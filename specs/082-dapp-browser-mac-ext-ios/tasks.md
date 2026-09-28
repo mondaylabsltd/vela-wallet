@@ -556,7 +556,7 @@ live page. T075 and T076 start together; T077 follows T076 (both pin in
 `W/signing/one-surface.test.ts`); T182 (persisting the may-have-been-sent flag) follows T083,
 T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) is last.
 
-- [ ] T075 [P] [US1] Web wire mirrors over the regenerated `W/core/generated/`:
+- [x] T075 [P] [US1] Web wire mirrors over the regenerated `W/core/generated/`:
   - `W/signing/core/sign-types.ts`: `SignPhase`, `phase`, `pending_op_maybe_sent`, `CeremonyStarted/Done`, `asker_gone`, `maybe_sent`, `submit_block`.
   - `W/wallet/core/tracker-types.ts`: `NotSent`, `MaybeSent`, `HoldingsMoved`, `FindOpEvent` / `OpEvent`, Status `tx_hash`.
   - `W/wallet/core/rpc-pool-types.ts`: `NotConnected`, `maybe_delivered`, `unreached_chains`.
@@ -564,7 +564,7 @@ T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) 
   - `W/wallet/core/feed-types.ts`: `kind`, `status`, `site`, `dapp_origin`, empty keys.
   - `W/flows/core/send-types.ts`: MaybeSent, NotSent, `not_sent`, `maybe_sent`.
   - Proof: `cd app-web/vela-wallet && pnpm check` green.
-- [ ] T076 [P] [US1] Pure lifecycle rules in new `X/lib/request-life.js` and `X/lib/protocol.js` (RB1–RB11, RB6, RB2); proof: new `W/dapp/request-life.test.ts`, `W/dapp/instant.test.ts`, `W/signing/one-surface.test.ts`.
+- [x] T076 [P] [US1] Pure lifecycle rules in new `X/lib/request-life.js` and `X/lib/protocol.js` (RB1–RB11, RB6, RB2); proof: new `W/dapp/request-life.test.ts`, `W/dapp/instant.test.ts`, `W/signing/one-surface.test.ts`.
   - New `X/lib/request-life.js`: `nextForWindow`, `claimVerdict`, `recoveryPlan`, `affectedBy`, `surfaceAfterOpen`, `settlement`.
   - `X/lib/protocol.js`:
     - add `DOC_PORT = "vela.doc"`, `SURFACE_PORT = "vela.surface"`, `REQUEST_TTL_MS = 300000`, `CONTENT_GRACE_MS`, `CLAIM_TIMEOUT_MS`, `REQUEST_PREFIX`;
@@ -575,11 +575,11 @@ T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) 
     - `W/dapp/instant.test.ts` pins `REQUEST_TTL_MS` to wasm `signRequestTtlMs()`, and every `SETTLE.*.code` to `popupCloseSettlement().code` (never 4001);
     - new `W/dapp/request-life.test.ts` covers every claim verdict, recovery branch and settle cause of data-model §4;
     - `W/signing/one-surface.test.ts` pins the port names and `REQUEST_PREFIX`.
-- [ ] T077 [US8] Worker logs in new `X/lib/swlog.js` (RB14, W23); proof: new `W/dapp/swlog.test.ts` and the `SW_COUNTS_KEY` pin in `W/signing/one-surface.test.ts`; (after T076, which also edits `one-surface.test.ts`).
+- [x] T077 [US8] Worker logs in new `X/lib/swlog.js` (RB14, W23); proof: new `W/dapp/swlog.test.ts` and the `SW_COUNTS_KEY` pin in `W/signing/one-surface.test.ts`; (after T076, which also edits `one-surface.test.ts`).
   - New `X/lib/swlog.js`: `[vela-sw] <iso> <event> k=v…` console lines, a 200-line ring in storage.session `vela.sw.log`, and counters in `vela.sw.counts`.
   - The fixed events are those of contract §15. Never params, results, signatures, addresses or URL paths; hosts only.
   - Proof: new `W/dapp/swlog.test.ts`: the ring cap; an address or URL path passed in is dropped; `SW_COUNTS_KEY` pinned in `one-surface.test.ts`.
-- [ ] T078 [US1] The worker owns each request's life, in `X/background.js` (RB1, RB3, RB4, RB5, RB7, RB8, RB10, RB11; G17, G18, G19, G23, EX6, EX7); (after T076 and T077).
+- [x] T078 [US1] The worker owns each request's life, in `X/background.js` (RB1, RB3, RB4, RB5, RB7, RB8, RB10, RB11; G17, G18, G19, G23, EX6, EX7); (after T076 and T077).
   - Ledger and page link:
     - records live in storage.session under `vela.req.<tabId>:<pageRequestId>`; at first start, remove the leftover `vela.req.*` from storage.local (delete the start sweep, `:289-298`);
     - the record keeps `sender.documentId`; answers go by `tabs.sendMessage(tabId, msg, {documentId})`;
@@ -597,7 +597,7 @@ T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) 
     - a restart with a live page resumes (no settle);
     - a panel port close settles `surface_closed`;
     - no `vela.req.*` left in storage.local.
-- [ ] T079 [US1] `X/content.js` (RB3, RB4, RB6, RB11); (after T076).
+- [x] T079 [US1] `X/content.js` (RB3, RB4, RB6, RB11); (after T076).
   - The `vela.doc` port is open only while the page owes a sign/connect answer. On a port close, reconnect with backoff 0/250/1000/3000 ms.
   - The answer handler replies `{ok:true}` synchronously; `alive` → the ids the document owns; `claimed` extends that id's deadline.
   - Deadlines: 5 min + 5 s unclaimed, 5 min after a claim → `abandon`.
@@ -607,7 +607,7 @@ T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) 
     - one answer per id;
     - the deadline order (worker 5 min < page 5 min + 5 s);
     - each of the four dropped-channel answers above.
-- [ ] T080 [US1] The panel side of the lifecycle: new `W/dapp/panel-surface.svelte.ts`, `W/dapp/transport.ts`, `W/dapp/DappRequestHost.svelte`, `WR/+layout.svelte`, `WR/[locale]/wallet/+page.svelte` (RB4, RB7, RB9, RB10, RB15); proof: new `W/dapp/panel-surface.test.ts`; (after T075 and T076).
+- [x] T080 [US1] The panel side of the lifecycle: new `W/dapp/panel-surface.svelte.ts`, `W/dapp/transport.ts`, `W/dapp/DappRequestHost.svelte`, `WR/+layout.svelte`, `WR/[locale]/wallet/+page.svelte` (RB4, RB7, RB9, RB10, RB15); proof: new `W/dapp/panel-surface.test.ts`; (after T075 and T076).
   - New `W/dapp/panel-surface.svelte.ts`: `start()`, `current`, `onWithdrawn(cb)`, `claim()`, `answer()`, `isPanelDocument()` (`?panel` or sessionStorage `vela.surface.panel`). Start it from `WR/+layout.svelte`; it switches to the wallet screen when a request is owed.
   - `W/dapp/transport.ts`: stop ignoring `delivered:false` (`:170-184`).
   - `W/dapp/DappRequestHost.svelte`: delete `tabId ??=` (`:130`). The pagehide settle stays only as a backstop. `withdrawn` closes the card with no words.
@@ -615,7 +615,7 @@ T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) 
   - Proof:
     - new `W/dapp/panel-surface.test.ts`: identity survives Wallet → Settings → Wallet (G23c); `withdrawn` clears `current`;
     - a vitest that the host serves a second tab's request.
-- [ ] T081 [US1] Claims before signing, in `W/signing/core/sign-types.ts`, `W/services/dapp-submit.ts`, `W/signing/core/sign-executor.ts` and `W/dapp/core/dperm-connect.ts` (RB2, RB5); proof: `W/signing/core/sign-executor.test.ts`; (after T080).
+- [x] T081 [US1] Claims before signing, in `W/signing/core/sign-types.ts`, `W/services/dapp-submit.ts`, `W/signing/core/sign-executor.ts` and `W/dapp/core/dperm-connect.ts` (RB2, RB5); proof: `W/signing/core/sign-executor.test.ts`; (after T080).
   - Ports: `SignResponder.claim?(id, phase)` and `SignShellPorts.askerLive(id, phase)` (true when the transport has no claim) in `W/signing/core/sign-types.ts`.
   - `W/services/dapp-submit.ts`: `handleDAppRequest(…, beforeSubmit?)`, whose signFn wrappers throw `AskerGoneError`. `W/signing/core/sign-executor.ts` maps it to `asker_gone`.
   - Claim points: approve, before a connect grant (`W/dapp/core/dperm-connect.ts`); sign, before the passkey; submit, after the passkey and before the relay POST.
@@ -624,7 +624,7 @@ T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) 
     - not live at sign → no signer call and `asker_gone`;
     - not live at submit → no relay POST;
     - no claim port (the web wallet) → unchanged behaviour.
-- [ ] T082 [US1] Submit via wasm `userOpSubmitStep`, in `W/services/safe-transaction.ts`, `W/services/rpc-pool.ts` and `W/signing/core/sign-executor.ts` (RA1, RA5, RA10, RA12, ruling 8); proof: `W/services/safe-transaction.test.ts`; (after T081).
+- [x] T082 [US1] Submit via wasm `userOpSubmitStep`, in `W/services/safe-transaction.ts`, `W/services/rpc-pool.ts` and `W/signing/core/sign-executor.ts` (RA1, RA5, RA10, RA12, ruling 8); proof: `W/services/safe-transaction.test.ts`; (after T081).
   - `W/services/safe-transaction.ts:3314-3354`: compute `userOpHash` before the POST, and read `eth_blockNumber` for `submit_block` (best effort).
   - `W/services/rpc-pool.ts:111-123`: a thrown fetch is `Network` (`maybe_delivered` true) unless `navigator.onLine === false` before the call → `NotConnected`.
   - NotSent answers `userOpNotSentDetail()`, never the raw `rpc-pool.ts:119` text.
@@ -634,7 +634,7 @@ T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) 
     - mute → MaybeSent with the local hash and the nonce cache unchanged;
     - `[existingHash:]` → Accepted;
     - offline before the call → NotSent with the fixed detail.
-- [ ] T083 [US1] One answer after MaybeSent or a revert, in `W/signing/core/sign-executor.ts`, `W/services/safe-transaction.ts` and `W/services/dapp-submit.ts` (RA2, RA8, RA9, ruling 9); proof: `W/services/dapp-submit.test.ts`, `W/signing/core/sign-executor.test.ts`; (after T082).
+- [x] T083 [US1] One answer after MaybeSent or a revert, in `W/signing/core/sign-executor.ts`, `W/services/safe-transaction.ts` and `W/services/dapp-submit.ts` (RA2, RA8, RA9, ruling 9); proof: `W/services/dapp-submit.test.ts`, `W/signing/core/sign-executor.test.ts`; (after T082).
   - `W/signing/core/sign-executor.ts` dispatches `OpSubmitted{maybe_sent, submit_block}` and runs the same receipt wait.
   - `waitForReceipt` throws a typed `UserOpRevertedError{txHash}` instead of "dropped… try again" (`W/services/safe-transaction.ts:3427-3431`); `W/services/dapp-submit.ts:503-507` answers the hash.
   - Dispatch `CeremonyStarted` / `CeremonyDone` around the passkey. Log `submit verdict=…` on the panel console (contract §15).
@@ -642,20 +642,20 @@ T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) 
     - mute → exactly one `Ok(op hash)` before 120 s;
     - revert → `Ok(tx hash)`, not -32603;
     - the ceremony order.
-- [ ] T084 [US1] The extension translates receipt reads for the op hashes it handed out: new `X/lib/op-receipt.js`, `X/background.js`, and the panel's `answer` in `W/dapp/panel-surface.svelte.ts` (RF3, W12); proof: new `W/dapp/op-receipt.test.ts`; (after T083 and T089).
+- [x] T084 [US1] The extension translates receipt reads for the op hashes it handed out: new `X/lib/op-receipt.js`, `X/background.js`, and the panel's `answer` in `W/dapp/panel-surface.svelte.ts` (RF3, W12); proof: new `W/dapp/op-receipt.test.ts`; (after T083 and T089).
   - New pure `X/lib/op-receipt.js`.
   - The panel's `answer` carries `opHash: {chainId}` for ReceiptPending or MaybeSent. The worker records `vela.ext.op.<hash>` for 24 h.
   - `forwardRead` for `eth_getTransactionReceipt` / `eth_getTransactionByHash` with a recorded hash first asks the bundler `eth_getUserOperationReceipt`. With a receipt it forwards the same method for the real `transactionHash`; else it answers `null`.
   - Proof: new `W/dapp/op-receipt.test.ts` on the vectors of `W/services/dapp-submit.ts:987-1008`; an unrecorded 32-byte hash is forwarded as is.
-- [ ] T085 [US7] Relay status on the web, in `W/services/tx-reconciler.ts`, `W/services/rpc-adapter.ts` and `E2E/stub-chain.ts` (RA7, G13); proof: `W/wallet/core/rpc-pool-executor.test.ts`; (after T075).
+- [x] T085 [US7] Relay status on the web, in `W/services/tx-reconciler.ts`, `W/services/rpc-adapter.ts` and `E2E/stub-chain.ts` (RA7, G13); proof: `W/wallet/core/rpc-pool-executor.test.ts`; (after T075).
   - `W/services/tx-reconciler.ts:91-112` uses wasm `parseUserOpStatus`; delete the parser. `W/services/rpc-adapter.ts:28` uses the TS constant `USER_OP_STATUS_METHOD`.
   - Fix `E2E/stub-chain.ts:301-302`: answer `pimlico_getUserOperationStatus` with a valid status.
   - Proof: `W/wallet/core/rpc-pool-executor.test.ts` pins the constant to wasm `userOpStatusMethod()`; `tx-reconciler` tests use the probe's JSON.
-- [ ] T086 [US7] `W/wallet/core/tracker-executor.ts` runs `FindOpEvent` and `HoldingsMoved` (ruling 8, RE8); proof: `W/wallet/core/tracker-executor.test.ts`; (after T075).
+- [x] T086 [US7] `W/wallet/core/tracker-executor.ts` runs `FindOpEvent` and `HoldingsMoved` (ruling 8, RE8); proof: `W/wallet/core/tracker-executor.test.ts`; (after T075).
   - FindOpEvent: `eth_getLogs` through the pool, answered `OpEvent` with the pool's answer as it came (`logs_json` or `error_json`, plus `head_block`); the core judges a range error (T180), the shell never does.
   - HoldingsMoved → `ports.confirmed(chainId)`, moved from `notify_confirmed` (`:231-236`).
   - Proof: `W/wallet/core/tracker-executor.test.ts`: the found/range-error/head-only cases; `confirmed` fires on HoldingsMoved only.
-- [ ] T087 [US2] Sheet words and endings on the web, in `W/signing/live.ts`, `W/signing/dapp-receipt.ts`, `W/signing/messages.ts` and `W/i18n/engine.server.ts` (RA8, RA9, RA10, G22); proof: `W/signing/dapp-receipt.test.ts`, `W/signing/live.test.ts`; (after T083).
+- [x] T087 [US2] Sheet words and endings on the web, in `W/signing/live.ts`, `W/signing/dapp-receipt.ts`, `W/signing/messages.ts` and `W/i18n/engine.server.ts` (RA8, RA9, RA10, G22); proof: `W/signing/dapp-receipt.test.ts`, `W/signing/live.test.ts`; (after T083).
   - `W/signing/live.ts:826-838`: stage words come from `SignView.phase`, so "Waiting for biometric" never covers the network wait.
   - `W/signing/dapp-receipt.ts`: endings from wasm `signEndingState`:
     - MaybeSent → caption `componentsUi.signing.maybeSent`, the op-hash row, `send.txCloseBackground`, no Retry;
@@ -663,64 +663,64 @@ T086, T088 and T092; T100 follows T099 (it uses the fixed helper); T101 (gates) 
     - Reverted → `failedHint` + explorer.
   - Add the `maybeSent` reader to `W/signing/messages.ts` and `W/i18n/engine.server.ts`.
   - Proof: `W/signing/dapp-receipt.test.ts` covers every `SignEndingState`, and `W/signing/live.test.ts` every phase.
-- [ ] T088 [US7] The wallet's own Send on the web, in `W/flows/core/send-executor.ts` and `W/flows/live-send.ts` (RA4, RA10); proof: `W/flows/live-send.test.ts`, `W/flows/core/send-executor.test.ts`; (after T082).
+- [x] T088 [US7] The wallet's own Send on the web, in `W/flows/core/send-executor.ts` and `W/flows/live-send.ts` (RA4, RA10); proof: `W/flows/live-send.test.ts`, `W/flows/core/send-executor.test.ts`; (after T082).
   - `W/flows/core/send-executor.ts` reports `Submitted{maybe_sent, submit_block}`.
   - `W/flows/live-send.ts` draws MaybeSent (caption, no success haptic) and NotSent.
   - Proof: `W/flows/live-send.test.ts`, `W/flows/core/send-executor.test.ts`.
-- [ ] T089 [US1] The worker's chain reads, in `X/background.js` and `X/lib/protocol.js` (RF2, G20, G33); proof: `W/dapp/protocol.test.ts`; (after T078).
+- [x] T089 [US1] The worker's chain reads, in `X/background.js` and `X/lib/protocol.js` (RF2, G20, G33); proof: `W/dapp/protocol.test.ts`; (after T078).
   - `X/background.js`: the per-endpoint timeout is the core's 8 s (`:62`).
   - A failed endpoint enters a cooldown of `30 s · 2^(n−1)`, capped at 300 s, kept in storage.session `vela.ext.endpoints`. Cooled endpoints are tried last, and a success clears the entry.
   - The final error is `-32603 "Vela could not reach a node for chain <name> (<id>)"` with no engine text (`:452-455`).
   - swlog: `read.fail / failover / slow / exhausted`. The constants and the cooldown function live in `X/lib/protocol.js`.
   - Proof: `W/dapp/protocol.test.ts` pins `READ_TIMEOUT_MS` to wasm `rpcReadTimeoutMs()` and the cooldown to `rpcCooldownMs(n)` for n = 1..5; a worker test shows that the second call skips the cooled endpoints.
-- [ ] T090 [US4] Plain send on the web, in `W/signing/live.ts` and `W/signing/core/sheet.svelte.ts` (RC1, RC5, RC6, G14); proof: `W/signing/live.test.ts`; (after T087).
+- [x] T090 [US4] Plain send on the web, in `W/signing/live.ts` and `W/signing/core/sheet.svelte.ts` (RC1, RC5, RC6, G14); proof: `W/signing/live.test.ts`; (after T087).
   - `W/signing/live.ts:418-431` draws `PlainSend`: no red "Blind signature"; an amount card with `nativeSymbol(chain_id)` (`W/services/networks.ts:162`), the recipient, and 确认发送, or 确认 when `no_value`.
   - `W/signing/core/sheet.svelte.ts:56-65` passes `String(value)` and reads `calls[0]`.
   - Proof: `W/signing/live.test.ts`: −0.001 xDAI with the recipient; zero; a numeric value → the blind card with no amount.
-- [ ] T091 [US4] `site_label` on the web, in `W/signing/live.ts` via wasm `browserSiteLabel` (RE7, F14); proof: `W/signing/live.test.ts`; (after T090).
+- [x] T091 [US4] `site_label` on the web, in `W/signing/live.ts` via wasm `browserSiteLabel` (RE7, F14); proof: `W/signing/live.test.ts`; (after T090).
   - The F14 copy at `W/signing/live.ts:898` is replaced by wasm `browserSiteLabel`.
   - Proof: `W/signing/live.test.ts`: host once when the name equals the host.
-- [ ] T092 [US3] dApp transactions in Activity on the web, in `W/wallet/live.ts`, `W/wallet/live-detail.ts`, `W/wallet/core/feed-executor.ts` and `W/signing/core/sign-executor.ts` (RG1–RG4, L-D3); proof: `W/wallet/live-activity.test.ts`, `W/wallet/core/feed-executor.test.ts`; (after T083).
+- [x] T092 [US3] dApp transactions in Activity on the web, in `W/wallet/live.ts`, `W/wallet/live-detail.ts`, `W/wallet/core/feed-executor.ts` and `W/signing/core/sign-executor.ts` (RG1–RG4, L-D3); proof: `W/wallet/live-activity.test.ts`, `W/wallet/core/feed-executor.test.ts`; (after T083).
   - Delete `feedItemStatus` (`W/wallet/live-detail.ts:61-69`) and the kind guess (`W/wallet/live.ts:430-435`). Rows come from `FeedItem.kind/status/site`; the detail shows "Requested by".
   - `W/wallet/core/feed-executor.ts` maps the stored `dappOrigin`.
   - After the save, `persist_record` (`W/signing/core/sign-executor.ts:270-293`) and every `UpdateRecord` call `feedReconciled(1)`.
   - Proof: `W/wallet/live-activity.test.ts`, `live-detail.test.ts`, `W/wallet/core/feed-executor.test.ts`: a pending row within one poke; a MaybeSent row pending under the local hash.
-- [ ] T093 [US6] Empty states on the web, in `W/flows/live.ts`, `W/flows/fixtures.ts`, `W/wallet/WalletDesktop.svelte` and `W/wallet/fixtures.ts` (RG5, RB13, G1, L-D7); proof: `W/wallet/live.test.ts`, `W/wallet/fixtures.test.ts`; (after T092).
+- [x] T093 [US6] Empty states on the web, in `W/flows/live.ts`, `W/flows/fixtures.ts`, `W/wallet/WalletDesktop.svelte` and `W/wallet/fixtures.ts` (RG5, RB13, G1, L-D7); proof: `W/wallet/live.test.ts`, `W/wallet/fixtures.test.ts`; (after T092).
   - History's empty line comes from `FeedView.history_empty_key`; delete the fixture copy of `history.emptyFilter` (`W/flows/fixtures.ts:398`, `W/flows/messages.ts:58` reader kept) and read the key in `W/flows/live.ts`.
   - `W/wallet/WalletDesktop.svelte:109-128, 134-148` draws `activitySection.mode` / `assetsSection.mode` the way `WalletHome.svelte:88-145` does.
   - `W/wallet/fixtures.ts:592-598` `buildDesktopState` gets the narrow model's `empty` copy (`:409-421`). Home uses `home_empty_key`.
   - Proof: `W/wallet/live.test.ts`, `W/wallet/fixtures.test.ts`: all networks → `emptyTitle`, filtered → `emptyFilter`, wide layout → skeleton then EmptyState.
-- [ ] T094 [US5] One address spelling on the web, in `W/dapp/follow.ts` (RG10, L-D6); proof: `W/dapp/follow.test.ts`, `W/dapp/core-table.test.ts`; (after T075).
+- [x] T094 [US5] One address spelling on the web, in `W/dapp/follow.ts` (RG10, L-D6); proof: `W/dapp/follow.test.ts`, `W/dapp/core-table.test.ts`; (after T075).
   - `W/dapp/follow.ts` gets `normalizeGrantSpelling()`, run once at wallet boot, which rewrites stored lower-case grants via wasm `checksumAddress`.
   - Proof:
     - `W/dapp/follow.test.ts`: once and idempotent;
     - `W/dapp/core-table.test.ts` loads `provider/inpage.js` (T042): `accountsChanged` keeps EIP-55, and the same account in another case fires no event.
-- [ ] T095 [US1] Balance read plan on the web, in `W/services/wallet-api.ts` (RE9); proof: `W/services/wallet-api.test.ts`; (after T075).
+- [x] T095 [US1] Balance read plan on the web, in `W/services/wallet-api.ts` (RE9); proof: `W/services/wallet-api.test.ts`; (after T075).
   - `W/services/wallet-api.ts` reads the slots from wasm `balanceReadPlan`; delete the local list.
   - Proof: `W/services/wallet-api.test.ts`: Base includes USDC, and the order is unchanged.
-- [ ] T096 [US1] Logo misses on the web, in `W/services/logo-cache.ts` and `W/wallet/ui/RemoteLogo.svelte` (RE10, W20); proof: new `W/services/logo-cache.test.ts`; (after T075).
+- [x] T096 [US1] Logo misses on the web, in `W/services/logo-cache.ts` and `W/wallet/ui/RemoteLogo.svelte` (RE10, W20); proof: new `W/services/logo-cache.test.ts`; (after T075).
   - `W/services/logo-cache.ts` keeps an expiry per URL from wasm `markMissTtlMs('unknown')` (60 s) instead of a session-long set; `W/wallet/ui/RemoteLogo.svelte` retries after it.
   - Proof: vitest: a miss is skipped for 60 s, then retried.
-- [ ] T097 [US2] The consent card's look, in `W/dapp/DappRequestHost.svelte`, `W/signing/ui/SigningBody.svelte` and `WR/dev/gallery/+page.svelte` (RB12, G16); proof: the new gate in `W/tokens/tokens.test.ts`; (after T080).
+- [x] T097 [US2] The consent card's look, in `W/dapp/DappRequestHost.svelte`, `W/signing/ui/SigningBody.svelte` and `WR/dev/gallery/+page.svelte` (RB12, G16); proof: the new gate in `W/tokens/tokens.test.ts`; (after T080).
   - `W/dapp/DappRequestHost.svelte:437-485` and `W/signing/ui/SigningBody.svelte:96-98` use `W/ui/Button.svelte`: Cancel secondary, Connect primary with a spinner while busy, Cancel disabled while busy.
   - Map the remaining tokens as in RB12. Remove the raw method line (panel and window). Window mode with no live request closes the window.
   - `WR/dev/gallery/+page.svelte:246`: `--layout-galleryRail` → `--layout-settingsNavW`.
   - Proof: new gate in `W/tokens/tokens.test.ts`: any fallback-less `var(--x)` under `src/**/*.svelte` that nothing defines fails (it lists today's 19 before the fix and 0 after).
-- [ ] T098 [US8] Worker counters in the extension's bug report, `W/services/bug-report.ts` (RB14); proof: `W/services/bug-report.test.ts`; (after T077).
+- [x] T098 [US8] Worker counters in the extension's bug report, `W/services/bug-report.ts` (RB14); proof: `W/services/bug-report.test.ts`; (after T077).
   - `W/services/bug-report.ts:44-56` adds `sw:<event>.<cause> ×N` from `vela.sw.counts`.
   - Proof: `W/services/bug-report.test.ts`: counters present; no URL or address.
-- [ ] T099 [US9] The side-panel check, in `E2E/extension-helpers.ts` and `E2E/extension-live-provider.e2e.ts` (RG12, L-PANEL, FR-017); proof: a new signed-tick test; (after T080 and T097).
+- [x] T099 [US9] The side-panel check, in `E2E/extension-helpers.ts` and `E2E/extension-live-provider.e2e.ts` (RG12, L-PANEL, FR-017); proof: a new signed-tick test; (after T080 and T097).
   - `E2E/extension-helpers.ts:106-145` finds the view with `pathname.endsWith('/wallet.html') && search.has('panel')`, reads the dialog's `aria-label` and clicks only inside the dialog. `sidePanelOpen` becomes `sidePanelShowsRequest`.
   - `E2E/extension-live-provider.e2e.ts`: `:339-341` becomes "the card goes, the panel stays"; `:343-357` becomes "a no-click request with the panel open shows in the panel" (RX, RB8).
   - Proof: a new signed-tick test, in which a MutationObserver in the panel sees `.landing-over [data-testid="dapp-receipt"]` titled "Signed", and it is gone within 5 s.
-- [ ] T100 [US1] New `E2E/extension-lifecycle.e2e.ts` (RH5), using T099's fixed helper; proof: the suite on port 4174; (after T078–T084 and T099).
+- [x] T100 [US1] New `E2E/extension-lifecycle.e2e.ts` (RH5), using T099's fixed helper; proof: the suite on port 4174; (after T078–T084 and T099).
   - Cases: reload during a sheet (EX5); a second tab (EX4); panel ✕ (EX6); a worker stop via CDP `Target.closeTarget` on the SW target (EX8); panel identity after Settings (EX4b).
   - Each asserts one answer per request, 4900 with the plain text, and no `vela.req.*` left.
   - Proof: `npx playwright test -c playwright.isolated.config.ts e2e/extension-lifecycle.e2e.ts` (port 4174).
-- [ ] T182 [US7] A may-have-been-sent op survives a reload on the web and in the extension panel, in `W/services/transactions-model.ts` (`LocalTransaction.maybeSent?`, `submitBlock?`), `W/services/dapp-history.ts` (`buildSigningRecord`), `W/signing/core/sign-executor.ts` (`persist_record`), `W/flows/core/send-executor.ts` (`persist_tx_records`) and `W/wallet/core/tracker-executor.ts` (`toPendingRecords`) (RA3, RA4, rulings 1 and 8, US3 AS2); proof: `W/wallet/core/tracker-executor.test.ts`; (after T083, T086, T088 and T092).
+- [x] T182 [US7] A may-have-been-sent op survives a reload on the web and in the extension panel, in `W/services/transactions-model.ts` (`LocalTransaction.maybeSent?`, `submitBlock?`), `W/services/dapp-history.ts` (`buildSigningRecord`), `W/signing/core/sign-executor.ts` (`persist_record`), `W/flows/core/send-executor.ts` (`persist_tx_records`) and `W/wallet/core/tracker-executor.ts` (`toPendingRecords`) (RA3, RA4, rulings 1 and 8, US3 AS2); proof: `W/wallet/core/tracker-executor.test.ts`; (after T083, T086, T088 and T092).
   - Same gap as T181: `toPendingRecords` (`tracker-executor.ts:100-116`) builds `TrackPendingRecord` from id, hash, chain and time only. Write both fields with the record, read them back into `TrackPendingRecord`, and carry them on the handoff into the tracker's `submitted` event.
   - Proof: a MaybeSent record saved, then the tracker restarted → `records_loaded` carries `maybe_sent: true` and `submit_block`; an old record without the fields loads as `false` / absent.
-- [ ] T101 [US1] Web and extension gates in `app-web/vela-wallet` (unit, `pnpm check`, both builds, the isolated e2e suites, the event-payload ruler); (after T075–T100 and T182).
+- [x] T101 [US1] Web and extension gates in `app-web/vela-wallet` (unit, `pnpm check`, both builds, the isolated e2e suites, the event-payload ruler); (after T075–T100 and T182).
   - Update the expectations that assumed "failed — try again" after a lost reply, or the old status method: `E2E/relay-faults.e2e.ts`, `E2E/send-lands.e2e.ts`, `E2E/reopen-pending.e2e.ts`.
   - `cd app-web/vela-wallet && pnpm test:unit -- --run && pnpm check && pnpm build && pnpm build:extension`
   - `npx playwright test -c playwright.isolated.config.ts e2e/extension-*.e2e.ts`
