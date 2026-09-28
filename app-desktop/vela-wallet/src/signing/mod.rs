@@ -223,6 +223,11 @@ pub struct SigningStrings {
     pub fee_estimating: SharedString,
     pub fee_token_title: SharedString,
     pub fee_balance: SharedString,
+    /// Spec 079: the send form's own refresh control, its stale line, and
+    /// why a quote failed when the service could not be reached.
+    pub fee_refresh: SharedString,
+    pub fee_stale: SharedString,
+    pub fee_unreachable: SharedString,
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
     /// under the fee row when the coin it was quoted in cannot pay it.
     pub warn_insufficient_gas: SharedString,
@@ -446,6 +451,9 @@ impl SigningStrings {
             fee_estimating: loc.t("componentsUi.gas.estimating"),
             fee_token_title: s("feeTokenTitle"),
             fee_balance: loc.t("componentsUi.gas.rowBalance"),
+            fee_refresh: loc.t("send.feeRefresh"),
+            fee_stale: loc.t("send.feeStale"),
+            fee_unreachable: loc.t("componentsUi.funding.denialNetworkError"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             tech_function: s("techFunction"),
             tech_raw_data: s("techRawData"),
@@ -565,6 +573,9 @@ mod tests {
             s.still_confirming.as_ref(),
             s.unknown_outcome.as_ref(),
             s.signed.as_ref(),
+            s.fee_refresh.as_ref(),
+            s.fee_stale.as_ref(),
+            s.fee_unreachable.as_ref(),
         ] {
             assert!(
                 !text.starts_with("send.")

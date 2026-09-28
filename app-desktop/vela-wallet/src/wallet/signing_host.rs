@@ -34,7 +34,7 @@ use vela_core::app::approval_guard::{
 use vela_core::app::clear_signing::{
     ClearOperation, ClearShellResult, ClearSigning, ClearSigningView, Event as ClearEvent,
 };
-use vela_core::app::fee_policy::{FeeAssetView, FeeCall, FeeTier, FeeView};
+use vela_core::app::fee_policy::{FeeAssetView, FeeCall, FeeFailure, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
 use vela_core::app::fee_tier_pref::FeeTierPref;
 use vela_core::app::sign_pref::SignPref;
@@ -57,6 +57,40 @@ impl SpeedHost for SigningHost {
     fn speed_control(&mut self) -> &mut SpeedControl {
         &mut self.speed
     }
+
+    /// Spec 079: a quote that failed for a reason that can pass is asked
+    /// again on the core's schedule.
+    fn in_force_changed(&mut self, cx: &mut Context<Self>) {
+        self.schedule_requote(cx);
+    }
+
+    fn unreadable(&mut self, cx: &mut Context<Self>) {
+        self.schedule_requote(cx);
+    }
+}
+
+/// Why the fee in force needs asking again, if it does: the core's failure,
+/// or — the deployment read could not answer, so nothing reached the core —
+/// the same thing an unreachable relay is (spec 079).
+fn requote_failure(fee: &FeeView, unanswered: bool) -> Option<FeeFailure> {
+    fee.failed
+        .or_else(|| unanswered.then_some(FeeFailure::QuoteUnavailable))
+}
+
+/// The wait before automatic re-quote `attempt`, or `None`: only while the
+/// person can still decide (open, not approved), never over a measurement
+/// already out, and never for a failure no retry fixes (the core's schedule,
+/// `fee_policy::requote_delay_ms`: 3 s, 6 s, 12 s, then every 15 s).
+fn requote_wait(
+    failure: Option<FeeFailure>,
+    attempt: u32,
+    on_form: bool,
+    measuring: bool,
+) -> Option<u32> {
+    if !on_form || measuring {
+        return None;
+    }
+    vela_core::app::fee_policy::requote_delay_ms(failure?, attempt)
 }
 
 /// The transport id of a request the WALLET made of itself. Its answer has no
@@ -167,6 +201,12 @@ pub struct SigningHost {
     /// The person approved this request (the slide, or the button that opens
     /// the Trusted Signer's page). A close after this refuses nothing.
     pub approved: bool,
+    /// Spec 079: automatic re-quotes since the last good quote, and the
+    /// number of the one scheduled — a newer schedule, an approval or a good
+    /// quote makes an older timer a no-op.
+    requote_attempt: u32,
+    requote_scheduled: Option<u64>,
+    requote_seq: u64,
 }
 
 impl SigningHost {
@@ -229,6 +269,9 @@ impl SigningHost {
             ending: None,
             seen_submitted_ms: None,
             approved: false,
+            requote_attempt: 0,
+            requote_scheduled: None,
+            requote_seq: 0,
         };
         // The stored default speed (spec 069), read now and followed while
         // the sheet is up: the column sits beside Settings, which may change it.
@@ -475,8 +518,90 @@ impl SigningHost {
 
     pub fn approve(&mut self, cx: &mut Context<Self>) {
         self.approved = true;
+        // Nothing re-prices under a slide that has gone.
+        self.requote_scheduled = None;
         let opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
+    }
+
+    /// The refresh control (spec 079): measure again, now — the held
+    /// readings dropped first, so it is a new measurement.
+    pub fn refresh_fee(&mut self, cx: &mut Context<Self>) {
+        if self.on_form() {
+            speed_control::refresh(self, cx);
+        }
+    }
+
+    /// A measurement is out on the fee in force.
+    pub fn fee_measuring(&self) -> bool {
+        self.speed.measuring()
+    }
+
+    /// The fee in force was never asked of the core: its deployment read
+    /// could not answer.
+    pub fn fee_unanswered(&self) -> bool {
+        self.speed.unanswered()
+    }
+
+    /// The person can still decide: the sheet is up, nothing is signing,
+    /// and nothing has been approved or answered.
+    fn on_form(&self) -> bool {
+        self.view.surface == vela_core::app::sign_request::SignSurface::Sheet
+            && !self.view.is_signing
+            && !self.view.is_submitting
+            && !self.approved
+            && !self.responded
+            && !self.closed
+    }
+
+    /// Spec 079 FR-008: a quote that failed because the service could not be
+    /// reached is asked again at a growing interval while the sheet is open
+    /// and unapproved. The device pass had the row read "点击重试" with the
+    /// relay down, and stay that way after it came back.
+    fn schedule_requote(&mut self, cx: &mut Context<Self>) {
+        let failure = requote_failure(self.speed.fee_view(), self.speed.unanswered());
+        if failure.is_none() {
+            // A good quote (or one still out): the count starts over.
+            if !self.speed.measuring() {
+                self.requote_attempt = 0;
+            }
+            self.requote_scheduled = None;
+            return;
+        }
+        if self.requote_scheduled.is_some() {
+            return;
+        }
+        let Some(wait) = requote_wait(
+            failure,
+            self.requote_attempt + 1,
+            self.on_form(),
+            self.speed.measuring(),
+        ) else {
+            return;
+        };
+        self.requote_attempt += 1;
+        self.requote_seq += 1;
+        let seq = self.requote_seq;
+        self.requote_scheduled = Some(seq);
+        cx.spawn(async move |host, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(u64::from(wait)))
+                .await;
+            host.update(cx, |host, cx| {
+                if host.requote_scheduled != Some(seq) {
+                    return;
+                }
+                host.requote_scheduled = None;
+                let still = requote_failure(host.speed.fee_view(), host.speed.unanswered());
+                if still.is_some() && host.on_form() && !host.speed.measuring() {
+                    speed_control::refresh(host, cx);
+                } else {
+                    host.schedule_requote(cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     // -- the speed control (spec 069) ----------------------------------------
@@ -924,6 +1049,64 @@ fn typed_data_of(params_json: &str) -> String {
 mod tests {
     use super::*;
     use vela_core::app::fee_policy::FeePolicy;
+
+    /// Spec 079 FR-008: 3 s, 6 s, 12 s, then every 15 s.
+    #[test]
+    fn a_failed_quote_is_asked_again_on_the_cores_schedule() {
+        let waits: Vec<Option<u32>> = (1..=5)
+            .map(|attempt| requote_wait(Some(FeeFailure::QuoteUnavailable), attempt, true, false))
+            .collect();
+        assert_eq!(
+            waits,
+            vec![
+                Some(3_000),
+                Some(6_000),
+                Some(12_000),
+                Some(15_000),
+                Some(15_000)
+            ]
+        );
+    }
+
+    /// Never under a slide that has gone, never over a measurement already
+    /// out, never for a failure no retry fixes, and nothing to do when the
+    /// quote is good.
+    #[test]
+    fn the_requote_stops_where_it_must() {
+        let unreachable = Some(FeeFailure::QuoteUnavailable);
+        assert_eq!(requote_wait(unreachable, 1, false, false), None, "approved");
+        assert_eq!(requote_wait(unreachable, 1, true, true), None, "measuring");
+        assert_eq!(
+            requote_wait(Some(FeeFailure::MissingPublicKey), 1, true, false),
+            None
+        );
+        assert_eq!(
+            requote_wait(Some(FeeFailure::CalculationFailed), 1, true, false),
+            None
+        );
+        assert_eq!(requote_wait(None, 1, true, false), None);
+    }
+
+    /// A deployment read that could not answer never reached the core; it is
+    /// the same to a person as an unreachable relay, and asked again the same.
+    #[test]
+    fn an_unanswered_read_is_an_unreachable_quote() {
+        let quiet = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        assert_eq!(requote_failure(&quiet, false), None);
+        assert_eq!(
+            requote_failure(&quiet, true),
+            Some(FeeFailure::QuoteUnavailable)
+        );
+        let failed = FeeView {
+            failed: Some(FeeFailure::EstimateFailed),
+            ..quiet
+        };
+        assert_eq!(
+            requote_failure(&failed, true),
+            Some(FeeFailure::EstimateFailed),
+            "the core's own reason first"
+        );
+    }
 
     /// Invariant ⑨: the capped params are the ones that get signed.
     ///

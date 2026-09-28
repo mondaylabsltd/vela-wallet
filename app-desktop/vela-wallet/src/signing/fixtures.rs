@@ -146,8 +146,18 @@ pub enum FeeModel {
         /// and the web's are the same flag, same rule.
         tappable: bool,
         /// Under the row, in the error colour: why the slide is shut when
-        /// the coin the fee was quoted in cannot pay it (issue #262).
+        /// the coin the fee was quoted in cannot pay it (issue #262) — or,
+        /// spec 079, that the service could not be reached and the wallet
+        /// will ask again by itself.
         warning: Option<SharedString>,
+        /// Spec 079: the send form's refresh control beside the row (its
+        /// label is what a screen reader says), `None` in the drawings.
+        refresh: Option<SharedString>,
+        /// A measurement is out: the control turns and the row waits.
+        refreshing: bool,
+        /// The figure is from a while ago (`FeeView.stale`) — a fact about a
+        /// number, so only ever beside one.
+        stale_note: Option<SharedString>,
     },
     /// Off-chain signature: the ✓ line, in place of a fee row.
     OffChain(SharedString),
@@ -290,6 +300,9 @@ fn base(
             selector: None,
             warning: None,
             tappable: true,
+            refresh: None,
+            refreshing: false,
+            stale_note: None,
         },
         signer_label: s.signing_account.clone(),
         signer_name: WALLET_NAME.into(),
@@ -904,6 +917,9 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         ],
                     )),
                     warning: None,
+                    refresh: None,
+                    refreshing: false,
+                    stale_note: None,
                 };
             }
             m

@@ -842,14 +842,17 @@ fn kv_row(
 ///
 /// `on_row` is the row's own tap — retry a failed quote, or open / close the
 /// coin list — and `on_pick` one listener per coin in drawn order, `None` for
-/// a coin that cannot pay (drawn for context, answers to nothing). The mocks
-/// pass neither.
+/// a coin that cannot pay (drawn for context, answers to nothing).
+/// `on_refresh` is the refresh control beside the row (spec 079: the send
+/// form's own, outside the row's click so measuring again never opens the
+/// coin list). The mocks pass none of them.
 pub fn fee(
     theme: &Theme,
     icons: &mut IconCache,
     fee: &FeeModel,
     on_row: Option<crate::flows::panels::Click>,
     on_pick: Vec<Option<crate::flows::panels::Click>>,
+    on_refresh: Option<crate::flows::panels::Click>,
 ) -> Option<Div> {
     match fee {
         FeeModel::Hidden => None,
@@ -872,6 +875,9 @@ pub fn fee(
             selector,
             warning,
             tappable,
+            refresh,
+            refreshing,
+            stale_note,
         } => {
             // Said under the row, in the error colour: why the slide is shut.
             let warning = warning.clone().map(|text| {
@@ -886,7 +892,6 @@ pub fn fee(
                     .px(px(16.))
                     .py(px(12.))
                     .rounded(px(12.))
-                    .bg(theme.bg_sunken)
                     .flex()
                     .items_center()
                     .justify_between()
@@ -923,12 +928,63 @@ pub fn fee(
                             }),
                     );
                 let on_row = if *tappable { on_row } else { None };
+                // One sunken surface, as the send form's `FeeRow` draws it:
+                // the row, and the refresh at its end — two controls side by
+                // side, not one inside the other.
+                let mut line = div()
+                    .flex()
+                    .items_center()
+                    .rounded(px(12.))
+                    .bg(theme.bg_sunken)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .child(crate::flows::panels::clickable("signing-fee", on_row, row)),
+                    );
+                if refresh.is_some() {
+                    // While a measurement is out the control turns — the row
+                    // is working, not stuck.
+                    let control = div()
+                        .flex()
+                        .flex_none()
+                        .items_center()
+                        .justify_center()
+                        .size(px(36.))
+                        .mr(px(4.))
+                        .rounded_full()
+                        .hover(|el| el.bg(theme.bg_base))
+                        .child(if *refreshing {
+                            crate::ui::spinner(theme.fg_muted, px(14.), px(1.5))
+                        } else {
+                            gpui::IntoElement::into_any_element(icon_img(
+                                icons,
+                                Icon::RefreshCw,
+                                false,
+                                theme.fg_muted,
+                                14.,
+                            ))
+                        });
+                    line = line.child(crate::flows::panels::clickable(
+                        "signing-fee-refresh",
+                        on_refresh.filter(|_| !*refreshing),
+                        control,
+                    ));
+                }
+                let stale = stale_note.clone().map(|note| {
+                    div()
+                        .px(px(16.))
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(note)
+                });
                 return Some(
                     div()
                         .flex()
                         .flex_col()
                         .gap(px(6.))
-                        .child(crate::flows::panels::clickable("signing-fee", on_row, row))
+                        .child(line)
+                        .children(stale)
                         .children(warning),
                 );
             };

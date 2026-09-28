@@ -1217,6 +1217,13 @@ pub fn fee_model(
     // the fee in hand is the previous speed's: "estimating", never its money.
     // Only the figure gives way — the coin list and its warning stay.
     let another_tier = fee_of_another_tier(fee, speed_tier);
+    // Spec 079: a quote the service could not give — the relay unreachable,
+    // an estimate that timed out — is asked again by itself, and the row says
+    // so in words instead of a bare "—". One that no retry fixes (no public
+    // key, a calculation that cannot be done) keeps the dash.
+    let unreachable = fee
+        .failed
+        .is_some_and(|failure| vela_core::app::fee_policy::requote_delay_ms(failure, 1).is_some());
     // The send screen's formatter, not a second one: two answers about what a
     // transaction costs, on two screens pricing the same operation, is how
     // they start disagreeing. An unpriced fee renders as its "—" rather than
@@ -1228,8 +1235,10 @@ pub fn fee_model(
         // failed quote can be asked again, more than one coin can be chosen
         // between — and one coin with a quote in hand is neither.
         tappable: fee.failed.is_some() || fee.options.len() > 1,
-        value: if another_tier {
+        value: if another_tier || (fee.busy && fee.fee.is_none()) {
             s.fee_estimating.clone()
+        } else if unreachable {
+            SharedString::default()
         } else {
             SharedString::from(crate::flows::live::fee_line(
                 fee.fee.as_ref(),
@@ -1280,7 +1289,41 @@ pub fn fee_model(
                     .collect(),
             )
         }),
-        warning: insufficient_gas_warning(fee, s),
+        warning: insufficient_gas_warning(fee, s)
+            .or_else(|| unreachable.then(|| s.fee_unreachable.clone())),
+        refresh: Some(s.fee_refresh.clone()),
+        refreshing: fee.busy,
+        // "From a while ago" is a fact about a number: not over a row with no
+        // figure, and not while a fresh one is being measured.
+        stale_note: (fee.stale && !fee.busy && !another_tier && fee.fee.is_some())
+            .then(|| s.fee_stale.clone()),
+    }
+}
+
+/// Spec 079: what the fee row knows that the fee machine does not — the
+/// speed control's own deployment read. A read that could not answer never
+/// reaches the core (guessing would price a different operation), so the
+/// core's view shows no failure; the row says the same thing it says for an
+/// unreachable relay, and the control turns while a read is out.
+pub fn fee_row_state(model: &mut FeeModel, measuring: bool, unanswered: bool, s: &SigningStrings) {
+    if let FeeModel::OnChain {
+        value,
+        warning,
+        refreshing,
+        stale_note,
+        ..
+    } = model
+    {
+        *refreshing |= measuring;
+        if measuring {
+            *stale_note = None;
+        }
+        if unanswered && !measuring {
+            *value = SharedString::default();
+            if warning.is_none() {
+                *warning = Some(s.fee_unreachable.clone());
+            }
+        }
     }
 }
 
@@ -2544,6 +2587,79 @@ mod fee_tests {
         let mut failed = quoted(vec![option("ETH", None, false, true)], false);
         failed.failed = Some(vela_core::app::fee_policy::FeeFailure::QuoteUnavailable);
         assert!(tappable(&failed), "a failed quote can be asked again");
+    }
+
+    /// Spec 079 (owner: "似乎没有刷新网络费的按钮呀"): the row always carries
+    /// the send form's refresh control; a quote the service could not give
+    /// says so in words instead of a bare "—"; one no retry fixes keeps the
+    /// dash; and "from a while ago" is said only beside a figure.
+    #[test]
+    fn the_fee_row_refreshes_and_says_why_it_has_no_figure() {
+        use vela_core::app::fee_policy::FeeFailure;
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let row = |fee: &FeeView| {
+            fee_model(
+                &clear,
+                fee,
+                1,
+                false,
+                &s,
+                "en",
+                None,
+                crate::wallet::live::Money::usd(),
+            )
+        };
+        let parts = |model: FeeModel| match model {
+            FeeModel::OnChain {
+                value,
+                warning,
+                refresh,
+                refreshing,
+                stale_note,
+                ..
+            } => (value, warning, refresh, refreshing, stale_note),
+            _ => unreachable!("a transaction has a fee row"),
+        };
+
+        let (value, warning, refresh, refreshing, stale) =
+            parts(row(&quoted(vec![option("ETH", None, false, true)], true)));
+        assert_eq!(refresh, Some(s.fee_refresh.clone()), "always offered");
+        assert!(!refreshing && stale.is_none() && warning.is_none());
+        assert!(!value.is_empty());
+
+        let mut unreachable = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        unreachable.failed = Some(FeeFailure::QuoteUnavailable);
+        let (value, warning, ..) = parts(row(&unreachable));
+        assert_eq!(warning, Some(s.fee_unreachable.clone()));
+        assert!(value.is_empty(), "the sentence, not a dash: {value}");
+
+        let mut unfixable = unreachable.clone();
+        unfixable.failed = Some(FeeFailure::MissingPublicKey);
+        let (value, warning, ..) = parts(row(&unfixable));
+        assert!(warning.is_none(), "no promise to retry what cannot heal");
+        assert_eq!(value.as_ref(), "—");
+
+        let mut stale_fee = quoted(vec![option("ETH", None, false, true)], true);
+        stale_fee.stale = true;
+        let (.., stale) = parts(row(&stale_fee));
+        assert_eq!(stale, Some(s.fee_stale.clone()));
+        stale_fee.busy = true;
+        let (_, _, _, refreshing, stale) = parts(row(&stale_fee));
+        assert!(refreshing, "the control turns while it measures");
+        assert!(stale.is_none(), "not old while a fresh one is coming");
+
+        // The speed control's own deployment read, which the core never saw.
+        let mut model = row(&crate::core_host::CoreHost::<FeePolicy>::new().view());
+        fee_row_state(&mut model, false, true, &s);
+        let (value, warning, ..) = parts(model);
+        assert_eq!(warning, Some(s.fee_unreachable.clone()));
+        assert!(value.is_empty());
+        let mut model = row(&crate::core_host::CoreHost::<FeePolicy>::new().view());
+        fee_row_state(&mut model, true, false, &s);
+        let (_, _, _, refreshing, _) = parts(model);
+        assert!(refreshing);
     }
 
     /// The coin list opens in the sheet with every coin the relay takes —

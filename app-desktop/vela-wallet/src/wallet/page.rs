@@ -14267,6 +14267,14 @@ impl WalletPage {
                     speed_tier,
                     &currency,
                 );
+                // Spec 079: the speed control's own deployment read, which the
+                // fee machine never sees.
+                signing_live::fee_row_state(
+                    &mut model.fee,
+                    host.fee_measuring(),
+                    host.fee_unanswered(),
+                    &self.signing,
+                );
                 model.confirm_label = signing_live::confirm_label(&host.clear_view, &self.signing);
                 model.confirm_enabled = signing_live::confirm_enabled(
                     &host.view,
@@ -14652,10 +14660,15 @@ impl WalletPage {
             }
             column = column.child(row_divider(theme)).child(section);
         }
-        let (on_fee, on_fee_pick) = self.fee_actions(cx);
-        if let Some(fee) =
-            signing_components::fee(theme, &mut self.icons, &model.fee, on_fee, on_fee_pick)
-        {
+        let (on_fee, on_fee_pick, on_fee_refresh) = self.fee_actions(cx);
+        if let Some(fee) = signing_components::fee(
+            theme,
+            &mut self.icons,
+            &model.fee,
+            on_fee,
+            on_fee_pick,
+            on_fee_refresh,
+        ) {
             let mut fee_block = div().flex().flex_col().gap(px(4.)).child(fee);
             if let Some(speed) = &signing_speed {
                 // The same control, the same clicks, as the send form's.
@@ -14746,10 +14759,21 @@ impl WalletPage {
     fn fee_actions(
         &mut self,
         cx: &mut Context<Self>,
-    ) -> (Option<panels::Click>, Vec<Option<panels::Click>>) {
+    ) -> (
+        Option<panels::Click>,
+        Vec<Option<panels::Click>>,
+        Option<panels::Click>,
+    ) {
         let Some(host) = self.signing_host.clone() else {
-            return (None, Vec::new());
+            return (None, Vec::new(), None);
         };
+        // Spec 079: the refresh control — measure again, now.
+        let on_refresh: panels::Click = Box::new({
+            let host = host.clone();
+            move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                host.update(cx, |host, cx| host.refresh_fee(cx));
+            }
+        });
         let options = host.read(cx).fee_view().options.clone();
         let on_row: panels::Click = Box::new({
             let host = host.clone();
@@ -14771,15 +14795,19 @@ impl WalletPage {
                 })
             })
             .collect();
-        (Some(on_row), on_pick)
+        (Some(on_row), on_pick, Some(on_refresh))
     }
 
     #[cfg(target_os = "linux")]
     fn fee_actions(
         &mut self,
         _cx: &mut Context<Self>,
-    ) -> (Option<panels::Click>, Vec<Option<panels::Click>>) {
-        (None, Vec::new())
+    ) -> (
+        Option<panels::Click>,
+        Vec<Option<panels::Click>>,
+        Option<panels::Click>,
+    ) {
+        (None, Vec::new(), None)
     }
 
     fn wallet_columns(

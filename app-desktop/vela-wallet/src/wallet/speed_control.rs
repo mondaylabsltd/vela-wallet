@@ -213,6 +213,19 @@ impl SpeedControl {
             .collect()
     }
 
+    /// A measurement is out on the session in force — the deployment read or
+    /// the quote itself (spec 079: the refresh control turns).
+    pub fn measuring(&self) -> bool {
+        self.fee.reading || self.fee_view.busy
+    }
+
+    /// The question in force never reached the core: its deployment read
+    /// could not answer (spec 079). The core's view shows no failure for it,
+    /// yet nothing is priced — to a person, the same as an unreachable relay.
+    pub fn unanswered(&self) -> bool {
+        self.fee.ask.is_some() && !self.fee.reading && self.fee.deployed.is_none()
+    }
+
     /// No session has an effect out.
     pub fn idle(&self) -> bool {
         self.fee.host.is_idle() && self.previews.iter().all(|session| session.host.is_idle())
