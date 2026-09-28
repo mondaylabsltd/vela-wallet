@@ -26,7 +26,7 @@
 use gpui::SharedString;
 
 use vela_core::app::sign_request::{
-    SignErrorKind, SignMethodKind, SignResponsePayload, SignView, method_kind,
+    SignErrorKind, SignMethodKind, SignResponsePayload, SignSwipeAction, SignView, method_kind,
 };
 use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
@@ -73,6 +73,21 @@ pub struct Clock {
     pub seen_submitted_ms: Option<f64>,
 }
 
+/// Where this approval's signature stands (083 W11) — the executor's word,
+/// since the core's `Submitting` spans building the operation, the passkey
+/// and the submission alike.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Signature {
+    /// Nothing has asked for it yet: the funding check, the nonce, the
+    /// deployment read.
+    #[default]
+    NotYet,
+    /// A prompt is up (or the Trusted Signer's page is asking).
+    Asked,
+    /// The prompt has answered.
+    Given,
+}
+
 /// Does this method go to the network? A message never does: it is signing,
 /// then signed — never "submitting" (device-found on the Xiaomi, spec 079).
 #[must_use]
@@ -81,6 +96,16 @@ pub fn on_chain(method: &str) -> bool {
         method_kind(method),
         SignMethodKind::Transaction | SignMethodKind::Batch
     )
+}
+
+/// Esc on the signing column (083, the owner's D1): it closes only where
+/// closing answers nothing — an operation already on its way (the core only
+/// stops watching it), or no request at all. A refusal (4001), a funding
+/// cancel, or a blocked request's answer is the ✕'s alone: on Windows Esc is
+/// also the key that leaves the address bar, and one press refused the page.
+#[must_use]
+pub fn escape_closes(swipe: SignSwipeAction) -> bool {
+    matches!(swipe, SignSwipeAction::Dismiss | SignSwipeAction::None)
 }
 
 /// The ending an answer stands for, or `None` when there is nothing to show —
@@ -149,7 +174,7 @@ pub fn summary_of(blocks: &[Block]) -> Option<SharedString> {
 /// `None` while it is still a request (the form is drawn).
 ///
 /// `track` is the tracker's entry for the operation this request submitted,
-/// when there is one.
+/// when there is one; `signature` is where its passkey stands.
 #[must_use]
 pub fn approved(
     sign: &SignView,
@@ -157,6 +182,7 @@ pub fn approved(
     summary: Option<&SharedString>,
     track: Option<&TrackEntryView>,
     clock: &Clock,
+    signature: Signature,
     s: &SigningStrings,
 ) -> Option<SigningReceipt> {
     let lead = || summary.cloned().into_iter().collect::<Vec<_>>();
@@ -191,7 +217,9 @@ pub fn approved(
         let track = track.filter(|entry| entry.user_op_hash.eq_ignore_ascii_case(op));
         return Some(following(op, track, lead(), clock, s));
     }
-    if sign.is_submitting {
+    // Submitting once the signature is given — the core's `Submitting` also
+    // covers building the operation and the prompt, which are not (083 W11).
+    if sign.is_submitting && (!sign.is_signing || signature == Signature::Given) {
         let mut captions = lead();
         captions.push(s.tx_background_hint.clone());
         return Some(receipt(
@@ -202,12 +230,20 @@ pub fn approved(
             false,
         ));
     }
-    // The passkey is up (or the Trusted Signer's page is — its own dialog
-    // stands over this one).
     if sign.is_signing {
+        // "Waiting for biometric" only while the passkey (or the Trusted
+        // Signer's page — its own dialog stands over this one) is asking.
+        // Before it, the funding check, the nonce and the deployment read
+        // are the wallet preparing; the owner saw the biometric line for
+        // seconds with no prompt anywhere (083 W11).
+        let title = if signature == Signature::Asked {
+            s.tx_signing.clone()
+        } else {
+            s.tx_preparing.clone()
+        };
         return Some(receipt(
             ReceiptStage::Submitting,
-            s.tx_signing.clone(),
+            title,
             lead(),
             s.close.clone(),
             false,
@@ -466,7 +502,18 @@ mod tests {
     #[test]
     fn a_request_not_yet_approved_is_still_the_form() {
         let s = strings();
-        assert!(approved(&view(|_| {}), true, None, None, &clock(0.), &s).is_none());
+        assert!(
+            approved(
+                &view(|_| {}),
+                true,
+                None,
+                None,
+                &clock(0.),
+                Signature::NotYet,
+                &s
+            )
+            .is_none()
+        );
     }
 
     /// The passkey, the submission and the wait are each named in the send's
@@ -480,6 +527,7 @@ mod tests {
             Some(&summary()),
             None,
             &clock(0.),
+            Signature::Asked,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -493,6 +541,7 @@ mod tests {
             None,
             None,
             &clock(0.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -505,6 +554,7 @@ mod tests {
             Some(&summary()),
             Some(&entry(TrackStatus::Pending, TrackOutcome::Landing, None)),
             &clock(3_000.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -542,10 +592,69 @@ mod tests {
             None,
             None,
             &clock(0.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
         assert_eq!(both.stage, ReceiptStage::Submitted);
+    }
+
+    /// 083 W11: the funding check, the nonce and the deployment read are the
+    /// wallet preparing; "waiting for biometric" is said only while a prompt
+    /// is up, and "submitting" once it has answered.
+    #[test]
+    fn preparing_is_not_waiting_for_biometric() {
+        let s = strings();
+        let title = |signing: bool, submitting: bool, signature: Signature| {
+            approved(
+                &view(|v| {
+                    v.is_signing = signing;
+                    v.is_submitting = submitting;
+                }),
+                true,
+                None,
+                None,
+                &clock(0.),
+                signature,
+                &s,
+            )
+            .map(|receipt| receipt.title)
+        };
+        let precheck = title(true, false, Signature::NotYet);
+        assert_eq!(
+            precheck.as_ref(),
+            Some(&s.tx_preparing),
+            "the funding check"
+        );
+        assert_ne!(s.tx_preparing, s.tx_signing);
+        assert_eq!(
+            title(true, true, Signature::NotYet).as_ref(),
+            Some(&s.tx_preparing),
+            "building the operation"
+        );
+        assert_eq!(
+            title(true, true, Signature::Asked).as_ref(),
+            Some(&s.tx_signing)
+        );
+        assert_eq!(
+            title(true, true, Signature::Given).as_ref(),
+            Some(&s.tx_submitting)
+        );
+        assert_eq!(
+            title(false, true, Signature::NotYet).as_ref(),
+            Some(&s.tx_submitting),
+            "the relay's own top-up after a signature"
+        );
+    }
+
+    /// 083 (D1): Esc never answers a request — only the ✕ refuses one. It
+    /// still closes a column whose close answers nothing.
+    #[test]
+    fn escape_never_refuses_a_request() {
+        assert!(escape_closes(SignSwipeAction::None));
+        assert!(escape_closes(SignSwipeAction::Dismiss));
+        assert!(!escape_closes(SignSwipeAction::Reject));
+        assert!(!escape_closes(SignSwipeAction::FundingCancel));
     }
 
     /// A message is signing, then signed — never "submitting".
@@ -558,6 +667,7 @@ mod tests {
             None,
             None,
             &clock(0.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -584,6 +694,7 @@ mod tests {
             Some(&summary()),
             None,
             &clock(0.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -606,6 +717,7 @@ mod tests {
                 None,
                 None,
                 &clock(0.),
+                Signature::NotYet,
                 &s,
             );
             assert!(form.is_none(), "{kind:?} is not a submission that failed");
@@ -624,6 +736,7 @@ mod tests {
                 None,
                 Some(&entry(status, outcome, tx)),
                 &clock(60_000.),
+                Signature::NotYet,
                 &s,
             )
             .unwrap_or_else(|| unreachable!("approved"))

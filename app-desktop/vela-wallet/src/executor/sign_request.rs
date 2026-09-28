@@ -36,10 +36,10 @@ use vela_core::app::fee_policy::FeeCall;
 use vela_core::app::sign_request::{
     Event, SignFundingNeeded, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
 };
-use vela_core::app::{Account, KeyMethod};
+use vela_core::app::{Account, Assertion, KeyMethod};
 use vela_core::user_op::WalletKey;
 
-use crate::executor::passkey::{self, Ceremony};
+use crate::executor::passkey::{self, Ceremony, PasskeyFailure};
 use crate::executor::trusted_signer::{self, Ask};
 use crate::executor::user_op::Signer;
 use crate::executor::{now_ms, relay, storage, user_op};
@@ -79,6 +79,13 @@ pub struct SignContext {
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
     pub signing_started: Arc<AtomicBool>,
+    /// Raised once that prompt has answered, whatever it said (083 W11): the
+    /// core's `Submitting` spans building the operation, the prompt and the
+    /// submission, and only these two flags say which of them is running.
+    pub signature_done: Arc<AtomicBool>,
+    /// The phone's QR ran its whole scan window with no phone (083 W19) —
+    /// told to the column, which says so; the page is told nothing.
+    pub scan_expired: Arc<AtomicBool>,
     /// Who asked, as the transport says — `None` for the wallet's own
     /// requests, which the Trusted Signer's page is told as the wallet's own
     /// send rather than as a site's.
@@ -97,6 +104,18 @@ impl SignContext {
     #[must_use]
     pub fn route(&self) -> (Option<String>, KeyMethod) {
         (self.pinned_credential.clone(), self.key_method)
+    }
+
+    /// A pipeline starting over — an approval, a retry, a top-up's Continue —
+    /// starts with no prompt asked yet (083).
+    pub fn prompt_reset(&self) {
+        for flag in [
+            &self.signing_started,
+            &self.signature_done,
+            &self.scan_expired,
+        ] {
+            flag.store(false, Ordering::SeqCst);
+        }
     }
 
     /// Point the Trusted Signer channel at this account's page when it signs
@@ -140,6 +159,8 @@ impl SignContext {
             page_key: send.page_key,
             ceremony: send.ceremony,
             signing_started: send.signing_started,
+            signature_done: Arc::new(AtomicBool::new(false)),
+            scan_expired: Arc::new(AtomicBool::new(false)),
             site: None,
             account_name: send.account_name,
             trusted_signer: send.trusted_signer,
@@ -314,9 +335,10 @@ fn sign_and_submit(
     };
 
     let mut sign = |challenge: &[u8]| {
-        ctx.signing_started.store(true, Ordering::SeqCst);
-        let (credential, method) = ctx.route();
-        passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
+        around_prompt(ctx, || {
+            let (credential, method) = ctx.route();
+            passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
+        })
     };
     let ask = ctx.ask(method, params_json);
     let page = ctx.trusted_signer.chosen();
@@ -372,9 +394,10 @@ fn sign_message(
         };
     };
     let mut sign = |challenge: &[u8]| {
-        ctx.signing_started.store(true, Ordering::SeqCst);
-        let (credential, method) = ctx.route();
-        passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
+        around_prompt(ctx, || {
+            let (credential, method) = ctx.route();
+            passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
+        })
     };
     let ask = ctx.ask(method, params_json);
     let page = ctx.trusted_signer.chosen();
@@ -396,6 +419,34 @@ fn sign_message(
 /// The methods the sheet signs as a message rather than submits.
 fn is_message(method: &str) -> bool {
     vela_core::sign_message::is_message_method(method)
+}
+
+/// One passkey prompt, as the column follows it (083).
+///
+/// W11: `signing_started` goes up as the prompt opens and `signature_done`
+/// once it has answered, so "waiting for biometric" is said only while
+/// something is asking — the owner saw it for seconds over the funding check
+/// and the nonce read, with no prompt anywhere.
+///
+/// W19: a phone's QR that ran its whole scan window with nobody scanning is
+/// a cancellation, not a failure. As a failure the core answered the page
+/// -32603 with the scan's own English; as a cancellation it keeps the request
+/// open and sends nothing, and the column offers the scan again.
+fn around_prompt(
+    ctx: &SignContext,
+    prompt: impl FnOnce() -> Result<Assertion, PasskeyFailure>,
+) -> Result<Assertion, PasskeyFailure> {
+    ctx.signing_started.store(true, Ordering::SeqCst);
+    let answer = prompt();
+    ctx.signature_done.store(true, Ordering::SeqCst);
+    answer.map_err(|failure| {
+        if failure.scan_ran_out() {
+            ctx.scan_expired.store(true, Ordering::SeqCst);
+            PasskeyFailure::cancelled()
+        } else {
+            failure
+        }
+    })
 }
 
 /// What the site asked to sign, before the Safe's wrap — the core's one rule
@@ -750,6 +801,7 @@ fn parse_wei(value: &str) -> Option<u128> {
 mod tests {
     use super::*;
 
+    use vela_core::app::FailureKind;
     use vela_core::app::sign_request::{
         SignRecord, SignRecordClose, SignRecordKind, SignRecordStatus,
     };
@@ -841,6 +893,71 @@ mod tests {
             legacy.route(),
             (Some("cred0".to_owned()), KeyMethod::Platform)
         );
+    }
+
+    /// 083 W11: the prompt is marked open while it asks and answered after,
+    /// whatever it said — and a new pipeline starts with neither.
+    #[test]
+    fn around_prompt_marks_the_prompt_then_the_signature() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        let answer = around_prompt(&ctx, || {
+            assert!(ctx.signing_started.load(Ordering::SeqCst), "asking now");
+            assert!(
+                !ctx.signature_done.load(Ordering::SeqCst),
+                "not answered yet"
+            );
+            Err(PasskeyFailure::cancelled())
+        });
+        assert_eq!(
+            answer.err().map(|failure| failure.kind),
+            Some(FailureKind::Cancelled)
+        );
+        assert!(
+            ctx.signature_done.load(Ordering::SeqCst),
+            "answered, if only with no"
+        );
+        assert!(!ctx.scan_expired.load(Ordering::SeqCst));
+
+        ctx.prompt_reset();
+        assert!(!ctx.signing_started.load(Ordering::SeqCst));
+        assert!(!ctx.signature_done.load(Ordering::SeqCst));
+    }
+
+    /// 083 W19: a QR nobody scanned in the whole window is not an answer to
+    /// the page. It reaches the core as the passkey dismissed — which keeps
+    /// the request open and sends nothing — and the column is told, so it can
+    /// say what happened and offer the scan again. Any other failure is still
+    /// the failure it was.
+    #[test]
+    fn scan_timeout_is_not_an_answer() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        let ran_out = around_prompt(&ctx, || {
+            Err(PasskeyFailure::other(crate::ctap::cable::NO_ADVERT))
+        })
+        .err()
+        .unwrap_or_else(|| unreachable!("no phone, no assertion"));
+        assert_eq!(ran_out.kind, FailureKind::Cancelled);
+        assert_eq!(ran_out.message, None, "no scan English for the page");
+        assert!(
+            ctx.scan_expired.load(Ordering::SeqCst),
+            "the column is told"
+        );
+        assert_eq!(
+            submit_failure(100, "0xabc", user_op::SubmitFailure::PasskeyCancelled),
+            SignSubmitOutcome::PasskeyCancelled,
+            "…which the core answers with nothing"
+        );
+
+        ctx.prompt_reset();
+        let broken = around_prompt(&ctx, || {
+            Err(PasskeyFailure::other(
+                "the relay tunnel would not open: refused",
+            ))
+        })
+        .err()
+        .unwrap_or_else(|| unreachable!("a failure"));
+        assert_eq!(broken.kind, FailureKind::Other);
+        assert!(!ctx.scan_expired.load(Ordering::SeqCst));
     }
 
     /// A site's request reaches the page as the site's — its method, its

@@ -60,10 +60,15 @@ pub enum HybridError {
     Cancelled,
 }
 
+/// [`HybridError::NoAdvert`]'s sentence, shared with the dApp signing path so
+/// it can tell a scan nobody answered from a failure without matching prose
+/// (083 W19) — the way [`TUNNEL_CLOSED`] is shared with the failure mapping.
+pub const NO_ADVERT: &str = "no phone answered the QR within the scan window";
+
 impl std::fmt::Display for HybridError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NoAdvert => write!(f, "no phone answered the QR within the scan window"),
+            Self::NoAdvert => f.write_str(NO_ADVERT),
             Self::Bluetooth(detail) => write!(f, "Bluetooth is unavailable: {detail}"),
             Self::BadAdvert => write!(f, "the phone's advertisement was malformed"),
             Self::Tunnel(detail) => write!(f, "the relay tunnel would not open: {detail}"),
@@ -106,8 +111,9 @@ pub const BLE_CHANNEL_SUPPORTED: bool = cfg!(any(target_os = "macos", target_os 
 const CABLE_SUBPROTOCOL: &str = "fido.cable";
 
 /// How long to scan before giving up. A person has to pick up their phone,
-/// unlock it, and approve the prompt that scanning the QR raised.
-const SCAN_TIMEOUT: Duration = Duration::from_secs(90);
+/// unlock it, and approve the prompt that scanning the QR raised. The signing
+/// column names it when the window closes (083 W19).
+pub(crate) const SCAN_TIMEOUT: Duration = Duration::from_secs(90);
 
 /// A read blocks this long before the tunnel is declared dead — long enough to
 /// cover the person approving on their phone (the CTAP user-presence budget and

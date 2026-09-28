@@ -111,6 +111,13 @@ impl PasskeyFailure {
             message: Some(message.into()),
         }
     }
+
+    /// The phone's QR was up for the whole scan window and no phone answered
+    /// (083 W19). Nobody declined and nothing failed — a dApp request keeps
+    /// waiting on it rather than hearing -32603.
+    pub(crate) fn scan_ran_out(&self) -> bool {
+        self.kind == FailureKind::Other && self.message.as_deref() == Some(cable::NO_ADVERT)
+    }
 }
 
 /// A core ceremony failure, in this shell's type. Same shape, different enum —

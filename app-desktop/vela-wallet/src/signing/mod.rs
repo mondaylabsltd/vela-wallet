@@ -52,6 +52,9 @@ pub struct SigningStrings {
     /// send receipt's own words (`send.tx*`) — a dApp transaction and a send
     /// must read the same while they land (Android's receipt, word for word).
     pub tx_signing: SharedString,
+    /// Approved, and nothing has asked for the signature yet: the funding
+    /// check, the nonce, the deployment read (083 W11).
+    pub tx_preparing: SharedString,
     pub tx_submitting: SharedString,
     pub tx_background_hint: SharedString,
     pub tx_submitted_title: SharedString,
@@ -290,6 +293,7 @@ impl SigningStrings {
             receipt_tx_hash: loc.t("componentsTx.receipt.txHash"),
             receipt_explorer: loc.t("componentsTx.receipt.explorer"),
             receipt_done: loc.t("componentsTx.receipt.done"),
+            tx_preparing: loc.t("send.txPreparing"),
             tx_signing: loc.t("send.txSigning"),
             tx_submitting: loc.t("send.txSubmitting"),
             tx_background_hint: loc.t("send.txBackgroundHint"),
@@ -562,6 +566,7 @@ mod tests {
     fn the_status_words_resolve() {
         let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
         for text in [
+            s.tx_preparing.as_ref(),
             s.tx_signing.as_ref(),
             s.tx_submitting.as_ref(),
             s.tx_background_hint.as_ref(),

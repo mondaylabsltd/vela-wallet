@@ -13709,27 +13709,121 @@ impl WalletPage {
             summary,
             track.as_ref(),
             &clock,
+            host.signature(),
             &self.signing,
         )
         .map(|receipt| (receipt, host.chain_id))
     }
 
-    /// The column's close — its ✕, Esc, and the receipt's own button. The
-    /// core decides what it answers: a request not yet approved is refused
-    /// (4001); one approved is merely no longer watched, and its answer still
-    /// reaches the page (spec 079 FR-002). An ending on screen just goes.
+    /// What the open request's ceremony waits on the person for, as a card
+    /// for the column (083 W19): the phone's QR, the phone's or the key's own
+    /// prompt, or a scan whose window closed with no phone. `None` when only
+    /// the request itself does.
+    #[cfg(not(target_os = "linux"))]
+    fn signing_ceremony_card(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        let host = self.signing_host.clone()?;
+        let (qr, touch, expired) = {
+            let read = host.read(cx);
+            (read.qr_showing(), read.touch_waiting(), read.qr_expired)
+        };
+        let card = if let Some(payload) = qr {
+            let host = host.clone();
+            hardware::qr_card_with(
+                theme,
+                &self.loc,
+                &payload,
+                // What to do on the phone. The create card's line ("create it
+                // on a nearby device") is not what a signature asks.
+                self.loc.t("onboarding.common.touchRemoteBody"),
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    host.update(cx, |host, cx| host.cancel_qr(cx));
+                },
+            )
+        } else if let Some(waiting) = touch {
+            let host = host.clone();
+            hardware::touch_card(
+                theme,
+                &self.loc,
+                &waiting,
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    host.update(cx, |host, cx| host.cancel_touch(cx));
+                },
+            )
+        } else if expired {
+            // Nothing was answered: Retry shows a new code, and the close is
+            // the column's own — a refusal, made by the person.
+            let seconds = crate::ctap::cable::SCAN_TIMEOUT.as_secs_f64();
+            let retry = {
+                let host = host.clone();
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    host.update(cx, |host, cx| host.retry(cx));
+                }
+            };
+            let close = cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                this.close_signing_column(cx);
+            });
+            hardware::card(theme)
+                .child(hardware::title(
+                    theme,
+                    self.loc.t("onboarding.common.timeoutTitle"),
+                ))
+                .child(hardware::body(
+                    theme,
+                    self.loc
+                        .t_vars("onboarding.common.timeoutBody", &[("seconds", seconds)]),
+                ))
+                .child(crate::ui::vela_button(
+                    "signing-scan-retry",
+                    crate::ui::ButtonVariant::Primary,
+                    self.loc.t("onboarding.common.retry"),
+                    theme,
+                    retry,
+                ))
+                .child(crate::ui::vela_button(
+                    "signing-scan-close",
+                    crate::ui::ButtonVariant::Secondary,
+                    self.loc.t("onboarding.common.close"),
+                    theme,
+                    close,
+                ))
+        } else {
+            return None;
+        };
+        // A dialog's width; the column is narrower.
+        Some(card.w_full())
+    }
+
+    /// The column's close — its ✕, the receipt's own button, and Esc where
+    /// that answers nothing (083). The core decides what it answers: a request
+    /// not yet approved is refused (4001); one approved is merely no longer
+    /// watched, and its answer still reaches the page (spec 079 FR-002). An
+    /// ending on screen just goes. Over the phone's QR the scan is stopped
+    /// first (`SigningHost::close`).
     fn close_signing_column(&mut self, cx: &mut Context<Self>) {
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.clone() {
-            host.update(cx, |host, cx| {
-                host.dispatch_sign(vela_core::app::sign_request::Event::SwipeDismissed, cx);
-            });
+            host.update(cx, |host, cx| host.close(cx));
         }
         self.dapp_landing = None;
         if self.panel == PanelId::Signing {
             self.panel = PanelId::None;
         }
         cx.notify();
+    }
+
+    /// Esc on the signing column (083, the owner's D1). Esc is not the ✕:
+    /// on Windows it is also the key that leaves the address bar, and one
+    /// press refused the page (4001). A request still waiting on the person
+    /// stays; over the QR or a key prompt Esc is that card's Cancel; an
+    /// ending, a failure or an operation already on its way still closes.
+    fn escape_signing_column(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = self.signing_host.clone()
+            && !host.update(cx, |host, cx| host.escape(cx))
+        {
+            return;
+        }
+        self.close_signing_column(cx);
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -14895,6 +14989,18 @@ impl WalletPage {
             let summary = crate::signing::status::summary_of(&model.blocks);
             let header = signing_components::HeaderModel::of(&model);
             self.signing_last = Some((header.clone(), summary.clone()));
+            // 083 W19: what the ceremony is waiting for — the phone's QR, the
+            // "check your phone" prompt, a scan that ran out — drawn IN the
+            // column. A window-wide scrim paints under the dApp page on
+            // Windows, and until 083 nothing drew these here at all.
+            if let Some(card) = self.signing_ceremony_card(theme, cx) {
+                return div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(16.))
+                    .child(signing_components::header_view(theme, &header))
+                    .child(card);
+            }
             if let Some((receipt, chain_id)) = self.open_request_receipt(summary.as_ref(), cx) {
                 let on_close: panels::Click =
                     Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
@@ -17657,11 +17763,17 @@ impl Render for WalletPage {
                         this.settings_open_dropdown = None;
                         cx.notify();
                     } else if this.panel != PanelId::None {
-                        // Escape is the ✕: a signing column tells its core,
-                        // as the web's `onclose` does, or the dApp's request
-                        // hangs and every later one is refused as busy.
+                        // A signing column closes only where closing answers
+                        // nothing (083 D1) — a refusal is the ✕'s alone.
                         if this.panel == PanelId::Signing {
-                            this.close_signing_column(cx);
+                            this.escape_signing_column(cx);
+                        } else if this.panel == PanelId::Connection
+                            && this.browser_consent.is_some()
+                        {
+                            // Nor does Esc put a site's connect question out
+                            // of sight (083): hidden by a key, it was answered
+                            // by nobody and the site waited unseen. It stays
+                            // for its own buttons.
                         } else {
                             this.panel = PanelId::None;
                             cx.notify();

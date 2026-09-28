@@ -318,6 +318,25 @@ pub fn qr_card(
     payload: &str,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
+    qr_card_with(
+        theme,
+        loc,
+        payload,
+        loc.t("onboarding.create.methodHybridBody"),
+        on_cancel,
+    )
+}
+
+/// [`qr_card`] with its own line under the code. The create card's line says
+/// "create it on a nearby device", which is false over a signature — the
+/// dApp signing column says what to do on the phone instead (083 W19).
+pub fn qr_card_with(
+    theme: &Theme,
+    loc: &Loc,
+    payload: &str,
+    body_text: SharedString,
+    on_cancel: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+) -> Div {
     // A module size that keeps a typical caBLE payload (~40 modules a side) to a
     // card-sized target without a second layout pass.
     const MODULE_PX: f32 = 5.0;
@@ -357,7 +376,7 @@ pub fn qr_card(
                 .bg(rgb(0xffffff))
                 .child(matrix),
         )
-        .child(body(theme, loc.t("onboarding.create.methodHybridBody")))
+        .child(body(theme, body_text))
         // The way out. This card waits up to ninety seconds for a phone, over a
         // scrim that swallows every press; without this button the only exit
         // was quitting the app. The PIN and wallet-picker cards always had one.
