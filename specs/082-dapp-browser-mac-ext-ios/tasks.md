@@ -76,7 +76,7 @@ does not touch `C/mod.rs` and may start with T009). After the groups
 come the exports and the bindings, a sub-phase of its own whose entry is the end of every group;
 it must be sequential because the binding files are shared.
 
-- [ ] T009 Register the three new pure modules in `C/mod.rs` so that no group touches `C/mod.rs` afterwards: create `C/sim_outcome.rs`, `C/net_health.rs` and `C/remote_mark.rs` as stubs holding only a module doc comment, and add their `pub mod` lines to `C/mod.rs`. Proof: `cd rust && cargo check -p vela-core --features crux`.
+- [x] T009 Register the three new pure modules in `C/mod.rs` so that no group touches `C/mod.rs` afterwards: create `C/sim_outcome.rs`, `C/net_health.rs` and `C/remote_mark.rs` as stubs holding only a module doc comment, and add their `pub mod` lines to `C/mod.rs`. Proof: `cd rust && cargo check -p vela-core --features crux`.
 
 ### Group A-core — money safety, lifecycle hole, chain notice, optional methods
 
