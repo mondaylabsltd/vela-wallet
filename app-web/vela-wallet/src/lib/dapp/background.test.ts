@@ -69,6 +69,8 @@ function makeEnv() {
 	const session = memArea();
 	const pages = new Map<string, FakePage>();
 	const panelWindows = new Set<number>();
+	/** Chrome reports the manifest's global side panel with `windowId: -1`. */
+	const globalPanel = { up: false };
 	const windows = new Set<number>([3]);
 	let nextWindow = 100;
 	const logs: string[] = [];
@@ -79,7 +81,8 @@ function makeEnv() {
 			getURL: (path = '') => `chrome-extension://ext/${path}`,
 			onMessage: on('message'),
 			onConnect: on('connect'),
-			getContexts: async () => [...panelWindows].map((windowId) => ({ windowId }))
+			getContexts: async () =>
+				globalPanel.up ? [{ windowId: -1 }] : [...panelWindows].map((windowId) => ({ windowId }))
 		},
 		storage: { local, session, onChanged: on('storageChanged') },
 		tabs: {
@@ -238,6 +241,7 @@ function makeEnv() {
 		session,
 		pages,
 		panelWindows,
+		globalPanel,
 		windows,
 		logs,
 		emit,
@@ -424,6 +428,34 @@ describe('a worker restart (G19, EX8 — resume, don’t settle)', () => {
 		panel.post({ type: 'answer', rid: '7:u1:1', result: '0xsig' });
 		await settleAll();
 		expect(page.answers).toEqual([{ id: 'u1:1', result: '0xsig', error: undefined }]);
+	});
+
+	it('keeps a panel request when Chrome cannot say which window its panel is in (windowId -1)', async () => {
+		const env = makeEnv();
+		const page = env.openPage(7, 'doc-a');
+		page.owed.add('u1:1');
+		env.globalPanel.up = true;
+		env.session.data['vela.req.7:u1:1'] = {
+			v: 1,
+			rid: '7:u1:1',
+			id: 'u1:1',
+			method: 'personal_sign',
+			params: [],
+			origin: 'https://a.example',
+			tabId: 7,
+			windowId: 3,
+			documentId: 'doc-a',
+			sentAt: Date.now(),
+			at: Date.now(),
+			surface: 'panel',
+			surfaceWindowId: 3,
+			state: 'shown'
+		};
+		await startWorker(env);
+		await settleAll();
+		expect(reqKeys(env.session)).toEqual(['vela.req.7:u1:1']);
+		expect(page.answers).toEqual([]);
+		expect(String(env.session.data['vela.sw.log'])).toMatch(/recovered=1/);
 	});
 
 	it('settles what can no longer be answered: expired, no panel, page gone', async () => {

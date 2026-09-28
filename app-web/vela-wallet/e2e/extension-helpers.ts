@@ -96,12 +96,37 @@ export async function preferWindows(extensionPage: Page): Promise<void> {
 }
 
 /**
- * Drive the open side panel from another extension page.
+ * The side panel's `Window`, as another extension page sees it.
+ *
+ * Since spec 077 the panel IS the wallet — `wallet.html?panel` — with a
+ * request rising over it as a dialog; and since spec 082 (RB9) it stays the
+ * panel after Wallet → Settings → Wallet drops the query, by a sessionStorage
+ * mark. This used to look for `request.html` with no query, a page the panel
+ * has not shown since 077 — so the "panel" checks were watching nothing
+ * (L-PANEL).
+ */
+const FIND_PANEL = `() => chrome.extension.getViews().find((w) => {
+	try {
+		if (!w.location.pathname.endsWith('/wallet.html')) return false;
+		return (
+			new URLSearchParams(w.location.search).has('panel') ||
+			w.sessionStorage.getItem('vela.surface.panel') === '1'
+		);
+	} catch {
+		return false;
+	}
+})`;
+
+/**
+ * Drive the side panel from another extension page, once a request's dialog
+ * is showing in it.
  *
  * `chrome.extension.getViews()` hands an extension page the `Window` of every
  * other view of the extension in its process — the side panel included — so a
- * test can read its heading and press its buttons without a Page of its own.
- * Resolves with the panel's heading once it is showing something.
+ * test can read the dialog and press its buttons without a Page of its own.
+ * `heading` is the dialog's `aria-label` (the card's title, which names the
+ * site); a click only ever lands INSIDE the dialog, never on the wallet under
+ * it.
  */
 export async function sidePanelView(
 	extensionPage: Page,
@@ -109,26 +134,27 @@ export async function sidePanelView(
 ): Promise<{ heading: string; click(buttonText: string): Promise<void> }> {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
-		const heading = await extensionPage.evaluate(() => {
-			const view = (window as unknown as ChromeLocal).chrome.extension
-				.getViews()
-				.find((w) => w.location.href.includes('/request.html') && !w.location.search);
-			return view?.document.querySelector('h1')?.textContent ?? null;
-		});
+		const heading = await extensionPage.evaluate((finder) => {
+			const find = new Function(`return (${finder})`)() as () => Window | undefined;
+			const dialog = find()?.document.querySelector('[role="dialog"]');
+			return dialog?.getAttribute('aria-label') ?? null;
+		}, FIND_PANEL);
 		if (heading) {
 			return {
 				heading,
 				click: (buttonText: string) =>
-					extensionPage.evaluate((text) => {
-						const view = (window as unknown as ChromeLocal).chrome.extension
-							.getViews()
-							.find((w) => w.location.href.includes('/request.html') && !w.location.search);
-						const button = [...(view?.document.querySelectorAll('button') ?? [])].find(
-							(b) => b.textContent?.trim() === text
-						);
-						if (!button) throw new Error(`no "${text}" button in the side panel`);
-						button.click();
-					}, buttonText)
+					extensionPage.evaluate(
+						([finder, text]) => {
+							const find = new Function(`return (${finder})`)() as () => Window | undefined;
+							const dialog = find()?.document.querySelector('[role="dialog"]');
+							const button = [...(dialog?.querySelectorAll('button') ?? [])].find(
+								(b) => b.textContent?.trim() === text
+							);
+							if (!button) throw new Error(`no "${text}" button in the side panel's dialog`);
+							(button as HTMLButtonElement).click();
+						},
+						[FIND_PANEL, buttonText] as const
+					)
 			};
 		}
 		await new Promise((r) => setTimeout(r, 250));
@@ -136,13 +162,37 @@ export async function sidePanelView(
 	throw new Error('no side panel showed a request');
 }
 
-/** Is a side panel showing a request right now? */
-export const sidePanelOpen = (extensionPage: Page): Promise<boolean> =>
-	extensionPage.evaluate(() =>
-		(window as unknown as ChromeLocal).chrome.extension
-			.getViews()
-			.some((w) => w.location.href.includes('/request.html') && !w.location.search)
-	);
+/** Is the side panel open at all (the wallet, request or not)? */
+export const sidePanelUp = (extensionPage: Page): Promise<boolean> =>
+	extensionPage.evaluate((finder) => {
+		const find = new Function(`return (${finder})`)() as () => Window | undefined;
+		return find() !== undefined;
+	}, FIND_PANEL);
+
+/** Is the side panel showing a request's dialog right now? */
+export const sidePanelShowsRequest = (extensionPage: Page): Promise<boolean> =>
+	extensionPage.evaluate((finder) => {
+		const find = new Function(`return (${finder})`)() as () => Window | undefined;
+		return !!find()?.document.querySelector('[role="dialog"]');
+	}, FIND_PANEL);
+
+/**
+ * Run `body` inside the side panel's window (a function of `panel: Window`),
+ * from another extension page. For what the helpers above do not cover — a
+ * MutationObserver, a slide, a navigation.
+ */
+export function inSidePanel<T>(extensionPage: Page, body: string, arg?: unknown): Promise<T> {
+	return extensionPage.evaluate(
+		async ([finder, source, value]) => {
+			const find = new Function(`return (${finder})`)() as () => Window | undefined;
+			const panel = find();
+			if (!panel) throw new Error('no side panel');
+			const run = new Function('panel', 'arg', `return (async () => { ${source} })()`);
+			return run(panel, value);
+		},
+		[FIND_PANEL, body, arg] as const
+	) as Promise<T>;
+}
 
 /** The request window this extension opened, once it is showing something. */
 export async function requestWindow(context: BrowserContext, timeoutMs = 15_000): Promise<Page> {

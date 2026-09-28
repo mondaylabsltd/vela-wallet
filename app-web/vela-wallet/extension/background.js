@@ -328,14 +328,29 @@ function within(promise, ms, fallback) {
 	return Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(fallback), ms))]);
 }
 
-/** The windows that have a side panel up, or `null` when that cannot be read. */
+/**
+ * The windows that have a side panel up, or `null` when that cannot be told.
+ *
+ * Chrome reports the manifest's global side panel with `windowId: -1`
+ * (measured on Chrome for Testing 151), so a panel context that names no
+ * window cannot rule any window out: that is `null` — the record is probed,
+ * never settled on a guess. No side panel at all is an empty set. A panel
+ * whose port is connected is up, whatever Chrome reports.
+ */
 async function panelWindows() {
+	let contexts;
 	try {
-		const contexts = await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] });
-		return new Set(contexts.map((c) => c.windowId).filter((id) => typeof id === 'number'));
+		contexts = await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] });
 	} catch {
 		return null;
 	}
+	const ids = contexts.map((c) => c.windowId);
+	if (ids.some((id) => typeof id !== 'number' || id < 0)) return null;
+	const up = new Set(ids);
+	for (const { caller } of surfaces.values()) {
+		if (caller.kind === 'panel') up.add(caller.windowId);
+	}
+	return up;
 }
 
 async function openWindows() {
