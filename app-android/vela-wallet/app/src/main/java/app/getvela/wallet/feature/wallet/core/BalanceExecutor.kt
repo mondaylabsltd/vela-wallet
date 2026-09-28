@@ -18,7 +18,8 @@ import uniffi.vela_core_uniffi.bestNativeDexPrice
 import uniffi.vela_core_uniffi.firstGroupedQuotePrice
 import uniffi.vela_core_uniffi.chooseNativePrice
 import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
-import uniffi.vela_core_uniffi.wrappedNativeIsTheNative
+import uniffi.vela_core_uniffi.BalanceReadSlot
+import uniffi.vela_core_uniffi.balanceReadPlan
 
 /**
  * The only place the `balance_dashboard` core touches the outside world.
@@ -192,7 +193,41 @@ class BalanceExecutor(
         val knownDecimals: Int?,
         val balanceIndex: Int,
         val decimalsIndex: Int?,
+        /** A registry stablecoin's worth (the read plan's `peg_usd`); `null` otherwise. */
+        val pegUsd: Double? = null,
     )
+
+    /** A slot's decimals: saved, or read in the batch; `null` when the read failed. */
+    private fun decimalsOf(slot: Slot, results: List<Abi.CallResult>): Int? =
+        slot.knownDecimals
+            ?: slot.decimalsIndex
+                ?.let { results.getOrNull(it) }
+                ?.takeIf { it.success }
+                ?.let { Abi.decodeUint8(it.data) }
+
+    /**
+     * The core's read plan for one chain. A plan the core refuses (it never
+     * should: the inputs are the registry's and the person's own) falls back
+     * to the native coin alone and says so — never a guessed list.
+     */
+    private fun readPlan(
+        chainId: Int,
+        stables: List<ChainStable>,
+        wrappedNative: String?,
+        customs: List<CustomToken>,
+    ): List<BalanceReadSlot> {
+        val stablesJson = JSONArray().apply {
+            stables.forEach { put(JSONObject().put("symbol", it.symbol).put("contract", it.contract)) }
+        }.toString()
+        val customJson = JSONArray().apply {
+            customs.forEach {
+                put(JSONObject().put("contract", it.contract).put("symbol", it.symbol).put("name", it.name).put("decimals", it.decimals.coerceIn(0, 255)))
+            }
+        }.toString()
+        return runCatching { balanceReadPlan(chainId.toUInt(), stablesJson, wrappedNative, customJson) }
+            .onFailure { VelaLog.failure("balance.plan", "the core refused the read plan", it) }
+            .getOrElse { listOf(BalanceReadSlot(kind = "native", contract = null, symbol = "", name = "", knownDecimals = null, pegUsd = null)) }
+    }
 
     /**
      * Every chain at once.
@@ -258,76 +293,67 @@ class BalanceExecutor(
         val calls = ArrayList<Abi.Call>()
         val slots = ArrayList<Slot>()
 
-        slots.add(
-            Slot(
-                Kind.Native, nativeSymbol, nativeName, null, nativeDecimals,
-                balanceIndex = calls.size, decimalsIndex = null,
-            ),
-        )
-        calls.add(Abi.Call(Abi.MULTICALL3, Abi.encodeGetEthBalance(address)))
-
+        // Which balances this read covers is the core's (`balanceReadPlan`,
+        // spec 082 RE9): the native coin, the registry's stablecoins (worth
+        // their peg), the wrapped native unless it IS the native (Celo's
+        // GoldToken: listing both showed CELO 6.96 and WCELO 6.96 for one
+        // holding, spec 038), then the person's own tokens — each contract
+        // once, the person's metadata lent to a registry entry. This file only
+        // turns each slot into its calls.
         val stables = chain?.stables.orEmpty()
-        stables.forEach { stable ->
-            val balanceIndex = calls.size
-            calls.add(Abi.Call(stable.contract, Abi.encodeBalanceOf(address)))
-            val decimalsIndex = calls.size
-            calls.add(Abi.Call(stable.contract, Abi.encodeDecimals()))
-            slots.add(
-                Slot(
-                    Kind.Stable, stable.symbol, stable.symbol, stable.contract, null,
-                    balanceIndex, decimalsIndex,
-                ),
-            )
+        val plan = readPlan(chainId, stables, chain?.wrappedNative, customTokens(chainId))
+        plan.forEach { slot ->
+            val contract = slot.contract
+            when (slot.kind) {
+                "native" -> {
+                    slots.add(Slot(Kind.Native, nativeSymbol, nativeName, null, nativeDecimals, balanceIndex = calls.size, decimalsIndex = null))
+                    calls.add(Abi.Call(Abi.MULTICALL3, Abi.encodeGetEthBalance(address)))
+                }
+                "stable", "wrapped", "custom" -> {
+                    if (contract.isNullOrBlank()) return@forEach
+                    val kind = when (slot.kind) {
+                        "stable" -> Kind.Stable
+                        "wrapped" -> Kind.Wrapped
+                        else -> Kind.Custom
+                    }
+                    val known = slot.knownDecimals?.toInt()
+                    val balanceIndex = calls.size
+                    calls.add(Abi.Call(contract, Abi.encodeBalanceOf(address)))
+                    // Known decimals (the person saved them) cost no read.
+                    val decimalsIndex = if (known == null) calls.size.also { calls.add(Abi.Call(contract, Abi.encodeDecimals())) } else null
+                    slots.add(
+                        Slot(
+                            kind,
+                            symbol = if (kind == Kind.Wrapped) "W$nativeSymbol" else slot.symbol,
+                            name = if (kind == Kind.Wrapped) "Wrapped $nativeName" else slot.name,
+                            contract = contract,
+                            knownDecimals = known,
+                            balanceIndex = balanceIndex,
+                            decimalsIndex = decimalsIndex,
+                            pegUsd = slot.pegUsd,
+                        ),
+                    )
+                }
+                else -> VelaLog.event("balance.plan", "a slot this app cannot read", "kind" to slot.kind, "chain" to chainId)
+            }
         }
-
-        // The chain data names a "wrapped" native, but on Celo nothing is
-        // wrapped: the GoldToken IS the coin, and `balanceOf` there and the
-        // native balance are ONE balance. Listing both showed CELO 6.96 and
-        // WCELO 6.96 to the founder and counted the holding twice (spec 038).
-        // The core owns which chains this is true of; the walk only asks.
-        val wrapped = chain?.wrappedNative
-            ?.takeUnless { wrappedNativeIsTheNative(chainId.toUInt(), it) }
-        if (wrapped != null) {
-            val balanceIndex = calls.size
-            calls.add(Abi.Call(wrapped, Abi.encodeBalanceOf(address)))
-            val decimalsIndex = calls.size
-            calls.add(Abi.Call(wrapped, Abi.encodeDecimals()))
-            slots.add(
-                Slot(
-                    Kind.Wrapped, "W$nativeSymbol", "Wrapped $nativeName", wrapped, null,
-                    balanceIndex, decimalsIndex,
-                ),
-            )
-        }
-
-        // The person's own tokens on this chain. Their decimals are already
-        // known — they were recorded when the token was added — so no
-        // `decimals()` read is spent on them.
-        val customs = customTokens(chainId)
-        customs.forEach { token ->
-            slots.add(
-                Slot(
-                    Kind.Custom, token.symbol, token.name, token.contract, token.decimals,
-                    balanceIndex = calls.size, decimalsIndex = null,
-                ),
-            )
-            calls.add(Abi.Call(token.contract, Abi.encodeBalanceOf(address)))
-        }
+        fun slotOf(contract: String): Slot? = slots.firstOrNull { it.contract.equals(contract, ignoreCase = true) }
+        val wrapped = slots.firstOrNull { it.kind == Kind.Wrapped }?.contract
+        val customs = slots.filter { it.kind == Kind.Custom }
 
         // One quote group per stable, never one flat list. The amount a quote
         // returns is denominated in THAT stable's base units, so a group scaled
         // by a neighbour's `decimals()` mis-prices by 10^12 the moment a chain
         // holds both a 6-decimal USDC and an 18-decimal DAI. Each group also
-        // carries its own decimals read; the core applies its own default when
-        // that read failed, rather than borrowing another group's real value.
-        val quoteGroups = ArrayList<Pair<List<Int>, Int?>>()
+        // carries its own stable's decimals; the core applies its own default
+        // when that read failed, rather than borrowing another group's value.
+        val quoteGroups = ArrayList<Pair<List<Int>, Slot?>>()
         val dex = chain?.dex
         if (wrapped != null && dex != null) {
             val amountIn = BigInteger.TEN.pow(nativeDecimals)
-            stables.forEachIndexed { index, stable ->
+            stables.forEach { stable ->
                 val indices = quoteCalls(calls, dex, wrapped, stable.contract, amountIn)
-                // +1: the native coin is slot 0, so stable `index` is slot 1+index.
-                if (indices.isNotEmpty()) quoteGroups.add(indices to slots[1 + index].decimalsIndex)
+                if (indices.isNotEmpty()) quoteGroups.add(indices to slotOf(stable.contract))
             }
         }
 
@@ -337,9 +363,7 @@ class BalanceExecutor(
         // then any USDC, then USDT, then whatever is left — is the chain
         // registry's, not this file's.
         val preferred = ChainData.pickQuoteToken(stables)
-        val orderedStables = stables.withIndex()
-            .sortedBy { (_, stable) -> if (stable == preferred) 0 else 1 }
-            .map { (index, stable) -> index to stable }
+        val orderedStables = stables.sortedBy { stable -> if (stable == preferred) 0 else 1 }
 
         // Custom-token prices, two paths and both the core's:
         //
@@ -348,22 +372,21 @@ class BalanceExecutor(
         //   B  token → the wrapped native coin, times the coin's own price.
         //      One quote token here, so one scale, and the wrapped coin mirrors
         //      the native decimals by construction.
-        val customDirect = HashMap<String, MutableList<Pair<List<Int>, Int?>>>()
+        val customDirect = HashMap<String, MutableList<Pair<List<Int>, Slot?>>>()
         val customViaNative = HashMap<String, List<Int>>()
         if (dex != null) {
             customs.forEach { token ->
-                val amountIn = BigInteger.TEN.pow(token.decimals)
-                val direct = ArrayList<Pair<List<Int>, Int?>>()
-                orderedStables.forEach { (stableIndex, stable) ->
-                    val indices = quoteCalls(calls, dex, token.contract, stable.contract, amountIn)
-                    if (indices.isNotEmpty()) {
-                        direct.add(indices to slots[1 + stableIndex].decimalsIndex)
-                    }
+                val tokenContract = token.contract ?: return@forEach
+                val amountIn = BigInteger.TEN.pow(token.knownDecimals ?: DEFAULT_DECIMALS)
+                val direct = ArrayList<Pair<List<Int>, Slot?>>()
+                orderedStables.forEach { stable ->
+                    val indices = quoteCalls(calls, dex, tokenContract, stable.contract, amountIn)
+                    if (indices.isNotEmpty()) direct.add(indices to slotOf(stable.contract))
                 }
-                if (direct.isNotEmpty()) customDirect[token.contract] = direct
+                if (direct.isNotEmpty()) customDirect[tokenContract] = direct
                 if (wrapped != null) {
-                    val viaNative = quoteCalls(calls, dex, token.contract, wrapped, amountIn)
-                    if (viaNative.isNotEmpty()) customViaNative[token.contract] = viaNative
+                    val viaNative = quoteCalls(calls, dex, tokenContract, wrapped, amountIn)
+                    if (viaNative.isNotEmpty()) customViaNative[tokenContract] = viaNative
                 }
             }
         }
@@ -380,13 +403,10 @@ class BalanceExecutor(
         // -- what the chain answered --
 
         val dexPrice = bestNativeDexPrice(
-            quoteGroups.map { (indices, decimalsIndex) ->
+            quoteGroups.map { (indices, stable) ->
                 NativeQuoteGroup(
                     amountsOut = quoteAmounts(results, indices, dex?.protocol),
-                    quoteDecimals = decimalsIndex
-                        ?.let { results.getOrNull(it) }
-                        ?.takeIf { it.success }
-                        ?.let { Abi.decodeUint8(it.data).toUInt() },
+                    quoteDecimals = stable?.let { decimalsOf(it, results) }?.toUInt(),
                 )
             },
         )
@@ -415,12 +435,7 @@ class BalanceExecutor(
             val raw = Abi.decodeUint256(balanceResult.data)
             if (raw.signum() == 0) return@mapNotNull null
 
-            val decimals = slot.knownDecimals
-                ?: slot.decimalsIndex
-                    ?.let { results.getOrNull(it) }
-                    ?.takeIf { it.success }
-                    ?.let { Abi.decodeUint8(it.data) }
-                ?: DEFAULT_DECIMALS
+            val decimals = decimalsOf(slot, results) ?: DEFAULT_DECIMALS
 
             BalanceToken(
                 chain_id = chainId,
@@ -440,16 +455,15 @@ class BalanceExecutor(
                         nativeUsd = nativePrice.price,
                         nativeDecimals = nativeDecimals,
                     )
-                    // **$1.00 here is a membership verdict, not a default.**
+                    // **The peg here is a membership verdict, not a default.**
                     // The token came from this chain's curated stablecoin list,
-                    // and ≈$1 is what that list means; the same approximation is
-                    // core-owned on the paths that matter for records and
-                    // signing. A de-peg gate was considered and rejected on the
-                    // web: the only measurement available is the same DEX quote
-                    // whose thin pools the price ladder already defends against,
-                    // and nulling a stablecoin on its say-so would silently drop
-                    // a real holding out of somebody's total.
-                    Kind.Stable -> 1.0
+                    // and ≈$1 is what that list means — the read plan's
+                    // `peg_usd`, the core's. A de-peg gate was considered and
+                    // rejected on the web: the only measurement available is the
+                    // same DEX quote whose thin pools the price ladder already
+                    // defends against, and nulling a stablecoin on its say-so
+                    // would silently drop a real holding out of somebody's total.
+                    Kind.Stable -> slot.pegUsd
                 },
                 spam = false,
             )
@@ -470,19 +484,16 @@ class BalanceExecutor(
     private fun customPrice(
         contract: String,
         results: List<Abi.CallResult>,
-        direct: Map<String, List<Pair<List<Int>, Int?>>>,
+        direct: Map<String, List<Pair<List<Int>, Slot?>>>,
         viaNative: Map<String, List<Int>>,
         protocol: String?,
         nativeUsd: Double?,
         nativeDecimals: Int,
     ): Double? {
-        val groups = direct[contract].orEmpty().map { (indices, decimalsIndex) ->
+        val groups = direct[contract].orEmpty().map { (indices, stable) ->
             NativeQuoteGroup(
                 amountsOut = quoteAmounts(results, indices, protocol),
-                quoteDecimals = decimalsIndex
-                    ?.let { results.getOrNull(it) }
-                    ?.takeIf { it.success }
-                    ?.let { Abi.decodeUint8(it.data).toUInt() },
+                quoteDecimals = stable?.let { decimalsOf(it, results) }?.toUInt(),
             )
         }
         firstGroupedQuotePrice(groups)?.let { return it }
