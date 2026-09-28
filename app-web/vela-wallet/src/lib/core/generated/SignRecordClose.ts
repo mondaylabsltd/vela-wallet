@@ -4,4 +4,4 @@
  * The in-place patch closing a pending record — same id, never a second
  * record (`dapp-connection.tsx:779-784, 880-884`).
  */
-export type SignRecordClose = { "type": "confirmed", tx_hash: string, } | { "type": "failed" };
+export type SignRecordClose = { "type": "confirmed", tx_hash: string, } | { "type": "failed" } | { "type": "admitted" };

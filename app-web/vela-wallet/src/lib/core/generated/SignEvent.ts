@@ -2,6 +2,7 @@
 import type { SignAccountRef } from "./SignAccountRef";
 import type { SignApproveOpts } from "./SignApproveOpts";
 import type { SignDappIdentity } from "./SignDappIdentity";
+import type { TrackStatus } from "./TrackStatus";
 
 export type SignEvent = { "type": "networks_changed", chain_ids: Array<number>, } | { "type": "accounts_changed", accounts: Array<SignAccountRef>, active_index: number, } | { "type": "request_arrived", id: string, method: string, 
 /**
@@ -25,4 +26,8 @@ maybe_sent: boolean,
 /**
  * The head read before the first POST (ruling 8); `None` = unknown.
  */
-submit_block: number | null, } | { "type": "ceremony_started", id: string, } | { "type": "ceremony_done", id: string, } | { "type": "transport_dropped", transport_id: string, };
+submit_block: number | null, } | { "type": "op_signed", id: string, user_op_hash: string, 
+/**
+ * The head read before the first POST (ruling 8); `None` = unknown.
+ */
+submit_block: number | null, now_ms: number, } | { "type": "op_tracked", user_op_hash: string, status: TrackStatus, tx_hash: string | null, now_ms: number, } | { "type": "ceremony_started", id: string, } | { "type": "ceremony_done", id: string, } | { "type": "transport_dropped", transport_id: string, };

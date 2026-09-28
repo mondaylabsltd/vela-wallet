@@ -8,6 +8,7 @@ import type { SignRequestView } from "./SignRequestView";
 import type { SignSurface } from "./SignSurface";
 import type { SignSwipeAction } from "./SignSwipeAction";
 import type { SignTrackerHandoff } from "./SignTrackerHandoff";
+import type { SignTrackerWithdraw } from "./SignTrackerWithdraw";
 
 export type SignView = { surface: SignSurface, request: SignRequestView | null, 
 /**
@@ -36,7 +37,17 @@ confirm_gate_open: boolean,
 /**
  * §12.1.6: the granted-account switch has not acked yet.
  */
-reconcile_pending: boolean, swipe_action: SignSwipeAction, tracker_handoff: SignTrackerHandoff | null, notice: SignNotice | null, global_chain_id: number, 
+reconcile_pending: boolean, swipe_action: SignSwipeAction, tracker_handoff: SignTrackerHandoff | null, 
+/**
+ * A write-ahead record proven never sent (spec 082 RJ1): the shell feeds
+ * it to `tx_tracker::Event::Withdrawn` the moment it appears.
+ */
+tracker_withdraw: SignTrackerWithdraw | null, 
+/**
+ * `error` is the relay refusing the op (spec 082 RJ3): the sheet says
+ * `componentsUi.signing.refused` under `statusFailed`, never "try again".
+ */
+failure_refused: boolean, notice: SignNotice | null, global_chain_id: number, 
 /**
  * Present when the request was refused because it would have changed who
  * controls the account; the sheet shows it and offers only Dismiss.

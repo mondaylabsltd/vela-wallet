@@ -11,4 +11,11 @@ maybe_sent: boolean,
  * The chain head read once before the first submit POST; `None` =
  * unknown (ruling 8's find-event then starts below the head).
  */
-submit_block: number | null, } | { "type": "tick" } | { "type": "app_resumed" } | { "type": "home_focused" } | { "type": "abort", user_op_hash: string, };
+submit_block: number | null, 
+/**
+ * The relay accepted this op (spec 082 RJ1): the hand-off after a
+ * write-ahead one. Sets the entry acknowledged — an accepted op
+ * never reads [`TrackOutcome::MaybeSent`], and a relay `not_found`
+ * no longer counts against it.
+ */
+admitted: boolean, } | { "type": "withdrawn", user_op_hash: string, record_ids: Array<string>, } | { "type": "tick" } | { "type": "app_resumed" } | { "type": "home_focused" } | { "type": "abort", user_op_hash: string, };

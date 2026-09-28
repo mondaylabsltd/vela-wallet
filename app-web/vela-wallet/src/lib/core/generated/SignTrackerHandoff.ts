@@ -8,4 +8,9 @@ export type SignTrackerHandoff = { user_op_hash: string, record_ids: Array<strin
 /**
  * Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA3).
  */
-maybe_sent: boolean, submit_block: number | null, };
+maybe_sent: boolean, submit_block: number | null, 
+/**
+ * Forwarded to `tx_tracker::Event::Submitted` (spec 082 RJ1): the relay
+ * accepted the op the write-ahead hand-off announced.
+ */
+admitted: boolean, };
