@@ -143,19 +143,19 @@ final class BrowserController {
             bridge: ExploreSitesCore(),
             perform: { [exploreExecutor] in await exploreExecutor.perform($0) },
             onView: { [weak self] view in self?.commitExplore(view) },
-            onFault: { print("[vela-wallet] explore_sites fault: \($0)") }
+            onFault: { VelaLog.failure(.browser, kind: "explore_sites_fault", VelaLog.error($0)) }
         )
         historyCore = CoreStore(
             bridge: BrowserHistoryCore(),
             perform: { [historyExecutor] in await historyExecutor.perform($0) },
             onView: { [weak self] view in self?.history = view },
-            onFault: { print("[vela-wallet] browser_history fault: \($0)") }
+            onFault: { VelaLog.failure(.browser, kind: "browser_history_fault", VelaLog.error($0)) }
         )
         dbrCore = CoreStore(
             bridge: DappBrowserCore(),
             perform: { [dbrExecutor] in await dbrExecutor.perform($0) },
             onView: { [weak self] view in self?.dbr = view },
-            onFault: { print("[vela-wallet] dapp_browser fault: \($0)") },
+            onFault: { VelaLog.failure(.browser, kind: "dapp_browser_fault", VelaLog.error($0)) },
             neutralAnswer: { DbrExecutor.neutralAnswer($0) }
         )
 

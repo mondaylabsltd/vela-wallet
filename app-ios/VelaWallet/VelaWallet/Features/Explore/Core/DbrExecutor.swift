@@ -148,7 +148,7 @@ final class DbrExecutor {
             return Self.ack
 
         default:
-            print("[vela-wallet] dapp_browser: unhandled operation \(operation["type"] ?? "?")")
+            VelaLog.failure(.browser, kind: "unhandled_operation", "dapp_browser \(operation["type"] ?? "?")")
             return Self.neutralAnswer(operation)
         }
     }

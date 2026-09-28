@@ -58,7 +58,7 @@ final class WalletStore {
             bridge: BalanceDashboardCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.viewArrived(view) },
-            onFault: { print("[vela-wallet] balance_dashboard fault: \($0)") }
+            onFault: { VelaLog.failure(.balance, kind: "balance_dashboard_fault", VelaLog.error($0)) }
         )
         // The port closes over this store, so it is installed after it exists
         // — the same shape `SendStore` uses for its two.

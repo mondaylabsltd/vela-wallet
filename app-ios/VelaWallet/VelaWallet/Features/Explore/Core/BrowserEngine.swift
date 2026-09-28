@@ -292,7 +292,12 @@ final class BrowserEngine: NSObject {
     /// the bar only in an empty tab). The watchdog is armed for it.
     func requested(_ target: String? = nil) {
         guard !tornDown else { return }
-        if let target, !target.isEmpty { pendingURL = target }
+        // Only a web address is a page the bar could name: a frame's
+        // `about:blank` or a `data:` document is not somewhere a load goes.
+        if let target, let scheme = URL(string: target)?.scheme?.lowercased(),
+           scheme == "http" || scheme == "https" {
+            pendingURL = target
+        }
         progress = max(loading ? progress : 0, Self.requestedProgress)
         loading = true
         loadGeneration &+= 1

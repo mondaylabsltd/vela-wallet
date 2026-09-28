@@ -100,7 +100,7 @@ final class ClearExecutor {
             return CoreJSON.string(["type": "clock", "now_ms": Date().timeIntervalSince1970 * 1000])
 
         default:
-            print("[vela-wallet] clear_signing: unhandled operation \(operation["type"] ?? "?")")
+            VelaLog.failure(.sign, kind: "unhandled_operation", "clear_signing \(operation["type"] ?? "?")")
             return Self.neutralAnswer(operation)
         }
     }

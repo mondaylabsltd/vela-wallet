@@ -136,4 +136,6 @@ final class SystemPath: NetPathSource {
     }
 
     func cancel() { monitor.cancel() }
+
+    deinit { monitor.cancel() }
 }
