@@ -501,7 +501,18 @@ fun PickerSheetContent(
  * one of what to do, one button that does it.
  */
 @Composable
-fun BrowserNotice(title: String, body: String, action: String, onAction: () -> Unit, modifier: Modifier = Modifier) {
+fun BrowserNotice(
+    title: String,
+    body: String,
+    action: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Spec 079: the host, small, under the reason. */
+    detail: String = "",
+    /** Spec 079: a retry is running — the button says [busyLabel] and takes no tap. */
+    busy: Boolean = false,
+    busyLabel: String = "",
+) {
     val colors = VelaTheme.colors
     Column(
         modifier = modifier
@@ -516,15 +527,24 @@ fun BrowserNotice(title: String, body: String, action: String, onAction: () -> U
         if (body.isNotBlank()) {
             Text(text = body, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, textAlign = TextAlign.Center)
         }
+        if (detail.isNotBlank()) {
+            Text(text = detail, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, textAlign = TextAlign.Center)
+        }
         Box(
             modifier = Modifier
                 .height(VelaSizing.controlLg)
                 .border(VelaBorder.hairline, colors.borderStrong, CircleShape)
-                .clickable(onClick = onAction)
+                .clickable(enabled = !busy, onClick = onAction)
                 .padding(horizontal = VelaSpacing.xl4),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = action, color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.semibold, fontSize = VelaTextSize.lg)
+            Text(
+                text = if (busy && busyLabel.isNotBlank()) busyLabel else action,
+                color = if (busy) colors.fgMuted else colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.lg,
+            )
         }
     }
 }

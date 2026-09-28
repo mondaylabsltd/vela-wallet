@@ -59,9 +59,16 @@ data class EngineState(
     val progress: Int = 0,
     /** The main frame failed to load (network, TLS): the page shows the retry panel instead. */
     val failed: Boolean = false,
+    /** Spec 079: why it failed — the core's class and the corpus key of its sentence. */
+    val failure: uniffi.vela_core_uniffi.BrowserLoadFailure? = null,
+    /** Spec 079: a retry of the failed page is running; the panel stays and says so. */
+    val retrying: Boolean = false,
     /** `false` when this WebView cannot carry the provider (no document-start script / message listener). */
     val wallet: Boolean = true,
 )
+
+/** Where the load hairline starts the moment a load is asked for (spec 079). */
+private const val REQUESTED_PROGRESS = 10
 
 /**
  * One tab's engine: a system `WebView` with the core's provider installed
@@ -77,7 +84,8 @@ class BrowserEngine(
     interface Listener {
         fun pageMessage(tab: String, json: String, sourceOrigin: String, isMainFrame: Boolean)
         fun navigationStarted(tab: String, url: String)
-        fun loadFinished(tab: String, url: String, title: String)
+        /** [failed]: the main frame failed during this load (what finished is an engine error page). */
+        fun loadFinished(tab: String, url: String, title: String, failed: Boolean, httpStatus: Int?)
         /** Same-document navigation (`pushState`) or a new title: what the tab shows, not a load. */
         fun shown(tab: String, url: String, title: String)
         fun rendererGone(tab: String)
@@ -98,6 +106,15 @@ class BrowserEngine(
 
     /** The tab this engine shows. (Inside the WebView's own scope `id` is the VIEW's id.) */
     private val tabId: String = id
+
+    // Spec 079 — one navigation's facts, and the retry schedule for a failed page.
+    private val mainLooper = android.os.Handler(android.os.Looper.getMainLooper())
+    /** This navigation hit a main-frame error: what finishes is the engine's error page, not the site. */
+    private var navFailed = false
+    /** The main document's HTTP status, when it was an error (the site's own 404 page is not a visit). */
+    private var navHttpStatus: Int? = null
+    private var retryAttempt = 0
+    private var retryTask: Runnable? = null
 
     val webView: WebView = WebView(context).apply {
         // MATCH_PARENT, and not for layout's sake: a WebView left at the
@@ -123,13 +140,27 @@ class BrowserEngine(
         _state.value = _state.value.copy(wallet = wallet)
         webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                update(url) { it.copy(loading = true, failed = false, progress = 0) }
+                // A failed page's panel stays through its retry (spec 079): it
+                // gives way only to a load that finishes without an error.
+                navFailed = false
+                navHttpStatus = null
+                update(url) { it.copy(loading = true, progress = maxOf(it.progress.takeIf { _ -> it.loading } ?: 0, REQUESTED_PROGRESS)) }
                 listener.navigationStarted(tabId, url)
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                update(url) { it.copy(loading = false, progress = 100) }
-                listener.loadFinished(tabId, url, view.title.orEmpty())
+                if (navFailed) {
+                    update(url) { it.copy(loading = false, progress = 100, retrying = false) }
+                } else {
+                    retryAttempt = 0
+                    cancelRetry()
+                    update(url) { it.copy(loading = false, progress = 100, failed = false, failure = null, retrying = false) }
+                }
+                listener.loadFinished(tabId, url, view.title.orEmpty(), navFailed, navHttpStatus)
+            }
+
+            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: android.webkit.WebResourceResponse) {
+                if (request.isForMainFrame) navHttpStatus = errorResponse.statusCode
             }
 
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
@@ -140,19 +171,27 @@ class BrowserEngine(
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 if (!request.isForMainFrame) return
                 VelaLog.event("browser.load", "main frame failed", "code" to error.errorCode.toString())
-                _state.value = _state.value.copy(failed = true, loading = false)
+                // The core's rule (spec 079): the class, its sentence, whether retrying helps.
+                val failure = uniffi.vela_core_uniffi.browserLoadClassify("android", error.errorCode.toLong(), null, false) ?: return
+                failed(failure)
             }
 
             @SuppressLint("WebViewClientOnReceivedSslError")
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                 // Never proceed: a page on a broken certificate is not the site it names.
                 handler.cancel()
-                if (error.url == view.url || view.url.isNullOrBlank()) _state.value = _state.value.copy(failed = true, loading = false)
+                if (error.url == view.url || view.url.isNullOrBlank()) {
+                    uniffi.vela_core_uniffi.browserLoadClassify("android", 0L, null, true)?.let { failed(it) }
+                }
             }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val scheme = request.url.scheme?.lowercase()
-                if (scheme == "http" || scheme == "https") return false
+                if (scheme == "http" || scheme == "https") {
+                    // A link the page follows: progress from the tap, not from the commit.
+                    if (request.isForMainFrame) requested()
+                    return false
+                }
                 // Another scheme leaves this browser only for the page a person
                 // is looking at, on a person's tap — never from a subframe or a
                 // script: an ad must not be able to launch another app.
@@ -174,6 +213,8 @@ class BrowserEngine(
             }
 
             override fun onReceivedTitle(view: WebView, title: String?) {
+                // The engine's error page has a title too ("网页无法打开"); it is not the page's.
+                if (navFailed) return
                 _state.value = _state.value.copy(title = title.orEmpty())
                 listener.shown(tabId, _state.value.url, title.orEmpty())
             }
@@ -187,6 +228,51 @@ class BrowserEngine(
             // Camera, microphone, MIDI: this browser grants a page none of them.
             override fun onPermissionRequest(request: PermissionRequest) = request.deny()
         }
+    }
+
+    /**
+     * The person or the page asked for a load (spec 079): progress shows now,
+     * not when the engine commits — on a slow network the commit is seconds
+     * away, and a tap that changes nothing reads as a tap that did nothing.
+     * The address bar keeps the committed host until then.
+     */
+    private fun requested() {
+        _state.value = _state.value.copy(loading = true, progress = maxOf(if (_state.value.loading) _state.value.progress else 0, REQUESTED_PROGRESS))
+    }
+
+    private fun failed(failure: uniffi.vela_core_uniffi.BrowserLoadFailure) {
+        navFailed = true
+        _state.value = _state.value.copy(failed = true, failure = failure, loading = false, retrying = false)
+        scheduleRetry(failure)
+    }
+
+    /**
+     * The core's schedule (2 s, 5 s, 10 s for the network classes; never for a
+     * wrong name or certificate), and only while this tab is on screen — a
+     * page in the background retries when it comes back.
+     */
+    private fun scheduleRetry(failure: uniffi.vela_core_uniffi.BrowserLoadFailure) {
+        cancelRetry()
+        if (!failure.autoRetry || !attached) return
+        val wait = uniffi.vela_core_uniffi.browserLoadRetryDelayMs(failure.`class`, (retryAttempt + 1).toUInt()) ?: return
+        val task = Runnable {
+            retryTask = null
+            retryAttempt += 1
+            retry()
+        }
+        retryTask = task
+        mainLooper.postDelayed(task, wait.toLong())
+    }
+
+    private fun cancelRetry() {
+        retryTask?.let(mainLooper::removeCallbacks)
+        retryTask = null
+    }
+
+    private fun retry() {
+        _state.value = _state.value.copy(retrying = true)
+        requested()
+        webView.reload()
     }
 
     private fun dialogOffScreen(result: JsResult): Boolean {
@@ -211,25 +297,44 @@ class BrowserEngine(
         context.baseContext = activity
         attached = true
         webView.onResume()
+        // A page that failed while off screen retries now it is looked at.
+        _state.value.failure?.takeIf { retryTask == null && !_state.value.retrying }?.let(::scheduleRetry)
     }
 
     /** Off screen. The page keeps its state; nothing of it is painted or prompts. */
     fun detach() {
         attached = false
+        cancelRetry()
         context.baseContext = appContext
         webView.onPause()
     }
 
-    fun load(url: String) = webView.loadUrl(url)
-    fun back() { if (webView.canGoBack()) webView.goBack() }
-    fun forward() { if (webView.canGoForward()) webView.goForward() }
+    fun load(url: String) {
+        // A new address: the old failure and its retries are over.
+        cancelRetry()
+        retryAttempt = 0
+        _state.value = _state.value.copy(failed = false, failure = null, retrying = false)
+        requested()
+        webView.loadUrl(url)
+    }
+    fun back() { if (webView.canGoBack()) { requested(); webView.goBack() } }
+    fun forward() { if (webView.canGoForward()) { requested(); webView.goForward() } }
+
+    /** Reload — or, on a failed page, the person's retry: the panel stays, saying so, and the count starts again. */
     fun reload() {
-        _state.value = _state.value.copy(failed = false)
-        webView.reload()
+        cancelRetry()
+        if (_state.value.failure != null) {
+            retryAttempt = 0
+            retry()
+        } else {
+            requested()
+            webView.reload()
+        }
     }
     fun deliver(json: String) = ProviderBridge.deliver(webView, json)
     fun destroy() {
         attached = false
+        cancelRetry()
         (webView.parent as? android.view.ViewGroup)?.removeView(webView)
         webView.stopLoading()
         webView.destroy()
@@ -470,17 +575,30 @@ class BrowserController(
                 exploreHost.dispatch(ExploreEvent.TabNavigated(id = tab, url = url, title = null), ExploreEvent.serializer())
             }
 
-            override fun loadFinished(tab: String, url: String, title: String) {
+            override fun loadFinished(tab: String, url: String, title: String, failed: Boolean, httpStatus: Int?) {
                 dispatch(DbrEvent.LoadFinished(tab, url))
-                exploreHost.dispatch(ExploreEvent.TabNavigated(id = tab, url = url, title = title.ifBlank { null }), ExploreEvent.serializer())
-                // One visit per load, recorded when the load finishes and the
-                // title is known — not once more for every title the page sets.
+                // A failed load leaves the tab's own title alone — the engine's
+                // error page ("网页无法打开") is not the site (spec 079).
+                exploreHost.dispatch(ExploreEvent.TabNavigated(id = tab, url = url, title = title.ifBlank { null }.takeUnless { failed }), ExploreEvent.serializer())
+                if (failed) return
+                // One visit per load, recorded when the load finishes — its
+                // address, title and icon read in ONE script from the document
+                // itself, then put through the core's visit rule (spec 079: the
+                // Xiaomi saved bscscan.com under Uniswap's title and icon, and
+                // an error page as a visit).
                 val engine = engines[tab] ?: return
-                engine.webView.evaluateJavascript(FAVICON_JS) { raw ->
-                    val favicon = raw?.trim('"')?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+                engine.webView.evaluateJavascript(PAGE_FACTS_JS) { raw ->
+                    val facts = runCatching { JSONObject(JSONObject("{\"v\":$raw}").getString("v")) }.getOrNull() ?: return@evaluateJavascript
+                    val visit = uniffi.vela_core_uniffi.browserLoadVisit(
+                        url = facts.optString("href"),
+                        title = facts.optString("title"),
+                        icon = facts.optString("icon").ifBlank { null },
+                        mainFrameFailed = false,
+                        httpStatus = httpStatus?.toUShort(),
+                    ) ?: return@evaluateJavascript
                     scope.launch {
                         historyLoaded.await()
-                        bhistHost.dispatch(BhistEvent.VisitRecorded(url = url, title = title.ifBlank { null }, favicon = favicon, now_ms = now()), BhistEvent.serializer())
+                        bhistHost.dispatch(BhistEvent.VisitRecorded(url = visit.url, title = visit.title, favicon = visit.favicon, now_ms = now()), BhistEvent.serializer())
                     }
                 }
             }
@@ -632,7 +750,12 @@ class BrowserController(
     fun clearRecent() = bhistHost.dispatch(BhistEvent.ClearAll, BhistEvent.serializer())
 
     private companion object {
-        /** The page's own icon link, absolute — the recents row shows it. */
-        const val FAVICON_JS = "(function(){var l=document.querySelector(\"link[rel~='icon']\");return l?l.href:''})()"
+        /**
+         * The document's own address, title and icon, absolute, in one read —
+         * three reads could straddle two documents (spec 079 R3).
+         */
+        const val PAGE_FACTS_JS =
+            "(function(){var l=document.querySelector(\"link[rel~='icon']\");" +
+                "return JSON.stringify({href:location.href,title:document.title,icon:l?l.href:''})})()"
     }
 }

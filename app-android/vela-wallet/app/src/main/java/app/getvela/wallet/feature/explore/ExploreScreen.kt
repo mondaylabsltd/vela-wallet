@@ -207,11 +207,18 @@ fun ExploreScreen(
                         page != null -> {
                             page()
                             if (model.browser.failed) {
+                                // Spec 079: why it failed (the core's words for the
+                                // class), the host, and a retry that keeps this panel
+                                // up — the engine's own error page is never shown.
+                                val title = strings.t("connect.browser.loadFailed")
                                 BrowserNotice(
-                                    title = strings.t("connect.browser.loadFailed"),
-                                    body = model.browser.host,
+                                    title = title,
+                                    body = model.browser.failureReason?.takeIf { it != title }.orEmpty(),
+                                    detail = model.browser.host,
                                     action = strings.t("connect.browser.retry"),
                                     onAction = onPageReload,
+                                    busy = model.browser.retrying,
+                                    busyLabel = strings.t("explore.loadRetrying"),
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }

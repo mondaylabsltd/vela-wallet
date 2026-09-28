@@ -134,6 +134,8 @@ object ExploreLive {
                 loading = engine?.loading ?: false,
                 progress = engine?.progress ?: 100,
                 failed = engine?.failed ?: false,
+                failureReason = engine?.failure?.reasonKey?.let { strings.t(it) },
+                retrying = engine?.retrying ?: false,
                 crashed = tab?.crashed ?: false,
             ),
             connection = engine?.let { e -> connection(fallback.connection, e, strings, tab, identity) } ?: fallback.connection,

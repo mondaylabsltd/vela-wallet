@@ -99,6 +99,10 @@ data class BrowserModel(
     val progress: Int = 100,
     /** The main frame could not load (network, certificate): the retry panel stands where the page is. */
     val failed: Boolean = false,
+    /** Spec 079: why, in the core's words for its class; `null` when it did not fail. */
+    val failureReason: String? = null,
+    /** Spec 079: a retry is running — the panel stays and says "正在重试…". */
+    val retrying: Boolean = false,
     /** The page's renderer died: the tab shows the reload panel until the person asks. */
     val crashed: Boolean = false,
 )

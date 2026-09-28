@@ -86,6 +86,18 @@ class ExploreLiveTest {
         assertEquals(strings.t("connect.browser.a11yInsecure"), model.siteMenuSheet.statusLine)
     }
 
+    /** Spec 079: a failed page says why in the core's words, and says it is retrying. */
+    @Test
+    fun `a failed page carries its reason and its retry`() {
+        val view = ExploreView(tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/", "", "app.uniswap.org")), selected_tab = "t1", ready = true)
+        val failure = uniffi.vela_core_uniffi.BrowserLoadFailure(`class` = "offline", reasonKey = "explore.loadOffline", autoRetry = true)
+        val engine = EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", failed = true, failure = failure, retrying = true)
+        val model = ExploreLive.home(fallback, view, BhistView(), engine, strings)
+        assertTrue(model.browser.failed)
+        assertEquals(strings.t("explore.loadOffline"), model.browser.failureReason)
+        assertTrue(model.browser.retrying)
+    }
+
     @Test
     fun `nothing remembered is the empty start page`() {
         val model = ExploreLive.home(fallback, ExploreView(ready = true), BhistView(), null, strings)
