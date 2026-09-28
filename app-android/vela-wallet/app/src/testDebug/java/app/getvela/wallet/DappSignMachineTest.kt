@@ -120,13 +120,13 @@ class DappSignMachineTest {
 
     private val handoffs = java.util.Collections.synchronizedList(ArrayList<Pair<String, List<String>>>())
 
-    private fun controller(receiptWaitMs: Long = 10_000L): SigningController {
+    private fun controller(receiptWaitMs: Long = 10_000L, signer: UserOpSigner = fixtureSigner): SigningController {
         val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
         val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
         val accounts = StoreAccountPort(AccountStore(store))
         val credential = fixtureAccounts().first().credentialIdHex
         return SigningController(
-            scope = scope, relay = relay, feed = feed, accounts = accounts, signer = { fixtureSigner },
+            scope = scope, relay = relay, feed = feed, accounts = accounts, signer = { signer },
             knownChains = { listOf(1, 100) },
             wallet = SignAccountRef(address = safe, credential_id = credential),
             receiptWaitMs = receiptWaitMs, receiptPollMs = 100L,
@@ -256,6 +256,35 @@ class DappSignMachineTest {
         assertTrue("kept with the row for a restart (T184)", row.getBoolean("maybeSent"))
         assertEquals(local, handoffs.single().first)
         assertEquals("posted once: nobody pays twice", 1, events.count { it == "relay.send" })
+    }
+
+    /**
+     * Spec 082 RB2 (money rule): the page's tab closed while the passkey was
+     * up. Between the passkey and the relay POST the executor asks again —
+     * nothing is sent for nobody, nobody is answered, nothing is recorded.
+     */
+    @Test
+    fun `a page that left during the passkey gets nothing sent`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        var sheet: SigningController? = null
+        val leavesMidCeremony = object : UserOpSigner {
+            override suspend fun sign(challenge: ByteArray, credentialIdHex: String?, transports: String, method: KeyMethod): Assertion {
+                // The browser core's `cancelSigning`: the page is gone.
+                sheet!!.cancel()
+                return fixtureSigner.sign(challenge, credentialIdHex, transports, method)
+            }
+        }
+        val c = controller(signer = leavesMidCeremony).also { sheet = it }
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(20_000) { while (events.none { it == "sign" }) delay(50) }
+        delay(1_500)
+        assertEquals("never posted: $events", 0, events.count { it == "relay.send" })
+        assertTrue("nobody answered: $answers", answers.none { it.first == "tab-1/r1" })
+        assertTrue(store.values[KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty() || JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).length() == 0)
+        assertTrue(handoffs.isEmpty())
     }
 
     /** Spec 082 RA10: nothing left the device — the page is told so in the core's fixed words, and nothing is recorded. */

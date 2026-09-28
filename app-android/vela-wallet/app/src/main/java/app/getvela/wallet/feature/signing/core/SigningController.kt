@@ -212,6 +212,8 @@ class SigningController(
                 dispatchSign(SignEvent.CeremonyDone(id))
             }
 
+            override fun askerGone(): Boolean = askerLeft
+
             override fun recordPersisted(recordId: String) {
                 persistedRecords += recordId
                 ports.recordPersisted(recordId)
@@ -446,6 +448,10 @@ class SigningController(
     @Volatile
     private var answered = false
 
+    /** The page that asked is gone ([cancel]). */
+    @Volatile
+    private var askerLeft = false
+
     /** Called by the container's response port so the sheet closes only once the page has its answer. */
     fun markAnswered() { answered = true; if (sign.value.surface == SignSurface.Hidden) _closed.value = true }
 
@@ -455,6 +461,9 @@ class SigningController(
      * operation already at the relay keeps its record and its tracker.
      */
     fun cancel() {
+        // Spec 082 RB2: from here nothing is signed or sent for this request
+        // — the executor asks before the passkey and before the relay POST.
+        askerLeft = true
         _request.value?.let { dispatchSign(SignEvent.TransportDropped(it.transportId)) }
         answered = true
         _closed.value = true

@@ -77,6 +77,13 @@ class SignExecutor(
         /** …and it returned a signature. */
         fun ceremonyDone(id: String) {}
 
+        /**
+         * Spec 082 RB2: the page that asked is gone (its tab closed or moved
+         * on). Asked before the passkey and again between the passkey and the
+         * relay POST: nothing is signed or sent for nobody.
+         */
+        fun askerGone(): Boolean = false
+
         /** The feed re-reads its store. */
         fun recordsPersisted()
 
@@ -174,7 +181,17 @@ class SignExecutor(
         awaitCancellation()
     }
 
+    /** Thrown from the ceremony's edges when [Ports.askerGone]: unwinds the spine before the passkey or the POST. */
+    private class AskerGone : RuntimeException("the asking page is gone")
+
+    private fun stillAsked(op: SignOperation.SignAndSubmit) {
+        if (!ports.askerGone()) return
+        VelaLog.event("sign.submit", "asker gone: nothing signed or sent", "method" to op.method)
+        throw AskerGone()
+    }
+
     private suspend fun signAndSubmit(op: SignOperation.SignAndSubmit): SignSubmitOutcome {
+        if (ports.askerGone()) return SignSubmitOutcome.AskerGone
         if (op.method == "personal_sign" || op.method == "eth_sign" || op.method.contains("signTypedData")) return signMessage(op)
         val calls = callsOf(op.method, op.params_json)
             ?: return SignSubmitOutcome.Failed("${op.method} carried no transaction this wallet could read")
@@ -188,9 +205,10 @@ class SignExecutor(
                 calls = calls,
                 gasFeeToken = op.gas_fee_token,
                 quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
-                signingStarted = { ports.ceremonyStarted(op.id) },
+                signingStarted = { stillAsked(op); ports.ceremonyStarted(op.id) },
                 intent = TrustedSignerIntent(op.method, op.params_json, origin(), originSeenByBrowser()),
-                ceremonyDone = { ports.ceremonyDone(op.id) },
+                // Between the passkey and the relay POST (RB2).
+                ceremonyDone = { stillAsked(op); ports.ceremonyDone(op.id) },
             )
             val hash = submitted.userOpHash
             ports.opSubmitted(op.id, submitted)
@@ -205,6 +223,8 @@ class SignExecutor(
             // polling the local hash: one answer, never "not sent".
             val wait = receiptWaitMs ?: dappReceiptWaitMs((System.currentTimeMillis() - approvedAt).toDouble()).toLong()
             afterReceiptWait(hash, awaitReceipt(op.chain_id, hash, wait))
+        } catch (_: AskerGone) {
+            SignSubmitOutcome.AskerGone
         } catch (refused: UserOpSpine.Refused) {
             VelaLog.event("sign.submit", "refused", "why" to refused.failure.toString().take(120))
             when (val failure = refused.failure) {
@@ -227,11 +247,13 @@ class SignExecutor(
             SignSubmitOutcome.Succeeded(
                 spine.signMessage(
                     op.chain_id, op.address, original,
-                    signingStarted = { ports.ceremonyStarted(op.id) },
+                    signingStarted = { stillAsked(op); ports.ceremonyStarted(op.id) },
                     intent = TrustedSignerIntent(op.method, op.params_json, origin(), originSeenByBrowser()),
                     ceremonyDone = { ports.ceremonyDone(op.id) },
                 ),
             )
+        } catch (_: AskerGone) {
+            SignSubmitOutcome.AskerGone
         } catch (refused: UserOpSpine.Refused) {
             when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
