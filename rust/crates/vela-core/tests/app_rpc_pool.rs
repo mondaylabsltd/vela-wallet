@@ -15,8 +15,8 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::rpc_pool::{
-    backoff_with_jitter_ms, cooldown_ms, endpoint_score, get_logs_range_cap, is_ban_active,
-    is_permanent_rpc_error, is_rate_limit_signal, is_transient_server_error,
+    backoff_with_jitter_ms, concluding_verdict, cooldown_ms, endpoint_score, get_logs_range_cap,
+    is_ban_active, is_permanent_rpc_error, is_rate_limit_signal, is_transient_server_error,
     qualifies_for_perma_ban, record_failure, record_success, select_urls, source_priority,
     strip_chain_suffix, Event, RpcBanEntry, RpcCallVerdict, RpcEndpointSeed, RpcEndpointStats,
     RpcErrorInfo, RpcKind, RpcOperation as Op, RpcPool, RpcShellResult as Res, RpcSource,
@@ -2205,4 +2205,59 @@ fn stale_results_are_dropped_by_construction() {
     assert_eq!(ops, vec![rpc_post("c3", USER, "eth_call")]);
     let ops = sut.resolve(outcome("c3", USER, ok(), 30.0, T0 + 3_050.0));
     assert_eq!(ops, vec![respond("c3", USER)]);
+}
+
+/// Spec 083 H6: the desktop asks the next endpoint when the current one is
+/// slow, and may hand the caller an answer before the machine reaches that
+/// endpoint — but only an answer the machine would hand back itself.
+/// `concluding_verdict` is that question; this pins it to the machine's own
+/// routing, outcome by outcome, so the two cannot drift.
+#[test]
+fn concluding_verdict_is_the_machines_own_classification() {
+    let cases = [
+        ("eth_call", ok()),
+        (
+            "eth_call",
+            rpc_err(Some(3), "execution reverted: ERC20 balance too low"),
+        ),
+        ("eth_call", rpc_err(Some(-32000), "header not found")),
+        ("eth_call", rpc_err(None, "unauthorized: api key required")),
+        (
+            "eth_call",
+            rpc_err(Some(-32000), "block range exceeded: maximum is 500"),
+        ),
+        (
+            "eth_getLogs",
+            rpc_err(Some(-32000), "block range exceeded: maximum is 500"),
+        ),
+        (
+            "eth_getLogs",
+            rpc_err(None, "query returned more than 10000 results"),
+        ),
+        ("eth_call", Out::HttpError { status: 403 }),
+        ("eth_call", Out::HttpError { status: 429 }),
+        ("eth_call", Out::HttpError { status: 502 }),
+        ("eth_call", Out::NonJson),
+        ("eth_call", Out::Timeout),
+        ("eth_call", Out::Network),
+    ];
+    let mut answers = 0;
+    for (index, (method, out)) in cases.into_iter().enumerate() {
+        let id = format!("h{index}");
+        let mut sut = Sut::new();
+        sut.dispatch(rpc_call(&id, method, T0));
+        assert_eq!(sut.resolve(config2(T0)), vec![rpc_post(&id, USER, method)]);
+        let ops = sut.resolve(outcome(&id, USER, out.clone(), 40.0, T0 + 10.0));
+        let machine = ops.into_iter().find_map(|op| match op {
+            Op::Conclude { verdict, .. } => Some(verdict),
+            _ => None,
+        });
+        answers += usize::from(machine.is_some());
+        assert_eq!(
+            concluding_verdict(RpcKind::Rpc, method, USER, &out),
+            machine,
+            "{method} {out:?}"
+        );
+    }
+    assert_eq!(answers, 4, "the two answers, and the two range caps");
 }

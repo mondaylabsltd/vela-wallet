@@ -1701,6 +1701,69 @@ fn classify_response_error(error: &RpcErrorInfo) -> Route {
     }
 }
 
+/// What one endpoint's outcome means for the route — the four-way
+/// classification, applied.
+fn route_of(kind: RpcKind, method: &str, outcome: &RpcTransportOutcome) -> Route {
+    match outcome {
+        RpcTransportOutcome::Response { error: None } => Route::Success,
+        RpcTransportOutcome::Response { error: Some(error) } => {
+            // The range check MUST come before the permanent/transient checks:
+            // these errors often carry "exceed" or a -32000 code that would
+            // otherwise (wrongly) ban or fail over the endpoint
+            // (`rpc-pool.ts:768-772`). RPC calls only, as in TS.
+            if kind == RpcKind::Rpc && method == "eth_getLogs" {
+                match get_logs_range_cap(error) {
+                    Some(cap) => Route::RangeCap(cap),
+                    None => classify_response_error(error),
+                }
+            } else {
+                classify_response_error(error)
+            }
+        }
+        RpcTransportOutcome::HttpError {
+            status: 401 | 403 | 404,
+        } => Route::Ban {
+            // The HttpBanError catch never feeds `sawRateLimit` (ported).
+            rate_limit_signal: false,
+        },
+        RpcTransportOutcome::HttpError { status: 429 } => Route::RateLimited429,
+        RpcTransportOutcome::HttpError { .. }
+        | RpcTransportOutcome::NonJson
+        | RpcTransportOutcome::Timeout
+        | RpcTransportOutcome::Network => Route::PlainFailure,
+    }
+}
+
+/// The verdict this one outcome would conclude a call with, or `None` when
+/// the sweep would fail over — the classification [`handle_outcome`] applies,
+/// asked without a session.
+///
+/// For a shell that asks the next endpoint before the current one has
+/// answered (desktop hedged reads, spec 083 H6): the caller may have an
+/// answer the moment one arrives, but only one this machine would hand back
+/// itself — a ban-class or transient error is still the sweep's to route.
+/// The machine is still told every outcome, in its own order.
+pub fn concluding_verdict(
+    kind: RpcKind,
+    method: &str,
+    url: &str,
+    outcome: &RpcTransportOutcome,
+) -> Option<RpcCallVerdict> {
+    match route_of(kind, method, outcome) {
+        Route::Success => Some(RpcCallVerdict::Respond {
+            url: url.to_owned(),
+        }),
+        Route::RangeCap(max_span) => Some(RpcCallVerdict::RangeCap {
+            url: url.to_owned(),
+            max_span,
+        }),
+        Route::Ban { .. }
+        | Route::Transient { .. }
+        | Route::RateLimited429
+        | Route::PlainFailure => None,
+    }
+}
+
 fn handle_outcome(
     model: &mut Model,
     call_id: &str,
@@ -1720,36 +1783,7 @@ fn handle_outcome(
         (session.kind, session.method.clone(), session.chain_id)
     };
 
-    let route = match outcome {
-        RpcTransportOutcome::Response { error: None } => Route::Success,
-        RpcTransportOutcome::Response { error: Some(error) } => {
-            // The range check MUST come before the permanent/transient checks:
-            // these errors often carry "exceed" or a -32000 code that would
-            // otherwise (wrongly) ban or fail over the endpoint
-            // (`rpc-pool.ts:768-772`). RPC calls only, as in TS.
-            if kind == RpcKind::Rpc && method == "eth_getLogs" {
-                match get_logs_range_cap(&error) {
-                    Some(cap) => Route::RangeCap(cap),
-                    None => classify_response_error(&error),
-                }
-            } else {
-                classify_response_error(&error)
-            }
-        }
-        RpcTransportOutcome::HttpError {
-            status: 401 | 403 | 404,
-        } => Route::Ban {
-            // The HttpBanError catch never feeds `sawRateLimit` (ported).
-            rate_limit_signal: false,
-        },
-        RpcTransportOutcome::HttpError { status: 429 } => Route::RateLimited429,
-        RpcTransportOutcome::HttpError { .. }
-        | RpcTransportOutcome::NonJson
-        | RpcTransportOutcome::Timeout
-        | RpcTransportOutcome::Network => Route::PlainFailure,
-    };
-
-    match route {
+    match route_of(kind, &method, &outcome) {
         Route::Success => {
             touch_success(model, chain_id, kind, url, latency_ms);
             clear_chain_failure(model, chain_id, kind);
