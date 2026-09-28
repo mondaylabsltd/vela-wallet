@@ -149,17 +149,7 @@ pub fn pending_tab(strings: &ExploreStrings, opening: Option<&str>) -> TabModel 
         (Some(url), Some(host)) => TabModel {
             id: "tab",
             title: SharedString::from(host.clone()),
-            site: Some(SiteModel {
-                id: "tab",
-                name: SharedString::from(host.clone()),
-                letter: SharedString::from(letter_of(&host)),
-                tint: tint_of(&host),
-                host: SharedString::from(host),
-                subtitle: None,
-                meta: None,
-                url: None,
-                icon_urls: icons_of(url, None),
-            }),
+            site: Some(address_site(&host, icons_of(url, None))),
             selected: true,
         },
         _ => TabModel {
@@ -168,6 +158,36 @@ pub fn pending_tab(strings: &ExploreStrings, opening: Option<&str>) -> TabModel 
             site: None,
             selected: true,
         },
+    }
+}
+
+/// The tab on screen while a load's failure panel stands where the page was
+/// (083 H8): named by the address that failed, as the bar names it. The core's
+/// tab still holds the page before it, and that page is not what failed. Its
+/// letter and no icon: nothing of the failed site loaded.
+pub fn name_failed_tab(tabs: &mut [TabModel], failed_url: &str) {
+    let host = crate::explore::load_watch::host_of(failed_url);
+    if host.is_empty() {
+        return;
+    }
+    if let Some(tab) = tabs.iter_mut().find(|tab| tab.selected) {
+        tab.title = SharedString::from(host.clone());
+        tab.site = Some(address_site(&host, Vec::new()));
+    }
+}
+
+/// A tab's site known by its address alone.
+fn address_site(host: &str, icon_urls: Vec<SharedString>) -> SiteModel {
+    SiteModel {
+        id: "tab",
+        name: SharedString::from(host.to_owned()),
+        letter: SharedString::from(letter_of(host)),
+        tint: tint_of(host),
+        host: SharedString::from(host.to_owned()),
+        subtitle: None,
+        meta: None,
+        url: None,
+        icon_urls,
     }
 }
 
@@ -345,6 +365,57 @@ mod tests {
         let strings = ExploreStrings::resolve(&crate::loc::Loc::from_env());
         assert!(recent_group(&[], &strings).is_none());
         assert!(recent_group(&[entry("a.example", "A")], &strings).is_some());
+    }
+
+    /// 083 H8: over a failure panel the tab on screen is the address that
+    /// failed — not the title of the page before it — and the tab beside it
+    /// keeps its own.
+    #[test]
+    fn a_failed_load_names_the_tab_on_screen_by_its_host() {
+        let strings = ExploreStrings::resolve(&crate::loc::Loc::from_env());
+        let tab = |id: &str, host: &str, title: &str| vela_core::app::explore_sites::ExploreTab {
+            id: id.to_owned(),
+            url: Some(format!("https://{host}/")),
+            title: title.to_owned(),
+            host: host.to_owned(),
+        };
+        let view = ExploreView {
+            favorites: Vec::new(),
+            groups: Vec::new(),
+            tabs: vec![
+                tab("a", "app.uniswap.org", "Uniswap Interface"),
+                tab("b", "polymarket.com", "Polymarket"),
+            ],
+            selected_tab: Some("a".to_owned()),
+            favorites_hidden: false,
+            recent_hidden: false,
+            favorites_full: false,
+            tabs_full: false,
+            ready: true,
+        };
+        let mut tabs = tab_models(&view, &strings);
+        name_failed_tab(&mut tabs, "https://expired.badssl.com/path?q=1");
+
+        assert_eq!(tabs[0].title, SharedString::from("expired.badssl.com"));
+        let site = tabs[0].site.as_ref();
+        assert_eq!(
+            site.map(|site| site.host.clone()),
+            Some(SharedString::from("expired.badssl.com"))
+        );
+        assert_eq!(
+            site.map(|site| site.letter.clone()),
+            Some(SharedString::from(letter_of("expired.badssl.com")))
+        );
+        assert!(
+            site.is_some_and(|site| site.icon_urls.is_empty()),
+            "nothing of the failed site loaded, its icon included"
+        );
+        assert_eq!(tabs[1].title, SharedString::from("Polymarket"));
+
+        // An address with no host names nothing.
+        let mut tabs = tab_models(&view, &strings);
+        name_failed_tab(&mut tabs, "https://");
+        assert_eq!(tabs[0].title, SharedString::from("Uniswap Interface"));
     }
 }
 

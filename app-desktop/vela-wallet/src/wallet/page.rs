@@ -12383,7 +12383,7 @@ impl WalletPage {
         let explore_tabs = resident::resident::<ExploreSites>(cx).read(cx).view();
         let live_tabs =
             self.identity.is_some() && explore_tabs.ready && !explore_tabs.tabs.is_empty();
-        let tabs = if live_tabs {
+        let mut tabs = if live_tabs {
             explore_live::tab_models(&explore_tabs, &self.explore)
         } else if self.identity.is_some() {
             // Signed in, before the core has a tab on record (a fresh profile,
@@ -12396,6 +12396,21 @@ impl WalletPage {
         } else {
             explore_fixtures::tabs(&self.explore, browsing)
         };
+        // 083 H8: while a load's failure panel stands where the page was (the
+        // panel's own condition, below), the tab on screen is named as the bar
+        // names it — after a certificate error it kept the page before's title.
+        let renderer_gone = self
+            .browser_host
+            .as_ref()
+            .is_some_and(|host| host.read(cx).tab().is_some_and(|tab| tab.crashed));
+        if browsing
+            && self.identity.is_some()
+            && !renderer_gone
+            && self.load_watch.failure.is_some()
+            && let Some(url) = self.load_watch.url.as_deref()
+        {
+            explore_live::name_failed_tab(&mut tabs, url);
+        }
         let actions = if self.identity.is_some() && explore_tabs.ready {
             let ids: Vec<String> = explore_tabs.tabs.iter().map(|tab| tab.id.clone()).collect();
             let urls: Vec<Option<String>> = explore_tabs
