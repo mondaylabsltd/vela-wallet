@@ -703,6 +703,16 @@ object VelaIcons {
         )
     }
 
+    /** lucide `lock-open` — a page NOT on https (spec 079: the lock alone says it, no words). */
+    val LockOpen: ImageVector by lazy {
+        strokeIcon(
+            "VelaLockOpen",
+            // rect x=3 y=11 w=18 h=11 rx=2
+            "M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z",
+            "M7 11V7a5 5 0 0 1 9.9-1",
+        )
+    }
+
     /** lucide share-2 — the site menu's share row. */
     val Share2: ImageVector by lazy {
         strokeIcon(

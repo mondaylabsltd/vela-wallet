@@ -30,6 +30,8 @@ data class SiteModel(
     val subtitle: String? = null,
     /** Row-only trailing text — "刚刚", "昨天". Fixture content. */
     val meta: String? = null,
+    /** Spec 079: the site's own icon, best first (https only); the letter shows until one lands, and when none does. */
+    val iconUrls: List<String> = emptyList(),
 )
 
 /** The favourites grid mixes sites with the trailing "add" affordance. */
@@ -142,6 +144,10 @@ data class ConnectionModel(
     val footnote: String,
     /** Spec 070: the lock tells the truth — `false` draws the warning, never a green padlock. */
     val secure: Boolean = true,
+    /** Spec 079: the network's logo; the dot shows until it lands. */
+    val networkLogoUrl: String? = null,
+    /** Spec 079: the consent card — its action is the primary one. */
+    val primaryAction: Boolean = false,
 )
 
 @Immutable

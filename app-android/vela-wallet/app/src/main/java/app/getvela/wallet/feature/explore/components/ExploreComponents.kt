@@ -82,6 +82,17 @@ internal object ExploreMetrics {
  * site it is about to warn you about has handed that site a tracking pixel and
  * a way to impersonate a brand.
  */
+/**
+ * A site's avatar (spec 079): its own icon when one loads — https only, the
+ * owner's ruling — and its letter until then, and when none does.
+ */
+@Composable
+fun SiteAvatar(site: app.getvela.wallet.feature.explore.SiteModel, modifier: Modifier = Modifier, size: Dp = ExploreMetrics.rowAvatar) {
+    app.getvela.wallet.core.marks.RemoteLogo(urls = site.iconUrls, size = size, modifier = modifier) {
+        LetterAvatar(site.letter, site.tint, size = size)
+    }
+}
+
 @Composable
 fun LetterAvatar(
     letter: String,
@@ -123,7 +134,7 @@ fun SiteTile(tile: TileModel, onOpen: (String) -> Unit, modifier: Modifier = Mod
     ) {
         when (tile) {
             is TileModel.Site -> {
-                LetterAvatar(tile.site.letter, tile.site.tint, size = ExploreMetrics.tileAvatar)
+                SiteAvatar(tile.site, size = ExploreMetrics.tileAvatar)
                 Text(
                     text = tile.site.name,
                     color = colors.fgBase,
@@ -168,7 +179,7 @@ fun SiteRow(site: SiteModel, onOpen: (String) -> Unit, modifier: Modifier = Modi
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
-        LetterAvatar(site.letter, site.tint)
+        SiteAvatar(site)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
             Text(
                 text = site.name,

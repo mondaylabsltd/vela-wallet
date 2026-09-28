@@ -74,6 +74,8 @@ object ExploreLive {
         val accountAddress: String = "",
         val chainName: String = "",
         val chainDot: Color = Color.Unspecified,
+        /** Spec 079: the page's chain, for its logo. */
+        val chainId: Int = 0,
     )
 
     fun home(
@@ -97,7 +99,7 @@ object ExploreLive {
             TabModel(
                 id = open.id,
                 title = open.title.ifBlank { strings.t("explore.startPage") },
-                site = open.url?.let { url -> SiteModel(id = url, name = open.title, host = open.host, letter = letterOf(open.host), tint = tintOf(open.host)) },
+                site = open.url?.let { url -> SiteModel(id = url, name = open.title, host = open.host, letter = letterOf(open.host), tint = tintOf(open.host), iconUrls = iconsOf(url)) },
                 selected = view.selected_tab == open.id,
                 startPage = open.url == null,
             )
@@ -154,8 +156,9 @@ object ExploreLive {
             siteMenuSheet = engine?.let { e ->
                 val secure = tab?.secure ?: false
                 fallback.siteMenuSheet.copy(
-                    site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host)),
-                    statusLine = if (secure) strings.t("explore.secureSite") else strings.t("connect.browser.a11yInsecure"),
+                    site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host), iconUrls = iconsOf(e.url)),
+                    // Spec 079 (owner): the lock alone — no "安全站点".
+                    statusLine = "",
                     secure = secure,
                     // What each row does now depends on the page: the star's row
                     // unpins a favourite, and Disconnect is offered only to a
@@ -177,16 +180,16 @@ object ExploreLive {
         val connected = tab?.connected_address != null
         val secure = tab?.secure ?: false
         return fallback.copy(
-            site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host)),
-            statusLine = listOfNotNull(
-                if (secure) strings.t("explore.secureSite") else strings.t("connect.browser.a11yInsecure"),
-                strings.t("explore.connectedTag").takeIf { connected },
-            ).joinToString(" · "),
+            site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host), iconUrls = iconsOf(e.url)),
+            // Spec 079 (owner): the lock alone says https; "已连接" is a fact about
+            // the connection, not a claim about the site, so it stays.
+            statusLine = strings.t("explore.connectedTag").takeIf { connected }.orEmpty(),
             accountName = identity.accountName.ifBlank { fallback.accountName },
             accountAddress = shortAddress(tab?.connected_address ?: identity.accountAddress),
             accountSeed = tab?.connected_address ?: identity.accountAddress.ifBlank { fallback.accountSeed },
             networkName = identity.chainName.ifBlank { fallback.networkName },
             networkDot = if (identity.chainDot == Color.Unspecified) fallback.networkDot else identity.chainDot,
+            networkLogoUrl = identity.chainId.takeIf { it > 0 }?.let { app.getvela.wallet.core.marks.Marks.chainLogoUrl(it) },
             secure = secure,
         )
     }
@@ -200,9 +203,11 @@ object ExploreLive {
         val host = consent.origin.substringAfter("://").substringBefore('/')
         return fallback.copy(
             title = strings.t("connect.browser.title", mapOf("host" to host)),
-            site = SiteModel(id = consent.origin, name = host, host = host, letter = letterOf(host), tint = tintOf(host)),
-            statusLine = if (secure) strings.t("explore.secureSite") else strings.t("connect.browser.a11yInsecure"),
+            site = SiteModel(id = consent.origin, name = host, host = host, letter = letterOf(host), tint = tintOf(host), iconUrls = iconsOf(consent.origin)),
+            statusLine = "",
             secure = secure,
+            networkLogoUrl = identity.chainId.takeIf { it > 0 }?.let { app.getvela.wallet.core.marks.Marks.chainLogoUrl(it) },
+            primaryAction = true,
             accountName = identity.accountName.ifBlank { fallback.accountName },
             accountAddress = shortAddress(identity.accountAddress),
             accountSeed = identity.accountAddress.ifBlank { fallback.accountSeed },
@@ -225,6 +230,8 @@ object ExploreLive {
         letter = letterOf(entry.host),
         tint = tintOf(entry.host),
         subtitle = entry.host,
+        // The icon the page named when it was visited, then the usual places.
+        iconUrls = (listOf(entry.favicon).filter { it.startsWith("https://") } + iconsOf(entry.url)).distinct(),
     )
 
     fun tileOf(site: ExploreSite): SiteModel = SiteModel(
@@ -234,7 +241,12 @@ object ExploreLive {
         letter = letterOf(site.host),
         tint = tintOf(site.host),
         subtitle = site.host,
+        iconUrls = iconsOf(site.url),
     )
+
+    /** Spec 079: where a site's icon conventionally lives (the signing header's list), https only. */
+    private fun iconsOf(url: String): List<String> =
+        uniffi.vela_core_uniffi.dappOriginOf(url)?.let(app.getvela.wallet.feature.signing.SigningLive::siteIconUrls).orEmpty()
 
     fun recentGroup(entries: List<BhistEntry>, strings: VelaStrings): GroupModel? {
         if (entries.isEmpty()) return null
@@ -259,9 +271,8 @@ object ExploreLive {
             )
         }
 
-    /** The first letter or digit of the host, upper-cased; `?` for none. */
-    fun letterOf(host: String): String =
-        host.firstOrNull { it.isLetterOrDigit() && it.code < 128 }?.uppercaseChar()?.toString() ?: "?"
+    /** The avatar letter — the core's rule (spec 079): `app.uniswap.org` is "U", not "A". */
+    fun letterOf(host: String): String = uniffi.vela_core_uniffi.browserSiteLetter(host)
 
     /** A stable hue per host (FNV-1a, the desktop's rule): the same site is the same colour everywhere. */
     fun tintOf(host: String): Color {

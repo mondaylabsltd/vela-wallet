@@ -196,7 +196,7 @@ private fun TabCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            tab.site?.let { LetterAvatar(it.letter, it.tint, size = VelaSpacing.xl2) }
+            tab.site?.let { SiteAvatar(it, size = VelaSpacing.xl2) }
             Text(
                 text = tab.title,
                 color = colors.fgBase,

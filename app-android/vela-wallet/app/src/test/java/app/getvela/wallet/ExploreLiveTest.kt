@@ -83,7 +83,9 @@ class ExploreLiveTest {
         assertFalse(model.browser.secure)
         assertTrue(model.browser.crashed)
         assertFalse(model.connection.secure)
-        assertEquals(strings.t("connect.browser.a11yInsecure"), model.siteMenuSheet.statusLine)
+        // Spec 079 (owner): the open lock alone says it — no words either way.
+        assertEquals("", model.siteMenuSheet.statusLine)
+        assertFalse(model.siteMenuSheet.secure)
     }
 
     /** Spec 079: a failed page says why in the core's words, and says it is retrying. */
@@ -110,7 +112,8 @@ class ExploreLiveTest {
 
     @Test
     fun `a host's letter and colour are stable, and hidden system groups stay off the page`() {
-        assertEquals("A", ExploreLive.letterOf("app.uniswap.org"))
+        // Spec 079: the core's letter rule skips the `app.` everyone puts in front.
+        assertEquals("U", ExploreLive.letterOf("app.uniswap.org"))
         assertEquals("1", ExploreLive.letterOf("127.0.0.1:8137"))
         assertEquals("?", ExploreLive.letterOf("···"))
         assertEquals(ExploreLive.tintOf("app.uniswap.org"), ExploreLive.tintOf("app.uniswap.org"))
