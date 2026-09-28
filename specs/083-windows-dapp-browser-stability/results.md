@@ -65,7 +65,8 @@ route — done. D4 consent shows account + network — done. D5 (per-user instal
   submitted / nothing went on chain), and 关闭 is the person's 4001. **Owner to confirm this change in
   what a dApp sees** — it follows W19's scan timeout; before, an immediate -32603. A tunnel the phone
   closes while connecting is the phone's cancel: back to the form, as mid-prompt (spec 038 finding
-  18). macOS: a BLE channel that will not open falls through to the tunnel, as on Linux. Not done: a
+  18) — but not a relay's policy close (1008, W20's refusal): that one never came up, and gets 重试.
+  macOS: a BLE channel that will not open falls through to the tunnel, as on Linux. Not done: a
   relay failure after a transaction was signed (a retry could sign the same nonce twice — owner
   decision); vi `networkBody` says "máy chủ" (server) — right where the line is shared (balance,
   onboarding), loose on the phone card; a phone-only line needs a new key and the translation pass.

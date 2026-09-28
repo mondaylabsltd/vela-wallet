@@ -705,7 +705,8 @@ impl SigningHost {
     }
 
     /// The phone card's Retry — a scan that ran out, a connection that never
-    /// came up (083): the same approval again, with a new QR.
+    /// came up or one that dropped once the phone was asked (083): the same
+    /// approval again, with a new QR.
     /// When the sheet could not be approved as it stands now (a quote gone
     /// stale into a failure), the form comes back instead, to say why.
     pub fn retry(&mut self, cx: &mut Context<Self>) {

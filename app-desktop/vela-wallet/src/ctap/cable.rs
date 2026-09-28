@@ -104,13 +104,19 @@ impl std::fmt::Display for HybridError {
 /// Other(\"caBLE transport: the tunnel closed\")". A tunnel the phone closed
 /// is the person cancelling on the phone while it connected — the phone's
 /// answer, not a connection to retry over a network to check (083 H4 review).
+/// A tunnel the RELAY refused is not the phone's (see [`peer_closed`]): it
+/// stays a connection that failed, said without the core's "caBLE
+/// transport:" in front.
 fn handshake_failed(error: CableError) -> HybridError {
     let detail = match error {
         CableError::Other(detail) if detail.contains(TUNNEL_CLOSED) => {
             return HybridError::PhoneEnded;
         }
         CableError::TimedOut => "the phone stopped answering".to_owned(),
-        CableError::Other(detail) => detail,
+        CableError::Other(detail) => match detail.strip_prefix(CORE_TRANSPORT) {
+            Some(cause) => cause.to_owned(),
+            None => detail,
+        },
         // Not raised by a handshake, which asks the phone nothing yet; the
         // ceremony's own sentences if one ever is.
         other => failure_for(other)
@@ -261,7 +267,31 @@ pub struct WebSocketCablePort {
 
 /// The one sentence a closed tunnel produces, shared with the ceremony's
 /// failure mapping so the sheet can name what happened without matching prose.
+/// It is read as the PHONE's goodbye — a cancel — so a close that is the
+/// relay's own refusal does not say it ([`peer_closed`]).
 pub const TUNNEL_CLOSED: &str = "the tunnel closed";
+
+/// How a close the relay itself sent reads: it would not carry this
+/// connection, and the phone never had a say.
+const RELAY_REFUSED: &str = "the relay refused the tunnel";
+
+/// A close from the other end of the tunnel, as the port reports it. Most
+/// are the phone leaving — the relay closes the pair when one leg goes —
+/// and read as its cancel ([`TUNNEL_CLOSED`]). A policy close (1008) is the
+/// relay refusing the connection: Apple's cable.auth.com sent exactly that,
+/// right after the first handshake frame, for tunnel ids it would not route
+/// (the W20 log, `evidence/after/w20-iphone-cable-log.txt`). Read as the
+/// phone's cancel, it went quietly back to the form as if the person had
+/// declined on the phone; it is a connection that never came up, to be
+/// offered again (083 H4 review).
+fn peer_closed(frame: Option<&tungstenite::protocol::CloseFrame<'_>>) -> PortError {
+    match frame {
+        Some(frame) if frame.code == tungstenite::protocol::frame::coding::CloseCode::Policy => {
+            PortError::Io(format!("{RELAY_REFUSED} ({})", frame.reason))
+        }
+        _ => PortError::Io(TUNNEL_CLOSED.to_owned()),
+    }
+}
 
 impl WebSocketCablePort {
     /// Open the tunnel at `url` (`wss://…/cable/connect/<routing>/<tunnel>`),
@@ -398,7 +428,7 @@ impl CablePort for WebSocketCablePort {
                 Ok(Message::Close(frame)) => {
                     log(&format!("← tunnel CLOSE {frame:?}"));
                     self.closed_by_peer = true;
-                    return Err(PortError::Io(TUNNEL_CLOSED.to_owned()));
+                    return Err(peer_closed(frame.as_ref()));
                 }
                 // The relay keeps the pair alive with pings and kills BOTH legs
                 // when one stops answering — and the phone-side selector can
@@ -1068,6 +1098,101 @@ mod tests {
         assert!(matches!(closed, HybridError::PhoneEnded), "{closed:?}");
         assert_eq!(closed.to_string(), PHONE_ENDED);
         assert!(!closed.to_string().starts_with(PHONE_LINK_FAILED));
+    }
+
+    /// A relay on loopback that takes the desktop's first handshake frame and
+    /// closes the tunnel with `close`; the handshake's failure, as the
+    /// connection reports it.
+    fn closed_after_the_first_frame(
+        close: Option<tungstenite::protocol::CloseFrame<'static>>,
+    ) -> HybridError {
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback");
+        let address = listener.local_addr().expect("an address");
+        let relay = std::thread::spawn(move || {
+            let Ok((stream, _)) = listener.accept() else {
+                return;
+            };
+            let Ok(mut ws) = tungstenite::accept(stream) else {
+                return;
+            };
+            if ws.read().is_err() {
+                return;
+            }
+            let _ = ws.close(close);
+            // Until the desktop has gone.
+            while ws.read().is_ok() {}
+        });
+        let stream = TcpStream::connect(address).expect("the relay answers");
+        let (ws, _) =
+            tungstenite::client_tls(format!("ws://{address}/cable"), stream).expect("upgraded");
+        let port = WebSocketCablePort {
+            ws,
+            closed_by_peer: false,
+            frames_read: 0,
+            handshake_wait: Duration::from_secs(5),
+        };
+        let session = CableInitiator::new(&[7; 32], &[9; 16]).expect("a session");
+        let failure = match session.establish(port, &[0; 16], &[5; 32], "phone".to_owned(), None) {
+            Err(error) => handshake_failed(error),
+            Ok(_) => unreachable!("a closed tunnel shakes no hands"),
+        };
+        let _ = relay.join();
+        failure
+    }
+
+    /// 083 H4 review: a policy close is the relay refusing the tunnel — what
+    /// Apple's relay did to lower-case tunnel ids (W20), right after the first
+    /// handshake frame — and not the phone's cancel: a connection that never
+    /// came up, which the column offers again. Any other close while the
+    /// phone connects is still the phone hanging up.
+    #[test]
+    fn a_relay_that_refuses_the_tunnel_is_not_the_phone_hanging_up() {
+        use tungstenite::protocol::CloseFrame;
+        use tungstenite::protocol::frame::coding::CloseCode;
+
+        let refused = closed_after_the_first_frame(Some(CloseFrame {
+            code: CloseCode::Policy,
+            reason: "Policy violation".into(),
+        }));
+        assert!(
+            matches!(
+                &refused,
+                HybridError::Handshake(detail)
+                    if detail == "the relay refused the tunnel (Policy violation)"
+            ),
+            "{refused:?}"
+        );
+        assert!(refused.to_string().starts_with(PHONE_LINK_FAILED));
+
+        for close in [
+            Some(CloseFrame {
+                code: CloseCode::Normal,
+                reason: "".into(),
+            }),
+            Some(CloseFrame {
+                code: CloseCode::Away,
+                reason: "".into(),
+            }),
+            None,
+        ] {
+            let hung_up = closed_after_the_first_frame(close.clone());
+            assert!(
+                matches!(hung_up, HybridError::PhoneEnded),
+                "{close:?}: {hung_up:?}"
+            );
+        }
+
+        // Once the phone was asked, the same refusal is its connection
+        // dropping — offered again — and not its cancel.
+        assert!(matches!(
+            dropped(CableError::Other(format!(
+                "{CORE_TRANSPORT}{RELAY_REFUSED} (Policy violation)"
+            ))),
+            CableError::Other(detail)
+                if detail == "the phone connection dropped: the relay refused the tunnel (Policy violation)"
+        ));
     }
 
     /// 083 H4 review: a dismissal stops the connection between its steps —
