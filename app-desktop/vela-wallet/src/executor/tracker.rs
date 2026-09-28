@@ -417,6 +417,24 @@ fn find_op_event(
 static TICKING: AtomicBool = AtomicBool::new(false);
 /// Records the tracker has patched since the feed was last told.
 static PATCHED: AtomicU32 = AtomicU32::new(0);
+/// Records the signing path wrote (a dApp's pending record, its close) since
+/// the feed was last told (spec 082 RG3).
+static WRITTEN: AtomicU32 = AtomicU32::new(0);
+
+/// A dApp record was written or closed in the background (spec 082 RG3,
+/// T072): the feed is told on the next tick — `ReconcileCompleted`, the same
+/// way the tracker's own patches reach it — so the row is on screen within
+/// one tick rather than at the feed's 10–30 s pass. Counted here because the
+/// write runs with no `cx`; never from the tracker hand-off.
+pub fn records_written() {
+    WRITTEN.fetch_add(1, Ordering::SeqCst);
+}
+
+/// How many record writes are waiting to be told to the feed.
+#[cfg(test)]
+pub fn records_waiting() -> u32 {
+    WRITTEN.load(Ordering::SeqCst)
+}
 
 /// Boot the tracker and keep it ticking for the life of the process. Called
 /// by the wallet page on every sign-in; a second call is a no-op.
@@ -435,7 +453,9 @@ pub fn start(cx: &mut App) {
             // Anything the sweep just converged, handed to the feed within one
             // tick rather than at its own 30 s pass: the row a person is
             // watching says "pending" until somebody re-reads the store.
-            let patched = PATCHED.swap(0, Ordering::SeqCst);
+            let patched = PATCHED
+                .swap(0, Ordering::SeqCst)
+                .saturating_add(WRITTEN.swap(0, Ordering::SeqCst));
             if patched > 0 {
                 let _ = cx.update(|cx| crate::executor::activity_feed::reconciled(patched, cx));
             }

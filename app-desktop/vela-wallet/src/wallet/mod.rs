@@ -70,6 +70,10 @@ pub struct WalletStrings {
     pub label_sent: SharedString,
     pub label_received: SharedString,
     pub label_dapp: SharedString,
+    /// A row that is not confirmed leads with its status (spec 082 RG2):
+    /// "处理中 · …", "失败 · …".
+    pub status_pending: SharedString,
+    pub status_failed: SharedString,
     pub today: SharedString,
     pub yesterday: SharedString,
     /// Templates carrying `{{name}}`.
@@ -81,6 +85,9 @@ pub struct WalletStrings {
     pub toast_received: String,
     pub empty_activity_title: SharedString,
     pub empty_activity_caption: SharedString,
+    /// The home Activity under a sidebar chain filter (spec 082 RG5): the
+    /// core's `home_empty_key` names it, with no caption.
+    pub empty_activity_network: SharedString,
     pub empty_assets_title: SharedString,
     pub empty_assets_caption: SharedString,
     pub networks_title: SharedString,
@@ -164,6 +171,8 @@ impl WalletStrings {
             label_sent: s("history.labelSent"),
             label_received: s("history.labelReceived"),
             label_dapp: s("history.txLabelDappTx"),
+            status_pending: s("componentsTx.detail.statusPending"),
+            status_failed: s("componentsTx.detail.statusFailed"),
             today: s("componentsUi.dayGroup.today"),
             yesterday: s("componentsUi.dayGroup.yesterday"),
             to_name: raw("history.toName"),
@@ -171,6 +180,7 @@ impl WalletStrings {
             toast_received: raw("home.toastReceived"),
             empty_activity_title: s("home.emptyNoActivity"),
             empty_activity_caption: s("home.emptySubtitle"),
+            empty_activity_network: s("home.emptyNoActivityNetwork"),
             empty_assets_title: s("assets.emptyTitle"),
             empty_assets_caption: s("assets.emptySubtext"),
             networks_title: s("settingsModals.network.modalTitle"),

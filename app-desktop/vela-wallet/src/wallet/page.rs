@@ -3613,6 +3613,39 @@ impl WalletPage {
             );
         }
 
+        // Nothing to list (spec 082 RD10, G1): skeletons while the balance
+        // core has not ruled, else the core's empty line — never a blank
+        // strip, which reads as a list that failed to load.
+        if self.identity.is_some() {
+            let state = wallet_live::home_activity(
+                !activity.is_empty(),
+                resident::resident::<BalanceDashboard>(cx)
+                    .read(cx)
+                    .view()
+                    .balance_unknown,
+                &resident::resident::<ActivityFeed>(cx).read(cx).view(),
+                &self.strings,
+            );
+            match state {
+                wallet_live::HomeActivity::Rows => {}
+                wallet_live::HomeActivity::Loading => {
+                    activity_col = activity_col
+                        .child(skeleton_row(theme))
+                        .child(skeleton_row(theme))
+                        .child(skeleton_row(theme));
+                }
+                wallet_live::HomeActivity::Empty { title, caption } => {
+                    activity_col = activity_col.child(empty_state(
+                        theme,
+                        &mut self.icons,
+                        Icon::Inbox,
+                        title,
+                        caption,
+                    ));
+                }
+            }
+        }
+
         // The strip is narrowed by the sidebar's filter, and the panel it opens
         // is addressed by index into the UNFILTERED list. Row 0 of "Gnosis" is
         // not holding 0 — so the mapping is carried, not assumed. Getting this
@@ -6151,7 +6184,6 @@ impl WalletPage {
                 flow_fixtures::FlowBody::History(flows_live::history_panel(
                     &feed,
                     balance.balance_unknown,
-                    self.chain_filter,
                     &self.flow_strings,
                     &self.strings,
                     balance.hidden,
@@ -14536,7 +14568,7 @@ impl WalletPage {
                 // write.
                 model.blocks.extend(signing_live::sim_blocks(
                     &host.sim,
-                    host.sim_unavailable,
+                    host.sim_notice.as_ref(),
                     host.chain_id,
                     &self.signing,
                 ));

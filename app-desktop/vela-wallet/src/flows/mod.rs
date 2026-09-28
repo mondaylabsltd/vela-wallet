@@ -237,6 +237,10 @@ pub struct FlowStrings {
     pub label_received: SharedString,
     pub tx_label_sent: String,
     pub tx_label_received: String,
+    /// A dApp's transaction (spec 082 RG2): "dApp 交易".
+    pub tx_label_dapp: SharedString,
+    /// "Requested by", over the site that asked for a dApp's transaction.
+    pub detail_requested_by: SharedString,
     pub to_name: String,
     pub from_name: String,
     pub view_on_explorer: SharedString,
@@ -520,6 +524,17 @@ pub struct FlowStrings {
 }
 
 impl FlowStrings {
+    /// The words for the History empty line the core chose
+    /// (`FeedView.history_empty_key`, spec 082 RG5). The choice is the core's;
+    /// this only looks the key up among the two it hands out.
+    #[must_use]
+    pub fn history_empty_of(&self, key: &str) -> SharedString {
+        match key {
+            "history.emptyFilter" => self.history_empty_filter.clone(),
+            _ => self.history_empty.clone(),
+        }
+    }
+
     /// "1 recipient" / "3 recipients" — the web's `_one` / `_other` pick.
     #[must_use]
     pub fn recipients(&self, count: usize) -> String {
@@ -578,6 +593,8 @@ impl FlowStrings {
             label_received: s("history.labelReceived"),
             tx_label_sent: raw("history.txLabelSent"),
             tx_label_received: raw("history.txLabelReceived"),
+            tx_label_dapp: s("history.txLabelDappTx"),
+            detail_requested_by: s("componentsUi.signing.siweOrigin"),
             to_name: raw("history.toName"),
             from_name: raw("history.fromName"),
             view_on_explorer: s("history.viewOnExplorer"),

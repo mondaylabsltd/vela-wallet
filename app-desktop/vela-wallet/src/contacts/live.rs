@@ -142,7 +142,7 @@ pub fn detail(
             .into_iter()
             .take(shown)
             .map(|item| {
-                let mut row = crate::wallet::live::activity_row(feed, item, wallet, hidden);
+                let mut row = crate::wallet::live::activity_row(item, wallet, hidden);
                 // On this person's own page "to Alice" is noise: the web's
                 // subtitle is the network and the day (`contactActivityRow`).
                 row.subtitle = SharedString::from(format!(

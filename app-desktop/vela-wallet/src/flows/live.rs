@@ -202,13 +202,14 @@ pub fn assets(
 ///
 /// Rows when there are any; skeletons while the balance core has not ruled
 /// (the feed has nothing yet, and "no transactions" would be a guess); and
-/// once it has, one line — about THIS network when the list is narrowed to
-/// one, because "no transactions" under a filter would read as "none at all".
+/// once it has, one line — the core's `history_empty_key` (spec 082 RG5):
+/// about THIS network when the feed is narrowed to one, because "no
+/// transactions" under a filter would read as "none at all". Which line is
+/// the core's; loading versus empty stays here.
 #[must_use]
 pub fn history_panel(
     view: &FeedView,
     balance_unknown: bool,
-    filter: Option<u32>,
     s: &FlowStrings,
     wallet: &crate::wallet::WalletStrings,
     hidden: bool,
@@ -218,10 +219,7 @@ pub fn history_panel(
     HistoryPanel {
         groups,
         loading: bare && balance_unknown,
-        empty: (bare && !balance_unknown).then(|| match filter {
-            Some(_) => s.history_empty_filter.clone(),
-            None => s.history_empty.clone(),
-        }),
+        empty: (bare && !balance_unknown).then(|| s.history_empty_of(&view.history_empty_key)),
     }
 }
 
@@ -246,7 +244,7 @@ pub fn history(
                 rows: Vec::new(),
             }),
             FeedRow::Item { item } => {
-                let model = crate::wallet::live::activity_row(view, item, wallet, hidden);
+                let model = crate::wallet::live::activity_row(item, wallet, hidden);
                 // A feed that opened with an item rather than a header is not a
                 // shape the core produces, but drawing the row is better than
                 // dropping somebody's transaction over a missing heading.
@@ -340,7 +338,6 @@ pub fn tx_detail(
         _ => None,
     })?;
     let incoming = item.direction == vela_core::app::activity_feed::FeedDirection::In;
-    let record = view.transactions.iter().find(|record| record.id == item.id);
 
     let mut facts = Vec::new();
     // Who it was with. The identicon is seeded by the ADDRESS even when a name
@@ -401,20 +398,39 @@ pub fn tx_detail(
         });
     }
 
-    let status = record.map_or(FeedTxStatus::Confirmed, |record| record.status);
+    // Who asked, for a dApp's transaction (spec 082 RG2): the site the core
+    // read off the stored record, verbatim.
+    if let Some(site) = item.site.as_ref().filter(|site| !site.is_empty()) {
+        facts.push(FactRow {
+            label: s.detail_requested_by.clone(),
+            value: SharedString::from(site.clone()),
+            lead: FactLead::None,
+            mono: false,
+            copy: None,
+            note: None,
+        });
+    }
+
+    // Where it stands is the core's (RG1): the row's status, which only the
+    // tracker moves off pending.
+    let status = item.status;
     let (breakdown_title, breakdown) = detail_parts(item, s);
     Some(crate::flows::fixtures::TxDetail {
         breakdown_title,
         breakdown,
-        title: SharedString::from(crate::wallet::fill(
-            if incoming {
-                &s.tx_label_received
-            } else {
-                &s.tx_label_sent
-            },
-            "symbol",
-            &item.symbol,
-        )),
+        title: if item.kind == vela_core::app::activity_feed::FeedTxKind::DappTx {
+            s.tx_label_dapp.clone()
+        } else {
+            SharedString::from(crate::wallet::fill(
+                if incoming {
+                    &s.tx_label_received
+                } else {
+                    &s.tx_label_sent
+                },
+                "symbol",
+                &item.symbol,
+            ))
+        },
         status: StatusChip {
             text: match status {
                 FeedTxStatus::Confirmed => s.status_confirmed.clone(),
@@ -4523,6 +4539,61 @@ mod tests {
     }
 
     /// A transaction's detail, and the row order the listeners are bound in.
+    /// Spec 082 RG2 (T072): a dApp's transaction opens as "dApp
+    /// transaction", with the status the core gave its row and who asked.
+    #[test]
+    fn a_dapp_transaction_detail_names_who_asked() {
+        crate::executor::storage::tests::with_temp_state("flows-dapp-detail", || {
+            use vela_core::app::activity_feed::{
+                ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem, FeedTxKind,
+            };
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let _ = host.dispatch(FeedEvent::AccountSwitched {
+                address: "0xme".to_owned(),
+            });
+            let item = FeedItem {
+                id: "dapp-1-tx".to_owned(),
+                direction: FeedDirection::Out,
+                counterparty: Some("0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".to_owned()),
+                alias: None,
+                value: Some("0.001".to_owned()),
+                symbol: "xDAI".to_owned(),
+                decimals: Some(18),
+                usd_value: 0.0,
+                chain_id: 100,
+                timestamp: 1_756_000_000.0,
+                day_start_ms: 0.0,
+                tx_hash: None,
+                batch: None,
+                kind: FeedTxKind::DappTx,
+                status: FeedTxStatus::Pending,
+                site: Some("127.0.0.1:8137".to_owned()),
+            };
+            let view = FeedView {
+                rows: vec![FeedRow::Item { item }],
+                ..host.view()
+            };
+            let s = strings();
+            let detail = tx_detail(
+                &view,
+                "dapp-1-tx",
+                &s,
+                false,
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            assert_eq!(detail.title, s.tx_label_dapp);
+            assert_eq!(detail.status.text, s.status_pending);
+            let asked = detail
+                .facts
+                .iter()
+                .find(|fact| fact.label == s.detail_requested_by)
+                .unwrap_or_else(|| unreachable!("a Requested by fact"));
+            assert_eq!(asked.value.as_ref(), "127.0.0.1:8137");
+        });
+    }
+
     #[test]
     fn a_transaction_opens_its_own_detail_and_the_row_order_matches() {
         crate::executor::storage::tests::with_temp_state("flows-tx-detail", || {
@@ -4558,7 +4629,13 @@ mod tests {
                 } else {
                     vela_core::app::activity_feed::FeedTxKind::Send
                 },
-                status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+                // The row's status is the core's (spec 082 RG1): the stored
+                // record's, which says pending for the sent one.
+                status: if incoming {
+                    vela_core::app::activity_feed::FeedTxStatus::Confirmed
+                } else {
+                    vela_core::app::activity_feed::FeedTxStatus::Pending
+                },
                 site: None,
             };
             let view = FeedView {
@@ -4631,8 +4708,8 @@ mod tests {
                 Some("https://gnosisscan.io/tx/0xdead")
             );
 
-            // The sent one, whose stored record says pending — it must NOT
-            // wear the confirmed chip.
+            // The sent one, whose row says pending — it must NOT wear the
+            // confirmed chip.
             let sent = tx_detail(
                 &view,
                 "b",
@@ -5006,14 +5083,23 @@ mod tests {
         };
         let (s, w) = (strings(), wallet_strings());
 
-        let loading = history_panel(&feed, true, None, &s, &w, false);
+        let loading = history_panel(&feed, true, &s, &w, false);
         assert!(loading.loading && loading.empty.is_none());
 
-        let empty = history_panel(&feed, false, None, &s, &w, false);
+        let empty = history_panel(&feed, false, &s, &w, false);
         assert!(!empty.loading);
         assert_eq!(empty.empty, Some(s.history_empty.clone()));
 
-        let narrowed = history_panel(&feed, false, Some(100), &s, &w, false);
+        // Narrowed: the core says which line (spec 082 RG5), from the filter
+        // it was told.
+        let _ = host.dispatch(FeedEvent::ChainFilterChanged {
+            chain_id: Some(100),
+        });
+        let narrowed_feed = FeedView {
+            rows: Vec::new(),
+            ..host.view()
+        };
+        let narrowed = history_panel(&narrowed_feed, false, &s, &w, false);
         assert_eq!(narrowed.empty, Some(s.history_empty_filter.clone()));
         assert_ne!(s.history_empty, s.history_empty_filter);
     }

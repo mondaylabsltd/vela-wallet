@@ -180,10 +180,14 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
         // this request and how to answer it.
         SignOperation::SendResponse { .. } => SignAnswer::Screen,
 
+        // After each write the feed is poked on the tracker's next tick
+        // (spec 082 RG3): a dApp's row is on screen within seconds, not at the
+        // feed's own pass.
         SignOperation::PersistRecord { record } => {
             let record = record.clone();
             SignAnswer::Blocking(Box::new(move || {
                 persist_record(&record);
+                crate::executor::tracker::records_written();
                 SignShellResult::RecordPersisted
             }))
         }
@@ -192,6 +196,7 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
             let (record_id, close) = (record_id.clone(), close.clone());
             SignAnswer::Blocking(Box::new(move || {
                 update_record(&record_id, &close);
+                crate::executor::tracker::records_written();
                 SignShellResult::RecordUpdated
             }))
         }
@@ -1213,6 +1218,38 @@ mod tests {
                 .any(|op| matches!(op.operation, SignOperation::SignAndSubmit { .. })),
             "a page that is gone gets nothing signed"
         );
+    }
+
+    /// Spec 082 RG3 (T072): every background record write — the pending
+    /// record, its close — pokes the feed once, on the tracker's next tick.
+    #[test]
+    fn each_record_write_pokes_the_feed_once() {
+        use vela_core::app::sign_request::{SignRecordClose, SignRecordKind};
+        storage::tests::with_temp_state("sign-poke", || {
+            let run = |operation: SignOperation| match perform(&operation, &context(None)) {
+                SignAnswer::Blocking(work) => {
+                    let before = crate::executor::tracker::records_waiting();
+                    let _ = work();
+                    crate::executor::tracker::records_waiting() - before
+                }
+                _ => unreachable!("a record write is blocking work"),
+            };
+            let record = record(
+                SignRecordKind::DappTx,
+                r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x1"}]"#,
+            );
+            let id = record.record_id.clone();
+            assert_eq!(run(SignOperation::PersistRecord { record }), 1);
+            assert_eq!(
+                run(SignOperation::UpdateRecord {
+                    record_id: id,
+                    close: SignRecordClose::Confirmed {
+                        tx_hash: "0xtx".to_owned(),
+                    },
+                }),
+                1
+            );
+        });
     }
 
     /// A dApp transaction lands in the store the feed and the tracker read.
