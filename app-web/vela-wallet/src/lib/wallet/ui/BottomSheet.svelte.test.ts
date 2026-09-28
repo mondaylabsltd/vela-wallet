@@ -19,7 +19,7 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function drawn(
 	props: {
 		variant?: Variant;
-		dismissible?: boolean;
+		dismissible?: boolean | 'explicit';
 		html?: string;
 		closeLabel?: string;
 	} = {}
@@ -244,6 +244,83 @@ describe('BottomSheet — the dismissible gate', () => {
 		const view = await drawn({ dismissible: false });
 		(view.screen.component as unknown as { requestClose: () => void }).requestClose();
 		await vi.waitFor(() => expect(view.onclose).toHaveBeenCalledOnce(), { timeout: 1500 });
+		await view.screen.unmount();
+	});
+});
+
+describe('BottomSheet — explicit close only (spec 079)', () => {
+	// The signing sheet and the consent card: a close there is the dApp's
+	// 4001, and the owner lost a request to a stray touch. Only the ✕ (or the
+	// host) closes them.
+	for (const variant of ['wallet', 'signing'] as const) {
+		it(`${variant}: a drag from the grabber takes nothing — no movement, no close`, async () => {
+			const view = await drawn({ variant, dismissible: 'explicit' });
+			await dragGrip(view.grip, view.height * 0.6, 10, 16);
+			// Not even a rubber band: the drag is never taken.
+			expect(Math.abs(view.top() - view.rest)).toBeLessThan(1);
+			await dragGrip(view.grip, 90, 3, 0); // …nor a flick
+			await pause(500);
+			expect(view.onclose).not.toHaveBeenCalled();
+			expect(Math.abs(view.top() - view.rest)).toBeLessThan(1);
+			await view.screen.unmount();
+		});
+	}
+
+	it('a pull on the content at its top takes nothing', async () => {
+		const view = await drawn({
+			dismissible: 'explicit',
+			html: '<p style="height: 40px">Short body</p>'
+		});
+		await dragContent(view.content.firstElementChild as HTMLElement, view.height * 0.5);
+		await pause(500);
+		expect(view.onclose).not.toHaveBeenCalled();
+		expect(Math.abs(view.top() - view.rest)).toBeLessThan(1);
+		await view.screen.unmount();
+	});
+
+	it('the scrim and Escape do nothing', async () => {
+		const view = await drawn({ dismissible: 'explicit' });
+		view.scrim.click();
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+		await pause(600);
+		expect(view.onclose).not.toHaveBeenCalled();
+		expect(view.sheet.isConnected).toBe(true);
+		await view.screen.unmount();
+	});
+
+	it('draws no grabber, and keeps its room', async () => {
+		const view = await drawn({ dismissible: 'explicit' });
+		const handle = view.sheet.querySelector<HTMLElement>('.handle')!;
+		expect(getComputedStyle(handle).visibility).toBe('hidden');
+		expect(handle.getBoundingClientRect().height).toBeGreaterThan(0);
+		await view.screen.unmount();
+	});
+
+	it('the ✕ closes it, once, after the exit', async () => {
+		const view = await drawn({ dismissible: 'explicit' });
+		const close = view.sheet.querySelector<HTMLButtonElement>('.close')!;
+		expect(close.disabled).toBe(false);
+		close.click();
+		close.click();
+		expect(view.onclose).not.toHaveBeenCalled(); // the exit plays first
+		await vi.waitFor(() => expect(view.onclose).toHaveBeenCalledOnce(), { timeout: 1500 });
+		await pause(300);
+		expect(view.onclose).toHaveBeenCalledOnce();
+		await view.screen.unmount();
+	});
+
+	it('a ✕ drawn by the content closes it through the same door (`close()`)', async () => {
+		const view = await drawn({ variant: 'signing', dismissible: 'explicit' });
+		(view.screen.component as unknown as { close: () => void }).close();
+		await vi.waitFor(() => expect(view.onclose).toHaveBeenCalledOnce(), { timeout: 1500 });
+		await view.screen.unmount();
+	});
+
+	it('locked (a signature in flight), the content’s ✕ does nothing either', async () => {
+		const view = await drawn({ variant: 'signing', dismissible: false });
+		(view.screen.component as unknown as { close: () => void }).close();
+		await pause(600);
+		expect(view.onclose).not.toHaveBeenCalled();
 		await view.screen.unmount();
 	});
 });

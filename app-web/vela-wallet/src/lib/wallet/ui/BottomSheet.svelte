@@ -32,6 +32,13 @@
 	 * - **`dismissible={false}`** while something must not be abandoned
 	 *   mid-way (a signature in flight): the drag resists and comes back, and
 	 *   the scrim, ✕ and Escape do nothing.
+	 * - **`dismissible="explicit"`** for a sheet whose closing SAYS something
+	 *   (spec 079 — the signing sheet and the consent card, where a close is
+	 *   the dApp's 4001 and the site must ask again): only its ✕ (or the
+	 *   host) closes it. No drag at all, no scrim tap, no Escape — the owner
+	 *   lost a request to a stray touch ("除非用户明确关掉，不应该很容易误操作，
+	 *   比如下滑就关掉了"). The grabber is not drawn: a handle on a sheet
+	 *   that cannot be dragged is a control that cannot act.
 	 * - **Focus** moves into the sheet, Tab stays in it, and goes back to
 	 *   whatever opened it. **Reduced motion** drops every animation (the drag
 	 *   still follows the finger — that is the person moving it, not motion).
@@ -80,8 +87,12 @@
 		height?: 'half' | 'tall';
 		/** The skin; the behaviour is the same in every one. */
 		variant?: 'wallet' | 'menu' | 'signing' | 'prompt';
-		/** false while it must not close (a signature in flight): drags resist, nothing closes it. */
-		dismissible?: boolean;
+		/**
+		 * `false` while it must not close (a signature in flight): drags resist,
+		 * nothing closes it. `'explicit'`: only the ✕ (or the host) closes it —
+		 * no drag, no scrim, no Escape (spec 079).
+		 */
+		dismissible?: boolean | 'explicit';
 		/** After the exit plays — however the sheet was dismissed. */
 		onclose?: () => void;
 		children: Snippet;
@@ -136,15 +147,34 @@
 	}
 
 	/**
-	 * Close, the way every door does: the exit plays from wherever the sheet
-	 * is, then `onclose`. `force` is the host's own "close now" (a confirm
-	 * button), which a non-dismissible sheet still obeys.
+	 * Which door a close came through. `gesture` — the drag, the scrim,
+	 * Escape: the ones a person can use without meaning to. `explicit` — the
+	 * ✕, a control that says what it does. `host` — the host's own "close now"
+	 * (a confirm button), which a non-dismissible sheet still obeys.
 	 */
-	function dismiss(force = false): void {
+	type Door = 'gesture' | 'explicit' | 'host';
+
+	/** Whether `door` may close the sheet in its current mode. */
+	function opens(door: Door): boolean {
+		if (door === 'host') return true;
+		// Nobody to tell (a gallery picture of a sheet has no host to take it down).
+		if (onclose === undefined || dismissible === false) return false;
+		return door === 'explicit' || dismissible === true;
+	}
+
+	/** Only the ✕ and the host close it (spec 079): no drag is ever taken. */
+	const explicitOnly = $derived(dismissible === 'explicit');
+	/** The drag's own gate — anything but a free-closing sheet resists. */
+	const dragCloses = $derived(dismissible === true);
+
+	/**
+	 * Close, the way every door does: the exit plays from wherever the sheet
+	 * is, then `onclose`.
+	 */
+	function dismiss(door: Door = 'gesture'): void {
 		if (closing) return;
-		// Not dismissible — or nobody to tell (a gallery picture of a sheet has
-		// no host to take it down): it resists and comes back.
-		if ((!dismissible || onclose === undefined) && !force) {
+		// A door this mode keeps shut: it resists and comes back.
+		if (!opens(door)) {
 			if (offset !== 0) springBack();
 			return;
 		}
@@ -163,7 +193,17 @@
 
 	/** The host asks for the exit (its own Cancel / Confirm buttons). */
 	export function requestClose(): void {
-		dismiss(true);
+		dismiss('host');
+	}
+
+	/**
+	 * An explicit close drawn by the CONTENT rather than the title row — the
+	 * signing sheet's ✕ sits in its own header (spec 079). It goes through the
+	 * same door as the title row's ✕: obeyed unless the sheet is locked
+	 * (`dismissible={false}`), and after the exit plays.
+	 */
+	export function close(): void {
+		dismiss('explicit');
 	}
 
 	function springBack(): void {
@@ -201,7 +241,7 @@
 	}
 
 	function follow(dy: number): void {
-		offset = sheetOffset(dy, panelHeight(), dismissible);
+		offset = sheetOffset(dy, panelHeight(), dragCloses);
 	}
 
 	function release(cancelled: boolean): void {
@@ -213,7 +253,7 @@
 				offset,
 				height: panelHeight(),
 				velocity: tracker.velocity(),
-				dismissible
+				dismissible: dragCloses
 			});
 		if (close) dismiss();
 		else springBack();
@@ -239,7 +279,7 @@
 	let pointer: { id: number; startY: number; engaged: boolean } | null = null;
 
 	function onGripDown(event: PointerEvent): void {
-		if (closing || isCard()) return;
+		if (closing || isCard() || explicitOnly) return;
 		if (event.pointerType === 'mouse' && event.button !== 0) return;
 		const target = event.target instanceof Element ? event.target : null;
 		if (!target?.closest('[data-sheet-grip]')) return;
@@ -309,7 +349,13 @@
 	}
 
 	function onTouchStart(event: TouchEvent): void {
-		if (closing || isCard() || event.touches.length !== 1 || scroller === undefined) {
+		if (
+			closing ||
+			isCard() ||
+			explicitOnly ||
+			event.touches.length !== 1 ||
+			scroller === undefined
+		) {
 			touch = null;
 			return;
 		}
@@ -500,7 +546,9 @@
 		onpointerup={onGripEnd}
 		onpointercancel={onGripEnd}
 	>
-		<span class="handle" aria-hidden="true" data-sheet-grip></span>
+		<!-- No grabber on a sheet that cannot be dragged (`explicit`): the space
+		     stays, so the layout above the content does not move. -->
+		<span class="handle" class:inert={explicitOnly} aria-hidden="true" data-sheet-grip></span>
 		{#if !hideTitle}
 			<header data-sheet-grip>
 				<h2>{title}</h2>
@@ -512,8 +560,8 @@
 						type="button"
 						class="close"
 						aria-label={closeLabel}
-						disabled={!dismissible}
-						onclick={() => dismiss()}
+						disabled={dismissible === false}
+						onclick={() => dismiss('explicit')}
 					>
 						<Icon icon={UTILITY_ICONS.x} size="lg" />
 					</button>
@@ -599,6 +647,11 @@
 	   part of the pill for hit-testing and draws nothing, so the grab area
 	   fills the margin band above and below and reaches well to either side
 	   — without adding a box that would move the layout. */
+	.handle.inert {
+		visibility: hidden;
+		cursor: default;
+	}
+
 	.handle::after {
 		content: '';
 		position: absolute;

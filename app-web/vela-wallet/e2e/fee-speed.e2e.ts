@@ -887,3 +887,165 @@ test('the dApp sheet keeps the coin picked when a speed is picked after it', asy
 	await expect(feeRow).toContainText('ETH', { timeout: 30_000 });
 	await expect(feeRow).not.toContainText('USDC');
 });
+
+/**
+ * Spec 079 (F11 — the owner: "可信签名器签完后，回到签名提示框，似乎没有任何提示"):
+ * from the approval on, the dApp sheet is a STATUS, never the form with a
+ * greyed slide. Send dust from a page, in the parallel space (its fixture keys
+ * sign for real), on the stubbed chain: "Submitting to network…" with a live ✕,
+ * then the landing, which closes by itself once the chain confirms. Lives here
+ * for this file's chain and relay stubs.
+ */
+/**
+ * Send dust from a page in the parallel space, up to the slide armed. The
+ * relay holds `eth_sendUserOperation` for 1.5 s, so "submitting" can be seen;
+ * `landed()` flips the receipt from pending to landed.
+ */
+async function dappSendArmed(page: Page): Promise<{ land: () => void }> {
+	await page.addInitScript(() => localStorage.setItem('vela.dev.console', '1'));
+	await stubChain(page);
+	let landed = false;
+	await stubRelay(
+		page,
+		RELAY,
+		tieredRelay(() => (landed ? 'landed' : 'pending'))
+	);
+	// Registered after `stubRelay`, so it runs first and then hands on.
+	await page.route(RELAY, async (route) => {
+		const body = route.request().postDataJSON() as { method?: string } | null;
+		if (body?.method === 'eth_sendUserOperation') await new Promise((r) => setTimeout(r, 1_500));
+		await route.fallback();
+	});
+	await enterWallet(page);
+	await page.waitForFunction(
+		() => (window as unknown as { vela?: { requester?: unknown } }).vela?.requester !== undefined,
+		null,
+		{ timeout: 20_000 }
+	);
+	await page.evaluate((to) => {
+		const accounts = JSON.parse(localStorage.getItem('vela.accounts') ?? '[]') as {
+			address: string;
+		}[];
+		const from = accounts[Number(localStorage.getItem('vela.activeAccountIndex') ?? 0)].address;
+		const vela = window as unknown as {
+			vela: { requester: { fire(method: string, params: unknown[]): Promise<unknown> } };
+			__answer?: unknown;
+			__error?: unknown;
+		};
+		void vela.vela.requester
+			.fire('eth_sendTransaction', [{ from, to, value: '0x1' }])
+			.then((answer) => (vela.__answer = answer))
+			.catch((error) => (vela.__error = error));
+	}, RECIPIENT);
+	await expect(page.getByRole('button', { name: /^Slide to confirm/ })).toHaveAttribute(
+		'aria-disabled',
+		'false',
+		{ timeout: 30_000 }
+	);
+	return { land: () => (landed = true) };
+}
+
+test('a dApp send reads as a status from the approval, and its landing closes by itself', async ({
+	page
+}) => {
+	const { land } = await dappSendArmed(page);
+	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
+
+	// From here on, record every frame the sheet draws: a greyed slide must
+	// never appear, and the status must.
+	await page.evaluate(() => {
+		const seen = { dimmedSlide: false, status: [] as string[] };
+		(window as unknown as { __seen: typeof seen }).__seen = seen;
+		const look = () => {
+			if (document.querySelector('[aria-label^="Slide to confirm"][aria-disabled="true"]')) {
+				seen.dimmedSlide = true;
+			}
+			const status = document.querySelector('[data-testid="signing-status"]');
+			const text = status?.textContent?.trim();
+			if (text && !seen.status.includes(text)) seen.status.push(text);
+		};
+		new MutationObserver(look).observe(document.body, {
+			subtree: true,
+			childList: true,
+			attributes: true,
+			characterData: true
+		});
+	});
+	await slider.focus();
+	await slider.press('Enter');
+
+	const status = page.getByTestId('signing-status');
+	await expect(status).toContainText(en('send.txSubmitting'), { timeout: 20_000 });
+	await expect(status).toContainText(en('send.txBackgroundHint'));
+	// Signed and on its way: the ✕ closes without refusing — it is live.
+	await expect(
+		page.getByRole('button', { name: en('componentsUi.signing.close'), exact: true })
+	).toBeEnabled();
+
+	// The relay took it: the landing, with the chain's clock.
+	const receipt = page.getByTestId('dapp-receipt');
+	await expect(receipt).toContainText(en('componentsTx.receipt.statusSubmitted'), {
+		timeout: 20_000
+	});
+	land();
+	await expect(receipt).toContainText(en('componentsTx.receipt.statusConfirmed'), {
+		timeout: 30_000
+	});
+	// …and a success closes by itself (~2.6 s), with no tap.
+	await expect(receipt).toBeHidden({ timeout: 8_000 });
+	await expect
+		.poll(() => page.evaluate(() => (window as unknown as { __answer?: unknown }).__answer))
+		.toBeTruthy();
+
+	const seen = await page.evaluate(
+		() => (window as unknown as { __seen: { dimmedSlide: boolean; status: string[] } }).__seen
+	);
+	expect(seen.dimmedSlide).toBe(false);
+	expect(seen.status.some((text) => text.includes(en('send.txSubmitting')))).toBe(true);
+});
+
+/**
+ * Spec 079: after the approval the ✕ closes without refusing — the operation
+ * goes on and the page still gets its answer — and nothing of it comes back
+ * over the page when the answer lands (Android 002f5a5c, iOS the same).
+ */
+test('a dApp send closed after approving is still answered, and no landing comes back', async ({
+	page
+}) => {
+	const { land } = await dappSendArmed(page);
+	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
+	land();
+	await slider.focus();
+	await slider.press('Enter');
+
+	const status = page.getByTestId('signing-status');
+	await expect(status).toContainText(en('send.txSubmitting'), { timeout: 20_000 });
+	await page.getByRole('button', { name: en('componentsUi.signing.close'), exact: true }).click();
+	await expect(status).toBeHidden();
+	// Watch every frame from the close on: a receipt must never rise again.
+	await page.evaluate(() => {
+		const seen = { receipt: false };
+		(window as unknown as { __afterClose: typeof seen }).__afterClose = seen;
+		new MutationObserver(() => {
+			if (document.querySelector('[data-testid="dapp-receipt"]')) seen.receipt = true;
+		}).observe(document.body, { subtree: true, childList: true });
+	});
+
+	// The page is answered with the transaction — not refused.
+	await expect
+		.poll(() => page.evaluate(() => (window as unknown as { __answer?: unknown }).__answer), {
+			timeout: 30_000
+		})
+		.toBeTruthy();
+	expect(await page.evaluate(() => (window as unknown as { __error?: unknown }).__error)).toBe(
+		undefined
+	);
+	// …and no receipt rose over the wallet the person went back to.
+	await page.waitForTimeout(1_500);
+	expect(
+		await page.evaluate(
+			() => (window as unknown as { __afterClose: { receipt: boolean } }).__afterClose.receipt
+		)
+	).toBe(false);
+	await expect(page.getByTestId('dapp-receipt')).toHaveCount(0);
+});

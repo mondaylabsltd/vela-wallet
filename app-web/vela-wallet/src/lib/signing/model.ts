@@ -182,7 +182,7 @@ export interface FeeTokenOption {
 	insufficient?: boolean;
 }
 
-import type { FeeSpeedModel } from '$lib/flows/model';
+import type { FeeSpeedModel, ReceiptStage } from '$lib/flows/model';
 
 export type FeeModel =
 	| {
@@ -209,20 +209,56 @@ export type FeeModel =
 			speed?: FeeSpeedModel;
 			/**
 			 * Why the slide is shut: the coin that pays is not there (issue 262 —
-			 * 0 ETH on mainnet, quoted in ETH, signed and never bundled).
+			 * 0 ETH on mainnet, quoted in ETH, signed and never bundled) — or,
+			 * spec 079, why there is no fee at all: the relay could not be
+			 * reached, and the sheet will ask again by itself.
 			 */
 			warning?: string;
+			/**
+			 * Spec 079: the send form's refresh control — its accessible name.
+			 * The owner: "似乎没有刷新网络费的按钮呀". Live only.
+			 */
+			refreshLabel?: string;
+			/** A measurement is out: the control turns and refuses a second tap. */
+			refreshing?: boolean;
+			/**
+			 * The quote's TTL elapsed (`FeeView.stale`) — the send form's calm
+			 * note, beside the control that fixes it. Never a warning tone.
+			 */
+			staleNote?: string;
+			/**
+			 * The chevron: only where a tap opens the list of coins. A failed
+			 * quote with one coin is still tapped to ask again, but opens nothing.
+			 */
+			chevron?: boolean;
 	  }
 	/** Off-chain signature: the ✓ line, in place of a fee row. */
 	| { kind: 'offchain'; note: string }
 	/** Nothing at all — cs20–cs22, where there is no fee and no reassurance. */
 	| { kind: 'hidden' };
 
+/** Spec 079: where an approved request stands, drawn with the send receipt's `StatusHero`. */
+export interface SigningStatus {
+	stage: ReceiptStage;
+	title: string;
+	/** The request in one line, then what the person may do about the wait. */
+	captions: string[];
+	/**
+	 * The ✕ may close the sheet now — the operation carrying on, the page still
+	 * answered. Shut while the passkey prompt is up or has not yet produced a
+	 * signature: closed then, a cancelled prompt would leave the page unanswered.
+	 */
+	closable: boolean;
+}
+
 export interface SigningModel {
 	id: SigningStateId;
 	dapp: {
 		name: string;
-		/** The observed origin's host. EMPTY for the wallet's own request: there is no site. */
+		/**
+		 * The observed origin's host. EMPTY for the wallet's own request (there
+		 * is no site), and when the name IS the host (spec 079: said once).
+		 */
 		host: string;
 		letter: string;
 		tint: string;
@@ -255,10 +291,19 @@ export interface SigningModel {
 		address?: string;
 	};
 	/**
-	 * The slide. There is no reject button anywhere in this vocabulary:
-	 * closing the sheet is the rejection (product contract, SPEC 签名).
+	 * The slide. There is no reject BUTTON anywhere in this vocabulary; the
+	 * header's quiet ✕ is the refusal, and since spec 079 nothing else closes
+	 * the sheet (owner ruling: no swipe, scrim or Escape rejection).
 	 */
 	confirm: { hint: string; action: string; enabled: boolean };
+	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
+	closeLabel?: string;
+	/**
+	 * Spec 079 (F11): the person has approved — the sheet is a status now, not
+	 * a form. No fee controls, no slide (never a greyed one): the request's one
+	 * line and where it stands. Absent while the request is still a request.
+	 */
+	status?: SigningStatus;
 	/**
 	 * Spec 081: the request was refused outright (it would have changed who
 	 * controls the account). There is no fee to show and nothing to slide —

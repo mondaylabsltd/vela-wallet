@@ -238,6 +238,17 @@ export class FeeQuote {
 	}
 
 	/**
+	 * The last request never reached the core: an input it needs (the
+	 * account's deployment, an `eth_getCode` read) could not be obtained — the
+	 * chain did not answer. The published view is then idle, which says "no
+	 * quote" and nothing about why; a surface that must say why, and ask again
+	 * (the signing sheet, spec 079), reads this.
+	 */
+	get contextLost(): boolean {
+		return this.#contextLost;
+	}
+
+	/**
 	 * Bumped every time this session is asked to price again.
 	 *
 	 * The speed picker's other rows are priced by separate sessions

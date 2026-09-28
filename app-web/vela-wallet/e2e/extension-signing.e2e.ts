@@ -151,6 +151,45 @@ test.describe('signing for a dApp', () => {
 	});
 
 	/**
+	 * Spec 079 (the owner: "签名框不小心容易关掉，关掉后就必须由 dapp 重新发起了"):
+	 * a stray Escape or a tap on the scrim used to answer the page 4001. Only
+	 * the sheet's ✕ does now.
+	 */
+	test('a stray Escape or scrim tap keeps the request; the ✕ refuses it', async () => {
+		const context = await loadExtension();
+		const id = extensionId();
+		await seedWallet(context, id);
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+		await connect(context, page);
+
+		let settled = false;
+		const asked = (
+			page.evaluate(([message, address]) => window.__ask('personal_sign', [message, address]), [
+				MESSAGE_HEX,
+				FIXTURE_ONE
+			] as const) as Promise<AskResult>
+		).finally(() => (settled = true));
+		const win = await requestWindow(context);
+		await expect(win.getByText('Hello, Vela')).toBeVisible({ timeout: 30_000 });
+
+		await win.keyboard.press('Escape');
+		await win
+			.locator('.scrim')
+			.first()
+			.click({ position: { x: 10, y: 10 } });
+		await win.waitForTimeout(1_000);
+		await expect(win.getByText('Hello, Vela')).toBeVisible();
+		expect(settled).toBe(false);
+
+		await win.getByRole('button', { name: 'Close', exact: true }).click();
+		const answer = await asked;
+		expect(answer.ok).toBe(false);
+		expect(answer.code).toBe(4001);
+		await context.close();
+	});
+
+	/**
 	 * SC-304, met in 028 Phase 8 — and the note of why it was not, kept so the
 	 * fix is legible.
 	 *

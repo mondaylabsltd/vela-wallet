@@ -898,6 +898,9 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeRetry: k('componentsUi.gas.estimateFailed'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
+		feeRefresh: k('send.feeRefresh'),
+		feeStale: k('send.feeStale'),
+		feeNetworkError: k('componentsUi.funding.denialNetworkError'),
 		speed: {
 			label: k('send.feeSpeedLabel'),
 			once: k('send.feeSpeedOnce'),
@@ -942,7 +945,21 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			opHashLabel: k('componentsTx.receipt.userOpHash'),
 			txHashLabel: k('componentsTx.receipt.txHash'),
 			explorer: k('componentsTx.receipt.explorer'),
-			done: k('componentsTx.receipt.done')
+			done: k('componentsTx.receipt.done'),
+			// Spec 079: what the landing says when the wait ran out, when the
+			// tracker gave up at 24 h, and when a message was signed.
+			stillConfirming: k('componentsUi.signing.stillConfirming'),
+			unknownOutcome: k('componentsUi.signing.unknownOutcome'),
+			signed: k('clearSigning.alertSignedTitle')
+		},
+		// Spec 079: after the approval — the send receipt's words, as
+		// Android's signing receipt uses them.
+		status: {
+			signing: k('send.txSigning'),
+			submitting: k('send.txSubmitting'),
+			backgroundHint: k('send.txBackgroundHint'),
+			messageSigning: k('componentsUi.signing.signing'),
+			failedHint: k('send.txErrorGeneric')
 		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),

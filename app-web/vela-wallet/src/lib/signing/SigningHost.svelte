@@ -19,7 +19,7 @@
 	 * defeated at the last step.
 	 */
 	import SigningSheetView from '$lib/signing/SigningSheet.svelte';
-	import { buildSigningModel } from '$lib/signing/live';
+	import { buildSigningModel, signingCloseEvent } from '$lib/signing/live';
 	import { signingSheet } from '$lib/signing/core/sheet.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { session } from '$lib/session/core/session.svelte';
@@ -31,17 +31,24 @@
 	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
 	import {
 		dappReceiptModel,
+		endsOnSignedTick,
+		landingFromEntry,
 		landingToRaise,
 		receiptProgress,
+		autoCloseAfterMs,
+		trackEntryFor,
 		type DappReceiptCopy,
 		type DappReceiptState
 	} from '$lib/signing/dapp-receipt';
+	import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
 	import { explorerBaseURL } from '$lib/services/networks';
-	import { typicalInclusionSeconds } from '$lib/core/kernels';
+	import { feeRequoteDelayMs, typicalInclusionSeconds } from '$lib/core/kernels';
+	import { FeeRequoteTimer, heldFeeFailure, withLostContext } from '$lib/signing/fee-requote';
+	import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 
 	interface Props {
 		messages: SigningMessages;
@@ -116,24 +123,106 @@
 	}
 
 	/**
-	 * What the tracker says, as the receipt's own state.
+	 * What the tracker says, as the receipt's own state (`landingFromEntry`).
 	 *
 	 * `dropped` / `rejected` are failures with a hash to look at; `unreachable`
 	 * is NOT — the wallet could not ask, which is not the chain saying no, and
-	 * a cross drawn for it would be a verdict this wallet does not have.
+	 * a cross drawn for it would be a verdict this wallet does not have. Past
+	 * the wait window the entry's `outcome` says "still confirming", and past
+	 * 24 h "unknown" — never "submitted" forever (spec 079, F13).
 	 */
 	function readTracker(opHash: string): void {
-		const wanted = opHash.toLowerCase();
-		const entry = txTrackerView().entries.find((row) => row.user_op_hash.toLowerCase() === wanted);
-		if (!entry) return;
-		if (entry.status === 'confirmed' && entry.tx_hash) {
-			landing = { kind: 'confirmed', opHash, txHash: entry.tx_hash };
-		} else if (entry.status === 'dropped' || entry.status === 'rejected') {
-			landing = { kind: 'failed', opHash };
-		} else {
-			landing = { kind: 'submitted', opHash };
-		}
+		const entry = trackEntryFor(txTrackerView().entries, opHash);
+		const next = landingFromEntry(entry, opHash);
+		if (!entry || !next) return;
+		landing = next;
 		if (entry.submitted_at_ms) landedAtMs = entry.submitted_at_ms;
+	}
+
+	/**
+	 * Spec 079: a message signature ends on the tick. The core clears the
+	 * sheet the moment it answers, and the sheet used to simply vanish — the
+	 * person never saw that it had signed. The request the sheet last showed
+	 * is matched against the answer the resident recorded; a match that
+	 * carried a signature raises "已签名！" for a beat, then it goes by itself.
+	 *
+	 * Neither is `$state`: the effect below writes them and must not re-run
+	 * because it did.
+	 */
+	let shownRequest: { id: string; kind: SignMethodKind } | null = null;
+	let answerSeen: unknown = null;
+	let signedTick = $state(false);
+	$effect(() => {
+		const request = signRequest.view.request;
+		if (request && signRequest.view.surface !== 'hidden') {
+			shownRequest = { id: request.id, kind: request.kind };
+		}
+	});
+	$effect(() => {
+		const answer = signRequest.answered;
+		if (!answer || answer === answerSeen) return;
+		answerSeen = answer;
+		// The request the person closed after approving has its answer: what
+		// it handed the tracker (if anything) is marked seen, so no landing
+		// rises for it, and the next approval's landing is not swallowed.
+		if (closedInFlight !== null && answer.id === closedInFlight) {
+			const handoff = signRequest.view.tracker_handoff;
+			if (handoff) landedOp = handoff.user_op_hash;
+			closedInFlight = null;
+		}
+		if (!receipt) return;
+		const shown = shownRequest;
+		// One answer per shown request: an id a site reuses later is not the
+		// request this sheet drew.
+		if (shown?.id === answer.id) shownRequest = null;
+		if (endsOnSignedTick(answer, shown)) signedTick = true;
+	});
+	$effect(() => {
+		if (!signedTick) return;
+		const timer = setTimeout(() => (signedTick = false), autoCloseAfterMs({ kind: 'signed' }) ?? 0);
+		return () => clearTimeout(timer);
+	});
+
+	/**
+	 * Spec 079: the request the person closed with the ✕ AFTER approving
+	 * (the Android `closedAfterApproval`, iOS the same). The operation goes
+	 * on and the page still gets its answer, but nothing of it comes back
+	 * over whatever they went to — no landing, no tick. Cleared by that
+	 * request's answer. Not `$state`: the effects write it.
+	 *
+	 * A second approval cannot begin while this one's pipeline runs (the
+	 * core's confirm gate waits for it), so the next hand-off after a close is
+	 * always this request's own.
+	 */
+	let closedInFlight: string | null = null;
+	interface CloseIntent {
+		event: ReturnType<typeof signingCloseEvent>;
+		requestId: string | null;
+		/** Closed with the operation still under way (not a failure already answered). */
+		inFlight: boolean;
+	}
+	/** What the ✕ meant at the moment it was pressed (the exit plays first). */
+	let closeIntent: CloseIntent | undefined;
+
+	function closeIntentNow(): CloseIntent {
+		const status = model?.status;
+		return {
+			event: signingCloseEvent(status),
+			requestId: signView.request?.id ?? null,
+			inFlight: status !== undefined && status.stage !== 'failed'
+		};
+	}
+
+	function closeSheet(): void {
+		const intent = closeIntent ?? closeIntentNow();
+		closeIntent = undefined;
+		if (intent.event === null) return;
+		if (intent.event === 'dismiss_tapped') {
+			// In flight: the ending must not come back over the page.
+			if (intent.inFlight && intent.requestId !== null) closedInFlight = intent.requestId;
+			shownRequest = null;
+		}
+		signRequest.dispatch({ type: intent.event });
 	}
 
 	/**
@@ -163,7 +252,32 @@
 		const op = landingToRaise(handoff?.user_op_hash, landedOp);
 		if (!op || !handoff) return;
 		landedOp = op;
+		// Closed after approving: tracked, answered — and not raised again.
+		if (closedInFlight !== null) return;
 		watchLanding(op, handoff.chain_id);
+	});
+
+	/** The landing goes: Done, or a landed transaction's own beat. */
+	function closeLanding(): void {
+		landing = null;
+		unsubscribeTracker?.();
+		unsubscribeTracker = undefined;
+		onreceiptdone?.();
+	}
+
+	/**
+	 * Spec 079: a landed transaction closes by itself after a beat (~2.6 s, as
+	 * on Android and iOS) — nobody should have to close a success. Done still
+	 * closes it sooner. "Still confirming" and "unknown" never close on their
+	 * own: the person is being told something they need to read.
+	 */
+	$effect(() => {
+		const state = landing;
+		if (!state) return;
+		const after = autoCloseAfterMs(state);
+		if (after === null) return;
+		const timer = setTimeout(closeLanding, after);
+		return () => clearTimeout(timer);
 	});
 
 	const view = $derived(session.view);
@@ -254,6 +368,56 @@
 		});
 	});
 
+	/**
+	 * Spec 079: a quote that failed for a reason that can pass (the relay out
+	 * of reach, a busy estimate) is asked again by itself, on the core's
+	 * schedule — while the sheet is up, for THIS request's fee, and nothing has
+	 * been approved or answered. On the Xiaomi the row said "点击重试" with the
+	 * relay down and stayed that way after it came back.
+	 */
+	/**
+	 * The fee in force as this sheet reads it — a quote the chain could not
+	 * even be asked about (`contextLost`) is a recoverable failure here, said
+	 * and retried, never an idle row over an open slide (`withLostContext`).
+	 */
+	const feeShown = $derived(
+		withLostContext(speedControl.feeInForce, speedControl.feeQuote.contextLost)
+	);
+	const requoter = new FeeRequoteTimer({
+		delayMs: feeRequoteDelayMs,
+		requote: () => speedControl.refresh()
+	});
+	$effect(() => {
+		const view = feeShown;
+		const request = signView.request;
+		const open =
+			request !== null &&
+			signView.surface === 'sheet' &&
+			// This request's own quote — never the last request's failure
+			// left in the session (a message has no fee to ask about).
+			quotedFor === request.id &&
+			!signView.is_signing &&
+			!signView.is_submitting &&
+			signView.error === null &&
+			signView.blocked === null;
+		untrack(() => requoter.observe(view, open));
+	});
+	onMount(() => () => requoter.stop());
+	/**
+	 * The failure the row keeps saying while a re-ask is out
+	 * (`heldFeeFailure`) — for this request only: the last request's failure
+	 * is not carried onto the next one's "estimating".
+	 */
+	let feeFailing = $state<FeeFailure | null>(null);
+	let feeFailingFor = '';
+	$effect(() => {
+		const view = feeShown;
+		const id = signView.request?.id ?? '';
+		const previous = id === feeFailingFor ? untrack(() => feeFailing) : null;
+		feeFailingFor = id;
+		feeFailing = heldFeeFailure(previous, view);
+	});
+
 	/** The fee-coin list is open. Like Send's: every coin the relay takes, the core's verdict on each. */
 	let feeOpen = $state(false);
 	$effect(() => {
@@ -267,7 +431,9 @@
 			sign: signView,
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
-			fee: speedControl.feeInForce,
+			fee: feeShown,
+			feeFailing,
+			progress: signRequest.progress,
 			feeOpen,
 			speed: {
 				view: speedControl.view,
@@ -357,30 +523,43 @@
 			progress={landing.kind === 'submitted'
 				? receiptProgress(landedAtMs, landingTypicalS, nowMs)
 				: undefined}
-			ondone={() => {
-				landing = null;
-				unsubscribeTracker?.();
-				unsubscribeTracker = undefined;
-				onreceiptdone?.();
-			}}
+			ondone={closeLanding}
+		/>
+	</div>
+{:else if signedTick && receipt && !model}
+	<!--
+		Spec 079: the message is signed — the tick, the same landing layer and
+		disc, gone by itself (`autoCloseAfterMs`). A new request's sheet wins
+		over it (`!model`); the page already has its signature.
+	-->
+	<div class="landing-over">
+		<DappReceipt
+			model={dappReceiptModel({ kind: 'signed' }, receipt, () => null)}
+			ondone={() => (signedTick = false)}
 		/>
 	</div>
 {:else if model}
 	<!--
-		Dismissal IS rejection (the 022 interaction contract draws no reject
-		button), so closing answers the transport with 4001 through the core.
+		The ✕ IS the rejection (the 022 interaction contract draws no reject
+		button), so closing answers the transport with 4001 through the core —
+		and since spec 079 the ✕ is the ONLY way it closes: no scrim, no drag,
+		no Escape (`SigningSheet` → `BottomSheet dismissible="explicit"`).
+		After the approval the sheet is a status, and the ✕ a plain close
+		(`dismiss_tapped`) once the signature exists: the operation carries on
+		and the page still gets its answer (`signingCloseEvent`).
 	-->
 	<SigningSheetView
 		{model}
-		dismissible={!signView.is_signing && !signView.is_submitting}
-		onclose={() => signRequest.dispatch({ type: 'reject_tapped' })}
+		dismissible={model.status ? model.status.closable : true}
+		onclosestart={() => (closeIntent = closeIntentNow())}
+		onclose={closeSheet}
 		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
 		onchip={guardChip}
 		oncustom={guardCustom}
 		onfee={() => {
 			// Failed → ask again. More than one coin → open the list, here in the
 			// sheet. Otherwise the host's own surface, if it has one.
-			if (fee.view?.failed) fee.requote();
+			if (feeShown.failed) fee.requote();
 			else if ((fee.view?.options.length ?? 0) > 1) feeOpen = !feeOpen;
 			else onfee();
 		}}
@@ -408,6 +587,7 @@
 			}
 			feeOpen = false;
 		}}
+		onfeerefresh={() => speedControl.refresh()}
 		onspeed={() => speedControl.toggle()}
 		onspeedpick={(id) => {
 			if (id === 'fast' || id === 'standard' || id === 'slow') speedControl.pick(id);

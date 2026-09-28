@@ -68,9 +68,9 @@ or gains a test"), and each client's mapping gets a unit test. Device checks are
 - [ ] T025a [US1] Desktop tracker clock ticks while any entry is `polling`; receipt wait capped by the remaining window (`D/executor/tracker.rs`, `D/executor/sign_request.rs` `await_receipt`)
 
 ### Extension
-- [ ] T026 [P] [US1] `W/signing/SigningHost.svelte:375`: `dismissible={false}` for the signing sheet and the consent card (`W/dapp/DappRequestHost.svelte`); explicit ✕ keeps `reject_tapped`; `W/wallet/ui/BottomSheet.svelte` gains a non-dismissible mode (no scrim click, no Esc, no drag)
-- [ ] T027 [US1] Message signatures get the signed tick before closing; `W/wallet/core/tracker-resident.ts` keeps ticking past 120 s while any entry is `polling` (the core paces it) and the receipt shows still-confirming/unknown (`SigningHost.svelte:129-135`)
-- [ ] T028 [P] [US1] Web unit tests for T026–T027 (BottomSheet non-dismissible, receipt status mapping)
+- [x] T026 [P] [US1] `W/signing/SigningHost.svelte:375`: `dismissible={false}` for the signing sheet and the consent card (`W/dapp/DappRequestHost.svelte`); explicit ✕ keeps `reject_tapped`; `W/wallet/ui/BottomSheet.svelte` gains a non-dismissible mode (no scrim click, no Esc, no drag)
+- [x] T027 [US1] Message signatures get the signed tick before closing; `W/wallet/core/tracker-resident.ts` keeps ticking past 120 s while any entry is `polling` (the core paces it) and the receipt shows still-confirming/unknown (`SigningHost.svelte:129-135`)
+- [x] T028 [P] [US1] Web unit tests for T026–T027 (BottomSheet non-dismissible, receipt status mapping)
 
 **Checkpoint**: quickstart S1–S6 pass on the Xiaomi and the iPhone; desktop screenshot of the status view.
 
@@ -85,8 +85,8 @@ or gains a test"), and each client's mapping gets a unit test. Device checks are
 - [x] T030 [US2] Android: schedule re-quotes with `feeRequoteDelayMs` in `A/feature/signing/core/SigningController.kt` while the sheet is open and unapproved; cancel on approve/close
 - [x] T031 [P] [US2] iOS: refresh control in `I/Components/Signing/SigningFooter.swift` (`SigningFeeView`) calling the uncalled `refreshFee()` (`I/Features/Signing/Core/SigningController.swift:400`); reason line; re-quote timer
 - [ ] T032 [P] [US2] Desktop: refresh icon in `D/signing/components.rs:809` row; reason instead of "—" (`D/flows/live.rs:1089-1090`); honour `stale` on this sheet; re-quote timer in `D/wallet/signing_host.rs`
-- [ ] T033 [P] [US2] Extension: refresh control + stale note in the signing fee row (`W/signing/live.ts:468-478`, reuse `W/flows/ui/FeeRow.svelte`'s control); re-quote with `fee_requote_delay_ms` over wasm
-- [ ] T034 [P] [US2] (Android and iOS done) Tests per client for the reason mapping and the timer stopping on approve (Android `AT/`, iOS `IT/`, desktop in-crate, web unit)
+- [x] T033 [P] [US2] Extension: refresh control + stale note in the signing fee row (`W/signing/live.ts:468-478`, reuse `W/flows/ui/FeeRow.svelte`'s control); re-quote with `fee_requote_delay_ms` over wasm
+- [ ] T034 [P] [US2] (Android, iOS and web done) Tests per client for the reason mapping and the timer stopping on approve (Android `AT/`, iOS `IT/`, desktop in-crate, web unit)
 
 **Checkpoint**: S7 fee appears ≤ 15 s after the relay returns, with no tap, on the Xiaomi and the iPhone.
 
@@ -168,7 +168,7 @@ resets its slide, and opens without the network after one visit.
 - [x] T069 [P] [US5] iOS: `lock.open` in `I/Components/Explore/AddressBarView.swift:107-113`; icon-only in `ConnectionPanelView.swift:44-47`, `SiteMenuSheetView.swift:39-42`; consent title drawn (`ConnectionPanelView.swift:33`); network rows logo + balance (`ConnectionPanelView.swift:127-131`); header host once (`SigningLive.swift:205-206`); favicon avatars + `browserSiteLetter` (`ExploreLive.swift:381-382`, `LetterAvatarView.swift`)
 - [x] T070 [US5] iOS consent approve word → `connect.browser.connect` (today "批准")
 - [ ] T071 [P] [US5] Desktop: open-lock icon for http (`D/explore/components.rs:497-498`); icon-only connection panel (`D/wallet/page.rs:13699-13703,13791`); network rows logo + balance and the per-chain dot (fix `chain_ethereum()` at `page.rs:13732`); wire "switch account" (`page.rs:13836`); header host once (`D/signing/live.rs:1328-1329`); favicon avatars + `site_letter` (`D/explore/live.rs:152-154`)
-- [ ] T072 [P] [US5] Extension: header host once (`W/signing/live.ts:705,722-723`)
+- [x] T072 [P] [US5] Extension: header host once (`W/signing/live.ts:705,722-723`)
 - [ ] T073 [P] [US5] Tests per client: lock state per scheme, no visible safety text (UI string sweep), picker rows carry logo/balance/identicon, header dedupe
 
 ---

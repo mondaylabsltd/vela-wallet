@@ -17,6 +17,8 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import FeeRefreshButton from './FeeRefreshButton.svelte';
+	import FeeStaleNote from './FeeStaleNote.svelte';
 	import type { FeeRowModel } from '../model';
 
 	interface Props {
@@ -60,46 +62,11 @@
 				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 			</span>
 		</button>
-		<!-- A tap must never be ambiguous: while the measurement is out the icon
-		     turns (and the control refuses a second tap), so "did that do
-		     anything?" has an answer on screen instead of in the network tab. -->
-		<button
-			type="button"
-			class="refresh"
-			data-focus-inner
-			aria-label={fee.refreshLabel}
-			aria-busy={fee.refreshing === true}
-			disabled={onrefresh === undefined || fee.refreshing === true}
-			onclick={onrefresh}
-		>
-			<!-- The turn belongs to the GLYPH, not to the button. The button's
-			     padding is deliberately lopsided (none at the start, so the icon
-			     sits against the figure it refreshes), which puts its geometric
-			     centre away from the icon — rotating the button swung the icon
-			     around that off-centre point in an orbit instead of turning it
-			     in place. This span shrink-wraps the square icon, so the two
-			     centres are the same one. -->
-			<span class="turn" class:spinning={fee.refreshing === true}>
-				<Icon icon={UTILITY_ICONS['refresh-cw']} size="sm" />
-			</span>
-		</button>
+		<FeeRefreshButton label={fee.refreshLabel} refreshing={fee.refreshing === true} {onrefresh} />
 	</div>
-	<!-- `FeeView.stale`, which had no consumer in this shell at all. A quote
-	     past its TTL is OLD, not WRONG — so this is a muted line beside the
-	     control that fixes it, never a warning tone. Someone who reads it as an
-	     error learns to distrust a row that is working.
-
-	     The line is always in the layout and only its INK is toggled. Below this
-	     row sit the speed control and Continue; letting the note appear would
-	     push them down by a line at the moment somebody is reaching for
-	     Continue, and a button that moves under a thumb is how a wrong tap
-	     happens. The owner chose the standing blank over that. -->
-	<p class="stale" class:empty={!fee.staleNote} aria-hidden={fee.staleNote ? undefined : 'true'}>
-		{#if fee.staleNote}
-			<Icon icon={UTILITY_ICONS.clock} size="sm" />
-		{/if}
-		<span>{fee.staleNote ?? ' '}</span>
-	</p>
+	<!-- `FeeView.stale`, which had no consumer in this shell at all (spec
+	     068): a standing line whose INK is toggled — see `FeeStaleNote`. -->
+	<FeeStaleNote note={fee.staleNote} />
 </div>
 
 <style>
@@ -179,106 +146,5 @@
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		font-variant-numeric: tabular-nums;
 		color: var(--color-fg-base);
-	}
-
-	/* Quiet on purpose: a fee that is fine is the normal case, and a loud
-	   refresh button next to a good number invites a tap nobody needs.
-
-	   Exactly the card's height (078 round 2): the same top and bottom edges
-	   at every text size, so a two-line fee at the largest size does not leave
-	   a small target floating in the middle of a tall card. The glyph stays
-	   centred inside it. */
-	.refresh {
-		display: flex;
-		align-items: center;
-		align-self: stretch;
-		flex: 0 0 auto;
-		padding: 0 var(--space-sm) 0 0;
-		border: none;
-		background: none;
-		color: var(--color-fg-subtle);
-		cursor: pointer;
-	}
-
-	.refresh:disabled {
-		cursor: default;
-	}
-
-	/* What is SEEN of the control (078 round 3): a small round icon button in
-	   the card, a fixed circle at the vertical centre whatever the card's
-	   height. The button around it stays the card's height so the whole edge
-	   takes a tap, but it draws nothing — no box stretches with a two-line
-	   card; its hover and its keyboard ring go on the circle. A circle round
-	   the glyph, so `spin` still turns it on its own centre. */
-	.turn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: var(--size-control-sm);
-		height: var(--size-control-sm);
-		border-radius: var(--radius-full);
-	}
-
-	@media (hover: hover) {
-		.refresh:not(:disabled):hover .turn {
-			background: var(--color-bg-sunken);
-			color: var(--color-fg-base);
-		}
-	}
-
-	/* `data-focus-inner` takes the button out of the global ring (app.css);
-	   the ring goes on the circle. The transparent outline stays, for forced
-	   colours, as the global rule keeps it. */
-	.refresh:focus-visible {
-		outline: var(--space-xs) solid transparent;
-	}
-
-	.refresh:focus-visible .turn {
-		box-shadow:
-			0 0 0 var(--space-xs) var(--color-fixed-focusRingInner),
-			0 0 0 var(--space-sm) var(--color-fixed-focusRingOuter);
-	}
-
-	.turn.spinning {
-		/* A calm turn, not a frantic one: the token is the longest duration the
-		   system defines, taken twice, because a full rotation in 400ms reads
-		   as alarm on a screen where somebody is about to pay. */
-		animation: spin calc(var(--motion-duration-slow) * 2) linear infinite;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	/* `visibility`, not `display`: the box has to keep occupying its line. */
-	.stale.empty {
-		visibility: hidden;
-	}
-
-	/* Loud enough to be read, quiet enough not to alarm. It was the smallest
-	   size in the faintest colour, which on a row of numbers is the same as
-	   not being there — the owner read right past it. It now carries the body
-	   size and the muted tone the row's own label uses, plus a glyph, because
-	   a line of prose among figures is found by its shape first. The danger
-	   tone is still wrong: this quote is OLD, not BROKEN. */
-	.stale {
-		display: flex;
-		align-items: center;
-		gap: var(--space-xs);
-		margin: 0;
-		padding-inline: var(--space-lg);
-		font-family: var(--font-ui);
-		font-size: calc(var(--text-sm) * var(--text-scale, 1));
-		color: var(--color-fg-muted);
-	}
-
-	/* The turn is feedback, not decoration; somebody who asked for no motion
-	   still gets the disabled control and the busy state. */
-	@media (prefers-reduced-motion: reduce) {
-		.turn.spinning {
-			animation: none;
-		}
 	}
 </style>

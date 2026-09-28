@@ -139,15 +139,30 @@ test('an unlimited approval is kept as asked and said in danger; a cap is one ch
 	await expect(page.getByText(/^5 /).first()).toBeVisible();
 });
 
-test('rejecting answers the requester with 4001 — dismissal IS the refusal', async ({ page }) => {
+test('rejecting answers the requester with 4001 — the ✕ IS the refusal', async ({ page }) => {
 	await openWallet(page);
 	await fire(page, 'personal_sign', ['0x68656c6c6f', '0xD400866e00B055B20752a826CD5C89b811de130b']);
 
 	const sheet = page.getByRole('button', { name: /^Slide to confirm/ });
 	await expect(sheet).toBeVisible({ timeout: 25_000 });
 
-	// The 022 contract: there is no reject button. Closing is the answer.
+	// Spec 079: a stray Escape or a tap on the scrim no longer throws the
+	// request away — the sheet stays, and the page has no answer.
 	await page.keyboard.press('Escape');
+	await page
+		.locator('.scrim')
+		.first()
+		.click({ position: { x: 10, y: 10 } });
+	await page.waitForTimeout(800);
+	await expect(sheet).toBeVisible();
+	expect(
+		await page.evaluate(
+			() => (window as unknown as { __error?: { code?: number } }).__error?.code ?? null
+		)
+	).toBeNull();
+
+	// The 022 contract: there is no reject button. The quiet ✕ is the answer.
+	await page.getByRole('button', { name: en('componentsUi.signing.close'), exact: true }).click();
 	await expect
 		.poll(
 			async () =>
@@ -157,4 +172,49 @@ test('rejecting answers the requester with 4001 — dismissal IS the refusal', a
 			{ timeout: 20_000 }
 		)
 		.toBe(4001);
+});
+
+/**
+ * Spec 079 ("可信签名器签完后，回到签名提示框，似乎没有任何提示"): the core clears
+ * the sheet the moment it answers, and a message signature used to simply
+ * vanish. It ends on the signed tick now, which goes by itself. Signed for real
+ * in the parallel space (its fixture keys sign headlessly).
+ */
+test('a signed message ends on the tick, and the tick goes by itself', async ({ page }) => {
+	await denyOffOrigin(page);
+	await page.addInitScript(() => {
+		localStorage.setItem('vela.intro.seen', String(Date.now()));
+		localStorage.setItem('vela.dev.console', '1');
+	});
+	await page.goto('/en/parallel');
+	// A click that lands before the page has hydrated does nothing (seen under
+	// a loaded runner): ask again until the entry navigates.
+	await expect(async () => {
+		await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+		await page.waitForURL(/\/en\/wallet$/, { timeout: 3_000 });
+	}).toPass({ timeout: 30_000 });
+	await page.waitForFunction(
+		() => (window as unknown as { vela?: { requester?: unknown } }).vela?.requester !== undefined,
+		null,
+		{ timeout: 20_000 }
+	);
+	await fire(page, 'personal_sign', ['0x68656c6c6f', '0xD400866e00B055B20752a826CD5C89b811de130b']);
+
+	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
+	await expect(slider).toBeVisible({ timeout: 25_000 });
+	const tick = page.getByText(en('clearSigning.alertSignedTitle'), { exact: true });
+	// Watched from the slide on: the tick is a beat, not a state.
+	const seen = expect(tick).toBeVisible({ timeout: 20_000 });
+	await slider.focus();
+	await slider.press('Enter');
+	await seen;
+
+	await expect
+		.poll(
+			async () =>
+				await page.evaluate(() => (window as unknown as { __answer?: unknown }).__answer ?? null),
+			{ timeout: 20_000 }
+		)
+		.toMatch(/^0x[0-9a-fA-F]{100,}$/);
+	await expect(tick).toBeHidden({ timeout: 5_000 });
 });

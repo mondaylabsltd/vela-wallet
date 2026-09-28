@@ -27,6 +27,9 @@ import {
 	calldataBytes,
 	cappedApproval,
 	localizedTerms,
+	signingCloseEvent,
+	signingStatus,
+	summaryOf,
 	type SigningLiveInputs
 } from './live';
 
@@ -175,7 +178,12 @@ describe('the fee the sheet shows', () => {
 			// again. The row is drawn as the fee STATED — no chevron, no pointer
 			// (spec 081, dead-controls #6: it was a button whose handler, live,
 			// was `SigningHost`'s defaulted no-op).
-			tappable: false
+			tappable: false,
+			// Spec 079: the send form's refresh control, and no chevron — one
+			// coin, so there is no list for a tap to open.
+			refreshLabel: m.feeRefresh,
+			refreshing: false,
+			chevron: false
 		});
 	});
 
@@ -308,6 +316,298 @@ describe('the fee the sheet shows', () => {
 });
 
 /**
+ * Spec 079 (the owner: "似乎没有刷新网络费的按钮呀"; F12: a relay that did not
+ * answer turned the fee into "点击重试" with no reason, and nothing asked again
+ * when it came back).
+ */
+describe('the fee can be refreshed, and says why it failed', () => {
+	const ETH_OPTION = {
+		symbol: 'ETH',
+		contract: null,
+		decimals: 18,
+		balance: '1500000000000000000',
+		recipient: '0x1',
+		usd_balance: '4500',
+		usd_price: '3000',
+		amount: '2100000000000000',
+		insufficient: false,
+		selected: true
+	};
+	const failedWith = (failed: FeeView['failed']): FeeView => ({
+		...QUOTED_FEE,
+		fee: null,
+		busy: false,
+		failed,
+		confirm_fee_ready: false,
+		options: [ETH_OPTION]
+	});
+
+	it('a shown fee carries the send form’s refresh, still while nothing is measuring', () => {
+		const fee = buildSigningModel(inputs())?.fee;
+		expect(fee).toMatchObject({ refreshLabel: m.feeRefresh, refreshing: false });
+	});
+
+	it('the control turns while a measurement is out', () => {
+		const fee = buildSigningModel(
+			inputs({ fee: { ...QUOTED_FEE, fee: null, busy: true, confirm_fee_ready: false } })
+		)?.fee;
+		expect(fee).toMatchObject({ value: m.feeEstimating, refreshing: true });
+	});
+
+	it('a relay out of reach says so, and that the sheet asks again — the row is still a retry', () => {
+		const fee = buildSigningModel(inputs({ fee: failedWith('quote_unavailable') }))?.fee;
+		expect(fee).toMatchObject({
+			value: m.feeRetry,
+			warning: m.feeNetworkError,
+			tappable: true,
+			// One coin: a tap asks again but opens no list, so no chevron.
+			chevron: false,
+			refreshLabel: m.feeRefresh
+		});
+	});
+
+	it('every failure a retry can clear gets the sentence; the ones it cannot, none', () => {
+		// The core's schedule (`requote_delay_ms`) decides — the sentence
+		// promises the retry the timer makes.
+		for (const failed of [
+			'quote_unavailable',
+			'fee_token_unavailable',
+			'estimate_failed',
+			'gas_quote_too_high'
+		] as const) {
+			expect(buildSigningModel(inputs({ fee: failedWith(failed) }))?.fee, failed).toMatchObject({
+				warning: m.feeNetworkError
+			});
+		}
+		for (const failed of ['missing_public_key', 'calculation_failed'] as const) {
+			const fee = buildSigningModel(inputs({ fee: failedWith(failed) }))?.fee;
+			expect(fee, failed).toMatchObject({ value: m.feeRetry, tappable: true });
+			expect(fee && 'warning' in fee ? fee.warning : undefined, failed).toBeUndefined();
+		}
+	});
+
+	it('the reason stays said while the sheet asks again, and goes with an answer', () => {
+		const asking: FeeView = { ...QUOTED_FEE, fee: null, busy: true, confirm_fee_ready: false };
+		expect(
+			buildSigningModel(inputs({ fee: asking, feeFailing: 'quote_unavailable' }))?.fee
+		).toMatchObject({ value: m.feeEstimating, warning: m.feeNetworkError });
+		// A first measurement, with no failure behind it, says nothing yet.
+		const first = buildSigningModel(inputs({ fee: asking, feeFailing: null }))?.fee;
+		expect(first && 'warning' in first ? first.warning : 'x').toBeUndefined();
+		// The answer: a quote, and no sentence.
+		const answered = buildSigningModel(inputs({ feeFailing: null }))?.fee;
+		expect(answered && 'warning' in answered ? answered.warning : 'x').toBeUndefined();
+	});
+
+	it('an old quote gets the send form’s calm note — not while a fresh one is out', () => {
+		expect(buildSigningModel(inputs({ fee: { ...QUOTED_FEE, stale: true } }))?.fee).toMatchObject({
+			staleNote: m.feeStale
+		});
+		const fresh = buildSigningModel(inputs())?.fee;
+		expect(fresh && 'staleNote' in fresh ? fresh.staleNote : 'x').toBeUndefined();
+	});
+
+	it('a message has no fee row, so no refresh', () => {
+		const message = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' as const }
+		};
+		expect(buildSigningModel(inputs({ sign: message }))?.fee).toEqual({
+			kind: 'offchain',
+			note: m.okNoNetworkFee
+		});
+	});
+});
+
+/** Spec 079 (F14): "127.0.0.1:8137" over "127.0.0.1:8137". */
+describe('the header says the site once', () => {
+	it('a site with no name of its own is named by its host, and the host line goes', () => {
+		const model = buildSigningModel(inputs());
+		expect(model?.dapp.name).toBe('app.example');
+		expect(model?.dapp.host).toBe('');
+	});
+
+	it('a named site keeps its host under the name', () => {
+		const named = {
+			...OPEN_SIGN,
+			request: {
+				...REQUEST,
+				dapp: { name: 'Example App', url: 'https://app.example' }
+			}
+		};
+		const model = buildSigningModel(inputs({ sign: named }));
+		expect(model?.dapp.name).toBe('Example App');
+		expect(model?.dapp.host).toBe('app.example');
+	});
+
+	it('a port is part of the host, said once too', () => {
+		const local = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, origin: 'http://127.0.0.1:8137' }
+		};
+		const model = buildSigningModel(inputs({ sign: local }));
+		expect(model?.dapp.name).toBe('127.0.0.1:8137');
+		expect(model?.dapp.host).toBe('');
+	});
+});
+
+describe('the sheet’s one close (spec 079)', () => {
+	it('names its ✕ with the sheet’s own word', () => {
+		expect(buildSigningModel(inputs())?.closeLabel).toBe(m.close);
+	});
+});
+
+/**
+ * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): from the
+ * approval on, the sheet is a status — Android's signing receipt, word for
+ * word — and never the form with a greyed slide.
+ */
+describe('after the approval the sheet is a status', () => {
+	const SUMMARY = 'Send USDC · -100 USDC';
+	const UNSIGNED = { signed: false, ceremonyUp: false };
+	const PROMPT_UP = { signed: false, ceremonyUp: true };
+	const SIGNED = { signed: true, ceremonyUp: false };
+	const MESSAGE_REQUEST = { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' as const };
+	const at = (over: Partial<SignView>): SignView => ({ ...OPEN_SIGN, ...over });
+
+	it('before the approval there is no status: the form, and the ✕ refuses (4001)', () => {
+		expect(signingStatus(OPEN_SIGN, UNSIGNED, SUMMARY, m)).toBeNull();
+		expect(buildSigningModel(inputs())?.status).toBeUndefined();
+		expect(signingCloseEvent(null)).toBe('reject_tapped');
+	});
+
+	it('approved, waiting for the passkey: "Waiting for biometric…", and the ✕ shut', () => {
+		for (const progress of [UNSIGNED, PROMPT_UP]) {
+			// The core's Precheck (is_signing alone) and its Submitting stage
+			// (both flags) before the signature exists read the same.
+			for (const flags of [
+				{ is_signing: true, is_submitting: false },
+				{ is_signing: true, is_submitting: true }
+			]) {
+				const status = signingStatus(at(flags), progress, SUMMARY, m);
+				expect(status).toEqual({
+					stage: 'submitting',
+					title: m.status.signing,
+					captions: [SUMMARY],
+					closable: false
+				});
+				expect(signingCloseEvent(status)).toBeNull();
+			}
+		}
+	});
+
+	it('signed, going to the relay: "Submitting to network…" + closing keeps it running; the ✕ closes without refusing', () => {
+		const status = signingStatus(at({ is_signing: true, is_submitting: true }), SIGNED, SUMMARY, m);
+		expect(status).toEqual({
+			stage: 'submitting',
+			title: m.status.submitting,
+			captions: [SUMMARY, m.status.backgroundHint],
+			closable: true
+		});
+		expect(signingCloseEvent(status)).toBe('dismiss_tapped');
+	});
+
+	it('the core’s reactive recovery after a submission counts as signed', () => {
+		const status = signingStatus(
+			at({ is_signing: false, is_submitting: true }),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(status).toMatchObject({ title: m.status.submitting, closable: true });
+	});
+
+	it('a second passkey prompt in the same approval shuts the ✕ again', () => {
+		const status = signingStatus(
+			at({ is_signing: true, is_submitting: true }),
+			{ signed: true, ceremonyUp: true },
+			SUMMARY,
+			m
+		);
+		expect(status).toMatchObject({ title: m.status.submitting, closable: false });
+		expect(signingCloseEvent(status)).toBeNull();
+	});
+
+	it('a message never "submits": "Signing…" throughout', () => {
+		const message = (flags: Partial<SignView>) => at({ request: MESSAGE_REQUEST, ...flags });
+		expect(signingStatus(message({ is_signing: true }), UNSIGNED, undefined, m)).toEqual({
+			stage: 'submitting',
+			title: m.status.messageSigning,
+			captions: [],
+			closable: false
+		});
+		expect(
+			signingStatus(message({ is_signing: true, is_submitting: true }), SIGNED, undefined, m)
+		).toMatchObject({ title: m.status.messageSigning, closable: true });
+	});
+
+	it('a failed submission says so, with the funds-are-safe line; the ✕ just closes', () => {
+		const failed = signingStatus(
+			at({ error: { kind: 'submit_failed', detail: 'relay said no' } }),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(failed).toEqual({
+			stage: 'failed',
+			title: m.receipt.failed,
+			captions: [SUMMARY, m.status.failedHint],
+			closable: true
+		});
+		expect(signingCloseEvent(failed)).toBe('dismiss_tapped');
+	});
+
+	it('an error before any approval is not a status (the form says it)', () => {
+		expect(
+			signingStatus(at({ error: { kind: 'user_rejected', detail: null } }), UNSIGNED, SUMMARY, m)
+		).toBeNull();
+		expect(
+			signingStatus(at({ error: { kind: 'stale_fee_quote', detail: null } }), UNSIGNED, SUMMARY, m)
+		).toBeNull();
+	});
+
+	it('the sheet carries the status, with the request in one line, and no refused request gets one', () => {
+		const model = buildSigningModel(
+			inputs({ sign: at({ is_signing: true, is_submitting: true }), progress: SIGNED })
+		);
+		expect(model?.status).toMatchObject({
+			title: m.status.submitting,
+			captions: ['Send USDC · -100 USDC', m.status.backgroundHint]
+		});
+		const blocked = buildSigningModel(
+			inputs({
+				sign: at({
+					is_signing: true,
+					blocked: {
+						function: 'enableModule',
+						selector: '0x610b5925',
+						leg_index: null,
+						nested: false
+					}
+				}),
+				progress: SIGNED
+			})
+		);
+		expect(blocked?.status).toBeUndefined();
+	});
+
+	it('summaryOf: what it is and its figure, or a swap’s two sides', () => {
+		expect(summaryOf([{ kind: 'intent', text: 'Swap', tone: 'neutral' }])).toBe('Swap');
+		expect(
+			summaryOf([
+				{ kind: 'intent', text: 'Swap', tone: 'neutral' },
+				{
+					kind: 'swap',
+					pay: { sign: '-', value: '1', symbol: 'ETH', tone: 'neutral' },
+					receive: { sign: '+', value: '3000', symbol: 'USDC', tone: 'success' }
+				}
+			])
+		).toBe('Swap · 1 ETH → 3000 USDC');
+		expect(summaryOf([])).toBeUndefined();
+	});
+});
+
+/**
  * Spec 069: the dApp sheet chooses a speed exactly as the send form does —
  * the same core machine, the same builder, the same words.
  */
@@ -390,7 +690,9 @@ describe('a decoded request', () => {
 		expect(model.blocks[0]).toMatchObject({ kind: 'intent', text: 'Send USDC' });
 		expect(model.blocks[1]).toMatchObject({ kind: 'amount' });
 		expect(model.blocks.find((b) => b.kind === 'party')).toMatchObject({ name: 'alice.eth' });
-		expect(model.dapp.host).toBe('app.example');
+		// Named by its host, said once (spec 079 F14).
+		expect(model.dapp.name).toBe('app.example');
+		expect(model.dapp.host).toBe('');
 		expect(model.network.name).toBe('Ethereum');
 	});
 

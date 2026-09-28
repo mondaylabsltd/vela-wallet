@@ -23,6 +23,8 @@
 		/** Spec 069: fold / unfold the speed control, and a one-shot pick. */
 		onspeed?: () => void;
 		onspeedpick?: (id: string) => void;
+		/** Spec 079: the fee row's refresh control. */
+		onfeerefresh?: () => void;
 		/** Spec 081: the way out of a refused request. */
 		onclose?: () => void;
 	}
@@ -36,7 +38,8 @@
 		onfee,
 		onfeepick,
 		onspeed,
-		onspeedpick
+		onspeedpick,
+		onfeerefresh
 	}: Props = $props();
 
 	// cs29 ships the disclosure open; anything after that is the person's call.
@@ -51,7 +54,14 @@
 <div class="footer">
 	<TechDetails tech={model.tech} open={techOpen} ontoggle={() => (techOverride = !techOpen)} />
 	{#if !model.dismissOnly}
-		<FeeRow fee={model.fee} ontoggle={onfee} onpick={onfeepick} {onspeed} {onspeedpick} />
+		<FeeRow
+			fee={model.fee}
+			ontoggle={onfee}
+			onpick={onfeepick}
+			{onspeed}
+			{onspeedpick}
+			onrefresh={onfeerefresh}
+		/>
 	{/if}
 	<SignerRow
 		label={model.signer.label}
