@@ -746,7 +746,11 @@ pub fn get_logs_range_cap(error: &RpcErrorInfo) -> Option<f64> {
             && (msg.contains("exceed")
                 || msg.contains("large")
                 || msg.contains("wide")
-                || msg.contains("maximum")));
+                || msg.contains("maximum")
+                // dRPC's free tier: "ranges over 10000 blocks are not
+                // supported on free plan" (answered for a 500-block window on
+                // Gnosis, 2026-09-28; 100 blocks pass) — spec 082 T180.
+                || msg.contains("blocks")));
     if !is_range_error {
         return None;
     }

@@ -2718,3 +2718,43 @@ fn range_text_on_another_method_is_routed_as_today() {
     ));
     assert_eq!(ops, vec![respond("c3", USER)]);
 }
+
+/// T180: the range answers Gnosis's public endpoints actually gave on
+/// 2026-09-28 for the find-event's filter (EntryPoint + the event topic):
+/// dRPC's free tier (500 blocks refused, 100 passed) and publicnode's two
+/// caps. Each must read as a range limit, or the find-event would retry the
+/// same window forever instead of halving it.
+#[test]
+fn gnosis_s_live_range_answers_are_range_errors() {
+    let drpc = err(
+        Some(35),
+        "ranges over 10000 blocks are not supported on free plan",
+    );
+    assert!(is_log_range_error(&drpc));
+    assert_eq!(get_logs_range_cap(&drpc), Some(10_000.0));
+    let publicnode = err(
+        Some(-32602),
+        "Block range 20001 exceeds the maximum of 10000 blocks per logs request. Use a narrower fromBlock/toBlock range or increase Receipt.MaxBlockDepth.",
+    );
+    assert!(is_log_range_error(&publicnode));
+    let publicnode_wide = err(Some(-32701), "exceed maximum block range: 50000");
+    assert_eq!(get_logs_range_cap(&publicnode_wide), Some(50_000.0));
+    // 1rpc's plan limit is throttling, not a range: it still fails over.
+    let one_rpc = err(
+        Some(-32001),
+        "You've reached the usage limit for your current plan. To continue with higher limits and uninterrupted access, please upgrade here",
+    );
+    assert!(!is_log_range_error(&one_rpc));
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("g1", "eth_getLogs", T0 + 1_000.0));
+    let ops = sut.resolve(outcome(
+        "g1",
+        USER,
+        Out::Response {
+            error: Some(one_rpc),
+        },
+        10.0,
+        T0 + 1_010.0,
+    ));
+    assert_eq!(ops, vec![rpc_post("g1", PUB1, "eth_getLogs")]);
+}
