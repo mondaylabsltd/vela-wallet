@@ -743,23 +743,23 @@ Chains:
 - chrome: T114 → T116 → T118 (T111, T114, T116 and T118 all edit `IT/BrowserChromeTests.swift`), and T117;
 - the rest after T103; T123 (gates) last.
 
-- [ ] T102 [P] [US8] New `I/Core/VelaLog.swift` on `os.Logger` (RE11, W23).
+- [x] T102 [P] [US8] New `I/Core/VelaLog.swift` on `os.Logger` (RE11, W23).
   - Subsystem `app.getvela.VelaWallet`; categories browser, sign, relay, rpc, fee, tracker, balance, net. `.notice` for events and `.error` for failures.
   - Public fields: kinds, classes, chain ids, NSError domain+code, short hashes, durations. The dApp host is public in DEBUG and an FNV token in Release.
   - A ring of the last 8 "scope: kind" failures feeds the report's "Recent failures" line (`componentsUi.bugReport.previewFailures`) through `SettingsLive.redact` (`I/Features/Settings/SettingsLive.swift:1356-1361`).
   - Later iOS tasks move their own `print` calls onto it.
   - Proof: new `IT/VelaLogTests.swift`: the ring cap, the FNV token under a Release seam, and no address in a formatted line.
-- [ ] T103 [P] [US1] iOS wire mirrors for every new variant and field of contract §1–§7, in `I/Features/Signing/Core/SignWire.swift`, `I/Features/Send/TrackerWire.swift`, `I/Core/RpcPool.swift`, `I/Features/Signing/Core/ClearWire.swift`, `I/Features/Wallet/ActivityWire.swift` and `I/Features/Send/SendWire.swift`; proof: `IT/CoreWireDriftTests.swift`.
+- [x] T103 [P] [US1] iOS wire mirrors for every new variant and field of contract §1–§7, in `I/Features/Signing/Core/SignWire.swift`, `I/Features/Send/TrackerWire.swift`, `I/Core/RpcPool.swift`, `I/Features/Signing/Core/ClearWire.swift`, `I/Features/Wallet/ActivityWire.swift` and `I/Features/Send/SendWire.swift`; proof: `IT/CoreWireDriftTests.swift`.
   - `I/Features/Signing/Core/SignWire.swift`, `I/Features/Send/TrackerWire.swift` (incl. FindOpEvent / OpEvent / HoldingsMoved), `I/Core/RpcPool.swift` (`RpcPoolViewWire.unreached_chains`, the verdict's `maybe_delivered`, the `NotConnected` outcome), `I/Features/Signing/Core/ClearWire.swift`, `I/Features/Wallet/ActivityWire.swift` and `I/Features/Send/SendWire.swift`.
   - Proof: `IT/CoreWireDriftTests.swift` round-trips a core-emitted sample of each new variant (one unknown variant must not fail the view).
-- [ ] T104 [US1] Submit on iOS, in `I/Core/RelayClient.swift`, `I/Core/RpcPool.swift`, `I/Core/UserOpSpine.swift` and `I/Features/Signing/Core/SignExecutor.swift` (RA1, RA5, RA10, ruling 8); proof: new `IT/SubmitVerdictTests.swift`; (after T102 and T103).
+- [x] T104 [US1] Submit on iOS, in `I/Core/RelayClient.swift`, `I/Core/RpcPool.swift`, `I/Core/UserOpSpine.swift` and `I/Features/Signing/Core/SignExecutor.swift` (RA1, RA5, RA10, ruling 8); proof: new `IT/SubmitVerdictTests.swift`; (after T102 and T103).
   - `I/Core/RelayClient.swift:514-534`: the loop is replaced by `userOpSubmitStep`, with `userOpHash` computed before the POST and `submit_block` read once.
   - Map `URLError` to `NotConnected` per contract §2 in `I/Core/RpcPool.swift` / `I/Core/CoreHTTP.swift`.
   - `I/Core/UserOpSpine.swift:429-430` and `I/Features/Signing/Core/SignExecutor.swift:256-259` no longer turn a pool give-up into "unreachable, try again". `EntryPoint.getNonce` is still read every time.
   - NotSent answers the dApp -32603 with `userOpNotSentDetail()`, never the pool's text (RA10).
   - Log `relay: submit verdict=…` through VelaLog.
   - Proof: new `IT/SubmitVerdictTests.swift` with a stub transport: mute → MaybeSent (local hash); refused → NotSent with the fixed detail; marker → Accepted.
-- [ ] T105 [US1] One answer, endings and phase on iOS, in `I/Features/Signing/Core/SignExecutor.swift`, `I/Features/Signing/SigningAftercare.swift` and `I/Features/Signing/SigningLive.swift` (RA2, RA8, RA9, RA10, RA12, ruling 9, W3, G22); proof: `IT/SigningReceiptTests.swift`; (after T104).
+- [x] T105 [US1] One answer, endings and phase on iOS, in `I/Features/Signing/Core/SignExecutor.swift`, `I/Features/Signing/SigningAftercare.swift` and `I/Features/Signing/SigningLive.swift` (RA2, RA8, RA9, RA10, RA12, ruling 9, W3, G22); proof: `IT/SigningReceiptTests.swift`; (after T104).
   - `I/Features/Signing/Core/SignExecutor.swift`:
     - dispatch `OpSubmitted{maybe_sent, submit_block}`;
     - the receipt wait comes from `dappReceiptWaitMs`, replacing 120 s at `:91`;
@@ -772,32 +772,32 @@ Chains:
     - NotSent;
     - Reverted → `failedHint` + explorer, where it used to be `txErrorGeneric`.
   - Proof: `IT/SigningReceiptTests.swift`: every `SignEndingState`; a reverted dApp tx never reads 已确认; phase words; `componentsUi.signing.maybeSent` resolves in zh and en without echoing its key (RI3's reader test).
-- [ ] T106 [US7] Relay status on iOS, in `I/Core/RelayClient.swift` (RA7, G13); proof: `IT/RelayLiveTests.swift` and a probe-JSON parse test; (after T105, which also edits `RelayClient.swift`).
+- [x] T106 [US7] Relay status on iOS, in `I/Core/RelayClient.swift` (RA7, G13); proof: `IT/RelayLiveTests.swift` and a probe-JSON parse test; (after T105, which also edits `RelayClient.swift`).
   - `I/Core/RelayClient.swift:571-587` uses `userOpStatusMethod()` + `parseUserOpStatus`; delete the parser. Status carries `tx_hash`.
   - Proof: `IT/RelayLiveTests.swift` is pinned to the method; a unit test parses the probe JSON.
-- [ ] T107 [US7] Tracker on iOS, FindOpEvent and HoldingsMoved, in `I/Features/Send/TrackerExecutor.swift`, `I/Features/Send/TrackerStore.swift` and `I/App/RootView.swift` (ruling 8, RE8, G26); proof: new `IT/TrackerFindOpEventTests.swift`; (after T102 and T103).
+- [x] T107 [US7] Tracker on iOS, FindOpEvent and HoldingsMoved, in `I/Features/Send/TrackerExecutor.swift`, `I/Features/Send/TrackerStore.swift` and `I/App/RootView.swift` (ruling 8, RE8, G26); proof: new `IT/TrackerFindOpEventTests.swift`; (after T102 and T103).
   - `I/Features/Send/TrackerExecutor.swift` runs `FindOpEvent` (`eth_getLogs` through `RpcPool`) and answers `OpEvent` with the pool's answer as it came (`logs_json` or `error_json`, plus `head_block`); the core judges a range error (T180), the shell never does.
   - `HoldingsMoved` → `wallet.refresh(pull:false)` (`I/Features/Send/TrackerStore.swift`, `I/App/RootView.swift:1644-1647`). Log `balance refresh (holdings_moved)`.
   - Proof: new `IT/TrackerFindOpEventTests.swift`; a HoldingsMoved test in `IT/MoneyPlumbingTests.swift`.
-- [ ] T108 [US7] The wallet's own Send on iOS, in `I/Features/Send/SendExecutor.swift` and `I/Features/Send/SendLive.swift` (RA4, RA10); proof: `IT/SplitVerdictTests.swift` or a new send-receipt test; (after T104).
+- [x] T108 [US7] The wallet's own Send on iOS, in `I/Features/Send/SendExecutor.swift` and `I/Features/Send/SendLive.swift` (RA4, RA10); proof: `IT/SplitVerdictTests.swift` or a new send-receipt test; (after T104).
   - `I/Features/Send/SendExecutor.swift` reports `Submitted{maybe_sent, submit_block}`.
   - `I/Features/Send/SendLive.swift` draws MaybeSent (no success haptic) and NotSent.
   - Proof: `IT/SplitVerdictTests.swift` or a new send receipt test.
-- [ ] T109 [US4] Plain send on iOS, in `I/Features/Signing/SigningLive.swift` and `I/Features/Signing/Core/ClearExecutor.swift` (RC1, RC6, G14); proof: `IT/DappSigningTests.swift`; (after T105).
+- [x] T109 [US4] Plain send on iOS, in `I/Features/Signing/SigningLive.swift` and `I/Features/Signing/Core/ClearExecutor.swift` (RC1, RC6, G14); proof: `IT/DappSigningTests.swift`; (after T105).
   - Delete the interception at `I/Features/Signing/SigningLive.swift:559-594` and draw `ClearSurface::PlainSend` with the same look. The zero-value card reads 发送 / 0 xDAI with the slide 确认.
   - An NSNumber `value` is passed as text (`I/Features/Signing/Core/ClearExecutor.swift`).
   - Proof: `IT/DappSigningTests.swift`: the look is unchanged for 0.001; zero; a number → the blind card.
-- [ ] T110 [US4] Simulation severity on iOS, in `I/Features/Signing/Core/SigningController.swift`, `I/Features/Signing/Core/SimDeltas.swift` and `I/Features/Signing/SigningLive.swift` (RG6, L-D5); proof: `IT/SimulationSheetTests.swift`; (after T109).
+- [x] T110 [US4] Simulation severity on iOS, in `I/Features/Signing/Core/SigningController.swift`, `I/Features/Signing/Core/SimDeltas.swift` and `I/Features/Signing/SigningLive.swift` (RG6, L-D5); proof: `IT/SimulationSheetTests.swift`; (after T109).
   - `I/Features/Signing/Core/SigningController.swift:347-373` normalises the reply → `simOutcome`.
   - Delete the parser in `I/Features/Signing/Core/SimDeltas.swift:76-176` (its vectors moved to core in T039).
   - `SigningLive.swift:609-614` draws the notice tone: caution for could-not-check, danger for reverts.
   - Proof: `IT/SimulationSheetTests.swift`; `IT/SimDeltasTests.swift` becomes a mapping test.
-- [ ] T111 [US1] The address bar names the committed page, in `I/Features/Explore/Core/BrowserEngine.swift`, `I/Components/Explore/AddressBarView.swift` and `I/Features/Explore/ExploreScreen.swift` (RE1, G28); proof: `IT/BrowserChromeTests.swift`; (after T102).
+- [x] T111 [US1] The address bar names the committed page, in `I/Features/Explore/Core/BrowserEngine.swift`, `I/Components/Explore/AddressBarView.swift` and `I/Features/Explore/ExploreScreen.swift` (RE1, G28); proof: `IT/BrowserChromeTests.swift`; (after T102).
   - `I/Features/Explore/Core/BrowserEngine.swift:338-340, 360-376` no longer renames the bar from the KVO `webView.url`.
   - Track the committed URL (`didCommit` + same-origin SPA changes while nothing is pending), the pending URL (load, retry, back/forward, policy-allowed main-frame, `_blank`) and the failed URL. Page-initiated navigations (`:652-656`) no longer rename the bar.
   - The bar comes from `browserAddressBar`. Share, copy, favourite and edit use `bar.url` (`I/Components/Explore/AddressBarView.swift`, `I/Features/Explore/ExploreScreen.swift:154-158`).
   - Proof: `IT/BrowserChromeTests.swift`: typed uniswap over jumper keeps jumper until commit; `location.href` to a blackholed host never renames; failed → no lock.
-- [ ] T112 [US1] Watchdog, Stop and a busy Retry, in `I/Features/Explore/Core/BrowserEngine.swift`, `I/Components/Explore/SiteMenuSheetView.swift` and `I/Components/Explore/BrowserWebView.swift` (RE2, RE4, RE5, G32, G31, W5); proof: `IT/BrowserLoadTests.swift`; (after T111).
+- [x] T112 [US1] Watchdog, Stop and a busy Retry, in `I/Features/Explore/Core/BrowserEngine.swift`, `I/Components/Explore/SiteMenuSheetView.swift` and `I/Components/Explore/BrowserWebView.swift` (RE2, RE4, RE5, G32, G31, W5); proof: `IT/BrowserLoadTests.swift`; (after T111).
   - `BrowserEngine.swift` arms a timer at every `requested()`, keyed by generation.
     - It is disarmed by commit, failure, finish, Stop and teardown; dropped when inactive and re-armed with the full budget on return.
     - On fire, `browserLoadShouldGiveUp(elapsed, committed, estimatedProgress)` → `stopLoading()` and `browserLoadStalled()` with the pending host, then retries 2/5/10 s while in front.
@@ -810,25 +810,25 @@ Chains:
     - -999 after Stop is not a failure;
     - `-1000` → offline and CFNetwork 306 → proxy with `explore.loadProxy` resolving (the core classify through UniFFI);
     - Stop keeps the committed page.
-- [ ] T113 [US1] Recovery when the network comes back, in new `I/Core/NetWatch.swift`, `I/Core/RpcPool.swift` and `I/App/RootView.swift` (RE3, W5); proof: new `IT/NetWatchTests.swift`; (after T112, T104 and T107, which also edit `RpcPool.swift` and `RootView.swift`).
+- [x] T113 [US1] Recovery when the network comes back, in new `I/Core/NetWatch.swift`, `I/Core/RpcPool.swift` and `I/App/RootView.swift` (RE3, W5); proof: new `IT/NetWatchTests.swift`; (after T112, T104 and T107, which also edit `RpcPool.swift` and `RootView.swift`).
   - New `I/Core/NetWatch.swift`: `netHealthStep` fed from `I/Core/RpcPool.swift` call outcomes (an unthrottled `.failed` is a miss; any answer is a reach), plus an NWPathMonitor unsatisfied→satisfied edge (500 ms debounce, path seam).
   - On `CameBack` (`I/App/RootView.swift`): reset the failed engines' attempt counts, retry the tab in front when `browserLoadRetryWhenNetworkReturns`, clear transient logo misses, and force a balance read. Log `net came back`.
   - Proof: new `IT/NetWatchTests.swift`: three misses then a reach → one retry; the path edge through the seam.
-- [ ] T114 [US1] The chain notice on iOS, in `I/Features/Explore/ExploreScreen.swift` (RF1, RF4, G33); proof: `theChainNoticeShowsForAFailedChainOnly` in `IT/BrowserChromeTests.swift`; (after T113).
+- [x] T114 [US1] The chain notice on iOS, in `I/Features/Explore/ExploreScreen.swift` (RF1, RF4, G33); proof: `theChainNoticeShowsForAFailedChainOnly` in `IT/BrowserChromeTests.swift`; (after T113).
   - `I/Features/Explore/ExploreScreen.swift:202-210` shows it for `failed ∪ unreached ∖ rate_limited` (from the pool view, `I/App/RootView.swift:1553-1556`).
   - Retry is a `VelaButton` that stays busy until its one `eth_blockNumber` settles.
   - Proof: `IT/BrowserChromeTests.swift`, `theChainNoticeShowsForAFailedChainOnly`, extended for an unreached chain.
-- [ ] T115 [US1] The fee row while the deployed state cannot be read, in `I/Features/Signing/Core/SigningController.swift` (RF5, W10); proof: `IT/SigningFeeRetryTests.swift`; (after T110).
+- [x] T115 [US1] The fee row while the deployed state cannot be read, in `I/Features/Signing/Core/SigningController.swift` (RF5, W10); proof: `IT/SigningFeeRetryTests.swift`; (after T110).
   - `I/Features/Signing/Core/SigningController.swift:386-401, 432-438` feeds the core the same quote failure the send flow uses (`componentsUi.funding.denialNetworkError`) and re-quotes on `fee_policy::requote_delay_ms`. A refresh tap cancels the running loop first. Confirm the exact event name at implementation.
   - Proof: `IT/SigningFeeRetryTests.swift`: a reason is shown; one loop only after a refresh tap.
-- [ ] T116 [US2] The consent sheet names the site once, in `I/Components/Explore/ConnectionPanelView.swift` and `I/Features/Explore/ExploreLive.swift` (RE6, G9, G10); proof: `IT/BrowserChromeTests.swift`; (after T103 and T114, which also edit `BrowserChromeTests.swift`).
+- [x] T116 [US2] The consent sheet names the site once, in `I/Components/Explore/ConnectionPanelView.swift` and `I/Features/Explore/ExploreLive.swift` (RE6, G9, G10); proof: `IT/BrowserChromeTests.swift`; (after T103 and T114, which also edit `BrowserChromeTests.swift`).
   - `I/Components/Explore/ConnectionPanelView.swift:34-48`: one header row (avatar + "连接到 {host}" wrapping, lock line, ✕) and one `connect.browser.body` sentence above the buttons, with no footnote (`I/Features/Explore/ExploreLive.swift:330-336`).
   - Proof: `IT/BrowserChromeTests.swift`: the host appears once; one explainer.
-- [ ] T117 [US2] The signing header at 375 pt, in `I/Components/Signing/SigningAtoms.swift` (RE13, RE7, G12); proof: `IT/SigningHeaderAndRouteTests.swift`; (after T103).
+- [x] T117 [US2] The signing header at 375 pt, in `I/Components/Signing/SigningAtoms.swift` (RE13, RE7, G12); proof: `IT/SigningHeaderAndRouteTests.swift`; (after T103).
   - `I/Components/Signing/SigningAtoms.swift:61-87`: the name/host column gets `.layoutPriority(1)`, name and host `lineLimit(2)` without truncation, and the chain chip `.fixedSize()`.
   - The F14 copy (`:66-72`) is replaced by `browserSiteLabel`.
   - Proof: `IT/SigningHeaderAndRouteTests.swift`: host once; no truncation modifier.
-- [ ] T118 [US2] Recents and the tab switcher, in `I/Components/Explore/SiteRowView.swift`, `I/Components/Explore/TabCardView.swift` and `I/Components/Explore/ExploreTabsScreen.swift` (RE7, RE12, G8, G25); proof: `IT/BrowserChromeTests.swift`, `IT/ExploreFixturesTests.swift`; (after T116).
+- [x] T118 [US2] Recents and the tab switcher, in `I/Components/Explore/SiteRowView.swift`, `I/Components/Explore/TabCardView.swift` and `I/Components/Explore/ExploreTabsScreen.swift` (RE7, RE12, G8, G25); proof: `IT/BrowserChromeTests.swift`, `IT/ExploreFixturesTests.swift`; (after T116).
   - Recents rows (`I/Components/Explore/SiteRowView.swift`) use `browserSiteLabel`.
   - `I/Components/Explore/TabCardView.swift:40-57` and `ExploreTabsScreen.swift:49-60` get one skeleton per cell:
     - the preview is sized by `Color.clear.aspectRatio(tabCardAspect, .fit)` with an overlay, and the snapshot top-cropped;
@@ -836,26 +836,26 @@ Chains:
     - the new-tab tile has a caption row `explore.newTab`;
     - the grid is top-aligned.
   - Proof: `IT/BrowserChromeTests.swift`, `IT/ExploreFixturesTests.swift`.
-- [ ] T119 [US1] Balance read plan on iOS, in `I/Features/Wallet/BalanceExecutor.swift` and `I/Core/TokenReads.swift` (RE9, G24); proof: `IT/TokenReadsTests.swift`, `IT/WalletLiveTests.swift`; (after T103).
+- [x] T119 [US1] Balance read plan on iOS, in `I/Features/Wallet/BalanceExecutor.swift` and `I/Core/TokenReads.swift` (RE9, G24); proof: `IT/TokenReadsTests.swift`, `IT/WalletLiveTests.swift`; (after T103).
   - `I/Features/Wallet/BalanceExecutor.swift:160-176` and `I/Core/TokenReads.swift:61-130` read the slots from `balanceReadPlan`, so stablecoins are counted.
   - Proof: `IT/TokenReadsTests.swift` (Base includes USDC), `IT/WalletLiveTests.swift`.
-- [ ] T120 [US1] Logo misses on iOS, in `I/Components/Wallet/RemoteLogoView.swift` (RE10, W20); proof: a new test in `IT/BrowserMemoryTests.swift`; (after T113).
+- [x] T120 [US1] Logo misses on iOS, in `I/Components/Wallet/RemoteLogoView.swift` (RE10, W20); proof: a new test in `IT/BrowserMemoryTests.swift`; (after T113).
   - `I/Components/Wallet/RemoteLogoView.swift:46-53`: `LogoStore` keeps expiries from `markMissTtlMs` and bumps an observable epoch; transient misses clear on `CameBack`.
   - Proof: a new test in `IT/BrowserMemoryTests.swift` or `IT/VelaStoreTests.swift`: a 404 stays missed for the session; a 503 retries after 60 s.
-- [ ] T121 [US3] dApp transactions and empty states on iOS, in `I/Features/Flows/FlowsLive.swift`, `I/Components/Wallet/ActivityRowView.swift`, `I/Features/Wallet/WalletLive.swift`, `I/Features/Wallet/ActivityExecutor.swift` and `I/Features/Flows/WalletFlowFixtures.swift` (RG1–RG3, RG5, RG10, L-D3, L-D7); proof: `IT/ActivityLiveTests.swift`, `IT/ProviderScriptTests.swift`; (after T107).
+- [x] T121 [US3] dApp transactions and empty states on iOS, in `I/Features/Flows/FlowsLive.swift`, `I/Components/Wallet/ActivityRowView.swift`, `I/Features/Wallet/WalletLive.swift`, `I/Features/Wallet/ActivityExecutor.swift` and `I/Features/Flows/WalletFlowFixtures.swift` (RG1–RG3, RG5, RG10, L-D3, L-D7); proof: `IT/ActivityLiveTests.swift`, `IT/ProviderScriptTests.swift`; (after T107).
   - Delete the record lookup at `I/Features/Flows/FlowsLive.swift:261`. Rows come from `FeedItem.kind/status/site` (`I/Components/Wallet/ActivityRowView.swift`, `I/Features/Wallet/WalletLive.swift`); the detail shows "Requested by".
   - `I/Features/Wallet/ActivityExecutor.swift` maps `dappOrigin`. The poke at `RootView.swift:1648` stays.
   - History's empty line uses `history_empty_key`: delete the fixture copy (`I/Features/Flows/WalletFlowFixtures.swift:240`, `FlowsLive.swift:183`). Home uses `home_empty_key`.
   - Proof:
     - `IT/ActivityLiveTests.swift`: a pending dApp row with its site; a failed row; `emptyTitle` on all networks;
     - `IT/ProviderScriptTests.swift`: `accountsChanged` keeps EIP-55 (T042).
-- [ ] T122 [US1] A hermetic never-answering listener, in `IU/LocalDappServer.swift` and `IU/DappBrowserStabilityProbeTests.swift` (RH4, T004 of 079); proof: the panel at 20 ± 2 s (run in T168); (after T112).
+- [x] T122 [US1] A hermetic never-answering listener, in `IU/LocalDappServer.swift` and `IU/DappBrowserStabilityProbeTests.swift` (RH4, T004 of 079); proof: the panel at 20 ± 2 s (run in T168); (after T112).
   - `IU/LocalDappServer.swift` gains an in-process loopback listener that accepts and never answers, and `IU/DappBrowserStabilityProbeTests.swift` gets a test for it.
   - Proof: the panel appears at 20 ± 2 s and the busy Retry label is asserted (run via the copied-`.xctestrun` recipe, in the device phase).
-- [ ] T183 [US7] A may-have-been-sent op survives a relaunch on iOS, in `I/Features/Signing/Core/SignExecutor.swift` (`persist_record`), `I/Features/Send/SendExecutor.swift` (`persist_tx_records`, `track_submitted`), `I/Features/Send/TrackerExecutor.swift` (`pendingWire`) and the dApp handoff in `I/App/RootView.swift` (RA3, RA4, rulings 1 and 8, US3 AS2); proof: a reload case in `IT/TrackerFindOpEventTests.swift`; (after T105, T108 and T113).
+- [x] T183 [US7] A may-have-been-sent op survives a relaunch on iOS, in `I/Features/Signing/Core/SignExecutor.swift` (`persist_record`), `I/Features/Send/SendExecutor.swift` (`persist_tx_records`, `track_submitted`), `I/Features/Send/TrackerExecutor.swift` (`pendingWire`) and the dApp handoff in `I/App/RootView.swift` (RA3, RA4, rulings 1 and 8, US3 AS2); proof: a reload case in `IT/TrackerFindOpEventTests.swift`; (after T105, T108 and T113).
   - Same gap as T181: `pendingWire` (`TrackerExecutor.swift:150-162`) sends only id, hash, chain and time. Write `maybeSent` / `submitBlock` with the record, read them back into the `TrackPendingRecord` wire, and carry both on the handoff into the tracker's `submitted` event.
   - Proof: a stored MaybeSent record → the wire has `maybe_sent: true` and `submit_block`; an old record → `false` / absent.
-- [ ] T123 [US1] iOS gates: the hermetic `VelaWalletTests` suite on a cloned simulator, `app-ios/scripts/check-ios-*.mjs`, `scripts/check-event-payloads.mjs` and `rust/scripts/check-ios-core-fresh.sh`; (after T102–T122 and T183).
+- [x] T123 [US1] iOS gates: the hermetic `VelaWalletTests` suite on a cloned simulator, `app-ios/scripts/check-ios-*.mjs`, `scripts/check-event-payloads.mjs` and `rust/scripts/check-ios-core-fresh.sh`; (after T102–T122 and T183).
   - `xcrun simctl clone "<base simulator>" vela-082`, then `xcodebuild test -project app-ios/VelaWallet/VelaWallet.xcodeproj -scheme VelaWallet -destination 'platform=iOS Simulator,name=vela-082' -only-testing:VelaWalletTests`. Assert the test count (Swift Testing can report a false zero).
   - `node app-ios/scripts/check-ios-dropped-judgement.mjs && node app-ios/scripts/check-ios-event-parity.mjs`
   - `node scripts/check-event-payloads.mjs` reports no iOS mismatch (the T047 red is gone for iOS)
