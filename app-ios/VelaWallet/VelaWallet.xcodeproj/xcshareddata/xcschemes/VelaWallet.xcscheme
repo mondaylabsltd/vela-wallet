@@ -138,6 +138,9 @@
                   Identifier = "BrowserAcceptanceTests">
                </Test>
                <Test
+                  Identifier = "DappBrowserStabilityProbeTests">
+               </Test>
+               <Test
                   Identifier = "LiveWiringAcceptanceTests">
                </Test>
                <Test
