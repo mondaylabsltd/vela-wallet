@@ -36,10 +36,14 @@ use vela_core::app::fee_policy::{
 };
 use vela_core::app::send::{SendTreasuryAsset, SendTreasuryProbe, SendTreasuryStatus};
 use vela_core::app::token_trust::TrustReceiptLog;
-use vela_core::app::tx_tracker::TrackLifecycle;
+use vela_core::app::tx_tracker::{TrackStatusAnswer, USER_OP_STATUS_METHOD, parse_user_op_status};
 use vela_core::safe::ENTRY_POINT;
-use vela_core::user_op::{GasEstimate, UserOperation, parse_hex_quantity, user_op_to_json};
+use vela_core::user_op::{
+    GasEstimate, SubmitReply, SubmitStep, SubmitVerdict, UserOperation, parse_hex_quantity,
+    submit_step, user_op_to_json,
+};
 
+use crate::diag::{short, vlog};
 use crate::executor::{pool, proxy, storage};
 
 /// The built-in relay. Per-chain JSON-RPC is `{base}/{chain_id}`; REST is
@@ -61,9 +65,6 @@ const FUNDING_BUFFER_BPS: u128 = 15_000;
 const SILENT_DENY_TTL: Duration = Duration::from_secs(25);
 /// `QUOTE_CACHE_TTL` (`bundler-service.ts:658`).
 const QUOTE_CACHE_TTL: Duration = Duration::from_secs(8);
-/// `submitUserOp`'s retry budget for a busy relay.
-const SUBMIT_MAX_RETRIES: u32 = 3;
-const SUBMIT_RETRY_DELAY: Duration = Duration::from_secs(3);
 
 // ---------------------------------------------------------------------------
 // Where the relay is
@@ -541,16 +542,6 @@ pub fn estimate_user_op_gas(op: &UserOperation, chain_id: u32) -> Result<GasEsti
     })
 }
 
-/// Why a submit produced no hash.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SubmitError {
-    /// The relay answered and refused. Carries `parseBundlerError`'s
-    /// sentence — the one the send executor classifies.
-    Rejected(String),
-    /// The relay could not be reached at all.
-    Unreachable,
-}
-
 /// `[userOperation, entryPoint, tier?]` — the relay's wire since it learned
 /// about speed. Two elements when no tier is named, which is the pre-068 wire
 /// exactly; never the dead `rapid`.
@@ -561,10 +552,92 @@ fn submit_params(dict: Value, tier: Option<FeeTier>) -> Value {
     }
 }
 
-/// `eth_sendUserOperation`, with the retry loop a busy relay earns: up to
-/// three more tries, 3 s apart, on "currently processing" / "Retry later".
-/// The AA20 structural guard runs in the caller, which holds the deployment
-/// read.
+// ---------------------------------------------------------------------------
+// A submit in flight (spec 082 RD14, W17)
+// ---------------------------------------------------------------------------
+
+/// Relay POSTs of `eth_sendUserOperation` running right now. The window's
+/// close and the Quit action read it: quitting mid-POST is how an operation
+/// ends up on chain with no record and no tracker behind it.
+static SUBMITS_IN_FLIGHT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Counted while alive; the drop is what un-counts it, so an early return or
+/// a panic on the submit path can never leave the window unable to close.
+pub struct SubmitGuard(());
+
+impl SubmitGuard {
+    #[must_use]
+    pub fn enter() -> Self {
+        SUBMITS_IN_FLIGHT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Self(())
+    }
+}
+
+impl Drop for SubmitGuard {
+    fn drop(&mut self) {
+        SUBMITS_IN_FLIGHT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Is a submit POST running?
+pub fn submit_in_flight() -> bool {
+    SUBMITS_IN_FLIGHT.load(std::sync::atomic::Ordering::SeqCst) > 0
+}
+
+/// One routed reply as the core's `SubmitReply`: the result hash, the
+/// JSON-RPC `error` member as JSON text, or no answer at all.
+fn reply_of(answer: &Result<Value, pool::PoolError>) -> SubmitReply {
+    let Ok(body) = answer else {
+        return SubmitReply::NoAnswer;
+    };
+    if let Some(error) = body.get("error").filter(|error| !error.is_null()) {
+        return SubmitReply::Error(error.to_string());
+    }
+    match body.get("result") {
+        Some(Value::String(hash)) => SubmitReply::Hash(hash.clone()),
+        // An answer nobody can read — the core says "may have been sent".
+        Some(other) => SubmitReply::Hash(other.to_string()),
+        None => SubmitReply::Hash(String::new()),
+    }
+}
+
+/// The submit loop (spec 082 RA1): POST, fold the pool's delivery bit into
+/// the running OR, ask `submit_step`, and either wait and POST the identical
+/// operation again or stop with the core's verdict. `post` is the pool call,
+/// a seam so the loop runs against a fake relay in the tests.
+///
+/// Every rule — the busy retry, "an `[existingHash]` is accepted", "a lost
+/// reply after any POST is may-have-been-sent", "refused with nothing
+/// delivered is not sent" — is `submit_step`'s. This decides nothing.
+fn submit_loop(
+    local_hash: &str,
+    mut post: impl FnMut() -> pool::Routed,
+    mut sleep: impl FnMut(Duration),
+) -> (SubmitVerdict, u32) {
+    let mut maybe_delivered = false;
+    let mut attempt: u32 = 0;
+    loop {
+        let routed = post();
+        maybe_delivered |= routed.maybe_delivered;
+        match submit_step(
+            &reply_of(&routed.answer),
+            attempt,
+            maybe_delivered,
+            local_hash,
+        ) {
+            SubmitStep::Done(verdict) => return (verdict, attempt + 1),
+            SubmitStep::RetryAfter { delay_ms } => {
+                vlog!("relay", "busy, retry {} in {delay_ms} ms", attempt + 1);
+                sleep(Duration::from_millis(u64::from(delay_ms)));
+                attempt += 1;
+            }
+        }
+    }
+}
+
+/// `eth_sendUserOperation`, to its end: the core's verdict on it (spec 082
+/// RA1, ruling 1). `local_hash` is the operation's hash computed before the
+/// first POST, followed when the relay's reply is lost.
 ///
 /// `tier` is the speed the displayed fee was priced at, sent as the optional
 /// third parameter (spec 068's relay contract, on the desktop since 069). It
@@ -580,40 +653,51 @@ pub fn send_user_op(
     chain_id: u32,
     extra: &[(&str, &str)],
     tier: Option<FeeTier>,
-) -> Result<String, SubmitError> {
+    local_hash: &str,
+) -> SubmitVerdict {
     let params = submit_params(user_op_to_json(op, extra), tier);
-    eprintln!(
-        "[vela-wallet] relay: submitting sender={} nonce={} initCode={} callData={}B signature={}B",
-        op.sender,
-        op.nonce,
+    // Never the sender: an address is not a log line (FR-019).
+    vlog!(
+        "relay",
+        "submitting chain={chain_id} op={} initCode={} callData={}B",
+        short(local_hash),
         if op.init_code.len() >= 20 {
             "yes"
         } else {
             "no"
         },
         op.call_data.len(),
-        op.signature.len()
     );
-    for attempt in 0..=SUBMIT_MAX_RETRIES {
-        let body = pool::bundler_call(chain_id, "eth_sendUserOperation", params.clone())
-            .map_err(|_| SubmitError::Unreachable)?;
-        if let Some(hash) = body.get("result").and_then(Value::as_str) {
-            return Ok(hash.to_owned());
-        }
-        let message = parse_bundler_error(body.get("error"));
-        let retryable = message.contains("currently processing") || message.contains("Retry later");
-        if !retryable || attempt == SUBMIT_MAX_RETRIES {
-            return Err(SubmitError::Rejected(message));
-        }
-        eprintln!(
-            "[vela-wallet] relay: busy, retry {}/{SUBMIT_MAX_RETRIES}",
-            attempt + 1
+    let _in_flight = SubmitGuard::enter();
+    let started = std::time::Instant::now();
+    let (verdict, attempts) = submit_loop(
+        local_hash,
+        || pool::bundler_routed(chain_id, "eth_sendUserOperation", params.clone()),
+        std::thread::sleep,
+    );
+    let (name, hash) = match &verdict {
+        SubmitVerdict::Accepted { user_op_hash } => ("accepted", user_op_hash.as_str()),
+        SubmitVerdict::MaybeSent { user_op_hash } => ("maybe_sent", user_op_hash.as_str()),
+        SubmitVerdict::NotSent { .. } => ("not_sent", local_hash),
+    };
+    vlog!(
+        "relay",
+        "submit verdict={name} hash={} attempts={attempts} in={} ms",
+        short(hash),
+        started.elapsed().as_millis()
+    );
+    if let SubmitVerdict::Accepted { user_op_hash } = &verdict
+        && !user_op_hash.eq_ignore_ascii_case(local_hash)
+    {
+        // The relay's hash wins; the difference is worth a line.
+        vlog!(
+            "relay",
+            "userop.hash_mismatch relay={} local={}",
+            short(user_op_hash),
+            short(local_hash)
         );
-        std::thread::sleep(SUBMIT_RETRY_DELAY);
     }
-    Err(SubmitError::Rejected(
-        "Bundler unavailable after retries".to_owned(),
-    ))
+    verdict
 }
 
 /// A definitive receipt (`UserOpResolution`).
@@ -722,41 +806,35 @@ fn receipt_poll(
     }
 }
 
-/// `eth_getUserOperationStatus` (a Vela extension): the lifecycle and the
-/// executor stage that last touched the op. `None` for an older relay, an
-/// error or an unreachable one (`pollUserOpStatus`).
-pub fn user_op_status(
-    user_op_hash: &str,
-    chain_id: u32,
-) -> Option<(TrackLifecycle, Option<String>)> {
+/// The relay's status for an op with no receipt (spec 082 RA7, G13): the
+/// core's method name and the core's parser — the desktop asked for
+/// `eth_getUserOperationStatus`, which the relay does not serve, and read
+/// every -32601 as "unavailable". `None` for an error, an unreachable relay
+/// or a status the core does not know.
+pub fn user_op_status(user_op_hash: &str, chain_id: u32) -> Option<TrackStatusAnswer> {
     if user_op_hash.is_empty() {
         return None;
     }
-    let body = pool::bundler_call(
-        chain_id,
-        "eth_getUserOperationStatus",
-        json!([user_op_hash]),
-    )
-    .ok()?;
-    if body.get("error").is_some() {
-        return None;
-    }
-    let result = body.get("result").filter(|value| value.is_object())?;
-    let status = match result.get("status").and_then(Value::as_str)? {
-        "not_found" => TrackLifecycle::NotFound,
-        "queued" => TrackLifecycle::Queued,
-        "not_submitted" => TrackLifecycle::NotSubmitted,
-        "submitted" => TrackLifecycle::Submitted,
-        "rejected" => TrackLifecycle::Rejected,
-        "included" => TrackLifecycle::Included,
-        "failed" => TrackLifecycle::Failed,
-        _ => return None,
+    let answer = pool::bundler_call(chain_id, USER_OP_STATUS_METHOD, json!([user_op_hash]));
+    let status = match &answer {
+        Ok(body) => parse_user_op_status(&body.to_string()),
+        Err(_) => None,
     };
-    let stage = result
-        .get("last_executor_stage")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-    Some((status, stage))
+    match &status {
+        Some(found) => vlog!(
+            "tracker",
+            "op={} status={:?}{}",
+            short(user_op_hash),
+            found.status,
+            found
+                .stage
+                .as_deref()
+                .map(|stage| format!(" stage={stage}"))
+                .unwrap_or_default()
+        ),
+        None => vlog!("tracker", "op={} status unavailable", short(user_op_hash)),
+    }
+    status
 }
 
 // ---------------------------------------------------------------------------
@@ -956,72 +1034,6 @@ fn sponsorship_answer(status: u16, text: &str) -> (bool, Option<String>) {
     )
 }
 
-/// `parseBundlerUnderfunded`: is this the relay saying the per-Safe gas
-/// account is short? Wording-tolerant — the relay has reworded it before
-/// ("…bundler EOA" → "…bundler gas account … Deposit to:").
-pub fn is_bundler_underfunded(message: &str) -> bool {
-    let lower = message.to_lowercase();
-    lower.contains("dedicated bundler gas account")
-        || lower.contains("dedicated bundler eoa")
-        || (lower.contains("deposit to:")
-            && lower
-                .split("deposit to:")
-                .nth(1)
-                .is_some_and(|rest| rest.trim_start().starts_with("0x"))
-            && lower.contains("required:"))
-}
-
-/// `parseBundlerError`: the relay's error member as one sentence. The known
-/// AA codes get the words the Expo client always gave them; everything else
-/// is the relay's own message, cleaned.
-pub fn parse_bundler_error(error: Option<&Value>) -> String {
-    let Some(error) = error else {
-        return "Transaction failed: unknown error".to_owned();
-    };
-    let message = error
-        .get("message")
-        .and_then(Value::as_str)
-        .or_else(|| error.get("data").and_then(Value::as_str))
-        .unwrap_or_default();
-    let has = |needle: &str| message.contains(needle);
-    if has("insufficient funds") || has("balance too low") {
-        return "Insufficient balance to cover gas fees. Please fund your account.".to_owned();
-    }
-    if has("could not load bundle") || has("simulation failed") {
-        return "Transaction simulation failed. The network may be congested or the transaction parameters are invalid. Please try again.".to_owned();
-    }
-    if has("AA21") || has("didn't pay prefund") {
-        return "Insufficient gas funds. The bundler account needs more balance on this network."
-            .to_owned();
-    }
-    if has("AA10") || has("sender already constructed") {
-        return "Wallet deployment conflict. Please try again.".to_owned();
-    }
-    if has("AA13") || has("initCode failed") {
-        return "Wallet deployment failed. Required contracts may not be deployed on this network."
-            .to_owned();
-    }
-    if has("AA23") || has("reverted") {
-        return "Transaction reverted during simulation. Check recipient address and amount."
-            .to_owned();
-    }
-    if has("AA25") || has("invalid account nonce") {
-        return "Transaction nonce mismatch. Please try again.".to_owned();
-    }
-    if has("rate limit") || has("429") {
-        return "Bundler rate limit reached. Please wait a moment and try again.".to_owned();
-    }
-    let clean = message
-        .trim_start_matches("execution reverted:")
-        .trim_start_matches("Execution reverted:")
-        .trim();
-    if !clean.is_empty() {
-        return format!("Transaction failed: {clean}");
-    }
-    let text = error.to_string();
-    format!("Transaction failed: {}", &text[..text.len().min(200)])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1132,45 +1144,146 @@ mod tests {
         assert_eq!(big_hex(None), 0);
     }
 
+    // -- the submit loop against a fake relay (spec 082 T050) --
+
+    const LOCAL: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
+    const RELAY: &str = "0x2222222222222222222222222222222222222222222222222222222222222222";
+
+    fn answered(body: Value) -> pool::Routed {
+        pool::Routed {
+            answer: Ok(body),
+            maybe_delivered: false,
+        }
+    }
+
+    /// A relay that gives up with the pool's own verdict.
+    fn silent(maybe_delivered: bool) -> pool::Routed {
+        pool::Routed {
+            answer: Err(pool::PoolError::Failed {
+                rate_limited: false,
+            }),
+            maybe_delivered,
+        }
+    }
+
+    /// Run the loop over a scripted relay; the count of POSTs and sleeps back.
+    fn run(script: Vec<pool::Routed>) -> (SubmitVerdict, u32, usize, usize) {
+        let mut replies = script.into_iter();
+        let mut posts = 0;
+        let mut sleeps = 0;
+        let (verdict, attempts) = submit_loop(
+            LOCAL,
+            || {
+                posts += 1;
+                replies.next().unwrap_or_else(|| silent(false))
+            },
+            |_| sleeps += 1,
+        );
+        (verdict, attempts, posts, sleeps)
+    }
+
+    /// `mute`: the request reached the relay and the reply never came back —
+    /// every endpoint timed out. The op may be on chain: followed under the
+    /// local hash, never "not sent".
     #[test]
-    fn the_underfunded_wording_is_recognised_in_both_generations() {
-        assert!(is_bundler_underfunded(
-            "The dedicated bundler gas account is underfunded. Deposit to: 0xabc required: 5"
+    fn a_mute_relay_is_may_have_been_sent_under_the_local_hash() {
+        let (verdict, attempts, posts, _) = run(vec![silent(true)]);
+        assert_eq!(
+            verdict,
+            SubmitVerdict::MaybeSent {
+                user_op_hash: LOCAL.to_owned()
+            }
+        );
+        assert_eq!((attempts, posts), (1, 1));
+    }
+
+    /// Nothing left the machine (DNS, refused, the proxy's CONNECT): not sent.
+    #[test]
+    fn a_refused_relay_is_not_sent() {
+        let (verdict, _, posts, _) = run(vec![silent(false)]);
+        assert_eq!(verdict, SubmitVerdict::NotSent { rejection: None });
+        assert_eq!(posts, 1);
+    }
+
+    /// The relay already holds this operation: accepted, under ITS hash.
+    #[test]
+    fn an_existing_hash_marker_is_accepted() {
+        let error = json!({"error": {"code": -32000, "message": format!("already queued [existingHash:{RELAY}]")}});
+        let (verdict, ..) = run(vec![answered(error)]);
+        assert_eq!(
+            verdict,
+            SubmitVerdict::Accepted {
+                user_op_hash: RELAY.to_owned()
+            }
+        );
+        let (verdict, ..) = run(vec![answered(json!({ "result": RELAY }))]);
+        assert_eq!(
+            verdict,
+            SubmitVerdict::Accepted {
+                user_op_hash: RELAY.to_owned()
+            }
+        );
+    }
+
+    /// A busy relay is asked again — the identical operation, 3 s apart, at
+    /// most three more times — and a lost reply on any earlier POST keeps the
+    /// verdict at "may have been sent" even when a later one is refused.
+    #[test]
+    fn busy_is_retried_and_an_earlier_lost_reply_is_remembered() {
+        let busy =
+            || answered(json!({"error": {"message": "sender currently processing, Retry later"}}));
+        let (verdict, attempts, posts, sleeps) =
+            run(vec![busy(), busy(), answered(json!({ "result": RELAY }))]);
+        assert!(matches!(verdict, SubmitVerdict::Accepted { .. }));
+        assert_eq!((attempts, posts, sleeps), (3, 3, 2));
+
+        let (verdict, _, posts, sleeps) = run(vec![busy(), busy(), busy(), busy()]);
+        assert!(matches!(
+            verdict,
+            SubmitVerdict::NotSent { rejection: Some(_) }
         ));
-        assert!(is_bundler_underfunded(
-            "dedicated bundler EOA balance too low"
-        ));
-        assert!(is_bundler_underfunded(
-            "Spendable: 0 required: 123 Deposit to: 0xB32a3965c4823Ea426de52C7E869DD0CFe154D03"
-        ));
-        assert!(!is_bundler_underfunded("Deposit to: nowhere required: 1"));
-        assert!(!is_bundler_underfunded("AA25 invalid account nonce"));
-        assert!(!is_bundler_underfunded(""));
+        assert_eq!((posts, sleeps), (4, 3), "three retries, then the verdict");
+
+        // The first POST: one endpoint's reply was lost before another said
+        // "busy". The retry is refused — which proves nothing about the POST
+        // whose reply was lost, and that one is what may have landed.
+        let busy_after_a_lost_reply = pool::Routed {
+            answer: busy().answer,
+            maybe_delivered: true,
+        };
+        let refused = answered(json!({"error": {"message": "AA25 invalid account nonce"}}));
+        let (verdict, _, posts, _) = run(vec![busy_after_a_lost_reply, refused]);
+        assert_eq!(
+            verdict,
+            SubmitVerdict::MaybeSent {
+                user_op_hash: LOCAL.to_owned()
+            }
+        );
+        assert_eq!(posts, 2);
+    }
+
+    /// A JSON answer that is not a hash is an answer nobody can read.
+    #[test]
+    fn an_unreadable_result_is_may_have_been_sent() {
+        let (verdict, ..) = run(vec![answered(json!({ "result": null }))]);
+        assert!(matches!(verdict, SubmitVerdict::MaybeSent { .. }));
     }
 
     #[test]
-    fn relay_errors_get_the_words_the_clients_always_gave_them() {
-        let message = |text: &str| parse_bundler_error(Some(&json!({ "message": text })));
-        assert!(message("AA21 didn't pay prefund").starts_with("Insufficient gas funds"));
-        assert!(message("AA25 invalid account nonce").starts_with("Transaction nonce mismatch"));
-        assert!(message("rate limit exceeded").starts_with("Bundler rate limit"));
-        // A ported quirk, kept: "execution reverted: …" carries the word the
-        // AA23 rule matches, so it gets that sentence, never the cleaned tail.
-        assert!(message("execution reverted: custom words").starts_with("Transaction reverted"));
-        assert_eq!(message("custom words"), "Transaction failed: custom words");
+    fn the_in_flight_guard_counts_and_uncounts() {
+        let before = SUBMITS_IN_FLIGHT.load(std::sync::atomic::Ordering::SeqCst);
+        {
+            let _one = SubmitGuard::enter();
+            assert!(submit_in_flight());
+            let _two = SubmitGuard::enter();
+            assert_eq!(
+                SUBMITS_IN_FLIGHT.load(std::sync::atomic::Ordering::SeqCst),
+                before + 2
+            );
+        }
         assert_eq!(
-            parse_bundler_error(None),
-            "Transaction failed: unknown error"
-        );
-        // `data` is read when `message` is absent.
-        assert_eq!(
-            parse_bundler_error(Some(&json!({ "data": "AA10 sender already constructed" }))),
-            "Wallet deployment conflict. Please try again."
-        );
-        // An error with no words at all still says something bounded.
-        assert!(
-            parse_bundler_error(Some(&json!({ "code": -32000 })))
-                .starts_with("Transaction failed:")
+            SUBMITS_IN_FLIGHT.load(std::sync::atomic::Ordering::SeqCst),
+            before
         );
     }
 
@@ -1257,8 +1370,14 @@ mod tests {
         println!("receipt poll: {poll:?}");
         assert!(poll.reached_bundler);
         assert!(poll.resolution.is_none());
+        // Spec 082 RA7: the relay's own method, answered `not_found` — never
+        // None, which is what -32601 on the old name produced.
         let status = user_op_status(&hash, 100);
         println!("status: {status:?}");
-        assert!(matches!(status, None | Some((TrackLifecycle::NotFound, _))));
+        let status = status.unwrap_or_else(|| unreachable!("the relay did not answer the status"));
+        assert_eq!(
+            status.status,
+            vela_core::app::tx_tracker::TrackLifecycle::NotFound
+        );
     }
 }

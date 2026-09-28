@@ -351,6 +351,10 @@ fn to_row(record: &SendTxRecord) -> Value {
         "timestamp": record.timestamp_s,
         "status": "pending",
         "type": "send",
+        // Spec 082 T181: what the tracker needs to keep following a payment
+        // whose submit reply was lost, across a relaunch.
+        "maybeSent": record.maybe_sent,
+        "submitBlock": record.submit_block,
     });
     if let Some(name) = &record.to_name {
         row["toName"] = json!(name);
@@ -596,10 +600,18 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                     &keys,
                     signer,
                     quoted,
+                    // The send column reads its own flags for the prompt
+                    // (`signing_started`, the Trusted Signer's channel).
+                    &user_op::quiet,
                 ) {
-                    Ok(user_op_hash) => SendShellResult::Submitted {
-                        user_op_hash,
+                    // Accepted, or may have been sent (spec 082 RA4): either
+                    // way it is recorded and tracked — a lost reply is never
+                    // "failed, try again".
+                    Ok(submitted) => SendShellResult::Submitted {
+                        user_op_hash: submitted.user_op_hash,
                         now_ms: now_ms(),
+                        maybe_sent: submitted.maybe_sent,
+                        submit_block: submitted.submit_block,
                     },
                     Err(failure) => SendShellResult::SubmitFailed {
                         failure: failure.into(),
@@ -843,6 +855,8 @@ mod tests {
                 chain_id: 100,
                 timestamp_s: 1_700_000_000.0,
                 usd: Some("$0.00".to_owned()),
+                maybe_sent: id.ends_with("-1"),
+                submit_block: id.ends_with("-1").then_some(48_479_132),
             };
             assert!(persist_records(&[record("0xop-0"), record("0xop-1")]));
             assert!(persist_records(&[record("0xop-1")]), "a resubmit merges");
@@ -855,6 +869,11 @@ mod tests {
             assert_eq!(rows[0]["type"], "send");
             assert_eq!(rows[0]["toName"], "Alice");
             assert_eq!(rows[0]["timestamp"], 1_700_000_000.0);
+            // T181: the lost-reply facts travel with the row.
+            assert_eq!(rows[0]["maybeSent"], false);
+            assert!(rows[0]["submitBlock"].is_null());
+            assert_eq!(rows[1]["maybeSent"], true);
+            assert_eq!(rows[1]["submitBlock"], 48_479_132);
             // The address book's first-time tell reads the same rows.
             assert!(has_prior_interaction("0xYOU"));
             assert!(!has_prior_interaction("0xnobody"));
@@ -906,6 +925,8 @@ mod tests {
                 user_op_hash: String::new(),
                 record_ids: Vec::new(),
                 chain_id: 100,
+                maybe_sent: false,
+                submit_block: None,
             },
             SendOperation::ShowAlert {
                 kind: vela_core::app::send::SendAlertKind::InvalidAddress,

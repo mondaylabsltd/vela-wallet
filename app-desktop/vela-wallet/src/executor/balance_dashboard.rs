@@ -341,6 +341,14 @@ pub fn take_invalidation() -> bool {
     INVALIDATED.swap(false, Ordering::SeqCst)
 }
 
+/// The flag is process-wide: the tests that raise and drain it take turns.
+#[cfg(test)]
+pub fn invalidation_turn() -> std::sync::MutexGuard<'static, ()> {
+    static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    TURN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Boot the hero and keep it honest for the life of the process.
 ///
 /// Until this existed the desktop dispatched exactly one balance event ever —
@@ -508,6 +516,8 @@ mod tests {
     /// and the frame after it does not force another.
     #[test]
     fn an_invalidation_is_drained_once() {
+        let _turn = invalidation_turn();
+        let _ = take_invalidation();
         assert!(!take_invalidation(), "nothing to drain");
         invalidate();
         invalidate();

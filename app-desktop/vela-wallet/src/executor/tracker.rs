@@ -31,14 +31,16 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 use gpui::App;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use vela_core::app::token_trust::TrustReceiptLog;
 use vela_core::app::tx_tracker::{
     Event, TrackOperation, TrackPendingRecord, TrackRecordStatus, TrackShellResult, TxTracker,
 };
 
-use crate::executor::{relay, storage, token_trust};
+use crate::diag::{short, vlog};
+use crate::executor::pool::PoolError;
+use crate::executor::{pool, relay, storage, token_trust};
 use crate::resident::{self, Answer, Machine};
 
 /// `vela.transactionHistory` — the shared local store.
@@ -104,6 +106,15 @@ fn pending_records(rows: &[Value]) -> Vec<TrackPendingRecord> {
                 // Stored in SECONDS; the core measures every deadline in ms.
                 submitted_at_ms: row.get("timestamp").and_then(Value::as_f64).unwrap_or(0.0)
                     * 1000.0,
+                // Spec 082 T181: an op whose submit reply was lost is still
+                // one after a relaunch — its "may have been sent" ending, the
+                // NotSent verdict and the on-chain search all hang on these.
+                // A row from before the fields reads as it always did.
+                maybe_sent: row
+                    .get("maybeSent")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                submit_block: row.get("submitBlock").and_then(Value::as_u64),
             })
         })
         .collect()
@@ -225,11 +236,14 @@ impl Machine for TxTracker {
                 let (hash, chain_id) = (user_op_hash.clone(), *chain_id);
                 Answer::Blocking(Box::new(move || {
                     match relay::user_op_status(&hash, chain_id) {
-                        Some((status, stage)) => TrackShellResult::Status {
+                        Some(answer) => TrackShellResult::Status {
                             user_op_hash: hash,
-                            status,
-                            stage,
+                            status: answer.status,
+                            stage: answer.stage,
                             now_ms: now_ms(),
+                            // The bundle tx the relay names while no receipt
+                            // has (RA7): an explorer link, never a verdict.
+                            tx_hash: answer.tx_hash,
                         },
                         None => TrackShellResult::StatusUnavailable {
                             user_op_hash: hash,
@@ -237,6 +251,46 @@ impl Machine for TxTracker {
                         },
                     }
                 }))
+            }
+
+            // Spec 082 ruling 8: the relay-independent landing check. The
+            // pool's answer goes back as it came — what a range error is,
+            // which window comes next and what a found log means are the
+            // core's.
+            TrackOperation::FindOpEvent {
+                chain_id,
+                entry_point,
+                topic0,
+                user_op_hash,
+                from_block,
+                to_block,
+            } => {
+                let search = OpSearch {
+                    chain_id: *chain_id,
+                    entry_point: entry_point.clone(),
+                    topic0: topic0.clone(),
+                    user_op_hash: user_op_hash.clone(),
+                    from_block: *from_block,
+                    to_block: *to_block,
+                };
+                Answer::Blocking(Box::new(move || {
+                    let chain_id = search.chain_id;
+                    find_op_event(&search, |method, params| {
+                        pool::call(chain_id, method, params)
+                    })
+                }))
+            }
+
+            // Spec 082 RE8 (G26): an op of ours landed — confirmed, or failed
+            // with gas spent — so the balance on screen is out of date now,
+            // not at the next ten-minute pass.
+            TrackOperation::HoldingsMoved { chain_id } => {
+                vlog!(
+                    "tracker",
+                    "holdings moved on chain={chain_id}; balances re-read"
+                );
+                crate::executor::balance_dashboard::invalidate();
+                Answer::Now(TrackShellResult::Notified)
             }
 
             TrackOperation::LoadPendingTxs => Answer::Now(TrackShellResult::RecordsLoaded {
@@ -282,6 +336,84 @@ impl Machine for TxTracker {
     }
 }
 
+/// One `FindOpEvent`, owned so it can cross to the worker.
+struct OpSearch {
+    chain_id: u32,
+    entry_point: String,
+    topic0: String,
+    user_op_hash: String,
+    from_block: Option<u64>,
+    to_block: Option<u64>,
+}
+
+fn quantity(block: u64) -> String {
+    format!("0x{block:x}")
+}
+
+/// Run one find-event through `call` (the pool, or a fake in the tests):
+/// the head from `eth_blockNumber`, and — unless the core asked for the head
+/// only — `eth_getLogs` on the EntryPoint filtered by the event topic and the
+/// operation's hash. Answered as it came: the log array, or the JSON-RPC
+/// error the endpoint gave (a range limit is one), or neither.
+fn find_op_event(
+    search: &OpSearch,
+    mut call: impl FnMut(&str, Value) -> Result<Value, PoolError>,
+) -> TrackShellResult {
+    let head_block = call("eth_blockNumber", json!([]))
+        .ok()
+        .and_then(|body| {
+            body.get("result")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        })
+        .and_then(|hex| u64::from_str_radix(hex.trim_start_matches("0x"), 16).ok());
+    let (mut logs_json, mut error_json) = (None, None);
+    if let Some(from) = search.from_block {
+        let filter = json!({
+            "address": search.entry_point,
+            "topics": [search.topic0, search.user_op_hash],
+            "fromBlock": quantity(from),
+            "toBlock": search.to_block.map_or_else(|| "latest".to_owned(), quantity),
+        });
+        match call("eth_getLogs", json!([filter])) {
+            Ok(body) => match body.get("error").filter(|error| !error.is_null()) {
+                Some(error) => error_json = Some(error.to_string()),
+                None => logs_json = body.get("result").map(Value::to_string),
+            },
+            // The pool held the endpoint's words for a range limit (T180);
+            // they go to the core, which halves the window.
+            Err(PoolError::RangeCap {
+                error_json: held, ..
+            }) => error_json = held,
+            Err(PoolError::Failed { .. } | PoolError::Unavailable) => {}
+        }
+    }
+    vlog!(
+        "tracker",
+        "op={} find-event chain={} from={:?} to={:?} head={head_block:?} → {}",
+        short(&search.user_op_hash),
+        search.chain_id,
+        search.from_block,
+        search.to_block,
+        if logs_json.is_some() {
+            "logs"
+        } else if error_json.is_some() {
+            "error"
+        } else if search.from_block.is_none() {
+            "head only"
+        } else {
+            "no answer"
+        }
+    );
+    TrackShellResult::OpEvent {
+        user_op_hash: search.user_op_hash.clone(),
+        now_ms: crate::executor::now_ms(),
+        logs_json,
+        error_json,
+        head_block,
+    }
+}
+
 static TICKING: AtomicBool = AtomicBool::new(false);
 /// Records the tracker has patched since the feed was last told.
 static PATCHED: AtomicU32 = AtomicU32::new(0);
@@ -321,15 +453,36 @@ pub fn focused(cx: &mut App) {
     });
 }
 
-/// A user operation was accepted: hand it to the tracker, whose patches
+/// One operation for the tracker to follow (spec 082 RA4, ruling 8): its
+/// hash, the records it patches, and — when the submit's reply was lost —
+/// that it may have been sent and the head read before its first POST.
+pub struct Handoff {
+    pub user_op_hash: String,
+    pub record_ids: Vec<String>,
+    pub chain_id: u32,
+    pub maybe_sent: bool,
+    pub submit_block: Option<u64>,
+}
+
+/// A user operation left the device: hand it to the tracker, whose patches
 /// will find the records the send path already persisted.
-pub fn submitted(user_op_hash: String, record_ids: Vec<String>, chain_id: u32, cx: &mut App) {
+pub fn submitted(handoff: Handoff, cx: &mut App) {
+    vlog!(
+        "tracker",
+        "op={} handed over chain={} maybe_sent={} submit_block={:?}",
+        short(&handoff.user_op_hash),
+        handoff.chain_id,
+        handoff.maybe_sent,
+        handoff.submit_block
+    );
     resident::resident::<TxTracker>(cx).update(cx, |resident, cx| {
         resident.dispatch(
             Event::Submitted {
-                user_op_hash,
-                record_ids,
-                chain_id,
+                user_op_hash: handoff.user_op_hash,
+                record_ids: handoff.record_ids,
+                chain_id: handoff.chain_id,
+                maybe_sent: handoff.maybe_sent,
+                submit_block: handoff.submit_block,
             },
             cx,
         );
@@ -369,6 +522,184 @@ mod tests {
         assert_eq!(ids, ["a", "b"]);
         assert_eq!(live[0].chain_id, 100);
         assert_eq!(live[0].submitted_at_ms, 1_700_000_000_000.0);
+    }
+
+    /// Spec 082 T181: a row written for a may-have-been-sent op reads back as
+    /// one — through the same writers the two submit paths use — and a row
+    /// from before the fields reads back as an ordinary pending op.
+    #[test]
+    fn a_may_have_been_sent_op_survives_a_relaunch() {
+        crate::executor::storage::tests::with_temp_state("tracker-maybe-sent", || {
+            let send = vela_core::app::send::SendTxRecord {
+                id: "0xop-0".to_owned(),
+                user_op_hash: "0xop".to_owned(),
+                tx_hash: String::new(),
+                from: "0xme".to_owned(),
+                to: "0xyou".to_owned(),
+                to_name: None,
+                value: "0.001".to_owned(),
+                symbol: "xDAI".to_owned(),
+                decimals: 18,
+                logo_urls: Vec::new(),
+                chain_id: 100,
+                timestamp_s: 1_700_000_000.0,
+                usd: None,
+                maybe_sent: true,
+                submit_block: Some(48_479_132),
+            };
+            assert!(crate::executor::send::persist_records(&[send]));
+            // A dApp's op whose reply was lost, through the signing path's
+            // own writer.
+            crate::executor::sign_request::persist_record(
+                &vela_core::app::sign_request::SignRecord {
+                    record_id: "dapp-1-tx".to_owned(),
+                    kind: vela_core::app::sign_request::SignRecordKind::DappTx,
+                    method: "eth_sendTransaction".to_owned(),
+                    params_json:
+                        r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x1"}]"#
+                            .to_owned(),
+                    result: String::new(),
+                    from: "0xme".to_owned(),
+                    chain_id: 100,
+                    now_ms: 1_700_000_000_000.0,
+                    status: vela_core::app::sign_request::SignRecordStatus::Pending,
+                    user_op_hash: "0xdapp".to_owned(),
+                    dapp_origin: "http://127.0.0.1:8137".to_owned(),
+                    intent: None,
+                    maybe_sent: true,
+                    submit_block: None,
+                },
+            );
+            let mut rows = read_rows();
+            rows.push(row("legacy", "pending", "0xold", "", Some("send")));
+            let live = pending_records(&rows);
+            assert_eq!(live.len(), 3);
+            assert_eq!(live[0].record_id, "0xop-0");
+            assert!(live[0].maybe_sent);
+            assert_eq!(live[0].submit_block, Some(48_479_132));
+            assert_eq!(live[1].record_id, "dapp-1-tx");
+            assert!(live[1].maybe_sent, "a dApp's lost reply is still one");
+            assert_eq!(live[1].submit_block, None, "an unknown head stays unknown");
+            assert!(!live[2].maybe_sent, "an old row is not may-have-been-sent");
+            assert_eq!(live[2].submit_block, None);
+        });
+    }
+
+    fn search(from_block: Option<u64>) -> OpSearch {
+        OpSearch {
+            chain_id: 100,
+            entry_point: vela_core::safe::ENTRY_POINT.to_owned(),
+            topic0: vela_core::user_op::USER_OPERATION_EVENT_TOPIC.to_owned(),
+            user_op_hash: format!("0x{}", "ab".repeat(32)),
+            from_block,
+            to_block: from_block.map(|from| from + 999),
+        }
+    }
+
+    /// The fake pool: the head is 0x2e3b5dc; `eth_getLogs` answers `logs`.
+    fn run_search(
+        from_block: Option<u64>,
+        logs: Result<Value, PoolError>,
+    ) -> (TrackShellResult, Vec<(String, Value)>) {
+        let mut asked = Vec::new();
+        let mut logs = Some(logs);
+        let answer = find_op_event(&search(from_block), |method, params| {
+            asked.push((method.to_owned(), params));
+            match method {
+                "eth_blockNumber" => Ok(json!({ "result": "0x2e3b5dc" })),
+                _ => logs.take().unwrap_or(Err(PoolError::Unavailable)),
+            }
+        });
+        (answer, asked)
+    }
+
+    fn op_event(answer: &TrackShellResult) -> (Option<&str>, Option<&str>, Option<u64>) {
+        match answer {
+            TrackShellResult::OpEvent {
+                logs_json,
+                error_json,
+                head_block,
+                ..
+            } => (logs_json.as_deref(), error_json.as_deref(), *head_block),
+            other => unreachable!("not an OpEvent: {other:?}"),
+        }
+    }
+
+    /// Found — success or failure alike: the logs go back as they came, the
+    /// filter names the EntryPoint, the event topic and the op's hash.
+    #[test]
+    fn a_found_event_is_answered_as_it_came() {
+        for success in ["0x1", "0x0"] {
+            let log = json!({ "transactionHash": "0xtx", "data": success, "topics": [] });
+            let (answer, asked) =
+                run_search(Some(48_479_000), Ok(json!({ "result": [log.clone()] })));
+            let (logs, error, head) = op_event(&answer);
+            assert_eq!(logs, Some(json!([log]).to_string().as_str()));
+            assert_eq!(error, None);
+            assert_eq!(head, Some(0x2e3b5dc));
+            let filter = &asked[1].1[0];
+            assert_eq!(filter["address"], vela_core::safe::ENTRY_POINT);
+            assert_eq!(
+                filter["topics"][0],
+                vela_core::user_op::USER_OPERATION_EVENT_TOPIC
+            );
+            assert_eq!(filter["topics"][1], search(None).user_op_hash);
+            assert_eq!(filter["fromBlock"], "0x2e3bb18");
+            assert_eq!(filter["toBlock"], "0x2e3beff");
+        }
+    }
+
+    /// A range limit reaches the core as the endpoint's own error member —
+    /// through the pool's `RangeCap` or as a plain JSON error — and nothing
+    /// here decides it is one.
+    #[test]
+    fn a_range_error_goes_to_the_core_as_it_came() {
+        let words = json!({"code": -32005, "message": "query exceeds max block range 1000"});
+        let (answer, _) = run_search(
+            Some(1),
+            Err(PoolError::RangeCap {
+                max_span: 1000.0,
+                error_json: Some(words.to_string()),
+            }),
+        );
+        assert_eq!(
+            op_event(&answer),
+            (None, Some(words.to_string().as_str()), Some(0x2e3b5dc))
+        );
+        let (answer, _) = run_search(Some(1), Ok(json!({ "error": words.clone() })));
+        assert_eq!(op_event(&answer).1, Some(words.to_string().as_str()));
+        // No answer at all is neither.
+        let (answer, _) = run_search(
+            Some(1),
+            Err(PoolError::Failed {
+                rate_limited: false,
+            }),
+        );
+        assert_eq!(op_event(&answer), (None, None, Some(0x2e3b5dc)));
+    }
+
+    /// The core asks for the head alone first when it does not know where
+    /// the op could start: no logs are read.
+    #[test]
+    fn a_head_only_search_reads_no_logs() {
+        let (answer, asked) = run_search(None, Ok(json!({ "result": [] })));
+        assert_eq!(op_event(&answer), (None, None, Some(0x2e3b5dc)));
+        assert_eq!(asked.len(), 1);
+        assert_eq!(asked[0].0, "eth_blockNumber");
+    }
+
+    /// RE8: holdings moved → the balances are invalidated, once, and the core
+    /// is answered `Notified`.
+    #[test]
+    fn holdings_moved_invalidates_the_balances_once() {
+        let _turn = crate::executor::balance_dashboard::invalidation_turn();
+        let _ = crate::executor::balance_dashboard::take_invalidation();
+        assert!(matches!(
+            TxTracker::perform(&TrackOperation::HoldingsMoved { chain_id: 100 }),
+            Answer::Now(TrackShellResult::Notified)
+        ));
+        assert!(crate::executor::balance_dashboard::take_invalidation());
+        assert!(!crate::executor::balance_dashboard::take_invalidation());
     }
 
     /// A patch rewrites the named rows in place and leaves every other row

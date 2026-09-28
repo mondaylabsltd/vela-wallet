@@ -136,6 +136,11 @@ ureq = { version = "3.4", features = [
     "socks-proxy",
     "win-system-proxy",
 ] }
+# ureq's own TLS stack, named only so the pool can tell a refused handshake
+# (a bad certificate, nothing in common) from a failure after the request was
+# written (spec 082 RA1: "not sent" must be provable). No features of its own:
+# the copy ureq already builds is the one this names.
+rustls = { version = "0.23", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The text wells' caret moves by grapheme cluster and by word (UAX #29) — an

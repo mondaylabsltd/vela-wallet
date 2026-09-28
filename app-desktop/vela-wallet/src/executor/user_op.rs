@@ -43,12 +43,13 @@ use vela_core::app::send::SendSubmitFailure;
 use vela_core::app::{Account, Assertion, FailureKind};
 use vela_core::primitives::{from_hex, to_hex};
 use vela_core::user_op::{
-    CALL_GAS_LIMIT, MultiSendCall, PRE_VERIFICATION_GAS, UserOperation, VERIFICATION_GAS_DEPLOYED,
-    VERIFICATION_GAS_UNDEPLOYED, WalletKey, build_dummy_signature, build_in_band_fee_leg,
-    build_init_code_for_keys, build_multi_send_execute_call_data, build_user_op_signature,
-    calculate_safe_op_hash, compute_safe_message_hash, eip1271_envelope_signature,
-    encode_erc20_transfer, extract_client_data_fields, inner_calls_gas_floor,
-    is_plain_transfer_call, pad_gas_estimate, parse_existing_user_op_hash, signer_address_for,
+    CALL_GAS_LIMIT, MultiSendCall, NOT_SENT_DAPP_DETAIL, PRE_VERIFICATION_GAS, RelayRejection,
+    SubmitVerdict, UserOperation, VERIFICATION_GAS_DEPLOYED, VERIFICATION_GAS_UNDEPLOYED,
+    WalletKey, build_dummy_signature, build_in_band_fee_leg, build_init_code_for_keys,
+    build_multi_send_execute_call_data, build_user_op_signature, calculate_safe_op_hash,
+    compute_safe_message_hash, eip1271_envelope_signature, encode_erc20_transfer,
+    extract_client_data_fields, inner_calls_gas_floor, is_plain_transfer_call, pad_gas_estimate,
+    signer_address_for, user_op_hash,
 };
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
 
@@ -65,11 +66,19 @@ const MAX_QUOTE_VS_CHAIN_MULTIPLE: u128 = 3;
 
 /// How a submit failed — the send machine's vocabulary, decided here from
 /// the relay's words and the ceremony's kind (`classifySubmit`).
+///
+/// Every one of these means **nothing left the device**, or the relay
+/// refused the operation with no earlier POST that could have delivered it
+/// (spec 082 RA1). An operation that may have been sent is never a failure:
+/// it is a [`Submitted`] with `maybe_sent`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SubmitFailure {
     PasskeyCancelled,
     RelayerUnavailable,
     BundlerUnderfunded,
+    /// The relay was never reached (`NotSent { rejection: None }`): the dApp
+    /// is told the core's fixed sentence, never the pool's text.
+    NotSent,
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
@@ -80,12 +89,45 @@ impl From<SubmitFailure> for SendSubmitFailure {
             SubmitFailure::PasskeyCancelled => SendSubmitFailure::PasskeyCancelled,
             SubmitFailure::RelayerUnavailable => SendSubmitFailure::RelayerUnavailable,
             SubmitFailure::BundlerUnderfunded => SendSubmitFailure::BundlerUnderfunded,
+            SubmitFailure::NotSent => SendSubmitFailure::Other {
+                message: Some(NOT_SENT_DAPP_DETAIL.to_owned()),
+            },
             SubmitFailure::Other(message) => SendSubmitFailure::Other {
                 message: (!message.is_empty()).then_some(message),
             },
         }
     }
 }
+
+/// An operation that left the device (spec 082 RA1–RA4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Submitted {
+    /// The relay's hash when it answered; the locally computed one when its
+    /// reply was lost.
+    pub user_op_hash: String,
+    /// The reply was lost: the operation may be on its way. Recorded,
+    /// tracked and answered all the same — never "failed, try again".
+    pub maybe_sent: bool,
+    /// The chain head read before the first POST, where the tracker's
+    /// relay-independent landing check starts (ruling 8). Best effort.
+    pub submit_block: Option<u64>,
+}
+
+/// The ceremony's two edges (spec 082 RA9): the prompt opened, and it came
+/// back with a signature. The signing sheet words its stage from them —
+/// "waiting for biometric" only while the prompt is really up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CeremonyEdge {
+    Started,
+    Signed,
+}
+
+/// Who hears the edges. The wallet's own Send reads its flags instead and
+/// passes [`quiet`].
+pub type Edges<'a> = &'a dyn Fn(CeremonyEdge);
+
+/// Edges nobody listens to.
+pub fn quiet(_: CeremonyEdge) {}
 
 fn other(message: impl Into<String>) -> SubmitFailure {
     SubmitFailure::Other(message.into())
@@ -127,8 +169,26 @@ pub enum Signer<'a> {
 impl Signer<'_> {
     /// One signature over `digest`. `operation` is what the Trusted Signer
     /// shows and derives the digest from — the assembled operation and the
-    /// calls before its fee leg; `None` for a message.
+    /// calls before its fee leg; `None` for a message. `edges` hears the
+    /// prompt open and the signature come back, whichever signer it is.
     fn sign(
+        &mut self,
+        digest: &[u8],
+        chain_id: u32,
+        safe: &str,
+        keys: &[WalletKey],
+        operation: Option<(&UserOperation, &[MultiSendCall])>,
+        edges: Edges<'_>,
+    ) -> Result<Assertion, SubmitFailure> {
+        edges(CeremonyEdge::Started);
+        let signed = self.ceremony(digest, chain_id, safe, keys, operation);
+        if signed.is_ok() {
+            edges(CeremonyEdge::Signed);
+        }
+        signed
+    }
+
+    fn ceremony(
         &mut self,
         digest: &[u8],
         chain_id: u32,
@@ -293,7 +353,12 @@ pub fn simulate_gas(
 
 /// The whole sign→submit orchestration (`sendBatchCalls`): Tempo pays gas
 /// in its stablecoin, every other chain settles in band. Answers the
-/// accepted operation's hash, or why there is none.
+/// operation that left the device — accepted, or may have been sent — or
+/// why nothing did.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the operation, its signer, and who hears the ceremony"
+)]
 pub fn submit(
     chain_id: u32,
     safe: &str,
@@ -302,7 +367,8 @@ pub fn submit(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-) -> Result<String, SubmitFailure> {
+    edges: Edges<'_>,
+) -> Result<Submitted, SubmitFailure> {
     let outcome = submit_inner(
         chain_id,
         safe,
@@ -311,6 +377,7 @@ pub fn submit(
         keys,
         signer,
         quoted_fee,
+        edges,
     );
     // The SCREEN gets the core's sentence — SC-305: no relay text reaches a
     // person. The OPERATOR gets the detail, because a submit that failed
@@ -320,7 +387,7 @@ pub fn submit(
     // compute, or the account is undeployed. One line, at the one place every
     // failure passes through.
     if let Err(failure) = &outcome {
-        eprintln!("[vela-wallet] submit failed: {failure:?}");
+        crate::diag::vlog!("relay", "submit failed: {failure:?}");
     }
     outcome
 }
@@ -337,15 +404,27 @@ fn submit_inner(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-) -> Result<String, SubmitFailure> {
+    edges: Edges<'_>,
+) -> Result<Submitted, SubmitFailure> {
     let inner: Vec<MultiSendCall> = calls
         .iter()
         .map(to_multi_send_call)
         .collect::<Result<_, _>>()
         .map_err(other)?;
+    // The head, read while the ceremony runs (spec 082 ruling 8): where the
+    // tracker starts looking for the operation's own event if the relay's
+    // reply is lost. Best effort and bounded — a chain that cannot answer
+    // leaves it unknown, and the tracker then scans back from the head.
+    let head = std::thread::Builder::new()
+        .name("vela-submit-head".to_owned())
+        .spawn(move || chain::head_block(chain_id))
+        .ok();
+    let tail = Tail { head, edges };
     if is_tempo_chain(chain_id) {
         let fee_token = gas_fee_token.unwrap_or(TEMPO_DEFAULT_FEE_TOKEN);
-        return submit_tempo(chain_id, safe, &inner, fee_token, keys, signer, quoted_fee);
+        return submit_tempo(
+            chain_id, safe, &inner, fee_token, keys, signer, quoted_fee, tail,
+        );
     }
     submit_in_band(
         chain_id,
@@ -355,7 +434,15 @@ fn submit_inner(
         keys,
         signer,
         quoted_fee,
+        tail,
     )
+}
+
+/// What the shared tail needs besides the operation: the head read started
+/// before the ceremony, and who hears the ceremony's edges.
+struct Tail<'a> {
+    head: Option<std::thread::JoinHandle<Option<u64>>>,
+    edges: Edges<'a>,
 }
 
 /// Deployment status and the nonce, together, with the two refusals.
@@ -485,6 +572,10 @@ fn fallback_fee(
     })
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one call site; the arguments are the operation"
+)]
 fn submit_in_band(
     chain_id: u32,
     safe: &str,
@@ -493,7 +584,8 @@ fn submit_in_band(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-) -> Result<String, SubmitFailure> {
+    tail: Tail<'_>,
+) -> Result<Submitted, SubmitFailure> {
     let (deployed, nonce, init_code) = account_context(chain_id, safe, keys)?;
 
     // The batch: the person's calls + one fee leg. Estimated with a
@@ -567,9 +659,13 @@ fn submit_in_band(
     op.call_data = batch(fee.amount, &fee.recipient)?;
 
     // The displayed quote's speed, or none for the fallback nobody saw.
-    sign_and_submit(op, chain_id, safe, inner, keys, signer, &[], fee.tier)
+    sign_and_submit(op, chain_id, safe, inner, keys, signer, &[], fee.tier, tail)
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one call site; the arguments are the operation"
+)]
 fn submit_tempo(
     chain_id: u32,
     safe: &str,
@@ -578,7 +674,8 @@ fn submit_tempo(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-) -> Result<String, SubmitFailure> {
+    tail: Tail<'_>,
+) -> Result<Submitted, SubmitFailure> {
     chain::verify_chain_ready(chain_id).map_err(other)?;
     // The reimbursement recipient MUST come from the relay that submits.
     let collector = relay::account_info(chain_id, safe)
@@ -679,12 +776,13 @@ fn submit_tempo(
         signer,
         &[("feeToken", fee_token)],
         tier,
+        tail,
     )
 }
 
-/// The shared tail: hash, sign, envelope, submit (with the AA20 guard and
-/// the in-flight-hash recovery), bump the nonce. `inner` is the person's
-/// calls — the operation carries them and then its fee leg.
+/// The shared tail: hash, sign, envelope, submit through the core's verdict
+/// (spec 082 RA1), and bump the nonce only when the relay took it. `inner`
+/// is the person's calls — the operation carries them and then its fee leg.
 #[allow(
     clippy::too_many_arguments,
     reason = "the operation, its calls, its signer, and the two things the wire names beside it"
@@ -698,10 +796,18 @@ fn sign_and_submit(
     mut signer: Signer<'_>,
     extra: &[(&str, &str)],
     tier: Option<FeeTier>,
-) -> Result<String, SubmitFailure> {
+    tail: Tail<'_>,
+) -> Result<Submitted, SubmitFailure> {
     let safe_op_hash =
         calculate_safe_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?;
-    let assertion = signer.sign(&safe_op_hash, chain_id, safe, keys, Some((&op, inner)))?;
+    let assertion = signer.sign(
+        &safe_op_hash,
+        chain_id,
+        safe,
+        keys,
+        Some((&op, inner)),
+        tail.edges,
+    )?;
     op.signature = envelope(&assertion, keys)?;
 
     // The AA20 guard: an undeployed sender with no initCode is a guaranteed
@@ -713,24 +819,36 @@ fn sign_and_submit(
         ));
     }
 
-    let hash = match relay::send_user_op(&op, chain_id, extra, tier) {
-        Ok(hash) => hash,
-        Err(relay::SubmitError::Rejected(message)) => {
-            // A previous op is still pending: poll ITS receipt instead of failing.
-            if let Some(existing) = parse_existing_user_op_hash(&message) {
-                eprintln!("[vela-wallet] relay: previous op pending ({existing}), tracking it");
-                return Ok(existing);
-            }
-            return Err(classify_rejection(message));
+    // Known before the first POST (RA6): the name the operation is followed
+    // by when the relay's reply never comes back. The signature is not part
+    // of it, so this is the hash of exactly what goes out.
+    let local_hash = user_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?;
+    let submit_block = tail.head.and_then(|head| head.join().ok()).flatten();
+    match relay::send_user_op(&op, chain_id, extra, tier, &local_hash) {
+        SubmitVerdict::Accepted { user_op_hash } => {
+            // RA5: the local nonce moves only for an operation the relay
+            // holds. One that may have been sent keeps nonce N, so a second
+            // attempt can never become a second payment: the EntryPoint lets
+            // at most one operation with N land.
+            chain::bump_nonce(safe, chain_id);
+            Ok(Submitted {
+                user_op_hash,
+                maybe_sent: false,
+                submit_block,
+            })
         }
-        Err(relay::SubmitError::Unreachable) => {
-            return Err(other(
-                "The gas relayer could not be reached. Please try again.",
-            ));
-        }
-    };
-    chain::bump_nonce(safe, chain_id);
-    Ok(hash)
+        SubmitVerdict::MaybeSent { user_op_hash } => Ok(Submitted {
+            user_op_hash,
+            maybe_sent: true,
+            submit_block,
+        }),
+        SubmitVerdict::NotSent { rejection } => Err(match rejection {
+            None => SubmitFailure::NotSent,
+            Some(RelayRejection::RelayerUnavailable) => SubmitFailure::RelayerUnavailable,
+            Some(RelayRejection::BundlerUnderfunded) => SubmitFailure::BundlerUnderfunded,
+            Some(RelayRejection::Other(message)) => other(message),
+        }),
+    }
 }
 
 /// A message (EIP-1271, spec 044 on the phones): the key signs the Safe's
@@ -743,10 +861,11 @@ pub fn sign_message(
     original_hash: &[u8],
     keys: &[WalletKey],
     mut signer: Signer<'_>,
+    edges: Edges<'_>,
 ) -> Result<String, SubmitFailure> {
     let challenge = compute_safe_message_hash(original_hash, u64::from(chain_id), safe)
         .map_err(|e| other(e.to_string()))?;
-    let assertion = signer.sign(&challenge, chain_id, safe, keys, None)?;
+    let assertion = signer.sign(&challenge, chain_id, safe, keys, None, edges)?;
     let hex = |text: &str| from_hex(text).map_err(|e| other(e.to_string()));
     let signature = eip1271_envelope_signature(
         &hex(&assertion.authenticator_data_hex)?,
@@ -757,21 +876,6 @@ pub fn sign_message(
     )
     .map_err(|e| other(e.to_string()))?;
     Ok(to_hex(&signature, true))
-}
-
-/// The relay's sentence, classified the way `classifySubmit` does.
-fn classify_rejection(message: String) -> SubmitFailure {
-    if message
-        .to_lowercase()
-        .contains("gas relayer is unavailable")
-    {
-        return SubmitFailure::RelayerUnavailable;
-    }
-    if relay::is_bundler_underfunded(&message) {
-        return SubmitFailure::BundlerUnderfunded;
-    }
-    eprintln!("[vela-wallet] send: unhandled relay error: {message}");
-    other(message)
 }
 
 /// The assertion as the Safe's contract signature: compatibility-checked,
@@ -974,18 +1078,58 @@ mod tests {
             SendSubmitFailure::from(SubmitFailure::Other(String::new())),
             SendSubmitFailure::Other { message: None }
         );
+        // Spec 082 RA10: "the relay was never reached" reaches the send
+        // machine as its generic failure, carrying the fixed sentence the
+        // dApp is told — never the pool's text.
         assert_eq!(
-            classify_rejection("The gas relayer is unavailable right now.".to_owned()),
-            SubmitFailure::RelayerUnavailable
+            SendSubmitFailure::from(SubmitFailure::NotSent),
+            SendSubmitFailure::Other {
+                message: Some(NOT_SENT_DAPP_DETAIL.to_owned())
+            }
         );
-        assert_eq!(
-            classify_rejection("dedicated bundler gas account is short".to_owned()),
-            SubmitFailure::BundlerUnderfunded
-        );
-        assert!(matches!(
-            classify_rejection("AA25 invalid account nonce".to_owned()),
-            SubmitFailure::Other(_)
-        ));
+    }
+
+    /// Spec 082 RA9 (T051): the Touch ID prompt is bracketed by the two edges
+    /// the sheet words its stage from — "started" before the prompt opens,
+    /// "signed" only after it came back with a signature, and no "signed" for
+    /// a prompt the person dismissed.
+    #[test]
+    fn the_passkey_is_bracketed_by_the_ceremony_edges() {
+        let log = std::cell::RefCell::new(Vec::<&str>::new());
+        let edges = |edge: CeremonyEdge| {
+            log.borrow_mut().push(match edge {
+                CeremonyEdge::Started => "started",
+                CeremonyEdge::Signed => "signed",
+            });
+        };
+        let assertion = Assertion {
+            credential_id: "cred0".to_owned(),
+            signature_der_hex: String::new(),
+            authenticator_data_hex: String::new(),
+            client_data_json_hex: String::new(),
+            user_id_hex: None,
+            authenticator_attachment: String::new(),
+            signer_origin: None,
+        };
+        let mut touch = |_: &[u8]| {
+            log.borrow_mut().push("touch id");
+            Ok(assertion.clone())
+        };
+        let signed = Signer::Passkey(&mut touch).sign(&[7; 32], 100, "0xsafe", &[], None, &edges);
+        assert!(signed.is_ok());
+        assert_eq!(log.take(), vec!["started", "touch id", "signed"]);
+
+        let mut dismissed = |_: &[u8]| {
+            log.borrow_mut().push("touch id");
+            Err(PasskeyFailure {
+                kind: FailureKind::Cancelled,
+                message: None,
+            })
+        };
+        let declined =
+            Signer::Passkey(&mut dismissed).sign(&[7; 32], 100, "0xsafe", &[], None, &edges);
+        assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
+        assert_eq!(log.take(), vec!["started", "touch id"]);
     }
 
     #[test]
@@ -1104,6 +1248,10 @@ mod tests {
         let answering = answers_once(&channel, move || {
             page_result(&signing_key(7), &credential, &signed_over)
         });
+        // Spec 082 RA9: the page is a ceremony like a passkey's — the sheet
+        // hears it open, then hears it answer, in that order.
+        let heard = std::cell::RefCell::new(Vec::new());
+        let edges = |edge: CeremonyEdge| heard.borrow_mut().push(edge);
         let signed = {
             let mut signer = Signer::TrustedSigner {
                 ask: &ask,
@@ -1111,9 +1259,13 @@ mod tests {
                 channel: &channel,
                 only: None,
             };
-            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
+            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)), &edges)
         };
         let _ = answering.join();
+        assert_eq!(
+            heard.take(),
+            vec![CeremonyEdge::Started, CeremonyEdge::Signed]
+        );
         let assertion = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
         let signature = envelope(&assertion, &keys).unwrap_or_else(|e| unreachable!("{e:?}"));
         // The second key signed, so its own proxy verifies — not the shared
@@ -1137,9 +1289,12 @@ mod tests {
                 channel: &channel,
                 only: None,
             };
-            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
+            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)), &edges)
         };
         let _ = declining.join();
+        // Opened, never signed: no "done" edge for a ceremony that returned
+        // nothing.
+        assert_eq!(heard.take(), vec![CeremonyEdge::Started]);
         assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
         assert_eq!(
             channel.ended(),
@@ -1185,6 +1340,7 @@ mod tests {
                     channel: &channel,
                     only: Some(&keys[1].credential_id),
                 },
+                &quiet,
             );
             let _ = answering.join();
             (signed, channel.ended())
@@ -1246,6 +1402,7 @@ mod tests {
                 channel: &channel,
                 only: None,
             },
+            &quiet,
         );
         let _ = answering.join();
         let signature = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));

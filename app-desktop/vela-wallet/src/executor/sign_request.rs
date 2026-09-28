@@ -35,13 +35,15 @@ use serde_json::{Value, json};
 use vela_core::app::fee_policy::FeeCall;
 use vela_core::app::sign_request::{
     Event, SignFundingNeeded, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
+    dapp_receipt_wait_ms,
 };
 use vela_core::app::{Account, KeyMethod};
-use vela_core::user_op::WalletKey;
+use vela_core::user_op::{NOT_SENT_DAPP_DETAIL, WalletKey};
 
+use crate::diag::{short, vlog};
 use crate::executor::passkey::{self, Ceremony};
 use crate::executor::trusted_signer::{self, Ask};
-use crate::executor::user_op::Signer;
+use crate::executor::user_op::{CeremonyEdge, Signer};
 use crate::executor::{now_ms, relay, storage, user_op};
 
 /// `vela.transactionHistory` — the shared local store.
@@ -89,6 +91,11 @@ pub struct SignContext {
     /// waiting sheet. Shared, because the context is cloned into the executor
     /// when the request opens and the host points it at the page afterwards.
     pub trusted_signer: Arc<trusted_signer::Channel>,
+    /// When the person approved (spec 082 RA12): the dApp's answer window is
+    /// measured from the tap, so a slow submit shortens the receipt wait
+    /// rather than adding a second full one. Set by the host at the tap,
+    /// before the submit is asked for.
+    pub approved_at_ms: Option<f64>,
 }
 
 impl SignContext {
@@ -143,18 +150,29 @@ impl SignContext {
             site: None,
             account_name: send.account_name,
             trusted_signer: send.trusted_signer,
+            approved_at_ms: None,
         }
     }
 }
 
-/// How long a dApp's transaction waits for its receipt before the answer is
-/// the userOpHash instead.
-///
-/// A dApp's promise must SETTLE. Waiting forever for a receipt is the failure
-/// mode that looks like success from inside the wallet and like a hang from
-/// inside the site.
-const RECEIPT_BUDGET: Duration = Duration::from_secs(90);
+/// How often the receipt wait asks. The wait itself is the core's
+/// (`dapp_receipt_wait_ms`, spec 082 RA12): a dApp's promise must SETTLE, and
+/// every client settles it by the same clock.
 const RECEIPT_POLL: Duration = Duration::from_secs(3);
+
+/// The receipt wait left for a submit that finished `now` after an approve
+/// at `approved_at` — what is left of the core's 120 s window, never less
+/// than its floor.
+fn receipt_budget(approved_at: Option<f64>, now: f64) -> Duration {
+    let elapsed = approved_at.map_or(0.0, |at| (now - at).max(0.0));
+    let wait_ms = dapp_receipt_wait_ms(elapsed);
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a wait of at most two minutes"
+    )]
+    Duration::from_millis(wait_ms.max(0.0) as u64)
+}
 
 pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
     match operation {
@@ -329,6 +347,7 @@ fn sign_and_submit(
         },
         None => Signer::Passkey(&mut sign),
     };
+    let edges = |edge: CeremonyEdge| sink.send(ceremony_event(id, edge));
     let submitted = user_op::submit(
         chain_id,
         address,
@@ -337,23 +356,48 @@ fn sign_and_submit(
         &ctx.keys,
         signer,
         quoted,
+        &edges,
     );
-    let user_op_hash = match submitted {
-        Ok(hash) => hash,
+    let submitted = match submitted {
+        Ok(submitted) => submitted,
         Err(failure) => return submit_failure(chain_id, address, failure),
     };
+    let user_op_hash = submitted.user_op_hash.clone();
 
     // Told BEFORE the receipt wait. A window closed during that wait must
-    // still know an operation was accepted — otherwise a submitted
-    // transaction looks, on reopen, like one that never happened.
+    // still know an operation left — otherwise a submitted transaction looks,
+    // on reopen, like one that never happened. A lost reply is told the same
+    // way (spec 082 RA2/RA3): recorded under the local hash, handed to the
+    // tracker, and answered once like any other.
     sink.send(Event::OpSubmitted {
         id: id.to_owned(),
         user_op_hash: user_op_hash.clone(),
         now_ms: now_ms(),
+        maybe_sent: submitted.maybe_sent,
+        submit_block: submitted.submit_block,
     });
 
-    let receipt = await_receipt(&user_op_hash, chain_id);
+    let budget = receipt_budget(ctx.approved_at_ms, now_ms());
+    let receipt = await_receipt(&user_op_hash, chain_id, budget);
+    vlog!(
+        "dapp",
+        "op={} answered with {} after the receipt wait",
+        short(&user_op_hash),
+        if receipt.is_some() {
+            "its tx hash"
+        } else {
+            "the op hash"
+        }
+    );
     after_receipt_wait(user_op_hash, receipt)
+}
+
+/// The core event for one edge of request `id`'s ceremony (spec 082 RA9).
+fn ceremony_event(id: &str, edge: CeremonyEdge) -> Event {
+    match edge {
+        CeremonyEdge::Started => Event::CeremonyStarted { id: id.to_owned() },
+        CeremonyEdge::Signed => Event::CeremonyDone { id: id.to_owned() },
+    }
 }
 
 /// A signature, not a transaction (the phones' `SignExecutor`): one
@@ -387,7 +431,14 @@ fn sign_message(
         },
         None => Signer::Passkey(&mut sign),
     };
-    match user_op::sign_message(chain_id, address, &original, &ctx.keys, signer) {
+    match user_op::sign_message(
+        chain_id,
+        address,
+        &original,
+        &ctx.keys,
+        signer,
+        &user_op::quiet,
+    ) {
         Ok(signature) => SignSubmitOutcome::Succeeded { result: signature },
         Err(failure) => submit_failure(chain_id, address, failure),
     }
@@ -502,8 +553,8 @@ fn wei_of(value: Option<&Value>) -> Option<String> {
 /// `None` is "not yet", never "failed": a relay that could not be reached is
 /// not a transaction that did not happen, and the caller answers with the
 /// userOpHash rather than an error.
-fn await_receipt(user_op_hash: &str, chain_id: u32) -> Option<String> {
-    wait_within(RECEIPT_BUDGET, RECEIPT_POLL, |left| {
+fn await_receipt(user_op_hash: &str, chain_id: u32, budget: Duration) -> Option<String> {
+    wait_within(budget, RECEIPT_POLL, |left| {
         // A receipt that says the operation reverted is still a receipt: the
         // tx hash is real and the dApp should have it. What it is NOT is this
         // wallet's business to relabel.
@@ -573,6 +624,11 @@ fn submit_failure(
         user_op::SubmitFailure::RelayerUnavailable => SignSubmitOutcome::Failed {
             message: "the relay could not be reached".to_owned(),
         },
+        // Nothing left the device (spec 082 RA10): the dApp's -32603 carries
+        // the core's fixed sentence, never the pool's "all endpoints failed".
+        user_op::SubmitFailure::NotSent => SignSubmitOutcome::Failed {
+            message: NOT_SENT_DAPP_DETAIL.to_owned(),
+        },
         user_op::SubmitFailure::Other(message) => SignSubmitOutcome::Failed { message },
     }
 }
@@ -588,7 +644,7 @@ fn submit_failure(
 ///
 /// Shape: `buildSigningRecord` (`dapp-history.ts:162-228`), field for field —
 /// the row is read by the feed, by the phone and by the web.
-fn persist_record(record: &SignRecord) {
+pub(crate) fn persist_record(record: &SignRecord) {
     use vela_core::app::sign_request::SignRecordKind;
 
     let (kind, to, value, symbol, decimals) = match record.kind {
@@ -656,6 +712,11 @@ fn persist_record(record: &SignRecord) {
         "dappOrigin": record.dapp_origin,
         "signedRequest": signed_request,
         "requestTruncated": truncated,
+        // Spec 082 T181: a may-have-been-sent op and the head read before its
+        // first POST travel with the record, so a relaunch hands the tracker
+        // the same op it was following (`tracker::pending_records`).
+        "maybeSent": record.maybe_sent,
+        "submitBlock": record.submit_block,
     });
     if let Some(intent) = &record.intent {
         row["intent"] = json!(intent);
@@ -768,6 +829,8 @@ mod tests {
             user_op_hash: "0xhash".to_owned(),
             dapp_origin: "https://app.uniswap.org".to_owned(),
             intent: Some("Swap".to_owned()),
+            maybe_sent: false,
+            submit_block: None,
         }
     }
 
@@ -960,6 +1023,195 @@ mod tests {
             SignSubmitOutcome::Succeeded {
                 result: "0xtx".to_owned()
             }
+        );
+    }
+
+    // -- spec 082 T051: one answer after a lost reply, and the phases -------
+
+    const LOCAL_OP: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
+    const LANDED_TX: &str = "0x2222222222222222222222222222222222222222222222222222222222222222";
+    const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+    const TAB: &str = "tab-1";
+
+    type Host = crate::core_host::CoreHost<vela_core::app::sign_request::SignRequest>;
+    type Ops = Vec<crate::core_host::Pending<SignOperation>>;
+
+    /// The desktop's host with one account and one plain dApp send on Gnosis
+    /// from an in-app browser tab, approved: the pre-check is out.
+    fn approved_send(id: &str) -> (Host, Ops) {
+        use vela_core::app::sign_request::{SignAccountRef, SignApproveOpts};
+        let mut host = Host::new();
+        host.dispatch(Event::NetworksChanged {
+            chain_ids: vec![100],
+        });
+        host.dispatch(Event::AccountsChanged {
+            accounts: vec![SignAccountRef {
+                address: ME.to_owned(),
+                credential_id: "cred0".to_owned(),
+            }],
+            active_index: 0,
+        });
+        host.dispatch(Event::RequestArrived {
+            id: id.to_owned(),
+            method: "eth_sendTransaction".to_owned(),
+            params_json:
+                r#"[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x38d7ea4c68000"}]"#
+                    .to_owned(),
+            origin: "http://127.0.0.1:8137".to_owned(),
+            transport_id: TAB.to_owned(),
+            dedicated_transport: true,
+            per_request_chain: Some(100),
+            dapp: None,
+            granted_address: Some(ME.to_owned()),
+            requested_address: None,
+            request_ts_ms: None,
+            now_ms: 1_000.0,
+        });
+        let ops = host.dispatch(Event::ApproveTapped {
+            opts: SignApproveOpts::default(),
+        });
+        (host, ops)
+    }
+
+    fn only<'a>(ops: &'a Ops, what: &str) -> &'a crate::core_host::Pending<SignOperation> {
+        assert_eq!(
+            ops.len(),
+            1,
+            "{what}: {:?}",
+            ops.iter().map(|op| &op.operation).collect::<Vec<_>>()
+        );
+        &ops[0]
+    }
+
+    /// What the page was told, over every operation.
+    fn answers(ops: &[crate::core_host::Pending<SignOperation>]) -> Vec<Option<String>> {
+        use vela_core::app::sign_request::SignResponsePayload;
+        ops.iter()
+            .filter_map(|op| match &op.operation {
+                SignOperation::SendResponse {
+                    payload: SignResponsePayload::Ok { result },
+                    ..
+                } => Some(result.clone()),
+                SignOperation::SendResponse { payload, .. } => {
+                    unreachable!("the page was refused: {payload:?}")
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Drive one submit to its end the way `sign_and_submit` does: the
+    /// ceremony's edges, the op told before the wait (with its lost-reply
+    /// facts), the record written, and then `after_receipt_wait`'s verdict.
+    /// Everything the page was told, and the record the core asked for.
+    fn submit_to_the_end(
+        maybe_sent: bool,
+        receipt: Option<&str>,
+    ) -> (
+        Vec<Option<String>>,
+        SignRecord,
+        Vec<vela_core::app::sign_request::SignPhase>,
+    ) {
+        let (mut host, ops) = approved_send("rid-1");
+        let precheck = only(&ops, "the pre-check").id;
+        let mut phases = vec![host.view().phase];
+        let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
+        let submit = only(&ops, "the submit");
+        assert!(matches!(
+            submit.operation,
+            SignOperation::SignAndSubmit { .. }
+        ));
+        let submit = submit.id;
+        phases.push(host.view().phase);
+        for edge in [CeremonyEdge::Started, CeremonyEdge::Signed] {
+            host.dispatch(ceremony_event("rid-1", edge));
+            phases.push(host.view().phase);
+        }
+        let ops = host.dispatch(Event::OpSubmitted {
+            id: "rid-1".to_owned(),
+            user_op_hash: LOCAL_OP.to_owned(),
+            now_ms: 5_000.0,
+            maybe_sent,
+            submit_block: maybe_sent.then_some(48_479_132),
+        });
+        assert_eq!(host.view().pending_op_maybe_sent, maybe_sent);
+        let persist = only(&ops, "the record");
+        let SignOperation::PersistRecord { record } = &persist.operation else {
+            unreachable!("not a record: {:?}", persist.operation);
+        };
+        let record = record.clone();
+        let mut told = answers(&host.resolve(persist.id, SignShellResult::RecordPersisted));
+        let settled = host.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: after_receipt_wait(LOCAL_OP.to_owned(), receipt.map(str::to_owned)),
+                now_ms: 90_000.0,
+            },
+        );
+        told.extend(answers(&settled));
+        assert!(
+            !settled
+                .iter()
+                .any(|op| matches!(op.operation, SignOperation::UpdateRecord { .. })),
+            "the tracker alone closes an on-chain record (RA8)"
+        );
+        (told, record, phases)
+    }
+
+    /// Ruling 1 / RA2: the relay's reply was lost. The op is recorded as may
+    /// have been sent, with the head it was sent at, and the page gets
+    /// exactly ONE answer — the op hash, never 4900 or -32603.
+    #[test]
+    fn a_mute_relay_is_answered_once_with_the_op_hash() {
+        let (told, record, _) = submit_to_the_end(true, None);
+        assert_eq!(told, vec![Some(LOCAL_OP.to_owned())]);
+        assert!(record.maybe_sent);
+        assert_eq!(record.submit_block, Some(48_479_132));
+        assert_eq!(record.user_op_hash, LOCAL_OP);
+    }
+
+    /// Ruling 9: a receipt that came back reverted inside the wait is still a
+    /// receipt — the page gets its tx hash, once.
+    #[test]
+    fn a_reverted_receipt_is_answered_with_its_tx_hash() {
+        let (told, record, _) = submit_to_the_end(false, Some(LANDED_TX));
+        assert_eq!(told, vec![Some(LANDED_TX.to_owned())]);
+        assert!(!record.maybe_sent);
+    }
+
+    /// RA9: "preparing" through the pre-check, "awaiting signature" only
+    /// while the ceremony is up, "submitting" once it has signed.
+    #[test]
+    fn the_phases_follow_the_ceremony_edges() {
+        use vela_core::app::sign_request::SignPhase;
+        let (_, _, phases) = submit_to_the_end(false, Some(LANDED_TX));
+        assert_eq!(
+            phases,
+            vec![
+                SignPhase::Preparing,
+                SignPhase::Preparing,
+                SignPhase::AwaitingSignature,
+                SignPhase::Submitting,
+            ]
+        );
+    }
+
+    /// RB2: the tab that asked went away while the pre-check ran. The late
+    /// pre-check answer is dropped by the host (`core_host` rule 3) and
+    /// nothing is signed or sent for a page that is gone.
+    #[test]
+    fn an_aborted_attempt_never_reaches_the_relay() {
+        let (mut host, ops) = approved_send("rid-gone");
+        let precheck = only(&ops, "the pre-check").id;
+        host.dispatch(Event::TransportDropped {
+            transport_id: TAB.to_owned(),
+        });
+        let after = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
+        assert!(
+            !after
+                .iter()
+                .any(|op| matches!(op.operation, SignOperation::SignAndSubmit { .. })),
+            "a page that is gone gets nothing signed"
         );
     }
 

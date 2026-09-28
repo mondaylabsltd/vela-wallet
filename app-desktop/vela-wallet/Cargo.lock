@@ -10051,6 +10051,7 @@ dependencies = [
  "raw-window-handle",
  "resvg 0.45.1",
  "rqrr",
+ "rustls",
  "serde",
  "serde_json",
  "tokio",
