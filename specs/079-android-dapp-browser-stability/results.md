@@ -1,22 +1,22 @@
 # 079 — Results
 
-**Status: 2026-09-28, in progress.** Branch `079-android-dapp-browser-stability`, with `079-ios`,
-`079-desktop` and `079-ext` merged into it. Rows marked *pending* are waiting for a person (a
-fingerprint, the iPhone's developer-certificate trust, or the owner's release of the signing page).
+**Status: 2026-09-28.** Branch `079-android-dapp-browser-stability`, with `079-ios`,
+`079-desktop` and `079-ext` merged into it. The signing page `e3ef90a6…` is released and `LAUNCH`
+names it. Rows marked *pending* wait for the owner's fingerprint on the Xiaomi.
 
 ## Success criteria
 
 | SC | Verdict | Evidence |
 |---|---|---|
-| SC-001 accidental closes | **Pass** on Android (Xiaomi: 9 attempts of swipe, scrim and Back on the signing sheet, 0 closed; the consent sheet is also non-dismissible). The web/extension e2e checks that Escape and a scrim tap leave the request open. Desktop already had no outside close. iOS: `interactiveDismissDisabled` + ✕, unit-tested, *device pending* | `evidence/android-after/us1-sheet-explicit-close.jpg`; web e2e `extension-signing` |
-| SC-002 a named status after approval | **Pass** on Android: signing → submitting → waiting with the chain's ring → landed tick (Gnosis `0xbf66a6d7…`); past the window, the still-confirming sentence, which flipped to landed when the relay caught up (`0xe3f09574…`); a message ends on "已签名". Desktop shows the same states (screenshots, driven by made-up core states). Web shows status (never a dimmed slide, e2e). iOS unit-tested, *device pending* | `us1-tx-landed.jpg`, `us1-still-confirming.jpg`, `us1-message-signed.jpg`; desktop `sign-states.png` |
-| SC-003 progress within 0.5 s | **Pass** on Android (progress from the tap with `latency=6000`). Desktop: yes for loads the wallet asks for; wry reports nothing before a commit for links inside a page. iOS *device pending* | `us3-progress-from-the-tap.jpg` |
-| SC-004 no raw engine error page | **Pass** in the app on Android (the panel stays through Retry; certificate, offline and not-found each have their own sentence), desktop (watchdog + probe; WKWebView's empty `about:blank` no longer counts as the page arriving). iOS draws the panel until the next commit (WebKit never draws its own page), *device pending*. The signing page opens in Chrome on Android, so a failed first load there is Chrome's own page until the person closes the tab; then the app says "签名页没能打开" with Retry. On iOS the tab closes itself as soon as the first load fails | `us3-retrying-keeps-the-panel.jpg`, `us3-l5-certificate.jpg`, `t5-back.jpg`; desktop `load-retrying.png` |
+| SC-001 accidental closes | **Pass** on Android (Xiaomi: 9 attempts of swipe, scrim and Back on the signing sheet, 0 closed; the consent sheet is also non-dismissible) and iOS (iPhone probe: swipe down and scrim tap, sheet stays). The web/extension e2e checks that Escape and a scrim tap leave the request open. Desktop already had no outside close | `evidence/android-after/us1-sheet-explicit-close.jpg`; web e2e `extension-signing` |
+| SC-002 a named status after approval | **Pass** on Android: signing → submitting → waiting with the chain's ring → landed tick (Gnosis `0xbf66a6d7…`); past the window, the still-confirming sentence, which flipped to landed when the relay caught up (`0xe3f09574…`); a message ends on "已签名". Desktop shows the same states (screenshots, driven by made-up core states). Web shows status (never a dimmed slide, e2e). iPhone: "已签名！" for a message; for Send dust "提交至网络…" → the ring with "Gnosis 通常在约 15 秒内确认 剩余约 14 秒" → "已确认" with the hash, then it closes by itself | `us1-tx-landed.jpg`, `us1-still-confirming.jpg`, `us1-message-signed.jpg`; desktop `sign-states.png` |
+| SC-003 progress within 0.5 s | **Pass** on Android (progress from the tap with `latency=6000`). Desktop: yes for loads the wallet asks for; wry reports nothing before a commit for links inside a page. iOS: unit-tested (`progressShowsFromTheRequest`); not timed on the device | `us3-progress-from-the-tap.jpg` |
+| SC-004 no raw engine error page | **Pass** in the app on Android (the panel stays through Retry; certificate, offline and not-found each have their own sentence), desktop (watchdog + probe; WKWebView's empty `about:blank` no longer counts as the page arriving). iOS: the iPhone pass found a white page for a site that never answers — behind a proxy (Shadowrocket; the Mac's proxy for the simulator) WebKit sends no failure at all, only its own `about:blank`. Fixed in 383af421: the panel with its reason, host and Retry through every frame, and a retry's attempt ends instead of saying "正在重试…" forever. The signing page opens in Chrome on Android, so a failed first load there is Chrome's own page until the person closes the tab; then the app says "签名页没能打开" with Retry. On iOS the tab closes itself as soon as the first load fails | `us3-retrying-keeps-the-panel.jpg`, `us3-l5-certificate.jpg`, `t5-back.jpg`; desktop `load-retrying.png` |
 | SC-005 fee back without a tap ≤ 15 s | **Pass** on Android (8 s after the relay came back). Web: re-quote schedule unit + e2e `relay-faults`. Desktop, iOS: unit-tested | `us2-fee-refresh-and-retry.jpg` |
 | SC-006 Recents only successful loads | **Pass** on Android, on the loads of this pass (failed, refused, certificate, and successful loads; the store read back held only the pages that loaded, each with its own title and icon). Fewer than the 10 + 10 the criterion names | store read in the device log |
-| SC-007 no "安全站点"/"不安全"/"已加密" text | **Pass** on Android (UI dump sweep, zh). Desktop: lock only (screenshot). iOS: removed in code and gallery, *device pending*. The en sweep was not run | `us5-lock-only-and-network-picker.jpg` |
+| SC-007 no "安全站点"/"不安全"/"已加密" text | **Pass** on Android (UI dump sweep, zh) and iOS (iPhone site menu and connection panel: a lock and "已连接" only). Desktop: lock only (screenshot). The en sweep was not run | `us5-lock-only-and-network-picker.jpg` |
 | SC-008 one slide per signature (trusted-signer route) | **Partial**: the app shows "去签名页确认" instead of its own slide on Android (device), iOS and desktop (unit). The end-to-end signature with the owner's fingerprint is *pending* | quickstart T1 |
-| SC-009 signing page opens with its host unreachable | **Pending the release** (T059): the offline open needs the content-addressed page and its `immutable` headers to be live on `sign.getvela.app`. Until then only the fallback is proven: with the host dropped, the app says "签名页没能打开，请检查网络。" with Retry, and the request stays open (Android device; iOS unit) | `t5-back.jpg`, `t5-cancelled.jpg` |
+| SC-009 signing page opens with its host unreachable | **Released, check pending the fingerprint**: `sign.getvela.app/b/e3ef90a6…/sign` answers with `immutable` and hashes to its name; `LAUNCH` names it (6f8a2adb). The fallback is proven: with the host dropped on first use, the app says "签名页没能打开，请检查网络。" with Retry, and the request stays open (Android device; iOS unit) | `t5-back.jpg`, `t5-cancelled.jpg` |
 | SC-010 no regression | **Pass**: 070 rows A1–A18 on the Xiaomi (A5 checked with chain 1337, since Polygon is configured on this device; A13 needs a tapped link, since Chromium skips history a script made without a gesture; A16's events reach the page when it is back on screen). Android unit suite 786/786 | `a11-crash.jpg`, `a12-alert.jpg`, `a16-connections.jpg` |
 
 ## The client matrix after the fix
@@ -49,6 +49,17 @@ fingerprint, the iPhone's developer-certificate trust, or the owner's release of
 Also on the signing page: a send reads as the send (the fee leg is the fee row, not a second
 "批量" leg), and the fee's explanation folds under its row with the "自述" tag in sight.
 
+## Found by the device passes and fixed
+
+- **iOS, a site that never answers → a white page** (383af421): behind a proxy WebKit reports no
+  failure, only its own `about:blank`; the engine took it for the page. Now a failure panel, and a
+  retry's attempt ends.
+- **iOS, network rows without balances on a cold open into Explore** (995f4725): only the home read
+  the figures; Explore now asks too.
+- **iOS probe** read the screen element by element and raced it; one snapshot now (213aed95).
+- **Android, re-quote after submission**: the rule now also stops once the operation is submitted
+  (4f8cf4e4).
+
 ## Where the clients differ (accepted)
 
 - **Closing after approval** is respected everywhere: the operation continues and the page gets
@@ -67,8 +78,9 @@ Also on the signing page: a send reads as the send (the fee leg is the fee row, 
 
 | Suite | Result |
 |---|---|
-| Android JVM | 786/786 on the merged tree |
-| iOS hermetic (simulator clone) | 928/928 (on `079-ios`) |
+| Android JVM | 789/789 on the merged tree |
+| iOS hermetic (simulator clone) | 932/932 on the merged tree |
+| iPhone 11 probe | both probes pass: the checkpoint walk (consent, closes, signed tick, send status and landing, chrome, pickers with balances, tabs) and the dead address |
 | Desktop `cargo test` | 651 passed, 49 ignored, on the merged tree |
 | Web unit (vitest) | 1906 passed, 5 skipped; `pnpm check` 0 errors (on `079-ext`) |
 | Web/extension e2e | 45/45 (own preview port, on `079-ext`) |
@@ -79,11 +91,10 @@ Also on the signing page: a send reads as the send (the fee leg is the fee row, 
 
 ## Not done, and why
 
-- **iPhone device pass (T077)**: UI Automation now starts; the app will not launch until the
-  developer certificate is trusted on the phone (a person's step).
-- **Fingerprint end to end (quickstart T1–T3)** on the Xiaomi with the owner's account.
-- **Signing page release (T059)**: deploy `app-web/trusted-signer/dist/` (build
-  `e3ef90a6…`), check the headers with `curl -I`, then set `LAUNCH` to that hash. SC-009 follows.
+- **Fingerprint end to end (quickstart T1–T4)** on the Xiaomi with the owner's account: one
+  signature on the page, a cancelled prompt, and one with the page's host dropped (SC-009).
+- **iOS before-probe (T004)**: never ran (UI Automation was off then); the iOS column rests on the
+  code audit.
 - **T048**: how the signing page's "self-reported site" warning should read. It cannot tell who
   opened it, so it cannot drop the warning; the recommendation is to keep it in plain, neutral words.
 - **Desktop at phone width**: the window cannot go below 1280×800.
