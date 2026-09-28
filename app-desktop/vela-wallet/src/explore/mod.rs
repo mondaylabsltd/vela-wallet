@@ -88,6 +88,8 @@ pub struct ExploreStrings {
     pub load_failed: SharedString,
     pub load_retry: SharedString,
     pub load_retrying: SharedString,
+    /// Spec 079 US4: the page's chain cannot be reached (`{{chain}}`).
+    pub chain_down: String,
 }
 
 impl ExploreStrings {
@@ -149,6 +151,7 @@ impl ExploreStrings {
             load_failed: s("connect.browser.loadFailed"),
             load_retry: s("connect.browser.retry"),
             load_retrying: s("explore.loadRetrying"),
+            chain_down: raw("explore.chainDown"),
         }
     }
 }
@@ -188,6 +191,10 @@ mod tests {
         assert!(
             s.site_count.contains("{{n}}"),
             "siteCount must be a template"
+        );
+        assert!(
+            s.chain_down.contains("{{chain}}"),
+            "chainDown must name the chain"
         );
         // Every reason the core's classifier can name resolves here.
         for key in [

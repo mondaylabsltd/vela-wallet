@@ -12518,6 +12518,18 @@ impl WalletPage {
             .clone()
             .zip(self.load_watch.url.clone())
             .filter(|_| live_browser && !crashed);
+        // Spec 079 US4: the page's chain cannot be reached — said in one line
+        // under the bar, with Retry; the connection chip stays as it is (the
+        // connection is fine). Not over the failure panel: no page, no chain.
+        let chain_notice = tab_view
+            .as_ref()
+            .filter(|_| live_browser && !crashed && failed_load.is_none())
+            .map(|tab| tab.chain_id)
+            .filter(|chain_id| {
+                self.browser_host
+                    .as_ref()
+                    .is_some_and(|host| host.read(cx).chain_unreachable(*chain_id))
+            });
         let (host, secure) = match &failed_load {
             Some((_, url)) => (
                 SharedString::from(crate::explore::load_watch::host_of(url)),
@@ -12731,7 +12743,56 @@ impl WalletPage {
             .children(live_browser.then(|| {
                 crate::explore::components::load_hairline(theme, self.load_watch.busy() && !crashed)
             }))
+            .children(chain_notice.map(|chain_id| self.chain_notice(theme, chain_id, cx)))
             .child(body)
+    }
+
+    /// The page's chain cannot be reached (spec 079 US4): which one, and a
+    /// Retry — a quiet line, gone by itself when the chain answers anyone.
+    fn chain_notice(&mut self, theme: &Theme, chain_id: u32, cx: &mut Context<Self>) -> Div {
+        let text = crate::signing::fill(
+            &self.explore.chain_down,
+            &[(
+                "chain",
+                &crate::flows::live::chain_name(chain_id).to_string(),
+            )],
+        );
+        div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(8.))
+            .px(px(16.))
+            .py(px(8.))
+            .bg(theme.warning_soft)
+            .child(icon_img(
+                &mut self.icons,
+                Icon::TriangleAlert,
+                false,
+                theme.warning_base,
+                14.,
+            ))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(SharedString::from(text)),
+            )
+            .child(
+                div()
+                    .id("chain-notice-retry")
+                    .flex_none()
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.accent)
+                    .child(self.explore.load_retry.clone())
+                    .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                        let host = this.browser_host(cx);
+                        host.update(cx, |host, cx| host.retry_chain(chain_id, cx));
+                    })),
+            )
     }
 
     /// The load failed (spec 079 US3): the generic line, the core's reason for

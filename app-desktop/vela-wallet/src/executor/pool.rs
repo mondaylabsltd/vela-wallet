@@ -125,6 +125,8 @@ enum Request {
     },
     /// The chains whose last failure was the providers' rate limit.
     RateLimited { reply: Sender<Vec<u32>> },
+    /// The chains whose whole RPC pool failed on the last attempt.
+    Failed { reply: Sender<Vec<u32>> },
 }
 
 /// Why a routed call produced no answer.
@@ -240,6 +242,23 @@ pub fn rate_limited_chains() -> Vec<u32> {
         tx.send(Message::Ask(Request::RateLimited { reply }))
             .is_ok()
     });
+    if !sent {
+        return Vec::new();
+    }
+    answer.recv().unwrap_or_default()
+}
+
+/// The chains whose whole RPC pool failed on the last attempt (`RpcPoolView.
+/// failed_chains`; spec 079 US4) — the rate-limited ones among them too, which
+/// a caller subtracts with [`rate_limited_chains`]. Cleared by the next usable
+/// answer from any caller. **Blocks** on the pool thread, briefly: it is
+/// answered from the view, never from the network.
+pub fn failed_chains() -> Vec<u32> {
+    let (reply, answer) = channel();
+    let sent = sender()
+        .lock()
+        .ok()
+        .is_some_and(|tx| tx.send(Message::Ask(Request::Failed { reply })).is_ok());
     if !sent {
         return Vec::new();
     }
@@ -394,6 +413,9 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
             }
             Request::RateLimited { reply } => {
                 let _ = reply.send(host.view().rate_limited_chains);
+            }
+            Request::Failed { reply } => {
+                let _ = reply.send(host.view().failed_chains);
             }
         }
     }
