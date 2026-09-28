@@ -317,6 +317,40 @@ fn is_live(progress: f64) -> bool {
     progress > ENGINE_LIVE_PROGRESS
 }
 
+/// Whether a load that has been under way for `elapsed_ms` is given up on
+/// (RX, RE2): [`GIVE_UP_MS`] or more, nothing committed, and the engine's
+/// progress (0.0 – 1.0: iOS `estimatedProgress`, Android `getProgress() / 100`)
+/// never past [`ENGINE_LIVE_PROGRESS`]. One rule on every client, so a slow
+/// but answering site is never cut anywhere. The desktop's
+/// [`LoadWatch::give_up`] applies the same threshold to the load's peak.
+#[must_use]
+pub fn should_give_up(elapsed_ms: u32, committed: bool, progress: f64) -> bool {
+    elapsed_ms >= GIVE_UP_MS && !committed && !is_live(progress)
+}
+
+/// What a given-up load is (RE2): a timeout — the network sentence
+/// (`explore.loadOffline`) and the network retry schedule — whichever client
+/// timed it.
+#[must_use]
+pub fn stalled() -> LoadFailure {
+    failure(LoadFailureClass::Timeout)
+}
+
+/// Whether a failed page is loaded again when the network comes back (RE3,
+/// `net_health`'s `CameBack`): every class a returning network can heal. A
+/// name that does not resolve is a typo and a wrong certificate is a warning;
+/// neither is the network.
+#[must_use]
+pub fn retry_when_network_returns(class: LoadFailureClass) -> bool {
+    match class {
+        LoadFailureClass::Offline
+        | LoadFailureClass::Timeout
+        | LoadFailureClass::Refused
+        | LoadFailureClass::Other => true,
+        LoadFailureClass::NotFound | LoadFailureClass::Certificate => false,
+    }
+}
+
 /// Who asked for a load.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Asked {
@@ -618,12 +652,7 @@ impl LoadWatch {
         if generation != self.generation || !self.loading || self.engine_live {
             return false;
         }
-        self.fail(classify(
-            LoadPlatform::Probe,
-            probe_code::TIMEOUT,
-            None,
-            false,
-        ));
+        self.fail(Some(stalled()));
         true
     }
 

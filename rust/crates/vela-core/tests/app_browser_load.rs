@@ -6,9 +6,10 @@
 #![cfg(feature = "crux")]
 
 use vela_core::app::browser_load::{
-    classify, host_of, probe_code, reason_key, retry_delay_ms, site_letter, visit_to_record, Asked,
-    EngineSample, EngineVerdict, LoadFailureClass as C, LoadFinished, LoadPlatform as P, LoadWatch,
-    Probed, RetryAction, ENGINE_LIVE_PROGRESS, GIVE_UP_MS,
+    classify, host_of, probe_code, reason_key, retry_delay_ms, retry_when_network_returns,
+    should_give_up, site_letter, stalled, visit_to_record, Asked, EngineSample, EngineVerdict,
+    LoadFailureClass as C, LoadFinished, LoadPlatform as P, LoadWatch, Probed, RetryAction,
+    ENGINE_LIVE_PROGRESS, GIVE_UP_MS,
 };
 
 fn class(platform: P, code: i64, domain: Option<&str>) -> Option<C> {
@@ -725,4 +726,53 @@ fn a_certificate_verdict_waits_for_a_loading_engine() {
         probe_only.probed(generation, Err(probe_code::TLS)),
         Probed::Failed
     );
+}
+
+// ---------------------------------------------------------------------------
+// The phones' watchdog and the network coming back (spec 082 T031, RE2, RE3)
+// ---------------------------------------------------------------------------
+
+/// One give-up rule on every client: 20 s with nothing committed and the
+/// page not arriving.
+#[test]
+fn a_load_is_given_up_at_twenty_seconds_only_if_nothing_is_arriving() {
+    assert_eq!(GIVE_UP_MS, 20_000);
+    assert!(!should_give_up(19_000, false, 0.1), "19 s");
+    assert!(should_give_up(20_000, false, 0.1), "20 s, no commit, 0.1");
+    assert!(should_give_up(45_000, false, 0.0));
+    assert!(!should_give_up(20_000, true, 0.1), "committed");
+    assert!(!should_give_up(20_000, false, 0.2), "progress 0.2");
+    assert!(
+        should_give_up(20_000, false, ENGINE_LIVE_PROGRESS),
+        "WebKit's own first step is not the page arriving"
+    );
+}
+
+/// A given-up load is a timeout: the network sentence, retried on the
+/// network schedule — the same failure the desktop's watch gives.
+#[test]
+fn a_stalled_load_is_a_timeout_that_retries() {
+    let failure = stalled();
+    assert_eq!(failure.class, C::Timeout);
+    assert_eq!(failure.reason_key, "explore.loadOffline");
+    assert!(failure.auto_retry);
+
+    let mut watch = LoadWatch::default();
+    let generation = watch.requested(SITE, 0.).unwrap_or_default();
+    watch.watchdog(generation);
+    watch.probed(generation, Ok(()));
+    watch.give_up(generation);
+    assert_eq!(watch.failure, Some(stalled()));
+}
+
+/// When the network comes back, every class it can heal is loaded again; a
+/// typo and a wrong certificate are not.
+#[test]
+fn only_what_the_network_can_heal_is_retried_when_it_returns() {
+    for class in [C::Offline, C::Timeout, C::Refused, C::Other] {
+        assert!(retry_when_network_returns(class), "{class:?}");
+    }
+    for class in [C::Certificate, C::NotFound] {
+        assert!(!retry_when_network_returns(class), "{class:?}");
+    }
 }
