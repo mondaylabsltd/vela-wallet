@@ -363,6 +363,10 @@ fn io_code(io: &std::io::Error) -> i64 {
         | ErrorKind::NotConnected
         | ErrorKind::BrokenPipe
         | ErrorKind::UnexpectedEof => probe_code::CONNECT,
+        // Windows' resolver speaks the system's language ("不知道这样的主机。"
+        // on the 083 device), so its Winsock code is read, not its sentence:
+        // WSAHOST_NOT_FOUND (11001) and WSANO_DATA (11004).
+        _ if cfg!(windows) && matches!(io.raw_os_error(), Some(11001 | 11004)) => probe_code::DNS,
         // `std` surfaces a resolver failure as an uncategorized error
         // carrying the libc sentence (`executor::proxy`'s note).
         _ => {
@@ -743,6 +747,19 @@ mod tests {
         watch.requested(&url, 1.);
         assert_eq!(watch.attempt, 0);
         assert_eq!(watch.retry(), None, "not while it is loading");
+    }
+
+    /// Spec 083: a failed lookup on a non-English Windows is a lookup failure
+    /// by its Winsock code, whatever language the sentence is in.
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_lookup_failure_is_dns_in_any_language() {
+        let io = std::io::Error::from_raw_os_error(11001);
+        assert_eq!(io_code(&io), probe_code::DNS);
+        assert_eq!(
+            io_code(&std::io::Error::from_raw_os_error(11004)),
+            probe_code::DNS
+        );
     }
 
     #[test]
