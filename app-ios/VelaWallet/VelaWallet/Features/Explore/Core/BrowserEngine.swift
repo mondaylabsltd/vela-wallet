@@ -80,6 +80,9 @@ final class BrowserEngine: NSObject {
     /// Where the failed navigation was going. `webView.url` is `nil` after a
     /// provisional failure — the URL is discarded with the navigation.
     private(set) var failedURL: String = ""
+    /// This attempt already said how it failed (spec 079): WebKit's blank that
+    /// may follow is then not a second, different failure.
+    private var attemptFailed = false
     /// A retry of the failed page is running (spec 079): the panel stays up
     /// and says so, and gives way only to a page that got through.
     private(set) var retrying = false
@@ -99,6 +102,10 @@ final class BrowserEngine: NSObject {
     /// How a load is asked of WebKit. A seam, so tests drive the engine
     /// without a socket.
     var loader: (URLRequest) -> Void
+
+    /// Where the web view says it is — a seam, so a test can play WebKit's
+    /// own blank document without loading one.
+    var reportedURL: () -> URL?
 
     /// Where the load hairline starts the moment a load is asked for
     /// (spec 079): on a slow network the engine's own progress starts only
@@ -143,6 +150,7 @@ final class BrowserEngine: NSObject {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         self.webView = webView
         self.loader = { [weak webView] request in webView?.load(request) }
+        self.reportedURL = { [weak webView] in webView?.url }
         super.init()
 
         ProviderBridge.install(into: configuration.userContentController, handler: self)
@@ -196,7 +204,7 @@ final class BrowserEngine: NSObject {
             return
         }
         requested()
-        if webView.url == nil, !url.isEmpty, let target = URL(string: url) {
+        if liveURL == nil, !url.isEmpty, let target = URL(string: url) {
             loader(URLRequest(url: target))
             return
         }
@@ -343,7 +351,7 @@ final class BrowserEngine: NSObject {
     }
 
     private func metaChanged() {
-        guard !tornDown, webView.url != nil else { return }
+        guard !tornDown, liveURL != nil else { return }
         update(loading: loading)
         guard !url.isEmpty, !origin.isEmpty else { return }
         onMeta(url, title)
@@ -353,13 +361,14 @@ final class BrowserEngine: NSObject {
         // A provisional failure discards the URL, so fall back to the one the
         // navigation was for: an address bar that empties itself tells a
         // person their tap did nothing.
-        let current = webView.url?.absoluteString ?? (failure != nil ? failedURL : url)
+        let live = liveURL
+        let current = live?.absoluteString ?? (failure != nil ? failedURL : url)
         url = current
         origin = ProviderBridge.origin(of: current)
         host = Self.hostOf(origin: origin)
         // The document's own title — never the previous page's kept over a
         // nil (spec 079 F2: `?? title` recorded one site under another's).
-        title = webView.url == nil ? title : (webView.title ?? "")
+        title = live == nil ? title : (webView.title ?? "")
         canGoBack = webView.canGoBack
         canGoForward = webView.canGoForward
         self.loading = loading
@@ -448,7 +457,8 @@ extension BrowserEngine: WKNavigationDelegate {
     func provisionalStarted(attempt: String?) {
         guard !tornDown else { return }
         navHttpStatus = nil
-        if let attempt, !attempt.isEmpty { failedURL = attempt }
+        attemptFailed = false
+        if let attempt, !attempt.isEmpty, attempt != "about:blank" { failedURL = attempt }
         update(loading: true)
     }
 
@@ -471,7 +481,7 @@ extension BrowserEngine: WKNavigationDelegate {
     /// before is over. (WebKit draws no error page of its own, so a commit is
     /// always the site — unlike Android's WebView.)
     func committed() {
-        guard !tornDown else { return }
+        guard !tornDown, !Self.isEngineBlank(reportedURL()) else { return }
         clearFailure()
         update(loading: true)
         onNavigationStarted(url)
@@ -483,11 +493,43 @@ extension BrowserEngine: WKNavigationDelegate {
 
     func finished() {
         guard !tornDown else { return }
+        if Self.isEngineBlank(reportedURL()) {
+            if !attemptFailed, !(failedURL.isEmpty && url.isEmpty) {
+                // Behind a proxy — the Mac's for the simulator, Shadowrocket on
+                // the iPhone, the norm for many of the people this is for — a
+                // first load the site never answered ends HERE, on WebKit's
+                // blank, with no failure callback at all (measured: provisional
+                // start, then only the blank's commit and finish). The page that
+                // was asked for did not arrive, so it is a failure, told as a
+                // connection that closed without an answer: the class Android
+                // gives the same empty response (`ERR_EMPTY_RESPONSE`). A retry
+                // ends the same way, so this also closes a retry's attempt.
+                fail(code: NSURLErrorNetworkConnectionLost, domain: NSURLErrorDomain)
+                onLoadFinished(url)
+            } else {
+                // The load that led here failed and said so; keep its panel.
+                update(loading: false)
+            }
+            return
+        }
         clearFailure()
         update(loading: false)
         onLoadFinished(url)
         if !origin.isEmpty { recordVisit() }
         captureSnapshot()
+    }
+
+    /// WebKit's own empty document. A fresh view whose first load was refused
+    /// commits and finishes `about:blank` (spec 079 — found on the Mac, then
+    /// on the iPhone as a white page with an empty address bar and no panel):
+    /// it is not the site arriving and not an address. A person cannot open
+    /// it in the main frame themselves; the address bar never loads it.
+    static func isEngineBlank(_ url: URL?) -> Bool { url?.absoluteString == "about:blank" }
+
+    /// The address the page is really at — `nil` for none, or for WebKit's blank.
+    private var liveURL: URL? {
+        let reported = reportedURL()
+        return Self.isEngineBlank(reported) ? nil : reported
     }
 
     private func clearFailure() {
@@ -576,6 +618,7 @@ extension BrowserEngine: WKNavigationDelegate {
             return
         }
         failure = classified
+        attemptFailed = true
         retrying = false
         update(loading: false)
         print("[vela-wallet] browser load failed: \(failedURL) — \(domain) \(code) → \(classified.class)")

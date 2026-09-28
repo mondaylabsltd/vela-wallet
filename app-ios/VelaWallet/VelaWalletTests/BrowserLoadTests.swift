@@ -89,6 +89,75 @@ struct BrowserLoadTests {
         #expect(engine.retryPendingMs == nil)
     }
 
+    /// WebKit commits and finishes its own `about:blank` in a fresh view whose
+    /// first load was refused. That is not the site arriving: the panel, its
+    /// reason and the address stay (iPhone pass: a white page, an empty bar).
+    @Test func webKitsOwnBlankPageIsNotTheSiteArriving() {
+        let (engine, asked) = engine()
+        defer { engine.tearDown() }
+        engine.load(url)
+        engine.provisionalStarted(attempt: url)
+        engine.provisionalFailed(code: offline, domain: NSURLErrorDomain, attempt: url)
+        engine.reportedURL = { URL(string: "about:blank") }
+        engine.provisionalStarted(attempt: "about:blank")
+        engine.committed()
+        engine.finished()
+        #expect(engine.failure?.class == "offline", "the panel stays")
+        #expect(engine.url == url, "the address bar keeps the site")
+        #expect(engine.host == "app.uniswap.org")
+        #expect(!engine.loading)
+
+        // Retry asks for the site again, not the blank document.
+        engine.reload()
+        #expect(asked().last?.absoluteString == url)
+
+        // The site itself committing ends it.
+        engine.reportedURL = { URL(string: self.url) }
+        engine.committed()
+        #expect(engine.failure == nil)
+    }
+
+    /// Behind a proxy WebKit reports nothing for a site that never answered:
+    /// the provisional start, then its own blank. That is a failure too.
+    @Test func aLoadThatEndsOnWebKitsBlankWithNoWordIsAFailure() {
+        let (engine, _) = engine()
+        defer { engine.tearDown() }
+        engine.load(url)
+        engine.provisionalStarted(attempt: url)
+        engine.reportedURL = { URL(string: "about:blank") }
+        engine.committed()
+        engine.finished()
+        #expect(engine.failure?.class == "offline")
+        #expect(engine.failureReasonKey == "explore.loadOffline")
+        #expect(engine.url == url, "the address bar keeps the site")
+        engine.setOnScreen(true)
+        #expect(engine.retryPendingMs == 2_000, "and it retries on the core's schedule")
+
+        // A retry ends the same silent way: the attempt closes, the next is set.
+        engine.fireRetry()
+        #expect(engine.retrying)
+        engine.provisionalStarted(attempt: url)
+        engine.committed()
+        engine.finished()
+        #expect(!engine.retrying, "the button says 重试 again, not 正在重试… forever")
+        #expect(engine.retryPendingMs == 5_000)
+    }
+
+    /// A failure WebKit did report keeps its own reason when the blank follows.
+    @Test func aReportedFailureIsNotOverwrittenByTheBlankThatFollows() {
+        let (engine, _) = engine()
+        defer { engine.tearDown() }
+        engine.load(url)
+        engine.provisionalStarted(attempt: url)
+        engine.provisionalFailed(code: NSURLErrorServerCertificateUntrusted, domain: NSURLErrorDomain, attempt: url)
+        engine.reportedURL = { URL(string: "about:blank") }
+        engine.committed()
+        engine.finished()
+        #expect(engine.failure?.class == "certificate")
+        engine.setOnScreen(true)
+        #expect(engine.retryPendingMs == nil, "a certificate is never retried by itself")
+    }
+
     /// A wrong name and a bad certificate never retry by themselves.
     @Test func aWrongNameOrACertificateIsNeverRetriedAutomatically() {
         for (code, key) in [

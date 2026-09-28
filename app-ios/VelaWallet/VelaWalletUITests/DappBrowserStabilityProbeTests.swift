@@ -31,13 +31,13 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         server = nil
     }
 
-    private func launch() -> XCUIApplication {
+    private func launch(url: String = LocalDappServer.url) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["VELA_LANG"] = "zh"
         app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
         app.launchEnvironment["VELA_PARALLEL_SPACE"] = "1"
         app.launchEnvironment["VELA_PARALLEL_SIGNER"] = "0"
-        app.launchEnvironment["VELA_URL"] = LocalDappServer.url
+        app.launchEnvironment["VELA_URL"] = url
         app.launchArguments += ["-AppleLanguages", "(zh)"]
         app.launch()
         return app
@@ -193,6 +193,23 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
                 retry.tap()
                 frames(app, "15-retry", count: 6, every: 0.4)
             }
+        }
+    }
+
+    /// Spec 079 US3 on the device: a page nobody answers (port 1 on this phone)
+    /// — the Vela panel with its reason and host, then Retry keeps the panel up
+    /// and says "正在重试…"; never WebKit's own page, never a blank.
+    func testProbeALoadThatFails() throws {
+        let app = launch(url: "http://127.0.0.1:1/")
+        let tab = app.buttons["探索"].firstMatch
+        if tab.waitForExistence(timeout: 5), tab.isHittable { tab.tap() }
+        let retry = app.buttons["重试"].firstMatch
+        _ = retry.waitForExistence(timeout: 20)
+        record(app, "14-load-failed")
+        frames(app, "14b-after-failure", count: 8, every: 1.5)
+        if retry.exists, retry.isHittable {
+            retry.tap()
+            frames(app, "15-retry", count: 8, every: 0.5)
         }
     }
 }
