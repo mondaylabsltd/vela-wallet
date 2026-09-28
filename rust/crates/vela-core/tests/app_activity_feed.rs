@@ -1692,6 +1692,18 @@ fn a_site_token_is_never_the_rows_figure() {
         (Some("0.1"), "USDC")
     );
     assert_eq!(rows[2].dapp.as_ref().and_then(|d| d.received.clone()), None);
+    assert_eq!(
+        rows[2].dapp.as_ref().map(|d| d.changes[1].clone()),
+        Some(FeedDappChange {
+            direction: FeedDirection::In,
+            verified: false,
+            symbol: String::new(),
+            value: None,
+            decimals: None,
+            exact: false,
+        }),
+        "a site's coin arriving is an unverified token in the detail too, whatever the shell judged"
+    );
 
     // Two coins out, so no simulated figure: the call's own 0.01 ETH, exact.
     assert_eq!(

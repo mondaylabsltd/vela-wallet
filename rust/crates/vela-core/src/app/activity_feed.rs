@@ -1189,6 +1189,14 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
                 }
             };
             let (out, magnitude) = signed_delta(delta)?;
+            // A coin arriving that the wallet does not already trust is the
+            // one line a site fully controls (its own token, any symbol, any
+            // figure): the record draws it as an unverified token whatever
+            // the storing shell judged, so no stored row can say "≈ +1000
+            // USDC" for it. An outflow is of a coin the account holds, which
+            // the trusted set covers.
+            let verified = verified && (known || out);
+            let symbol = if verified { symbol } else { String::new() };
             let value = magnitude
                 .filter(|_| verified)
                 .zip(decimals.filter(|decimals| *decimals <= MAX_DAPP_DECIMALS))

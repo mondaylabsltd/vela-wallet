@@ -1022,8 +1022,8 @@ mod tests {
             !at_once
                 .captions
                 .iter()
-                .any(|line| line.contains("reverted")),
-            "the page's English stays off the screen"
+                .any(|line| line.contains(vela_core::app::sign_request::REVERTED_MESSAGE)),
+            "the page's developer sentence stays off the screen (the column's own hint may say reverted)"
         );
 
         let dropped = entry(TrackStatus::Dropped, TrackOutcome::Final, Some(TX));
