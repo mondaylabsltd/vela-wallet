@@ -39,9 +39,15 @@ import {
 	minGasPriceWei,
 	parsePublicKey,
 	stripHexPrefix,
-	toHex
+	toHex,
+	userOpHash as localUserOpHash,
+	userOpNotSentDetail,
+	userOpSubmitStep,
+	type RelayRejection,
+	type SubmitReply
 } from '$lib/core/kernels';
 import { rpcCall } from './rpc-adapter';
+import { maybeDeliveredOf, PoolFailedError } from './rpc-pool';
 import { assertChallengeSigned, attestedSafeOpHash } from './sign-attest';
 import {
 	isFeeHold,
@@ -90,7 +96,7 @@ const ESTIMATION_REQUIRED_CALLDATA = 1024;
 // Types
 // ---------------------------------------------------------------------------
 
-interface UserOperation {
+export interface UserOperation {
 	sender: string;
 	nonce: string;
 	initCode: Uint8Array;
@@ -111,8 +117,21 @@ export interface TransactionResult {
 
 export interface SubmitResult {
 	userOpHash: string;
-	/** Resolves to txHash once the receipt is available. */
-	waitForTxHash: () => Promise<string>;
+	/**
+	 * The relay's reply was lost after the op may have left (spec 082 RA1/RA2):
+	 * `userOpHash` is the locally computed hash, the local nonce did NOT
+	 * advance, and the op is followed to its end like an accepted one — never
+	 * reported as failed.
+	 */
+	maybeSent: boolean;
+	/** The chain head read once before the first POST; `null` = unknown (ruling 8). */
+	submitBlock: number | null;
+	/**
+	 * Resolves to txHash once the receipt is available. `timeoutMs` is how long
+	 * the caller may still wait (a dApp's answer window, `dappReceiptWaitMs`);
+	 * omitted = the full 120 s.
+	 */
+	waitForTxHash: (timeoutMs?: number) => Promise<string>;
 }
 
 interface GasEstimate {
@@ -1789,33 +1808,11 @@ async function sendUserOp(
 	);
 	userOp.signature = realSig;
 
-	// 11. Submit to bundler
-	let userOpHash: string;
-	try {
-		userOpHash = await submitUserOp(userOp, chainId);
-	} catch (err) {
-		// If bundler says a previous UserOp is already pending (replacement or duplicate),
-		// extract the existing hash and poll for its receipt instead of failing.
-		const errMsg = err instanceof Error ? err.message : String(err);
-		const existingHash = parseExistingUserOpHash(errMsg);
-		if (existingHash) {
-			console.log(`[UserOp] Previous op pending (${existingHash}), polling for receipt...`);
-			return {
-				userOpHash: existingHash,
-				waitForTxHash: () => waitForReceipt(existingHash, chainId, 60_000)
-			};
-		}
-		throw err;
-	}
-
-	// 12. Optimistically increment nonce so concurrent sends don't collide
-	incrementNonceCache(safeAddress, chainId);
-
-	// Return immediately — caller can await txHash separately
-	return {
-		userOpHash,
-		waitForTxHash: () => waitForReceipt(userOpHash, chainId)
-	};
+	// 11. Submit to bundler — the core's submit loop decides accepted / may
+	//     have been sent / not sent (spec 082 RA1).
+	// 12. The nonce moves on only when the relay has the op (RA5).
+	//     Returns immediately — the caller can await txHash separately.
+	return submitSigned(userOp, chainId, safeAddress);
 }
 
 // ---------------------------------------------------------------------------
@@ -2125,26 +2122,7 @@ async function sendUserOpTempo(
 		signerAddressFor(publicKeyHex, assertion.credentialId ?? null)
 	);
 
-	let userOpHash: string;
-	try {
-		userOpHash = await submitUserOp(userOp, chainId, { feeToken }, quotedFee?.tier);
-	} catch (err) {
-		const errMsg = err instanceof Error ? err.message : String(err);
-		const existingHash = parseExistingUserOpHash(errMsg);
-		if (existingHash) {
-			return {
-				userOpHash: existingHash,
-				waitForTxHash: () => waitForReceipt(existingHash, chainId, 60_000)
-			};
-		}
-		throw err;
-	}
-
-	incrementNonceCache(safeAddress, chainId);
-	return {
-		userOpHash,
-		waitForTxHash: () => waitForReceipt(userOpHash, chainId)
-	};
+	return submitSigned(userOp, chainId, safeAddress, { feeToken }, quotedFee?.tier);
 }
 
 // ---------------------------------------------------------------------------
@@ -2399,26 +2377,7 @@ async function sendUserOpInBand(
 		signerAddressFor(publicKeyHex, assertion.credentialId ?? null)
 	);
 
-	let userOpHash: string;
-	try {
-		userOpHash = await submitUserOp(userOp, chainId, undefined, quotedFee?.tier);
-	} catch (err) {
-		const errMsg = err instanceof Error ? err.message : String(err);
-		const existingHash = parseExistingUserOpHash(errMsg);
-		if (existingHash) {
-			return {
-				userOpHash: existingHash,
-				waitForTxHash: () => waitForReceipt(existingHash, chainId, 60_000)
-			};
-		}
-		throw err;
-	}
-
-	incrementNonceCache(safeAddress, chainId);
-	return {
-		userOpHash,
-		waitForTxHash: () => waitForReceipt(userOpHash, chainId)
-	};
+	return submitSigned(userOp, chainId, safeAddress, undefined, quotedFee?.tier);
 }
 
 // ---------------------------------------------------------------------------
@@ -3272,7 +3231,7 @@ async function submitUserOp(
 	 * on the wire as the third `eth_sendUserOperation` parameter.
 	 */
 	tier?: Exclude<GasTier, 'rapid'>
-): Promise<string> {
+): Promise<SubmittedOp> {
 	const dict = userOpToDict(userOp, extra);
 	const initCodePresent = userOp.initCode.length >= 20;
 	console.log(
@@ -3310,11 +3269,18 @@ async function submitUserOp(
 		}
 	}
 
-	// Retry on transient bundler errors (e.g. EOA busy processing another bundle).
-	const MAX_RETRIES = 3;
-	const RETRY_DELAY = 3_000;
+	// The op's own name before anything leaves (RA6): if the reply is lost it is
+	// followed under this hash, and the relay's hash, when it answers, wins.
+	const localHash = localUserOpHash(userOp, chainId);
+	// Where the find-event starts if the relay stays silent (ruling 8). Best
+	// effort: a head that cannot be read is unknown, never a reason not to send.
+	const submitBlock = await readSubmitBlock(chainId);
 
-	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+	// One loop, the core's (RA1): every reply goes through `submit_step`, which
+	// alone decides accepted / retry / may-have-been-sent / not sent. The busy
+	// retry re-POSTs the IDENTICAL op, so the relay answers its hash again.
+	let maybeDelivered = false;
+	for (let attempt = 0; ; attempt++) {
 		// `[userOperation, entryPoint, tier?]` — the relay's wire since it learned
 		// about speed (`vela-relay-core/src/wire.rs`, `docs/fees.md` §2a). The
 		// tier is a NAME, never a wei figure: the relay resolves it against the
@@ -3334,25 +3300,147 @@ async function submitUserOp(
 		// no capability probe and no silent fallback: guessing which relay is
 		// on the other end is how a screen and a chain start disagreeing.
 		const params = tier === undefined ? [dict, ENTRY_POINT] : [dict, ENTRY_POINT, tier];
-		const response = await rpcCall('eth_sendUserOperation', params, chainId);
-
-		const result = response.result as string | undefined;
-		if (result) return result;
-
-		const errorMsg = parseBundlerError(response.error);
-		const isRetryable =
-			errorMsg.includes('currently processing') || errorMsg.includes('Retry later');
-		if (!isRetryable || attempt === MAX_RETRIES) {
-			throw new Error(errorMsg);
+		let reply: SubmitReply;
+		let relayMessage = '';
+		try {
+			const response = await rpcCall('eth_sendUserOperation', params, chainId);
+			maybeDelivered ||= maybeDeliveredOf(response);
+			const result = response.result;
+			if (typeof result === 'string' && result) {
+				reply = { hash: result };
+			} else {
+				reply = { error: response.error ?? {} };
+				relayMessage = parseBundlerError(response.error);
+			}
+		} catch (error) {
+			// The pool reached nobody. Whether a POST of it may still have
+			// arrived is the pool's fact; anything else thrown is unknown — so
+			// it may have.
+			maybeDelivered ||= error instanceof PoolFailedError ? error.maybeDelivered : true;
+			reply = 'no_answer';
 		}
 
-		console.log(
-			`[UserOp] Bundler busy, retry ${attempt + 1}/${MAX_RETRIES} in ${RETRY_DELAY}ms...`
-		);
-		await sleep(RETRY_DELAY);
-	}
+		const step = userOpSubmitStep(reply, attempt, maybeDelivered, localHash);
+		if ('retry_after' in step) {
+			console.log(
+				`[UserOp] Bundler busy, retry ${attempt + 1} in ${step.retry_after.delay_ms}ms...`
+			);
+			await sleep(step.retry_after.delay_ms);
+			continue;
+		}
 
-	throw new Error('Bundler unavailable after retries');
+		const verdict = step.done;
+		console.log(
+			`[UserOp] submit verdict=${verdict.type}` +
+				('user_op_hash' in verdict ? ` hash=${verdict.user_op_hash.slice(0, 12)}` : '') +
+				` attempts=${attempt + 1} chain=${chainId}`
+		);
+		switch (verdict.type) {
+			case 'accepted':
+				if (verdict.user_op_hash.toLowerCase() !== localHash.toLowerCase()) {
+					// The relay's hash wins; the difference is worth a line (RA1).
+					console.warn(
+						`[UserOp] userop.hash_mismatch relay=${verdict.user_op_hash.slice(0, 12)} ` +
+							`local=${localHash.slice(0, 12)} chain=${chainId}`
+					);
+				}
+				return { accepted: true, userOpHash: verdict.user_op_hash, submitBlock };
+			case 'maybe_sent':
+				return { accepted: false, userOpHash: verdict.user_op_hash, submitBlock };
+			case 'not_sent':
+				throw new UserOpNotSentError(
+					verdict.rejection,
+					verdict.rejection === null ? userOpNotSentDetail() : relayMessage
+				);
+		}
+	}
+}
+
+/** What {@link submitUserOp} settled on: the relay has it, or it may. */
+interface SubmittedOp {
+	/** The relay answered with the op's hash (or an identical op's). */
+	accepted: boolean;
+	userOpHash: string;
+	submitBlock: number | null;
+}
+
+/**
+ * Submit a signed op and account for it: the local nonce moves on ONLY when
+ * the relay has the op (spec 082 RA5). A may-have-been-sent op leaves nonce N
+ * where it was, so a new attempt reuses it and the EntryPoint lets at most one
+ * land — the double payment needs two different nonces. Exported for the
+ * submit tests; every send path goes through here.
+ */
+export async function submitSigned(
+	userOp: UserOperation,
+	chainId: number,
+	safeAddress: string,
+	extra?: Record<string, string>,
+	tier?: Exclude<GasTier, 'rapid'>
+): Promise<SubmitResult> {
+	const submitted = await submitUserOp(userOp, chainId, extra, tier);
+	if (submitted.accepted) incrementNonceCache(safeAddress, chainId);
+	return submitResultOf(submitted, chainId);
+}
+
+/** The nonce this module would sign next for `safeAddress` — tests only. */
+export function _cachedNonceForTest(safeAddress: string, chainId: number): string | undefined {
+	return _nonceCache.get(`${chainId}:${safeAddress.toLowerCase()}`)?.nonce;
+}
+
+/** Plant a cached nonce — tests only. */
+export function _seedNonceForTest(safeAddress: string, chainId: number, nonce: string): void {
+	_nonceCache.set(`${chainId}:${safeAddress.toLowerCase()}`, { nonce, at: Date.now() });
+}
+
+function submitResultOf(submitted: SubmittedOp, chainId: number): SubmitResult {
+	return {
+		userOpHash: submitted.userOpHash,
+		maybeSent: !submitted.accepted,
+		submitBlock: submitted.submitBlock,
+		waitForTxHash: (timeoutMs?: number) =>
+			waitForReceipt(submitted.userOpHash, chainId, timeoutMs ?? 120_000)
+	};
+}
+
+/** The chain head through the pool, or `null` — never a reason not to send. */
+async function readSubmitBlock(chainId: number): Promise<number | null> {
+	try {
+		const response = await rpcCall('eth_blockNumber', [], chainId);
+		const head = typeof response.result === 'string' ? Number.parseInt(response.result, 16) : NaN;
+		return Number.isSafeInteger(head) && head >= 0 ? head : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * The relay provably never queued the op (spec 082 RA1 `NotSent`): it refused
+ * it, or it was never reached and nothing left the device. Re-sending is safe,
+ * and it is the ONE submit failure a person may be told to try again after.
+ * `message` is the relay's own sentence for a refusal, or the core's fixed
+ * "relay unreachable; nothing was sent" — never the pool's raw text.
+ */
+export class UserOpNotSentError extends Error {
+	constructor(
+		readonly rejection: RelayRejection | null,
+		message: string
+	) {
+		super(message);
+		this.name = 'UserOpNotSentError';
+	}
+}
+
+/**
+ * The op landed and REVERTED — gas was spent, the call did not happen (spec
+ * 082 RA8). Not "dropped, try again": the chain has a transaction, and a dApp
+ * is answered its hash (ruling 9); the tracker marks the record failed.
+ */
+export class UserOpRevertedError extends Error {
+	constructor(readonly txHash: string) {
+		super(`Transaction ${txHash.slice(0, 10)}… reverted on-chain.`);
+		this.name = 'UserOpRevertedError';
+	}
 }
 
 /**
@@ -3424,12 +3512,9 @@ export async function waitForReceipt(
 				sawCleanResponse = true;
 				const result = outcome.resolution;
 				if (result?.txHash) {
-					// Check if the UserOp was marked as failed (e.g. tx dropped from mempool)
-					if (result.failed) {
-						throw new Error(
-							'Transaction was dropped from the network. Try again with a higher gas price.'
-						);
-					}
+					// The op landed and reverted (`success === false`): a transaction
+					// exists, gas was spent — never "try again" (spec 082 RA8).
+					if (result.failed) throw new UserOpRevertedError(result.txHash);
 					console.log('[UserOp] Receipt landed', {
 						userOpHash: `${userOpHash.slice(0, 10)}…`,
 						chainId,
@@ -3441,8 +3526,8 @@ export async function waitForReceipt(
 				}
 			}
 		} catch (err) {
-			// A genuine drop (success === false) is final — rethrow it.
-			if (err instanceof Error && /dropped from the network/.test(err.message)) throw err;
+			// A landed revert (success === false) is final — rethrow it.
+			if (err instanceof UserOpRevertedError) throw err;
 			// All bundler endpoints failed this round (network blip). Previously this
 			// aborted the whole wait; instead keep polling, since the op may still land.
 			rpcFailures++;
@@ -3578,18 +3663,6 @@ function userOpToDict(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Parse the bundler's "[existingHash:0x…]" marker out of a submit error. When a
- * previous UserOp for the account is still pending, the bundler rejects the new one
- * but reports the in-flight hash so we can poll its receipt instead of failing.
- * Returns the hash, or null when the error isn't this case. (Same recovery is used
- * by both the standard and Tempo send paths — this is their shared parser.)
- */
-export function parseExistingUserOpHash(errMsg: string): string | null {
-	const m = errMsg.match(/\[existingHash:(0x[0-9a-fA-F]+)\]/);
-	return m ? m[1] : null;
-}
 
 export function parseHexUInt64(value: string | undefined): bigint {
 	if (!value) return 0n;

@@ -25,8 +25,11 @@
  * - **The networks snapshot first.** Until it arrives every chain is
  *   unsupported (fail-closed), so a shell that forgot it would refuse
  *   everything with 4902.
- * - **The tracker hand-off, deduped by hash.** A dApp transaction that reached
- *   the relay is handed to `tx_tracker` the moment the view publishes it.
+ * - **The tracker hand-off, deduped by record.** A dApp transaction that
+ *   reached the relay (or may have — spec 082 RA3) is handed to `tx_tracker`
+ *   the moment the view publishes it. Deduped by the records it closes, not by
+ *   its hash: a second submit of an op that was never sent can carry the very
+ *   same hash, and it is a new record the tracker must follow.
  */
 import { loadCore } from '$lib/core/client';
 import type { SignEvent } from '$lib/core/generated/SignEvent';
@@ -34,11 +37,12 @@ import type { SignView } from '$lib/core/generated/SignView';
 import { getAllNetworksSync } from '$lib/services/networks';
 import type { AssetSimResult } from '$lib/services/sim/tx-simulation';
 import { dispatchTxTracker } from '$lib/wallet/core/tracker-resident';
+import { feed } from '$lib/wallet/core/feed.svelte';
 import { session } from '$lib/session/core/session.svelte';
 import { onSignCeremony } from '$lib/onboarding/core/passkey';
 import { approvalProgress, IDLE_APPROVAL, type ApprovalProgress } from '../approval-progress';
 import { createSignRequestSession, type SignRequestSession } from './sign-session';
-import type { SignResponder } from './sign-types';
+import { claimThrough, type ClaimPhase, type SignResponder } from './sign-types';
 
 /** The machine's own initial projection — mirrored until the first view lands. */
 export const INITIAL_SIGN_VIEW: SignView = {
@@ -46,7 +50,9 @@ export const INITIAL_SIGN_VIEW: SignView = {
 	request: null,
 	is_signing: false,
 	is_submitting: false,
+	phase: 'idle',
 	pending_op_hash: null,
+	pending_op_maybe_sent: false,
 	error: null,
 	funding: null,
 	confirm_gate_open: false,
@@ -93,7 +99,11 @@ class SignRequest {
 	#networksKey: string | null = null;
 	#accountsKey: string | null = null;
 	#stopAccountsMirror: (() => void) | null = null;
-	#lastHandoffHash = '';
+	#lastHandoffKey = '';
+	/** request id → the transport that delivered it (for the claim port). */
+	#transportOfRequest = new Map<string, string>();
+	/** request id → when the person approved it (the dApp's answer window). */
+	#approvedAt = new Map<string, number>();
 
 	/** Register a transport and get the id the core will name it by. */
 	registerTransport(transport: SignResponder): string {
@@ -142,25 +152,37 @@ class SignRequest {
 						const transport = this.#transports.get(id);
 						if (!transport) return null;
 						return {
-							sendResponse: (rid, result, error) => {
+							sendResponse: (rid, result, error, opHash) => {
 								try {
-									transport.sendResponse(rid, result, error);
+									transport.sendResponse(rid, result, error, opHash);
 								} finally {
 									this.answered = {
 										id: rid,
 										ok: !error && result !== undefined && result !== null && result !== ''
 									};
+									this.#transportOfRequest.delete(rid);
+									this.#approvedAt.delete(rid);
 								}
 							}
 						};
 					},
-					opSubmitted: (id, userOpHash) =>
+					opSubmitted: (id, userOpHash, maybeSent, submitBlock) =>
 						this.dispatch({
 							type: 'op_submitted',
 							id,
 							user_op_hash: userOpHash,
-							now_ms: Date.now()
+							now_ms: Date.now(),
+							maybe_sent: maybeSent,
+							submit_block: submitBlock
 						}),
+					ceremony: (id, stage) =>
+						this.dispatch({
+							type: stage === 'started' ? 'ceremony_started' : 'ceremony_done',
+							id
+						}),
+					askerLive: (id, phase) => this.askerLive(id, phase),
+					approvedAtMs: (id) => this.#approvedAt.get(id) ?? null,
+					recordsWritten: () => feed.reconciled(1),
 					assetSim: () => this.#assetSim,
 					// The wallet's own request (the key backup) is from this very
 					// origin, and names no site: the Trusted Signer draws an empty
@@ -215,7 +237,25 @@ class SignRequest {
 	}
 
 	dispatch(event: SignEvent): void {
+		if (event.type === 'request_arrived') {
+			this.#transportOfRequest.set(event.id, event.transport_id);
+		} else if (event.type === 'approve_tapped') {
+			// The start of the dApp's answer window (spec 082 RA12): the receipt
+			// wait after a slow submit is what is LEFT of it, never a fresh 120 s.
+			const id = this.view.request?.id;
+			if (id) this.#approvedAt.set(id, Date.now());
+		}
 		void this.boot().then(() => this.#loop?.dispatch(event));
+	}
+
+	/**
+	 * Is the asker of request `id` still there (spec 082 RB5)? The owning
+	 * transport's claim, when it has one; a transport that cannot lose its
+	 * asker (the wallet's own page) is always live.
+	 */
+	askerLive(id: string, phase: ClaimPhase): Promise<boolean> {
+		const transportId = this.#transportOfRequest.get(id);
+		return claimThrough(transportId ? this.#transports.get(transportId) : undefined, id, phase);
 	}
 
 	/**
@@ -270,13 +310,17 @@ class SignRequest {
 	#drainHandoff(view: SignView): void {
 		const handoff = view.tracker_handoff;
 		if (!handoff) return;
-		if (handoff.user_op_hash === this.#lastHandoffHash) return;
-		this.#lastHandoffHash = handoff.user_op_hash;
+		// By the records it closes, never by hash alone (see the header).
+		const key = `${handoff.user_op_hash}|${handoff.record_ids.join(',')}`;
+		if (key === this.#lastHandoffKey) return;
+		this.#lastHandoffKey = key;
 		dispatchTxTracker({
 			type: 'submitted',
 			user_op_hash: handoff.user_op_hash,
 			record_ids: handoff.record_ids,
-			chain_id: handoff.chain_id
+			chain_id: handoff.chain_id,
+			maybe_sent: handoff.maybe_sent,
+			submit_block: handoff.submit_block
 		});
 	}
 }

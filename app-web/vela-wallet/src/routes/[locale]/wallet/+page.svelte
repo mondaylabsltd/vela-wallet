@@ -611,12 +611,18 @@
 		// The tracker owns the receipt from the moment the op is accepted; the
 		// send core only hears the verdict back (invariant ⑥'s ordering half).
 		setSendTrackerSink((handoff) =>
-			trackSubmitted(handoff.userOpHash, handoff.recordIds, handoff.chainId, (outcome) =>
-				sendSession?.dispatch({
-					type: 'receipt_update',
-					user_op_hash: handoff.userOpHash,
-					outcome
-				})
+			trackSubmitted(
+				handoff.userOpHash,
+				handoff.recordIds,
+				handoff.chainId,
+				(outcome) =>
+					sendSession?.dispatch({
+						type: 'receipt_update',
+						user_op_hash: handoff.userOpHash,
+						outcome
+					}),
+				handoff.maybeSent,
+				handoff.submitBlock
 			)
 		);
 		startTxTracker();

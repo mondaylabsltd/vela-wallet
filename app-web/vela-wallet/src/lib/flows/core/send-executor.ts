@@ -52,7 +52,9 @@ import {
 	keySetOf,
 	sendBatchCalls,
 	UserOpFeeHoldError,
+	UserOpNotSentError,
 	UserOpRejectedError,
+	UserOpRevertedError,
 	type SubmitResult
 } from '$lib/services/safe-transaction';
 import { findAccountByAddress, findAccountByCredentialId } from '$lib/services/accounts';
@@ -108,6 +110,10 @@ export interface SendTrackerHandoff {
 	userOpHash: string;
 	recordIds: string[];
 	chainId: number;
+	/** The submit's reply was lost; the hash is the local one (spec 082 RA4). */
+	maybeSent: boolean;
+	/** The head read before the first POST — where the find-event starts. */
+	submitBlock: number | null;
 	/** The bundler's own receipt promise, or `null` if this process never had it. */
 	submitted: SubmitResult | null;
 }
@@ -147,7 +153,11 @@ function toLocalTransaction(record: SendTxRecord): LocalTransaction {
 		timestamp: record.timestamp_s,
 		status: 'pending',
 		type: 'send',
-		...(record.usd != null ? { usd: record.usd } : {})
+		...(record.usd != null ? { usd: record.usd } : {}),
+		// Spec 082 T182: kept with the row, so a reload follows a
+		// may-have-been-sent payment as one — never as a plain pending op.
+		...(record.maybe_sent ? { maybeSent: true } : {}),
+		...(record.submit_block != null ? { submitBlock: record.submit_block } : {})
 	};
 }
 
@@ -193,9 +203,8 @@ export function createSendExecutor(ports: SendShellPorts) {
 				// A definitive relay refusal / drop / revert, versus a slow or
 				// unreachable poll. Only the former is a real failure.
 				const rejected = error instanceof UserOpRejectedError;
-				const message = (error as { message?: string } | null)?.message ?? '';
-				if (!rejected && !/dropped from the network|reverted|failed/i.test(message)) return;
-				ports.receiptUpdate(handoff.userOpHash, { type: 'failed', rejected });
+				if (!rejected && !(error instanceof UserOpRevertedError)) return;
+				ports.receiptUpdate(handoff.userOpHash, { type: 'failed', rejected, not_sent: false });
 				await updateTransactions(handoff.recordIds, { status: 'failed' }).catch(() => {});
 			});
 	}
@@ -420,7 +429,15 @@ export function createSendExecutor(ports: SendShellPorts) {
 							: undefined
 					);
 					submitted.set(result.userOpHash, result);
-					return { type: 'submitted', user_op_hash: result.userOpHash, now_ms: Date.now() };
+					// A lost reply is not a failure (spec 082 RA4): the payment may be
+					// on its way, so it is recorded and followed under the local hash.
+					return {
+						type: 'submitted',
+						user_op_hash: result.userOpHash,
+						now_ms: Date.now(),
+						maybe_sent: result.maybeSent,
+						submit_block: result.submitBlock
+					};
 				} catch (error) {
 					return { type: 'submit_failed', failure: classifySubmit(error) };
 				}
@@ -443,6 +460,8 @@ export function createSendExecutor(ports: SendShellPorts) {
 					userOpHash: operation.user_op_hash,
 					recordIds: operation.record_ids,
 					chainId: operation.chain_id,
+					maybeSent: operation.maybe_sent,
+					submitBlock: operation.submit_block,
 					submitted: submitted.get(operation.user_op_hash) ?? null
 				};
 				submitted.delete(operation.user_op_hash);
@@ -517,8 +536,11 @@ export function createSendExecutor(ports: SendShellPorts) {
 	}
 
 	/**
-	 * The submit-failure classification the core deliberately does not own: every
-	 * regex, in the order `useSendController.ts:1072-1104` applied them.
+	 * The submit failure in the core's vocabulary. A refusal is the CORE's
+	 * reading of the relay's answer (`submit_step` → `NotSent{rejection}`,
+	 * spec 082 RA1); the passkey sheet's own cancel is the one fact only this
+	 * side has. Anything thrown before the submit (an estimate, a deploy check)
+	 * keeps the underfunded reading of its words, which is all it ever had.
 	 */
 	function classifySubmit(
 		error: unknown
@@ -528,7 +550,12 @@ export function createSendExecutor(ports: SendShellPorts) {
 			return { type: 'passkey_cancelled' };
 		}
 		const message = err?.message ?? String(error ?? '');
-		if (/gas relayer is unavailable/i.test(message)) return { type: 'relayer_unavailable' };
+		if (error instanceof UserOpNotSentError) {
+			if (error.rejection === 'relayer_unavailable') return { type: 'relayer_unavailable' };
+			if (error.rejection === 'bundler_underfunded') return { type: 'bundler_underfunded' };
+			console.warn('[send] submit not sent:', message);
+			return { type: 'other', message: message || null };
+		}
 		// Wording-tolerant: the bundler has reworded this before (legacy
 		// "...bundler EOA" → current "...bundler gas account ... Deposit to:").
 		if (parseBundlerUnderfunded(message)) return { type: 'bundler_underfunded' };

@@ -44,19 +44,88 @@ export interface SignResponder {
 	 * transport sometimes has to act on WHICH refusal this was — a window
 	 * showing a blocked request (spec 081) stays open to explain it, while every
 	 * other answer closes it.
+	 *
+	 * `opHash` rides along with an on-chain request answered by its operation
+	 * hash (a receipt still pending, or an op that may have been sent — spec 082
+	 * RF3): the extension remembers it so the page's later receipt reads for that
+	 * hash can be translated to the real transaction.
 	 */
 	sendResponse(
 		id: string,
 		result?: unknown,
-		error?: { code: number; message: string; kind?: SignErrorKind }
+		error?: { code: number; message: string; kind?: SignErrorKind },
+		opHash?: { chainId: number }
 	): void;
+	/**
+	 * Is the asker still there to be answered (spec 082 RB5)? Asked at the three
+	 * points a request becomes harder to take back — approve, before the passkey
+	 * (`sign`), and between the passkey and the relay POST (`submit`). Absent on a
+	 * transport that cannot lose its asker (the wallet's own page): then the
+	 * answer is always yes.
+	 */
+	claim?(id: string, phase: ClaimPhase): Promise<boolean>;
+}
+
+/** The three claim points of a request (spec 082 RB5, contract §14). */
+export type ClaimPhase = 'approve' | 'sign' | 'submit';
+
+/**
+ * The asker of request `id` was gone when the wallet checked (spec 082 RB5):
+ * nothing was signed or sent, and there is nobody to answer. The executor maps
+ * it to the core's `asker_gone` outcome.
+ */
+export class AskerGoneError extends Error {
+	constructor(readonly phase: ClaimPhase) {
+		super(`The page that asked is gone (${phase})`);
+		this.name = 'AskerGoneError';
+	}
+}
+
+/**
+ * The claim through the transport that owns a request (RB5): its own `claim`
+ * when it has one; a transport that cannot lose its asker — the wallet's own
+ * page — is always live, so nothing changes for it. A claim that throws is
+ * not a yes: a false "no" costs one re-approval, a false "yes" a signature
+ * nobody is there to receive.
+ */
+export async function claimThrough(
+	transport: SignResponder | undefined,
+	id: string,
+	phase: ClaimPhase
+): Promise<boolean> {
+	if (!transport?.claim) return true;
+	try {
+		return await transport.claim(id, phase);
+	} catch {
+		return false;
+	}
 }
 
 export interface SignShellPorts {
 	/** The transport that owns a request. `null` when it is already gone. */
 	transportFor(transportId: string): SignResponder | null;
-	/** `onSubmitted(hash)` — dispatches `Event::OpSubmitted` mid-`SignAndSubmit`. */
-	opSubmitted(id: string, userOpHash: string): void;
+	/**
+	 * `onSubmitted(hash)` — dispatches `Event::OpSubmitted` mid-`SignAndSubmit`.
+	 * `maybeSent`: the relay's reply was lost and `userOpHash` is the local hash
+	 * (spec 082 RA2/RA3); `submitBlock`: the head read before the first POST.
+	 */
+	opSubmitted(id: string, userOpHash: string, maybeSent: boolean, submitBlock: number | null): void;
+	/**
+	 * The passkey (or Trusted Signer) prompt opened / returned a signature for
+	 * request `id` — `CeremonyStarted` / `CeremonyDone` (spec 082 RA9), so the
+	 * sheet's words follow the real stage instead of guessing it.
+	 */
+	ceremony(id: string, stage: 'started' | 'done'): void;
+	/**
+	 * `true` while the asker of request `id` is still there (spec 082 RB5):
+	 * the owning transport's `claim`, or `true` when that transport has none.
+	 */
+	askerLive(id: string, phase: ClaimPhase): Promise<boolean>;
+	/**
+	 * When the person approved request `id` (epoch ms) — the start of the dApp's
+	 * answer window (`dappReceiptWaitMs`, spec 082 RA12). `null` if unknown.
+	 */
+	approvedAtMs(id: string): number | null;
 	/**
 	 * The origin that sent request `id` — what the Trusted Signer's page shows
 	 * as the requester (spec 071). `SignAndSubmit` does not carry it, and the
@@ -85,6 +154,12 @@ export interface SignShellPorts {
 	 * sign path for a React commit to be ahead of.
 	 */
 	switchActiveAccount(index: number): Promise<void>;
+	/**
+	 * A record was written or patched — the Activity feed re-reads the store
+	 * (spec 082 RG3: `ReconcileCompleted{resolved_count: 1}`), so a dApp row
+	 * appears within one poke instead of the next 10–30 s tick.
+	 */
+	recordsWritten(): void;
 }
 
 export type SignRequestSessionOptions = SessionOptions<SignView> & {

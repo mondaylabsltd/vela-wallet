@@ -29,7 +29,8 @@ export const INITIAL_CLEAR_VIEW: ClearSigningView = {
 	surface: 'none',
 	confirm: { type: 'confirm' },
 	blind_typed: null,
-	danger_haptic: false
+	danger_haptic: false,
+	plain_send: null
 };
 
 export const INITIAL_GUARD_VIEW: GuardView = {
@@ -53,12 +54,31 @@ interface TxParams {
 	value: string | null;
 }
 
+/**
+ * A field the dApp sent, as TEXT for the core (spec 082 RC6): a present value
+ * of any other type (a number, `null` spelled out) reaches the core as its own
+ * text, which the core refuses to print as an amount — never as absent, which
+ * would read as a calm "0" while the submit path reads the number.
+ */
+function textOf(value: unknown): string | null {
+	if (value === undefined) return null;
+	return typeof value === 'string' ? value : String(value);
+}
+
+/**
+ * The call the sheet describes: `eth_sendTransaction`'s one transaction, or
+ * the FIRST leg of a `wallet_sendCalls` batch (`params[0].calls[0]`) — the
+ * rule every rung applies to leg 1 (spec 082 RC7).
+ */
 function txParams(paramsJson: string): TxParams | null {
 	try {
 		const params = JSON.parse(paramsJson) as unknown[];
-		const tx = params[0] as { to?: string; data?: string; value?: string } | undefined;
+		const first = params[0] as Record<string, unknown> | undefined;
+		if (!first || typeof first !== 'object') return null;
+		const calls = (first as { calls?: unknown }).calls;
+		const tx = (Array.isArray(calls) ? calls[0] : first) as Record<string, unknown> | undefined;
 		if (!tx || typeof tx !== 'object') return null;
-		return { to: tx.to ?? null, data: tx.data ?? null, value: tx.value ?? null };
+		return { to: textOf(tx.to), data: textOf(tx.data), value: textOf(tx.value) };
 	} catch {
 		return null;
 	}
