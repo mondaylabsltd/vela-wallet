@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.signing.core
 
 import app.getvela.wallet.core.crux.Wire
+import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
 import kotlinx.serialization.builtins.ListSerializer
@@ -70,10 +71,15 @@ object SimDeltas {
         return SigningController.SimOutcome.Notice(risk = risk, key = key, reason = record.revertReason)
     }
 
-    /** A clean run's per-asset moves for the signing account (empty = nothing of theirs moves). */
-    fun deltas(record: SimOutcomeRecord): List<TrustAssetDelta> =
+    /**
+     * A clean run's per-asset moves for the signing account (empty = nothing
+     * of theirs moves). `null` when this app cannot read them — "could not
+     * check", never the empty list: that is a calm verdict nobody made.
+     */
+    fun deltas(record: SimOutcomeRecord): List<TrustAssetDelta>? =
         runCatching { Wire.json.decodeFromString(ListSerializer(TrustAssetDelta.serializer()), record.deltasJson) }
-            .getOrDefault(emptyList())
+            .onFailure { VelaLog.failure("signing.sim", "the core's deltas could not be read", it) }
+            .getOrNull()
 
     /** The core's "could not check" line, for a run whose moves nobody could judge. */
     fun couldNotCheck(): SigningController.SimOutcome.Notice =

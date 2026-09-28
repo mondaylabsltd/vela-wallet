@@ -437,7 +437,8 @@ class SigningController(
         VelaLog.event("signing.sim", "outcome", "chain" to chainId, "kind" to record.kind)
         val notice = SimDeltas.notice(record)
         if (notice != null) return notice
-        val deltas = SimDeltas.deltas(record)
+        // Moves this build cannot read are not "nothing moves".
+        val deltas = SimDeltas.deltas(record) ?: return SimDeltas.couldNotCheck()
         val judged = runCatching { ports.judgeDeltas(chainId, wallet.address, deltas) }
             .onFailure { VelaLog.failure("signing.sim", "the trust machine could not judge the deltas", it) }
             .getOrNull()

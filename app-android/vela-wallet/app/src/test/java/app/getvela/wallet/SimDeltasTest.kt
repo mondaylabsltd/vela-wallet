@@ -100,14 +100,31 @@ class SimDeltasTest {
         )
         assertEquals("deltas", record.kind)
         assertNull(SimDeltas.notice(record))
-        val deltas = SimDeltas.deltas(record)
+        val deltas = SimDeltas.deltas(record)!!
         assertEquals(listOf(TrustDeltaKind.Native, TrustDeltaKind.Erc20), deltas.map { it.kind })
         assertEquals(listOf("-1000", "5000"), deltas.map { it.delta })
         assertTrue(deltas[1].token.equals(usdc, ignoreCase = true))
         // Checked, nothing of theirs moves: an empty list, still a check.
         val quiet = SimDeltas.outcome(me, answer(JSONObject().put("status", "0x1").put("returnData", "0x").put("logs", JSONArray())))
         assertEquals("deltas", quiet.kind)
-        assertTrue(SimDeltas.deltas(quiet).isEmpty())
+        assertTrue(SimDeltas.deltas(quiet)!!.isEmpty())
+    }
+
+    /**
+     * A clean run whose moves this app cannot read (a delta kind it has no
+     * name for) is "could not check" — never the empty list, which the sheet
+     * draws as "checked, nothing of yours moves": a calm verdict nobody made.
+     */
+    @Test
+    fun `deltas this app cannot read are not an empty check`() {
+        val unreadable = uniffi.vela_core_uniffi.SimOutcomeRecord(
+            kind = "deltas",
+            deltasJson = """[{"kind":"a_kind_this_build_has_no_name_for","token":null,"delta":"-1000"}]""",
+            revertReason = null,
+            noticeRisk = null,
+            noticeKey = null,
+        )
+        assertNull(SimDeltas.deltas(unreadable))
     }
 
     @Test
