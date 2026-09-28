@@ -4,9 +4,9 @@
  * driving it with resources built exactly as `src/i18n/resources.ts` builds them
  * and an init config copied from `src/i18n/index.ts`.
  *
- * Spec 004-rust-i18n, contracts/conformance-vectors.md. Four suites, 18,975 cases:
+ * Spec 004-rust-i18n, contracts/conformance-vectors.md. Four suites, 18,980 cases:
  *   i18n-exhaustive     17,115  columnar — every key x every locale
- *   i18n-behaviour         210  the option/edge matrix + language normalisation
+ *   i18n-behaviour         215  the option/edge matrix + language normalisation
  *   i18n-plural            825  MODE A (full Intl.PluralRules)
  *   i18n-plural-legacy     825  MODE B (Intl.PluralRules deleted)
  *
@@ -454,6 +454,15 @@ function buildBehaviour() {
   add('nest/double', 'i18n_t', { lng: 'en', key: 'zz.n', opts: { defaultValue: '$t(common.cancel) $t(common.error)' } });
   add('nest/malformed', 'i18n_t', { lng: 'en', key: 'zz.n', opts: { defaultValue: 'A $t(common.cancel B' } });
   add('nest/cross-locale', 'i18n_t', { lng: 'zh', key: 'zz.n', opts: { defaultValue: 'A $t(common.cancel) B' } });
+  // Spec 082: a variable never brings in a $t() call. `skipOnVariables` turns
+  // nesting off for the whole string when interpolation added a match
+  // (extendTranslation, nestBef < nestAft) — so a revert reason, a token symbol
+  // or a page title cannot print a wallet sentence inside another one.
+  add('nest/variable-carries-nesting', 'i18n_t', { lng: 'en', key: 'zz.n', opts: { defaultValue: 'A {{v}} B', v: '$t(common.cancel)' } });
+  add('nest/variable-beside-template-nesting', 'i18n_t', { lng: 'en', key: 'zz.n', opts: { defaultValue: '$t(common.cancel) {{v}}', v: '$t(common.error)' } });
+  add('nest/plain-variable-beside-nesting', 'i18n_t', { lng: 'en', key: 'zz.n', opts: { defaultValue: '$t(common.cancel) {{v}}', v: 'x' } });
+  add('nest/variable-names-the-key', 'i18n_t', { lng: 'en', key: 'zz.n', opts: { defaultValue: 'A $t({{v}}) B', v: 'common.cancel' } });
+  add('nest/corpus-sentence-variable', 'i18n_t', { lng: 'en', key: 'componentsUi.signing.simWillFailReason', opts: { reason: '$t(componentsUi.signing.simUnavailableWarning)' } });
 
   // --- array keys
   cases.push({

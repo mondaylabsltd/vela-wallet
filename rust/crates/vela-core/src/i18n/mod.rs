@@ -655,6 +655,16 @@ impl I18n {
         // ONE allocation for the output: `interpolate` copies straight out of the
         // catalog slice rather than through an intermediate owned copy.
         let interpolated = interpolate::interpolate(raw, opts)?;
+        // `skipOnVariables` (i18next `extendTranslation`, `nestBef < nestAft`):
+        // when filling the variables added a `$t()` call the template did not
+        // have, nothing in the string is expanded — the variable's call and
+        // the template's own stay as text. A value from outside (a revert
+        // reason, a token symbol, a page's title) can therefore never pull a
+        // wallet sentence into the one it is shown in. Counted with the
+        // matcher expansion itself uses.
+        if interpolated.contains("$t(") && nest_calls(&interpolated) > nest_calls(raw) {
+            return Ok(interpolated);
+        }
         self.expand_nesting(interpolated, opts, depth)
     }
 
@@ -695,6 +705,19 @@ impl I18n {
         out.push_str(rest);
         Ok(out)
     }
+}
+
+/// How many `$t()` calls [`I18n::expand_nesting`] would make in `s`: the same
+/// left-to-right walk, stopping where it stops (a call with no closing
+/// parenthesis). i18next counts its nesting-regexp matches for the same rule.
+fn nest_calls(s: &str) -> usize {
+    let mut count = 0;
+    let mut rest = s;
+    while let Some(call) = interpolate::find_nest(rest) {
+        count += 1;
+        rest = &rest[call.range.end..];
+    }
+    count
 }
 
 /// What a candidate-key sweep found.

@@ -1659,6 +1659,80 @@
    }
   },
   {
+   "name": "nest/variable-carries-nesting",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "zz.n",
+    "opts": {
+     "defaultValue": "A {{v}} B",
+     "v": "$t(common.cancel)"
+    }
+   },
+   "expect": {
+    "value": "A $t(common.cancel) B"
+   }
+  },
+  {
+   "name": "nest/variable-beside-template-nesting",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "zz.n",
+    "opts": {
+     "defaultValue": "$t(common.cancel) {{v}}",
+     "v": "$t(common.error)"
+    }
+   },
+   "expect": {
+    "value": "$t(common.cancel) $t(common.error)"
+   }
+  },
+  {
+   "name": "nest/plain-variable-beside-nesting",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "zz.n",
+    "opts": {
+     "defaultValue": "$t(common.cancel) {{v}}",
+     "v": "x"
+    }
+   },
+   "expect": {
+    "value": "Cancel x"
+   }
+  },
+  {
+   "name": "nest/variable-names-the-key",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "zz.n",
+    "opts": {
+     "defaultValue": "A $t({{v}}) B",
+     "v": "common.cancel"
+    }
+   },
+   "expect": {
+    "value": "A Cancel B"
+   }
+  },
+  {
+   "name": "nest/corpus-sentence-variable",
+   "fn": "i18n_t",
+   "input": {
+    "lng": "en",
+    "key": "componentsUi.signing.simWillFailReason",
+    "opts": {
+     "reason": "$t(componentsUi.signing.simUnavailableWarning)"
+    }
+   },
+   "expect": {
+    "value": "Expected to fail: $t(componentsUi.signing.simUnavailableWarning) — you’d still pay gas."
+   }
+  },
+  {
    "name": "keys/first-hit",
    "fn": "i18n_t_keys",
    "input": {
