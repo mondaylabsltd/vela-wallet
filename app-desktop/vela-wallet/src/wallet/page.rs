@@ -662,6 +662,8 @@ pub struct WalletPage {
     /// Spec 082 RD6: the tab whose page is in the webview — `None` at launch,
     /// when a restored tab waits unlit for a click.
     shown_tab: Option<String>,
+    /// Spec 082 G54: the tab strip's measure and scroll, kept across frames.
+    tab_strip: explore_components::TabStripScroll,
     /// Spec 082 RE1: the web document committed since the shown tab last
     /// changed — what the bar may name. The one webview still holds the
     /// previous tab's page while a new tab's first load is pending, and that
@@ -1201,6 +1203,7 @@ impl WalletPage {
             browser_title: None,
             load: crate::wallet::browser_host::LoadDriver::default(),
             shown_tab: None,
+            tab_strip: explore_components::TabStripScroll::default(),
             bar_committed: None,
             nav_enabled: [false; 3],
             engine_polling: false,
@@ -12684,6 +12687,7 @@ impl WalletPage {
                     page.browser_go(crate::wallet::browser_host::Go::NewTab, cx);
                 })) as panels::Click),
                 held,
+                scroll: Some(self.tab_strip.clone()),
             }
         } else {
             explore_components::TabActions::default()

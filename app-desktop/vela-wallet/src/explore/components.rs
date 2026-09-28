@@ -20,6 +20,13 @@ use super::fixtures::{DemoPage, SiteModel, TabModel, demo_palette};
 pub const TAB_STRIP_H: f32 = 36.;
 pub const TAB_W: f32 = 200.;
 pub const TAB_H: f32 = 32.;
+/// The narrowest a tab gets before the strip scrolls (spec 082 G54): its
+/// padding, its mark and its ✕ — 12 + 16 + 8 + 8 + 20 + 12, the title gone.
+pub const TAB_MIN_W: f32 = 76.;
+/// The strip's own measures, which [`tab_widths`] counts with.
+const TAB_GAP: f32 = 2.;
+const STRIP_PAD_X: f32 = 12.;
+const NEW_TAB_W: f32 = 20.;
 pub const TOOLBAR_H: f32 = 56.;
 pub const TOOLBAR_CONTROL: f32 = 32.;
 pub const TILE_AVATAR: f32 = 56.;
@@ -204,6 +211,83 @@ pub struct TabActions {
     /// the lit one, and +, are drawn at the disabled opacity. They still take
     /// clicks: a click is what brings the request forward and says why.
     pub held: bool,
+    /// Spec 082 G54: the page's measure of the strip and the scroll of its
+    /// tabs. `None` (the gallery) draws every tab at [`TAB_W`].
+    pub scroll: Option<TabStripScroll>,
+}
+
+/// How wide each tab is drawn, and whether the strip scrolls (spec 082 G54).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TabFit {
+    pub tab_w: f32,
+    pub scrolls: bool,
+}
+
+/// The rule: tabs share the row at up to [`TAB_W`] each, shrink to
+/// [`TAB_MIN_W`], and past that the row scrolls — the + always beside them.
+/// `row_w` is the strip's inner row (the strip less its padding), as the
+/// last frame laid it out; nothing measured yet (0) draws the full width.
+#[must_use]
+pub fn tab_widths(count: usize, row_w: f32) -> TabFit {
+    if count == 0 || row_w <= 0. {
+        return TabFit {
+            tab_w: TAB_W,
+            scrolls: false,
+        };
+    }
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a tab count is far below f32's exact range"
+    )]
+    let n = count as f32;
+    // The + and the gap before it are always there; so is one gap between
+    // two tabs.
+    let room = row_w - TAB_GAP - NEW_TAB_W - TAB_GAP * (n - 1.);
+    let shared = (room / n).floor();
+    TabFit {
+        tab_w: shared.clamp(TAB_MIN_W, TAB_W),
+        scrolls: shared < TAB_MIN_W,
+    }
+}
+
+/// The two handles a live strip keeps across frames (spec 082 G54): the
+/// row's measure, which sizes the tabs, and the tabs' own scroll, which keeps
+/// the lit tab in view.
+#[derive(Clone)]
+pub struct TabStripScroll {
+    row: gpui::ScrollHandle,
+    tabs: gpui::ScrollHandle,
+    /// The lit tab and the count last scrolled to — once per change, so the
+    /// person's own scroll is left alone in between.
+    followed: std::rc::Rc<std::cell::Cell<Option<(Option<usize>, usize)>>>,
+}
+
+impl Default for TabStripScroll {
+    fn default() -> Self {
+        Self {
+            row: gpui::ScrollHandle::new(),
+            tabs: gpui::ScrollHandle::new(),
+            followed: std::rc::Rc::default(),
+        }
+    }
+}
+
+impl TabStripScroll {
+    /// The row's width as last laid out — 0 before the first frame.
+    fn row_w(&self) -> f32 {
+        f32::from(self.row.bounds().size.width)
+    }
+
+    /// Scroll the lit tab into view when it, or the number of tabs, changed.
+    fn follow(&self, lit: Option<usize>, count: usize) {
+        if self.followed.get() == Some((lit, count)) {
+            return;
+        }
+        self.followed.set(Some((lit, count)));
+        if let Some(lit) = lit {
+            self.tabs.scroll_to_item(lit);
+        }
+    }
 }
 
 pub fn tab_strip(
@@ -232,21 +316,44 @@ pub fn tab_strip_with(
     mut actions: TabActions,
 ) -> Div {
     let held = actions.held;
+    let scroll = actions.scroll.take();
+    // Spec 082 G54: at 6+ tabs the lit new tab and + ran off the right
+    // edge. The tabs share the row, shrink to their mark and ✕, then scroll;
+    // the + stays outside the scroll, beside them.
+    let fit = tab_widths(
+        tabs.len(),
+        scroll.as_ref().map_or(0., TabStripScroll::row_w),
+    );
+    if let Some(scroll) = &scroll {
+        scroll.follow(tabs.iter().position(|tab| tab.selected), tabs.len());
+    }
     // Never shrinks (spec 082 RD8, G6): taffy's default `flex-shrink: 1`
     // shared a live page's overflow with the strip and the toolbar, which
     // jumped up by a few points the moment a page loaded.
-    let mut strip = div()
+    let strip = div()
         .h(px(TAB_STRIP_H))
         .flex_none()
         .flex()
         .items_end()
-        .gap(px(2.))
-        .px(px(12.))
+        .px(px(STRIP_PAD_X))
         .bg(theme.bg_sunken);
+    // The tabs' own row: it takes what the + leaves, scrolls sideways once
+    // the tabs are at their narrowest, and never pushes the + out.
+    let mut row = div()
+        .id("tab-scroller")
+        .h_full()
+        .min_w(px(0.))
+        .flex()
+        .items_end()
+        .gap(px(TAB_GAP))
+        .overflow_x_scroll();
+    if let Some(scroll) = &scroll {
+        row = row.track_scroll(&scroll.tabs);
+    }
 
     for (i, tab) in tabs.iter().enumerate() {
         let mut face = div()
-            .w(px(TAB_W))
+            .w(px(fit.tab_w))
             .h(px(TAB_H))
             .px(px(12.))
             .rounded_t(px(8.))
@@ -289,7 +396,15 @@ pub fn tab_strip_with(
                 .id(ElementId::from(("tab-close", i)))
                 .cursor_pointer()
                 .hover(move |el| el.bg(raised))
-                .on_click(move |event, window, cx| close(event, window, cx))
+                // Spec 082 G40: the ✕ lives inside the tab's own click, and
+                // a close that bubbled to it also SELECTED the closed tab —
+                // the one webview loaded a page no tab owned. The press stops
+                // here, and so does the click.
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    close(event, window, cx);
+                })
                 .into_any_element(),
             None => cross.into_any_element(),
         };
@@ -305,21 +420,24 @@ pub fn tab_strip_with(
         let select = actions.select.get_mut(i).and_then(Option::take);
         let mut tab_el = div()
             .id(ElementId::from(("tab", i)))
+            // Its width is the fit's: a scrolling row must not squeeze it.
+            .flex_none()
             .cursor_pointer()
             .when(held && !tab.selected, |el| el.opacity(0.45))
             .child(face);
         if let Some(select) = select {
             tab_el = tab_el.on_click(move |event, window, cx| select(event, window, cx));
         }
-        strip = strip.child(tab_el);
+        row = row.child(tab_el);
         let _ = &close_label;
     }
 
     let mut plus = div()
         .id("new-tab")
+        .flex_none()
         .mb(px(6.))
-        .w(px(20.))
-        .h(px(20.))
+        .w(px(NEW_TAB_W))
+        .h(px(NEW_TAB_W))
         .flex()
         .items_center()
         .justify_center()
@@ -329,11 +447,27 @@ pub fn tab_strip_with(
     if let Some(new_tab) = actions.new_tab.take() {
         plus = plus.on_click(move |event, window, cx| new_tab(event, window, cx));
     }
-    strip.child(plus).child(
+    // The row the strip measures: all of the strip's width but its padding.
+    let mut measured = div()
+        .id("tab-row")
+        .flex_1()
+        .min_w(px(0.))
+        .h_full()
+        .flex()
+        .items_end()
+        .gap(px(TAB_GAP))
+        .child(row)
+        .child(plus);
+    if let Some(scroll) = &scroll {
+        measured = measured.track_scroll(&scroll.row);
+    }
+    strip.child(measured).child(
+        // The + button's name, for the page's text; never drawn and never in
+        // the row's measure.
         div()
-            .flex_1()
-            .child(div().h(px(1.)).child(new_tab_label.clone()))
-            .invisible(),
+            .absolute()
+            .invisible()
+            .child(div().h(px(1.)).child(new_tab_label.clone())),
     )
 }
 
@@ -856,6 +990,60 @@ mod tests {
             NavState::default(),
         );
         assert_eq!(bar.style().flex_shrink, Some(0.));
+    }
+
+    /// Spec 082 G54: tabs share the row at up to their full width, shrink to
+    /// their mark and ✕, and only then scroll — the + always beside them.
+    #[test]
+    fn tabs_shrink_then_the_strip_scrolls() {
+        // Nothing measured yet (the first frame, the gallery): full width.
+        assert_eq!(
+            tab_widths(8, 0.),
+            TabFit {
+                tab_w: TAB_W,
+                scrolls: false
+            }
+        );
+        // A few tabs in a wide window keep their width.
+        assert_eq!(tab_widths(3, 1_000.).tab_w, TAB_W);
+        // The six of DX3′ in the column beside a signing panel shrink.
+        let six = tab_widths(6, 640.);
+        assert!(!six.scrolls);
+        assert!(six.tab_w < TAB_W && six.tab_w >= TAB_MIN_W, "{six:?}");
+        // Whenever the tabs do not scroll, they and the + fit the row.
+        for count in 1..=40_usize {
+            for row_w in [300., 480., 640., 900., 1_240.] {
+                let fit = tab_widths(count, row_w);
+                #[allow(clippy::cast_precision_loss, reason = "small counts")]
+                let n = count as f32;
+                let drawn = n * fit.tab_w + TAB_GAP * (n - 1.) + TAB_GAP + NEW_TAB_W;
+                assert!(fit.tab_w >= TAB_MIN_W, "{count} in {row_w}: {fit:?}");
+                if !fit.scrolls {
+                    assert!(drawn <= row_w, "{count} in {row_w}: {drawn} > {row_w}");
+                } else {
+                    assert!(
+                        (fit.tab_w - TAB_MIN_W).abs() < f32::EPSILON,
+                        "a strip scrolls only at the narrowest tab"
+                    );
+                }
+            }
+        }
+        // Twelve tabs in 640 are at the minimum and scroll.
+        assert_eq!(
+            tab_widths(12, 640.),
+            TabFit {
+                tab_w: TAB_MIN_W,
+                scrolls: true
+            }
+        );
+    }
+
+    /// The narrowest tab still holds its mark and its ✕ (G54): the ✕ is never
+    /// the part that goes.
+    #[test]
+    fn the_narrowest_tab_keeps_its_close() {
+        // Padding, mark, gap, gap, ✕, padding — the title's share is zero.
+        assert!(TAB_MIN_W >= 12. + 16. + 8. + 8. + 20. + 12.);
     }
 
     /// Spec 079 FR-015: the scheme is a lock and only a lock — closed and
