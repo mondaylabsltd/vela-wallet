@@ -21,14 +21,14 @@ use vela_core::app::fee_policy::{to_base_units, FeeAssetView, FeeEstimateView, F
 use vela_core::app::money::{DenominatedAmount, TokenPrice};
 use vela_core::app::send::{
     build_multi_token_calls, build_split_calls, duplicate_recipient_rows, is_valid_address,
-    max_figure, recipients_are_valid, split_row_issues, sum_split_base_units, Event, ReentryLock,
-    Send, SendAccountRef, SendAddNetworkOutcome, SendAlertKind, SendAmountWarning, SendChainInfo,
-    SendDisplayContext, SendEstimateFailure, SendFeeOutcome, SendHapticKind, SendHoldReason,
-    SendLockError, SendOpenParams, SendOperation as Op, SendReceiptKind, SendReceiptOutcome,
-    SendReceiptStatus, SendRecipientDraft, SendRowFieldState, SendScan, SendShellResult as Res,
-    SendStage, SendSubmitFailure, SendTimerTag, SendToken, SendTokenMeta, SendTreasuryAsset,
-    SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey, SendTxStatus, SendUnitIssue, SendView,
-    BATCH_MAX_RECIPIENTS,
+    max_figure, receipt_outcome_of, recipients_are_valid, split_row_issues, sum_split_base_units,
+    Event, ReentryLock, Send, SendAccountRef, SendAddNetworkOutcome, SendAlertKind,
+    SendAmountWarning, SendChainInfo, SendDisplayContext, SendEstimateFailure, SendFeeOutcome,
+    SendHapticKind, SendHoldReason, SendLockError, SendOpenParams, SendOperation as Op,
+    SendReceiptKind, SendReceiptOutcome, SendReceiptStatus, SendRecipientDraft, SendRowFieldState,
+    SendScan, SendShellResult as Res, SendStage, SendSubmitFailure, SendTimerTag, SendToken,
+    SendTokenMeta, SendTreasuryAsset, SendTreasuryProbe, SendTreasuryStatus, SendTxErrorKey,
+    SendTxRecord, SendTxStatus, SendUnitIssue, SendView, BATCH_MAX_RECIPIENTS,
 };
 
 type Sut = DomainDriver<Send>;
@@ -250,6 +250,8 @@ fn submitted(hash: &str) -> Res {
     Res::Submitted {
         user_op_hash: hash.to_owned(),
         now_ms: 1_754_000_000_500.0,
+        maybe_sent: false,
+        submit_block: None,
     }
 }
 
@@ -3703,6 +3705,8 @@ fn a_single_send_persists_one_record_then_hands_off_to_the_tracker() {
             user_op_hash: HASH.to_owned(),
             record_ids: vec![HASH.to_owned()],
             chain_id: 1,
+            maybe_sent: false,
+            submit_block: None,
         }
     );
     assert!(sut.resolve(Res::TrackHandedOff).is_empty());
@@ -3833,7 +3837,10 @@ fn a_definitive_failure_stamps_the_receipt_but_never_unsubmits_the_payment() {
     // A stale hash is ignored.
     sut.dispatch(Event::ReceiptUpdate {
         user_op_hash: "0xother".to_owned(),
-        outcome: SendReceiptOutcome::Failed { rejected: false },
+        outcome: SendReceiptOutcome::Failed {
+            rejected: false,
+            not_sent: false,
+        },
     });
     assert_eq!(
         sut.view().receipt.expect("receipt").status,
@@ -3843,7 +3850,10 @@ fn a_definitive_failure_stamps_the_receipt_but_never_unsubmits_the_payment() {
     // (⑤: a submitted payment is never flipped back into an error).
     sut.dispatch(Event::ReceiptUpdate {
         user_op_hash: HASH.to_owned(),
-        outcome: SendReceiptOutcome::Failed { rejected: false },
+        outcome: SendReceiptOutcome::Failed {
+            rejected: false,
+            not_sent: false,
+        },
     });
     let view = sut.view();
     assert_eq!(view.tx_status, SendTxStatus::Confirmed);
@@ -4983,5 +4993,252 @@ fn a_chains_own_coin_is_one_token_whichever_way_it_was_spelled() {
         view.selected_token.as_ref().map(|t| t.symbol.as_str()),
         Some("xDAI"),
         "the hand-off landed on the form"
+    );
+}
+
+// ===========================================================================
+// Spec 082 T026 (RA4, RA10) — a Send whose submit reply was lost
+// ===========================================================================
+
+const SUBMIT_BLOCK: u64 = 48_479_100;
+
+fn submitted_maybe(hash: &str) -> Res {
+    Res::Submitted {
+        user_op_hash: hash.to_owned(),
+        now_ms: 1_754_000_000_500.0,
+        maybe_sent: true,
+        submit_block: Some(SUBMIT_BLOCK),
+    }
+}
+
+fn track_entry(
+    status: vela_core::app::tx_tracker::TrackStatus,
+    outcome: vela_core::app::tx_tracker::TrackOutcome,
+    tx_hash: Option<&str>,
+) -> vela_core::app::tx_tracker::TrackEntryView {
+    vela_core::app::tx_tracker::TrackEntryView {
+        user_op_hash: HASH.to_owned(),
+        chain_id: 1,
+        record_ids: vec![HASH.to_owned()],
+        status,
+        tx_hash: tx_hash.map(str::to_owned),
+        polling: true,
+        submitted_at_ms: Some(1_754_000_000_500.0),
+        outcome,
+        relay_tx_hash: None,
+    }
+}
+
+/// A lost reply reaches the receipt as MaybeSent — recorded and tracked with
+/// the flag and the head, and WITHOUT the success haptic (it has not earned
+/// "sent").
+#[test]
+fn a_maybe_sent_send_reads_maybe_sent_and_plays_no_success_haptic() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    let ops = sut.resolve(submitted_maybe(HASH));
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::Haptic { .. })),
+        "no haptic: {ops:?}"
+    );
+    let records = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::PersistTxRecords { records } => Some(records.clone()),
+            _ => None,
+        })
+        .expect("the records are still written");
+    assert!(records.iter().all(|r| r.maybe_sent));
+    assert!(records.iter().all(|r| r.submit_block == Some(SUBMIT_BLOCK)));
+
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Receipt, "never an error screen");
+    assert_eq!(view.tx_error, None);
+    assert_eq!(
+        view.receipt.expect("receipt").status,
+        SendReceiptStatus::MaybeSent
+    );
+
+    // The tracker learns it as such, after the records landed.
+    assert!(sut.resolve(Res::TokenCacheCleared).is_empty());
+    let ops = sut.resolve(Res::RecordsPersisted);
+    assert_eq!(
+        ops,
+        vec![Op::TrackSubmitted {
+            user_op_hash: HASH.to_owned(),
+            record_ids: vec![HASH.to_owned()],
+            chain_id: 1,
+            maybe_sent: true,
+            submit_block: Some(SUBMIT_BLOCK),
+        }]
+    );
+}
+
+/// The tracker's verdicts on a may-have-been-sent Send, through the one
+/// mapping: acknowledged → the ordinary words; confirmed → Confirmed; never
+/// sent → NotSent, never the fee-rejected words.
+#[test]
+fn the_tracker_ends_a_maybe_sent_send() {
+    use vela_core::app::tx_tracker::{TrackOutcome, TrackStatus};
+    let open = || {
+        let mut sut = boot(vec![eth("2")]);
+        to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+        slide_to_submit(&mut sut);
+        sut.resolve(submitted_maybe(HASH));
+        sut
+    };
+    let update = |sut: &mut Sut, entry| {
+        if let Some(outcome) = receipt_outcome_of(&entry) {
+            sut.dispatch(Event::ReceiptUpdate {
+                user_op_hash: HASH.to_owned(),
+                outcome,
+            });
+        }
+    };
+
+    // Still in doubt: nothing to say.
+    let mut sut = open();
+    update(
+        &mut sut,
+        track_entry(TrackStatus::Pending, TrackOutcome::MaybeSent, None),
+    );
+    assert_eq!(
+        sut.view().receipt.expect("receipt").status,
+        SendReceiptStatus::MaybeSent
+    );
+    // The relay has it: back to "submitted".
+    update(
+        &mut sut,
+        track_entry(TrackStatus::Pending, TrackOutcome::Landing, None),
+    );
+    assert_eq!(
+        sut.view().receipt.expect("receipt").status,
+        SendReceiptStatus::Submitted
+    );
+
+    // Confirmed after MaybeSent.
+    let mut sut = open();
+    update(
+        &mut sut,
+        track_entry(TrackStatus::Confirmed, TrackOutcome::Final, Some("0xtx")),
+    );
+    let view = sut.view();
+    assert_eq!(view.tx_hash.as_deref(), Some("0xtx"));
+    assert_eq!(
+        view.receipt.expect("receipt").status,
+        SendReceiptStatus::Confirmed
+    );
+
+    // Never sent.
+    let mut sut = open();
+    update(
+        &mut sut,
+        track_entry(TrackStatus::NotSent, TrackOutcome::Final, None),
+    );
+    let view = sut.view();
+    let receipt = view.receipt.expect("receipt");
+    assert_eq!(receipt.status, SendReceiptStatus::NotSent);
+    assert_eq!(receipt.hold_reason, None, "never the fee-rejected words");
+    assert_eq!(
+        view.tx_status,
+        SendTxStatus::Confirmed,
+        "never an error screen"
+    );
+}
+
+/// The one tracker → receipt mapping, row by row.
+#[test]
+fn receipt_outcome_of_maps_every_tracker_status() {
+    use vela_core::app::tx_tracker::{TrackOutcome, TrackStatus};
+    let failed = |rejected, not_sent| SendReceiptOutcome::Failed { rejected, not_sent };
+    let rows = [
+        (
+            track_entry(TrackStatus::Confirmed, TrackOutcome::Final, Some("0xtx")),
+            Some(SendReceiptOutcome::Confirmed {
+                tx_hash: "0xtx".to_owned(),
+            }),
+        ),
+        (
+            track_entry(TrackStatus::Confirmed, TrackOutcome::Final, None),
+            None,
+        ),
+        (
+            track_entry(TrackStatus::Dropped, TrackOutcome::Final, Some("0xtx")),
+            Some(failed(false, false)),
+        ),
+        (
+            track_entry(TrackStatus::Rejected, TrackOutcome::Final, None),
+            Some(failed(true, false)),
+        ),
+        (
+            track_entry(TrackStatus::NotSent, TrackOutcome::Final, None),
+            Some(failed(false, true)),
+        ),
+        (
+            track_entry(TrackStatus::FeeHeld, TrackOutcome::StillConfirming, None),
+            Some(SendReceiptOutcome::FeeHeld),
+        ),
+        (
+            track_entry(TrackStatus::Pending, TrackOutcome::MaybeSent, None),
+            None,
+        ),
+        (
+            track_entry(TrackStatus::Unreachable, TrackOutcome::Unknown, None),
+            None,
+        ),
+        (
+            track_entry(TrackStatus::Pending, TrackOutcome::Landing, None),
+            Some(SendReceiptOutcome::Acknowledged),
+        ),
+        (
+            track_entry(
+                TrackStatus::AcceptedNotLanded,
+                TrackOutcome::StillConfirming,
+                None,
+            ),
+            Some(SendReceiptOutcome::Acknowledged),
+        ),
+    ];
+    for (entry, expected) in rows {
+        assert_eq!(
+            receipt_outcome_of(&entry),
+            expected,
+            "{:?}/{:?}",
+            entry.status,
+            entry.outcome
+        );
+    }
+}
+
+/// Shells that predate 082 send none of the new fields.
+#[test]
+fn old_send_json_without_the_new_fields_still_decodes() {
+    let submitted: Option<Res> =
+        serde_json::from_str(r#"{"type":"submitted","user_op_hash":"0x1","now_ms":1}"#).ok();
+    assert!(matches!(
+        submitted,
+        Some(Res::Submitted {
+            maybe_sent: false,
+            submit_block: None,
+            ..
+        })
+    ));
+    let failed: Option<SendReceiptOutcome> =
+        serde_json::from_str(r#"{"type":"failed","rejected":true}"#).ok();
+    assert_eq!(
+        failed,
+        Some(SendReceiptOutcome::Failed {
+            rejected: true,
+            not_sent: false
+        })
+    );
+    let record: Option<SendTxRecord> = serde_json::from_str(
+        r#"{"id":"0x1","user_op_hash":"0x1","tx_hash":"","from":"0xa","to":"0xb","to_name":null,"value":"1","symbol":"ETH","decimals":18,"logo_urls":[],"chain_id":1,"timestamp_s":1,"usd":null}"#,
+    )
+    .ok();
+    assert_eq!(
+        record.map(|r| (r.maybe_sent, r.submit_block)),
+        Some((false, None))
     );
 }
