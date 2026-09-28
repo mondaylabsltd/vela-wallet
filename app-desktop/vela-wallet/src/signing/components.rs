@@ -127,13 +127,19 @@ pub fn header_view(theme: &Theme, model: &HeaderModel) -> Div {
                         .truncate()
                         .child(model.dapp_name.clone()),
                 )
-                .children((!model.dapp_host.is_empty()).then(|| {
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_muted)
-                        .truncate()
-                        .child(model.dapp_host.clone())
-                })),
+                // A site whose name IS its host says it once (spec 079 F14:
+                // "127.0.0.1:8137" over "127.0.0.1:8137").
+                .children(
+                    (!model.dapp_host.is_empty() && model.dapp_host != model.dapp_name).then(
+                        || {
+                            div()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_muted)
+                                .truncate()
+                                .child(model.dapp_host.clone())
+                        },
+                    ),
+                ),
         )
         .child(
             div()

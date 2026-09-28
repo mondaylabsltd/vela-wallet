@@ -1363,10 +1363,8 @@ pub fn dapp_identity(origin: &str) -> (SharedString, SharedString, SharedString)
         .split(['/', '?', '#'])
         .next()
         .unwrap_or(origin);
-    let letter = host
-        .chars()
-        .find(char::is_ascii_alphanumeric)
-        .map_or_else(|| "?".to_owned(), |c| c.to_uppercase().to_string());
+    // The core's letter (spec 079 F16): `app.uniswap.org` is "U".
+    let letter = vela_core::app::browser_load::site_letter(host);
     (
         SharedString::from(host.to_owned()),
         SharedString::from(host.to_owned()),
@@ -2472,7 +2470,7 @@ mod identity_tests {
         let (name, host, letter) = dapp_identity("https://app.uniswap.org/swap?x=1");
         assert_eq!(host, "app.uniswap.org");
         assert_eq!(name, host, "no invented display name");
-        assert_eq!(letter, "A");
+        assert_eq!(letter, "U", "the letter skips the `app.` (spec 079 F16)");
 
         // A look-alike stays a look-alike on screen.
         let (name, _, _) = dapp_identity("https://uniswap-app.com");

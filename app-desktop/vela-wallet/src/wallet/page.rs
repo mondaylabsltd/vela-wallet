@@ -692,9 +692,10 @@ pub struct WalletPage {
     contacts_scroll: crate::ui::SmoothScroll,
     explore_scroll: crate::ui::SmoothScroll,
     pick_scroll: crate::ui::SmoothScroll,
-    /// The network menu's rows — `(chain, name, current)` — named when it
-    /// opened; `menu_origin` says which site it is about.
-    site_networks: Vec<(u32, SharedString, bool)>,
+    /// The network picker's rows — logo, name, the account's figure there,
+    /// and the site's own ticked — named when it opened; `menu_origin` says
+    /// which site it is about.
+    site_networks: Vec<explore_fixtures::NetworkPick>,
     /// `VELA_BROWSER_URL` is applied once, not on every frame the column draws.
     browser_url_pinned: bool,
     send_amount_focus: gpui::FocusHandle,
@@ -13931,7 +13932,12 @@ impl WalletPage {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(explore_components::letter_avatar(letter, theme.accent, 40.))
+                    .child(explore_components::site_avatar(
+                        letter,
+                        theme.accent,
+                        &explore_live::icons_of(&consent.origin, None),
+                        40.,
+                    ))
                     .child(
                         div()
                             .text_size(theme::text_row_title())
@@ -14034,17 +14040,16 @@ impl WalletPage {
                 None,
             ),
         };
-        // "Secure" and "Connected" are claims, so each is only made when the
-        // core says so: a lock for the origin, a grant for the site.
-        let status = match (secure, connected) {
-            (true, true) => SharedString::from(format!(
-                "{} · {}",
-                self.explore.secure_site, self.explore.connected_tag
-            )),
-            (true, false) => self.explore.secure_site.clone(),
-            (false, true) => self.explore.connected_tag.clone(),
-            (false, false) => SharedString::default(),
-        };
+        // Spec 079 (owner: "你标记的安全站点 只是https 而已，并不代表这个站点真的
+        // 安全"): the scheme is a lock and only a lock — no "secure site" in
+        // words, and no green; "Connected" is a fact about the grant, and is
+        // said only when the core has one.
+        let (lock, lock_tint) = explore_components::lock_glyph(theme, secure);
+        let status = connected.then(|| self.explore.connected_tag.clone());
+        let site_icons = origin
+            .as_deref()
+            .map(|origin| explore_live::icons_of(origin, None))
+            .unwrap_or_default();
         let identity = self.identity();
         let e = &self.explore;
         // The site's own network, which the person can change here — the
@@ -14065,13 +14070,17 @@ impl WalletPage {
                     .flex()
                     .items_center()
                     .gap(px(8.))
-                    .child(
-                        div()
-                            .w(px(8.))
-                            .h(px(8.))
-                            .rounded_full()
-                            .bg(fixtures::chain_ethereum()),
-                    )
+                    // The chain's own logo (owner: "连接时 切换网络，没有网络
+                    // logo呀") — the dot was Ethereum's colour on every chain.
+                    .child(chain_logo_mark(
+                        u64::from(chain_id),
+                        crate::settings::model::lettermark(
+                            &crate::executor::custom_tokens::network_name(chain_id),
+                        ),
+                        crate::settings::model::chain_tint(u64::from(chain_id))
+                            .unwrap_or(0x8A_8F_98),
+                        20.,
+                    ))
                     .child(
                         div()
                             .text_size(theme::text_row_title())
@@ -14109,9 +14118,10 @@ impl WalletPage {
                     .flex()
                     .items_center()
                     .gap(px(12.))
-                    .child(explore_components::letter_avatar(
+                    .child(explore_components::site_avatar(
                         site_letter,
                         site_tint,
+                        &site_icons,
                         40.,
                     ))
                     .child(
@@ -14128,13 +14138,16 @@ impl WalletPage {
                             )
                             .child(
                                 div()
-                                    .text_size(theme::text_row_sub())
-                                    .text_color(if connected {
-                                        theme.success_base
-                                    } else {
-                                        theme.fg_muted
-                                    })
-                                    .child(status),
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.))
+                                    .child(icon_img(&mut self.icons, lock, false, lock_tint, 12.))
+                                    .children(status.map(|status| {
+                                        div()
+                                            .text_size(theme::text_row_sub())
+                                            .text_color(theme.fg_muted)
+                                            .child(status)
+                                    })),
                             ),
                     ),
             )
@@ -14170,11 +14183,19 @@ impl WalletPage {
                                     .child(identity.display()),
                             ),
                     )
+                    // It had no listener (the audit's F9): the header's own
+                    // switcher, over the browser — every connected site
+                    // follows the account the person picks.
                     .child(
                         div()
+                            .id("connection-switch-account")
+                            .cursor_pointer()
                             .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_muted)
-                            .child(e.switch_account.clone()),
+                            .text_color(theme.accent)
+                            .child(e.switch_account.clone())
+                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.open_account_switcher(cx);
+                            })),
                     ),
             )
             .child(row_divider(theme))
@@ -14229,14 +14250,22 @@ impl WalletPage {
     ) {
         let host = self.browser_host(cx);
         host.update(cx, |host, cx| host.follow_networks(cx));
+        // What the account holds on each network: the home screen's own
+        // figures, read now — the picker opens at once and never waits on
+        // the network (spec 079 FR-017).
+        let money = self.money(cx);
+        let balances = wallet_live::network_balances(
+            &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
+            &self.locale,
+            &money,
+        );
         self.site_networks = crate::wallet::signing_host::known_chain_ids()
             .into_iter()
-            .map(|chain_id| {
-                (
-                    chain_id,
-                    SharedString::from(crate::flows::live::chain_name(chain_id)),
-                    chain_id == current,
-                )
+            .map(|chain_id| explore_fixtures::NetworkPick {
+                chain_id,
+                name: SharedString::from(crate::flows::live::chain_name(chain_id)),
+                current: chain_id == current,
+                amount: balances.get(&chain_id).cloned(),
             })
             .collect();
         self.menu_origin = Some(origin);
@@ -16754,8 +16783,8 @@ impl WalletPage {
             ContactsMenu::SiteNetwork => self
                 .site_networks
                 .iter()
-                .map(|(chain_id, _, _)| {
-                    let chain_id = *chain_id;
+                .map(|row| {
+                    let chain_id = row.chain_id;
                     Some(
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             let origin = this.menu_origin.take();
@@ -16990,17 +17019,24 @@ impl WalletPage {
                     .collect::<Vec<_>>(),
             ),
             ContactsMenu::Tile => explore_fixtures::tile_menu(&self.explore),
-            ContactsMenu::SiteNetwork => explore_fixtures::network_pick_menu(
-                &self
-                    .site_networks
-                    .iter()
-                    .map(|(_, name, current)| (name.clone(), *current))
-                    .collect::<Vec<_>>(),
-            ),
+            // Drawn by its own card below: logos and figures, not glyphs.
+            ContactsMenu::SiteNetwork => contacts_fixtures::MenuModel {
+                items: Vec::new(),
+                divider_after: None,
+            },
             ContactsMenu::Contact => contacts_fixtures::contact_context(&self.contacts),
         };
         let actions = self.menu_actions(kind, cx);
-        let card = menu_card(theme, &mut self.icons, &model, actions);
+        let card = if matches!(kind, ContactsMenu::SiteNetwork) {
+            explore_components::network_pick_card(
+                theme,
+                &mut self.icons,
+                &self.site_networks,
+                actions,
+            )
+        } else {
+            menu_card(theme, &mut self.icons, &model, actions)
+        };
         Some(
             deferred(
                 anchored()
