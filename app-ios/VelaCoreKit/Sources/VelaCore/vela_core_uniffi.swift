@@ -8235,17 +8235,121 @@ public func FfiConverterTypeNativeQuoteGroup_lower(_ value: NativeQuoteGroup) ->
 
 
 /**
- * One call's outcome applied to the network count.
+ * The network count so far (spec 082 RE3, RJ14) — the shell keeps it and
+ * hands it back on every call. A fresh app: [`net_health_fresh`].
  */
-public struct NetHealthStep: Equatable, Hashable {
+public struct NetHealthState: Equatable, Hashable {
     /**
-     * Calls in a row that never reached a server — the next state's.
+     * Calls in a row that never reached a server.
      */
     public var misses: UInt32
     public var online: Bool
     /**
-     * The edge this call crossed: `went_offline` (the third miss in a row) or
-     * `came_back` (the first answer after it); `None` while the state holds.
+     * The distinct chains the current run of misses came from.
+     */
+    public var sources: [UInt32]
+    /**
+     * Misses in the current run that named no chain (each its own source).
+     */
+    public var unsourced: UInt32
+    /**
+     * When a call last reached a server (epoch ms).
+     */
+    public var lastReachMs: Double?
+    /**
+     * When the current run of misses began (epoch ms).
+     */
+    public var runStartedMs: Double?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Calls in a row that never reached a server.
+         */misses: UInt32, online: Bool, 
+        /**
+         * The distinct chains the current run of misses came from.
+         */sources: [UInt32], 
+        /**
+         * Misses in the current run that named no chain (each its own source).
+         */unsourced: UInt32, 
+        /**
+         * When a call last reached a server (epoch ms).
+         */lastReachMs: Double?, 
+        /**
+         * When the current run of misses began (epoch ms).
+         */runStartedMs: Double?) {
+        self.misses = misses
+        self.online = online
+        self.sources = sources
+        self.unsourced = unsourced
+        self.lastReachMs = lastReachMs
+        self.runStartedMs = runStartedMs
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NetHealthState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetHealthState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetHealthState {
+        return
+            try NetHealthState(
+                misses: FfiConverterUInt32.read(from: &buf), 
+                online: FfiConverterBool.read(from: &buf), 
+                sources: FfiConverterSequenceUInt32.read(from: &buf), 
+                unsourced: FfiConverterUInt32.read(from: &buf), 
+                lastReachMs: FfiConverterOptionDouble.read(from: &buf), 
+                runStartedMs: FfiConverterOptionDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetHealthState, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.misses, into: &buf)
+        FfiConverterBool.write(value.online, into: &buf)
+        FfiConverterSequenceUInt32.write(value.sources, into: &buf)
+        FfiConverterUInt32.write(value.unsourced, into: &buf)
+        FfiConverterOptionDouble.write(value.lastReachMs, into: &buf)
+        FfiConverterOptionDouble.write(value.runStartedMs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetHealthState_lift(_ buf: RustBuffer) throws -> NetHealthState {
+    return try FfiConverterTypeNetHealthState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetHealthState_lower(_ value: NetHealthState) -> RustBuffer {
+    return FfiConverterTypeNetHealthState.lower(value)
+}
+
+
+/**
+ * One call's outcome applied to the network count.
+ */
+public struct NetHealthStep: Equatable, Hashable {
+    /**
+     * The next state — hand it to the next call.
+     */
+    public var state: NetHealthState
+    /**
+     * The edge this call crossed: `went_offline` (three misses in a row from
+     * at least two sources, with nothing answering for 10 s) or `came_back`
+     * (the first answer after it); `None` while the state holds.
      */
     public var edge: String?
 
@@ -8253,14 +8357,14 @@ public struct NetHealthStep: Equatable, Hashable {
     // declare one manually.
     public init(
         /**
-         * Calls in a row that never reached a server — the next state's.
-         */misses: UInt32, online: Bool, 
+         * The next state — hand it to the next call.
+         */state: NetHealthState, 
         /**
-         * The edge this call crossed: `went_offline` (the third miss in a row) or
-         * `came_back` (the first answer after it); `None` while the state holds.
+         * The edge this call crossed: `went_offline` (three misses in a row from
+         * at least two sources, with nothing answering for 10 s) or `came_back`
+         * (the first answer after it); `None` while the state holds.
          */edge: String?) {
-        self.misses = misses
-        self.online = online
+        self.state = state
         self.edge = edge
     }
 
@@ -8280,15 +8384,13 @@ public struct FfiConverterTypeNetHealthStep: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetHealthStep {
         return
             try NetHealthStep(
-                misses: FfiConverterUInt32.read(from: &buf), 
-                online: FfiConverterBool.read(from: &buf), 
+                state: FfiConverterTypeNetHealthState.read(from: &buf), 
                 edge: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: NetHealthStep, into buf: inout [UInt8]) {
-        FfiConverterUInt32.write(value.misses, into: &buf)
-        FfiConverterBool.write(value.online, into: &buf)
+        FfiConverterTypeNetHealthState.write(value.state, into: &buf)
         FfiConverterOptionString.write(value.edge, into: &buf)
     }
 }
@@ -9664,6 +9766,79 @@ public func FfiConverterTypeUserOpDraft_lift(_ buf: RustBuffer) throws -> UserOp
 #endif
 public func FfiConverterTypeUserOpDraft_lower(_ value: UserOpDraft) -> RustBuffer {
     return FfiConverterTypeUserOpDraft.lower(value)
+}
+
+
+/**
+ * A failed relay gas estimate, as the core reads it (spec 082 RJ19).
+ */
+public struct UserOpEstimateFailure: Equatable, Hashable {
+    /**
+     * `reverts` (the relay simulated the call and it reverts: warn with
+     * `componentsUi.signing.simWillFail` / `simWillFailReason`) or
+     * `unavailable` (nothing is known about the call).
+     */
+    public var kind: String
+    /**
+     * The decoded, sanitised revert reason, when `reverts` carried one.
+     */
+    public var reason: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `reverts` (the relay simulated the call and it reverts: warn with
+         * `componentsUi.signing.simWillFail` / `simWillFailReason`) or
+         * `unavailable` (nothing is known about the call).
+         */kind: String, 
+        /**
+         * The decoded, sanitised revert reason, when `reverts` carried one.
+         */reason: String?) {
+        self.kind = kind
+        self.reason = reason
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension UserOpEstimateFailure: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUserOpEstimateFailure: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UserOpEstimateFailure {
+        return
+            try UserOpEstimateFailure(
+                kind: FfiConverterString.read(from: &buf), 
+                reason: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: UserOpEstimateFailure, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterOptionString.write(value.reason, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserOpEstimateFailure_lift(_ buf: RustBuffer) throws -> UserOpEstimateFailure {
+    return try FfiConverterTypeUserOpEstimateFailure.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserOpEstimateFailure_lower(_ value: UserOpEstimateFailure) -> RustBuffer {
+    return FfiConverterTypeUserOpEstimateFailure.lower(value)
 }
 
 
@@ -13012,9 +13187,22 @@ public func extractAttestationPublicKey(attestationObject: Data)throws  -> P256P
 })
 }
 /**
+ * The corpus key of the reason line under a failed fee (spec 082 RJ13), or
+ * `None` for no reason line. `explore.chainDown` takes `{{chain}}`, the
+ * chain's name. `failure` as for [`fee_requote_delay_ms`].
+ */
+public func feeFailureReasonKey(failure: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_failure_reason_key(
+        FfiConverterString.lower(failure),uniffiCallStatus
+    )
+})
+}
+/**
  * The wait before automatic fee re-quote `attempt` (1-based) after
- * `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
- * `None` when no retry can fix it (spec 079 FR-008).
+ * `failure` (see [`fee_failure_of`]), or `None` when no retry can fix it
+ * (spec 079 FR-008): 3 s, 6 s, then every 8 s (spec 082 RJ12).
  */
 public func feeRequoteDelayMs(failure: String, attempt: UInt32) -> UInt32?  {
     return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
@@ -13022,6 +13210,17 @@ public func feeRequoteDelayMs(failure: String, attempt: UInt32) -> UInt32?  {
     uniffi_vela_core_uniffi_fn_func_fee_requote_delay_ms(
         FfiConverterString.lower(failure),
         FfiConverterUInt32.lower(attempt),uniffiCallStatus
+    )
+})
+}
+/**
+ * The bound on each automatic fee re-quote, in ms (spec 082 RJ12): a re-ask
+ * not answered in this time is a failure again.
+ */
+public func feeRequoteTimeoutMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_requote_timeout_ms(uniffiCallStatus
     )
 })
 }
@@ -13055,6 +13254,23 @@ public func firstGroupedQuotePrice(groups: [NativeQuoteGroup]) -> Double?  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_first_grouped_quote_price(
         FfiConverterSequenceTypeNativeQuoteGroup.lower(groups),uniffiCallStatus
+    )
+})
+}
+/**
+ * A signed balance change from signed base units (`"-1000"`, `"+2100…"`):
+ * the token ladder, a dust figure written exactly (never `−0`), U+2212 for
+ * a minus, `+` for a plus; `None` for zero or unreadable text (spec 082
+ * RJ15). `preset` is the number preset's wire name (`comma_dot`,
+ * `dot_comma`, `space_comma`, `indian`; anything else is `comma_dot`).
+ */
+public func formatSignedTokenAmount(deltaBaseUnits: String, decimals: UInt32, preset: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_format_signed_token_amount(
+        FfiConverterString.lower(deltaBaseUnits),
+        FfiConverterUInt32.lower(decimals),
+        FfiConverterString.lower(preset),uniffiCallStatus
     )
 })
 }
@@ -13318,20 +13534,32 @@ public func matchSelector(sig: String, calldata: Data)throws  -> Bool  {
 })
 }
 /**
+ * A fresh app's network count: online, no misses.
+ */
+public func netHealthFresh() -> NetHealthState  {
+    return try!  FfiConverterTypeNetHealthState_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_net_health_fresh(uniffiCallStatus
+    )
+})
+}
+/**
  * Feed one call: `reached` is any answer from a server, whatever its status;
  * a miss is a call that never reached one (for a pooled read: every endpoint
- * swept, none answered, not throttled — timeouts included). `misses` and
- * `online` are the state so far (a fresh app: 0, true). On `came_back` a
- * shell retries its failed page, clears transient logo misses and re-reads
- * the balance.
+ * swept, none answered, not throttled — timeouts included). `source` is the
+ * chain the call read (`None` for a call with no chain); `now_ms` the clock
+ * when it ended. One failing chain is its own notice, never "offline" (spec
+ * 082 RJ14). On `came_back` a shell retries its failed page, clears
+ * transient logo misses and re-reads the balance.
  */
-public func netHealthStep(misses: UInt32, online: Bool, reached: Bool) -> NetHealthStep  {
+public func netHealthStep(state: NetHealthState, reached: Bool, source: UInt32?, nowMs: Double) -> NetHealthStep  {
     return try!  FfiConverterTypeNetHealthStep_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_net_health_step(
-        FfiConverterUInt32.lower(misses),
-        FfiConverterBool.lower(online),
-        FfiConverterBool.lower(reached),uniffiCallStatus
+        FfiConverterTypeNetHealthState_lower(state),
+        FfiConverterBool.lower(reached),
+        FfiConverterOptionUInt32.lower(source),
+        FfiConverterDouble.lower(nowMs),uniffiCallStatus
     )
 })
 }
@@ -13909,6 +14137,19 @@ public func userOpDraft(sender: String, nonce: String, deployed: Bool, keyHexes:
 })
 }
 /**
+ * Classify the relay's answer to a failed gas estimate: `error_json` is the
+ * JSON-RPC `error` member (or the whole body); anything else is no answer.
+ * See `vela_core::user_op::estimate_failure`.
+ */
+public func userOpEstimateFailure(errorJson: String) -> UserOpEstimateFailure  {
+    return try!  FfiConverterTypeUserOpEstimateFailure_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_estimate_failure(
+        FfiConverterString.lower(errorJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The floors for a chain and a deployment state: the in-band pair, or
  * Tempo's (its call floor grows with the sub-call count — the person's
  * calls plus the reimbursement leg).
@@ -13977,6 +14218,18 @@ public func userOpRaiseCallGas(draft: UserOpDraft, measured: [String], callCount
         FfiConverterTypeUserOpDraft_lower(draft),
         FfiConverterSequenceString.lower(measured),
         FfiConverterUInt32.lower(callCount),uniffiCallStatus
+    )
+})
+}
+/**
+ * The dApp's `-32603` detail when the relay refused the operation (spec 082
+ * RJ3): the tracker's `rejected`, or a submit-time not-sent with a rejection
+ * that is not "relayer unavailable". A fixed sentence.
+ */
+public func userOpRefusedDappDetail() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_refused_dapp_detail(uniffiCallStatus
     )
 })
 }
@@ -14061,6 +14314,17 @@ public func userOpWithCalls(draft: UserOpDraft, calls: [UserOpCall], fee: UserOp
         FfiConverterTypeUserOpDraft_lower(draft),
         FfiConverterSequenceTypeUserOpCall.lower(calls),
         FfiConverterTypeUserOpFeeMode_lower(fee),uniffiCallStatus
+    )
+})
+}
+/**
+ * How long a shell waits for the core's `ClearToPost` after `OpSigned`
+ * before it gives up without POSTing (spec 082 RJ1), in ms.
+ */
+public func userOpWriteAheadWaitMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_write_ahead_wait_ms(uniffiCallStatus
     )
 })
 }
@@ -14894,13 +15158,22 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_extract_attestation_public_key() != 65487) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_fee_requote_delay_ms() != 6275) {
+    if (uniffi_vela_core_uniffi_checksum_func_fee_failure_reason_key() != 39551) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_requote_delay_ms() != 15874) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_requote_timeout_ms() != 49080) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_fee_signals_cache_ttl_ms() != 43504) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_first_grouped_quote_price() != 50678) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_format_signed_token_amount() != 31761) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_from_base64url() != 37019) {
@@ -14975,7 +15248,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_match_selector() != 41973) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_net_health_step() != 22480) {
+    if (uniffi_vela_core_uniffi_checksum_func_net_health_fresh() != 36533) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_net_health_step() != 51766) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_network_typical_inclusion_s() != 781) {
@@ -15101,6 +15377,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_user_op_draft() != 31118) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_estimate_failure() != 19910) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_floors() != 34703) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15114,6 +15393,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_raise_call_gas() != 29305) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_refused_dapp_detail() != 30730) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_relay_json() != 41999) {
@@ -15132,6 +15414,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_with_calls() != 27911) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_write_ahead_wait_ms() != 11083) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_validate_client_data() != 34255) {
