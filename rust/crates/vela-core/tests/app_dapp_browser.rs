@@ -23,6 +23,9 @@ const OTHER: &str = "https://other.example";
 const A1: &str = "0x1111111111111111111111111111111111111111";
 const A2: &str = "0x2222222222222222222222222222222222222222";
 const A3: &str = "0x3333333333333333333333333333333333333333";
+/// A mixed-case account: its EIP-55 spelling differs from its lower case.
+const V: &str = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+const V_LOWER: &str = "0xd8da6bf26964af9d7eed9e03e53415d37aa96045";
 
 fn grant(origin: &str, address: &str, chain_id: u32) -> DpermGrant {
     DpermGrant {
@@ -2039,4 +2042,138 @@ fn a_grant_filed_under_the_wrong_origin_is_ignored() {
         chain_id: None,
     }]);
     assert!(sut.view().sites.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 RG10 — one address spelling toward dApps (L-D6)
+// ---------------------------------------------------------------------------
+
+/// The wallet names the account lower-case; the page hears EIP-55 from the
+/// connect answer AND from every later `accountsChanged` — the same account
+/// never looks like two to a strict dApp.
+#[test]
+fn account_changed_carries_the_connect_spelling() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    sut.dispatch(Event::AccountsUpdated {
+        addresses: Some(vec![A1.to_owned(), V_LOWER.to_owned()]),
+    });
+    sut.dispatch(Event::AccountSwitched {
+        address: V_LOWER.to_owned(),
+        now_ms: T0,
+    });
+    sut.resolve(Res::SitesListed { sites: Vec::new() });
+    hello(&mut sut, "t1", "d1", DAPP);
+    ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_requestAccounts",
+        json!([]),
+    );
+    assert_eq!(
+        sut.view().consent.expect("consent").address.as_deref(),
+        Some(V)
+    );
+
+    let ops = sut.dispatch(Event::ConsentApproved { now_ms: T0 + 1.0 });
+    assert!(ops.contains(&Op::WriteGrant {
+        grant: DpermGrant {
+            granted_at_ms: T0 + 1.0,
+            ..grant(DAPP, V, DEFAULT_CHAIN_ID)
+        }
+    }));
+    assert_eq!(
+        only_answer(&ops)["result"],
+        json!([V]),
+        "the connect answer"
+    );
+    assert_eq!(
+        events(&ops)[0],
+        ("t1".to_owned(), "accountsChanged".to_owned(), json!([V]))
+    );
+
+    // Away and back, the wallet still naming it lower-case: the event spells
+    // it as the connect answer did.
+    sut.dispatch(Event::AccountSwitched {
+        address: A1.to_owned(),
+        now_ms: T0 + 2.0,
+    });
+    let ops = sut.dispatch(Event::AccountSwitched {
+        address: V_LOWER.to_owned(),
+        now_ms: T0 + 3.0,
+    });
+    assert_eq!(
+        events(&ops),
+        vec![("t1".to_owned(), "accountsChanged".to_owned(), json!([V]))]
+    );
+    let accounts = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "eth_accounts",
+        json!([]),
+    ));
+    assert_eq!(accounts["result"], json!([V]));
+}
+
+/// A site stored with a lower-case grant (before 082) loads in EIP-55: its
+/// answers, the forward to signing and Settings' list all spell it so. The
+/// store is not rewritten for the spelling alone — every comparison with it
+/// is case-insensitive.
+#[test]
+fn loaded_lower_case_sites_are_normalised() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    sut.dispatch(Event::AccountsUpdated {
+        addresses: Some(vec![A1.to_owned(), V.to_owned()]),
+    });
+    sut.dispatch(Event::AccountSwitched {
+        address: V.to_owned(),
+        now_ms: T0,
+    });
+    let ops = sut.resolve(Res::SitesListed {
+        sites: vec![DbrStoredSite {
+            origin: DAPP.to_owned(),
+            grant: Some(grant(DAPP, V_LOWER, 100)),
+            chain_id: None,
+        }],
+    });
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::WriteGrant { .. })),
+        "no write for the spelling alone: {ops:?}"
+    );
+    assert_eq!(sut.view().sites[0].address, V);
+
+    hello(&mut sut, "t1", "d1", DAPP);
+    let accounts = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "1",
+        "eth_accounts",
+        json!([]),
+    ));
+    assert_eq!(accounts["result"], json!([V]));
+
+    let ops = ask(
+        &mut sut,
+        "t1",
+        "d1",
+        DAPP,
+        "2",
+        "personal_sign",
+        json!(["0x68656c6c6f", V_LOWER]),
+    );
+    match forwarded(&ops) {
+        Some(Op::ForwardToSigning {
+            granted_address, ..
+        }) => assert_eq!(granted_address, V),
+        other => panic!("forwarded to signing: {other:?}"),
+    }
 }
