@@ -1161,46 +1161,46 @@ gone; a record exists before the bytes leave (RJ1).
 
 ### DESK_A — desktop fixes with no new core export (`app-desktop/vela-wallet/**`, listed files)
 
-- [ ] T199 [P] [US1] `D/explore/components.rs`: the tab ✕ closes without selecting, and the strip never overflows (G40, G54); proof: in-file tests.
+- [x] T199 [P] [US1] `D/explore/components.rs`: the tab ✕ closes without selecting, and the strip never overflows (G40, G54); proof: in-file tests.
   - The close control's `on_click` calls `cx.stop_propagation()` before `close(…)` (`:286-292`, inside the tab's `on_click` at `:309-313`); the comment's promise becomes true.
   - Tabs shrink from `TAB_W` to a minimum width (icon + ✕), then the strip scrolls horizontally; the lit tab and + always stay in view.
   - Tests: a pure `tab_widths(count, strip_w)`; the strip's actions table fires close only (no select) for a ✕ click, if the gpui test harness allows it — otherwise the device row CLOSE-TAB (§8) is the proof.
-- [ ] T200 [P] [US1] `D/explore/probe.rs`: an expired certificate is TLS (RJ10, G45); proof: in-file tests.
+- [x] T200 [P] [US1] `D/explore/probe.rs`: an expired certificate is TLS (RJ10, G45); proof: in-file tests.
   - `io_code` downcasts `io.get_ref()` to `rustls::Error`: `InvalidCertificate(_)`, `NoCertificatesPresented` → `probe_code::TLS`; other rustls errors keep today's class.
   - Test: an `io::Error::new(InvalidData, rustls::Error::InvalidCertificate(CertificateError::Expired))` → TLS; the L5 class is Certificate with no auto-retry (`browser_load::classify`).
-- [ ] T201 [P] [US1] `D/webview.rs` and `D/wallet/page.rs`: the address bar owns the keyboard, and a bfcache Back renames the tab (G41, G70 part); proof: in-crate tests of the pure helpers.
+- [x] T201 [P] [US1] `D/webview.rs` and `D/wallet/page.rs`: the address bar owns the keyboard, and a bfcache Back renames the tab (G41, G70 part); proof: in-crate tests of the pure helpers.
   - New `webview::focus_parent()` (wry `focus_parent`: gpui's NSView becomes first responder); `edit_address` (`page.rs:13352-13373`) and every focus of the bar call it; a click into the page gives focus back to WebKit by itself.
   - `META_JS` also reports on `pageshow` with `persisted`, so a bfcache restore sends its own title.
   - Tests: `edit_address` asks for `focus_parent` (a call counter behind the non-Linux cfg); META_JS contains the `pageshow` listener. Device rows KEY-FOCUS and DX4-title (§8).
-- [ ] T202 [US1] RJ5, in `D/wallet/page.rs`, `D/wallet/browser_host.rs` and `D/webview.rs`: a tab's page is hidden until that tab's own load commits, and Back stops at the tab's first page (G42); proof: `browser_host.rs` tests; (after T201).
+- [x] T202 [US1] RJ5, in `D/wallet/page.rs`, `D/wallet/browser_host.rs` and `D/webview.rs`: a tab's page is hidden until that tab's own load commits, and Back stops at the tab's first page (G42); proof: `browser_host.rs` tests; (after T201).
   - `webview::engine()` adds `back_len` (`backForwardList.backList.count` via `msg_send`, as `engine_sample` does).
   - `page.rs`: `doc_tab` is set when a navigation asked while `shown_tab = X` commits (`Load::Started`); while `browsing ∧ shown_tab ≠ doc_tab` the frame calls `webview::hide()` and draws the page background, the hairline, the failure panel if up, and no connection chip. At the shown tab's first commit `back_floor = back_len`.
   - `browser_host::nav_enabled(browsing, can_back, can_forward, back_len, back_floor)`; `veiled(shown_tab, doc_tab, browsing)` pure.
   - Tests: DX14 (new tab typed while another tab's page is up → veiled until commit); DX11 (restored tab clicked → veiled; after commit Back disabled at the floor); an SPA pushState raises `back_len` above the floor → Back enabled.
-- [ ] T203 [US1] `D/wallet/browser_host.rs`: the chain notice during a read, the skip logged once, the probe's route (RJ11, RJ9, G46, G44, G67 part); proof: in-file tests; (after T202 and T192).
+- [ ] T203 [US1] `D/wallet/browser_host.rs`: the chain notice during a read, the skip logged once, the probe's route (RJ11, RJ9, G46, G44, G67 part); proof: in-file tests; (after T202 and T192). DESK_A: done except the network-back test, which moves to T192's `net_health_step(state, reached, source, now_ms)` once CORE is merged (this tree has the two-argument one).
   - The network-back test (`browser_host.rs:1515-1557`) calls the new `net_health_step(state, reached, source, now_ms)`.
   - While any page `Work` is in flight, `refresh_health` runs every 1 s (a watch started with the first in-flight read, stopped when none is left and nothing is down); `chain notice: shown chain=<id>` when it appears.
   - `retry … skipped (engine still loading)` is logged once per load generation (`:795-806`).
   - The probe's route is logged as `route=dev-proxy <host:port>` when `VELA_DEV_PROXY` is in force (`:716-724`).
   - Tests: a fake pool whose `unreached_chains` gains 100 at 14 s while a read is pending → the notice at ≤ 15 s; ten skips → one line.
-- [ ] T204 [P] [US3] `D/flows/components.rs` and `D/flows/panels.rs`: the hash fits, the trace is not a red button, no explorer without a page (G50, G51, G52 part); proof: in-crate tests.
+- [x] T204 [P] [US3] `D/flows/components.rs` and `D/flows/panels.rs`: the hash fits, the trace is not a red button, no explorer without a page (G50, G51, G52 part); proof: in-crate tests.
   - A mono fact value truncates in the middle (`0x1234…abcd`, the copy button copies the whole) and never pushes its copy button out (`components.rs:319-330`: `min_w(0)`, `flex_1`, truncate).
   - A pending record's 删除记录 is a quiet secondary control under the explorer (`panels.rs:907-913`); confirmed and failed keep the danger button.
   - No explorer button when `explorer_url` is `None` (`panels.rs:893-903`).
   - Tests: a 66-char hash row's measured width ≤ the column; `detail_panel` for a pending model has no danger button; no explorer element for a `None` URL.
-- [ ] T205 [US1] `D/main.rs` and `D/wallet/page.rs`: ⌘W, a Close Window menu item, and words for the held close (RJ17, G68); proof: in-crate tests; (after T202).
+- [x] T205 [US1] `D/main.rs` and `D/wallet/page.rs`: ⌘W, a Close Window menu item, and words for the held close (RJ17, G68); proof: in-crate tests; (after T202).
   - `cmd-w` → close the window through `on_window_should_close` (the RD14 hold and `window: close held` apply); a Close Window item in the menu (`main.rs:443-460`).
   - A held close shows `send.txSubmitting` in the bar's notice slot for 2.5 s when Explore is in front and brings the submitting column (or the Send screen) forward.
   - Tests: the key binding table has `cmd-w`; a pure `close_held_notice(section)` picks the words and the surface.
-- [ ] T206 [US3] `D/wallet/page.rs`: the dApp ending survives a section switch (RJ18, G51); proof: a page-level helper test; (after T205).
+- [x] T206 [US3] `D/wallet/page.rs`: the dApp ending survives a section switch (RJ18, G51); proof: a page-level helper test; (after T205).
   - `dapp_landing` is kept when `panel` leaves `Signing` (`:14102-14130`) and shown again when Explore returns, until it ends by itself or the person closes it.
   - Test: may-have-been-sent ending → section 钱包 → back to 探索 → the ending is there.
-- [ ] T207 [P] [US8] `D/resident.rs`, `D/executor/signer_integrity.rs` and `D/parallel_space.rs`: log hygiene and the dev badge (G67, G70 part); proof: in-file tests.
+- [x] T207 [P] [US8] `D/resident.rs`, `D/executor/signer_integrity.rs` and `D/parallel_space.rs`: log hygiene and the dev badge (G67, G70 part); proof: in-file tests.
   - `core: <machine> booting` through `vlog!` (timestamped, `resident.rs:312`).
   - A signer-page fetch that failed on transport is logged as `signer page: could not fetch <host> (<kind>)`, never "publishes no version … update the wallet" (`signer_integrity.rs:81-88`, `:285-290`).
   - The PARALLEL SPACE badge moves off the tab strip (bottom-left of the window, or the sidebar foot) so it covers no ✕ or +.
   - Tests: a transport failure yields the fetch line; an empty version list yields the version line.
-- [ ] T208 [P] `scripts/device/chaos-proxy.py`: a mode switch resets `latency` to 0 unless the same request sets it (G73); proof: `python3 -m py_compile scripts/device/chaos-proxy.py` and `curl '…/__chaos?mode=latency&latency=9000'` then `'…?mode=mute'` → the status line reads `latency=0`.
+- [x] T208 [P] `scripts/device/chaos-proxy.py`: a mode switch resets `latency` to 0 unless the same request sets it (G73); proof: `python3 -m py_compile scripts/device/chaos-proxy.py` and `curl '…/__chaos?mode=latency&latency=9000'` then `'…?mode=mute'` → the status line reads `latency=0`.
 
 ### WEB_A — web and extension fixes with no new core export
 
