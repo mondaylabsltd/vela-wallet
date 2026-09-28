@@ -6040,13 +6040,13 @@ impl WalletPage {
                     host.update(cx, |host, cx| host.cancel_qr(cx));
                 }
             };
-            // What to do on the phone, as the dApp column says it (083 W19):
-            // a send creates nothing on it.
+            // A send creates nothing on the phone: the line is the scan, as
+            // under a sign-in and a dApp's signature (083 W19, H1).
             let card = hardware::qr_card_with(
                 theme,
                 &self.loc,
                 &payload,
-                self.loc.t("onboarding.common.touchRemoteBody"),
+                hardware::scan_line(&self.loc),
                 on_cancel,
             );
             return Some(scrim("send-qr-scrim").child(card).into_any_element());
@@ -13935,9 +13935,10 @@ impl WalletPage {
                 theme,
                 &self.loc,
                 &payload,
-                // What to do on the phone. The create card's line ("create it
-                // on a nearby device") is not what a signature asks.
-                self.loc.t("onboarding.common.touchRemoteBody"),
+                // The scan. The create card's line ("create it on a nearby
+                // device") is not what a signature asks; what to do on the
+                // phone is the touch card's, once it is in (083 H1 review).
+                hardware::scan_line(&self.loc),
                 move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
                     host.update(cx, |host, cx| host.cancel_qr(cx));
                 },

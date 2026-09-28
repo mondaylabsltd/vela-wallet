@@ -139,14 +139,29 @@ fn profile_dir_in(state: Option<PathBuf>, local: Option<PathBuf>) -> Option<Path
 /// first, the refusal is the engine panel's, at once.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn probe_profile_dir(dir: &Path) -> std::io::Result<()> {
+    probe_profile_dir_as(dir, &profile_probe_name())
+}
+
+fn probe_profile_dir_as(dir: &Path, name: &str) -> std::io::Result<()> {
     fs::create_dir_all(dir)?;
-    let probe = dir.join(PROFILE_PROBE);
+    let probe = dir.join(name);
     fs::write(&probe, b"")?;
     fs::remove_file(&probe)
 }
 
 /// The probe's file: never left behind, and no name WebView2 uses.
-const PROFILE_PROBE: &str = "vela-write-probe.tmp";
+///
+/// A new name each time (083 H7 review). On a volume that deletes a file only
+/// once every handle on it has closed (FAT, a network share given as
+/// `VELA_STATE_DIR`, Windows before 1903), a second probe of one shared name —
+/// another Vela, or a Retry while a scanner still holds the last one — could
+/// meet it half-deleted: `ERROR_ACCESS_DENIED`, which is the refusal, and the
+/// panel would say a folder that takes writes refused them.
+fn profile_probe_name() -> String {
+    static PROBES: AtomicU64 = AtomicU64::new(0);
+    let probe = PROBES.fetch_add(1, Ordering::Relaxed);
+    format!("vela-write-probe-{}-{probe}.tmp", std::process::id())
+}
 
 /// Delete that profile, whole (spec 083; the erase of 081 FR-017 when no
 /// browser was opened this session). A folder already gone is gone.
@@ -832,13 +847,29 @@ pub(crate) mod tests {
         // a deny entry on the folder does (ERROR_ACCESS_DENIED).
         #[cfg(windows)]
         {
-            assert!(fs::create_dir_all(dir.join(PROFILE_PROBE)).is_ok());
+            let name = profile_probe_name();
+            assert!(fs::create_dir_all(dir.join(&name)).is_ok());
             assert_eq!(
-                probe_profile_dir(&dir).map_err(|error| error.kind()),
+                probe_profile_dir_as(&dir, &name).map_err(|error| error.kind()),
                 Err(std::io::ErrorKind::PermissionDenied)
             );
+            // The next probe is its own file, so a leftover of the last one —
+            // here the blocking folder — is not a refusal.
+            assert!(probe_profile_dir(&dir).is_ok(), "a new name each probe");
         }
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// 083 H7 review: two processes, or a Retry while the last probe is still
+    /// being deleted, never share a probe's file.
+    #[test]
+    fn each_profile_probe_has_a_file_of_its_own() {
+        let first = profile_probe_name();
+        let second = profile_probe_name();
+        assert_ne!(first, second);
+        let pid = format!("-{}-", std::process::id());
+        assert!(first.contains(&pid) && second.contains(&pid), "{first}");
+        assert!(first.starts_with("vela-write-probe-") && first.ends_with(".tmp"));
     }
 
     pub(crate) fn with_temp_state<T>(name: &str, body: impl FnOnce() -> T) -> T {

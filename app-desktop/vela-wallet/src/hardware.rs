@@ -219,10 +219,19 @@ pub fn method_line(loc: &Loc, method: KeyMethod, chooser: Chooser) -> SharedStri
     match (method, chooser, PLATFORM_AUTHENTICATOR) {
         // Nothing is created by signing in: the phone scans, and a passkey
         // already on it answers.
-        (KeyMethod::Hybrid, Chooser::SignIn, _) => loc.t("explore.scan"),
+        (KeyMethod::Hybrid, Chooser::SignIn, _) => scan_line(loc),
         (KeyMethod::Platform, _, Some(name)) => SharedString::from(name),
         _ => loc.t(method_words(method).1),
     }
+}
+
+/// The line under a phone's QR wherever the phone creates nothing — a
+/// sign-in, a send, a dApp's signature: "Scan a code", the one thing to do
+/// while the code is up (083 H1 review). What to do on the phone after that
+/// is the touch card's line, which replaces this card once the phone is in.
+#[must_use]
+pub fn scan_line(loc: &Loc) -> SharedString {
+    loc.t("explore.scan")
 }
 
 /// The authenticator "this device" reaches here, by its own name (083 W16).
@@ -350,8 +359,8 @@ pub fn signin_method_card(
 /// itself the moment the tunnel is up.
 ///
 /// **Its line is the caller's.** The create card's "create it on a nearby
-/// device" is false over a signature (083 W19) and over a sign-in (083 W16),
-/// so each ceremony says what the phone is for.
+/// device" is false over a signature (083 W19) and over a sign-in (083 W16);
+/// those say [`scan_line`].
 pub fn qr_card_with(
     theme: &Theme,
     loc: &Loc,
@@ -728,6 +737,8 @@ mod tests {
         assert_eq!(phone_create, loc.t("onboarding.create.methodHybridBody"));
         assert_ne!(phone_sign_in, phone_create, "the sign-in row said create");
         assert_ne!(phone_sign_in.as_ref(), "explore.scan", "echoed its key");
+        // The QR under a sign-in, a send and a dApp signature: one line.
+        assert_eq!(phone_sign_in, scan_line(&loc));
 
         let this_device = method_line(&loc, KeyMethod::Platform, Chooser::SignIn);
         assert_eq!(
