@@ -173,3 +173,44 @@ test('rejecting answers the requester with 4001 — the ✕ IS the refusal', asy
 		)
 		.toBe(4001);
 });
+
+/**
+ * Spec 079 ("可信签名器签完后，回到签名提示框，似乎没有任何提示"): the core clears
+ * the sheet the moment it answers, and a message signature used to simply
+ * vanish. It ends on the signed tick now, which goes by itself. Signed for real
+ * in the parallel space (its fixture keys sign headlessly).
+ */
+test('a signed message ends on the tick, and the tick goes by itself', async ({ page }) => {
+	await denyOffOrigin(page);
+	await page.addInitScript(() => {
+		localStorage.setItem('vela.intro.seen', String(Date.now()));
+		localStorage.setItem('vela.dev.console', '1');
+	});
+	await page.goto('/en/parallel');
+	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+	await page.waitForURL(/\/en\/wallet$/);
+	await page.waitForFunction(
+		() => (window as unknown as { vela?: { requester?: unknown } }).vela?.requester !== undefined,
+		null,
+		{ timeout: 20_000 }
+	);
+	await fire(page, 'personal_sign', ['0x68656c6c6f', '0xD400866e00B055B20752a826CD5C89b811de130b']);
+
+	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
+	await expect(slider).toBeVisible({ timeout: 25_000 });
+	const tick = page.getByText(en('clearSigning.alertSignedTitle'), { exact: true });
+	// Watched from the slide on: the tick is a beat, not a state.
+	const seen = expect(tick).toBeVisible({ timeout: 20_000 });
+	await slider.focus();
+	await slider.press('Enter');
+	await seen;
+
+	await expect
+		.poll(
+			async () =>
+				await page.evaluate(() => (window as unknown as { __answer?: unknown }).__answer ?? null),
+			{ timeout: 20_000 }
+		)
+		.toMatch(/^0x[0-9a-fA-F]{100,}$/);
+	await expect(tick).toBeHidden({ timeout: 5_000 });
+});
