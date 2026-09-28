@@ -190,7 +190,7 @@ fn tracking(sign: &DomainDriver<SignRequest>) -> DomainDriver<TxTracker> {
         chain_id: handoff.chain_id,
         maybe_sent: handoff.maybe_sent,
         submit_block: handoff.submit_block,
-        admitted: false,
+        admitted: handoff.admitted,
     });
     tracker.resolve(TrackRes::Clock { now_ms: NOW });
     tracker.resolve(TrackRes::ReceiptPending {
