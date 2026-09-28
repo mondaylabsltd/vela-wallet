@@ -1,0 +1,30 @@
+T182 (drop variant) + P0 probe - extension side panel (zh). Own proxy 8898 only.
+
+A) T182: a may-have-been-sent op survives a panel reload
+Nonce before 26, after 26 (drop: provably nothing sent).
+19:26:52.032Z dApp eth_sendTransaction dust; fee shown; 8898 drop match=vela-relay; slide 19:27:05.133Z
+19:27:07.961 overlay: 已提交 | 可能已经发出。Vela 会继续查看，请不要重复发送。 | UserOp 哈希 0x668276cf…608cbbca | 关闭 · 后台继续
+19:27:13.074 Page.reload on the side panel (relay still dropped, before pass)
+19:27:13.169 dApp answered {ok:false, code:4900, message:"The browser closed before the request finished"}   <- during a may-have-been-sent submit
+   worker: 19:27:06.875Z req.claim phase=sign live=true; 19:27:06.879Z req.claim phase=submit live=true;
+           19:27:13.165Z panel.down window=291188707; 19:27:13.167Z req.settled cause=surface_closed; 19:27:13.220Z panel.up
+19:27:14 reloaded panel Activity: 今天 · dApp 交易 · 处理中 · 127.0.0.1:8137 · -0.001 xDAI   (the persisted maybe-sent record, T182 OK)
+19:27:37.818 pass
+19:28:23 Activity: 今天 · dApp 交易 · 失败 · 127.0.0.1:8137 (not_found x2 -> NotSent; ~78 s after the slide)
+
+B) P0 probe: no fault at all; the person closes the side panel after "已发送！"
+Nonce before 26, after 27.
+19:28:47.136Z dApp eth_sendTransaction dust; fee shown; slide 19:28:58.074Z
+19:28:58.686 sheet: 正在准备交易...   19:29:00.071 sheet: 提交至网络... | 关闭此页交易会在后台继续
+19:29:01.196 overlay: 已提交 | 已发送！正在链上确认——区块浏览器链接稍后出现。 | UserOp 哈希 0x839be8dc…8814cc27 | 完成
+19:29:01.870 chrome.sidePanel.close({windowId:291188707}) (Chrome's own close of the panel, as in stage A EX6)
+19:29:02.230 dApp answered {ok:false, code:4900, message:"The browser closed before the request finished"}
+   worker: 19:29:00.050Z req.claim phase=sign live=true; 19:29:00.070Z req.claim phase=submit live=true;
+           19:29:02.226Z panel.down window=291188707; 19:29:02.230Z req.settled cause=surface_closed tab=291188710
+On chain (EntryPoint UserOperationEvent, topic2 = the Safe):
+   block=48487286 opHash=0x839be8dc2c0de9f2e73d42cbc29f9fe7c6c17da58fb27d9fd693dbc28814cc27
+   tx=0xa37e65b4434b61b03398511899500f5c5af46bfca5bfdb9b133db9f05441d1d1 nonce=26 success=1
+=> "said failed but landed": the page was told the request ended without an answer while its payment landed.
+Code: extension/background.js:541-553 (onSurfacePort onDisconnect) settles every record the panel owed via
+extension/lib/request-life.js:184-191 affectedBy('surface_closed') with SETTLE.surface_closed (4900), whatever the
+record's state - including 'claimed' at phase=submit (background.js:629-634 sets it; nothing reads it on disconnect).

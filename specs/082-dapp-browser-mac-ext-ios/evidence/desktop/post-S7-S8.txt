@@ -1,0 +1,30 @@
+S7/S8 desktop — 2026-09-29, chaos 127.0.0.1:8899
+03:23:15 chaos mode=drop match=vela-relay
+03:23:20 Send dust clicked (test dApp 127.0.0.1:8137, Gnosis)
+[vela-wallet] core: fee_tier_pref booting
+[vela-wallet] 03:23:25.693 proxy: 127.0.0.1:8899 refused tunnel
+[vela-wallet] 03:23:25.693 rpc: chain=100 host=vela-relay-cf.getvela.app method=vela_getInBandGasQuote outcome=not connected
+[vela-wallet] 03:23:25.693 proxy: 127.0.0.1:8899 refused tunnel
+[vela-wallet] 03:23:25.693 rpc: chain=100 host=vela-relay-cf.getvela.app method=pimlico_getUserOperationGasPrice outcome=not connected
+[vela-wallet] 03:23:26.391 proxy: 127.0.0.1:8899 refused tunnel
+[vela-wallet] 03:23:26.391 rpc: chain=100 host=vela-relay-cf.getvela.app method=vela_getInBandGasQuote outcome=not connected
+[vela-wallet] 03:23:26.392 proxy: 127.0.0.1:8899 refused tunnel
+[vela-wallet] 03:23:26.392 rpc: chain=100 host=vela-relay-cf.getvela.app method=pimlico_getUserOperationGasPrice outcome=not connected
+[vela-wallet] 03:23:29.559 proxy: 127.0.0.1:8899 refused tunnel
+[vela-wallet] 03:23:29.559 proxy: 127.0.0.1:8899 refused tunnel
+[vela-wallet] 03:23:29.559 rpc: chain=100 host=vela-relay-cf.getvela.app method=pimlico_getUserOperationGasPrice outcome=not connected
+...
+[vela-wallet] 03:24:07.757 rpc: chain=100 method=vela_getInBandGasQuote gave up after 882 ms
+[vela-wallet] 03:24:07.759 rpc: chain=100 method=pimlico_getUserOperationGasPrice gave up after 884 ms
+[vela-wallet] 03:25:12.632 rpc: chain=1 method=eth_getBalance gave up after 2774 ms (rate limited)
+[vela-wallet] 03:25:13.602 rpc: chain=1 method=eth_call gave up after 3744 ms (rate limited)
+03:24:09.3 chaos mode=pass
+03:24:06 DROP vela-relay-cf.getvela.app:443
+03:24:06 DROP vela-relay-cf.getvela.app:443
+03:24:07 DROP vela-relay-cf.getvela.app:443
+03:24:07 DROP vela-relay-cf.getvela.app:443
+03:24:09 CONFIG {"mode": "pass", "latency": 9000, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+03:24:23 PASS vela-relay-cf.getvela.app:443 1ms
+03:24:23 PASS vela-relay-cf.getvela.app:443 2ms
+screens: fee row 无法连接 Vela 服务 — 请检查网络，稍后会自动重试。 slide dimmed; 03:24:25.1 估算中… spinner; 03:24:28.3 0.01xDAI · ≈$0.01, slide live (15.8–19.0 s after pass)
+NOTE: no 'fee: quote failed … re-quote #n' / 'fee: quote back' line exists in the desktop log (grep 'fee:' finds none; not in source either).

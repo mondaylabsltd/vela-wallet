@@ -1,0 +1,37 @@
+DX6 desktop (log desk-post-T181.err)
+run 1: nonce 47; 03:44:18 chaos reset_mid match=vela-relay latency=0
+[vela-wallet] 03:44:27.241 relay: submitting chain=100 op=0x5b30adaa21 initCode=no callData=452B
+[vela-wallet] 03:44:27.289 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=network
+[vela-wallet] 03:44:29.084 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=network
+[vela-wallet] 03:44:29.084 relay: submit verdict=maybe_sent hash=0x5b30adaa21 attempts=1 in=1843 ms
+[vela-wallet] 03:44:29.085 tracker: op=0x5b30adaa21 handed over chain=100 maybe_sent=true submit_block=Some(48487462)
+[vela-wallet] 03:44:38.922 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=network
+[vela-wallet] 03:44:40.898 dapp: op=0x5b30adaa21 answered with its tx hash after the receipt wait
+[vela-wallet] 03:44:41.328 tracker: holdings moved on chain=100; balances re-read
+[vela-wallet] 03:46:12.921 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=network
+[vela-wallet] 03:46:15.086 relay: submitting chain=100 op=0xcbde0dc770 initCode=no callData=452B
+[vela-wallet] 03:46:15.352 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=network
+[vela-wallet] 03:46:17.213 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=network
+03:44:18 CONFIG {"mode": "reset_mid", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+03:44:18 CUT 2 live tunnels: vela-relay-cf.getvela.app
+03:44:22 RESET_MID vela-relay-cf.getvela.app:443 0ms
+03:44:23 RESET vela-relay-cf.getvela.app:443
+03:44:25 RESET_MID vela-relay-cf.getvela.app:443 0ms
+03:44:27 RESET vela-relay-cf.getvela.app:443
+03:44:27 RESET_MID vela-relay-cf.getvela.app:443 0ms
+03:44:29 RESET vela-relay-cf.getvela.app:443
+chain: block 48487465 op 0x5b30adaa214b4b1fb9ae32ed65acb45b71dc25e7b67dbf500c6ad9122b91de0b tx 0x372e387e764a19539baaee4bd03b47abd253302c8d150e0802fab1c6ee23e8b0 nonce 47 success 1; nonce after 48
+screens: 正在准备交易… → 03:44:30 提交至网络… + 可能已经发出… + UserOp 哈希 0x5b30adaa…2b91de0b → column closed by 03:44:44 (ending not caught between 5 s frames)
+
+run 2: nonce 48; 03:45:43 pass (fee quoted) → 03:46:04 reset_mid again
+[vela-wallet] 03:46:12.921 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=network
+[vela-wallet] 03:46:15.086 relay: submitting chain=100 op=0xcbde0dc770 initCode=no callData=452B
+[vela-wallet] 03:46:15.352 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=network
+[vela-wallet] 03:46:17.213 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=network
+[vela-wallet] 03:46:17.213 relay: submit verdict=maybe_sent hash=0xcbde0dc770 attempts=1 in=2127 ms
+[vela-wallet] 03:46:17.215 tracker: op=0xcbde0dc770 handed over chain=100 maybe_sent=true submit_block=Some(48487484)
+[vela-wallet] 03:46:26.592 dapp: op=0xcbde0dc770 answered with its tx hash after the receipt wait
+[vela-wallet] 03:46:29.758 tracker: holdings moved on chain=100; balances re-read
+chain: block 48487487 op 0xcbde0dc77038805d8e8e128511d22cce07b1c8fb5362beb1c44d655b57070859 tx 0x8c8a55429093cafc2b1be69b0604a2b746a47e5903d3fbbdf40a8bd5b104ab86 nonce 48 success 1; nonce after 49
+screens: 03:46:13 正在准备交易…; 03:46:18.4–03:46:29.5 提交至网络… + 可能已经发出。Vela 会继续查看，请不要重复发送。 + UserOp 哈希 0xcbde0dc7…57070859; 03:46:31.7 已确认 · 交易哈希 0x8c8a5542…b104ab86; 03:46:33.9 column closed
+03:47:07 chaos pass

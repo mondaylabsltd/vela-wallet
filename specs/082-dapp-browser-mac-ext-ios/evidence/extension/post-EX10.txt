@@ -1,0 +1,43 @@
+EX10 / EX11 (G20, G33) - Chrome for Testing 151, own fault proxy 127.0.0.1:8898 only.
+2026-09-29 (UTC times below; +0800 local = 02:56-03:00)
+
+Fault: 8898 blackhole match='gnosis|xdai|1rpc' at 18:56:45Z (chaos-ext.log 02:56:45 CONFIG ... CUT 3 live tunnels)
+Tab A http://127.0.0.1:8137 on Gnosis (0x64), connected as 0xD400...130b.
+
+Faulted eth_blockNumber, page-timed (await on ethereum.request / the dApp's own __ask):
+  #1 18:56:45.257Z  24020 ms  {ok:false, code:-32603, message:"Vela could not reach a node for chain Gnosis (100)"}
+  #2 18:57:09.277Z  21997 ms  same
+  #3 18:57:41Z (dApp "Block number" button)  ended 18:58:05.6Z (~24 s by worker log) same
+  #4 18:59:29.633Z  16689 ms  same (dApp __ask, tab in front)
+  No "Failed to fetch" / engine text in any answer.
+After pass (18:59:52Z):
+  #5 18:59:52.466Z    616 ms  {ok:true, result:"0x2e3da1b"}
+  #6 18:59:53.082Z    316 ms  {ok:true, result:"0x2e3da1b"}
+
+Worker log (chrome.storage.session 'vela.sw.log', host-only):
+[vela-sw] 2026-09-28T18:56:53.262Z read.fail chain=100 host=rpc.gnosischain.com kind=timeout
+[vela-sw] 2026-09-28T18:57:01.265Z read.fail chain=100 host=gnosis-rpc.publicnode.com kind=timeout
+[vela-sw] 2026-09-28T18:57:09.270Z read.fail chain=100 host=1rpc.io kind=timeout
+[vela-sw] 2026-09-28T18:57:09.271Z read.exhausted chain=100 tried=3
+[vela-sw] 2026-09-28T18:57:15.263Z read.fail chain=100 host=rpc.gnosischain.com kind=network
+[vela-sw] 2026-09-28T18:57:23.267Z read.fail chain=100 host=gnosis-rpc.publicnode.com kind=network
+[vela-sw] 2026-09-28T18:57:31.271Z read.fail chain=100 host=1rpc.io kind=network
+[vela-sw] 2026-09-28T18:57:31.272Z read.exhausted chain=100 tried=3
+[vela-sw] 2026-09-28T18:57:49.597Z read.fail chain=100 host=rpc.gnosischain.com kind=timeout
+[vela-sw] 2026-09-28T18:57:57.603Z read.fail chain=100 host=gnosis-rpc.publicnode.com kind=timeout
+[vela-sw] 2026-09-28T18:58:05.609Z read.fail chain=100 host=1rpc.io kind=timeout
+[vela-sw] 2026-09-28T18:58:05.609Z read.exhausted chain=100 tried=3
+[vela-sw] 2026-09-28T18:59:30.314Z read.fail chain=100 host=rpc.gnosischain.com kind=network
+[vela-sw] 2026-09-28T18:59:38.316Z read.fail chain=100 host=gnosis-rpc.publicnode.com kind=network
+[vela-sw] 2026-09-28T18:59:46.319Z read.fail chain=100 host=1rpc.io kind=network
+[vela-sw] 2026-09-28T18:59:46.319Z read.exhausted chain=100 tried=3
+
+storage.session vela.ext.endpoints after pass: rpc.gnosischain.com cleared (answered);
+  1rpc.io/gnosis failures=4, gnosis-rpc.publicnode.com failures=4 still cooling.
+
+chaos-ext.log (8898): 02:56:45 HOLE rpc.gnosischain.com:443 ... HOLE gnosis-rpc.publicnode.com:443 ... HOLE 1rpc.io:443 (every attempt held; no direct bypass)
+  02:59:52 CONFIG pass
+
+Note: every faulted call paid the full 3 x 8 s again (22-24 s; #4 16.7 s): protocol.js:155-165 orderEndpoints puts cooled
+endpoints LAST but still tries them, so "memory of dead nodes" only reorders. RF2's rationale sentence "then the cooled
+endpoints are skipped until a live one answers" is not what the code does. Within the row's "~3 x 8 s per call" expectation.

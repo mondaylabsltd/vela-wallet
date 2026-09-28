@@ -1,0 +1,70 @@
+# DX14 (drop uniswap) — desk-post.err excerpt
+[vela-wallet] 02:28:05.894 browser: navigate asked host=app.uniswap.org view=built composing=false
+[vela-wallet] 02:28:05.895 browser: asked host=app.uniswap.org gen=4 how=navigation
+[vela-wallet] 02:28:09.045 browser: watchdog host=app.uniswap.org gen=4 (no commit in 3000 ms)
+[vela-wallet] 02:28:09.050 browser: probe host=app.uniswap.org gen=4 verdict=refused route=127.0.0.1:8899
+[vela-wallet] 02:28:09.050 browser: failed host=app.uniswap.org class=refused
+[vela-wallet] 02:28:11.111 browser: retry host=app.uniswap.org attempt=1
+[vela-wallet] 02:28:11.116 browser: asked host=app.uniswap.org gen=5 how=auto
+[vela-wallet] 02:28:11.378 browser: engine stopped without commit host=app.uniswap.org gen=5
+[vela-wallet] 02:28:11.383 browser: probe host=app.uniswap.org gen=5 verdict=refused route=127.0.0.1:8899
+[vela-wallet] 02:28:11.383 browser: failed host=app.uniswap.org class=refused
+[vela-wallet] 02:28:16.586 browser: retry host=app.uniswap.org attempt=2
+[vela-wallet] 02:28:16.587 browser: asked host=app.uniswap.org gen=6 how=page
+[vela-wallet] 02:28:16.587 browser: asked host=app.uniswap.org gen=7 how=navigation
+[vela-wallet] 02:28:19.692 browser: watchdog host=app.uniswap.org gen=7 (no commit in 3000 ms)
+[vela-wallet] 02:28:19.708 browser: probe host=app.uniswap.org gen=7 verdict=refused route=127.0.0.1:8899
+[vela-wallet] 02:28:19.708 browser: failed host=app.uniswap.org class=refused
+[vela-wallet] 02:28:21.808 browser: retry host=app.uniswap.org attempt=1
+[vela-wallet] 02:28:21.810 browser: asked host=app.uniswap.org gen=8 how=auto
+[vela-wallet] 02:28:24.925 browser: watchdog host=app.uniswap.org gen=8 (no commit in 3000 ms)
+[vela-wallet] 02:28:24.942 browser: probe host=app.uniswap.org gen=8 verdict=refused route=127.0.0.1:8899
+[vela-wallet] 02:28:24.942 browser: failed host=app.uniswap.org class=refused
+[vela-wallet] 02:28:30.194 browser: retry host=app.uniswap.org attempt=2
+[vela-wallet] 02:28:30.195 browser: asked host=app.uniswap.org gen=9 how=page
+[vela-wallet] 02:28:30.195 browser: asked host=app.uniswap.org gen=10 how=navigation
+[vela-wallet] 02:28:33.345 browser: watchdog host=app.uniswap.org gen=10 (no commit in 3000 ms)
+[vela-wallet] 02:28:33.351 browser: probe host=app.uniswap.org gen=10 verdict=refused route=127.0.0.1:8899
+[vela-wallet] 02:28:33.351 browser: failed host=app.uniswap.org class=refused
+[vela-wallet] 02:28:35.390 browser: retry host=app.uniswap.org attempt=1
+[vela-wallet] 02:28:35.391 browser: asked host=app.uniswap.org gen=11 how=auto
+[vela-wallet] 02:28:35.662 browser: engine stopped without commit host=app.uniswap.org gen=11
+[vela-wallet] 02:28:35.667 browser: probe host=app.uniswap.org gen=11 verdict=refused route=127.0.0.1:8899
+[vela-wallet] 02:28:35.667 browser: failed host=app.uniswap.org class=refused
+[vela-wallet] 02:28:40.809 browser: retry host=app.uniswap.org attempt=2
+[vela-wallet] 02:28:40.811 browser: asked host=app.uniswap.org gen=12 how=auto
+[vela-wallet] 02:28:41.070 browser: engine stopped without commit host=app.uniswap.org gen=12
+[vela-wallet] 02:28:41.075 browser: probe host=app.uniswap.org gen=12 verdict=refused route=127.0.0.1:8899
+[vela-wallet] 02:28:41.075 browser: failed host=app.uniswap.org class=refused
+[vela-wallet] 02:28:51.108 browser: retry host=app.uniswap.org attempt=3
+[vela-wallet] 02:28:51.109 browser: asked host=app.uniswap.org gen=13 how=auto
+[vela-wallet] 02:28:51.387 browser: engine stopped without commit host=app.uniswap.org gen=13
+[vela-wallet] 02:28:51.392 browser: probe host=app.uniswap.org gen=13 verdict=refused route=127.0.0.1:8899
+[vela-wallet] 02:28:51.392 browser: failed host=app.uniswap.org class=refused
+--- chaos-post.log
+02:27:44 CONFIG {"mode": "drop", "latency": 0, "bps": 0, "drop": 1.0, "match": "uniswap"}
+02:28:05 DROP app.uniswap.org:443
+02:28:05 DROP app.uniswap.org:443
+02:28:09 DROP app.uniswap.org:443
+02:28:11 DROP app.uniswap.org:443
+02:28:11 DROP app.uniswap.org:443
+02:28:11 DROP app.uniswap.org:443
+02:28:16 DROP app.uniswap.org:443
+02:28:16 DROP app.uniswap.org:443
+02:28:19 DROP app.uniswap.org:443
+02:28:21 DROP app.uniswap.org:443
+02:28:21 DROP app.uniswap.org:443
+02:28:24 DROP app.uniswap.org:443
+02:28:30 DROP app.uniswap.org:443
+02:28:30 DROP app.uniswap.org:443
+02:28:33 DROP app.uniswap.org:443
+02:28:35 DROP app.uniswap.org:443
+02:28:35 DROP app.uniswap.org:443
+02:28:35 DROP app.uniswap.org:443
+02:28:40 DROP app.uniswap.org:443
+02:28:40 DROP app.uniswap.org:443
+02:28:41 DROP app.uniswap.org:443
+02:28:51 DROP app.uniswap.org:443
+02:28:51 DROP app.uniswap.org:443
+02:28:51 DROP app.uniswap.org:443
+02:31:21 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "uniswap"}

@@ -1,0 +1,55 @@
+SC-006a/b desktop — launched WITHOUT VELA_DEV_PROXY (follows the system proxy, which scutil shows as 127.0.0.1:1088 HTTP/HTTPS + SOCKS; not changed). Log desk-post-SC006.err
+Recents cleared first (清空 — no confirmation asked).
+--- a: 10 × https://vela-tN.invalid
+[vela-wallet] 04:16:58.419 browser: probe host=vela-t1.invalid gen=1 verdict=connect route=system
+[vela-wallet] 04:16:58.419 browser: failed host=vela-t1.invalid class=offline
+[vela-wallet] 04:17:07.294 browser: probe host=vela-t2.invalid gen=2 verdict=connect route=system
+[vela-wallet] 04:17:07.294 browser: failed host=vela-t2.invalid class=offline
+[vela-wallet] 04:17:16.337 browser: probe host=vela-t3.invalid gen=3 verdict=connect route=system
+[vela-wallet] 04:17:16.338 browser: failed host=vela-t3.invalid class=offline
+[vela-wallet] 04:17:25.135 browser: probe host=vela-t4.invalid gen=4 verdict=connect route=system
+[vela-wallet] 04:17:25.135 browser: failed host=vela-t4.invalid class=offline
+[vela-wallet] 04:17:34.060 browser: probe host=vela-t5.invalid gen=5 verdict=connect route=system
+[vela-wallet] 04:17:34.060 browser: failed host=vela-t5.invalid class=offline
+[vela-wallet] 04:18:12.536 browser: probe host=vela-t5.invalid gen=6 verdict=connect route=system
+[vela-wallet] 04:18:12.536 browser: failed host=vela-t5.invalid class=offline
+[vela-wallet] 04:18:54.003 browser: probe host=vela-t5.invalid gen=8 verdict=connect route=system
+[vela-wallet] 04:18:54.003 browser: failed host=vela-t5.invalid class=offline
+[vela-wallet] 04:19:10.796 browser: probe host=vela-t6.invalid gen=9 verdict=connect route=system
+[vela-wallet] 04:19:10.796 browser: failed host=vela-t6.invalid class=offline
+[vela-wallet] 04:19:19.811 browser: probe host=vela-t7.invalid gen=10 verdict=connect route=system
+[vela-wallet] 04:19:19.811 browser: failed host=vela-t7.invalid class=offline
+[vela-wallet] 04:19:28.613 browser: probe host=vela-t8.invalid gen=11 verdict=connect route=system
+[vela-wallet] 04:19:28.613 browser: failed host=vela-t8.invalid class=offline
+auto-retries (class offline, so the schedule applies):
+[vela-wallet] 04:18:07.114 browser: retry host=vela-t5.invalid attempt=1
+[vela-wallet] 04:18:48.580 browser: retry host=vela-t5.invalid attempt=2
+[vela-wallet] 04:20:19.726 browser: retry host=vela-t10.invalid attempt=1
+[vela-wallet] 04:21:01.090 browser: retry host=vela-t10.invalid attempt=2
+'retry … skipped (engine still loading)' lines: 62
+--- b: 10 real dApps
+[vela-wallet] 04:21:06.496 browser: failed host=vela-t10.invalid class=offline
+[vela-wallet] 04:21:17.389 browser: navigate asked host=app.uniswap.org view=built composing=false
+[vela-wallet] 04:21:18.737 browser: committed host=app.uniswap.org gen=17
+[vela-wallet] 04:21:39.441 browser: navigate asked host=app.aave.comhttps: view=built composing=false
+[vela-wallet] 04:21:44.923 browser: failed host=app.aave.comhttps: class=offline
+[vela-wallet] 04:21:50.407 browser: navigate asked host=pancakeswap.finance view=built composing=false
+[vela-wallet] 04:21:51.753 browser: committed host=pancakeswap.finance gen=19
+[vela-wallet] 04:22:01.430 browser: navigate asked host=jumper.exchange view=built composing=false
+[vela-wallet] 04:22:04.760 browser: committed host=jumper.xyz gen=20
+[vela-wallet] 04:23:38.406 browser: navigate asked host=app.aave.com view=built composing=false
+[vela-wallet] 04:23:39.743 browser: committed host=app.aave.com gen=21
+[vela-wallet] 04:23:50.322 browser: navigate asked host=curve.fi view=built composing=false
+[vela-wallet] 04:23:53.527 browser: committed host=www.curve.finance gen=22
+[vela-wallet] 04:24:02.210 browser: navigate asked host=opensea.io view=built composing=false
+[vela-wallet] 04:24:03.286 browser: committed host=opensea.io gen=23
+[vela-wallet] 04:24:14.143 browser: navigate asked host=stake.lido.fi view=built composing=false
+[vela-wallet] 04:24:14.927 browser: committed host=stake.lido.fi gen=24
+[vela-wallet] 04:25:54.338 browser: navigate asked host=app.1inch.io view=built composing=false
+[vela-wallet] 04:25:55.589 browser: committed host=1inch.com gen=25
+[vela-wallet] 04:26:06.220 browser: navigate asked host=app.balancer.fi view=built composing=false
+[vela-wallet] 04:26:08.558 browser: committed host=balancer.fi gen=26
+[vela-wallet] 04:26:18.171 browser: navigate asked host=app.compound.finance view=built composing=false
+[vela-wallet] 04:26:21.881 browser: committed host=app.compound.xyz gen=27
+[vela-wallet] 04:26:38.899 browser: committed host=app.compound.xyz gen=28
+Recents after: Compound Dashboard (app.compound.xyz), Balancer DeFi Liquidity Pools (balancer.fi, letter icon), 1inch | Swap… (1inch.com), Stake with Lido | Lido (stake.lido.fi), OpenSea… (opensea.io), Curve.finance (www.curve.finance), Aave - Open Source Liquidity Protocol (app.aave.com), Jumper | Smart App… (jumper.xyz), Home | PancakeSwap (pancakeswap.finance), Uniswap Interface (app.uniswap.org) = 10; no .invalid, no 'app.aave.comhttps:'

@@ -1,0 +1,22 @@
+# DX3′ — relaunch with VELA_DEV_PROXY=127.0.0.1:9 (dead); log desk-post-DX3p.err
+[vela-wallet] dev proxy: all traffic via 127.0.0.1:9
+[vela-wallet] 02:57:04.759 proxy: 127.0.0.1:9 unreachable
+[vela-wallet] signer page: this address publishes no version this wallet knows — update the wallet
+…
+proxy: 127.0.0.1:9 unreachable lines: 896
+[vela-wallet] 02:57:04.916 rpc: chain=1 host=1rpc.io method=eth_call outcome=not connected
+[vela-wallet] 02:57:04.916 rpc: chain=1 host=1rpc.io method=eth_getBalance outcome=not connected
+[vela-wallet] 02:57:04.916 rpc: chain=137 host=polygon-bor-rpc.publicnode.com method=eth_getBalance outcome=not connected
+[vela-wallet] 02:57:05.335 rpc: chain=1868 method=eth_getBalance gave up after 416 ms
+[vela-wallet] 02:57:05.543 rpc: chain=988 method=eth_getBalance gave up after 623 ms
+[vela-wallet] 02:58:02.555 browser: navigate asked host=app.uniswap.org view=pending composing=false
+[vela-wallet] 02:58:02.677 browser: asked host=app.uniswap.org gen=1 how=navigation
+[vela-wallet] 02:58:05.829 browser: watchdog host=app.uniswap.org gen=1 (no commit in 3000 ms)
+[vela-wallet] 02:58:05.846 browser: probe host=app.uniswap.org gen=1 verdict=proxy route=127.0.0.1:9
+[vela-wallet] 02:58:05.846 browser: failed host=app.uniswap.org class=proxy
+[vela-wallet] 02:58:07.939 browser: retry host=app.uniswap.org attempt=1
+[vela-wallet] 02:58:07.939 browser: asked host=app.uniswap.org gen=2 how=auto
+[vela-wallet] 02:58:11.088 browser: watchdog host=app.uniswap.org gen=2 (no commit in 3000 ms)
+[vela-wallet] 02:58:11.104 browser: probe host=app.uniswap.org gen=2 verdict=proxy route=127.0.0.1:9
+[vela-wallet] 02:58:11.104 browser: failed host=app.uniswap.org class=proxy
+(no line reaches chaos-post.log: nothing went direct)

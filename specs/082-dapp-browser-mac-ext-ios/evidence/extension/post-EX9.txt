@@ -1,0 +1,24 @@
+EX9 — chaos on 127.0.0.1:8898 (CfT only): blackhole match='' 02:50:13 -> pass 02:50:35
+fresh origin http://localhost:8137 (loopback, never proxied), tab opened 02:50:13
+page timeline (Date.now ms, dApp hook):
+  eth_requestAccounts   req 1790621423120 -> card in panel 1790621423126 (+6 ms); 连接 tapped ~1.2 s later -> ok [0xD400866e…130b] at 1790621424366
+  wallet_switchEthereumChain 0x64  req 1790621425786 -> ok null 1790621425788 (+2 ms); event chainChanged 0x64
+  eth_chainId           req 1790621427187 -> ok 0x64 1790621427188 (+1 ms)
+events seen by the dApp: connect {chainId:0x1}, accountsChanged [0xD400866e00B055B20752a826CD5C89b811de130b], chainChanged 0x64
+chaos-ext.log during the fault (every host held; nothing leaked direct):
+02:50:13 CONFIG {"mode": "blackhole", "latency": 0, "bps": 0, "drop": 1.0, "match": ""}
+02:50:13 CUT 25 live tunnels: api.avax.network,arb1.arbitrum.io,bsc-rpc.publicnode.com,ethereum-rpc.publicnode.com,forno.celo.org,mainnet.base.org,mainnet.optimism.io,mainnet.unichain.org,megaeth.drpc
+02:50:13 HOLE mtalk.google.com:5228
+02:50:17 HOLE bsc-rpc.publicnode.com:443
+02:50:17 HOLE rpc.xlayer.tech:443
+02:50:17 HOLE rpc.gnosischain.com:443
+02:50:17 HOLE rpc.mainnet.tempo.xyz:443
+02:50:25 HOLE bsc.drpc.org:443
+02:50:25 HOLE xlayer.drpc.org:443
+02:50:25 HOLE gnosis-rpc.publicnode.com:443
+02:50:25 HOLE rpc.tempo.xyz:443
+02:50:33 HOLE bsc-dataseed3.defibit.io:443
+02:50:33 HOLE xlayerrpc.okx.com:443
+02:50:33 HOLE 1rpc.io:443
+02:50:33 HOLE tempo-rpc.publicnode.com:443
+02:50:35 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": ""}

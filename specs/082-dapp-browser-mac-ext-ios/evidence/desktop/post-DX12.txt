@@ -1,0 +1,4 @@
+# DX12 (G6) — pixel measurement of the chrome, points (2x screenshots), column x=430/520 pt
+start page (dx14-0 new tab, a00-initial launch): strip→toolbar edge y=36.0, address field y=47.5–79.5, toolbar hairline y=91.0
+live page (dx13-2 test dApp, dx0-example example.com): strip→toolbar edge y=36.0, address field y=47.5–79.5, toolbar hairline y=91.0
+difference: 0 pt for all three edges

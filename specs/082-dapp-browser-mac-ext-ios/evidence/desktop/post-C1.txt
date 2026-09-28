@@ -1,0 +1,68 @@
+# C1 — blackhole gnosis|xdai|1rpc at 03:02:34.155; Block number clicked 03:02:34.4
+[vela-wallet] 03:02:41.582 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:02:48.784 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:02:50.565 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:02:56.226 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:02:57.766 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:03:03.429 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:03:05.202 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:03:10.894 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:03:12.404 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:03:18.097 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:03:18.097 rpc: chain=100 method=eth_blockNumber gave up after 43716 ms
+[vela-wallet] 03:03:18.107 chain notice: shown chain=100
+[vela-wallet] 03:03:19.851 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:03:27.053 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:03:27.053 rpc: chain=100 method=eth_blockNumber gave up after 43690 ms
+[vela-wallet] 03:03:52.456 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:03:59.658 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:05.710 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:07.062 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:12.915 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:14.264 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:20.393 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:21.630 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:27.596 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:28.832 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:28.833 rpc: chain=100 method=eth_blockNumber gave up after 43578 ms
+[vela-wallet] 03:04:35.159 rpc: chain=100 host=1rpc.io method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:42.361 rpc: chain=100 host=gnosis-rpc.publicnode.com method=eth_blockNumber outcome=not connected
+[vela-wallet] 03:04:42.361 rpc: chain=100 method=eth_blockNumber gave up after 43852 ms
+[vela-wallet] 03:04:42.362 chain notice: retry chain=100 → failed
+[vela-wallet] 03:04:49.391 chain notice: cleared chain=100
+--- chaos-post.log
+03:02:12 PASS gnosis-rpc.publicnode.com:443 4ms
+03:02:34 CONFIG {"mode": "blackhole", "latency": 9000, "bps": 0, "drop": 1.0, "match": "gnosis|xdai|1rpc"}
+03:02:34 CUT 1 live tunnels: gnosis-rpc.publicnode.com
+03:02:34 HOLE gnosis-rpc.publicnode.com:443
+03:02:41 HOLE 1rpc.io:443
+03:02:43 HOLE 1rpc.io:443
+03:02:49 HOLE 1rpc.io:443
+03:02:50 HOLE gnosis-rpc.publicnode.com:443
+03:02:56 HOLE gnosis-rpc.publicnode.com:443
+03:02:58 HOLE 1rpc.io:443
+03:03:03 HOLE 1rpc.io:443
+03:03:05 HOLE gnosis-rpc.publicnode.com:443
+03:03:10 HOLE gnosis-rpc.publicnode.com:443
+03:03:12 HOLE 1rpc.io:443
+03:03:19 HOLE gnosis-rpc.publicnode.com:443
+03:03:45 HOLE 1rpc.io:443
+03:03:52 HOLE gnosis-rpc.publicnode.com:443
+03:03:58 HOLE 1rpc.io:443
+03:03:59 HOLE 1rpc.io:443
+03:04:05 HOLE gnosis-rpc.publicnode.com:443
+03:04:07 HOLE gnosis-rpc.publicnode.com:443
+03:04:13 HOLE 1rpc.io:443
+03:04:14 HOLE 1rpc.io:443
+03:04:20 HOLE gnosis-rpc.publicnode.com:443
+03:04:21 HOLE gnosis-rpc.publicnode.com:443
+03:04:27 HOLE 1rpc.io:443
+03:04:35 HOLE gnosis-rpc.publicnode.com:443
+03:04:46 CONFIG {"mode": "pass", "latency": 9000, "bps": 0, "drop": 1.0, "match": "gnosis|xdai|1rpc"}
+03:04:46 PASS 1rpc.io:443 0ms
+03:04:47 PASS 1rpc.io:443 5ms
+03:04:48 PASS gnosis-rpc.publicnode.com:443 1ms
+03:04:48 PASS gnosis-rpc.publicnode.com:443 0ms
+03:05:18 PASS gnosis-rpc.publicnode.com:443 3ms
+03:05:49 PASS gnosis-rpc.publicnode.com:443 3ms
+# note: rpc.gnosischain.com is permanently banned in this state (vela.rpc.banned), so the pool has 2 Gnosis endpoints

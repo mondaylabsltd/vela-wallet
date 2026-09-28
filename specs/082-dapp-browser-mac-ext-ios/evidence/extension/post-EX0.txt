@@ -1,0 +1,11 @@
+EX0 freshness (2026-09-29 02:27 +0800)
+git HEAD                      fb8c7026 2026-09-29 02:16:57 +0800
+rust/pkg-web WASM_URL         /vela_core_bg.80945236660e.wasm
+rust/pkg-web build-info src   80945236660e87cb…
+extension/dist wasm           vela_core_bg.80945236660e.wasm (4,140,758 B, 02:16)
+extension/dist manifest       version 0.9.5, minimum_chrome_version 116
+extension/dist background.js  02:16:19 (bundles request-life / swlog: contains page_left, surface_closed, recovered)
+CfT started                   02:17:15 (after the dist build) -> loaded the fresh build
+chrome.runtime.getManifest()  0.9.5 (read from the wallet tab)
+after reloading tab A + tab B: window.ethereum {isVela:true}; EIP-6963 announces "Vela Wallet" app.getvela on both origins
+worker log at start           [vela-sw] 2026-09-28T18:17:17.352Z sw.start records=0 recovered=0
