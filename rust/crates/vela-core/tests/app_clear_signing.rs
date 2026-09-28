@@ -683,6 +683,50 @@ fn the_plain_send_is_reset_by_every_later_request() {
     }
 }
 
+/// 082 RC1 — one request, one answer. A contract call that is still
+/// resolving when a plain send replaces it must not land its late
+/// descriptor answer on the plain send: `confirm_of` reads `result` first,
+/// so a stray USDC transfer result would put "Confirm Send" for 1,000 USDC
+/// under a card that says 1 wei of the native coin.
+#[test]
+fn a_superseded_call_never_answers_onto_a_plain_send() {
+    let mut sut = Sut::new();
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    let ops = resolve_tx(&mut sut, USDC, &transfer, "0x0");
+    assert_eq!(
+        ops,
+        vec![Op::HttpGet {
+            path: format!("/erc7730/calldata/eip155-1/{USDC}.json"),
+        }]
+    );
+    assert!(sut.view().resolving);
+
+    let ops = sut.dispatch(plain_tx(Some(VITALIK), None, Some("0x1")));
+    assert!(ops.is_empty(), "a plain send asks the shell for nothing");
+
+    // The superseded run's descriptor answer arrives late.
+    let late = sut.resolve(Res::DescriptorFetched {
+        path: format!("/erc7730/calldata/eip155-1/{USDC}.json"),
+        json: None,
+    });
+    assert!(late.is_empty(), "a stale answer starts nothing: {late:?}");
+
+    let view = sut.view();
+    assert!(!view.resolving && view.resolved);
+    assert!(view.result.is_none(), "no stale USDC result");
+    assert_eq!(view.surface, ClearSurface::PlainSend);
+    assert_eq!(
+        view.plain_send,
+        Some(ClearPlainSend {
+            to: VITALIK_EIP55.to_owned(),
+            value_wei: "1".to_owned(),
+            amount: "0.000000000000000001".to_owned(),
+            no_value: false,
+        })
+    );
+    assert_eq!(view.confirm, confirm_send());
+}
+
 /// 082 house rule — serde-additive: a view written before `plain_send`
 /// existed still decodes, and the new surface travels as `plain_send`.
 #[test]
