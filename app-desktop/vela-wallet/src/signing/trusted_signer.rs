@@ -24,12 +24,47 @@ use crate::ui::{ButtonVariant, vela_button};
 /// "Waiting for the Trusted Signer…" — over the flow while the page has the
 /// request. The hint says what the page's own browser may ask first (Chrome
 /// asks before a page reaches this computer's loopback, research R3).
+///
+/// `unreachable` (spec 082 RD13, W16): the person came back and the page
+/// could not be reached — the card says so (`signerDown`), with Retry first
+/// and Cancel; the request and its five-minute clock stay.
 pub fn waiting_card(
     theme: &Theme,
     loc: &Loc,
+    unreachable: bool,
     on_reopen: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
+    if unreachable {
+        return card(theme)
+            .items_center()
+            .child(title(
+                theme,
+                loc.t("componentsUi.signing.trustedSignerTitle"),
+            ))
+            .child(body(theme, loc.t("componentsUi.signing.signerDown")))
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .flex_col()
+                    .gap(px(FLOW_GAP_SM))
+                    .child(vela_button(
+                        "trusted-signer-retry",
+                        ButtonVariant::Primary,
+                        loc.t("connect.browser.retry"),
+                        theme,
+                        on_reopen,
+                    ))
+                    .child(vela_button(
+                        "trusted-signer-cancel",
+                        ButtonVariant::Secondary,
+                        loc.t("common.cancel"),
+                        theme,
+                        on_cancel,
+                    )),
+            );
+    }
     card(theme)
         .items_center()
         // The touch prompt's disc, in the same place: a ceremony is under way
@@ -147,6 +182,9 @@ mod tests {
             "componentsUi.signing.trustedSignerWaitingHint",
             "componentsUi.signing.trustedSignerReopen",
             "componentsUi.signing.trustedSignerTitle",
+            // Spec 082 RD13: the page could not be reached, and its Retry.
+            "componentsUi.signing.signerDown",
+            "connect.browser.retry",
             "common.cancel",
             "common.done",
         ] {

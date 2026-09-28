@@ -871,6 +871,7 @@ impl OnboardingPage {
             trusted_signer_cards::waiting_card(
                 theme,
                 &self.loc,
+                channel.unreachable(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| reopen.reopen(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut App| cancel.cancel(),
             )
