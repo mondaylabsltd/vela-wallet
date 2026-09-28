@@ -31,6 +31,13 @@
 //!   convergence flows back as [`Event::ReceiptUpdate`] typed variants — all
 //!   terminal-wording regexes live in the shell's result-mapping layer.
 //!
+//! Spec 082 round 2 (RJ1) — the records exist before the bytes leave: the
+//! shell reports [`Event::OpSigned`] (signed, hashed, nothing POSTed), the
+//! core writes the records "may have been sent" and hands them to the tracker,
+//! and only then [`SendOperation::ClearToPost`] lets the shell POST. The
+//! relay's verdict then marks them admitted, or a proven "not sent" deletes
+//! and withdraws them; the receipt screen still waits for that verdict.
+//!
 //! Faithful port — behavior aligned line by line with the TS sources named per
 //! item; quirks kept and marked "ported verbatim". Deliberate deviations, all
 //! mandated by the migration notes:
@@ -950,6 +957,34 @@ pub enum SendOperation {
         #[serde(default)]
         #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
         submit_block: Option<u64>,
+        /// Forwarded to `tx_tracker::Event::Submitted` (spec 082 RJ1): the
+        /// relay accepted the op the write-ahead hand-off announced.
+        #[serde(default)]
+        admitted: bool,
+    },
+    /// The write-ahead records are on disk and the tracker holds them (spec
+    /// 082 RJ1): the shell may now POST `user_op_hash`, and only now. With no
+    /// clearance within `user_op::WRITE_AHEAD_WAIT_MS` it does not POST and
+    /// answers `SubmitFailed` (nothing sent). Answered `PostCleared`.
+    ClearToPost {
+        user_op_hash: String,
+    },
+    /// The relay accepted the written-ahead op (RJ1): patch these records'
+    /// `maybeSent` to false, in ONE write; they stay pending. Answered
+    /// `RecordsPersisted`.
+    MarkAdmitted {
+        record_ids: Vec<String>,
+    },
+    /// Remove written-ahead records whose op is proven never sent (RJ1), in
+    /// ONE write. Answered `RecordsPersisted`.
+    DeleteTxRecords {
+        ids: Vec<String>,
+    },
+    /// Forwarded to `tx_tracker::Event::Withdrawn` (RJ1). Answered
+    /// `TrackHandedOff`.
+    TrackWithdrawn {
+        user_op_hash: String,
+        record_ids: Vec<String>,
     },
     /// `resolveRecipientIdentity(addr)`.
     ResolveIdentity {
@@ -1040,6 +1075,8 @@ pub enum SendShellResult {
     PasskeyCancelAcknowledged,
     RecordsPersisted,
     TrackHandedOff,
+    /// `ClearToPost` was taken (spec 082 RJ1).
+    PostCleared,
     IdentityResolved {
         identity: Option<SendRecipientIdentity>,
     },
@@ -1214,6 +1251,18 @@ pub enum Event {
     SlideConfirm,
     /// The passkey sheet opened inside `SubmitUserOp`.
     SigningStarted,
+    /// Inside `SubmitUserOp`: the op is signed and its hash computed, and
+    /// nothing has been POSTed (spec 082 RJ1). The core writes the records
+    /// ahead and answers [`SendOperation::ClearToPost`] once they are on disk
+    /// and the tracker holds them. Once per submit.
+    OpSigned {
+        user_op_hash: String,
+        /// The head read before the first POST (ruling 8); `None` = unknown.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        submit_block: Option<u64>,
+        now_ms: f64,
+    },
     /// The confirm screen's cancel (✕) during preparing/signing.
     CancelSigning,
     /// Treasury sheet "retry" — re-runs the step-appropriate flow.
@@ -1417,6 +1466,18 @@ struct PersistCtx {
     chain_id: u32,
     maybe_sent: bool,
     submit_block: Option<u64>,
+    /// The write-ahead's records (RJ1): their ack also clears the POST.
+    write_ahead: bool,
+}
+
+/// The records written ahead of one submit's POST (spec 082 RJ1).
+#[derive(Clone, Debug, PartialEq)]
+struct WriteAhead {
+    /// The `Pipeline::Submitting` id they belong to.
+    pipeline_id: u64,
+    user_op_hash: String,
+    record_ids: Vec<String>,
+    submit_block: Option<u64>,
 }
 
 /// What `Max` stands for while it is in force.
@@ -1537,6 +1598,8 @@ pub struct Model {
     /// `prefetchedAccount.current?.publicKeyHex`.
     public_key_hex: Option<String>,
     pipeline: Pipeline,
+    /// The write-ahead of the submit in flight (RJ1), until its verdict.
+    write_ahead: Option<WriteAhead>,
     flights: Flights,
     /// Monotonic per-request id source (every request gets a fresh one).
     attempt: u64,
@@ -1962,6 +2025,11 @@ impl App for Send {
                 }
                 Command::done()
             }
+            Event::OpSigned {
+                user_op_hash,
+                submit_block,
+                now_ms,
+            } => op_signed(model, user_op_hash, submit_block, now_ms),
             Event::CancelSigning => cancel_signing(model),
             Event::RetryAfterBootstrap => retry_after_bootstrap(model),
             Event::DismissTreasurySheet => {
@@ -4785,6 +4853,13 @@ fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOut
         SendReceiptOutcome::Confirmed { tx_hash } => {
             model.tx_hash = Some(tx_hash);
         }
+        // `NotSent` judges an op the relay never showed it holds: for one it
+        // accepted (or has since acknowledged) it can only be stale — the
+        // write-ahead hands the op to the tracker before its POST (RJ1), and
+        // a slow POST can outlast the grace. The tracker revives the entry
+        // on the admitted hand-off; the receipt waits for that verdict
+        // (082 round-2 review).
+        SendReceiptOutcome::Failed { not_sent: true, .. } if !model.receipt_maybe_sent => {}
         SendReceiptOutcome::Failed { rejected, not_sent } => {
             // A definitive failure stamps the receipt — it never turns the
             // submitted payment back into an error state (invariant ⑤).
@@ -4863,7 +4938,8 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             // find the records they target (invariant ⑥).
             let track_id = next(model);
             model.flights.track = Some(track_id);
-            issue(
+            let clear = ctx.write_ahead.then(|| ctx.user_op_hash.clone());
+            let track = issue(
                 track_id,
                 SendOperation::TrackSubmitted {
                     user_op_hash: ctx.user_op_hash,
@@ -4871,9 +4947,22 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
                     chain_id: ctx.chain_id,
                     maybe_sent: ctx.maybe_sent,
                     submit_block: ctx.submit_block,
+                    admitted: false,
                 },
-            )
+            );
+            match clear {
+                // RJ1: on disk and tracked — the shell may POST.
+                Some(user_op_hash) => {
+                    let clear_id = next(model);
+                    Command::all([
+                        track,
+                        issue(clear_id, SendOperation::ClearToPost { user_op_hash }),
+                    ])
+                }
+                None => track,
+            }
         }
+        R::PostCleared => Command::done(),
         R::TrackHandedOff => {
             if model.flights.track == Some(id) {
                 model.flights.track = None;
@@ -5221,6 +5310,150 @@ fn accept_treasury(model: &mut Model, id: u64, probe: SendTreasuryProbe) -> Cmd 
     }
 }
 
+/// One activity record per recipient of `lines`, under `user_op_hash`.
+fn tx_records(
+    model: &Model,
+    lines: &[SendLine],
+    chain_id: u32,
+    user_op_hash: &str,
+    now_ms: f64,
+    (maybe_sent, submit_block): (bool, Option<u64>),
+) -> Vec<SendTxRecord> {
+    let from = model
+        .account
+        .as_ref()
+        .map(|a| a.address.clone())
+        .unwrap_or_default();
+    let timestamp_s = (now_ms / 1000.0).floor();
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, ln)| {
+            let usd = parse_float_or_zero(&ln.amount) * ln.price_usd;
+            SendTxRecord {
+                id: if lines.len() > 1 {
+                    format!("{user_op_hash}-{i}")
+                } else {
+                    user_op_hash.to_owned()
+                },
+                user_op_hash: user_op_hash.to_owned(),
+                tx_hash: String::new(),
+                from: from.clone(),
+                to: ln.to.clone(),
+                to_name: ln.to_name.clone(),
+                value: ln.amount.clone(),
+                symbol: ln.symbol.clone(),
+                decimals: ln.decimals,
+                logo_urls: ln.logo_urls.clone(),
+                chain_id,
+                timestamp_s,
+                usd: (usd > 0.0).then(|| format!("${usd:.2}")),
+                maybe_sent,
+                submit_block,
+            }
+        })
+        .collect()
+}
+
+/// The write-ahead (spec 082 RJ1): signed, nothing POSTed. The records are
+/// written "may have been sent" in ONE write; their ack hands them to the
+/// tracker and clears the POST. The receipt still waits for the verdict.
+fn op_signed(
+    model: &mut Model,
+    user_op_hash: String,
+    submit_block: Option<u64>,
+    now_ms: f64,
+) -> Cmd {
+    let Pipeline::Submitting {
+        id: pipeline_id,
+        chain_id,
+        lines,
+        ..
+    } = model.pipeline.clone()
+    else {
+        return Command::done();
+    };
+    if model
+        .write_ahead
+        .as_ref()
+        .is_some_and(|wa| wa.pipeline_id == pipeline_id)
+    {
+        return Command::done(); // once per submit
+    }
+    let records = tx_records(
+        model,
+        &lines,
+        chain_id,
+        &user_op_hash,
+        now_ms,
+        (true, submit_block),
+    );
+    let record_ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
+    model.write_ahead = Some(WriteAhead {
+        pipeline_id,
+        user_op_hash: user_op_hash.clone(),
+        record_ids: record_ids.clone(),
+        submit_block,
+    });
+    // Signed: the sheet is past the passkey, on its way to the relay.
+    if model.tx == SendTxStatus::Signing {
+        model.tx = SendTxStatus::Submitting;
+    }
+    let persist_id = next(model);
+    model.flights.persist = Some((
+        persist_id,
+        PersistCtx {
+            user_op_hash,
+            record_ids,
+            chain_id,
+            maybe_sent: true,
+            submit_block,
+            write_ahead: true,
+        },
+    ));
+    Command::all([
+        issue(persist_id, SendOperation::PersistTxRecords { records }),
+        render(),
+    ])
+}
+
+/// Withdraw the write-ahead of pipeline `pipeline_id`, if any (RJ1): its op
+/// is proven never sent. Deletes the records in one write and tells the
+/// tracker to forget them; a persist of them still in flight is dropped.
+fn withdraw_write_ahead(model: &mut Model, pipeline_id: u64) -> Vec<Cmd> {
+    let Some(wa) = model
+        .write_ahead
+        .take_if(|wa| wa.pipeline_id == pipeline_id)
+    else {
+        return Vec::new();
+    };
+    if model
+        .flights
+        .persist
+        .as_ref()
+        .is_some_and(|(_, ctx)| ctx.write_ahead)
+    {
+        model.flights.persist = None;
+    }
+    let delete_id = next(model);
+    let withdraw_id = next(model);
+    vec![
+        issue(
+            delete_id,
+            SendOperation::DeleteTxRecords {
+                ids: wa.record_ids.clone(),
+            },
+        ),
+        issue(
+            withdraw_id,
+            SendOperation::TrackWithdrawn {
+                user_op_hash: wa.user_op_hash,
+                record_ids: wa.record_ids,
+            },
+        ),
+    ]
+}
+
 fn accept_submitted(
     model: &mut Model,
     id: u64,
@@ -5241,6 +5474,16 @@ fn accept_submitted(
         return Command::done();
     }
     model.pipeline = Pipeline::Idle;
+
+    // RJ1: the records written ahead name this op — no second write. Another
+    // hash (the relay's own) withdraws them, and today's write follows.
+    let mut commands = Vec::new();
+    let written = model
+        .write_ahead
+        .take_if(|wa| wa.pipeline_id == id && wa.user_op_hash.eq_ignore_ascii_case(&user_op_hash));
+    if written.is_none() {
+        commands.extend(withdraw_write_ahead(model, id));
+    }
 
     // Bundler accepted — the payment is sent NOW. The tx hash resolves in the
     // background; a slow poll can never turn this into an error (invariant ⑤).
@@ -5266,57 +5509,11 @@ fn accept_submitted(
     model.tx = SendTxStatus::Confirmed;
     model.lock.end(gen);
 
-    // One activity record per recipient, all persisted in ONE atomic write
-    // (invariant ⑥) — a per-record write would drop every sibling but one.
     let from = model
         .account
         .as_ref()
         .map(|a| a.address.clone())
         .unwrap_or_default();
-    let timestamp_s = (now_ms / 1000.0).floor();
-    let records: Vec<SendTxRecord> = lines
-        .iter()
-        .enumerate()
-        .map(|(i, ln)| {
-            let usd = parse_float_or_zero(&ln.amount) * ln.price_usd;
-            SendTxRecord {
-                id: if lines.len() > 1 {
-                    format!("{user_op_hash}-{i}")
-                } else {
-                    user_op_hash.clone()
-                },
-                user_op_hash: user_op_hash.clone(),
-                tx_hash: String::new(),
-                from: from.clone(),
-                to: ln.to.clone(),
-                to_name: ln.to_name.clone(),
-                value: ln.amount.clone(),
-                symbol: ln.symbol.clone(),
-                decimals: ln.decimals,
-                logo_urls: ln.logo_urls.clone(),
-                chain_id,
-                timestamp_s,
-                usd: (usd > 0.0).then(|| format!("${usd:.2}")),
-                maybe_sent,
-                submit_block,
-            }
-        })
-        .collect();
-    let record_ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
-
-    let clear_id = next(model);
-    let persist_id = next(model);
-    model.flights.persist = Some((
-        persist_id,
-        PersistCtx {
-            user_op_hash,
-            record_ids,
-            chain_id,
-            maybe_sent,
-            submit_block,
-        },
-    ));
-    let mut commands = Vec::new();
     if !maybe_sent {
         // The success haptic says "sent" — a lost reply has not earned it
         // (spec 082 RA10); the receipt says "may have been sent" instead.
@@ -5328,9 +5525,64 @@ fn accept_submitted(
             },
         ));
     }
+    let clear_id = next(model);
     commands.push(issue(
         clear_id,
         SendOperation::ClearTokenCache { address: from },
+    ));
+
+    if let Some(wa) = written {
+        // Accepted: the records stop saying "may have been sent" and the
+        // tracker learns the relay has it. A lost reply adds nothing — the
+        // records and the tracker already say so.
+        if !maybe_sent {
+            let mark_id = next(model);
+            let track_id = next(model);
+            model.flights.track = Some(track_id);
+            commands.push(issue(
+                mark_id,
+                SendOperation::MarkAdmitted {
+                    record_ids: wa.record_ids.clone(),
+                },
+            ));
+            commands.push(issue(
+                track_id,
+                SendOperation::TrackSubmitted {
+                    user_op_hash: wa.user_op_hash,
+                    record_ids: wa.record_ids,
+                    chain_id,
+                    maybe_sent: false,
+                    submit_block: wa.submit_block.or(submit_block),
+                    admitted: true,
+                },
+            ));
+        }
+        commands.push(render());
+        return Command::all(commands);
+    }
+
+    // One activity record per recipient, all persisted in ONE atomic write
+    // (invariant ⑥) — a per-record write would drop every sibling but one.
+    let records = tx_records(
+        model,
+        &lines,
+        chain_id,
+        &user_op_hash,
+        now_ms,
+        (maybe_sent, submit_block),
+    );
+    let record_ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
+    let persist_id = next(model);
+    model.flights.persist = Some((
+        persist_id,
+        PersistCtx {
+            user_op_hash,
+            record_ids,
+            chain_id,
+            maybe_sent,
+            submit_block,
+            write_ahead: false,
+        },
     ));
     commands.push(issue(
         persist_id,
@@ -5351,6 +5603,19 @@ fn accept_submit_failed(model: &mut Model, id: u64, failure: SendSubmitFailure) 
         return Command::done();
     }
     model.pipeline = Pipeline::Idle;
+    // RJ1: a failure is proven "not sent" — nothing is POSTed without
+    // `ClearToPost`, and a POST whose reply was lost is `Submitted{maybe_sent}`.
+    // The written-ahead records go, and the tracker forgets them.
+    let withdrawn = withdraw_write_ahead(model, id);
+    let command = submit_failed(model, gen, failure);
+    if withdrawn.is_empty() {
+        command
+    } else {
+        Command::all(withdrawn.into_iter().chain([command]))
+    }
+}
+
+fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd {
     match failure {
         SendSubmitFailure::PasskeyCancelled => {
             // Never an error state, never an alert.

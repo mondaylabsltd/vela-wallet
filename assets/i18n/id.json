@@ -1137,7 +1137,7 @@
    "statusConfirmed": "Dikonfirmasi",
    "statusSubmitted": "Terkirim",
    "statusFailed": "Gagal",
-   "failedHint": "Transfer gagal on-chain — dana Anda tidak jadi terkirim. Biaya jaringan mungkin tetap dikenakan. Buka explorer di bawah untuk melihat alasannya, atau kembali dan coba lagi.",
+   "failedHint": "Transfer gagal on-chain — dana Anda tidak jadi terkirim. Biaya jaringan mungkin tetap dikenakan.",
    "userOpHash": "UserOp Hash"
   },
   "detail": {
@@ -1405,6 +1405,7 @@
    "selfCallBlockedSafeTx": "Permintaan ini meminta kunci Anda menyetujui transaksi Safe untuk dijalankan nanti. Vela menolaknya — tanda tangan seperti itu bisa dipakai tanpa kehadiran Anda. Tidak ada yang ditandatangani.",
    "stillConfirming": "Belum masuk ke chain. Vela terus memeriksa — jangan kirim ulang.",
    "maybeSent": "Mungkin sudah terkirim. Vela terus memeriksa — jangan kirim ulang.",
+   "refused": "Jaringan menolaknya — tidak ada yang terkirim.",
    "unknownOutcome": "Masih belum terkonfirmasi setelah 24 jam.",
    "openSigner": "Konfirmasi di halaman tanda tangan",
    "signerDown": "Halaman tanda tangan tidak terbuka. Periksa koneksi Anda."

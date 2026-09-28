@@ -240,6 +240,7 @@
       "selfCallBlockedSafeTx": "Questa richiesta chiede alla tua chiave di autorizzare una transazione Safe da eseguire più tardi. Vela la rifiuta: una firma così può essere usata senza di te. Non è stato firmato nulla.",
       "stillConfirming": "Non ancora sulla chain. Vela continua a controllare: non inviarla di nuovo.",
       "maybeSent": "Potrebbe essere già stata inviata. Vela continua a controllare: non inviarla di nuovo.",
+      "refused": "La rete l’ha rifiutata: non è stato inviato nulla.",
       "unknownOutcome": "Ancora non confermata dopo 24 ore.",
       "openSigner": "Conferma nella pagina di firma",
       "signerDown": "Impossibile aprire la pagina di firma. Controlla la connessione."

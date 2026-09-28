@@ -1140,7 +1140,7 @@
    "statusConfirmed": "Confirmado",
    "statusSubmitted": "Enviado",
    "statusFailed": "Falhou",
-   "failedHint": "A transferência foi revertida on-chain — seus fundos não foram enviados. Uma taxa de rede ainda pode ter sido cobrada. Abra o explorer abaixo para ver o motivo, ou volte e tente de novo.",
+   "failedHint": "A transferência foi revertida on-chain — seus fundos não foram enviados. Uma taxa de rede ainda pode ter sido cobrada.",
    "userOpHash": "Hash da UserOp"
   },
   "detail": {
@@ -1408,6 +1408,7 @@
    "selfCallBlockedSafeTx": "Esta solicitação pede que a sua chave autorize uma transação Safe para ser executada depois. A Vela recusa — uma assinatura dessas pode ser usada sem você. Nada foi assinado.",
    "stillConfirming": "Ainda não está na rede. O Vela continua verificando — não envie de novo.",
    "maybeSent": "Talvez já tenha sido enviada. O Vela continua verificando — não envie de novo.",
+   "refused": "A rede recusou — nada foi enviado.",
    "unknownOutcome": "Ainda sem confirmação após 24 horas.",
    "openSigner": "Confirmar na página de assinatura",
    "signerDown": "A página de assinatura não abriu. Verifique sua conexão."

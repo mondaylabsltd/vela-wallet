@@ -20,4 +20,4 @@ export type SignOperation = { "type": "send_response", transport_id: string, id:
 /**
  * FINAL (capped) params — invariant ⑨.
  */
-params_json: string, chain_id: number, address: string, credential_id: string, max_fee_per_gas: string | null, gas_fee_token: string | null, quoted_fee: SignQuotedFee | null, } | { "type": "persist_record", record: SignRecord, } | { "type": "update_record", record_id: string, close: SignRecordClose, } | { "type": "switch_active_account", index: number, };
+params_json: string, chain_id: number, address: string, credential_id: string, max_fee_per_gas: string | null, gas_fee_token: string | null, quoted_fee: SignQuotedFee | null, } | { "type": "persist_record", record: SignRecord, } | { "type": "update_record", record_id: string, close: SignRecordClose, } | { "type": "clear_to_post", id: string, user_op_hash: string, } | { "type": "delete_record", record_id: string, } | { "type": "switch_active_account", index: number, };

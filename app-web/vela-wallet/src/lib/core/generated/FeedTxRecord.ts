@@ -52,4 +52,10 @@ usd: string | null,
  * `dappOrigin`, spec 082 RG1). `None` for every other kind, and for a
  * shell that predates the field.
  */
-dapp_origin: string | null, };
+dapp_origin: string | null, 
+/**
+ * The call's `data` hex, for a `dapp_tx` record (spec 082 RJ16) — the
+ * shells map it from the stored request (`signedRequest`). `None` for
+ * every other kind, for a plain send, and for a shell that predates it.
+ */
+call_data: string | null, };

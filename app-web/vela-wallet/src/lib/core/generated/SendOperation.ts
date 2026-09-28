@@ -27,4 +27,9 @@ quoted_fee: SendQuotedFee | null, } | { "type": "cancel_passkey_sign" } | { "typ
 /**
  * Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA4).
  */
-maybe_sent: boolean, submit_block: number | null, } | { "type": "resolve_identity", address: string, } | { "type": "resolve_risk", chain_id: number, address: string, } | { "type": "simulate_calls", chain_id: number, account: string, calls: Array<FeeCall>, } | { "type": "start_timer", ms: number, tag: SendTimerTag, } | { "type": "haptic", kind: SendHapticKind, } | { "type": "show_alert", kind: SendAlertKind, } | { "type": "close" };
+maybe_sent: boolean, submit_block: number | null, 
+/**
+ * Forwarded to `tx_tracker::Event::Submitted` (spec 082 RJ1): the
+ * relay accepted the op the write-ahead hand-off announced.
+ */
+admitted: boolean, } | { "type": "clear_to_post", user_op_hash: string, } | { "type": "mark_admitted", record_ids: Array<string>, } | { "type": "delete_tx_records", ids: Array<string>, } | { "type": "track_withdrawn", user_op_hash: string, record_ids: Array<string>, } | { "type": "resolve_identity", address: string, } | { "type": "resolve_risk", chain_id: number, address: string, } | { "type": "simulate_calls", chain_id: number, account: string, calls: Array<FeeCall>, } | { "type": "start_timer", ms: number, tag: SendTimerTag, } | { "type": "haptic", kind: SendHapticKind, } | { "type": "show_alert", kind: SendAlertKind, } | { "type": "close" };

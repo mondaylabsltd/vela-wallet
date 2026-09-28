@@ -161,7 +161,7 @@
     "batchParsedCount": "解析结果 · {{n}} 条",
     "confirmTotalLine": "合计 ≈ {{fiat}} · {{network}}",
     "txPreparingBiometric": "正在准备交易并等待生物识别确认",
-    "txBackgroundHint": "关闭此页交易会在后台继续",
+    "txBackgroundHint": "关闭此页，交易会在后台继续",
     "txCloseBackground": "关闭 · 后台继续",
     "txSubmittedTitle": "交易已提交至网络",
     "txConfirmedTitle": "已发送 {{amount}} {{symbol}}"

@@ -52,6 +52,19 @@
 //!   limit (`rpc_pool::is_log_range_error`) and halves the window.
 //! - `HoldingsMoved` asks for a balance read only when an op landed.
 //!
+//! Spec 082 round 2 (RJ1, RJ4):
+//!
+//! - The write-ahead: the sign and send machines hand an op over "may have
+//!   been sent" BEFORE its POST, then again `admitted` once the relay took it
+//!   (an accepted op never reads MaybeSent), or `Withdrawn` once it is proven
+//!   never sent (the entry forgets those records; no patch, no balance read).
+//! - The relay's tx hash is used, not only shown: a status that names one for
+//!   a live entry asks the chain for that transaction's receipt
+//!   ([`TrackOperation::TxReceipt`], at the receipt cadence, one in flight per
+//!   hash); the op's own `UserOperationEvent` in its logs confirms or fails
+//!   the op exactly as a relay receipt does. EX13's landed op read "not on
+//!   chain yet" for 5 min 49 s with the tx hash in hand.
+//!
 //! The shell owns the regex wording layer that used to *be* the classification
 //! (`/dropped from the network/`, `UserOpRejectedError` instanceof checks):
 //! it maps RPC answers to the typed results below, and this core owns every
@@ -250,6 +263,15 @@ pub enum TrackOperation {
     /// Read the clock. The core owns every cadence decision but no clock —
     /// each `Tick`/resume asks, and the answer drives one scheduler pass.
     Now,
+    /// `eth_getTransactionReceipt(tx_hash)` through the chain pool (spec 082
+    /// RJ4): the bundle transaction the relay's status named for this op.
+    /// Answered [`TrackShellResult::TxReceipt`] with the result as it came —
+    /// the shell judges nothing.
+    TxReceipt {
+        chain_id: u32,
+        tx_hash: String,
+        user_op_hash: String,
+    },
 }
 
 /// What the shell observed. Every time-bearing variant carries `now_ms`
@@ -337,6 +359,18 @@ pub enum TrackShellResult {
     },
     RecordsPatched,
     Notified,
+    /// The answer to [`TrackOperation::TxReceipt`] (spec 082 RJ4):
+    /// `receipt_json` is the JSON-RPC `result` as it came — `"null"` while
+    /// the transaction is not mined; `None` when the pool got no answer. The
+    /// core reads the op's own `UserOperationEvent` out of its `logs` (the
+    /// find-event reader) and runs the `ExecutionFailure` rule over that op's
+    /// logs; a receipt without the op's event is ignored.
+    TxReceipt {
+        user_op_hash: String,
+        now_ms: f64,
+        #[serde(default)]
+        receipt_json: Option<String>,
+    },
 }
 
 impl Operation for TrackOperation {
@@ -437,6 +471,21 @@ pub enum Event {
         #[serde(default)]
         #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
         submit_block: Option<u64>,
+        /// The relay accepted this op (spec 082 RJ1): the hand-off after a
+        /// write-ahead one. Sets the entry acknowledged — an accepted op
+        /// never reads [`TrackOutcome::MaybeSent`], and a relay `not_found`
+        /// no longer counts against it.
+        #[serde(default)]
+        admitted: bool,
+    },
+    /// The op was proven never sent after its write-ahead hand-off (spec 082
+    /// RJ1): the submit failed before any POST, or the relay answered with
+    /// another hash. Drops `record_ids` from the entry and removes an entry
+    /// left with none; patches nothing, reads no balance. A later submit of
+    /// the same hash is tracked from the start.
+    Withdrawn {
+        user_op_hash: String,
+        record_ids: Vec<String>,
     },
     /// The shell's cadence timer. Any frequency is safe — the core enforces
     /// every throttle, so a chatty shell can never double-poll the bundler.
@@ -549,6 +598,10 @@ struct Entry {
     submit_block: Option<u64>,
     /// The find-event scan (ruling 8) — see [`FindScan`].
     find: FindScan,
+    /// A [`TrackOperation::TxReceipt`] for `relay_tx_hash` is out (RJ4).
+    tx_receipt_in_flight: bool,
+    /// Completion time of the last one — the receipt cadence counts from it.
+    last_tx_receipt_ms: Option<f64>,
 }
 
 /// Where the relay-independent landing check stands for one entry.
@@ -624,6 +677,8 @@ impl Entry {
             not_found_streak: 0,
             submit_block: None,
             find: FindScan::new(None, submitted_at_ms),
+            tx_receipt_in_flight: false,
+            last_tx_receipt_ms: None,
         }
     }
 
@@ -782,13 +837,28 @@ impl App for TxTracker {
                 chain_id,
                 maybe_sent,
                 submit_block,
+                admitted,
             } => submitted(
                 model,
                 &user_op_hash,
                 record_ids,
                 chain_id,
-                (maybe_sent, submit_block),
+                (maybe_sent, submit_block, admitted),
             ),
+            Event::Withdrawn {
+                user_op_hash,
+                record_ids,
+            } => {
+                let key = normalize(&user_op_hash);
+                let emptied = model.entries.get_mut(&key).is_some_and(|entry| {
+                    entry.record_ids.retain(|id| !record_ids.contains(id));
+                    entry.record_ids.is_empty()
+                });
+                if emptied {
+                    model.entries.remove(&key);
+                }
+                render()
+            }
             Event::Tick => {
                 // Inert unless something still needs the clock — a tracker
                 // with only terminal/abandoned entries makes no requests.
@@ -887,7 +957,7 @@ fn submitted(
     user_op_hash: &str,
     record_ids: Vec<String>,
     chain_id: u32,
-    (maybe_sent, submit_block): (bool, Option<u64>),
+    (maybe_sent, submit_block, admitted): (bool, Option<u64>, bool),
 ) -> Command<TrackEffect, Event> {
     let key = normalize(user_op_hash);
     let attempt = model.attempt;
@@ -897,9 +967,18 @@ fn submitted(
     // New records mark the new submission; the same hand-off again is an
     // echo and changes nothing. Merged into the dead entry, the new op would
     // go unpolled and read "not sent" at once, over an op the relay holds.
+    //
+    // Spec 082 round 2 (review): the write-ahead hands the op over BEFORE
+    // its POST, so a slow POST can outlast the not-found grace. `NotSent`
+    // judges an op the relay never showed it holds; the relay then taking it
+    // (`admitted`) proves that verdict came too early — and an admitted op is
+    // never in doubt again, so this can never undo a real `NotSent`. The
+    // entry lives again (a `Rejected` after the relay took it stays: DX-W3).
     let new_life = model.entries.get(&key).is_some_and(|entry| {
-        matches!(entry.status, EntryStatus::NotSent | EntryStatus::Rejected)
-            && record_ids.iter().any(|id| !entry.record_ids.contains(id))
+        let refused_or_unsent =
+            matches!(entry.status, EntryStatus::NotSent | EntryStatus::Rejected);
+        (refused_or_unsent && record_ids.iter().any(|id| !entry.record_ids.contains(id)))
+            || (admitted && entry.status == EntryStatus::NotSent)
     });
     if new_life {
         model.entries.remove(&key);
@@ -912,6 +991,11 @@ fn submitted(
         entry.merge_record_id(id);
     }
     entry.merge_submit_facts(maybe_sent, submit_block);
+    if admitted {
+        // The relay took it (RJ1): an ordinary op from here on.
+        entry.acknowledged = true;
+        entry.not_found_streak = 0;
+    }
 
     // First receipt poll goes out immediately, like `waitForReceipt`'s first
     // loop iteration. A second consumer of an already-tracked hash joins the
@@ -1177,6 +1261,12 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             },
         ),
 
+        TrackShellResult::TxReceipt {
+            user_op_hash,
+            now_ms,
+            receipt_json,
+        } => on_tx_receipt(model, &user_op_hash, now_ms, receipt_json.as_deref()),
+
         // Acks — nothing may change.
         TrackShellResult::RecordsPatched | TrackShellResult::Notified => Command::done(),
     }
@@ -1287,6 +1377,26 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
             ));
         }
 
+        // RJ4: the relay named the bundle tx — read its receipt from the
+        // chain at the receipt cadence, one request per hash in flight.
+        if let Some(tx_hash) = entry.relay_tx_hash.clone() {
+            let due = !entry.tx_receipt_in_flight
+                && entry
+                    .last_tx_receipt_ms
+                    .is_none_or(|last| now_ms - last >= receipt_interval);
+            if due {
+                entry.tx_receipt_in_flight = true;
+                commands.push(shell_request(
+                    attempt,
+                    TrackOperation::TxReceipt {
+                        chain_id: entry.chain_id,
+                        tx_hash,
+                        user_op_hash: hash.clone(),
+                    },
+                ));
+            }
+        }
+
         // Ruling 8: while the relay has not shown it holds a may-have-been-
         // sent op, read the chain for the op's own event, on the same
         // cadence as the status polls.
@@ -1369,51 +1479,144 @@ fn find_in_logs(logs_json: &str, user_op_hash: &str) -> Found {
     let Some(logs) = logs.as_array() else {
         return Found::Unreadable;
     };
-    let text = |log: &serde_json::Value, key: &str| {
-        log.get(key)
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_owned()
-    };
-    for log in logs {
-        if log.get("removed").and_then(serde_json::Value::as_bool) == Some(true) {
-            continue;
-        }
-        if !text(log, "address").eq_ignore_ascii_case(crate::safe::ENTRY_POINT) {
-            continue;
-        }
-        let topics: Vec<&str> = log
-            .get("topics")
-            .and_then(serde_json::Value::as_array)
-            .map(|topics| {
-                topics
-                    .iter()
-                    .filter_map(serde_json::Value::as_str)
-                    .collect()
-            })
-            .unwrap_or_default();
-        let ours = topics.first().is_some_and(|topic| {
+    match find_in_log_array(logs, user_op_hash) {
+        Some(event) => Found::Landed {
+            tx_hash: event.tx_hash,
+            success: event.success,
+        },
+        None => Found::Nothing,
+    }
+}
+
+/// The op's own `UserOperationEvent` in a log array, with where it sits.
+struct OpEventLog {
+    /// Its position in the array.
+    index: usize,
+    tx_hash: String,
+    success: bool,
+}
+
+fn log_text(log: &serde_json::Value, key: &str) -> String {
+    log.get(key)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn log_topics(log: &serde_json::Value) -> Vec<String> {
+    log.get("topics")
+        .and_then(serde_json::Value::as_array)
+        .map(|topics| {
+            topics
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A live (not `removed`) `UserOperationEvent` of the EntryPoint — any op's.
+fn is_op_event(log: &serde_json::Value) -> bool {
+    log.get("removed").and_then(serde_json::Value::as_bool) != Some(true)
+        && log_text(log, "address").eq_ignore_ascii_case(crate::safe::ENTRY_POINT)
+        && log_topics(log).first().is_some_and(|topic| {
             topic.eq_ignore_ascii_case(crate::user_op::USER_OPERATION_EVENT_TOPIC)
-        }) && topics
+        })
+}
+
+/// The find-event reader: the EntryPoint's `UserOperationEvent` whose
+/// `topics[1]` is this op's hash. `data` is `(uint256 nonce, bool success,
+/// uint256 actualGasCost, uint256 actualGasUsed)`; `success` is its second
+/// word. An event whose tx hash or success word cannot be read is no verdict.
+fn find_in_log_array(logs: &[serde_json::Value], user_op_hash: &str) -> Option<OpEventLog> {
+    logs.iter().enumerate().find_map(|(index, log)| {
+        if !is_op_event(log) {
+            return None;
+        }
+        let ours = log_topics(log)
             .get(1)
             .is_some_and(|topic| topic.eq_ignore_ascii_case(user_op_hash));
         if !ours {
-            continue;
+            return None;
         }
-        let tx_hash = text(log, "transactionHash");
-        let data = text(log, "data");
+        let tx_hash = log_text(log, "transactionHash");
+        let data = log_text(log, "data");
         let data = data.strip_prefix("0x").unwrap_or(&data);
-        // The second 32-byte word; anything unreadable is not a verdict.
-        let Some(word) = data.get(64..128) else {
-            continue;
-        };
+        let word = data.get(64..128)?;
         if tx_hash.is_empty() || !word.bytes().all(|b| b.is_ascii_hexdigit()) {
-            continue;
+            return None;
         }
-        let success = word.bytes().any(|b| b != b'0');
-        return Found::Landed { tx_hash, success };
+        Some(OpEventLog {
+            index,
+            tx_hash,
+            success: word.bytes().any(|b| b != b'0'),
+        })
+    })
+}
+
+/// A bundle transaction's receipt, read for this op (RJ4). The op's own
+/// logs are the ones after the previous op's `UserOperationEvent` (or the
+/// start) up to its own — how the EntryPoint orders a bundle's execution —
+/// so another op's Safe failing in the same bundle is not this op failing.
+fn on_tx_receipt(
+    model: &mut Model,
+    user_op_hash: &str,
+    now_ms: f64,
+    receipt_json: Option<&str>,
+) -> Command<TrackEffect, Event> {
+    let key = normalize(user_op_hash);
+    let attempt = model.attempt;
+    let Some(entry) = model.entries.get_mut(&key) else {
+        return Command::done();
+    };
+    entry.tx_receipt_in_flight = false;
+    entry.last_tx_receipt_ms = Some(now_ms);
+    if entry.status.is_terminal() {
+        return Command::done(); // resolved meanwhile — never double-resolve
     }
-    Found::Nothing
+    // No answer, not mined (`null`), or not a receipt: ask again later.
+    let receipt =
+        receipt_json.and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok());
+    let receipt = receipt
+        .as_ref()
+        .map(|value| value.get("result").unwrap_or(value));
+    let Some(logs) = receipt
+        .and_then(|receipt| receipt.get("logs"))
+        .and_then(serde_json::Value::as_array)
+    else {
+        return render();
+    };
+    let Some(event) = find_in_log_array(logs, &key) else {
+        // Mined without this op's event (a replaced bundle): proves nothing.
+        return render();
+    };
+    let start = logs[..event.index]
+        .iter()
+        .rposition(is_op_event)
+        .map_or(0, |previous| previous + 1);
+    let own_logs: Vec<super::token_trust::TrustReceiptLog> = logs[start..=event.index]
+        .iter()
+        .map(|log| super::token_trust::TrustReceiptLog {
+            address: log_text(log, "address"),
+            topics: log_topics(log),
+            data: log_text(log, "data"),
+        })
+        .collect();
+    entry.acknowledged = true;
+    let ids = entry.record_ids.clone();
+    let chain_id = entry.chain_id;
+    if event.success && !safe_execution_failed(&own_logs) {
+        entry.status = EntryStatus::Confirmed {
+            tx_hash: event.tx_hash.clone(),
+        };
+        confirm_records(attempt, key, chain_id, ids, event.tx_hash)
+    } else {
+        entry.status = EntryStatus::Failed {
+            tx_hash: event.tx_hash,
+        };
+        fail_records(attempt, ids, Some(chain_id))
+    }
 }
 
 /// The JSON-RPC error member the pool answered, as the range rule reads it.
@@ -1570,7 +1773,8 @@ fn clock_of(result: &TrackShellResult) -> Option<f64> {
         | TrackShellResult::Status { now_ms, .. }
         | TrackShellResult::StatusUnavailable { now_ms, .. }
         | TrackShellResult::RecordsLoaded { now_ms, .. }
-        | TrackShellResult::OpEvent { now_ms, .. } => Some(*now_ms),
+        | TrackShellResult::OpEvent { now_ms, .. }
+        | TrackShellResult::TxReceipt { now_ms, .. } => Some(*now_ms),
         TrackShellResult::RecordsPatched | TrackShellResult::Notified => None,
     }
 }

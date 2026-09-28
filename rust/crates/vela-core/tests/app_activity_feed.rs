@@ -14,9 +14,9 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::activity_feed::{
     dapp_site, history_empty_key, home_empty_key, is_stable, native_amount, tx_usd_value,
-    ActivityFeed, Event, FeedBatchKind, FeedDirection, FeedItem, FeedOperation as Op, FeedRow,
-    FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus, FeedView, HISTORY_EMPTY_ALL,
-    HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED,
+    ActivityFeed, Event, FeedBatchKind, FeedCounterpartyRole, FeedDirection, FeedItem,
+    FeedOperation as Op, FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus,
+    FeedView, HISTORY_EMPTY_ALL, HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED,
 };
 
 type Sut = DomainDriver<ActivityFeed>;
@@ -54,6 +54,7 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         kind: None,
         usd: None,
         dapp_origin: None,
+        call_data: None,
     }
 }
 
@@ -1307,5 +1308,131 @@ fn a_stale_read_never_eats_the_celebration_the_sync_earned() {
     assert!(
         sut.view().toast.is_some(),
         "the receipt's own read must celebrate"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 round 2 — what a dApp record's detail says (RJ16, G52)
+// ---------------------------------------------------------------------------
+
+/// The founder's address, as the DX-W3 run sent to it.
+const FOUNDER: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+/// USDC on Gnosis — the contract the DX-W3 call went to.
+const GNOSIS_USDC: &str = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83";
+
+/// `transfer(FOUNDER, 10^30)` — exactly 4 + 32 + 32 bytes.
+fn transfer_to_founder() -> String {
+    format!(
+        "0xa9059cbb{:0>64}{:0>64}",
+        FOUNDER.trim_start_matches("0x").to_lowercase(),
+        "c9f2c9cd04674edea40000000"
+    )
+}
+
+/// DX-W3: a relay-rejected USDC transfer. The detail named the token contract
+/// as 接收方 and offered the explorer for an op that never reached the chain.
+/// The recipient is the transfer's, checksummed; there is no tx hash to link.
+#[test]
+fn a_token_transfer_names_its_recipient_and_links_no_op_hash() {
+    let op = "0x4d558afa2e899ead13277162dfa5b25fa7f9b1bc809de0b9f90f7713449439d7";
+    let mut rejected = dapp_tx(
+        "dapp-w3-tx",
+        "http://127.0.0.1:8137",
+        GNOSIS_USDC,
+        "0x0",
+        100_000.0,
+    );
+    rejected.call_data = Some(transfer_to_founder());
+    rejected.status = FeedTxStatus::Failed;
+    rejected.user_op_hash = op.to_owned();
+    rejected.tx_hash = op.to_uppercase().replace("0X", "0x");
+    rejected.to_name = None;
+    let sut = boot(vec![rejected]);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.counterparty.as_deref(), Some(FOUNDER));
+    assert_eq!(row.counterparty_role, FeedCounterpartyRole::Recipient);
+    assert_eq!(row.tx_hash, None, "an op hash is never an explorer link");
+    assert_eq!(row.status, FeedTxStatus::Failed);
+}
+
+/// Any other call goes to a contract: the counterparty is the contract, said
+/// as the contract ("interacting with"), not as a recipient.
+#[test]
+fn a_swap_call_names_the_contract() {
+    let mut swap = dapp_tx(
+        "dapp-s-tx",
+        "https://app.uniswap.org",
+        "0xRouter",
+        "0x0",
+        100_000.0,
+    );
+    swap.call_data = Some(format!("0x3593564c{}", "00".repeat(96)));
+    let sut = boot(vec![swap]);
+    let row = &items(&sut)[0];
+    assert_eq!(row.counterparty.as_deref(), Some("0xRouter"));
+    assert_eq!(row.counterparty_role, FeedCounterpartyRole::Contract);
+    assert_eq!(
+        row.tx_hash.as_deref(),
+        Some("0xtxdapp-s-tx"),
+        "a real tx hash stays"
+    );
+
+    // A transfer selector with the wrong length is not a transfer.
+    let mut odd = dapp_tx("dapp-o-tx", "https://x.test", "0xToken", "0x0", 100_000.0);
+    odd.call_data = Some(format!("{}00", transfer_to_founder()));
+    let sut = boot(vec![odd]);
+    let row = &items(&sut)[0];
+    assert_eq!(row.counterparty.as_deref(), Some("0xToken"));
+    assert_eq!(row.counterparty_role, FeedCounterpartyRole::Contract);
+}
+
+/// No calldata (a plain native send from a page, or a shell that does not
+/// map it yet): `to`, as a recipient — today's row, unchanged.
+#[test]
+fn a_plain_send_is_unchanged() {
+    let plain = dapp_tx(
+        "dapp-p-tx",
+        "https://x.test",
+        "0xFriend",
+        "0x2386f26fc10000",
+        100_000.0,
+    );
+    let sut = boot(vec![plain]);
+    let row = &items(&sut)[0];
+    assert_eq!(row.counterparty.as_deref(), Some("0xFriend"));
+    assert_eq!(row.counterparty_role, FeedCounterpartyRole::Recipient);
+    assert_eq!(row.value.as_deref(), Some("0.01"));
+
+    let mut empty = dapp_tx("dapp-e-tx", "https://x.test", "0xFriend", "0x0", 100_000.0);
+    empty.call_data = Some("0x".to_owned());
+    let sut = boot(vec![empty]);
+    assert_eq!(
+        items(&sut)[0].counterparty_role,
+        FeedCounterpartyRole::Recipient,
+        "empty calldata is no call"
+    );
+}
+
+/// The wire: both fields default, so a record or row from before round 2
+/// still reads.
+#[test]
+fn the_new_fields_default_on_the_wire() {
+    let record = serde_json::to_value(base("x", 1.0)).unwrap_or_default();
+    let mut old = record.clone();
+    if let Some(map) = old.as_object_mut() {
+        map.remove("call_data");
+    }
+    let back: FeedTxRecord = serde_json::from_value(old).expect("an old record reads");
+    assert_eq!(back.call_data, None);
+    assert_eq!(
+        serde_json::to_value(FeedCounterpartyRole::Contract).unwrap_or_default(),
+        serde_json::json!("contract")
+    );
+    assert_eq!(
+        FeedCounterpartyRole::default(),
+        FeedCounterpartyRole::Recipient
     );
 }

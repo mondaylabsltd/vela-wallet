@@ -66,6 +66,24 @@
 //! - A dropped transport stops a pipeline still before the passkey, and
 //!   `AskerGone` ends one whose page vanished (RB2).
 //!
+//! Spec 082 round 2:
+//!
+//! - **Write-ahead (RJ1)**: the record exists before the bytes leave.
+//!   [`Event::OpSigned`] (after the passkey, the local hash and the head read,
+//!   before any POST) persists the pending record "may have been sent" and
+//!   hands it to the tracker; only on its `RecordPersisted` does
+//!   [`SignOperation::ClearToPost`] let the shell POST. The relay accepting it
+//!   patches the record [`SignRecordClose::Admitted`]; a proven "not sent"
+//!   before `OpSubmitted` deletes it ([`SignOperation::DeleteRecord`]) and
+//!   tells the tracker to forget it ([`SignView::tracker_withdraw`]).
+//! - **Refusals are errors (RJ3)**: a relay-refused op answers `-32603` with
+//!   [`crate::user_op::REFUSED_DAPP_DETAIL`], a proven-never-sent one with
+//!   [`crate::user_op::NOT_SENT_DAPP_DETAIL`] — never Ok + op hash, and the
+//!   sheet never says "try again" for a refusal ([`SignView::failure_refused`],
+//!   [`SignEndingState::Refused`]).
+//! - **The answer follows the tracker (RJ4)**: [`Event::OpTracked`] answers the
+//!   waiting page the moment the tracker knows the outcome.
+//!
 //! Ported quirks and fail-closed divergences are doc-commented inline.
 
 use crux_core::capability::Operation;
@@ -331,8 +349,14 @@ pub struct SignRecord {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum SignRecordClose {
-    Confirmed { tx_hash: String },
+    Confirmed {
+        tx_hash: String,
+    },
     Failed,
+    /// The relay accepted the write-ahead record's op (spec 082 RJ1): the
+    /// record's `maybeSent` becomes false and it stays pending — only the
+    /// tracker closes it.
+    Admitted,
 }
 
 /// The one-shot settlement a rid reaches — the extension's durable outcomes
@@ -372,6 +396,20 @@ pub struct SignTrackerHandoff {
     #[serde(default)]
     #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
     pub submit_block: Option<u64>,
+    /// Forwarded to `tx_tracker::Event::Submitted` (spec 082 RJ1): the relay
+    /// accepted the op the write-ahead hand-off announced.
+    #[serde(default)]
+    pub admitted: bool,
+}
+
+/// A write-ahead record proven never sent (spec 082 RJ1): the shell feeds
+/// this to `tx_tracker::Event::Withdrawn` the moment it appears (idempotent —
+/// withdrawing ids already gone changes nothing).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct SignTrackerWithdraw {
+    pub user_op_hash: String,
+    pub record_ids: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -434,6 +472,16 @@ pub enum SignOperation {
         record_id: String,
         close: SignRecordClose,
     },
+    /// The write-ahead record for request `id` is on disk (spec 082 RJ1): the
+    /// shell may now POST `user_op_hash`, and only now — after the asker
+    /// check (RB2), immediately before the POST. With no clearance within
+    /// `user_op::WRITE_AHEAD_WAIT_MS` the shell does not POST and reports
+    /// `Failed` (nothing sent). Answered `Responded`.
+    ClearToPost { id: String, user_op_hash: String },
+    /// Remove a write-ahead record whose op is proven never sent (RJ1). The
+    /// shell serialises it with the record's other writes. Answered
+    /// `RecordUpdated`.
+    DeleteRecord { record_id: String },
     /// §12.1.6 — switch the active account to the granted one (dispatched to
     /// the session/wallet store); answered with `AccountSwitched` once the
     /// switch landed, which is what sequences "switch first, then the
@@ -462,9 +510,7 @@ pub enum SignSubmitOutcome {
     /// reverted (owner ruling 9: the page gets its tx hash, the sheet and
     /// Activity say it failed); batch: the userOpHash; signatures: the
     /// EIP-1271 signature hex.
-    Succeeded {
-        result: String,
-    },
+    Succeeded { result: String },
     /// The bundler accepted the op but its receipt did not arrive inside the
     /// shell's wait (~120 s). The page is still answered — with the op hash,
     /// since a dApp expects SOME hash — but nothing is known to have landed,
@@ -474,9 +520,7 @@ pub enum SignSubmitOutcome {
     /// bundler forever while its record claimed "confirmed"). The core never
     /// tries to tell a tx hash from an op hash — both are 32-byte hex — so
     /// the shell must say which one it holds.
-    ReceiptPending {
-        user_op_hash: String,
-    },
+    ReceiptPending { user_op_hash: String },
     /// User dismissed the passkey sheet — never an error, never a response
     /// (`dapp-connection.tsx:808-812`).
     PasskeyCancelled,
@@ -490,6 +534,12 @@ pub enum SignSubmitOutcome {
     },
     Failed {
         message: String,
+        /// The relay refused the op (spec 082 RJ3): a submit-time `NotSent`
+        /// with a rejection that is not "relayer unavailable". The page is
+        /// answered `user_op::REFUSED_DAPP_DETAIL`, whatever `message` says,
+        /// and the sheet's failure is a refusal ([`SignView::failure_refused`]).
+        #[serde(default)]
+        refused: bool,
     },
     /// The shell proved, before the passkey or between the passkey and the
     /// relay POST, that the asking page no longer exists (spec 082 RB2):
@@ -609,6 +659,33 @@ pub enum Event {
         #[serde(default)]
         #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
         submit_block: Option<u64>,
+    },
+    /// The op for request `id` is signed and its hash computed — after the
+    /// passkey, the local hash and the head read, BEFORE any POST (spec 082
+    /// RJ1). The core writes the record ahead and answers
+    /// [`SignOperation::ClearToPost`] once it is on disk. Accepted only in the
+    /// submit stage, once per pipeline, before `OpSubmitted`.
+    OpSigned {
+        id: String,
+        user_op_hash: String,
+        /// The head read before the first POST (ruling 8); `None` = unknown.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        submit_block: Option<u64>,
+        now_ms: f64,
+    },
+    /// The tracker's entry for an op changed (spec 082 RJ4): the shell
+    /// forwards `status` and `tx_hash` of the entry for the in-flight op
+    /// whenever they change. Once the op is past `OpSubmitted` and the page
+    /// is still waiting: Confirmed / Dropped with a tx hash answer Ok(tx
+    /// hash) (ruling 9 for Dropped); Rejected answers -32603 refused;
+    /// NotSent answers -32603 not sent; anything else waits.
+    OpTracked {
+        user_op_hash: String,
+        status: TrackStatus,
+        #[serde(default)]
+        tx_hash: Option<String>,
+        now_ms: f64,
     },
     /// The passkey (or Trusted Signer) prompt for request `id` opened
     /// (spec 082 RA9). Accepted only while that request's pipeline is in its
@@ -851,9 +928,13 @@ pub enum SignEndingState {
     /// Cross, `statusFailed` + `failedHint`, the explorer: it landed and
     /// reverted (including a Safe `ExecutionFailure`).
     Reverted { tx_hash: String },
-    /// Cross, `statusFailed` + `txErrorGeneric`: the relay refused it, or
-    /// never had it.
+    /// Cross, `statusFailed` + `txErrorGeneric`: the relay never had it
+    /// (the tracker's `NotSent`) — sending it again is safe advice.
     NotSent,
+    /// Cross, `statusFailed` + `componentsUi.signing.refused`, no Retry words
+    /// (spec 082 RJ3): the relay refused it (the tracker's `Rejected`) —
+    /// nothing was sent, and the same request would be refused again.
+    Refused,
     /// Still on its way: the words come from `outcome` (`MaybeSent` →
     /// `maybeSent`, `Landing` → the ring, `StillConfirming`, `Unknown`);
     /// `fee_held` swaps in the fee-hold line.
@@ -878,6 +959,7 @@ pub fn ending_state(ending: &SignEnding, track: Option<&TrackEntryView>) -> Sign
         } => (user_op_hash.clone().unwrap_or_default(), Some(tx_hash)),
         SignEnding::StillConfirming { user_op_hash } => (user_op_hash.clone(), None),
     };
+    let landed = answered_tx.is_some();
     let entry =
         track.filter(|entry| !op.is_empty() && entry.user_op_hash.eq_ignore_ascii_case(&op));
     let Some(entry) = entry else {
@@ -897,13 +979,31 @@ pub fn ending_state(ending: &SignEnding, track: Option<&TrackEntryView>) -> Sign
     match entry.status {
         TrackStatus::Confirmed => SignEndingState::Confirmed { tx_hash: tx_hash() },
         TrackStatus::Dropped => SignEndingState::Reverted { tx_hash: tx_hash() },
-        TrackStatus::NotSent | TrackStatus::Rejected => SignEndingState::NotSent,
+        // A landed answer holds a tx hash (a receipt, or the tracker's own
+        // verdict): "never sent" / "refused" against it can only be stale —
+        // reached while the POST was still out — and would say "send it
+        // again" over money that moved. It follows the tracker to its real
+        // verdict (082 round-2 review, DX6's rule for the other two words).
+        TrackStatus::NotSent | TrackStatus::Rejected if landed => SignEndingState::Following {
+            user_op_hash: op,
+            outcome: TrackOutcome::Landing,
+            fee_held: false,
+        },
+        TrackStatus::NotSent => SignEndingState::NotSent,
+        TrackStatus::Rejected => SignEndingState::Refused,
         TrackStatus::Pending
         | TrackStatus::FeeHeld
         | TrackStatus::Unreachable
         | TrackStatus::AcceptedNotLanded => SignEndingState::Following {
             user_op_hash: op,
-            outcome: entry.outcome,
+            // DX6: the page has its tx hash while the tracker still has the
+            // op in doubt (its relay was silent). A landed answer is never
+            // "may have been sent" — it is landing.
+            outcome: if landed && entry.outcome == TrackOutcome::MaybeSent {
+                TrackOutcome::Landing
+            } else {
+                entry.outcome
+            },
             fee_held: entry.status == TrackStatus::FeeHeld,
         },
     }
@@ -993,6 +1093,23 @@ struct Inflight {
     op_hash: Option<String>,
     /// Where the passkey prompt is, within `Stage::Submitting` (RA9).
     ceremony: Ceremony,
+    /// The record written ahead of the POST (spec 082 RJ1), until the
+    /// relay's verdict (`OpSubmitted`) or a proven "not sent" withdraws it.
+    write_ahead: Option<WriteAhead>,
+    /// `OpSubmitted` said the relay took the op (`maybe_sent: false`): the
+    /// tracker's `NotSent` — a verdict on an op the relay never showed it
+    /// holds — can only be stale for it (082 round-2 review).
+    accepted: bool,
+}
+
+/// The write-ahead record of one submit (RJ1).
+#[derive(Clone, Debug)]
+struct WriteAhead {
+    user_op_hash: String,
+    record_id: String,
+    submit_block: Option<u64>,
+    /// `ClearToPost` went out (the record's persist was acked).
+    cleared: bool,
 }
 
 /// The passkey / Trusted Signer prompt of one submit (spec 082 RA9).
@@ -1026,10 +1143,15 @@ pub struct Model {
     funding_pinned_rid: Option<String>,
     last_opts: Option<SignApproveOpts>,
     sign_error: Option<SignErrorNotice>,
+    /// The error above is a refusal by the relay (spec 082 RJ3). Set and
+    /// cleared with `sign_error`.
+    sign_error_refused: bool,
     pending_op_hash: Option<String>,
     /// The sheet's op was submitted "may have been sent" (spec 082 RA3).
     pending_op_maybe_sent: bool,
     tracker_handoff: Option<SignTrackerHandoff>,
+    /// A write-ahead record proven never sent (RJ1), for the tracker.
+    tracker_withdraw: Option<SignTrackerWithdraw>,
     notice: Option<SignNotice>,
     /// Set with `pending` when the self-call guard refuses a request.
     blocked: Option<SignBlockedView>,
@@ -1083,6 +1205,7 @@ impl Model {
         self.funding = None;
         self.funding_pinned_rid = None;
         self.sign_error = None;
+        self.sign_error_refused = false;
         self.pending_op_hash = None;
         self.pending_op_maybe_sent = false;
     }
@@ -1214,6 +1337,14 @@ pub struct SignView {
     pub reconcile_pending: bool,
     pub swipe_action: SignSwipeAction,
     pub tracker_handoff: Option<SignTrackerHandoff>,
+    /// A write-ahead record proven never sent (spec 082 RJ1): the shell feeds
+    /// it to `tx_tracker::Event::Withdrawn` the moment it appears.
+    #[serde(default)]
+    pub tracker_withdraw: Option<SignTrackerWithdraw>,
+    /// `error` is the relay refusing the op (spec 082 RJ3): the sheet says
+    /// `componentsUi.signing.refused` under `statusFailed`, never "try again".
+    #[serde(default)]
+    pub failure_refused: bool,
     pub notice: Option<SignNotice>,
     pub global_chain_id: u32,
     /// Present when the request was refused because it would have changed who
@@ -1304,6 +1435,18 @@ impl App for SignRequest {
                 maybe_sent,
                 submit_block,
             } => on_op_submitted(model, &id, user_op_hash, now_ms, (maybe_sent, submit_block)),
+            Event::OpSigned {
+                id,
+                user_op_hash,
+                submit_block,
+                now_ms,
+            } => on_op_signed(model, &id, user_op_hash, submit_block, now_ms),
+            Event::OpTracked {
+                user_op_hash,
+                status,
+                tx_hash,
+                now_ms: _,
+            } => on_op_tracked(model, &user_op_hash, status, tx_hash),
             Event::CeremonyStarted { id } => on_ceremony(model, &id, Ceremony::Up),
             Event::CeremonyDone { id } => on_ceremony(model, &id, Ceremony::Done),
             Event::TransportDropped { transport_id } => {
@@ -1332,7 +1475,12 @@ impl App for SignRequest {
                 render()
             }
             Event::ShellCompleted { attempt, result } => {
-                if attempt != model.attempt {
+                // The account switch belongs to the request that asked for
+                // it, never to a pipeline: a pipeline killed or answered early
+                // (the attempt moving on) must not strand a newer request's
+                // switch ack, or that request stays `reconcile_pending` and
+                // can never be approved (082 round-2 review).
+                if attempt != model.attempt && !matches!(result, SignShellResult::AccountSwitched) {
                     // A result from a rejected pipeline (BUG-2): the 4001 is
                     // out, nothing may still submit or answer this id.
                     return Command::done();
@@ -1433,6 +1581,8 @@ impl App for SignRequest {
             reconcile_pending: !model.reconciled,
             swipe_action: swipe_action(model),
             tracker_handoff: model.tracker_handoff.clone(),
+            tracker_withdraw: model.tracker_withdraw.clone(),
+            failure_refused: model.sign_error.is_some() && model.sign_error_refused,
             notice: model.notice,
             global_chain_id: model.global_chain_id(),
             blocked: model.blocked.clone(),
@@ -1674,6 +1824,7 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         // request stays pending, unsignable, until the person closes it —
         // exactly like every other request that waits for a decision.
         model.blocked = Some(blocked_view(&block));
+        model.sign_error_refused = false;
         model.sign_error = Some(SignErrorNotice {
             kind: SignErrorKind::SelfCallBlocked,
             detail: Some(block.function.as_str().to_owned()),
@@ -1869,6 +2020,7 @@ fn approve_with(
 
     // Immediate feedback + fresh error state (`dapp-connection.tsx:656-658`).
     model.sign_error = None;
+    model.sign_error_refused = false;
     model.pending_op_hash = None;
     model.pending_op_maybe_sent = false;
 
@@ -1932,6 +2084,7 @@ fn approve_with(
                 Err(_) => true, // unparseable displayed amount — fail closed
             };
             if stale {
+                model.sign_error_refused = false;
                 model.sign_error = Some(SignErrorNotice {
                     kind: SignErrorKind::StaleFeeQuote,
                     detail: None,
@@ -1971,6 +2124,8 @@ fn approve_with(
         record_id: None,
         op_hash: None,
         ceremony: Ceremony::NotYet,
+        write_ahead: None,
+        accepted: false,
     });
 
     if matches!(
@@ -2106,6 +2261,7 @@ fn fail_pending(
         err_payload(code, kind, detail.clone()),
     );
     model.sign_error = Some(SignErrorNotice { kind, detail });
+    model.sign_error_refused = false;
     ops_and_render(model, vec![op])
 }
 
@@ -2139,6 +2295,7 @@ fn fail_inflight(
             p.responded = true;
         }
         model.sign_error = Some(SignErrorNotice { kind, detail });
+        model.sign_error_refused = false;
     }
     ops_and_render(model, ops)
 }
@@ -2204,6 +2361,7 @@ fn funding_cancel(model: &mut Model) -> Command<SignEffect, Event> {
         return render();
     };
     model.sign_error = None;
+    model.sign_error_refused = false;
     model.pending_op_hash = None;
     // ⑧: funding cancellation is NOT a user reject — recoverable -32603, so
     // the extension writes no durable 'rejected' (`dapp-connection.tsx:940-946`).
@@ -2241,18 +2399,23 @@ fn funding_complete(model: &mut Model) -> Command<SignEffect, Event> {
 // Mid-flight submission facts
 // ---------------------------------------------------------------------------
 
-fn on_op_submitted(
+/// The write-ahead (spec 082 RJ1): the op for `id` is signed and hashed, and
+/// nothing has been POSTed. The record is written pending, "may have been
+/// sent", and handed to the tracker; `ClearToPost` follows its ack.
+fn on_op_signed(
     model: &mut Model,
     id: &str,
     user_op_hash: String,
+    submit_block: Option<u64>,
     now_ms: f64,
-    (maybe_sent, submit_block): (bool, Option<u64>),
 ) -> Command<SignEffect, Event> {
-    let matches_pipeline = model
-        .inflight
-        .as_ref()
-        .is_some_and(|fl| fl.id == id && matches!(fl.stage, Stage::Submitting));
-    if !matches_pipeline {
+    let accepts = model.inflight.as_ref().is_some_and(|fl| {
+        fl.id == id
+            && matches!(fl.stage, Stage::Submitting)
+            && fl.write_ahead.is_none()
+            && fl.op_hash.is_none()
+    });
+    if !accepts {
         return Command::done();
     }
     let record_id = record_id_for("eth_sendTransaction", now_ms);
@@ -2260,28 +2423,172 @@ fn on_op_submitted(
         let Some(fl) = model.inflight.as_mut() else {
             return Command::done();
         };
+        // Signed: whatever the shell said about the prompt (RA9).
+        fl.ceremony = Ceremony::Done;
+        fl.write_ahead = Some(WriteAhead {
+            user_op_hash: user_op_hash.clone(),
+            record_id: record_id.clone(),
+            submit_block,
+            cleared: false,
+        });
+        (
+            pending_tx_record(fl, &record_id, &user_op_hash, now_ms, (true, submit_block)),
+            fl.chain_id,
+        )
+    };
+    model.tracker_handoff = Some(SignTrackerHandoff {
+        user_op_hash,
+        record_ids: vec![record_id],
+        chain_id,
+        maybe_sent: true,
+        submit_block,
+        admitted: false,
+    });
+    let command = request_op(model, SignOperation::PersistRecord { record }, false);
+    Command::all([command, render()])
+}
+
+/// The pending dApp-tx record of `fl` under `user_op_hash`.
+fn pending_tx_record(
+    fl: &Inflight,
+    record_id: &str,
+    user_op_hash: &str,
+    now_ms: f64,
+    (maybe_sent, submit_block): (bool, Option<u64>),
+) -> SignRecord {
+    SignRecord {
+        record_id: record_id.to_owned(),
+        kind: SignRecordKind::DappTx,
+        method: fl.method.clone(),
+        params_json: fl.params_json.clone(),
+        result: String::new(),
+        from: fl.address.clone(),
+        chain_id: fl.chain_id,
+        now_ms,
+        status: SignRecordStatus::Pending,
+        user_op_hash: user_op_hash.to_owned(),
+        dapp_origin: fl.record_origin.clone(),
+        intent: fl.intent.clone(),
+        maybe_sent,
+        submit_block,
+    }
+}
+
+/// Withdraw the in-flight pipeline's write-ahead record, if it has one: its
+/// op is proven never sent (RJ1). Returns the delete for the shell; the
+/// tracker learns it through [`SignView::tracker_withdraw`], and a hand-off
+/// still naming the op is taken back so no shell feeds it again.
+fn withdraw_write_ahead(model: &mut Model) -> Vec<SignOperation> {
+    let Some(wa) = model.inflight.as_mut().and_then(|fl| fl.write_ahead.take()) else {
+        return Vec::new();
+    };
+    if model
+        .tracker_handoff
+        .as_ref()
+        .is_some_and(|h| h.user_op_hash.eq_ignore_ascii_case(&wa.user_op_hash))
+    {
+        model.tracker_handoff = None;
+    }
+    model.tracker_withdraw = Some(SignTrackerWithdraw {
+        user_op_hash: wa.user_op_hash,
+        record_ids: vec![wa.record_id.clone()],
+    });
+    vec![SignOperation::DeleteRecord {
+        record_id: wa.record_id,
+    }]
+}
+
+/// Adopt the write-ahead record as the op's record: the relay's verdict (or
+/// a result standing for it) names the same op.
+fn adopt_write_ahead(model: &mut Model) {
+    if let Some(fl) = model.inflight.as_mut() {
+        if let Some(wa) = &fl.write_ahead {
+            fl.op_hash = Some(wa.user_op_hash.clone());
+            fl.record_id = Some(wa.record_id.clone());
+        }
+    }
+}
+
+fn on_op_submitted(
+    model: &mut Model,
+    id: &str,
+    user_op_hash: String,
+    now_ms: f64,
+    (maybe_sent, submit_block): (bool, Option<u64>),
+) -> Command<SignEffect, Event> {
+    let matches_pipeline = model.inflight.as_ref().is_some_and(|fl| {
+        fl.id == id && matches!(fl.stage, Stage::Submitting) && fl.op_hash.is_none()
+    });
+    if !matches_pipeline {
+        return Command::done();
+    }
+    let write_ahead = model
+        .inflight
+        .as_ref()
+        .and_then(|fl| fl.write_ahead.clone());
+    // RJ1: the write-ahead record already names this op — no second record.
+    // The relay taking it patches the record Admitted and tells the tracker
+    // (an accepted op never reads "may have been sent"); a lost reply adds
+    // nothing, the record already says so.
+    if let Some(wa) = write_ahead
+        .as_ref()
+        .filter(|wa| wa.user_op_hash.eq_ignore_ascii_case(&user_op_hash))
+    {
+        adopt_write_ahead(model);
+        let chain_id = match model.inflight.as_mut() {
+            Some(fl) => {
+                fl.ceremony = Ceremony::Done;
+                fl.accepted = !maybe_sent;
+                fl.chain_id
+            }
+            None => return Command::done(),
+        };
+        if model.inflight_matches_pending() {
+            model.pending_op_hash = Some(wa.user_op_hash.clone());
+            model.pending_op_maybe_sent = maybe_sent;
+        }
+        if maybe_sent {
+            return render();
+        }
+        model.tracker_handoff = Some(SignTrackerHandoff {
+            user_op_hash: wa.user_op_hash.clone(),
+            record_ids: vec![wa.record_id.clone()],
+            chain_id,
+            maybe_sent: false,
+            submit_block: wa.submit_block.or(submit_block),
+            admitted: true,
+        });
+        return ops_and_render(
+            model,
+            vec![SignOperation::UpdateRecord {
+                record_id: wa.record_id.clone(),
+                close: SignRecordClose::Admitted,
+            }],
+        );
+    }
+    // A relay hash that is not the local one (`userop.hash_mismatch`): the
+    // write-ahead op will never land under its hash — withdraw it, and
+    // record the op under the relay's (today's path).
+    let mut operations = withdraw_write_ahead(model);
+    let record_id = record_id_for("eth_sendTransaction", now_ms);
+    let (record, chain_id) = {
+        let Some(fl) = model.inflight.as_mut() else {
+            return Command::done();
+        };
         fl.op_hash = Some(user_op_hash.clone());
         fl.record_id = Some(record_id.clone());
+        fl.accepted = !maybe_sent;
         // Whatever the shell said about the prompt, an op on its way to the
         // relay has been signed (RA9).
         fl.ceremony = Ceremony::Done;
         (
-            SignRecord {
-                record_id: record_id.clone(),
-                kind: SignRecordKind::DappTx,
-                method: fl.method.clone(),
-                params_json: fl.params_json.clone(),
-                result: String::new(),
-                from: fl.address.clone(),
-                chain_id: fl.chain_id,
+            pending_tx_record(
+                fl,
+                &record_id,
+                &user_op_hash,
                 now_ms,
-                status: SignRecordStatus::Pending,
-                user_op_hash: user_op_hash.clone(),
-                dapp_origin: fl.record_origin.clone(),
-                intent: fl.intent.clone(),
-                maybe_sent,
-                submit_block,
-            },
+                (maybe_sent, submit_block),
+            ),
             fl.chain_id,
         )
     };
@@ -2299,9 +2606,99 @@ fn on_op_submitted(
         chain_id,
         maybe_sent,
         submit_block,
+        admitted: false,
     });
-    let command = request_op(model, SignOperation::PersistRecord { record }, false);
-    Command::all([command, render()])
+    operations.push(SignOperation::PersistRecord { record });
+    ops_and_render(model, operations)
+}
+
+/// The tracker's word on the in-flight op (spec 082 RJ3, RJ4). Answers the
+/// waiting page at once when it is final — and only then: a relay's
+/// `submitted` tx hash can still be replaced by a fee bump, and `included`
+/// becomes Confirmed within one poll through the tracker's `TxReceipt`.
+/// The inflight clears and the attempt moves on, so the shell's own late
+/// `Submit` result (the window's end) is dropped — never a second answer,
+/// never an answer to a newer request.
+fn on_op_tracked(
+    model: &mut Model,
+    user_op_hash: &str,
+    status: TrackStatus,
+    tx_hash: Option<String>,
+) -> Command<SignEffect, Event> {
+    let Some(fl) = model.inflight.clone() else {
+        return Command::done();
+    };
+    let ours = matches!(fl.stage, Stage::Submitting)
+        && fl.record_id.is_some()
+        && fl
+            .op_hash
+            .as_deref()
+            .is_some_and(|op| op.eq_ignore_ascii_case(user_op_hash));
+    if !ours {
+        return Command::done();
+    }
+    let tx_hash = tx_hash.filter(|hash| !hash.trim().is_empty());
+    let (payload, refusal) = match (status, tx_hash) {
+        (TrackStatus::Confirmed | TrackStatus::Dropped, Some(tx_hash)) => (
+            SignResponsePayload::Ok {
+                result: Some(tx_hash),
+            },
+            None,
+        ),
+        (TrackStatus::Rejected, _) => (
+            err_payload(
+                CODE_INTERNAL,
+                SignErrorKind::SubmitFailed,
+                Some(crate::user_op::REFUSED_DAPP_DETAIL.to_owned()),
+            ),
+            Some(true),
+        ),
+        // Stale for an op the relay accepted: the tracker reached it before
+        // it learned `admitted` (a verdict while the POST was still out). The
+        // tracker's own verdict follows; "nothing was sent" never answers an
+        // op on its way (082 round-2 review).
+        (TrackStatus::NotSent, _) if fl.accepted => return Command::done(),
+        (TrackStatus::NotSent, _) => (
+            err_payload(
+                CODE_INTERNAL,
+                SignErrorKind::SubmitFailed,
+                Some(crate::user_op::NOT_SENT_DAPP_DETAIL.to_owned()),
+            ),
+            Some(false),
+        ),
+        _ => return Command::done(),
+    };
+    model.settle(&fl.id, SignSettledOutcome::Submitted);
+    model.inflight = None;
+    model.attempt += 1;
+    let shows_it = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
+    match refusal {
+        None => {
+            if shows_it {
+                model.clear_sheet();
+            }
+        }
+        Some(refused) => {
+            // Nothing was sent: the sheet says it failed — as a refusal,
+            // with no Retry, when the relay refused it — and no longer
+            // "submitting".
+            if shows_it {
+                if let Some(p) = model.pending.as_mut() {
+                    p.responded = true;
+                }
+                if let SignResponsePayload::Err { kind, message, .. } = &payload {
+                    model.sign_error = Some(SignErrorNotice {
+                        kind: *kind,
+                        detail: message.clone(),
+                    });
+                }
+                model.sign_error_refused = refused;
+                model.pending_op_hash = None;
+                model.pending_op_maybe_sent = false;
+            }
+        }
+    }
+    ops_and_render(model, vec![respond_op(&fl.transport_id, &fl.id, payload)])
 }
 
 /// The passkey prompt of the pipeline for `id` opened or returned (RA9).
@@ -2465,6 +2862,43 @@ fn on_submit(
     if !matches!(fl.stage, Stage::Submitting) {
         return Command::done();
     }
+    // Spec 082 RJ1: a write-ahead record with no `OpSubmitted` yet. A failure
+    // now is proven "not sent" — nothing was POSTed without `ClearToPost`,
+    // and a POST whose reply was lost is reported `OpSubmitted{maybe_sent}`,
+    // not a failure — so the record is withdrawn, then the outcome is handled
+    // as today. A result that stands for the same op adopts the record.
+    let mut withdrawn = Vec::new();
+    if let Some(wa) = fl.write_ahead.as_ref().filter(|_| fl.record_id.is_none()) {
+        let same_op = match &outcome {
+            SignSubmitOutcome::Succeeded { .. } => true,
+            SignSubmitOutcome::ReceiptPending { user_op_hash } => {
+                user_op_hash.eq_ignore_ascii_case(&wa.user_op_hash)
+            }
+            _ => false,
+        };
+        if same_op {
+            adopt_write_ahead(model);
+        } else {
+            withdrawn = withdraw_write_ahead(model);
+        }
+    }
+    let Some(fl) = model.inflight.clone() else {
+        return Command::done();
+    };
+    let command = on_submit_outcome(model, &fl, outcome, now_ms);
+    if withdrawn.is_empty() {
+        command
+    } else {
+        Command::all([ops_and_render(model, withdrawn), command])
+    }
+}
+
+fn on_submit_outcome(
+    model: &mut Model,
+    fl: &Inflight,
+    outcome: SignSubmitOutcome,
+    now_ms: f64,
+) -> Command<SignEffect, Event> {
     // Spec 082 RA2/RA8 (G21): once `OpSubmitted` handed the op to the tracker
     // it is on its way — or may be. The only honest answers left are a
     // receipt's tx hash or the op hash: a failure would tell the page "not
@@ -2600,6 +3034,7 @@ fn on_submit(
                     chain_id: fl.chain_id,
                     maybe_sent: false,
                     submit_block: None,
+                    admitted: false,
                 });
                 if let Some(inner) = model.inflight.as_mut() {
                     inner.op_hash = Some(user_op_hash.clone());
@@ -2639,21 +3074,54 @@ fn on_submit(
                 Some(message),
             ),
         },
-        SignSubmitOutcome::Failed { message } => fail_inflight(
-            model,
-            CODE_INTERNAL,
-            SignErrorKind::SubmitFailed,
-            Some(message),
-        ),
+        SignSubmitOutcome::Failed { message, refused } => {
+            // RJ3: the relay refused it — the page is told so in the fixed
+            // sentence (the relay's words are diagnostics), and the sheet's
+            // failure is a refusal, never "try again".
+            let detail = if refused {
+                crate::user_op::REFUSED_DAPP_DETAIL.to_owned()
+            } else {
+                message
+            };
+            let command = fail_inflight(
+                model,
+                CODE_INTERNAL,
+                SignErrorKind::SubmitFailed,
+                Some(detail),
+            );
+            model.sign_error_refused = refused && model.sign_error.is_some();
+            command
+        }
     }
 }
 
 fn on_record_persisted(model: &mut Model) -> Command<SignEffect, Event> {
-    // Only the §4 record-then-respond step reacts here; the tx pending-record
-    // ack (stage Submitting) needs no transition.
+    // The §4 record-then-respond step, and the write-ahead record's ack
+    // (spec 082 RJ1): on disk, so the shell may POST. Any other ack of the
+    // tx pending record (stage Submitting) needs no transition.
     let Some(fl) = model.inflight.clone() else {
         return Command::done();
     };
+    if matches!(fl.stage, Stage::Submitting) {
+        let clear = fl
+            .write_ahead
+            .as_ref()
+            .filter(|wa| !wa.cleared && fl.op_hash.is_none())
+            .map(|wa| wa.user_op_hash.clone());
+        let Some(user_op_hash) = clear else {
+            return Command::done();
+        };
+        if let Some(wa) = model.inflight.as_mut().and_then(|f| f.write_ahead.as_mut()) {
+            wa.cleared = true;
+        }
+        return ops_and_render(
+            model,
+            vec![SignOperation::ClearToPost {
+                id: fl.id,
+                user_op_hash,
+            }],
+        );
+    }
     let Stage::PersistingResult { result } = fl.stage else {
         return Command::done();
     };

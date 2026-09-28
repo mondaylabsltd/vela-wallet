@@ -6,4 +6,11 @@ import type { SignFundingNeeded } from "./SignFundingNeeded";
  * owns every wording regex (`parseBundlerUnderfunded`,
  * `PasskeyErrorCode.CANCELLED`) — the core only sees typed variants.
  */
-export type SignSubmitOutcome = { "type": "succeeded", result: string, } | { "type": "receipt_pending", user_op_hash: string, } | { "type": "passkey_cancelled" } | { "type": "underfunded", message: string, funding: SignFundingNeeded | null, } | { "type": "failed", message: string, } | { "type": "asker_gone" };
+export type SignSubmitOutcome = { "type": "succeeded", result: string, } | { "type": "receipt_pending", user_op_hash: string, } | { "type": "passkey_cancelled" } | { "type": "underfunded", message: string, funding: SignFundingNeeded | null, } | { "type": "failed", message: string, 
+/**
+ * The relay refused the op (spec 082 RJ3): a submit-time `NotSent`
+ * with a rejection that is not "relayer unavailable". The page is
+ * answered `user_op::REFUSED_DAPP_DETAIL`, whatever `message` says,
+ * and the sheet's failure is a refusal ([`SignView::failure_refused`]).
+ */
+refused: boolean, } | { "type": "asker_gone" };

@@ -240,6 +240,7 @@
       "selfCallBlockedSafeTx": "这笔请求要你的钥匙授权一笔以后再执行的 Safe 交易。Vela 拒绝了它——这样的签名可以在你不在场时被使用。什么都没有签。",
       "stillConfirming": "还没上链。Vela 会继续查看，请不要重复发送。",
       "maybeSent": "可能已经发出。Vela 会继续查看，请不要重复发送。",
+      "refused": "网络拒绝了这笔交易，什么都没有发出。",
       "unknownOutcome": "超过 24 小时仍未确认。",
       "openSigner": "去签名页确认",
       "signerDown": "签名页没能打开，请检查网络。"

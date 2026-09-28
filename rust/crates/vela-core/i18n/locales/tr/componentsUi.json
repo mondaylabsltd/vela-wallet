@@ -240,6 +240,7 @@
       "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı.",
       "stillConfirming": "Henüz zincire yazılmadı. Vela kontrol ediyor — tekrar göndermeyin.",
       "maybeSent": "Gönderilmiş olabilir. Vela kontrol ediyor — tekrar göndermeyin.",
+      "refused": "Ağ reddetti — hiçbir şey gönderilmedi.",
       "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
       "openSigner": "İmza sayfasında onayla",
       "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin."

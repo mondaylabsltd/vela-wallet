@@ -38,6 +38,34 @@ pub const USER_OPERATION_EVENT_TOPIC: &str;
 Clients loop: POST → OR `maybe_delivered` from the pool verdict → `submit_step` → retry or done.
 Local nonce advances only on `Accepted`. The relay's hash wins; a mismatch logs `userop.hash_mismatch`.
 
+**Round 2** (T185, T191 — [RJ1, RJ3, RJ12, RJ13, RJ19]):
+
+```rust
+/// The dApp's -32603 detail for a relay refusal: tracker Rejected, or a submit-time
+/// NotSent{Some(r)} with r ≠ RelayerUnavailable [RJ3].
+pub const REFUSED_DAPP_DETAIL: &str = "the network refused this transaction; nothing was sent";
+/// How long a shell waits for ClearToPost after OpSigned; none in time → no POST, report Failed [RJ1].
+pub const WRITE_AHEAD_WAIT_MS: u32 = 5_000;
+
+#[cfg(feature = "crux")] // reads sim_outcome::revert_reason
+pub enum EstimateFailure { Reverts { reason: Option<String> }, Unavailable } // serde tag "type"
+/// error_json = the JSON-RPC `error` member or the whole body. "reverted" / "AA23" in the message or a
+/// string `data`, or code -32521 → Reverts (reason only from ABI Error(string) bytes, sanitised, RG8);
+/// -32500 alone (AA21, a signature), a timeout, an exhausted pool, a rate limit, no answer → Unavailable.
+pub fn estimate_failure(error_json: &str) -> EstimateFailure;
+
+// app::fee_policy [RJ12, RJ13]
+FeeFailure::ChainRead { rate_limited: bool }   // wire {"chain_read":{"rate_limited":…}}; the others stay strings
+pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32>; // 3 000, 6 000, then 8 000
+pub const REQUOTE_TIMEOUT_MS: u32 = 6_000;     // bound on each automatic re-quote; wait + ask ≤ 15 s
+/// Relay failures → "componentsUi.funding.denialNetworkError"; ChainRead{rate_limited: true} →
+/// "home.balanceDetailStatusRetrying"; ChainRead{false} → "explore.chainDown" ({{chain}} = the chain's
+/// name); MissingPublicKey / CalculationFailed → None (no reason line, the dash).
+pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str>;
+```
+
+`ChainRead` is produced by the shells (the deployment read is theirs); the fee machine never emits it.
+
 ## 2. `app::rpc_pool` — [RA1, RG7, RF1, ruling 8]
 
 ```rust
@@ -127,6 +155,36 @@ judges nothing. The core:
 event), and follows the fail patch alone on a failed receipt (or found event) with a tx hash; never
 on pending, unreachable, age or `NotSent`. Invariant kept: time alone never produces a failure.
 
+**Round 2** (T186 — [RJ1, RJ4]):
+
+```rust
+Event::Submitted { .., #[serde(default)] admitted: bool } // sets acknowledged: an accepted op never reads MaybeSent,
+                                                          // and a later not_found no longer counts against it
+Event::Withdrawn { user_op_hash: String, record_ids: Vec<String> }
+    // drops those ids; an entry left with none is removed. No UpdateTxRecords, no HoldingsMoved.
+    // A later Submitted of the same hash starts a fresh entry.
+TrackOperation::TxReceipt { chain_id: u32, tx_hash: String, user_op_hash: String }
+    // eth_getTransactionReceipt through the chain pool
+TrackShellResult::TxReceipt { user_op_hash: String, now_ms: f64, #[serde(default)] receipt_json: Option<String> }
+    // the result as it came: "null" = not mined; None = no answer
+```
+
+**Relay tx hash, confirmed through the chain.** A `Status` naming a tx hash for a live entry makes the
+scheduler issue `TxReceipt` for `relay_tx_hash` at `receipt_interval_ms` (one in flight per hash; the
+first at once). The core finds the op's own `UserOperationEvent` in the receipt's `logs` (the
+find-event reader) and runs `safe_execution_failed` over **that op's logs** (after the previous op's
+`UserOperationEvent`, up to its own): success and no `ExecutionFailure` → `Confirmed` (records
+confirmed, `NotifyConfirmed`, `HoldingsMoved`); otherwise → `Dropped` (records failed,
+`HoldingsMoved`). Not mined, no answer, or mined without the op's event (a replaced bundle) → keep
+asking. A terminal entry ignores a late answer.
+
+**A premature `NotSent` yields to `admitted`** (review). The write-ahead hands the op over before its
+POST, so a slow POST (a 15 s relay timeout per endpoint, "currently processing" retries) can outlast
+the not-found grace. `Submitted{admitted: true}` on a `NotSent` entry starts a fresh entry (a new
+life, polled again; a later receipt patches the records confirmed over the early failed patch). An
+admitted op is never in doubt, so this never undoes a real `NotSent`; a `Rejected` after the relay
+took the op (DX-W3) stays terminal under the hand-off's echo.
+
 ## 4. `app::sign_request` — [RA2, RA3, RA8, RA9, RA12, RB2]
 
 ```rust
@@ -159,6 +217,74 @@ Changed: `on_submit` Succeeded with a record answers the page only — no `Updat
 the tracker closes on-chain records. A reverted-in-window op is answered its tx hash on all four
 clients (ruling 9; web: `UserOpRevertedError{txHash}`).
 
+**Round 2** (T187, T188 — [RJ1, RJ3, RJ4]):
+
+```rust
+Event::OpSigned { id, user_op_hash, #[serde(default)] submit_block: Option<u64>, now_ms: f64 }
+    // after the passkey, the local hash and the head read, BEFORE any POST; accepted once, for the
+    // inflight id, in stage Submitting, before OpSubmitted — else dropped
+SignOperation::ClearToPost { id: String, user_op_hash: String }   // answered Responded
+SignOperation::DeleteRecord { record_id: String }                 // answered RecordUpdated
+SignRecordClose::Admitted          // the record's maybeSent → false; stays pending
+SignTrackerHandoff { .., #[serde(default)] admitted: bool }
+pub struct SignTrackerWithdraw { pub user_op_hash: String, pub record_ids: Vec<String> }
+SignView { .., #[serde(default)] tracker_withdraw: Option<SignTrackerWithdraw>,
+               #[serde(default)] failure_refused: bool }  // set and cleared with `error`
+Event::OpTracked { user_op_hash, status: TrackStatus, #[serde(default)] tx_hash: Option<String>, now_ms }
+SignSubmitOutcome::Failed { message, #[serde(default)] refused: bool }
+SignEndingState::Refused           // the tracker's Rejected (NotSent keeps NotSent)
+```
+
+**Write-ahead.** `OpSigned` → `PersistRecord` (pending, `maybe_sent: true`, `submit_block`) + a
+hand-off (`maybe_sent: true`) → on that record's `RecordPersisted`: `ClearToPost` — and nothing
+else; the shell POSTs only after it, the asker check (RB2) immediately before the POST. Then:
+
+| Next | Core does |
+|---|---|
+| `OpSubmitted{same hash, maybe_sent: false}` (Accepted) | `UpdateRecord{Admitted}` + hand-off `{admitted: true, maybe_sent: false}`; no second record |
+| `OpSubmitted{same hash, maybe_sent: true}` | nothing new (the record already says so) |
+| `OpSubmitted{another hash}` | `DeleteRecord` + `tracker_withdraw` for the write-ahead op, then today's record + hand-off under the relay's hash |
+| `Submit{Failed \| Underfunded \| AskerGone \| PasskeyCancelled}` before `OpSubmitted` | proven not sent: `DeleteRecord` + `tracker_withdraw` (the hand-off naming it is taken back), then today's handling (`-32603`, reactive sponsoring, no answer for AskerGone) |
+| `Submit{Succeeded \| ReceiptPending(same hash)}` before `OpSubmitted` | the write-ahead record is adopted as the op's record |
+| a quit / crash after `OpSigned` | one pending `maybe_sent` record; the tracker resolves it on the next launch |
+
+After `OpSubmitted` the G21 guard is unchanged (any failure = `ReceiptPending`, the op hash).
+
+**The answer follows the tracker.** Each shell forwards the tracker entry of the in-flight op as
+`OpTracked` whenever it changes. Past `OpSubmitted`, unanswered, same op:
+
+| `status` | Answer |
+|---|---|
+| `Confirmed` / `Dropped` with a tx hash | `Ok(tx hash)` (ruling 9 for Dropped); sheet cleared → ending from `ending_state` |
+| `Rejected` | `Err(-32603, SubmitFailed, REFUSED_DAPP_DETAIL)`; sheet: `error` + `failure_refused` |
+| `NotSent` | `Err(-32603, SubmitFailed, NOT_SENT_DAPP_DETAIL)`; sheet: `error` |
+| anything else (incl. Confirmed without a tx hash) | wait |
+
+The rid settles `Submitted`, the inflight clears and the attempt moves on: the shell's own late
+`Submit` result is dropped and can never answer a newer request. No record patch (the tracker's).
+Shells may stop their receipt wait once answered. A submit-time `Failed{refused: true}` answers
+`REFUSED_DAPP_DETAIL` whatever `message` says. `ending_state` draws a `Landed` ending whose entry
+still reads `MaybeSent` as `Following{outcome: Landing}` (DX6). `Refused` is drawn cross,
+`statusFailed` + `componentsUi.signing.refused`, no Retry words.
+
+Review additions (round 2):
+
+- A tracker `NotSent` never answers an op whose `OpSubmitted` said `maybe_sent: false` (Accepted):
+  it can only be stale (reached while the POST was still out) — it waits for the tracker's real
+  verdict. `Rejected` still answers (DX-W3). A may-have-been-sent op is answered `NotSent` (EX-S5).
+- `ending_state` never draws a `Landed` ending (it holds a tx hash) as `NotSent` or `Refused`:
+  `Following{outcome: Landing}` until the tracker's real verdict. `StillConfirming` keeps both.
+- `AccountSwitched` is accepted whatever the attempt: the switch belongs to the request that asked
+  for it, so the early answer's attempt bump can never strand a newer request `reconcile_pending`.
+- **Every shell's hand-off de-duplication must include `admitted`.** Today each shell feeds
+  `tracker_handoff` once per `(user_op_hash, record_ids)` (desktop `signing_host` `handed_off`, web
+  `sign-resident` `#lastHandoffKey`, iOS `SigningController.handoffKey`, Android
+  `SigningController.handedRecords`). The admitted hand-off names the SAME hash and ids as the
+  write-ahead one, so with today's key it is never fed: the tracker never learns the relay took the
+  op, the entry stays in doubt (`MaybeSent` over an accepted op), and two relay `not_found` answers
+  past the grace end an accepted op `NotSent` — records failed over an op that lands. Key on
+  `(user_op_hash, record_ids, maybe_sent, admitted)`. `tracker_withdraw` is fed once per value.
+
 ## 5. `app::send` — [RA4, RA10]
 
 ```rust
@@ -172,6 +298,27 @@ SendReceiptOutcome::Failed { rejected, #[serde(default)] not_sent: bool }
 
 `MaybeSent` never fires the success haptic. `TrackStatus::NotSent` maps to
 `Failed{rejected: false, not_sent: true}` (never `fee_rejected`).
+
+**Round 2** (T189 — [RJ1]): the wallet's own Send writes ahead too.
+
+```rust
+Event::OpSigned { user_op_hash, #[serde(default)] submit_block: Option<u64>, now_ms }  // during SubmitUserOp, once
+SendOperation::ClearToPost { user_op_hash }            // answered SendShellResult::PostCleared (new)
+SendOperation::MarkAdmitted { record_ids }             // records' maybeSent → false, one write; answered RecordsPersisted
+SendOperation::DeleteTxRecords { ids }                 // one write; answered RecordsPersisted
+SendOperation::TrackWithdrawn { user_op_hash, record_ids } // → tx_tracker::Event::Withdrawn; answered TrackHandedOff
+SendOperation::TrackSubmitted { .., #[serde(default)] admitted: bool }
+```
+
+`OpSigned` → `PersistTxRecords` (every recipient's record, `maybe_sent: true`; a Signing sheet
+turns Submitting) → on its `RecordsPersisted`: `TrackSubmitted{maybe_sent: true}` and `ClearToPost`.
+`Submitted{same hash, maybe_sent: false}` → `MarkAdmitted` + `TrackSubmitted{admitted: true}` + the
+success haptic, no second write; `{maybe_sent: true}` → nothing is written; another hash →
+withdraw, then today's write. `SubmitFailed` after the write-ahead → `DeleteTxRecords` +
+`TrackWithdrawn`, then today's handling; an ack of the write-ahead still in flight is dropped. The
+receipt screen still waits for the verdict. A `ReceiptUpdate{Failed{not_sent: true}}` stamps the
+receipt only while it reads `MaybeSent`: for an accepted (or acknowledged) send it can only be stale
+(review) — the tracker revives the entry on `TrackSubmitted{admitted: true}`.
 
 ## 6. `app::clear_signing` — [RC1–RC5]
 
@@ -197,6 +344,14 @@ FeedView { .., pub history_empty_key: String, pub home_empty_key: String }
 
 `accept()` keeps DappTx with `from == me`; message signatures and connects never become rows.
 After `PersistRecord`/`UpdateRecord` every shell dispatches `ReconcileCompleted{resolved_count: 1}`.
+
+**Round 2** (T194 — [RJ16]): `FeedTxRecord { .., #[serde(default)] call_data: Option<String> }` (the
+shells map it from the stored request); `FeedItem { .., #[serde(default)] counterparty_role:
+FeedCounterpartyRole }` with `enum FeedCounterpartyRole { Recipient /* default */, Contract }`.
+`dapp_item`: call data exactly `transfer(address,uint256)` → the decoded recipient (EIP-55),
+`Recipient`; other call data → `to`, `Contract` (label `componentsUi.signing.interactingLabel`); none
+→ `to`, `Recipient`. `tx_hash` is `None` when it equals `user_op_hash` (case-insensitive): an op hash
+is never an explorer link, and no client draws an explorer control without a URL.
 
 ## 8. `app::sim_outcome` (new, pure) — [RG6, RG8]
 
@@ -264,13 +419,42 @@ impl LoadWatch { requested, committed, finished, engine, watchdog, probed, give_
 pub fn host_of(url: &str) -> String;
 ```
 
+**Round 2** (T190 — [RJ8, RJ9]):
+
+```rust
+pub fn same_address(a: &str, b: &str) -> bool; // scheme/host case, default port, empty path = "/",
+                                               // one trailing slash, fragment ignored; path and query as written
+LoadWatch { .., pub own_request: Option<String>, pub clock_ms: f64 }
+impl LoadWatch { retry_fired_at(generation, in_front, now_ms), take_due_at(now_ms) } // exact clock; the old two
+                                               // keep their signatures and use clock_ms (requests, engine polls)
+```
+
+- `retry_now` / `retry` record `own_request`; `engine_started` for it (by `same_address`), or while
+  `next_asked` is `AutoRetry` / `Retry`, is the wallet's own load: no `Asked::Page`, no
+  `requested()`, no reset of `attempt` / `failure` (DX14: three attempts at +2/+5/+10 s, no restart).
+- `EngineStillLoading` only while the engine's load is younger than `GIVE_UP_MS` or live (progress
+  > `ENGINE_LIVE_PROGRESS`, now also counted while the panel is up); past it and not live the
+  attempt is `RetryAction::Load(url)`, which cancels WebKit's hung provisional load (L2).
+
 ## 11. `app::net_health`, `app::remote_mark`, `app::balance_dashboard` — [RE3, RE9, RE10]
 
 ```rust
 pub const MISSES_BEFORE_OFFLINE: u32 = 3;
-pub struct NetHealth { pub misses: u32, pub online: bool }
+pub const SOURCES_BEFORE_OFFLINE: usize = 2;   // round 2 [RJ14]
+pub const OFFLINE_QUIET_MS: f64 = 10_000.0;    // round 2 [RJ14]
+pub struct NetHealth { pub misses: u32, pub online: bool,
+                       #[serde(default)] pub sources: Vec<u32>, #[serde(default)] pub unsourced: u32,
+                       #[serde(default)] pub last_reach_ms: Option<f64>, #[serde(default)] pub run_started_ms: Option<f64> }
 pub enum NetEdge { WentOffline, CameBack }
-pub fn net_health_step(state: NetHealth, reached: bool) -> (NetHealth, Option<NetEdge>);
+/// source = the chain a call read (None: its own source). WentOffline needs MISSES_BEFORE_OFFLINE misses
+/// in a row from ≥ 2 sources AND nothing reached for OFFLINE_QUIET_MS (since the last reach, or the
+/// run's first miss); any reach resets the run. One failing chain is its notice, never "offline".
+pub fn net_health_step(state: NetHealth, reached: bool, source: Option<u32>, now_ms: f64) -> (NetHealth, Option<NetEdge>);
+
+// app::l10n::number — round 2 [RJ15]
+/// None for zero or unreadable text; the token ladder (not compact); a non-zero delta the ladder
+/// prints as "0" written exactly (RC5 scaling, trailing zeros trimmed, the preset's marks); U+2212 / "+".
+pub fn format_signed_token_amount(delta_base_units: &str, decimals: u32, preset: NumberPreset) -> Option<String>;
 
 pub enum MarkMiss { NotFound, Refused, NotAnImage, Throttled, ServerError, Transport, Unknown }
 pub fn mark_miss_of_status(status: u16) -> MarkMiss;
@@ -290,6 +474,9 @@ pub fn read_plan(chain_id: u32, stables: &[StableRef], wrapped_native: Option<&s
 | wasm (`vela-core-wasm/src/lib.rs`) | `userOpHash(opJson, chainId)`, `userOpSubmitStep(replyJson, attempt, maybeDelivered, localHash)`, `userOpNotSentDetail()`, `userOpStatusMethod()`, `parseUserOpStatus(json)`, `signEndingState(endingJson, entryJson)`, `dappReceiptWaitMs(elapsedMs)`, `signRequestTtlMs()`, `rpcReadTimeoutMs()`, `rpcCooldownMs(n)`, `browserSiteLabel(title, host)`, `markMissTtlMs(kind, status?)`, `balanceReadPlan(...)` |
 | ts-rs (`app-web/vela-wallet/src/lib/core/generated/`) | regenerate: `SignSubmitOutcome`, `SignView`, `TrackOperation`, `TrackEntryView`, `ClearSurface`, `ClearSigningView`, `ClearPlainSend` (new), `FeedItem`, `FeedTxRecord`, `FeedView`, `RpcPoolView`, `TrackOutcome`, `TrackStatus`, `SendReceiptStatus`, `SendReceiptOutcome`, `SendReceiptView` |
 | Rebuilds | `rust/pkg-web` (fingerprint moves) → `extension/dist`; VelaCoreKit xcframework (`check-ios-core-fresh.sh` must print ok); Android `.so` + Kotlin bindings |
+| Round 2 UniFFI (T196) | `userOpRefusedDappDetail()`, `userOpWriteAheadWaitMs()`, `userOpEstimateFailure(errorJson) -> UserOpEstimateFailure{kind: "reverts"\|"unavailable", reason?}`, `feeRequoteTimeoutMs()`, `feeFailureReasonKey(failure) -> String?`, `formatSignedTokenAmount(delta, decimals, preset) -> String?`, `netHealthFresh()`, **changed** `netHealthStep(state: NetHealthState, reached, source?, nowMs) -> NetHealthStep{state, edge?}`; `feeRequoteDelayMs` / `feeFailureReasonKey` take the wire name or the `ChainRead` JSON |
+| Round 2 wasm (T196) | `userOpRefusedDappDetail()`, `userOpWriteAheadWaitMs()`, `userOpEstimateFailure(errorJson)` (EstimateFailure JSON), `formatSignedTokenAmount(delta, decimals, preset)`, `feeRequoteTimeoutMs()`, `feeFailureReasonKey(failure)`; `feeRequoteDelayMs` accepts the `ChainRead` JSON |
+| Round 2 ts-rs (T197) | regenerated: `FeeFailure`, `FeedItem`, `FeedCounterpartyRole` (new), `FeedTxRecord`, `SendEvent`, `SendOperation`, `SendShellResult`, `SignEndingState`, `SignEvent`, `SignOperation`, `SignRecordClose`, `SignSubmitOutcome`, `SignTrackerHandoff`, `SignTrackerWithdraw` (new), `SignView`, `TrackEvent`, `TrackOperation`, `TrackShellResult` |
 
 ## 13. Pinned in JavaScript (the worker cannot load the core)
 
@@ -352,6 +539,11 @@ New (15 locales): `componentsUi.signing.maybeSent`, `explore.loadProxy`, `explor
 (ruling 10: zh "请先完成或取消这个请求").
 Reworded: `componentsUi.signing.simUnavailableWarning`. Deleted: `send.txErrorTimeout`. Everything
 else reuses existing keys (list in research RI2). Residency after the change ≈ 138,729 of 138,800.
+
+Round 2 (T195, [RJ6]): + `componentsUi.signing.refused` ("The network refused it — nothing was
+sent." / 网络拒绝了这笔交易，什么都没有发出。); `componentsTx.receipt.failedHint` trimmed to its first two
+sentences; zh / zh-TW `send.txBackgroundHint` with its comma. 1785 paths / 1696 leaves; residency
+138,671 of 138,800.
 
 ## 17. What each client promises
 

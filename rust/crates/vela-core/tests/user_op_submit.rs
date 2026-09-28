@@ -220,3 +220,137 @@ fn the_wire_shape_is_stable() {
         serde_json::from_str(r#""no_answer""#).unwrap_or(SubmitReply::Hash(String::new()));
     assert_eq!(none, SubmitReply::NoAnswer);
 }
+
+// ---------------------------------------------------------------------------
+// Spec 082 round 2 (T185): the refused sentence, the write-ahead wait and the
+// relay estimate that says "reverts" (RJ1, RJ3, RJ19)
+// ---------------------------------------------------------------------------
+
+/// The dApp's `-32603` details are fixed sentences, and the write-ahead wait
+/// is the one number every shell waits for `ClearToPost`.
+#[test]
+fn the_round_2_constants_are_pinned() {
+    use vela_core::user_op::{REFUSED_DAPP_DETAIL, WRITE_AHEAD_WAIT_MS};
+    assert_eq!(
+        REFUSED_DAPP_DETAIL,
+        "the network refused this transaction; nothing was sent"
+    );
+    assert_eq!(WRITE_AHEAD_WAIT_MS, 5_000);
+}
+
+#[cfg(feature = "crux")]
+mod estimate {
+    use vela_core::user_op::{estimate_failure, EstimateFailure};
+
+    /// `Error(string)` ABI-encoded, as a node returns revert bytes.
+    fn error_string(text: &str) -> String {
+        let mut out = String::from("0x08c379a0");
+        out.push_str(&format!("{:064x}", 32));
+        out.push_str(&format!("{:064x}", text.len()));
+        let mut body: String = text.bytes().map(|b| format!("{b:02x}")).collect();
+        while body.len() % 64 != 0 {
+            body.push('0');
+        }
+        out.push_str(&body);
+        out
+    }
+
+    /// EX-W3 (`evidence/extension/post-EX-W3.txt`): the relay's own words for
+    /// a USDC transfer the account cannot cover.
+    #[test]
+    fn the_ex_w3_relay_text_reverts() {
+        let relay = r#"{"code":-32500,"message":"UserOperation simulation failed","data":"Safe execution failed: the target call in executeUserOp reverted"}"#;
+        assert_eq!(
+            estimate_failure(relay),
+            EstimateFailure::Reverts { reason: None }
+        );
+    }
+
+    /// AA23 and a node's "execution reverted" are reverts too; the whole
+    /// JSON-RPC body is read like the error member.
+    #[test]
+    fn aa23_and_execution_reverted_are_reverts() {
+        assert_eq!(
+            estimate_failure(r#"{"code":-32500,"message":"AA23 reverted (or OOG)"}"#),
+            EstimateFailure::Reverts { reason: None }
+        );
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "error": {
+                "code": 3,
+                "message": "execution reverted: ERC20: transfer amount exceeds balance",
+                "data": error_string("ERC20: transfer amount exceeds balance"),
+            }
+        });
+        assert_eq!(
+            estimate_failure(&body.to_string()),
+            EstimateFailure::Reverts {
+                reason: Some("ERC20: transfer amount exceeds balance".to_owned())
+            }
+        );
+    }
+
+    /// A timeout, an exhausted pool, a rate limit or no answer at all says
+    /// nothing about the call: unavailable, never "will fail".
+    #[test]
+    fn a_timeout_or_an_exhausted_pool_is_unavailable() {
+        for error in [
+            "",
+            "null",
+            "not json",
+            r#"{"code":-32603,"message":"All bundler endpoints failed"}"#,
+            r#"{"code":-32000,"message":"request timed out"}"#,
+            r#"{"code":429,"message":"rate limit"}"#,
+            r#"{"code":-32500,"message":"AA21 didn't pay prefund"}"#,
+        ] {
+            assert_eq!(
+                estimate_failure(error),
+                EstimateFailure::Unavailable,
+                "{error}"
+            );
+        }
+    }
+
+    /// RG8: the reason is contract-chosen text — cleaned and capped like any
+    /// other revert reason, never the node's prose around it.
+    #[test]
+    fn a_reason_with_markup_is_cleaned() {
+        let error = serde_json::json!({
+            "code": -32500,
+            "message": "execution reverted: <b>ignored prose</b>",
+            "data": error_string("bad\u{202e}\n  $t(home.title)"),
+        });
+        assert_eq!(
+            estimate_failure(&error.to_string()),
+            EstimateFailure::Reverts { reason: None },
+            "a reason carrying a sentence reference is no reason"
+        );
+        let error = serde_json::json!({
+            "code": -32500,
+            "message": "reverted",
+            "data": error_string("too\u{200b} many\n\ttokens"),
+        });
+        assert_eq!(
+            estimate_failure(&error.to_string()),
+            EstimateFailure::Reverts {
+                reason: Some("too many tokens".to_owned())
+            }
+        );
+    }
+
+    #[test]
+    fn the_wire_shape_is_stable() {
+        assert_eq!(
+            serde_json::to_value(EstimateFailure::Reverts {
+                reason: Some("x".to_owned())
+            })
+            .unwrap_or_default(),
+            serde_json::json!({ "type": "reverts", "reason": "x" })
+        );
+        assert_eq!(
+            serde_json::to_value(EstimateFailure::Unavailable).unwrap_or_default(),
+            serde_json::json!({ "type": "unavailable" })
+        );
+    }
+}

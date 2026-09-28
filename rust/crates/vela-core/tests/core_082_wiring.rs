@@ -91,6 +91,7 @@ fn stored(record: &SignRecord) -> FeedTxRecord {
         kind: Some(rewire(&record.kind)),
         usd: None,
         dapp_origin: Some(record.dapp_origin.clone()),
+        call_data: tx["data"].as_str().map(str::to_owned),
     }
 }
 
@@ -189,6 +190,7 @@ fn tracking(sign: &DomainDriver<SignRequest>) -> DomainDriver<TxTracker> {
         chain_id: handoff.chain_id,
         maybe_sent: handoff.maybe_sent,
         submit_block: handoff.submit_block,
+        admitted: handoff.admitted,
     });
     tracker.resolve(TrackRes::Clock { now_ms: NOW });
     tracker.resolve(TrackRes::ReceiptPending {
