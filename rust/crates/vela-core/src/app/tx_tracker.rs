@@ -967,9 +967,18 @@ fn submitted(
     // New records mark the new submission; the same hand-off again is an
     // echo and changes nothing. Merged into the dead entry, the new op would
     // go unpolled and read "not sent" at once, over an op the relay holds.
+    //
+    // Spec 082 round 2 (review): the write-ahead hands the op over BEFORE
+    // its POST, so a slow POST can outlast the not-found grace. `NotSent`
+    // judges an op the relay never showed it holds; the relay then taking it
+    // (`admitted`) proves that verdict came too early — and an admitted op is
+    // never in doubt again, so this can never undo a real `NotSent`. The
+    // entry lives again (a `Rejected` after the relay took it stays: DX-W3).
     let new_life = model.entries.get(&key).is_some_and(|entry| {
-        matches!(entry.status, EntryStatus::NotSent | EntryStatus::Rejected)
-            && record_ids.iter().any(|id| !entry.record_ids.contains(id))
+        let refused_or_unsent =
+            matches!(entry.status, EntryStatus::NotSent | EntryStatus::Rejected);
+        (refused_or_unsent && record_ids.iter().any(|id| !entry.record_ids.contains(id)))
+            || (admitted && entry.status == EntryStatus::NotSent)
     });
     if new_life {
         model.entries.remove(&key);
@@ -1567,8 +1576,11 @@ fn on_tx_receipt(
         return Command::done(); // resolved meanwhile — never double-resolve
     }
     // No answer, not mined (`null`), or not a receipt: ask again later.
-    let receipt = receipt_json.and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok());
-    let receipt = receipt.as_ref().map(|value| value.get("result").unwrap_or(value));
+    let receipt =
+        receipt_json.and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok());
+    let receipt = receipt
+        .as_ref()
+        .map(|value| value.get("result").unwrap_or(value));
     let Some(logs) = receipt
         .and_then(|receipt| receipt.get("logs"))
         .and_then(serde_json::Value::as_array)

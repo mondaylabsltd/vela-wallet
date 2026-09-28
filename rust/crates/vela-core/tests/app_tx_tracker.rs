@@ -1953,7 +1953,10 @@ fn a_late_tx_receipt_changes_nothing_after_the_relay_s() {
     let ops = tick(&mut sut, T0 + 15_800.0);
     assert!(ops.contains(&poll_receipt()), "{ops:?}");
     let ops = sut.resolve_matching(is_receipt, receipt_confirmed(T0 + 16_000.0));
-    assert_eq!(ops, vec![confirm_patch(), notify_confirmed(), holdings_moved()]);
+    assert_eq!(
+        ops,
+        vec![confirm_patch(), notify_confirmed(), holdings_moved()]
+    );
     let ops = sut.resolve_matching(
         is_tx_receipt,
         tx_receipt(T0 + 16_100.0, Some(&bundle_receipt(vec![our_event(false)]))),
@@ -1978,13 +1981,19 @@ fn an_admitted_hand_off_is_never_maybe_sent() {
         submit_block: Some(SUBMIT_BLOCK),
         admitted: true,
     });
-    assert!(!ops.contains(&poll_receipt()), "one entry, one poll line: {ops:?}");
+    assert!(
+        !ops.contains(&poll_receipt()),
+        "one entry, one poll line: {ops:?}"
+    );
     assert_eq!(outcome_of(&sut), TrackOutcome::Landing);
     let view = sut.view();
     assert_eq!(view.entries.len(), 1);
     assert_eq!(view.entries[0].record_ids, vec!["rec-1".to_owned()]);
     // A `not_found` past the grace no longer counts: the relay has it.
-    let _ = sut.resolve_matching(|op| matches!(op, Op::Now), Res::Clock { now_ms: T0 + 500.0 });
+    let _ = sut.resolve_matching(
+        |op| matches!(op, Op::Now),
+        Res::Clock { now_ms: T0 + 500.0 },
+    );
     assert!(not_found_at(&mut sut, T0 + 70_000.0, SUBMIT_BLOCK + 5).is_empty());
     assert!(not_found_at(&mut sut, T0 + 90_000.0, SUBMIT_BLOCK + 9).is_empty());
     assert_eq!(entry_status(&sut), TrackStatus::Pending);
@@ -1993,7 +2002,13 @@ fn an_admitted_hand_off_is_never_maybe_sent() {
         r#"{{"type":"submitted","user_op_hash":"{HASH}","record_ids":[],"chain_id":1}}"#
     ))
     .ok();
-    assert!(matches!(old, Some(Event::Submitted { admitted: false, .. })));
+    assert!(matches!(
+        old,
+        Some(Event::Submitted {
+            admitted: false,
+            ..
+        })
+    ));
 }
 
 /// RJ1: a proven "not sent" withdraws the write-ahead record — the entry
@@ -2052,4 +2067,87 @@ fn a_withdrawn_op_is_forgotten_and_a_resubmit_starts_fresh() {
 /// `Tick` with nothing live asks nothing.
 fn tick_ops(sut: &mut Sut) -> Vec<Op> {
     sut.dispatch(Event::Tick)
+}
+
+// ===========================================================================
+// Spec 082 round 2 — adversarial review of T186
+// ===========================================================================
+
+/// The write-ahead hands the op over BEFORE its POST (RJ1), so the not-found
+/// grace can run out while a slow POST is still going (a 15 s relay timeout
+/// per endpoint, "currently processing" retries). `NotSent` is a verdict on
+/// an op the relay never showed it holds; the relay then taking it (the
+/// `admitted` hand-off) proves the verdict came too early. Left terminal,
+/// the accepted op was never polled again and every reader of the entry said
+/// "not sent" over it — the words that make a person pay again. An admitted
+/// hand-off can never FOLLOW a real `NotSent` (admitted ops are never in
+/// doubt), so it revives only a premature one; a `Rejected` after the relay
+/// took the op (DX-W3) stays terminal under the hand-off's echo.
+#[test]
+fn a_not_sent_reached_while_the_post_was_out_yields_to_the_relay_taking_it() {
+    let mut sut = Sut::new();
+    submitted_maybe(&mut sut, Some(SUBMIT_BLOCK));
+    assert!(not_found_at(&mut sut, T0 + 30_000.0, SUBMIT_BLOCK + 6).is_empty());
+    assert!(not_found_at(&mut sut, T0 + 61_000.0, SUBMIT_BLOCK + 12).is_empty());
+    let ops = not_found_at(&mut sut, T0 + 73_000.0, SUBMIT_BLOCK + 14);
+    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(entry_status(&sut), TrackStatus::NotSent);
+
+    // The POST that was still out comes back Accepted.
+    let admitted = Event::Submitted {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent: false,
+        submit_block: Some(SUBMIT_BLOCK),
+        admitted: true,
+    };
+    let ops = sut.dispatch(admitted.clone());
+    assert_eq!(ops, vec![Op::Now, poll_receipt()], "tracked again");
+    let _ = sut.resolve_matching(
+        |op| matches!(op, Op::Now),
+        Res::Clock {
+            now_ms: T0 + 74_000.0,
+        },
+    );
+    let view = sut.view();
+    assert_eq!(view.entries[0].status, TrackStatus::Pending);
+    assert_ne!(view.entries[0].outcome, TrackOutcome::MaybeSent);
+    // It lands: the records are confirmed over the early failed patch.
+    let ops = sut.resolve_matching(is_receipt, receipt_confirmed(T0 + 80_000.0));
+    assert_eq!(ops.first(), Some(&confirm_patch()), "{ops:?}");
+    assert_eq!(entry_status(&sut), TrackStatus::Confirmed);
+    // Its echo changes nothing.
+    let ops = sut.dispatch(admitted);
+    assert!(!ops.contains(&poll_receipt()), "{ops:?}");
+    assert_eq!(entry_status(&sut), TrackStatus::Confirmed);
+
+    // DX-W3: taken, then refused — the echo of the admitted hand-off after
+    // the refusal is an echo, not a new life.
+    let mut refused = Sut::new();
+    refused.dispatch(Event::Submitted {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent: false,
+        submit_block: None,
+        admitted: true,
+    });
+    refused.resolve(Res::Clock { now_ms: T0 });
+    refused.resolve(receipt_pending(T0 + 300.0));
+    let _ = tick(&mut refused, T0 + 12_400.0);
+    while refused.outstanding().iter().any(is_status) {
+        refused.resolve_matching(is_status, status(TrackLifecycle::Rejected, T0 + 12_500.0));
+    }
+    assert_eq!(entry_status(&refused), TrackStatus::Rejected);
+    let ops = refused.dispatch(Event::Submitted {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent: false,
+        submit_block: None,
+        admitted: true,
+    });
+    assert!(!ops.contains(&poll_receipt()), "{ops:?}");
+    assert_eq!(entry_status(&refused), TrackStatus::Rejected);
 }
