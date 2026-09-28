@@ -243,7 +243,7 @@
 <style>
 	.gallery {
 		display: grid;
-		grid-template-columns: var(--layout-galleryRail) 1fr;
+		grid-template-columns: var(--layout-settingsNavW) 1fr;
 		min-height: 100dvh;
 		background: var(--color-bg-base);
 		color: var(--color-fg-base);

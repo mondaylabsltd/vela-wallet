@@ -171,3 +171,45 @@ describe('literal audit — product UI references tokens, never raw values', () 
 		}
 	});
 });
+
+describe('every token a component names exists (spec 082 RB12, G16)', () => {
+	/**
+	 * `var(--x)` with no fallback and no definition anywhere resolves to
+	 * NOTHING: the property falls back to its initial value, silently. That is
+	 * how the extension's consent card shipped with unpadded, unbordered
+	 * buttons in the body font — 19 such names, from a token set that had been
+	 * renamed underneath them (`--space-4`, `--color-text-primary`, …). This
+	 * lists every one; a fallback (`var(--x, …)`) is a deliberate choice and is
+	 * not counted.
+	 */
+	const walk = (dir: string): string[] =>
+		readdirSync(dir).flatMap((name) => {
+			const path = join(dir, name);
+			return statSync(path).isDirectory() ? walk(path) : [path];
+		});
+	const files = walk(join(APP_ROOT, 'src'));
+	const defined = new Set<string>();
+	for (const file of files) {
+		if (!/\.(svelte|css|ts|js|html)$/.test(file)) continue;
+		const text = readFileSync(file, 'utf8');
+		for (const m of text.matchAll(/(--[A-Za-z0-9_-]+)\s*:/g)) defined.add(m[1]);
+		for (const m of text.matchAll(/style:(--[A-Za-z0-9_-]+)/g)) defined.add(m[1]);
+		for (const m of text.matchAll(/setProperty\(\s*['"`](--[A-Za-z0-9_-]+)/g)) defined.add(m[1]);
+	}
+
+	it('finds definitions to check against', () => {
+		expect(defined.has('--space-lg')).toBe(true);
+		expect(defined.has('--color-fg-base')).toBe(true);
+	});
+
+	it('no fallback-less var() under src/**/*.svelte names an undefined token', () => {
+		const undefinedRefs: string[] = [];
+		for (const file of files.filter((f) => f.endsWith('.svelte'))) {
+			const text = readFileSync(file, 'utf8');
+			for (const m of text.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)\s*\)/g)) {
+				if (!defined.has(m[1])) undefinedRefs.push(`${relative(APP_ROOT, file)} ${m[1]}`);
+			}
+		}
+		expect(undefinedRefs).toEqual([]);
+	});
+});

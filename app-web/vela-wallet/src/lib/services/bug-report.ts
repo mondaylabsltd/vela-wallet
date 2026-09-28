@@ -164,6 +164,55 @@ export interface DeviceFacts {
 	failures: readonly string[];
 }
 
+/**
+ * The extension worker's counters in `storage.session` — `extension/lib/
+ * swlog.js`'s `SW_COUNTS_KEY`, declared here because the app bundle must not
+ * import the worker's modules; `one-surface.test.ts` pins the two together.
+ */
+export const SW_COUNTS_KEY = 'vela.sw.counts';
+
+/** A counter name the worker writes: `<area>.<event>[.<cause>]`, lower-case words only. */
+const SW_COUNTER = /^[a-z]+\.[a-z_]+(?:\.[a-z][a-z_]*\d{0,3})?$/;
+
+/**
+ * The worker's failure counters as report lines — `sw:req.settled.page_left
+ * ×2` (spec 082 RB14): the counters that carry a cause, plus a read that
+ * reached no node at all. Counters and classes only: a counter's name is a
+ * closed word list, and nothing the worker logs next to it (a host, a tab)
+ * is read here.
+ */
+export function workerFailureLines(counts: unknown): string[] {
+	if (!counts || typeof counts !== 'object') return [];
+	const lines: string[] = [];
+	for (const [key, value] of Object.entries(counts as Record<string, unknown>)) {
+		if (!SW_COUNTER.test(key)) continue;
+		if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) continue;
+		const hasCause = key.split('.').length === 3;
+		if (!hasCause && key !== 'read.exhausted') continue;
+		lines.push(`sw:${key} ×${value}`);
+	}
+	return lines.sort();
+}
+
+/**
+ * {@link workerFailureLines} for this extension, or `[]` off the extension
+ * (the hosted wallet has no worker) and when the session store cannot be read.
+ */
+export async function readWorkerFailureLines(): Promise<string[]> {
+	const session = (
+		globalThis as {
+			chrome?: { storage?: { session?: { get(key: string): Promise<Record<string, unknown>> } } };
+		}
+	).chrome?.storage?.session;
+	if (!isExtensionPage() || typeof session?.get !== 'function') return [];
+	try {
+		const all = await session.get(SW_COUNTS_KEY);
+		return workerFailureLines(all?.[SW_COUNTS_KEY]);
+	} catch {
+		return [];
+	}
+}
+
 /** The corpus labels the preview lines wear. */
 export interface EnvironmentLabels {
 	version: string;

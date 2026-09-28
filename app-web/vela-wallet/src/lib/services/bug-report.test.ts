@@ -15,6 +15,9 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	workerFailureLines,
+	readWorkerFailureLines,
+	SW_COUNTS_KEY,
 	AREA_OTHER,
 	MAX_SCREENSHOTS,
 	SCREENSHOT_TIMEOUT_MS,
@@ -521,5 +524,60 @@ describe('the dedup marker', () => {
 		const a = fingerprintOf('Send froze', AREA_OTHER, '1.0.0');
 		expect(fingerprintOf('  SEND FROZE ', AREA_OTHER, '1.0.0')).toBe(a);
 		expect(fingerprintOf('Receive froze', AREA_OTHER, '1.0.0')).not.toBe(a);
+	});
+});
+
+describe('the extension worker’s counters (spec 082 RB14)', () => {
+	it('become `sw:<event>.<cause> ×N` lines, the failures only', () => {
+		expect(
+			workerFailureLines({
+				'req.settled.page_left': 2,
+				'read.fail.timeout': 3,
+				'read.exhausted': 1,
+				'req.claim.expired': 1,
+				'sw.start': 4,
+				'req.arrived': 9,
+				'req.answered': 5
+			})
+		).toEqual([
+			'sw:read.exhausted ×1',
+			'sw:read.fail.timeout ×3',
+			'sw:req.claim.expired ×1',
+			'sw:req.settled.page_left ×2'
+		]);
+	});
+
+	it('carry no URL, no address and no value a counter name could smuggle', () => {
+		const lines = workerFailureLines({
+			'read.fail.https://rpc.example/key': 1,
+			[`req.settled.0x${'ab'.repeat(20)}`]: 1,
+			'req.settled.page_left': 'x',
+			'req.settled.surface_closed': -1,
+			'req.settled.expired': 1
+		});
+		expect(lines).toEqual(['sw:req.settled.expired ×1']);
+		expect(lines.join(' ')).not.toMatch(/https?:|0x/);
+	});
+
+	it('reach the preview’s failures line through the same list', () => {
+		const lines = environmentLines(LABELS, {
+			...FACTS,
+			failures: [...FACTS.failures, ...workerFailureLines({ 'req.settled.page_left': 1 })]
+		});
+		expect(lines.at(-1)).toContain('sw:req.settled.page_left ×1');
+	});
+
+	it('are read from the extension’s session store, and nowhere else', async () => {
+		expect(await readWorkerFailureLines()).toEqual([]);
+		vi.stubGlobal('chrome', {
+			runtime: { id: 'ext' },
+			storage: {
+				session: {
+					get: async (key: string) => ({ [key]: { 'req.settled.surface_closed': 2 } })
+				}
+			}
+		});
+		expect(await readWorkerFailureLines()).toEqual(['sw:req.settled.surface_closed ×2']);
+		expect(SW_COUNTS_KEY).toBe('vela.sw.counts');
 	});
 });
