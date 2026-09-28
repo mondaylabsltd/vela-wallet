@@ -308,7 +308,6 @@
   "txRemaining": "~{{remaining}} s verbleibend",
   "txTypicalTime": "{{chainName}} bestätigt in der Regel in ~{{estSecs}} s",
   "txRetryBtn": "Erneut versuchen",
-  "txErrorTimeout": "Transaktion übermittelt, aber Zeitüberschreitung bei der Bestätigung. Prüfen Sie den Verlauf später.",
   "txErrorBundlerLoop": "Das Gas-Konto-Guthaben wird vom Bundler weiterhin abgelehnt. Versuchen Sie es später erneut oder erhöhen Sie die Gas-Stufe.",
   "txErrorBundlerFund": "Das Bundler-Konto benötigt mehr Gas. Bitte füllen Sie es in den Einstellungen auf.",
   "txErrorPublicKey": "Kein öffentlicher Schlüssel für dieses Konto gefunden",
@@ -1356,7 +1355,7 @@
    "verifiedAbiSummary": "Der Vertrag ist im Block-Explorer verifiziert und seine Parameter lassen sich vollständig dekodieren, aber kein ERC-7730-Deskriptor gibt ihnen eine Bedeutung.",
    "verifiedAbiWarning": "Kein ERC-7730-Deskriptor für diesen Vertrag — die Werte oben sind eine direkte Dekodierung der verifizierten On-Chain-ABI. Bitte prüfen.",
    "bestEffortSummary": "Aufruf von {{fn}} — aus der öffentlichen Funktionssignatur gelesen, nicht aus einem verifizierten Deskriptor.",
-   "simUnavailableWarning": "Diese Transaktion ließ sich nicht simulieren (das RPC hat abgelehnt) — Vela kann nicht vorhersagen, was sie tut. Lehne sie ab, außer du vertraust dieser Website vollständig.",
+   "simUnavailableWarning": "Vela konnte nicht prüfen, was diese Transaktion bewirkt – bitte vor dem Signieren kontrollieren.",
    "drainSummary": "Die Website nennt das eine kostenlose Beanspruchung, doch die Simulation zeigt, wie Vermögenswerte deine Wallet verlassen.",
    "drainWarning": "Es fließen Vermögenswerte ab, die die Website nie erwähnt hat — das sieht stark nach einem Leerräumen aus. Lehne ab.",
    "selectorNotListed": "Dekodierung nicht möglich — kein ERC-7730-Deskriptor, Selektor nicht verzeichnet ({{bytes}} Bytes)",
@@ -1405,6 +1404,7 @@
    "selfCallBlockedLegBody": "Schritt {{index}} dieser Anfrage würde ändern, wer deine Wallet kontrolliert ({{function}}). Einmal signiert, kann sie deine Wallet jemand anderem übergeben — deshalb lehnt Vela die ganze Anfrage ab. Es wurde nichts signiert.",
    "selfCallBlockedSafeTx": "Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion für eine spätere Ausführung freigibt. Vela lehnt ab: So eine Signatur lässt sich auch ohne dich verwenden. Es wurde nichts signiert.",
    "stillConfirming": "Noch nicht in der Chain. Vela prüft weiter – bitte nicht erneut senden.",
+   "maybeSent": "Möglicherweise schon gesendet. Vela prüft weiter – bitte nicht erneut senden.",
    "unknownOutcome": "Nach 24 Stunden noch unbestätigt.",
    "openSigner": "Auf der Signaturseite bestätigen",
    "signerDown": "Die Signaturseite ließ sich nicht öffnen. Prüfe deine Verbindung."
@@ -1845,7 +1845,9 @@
   "loadOffline": "Instabile Verbindung – die Seite ließ sich nicht öffnen.",
   "loadNotFound": "Diese Website wurde nicht gefunden. Prüfe die Adresse.",
   "loadCertificate": "Das Zertifikat dieser Website ist ungültig, Vela hat sie blockiert.",
+  "loadProxy": "Ihr Proxy antwortet nicht.",
   "loadRetrying": "Neuer Versuch…",
-  "chainDown": "{{chain}} nicht erreichbar – Daten auf der Seite sind eventuell unvollständig."
+  "chainDown": "{{chain}} nicht erreichbar – Daten auf der Seite sind eventuell unvollständig.",
+  "requestOpen": "Bitte zuerst die Anfrage abschließen oder abbrechen"
  }
 }

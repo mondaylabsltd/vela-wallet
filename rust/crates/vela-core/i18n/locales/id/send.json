@@ -54,7 +54,6 @@
     "txRemaining": "~{{remaining}}s tersisa",
     "txTypicalTime": "{{chainName}} biasanya terkonfirmasi dalam ~{{estSecs}} dtk",
     "txRetryBtn": "Coba Lagi",
-    "txErrorTimeout": "Transaksi dikirim tetapi konfirmasi melebihi waktu tunggu. Periksa riwayat nanti.",
     "txErrorBundlerLoop": "Saldo akun gas terus ditolak oleh bundler. Coba lagi nanti atau naikkan tingkat gas.",
     "txErrorBundlerFund": "Akun bundler butuh lebih banyak gas. Isi dananya di Pengaturan.",
     "txErrorPublicKey": "Kunci publik untuk akun ini tidak ditemukan",

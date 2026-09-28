@@ -314,7 +314,7 @@ Owns `L/*.json` in 15 locales, `scripts/gen-i18n.mjs` and the generated
 `rust/crates/vela-core/src/i18n/paths.rs`, `rust/crates/vela-core/src/i18n_catalogs/` and
 `assets/i18n/`.
 
-- [ ] T043 [P] One commit for the whole corpus change: `L/componentsUi.json`, `L/explore.json`, `L/send.json` in 15 locales, the pins in `scripts/gen-i18n.mjs` and the generated `paths.rs` / `i18n_catalogs/` / `assets/i18n/` (RI1–RI3, RA11, RG9, RG14, RX); proof: `CT/i18n_residency.rs` prints ≤ 138,800. Adding `maybeSent` alone would break the cap.
+- [x] T043 [P] One commit for the whole corpus change: `L/componentsUi.json`, `L/explore.json`, `L/send.json` in 15 locales, the pins in `scripts/gen-i18n.mjs` and the generated `paths.rs` / `i18n_catalogs/` / `assets/i18n/` (RI1–RI3, RA11, RG9, RG14, RX); proof: `CT/i18n_residency.rs` prints ≤ 138,800. Adding `maybeSent` alone would break the cap.
   - Keys:
     - add `componentsUi.signing.maybeSent` (L/componentsUi.json);
     - add `explore.loadProxy` and `explore.requestOpen` (L/explore.json);

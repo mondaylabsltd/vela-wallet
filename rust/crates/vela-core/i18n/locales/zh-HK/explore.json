@@ -62,7 +62,9 @@
     "loadOffline": "網絡唔穩定，頁面開唔到。",
     "loadNotFound": "搵唔到呢個網站，請檢查網址。",
     "loadCertificate": "網站證書有問題，Vela 已經阻止開啟。",
+    "loadProxy": "代理伺服器冇回應。",
     "loadRetrying": "重試緊…",
-    "chainDown": "暫時連唔到 {{chain}}，頁面資料可能唔齊。"
+    "chainDown": "暫時連唔到 {{chain}}，頁面資料可能唔齊。",
+    "requestOpen": "請先完成或者取消呢個請求"
   }
 }

@@ -190,7 +190,7 @@
       "verifiedAbiSummary": "Le contrat est vérifié sur l’explorateur et ses paramètres se décodent entièrement, mais aucun descripteur ERC-7730 ne leur donne de sens.",
       "verifiedAbiWarning": "Aucun descripteur ERC-7730 pour ce contrat — les valeurs ci-dessus sont un décodage direct de l’ABI vérifiée on-chain. Vérifiez-les.",
       "bestEffortSummary": "Appel de {{fn}} — lu depuis la signature publique de la fonction, pas depuis un descripteur vérifié.",
-      "simUnavailableWarning": "Cette transaction n’a pas pu être simulée (le RPC a refusé) — Vela ne peut pas prédire ce qu’elle ferait. À moins de faire entièrement confiance à ce site, refusez-la.",
+      "simUnavailableWarning": "Vela n’a pas pu vérifier ce que fait cette transaction. Relisez-la avant de signer.",
       "drainSummary": "Le site présente cela comme une réclamation gratuite, mais la simulation montre des actifs qui quittent votre portefeuille.",
       "drainWarning": "Des actifs partent alors que le site ne les a jamais mentionnés — cela ressemble fortement à un siphonnage. Refusez.",
       "selectorNotListed": "Décodage impossible — aucun descripteur ERC-7730 et sélecteur non répertorié ({{bytes}} octets)",
@@ -239,6 +239,7 @@
       "selfCallBlockedLegBody": "L’étape {{index}} de cette demande changerait qui contrôle votre portefeuille ({{function}}). La signer une seule fois peut le remettre à quelqu’un d’autre, alors Vela refuse toute la demande. Rien n’a été signé.",
       "selfCallBlockedSafeTx": "Cette demande veut que votre clé autorise une transaction Safe à exécuter plus tard. Vela la refuse : une telle signature peut servir sans vous. Rien n’a été signé.",
       "stillConfirming": "Pas encore sur la chaîne. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
+      "maybeSent": "Elle a peut-être été envoyée. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
       "unknownOutcome": "Toujours non confirmée après 24 heures.",
       "openSigner": "Confirmer sur la page de signature",
       "signerDown": "Impossible d’ouvrir la page de signature. Vérifiez votre connexion."

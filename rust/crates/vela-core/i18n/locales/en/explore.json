@@ -62,7 +62,9 @@
     "loadOffline": "Unstable connection — the page didn't open.",
     "loadNotFound": "Site not found. Check the address.",
     "loadCertificate": "This site's certificate is invalid, so Vela blocked it.",
+    "loadProxy": "Your proxy isn't responding.",
     "loadRetrying": "Retrying…",
-    "chainDown": "Can't reach {{chain}} — page data may be incomplete."
+    "chainDown": "Can't reach {{chain}} — page data may be incomplete.",
+    "requestOpen": "Finish or cancel the request first"
   }
 }

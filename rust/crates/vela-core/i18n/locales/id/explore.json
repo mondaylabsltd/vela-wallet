@@ -62,7 +62,9 @@
     "loadOffline": "Koneksi tidak stabil, halaman tidak terbuka.",
     "loadNotFound": "Situs ini tidak ditemukan. Periksa alamatnya.",
     "loadCertificate": "Sertifikat situs ini tidak valid, jadi Vela memblokirnya.",
+    "loadProxy": "Proxy Anda tidak merespons.",
     "loadRetrying": "Mencoba lagi…",
-    "chainDown": "{{chain}} tidak terjangkau — data halaman mungkin tidak lengkap."
+    "chainDown": "{{chain}} tidak terjangkau — data halaman mungkin tidak lengkap.",
+    "requestOpen": "Selesaikan atau batalkan permintaan ini dulu"
   }
 }

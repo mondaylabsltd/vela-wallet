@@ -308,7 +308,6 @@
   "txRemaining": "~{{remaining}}s tersisa",
   "txTypicalTime": "{{chainName}} biasanya terkonfirmasi dalam ~{{estSecs}} dtk",
   "txRetryBtn": "Coba Lagi",
-  "txErrorTimeout": "Transaksi dikirim tetapi konfirmasi melebihi waktu tunggu. Periksa riwayat nanti.",
   "txErrorBundlerLoop": "Saldo akun gas terus ditolak oleh bundler. Coba lagi nanti atau naikkan tingkat gas.",
   "txErrorBundlerFund": "Akun bundler butuh lebih banyak gas. Isi dananya di Pengaturan.",
   "txErrorPublicKey": "Kunci publik untuk akun ini tidak ditemukan",
@@ -1356,7 +1355,7 @@
    "verifiedAbiSummary": "Kontraknya terverifikasi di block explorer dan parameternya terbaca lengkap, tetapi tidak ada deskriptor ERC-7730 yang memberi maknanya.",
    "verifiedAbiWarning": "Kontrak ini tidak punya deskriptor ERC-7730 — nilai di atas adalah hasil dekode langsung dari ABI on-chain yang terverifikasi. Periksa nilainya.",
    "bestEffortSummary": "Memanggil {{fn}} — dibaca dari tanda tangan fungsi publik, bukan deskriptor terverifikasi.",
-   "simUnavailableWarning": "Transaksi ini tidak bisa disimulasikan (RPC menolak) — Vela tidak dapat memperkirakan apa yang akan terjadi. Kecuali kamu benar-benar memercayai situs ini, tolak saja.",
+   "simUnavailableWarning": "Vela tidak bisa memeriksa hasil transaksi ini. Periksa dulu sebelum menandatangani.",
    "drainSummary": "Situs menyebut ini klaim gratis, tetapi simulasi menunjukkan aset keluar dari dompetmu.",
    "drainWarning": "Ada aset yang keluar padahal situs tidak pernah menyebutkannya — ini sangat mirip pengurasan dompet. Tolak.",
    "selectorNotListed": "Tidak bisa didekode — tidak ada deskriptor ERC-7730, selector tidak terdaftar ({{bytes}} byte)",
@@ -1405,6 +1404,7 @@
    "selfCallBlockedLegBody": "Langkah {{index}} pada permintaan ini akan mengubah siapa yang menguasai dompet Anda ({{function}}). Sekali ditandatangani, dompet bisa berpindah ke orang lain, jadi Vela menolak seluruh permintaan. Tidak ada yang ditandatangani.",
    "selfCallBlockedSafeTx": "Permintaan ini meminta kunci Anda menyetujui transaksi Safe untuk dijalankan nanti. Vela menolaknya — tanda tangan seperti itu bisa dipakai tanpa kehadiran Anda. Tidak ada yang ditandatangani.",
    "stillConfirming": "Belum masuk ke chain. Vela terus memeriksa — jangan kirim ulang.",
+   "maybeSent": "Mungkin sudah terkirim. Vela terus memeriksa — jangan kirim ulang.",
    "unknownOutcome": "Masih belum terkonfirmasi setelah 24 jam.",
    "openSigner": "Konfirmasi di halaman tanda tangan",
    "signerDown": "Halaman tanda tangan tidak terbuka. Periksa koneksi Anda."
@@ -1845,7 +1845,9 @@
   "loadOffline": "Koneksi tidak stabil, halaman tidak terbuka.",
   "loadNotFound": "Situs ini tidak ditemukan. Periksa alamatnya.",
   "loadCertificate": "Sertifikat situs ini tidak valid, jadi Vela memblokirnya.",
+  "loadProxy": "Proxy Anda tidak merespons.",
   "loadRetrying": "Mencoba lagi…",
-  "chainDown": "{{chain}} tidak terjangkau — data halaman mungkin tidak lengkap."
+  "chainDown": "{{chain}} tidak terjangkau — data halaman mungkin tidak lengkap.",
+  "requestOpen": "Selesaikan atau batalkan permintaan ini dulu"
  }
 }

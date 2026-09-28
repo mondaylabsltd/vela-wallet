@@ -62,7 +62,9 @@
     "loadOffline": "接続が不安定で開けませんでした。",
     "loadNotFound": "サイトが見つかりません。URL を確認してください。",
     "loadCertificate": "証明書が無効なため、Vela がブロックしました。",
+    "loadProxy": "プロキシが応答していません。",
     "loadRetrying": "再試行中…",
-    "chainDown": "{{chain}} に接続できず、データが不完全な可能性があります。"
+    "chainDown": "{{chain}} に接続できず、データが不完全な可能性があります。",
+    "requestOpen": "先にこのリクエストを完了するかキャンセルしてください"
   }
 }

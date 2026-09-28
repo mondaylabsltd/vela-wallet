@@ -308,7 +308,6 @@
   "txRemaining": "~{{remaining}}s restantes",
   "txTypicalTime": "{{chainName}} suele confirmar en ~{{estSecs}}s",
   "txRetryBtn": "Intentar de nuevo",
-  "txErrorTimeout": "La transacción se envió, pero se agotó el tiempo de confirmación. Revisa el historial más tarde.",
   "txErrorBundlerLoop": "El bundler sigue rechazando el saldo de la cuenta de gas. Inténtalo más tarde o sube el nivel de gas.",
   "txErrorBundlerFund": "Financia tu cuenta de bundler en Ajustes.",
   "txErrorPublicKey": "No se encontró la llave pública de esta cuenta",
@@ -1359,7 +1358,7 @@
    "verifiedAbiSummary": "El contrato está verificado en el explorador y sus parámetros se decodifican por completo, pero ningún descriptor ERC-7730 les da significado.",
    "verifiedAbiWarning": "Este contrato no tiene descriptor ERC-7730 — los valores de arriba son una decodificación directa del ABI verificado en cadena. Revísalos.",
    "bestEffortSummary": "Llamando a {{fn}} — leído de la firma pública de la función, no de un descriptor verificado.",
-   "simUnavailableWarning": "No se pudo simular esta transacción (el RPC la rechazó) — Vela no puede predecir qué haría. A menos que confíes por completo en este sitio, recházala.",
+   "simUnavailableWarning": "Vela no pudo comprobar qué hace esta transacción. Revísala antes de firmar.",
    "drainSummary": "El sitio dice que es un reclamo gratuito, pero la simulación muestra activos saliendo de tu billetera.",
    "drainWarning": "Salen activos que el sitio nunca mencionó — se parece muchísimo a un vaciado. Recházalo.",
    "selectorNotListed": "No se puede decodificar — sin descriptor ERC-7730 y con un selector no registrado ({{bytes}} bytes)",
@@ -1408,6 +1407,7 @@
    "selfCallBlockedLegBody": "El paso {{index}} de esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela rechaza la solicitud completa. No se firmó nada.",
    "selfCallBlockedSafeTx": "Esta solicitud pide que tu llave autorice una transacción de Safe para ejecutarla después. Vela la rechaza: una firma así puede usarse sin ti. No se firmó nada.",
    "stillConfirming": "Todavía no está en la cadena. Vela sigue revisando; no la envíes otra vez.",
+   "maybeSent": "Es posible que ya se haya enviado. Vela sigue revisando; no la envíes otra vez.",
    "unknownOutcome": "Sigue sin confirmarse tras 24 horas.",
    "openSigner": "Confirmar en la página de firma",
    "signerDown": "No se abrió la página de firma. Revisa tu conexión."
@@ -1849,7 +1849,9 @@
   "loadOffline": "Conexión inestable: la página no se abrió.",
   "loadNotFound": "No se encontró este sitio. Revisa la dirección.",
   "loadCertificate": "El certificado de este sitio no es válido y Vela lo bloqueó.",
+  "loadProxy": "Tu proxy no responde.",
   "loadRetrying": "Reintentando…",
-  "chainDown": "No se puede conectar con {{chain}}: los datos podrían estar incompletos."
+  "chainDown": "No se puede conectar con {{chain}}: los datos podrían estar incompletos.",
+  "requestOpen": "Primero termina o cancela la solicitud"
  }
 }
