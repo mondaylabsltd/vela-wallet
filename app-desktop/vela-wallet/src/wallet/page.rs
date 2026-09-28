@@ -4236,12 +4236,19 @@ impl WalletPage {
         // over them: the ⋯ menu showed a sliver above the page and nothing
         // else (found verifying 078 E-03). While one is open the page steps
         // aside, as it does for a dialog, and comes back when it closes.
+        // On Windows the page stays: the menu cuts its own hole in the
+        // webview's window instead (spec 083 D2, `webview::cut_out`).
         self.account_switcher
             || self.identicon_viewer.is_some()
-            || matches!(
-                self.menu,
-                Some((ContactsMenu::Site | ContactsMenu::SiteNetwork, _, _))
-            )
+            || (!cfg!(target_os = "windows") && self.site_menu_open())
+    }
+
+    /// A menu that drops over the page: the site's ⋯ and its network picker.
+    fn site_menu_open(&self) -> bool {
+        matches!(
+            self.menu,
+            Some((ContactsMenu::Site | ContactsMenu::SiteNetwork, _, _))
+        )
     }
 
     /// 078 H-02 — every artwork with an address behind it opens this.
@@ -17339,7 +17346,35 @@ impl WalletPage {
                                 this.menu = None;
                                 cx.notify();
                             }))
-                            .child(card),
+                            .child(card)
+                            // Spec 083 D2 (Windows): measured where it is
+                            // painted — after the page, so this frame's layout
+                            // — and cut out of the webview's window.
+                            .children(
+                                (cfg!(target_os = "windows")
+                                    && matches!(
+                                        kind,
+                                        ContactsMenu::Site | ContactsMenu::SiteNetwork
+                                    ))
+                                .then(|| {
+                                    gpui::canvas(
+                                        |_, _, _| (),
+                                        |bounds, (), window, _| {
+                                            #[cfg(target_os = "windows")]
+                                            crate::webview::cut_out(
+                                                Some(bounds),
+                                                window.scale_factor(),
+                                            );
+                                            #[cfg(not(target_os = "windows"))]
+                                            let _ = (bounds, window);
+                                        },
+                                    )
+                                    .absolute()
+                                    .top_0()
+                                    .left_0()
+                                    .size_full()
+                                }),
+                            ),
                     ),
             )
             .with_priority(1)
@@ -17405,6 +17440,11 @@ impl Render for WalletPage {
             || self.dialog_over_browser()
         {
             crate::webview::hide();
+        }
+        // The menu closed: the webview's window is whole again (083 D2).
+        #[cfg(target_os = "windows")]
+        if !self.site_menu_open() {
+            crate::webview::cut_out(None, 1.0);
         }
         // Typing stops when the address bar loses the keyboard.
         if self.address_draft.is_some() && !self.address_focus.is_focused(window) {

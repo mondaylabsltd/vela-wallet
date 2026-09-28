@@ -357,6 +357,8 @@ windows-core = "0.61.2"
 windows-sys = { version = "0.59", features = [
     "Win32_System_Time",
     "Win32_Foundation",
+    # A menu over the page cuts a hole in the webview's window (spec 083 D2).
+    "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_Storage_FileSystem",
     "Win32_System_IO",

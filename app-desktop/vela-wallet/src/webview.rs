@@ -200,6 +200,10 @@ struct Browser {
     /// building, but documents a context as outliving its views.
     #[cfg(windows)]
     _context: wry::WebContext,
+    /// The rectangle cut out of the view's window for a menu over the page
+    /// (spec 083 D2), in the window's own pixels.
+    #[cfg(windows)]
+    hole: Option<[i32; 4]>,
 }
 
 thread_local! {
@@ -295,6 +299,73 @@ pub fn place(bounds: Bounds<Pixels>, window: &Window, home: &str, cx: &mut gpui:
             browser.visible = true;
         }
     });
+}
+
+/// The part of `menu` over `page`, in the page window's own pixels — `None`
+/// when they do not overlap (spec 083 D2).
+#[cfg(any(windows, test))]
+fn hole_in(page: Bounds<Pixels>, menu: Bounds<Pixels>, scale: f32) -> Option<[i32; 4]> {
+    let over = page.intersect(&menu);
+    if over.size.width <= gpui::px(0.) || over.size.height <= gpui::px(0.) {
+        return None;
+    }
+    // Outward, so no sliver of the page is left over the menu's edge.
+    #[allow(clippy::cast_possible_truncation)]
+    let at = |value: Pixels, round: fn(f32) -> f32| round(f32::from(value) * scale) as i32;
+    Some([
+        at(over.left() - page.left(), f32::floor),
+        at(over.top() - page.top(), f32::floor),
+        at(over.right() - page.left(), f32::ceil),
+        at(over.bottom() - page.top(), f32::ceil),
+    ])
+}
+
+/// A menu over the page shows through a hole cut out of the webview's window,
+/// instead of the whole dApp blanking while it is open (spec 083 D2, Windows —
+/// the owner's "打开 ⋯ 菜单时整个网页会消失"). `None` mends the window.
+#[cfg(windows)]
+pub fn cut_out(menu: Option<Bounds<Pixels>>, scale: f32) {
+    BROWSER.with(|slot| {
+        let Ok(mut slot) = slot.try_borrow_mut() else {
+            return;
+        };
+        let Some(browser) = slot.as_mut() else {
+            return;
+        };
+        let hole = menu
+            .zip(browser.bounds)
+            .and_then(|(menu, page)| hole_in(page, menu, scale));
+        if browser.hole != hole {
+            set_region(&browser.view, hole);
+            browser.hole = hole;
+        }
+    });
+}
+
+#[cfg(windows)]
+fn set_region(view: &wry::WebView, hole: Option<[i32; 4]>) {
+    use windows_sys::Win32::Graphics::Gdi::{
+        CombineRgn, CreateRectRgn, DeleteObject, RGN_DIFF, SetWindowRgn,
+    };
+    use wry::WebViewExtWindows as _;
+    let hwnd = view.hwnd().0;
+    // SAFETY: wry's container window, alive as long as the view. A region
+    // SetWindowRgn accepted belongs to the system and is not deleted here.
+    unsafe {
+        let Some([left, top, right, bottom]) = hole else {
+            SetWindowRgn(hwnd, std::ptr::null_mut(), 1);
+            return;
+        };
+        // Wider than any window, so a resize under the menu never leaves part
+        // of the page unpainted.
+        let whole = CreateRectRgn(0, 0, i32::from(i16::MAX), i32::from(i16::MAX));
+        let cut = CreateRectRgn(left, top, right, bottom);
+        CombineRgn(whole, whole, cut, RGN_DIFF);
+        DeleteObject(cut);
+        if SetWindowRgn(hwnd, whole, 1) == 0 {
+            DeleteObject(whole);
+        }
+    }
 }
 
 /// Take the browser off the screen.
@@ -589,6 +660,8 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
                 visible: false,
                 #[cfg(windows)]
                 _context: context,
+                #[cfg(windows)]
+                hole: None,
             })
         }
         Err(error) => {
@@ -795,6 +868,18 @@ fn sender_url(reported: &str, webview: impl FnOnce() -> Option<String>) -> Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 083 D2: the hole is the menu's part over the page, in the page
+    /// window's pixels, rounded outward; nothing when they do not meet.
+    #[test]
+    fn a_menu_over_the_page_cuts_its_own_rectangle() {
+        use gpui::{point, px, size};
+        let page = Bounds::new(point(px(300.), px(92.)), size(px(900.), px(700.)));
+        let menu = Bounds::new(point(px(1000.), px(72.)), size(px(180.), px(240.)));
+        assert_eq!(hole_in(page, menu, 1.75), Some([1225, 0, 1540, 385]));
+        let beside = Bounds::new(point(px(10.), px(10.)), size(px(100.), px(50.)));
+        assert_eq!(hole_in(page, beside, 1.75), None);
+    }
 
     /// The platform's word for who sent a message wins; the webview's URL is
     /// asked only when there is no such word.
