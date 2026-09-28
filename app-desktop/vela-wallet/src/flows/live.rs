@@ -380,13 +380,21 @@ pub fn tx_detail(
             note: None,
         });
     }
+    // The network line wears the row's coin — or, when the row has none (a
+    // dApp call that moved no coin, a multi-token sweep), the chain's own
+    // rather than an empty mark (083 H2 review).
+    let coin = if item.symbol.is_empty() {
+        native_symbol(item.chain_id)
+    } else {
+        item.symbol.clone()
+    };
     facts.push(FactRow {
         label: s.detail_chain.clone(),
         value: SharedString::from(chain_name(item.chain_id)),
         lead: FactLead::Token(TokenMark {
-            ticker: SharedString::from(item.symbol.clone()),
+            ticker: SharedString::from(coin.clone()),
             badge: tint(item.chain_id),
-            logos: crate::marks::token_logos(item.chain_id, &item.symbol, None, &[]),
+            logos: crate::marks::token_logos(item.chain_id, &coin, None, &[]),
         }),
         mono: false,
         copy: None,
@@ -1000,11 +1008,10 @@ pub fn receivable_chains() -> Vec<(u32, String)> {
     out
 }
 
+/// The wallet's one shortening — by character, never by byte (083 H2
+/// review).
 fn shorten(address: &str) -> String {
-    if address.len() <= 14 {
-        return address.to_owned();
-    }
-    format!("{}…{}", &address[..6], &address[address.len() - 4..])
+    crate::wallet::live::shorten_address(address)
 }
 
 // ---------------------------------------------------------------------------
@@ -4540,7 +4547,7 @@ mod tests {
                     status: FeedTxStatus::Pending,
                     kind: None,
                     usd: None,
-                    dapp_origin: None,
+                    dapp_url: None,
                     intent: None,
                 }],
                 ..host.view()
@@ -4695,6 +4702,51 @@ mod tests {
         assert_eq!(detail.facts[1].label, s.detail_to, "then the contract");
         assert_eq!(detail.amount.as_ref(), "", "no coin moved, no figure");
         assert_eq!(detail.fiat.as_ref(), "");
+        // The network line wears the chain's coin when the row has none.
+        match &detail.facts[2].lead {
+            FactLead::Token(mark) => assert_eq!(
+                mark.ticker.as_ref(),
+                "xDAI",
+                "the chain's own coin, not an empty mark"
+            ),
+            _ => unreachable!("the network line leads with a coin"),
+        }
+        // Hidden: nothing to mask where no figure is, so no "••••" — and with
+        // neither figure the panel draws no empty hero (083 H2 review).
+        let hidden = tx_detail(
+            &view,
+            "dapp-1-tx",
+            &s,
+            &w,
+            true,
+            "en-US",
+            crate::wallet::live::Money::usd(),
+        )
+        .unwrap_or_else(|| unreachable!("the row exists"));
+        assert_eq!((hidden.amount.as_ref(), hidden.fiat.as_ref()), ("", ""));
+
+        // A recipient that is not ASCII is drawn, never a crash: the panel
+        // shortens it by character.
+        let mut odd = match &view.rows[0] {
+            FeedRow::Item { item } => item.clone(),
+            FeedRow::Header { .. } => unreachable!("one item"),
+        };
+        odd.counterparty = Some("日本語日本語日本語日本語日本語".to_owned());
+        let view = FeedView {
+            rows: vec![FeedRow::Item { item: odd }],
+            ..view
+        };
+        let detail = tx_detail(
+            &view,
+            "dapp-1-tx",
+            &s,
+            &w,
+            false,
+            "en-US",
+            crate::wallet::live::Money::usd(),
+        )
+        .unwrap_or_else(|| unreachable!("the row exists"));
+        assert_eq!(detail.facts[1].value.as_ref(), "日本語日本語…語日本語");
     }
 
     /// The QR encodes what the CORE says, and a live one is never the demo

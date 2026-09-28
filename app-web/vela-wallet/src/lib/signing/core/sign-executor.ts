@@ -241,12 +241,24 @@ export function createSignExecutor(ports: SignShellPorts) {
 						// so keeps its own TS guard (Hermes has no wasm) — see SubmitGuardOwner.
 						'core'
 					);
+					const answer = typeof result === 'string' ? result : String(result ?? '');
+					// EIP-5792: a batch is answered with its id — the op hash — the moment
+					// the relay accepts it, and `wallet_getCallsStatus` reads it back as
+					// one. It is not a receipt. Reported as `succeeded`, the core closed
+					// the record "confirmed" with the op hash for a tx hash — an explorer
+					// link to nothing, never tracked, never failed, and Activity shows it
+					// (083 H2 review). As `receipt_pending` the page gets the same id, the
+					// record lands pending first, and the tracker settles it.
+					if (operation.method === 'wallet_sendCalls' && answer !== '') {
+						return {
+							type: 'submit',
+							outcome: { type: 'receipt_pending', user_op_hash: answer },
+							now_ms: Date.now()
+						};
+					}
 					return {
 						type: 'submit',
-						outcome: {
-							type: 'succeeded',
-							result: typeof result === 'string' ? result : String(result ?? '')
-						},
+						outcome: { type: 'succeeded', result: answer },
 						now_ms: Date.now()
 					};
 				} catch (error) {
@@ -277,6 +289,7 @@ export function createSignExecutor(ports: SignShellPorts) {
 					from: record.from,
 					chainId: record.chain_id,
 					dappOrigin: record.dapp_origin,
+					dappUrl: record.dapp_url,
 					nowMs: record.now_ms,
 					status: record.status,
 					userOpHash: record.user_op_hash,

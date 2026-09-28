@@ -306,7 +306,15 @@ pub struct SignRecord {
     pub now_ms: f64,
     pub status: SignRecordStatus,
     pub user_op_hash: String,
+    /// `requestDApp(...)?.name ?? origin` — what the Connections list shows.
+    /// A name here is the dApp's own claim, so nothing reads it as a site.
     pub dapp_origin: String,
+    /// The origin the request arrived from, as its transport reported it —
+    /// never the dApp's self-declared name. Stored beside `dapp_origin`
+    /// (`dappUrl`) so Activity can name the site from an address the dApp
+    /// did not get to choose (083 H2 review). `""` when there is none.
+    #[serde(default)]
+    pub dapp_url: String,
     pub intent: Option<String>,
 }
 
@@ -439,9 +447,12 @@ pub enum SignSponsorship {
 pub enum SignSubmitOutcome {
     /// tx: the real tx hash from a receipt whose operation EXECUTED (a
     /// receipt with `success: false` is [`Self::Reverted`], never this);
-    /// batch: the userOpHash as EIP-5792's opaque batch id where the shell
-    /// answers `wallet_getCallsStatus` (the web), else the tx hash as for a
-    /// transaction (the desktop); signatures: the EIP-1271 signature hex.
+    /// batch: the tx hash as for a transaction; signatures: the EIP-1271
+    /// signature hex. A batch id handed to the page the moment the relay
+    /// accepts it (the web's EIP-5792 answer) is the userOpHash, not a
+    /// receipt: it is [`Self::ReceiptPending`], or the record closes
+    /// "confirmed" under a hash no explorer knows and nothing ever tracks it
+    /// (083 H2 review).
     Succeeded {
         result: String,
     },
@@ -869,6 +880,8 @@ struct Inflight {
     credential_id: String,
     /// `requestDApp(...)?.name ?? request.origin` (`dapp-connection.tsx:729`).
     record_origin: String,
+    /// `request.origin` alone — the record's `dapp_url`.
+    record_url: String,
     intent: Option<String>,
     max_fee_per_gas: Option<String>,
     gas_fee_token: Option<String>,
@@ -1763,6 +1776,7 @@ fn approve_with(
         address: signer.address.clone(),
         credential_id: signer.credential_id,
         record_origin,
+        record_url: pending.origin.clone(),
         intent,
         max_fee_per_gas: opts.max_fee_per_gas.clone(),
         gas_fee_token: opts.gas_fee_token.clone(),
@@ -2080,6 +2094,7 @@ fn on_op_submitted(
                 status: SignRecordStatus::Pending,
                 user_op_hash: user_op_hash.clone(),
                 dapp_origin: fl.record_origin.clone(),
+                dapp_url: fl.record_url.clone(),
                 intent: fl.intent.clone(),
             },
             fl.chain_id,
@@ -2314,6 +2329,7 @@ fn on_submit(
                     status: SignRecordStatus::Confirmed,
                     user_op_hash: fl.op_hash.clone().unwrap_or_default(),
                     dapp_origin: fl.record_origin.clone(),
+                    dapp_url: fl.record_url.clone(),
                     intent: fl.intent.clone(),
                 };
                 if let Some(inner) = model.inflight.as_mut() {
@@ -2455,6 +2471,7 @@ fn persist_pending_then(
         status: SignRecordStatus::Pending,
         user_op_hash: user_op_hash.clone(),
         dapp_origin: fl.record_origin.clone(),
+        dapp_url: fl.record_url.clone(),
         intent: fl.intent.clone(),
     };
     model.tracker_handoff = Some(SignTrackerHandoff {

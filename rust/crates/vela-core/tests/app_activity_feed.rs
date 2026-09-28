@@ -50,7 +50,7 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         status: FeedTxStatus::Confirmed,
         kind: None,
         usd: None,
-        dapp_origin: None,
+        dapp_url: None,
         intent: None,
     }
 }
@@ -79,6 +79,10 @@ fn recv(id: &str, from: &str, value: &str, symbol: &str, ts: f64) -> FeedTxRecor
     r
 }
 
+/// A real address for a dApp row's recipient: the row names nothing else
+/// (083 H2 review).
+const CAFE: &str = "0x000000000000000000000000000000000000cafe";
+
 /// A transaction a dApp asked this account to send, in the shape every
 /// client's signing path stores (`buildSigningRecord`): the call's own wei
 /// figure, the chain's coin at 18 decimals, the site's origin (083 H2).
@@ -94,7 +98,7 @@ fn dapp_tx(id: &str, to: &str, wei_hex: &str, intent: Option<&str>, ts: f64) -> 
     r.status = FeedTxStatus::Pending;
     r.tx_hash = String::new();
     r.user_op_hash = format!("0xop{id}");
-    r.dapp_origin = Some("http://127.0.0.1:5173".to_owned());
+    r.dapp_url = Some("http://127.0.0.1:5173".to_owned());
     r.intent = intent.map(str::to_owned);
     r
 }
@@ -998,7 +1002,7 @@ fn a_stale_read_never_eats_the_celebration_the_sync_earned() {
 fn a_dapp_native_send_is_a_row_with_its_amount_and_site() {
     let sut = boot(vec![dapp_tx(
         "dapp-1-tx",
-        "0xCafe",
+        CAFE,
         "0x2386f26fc10000",
         Some("Send"),
         100_000.0,
@@ -1010,7 +1014,7 @@ fn a_dapp_native_send_is_a_row_with_its_amount_and_site() {
     assert_eq!(row.value.as_deref(), Some("0.01"), "0x2386f26fc10000 wei");
     assert_eq!(row.symbol, "xDAI");
     assert_eq!(row.decimals, Some(18));
-    assert_eq!(row.counterparty.as_deref(), Some("0xCafe"));
+    assert_eq!(row.counterparty.as_deref(), Some(CAFE));
     assert_eq!(row.tx_hash, None, "pending: no hash yet");
     assert_eq!(
         row.dapp,
@@ -1030,9 +1034,8 @@ fn a_dapp_native_send_is_a_row_with_its_amount_and_site() {
 #[test]
 fn a_dapp_contract_call_carries_its_intent_and_no_zero_amount() {
     let mut swap = dapp_tx("dapp-2-tx", "0xRouter", "0x0", Some("Swap"), 200_000.0);
-    swap.dapp_origin = Some("https://app.uniswap.org".to_owned());
-    let mut blind = dapp_tx("dapp-3-tx", "", "0x0", None, 190_000.0);
-    blind.dapp_origin = Some("Some dApp".to_owned());
+    swap.dapp_url = Some("https://app.uniswap.org".to_owned());
+    let blind = dapp_tx("dapp-3-tx", "", "0x0", None, 190_000.0);
     let sut = boot(vec![swap, blind]);
     let rows = items(&sut);
     assert_eq!(rows.len(), 2);
@@ -1050,12 +1053,126 @@ fn a_dapp_contract_call_carries_its_intent_and_no_zero_amount() {
         "a batch has no single recipient"
     );
     let blind = rows[1].dapp.clone().expect("a dApp row");
-    assert_eq!(
-        blind.site.as_deref(),
-        Some("Some dApp"),
-        "a stored name, verbatim"
-    );
+    assert_eq!(blind.site.as_deref(), Some("127.0.0.1"));
     assert_eq!((blind.intent, blind.intent_term), (None, None));
+}
+
+/// The site is read from the ORIGIN the request came from, and only from an
+/// origin: a bare word — the shape a dApp's self-declared name takes — names
+/// no site, even when it reads like a host (083 H2 review). The host reader
+/// alone would take `app.uniswap.org` as one.
+#[test]
+fn a_dapp_row_names_no_site_from_a_bare_name() {
+    let mut named = dapp_tx("d-named", "0xRouter", "0x0", None, 100_000.0);
+    named.dapp_url = Some("app.uniswap.org".to_owned());
+    let mut junk = dapp_tx("d-junk", "0xRouter", "0x0", None, 90_000.0);
+    junk.dapp_url = Some("https://trusted.org:evil@/".to_owned());
+    let mut userinfo = dapp_tx("d-userinfo", "0xRouter", "0x0", None, 80_000.0);
+    userinfo.dapp_url = Some("https://app.uniswap.org@evil.example".to_owned());
+    // An opaque page's origin serializes as the word "null".
+    let mut opaque = dapp_tx("d-opaque", "0xRouter", "0x0", None, 70_000.0);
+    opaque.dapp_url = Some("null".to_owned());
+    let sut = boot(vec![named, junk, userinfo, opaque]);
+    let sites: Vec<Option<String>> = items(&sut)
+        .into_iter()
+        .map(|item| item.dapp.and_then(|dapp| dapp.site))
+        .collect();
+    assert_eq!(
+        sites,
+        vec![None, None, Some("evil.example".to_owned()), None],
+        "no name read as a host; an unparseable origin names nothing; \
+         userinfo is not the host; an opaque origin is no site"
+    );
+}
+
+/// A dApp row's recipient is an ADDRESS or nothing (083 H2 review). A batch
+/// submits no top-level `to`, so a page can put any text there without the
+/// sheet showing it; drawn, it was shortened by byte and took the desktop
+/// down on every launch. Text that is not an address is no counterparty,
+/// keeps no stored name, and is never sent to the name lookup.
+#[test]
+fn a_dapp_row_names_no_recipient_that_is_not_an_address() {
+    let mut forged = dapp_tx("d-forged", "日本語日本語", "0x0", None, 100_000.0);
+    forged.to_name = Some("Vitalik".to_owned());
+    let short = dapp_tx("d-short", "0xCafe", "0x0", None, 90_000.0);
+    let upper = dapp_tx(
+        "d-real",
+        "0x000000000000000000000000000000000000CAFE",
+        "0x0",
+        None,
+        80_000.0,
+    );
+    let mut sut = Sut::new();
+    sut.dispatch(Event::AccountSwitched {
+        address: ADDR.to_owned(),
+    });
+    let ops = sut.resolve(loaded(&sut, vec![forged, short, upper], T0));
+    assert_eq!(
+        ops,
+        vec![Op::ResolveRecipientIdentity {
+            addr: "0x000000000000000000000000000000000000cafe".to_owned()
+        }],
+        "only the real address is looked up"
+    );
+    let rows = items(&sut);
+    assert_eq!(
+        rows.iter()
+            .map(|item| (item.counterparty.as_deref(), item.alias.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![
+            (None, None),
+            (None, None),
+            (Some("0x000000000000000000000000000000000000CAFE"), None),
+        ]
+    );
+}
+
+/// Signatures and connections move nothing, so they are no row and no
+/// record in the view — the rule the dApp transaction row must not loosen.
+#[test]
+fn signatures_and_connections_stay_out_of_activity() {
+    let mut records = Vec::new();
+    for (id, kind) in [
+        ("m1", FeedTxKind::SignMessage),
+        ("t1", FeedTxKind::SignTypedData),
+        ("c1", FeedTxKind::Connect),
+    ] {
+        let mut r = base(id, 100_000.0);
+        r.kind = Some(kind);
+        r.from = ADDR.to_owned();
+        r.to = ADDR.to_owned();
+        r.dapp_url = Some("https://app.uniswap.org".to_owned());
+        records.push(r);
+    }
+    records.push(dapp_tx("d1", "0xCafe", "0x1", None, 90_000.0));
+    let sut = boot(records);
+    let ids: Vec<String> = items(&sut).into_iter().map(|i| i.id).collect();
+    assert_eq!(ids, vec!["d1"]);
+    let tx_ids: Vec<String> = sut.view().transactions.into_iter().map(|t| t.id).collect();
+    assert_eq!(tx_ids, vec!["d1"]);
+}
+
+/// A stored `decimals` sizes the scaling's padding, so a corrupted or
+/// imported row cannot be allowed to say four billion: past the bound the row
+/// shows no figure, and the feed still loads (083 H2 review).
+#[test]
+fn a_dapp_row_with_absurd_decimals_shows_no_figure() {
+    let mut absurd = dapp_tx("d-absurd", "0xCafe", "0x2386f26fc10000", None, 100_000.0);
+    absurd.decimals = u32::MAX;
+    let mut edge = dapp_tx("d-edge", "0xCafe", "0x1", None, 90_000.0);
+    edge.decimals = vela_core::app::activity_feed::MAX_DAPP_DECIMALS;
+    let sut = boot(vec![absurd, edge]);
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        (rows[0].value.as_deref(), rows[0].symbol.as_str()),
+        (None, "")
+    );
+    assert_eq!(rows[0].decimals, None);
+    assert_eq!(
+        rows[1].value.as_deref(),
+        Some("0.000000000000000000000000000000000001")
+    );
 }
 
 /// Another account's dApp transaction is not this account's Activity, and a
@@ -1063,7 +1180,7 @@ fn a_dapp_contract_call_carries_its_intent_and_no_zero_amount() {
 #[test]
 fn a_dapp_row_is_account_scoped_and_survives_a_missing_origin() {
     let mut ours = dapp_tx("d-ours", "0xCafe", "0x1", None, 100_000.0);
-    ours.dapp_origin = None;
+    ours.dapp_url = None;
     let mut theirs = dapp_tx("d-theirs", "0xCafe", "0x1", None, 90_000.0);
     theirs.from = OTHER.to_owned();
     let sut = boot(vec![ours, theirs]);
@@ -1109,9 +1226,9 @@ fn the_dapp_fields_are_optional_on_the_wire() {
         "day_start_ms":0,"status":"confirmed","kind":"send","usd":null}"#;
     let record: FeedTxRecord = serde_json::from_str(json).expect("an older shell's record");
     assert_eq!(
-        (record.dapp_origin.clone(), record.intent.clone()),
+        (record.dapp_url.clone(), record.intent.clone()),
         (None, None)
     );
     let out = serde_json::to_value(&record).expect("serializes");
-    assert!(out.get("dapp_origin").is_none() && out.get("intent").is_none());
+    assert!(out.get("dapp_url").is_none() && out.get("intent").is_none());
 }

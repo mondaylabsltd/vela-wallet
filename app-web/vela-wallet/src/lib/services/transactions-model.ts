@@ -31,7 +31,13 @@ export interface LocalTransaction {
 	status: 'pending' | 'confirmed' | 'failed';
 	/** Defaults to 'send' for records older than the field. */
 	type?: TransactionType;
+	/** `requestDApp(...)?.name ?? origin` — a dApp's own name when it gave one. */
 	dappOrigin?: string;
+	/**
+	 * The origin the request arrived from, never the dApp's name (083 H2).
+	 * Activity names the site from this alone, so a dApp cannot choose it.
+	 */
+	dappUrl?: string;
 	intent?: string;
 	/** USD value at event time, pre-formatted (e.g. "$1.00"). */
 	usd?: string;

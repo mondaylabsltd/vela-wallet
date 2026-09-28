@@ -646,6 +646,11 @@ export async function handleDAppRequest(
 /**
  * Handle a wallet_sendCalls request (EIP-5792 batched atomic calls).
  * Executes multiple calls as a single UserOp via the Safe account.
+ *
+ * Resolves with the batch id — the userOpHash — as soon as the relay accepts
+ * the op, without a receipt wait: that id is what `wallet_getCallsStatus`
+ * reads back. It is not a tx hash, so the core-driven path reports it as
+ * `receipt_pending` (`sign-executor.ts`) and the tracker settles the record.
  */
 export async function handleSendCalls(
 	request: DAppRequest,

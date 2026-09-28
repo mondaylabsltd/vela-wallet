@@ -1024,6 +1024,11 @@ impl SigningHost {
         // The dApp's record is on disk now — opened pending, or closed. The
         // feed re-reads at once rather than at its next tick, so Activity
         // shows the operation the moment the site's is on its way (083 H2).
+        //
+        // A re-read and nothing else: `ReconcileCompleted` reads the store
+        // and never celebrates. `FocusTick` would also sweep every chain for
+        // incoming transfers, twice per transaction and once per signature
+        // (083 H2 review).
         let wrote_record = matches!(
             result,
             SignShellResult::RecordPersisted | SignShellResult::RecordUpdated
@@ -1031,7 +1036,7 @@ impl SigningHost {
         let pending = self.sign.resolve(id, result);
         self.pump_sign(pending, cx);
         if wrote_record {
-            crate::executor::activity_feed::focus_tick(cx);
+            crate::executor::activity_feed::reconciled(1, cx);
         }
     }
 
@@ -1341,12 +1346,29 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         }),
         fee_collector: None,
         params_override_json: guard.rewritten_params_json.clone(),
-        intent: clear.result.as_ref().map(|result| result.intent.clone()),
+        intent: recorded_intent(clear),
         // The guard showed an unbounded amount and it was kept as the site
         // asked — the submit guard's only waiver, copied from the view that
         // drew it, never decided here.
         unlimited_approved: guard.unlimited_consented,
     }
+}
+
+/// The intent the record keeps, which Activity shows as the row's title in
+/// the wallet's own voice (083 H2).
+///
+/// Only a reading the sheet did not mark best-effort: a function name
+/// recovered from the public selector database is whatever the contract's
+/// deployer called it, and the sheet showed it under a caution. A plain title
+/// in Activity would drop that caution, so such a call records no intent and
+/// reads "Contract interaction" (083 H2 review). A plain native send has no
+/// reading at all; the core records "Send" for it.
+fn recorded_intent(clear: &ClearSigningView) -> Option<String> {
+    clear
+        .result
+        .as_ref()
+        .filter(|result| result.verified || !result.best_effort)
+        .map(|result| result.intent.clone())
 }
 
 /// The blind rung's two facts: who it goes to, and how many bytes of calldata
@@ -1675,6 +1697,58 @@ mod tests {
         assert_eq!(
             opts.params_override_json, None,
             "kept as asked: the site's own bytes, nothing rewritten"
+        );
+    }
+
+    /// The record keeps the intent Activity will print as a title, so only a
+    /// reading that is not best-effort: a selector-database name is the
+    /// deployer's word, shown on the sheet under a caution, and Activity has
+    /// no caution to show it under (083 H2 review).
+    #[test]
+    fn only_a_trusted_reading_names_the_recorded_intent() {
+        use vela_core::app::clear_signing::{
+            ClearProvenance, ClearRisk, ClearSignResult, ClearSignType,
+        };
+
+        let fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        let guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
+        let mut clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).intent,
+            None,
+            "nothing read: the core decides (\"Send\" for a plain send)"
+        );
+
+        let reading = |verified: bool, best_effort: bool| ClearSignResult {
+            intent: "Claim".to_owned(),
+            intent_term: None,
+            contract_name: None,
+            owner: None,
+            fields: Vec::new(),
+            risk: ClearRisk::Caution,
+            contract_address: None,
+            verified,
+            provenance: ClearProvenance::Standard,
+            sign_type: ClearSignType::Transaction,
+            partial: false,
+            best_effort,
+            to_own_token: false,
+        };
+        clear.result = Some(reading(false, true));
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).intent,
+            None,
+            "a guessed function name is not recorded"
+        );
+        clear.result = Some(reading(false, false));
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).intent.as_deref(),
+            Some("Claim")
+        );
+        clear.result = Some(reading(true, true));
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).intent.as_deref(),
+            Some("Claim")
         );
     }
 

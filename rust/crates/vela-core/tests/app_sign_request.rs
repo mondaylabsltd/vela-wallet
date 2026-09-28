@@ -1135,6 +1135,12 @@ fn f3_f4_request_uses_its_own_chain_and_dapp_identity() {
             if record.chain_id == 137 && record.dapp_origin == "app.example"),
         "history carries the request's own chain + identity (F3): {ops:?}"
     );
+    // Beside the name the dApp gave, the origin it came from — the only one
+    // of the two Activity may call a site (083 H2 review).
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { record }] if record.dapp_url == ORIGIN),
+        "{ops:?}"
+    );
 }
 
 // ===========================================================================
@@ -2155,6 +2161,49 @@ fn batch_result_records_then_responds_with_the_batch_id() {
         response_ok(&ops[0]),
         Some((WP.to_owned(), Some("0xbatchid".to_owned())))
     );
+}
+
+/// 083 H2 review: the web answers `wallet_sendCalls` with its EIP-5792 batch
+/// id — the userOpHash — the moment the relay accepts it, and says so
+/// (`ReceiptPending`). The page gets that id, the durable record lands
+/// PENDING under it first, and the tracker is handed the op to settle with
+/// the real tx hash. Reported as `Succeeded`, the record closed "confirmed"
+/// with the op hash as its tx hash — which Activity now shows.
+#[test]
+fn a_batch_answered_at_acceptance_stays_pending_for_the_tracker() {
+    let mut sut = boot();
+    let params = batch_params(
+        &format!(r#"[{{"to":"{SPENDER}","data":"0x","value":"0x1"}}]"#),
+        None,
+    );
+    sut.dispatch(Arrive::global("req-27b", "wallet_sendCalls", &params).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::ReceiptPending {
+            user_op_hash: "0xbatchid".to_owned(),
+        },
+        now_ms: 13_000.0,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { record }]
+            if record.kind == SignRecordKind::DappTx
+                && record.record_id == "dapp-13000-tx"
+                && record.status == SignRecordStatus::Pending
+                && record.user_op_hash == "0xbatchid"
+                && record.result.is_empty()),
+        "pending, under the op hash, with no tx hash: {ops:?}"
+    );
+    let handoff = sut.view().tracker_handoff.expect("the tracker gets the op");
+    assert_eq!(handoff.user_op_hash, "0xbatchid");
+    assert_eq!(handoff.record_ids, vec!["dapp-13000-tx".to_owned()]);
+    let ops = sut.resolve(Res::RecordPersisted);
+    assert_eq!(
+        response_ok(&ops[0]),
+        Some((WP.to_owned(), Some("0xbatchid".to_owned()))),
+        "the page still gets its batch id"
+    );
+    assert!(!ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })));
 }
 
 #[test]

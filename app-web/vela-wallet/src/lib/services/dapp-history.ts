@@ -132,6 +132,12 @@ export interface SigningRecordInput {
 	from: string;
 	chainId: number;
 	dappOrigin: string;
+	/**
+	 * The origin the request arrived from (the core's `dapp_url`), kept beside
+	 * `dappOrigin` — which holds the dApp's own name when it gave one — so
+	 * Activity names the site from an address the dApp did not choose (083 H2).
+	 */
+	dappUrl?: string;
 	/** Millisecond timestamp; drives both the unique id and the display time. */
 	nowMs: number;
 	/**
@@ -167,6 +173,7 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 		from,
 		chainId,
 		dappOrigin,
+		dappUrl,
 		nowMs,
 		status = 'confirmed',
 		userOpHash = '',
@@ -183,6 +190,7 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 		timestamp: now,
 		status,
 		dappOrigin,
+		...(dappUrl ? { dappUrl } : {}),
 		signedContent,
 		signedRequest,
 		requestTruncated,
@@ -191,13 +199,18 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 	};
 
 	if (method === 'eth_sendTransaction' || method === 'wallet_sendCalls') {
-		const tx = (Array.isArray(params) ? params[0] : undefined) as
-			Record<string, string> | undefined;
+		// Only a single transaction's `to` and `value` are the ones it submitted.
+		// A batch submits its `calls`; a top-level `to`/`value` beside them is
+		// whatever the page wrote, which the sheet never showed — kept, Activity
+		// drew a recipient and an amount that never moved (083 H2 review).
+		const tx = (
+			method === 'eth_sendTransaction' && Array.isArray(params) ? params[0] : undefined
+		) as Record<string, string> | undefined;
 		return {
 			...base,
 			id: `dapp-${nowMs}-tx`,
 			txHash: typeof result === 'string' ? result : '',
-			to: tx?.to ?? '',
+			to: typeof tx?.to === 'string' ? tx.to : '',
 			value: tx?.value ?? '0x0',
 			symbol: nativeSymbol(chainId),
 			decimals: 18,

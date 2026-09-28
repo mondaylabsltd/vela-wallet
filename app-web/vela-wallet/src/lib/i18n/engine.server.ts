@@ -23,7 +23,7 @@ import { WALLET_FLOW_KEYS, type WalletFlowMessages } from '$lib/flows/messages';
 import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { SigningMessages } from '$lib/signing/messages';
-import { CLEAR_TERMS } from '$lib/signing/terms';
+import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
 import type { SettingsMessages } from '$lib/settings/messages';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
@@ -136,6 +136,10 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			sent: k('history.labelSent'),
 			received: k('history.labelReceived'),
 			dapp: k('history.txLabelDappTx'),
+			contractCall: k('componentsUi.signing.intentContractCall'),
+			intents: Object.fromEntries(
+				INTENT_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])
+			),
 			today: k('componentsUi.dayGroup.today'),
 			yesterday: k('componentsUi.dayGroup.yesterday'),
 			toName: k('history.toName'),

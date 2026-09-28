@@ -16,4 +16,16 @@ record_id: string, kind: SignRecordKind, method: string, params_json: string,
 /**
  * Result of the request — `""` while pending.
  */
-result: string, from: string, chain_id: number, now_ms: number, status: SignRecordStatus, user_op_hash: string, dapp_origin: string, intent: string | null, };
+result: string, from: string, chain_id: number, now_ms: number, status: SignRecordStatus, user_op_hash: string, 
+/**
+ * `requestDApp(...)?.name ?? origin` — what the Connections list shows.
+ * A name here is the dApp's own claim, so nothing reads it as a site.
+ */
+dapp_origin: string, 
+/**
+ * The origin the request arrived from, as its transport reported it —
+ * never the dApp's self-declared name. Stored beside `dapp_origin`
+ * (`dappUrl`) so Activity can name the site from an address the dApp
+ * did not get to choose (083 H2 review). `""` when there is none.
+ */
+dapp_url: string, intent: string | null, };

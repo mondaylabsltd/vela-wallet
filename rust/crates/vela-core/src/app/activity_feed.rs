@@ -81,6 +81,12 @@ use super::clear_signing::ClearTerm;
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
 pub const TOAST_MS: u32 = 2_800;
 
+/// The most decimals a dApp row's stored figure is scaled by (083 H2
+/// review). Every client stores 18; a `u128` has 39 digits, so anything past
+/// this could only print a string of zeros — and an unbounded one sizes an
+/// allocation from a number read off the disk.
+pub const MAX_DAPP_DECIMALS: u32 = 36;
+
 /// Symbols treated as ≈ $1 so stablecoin transfers are never shown as $0.00
 /// (`activity.ts:150-152`, verbatim).
 pub const STABLE_SYMBOLS: [&str; 15] = [
@@ -150,11 +156,13 @@ pub struct FeedTxRecord {
     pub kind: Option<FeedTxKind>,
     /// Legacy pre-formatted USD (e.g. `"$1.00"`), as stored.
     pub usd: Option<String>,
-    /// `dapp_tx` only (083 H2): the site that asked, as the signing path
-    /// stored it (`dappOrigin`) — an origin, or the dApp's own name. Absent
-    /// on every other kind and from a shell that does not map it yet.
+    /// `dapp_tx` only (083 H2): the origin the request arrived from, as the
+    /// signing path stored it (`dappUrl`, `SignRecord::dapp_url`). Never
+    /// `dappOrigin`: that holds the dApp's self-declared name when it gave
+    /// one, and a site named from it would be whatever the dApp said it was.
+    /// Absent on every other kind and from a shell that does not map it yet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dapp_origin: Option<String>,
+    pub dapp_url: Option<String>,
     /// `dapp_tx` only (083 H2): the intent recorded at approve time
     /// (`intent`, e.g. "Swap").
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -269,9 +277,9 @@ pub struct FeedItem {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct FeedDapp {
-    /// The site as a person reads it: the host of a stored origin
-    /// (`app.uniswap.org`, `127.0.0.1`), or the dApp's name when the record
-    /// holds a name. `None` when the record names no site.
+    /// The site as a person reads it: the host of the origin the request
+    /// arrived from (`app.uniswap.org`, `127.0.0.1`). `None` when the record
+    /// holds no origin that parses as one — never the dApp's own name.
     pub site: Option<String>,
     /// The intent recorded at approve time, as the descriptor wrote it
     /// ("Swap"; "Send" for a plain native transfer). `None` is a call nobody
@@ -932,9 +940,15 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
 /// (`0x…`), scaled here into the human decimal every other row carries. A
 /// call that moves no coin shows no amount rather than "0 ETH" — what it did
 /// to tokens is the intent's to say, not a figure this record holds.
+///
+/// `decimals` is read off the disk, so it is bounded before it sizes
+/// anything: the scaling pads to `decimals + 1` digits, and a corrupted or
+/// imported row saying four billion would take the feed down on every read
+/// (083 H2 review). Every client writes 18; past [`MAX_DAPP_DECIMALS`] the row
+/// shows no figure rather than a guess.
 fn dapp_item(t: &FeedTxRecord) -> FeedItem {
     let value = wei(&t.value)
-        .filter(|wei| *wei > 0)
+        .filter(|wei| *wei > 0 && t.decimals <= MAX_DAPP_DECIMALS)
         .map(|wei| super::fee_policy::from_base_units(wei, t.decimals));
     let usd_value = value.as_ref().map_or(0.0, |value| {
         tx_usd_value(&FeedTxRecord {
@@ -948,12 +962,20 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
         .map(str::trim)
         .filter(|intent| !intent.is_empty())
         .map(str::to_owned);
+    // The contract or recipient — and only when it IS an address. A batch
+    // (`wallet_sendCalls`) submits no top-level `to`, so whatever a record
+    // holds there is the page's to write, and the sheet never showed it: text
+    // that is not an address is no counterparty to draw, shorten or look a
+    // name up for (083 H2 review). A contract deployment has none either.
+    let counterparty = Some(t.to.trim())
+        .filter(|to| super::contacts::is_address(to))
+        .map(str::to_owned);
     FeedItem {
         id: t.id.clone(),
         direction: FeedDirection::Out,
-        // The contract or recipient; a batch (`wallet_sendCalls`) has none.
-        counterparty: non_empty(&t.to),
-        alias: t.to_name.clone(),
+        // A stored name belongs to the address it was stored beside.
+        alias: counterparty.as_ref().and(t.to_name.clone()),
+        counterparty,
         symbol: if value.is_some() {
             t.symbol.clone()
         } else {
@@ -968,7 +990,7 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
         tx_hash: non_empty(&t.tx_hash),
         batch: None,
         dapp: Some(FeedDapp {
-            site: t.dapp_origin.as_deref().and_then(site_of),
+            site: t.dapp_url.as_deref().and_then(site_of),
             intent_term: intent.as_deref().and_then(ClearTerm::of),
             intent,
         }),
@@ -992,18 +1014,20 @@ fn wei(value: &str) -> Option<u128> {
     }
 }
 
-/// The site a record names, as a person reads it (083 H2): an origin's host
-/// (`https://app.uniswap.org` → `app.uniswap.org`, `http://127.0.0.1:5173` →
-/// `127.0.0.1`), or the dApp's own name verbatim — the signing path stores
-/// `requestDApp(...)?.name ?? origin`. An origin that will not parse names
-/// nothing rather than something half-read.
+/// The site a record's origin names, as a person reads it (083 H2):
+/// `https://app.uniswap.org` → `app.uniswap.org`, `http://127.0.0.1:5173` →
+/// `127.0.0.1`.
+///
+/// Only an origin — a scheme and a host. A bare word is not one: the host
+/// reader below takes `app.uniswap.org` on its own as a host, and a value
+/// that never carried a scheme is a name somebody typed, not an address the
+/// request came from (083 H2 review). An origin that will not parse names
+/// nothing rather than something half-read — and neither does `"null"`, the
+/// origin an opaque page (`data:`, a sandboxed frame) reports.
 fn site_of(origin: &str) -> Option<String> {
     let origin = origin.trim();
-    if origin.is_empty() {
+    if origin.eq_ignore_ascii_case("null") || !origin.contains("://") {
         return None;
-    }
-    if !origin.contains("://") {
-        return Some(origin.to_owned());
     }
     // The SIWE binding's host reading: lower-cased, no port, fail safe.
     super::clear_signing::siwe_host(Some(origin))

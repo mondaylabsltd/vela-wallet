@@ -104,10 +104,18 @@ fn to_record(row: &Value) -> Option<FeedTxRecord> {
                 _ => None,
             }),
         usd: optional("usd"),
-        // A dApp transaction's site and decoded intent, which the core turns
+        // A dApp transaction's origin and decoded intent, which the core turns
         // into the row's label (083 H2). Both are what `persist_record` in the
         // sign executor writes, in the bytes every client writes them.
-        dapp_origin: optional("dappOrigin"),
+        //
+        // The site is read from `dappUrl`, the origin the request came from;
+        // `dappOrigin` is a dApp's self-declared name on the clients that
+        // pass one (083 H2 review). A row this shell wrote before `dappUrl`
+        // existed has only `dappOrigin`, and on this shell that IS the origin:
+        // the desktop has never handed the core a dApp identity
+        // (`RequestArrived { dapp: None }`), so the core stored the origin
+        // there.
+        dapp_url: optional("dappUrl").or_else(|| optional("dappOrigin")),
         intent: optional("intent"),
     })
 }
@@ -552,6 +560,38 @@ mod tests {
             assert_eq!(r.status, FeedTxStatus::Confirmed);
             assert_eq!(r.kind, Some(FeedTxKind::Send));
             assert_eq!(r.usd.as_deref(), Some("$1.00"));
+        });
+    }
+
+    /// A dApp row's origin is `dappUrl` when it has one — never the name in
+    /// `dappOrigin` beside it. A row written before `dappUrl` existed carries
+    /// only `dappOrigin`, which on this shell is always the origin, so it
+    /// still names its site (083 H2 review).
+    #[test]
+    fn a_dapp_row_reads_its_origin_from_dapp_url_first() {
+        storage::tests::with_temp_state("feed-dapp-url", || {
+            seed(json!([
+                {
+                    "id": "new", "timestamp": 1_756_000_000, "chainId": 100,
+                    "type": "dapp_tx", "dappOrigin": "Uniswap",
+                    "dappUrl": "https://app.uniswap.org", "intent": "Swap"
+                },
+                {
+                    "id": "old", "timestamp": 1_755_000_000, "chainId": 100,
+                    "type": "dapp_tx", "dappOrigin": "http://127.0.0.1:5173"
+                }
+            ]));
+            let records = read_records();
+            assert_eq!(
+                records[0].dapp_url.as_deref(),
+                Some("https://app.uniswap.org")
+            );
+            assert_eq!(records[0].intent.as_deref(), Some("Swap"));
+            assert_eq!(
+                records[1].dapp_url.as_deref(),
+                Some("http://127.0.0.1:5173")
+            );
+            assert_eq!(records[1].intent, None);
         });
     }
 

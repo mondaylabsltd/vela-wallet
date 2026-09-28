@@ -48,11 +48,13 @@ kind: FeedTxKind | null,
  */
 usd: string | null, 
 /**
- * `dapp_tx` only (083 H2): the site that asked, as the signing path
- * stored it (`dappOrigin`) — an origin, or the dApp's own name. Absent
- * on every other kind and from a shell that does not map it yet.
+ * `dapp_tx` only (083 H2): the origin the request arrived from, as the
+ * signing path stored it (`dappUrl`, `SignRecord::dapp_url`). Never
+ * `dappOrigin`: that holds the dApp's self-declared name when it gave
+ * one, and a site named from it would be whatever the dApp said it was.
+ * Absent on every other kind and from a shell that does not map it yet.
  */
-dapp_origin?: string | null, 
+dapp_url?: string | null, 
 /**
  * `dapp_tx` only (083 H2): the intent recorded at approve time
  * (`intent`, e.g. "Swap").

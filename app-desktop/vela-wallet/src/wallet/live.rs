@@ -610,7 +610,7 @@ mod tests {
             status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
             kind: Some(vela_core::app::activity_feed::FeedTxKind::Receive),
             usd: None,
-            dapp_origin: None,
+            dapp_url: None,
             intent: None,
         };
 
@@ -836,6 +836,93 @@ mod tests {
             rows[2].subtitle.to_string(),
             crate::wallet::fill(&s.to_name, "name", "0xAbCd…0001")
         );
+    }
+
+    /// A counterparty that is not ASCII is drawn, never a crash (083 H2
+    /// review). A page could put any text in a batch's top-level `to`; cut at
+    /// byte 6, `日本語日本語` panicked on every launch while its record stayed on
+    /// the disk. The core now names no such recipient — this is the shell's
+    /// own half of the promise, for whatever else reaches it.
+    #[test]
+    fn a_counterparty_that_is_not_ascii_is_drawn_not_a_crash() {
+        use vela_core::app::activity_feed::FeedDapp;
+
+        let row = |id: &str, to: &str, site: Option<&str>| {
+            let mut row = item(id, false, None, "");
+            row.decimals = None;
+            row.counterparty = Some(to.to_owned());
+            row.dapp = Some(FeedDapp {
+                site: site.map(str::to_owned),
+                intent: None,
+                intent_term: None,
+            });
+            FeedRow::Item { item: row }
+        };
+        let view = feed_with(
+            vec![
+                row("site", "日本語日本語", Some("app.uniswap.org")),
+                row("bare", "日本語日本語日本語日本語日本語", None),
+            ],
+            Vec::new(),
+        );
+        let s = strings();
+        let rows = activity_rows(
+            &view,
+            &s,
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            false,
+        );
+        assert_eq!(rows[0].subtitle.as_ref(), "app.uniswap.org");
+        assert_eq!(
+            rows[1].subtitle.to_string(),
+            crate::wallet::fill(&s.to_name, "name", "日本語日本語…語日本語")
+        );
+        // By character, never by byte — and an address reads as it did.
+        assert_eq!(super::shorten_address("日本語日本語"), "日本語日本語");
+        assert_eq!(
+            super::shorten_address("0x日本語日本語日本語日本語日本語"),
+            "0x日本語日…語日本語"
+        );
+        assert_eq!(
+            super::shorten_address("0xAbCd000000000000000000000000000000000001"),
+            "0xAbCd…0001"
+        );
+        assert_eq!(super::shorten_address(""), "");
+    }
+
+    /// A dApp call that moved no coin has no figure to mask: privacy draws
+    /// nothing there rather than "••••", which would claim one (083 H2
+    /// review). A figure beside it is still masked.
+    #[test]
+    fn a_row_with_no_figure_is_not_masked() {
+        use vela_core::app::activity_feed::FeedDapp;
+
+        let mut call = item("call", false, None, "");
+        call.decimals = None;
+        call.dapp = Some(FeedDapp {
+            site: Some("app.uniswap.org".to_owned()),
+            intent: Some("Swap".to_owned()),
+            intent_term: None,
+        });
+        let mut send = item("send", false, Some("0.01"), "xDAI");
+        send.dapp = call.dapp.clone();
+        let view = feed_with(
+            vec![FeedRow::Item { item: call }, FeedRow::Item { item: send }],
+            Vec::new(),
+        );
+        let rows = activity_rows(
+            &view,
+            &strings(),
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            true,
+        );
+        assert_eq!(rows[0].amount.as_ref(), "");
+        assert_eq!(rows[0].unit.as_ref(), "");
+        assert_eq!(
+            rows[1].amount,
+            SharedString::from(crate::wallet::fixtures::MASK)
+        );
+        assert_eq!(rows[1].unit.as_ref(), "xDAI");
     }
 
     /// `value` is the human amount already. Scaling it by `decimals` would
@@ -2044,8 +2131,11 @@ pub(crate) fn activity_row(
         badge_logo: crate::marks::chain_logo_url(item.chain_id),
         // Privacy masks the FIGURE and keeps the unit — H5's rule, and the same
         // mask the hero uses, because a leak in one surface defeats it
-        // everywhere (the core's invariant ④ on the balance side).
-        amount: if hidden {
+        // everywhere (the core's invariant ④ on the balance side). A row with
+        // no figure has nothing to mask, and "••••" would claim one.
+        amount: if moved_nothing(item) {
+            SharedString::from("")
+        } else if hidden {
             SharedString::from(crate::wallet::fixtures::MASK)
         } else {
             amount_text(item, incoming)
@@ -2140,16 +2230,28 @@ fn with_decimal_mark(figure: String) -> String {
 }
 
 pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> SharedString {
+    // A dApp call that moved no coin has no figure (083 H2) — and nothing to
+    // mask either: "••••" would say there is one (083 H2 review).
+    if moved_nothing(item) {
+        return SharedString::from("");
+    }
     if hidden {
         return SharedString::from(crate::wallet::fixtures::MASK);
     }
     let amount = amount_text(item, incoming);
-    // A dApp call that moved no coin has no figure (083 H2) — nothing, not a
-    // stray space where one would be.
+    // Nothing, not a stray space where a figure would be.
     if amount.is_empty() {
         return amount;
     }
     SharedString::from(format!("{amount} {}", item.symbol))
+}
+
+/// A dApp's transaction that moved no coin (083 H2): the core sends no
+/// figure for it, and no surface draws one — or masks one. A multi-token
+/// batch also has no single figure, but it has a total, and privacy keeps
+/// masking that.
+pub(crate) fn moved_nothing(item: &FeedItem) -> bool {
+    item.dapp.is_some() && item.value.is_none()
 }
 
 pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {
@@ -2177,9 +2279,17 @@ pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {
     ))
 }
 
+/// `0x1234…abcd`. Counted in characters, never bytes: what reaches here is
+/// not always an address a wallet wrote — a dApp record's recipient, a
+/// clear-signing field — and cutting text like `日本語日本語` at byte 6
+/// panics, which took the desktop down on every launch while the row stayed
+/// on the disk (083 H2 review). An address is ASCII, so it reads as before.
 pub(crate) fn shorten_address(address: &str) -> String {
-    if address.len() <= 14 {
+    let count = address.chars().count();
+    if count <= 14 {
         return address.to_owned();
     }
-    format!("{}…{}", &address[..6], &address[address.len() - 4..])
+    let head: String = address.chars().take(6).collect();
+    let tail: String = address.chars().skip(count - 4).collect();
+    format!("{head}…{tail}")
 }

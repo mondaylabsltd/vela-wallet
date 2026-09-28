@@ -28,7 +28,7 @@ import { formatTime } from '$lib/services/locale-format';
 import { chainName, explorerTxURL } from '$lib/services/networks';
 import { chainColor, MASK } from './fixtures';
 import { shortenAddress } from './identity';
-import { dayLabel, moneyText, trimBalance } from './live';
+import { dappTitle, dayLabel, moneyText, trimBalance } from './live';
 import { fill, type WalletMessages } from './messages';
 
 /** The feed item a tap named, by the id the live rows carry. */
@@ -162,6 +162,14 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	const chain = chainMeta(item.chain_id);
 	const facts: FactRowModel[] = [];
 
+	// The site that asked, for a dApp's transaction (083 H2) — first, because
+	// it is the one fact the person recognises. The core names it from the
+	// request's origin only, never from the name the dApp gave itself.
+	const site = item.dapp?.site ?? null;
+	if (site !== null) {
+		facts.push({ label: m['connect.detail.labelApp'], value: site });
+	}
+
 	if (item.counterparty !== null) {
 		facts.push({
 			label: received ? m['componentsTx.detail.from'] : m['componentsTx.detail.to'],
@@ -239,19 +247,25 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 				: fill(m['send.multiSendSummary'], { n: parts.length, chain: chainName(item.chain_id) });
 
 	const amount = item.value === null ? '' : `${trimBalance(item.value)} `;
+	// A dApp call that moved no coin has no figure (083 H2): no lone "−" and
+	// no "≈ $0.00" where one would be. A mixed batch keeps its reading.
+	const figureless = item.dapp != null && item.value === null;
 	return {
 		breakdownTitle,
 		breakdown: parts.length > 0 ? parts : undefined,
-		title: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
-			symbol: item.symbol
-		}),
+		// What a dApp's call did, not "Sent" plus a coin it may never have moved.
+		title: item.dapp
+			? dappTitle(item.dapp, wm)
+			: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
+					symbol: item.symbol
+				}),
 		// The record's own lifecycle — never the confirmed chip by default
 		// (issue 211). The desktop shell has read this since it was wired;
 		// this one stamped "Confirmed" on a send that never left the wallet.
 		status: statusChip(status, m),
 		closeLabel: m['componentsUi.identiconViewer.close'],
-		amount: hidden ? MASK : `${received ? '+' : '−'}${amount}${item.symbol}`,
-		fiat: hidden ? MASK : `≈ ${moneyText(item.usd_value, currency)}`,
+		amount: figureless ? '' : hidden ? MASK : `${received ? '+' : '−'}${amount}${item.symbol}`,
+		fiat: figureless ? '' : hidden ? MASK : `≈ ${moneyText(item.usd_value, currency)}`,
 		positive: received,
 		facts,
 		viewOnExplorer: m['history.viewOnExplorer'],

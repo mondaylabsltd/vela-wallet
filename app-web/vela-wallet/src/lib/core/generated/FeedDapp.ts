@@ -7,9 +7,9 @@ import type { ClearTerm } from "./ClearTerm";
  */
 export type FeedDapp = { 
 /**
- * The site as a person reads it: the host of a stored origin
- * (`app.uniswap.org`, `127.0.0.1`), or the dApp's name when the record
- * holds a name. `None` when the record names no site.
+ * The site as a person reads it: the host of the origin the request
+ * arrived from (`app.uniswap.org`, `127.0.0.1`). `None` when the record
+ * holds no origin that parses as one — never the dApp's own name.
  */
 site: string | null, 
 /**

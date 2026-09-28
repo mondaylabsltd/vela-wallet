@@ -681,7 +681,15 @@ fn persist_record(record: &SignRecord) {
 
     let (kind, to, value, symbol, decimals) = match record.kind {
         SignRecordKind::DappTx => {
-            let call = first_param(&record.params_json);
+            // Only a single transaction's `to` and `value` are the ones it
+            // submitted. A batch (`wallet_sendCalls`) submits its `calls`, so
+            // a top-level `to` or `value` beside them is whatever the page
+            // wrote, which the sheet never showed: kept, it drew a recipient
+            // and an amount that never moved (083 H2 review). A batch row has
+            // no single recipient and no single figure.
+            let call = (record.method == "eth_sendTransaction")
+                .then(|| first_param(&record.params_json))
+                .flatten();
             (
                 "dapp_tx",
                 call.as_ref()
@@ -689,11 +697,7 @@ fn persist_record(record: &SignRecord) {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_owned(),
-                call.as_ref()
-                    .and_then(|tx| tx.get("value"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("0x0")
-                    .to_owned(),
+                stored_value(call.as_ref().and_then(|tx| tx.get("value"))),
                 native_symbol(record.chain_id),
                 18,
             )
@@ -742,6 +746,9 @@ fn persist_record(record: &SignRecord) {
         },
         "type": kind,
         "dappOrigin": record.dapp_origin,
+        // The origin itself, beside the name: Activity names the site from
+        // this one only (083 H2 review).
+        "dappUrl": record.dapp_url,
         "signedRequest": signed_request,
         "requestTruncated": truncated,
     });
@@ -787,6 +794,20 @@ fn update_record(record_id: &str, close: &vela_core::app::sign_request::SignReco
         SignRecordClose::Failed => row["status"] = json!("failed"),
     }
     let _ = storage::write_value(TX_KEY, Value::Array(rows));
+}
+
+/// The call's value as the record keeps it: a `0x` quantity, read by the
+/// same [`wei_of`] the submit path read it with (083 H2 review).
+///
+/// A page may send `value` as a JSON number. The submit path took that and
+/// moved the coin, but this used to read strings only and stored `"0x0"` —
+/// so Activity showed a real transfer with no figure. Unreadable is `"0x0"`
+/// as absent is: `calls_of` refuses an `eth_sendTransaction` whose value it
+/// cannot read, so no such transaction reaches a record.
+fn stored_value(value: Option<&Value>) -> String {
+    wei_of(value)
+        .and_then(|wei| wei.parse::<u128>().ok())
+        .map_or_else(|| "0x0".to_owned(), |wei| format!("{wei:#x}"))
 }
 
 /// The first element of a JSON-RPC params array, when it is an object.
@@ -856,6 +877,7 @@ mod tests {
             status: SignRecordStatus::Pending,
             user_op_hash: "0xhash".to_owned(),
             dapp_origin: "https://app.uniswap.org".to_owned(),
+            dapp_url: "https://app.uniswap.org".to_owned(),
             intent: Some("Swap".to_owned()),
         }
     }
@@ -1316,47 +1338,54 @@ mod tests {
     /// site asked, labelled with the site — and closed in place when it lands.
     /// Before 083 the core dropped every `dapp_tx` row, so a dApp's operation
     /// was on disk and on no screen.
+    /// Answer the feed's asks from the store, as its executor does. Returns
+    /// every name lookup the core asked for.
+    fn settle(
+        host: &mut crate::core_host::CoreHost<vela_core::app::activity_feed::ActivityFeed>,
+        mut pending: Vec<crate::core_host::Pending<vela_core::app::activity_feed::FeedOperation>>,
+    ) -> Vec<String> {
+        use vela_core::app::activity_feed::{FeedOperation, FeedShellResult};
+
+        let mut lookups = Vec::new();
+        while let Some(next) = pending.pop() {
+            let result = match &next.operation {
+                FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
+                    records: crate::executor::activity_feed::read_records(),
+                    now_ms: 1_757_000_001_000.0,
+                    read_id: *read_id,
+                },
+                FeedOperation::ScanIncomingTransfers { .. } => {
+                    FeedShellResult::SyncCompleted { new_count: 0 }
+                }
+                FeedOperation::ResolveRecipientIdentity { addr } => {
+                    lookups.push(addr.clone());
+                    FeedShellResult::AliasResolved {
+                        addr: addr.clone(),
+                        name: None,
+                    }
+                }
+                _ => continue,
+            };
+            pending.extend(host.resolve(next.id, result));
+        }
+        lookups
+    }
+
     #[test]
     fn a_dapp_transaction_is_in_activity_with_its_site_until_it_lands() {
         use crate::core_host::CoreHost;
-        use vela_core::app::activity_feed::{
-            ActivityFeed, Event as FeedEvent, FeedOperation, FeedShellResult, FeedTxStatus,
-        };
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent, FeedTxStatus};
         use vela_core::app::clear_signing::ClearTerm;
-
-        // Answer the feed's asks from the store, as its executor does.
-        fn settle(
-            host: &mut CoreHost<ActivityFeed>,
-            mut pending: Vec<crate::core_host::Pending<FeedOperation>>,
-        ) {
-            while let Some(next) = pending.pop() {
-                let result = match &next.operation {
-                    FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
-                        records: crate::executor::activity_feed::read_records(),
-                        now_ms: 1_757_000_001_000.0,
-                        read_id: *read_id,
-                    },
-                    FeedOperation::ScanIncomingTransfers { .. } => {
-                        FeedShellResult::SyncCompleted { new_count: 0 }
-                    }
-                    FeedOperation::ResolveRecipientIdentity { addr } => {
-                        FeedShellResult::AliasResolved {
-                            addr: addr.clone(),
-                            name: None,
-                        }
-                    }
-                    _ => continue,
-                };
-                pending.extend(host.resolve(next.id, result));
-            }
-        }
 
         storage::tests::with_temp_state("sign-record-feed", || {
             let mut record = record(
                 SignRecordKind::DappTx,
                 r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x2386f26fc10000"}]"#,
             );
-            record.dapp_origin = "http://127.0.0.1:5173".to_owned();
+            // The name a dApp could have given itself, beside the origin it
+            // came from: the site is read from the origin only.
+            record.dapp_origin = "app.uniswap.org".to_owned();
+            record.dapp_url = "http://127.0.0.1:5173".to_owned();
             record.intent = Some("Send".to_owned());
             persist_record(&record);
 
@@ -1403,6 +1432,96 @@ mod tests {
             assert_eq!(view.transactions[0].status, FeedTxStatus::Confirmed);
             assert_eq!(view.transactions[0].tx_hash, "0xdeadbeef");
         });
+    }
+
+    /// A batch submits its `calls` and nothing else, so a top-level `to` or
+    /// `value` beside them is the page's to write and the sheet never shows
+    /// it (083 H2 review). Kept, `"to":"日本語日本語"` was shortened by byte on
+    /// the home page and crashed the wallet on every launch, and a forged
+    /// `value` drew −1,208,925 xDAI that never moved. The record keeps
+    /// neither, and the row that reaches the screen has no recipient, no
+    /// figure and no name lookup — the site is what labels it.
+    #[test]
+    fn a_batch_keeps_no_recipient_or_figure_the_page_wrote_beside_its_calls() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        storage::tests::with_temp_state("sign-record-batch", || {
+            let mut record = record(
+                SignRecordKind::DappTx,
+                r#"[{"version":"2.0.0","chainId":"0x64",
+                    "calls":[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x0"}],
+                    "to":"日本語日本語","value":"0xffffffffffffffffffff"}]"#,
+            );
+            record.method = "wallet_sendCalls".to_owned();
+            record.intent = None;
+            persist_record(&record);
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert_eq!(stored[0].get("to").and_then(Value::as_str), Some(""));
+            assert_eq!(stored[0].get("value").and_then(Value::as_str), Some("0x0"));
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: record.from.clone(),
+            });
+            let lookups = settle(&mut host, asks);
+            assert!(lookups.is_empty(), "no name lookup: {lookups:?}");
+
+            let loc = crate::loc::Loc::from_env();
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            for hidden in [false, true] {
+                let rows = crate::wallet::live::activity_rows(&view, &s, &flow, hidden);
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0].title, s.intent_contract_call);
+                assert_eq!(rows[0].subtitle.as_ref(), "app.uniswap.org");
+                assert_eq!((rows[0].amount.as_ref(), rows[0].unit.as_ref()), ("", ""));
+            }
+        });
+    }
+
+    /// A page may send `value` as a JSON number, and the submit path moves
+    /// that coin — so the record keeps that figure, as the `0x` quantity every
+    /// other row carries, rather than `"0x0"` (083 H2 review). The record also
+    /// keeps the origin itself beside the name.
+    #[test]
+    fn a_numeric_value_is_recorded_as_the_quantity_it_moved() {
+        storage::tests::with_temp_state("sign-record-number", || {
+            let record = record(
+                SignRecordKind::DappTx,
+                r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":10000000000000000}]"#,
+            );
+            persist_record(&record);
+            let rows = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert_eq!(
+                rows[0].get("value").and_then(Value::as_str),
+                Some("0x2386f26fc10000"),
+                "0.01 of the coin, not nothing"
+            );
+            assert_eq!(
+                rows[0].get("dappUrl").and_then(Value::as_str),
+                Some("https://app.uniswap.org")
+            );
+        });
+        // Absent, empty and unreadable are all "moved nothing".
+        assert_eq!(stored_value(None), "0x0");
+        assert_eq!(stored_value(Some(&json!("0x"))), "0x0");
+        assert_eq!(stored_value(Some(&json!("banana"))), "0x0");
+        assert_eq!(
+            stored_value(Some(&json!("0x2386F26FC10000"))),
+            "0x2386f26fc10000"
+        );
+        assert_eq!(
+            stored_value(Some(&json!("10000000000000000"))),
+            "0x2386f26fc10000"
+        );
     }
 
     /// A signature moves nothing, and its row must not claim otherwise.
