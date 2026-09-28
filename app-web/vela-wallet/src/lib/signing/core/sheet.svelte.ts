@@ -19,6 +19,7 @@ import type { SignRequestView } from '$lib/core/generated/SignRequestView';
 import { createApprovalGuardSession, type ApprovalGuardSession } from './guard-session';
 import { createClearSigningSession, type ClearSigningSession } from './clear-session';
 import { toClearLocale } from './clear-types';
+import { txParams } from './tx-params';
 
 /** The machines' own initial projections — mirrored until their first views land. */
 export const INITIAL_CLEAR_VIEW: ClearSigningView = {
@@ -46,43 +47,6 @@ export const INITIAL_GUARD_VIEW: GuardView = {
 	expired: false,
 	batch: null
 };
-
-/** A transaction's three params, as the two machines need them. */
-interface TxParams {
-	to: string | null;
-	data: string | null;
-	value: string | null;
-}
-
-/**
- * A field the dApp sent, as TEXT for the core (spec 082 RC6): a present value
- * of any other type (a number, `null` spelled out) reaches the core as its own
- * text, which the core refuses to print as an amount — never as absent, which
- * would read as a calm "0" while the submit path reads the number.
- */
-function textOf(value: unknown): string | null {
-	if (value === undefined) return null;
-	return typeof value === 'string' ? value : String(value);
-}
-
-/**
- * The call the sheet describes: `eth_sendTransaction`'s one transaction, or
- * the FIRST leg of a `wallet_sendCalls` batch (`params[0].calls[0]`) — the
- * rule every rung applies to leg 1 (spec 082 RC7).
- */
-function txParams(paramsJson: string): TxParams | null {
-	try {
-		const params = JSON.parse(paramsJson) as unknown[];
-		const first = params[0] as Record<string, unknown> | undefined;
-		if (!first || typeof first !== 'object') return null;
-		const calls = (first as { calls?: unknown }).calls;
-		const tx = (Array.isArray(calls) ? calls[0] : first) as Record<string, unknown> | undefined;
-		if (!tx || typeof tx !== 'object') return null;
-		return { to: textOf(tx.to), data: textOf(tx.data), value: textOf(tx.value) };
-	} catch {
-		return null;
-	}
-}
 
 class SigningSheet {
 	clear = $state<ClearSigningView>(INITIAL_CLEAR_VIEW);

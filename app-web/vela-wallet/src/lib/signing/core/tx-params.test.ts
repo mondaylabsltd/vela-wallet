@@ -1,0 +1,63 @@
+/**
+ * The sheet reads a request the way the submit path sends it (spec 082 RC6):
+ * the card the person approves and the call that goes out are one call.
+ */
+import '$lib/i18n/wasm-init.server';
+import { describe, expect, it } from 'vitest';
+import { ClearSigningCore } from '$lib/core/client';
+import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
+import { toClearLocale } from './clear-types';
+import { txParams } from './tx-params';
+
+const TO = '0x7687C0bC1dD2B9d7e9a5b1b4e1B0cBd8e0C3D141';
+
+/** What the REAL clear-signing core draws for the params the sheet reads. */
+function surfaceFor(paramsJson: string): ClearSigningView {
+	const tx = txParams(paramsJson);
+	const core = new ClearSigningCore();
+	try {
+		core.dispatch(
+			JSON.stringify({
+				type: 'resolve_transaction',
+				to: tx?.to ?? null,
+				data: tx?.data ?? null,
+				value: tx?.value ?? null,
+				chain_id: 100,
+				locale: toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })
+			})
+		);
+		return JSON.parse(core.view()) as ClearSigningView;
+	} finally {
+		core.free();
+	}
+}
+
+describe('the sheet reads a transaction as the submit path sends it (RC6)', () => {
+	it('a JSON null data or value is "not given" — the plain send that is sent, with its amount', () => {
+		// dapp-submit sends `data ?? '0x'` and `value ?? '0x0'`: this goes out as
+		// a native send of 0.001. Read as the text "null" it drew the red blind
+		// card with no amount over it (the desktop and Android read null as None).
+		const params = JSON.stringify([{ to: TO, value: '0x38d7ea4c68000', data: null }]);
+		expect(txParams(params)).toEqual({ to: TO, data: null, value: '0x38d7ea4c68000' });
+		const view = surfaceFor(params);
+		expect(view.surface).toBe('plain_send');
+		expect(view.plain_send?.amount).toBe('0.001');
+
+		const zero = JSON.stringify([{ to: TO, value: null }]);
+		expect(txParams(zero)).toEqual({ to: TO, data: null, value: null });
+		expect(surfaceFor(zero).plain_send?.no_value).toBe(true);
+	});
+
+	it('a present number is its own text, which the core refuses to print as an amount', () => {
+		const params = JSON.stringify([{ to: TO, value: 1000 }]);
+		expect(txParams(params)?.value).toBe('1000');
+		expect(surfaceFor(params).surface).toBe('blind_transaction');
+	});
+
+	it('a batch is described by its first leg', () => {
+		const params = JSON.stringify([
+			{ calls: [{ to: TO, value: '0x1', data: null }, { to: TO, data: '0xdeadbeef' }] }
+		]);
+		expect(txParams(params)).toEqual({ to: TO, data: null, value: '0x1' });
+	});
+});
