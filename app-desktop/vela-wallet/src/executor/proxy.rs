@@ -62,12 +62,15 @@ use ureq::{Agent, Proxy, ProxyProtocol};
 
 use crate::diag::vlog;
 
-/// How long a connection may take to be set up — TCP, a proxy's CONNECT, TLS —
-/// within a request's own budget. Shorter than that budget on purpose: ureq
-/// names a timeout by the phase that ran out, and only a connect-phase
-/// timeout proves the request was never written (spec 082 RA1), so the phase
-/// must be able to run out first.
-const CONNECT_BUDGET: Duration = Duration::from_secs(5);
+/// How much of a request's budget its connection may take to set up — TCP,
+/// a proxy's CONNECT, TLS: nine tenths. Shorter than the whole on purpose:
+/// ureq names a timeout by the phase that ran out, and only a connect-phase
+/// timeout proves the request was never written (spec 082 RA1), so that
+/// phase must be able to run out first. Not a fixed cap: a slow proxy that
+/// takes six seconds to open a tunnel is still a proxy that works (RE2).
+fn connect_budget(timeout: Duration) -> Duration {
+    timeout * 9 / 10
+}
 
 /// One way out of the machine for one request.
 #[derive(Clone, Debug)]
@@ -518,7 +521,7 @@ fn agent_over(route: &Route, timeout: Duration) -> Agent {
     }
     let config = Agent::config_builder()
         .timeout_global(Some(timeout))
-        .timeout_connect(Some((timeout * 4 / 5).min(CONNECT_BUDGET)))
+        .timeout_connect(Some(connect_budget(timeout)))
         // A balance read talks to two dozen chains' endpoints at once; the
         // default ten idle sockets would drop most of them between calls.
         .max_idle_connections(128)
@@ -1005,6 +1008,22 @@ mod tests {
         )
         .unwrap_or_else(|failure| unreachable!("{:?}", failure.error));
         assert_eq!(body, "ok");
+    }
+
+    /// The connect phase can run out before the request's own budget — so a
+    /// connect timeout is named as one — and a slow tunnel still gets most
+    /// of the budget.
+    #[test]
+    fn the_connect_phase_gets_nine_tenths() {
+        assert_eq!(
+            connect_budget(Duration::from_secs(8)),
+            Duration::from_millis(7_200)
+        );
+        assert_eq!(
+            connect_budget(Duration::from_secs(15)),
+            Duration::from_millis(13_500)
+        );
+        assert!(connect_budget(Duration::from_secs(5)) < Duration::from_secs(5));
     }
 
     /// Loopback never takes a proxy; everything else asks the platform.
