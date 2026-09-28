@@ -60,7 +60,6 @@ use vela_core::app::balance_dashboard::{
     BalanceToken, NativeQuoteGroup, ReadKind, ReadSlot, StableRef, TokenRef, best_native_dex_price,
     choose_native_price, first_grouped_quote_price, read_plan,
 };
-use vela_core::app::fee_policy::TEMPO_CHAIN_IDS;
 use vela_core::app::network_admin::BUILTIN_CHAINS;
 
 use crate::executor::abi::{self, Call3, McResult};
@@ -892,7 +891,7 @@ mod tests {
                 ReadKind::Native
             );
         }
-        for chain_id in TEMPO_CHAIN_IDS {
+        for chain_id in vela_core::app::fee_policy::TEMPO_CHAIN_IDS {
             assert!(
                 read_plan(chain_id, &[], None, &[]).is_empty(),
                 "chain {chain_id} settles gas in a TIP-20 stablecoin"
