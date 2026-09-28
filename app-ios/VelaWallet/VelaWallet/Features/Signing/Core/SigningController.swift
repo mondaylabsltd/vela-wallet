@@ -109,7 +109,12 @@ final class SigningController {
     /// A tap on the fee row: a failed quote is asked again; with more than one
     /// coin, the list opens or closes.
     func feeTapped() {
-        guard let fee else { return }
+        guard let fee else {
+            // The quote never started (the account's deployment could not be
+            // read): the row said so, and a tap asks again.
+            if quoteStartFailure != nil { refreshFee() }
+            return
+        }
         if fee.failed != nil {
             // Measured again for real — the held readings dropped first.
             fees.refresh()
@@ -179,9 +184,19 @@ final class SigningController {
     /// Where the simulation for the request on screen has got to.
     ///
     /// THREE states, because they are three different sentences and a boolean
-    /// could only carry two. "Not yet" is silence; "the node refused" is a
-    /// warning; "it ran" is the balance block.
-    enum Simulation { case pending, answered, unavailable }
+    /// could only carry two. "Not yet" is silence; "it ran" is the balance
+    /// block; anything else is the CORE's notice (`simOutcome`, spec 082
+    /// RG6): a revert is danger — "expected to fail", with its sanitised
+    /// reason — and a node that could not or would not check is caution,
+    /// "Vela couldn't check what this does". Which is which is not decided
+    /// here.
+    enum Simulation: Equatable {
+        case pending
+        case answered
+        /// `risk` is a `ClearRisk` wire name, `key` a corpus key, `reason` the
+        /// `{{reason}}` it takes.
+        case notice(risk: String, key: String, reason: String?)
+    }
 
     private(set) var simulation: Simulation = .pending
 
@@ -376,7 +391,7 @@ final class SigningController {
             SimDeltas.Call(to: $0.to, value: $0.value, data: $0.data)
         }
         guard let payload = SimDeltas.payload(from: wallet.address, calls: legs) else {
-            simulation = .unavailable
+            simulation = Self.simulation(of: simOutcome(user: wallet.address, replyJson: #"{"unreachable":true}"#))
             return
         }
         Task { [weak self] in
@@ -384,21 +399,42 @@ final class SigningController {
             let answer = await pool.call(
                 chainId: chainId, method: "eth_simulateV1", params: payload, kind: "rpc"
             )
-            guard case .ok(let body) = answer,
-                  let logs = SimDeltas.logsOf(["result": body ?? NSNull()])
-            else {
-                // The node has told us NOTHING — no `eth_simulateV1`, or it
-                // errored. Not the same as "nothing moves", and the sheet says
-                // which of the two this is.
-                simulation = .unavailable
+            let outcome = simOutcome(user: wallet.address, replyJson: Self.simReply(answer))
+            simulation = Self.simulation(of: outcome)
+            if outcome.kind != "deltas" {
+                VelaLog.failure(.sign, kind: "sim_\(outcome.kind)", "chain=\(chainId)")
                 return
             }
-            simulation = .answered
-            ports.simDeltas(
-                wallet.address, chainId,
-                SimDeltas.deriveDeltas(logs: logs, user: wallet.address)
-            )
+            // Checked: the person's own moves, to the machine that judges
+            // them — the one entrance that may never admit a token.
+            let deltas = (try? JSONSerialization.jsonObject(with: Data(outcome.deltasJson.utf8))) as? [[String: Any]] ?? []
+            ports.simDeltas(wallet.address, chainId, deltas)
         }
+    }
+
+    /// The pool's answer, normalised into the reply `simOutcome` reads:
+    /// `{"result": …}`, `{"error": {code, message}}` or `{"unreachable": true}`.
+    /// Nothing is judged here — a revert inside a result, a node that cannot
+    /// simulate and a node nobody reached are the core's to tell apart.
+    static func simReply(_ answer: RpcOutcome) -> String {
+        switch answer {
+        case .ok(let body):
+            return CoreJSON.string(["result": body ?? NSNull()])
+        case .rpcError(let code, let message):
+            return CoreJSON.string(["error": ["code": code.map { $0 as Any } ?? NSNull(), "message": message]])
+        case .failed, .rangeCap:
+            return #"{"unreachable":true}"#
+        }
+    }
+
+    /// The sheet's state for the core's verdict.
+    static func simulation(of outcome: SimOutcomeRecord) -> Simulation {
+        guard outcome.kind != "deltas" else { return .answered }
+        return .notice(
+            risk: outcome.noticeRisk ?? "caution",
+            key: outcome.noticeKey ?? "componentsUi.signing.simUnavailableWarning",
+            reason: outcome.revertReason
+        )
     }
 
     /// The stored default speed (spec 069): a dApp transaction is priced —
@@ -408,22 +444,48 @@ final class SigningController {
     private let preferredTier: () -> String
     private let numberPreset: () -> String
 
+    /// Why the quote could not even start: the account's deployment could not
+    /// be read, so there is no fee session to fail (spec 082 RF5, W10). It is
+    /// the core's own failure for a quote that could not be had —
+    /// `quote_unavailable` — so the row says what a failed quote says (the
+    /// service-unreachable reason) instead of "estimating…" for ever, and it
+    /// is asked again on the core's schedule. `nil` once a quote starts.
+    private(set) var quoteStartFailure: String?
+    /// The one loop that asks again for a quote that could not start.
+    private var startRetry: Task<Void, Never>?
+    /// How many such loops are alive — a refresh tap cancels the running
+    /// one before it starts another, so this is never more than one (the
+    /// test seam for that).
+    private(set) var startLoopsAlive = 0
+
     private func requestQuote(chainId: Int, attempt: UInt32 = 1) {
         guard !feeCalls.isEmpty else { return }
-        Task { [weak self] in
+        // One loop: whatever was waiting to ask again is superseded.
+        startRetry?.cancel()
+        startRetry = Task { [weak self] in
             guard let self else { return }
+            startLoopsAlive += 1
+            defer { startLoopsAlive -= 1 }
             guard let deployed = await relay.isDeployed(chainId: chainId, address: wallet.address)
             else {
-                // The chain could not say: nothing was quoted, so nothing
-                // would ever ask again. Ask on the core's schedule for a quote
-                // that could not be had (spec 079), while the sheet waits.
+                guard !Task.isCancelled else { return }
+                // The chain could not say: nothing was quoted. Say why, and
+                // ask on the core's schedule for a quote that could not be
+                // had (spec 079), while the sheet waits.
+                quoteStartFailure = "quote_unavailable"
+                VelaLog.failure(.fee, kind: "quote_failed", "reason=deployed_unreadable chain=\(chainId) re-quote #\(attempt)")
                 guard let wait = feeRequoteDelayMs(failure: "quote_unavailable", attempt: attempt)
                 else { return }
                 try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
-                guard fees.view == nil, requoteAllowed else { return }
+                guard !Task.isCancelled, fees.view == nil, requoteAllowed else { return }
                 requestQuote(chainId: chainId, attempt: attempt + 1)
                 return
             }
+            guard !Task.isCancelled else { return }
+            if quoteStartFailure != nil {
+                VelaLog.notice(.fee, "quote back chain=\(chainId)")
+            }
+            quoteStartFailure = nil
             // HOW FAST is the speed core's to say: the store asks at its tier.
             // WHICH COIN is the fee machine's until the person taps one (spec
             // 078): it pays in a coin that can, and the approve carries the
@@ -456,6 +518,8 @@ final class SigningController {
     /// (the chain could not say whether the account is deployed) is started.
     func refreshFee() {
         guard fees.view != nil else {
+            // `requestQuote` cancels the loop already waiting first: a tap
+            // never leaves two loops asking (RF5).
             if let request { requestQuote(chainId: request.chainId) }
             return
         }
@@ -669,6 +733,8 @@ final class SigningController {
     private func cancelRequote() {
         requoteTask?.cancel()
         requoteTask = nil
+        startRetry?.cancel()
+        startRetry = nil
     }
 
     private func recordLanded() {

@@ -48,6 +48,10 @@ enum SigningLive {
         /// Spec 079: this account signs on the Trusted Signer's page — its
         /// slide is the one consent.
         var trustedSignerRoute = false
+        /// Spec 082 RF5: the quote could not even start (the account's
+        /// deployment could not be read) — the core's failure name for it,
+        /// drawn as a failed quote is.
+        var feeStartFailure: String?
 
         /// The Trusted Signer's waiting card is up: the account signs on the
         /// page and the signature is under way. The card speaks for the
@@ -663,9 +667,10 @@ enum SigningLive {
     ///
     /// - judgments → the rows, each one the CORE's verdict;
     /// - answered, nothing moved → "checked, nothing moves";
-    /// - never answered → the danger-toned "Vela could not tell what this
-    ///   does", because a wallet that stays quiet when it could not check
-    ///   teaches people that silence means safe.
+    /// - the core's notice → its sentence in its tone: "expected to fail"
+    ///   (danger) or "Vela couldn't check" (caution) — never silence, because
+    ///   a wallet that stays quiet when it could not check teaches people
+    ///   that silence means safe.
     ///
     /// Only for transactions: a message moves nothing, and a balance block on
     /// a signature would be an answer to a question nobody asked.
@@ -673,8 +678,11 @@ enum SigningLive {
         let loc = context.loc
         guard isTransaction else { return [] }
 
-        if context.simulation == .unavailable {
-            return [.warning(tone: .danger, text: s(loc, "simUnavailableWarning"))]
+        // The core's notice, in the core's tone (spec 082 RG6): a revert is
+        // danger, a node that could not check is caution.
+        if case .notice(let risk, let key, let reason) = context.simulation {
+            let text = reason.map { loc.t(key, vars: ["reason": $0]) } ?? loc.t(key)
+            return [.warning(tone: risk == "danger" ? .danger : .caution, text: text)]
         }
         // Still running, or a verdict for a previous request. Silence, because
         // a block that appears and then changes its mind is worse than one that
@@ -1083,7 +1091,7 @@ enum SigningLive {
             // the native figure — and what it costs. The design sheet is
             // explicit that these two surfaces must not drift.
             value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display)
-        } else if fee?.failed != nil {
+        } else if fee?.failed != nil || (fee == nil && context.feeStartFailure != nil) {
             value = context.loc.t("componentsUi.gas.estimateFailed")
         } else {
             value = context.loc.t("componentsUi.gas.estimating")
@@ -1116,14 +1124,17 @@ enum SigningLive {
         if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
             warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
-        } else if let failed = fee?.failed, recoverable(failed) {
+        } else if let failed = fee?.failed ?? (fee == nil ? context.feeStartFailure : nil),
+                  recoverable(failed) {
             // Spec 079: why there is no fee, and that it will be asked again
             // (the row said "点击重试" with the relay down and stayed so).
+            // Spec 082: also when the quote could not even start.
             warning = context.loc.t("componentsUi.funding.denialNetworkError")
         }
         // The same condition `SigningController.feeTapped` acts on, decided
         // once here so the chevron and the handler cannot disagree.
-        let tappable = fee?.failed != nil || options.count > 1
+        let tappable = fee?.failed != nil || (fee == nil && context.feeStartFailure != nil)
+            || options.count > 1
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
                         selector: selector, warning: warning, tappable: tappable)
     }

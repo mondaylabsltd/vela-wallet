@@ -2630,7 +2630,8 @@ struct RootView: View {
             explorerBase: ExplorerLinks.base(chainId: chain, store: shelf),
             track: tracker.view?.entry(userOpHash: live?.shownSign.pendingOpHash),
             typicalS: SigningController.typicalInclusionS(chainId: chain),
-            trustedSignerRoute: live?.trustedSignerRoute ?? false
+            trustedSignerRoute: live?.trustedSignerRoute ?? false,
+            feeStartFailure: live?.quoteStartFailure
         )
     }
 

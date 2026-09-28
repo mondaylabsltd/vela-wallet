@@ -7,6 +7,11 @@
 //  again by itself on the core's schedule while the sheet can still use it.
 //  The Android twin is in `SigningLiveTest.kt`. Hermetic.
 //
+//  Spec 082 T115 (RF5, W10): when the account's deployment cannot be read the
+//  quote cannot even start, and the row used to say "estimating…" for ever
+//  with no reason. It now says what a failed quote says, and a refresh tap
+//  cancels the loop already waiting before it starts one.
+//
 
 import Foundation
 import SwiftUI
@@ -15,6 +20,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct SigningFeeRetryTests {
 
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])
@@ -136,5 +142,59 @@ struct SigningFeeRetryTests {
                 "a measurement already out is not doubled")
         #expect(SigningController.requoteDelay(fee(failed: "missing_public_key"), attempt: 1, allowed: true) == nil)
         #expect(SigningController.requoteDelay(fee(), attempt: 1, allowed: true) == nil, "a quote needs no retry")
+    }
+
+    /// The quote could not start: the row says the network is why — the
+    /// failed quote's own words — and a tap asks again.
+    @Test func aQuoteThatCouldNotStartSaysWhy() {
+        var ctx = context()
+        ctx.feeStartFailure = "quote_unavailable"
+        let down = SigningLive.feeModel(clear: clear(.clearSign), fee: nil, context: ctx)
+        #expect(warning(down) == loc.t("componentsUi.funding.denialNetworkError"))
+        #expect(tappable(down))
+        if case .onchain(_, let value, _, _, _) = down {
+            #expect(value == loc.t("componentsUi.gas.estimateFailed"))
+            #expect(value != loc.t("componentsUi.gas.estimating"))
+        }
+        // No failure: still estimating, no reason, nothing to tap.
+        let waiting = SigningLive.feeModel(clear: clear(.clearSign), fee: nil, context: context())
+        #expect(warning(waiting) == nil)
+        #expect(!tappable(waiting))
+    }
+
+    /// The deployment read fails; the controller names the core's failure,
+    /// and two refresh taps leave exactly one loop asking again.
+    @Test func aRefreshTapLeavesOneLoop() async {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let port = ScriptedRelayPort()   // eth_getCode unscripted: the chain is silent
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accounts = ScriptedAccounts()
+        let controller = SigningController(
+            wallet: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", credentialId: "cred-1"),
+            relay: relay, accounts: accounts,
+            spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
+            store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
+            ports: SigningController.Ports(knownChains: { [100] })
+        )
+        controller.open(SigningController.Incoming(
+            id: "r1", method: "eth_sendTransaction",
+            paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x1"}]"#,
+            origin: "https://x.test", transportId: "tab-1", chainId: 100
+        ))
+        await Wait.until { controller.quoteStartFailure == "quote_unavailable" }
+        #expect(controller.fee == nil)
+
+        controller.refreshFee()
+        controller.refreshFee()
+        let reads = { port.calls.filter { $0 == "eth_getCode" }.count }
+        // Two taps in a row share one read (the relay's single flight).
+        await Wait.until { reads() >= 2 && controller.startLoopsAlive == 1 }
+        // Each loop now waits the core's 3 s before asking again; a moment
+        // later there is still only the one.
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        #expect(controller.startLoopsAlive == 1, "a refresh tap cancels the loop already waiting")
+        #expect(controller.quoteStartFailure == "quote_unavailable")
+        controller.swipeDismissed()
     }
 }
