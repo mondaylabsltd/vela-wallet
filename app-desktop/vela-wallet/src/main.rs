@@ -9,6 +9,7 @@ mod ceremony;
 mod contacts;
 mod core_host;
 mod ctap;
+mod diag;
 mod executor;
 mod explore;
 mod flows;
