@@ -64,7 +64,7 @@ jobs:
           $iss = 'app-desktop/vela-wallet/installer/VelaWallet.iss'
           if (-not (Test-Path -LiteralPath $iss)) { throw "missing $iss" }
           foreach ($define in 'MyAppVersion', 'MyAppExe', 'MyVCRedist',
-                              'MyVCRedistName', 'MyArchitecture',
+                              'MyVCRedistName', 'MyVCRuntimeMin', 'MyArchitecture',
                               'MyArchitecturesAllowed', 'MyOutputDir') {
             if (-not (Select-String -Path $iss -Pattern $define -Quiet)) {
               throw "VelaWallet.iss no longer references $define, but the build script passes /D$define"

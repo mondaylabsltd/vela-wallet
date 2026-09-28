@@ -229,12 +229,33 @@ H9). The same choice from a command line, e.g. for an unattended install:
 - **An upgrade stays where the app is.** A newer installer finds the existing
   install and uses its mode without asking, so a per-machine install still
   needs the administrator — run an unattended upgrade of one from an elevated
-  shell. Passing `/CURRENTUSER` over a per-machine install puts a second copy
-  beside it; uninstall the per-machine one first to move it.
-- **The Visual C++ runtime is machine-wide.** A per-user install runs
-  Microsoft's redistributable only when the machine lacks the bundled runtime
-  or has an older one — and then Windows asks for an administrator once, for
-  that runtime alone.
+  shell.
+- **To move a per-machine install to "for me only", uninstall it first**
+  (Settings → Apps, as an administrator), then run the installer with
+  `/CURRENTUSER` or pick **Install for me only**. Passing `/CURRENTUSER` over
+  a per-machine install puts a second copy beside it instead. Keep that order:
+  an install first made by 0.9.5 or older wrote its `velawallet://` handler
+  into the account's own registry, and its uninstaller deletes that key even
+  after a per-user copy has taken it over, so Trusted Signer answers stop
+  reaching the app. An uninstaller from a later version keeps a handler that
+  opens another copy; re-running Setup for the per-user copy repairs it either
+  way.
+- **The Visual C++ runtime is machine-wide.** A per-machine install always runs
+  Microsoft's redistributable, as before. A per-user install compares the
+  machine's runtime with the version of the MSVC toolset that linked
+  `vela-wallet.exe` (the build script reads it from the exe and passes it as
+  `MyVCRuntimeMin`, never the bundled redistributable's own version), and does
+  nothing when it is there:
+  - **Interactive, runtime missing or older:** Windows asks for an
+    administrator once, for that runtime alone. Declined, or for an account
+    that cannot approve it, Setup still finishes and says where an
+    administrator can get the runtime.
+  - **Silent (`/SILENT`, `/VERYSILENT`), runtime missing or older:** the
+    redistributable is not run, only logged, so an unattended per-user install
+    never waits on a prompt. Until an administrator installs the runtime, the
+    app may not start (it cannot, if the runtime is missing altogether).
+  - Only linking the C runtime statically (`+crt-static`) would take the
+    runtime, and with it every administrator prompt, out of a per-user install.
 
 ### Fedora / RHEL
 

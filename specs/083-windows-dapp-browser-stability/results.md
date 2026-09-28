@@ -41,7 +41,8 @@ was tested: 5/5 races answered "History cannot be pruned" (-32000), no crash.
 ## Owner decisions (2026-09-28)
 
 D1 Esc never answers a pending request — done. D2 region hole — experiment passed, done. D3 per-host
-route — done. D4 consent shows account + network — done. D5 (per-user installer) — not asked; still open.
+route — done. D4 consent shows account + network — done. D5 (per-user installer) — not asked;
+"Install for me only" is offered (H9); moving existing per-machine installs is still open.
 
 ## Where the clients differ after 083
 
@@ -78,6 +79,11 @@ route — done. D4 consent shows account + network — done. D5 (per-user instal
 - **H7** A profile folder WebView2 accepts but cannot use makes the engine wait forever (only an
   artificial ACL produced it; research R1).
 - **H8** After a certificate failure the tab keeps the previous page's title.
-- **H9** D5: the installer is per-machine (admin); an unattended upgrade times out on UAC.
+- **H9** D5 — **partly done.** The installer now offers **Install for me only** (`/CURRENTUSER`: no
+  administrator, handler in HKCU, the VC++ runtime never run silently) beside the per-machine default
+  (1a187cda and its review fixes). An existing install keeps its mode on upgrade, so the owner's
+  per-machine install still upgrades per-machine and an unattended upgrade of it still waits on UAC.
+  Moving it — uninstall once as an administrator, then install `/CURRENTUSER` — waits on the owner's
+  D5 decision; device check `quickstart.md` F4.
 - Relay faults could not be held on the app's own traffic on this machine (its route falls back to
   Direct around the fault proxy, and TUN makes Direct work) — S5/S7 were not re-run.

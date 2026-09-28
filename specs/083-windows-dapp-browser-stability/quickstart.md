@@ -69,3 +69,15 @@ Read after every run: stderr of the instance, and
 | N1 | `target=_blank` link, `window.open` from a click | new tab on the address |
 | N2 | `mailto:` link | handed to Windows once (or logged with `VELA_OPEN_URL_LOG`); timers' popups refused |
 | N3 | ⋯ menu over a page | the page stays visible around the menu |
+
+## F — Installer: for everyone, or for me only (H9, D5)
+
+Build with `./scripts/build-windows-installer.ps1` (it prints "Visual C++ runtime: needs 14.x or newer").
+Run F1–F3 on a machine or VM with no Vela; `/LOG=<file>` keeps Setup's log.
+
+| # | Do | Expect |
+|---|---|---|
+| F1 | run the installer, pick **Install for me only** | no UAC; app in `%LOCALAPPDATA%\Programs\Vela Wallet`; `HKCU\Software\Classes\velawallet` opens it; a Trusted Signer answer reaches the running app |
+| F2 | `/CURRENTUSER /VERYSILENT /LOG=f2.log`, then the same again (an unattended upgrade) | both finish with no prompt; the log says the runtime is present, or "not installed: per-user and silent" — never runs `vc_redist` |
+| F3 | a standard (non-admin) account on a machine with an older runtime, **Install for me only** | after the files, Windows asks for an administrator; Cancel → Setup finishes with the warning naming `aka.ms/vc14`, not an error |
+| F4 | over the owner's per-machine install: a normal run; then (on the owner's D5 go-ahead) uninstall it as an administrator and install `/CURRENTUSER` | no mode question, UAC, upgrade in `C:\Program Files\Vela Wallet`, `HKLM\Software\Classes\velawallet` exists; after the move, a `/VERYSILENT` upgrade needs no UAC and the Trusted Signer answer still arrives |
