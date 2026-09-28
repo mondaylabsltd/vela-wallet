@@ -379,19 +379,32 @@ fun TxDetailBody(
             FactRow(fact = fact, copied = copied == index, onCopy = { if (Clipboard.copy(context, fact.copy ?: fact.label, fact.copyValue ?: fact.value)) { haptic(VelaHaptic.Select); setCopied(index) } })
         }
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
-        FlowCta(
-            label = model.viewOnExplorer,
-            onClick = onExplorer,
-            accent = false,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (model.deleteLabel != null && onDelete != null) {
-            Spacer(modifier = Modifier.height(VelaSpacing.md))
-            VelaDangerButton(
-                text = model.deleteLabel,
-                onClick = onDelete,
+        // Spec 082 RJ16: no explorer control without a transaction to open.
+        if (model.explorerShown) {
+            FlowCta(
+                label = model.viewOnExplorer,
+                onClick = onExplorer,
+                accent = false,
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+        if (model.deleteLabel != null && onDelete != null) {
+            if (model.explorerShown) Spacer(modifier = Modifier.height(VelaSpacing.md))
+            // Spec 082 RJ18: a pending record's delete is quiet — the trace
+            // that says "don't send it again" is not one red tap from gone.
+            if (model.deleteQuiet) {
+                VelaSecondaryButton(
+                    text = model.deleteLabel,
+                    onClick = onDelete,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                VelaDangerButton(
+                    text = model.deleteLabel,
+                    onClick = onDelete,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }

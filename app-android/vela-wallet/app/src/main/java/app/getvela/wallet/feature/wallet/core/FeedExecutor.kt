@@ -192,19 +192,72 @@ class FeedExecutor(
             // Spec 082 RG1: the site a dApp's record came from — the core names
             // the row's `site` from it; nothing here decides what it says.
             dapp_origin = row.stringOrNull("dappOrigin"),
+            // Spec 082 RJ16: the stored request's first call `data` — the core
+            // tells a token transfer's recipient from the contract a call went
+            // to; nothing here decodes it.
+            call_data = callData(row),
         )
     }
 
-    private suspend fun deleteRecord(id: String) = writeLock.withLock {
-        val raw = store.read(KeyValueStore.Keys.TRANSACTIONS) ?: return@withLock
-        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return@withLock
+    /**
+     * The first call's `data` of a dApp record's stored request (`signedRequest`,
+     * the page's params: `eth_sendTransaction`'s one call, or a
+     * `wallet_sendCalls` batch's first leg). `null` for any other row, a
+     * request clipped when it was stored, or a call without data.
+     */
+    private fun callData(row: JSONObject): String? {
+        if (row.optString("type") !in setOf("dapp_tx", "dappTx")) return null
+        if (row.optBoolean("requestTruncated", false)) return null
+        val request = row.stringOrNull("signedRequest") ?: return null
+        val first = runCatching { JSONArray(request).optJSONObject(0) }.getOrNull() ?: return null
+        val call = first.optJSONArray("calls")?.optJSONObject(0) ?: first
+        return if (!call.has("data") || call.isNull("data")) null else call.optString("data").ifBlank { null }
+    }
+
+    private suspend fun deleteRecord(id: String) {
+        deleteRecords(listOf(id))
+    }
+
+    /**
+     * Remove rows by id in ONE write (spec 082 RJ1: a written-ahead row whose
+     * op is proven never sent). Ids nobody stored are a no-op.
+     */
+    suspend fun deleteRecords(ids: List<String>): Boolean = writeLock.withLock {
+        if (ids.isEmpty()) return@withLock true
+        val raw = store.read(KeyValueStore.Keys.TRANSACTIONS) ?: return@withLock true
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return@withLock true
+        val wanted = ids.toSet()
         val kept = JSONArray()
-        var removed = false
+        var removed = 0
         for (index in 0 until array.length()) {
             val row = array.optJSONObject(index) ?: continue
-            if (row.optString("id") == id) removed = true else kept.put(row)
+            if (row.optString("id") in wanted) removed += 1 else kept.put(row)
         }
-        if (removed) store.write(KeyValueStore.Keys.TRANSACTIONS, kept.toString())
+        if (removed == 0) return@withLock true
+        val ok = store.write(KeyValueStore.Keys.TRANSACTIONS, kept.toString())
+        VelaLog.event("feed.delete", if (ok) "removed" else "refused", "rows" to removed)
+        ok
+    }
+
+    /**
+     * The relay took a written-ahead op (spec 082 RJ1): its rows' `maybeSent`
+     * becomes false, in ONE write; they stay pending — only the tracker closes
+     * a row.
+     */
+    suspend fun markAdmitted(ids: List<String>): Boolean = writeLock.withLock {
+        if (ids.isEmpty()) return@withLock true
+        val raw = store.read(KeyValueStore.Keys.TRANSACTIONS) ?: return@withLock true
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return@withLock true
+        val wanted = ids.toSet()
+        var touched = false
+        for (index in 0 until array.length()) {
+            val row = array.optJSONObject(index) ?: continue
+            if (row.optString("id") !in wanted) continue
+            row.put("maybeSent", false)
+            touched = true
+        }
+        if (!touched) return@withLock true
+        store.write(KeyValueStore.Keys.TRANSACTIONS, array.toString())
     }
 
     /**

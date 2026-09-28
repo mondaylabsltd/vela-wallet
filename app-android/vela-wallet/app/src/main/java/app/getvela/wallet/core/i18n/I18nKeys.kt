@@ -499,6 +499,8 @@ object I18nKeys {
         const val STATUS_CONFIRMED = "componentsTx.receipt.statusConfirmed"
         const val DETAIL_FROM = "componentsTx.detail.from"
         const val DETAIL_TO = "componentsTx.detail.to"
+        /** Spec 082 RJ16: a dApp record's counterparty is the contract a call went to ("Interacting with"). */
+        const val DETAIL_CONTRACT = "componentsUi.signing.interactingLabel"
         const val DETAIL_CHAIN = "componentsTx.detail.labelChain"
         const val DETAIL_DATE = "componentsTx.detail.labelDate"
         const val DETAIL_HASH = "componentsTx.detail.labelHash"
@@ -688,6 +690,13 @@ object I18nKeys {
          * again. Never "failed, try again" (owner ruling 1).
          */
         const val SIGN_MAYBE_SENT = "componentsUi.signing.maybeSent"
+        /**
+         * Spec 082 RJ3/RJ6: under `statusFailed` when the relay refused the op
+         * (the core's `SignEndingState.Refused` / `SignView.failure_refused`):
+         * nothing was sent, and no Retry words — the same request would be
+         * refused again.
+         */
+        const val SIGN_REFUSED = "componentsUi.signing.refused"
         const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
         const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
         const val TX_HELD_FEES = "send.txHeldFees"

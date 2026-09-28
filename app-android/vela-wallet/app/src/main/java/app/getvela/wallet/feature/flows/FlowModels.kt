@@ -222,6 +222,17 @@ data class TxDetailModel(
      * so it has been unreachable everywhere.
      */
     val deleteLabel: String? = null,
+    /**
+     * Spec 082 RJ18: the record is still pending — 删除记录 is a quiet
+     * secondary control, not the full-width danger button: the "don't send
+     * it again" trace should stay in view while the op may still land.
+     */
+    val deleteQuiet: Boolean = false,
+    /**
+     * Spec 082 RJ16: whether the explorer control is drawn — only with a
+     * transaction hash to open (an op hash is never an explorer link).
+     */
+    val explorerShown: Boolean = true,
 )
 
 /* ------------------------------------------------------------------ assets */

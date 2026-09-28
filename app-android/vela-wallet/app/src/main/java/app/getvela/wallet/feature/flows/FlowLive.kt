@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.wallet.AssetFiatModel
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole
 import app.getvela.wallet.feature.wallet.core.FeedDirection
 import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
@@ -229,7 +230,10 @@ object FlowLive {
             item.value?.toBigDecimalOrNull()?.stripTrailingZeros()?.toPlainString().orEmpty(),
         )
         val counterparty = item.counterparty.orEmpty()
-        val hash = item.tx_hash?.takeIf { it.isNotBlank() } ?: item.id
+        // Spec 082 RJ16: the core names a tx hash only when it is one — an op
+        // hash is never an explorer link.
+        val txHash = item.tx_hash?.takeIf { it.isNotBlank() }
+        val hash = txHash ?: item.id
         val dapp = item.kind == FeedTxKind.DappTx
         // Spec 043 phase 4 (device-found): the notification's deep link opened
         // this sheet with the fixture's title, status, counterparty, network,
@@ -237,7 +241,13 @@ object FlowLive {
         val facts = buildList {
             add(
                 FactRowModel(
-                    label = strings.t(if (received) I18nKeys.Flows.DETAIL_FROM else I18nKeys.Flows.DETAIL_TO),
+                    // Spec 082 RJ16: a call's `to` is the contract it went to,
+                    // not somebody paid — the core says which.
+                    label = when {
+                        received -> strings.t(I18nKeys.Flows.DETAIL_FROM)
+                        item.counterparty_role == FeedCounterpartyRole.Contract -> strings.t(I18nKeys.Flows.DETAIL_CONTRACT)
+                        else -> strings.t(I18nKeys.Flows.DETAIL_TO)
+                    },
                     value = item.alias ?: shortAddress(counterparty),
                     copyValue = counterparty,
                     lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it) },
@@ -268,7 +278,8 @@ object FlowLive {
             )
         }
         return fallback.copy(
-            explorerUrl = explorers[item.chain_id]?.let { "${it.trimEnd('/')}/tx/$hash" },
+            explorerUrl = txHash?.let { tx -> explorers[item.chain_id]?.let { "${it.trimEnd('/')}/tx/$tx" } },
+            explorerShown = txHash != null && explorers[item.chain_id] != null,
             title = if (dapp) {
                 strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
             } else {
@@ -298,6 +309,8 @@ object FlowLive {
             // The chain keeps the transaction; this is the wallet forgetting
             // it, which is why the sentence is "delete record" (spec 058).
             deleteLabel = strings.t(I18nKeys.Flows.DELETE_RECORD),
+            // Spec 082 RJ18: while it may still land, deleting it is quiet.
+            deleteQuiet = item.status == FeedTxStatus.Pending,
         )
     }
 

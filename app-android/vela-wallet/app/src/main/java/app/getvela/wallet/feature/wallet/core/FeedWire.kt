@@ -89,7 +89,21 @@ data class FeedTxRecord(
     val usd: String? = null,
     /** Spec 082 RG1: the stored `dappOrigin` of a dApp's record. */
     val dapp_origin: String? = null,
+    /**
+     * Spec 082 RJ16: a dApp record's first call `data`, from the stored
+     * request — what lets the core tell a token transfer's recipient from the
+     * contract the call went to.
+     */
+    val call_data: String? = null,
 )
+
+/** Who a row's `counterparty` is (spec 082 RJ16, G52): the person paid, or the contract a call went to. */
+@Serializable
+enum class FeedCounterpartyRole {
+    @SerialName("recipient") Recipient,
+
+    @SerialName("contract") Contract,
+}
 
 @Serializable
 data class FeedBatchTransfer(
@@ -155,6 +169,11 @@ data class FeedItem(
     val status: FeedTxStatus = FeedTxStatus.Pending,
     /** `DappTx` only: `host[:port]` of the asking site. */
     val site: String? = null,
+    /**
+     * Spec 082 RJ16: [counterparty] is the recipient (the default) or the
+     * contract a call went to — labelled `componentsUi.signing.interactingLabel`.
+     */
+    val counterparty_role: FeedCounterpartyRole = FeedCounterpartyRole.Recipient,
 )
 
 /**

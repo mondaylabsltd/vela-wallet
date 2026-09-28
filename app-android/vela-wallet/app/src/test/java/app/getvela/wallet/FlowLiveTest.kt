@@ -294,6 +294,8 @@ class FlowLiveTest {
         status: app.getvela.wallet.feature.wallet.core.FeedTxStatus = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Pending,
         site: String? = null,
         counterparty: String? = "0x9F3c000000000000000000000000000000021aE0",
+        txHash: String? = null,
+        role: app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole = app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole.Recipient,
     ) = FeedItem(
         id = id,
         direction = if (received) FeedDirection.In else FeedDirection.Out,
@@ -308,6 +310,8 @@ class FlowLiveTest {
         kind = kind,
         status = status,
         site = site,
+        tx_hash = txHash,
+        counterparty_role = role,
     )
 
     private fun midnightToday(): Double = java.util.Calendar.getInstance().apply {
@@ -645,5 +649,57 @@ class FlowLiveTest {
         } finally {
             Formats.current = saved
         }
+    }
+    // -- spec 082 round 2: what a dApp record's detail says (RJ16, RJ18) -------
+
+    /**
+     * G52: a call's counterparty is the contract it went to — "Interacting
+     * with", as the sheet said it — and a transfer's is who was paid.
+     */
+    @Test
+    fun `a call's counterparty is labelled the contract it went to`() {
+        val contract = feedItem(
+            "call", received = false, value = null, kind = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx,
+            role = app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole.Contract,
+        )
+        val paid = feedItem("paid", received = false, value = null, kind = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx)
+        val feed = feedOf(contract, paid)
+        assertEquals(strings.t("componentsUi.signing.interactingLabel"), FlowLive.txDetail(txFixture(), feed, id = "call", strings = strings)!!.facts[0].label)
+        assertEquals(strings.t(I18nKeys.Flows.DETAIL_TO), FlowLive.txDetail(txFixture(), feed, id = "paid", strings = strings)!!.facts[0].label)
+    }
+
+    /** No explorer control without a transaction hash: an op hash is never an explorer link. */
+    @Test
+    fun `no explorer without a transaction hash`() {
+        val explorers = mapOf(100 to "https://gnosisscan.io/")
+        val feed = feedOf(
+            feedItem("pending", received = false, value = "1", chainId = 100),
+            feedItem("landed", received = false, value = "1", chainId = 100, txHash = "0x" + "ab".repeat(32), status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Confirmed),
+        )
+        val pending = FlowLive.txDetail(txFixture(), feed, id = "pending", strings = strings, explorers = explorers)!!
+        assertNull(pending.explorerUrl)
+        assertEquals(false, pending.explorerShown)
+        val landed = FlowLive.txDetail(txFixture(), feed, id = "landed", strings = strings, explorers = explorers)!!
+        assertEquals("https://gnosisscan.io/tx/0x" + "ab".repeat(32), landed.explorerUrl)
+        assertEquals(true, landed.explorerShown)
+        val noExplorer = FlowLive.txDetail(txFixture(), feed, id = "landed", strings = strings)!!
+        assertEquals("a chain with no explorer draws none", false, noExplorer.explorerShown)
+    }
+
+    /**
+     * RJ18: while a record is pending — it may still land — 删除记录 is a
+     * quiet secondary control; a confirmed or failed one keeps the danger button.
+     */
+    @Test
+    fun `deleting a pending record is quiet, a settled one is not`() {
+        val feed = feedOf(
+            feedItem("pending", received = false, value = "1"),
+            feedItem("failed", received = false, value = "1", status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Failed),
+            feedItem("confirmed", received = false, value = "1", status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Confirmed),
+        )
+        assertEquals(true, FlowLive.txDetail(txFixture(), feed, id = "pending", strings = strings)!!.deleteQuiet)
+        assertEquals(false, FlowLive.txDetail(txFixture(), feed, id = "failed", strings = strings)!!.deleteQuiet)
+        assertEquals(false, FlowLive.txDetail(txFixture(), feed, id = "confirmed", strings = strings)!!.deleteQuiet)
+        assertEquals(strings.t(I18nKeys.Flows.DELETE_RECORD), FlowLive.txDetail(txFixture(), feed, id = "pending", strings = strings)!!.deleteLabel)
     }
 }

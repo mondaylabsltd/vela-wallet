@@ -404,4 +404,100 @@ class FeedExecutorTest {
         write(storedRow(type = "send"))
         assertNull((executor().perform(FeedOperation.ReadTxStore("0x1111", 2)) as FeedShellResult.StoreLoaded).records.single().dapp_origin)
     }
+    // -- spec 082 round 2 (RJ1, RJ16) ------------------------------------------
+
+    /** A dApp record's stored request, its first call's data, crosses to the core; nothing here decodes it. */
+    @Test
+    fun `a dApp record's first call data crosses to the core`() = runBlocking {
+        val transfer = "0xa9059cbb" + "0".repeat(24) + "76875e38fc6bc2dedcaed807ce00782db5c0d141" + "0".repeat(58) + "0f4240"
+        write(
+            storedRow(id = "d1", type = "dapp_tx").put("signedRequest", """[{"to":"0xdddd","data":"$transfer"}]"""),
+            storedRow(id = "d2", type = "dapp_tx").put("signedRequest", """[{"calls":[{"to":"0xeeee","data":"0x12345678"}]}]"""),
+            storedRow(id = "d3", type = "dapp_tx").put("signedRequest", """[{"to":"0xdddd","data":"0x1234"}]""").put("requestTruncated", true),
+            storedRow(id = "s1", type = "send").put("signedRequest", """[{"to":"0xdddd","data":"0x1234"}]"""),
+        )
+        val records = (executor().perform(FeedOperation.ReadTxStore("0x1111", 1)) as FeedShellResult.StoreLoaded).records.associateBy { it.id }
+        assertEquals(transfer, records.getValue("d1").call_data)
+        assertEquals("a batch's first leg", "0x12345678", records.getValue("d2").call_data)
+        assertNull("a clipped request is not read", records.getValue("d3").call_data)
+        assertNull("only a dApp record carries one", records.getValue("s1").call_data)
+    }
+
+    /** Spec 082 RJ1: a written-ahead row whose op is proven never sent goes, in one write; an admitted one stays pending, no longer "may have been sent". */
+    @Test
+    fun `written-ahead rows are deleted in one write, or marked admitted in place`() = runBlocking {
+        write(
+            storedRow(id = "w1", type = "send", status = "pending").put("maybeSent", true),
+            storedRow(id = "w2", type = "send", status = "pending").put("maybeSent", true),
+            storedRow(id = "keep", type = "send", status = "pending").put("maybeSent", true),
+        )
+        val feed = executor()
+        assertTrue(feed.markAdmitted(listOf("keep")))
+        assertTrue(feed.deleteRecords(listOf("w1", "w2")))
+        val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
+        assertEquals(1, rows.length())
+        assertEquals("keep", rows.getJSONObject(0).getString("id"))
+        assertEquals(false, rows.getJSONObject(0).getBoolean("maybeSent"))
+        assertEquals("still the tracker's to close", "pending", rows.getJSONObject(0).getString("status"))
+        store.refuseWrites = true
+        assertEquals("a refused delete says so", false, feed.deleteRecords(listOf("keep")))
+    }
+
+    /**
+     * Spec 082 RJ16 (G52, DX-W3): a dApp's token transfer names who was paid —
+     * the decoded recipient, not the token contract — and a call that is not a
+     * transfer names the contract it went to. An op hash is never a tx hash.
+     */
+    @Test
+    fun `a dApp record's counterparty is who was paid, or the contract a call went to`() = runBlocking {
+        val me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        val usdc = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+        try {
+            val feed = FeedExecutor(store = store, ownAccounts = { emptyList() }, now = { System.currentTimeMillis().toDouble() })
+            val host = app.getvela.wallet.core.crux.CoreHost(
+                bridge = uniffi.vela_core_uniffi.ActivityFeedCore().asBridge(),
+                scope = scope,
+                initial = app.getvela.wallet.feature.wallet.core.FeedView(),
+                serializer = app.getvela.wallet.feature.wallet.core.FeedView.serializer(),
+                perform = app.getvela.wallet.core.crux.JsonShell.perform(FeedOperation.serializer(), FeedShellResult.serializer(), feed::perform),
+                escapedFailure = app.getvela.wallet.core.crux.JsonShell.escapedFailure(
+                    FeedOperation.serializer(), FeedShellResult.serializer(), fallback = FeedShellResult.HapticPlayed, answer = feed::neutralAnswer,
+                ),
+                onFault = { error -> throw AssertionError("shell fault: $error", error) },
+            )
+            host.dispatch(app.getvela.wallet.feature.wallet.core.FeedEvent.AccountSwitched(me), app.getvela.wallet.feature.wallet.core.FeedEvent.serializer())
+            kotlinx.coroutines.delay(500)
+
+            val transfer = "0xa9059cbb" + "0".repeat(24) + "76875e38fc6bc2dedcaed807ce00782db5c0d141" + "0".repeat(58) + "0f4240"
+            fun record(id: String, op: String, data: String) = app.getvela.wallet.feature.signing.core.SignExecutor.recordRow(
+                app.getvela.wallet.feature.signing.core.SignRecord(
+                    record_id = id, kind = app.getvela.wallet.feature.signing.core.SignRecordKind.DappTx, method = "eth_sendTransaction",
+                    params_json = """[{"to":"$usdc","value":"0x0","data":"$data"}]""",
+                    result = "", from = me, chain_id = 100, now_ms = System.currentTimeMillis().toDouble(),
+                    status = app.getvela.wallet.feature.signing.core.SignRecordStatus.Pending, user_op_hash = op,
+                    dapp_origin = "http://127.0.0.1:8137",
+                ),
+                "XDAI",
+            ).put("txHash", op)
+            val paid = "0x" + "7a".repeat(32)
+            val called = "0x" + "7b".repeat(32)
+            assertTrue(feed.writeRecords(listOf(record("dapp-paid", paid, transfer), record("dapp-called", called, "0x095ea7b3" + "0".repeat(128)))))
+            host.dispatch(app.getvela.wallet.feature.wallet.core.FeedEvent.ReconcileCompleted(1), app.getvela.wallet.feature.wallet.core.FeedEvent.serializer())
+            val items = kotlinx.coroutines.withTimeout(10_000) {
+                host.view.first { view -> view.rows.filterIsInstance<app.getvela.wallet.feature.wallet.core.FeedRow.Item>().size == 2 }
+            }.rows.filterIsInstance<app.getvela.wallet.feature.wallet.core.FeedRow.Item>().map { it.item }.associateBy { it.id }
+
+            val toPerson = items.getValue("dapp-paid")
+            assertEquals("0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141", toPerson.counterparty)
+            assertEquals(app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole.Recipient, toPerson.counterparty_role)
+            assertNull("an op hash is never an explorer link", toPerson.tx_hash)
+
+            val toContract = items.getValue("dapp-called")
+            assertTrue(toContract.counterparty.equals(usdc, ignoreCase = true))
+            assertEquals(app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole.Contract, toContract.counterparty_role)
+        } finally {
+            scope.cancel()
+        }
+    }
 }
