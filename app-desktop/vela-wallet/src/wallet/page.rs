@@ -161,6 +161,53 @@ fn gallery_bar_caption_pad(caption: bool) -> f32 {
     if caption { CAPTION_H + 4. - 8. } else { 0. }
 }
 
+/// A close of the window (or Quit) the RD14 hold refused, counted (spec 082
+/// RJ17). `main.rs` bumps it; every wallet page observes it and says why.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CloseHeld(pub u64);
+
+impl gpui::Global for CloseHeld {}
+
+/// A close was held: tell the page.
+pub fn close_held(cx: &mut gpui::App) {
+    let next = cx.try_global::<CloseHeld>().map_or(0, |held| held.0) + 1;
+    cx.set_global(CloseHeld(next));
+}
+
+/// The words a held close shows: 提交至网络… — what the window is waiting on.
+const CLOSE_HELD_WORDS: &str = "send.txSubmitting";
+
+/// The column a held close brings forward.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HeldColumn {
+    /// A dApp's request, submitting.
+    Signing,
+    /// The wallet's own Send.
+    Send,
+}
+
+/// What a held close shows (RJ17): the words in the bar's notice slot when
+/// the browser is in front — the bar is the one place there that speaks —
+/// and the column whose submit is holding the window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CloseHeldNotice {
+    bar_words: Option<&'static str>,
+    column: Option<HeldColumn>,
+}
+
+fn close_held_notice(section: Section, signing: bool, send_open: bool) -> CloseHeldNotice {
+    CloseHeldNotice {
+        bar_words: (section == Section::Explore).then_some(CLOSE_HELD_WORDS),
+        column: if signing {
+            Some(HeldColumn::Signing)
+        } else if send_open {
+            Some(HeldColumn::Send)
+        } else {
+            None
+        },
+    }
+}
+
 /// Which destination the content column renders. The sidebar's selected nav
 /// row derives from this (spec 018 research.md D1).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -685,6 +732,9 @@ pub struct WalletPage {
     /// press is superseded (`explore.requestOpen`, 2.5 s).
     held_notice: Option<u64>,
     held_press: u64,
+    /// Spec 082 RJ17: the held words are a held CLOSE's (`send.txSubmitting`),
+    /// not a held navigation's.
+    held_close: bool,
     /// Spec 082 RF1: the chain whose notice is on screen, for its log lines.
     chain_notice_shown: Option<u32>,
     /// The browser machine (spec 070): every page's requests, the grants,
@@ -1087,6 +1137,9 @@ impl WalletPage {
         let explore = ExploreStrings::resolve(&loc);
         let signing = SigningStrings::resolve(&loc);
 
+        // Spec 082 RJ17: a close the RD14 hold refused says why, here.
+        cx.observe_global::<CloseHeld>(|page, cx| page.close_was_held(cx))
+            .detach();
         // The window coming back is the desktop's `visibilitychange`: the web
         // refreshes the hero and ticks the feed on it, and this app did
         // neither. Registered for the life of the page; the guard is the
@@ -1214,6 +1267,7 @@ impl WalletPage {
             came_back_seen: crate::executor::pool::came_back_count(),
             held_notice: None,
             held_press: 0,
+            held_close: false,
             chain_notice_shown: None,
             cap_focus: cx.focus_handle(),
             leg_cap_focus: std::collections::HashMap::new(),
@@ -12434,6 +12488,12 @@ impl WalletPage {
         } else if signing {
             self.bring_signing_forward(cx);
         }
+        self.held_close = false;
+        self.show_held_words(cx);
+    }
+
+    /// The bar's held words for 2.5 s (RD1, RJ17), until a newer press.
+    fn show_held_words(&mut self, cx: &mut Context<Self>) {
         self.held_press += 1;
         let press = self.held_press;
         self.held_notice = Some(press);
@@ -12450,6 +12510,32 @@ impl WalletPage {
             .ok();
         })
         .detach();
+        cx.notify();
+    }
+
+    /// The window's close (or Quit) was held while a submit POST was out
+    /// (RD14, RJ17): the submitting column comes forward — the dApp's signing
+    /// column, else the Send screen — and over the browser the bar says
+    /// 提交至网络… for 2.5 s. A second close within 5 s still quits.
+    fn close_was_held(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        let signing = self
+            .signing_host
+            .iter()
+            .chain(self.signing_background.iter())
+            .any(|host| host.read(cx).view.is_submitting);
+        #[cfg(target_os = "linux")]
+        let signing = false;
+        let notice = close_held_notice(self.section, signing, self.send_host.is_some());
+        match notice.column {
+            Some(HeldColumn::Signing) => self.bring_signing_forward(cx),
+            Some(HeldColumn::Send) => self.panel = PanelId::Flow,
+            None => {}
+        }
+        if notice.bar_words.is_some() {
+            self.held_close = true;
+            self.show_held_words(cx);
+        }
         cx.notify();
     }
 
@@ -12901,7 +12987,11 @@ impl WalletPage {
             draft: self.address_draft.clone().map(SharedString::from),
             selected: self.address_selected,
             notice: if held_words {
-                Some(self.explore.request_open.clone())
+                Some(if self.held_close {
+                    self.loc.t(CLOSE_HELD_WORDS)
+                } else {
+                    self.explore.request_open.clone()
+                })
             } else {
                 (self.copied.as_deref() == Some(EXPLORE_COPY)).then(|| self.explore.copied.clone())
             },
@@ -18197,6 +18287,30 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 082 RJ17 (G68, DX9): a held close says 提交至网络… in the bar
+    /// when the browser is in front, and brings the submitting column
+    /// forward — the dApp's, else the Send screen.
+    #[test]
+    fn a_held_close_says_why_and_shows_what_it_waits_on() {
+        let explore = close_held_notice(Section::Explore, true, false);
+        assert_eq!(explore.bar_words, Some("send.txSubmitting"));
+        assert_eq!(explore.column, Some(HeldColumn::Signing));
+        let wallet = close_held_notice(Section::Wallet, false, true);
+        assert_eq!(wallet.bar_words, None, "no bar outside the browser");
+        assert_eq!(wallet.column, Some(HeldColumn::Send));
+        assert_eq!(
+            close_held_notice(Section::Settings, true, true).column,
+            Some(HeldColumn::Signing)
+        );
+        assert_eq!(
+            close_held_notice(Section::Contacts, false, false).column,
+            None
+        );
+        // The words are a corpus key the desktop already resolves.
+        let loc = Loc::from_env();
+        assert_ne!(loc.t(CLOSE_HELD_WORDS).as_ref(), CLOSE_HELD_WORDS);
+    }
 
     /// Spec 082 G41: every way into the address bar takes the keyboard back
     /// from WebKit — `edit_address` through `focus_address`, and a press in
