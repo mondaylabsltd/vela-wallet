@@ -796,6 +796,30 @@ fn a_certificate_verdict_waits_for_a_loading_engine() {
     );
 }
 
+/// A deferred verdict is not a pass: the 20 s give-up still ends a load
+/// that WebKit holds at its first step (RD3, RE2), so the probe's TLS
+/// answer never leaves a hairline running until WebKit's own minute. A page
+/// that is arriving is still never cut.
+#[test]
+fn a_deferred_verdict_still_gives_up_at_twenty_seconds() {
+    let (mut watch, generation) = engine_on_site();
+    watch.watchdog(generation);
+    assert_eq!(
+        watch.probed(generation, Err(probe_code::TLS)),
+        Probed::Deferred
+    );
+    watch.engine(&sample(true, 0.1, SITE), 19_000.);
+    assert!(watch.give_up(generation), "held at 0.1 for 20 s: given up");
+    assert_eq!(watch.failure, Some(stalled()));
+
+    let (mut arriving, generation) = engine_on_site();
+    arriving.watchdog(generation);
+    arriving.probed(generation, Err(probe_code::TLS));
+    arriving.engine(&sample(true, 0.5, SITE), 9_000.);
+    assert!(!arriving.give_up(generation), "the page is arriving");
+    assert!(arriving.loading && arriving.failure.is_none());
+}
+
 // ---------------------------------------------------------------------------
 // The phones' watchdog and the network coming back (spec 082 T031, RE2, RE3)
 // ---------------------------------------------------------------------------

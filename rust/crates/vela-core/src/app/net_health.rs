@@ -11,12 +11,20 @@
 //! "satisfied" (the China case, where NWPathMonitor alone never fires). So a
 //! shell feeds [`net_health_step`] with:
 //!
-//! - `reached = true` — any answer from a server, whatever its status;
-//! - `reached = false` — a call that never reached one (the socket could not
-//!   open, the connection was refused or dropped before an answer).
-//!
-//! A timeout is neither and is not fed: a slow server is not a missing
-//! network.
+//! - `reached = true` — any answer from a server, whatever its status (a
+//!   throttled 429 included);
+//! - `reached = false` — a call that never reached one. Which calls count is
+//!   the shell's unit of work:
+//!   - one HTTP request (Android's executor, spec 047): the socket could not
+//!     open, or the connection was refused or dropped before an answer. That
+//!     one request timing out is not fed — a slow server is not a missing
+//!     network;
+//!   - one pooled read (the iPhone's `RpcPool`, the desktop's
+//!     `executor/pool.rs`; RE3, T113, T069): every endpoint swept and none
+//!     answered, and not throttled. This
+//!     one IS fed even when each endpoint only timed out: a hanging proxy
+//!     node refuses nothing — it only times out — and is exactly the case
+//!     that must still go offline and come back.
 //!
 //! On [`NetEdge::CameBack`] a shell resets its failed pages' attempt counts
 //! and retries the one in front (`browser_load::retry_when_network_returns`),

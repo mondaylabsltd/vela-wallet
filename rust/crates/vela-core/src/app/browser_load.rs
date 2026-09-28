@@ -385,7 +385,9 @@ pub fn stalled() -> LoadFailure {
 /// Whether a failed page is loaded again when the network comes back (RE3,
 /// `net_health`'s `CameBack`): every class a returning network can heal. A
 /// name that does not resolve is a typo and a wrong certificate is a warning;
-/// neither is the network.
+/// neither is the network. A load the page itself started is still retried
+/// by hand only, whatever its class (the desktop's
+/// [`LoadWatch::page_initiated`], RD7: it may have been a POST).
 #[must_use]
 pub fn retry_when_network_returns(class: LoadFailureClass) -> bool {
     match class {
@@ -491,7 +493,10 @@ pub enum Probed {
     /// The failure panel, with its reason.
     Failed,
     /// A certificate verdict while the engine is still loading: not believed.
-    /// The engine decides — a commit, or a stop and a second probe.
+    /// The engine decides — a commit, or a stop and a second probe. It is
+    /// not a pass: keep the give-up armed as for [`Probed::WaitUntil`]
+    /// (`requested_at_ms + GIVE_UP_MS`), so a load WebKit holds at its first
+    /// step still ends at 20 s rather than on WebKit's own minute (RD3, RE2).
     Deferred,
 }
 
@@ -700,8 +705,10 @@ impl LoadWatch {
     }
 
     /// [`GIVE_UP_MS`] after load `generation` was asked for, with a site that
-    /// answered the probe: still nothing committed is a timeout — unless the
-    /// engine's progress showed the page arriving, which is never cut.
+    /// answered the probe ([`Probed::WaitUntil`]) or a probe verdict the
+    /// engine outranks ([`Probed::Deferred`]): still nothing committed is a
+    /// timeout — unless the engine's progress showed the page arriving, which
+    /// is never cut.
     pub fn give_up(&mut self, generation: u64) -> bool {
         if generation != self.generation || !self.loading || self.engine_live {
             return false;
