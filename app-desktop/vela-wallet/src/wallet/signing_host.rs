@@ -94,6 +94,36 @@ fn requote_wait(
     vela_core::app::fee_policy::requote_delay_ms(failure?, attempt)
 }
 
+/// Where a request stands, as far as closing its column goes (083): the
+/// core's view, where its signature is, and whether a close already waits.
+fn close_facts_of(
+    view: &SignView,
+    signature: crate::signing::status::Signature,
+    closing: bool,
+) -> crate::signing::status::CloseFacts {
+    crate::signing::status::CloseFacts {
+        swipe: view.swipe_action,
+        running: view.is_signing || view.is_submitting,
+        submitted: view.pending_op_hash.is_some(),
+        failed: view.error.is_some(),
+        signature,
+        closing,
+    }
+}
+
+/// The core kept a request open after its pipeline stopped — the ceremony
+/// came back unsigned (dismissed, a QR nobody scanned) — so the form is the
+/// person's again: the sheet up, nothing running, nothing failed, submitted
+/// or answered (083).
+fn back_on_form_of(view: &SignView, responded: bool) -> bool {
+    view.surface == vela_core::app::sign_request::SignSurface::Sheet
+        && !view.is_signing
+        && !view.is_submitting
+        && view.error.is_none()
+        && view.pending_op_hash.is_none()
+        && !responded
+}
+
 /// How often the column looks at its ceremony while a pipeline runs — the
 /// cadence the send and onboarding already poll theirs at (083).
 const CEREMONY_TICK_MS: u64 = 120;
@@ -186,16 +216,26 @@ pub struct SigningHost {
     /// The ceremony watch is running (see [`Self::ensure_watcher`]).
     watching: bool,
     /// What the column last drew of the ceremony, so the watch redraws on a
-    /// change rather than eight times a second.
-    ceremony_seen: (crate::signing::status::Signature, Option<String>, bool),
+    /// change rather than eight times a second. The whole touch prompt, not
+    /// whether there is one: a key's "select" becoming "touch", or another
+    /// key's name, is a change too (083 review).
+    ceremony_seen: (
+        crate::signing::status::Signature,
+        Option<String>,
+        Option<crate::ctap::usb::TouchRequest>,
+    ),
     /// The phone's QR ran its whole window with nobody scanning (083 W19).
     /// The request is still open — nothing was answered — and the column
     /// says what happened, with Retry, until the person chooses.
     pub qr_expired: bool,
-    /// The column was closed over the QR: the scan is stopped first, and the
-    /// close is made once the core has the ceremony back — a refusal
-    /// (4001), where before the scan ran on unseen for up to 90 s and the page
-    /// then got "-32603 no phone answered…" (083 W19).
+    /// The column was closed while the signature was still to come
+    /// ([`crate::signing::status::ClosePlan::AfterCancel`]): whatever the
+    /// ceremony waits behind is stopped, and the close is made once the core
+    /// has the ceremony back — a refusal (4001) if nothing was signed. Before
+    /// 083 the scan ran on unseen for up to 90 s and the page then got
+    /// "-32603 no phone answered…" (W19); told to the core at once as a
+    /// dismiss, a prompt that came back unsigned answered nothing, ever
+    /// (083 review).
     close_after_cancel: bool,
     /// The Trusted Signer's page asked for this approval's signature (083
     /// W11): once it stops asking, the signature is given.
@@ -243,6 +283,14 @@ impl SigningHost {
     /// Something on the Trusted Signer's channel changed: hand the browser the
     /// page if a ceremony asked for it, and redraw.
     fn trusted_signer_changed(&mut self, cx: &mut Context<Self>) {
+        // The column was closed before this signature (083 review): its
+        // channel is closed (`close`), so no wait goes on and none starts —
+        // and a page asked for in that breath is not opened either.
+        if self.close_after_cancel {
+            let _unopened = self.ctx.trusted_signer.take_page();
+            cx.notify();
+            return;
+        }
         if let Some(url) = self.ctx.trusted_signer.take_page() {
             cx.open_url(&url);
         }
@@ -571,14 +619,20 @@ impl SigningHost {
     }
 
     /// Where this approval's signature stands (083 W11): the Trusted
-    /// Signer's page asking, then the passkey's own two flags.
+    /// Signer's page asking, then the passkey's own two flags. `Given` only
+    /// for a signature that exists — a page that stopped asking because it
+    /// was refused has signed nothing (083 review: the column's close reads
+    /// `Given` as "the operation goes on").
     pub fn signature(&self) -> crate::signing::status::Signature {
         use crate::signing::status::Signature;
-        if self.ctx.trusted_signer.waiting() {
+        let signer = &self.ctx.trusted_signer;
+        if signer.waiting() {
             Signature::Asked
-        } else if self.ctx.signature_done.load(Ordering::SeqCst) || self.page_asked {
+        } else if self.ctx.signature_done.load(Ordering::SeqCst)
+            || (self.page_asked && signer.ended().is_none())
+        {
             Signature::Given
-        } else if self.ctx.signing_started.load(Ordering::SeqCst) {
+        } else if self.ctx.signing_started.load(Ordering::SeqCst) || self.page_asked {
             Signature::Asked
         } else {
             Signature::NotYet
@@ -617,30 +671,90 @@ impl SigningHost {
         }
     }
 
+    /// Where this request stands, as far as closing its column goes.
+    fn close_facts(&self) -> crate::signing::status::CloseFacts {
+        close_facts_of(&self.view, self.signature(), self.close_after_cancel)
+    }
+
+    /// A close waits on the ceremony: the column is gone for the person, and
+    /// must not come back while the ceremony winds down (083 review).
+    pub fn closing(&self) -> bool {
+        self.close_after_cancel
+    }
+
     /// The column's close — its ✕ and the receipt's button. The core decides
     /// what it answers (a request not yet approved is refused, one already on
-    /// its way is only no longer watched). With the phone's QR up the core
-    /// would read it as the second, and the scan ran on unseen for up to 90 s
-    /// before the page heard "-32603 no phone answered…"; the scan is stopped
-    /// first, and the close is made once the core has the ceremony back
-    /// (083 W19).
+    /// its way is only no longer watched); this decides only WHEN it is told
+    /// ([`crate::signing::status::close_plan`], 083). While the signature is
+    /// still to come the core would take the close as the second — and a
+    /// prompt that then came back unsigned answered the page nothing, ever
+    /// (the review's case: ✕ over "正在准备交易...", then a QR in a column
+    /// nobody drew, 90 s, silence). So the prompt is stopped, or never
+    /// opened, and the close is made once the core has the ceremony back. A
+    /// second close while one waits adds nothing.
     pub fn close(&mut self, cx: &mut Context<Self>) {
-        if self.channel.qr_showing().is_some() {
-            self.close_after_cancel = true;
-            self.channel.cancel_qr();
-            cx.notify();
-            return;
+        use crate::signing::status::{ClosePlan, close_plan};
+        match close_plan(&self.close_facts()) {
+            ClosePlan::Ignore => {}
+            ClosePlan::AfterCancel => {
+                self.close_after_cancel = true;
+                // No passkey prompt opens after this (`around_prompt`)…
+                self.ctx.abandoned.store(true, Ordering::SeqCst);
+                // …nor a Trusted Signer page: its channel is closed rather
+                // than cancelled — an attempt not yet begun clears a cancel
+                // as it starts, while a closed channel refuses it before any
+                // page is asked for, and ends one already waiting. Closed is
+                // what the column's Drop does anyway: this request ends with
+                // this close, refused or on its way.
+                self.ctx.trusted_signer.close();
+                self.stop_prompts();
+                // Watched until the ceremony is back: a QR posted after this
+                // is taken down too.
+                self.ensure_watcher(cx);
+                cx.notify();
+            }
+            ClosePlan::Now => {
+                self.qr_expired = false;
+                self.dispatch_sign(SignEvent::SwipeDismissed, cx);
+            }
         }
-        self.qr_expired = false;
-        self.dispatch_sign(SignEvent::SwipeDismissed, cx);
+    }
+
+    /// Whatever the passkey ceremony waits behind, stopped for a close (083
+    /// review): the scan — and a key's exchange, which polls the same flag —
+    /// even before a QR is up; a key's prompt that can be stopped; a PIN or
+    /// wallet question the column never draws. Run again on every watch tick
+    /// while the close waits: a QR posted after it clears the stop flag as it
+    /// goes up. (The Trusted Signer's channel is closed once, in `close`.)
+    fn stop_prompts(&self) {
+        self.channel.cancel_qr();
+        if self
+            .channel
+            .touch_waiting()
+            .is_some_and(|waiting| waiting.cancellable)
+        {
+            self.channel.cancel_touch();
+        }
+        if self.channel.pending_pin().is_some() {
+            self.channel.answer_pin(None);
+        }
+        if self.channel.pending_choice().is_some() {
+            self.channel.answer_choice(None);
+        }
     }
 
     /// Esc on the column (083, the owner's D1): never an answer to the page.
     /// Over the QR or a key prompt it is that card's Cancel — the request
     /// stays open, back on its form. Otherwise it reports whether the
-    /// column may close: only where closing answers nothing
-    /// ([`crate::signing::status::escape_closes`]).
+    /// column may close: only where closing answers nothing, now
+    /// ([`crate::signing::status::escape_closes`]) — never while a close
+    /// already waits, nor while the signature is still to come (that close
+    /// ends in a refusal too).
     pub fn escape(&mut self, cx: &mut Context<Self>) -> bool {
+        let plan = crate::signing::status::close_plan(&self.close_facts());
+        if plan == crate::signing::status::ClosePlan::Ignore {
+            return false;
+        }
         if self.channel.qr_showing().is_some() {
             self.cancel_qr(cx);
             return false;
@@ -651,7 +765,7 @@ impl SigningHost {
             }
             return false;
         }
-        crate::signing::status::escape_closes(self.view.swipe_action)
+        crate::signing::status::escape_closes(self.view.swipe_action, plan)
     }
 
     /// The ceremony runs on a background thread that cannot wake the column:
@@ -681,10 +795,14 @@ impl SigningHost {
 
     /// One look at the ceremony. Returns whether to keep looking.
     fn watch_ceremony(&mut self, cx: &mut Context<Self>) -> bool {
+        // A close waits: whatever came up since is stopped too.
+        if self.close_after_cancel {
+            self.stop_prompts();
+        }
         let seen = (
             self.signature(),
             self.channel.qr_showing(),
-            self.channel.touch_waiting().is_some(),
+            self.channel.touch_waiting(),
         );
         if seen != self.ceremony_seen {
             self.ceremony_seen = seen;
@@ -710,12 +828,7 @@ impl SigningHost {
     /// Back on the form with the request still open: nothing signing, nothing
     /// submitted, failed or answered.
     fn back_on_form(&self) -> bool {
-        self.view.surface == vela_core::app::sign_request::SignSurface::Sheet
-            && !self.pipeline_running()
-            && self.view.error.is_none()
-            && self.view.pending_op_hash.is_none()
-            && !self.responded
-            && !self.closed
+        back_on_form_of(&self.view, self.responded) && !self.closed
     }
 
     /// The refresh control (spec 079): measure again, now — the held
@@ -950,11 +1063,14 @@ impl SigningHost {
             self.ensure_watcher(cx);
         }
         cx.notify();
-        // The close made over the QR, now that the scan has stopped: a
-        // refusal if the ceremony came back empty, or — when the phone had
-        // already signed — the ordinary close of an operation on its way.
+        // The close that waited, now that the ceremony is back: a refusal if
+        // it came back empty, or — when the phone had already signed — the
+        // ordinary close of an operation on its way.
         if self.close_after_cancel
-            && (!self.pipeline_running() || self.view.pending_op_hash.is_some())
+            && crate::signing::status::waited_close_due(
+                self.pipeline_running(),
+                self.view.pending_op_hash.is_some(),
+            )
         {
             self.close_after_cancel = false;
             self.qr_expired = false;
@@ -1090,13 +1206,17 @@ impl SigningHost {
 }
 
 impl Drop for SigningHost {
-    /// The column is gone: a Trusted Signer still waiting stops now rather
-    /// than holding a port for five minutes nobody can see — and so does a
-    /// phone scan, and a PIN or wallet question nobody can answer (083 W19).
     fn drop(&mut self) {
-        self.ctx.trusted_signer.close();
-        self.channel.close();
+        release(&self.ctx.trusted_signer, &self.channel);
     }
+}
+
+/// The column is gone: a Trusted Signer still waiting stops now rather than
+/// holding a port for five minutes nobody can see — and so does a phone scan,
+/// and a PIN or wallet question nobody can answer (083 W19).
+fn release(trusted_signer: &trusted_signer::Channel, channel: &CeremonyChannel) {
+    trusted_signer.close();
+    channel.close();
 }
 
 /// Every chain this wallet can act on: the built-ins plus whatever was added.
@@ -1913,6 +2033,233 @@ mod approve_tests {
             opts.quoted_fee.map(|quoted| quoted.amount).as_deref(),
             Some("91000000000000")
         );
+    }
+
+    /// A personal_sign on the machine the column drives, approved as far as
+    /// its signature: `SignAndSubmit` is out, and its id is returned.
+    fn approved_to_its_signature(sign: &mut CoreHost<SignRequest>) -> u64 {
+        let wallet = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        sign.dispatch(SignEvent::NetworksChanged {
+            chain_ids: vec![100],
+        });
+        sign.dispatch(SignEvent::AccountsChanged {
+            accounts: vec![SignAccountRef {
+                address: wallet.to_owned(),
+                credential_id: "cred0".to_owned(),
+            }],
+            active_index: 0,
+        });
+        sign.dispatch(SignEvent::RequestArrived {
+            id: "7".to_owned(),
+            method: "personal_sign".to_owned(),
+            params_json: format!(r#"["0x48656c6c6f","{wallet}"]"#),
+            origin: "https://app.uniswap.org".to_owned(),
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            dedicated_transport: true,
+            per_request_chain: Some(100),
+            dapp: None,
+            granted_address: None,
+            requested_address: None,
+            request_ts_ms: None,
+            now_ms: 0.0,
+        });
+        let signing = sign.dispatch(SignEvent::ApproveTapped {
+            opts: SignApproveOpts::default(),
+        });
+        match signing.as_slice() {
+            [
+                Pending {
+                    id,
+                    operation: SignOperation::SignAndSubmit { .. },
+                },
+            ] => *id,
+            other => unreachable!("approve signs at once: {}", other.len()),
+        }
+    }
+
+    /// The answers among `ops`, as (id, error code) — `None` for a success.
+    fn answers_in(ops: &[Pending<SignOperation>]) -> Vec<(String, Option<i32>)> {
+        use vela_core::app::sign_request::SignResponsePayload;
+        ops.iter()
+            .filter_map(|pending| match &pending.operation {
+                SignOperation::SendResponse { id, payload, .. } => Some((
+                    id.clone(),
+                    match payload {
+                        SignResponsePayload::Err { code, .. } => Some(*code),
+                        SignResponsePayload::Ok { .. } => None,
+                    },
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// 083 (review): the close while the signature is still to come, against
+    /// the machine the column drives, with the column's own decisions in the
+    /// order it makes them. The close waits (Esc does not close at all), a
+    /// second close adds nothing, the prompt comes back unsigned, and the
+    /// waited close is told: exactly one answer, the person's refusal.
+    #[test]
+    fn a_close_before_the_signature_refuses_exactly_once() {
+        use crate::signing::status::{
+            ClosePlan, Signature, close_plan, escape_closes, waited_close_due,
+        };
+        use vela_core::app::sign_request::{SignSubmitOutcome, SignSurface};
+
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+
+        let plan = close_plan(&close_facts_of(&sign.view(), Signature::NotYet, false));
+        assert_eq!(plan, ClosePlan::AfterCancel, "preparing: the close waits");
+        assert!(
+            !escape_closes(sign.view().swipe_action, plan),
+            "and Esc leaves the request alone (D1)"
+        );
+        let plan = close_plan(&close_facts_of(&sign.view(), Signature::Asked, false));
+        assert_eq!(plan, ClosePlan::AfterCancel, "the QR is up: the same");
+        assert_eq!(
+            close_plan(&close_facts_of(&sign.view(), Signature::Asked, true)),
+            ClosePlan::Ignore,
+            "a second close while the first waits"
+        );
+
+        let view = sign.view();
+        assert!(!waited_close_due(
+            view.is_signing || view.is_submitting,
+            view.pending_op_hash.is_some()
+        ));
+        let back = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::PasskeyCancelled,
+                now_ms: 1.0,
+            },
+        );
+        assert!(answers_in(&back).is_empty(), "the core kept the request");
+        let view = sign.view();
+        assert!(waited_close_due(
+            view.is_signing || view.is_submitting,
+            view.pending_op_hash.is_some()
+        ));
+
+        let refused = sign.dispatch(SignEvent::SwipeDismissed);
+        assert_eq!(answers_in(&refused), vec![("7".to_owned(), Some(4001))]);
+        assert_eq!(sign.view().surface, SignSurface::Hidden);
+        assert!(answers_in(&sign.dispatch(SignEvent::SwipeDismissed)).is_empty());
+    }
+
+    /// 083 (review): once the phone has signed, the close is the ordinary
+    /// one, at once — the operation goes on and the page still gets its
+    /// answer (spec 079 FR-002); nothing is refused. And if the pipeline
+    /// then comes back unsigned after all (a second prompt, dismissed), the
+    /// core's own safety net answers the closed request once: 4001, never
+    /// silence.
+    #[test]
+    fn a_close_after_the_signature_refuses_nothing() {
+        use crate::signing::status::{ClosePlan, Signature, close_plan};
+        use vela_core::app::sign_request::SignSubmitOutcome;
+
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+        assert_eq!(
+            close_plan(&close_facts_of(&sign.view(), Signature::Given, false)),
+            ClosePlan::Now
+        );
+        let dismissed = sign.dispatch(SignEvent::SwipeDismissed);
+        assert!(answers_in(&dismissed).is_empty(), "no refusal");
+
+        let back = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::PasskeyCancelled,
+                now_ms: 1.0,
+            },
+        );
+        assert_eq!(answers_in(&back), vec![("7".to_owned(), Some(4001))]);
+        assert!(answers_in(&sign.dispatch(SignEvent::SwipeDismissed)).is_empty());
+    }
+
+    /// 083: a ceremony that comes back unsigned gives the form back — the
+    /// column then un-approves and resets the slide, which stayed stuck at
+    /// the end — and a failure does not: the page has its answer.
+    #[test]
+    fn only_an_unsigned_ceremony_gives_the_form_back() {
+        use vela_core::app::sign_request::SignSubmitOutcome;
+
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+        assert!(!back_on_form_of(&sign.view(), false), "still signing");
+        let back = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::PasskeyCancelled,
+                now_ms: 1.0,
+            },
+        );
+        assert!(answers_in(&back).is_empty());
+        assert!(back_on_form_of(&sign.view(), false), "the form is back");
+        assert!(sign.view().confirm_gate_open, "and can be approved again");
+
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+        let failed = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::Failed {
+                    message: "the relay said no".to_owned(),
+                },
+                now_ms: 1.0,
+            },
+        );
+        assert_eq!(answers_in(&failed), vec![("7".to_owned(), Some(-32603))]);
+        assert!(
+            !back_on_form_of(&sign.view(), true),
+            "a failure is an answer"
+        );
+        assert!(
+            !back_on_form_of(&sign.view(), false),
+            "…and the core says so on its own"
+        );
+    }
+
+    /// 083 W19: a column that goes away stops what its ceremony waits
+    /// behind — the phone's scan, a PIN question nobody can answer, the
+    /// Trusted Signer's page — instead of leaving a 90 s scan or a blocked
+    /// thread behind a column nobody can see.
+    #[test]
+    fn a_column_that_goes_away_stops_its_ceremony() {
+        let channel = CeremonyChannel::new();
+        let ceremony = channel.ceremony(0);
+        let (signer, _changed) = trusted_signer::Channel::new();
+        (ceremony.qr)(Some("FIDO:/083".to_owned()));
+        assert!(!(ceremony.cancelled)());
+
+        // A PIN question, blocking the ceremony's thread until a screen answers.
+        let pin = Arc::clone(&ceremony.pin);
+        let asking = std::thread::spawn(move || {
+            pin(crate::executor::passkey::PinRequest {
+                product: "YubiKey 5C NFC".to_owned(),
+                device: "hid-1".to_owned(),
+                retries: Some(8),
+                retry: false,
+            })
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while channel.pending_pin().is_none() && std::time::Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(channel.pending_pin().is_some(), "the question is up");
+
+        release(&signer, &channel);
+
+        assert_eq!(
+            asking.join().ok(),
+            Some(None),
+            "the question is let go, unanswered"
+        );
+        assert_eq!(channel.qr_showing(), None, "the QR comes down");
+        assert!((ceremony.cancelled)(), "and the scan behind it is told");
+        assert!(signer.stopped(), "no Trusted Signer wait goes on or starts");
     }
 
     /// An unpriced sheet approves with no quote rather than a zero.

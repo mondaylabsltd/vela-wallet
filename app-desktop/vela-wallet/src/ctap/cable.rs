@@ -796,5 +796,12 @@ async fn scan_loop(eid_key: &[u8]) -> Result<AdvertHit, HybridError> {
         }
     }
 
-    Err(HybridError::NoAdvert)
+    // The adapter's event stream ended before the window did — the radio
+    // went away, or the stack dropped the scan. Not `NoAdvert`: that one is
+    // the window elapsing, which the dApp column now names as a 90-second
+    // timeout with Retry (083 W19); this is Bluetooth failing, and says so.
+    Err(HybridError::Bluetooth(SCAN_STREAM_ENDED.to_owned()))
 }
+
+/// Why a scan stopped short of its window: the adapter stopped reporting.
+pub(crate) const SCAN_STREAM_ENDED: &str = "the scan stopped before any phone answered";

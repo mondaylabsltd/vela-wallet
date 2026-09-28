@@ -84,7 +84,9 @@ pub enum Signature {
     NotYet,
     /// A prompt is up (or the Trusted Signer's page is asking).
     Asked,
-    /// The prompt has answered.
+    /// The prompt has signed. Not merely answered: a prompt that said no
+    /// signed nothing, and the column's close reads `Given` as "the
+    /// operation goes on" (083 review).
     Given,
 }
 
@@ -98,14 +100,77 @@ pub fn on_chain(method: &str) -> bool {
     )
 }
 
+/// When the column's close reaches the core (083). What it answers stays the
+/// core's (`swipe_action`); this is only whether it may be told NOW.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClosePlan {
+    /// Tell the core now: it refuses a request not yet approved (4001),
+    /// cancels a top-up, or stops watching an operation on its way.
+    Now,
+    /// The core would only stop watching — but the signature is still to
+    /// come, and a prompt that then came back unsigned answered the page
+    /// nothing, ever (083 review; before 083 a scan that ran out answered
+    /// -32603 after 90 s). So the prompt is stopped, and the core is told
+    /// once the ceremony is back: a refusal if nothing was signed, the
+    /// ordinary close if the phone had already signed.
+    AfterCancel,
+    /// A close already waits on the ceremony. A second one must add nothing:
+    /// told to the core as a dismiss, it left the request unanswered.
+    Ignore,
+}
+
+/// Where a request stands, as far as closing its column goes (083).
+#[derive(Clone, Copy, Debug)]
+pub struct CloseFacts {
+    /// What the core does with a close right now.
+    pub swipe: SignSwipeAction,
+    /// A pipeline runs (the core's `is_signing || is_submitting`).
+    pub running: bool,
+    /// An operation went out (`pending_op_hash`).
+    pub submitted: bool,
+    /// The core already failed it — and answered the page.
+    pub failed: bool,
+    pub signature: Signature,
+    /// A close already waits on the ceremony.
+    pub closing: bool,
+}
+
+/// [`ClosePlan`] for these facts.
+#[must_use]
+pub fn close_plan(facts: &CloseFacts) -> ClosePlan {
+    if facts.closing {
+        return ClosePlan::Ignore;
+    }
+    let signature_ahead = facts.swipe == SignSwipeAction::Dismiss
+        && facts.running
+        && !facts.submitted
+        && !facts.failed
+        && facts.signature != Signature::Given;
+    if signature_ahead {
+        ClosePlan::AfterCancel
+    } else {
+        ClosePlan::Now
+    }
+}
+
+/// A close that waited on the ceremony may be told to the core: the ceremony
+/// came back empty (nothing runs — the core now refuses), or an operation
+/// went out (the phone had signed — the core now stops watching it).
+#[must_use]
+pub fn waited_close_due(running: bool, submitted: bool) -> bool {
+    !running || submitted
+}
+
 /// Esc on the signing column (083, the owner's D1): it closes only where
 /// closing answers nothing — an operation already on its way (the core only
 /// stops watching it), or no request at all. A refusal (4001), a funding
 /// cancel, or a blocked request's answer is the ✕'s alone: on Windows Esc is
 /// also the key that leaves the address bar, and one press refused the page.
+/// Nor does it close while the signature is still to come: that close ends
+/// in a refusal too, once the prompt comes back unsigned.
 #[must_use]
-pub fn escape_closes(swipe: SignSwipeAction) -> bool {
-    matches!(swipe, SignSwipeAction::Dismiss | SignSwipeAction::None)
+pub fn escape_closes(swipe: SignSwipeAction, plan: ClosePlan) -> bool {
+    plan == ClosePlan::Now && matches!(swipe, SignSwipeAction::Dismiss | SignSwipeAction::None)
 }
 
 /// The ending an answer stands for, or `None` when there is nothing to show —
@@ -647,14 +712,129 @@ mod tests {
         );
     }
 
+    /// Facts for [`close_plan`]: a transaction past the commitment point
+    /// (a close is a dismiss), nothing submitted, nothing failed.
+    fn committed(signature: Signature) -> CloseFacts {
+        CloseFacts {
+            swipe: SignSwipeAction::Dismiss,
+            running: true,
+            submitted: false,
+            failed: false,
+            signature,
+            closing: false,
+        }
+    }
+
+    /// 083 (review): the close is told to the core now, except while the
+    /// signature is still to come — then only once the ceremony is back —
+    /// and a second close while one waits adds nothing.
+    #[test]
+    fn a_close_waits_only_for_a_signature_still_to_come() {
+        use ClosePlan::{AfterCancel, Ignore, Now};
+        let table: [(&str, CloseFacts, ClosePlan); 10] = [
+            (
+                "preparing: nonce, deployment",
+                committed(Signature::NotYet),
+                AfterCancel,
+            ),
+            (
+                "a prompt or the QR is up",
+                committed(Signature::Asked),
+                AfterCancel,
+            ),
+            (
+                "the phone signed: on its way",
+                committed(Signature::Given),
+                Now,
+            ),
+            (
+                "an operation went out",
+                CloseFacts {
+                    submitted: true,
+                    ..committed(Signature::Asked)
+                },
+                Now,
+            ),
+            (
+                "a failure, already answered",
+                CloseFacts {
+                    failed: true,
+                    ..committed(Signature::NotYet)
+                },
+                Now,
+            ),
+            (
+                "the funding check (the core refuses and stops it)",
+                CloseFacts {
+                    swipe: SignSwipeAction::Reject,
+                    ..committed(Signature::NotYet)
+                },
+                Now,
+            ),
+            (
+                "the form",
+                CloseFacts {
+                    swipe: SignSwipeAction::Reject,
+                    running: false,
+                    ..committed(Signature::NotYet)
+                },
+                Now,
+            ),
+            (
+                "the top-up",
+                CloseFacts {
+                    swipe: SignSwipeAction::FundingCancel,
+                    running: false,
+                    ..committed(Signature::NotYet)
+                },
+                Now,
+            ),
+            (
+                "a close already waits",
+                CloseFacts {
+                    closing: true,
+                    ..committed(Signature::Asked)
+                },
+                Ignore,
+            ),
+            (
+                "…whatever else is true",
+                CloseFacts {
+                    closing: true,
+                    swipe: SignSwipeAction::Reject,
+                    running: false,
+                    ..committed(Signature::NotYet)
+                },
+                Ignore,
+            ),
+        ];
+        for (case, facts, plan) in table {
+            assert_eq!(close_plan(&facts), plan, "{case}");
+        }
+    }
+
+    /// The close that waited goes to the core once nothing runs, or once an
+    /// operation is out — never while the ceremony is still going.
+    #[test]
+    fn a_waited_close_goes_once_the_ceremony_is_back() {
+        assert!(!waited_close_due(true, false), "still asking");
+        assert!(waited_close_due(false, false), "came back empty");
+        assert!(waited_close_due(true, true), "the phone signed");
+    }
+
     /// 083 (D1): Esc never answers a request — only the ✕ refuses one. It
-    /// still closes a column whose close answers nothing.
+    /// still closes a column whose close answers nothing, and never one whose
+    /// close waits for the prompt to come back unsigned — a refusal too.
     #[test]
     fn escape_never_refuses_a_request() {
-        assert!(escape_closes(SignSwipeAction::None));
-        assert!(escape_closes(SignSwipeAction::Dismiss));
-        assert!(!escape_closes(SignSwipeAction::Reject));
-        assert!(!escape_closes(SignSwipeAction::FundingCancel));
+        use ClosePlan::{AfterCancel, Ignore, Now};
+        assert!(escape_closes(SignSwipeAction::None, Now));
+        assert!(escape_closes(SignSwipeAction::Dismiss, Now));
+        assert!(!escape_closes(SignSwipeAction::Reject, Now));
+        assert!(!escape_closes(SignSwipeAction::FundingCancel, Now));
+        assert!(!escape_closes(SignSwipeAction::Dismiss, AfterCancel));
+        assert!(!escape_closes(SignSwipeAction::Dismiss, Ignore));
+        assert!(!escape_closes(SignSwipeAction::None, Ignore));
     }
 
     /// A message is signing, then signed — never "submitting".

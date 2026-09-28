@@ -786,6 +786,11 @@ struct Inflight {
     stage: Stage,
     record_id: Option<String>,
     op_hash: Option<String>,
+    /// 083: this request's own transport dropped while the pipeline ran — the
+    /// page that asked is gone and already has its answer (4900) from the
+    /// browser. A passkey that then comes back cancelled owes it nothing more;
+    /// see `on_submit`.
+    page_gone: bool,
 }
 
 /// Funding view state (`fundingNeeded` + `fundingRidRef`).
@@ -1062,6 +1067,14 @@ impl App for SignRequest {
                     let keep = p.dedicated_transport && p.transport_id != transport_id;
                     if !keep {
                         model.clear_sheet();
+                    }
+                }
+                // 083: a pipeline whose page went away is not refused later
+                // — the page already has its 4900 from the browser, and a
+                // second answer is one too many.
+                if let Some(fl) = model.inflight.as_mut() {
+                    if fl.transport_id == transport_id {
+                        fl.page_gone = true;
                     }
                 }
                 render()
@@ -1667,6 +1680,7 @@ fn approve_with(
         stage: Stage::Precheck,
         record_id: None,
         op_hash: None,
+        page_gone: false,
     });
 
     if matches!(
@@ -1887,7 +1901,8 @@ fn reject(model: &mut Model) -> Command<SignEffect, Event> {
 
 fn dismiss(model: &mut Model) -> Command<SignEffect, Event> {
     // No response, no pipeline abort: a dismissed-but-committed op proceeds
-    // and its real result is still delivered (`dismissRequest`).
+    // and its real result is still delivered (`dismissRequest`) — or, when its
+    // passkey comes back cancelled instead, its refusal (083, `on_submit`).
     model.clear_sheet();
     model.notice = None;
     render()
@@ -2131,9 +2146,35 @@ fn on_submit(
     }
     match outcome {
         SignSubmitOutcome::PasskeyCancelled => {
-            // Keep the modal open, send nothing — never an error, never a
-            // durable 'rejected' (`dapp-connection.tsx:808-812`; ⑧).
             model.inflight = None;
+            // 083: "keep the modal open for a retry" means nothing once the
+            // request is off the sheet — closed while the signature was still
+            // to come (a dismiss: the pipeline was past the commitment point),
+            // or replaced by a newer one — and nobody can retry or refuse it
+            // any more. Sending nothing left the page's promise unsettled for
+            // good (the desktop's tab queued every later request behind it).
+            // The prompt came back unsigned: the person's refusal, once — the
+            // same rule as `on_sponsorship`, which answers a superseded
+            // pipeline rather than leave it hanging. Not to a page already
+            // gone (it has its 4900), not while the request is back on the
+            // sheet (open for a retry like any other), and never after a
+            // submission (①) — a cancelled prompt has none, and an op hash
+            // would make the answer the chain's. On the phones (one core per
+            // request, so never superseded) this is only their ✕ during the
+            // commitment window followed by a dismissed passkey sheet, which
+            // answered nothing before.
+            let on_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
+            if !on_sheet && !fl.page_gone && fl.op_hash.is_none() {
+                model.settle(&fl.id, SignSettledOutcome::Rejected);
+                let op = respond_op(
+                    &fl.transport_id,
+                    &fl.id,
+                    err_payload(CODE_USER_REJECTED, SignErrorKind::UserRejected, None),
+                );
+                return ops_and_render(model, vec![op]);
+            }
+            // Otherwise keep the modal open, send nothing — never an error,
+            // never a durable 'rejected' (`dapp-connection.tsx:808-812`; ⑧).
             render()
         }
         SignSubmitOutcome::Succeeded { result } => {

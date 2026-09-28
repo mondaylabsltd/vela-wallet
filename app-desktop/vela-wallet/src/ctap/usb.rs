@@ -109,7 +109,7 @@ impl std::fmt::Display for UsbError {
 pub use vela_core::ctap::ceremony::TouchKind;
 
 /// What the screen should say while the key blinks.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TouchRequest {
     pub kind: TouchKind,
     /// The key's own product string, so the prompt names the thing on the desk.

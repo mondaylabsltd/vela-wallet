@@ -1114,6 +1114,20 @@ mod tests {
     use vela_core::registry_proof::build_member_proof;
     use vela_core::webauthn;
 
+    /// 083 (review): only the scan window running out is "no phone answered",
+    /// which the dApp column shows as a 90-second timeout with Retry. A
+    /// Bluetooth stack that stops reporting early says Bluetooth — shown as
+    /// that timeout, the real failure was hidden behind a Retry that could
+    /// not work.
+    #[test]
+    fn only_the_window_running_out_is_a_scan_timeout() {
+        assert!(hybrid_failure(HybridError::NoAdvert).scan_ran_out());
+        let stopped = hybrid_failure(HybridError::Bluetooth(cable::SCAN_STREAM_ENDED.to_owned()));
+        assert!(!stopped.scan_ran_out());
+        assert_eq!(stopped.kind, FailureKind::NotSupported);
+        assert!(!hybrid_failure(HybridError::Cancelled).scan_ran_out());
+    }
+
     /// The clientDataJSON this client signs must be readable by the SAME
     /// parsers the browser path feeds.
     ///

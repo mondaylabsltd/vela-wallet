@@ -1449,6 +1449,267 @@ fn no_second_response_after_a_terminal_error() {
     );
 }
 
+/// Every answer the core asked for in `ops`, as (transport, id, code) — `None`
+/// for a success.
+fn responses(ops: &[Op]) -> Vec<(String, String, Option<i32>)> {
+    ops.iter()
+        .filter_map(|op| match op {
+            Op::SendResponse {
+                transport_id,
+                id,
+                payload,
+            } => Some((
+                transport_id.clone(),
+                id.clone(),
+                match payload {
+                    SignResponsePayload::Err { code, .. } => Some(*code),
+                    SignResponsePayload::Ok { .. } => None,
+                },
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Approve a transaction as far as its signature: the pre-check answered,
+/// `SignAndSubmit` out — the core is `Submitting`, so a close is a dismiss.
+/// Returns every operation asked for on the way.
+fn approve_to_submitting(sut: &mut Sut, id: &str) -> Vec<Op> {
+    let mut ops =
+        sut.dispatch(Arrive::global(id, "eth_sendTransaction", &plain_send_params()).event());
+    ops.extend(sut.dispatch(approve(SignApproveOpts::default())));
+    let submitting = sut.resolve(Res::PreCheck { funding: None });
+    assert!(matches!(submitting.as_slice(), [Op::SignAndSubmit { .. }]));
+    ops.extend(submitting);
+    assert_eq!(sut.view().swipe_action, SignSwipeAction::Dismiss);
+    ops
+}
+
+fn passkey_cancelled() -> Res {
+    Res::Submit {
+        outcome: SignSubmitOutcome::PasskeyCancelled,
+        now_ms: NOW + 1_000.0,
+    }
+}
+
+/// 083 (review): the prompt comes back unsigned, THEN the person closes —
+/// the request is back on its form, so the close is a refusal. Over the whole
+/// run, exactly one answer: that 4001.
+#[test]
+fn a_cancelled_prompt_then_a_close_answers_4001_once() {
+    let mut sut = boot();
+    let mut all = approve_to_submitting(&mut sut, "req-083a");
+
+    let back = sut.resolve(passkey_cancelled());
+    assert!(
+        responses(&back).is_empty(),
+        "the sheet is still up: {back:?}"
+    );
+    assert_eq!(sut.view().swipe_action, SignSwipeAction::Reject);
+    all.extend(back);
+
+    all.extend(sut.dispatch(Event::SwipeDismissed));
+    all.extend(sut.dispatch(Event::SwipeDismissed));
+    all.extend(sut.dispatch(Event::RejectTapped));
+    assert_eq!(
+        responses(&all),
+        vec![(
+            WP.to_owned(),
+            "req-083a".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+}
+
+/// 083 (review): the person closes while the signature is still to come — a
+/// dismiss, since the core is `Submitting` — THEN the prompt comes back
+/// unsigned. This sent nothing, and the page's promise never settled (the
+/// desktop's tab queued every later request behind it). Now, over the whole
+/// run, exactly one answer: a 4001 to the request's own transport, settled as
+/// the person's refusal.
+#[test]
+fn a_close_then_a_cancelled_prompt_answers_4001_once() {
+    let mut sut = boot();
+    let mut all = approve_to_submitting(&mut sut, "req-083b");
+
+    let dismissed = sut.dispatch(Event::SwipeDismissed);
+    assert!(
+        responses(&dismissed).is_empty(),
+        "a dismiss sends nothing yet: {dismissed:?}"
+    );
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    all.extend(dismissed);
+
+    let back = sut.resolve(passkey_cancelled());
+    let (code, kind, transport) = back
+        .iter()
+        .find_map(response_error)
+        .expect("an error answer");
+    assert_eq!(
+        (code, kind, transport.as_str()),
+        (CODE_USER_REJECTED, SignErrorKind::UserRejected, WP)
+    );
+    all.extend(back);
+    all.extend(sut.dispatch(Event::SwipeDismissed));
+    all.extend(sut.dispatch(Event::RejectTapped));
+    assert_eq!(
+        responses(&all),
+        vec![(
+            WP.to_owned(),
+            "req-083b".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+
+    // Settled as the person's refusal: the same rid never signs.
+    sut.dispatch(Arrive::global("req-083b", "eth_sendTransaction", &plain_send_params()).event());
+    assert_eq!(
+        sut.view().notice,
+        Some(SignNotice::AlreadySettled {
+            outcome: SignSettledOutcome::Rejected
+        })
+    );
+}
+
+/// 083 (review): the same, with a newer request on the sheet by the time the
+/// prompt comes back — the refusal goes to the OLD request (F2), and the new
+/// one is untouched and can be approved.
+#[test]
+fn a_dismissed_request_cancelled_under_a_newer_one_answers_only_itself() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-083c", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    assert_eq!(sut.view().swipe_action, SignSwipeAction::Dismiss);
+    sut.dispatch(Event::SwipeDismissed);
+    sut.dispatch(Arrive::extension("rid-083d", "personal_sign", r#"["0xbeef","0x0"]"#, 1).event());
+
+    let ops = sut.resolve(passkey_cancelled());
+    assert_eq!(
+        responses(&ops),
+        vec![(
+            WP.to_owned(),
+            "req-083c".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+    let view = sut.view();
+    assert_eq!(view.request.expect("the newer request").id, "rid-083d");
+    assert!(view.confirm_gate_open, "and it can still be approved");
+}
+
+/// 083 (review): a request replaced on the sheet while its signature was
+/// still to come — no close at all — is off the sheet just the same: nobody
+/// can retry or refuse it any more, so a prompt that comes back unsigned is
+/// its refusal, once, and the newer request is untouched (the rule
+/// `on_sponsorship` already keeps for a superseded pipeline).
+#[test]
+fn a_superseded_request_cancelled_answers_only_itself() {
+    let mut sut = boot();
+    let mut all = approve_to_submitting(&mut sut, "req-083i");
+    all.extend(sut.dispatch(
+        Arrive::extension("rid-083j", "personal_sign", r#"["0xbeef","0x0"]"#, 1).event(),
+    ));
+    assert_eq!(
+        sut.view().request.expect("the newer request").id,
+        "rid-083j"
+    );
+
+    all.extend(sut.resolve(passkey_cancelled()));
+    assert_eq!(
+        responses(&all),
+        vec![(
+            WP.to_owned(),
+            "req-083i".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+    let view = sut.view();
+    assert_eq!(
+        view.request.expect("still the newer request").id,
+        "rid-083j"
+    );
+    assert!(view.confirm_gate_open, "and it can still be approved");
+}
+
+/// 083 (review): a request still on its sheet when the prompt comes back
+/// unsigned is answered nothing — the pre-083 rule every client relies on
+/// (the modal stays open for a retry; `dapp-connection.tsx:808-812`).
+#[test]
+fn a_cancelled_prompt_on_the_sheet_answers_nothing() {
+    let mut sut = boot();
+    let mut all = approve_to_submitting(&mut sut, "req-083k");
+    all.extend(sut.resolve(passkey_cancelled()));
+    assert!(responses(&all).is_empty(), "{all:?}");
+    let view = sut.view();
+    assert_eq!(view.surface, SignSurface::Sheet);
+    assert!(view.confirm_gate_open, "open for a retry");
+}
+
+/// 083 (review): only a request whose page is still there is refused. A page
+/// that went away already has its 4900 from the browser — with or without a
+/// close before it, nothing more is sent — which is what every client did
+/// before 083.
+#[test]
+fn a_page_already_gone_is_not_answered_again() {
+    // Gone while signing, no close.
+    let mut sut = boot();
+    approve_to_submitting(&mut sut, "req-083e");
+    sut.dispatch(Event::TransportDropped {
+        transport_id: WP.to_owned(),
+    });
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    assert!(responses(&sut.resolve(passkey_cancelled())).is_empty());
+
+    // Closed, THEN gone, then the prompt comes back unsigned.
+    let mut sut = boot();
+    approve_to_submitting(&mut sut, "req-083f");
+    sut.dispatch(Event::SwipeDismissed);
+    sut.dispatch(Event::TransportDropped {
+        transport_id: WP.to_owned(),
+    });
+    assert!(responses(&sut.resolve(passkey_cancelled())).is_empty());
+
+    // Another transport dropping is not this page going away.
+    let mut sut = boot();
+    approve_to_submitting(&mut sut, "req-083g");
+    sut.dispatch(Event::SwipeDismissed);
+    sut.dispatch(Event::TransportDropped {
+        transport_id: EXT.to_owned(),
+    });
+    assert_eq!(
+        responses(&sut.resolve(passkey_cancelled())),
+        vec![(
+            WP.to_owned(),
+            "req-083g".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+}
+
+/// 083 (review): a closed request the page sent again is back on the sheet
+/// by the time its old prompt comes back unsigned — it is open for a retry
+/// like any other (nothing sent), and the person's close of THAT sheet is
+/// the one refusal.
+#[test]
+fn a_closed_request_back_on_the_sheet_stays_open() {
+    let mut sut = boot();
+    approve_to_submitting(&mut sut, "req-083h");
+    sut.dispatch(Event::SwipeDismissed);
+    sut.dispatch(Arrive::global("req-083h", "eth_sendTransaction", &plain_send_params()).event());
+    assert_eq!(sut.view().request.expect("back").id, "req-083h");
+
+    assert!(responses(&sut.resolve(passkey_cancelled())).is_empty());
+    assert!(sut.view().confirm_gate_open, "open for a retry");
+    assert_eq!(
+        responses(&sut.dispatch(Event::SwipeDismissed)),
+        vec![(
+            WP.to_owned(),
+            "req-083h".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+}
+
 #[test]
 fn transport_drop_clears_only_requests_it_owns() {
     // A global request dies with its durable transport…

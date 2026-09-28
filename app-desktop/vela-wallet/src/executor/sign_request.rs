@@ -79,13 +79,20 @@ pub struct SignContext {
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
     pub signing_started: Arc<AtomicBool>,
-    /// Raised once that prompt has answered, whatever it said (083 W11): the
-    /// core's `Submitting` spans building the operation, the prompt and the
-    /// submission, and only these two flags say which of them is running.
+    /// Raised once that prompt has signed (083 W11): the core's `Submitting`
+    /// spans building the operation, the prompt and the submission, and only
+    /// these two flags say which of them is running. A prompt that said no
+    /// raises nothing — the column's close reads this as "the phone signed,
+    /// the operation goes on", and must not read it after a no (083 review).
     pub signature_done: Arc<AtomicBool>,
     /// The phone's QR ran its whole scan window with no phone (083 W19) —
     /// told to the column, which says so; the page is told nothing.
     pub scan_expired: Arc<AtomicBool>,
+    /// The column was closed while this approval's signature was still to
+    /// come (083 review): a prompt not yet open never opens — the ceremony
+    /// comes back unsigned at once, and the column's close becomes a refusal
+    /// instead of a QR or a Windows Hello dialog nobody will see.
+    pub abandoned: Arc<AtomicBool>,
     /// Who asked, as the transport says — `None` for the wallet's own
     /// requests, which the Trusted Signer's page is told as the wallet's own
     /// send rather than as a site's.
@@ -113,6 +120,7 @@ impl SignContext {
             &self.signing_started,
             &self.signature_done,
             &self.scan_expired,
+            &self.abandoned,
         ] {
             flag.store(false, Ordering::SeqCst);
         }
@@ -161,6 +169,7 @@ impl SignContext {
             signing_started: send.signing_started,
             signature_done: Arc::new(AtomicBool::new(false)),
             scan_expired: Arc::new(AtomicBool::new(false)),
+            abandoned: Arc::new(AtomicBool::new(false)),
             site: None,
             account_name: send.account_name,
             trusted_signer: send.trusted_signer,
@@ -424,7 +433,7 @@ fn is_message(method: &str) -> bool {
 /// One passkey prompt, as the column follows it (083).
 ///
 /// W11: `signing_started` goes up as the prompt opens and `signature_done`
-/// once it has answered, so "waiting for biometric" is said only while
+/// once it has signed, so "waiting for biometric" is said only while
 /// something is asking — the owner saw it for seconds over the funding check
 /// and the nonce read, with no prompt anywhere.
 ///
@@ -432,13 +441,23 @@ fn is_message(method: &str) -> bool {
 /// a cancellation, not a failure. As a failure the core answered the page
 /// -32603 with the scan's own English; as a cancellation it keeps the request
 /// open and sends nothing, and the column offers the scan again.
+///
+/// Review: a column closed before the prompt opened asks nothing — the
+/// ceremony comes back unsigned at once, and the column's waiting close
+/// refuses. Otherwise the QR went up in a column nobody drew, and the core,
+/// which had only stopped watching, heard the scan run out 90 s later.
 fn around_prompt(
     ctx: &SignContext,
     prompt: impl FnOnce() -> Result<Assertion, PasskeyFailure>,
 ) -> Result<Assertion, PasskeyFailure> {
+    if ctx.abandoned.load(Ordering::SeqCst) {
+        return Err(PasskeyFailure::cancelled());
+    }
     ctx.signing_started.store(true, Ordering::SeqCst);
     let answer = prompt();
-    ctx.signature_done.store(true, Ordering::SeqCst);
+    if answer.is_ok() {
+        ctx.signature_done.store(true, Ordering::SeqCst);
+    }
     answer.map_err(|failure| {
         if failure.scan_ran_out() {
             ctx.scan_expired.store(true, Ordering::SeqCst);
@@ -895,8 +914,11 @@ mod tests {
         );
     }
 
-    /// 083 W11: the prompt is marked open while it asks and answered after,
-    /// whatever it said — and a new pipeline starts with neither.
+    /// 083 W11: the prompt is marked open while it asks, and signed only
+    /// once it signed — a no is not a signature (083 review: the column's
+    /// close reads "signed" as "the operation goes on", and a close in the
+    /// breath after a cancelled Windows Hello then answered nothing) — and a
+    /// new pipeline starts with neither.
     #[test]
     fn around_prompt_marks_the_prompt_then_the_signature() {
         let ctx = context(Some("https://app.uniswap.org"));
@@ -913,10 +935,24 @@ mod tests {
             Some(FailureKind::Cancelled)
         );
         assert!(
-            ctx.signature_done.load(Ordering::SeqCst),
-            "answered, if only with no"
+            !ctx.signature_done.load(Ordering::SeqCst),
+            "a no is not a signature"
         );
         assert!(!ctx.scan_expired.load(Ordering::SeqCst));
+
+        let signed = around_prompt(&ctx, || {
+            Ok(Assertion {
+                credential_id: "cred0".to_owned(),
+                signature_der_hex: String::new(),
+                authenticator_data_hex: String::new(),
+                client_data_json_hex: String::new(),
+                user_id_hex: None,
+                authenticator_attachment: String::new(),
+                signer_origin: None,
+            })
+        });
+        assert!(signed.is_ok());
+        assert!(ctx.signature_done.load(Ordering::SeqCst), "signed");
 
         ctx.prompt_reset();
         assert!(!ctx.signing_started.load(Ordering::SeqCst));
@@ -925,9 +961,11 @@ mod tests {
 
     /// 083 W19: a QR nobody scanned in the whole window is not an answer to
     /// the page. It reaches the core as the passkey dismissed — which keeps
-    /// the request open and sends nothing — and the column is told, so it can
-    /// say what happened and offer the scan again. Any other failure is still
-    /// the failure it was.
+    /// the request open and sends nothing while its form is up (one already
+    /// closed is refused: vela-core's `app_sign_request.rs`,
+    /// `a_close_then_a_cancelled_prompt_answers_4001_once`) — and the column
+    /// is told, so it can say what happened and offer the scan again. Any
+    /// other failure is still the failure it was.
     #[test]
     fn scan_timeout_is_not_an_answer() {
         let ctx = context(Some("https://app.uniswap.org"));
@@ -945,7 +983,7 @@ mod tests {
         assert_eq!(
             submit_failure(100, "0xabc", user_op::SubmitFailure::PasskeyCancelled),
             SignSubmitOutcome::PasskeyCancelled,
-            "…which the core answers with nothing"
+            "…which the core answers with nothing while the form is up"
         );
 
         ctx.prompt_reset();
@@ -958,6 +996,39 @@ mod tests {
         .unwrap_or_else(|| unreachable!("a failure"));
         assert_eq!(broken.kind, FailureKind::Other);
         assert!(!ctx.scan_expired.load(Ordering::SeqCst));
+    }
+
+    /// 083 (review): a column closed before its prompt opened asks nothing —
+    /// no QR, no Windows Hello — and the ceremony comes back unsigned at
+    /// once, so the column's waiting close can refuse. The next approval
+    /// starts asking again.
+    #[test]
+    fn a_closed_column_opens_no_prompt() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        ctx.abandoned.store(true, Ordering::SeqCst);
+        let mut asked = false;
+        let answer = around_prompt(&ctx, || {
+            asked = true;
+            Err(PasskeyFailure::other("never reached"))
+        });
+        assert!(!asked, "no prompt opened");
+        assert_eq!(
+            answer.err().map(|failure| failure.kind),
+            Some(FailureKind::Cancelled)
+        );
+        assert!(
+            !ctx.signing_started.load(Ordering::SeqCst),
+            "nothing is said to be asking"
+        );
+
+        ctx.prompt_reset();
+        assert!(!ctx.abandoned.load(Ordering::SeqCst));
+        let answer = around_prompt(&ctx, || {
+            asked = true;
+            Err(PasskeyFailure::cancelled())
+        });
+        assert!(asked, "a new approval asks");
+        assert!(answer.is_err());
     }
 
     /// A site's request reaches the page as the site's — its method, its

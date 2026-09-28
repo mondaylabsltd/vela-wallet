@@ -13852,7 +13852,15 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         if self.signing_busy(cx) {
-            self.panel = PanelId::Signing;
+            // Not a column the person closed, while it winds down to its
+            // refusal (083 review) — the row can be pressed again after.
+            let closing = self
+                .signing_host
+                .as_ref()
+                .is_some_and(|host| host.read(cx).closing());
+            if !closing {
+                self.panel = PanelId::Signing;
+            }
             cx.notify();
             return;
         }
@@ -13931,7 +13939,13 @@ impl WalletPage {
                 if self.panel == PanelId::Signing && self.dapp_landing.is_none() {
                     self.panel = PanelId::None;
                 }
-            } else {
+            } else if !host.read(cx).closing() {
+                // An open request is on screen — but not one the person
+                // closed while its signature was still to come: that stays
+                // closed while the ceremony winds down (083 review). The
+                // host's own redraws — the QR coming down, the watch —
+                // reopened it, showing "等待生物识别…" for as long as a
+                // tunnel handshake took, and inviting a second close.
                 self.panel = PanelId::Signing;
             }
         }
@@ -17767,13 +17781,6 @@ impl Render for WalletPage {
                         // nothing (083 D1) — a refusal is the ✕'s alone.
                         if this.panel == PanelId::Signing {
                             this.escape_signing_column(cx);
-                        } else if this.panel == PanelId::Connection
-                            && this.browser_consent.is_some()
-                        {
-                            // Nor does Esc put a site's connect question out
-                            // of sight (083): hidden by a key, it was answered
-                            // by nobody and the site waited unseen. It stays
-                            // for its own buttons.
                         } else {
                             this.panel = PanelId::None;
                             cx.notify();
