@@ -1654,3 +1654,106 @@ fn the_window_grows_back_after_a_range_error() {
     assert_eq!(widest, FIND_OP_MAX_RANGE);
     assert!(!sut.outstanding().iter().any(is_find), "caught up");
 }
+
+/// Review of T017: `NotSent` says the relay never had the op, so a later
+/// submit of the SAME op — same nonce (never bumped for a may-have-been-sent
+/// op, RA5), same calldata, gas and fees (a stable chain quotes the same) —
+/// is a new life for that hash, not an echo of the dead one. Merged into the
+/// terminal entry, the new submission was never polled: its record stayed
+/// pending for good, and every reader of the entry (the Send receipt, the
+/// signing sheet's ending) said "not sent" at once over an op the relay had
+/// just accepted — the words that make a person pay again. A repeat of the
+/// old hand-off (no new record) is still an echo and changes nothing.
+#[test]
+fn a_new_submit_of_a_never_sent_op_is_tracked_again() {
+    let mut sut = Sut::new();
+    submitted_maybe(&mut sut, Some(SUBMIT_BLOCK));
+    assert!(not_found_at(&mut sut, T0 + 30_000.0, SUBMIT_BLOCK + 6).is_empty());
+    assert!(not_found_at(&mut sut, T0 + 61_000.0, SUBMIT_BLOCK + 12).is_empty());
+    let ops = not_found_at(&mut sut, T0 + 73_000.0, SUBMIT_BLOCK + 14);
+    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(entry_status(&sut), TrackStatus::NotSent);
+
+    // The old hand-off again: an echo, nothing restarts.
+    let ops = sut.dispatch(Event::Submitted {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent: true,
+        submit_block: Some(SUBMIT_BLOCK),
+    });
+    assert!(!ops.contains(&poll_receipt()), "{ops:?}");
+    let _ = sut.resolve_matching(
+        |op| matches!(op, Op::Now),
+        Res::Clock {
+            now_ms: T0 + 90_000.0,
+        },
+    );
+    assert_eq!(entry_status(&sut), TrackStatus::NotSent);
+
+    // The person sends it again and the relay accepts the identical op.
+    let ops = sut.dispatch(Event::Submitted {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-2".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent: false,
+        submit_block: None,
+    });
+    assert_eq!(ops, vec![Op::Now, poll_receipt()], "tracked again");
+    let view = sut.view();
+    assert_eq!(view.entries.len(), 1);
+    assert_eq!(view.entries[0].status, TrackStatus::Pending);
+    assert_eq!(view.entries[0].outcome, TrackOutcome::Landing);
+    assert_eq!(
+        view.entries[0].record_ids,
+        vec!["rec-2".to_owned()],
+        "the dead record stays failed; only the new one is followed"
+    );
+    let _ = sut.resolve_matching(
+        |op| matches!(op, Op::Now),
+        Res::Clock {
+            now_ms: T0 + 200_000.0,
+        },
+    );
+    let ops = sut.resolve_matching(is_receipt, receipt_confirmed(T0 + 200_300.0));
+    assert!(
+        ops.contains(&Op::UpdateTxRecords {
+            ids: vec!["rec-2".to_owned()],
+            patch: TrackRecordPatch {
+                status: TrackRecordStatus::Confirmed,
+                tx_hash: Some(TX.to_owned()),
+            },
+        }),
+        "{ops:?}"
+    );
+    assert_eq!(entry_status(&sut), TrackStatus::Confirmed);
+}
+
+/// The same rule for the relay's own "rejected" (nothing was sent either): a
+/// later accepted submit of the identical op, with new records, is followed
+/// — never merged into the rejection it would otherwise read at once.
+#[test]
+fn a_new_submit_of_a_rejected_op_is_tracked_again() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let ops = tick(&mut sut, T0 + 12_100.0);
+    assert_eq!(ops, vec![poll_receipt(), poll_status()]);
+    assert!(sut.resolve(receipt_pending(T0 + 12_400.0)).is_empty());
+    assert_eq!(
+        sut.resolve(status(TrackLifecycle::Rejected, T0 + 12_500.0)),
+        vec![fail_patch()]
+    );
+    assert_eq!(entry_status(&sut), TrackStatus::Rejected);
+
+    let ops = sut.dispatch(Event::Submitted {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-2".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent: false,
+        submit_block: None,
+    });
+    assert_eq!(ops, vec![Op::Now, poll_receipt()]);
+    let view = sut.view();
+    assert_eq!(view.entries[0].status, TrackStatus::Pending);
+    assert_eq!(view.entries[0].record_ids, vec!["rec-2".to_owned()]);
+}

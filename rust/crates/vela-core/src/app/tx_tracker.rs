@@ -891,6 +891,19 @@ fn submitted(
 ) -> Command<TrackEffect, Event> {
     let key = normalize(user_op_hash);
     let attempt = model.attempt;
+    // A verdict that nothing was sent (NotSent, Rejected) does not outlive a
+    // new submit of the identical op — same nonce (never bumped for a
+    // may-have-been-sent op, RA5), calldata, gas and fees, so the same hash.
+    // New records mark the new submission; the same hand-off again is an
+    // echo and changes nothing. Merged into the dead entry, the new op would
+    // go unpolled and read "not sent" at once, over an op the relay holds.
+    let new_life = model.entries.get(&key).is_some_and(|entry| {
+        matches!(entry.status, EntryStatus::NotSent | EntryStatus::Rejected)
+            && record_ids.iter().any(|id| !entry.record_ids.contains(id))
+    });
+    if new_life {
+        model.entries.remove(&key);
+    }
     let entry = model
         .entries
         .entry(key.clone())
