@@ -20,7 +20,7 @@ it merged as `ffc9ac9f` and re-run on Base with the parallel-space build: max US
 | SC-005 renderer crash → Vela panel, Reload restores | **Pass.** Killed renderer process → "此页面已停止运行"; 重新加载 restored the page | `after/us3-renderer-crash-panel.jpg` |
 | SC-006 `target=_blank` / `window.open` → new tab | **Pass** for a person's tap (new selected tab, Back disabled on it); script-initiated popups and `location='mailto:'` refused; a tapped `mailto:` handed to Windows once, escaped, no "选取应用" | `after/w6-new-window-is-a-tab.jpg` |
 | SC-007 a native-coin send reads as a transfer | **Desktop pass** ("发送 0.001 xDAI · 接收方"). Web still draws its blind branch — hand-off H3 | `after/w10-plain-transfer-reads-as-send.jpg` |
-| SC-008 no regression | **Pass.** 2026-09-29 on `ffc9ac9f`: desktop 779 passed / 0 failed, core (`crux,bindings,i18n-all`) 1896 / 0, web unit 1647 passed (4 fail on this Windows checkout only: CRLF line endings and an unbuilt extension — they fail the same way on the E2 branch). 2026-09-28: desktop suite 718 passed / 0 failed; core `app_browser_load` 15, `app_sign_request` 58, `app_dapp_browser` 62, `app_self_call_guard` 14, `app_clear_signing` 74, `cable::` 38; rustfmt clean. Happy path on Windows: connect, sign, EIP-1271 verify, switch chain, a dust send landed (`0xe2e2527a…`) | — |
+| SC-008 no regression | **Pass.** 2026-09-29 on `b2430a4e`: desktop 790 passed / 0 failed, core (`crux,bindings,i18n-all`) 1908 / 0; on `ffc9ac9f`: desktop 779 / 0, core 1896 / 0, web unit 1647 passed (4 fail on this Windows checkout only: CRLF line endings and an unbuilt extension — they fail the same way on the E2 branch). 2026-09-28: desktop suite 718 passed / 0 failed; core `app_browser_load` 15, `app_sign_request` 58, `app_dapp_browser` 62, `app_self_call_guard` 14, `app_clear_signing` 74, `cable::` 38; rustfmt clean. Happy path on Windows: connect, sign, EIP-1271 verify, switch chain, a dust send landed (`0xe2e2527a…`) | — |
 
 ## What was found and fixed
 
@@ -71,8 +71,18 @@ Device re-run on `ffc9ac9f` (2026-09-29, Base):
 Uniswap listed each as confirmed on its own node — the hash Vela answered is the transaction's. In 活动 all
 three are rows under app.uniswap.org; see F1 below for what those rows still did not say.
 
-Found on this run and fixed (F1–F3, see below): a dApp row said 合约交互 with no amount although the sheet
-had shown 余额变化; the detail's hash ran off the panel; the Universal Router was labelled 接收方.
+Found on this run and fixed — F1–F3 (99b15ced, 48b3e931, 9004bba3, b2430a4e; implemented, adversarially
+reviewed — 7 findings, all fixed — and verified MERGE by a workflow):
+
+| # | Before | After (device, 0.05 USDC → ETH, tx `0x7ca7653c…e4f89269`, success 1) |
+|---|---|---|
+| F1 | a swap's row: 合约交互 · app.uniswap.org, no amount; the detail said nothing of the coins | row **≈ −0.05 USDC / ≈ +0.000019 ETH**; detail hero ≈ −0.05 USDC and a 余额变化 block, as the sheet showed. From the wallet's own simulation carried with the approval — never the page. "≈" on every simulated figure (the wallet cannot tell exact-in from exact-out); only the coin the call itself sent is exact. A failed op keeps no simulated figure; a site's own token is never a row's figure, and a coin arriving that the wallet does not trust is an unverified line with no symbol or number |
+| F2 | the 哈希 ran off the detail panel | 0x7ca7…9269 with copy, in every transaction detail |
+| F3 | the Universal Router labelled 接收方 | **合约** 0xd614…9c40 for a call with calldata (from the whole request, before clipping); a plain send keeps 接收方 |
+
+Rows approved before this build have no stored changes and keep no figure. Web and phones draw as before
+until their feed executors map `assetChanges` → `balance_changes` and the calldata flag (follow-up).
+Evidence: `after/f1-dapp-row-says-what-moved.jpg`, `after/f1-f3-detail-after.jpg` (before: `after/f1-f3-detail-before.jpg`).
 Not fixed: the sheet's headline for `execute` is the English function name ("Execute") from the selector
 database — the Universal Router has no clear-signing descriptor yet (it would read "兑换 0.1 USDC → ETH").
 
@@ -118,7 +128,7 @@ route — done. D4 consent shows account + network — done. D5 (per-user instal
 | # | What | State | Device |
 |---|---|---|---|
 | H1 | sign-in sheet copy | **done** — the phone row says 扫码; "this device" names Windows Hello on Windows, Touch ID on a Mac (d9ab6e80, 5c79c6b3) | **pass**: 手机或平板 · 扫码, 这台设备 · Windows Hello |
-| H2 | a dApp transaction in 活动 | **done** in the core + desktop + web (43fd67a4, ff660c2d): pending until it lands, under the site, a page cannot put a counterparty or a figure there | **pass**: the three swaps are rows under app.uniswap.org; detail 已确认 with the real tx hash. What they moved: F1 |
+| H2 | a dApp transaction in 活动 | **done** in the core + desktop + web (43fd67a4, ff660c2d): pending until it lands, under the site, a page cannot put a counterparty or a figure there; plus F1–F3 | **pass**: the swaps are rows under app.uniswap.org; detail 已确认 with the real tx hash; since F1 the row says what moved |
 | H3 | web: a plain coin send reads as a send; "preparing" until the passkey is asked | **done** on the web (3707e196, 1618a9f6, 4d4c76c4) | web unit + e2e by the agent; not run in a browser here |
 | H4 | phone stops told apart; a failed message is not a failed transaction | **done on desktop** (a22e1b30, 95b8e573, 1063909f) — owner items 2 and 6 above | needs the owner's iPhone |
 | H5 | "check your phone" once scanned, with Cancel; handshake waits seconds | **done on desktop** (a22e1b30, 95b8e573) | needs the owner's iPhone |

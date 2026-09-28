@@ -76,7 +76,7 @@ Done is `[x]` with "— done: …"; a task not run says **NOT RUN:** and why.
 - [x] T078 H9 "Install for me only" — done: d344d847, 5adf0c17 (moving an existing install waits on D5)
 - [x] T079 Merge all streams; receipts review #2 (only the op's own logs fail it) and #3 (revert receipt at once); README fee claim — done: e85859a9, 2448738a, ffc9ac9f; desktop 779/0, core 1896/0
 - [x] T080 Device on `ffc9ac9f`: max USDC → ETH, ETH → USDC, 0.1 USDC → ETH landed; H1, H7, H8 pass — done: results.md
-- [ ] T081 F1–F3: a dApp row says what it moved; the detail's hash fits; a contract is not 接收方 — in progress
+- [x] T081 F1–F3: a dApp row says what it moved; the detail's hash fits; a contract is not 接收方 — done: 99b15ced, 48b3e931, 9004bba3, b2430a4e; desktop 790/0, core 1908/0; device pass (0.05 USDC → ETH)
 - [ ] T082 H4/H5 with the owner's iPhone; install the rebuilt installer (owner's UAC) — **NOT RUN:** needs the owner
 - [ ] T083 H6 on the device — **NOT RUN:** the pool never asks a slower node once faster ones answer; not stageable here without faking chain data (results.md)
 
