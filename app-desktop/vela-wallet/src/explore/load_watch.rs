@@ -133,7 +133,7 @@ impl LoadWatch {
     /// fresh view is refused (seen on this Mac, spec 079): that is the engine
     /// giving up, not the site arriving.
     pub fn committed(&mut self, url: &str) {
-        if !is_web(url) && self.url.is_some() && (self.loading || self.failure.is_some()) {
+        if self.ignores(url) {
             return;
         }
         self.loading = false;
@@ -145,11 +145,21 @@ impl LoadWatch {
         self.retry_due = false;
     }
 
-    /// The load finished.
-    pub fn finished(&mut self) {
+    /// The load of `url` finished — the engine's blank page finishing is not
+    /// the site's load finishing (see [`Self::committed`]).
+    pub fn finished(&mut self, url: &str) {
+        if self.ignores(url) {
+            return;
+        }
         self.committed = false;
         self.loading = false;
         self.probing = false;
+    }
+
+    /// A document that is not a web page while a web page is being waited
+    /// on (or has failed): the engine giving up, not the site.
+    fn ignores(&self, url: &str) -> bool {
+        !is_web(url) && self.url.is_some() && (self.loading || self.failure.is_some())
     }
 
     /// Three seconds after load `generation` was asked for: the address to
@@ -369,7 +379,7 @@ mod tests {
         assert!(watch.loading && watch.busy());
         watch.committed(SITE);
         assert!(!watch.loading && watch.busy(), "committed, still finishing");
-        watch.finished();
+        watch.finished(SITE);
         assert!(!watch.busy());
         assert_eq!(watch.requested("about:blank", 2_000.), None);
         assert!(!watch.busy() && watch.url.is_none());
@@ -491,6 +501,7 @@ mod tests {
             .requested("http://127.0.0.1:9/", 0.)
             .unwrap_or_default();
         watch.committed("about:blank");
+        watch.finished("about:blank");
         assert!(watch.loading, "still waiting on the site");
         assert_eq!(
             watch.watchdog(generation).as_deref(),

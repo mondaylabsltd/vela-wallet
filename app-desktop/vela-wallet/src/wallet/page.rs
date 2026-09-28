@@ -12498,7 +12498,18 @@ impl WalletPage {
         // the first page — and in the mock — it stays the drawn host.
         #[cfg(not(target_os = "linux"))]
         let host = if live_browser {
+            // Before any web page has committed in this view (the engine's
+            // blank page is not one), the site being loaded is the only name
+            // there is (spec 079).
+            let loading = self
+                .load_watch
+                .url
+                .as_deref()
+                .filter(|_| self.load_watch.loading)
+                .map(crate::explore::load_watch::host_of);
             crate::webview::host()
+                .filter(|host| !host.starts_with("about:"))
+                .or(loading)
                 .map_or_else(|| explore_fixtures::uniswap().host, SharedString::from)
         } else {
             explore_fixtures::uniswap().host
@@ -13166,7 +13177,7 @@ impl WalletPage {
                 DbrEvent::NavigationStarted { tab, url }
             }
             crate::webview::Load::Finished(url) => {
-                self.load_watch.finished();
+                self.load_watch.finished(&url);
                 cx.notify();
                 DbrEvent::LoadFinished { tab, url }
             }
