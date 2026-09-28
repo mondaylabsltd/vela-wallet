@@ -54,6 +54,7 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use super::clear_signing::ClearRisk;
+use super::name_verify::is_never_in_a_name;
 use super::token_trust::{TrustAssetDelta, TrustDeltaKind, NATIVE_LOG_ADDRESSES, TRANSFER_TOPIC};
 
 /// The selector of Solidity's `Error(string)` revert payload.
@@ -352,7 +353,7 @@ fn sanitise(raw: &str) -> Option<String> {
             space = !out.is_empty();
             continue;
         }
-        if never_in_a_name(c) {
+        if is_never_in_a_name(c) {
             continue;
         }
         if space {
@@ -376,26 +377,6 @@ fn sanitise(raw: &str) -> Option<String> {
         out = cut;
     }
     Some(out)
-}
-
-/// The set `name_verify::is_never_in_a_name` rejects (`name_verify.rs:186-197`):
-/// C0/C1 controls, every flavour of space, and the invisible formatting blocks
-/// (zero width, bidi overrides, variation selectors, interlinear annotations).
-///
-/// A mirror, not a second rule: that predicate is private to `name_verify`,
-/// which spec 082's G-core group may not edit. At merge it becomes
-/// `pub(crate)` there and this copy is deleted (tests/app_sim_outcome.rs pins
-/// every range, so the swap is checked).
-fn never_in_a_name(c: char) -> bool {
-    c.is_control()
-        || c.is_whitespace()
-        || matches!(c,
-            '\u{200B}'..='\u{200F}'
-            | '\u{202A}'..='\u{202E}'
-            | '\u{2060}'..='\u{206F}'
-            | '\u{FE00}'..='\u{FE0F}'
-            | '\u{FFF9}'..='\u{FFFB}'
-            | '\u{FEFF}')
 }
 
 // ---------------------------------------------------------------------------
