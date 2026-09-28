@@ -118,6 +118,18 @@ impl PasskeyFailure {
     pub(crate) fn scan_ran_out(&self) -> bool {
         self.kind == FailureKind::Other && self.message.as_deref() == Some(cable::NO_ADVERT)
     }
+
+    /// The phone scanned, and the connection to it never came up — its relay
+    /// tunnel, or the encrypted channel through it (083 H4). Nothing was asked
+    /// of the phone, so nothing was signed, and another try can work: a dApp
+    /// request stays open for one rather than hearing -32603.
+    pub(crate) fn phone_link_failed(&self) -> bool {
+        self.kind == FailureKind::Other
+            && self
+                .message
+                .as_deref()
+                .is_some_and(|message| message.starts_with(cable::PHONE_LINK_FAILED))
+    }
 }
 
 /// A core ceremony failure, in this shell's type. Same shape, different enum —
@@ -881,7 +893,7 @@ fn assert_ccid(
 /// Fresh secrets, the QR on screen, and the Noise handshake over the tunnel the
 /// scanned phone opens — returning the [`Cable`] a ceremony drives. The QR is
 /// shown before the scan (scanning it is what makes the phone advertise) and
-/// cleared once the tunnel is up, however it ends.
+/// cleared once the phone has scanned it, or however it ends.
 fn run_hybrid(ceremony: &Ceremony, for_get: bool) -> Result<Box<dyn Cable>, PasskeyFailure> {
     let static_seed = random(32);
     let qr_secret = random(16);
@@ -899,35 +911,59 @@ fn run_hybrid(ceremony: &Ceremony, for_get: bool) -> Result<Box<dyn Cable>, Pass
 
     let ephemeral_seed = random(32);
     let touch_notify = Arc::clone(&ceremony.touch);
-    let on_touch: TouchAnnouncer = Box::new(move |kind, product| {
-        touch_notify(Some(TouchRequest {
-            kind,
-            product: product.to_owned(),
-            // Over caBLE the "authenticator" is the person's phone; the prompt
-            // must say so, not "touch your security key".
-            remote: true,
-            // The phone is mid-ceremony over the tunnel; nothing here polls.
-            cancellable: false,
-        }));
-    });
+    let on_touch: TouchAnnouncer =
+        Box::new(move |kind, product| touch_notify(Some(phone_prompt(kind, product))));
 
     let result = cable::establish_hybrid(
         &session,
         HYBRID_PRODUCT.to_owned(),
         &ephemeral_seed,
         Some(on_touch),
+        &|| phone_found(ceremony),
         &*ceremony.cancelled,
     );
-    // The QR has done its job the moment the tunnel is up (or failed); take it
-    // down either way rather than leaving it on screen behind the next step.
+    hybrid_ready(ceremony, result)
+}
+
+/// The phone's card. Over caBLE the "authenticator" is the person's phone; the
+/// prompt must say so, not "touch your security key". No Cancel: the phone is
+/// mid-ceremony over the tunnel, and nothing here polls.
+fn phone_prompt(kind: TouchKind, product: &str) -> TouchRequest {
+    TouchRequest {
+        kind,
+        product: product.to_owned(),
+        remote: true,
+        cancellable: false,
+    }
+}
+
+/// The phone scanned the QR and its advert decrypted (083 H5). The tunnel and
+/// the handshake can take seconds more, and the QR stood over them as if
+/// nobody had scanned — so it comes down now, and the phone's card says to
+/// look at the phone.
+fn phone_found(ceremony: &Ceremony) {
     (ceremony.qr)(None);
-    // Dismissed in the few seconds between "advert found" and "tunnel up",
-    // where nothing polls: honour it here rather than carry on into a touch
-    // prompt for a ceremony the person has already walked away from.
+    (ceremony.touch)(Some(phone_prompt(TouchKind::Presence, HYBRID_PRODUCT)));
+}
+
+/// The hybrid setup, back. The QR comes down however it ended. A dismissal
+/// made while the tunnel came up, where nothing polls, is honoured here rather
+/// than carried on into a prompt for a ceremony the person has walked away
+/// from. The phone's card goes with a failure or a dismissal (083 H5), and
+/// stays for a phone that is connected: its prompt is next.
+fn hybrid_ready(
+    ceremony: &Ceremony,
+    result: Result<Box<dyn Cable>, HybridError>,
+) -> Result<Box<dyn Cable>, PasskeyFailure> {
+    (ceremony.qr)(None);
     if (ceremony.cancelled)() {
+        (ceremony.touch)(None);
         return Err(PasskeyFailure::cancelled());
     }
-    result.map_err(hybrid_failure)
+    result.map_err(|error| {
+        (ceremony.touch)(None);
+        hybrid_failure(error)
+    })
 }
 
 /// Wall-clock seconds since the epoch, for the QR's freshness field. The core is
@@ -1126,6 +1162,91 @@ mod tests {
         assert!(!stopped.scan_ran_out());
         assert_eq!(stopped.kind, FailureKind::NotSupported);
         assert!(!hybrid_failure(HybridError::Cancelled).scan_ran_out());
+    }
+
+    /// 083 H4: a phone found whose connection never came up — the tunnel, or
+    /// the handshake through it — is the one hybrid failure another try can
+    /// fix. Nothing else is: no phone at all is the scan timeout, no radio is
+    /// Bluetooth, a dismissal is the person's.
+    #[test]
+    fn only_a_connection_that_never_came_up_is_worth_another_try() {
+        for error in [
+            HybridError::Tunnel("cannot reach cable.ua5v.com: refused".to_owned()),
+            HybridError::Handshake("it closed before the signature".to_owned()),
+        ] {
+            let failure = hybrid_failure(error);
+            assert!(failure.phone_link_failed(), "{:?}", failure.message);
+            assert!(!failure.scan_ran_out());
+        }
+        for error in [
+            HybridError::NoAdvert,
+            HybridError::Bluetooth("no Bluetooth adapter".to_owned()),
+            HybridError::BadAdvert,
+            HybridError::Cancelled,
+        ] {
+            assert!(!hybrid_failure(error).phone_link_failed());
+        }
+    }
+
+    /// A cable that is connected and is never asked anything here.
+    struct Connected;
+    impl Cable for Connected {
+        fn exchange(
+            &mut self,
+            _request: &[u8],
+            _touch: Option<TouchKind>,
+        ) -> Result<Vec<u8>, CableError> {
+            unreachable!("only set up, never asked")
+        }
+        fn cancel(&mut self) {}
+        fn product(&self) -> &str {
+            "phone"
+        }
+        fn path(&self) -> &str {
+            "cable"
+        }
+    }
+
+    /// 083 H5: the QR comes down the moment the phone's advert is found, and
+    /// the phone's card goes up in its place for the seconds the tunnel and
+    /// the handshake take. The card stays for a phone that connected — its
+    /// prompt is next — and goes with a failure or a close made meanwhile.
+    #[test]
+    fn a_found_phone_takes_the_qr_down_and_says_look_at_the_phone() {
+        let channel = crate::ceremony::CeremonyChannel::new();
+        let ceremony = channel.ceremony(0);
+        let phone = Some(phone_prompt(TouchKind::Presence, HYBRID_PRODUCT));
+
+        (ceremony.qr)(Some("FIDO:/083".to_owned()));
+        phone_found(&ceremony);
+        assert_eq!(channel.qr_showing(), None, "the QR has done its job");
+        assert_eq!(channel.touch_waiting(), phone, "check your phone");
+        assert!(
+            channel.touch_waiting().is_some_and(|card| card.remote),
+            "the phone's words, not a security key's"
+        );
+        assert!(!(ceremony.cancelled)(), "a scan is not a dismissal");
+        assert!(hybrid_ready(&ceremony, Ok(Box::new(Connected))).is_ok());
+        assert_eq!(channel.touch_waiting(), phone, "its prompt is next");
+
+        (ceremony.qr)(Some("FIDO:/083".to_owned()));
+        phone_found(&ceremony);
+        let broken = hybrid_ready(
+            &ceremony,
+            Err(HybridError::Handshake(
+                "it closed before the signature".to_owned(),
+            )),
+        );
+        assert!(broken.is_err_and(|failure| failure.phone_link_failed()));
+        assert_eq!(channel.touch_waiting(), None, "no card over the failure");
+
+        (ceremony.qr)(Some("FIDO:/083".to_owned()));
+        phone_found(&ceremony);
+        // The column's ✕ while the tunnel comes up (`SigningHost::close`).
+        channel.cancel_qr();
+        let closed = hybrid_ready(&ceremony, Ok(Box::new(Connected)));
+        assert!(closed.is_err_and(|failure| failure.kind == FailureKind::Cancelled));
+        assert_eq!(channel.touch_waiting(), None);
     }
 
     /// The clientDataJSON this client signs must be readable by the SAME

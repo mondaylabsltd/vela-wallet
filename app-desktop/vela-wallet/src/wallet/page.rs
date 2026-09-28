@@ -13891,14 +13891,15 @@ impl WalletPage {
 
     /// What the open request's ceremony waits on the person for, as a card
     /// for the column (083 W19): the phone's QR, the phone's or the key's own
-    /// prompt, or a scan whose window closed with no phone. `None` when only
+    /// prompt, or a phone that stopped — a scan whose window closed with no
+    /// phone, a phone that scanned and never connected (H4). `None` when only
     /// the request itself does.
     #[cfg(not(target_os = "linux"))]
     fn signing_ceremony_card(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
         let host = self.signing_host.clone()?;
-        let (qr, touch, expired) = {
+        let (qr, touch, stopped) = {
             let read = host.read(cx);
-            (read.qr_showing(), read.touch_waiting(), read.qr_expired)
+            (read.qr_showing(), read.touch_waiting(), read.phone_stop)
         };
         let card = if let Some(payload) = qr {
             let host = host.clone();
@@ -13923,9 +13924,10 @@ impl WalletPage {
                     host.update(cx, |host, cx| host.cancel_touch(cx));
                 },
             )
-        } else if expired {
+        } else if let Some(stop) = stopped {
             // Nothing was answered: Retry shows a new code, and the close is
             // the column's own — a refusal, made by the person.
+            let (title, body) = crate::signing::status::phone_stop_words(stop);
             let seconds = crate::ctap::cable::SCAN_TIMEOUT.as_secs_f64();
             let retry = {
                 let host = host.clone();
@@ -13937,14 +13939,10 @@ impl WalletPage {
                 this.close_signing_column(cx);
             });
             hardware::card(theme)
-                .child(hardware::title(
-                    theme,
-                    self.loc.t("onboarding.common.timeoutTitle"),
-                ))
+                .child(hardware::title(theme, self.loc.t(title)))
                 .child(hardware::body(
                     theme,
-                    self.loc
-                        .t_vars("onboarding.common.timeoutBody", &[("seconds", seconds)]),
+                    self.loc.t_vars(body, &[("seconds", seconds)]),
                 ))
                 .child(crate::ui::vela_button(
                     "signing-scan-retry",

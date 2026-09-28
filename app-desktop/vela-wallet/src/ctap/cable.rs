@@ -32,7 +32,7 @@ use uuid::Uuid;
 use vela_core::cable::conn::CablePort;
 use vela_core::cable::crypto as cable_crypto;
 use vela_core::cable::session::CableInitiator;
-use vela_core::ctap::ceremony::{Cable, TouchAnnouncer};
+use vela_core::ctap::ceremony::{Cable, CableError, TouchAnnouncer, failure_for};
 use vela_core::ctap::hid_cable::PortError;
 
 #[cfg(target_os = "macos")]
@@ -65,17 +65,44 @@ pub enum HybridError {
 /// (083 W19) — the way [`TUNNEL_CLOSED`] is shared with the failure mapping.
 pub const NO_ADVERT: &str = "no phone answered the QR within the scan window";
 
+/// How [`HybridError::Tunnel`] and [`HybridError::Handshake`] begin: the phone
+/// was found, and the connection to it never came up. Shared with the dApp
+/// signing path the way [`NO_ADVERT`] is, so it can offer the approval again
+/// rather than fail the request (083 H4).
+pub const PHONE_LINK_FAILED: &str = "the phone connection failed";
+
 impl std::fmt::Display for HybridError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NoAdvert => f.write_str(NO_ADVERT),
             Self::Bluetooth(detail) => write!(f, "Bluetooth is unavailable: {detail}"),
             Self::BadAdvert => write!(f, "the phone's advertisement was malformed"),
-            Self::Tunnel(detail) => write!(f, "the relay tunnel would not open: {detail}"),
-            Self::Handshake(detail) => write!(f, "the encrypted channel failed: {detail}"),
+            Self::Tunnel(detail) => write!(
+                f,
+                "{PHONE_LINK_FAILED}: the relay tunnel would not open ({detail})"
+            ),
+            Self::Handshake(detail) => write!(f, "{PHONE_LINK_FAILED}: {detail}"),
             Self::Cancelled => write!(f, "the QR was dismissed"),
         }
     }
+}
+
+/// A Noise handshake that failed, in words (083 H4). It was the core's error
+/// in Rust's debug form, and a dApp was answered "the encrypted channel failed:
+/// Other(\"caBLE transport: the tunnel closed\")".
+fn handshake_failed(error: CableError) -> HybridError {
+    HybridError::Handshake(match error {
+        CableError::Other(detail) if detail.contains(TUNNEL_CLOSED) => {
+            "it closed before the signature".to_owned()
+        }
+        CableError::TimedOut => "the phone stopped answering".to_owned(),
+        CableError::Other(detail) => detail,
+        // Not raised by a handshake, which asks the phone nothing yet; the
+        // ceremony's own sentences if one ever is.
+        other => failure_for(other)
+            .message
+            .unwrap_or_else(|| "the phone refused".to_owned()),
+    })
 }
 
 /// The two 16-bit BLE service-data UUIDs a caBLE responder advertises under
@@ -272,18 +299,21 @@ impl CablePort for WebSocketCablePort {
 ///
 /// The QR must already be on screen (the caller shows [`CableInitiator::qr_payload`]);
 /// scanning it is what makes the phone start advertising, so nothing here can
-/// happen until it is.
+/// happen until it is. `found` is called the moment its advert decrypts: the
+/// phone has scanned, and the tunnel and the handshake can take seconds more.
 pub fn establish_hybrid(
     session: &CableInitiator,
     product: String,
     ephemeral_seed: &[u8],
     on_touch: Option<TouchAnnouncer>,
+    found: &dyn Fn(),
     cancelled: &(dyn Fn() -> bool + Send + Sync),
 ) -> Result<Box<dyn Cable>, HybridError> {
     // 1. Find the authenticator by its BLE proximity advert.
     log("scanning for the phone's Bluetooth advert…");
     let hit = scan_for_advert(session.eid_key(), cancelled)?;
     log("advert found; decrypted");
+    found();
 
     // 2. The advert chooses the channel: a PSM means the CTAP 2.3 local BLE
     //    channel (direct L2CAP, no tunnel — the GFW-proof path); no PSM means
@@ -297,7 +327,7 @@ pub fn establish_hybrid(
         log("L2CAP channel open; starting Noise handshake");
         let cable = session
             .establish(port, &hit.plaintext, ephemeral_seed, product, on_touch)
-            .map_err(|error| HybridError::Handshake(format!("{error:?}")))?;
+            .map_err(handshake_failed)?;
         log("handshake complete; channel is up (BLE)");
         return Ok(Box::new(cable));
     }
@@ -323,7 +353,7 @@ pub fn establish_hybrid(
                         log("L2CAP channel open; starting Noise handshake");
                         let cable = session
                             .establish(port, &hit.plaintext, ephemeral_seed, product, on_touch)
-                            .map_err(|error| HybridError::Handshake(format!("{error:?}")))?;
+                            .map_err(handshake_failed)?;
                         log("handshake complete; channel is up (BLE)");
                         return Ok(Box::new(cable));
                     }
@@ -366,7 +396,7 @@ pub fn establish_hybrid(
     log("tunnel open; starting Noise handshake");
     let cable = session
         .establish(port, &hit.plaintext, ephemeral_seed, product, on_touch)
-        .map_err(|error| HybridError::Handshake(format!("{error:?}")))?;
+        .map_err(handshake_failed)?;
     log("handshake complete; channel is up (WebSocket)");
     Ok(Box::new(cable))
 }
@@ -805,3 +835,31 @@ async fn scan_loop(eid_key: &[u8]) -> Result<AdvertHit, HybridError> {
 
 /// Why a scan stopped short of its window: the adapter stopped reporting.
 pub(crate) const SCAN_STREAM_ENDED: &str = "the scan stopped before any phone answered";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 083 H4: a handshake the phone hung up on is a sentence that says the
+    /// phone's connection failed — not the core's error in Rust's debug form,
+    /// which a dApp was answered verbatim.
+    #[test]
+    fn a_failed_handshake_is_a_sentence() {
+        let closed = handshake_failed(CableError::Other(format!(
+            "caBLE transport: {TUNNEL_CLOSED}"
+        )));
+        assert_eq!(
+            closed.to_string(),
+            "the phone connection failed: it closed before the signature"
+        );
+        assert_eq!(
+            handshake_failed(CableError::TimedOut).to_string(),
+            "the phone connection failed: the phone stopped answering"
+        );
+        let tunnel = HybridError::Tunnel("cannot reach cable.ua5v.com".to_owned()).to_string();
+        assert!(tunnel.starts_with(PHONE_LINK_FAILED), "{tunnel}");
+        for other in [HybridError::NoAdvert, HybridError::BadAdvert] {
+            assert!(!other.to_string().starts_with(PHONE_LINK_FAILED));
+        }
+    }
+}

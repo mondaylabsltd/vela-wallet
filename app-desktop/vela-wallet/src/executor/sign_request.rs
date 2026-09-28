@@ -66,6 +66,18 @@ pub enum SignAnswer {
     Screen,
 }
 
+/// A phone's ceremony that came back unsigned with the request still open,
+/// for a reason another try can fix (083). The column names which, and
+/// offers the approval again; its close is the person's refusal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PhoneStop {
+    /// The QR ran its whole scan window with no phone (W19).
+    ScanExpired,
+    /// The phone scanned, and its relay tunnel or the encrypted channel
+    /// through it never came up (H4).
+    LinkFailed,
+}
+
 /// What the ceremony needs, fixed when the REQUEST opens.
 ///
 /// The same fixing `SendContext` does and for the same reason: an account
@@ -95,6 +107,9 @@ pub struct SignContext {
     /// The phone's QR ran its whole scan window with no phone (083 W19) —
     /// told to the column, which says so; the page is told nothing.
     pub scan_expired: Arc<AtomicBool>,
+    /// The phone scanned, and the connection to it never came up (083 H4) —
+    /// told to the column the same way, with its own words.
+    pub phone_failed: Arc<AtomicBool>,
     /// The column was closed while this approval's signature was still to
     /// come (083 review): a prompt not yet open never opens — the ceremony
     /// comes back unsigned at once, and the column's close becomes a refusal
@@ -127,9 +142,25 @@ impl SignContext {
             &self.signing_started,
             &self.signature_done,
             &self.scan_expired,
+            &self.phone_failed,
             &self.abandoned,
         ] {
             flag.store(false, Ordering::SeqCst);
+        }
+    }
+
+    /// Why the last prompt came back unsigned, when it was the phone's doing
+    /// and another try can help (083): nobody scanned its QR in time, or the
+    /// connection to it never came up. Taken once.
+    pub fn take_phone_stop(&self) -> Option<PhoneStop> {
+        let expired = self.scan_expired.swap(false, Ordering::SeqCst);
+        let failed = self.phone_failed.swap(false, Ordering::SeqCst);
+        if expired {
+            Some(PhoneStop::ScanExpired)
+        } else if failed {
+            Some(PhoneStop::LinkFailed)
+        } else {
+            None
         }
     }
 
@@ -176,6 +207,7 @@ impl SignContext {
             signing_started: send.signing_started,
             signature_done: Arc::new(AtomicBool::new(false)),
             scan_expired: Arc::new(AtomicBool::new(false)),
+            phone_failed: Arc::new(AtomicBool::new(false)),
             abandoned: Arc::new(AtomicBool::new(false)),
             site: None,
             account_name: send.account_name,
@@ -456,6 +488,10 @@ fn is_message(method: &str) -> bool {
 /// -32603 with the scan's own English; as a cancellation it keeps the request
 /// open and sends nothing, and the column offers the scan again.
 ///
+/// H4: so is a phone whose connection never came up. As a failure the page
+/// got the transport's words and the column a transaction's failure — with
+/// only 完成, where another try (a new QR) is what can work.
+///
 /// Review: a column closed before the prompt opened asks nothing — the
 /// ceremony comes back unsigned at once, and the column's waiting close
 /// refuses. Otherwise the QR went up in a column nobody drew, and the core,
@@ -473,12 +509,15 @@ fn around_prompt(
         ctx.signature_done.store(true, Ordering::SeqCst);
     }
     answer.map_err(|failure| {
-        if failure.scan_ran_out() {
-            ctx.scan_expired.store(true, Ordering::SeqCst);
-            PasskeyFailure::cancelled()
+        let told = if failure.scan_ran_out() {
+            &ctx.scan_expired
+        } else if failure.phone_link_failed() {
+            &ctx.phone_failed
         } else {
-            failure
-        }
+            return failure;
+        };
+        told.store(true, Ordering::SeqCst);
+        PasskeyFailure::cancelled()
     })
 }
 
@@ -972,13 +1011,43 @@ mod tests {
         ctx.prompt_reset();
         let broken = around_prompt(&ctx, || {
             Err(PasskeyFailure::other(
-                "the relay tunnel would not open: refused",
+                crate::ctap::cable::HybridError::BadAdvert.to_string(),
             ))
         })
         .err()
         .unwrap_or_else(|| unreachable!("a failure"));
         assert_eq!(broken.kind, FailureKind::Other);
-        assert!(!ctx.scan_expired.load(Ordering::SeqCst));
+        assert_eq!(ctx.take_phone_stop(), None);
+    }
+
+    /// 083 H4: a phone that scanned but never connected is not an answer to
+    /// the page either — not "-32603 the encrypted channel failed: Other(…)".
+    /// The request stays open, and the column is told which of the two
+    /// stops it was, once, so it can say so and offer the approval again.
+    #[test]
+    fn a_phone_that_never_connected_is_not_an_answer() {
+        use crate::ctap::cable::HybridError;
+        let ctx = context(Some("https://app.uniswap.org"));
+        for (error, stop) in [
+            (
+                HybridError::Handshake("it closed before the signature".to_owned()),
+                PhoneStop::LinkFailed,
+            ),
+            (
+                HybridError::Tunnel("cannot reach cable.ua5v.com".to_owned()),
+                PhoneStop::LinkFailed,
+            ),
+            (HybridError::NoAdvert, PhoneStop::ScanExpired),
+        ] {
+            ctx.prompt_reset();
+            let failure = around_prompt(&ctx, || Err(PasskeyFailure::other(error.to_string())))
+                .err()
+                .unwrap_or_else(|| unreachable!("no phone, no assertion"));
+            assert_eq!(failure.kind, FailureKind::Cancelled, "{error}");
+            assert_eq!(failure.message, None, "no transport English: {error}");
+            assert_eq!(ctx.take_phone_stop(), Some(stop), "{error}");
+            assert_eq!(ctx.take_phone_stop(), None, "told once");
+        }
     }
 
     /// 083 (review): a column closed before its prompt opened asks nothing —

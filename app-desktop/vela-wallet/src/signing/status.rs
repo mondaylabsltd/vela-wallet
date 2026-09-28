@@ -36,6 +36,7 @@ use vela_core::app::sign_request::{
 };
 use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
+use crate::executor::sign_request::PhoneStop;
 use crate::flows::fixtures::ReceiptStage;
 use crate::signing::SigningStrings;
 use crate::signing::fixtures::Block;
@@ -179,6 +180,21 @@ pub fn escape_closes(swipe: SignSwipeAction, plan: ClosePlan) -> bool {
     plan == ClosePlan::Now && matches!(swipe, SignSwipeAction::Dismiss | SignSwipeAction::None)
 }
 
+/// The title and body keys of the card a phone's stop is told with (083). A
+/// connection that never came up is "connection failed" and the onboarding's
+/// "the request never arrived — check your network": nothing reached the
+/// phone, and the network is what a person can check before trying again.
+#[must_use]
+pub const fn phone_stop_words(stop: PhoneStop) -> (&'static str, &'static str) {
+    match stop {
+        PhoneStop::ScanExpired => (
+            "onboarding.common.timeoutTitle",
+            "onboarding.common.timeoutBody",
+        ),
+        PhoneStop::LinkFailed => ("connect.list.connFailed", "onboarding.common.networkBody"),
+    }
+}
+
 /// The ending an answer stands for, or `None` when there is nothing to show —
 /// a refusal (the page was told why; the column said so) or an empty answer.
 /// `submitted` is the operation this request handed the tracker: an answer
@@ -286,7 +302,13 @@ pub fn approved(
             return Some(following(op, Some(entry), lead(), clock, s));
         }
         let mut captions = lead();
-        captions.push(s.error_generic.clone());
+        // A message goes nowhere: "the transaction couldn't be submitted" is
+        // not what failed (083 H4), and nothing went on chain.
+        captions.push(if on_chain {
+            s.error_generic.clone()
+        } else {
+            s.error_off_chain.clone()
+        });
         return Some(receipt(
             ReceiptStage::Failed,
             s.receipt_failed.clone(),
@@ -1020,6 +1042,46 @@ mod tests {
         );
         let landed = at(TrackStatus::Confirmed, TrackOutcome::Final, Some(TX));
         assert_eq!(landed.stage, ReceiptStage::Confirmed);
+
+    /// 083 H4: a message whose signature failed is not a transaction that
+    /// could not be submitted — it went nowhere, and says so.
+    #[test]
+    fn a_failed_message_is_not_a_failed_transaction() {
+        let s = strings();
+        let failed = approved(
+            &view(|v| {
+                v.error = Some(SignErrorNotice {
+                    kind: SignErrorKind::SubmitFailed,
+                    detail: Some("personal_sign carried nothing this wallet could sign".to_owned()),
+                });
+            }),
+            false,
+            Some(&summary()),
+            None,
+            &clock(0.),
+            Signature::Asked,
+            &s,
+        )
+        .unwrap_or_else(|| unreachable!("approved"));
+        assert_eq!(failed.stage, ReceiptStage::Failed);
+        assert_eq!(failed.captions, vec![summary(), s.error_off_chain.clone()]);
+        assert_ne!(s.error_off_chain, s.error_generic);
+        assert_eq!(failed.cta, s.receipt_done, "the close stays");
+    }
+
+    /// 083: the two phone stops are told apart — a scan nobody answered is
+    /// its window; a phone that scanned and never connected is the
+    /// connection — each in words every catalogue has.
+    #[test]
+    fn a_phone_stop_says_which_stop_it_was() {
+        let scan = phone_stop_words(PhoneStop::ScanExpired);
+        let link = phone_stop_words(PhoneStop::LinkFailed);
+        assert_ne!(scan.0, link.0);
+        assert_ne!(scan.1, link.1);
+        let loc = crate::loc::Loc::from_env();
+        for key in [scan.0, scan.1, link.0, link.1] {
+            assert_ne!(loc.t(key).as_ref(), key, "`{key}` echoed the key");
+        }
     }
 
     /// Every tracker status has its own words — the column used to read

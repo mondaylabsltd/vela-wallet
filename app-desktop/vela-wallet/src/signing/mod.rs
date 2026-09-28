@@ -183,6 +183,9 @@ pub struct SigningStrings {
     pub status_signing: SharedString,
     pub status_submitted: SharedString,
     pub error_generic: SharedString,
+    /// What a message signature that failed says in its place (083 H4): it
+    /// was never a transaction, and nothing went on chain.
+    pub error_off_chain: SharedString,
     pub error_network: SharedString,
     /// Spec 081: the request would have changed who controls the account.
     pub blocked_title: SharedString,
@@ -415,6 +418,7 @@ impl SigningStrings {
             // wallet, one way of saying "it did not go out, your funds are
             // safe" — and no raw relay text on a screen (SC-305).
             error_generic: loc.t("send.txErrorGeneric"),
+            error_off_chain: loc.t("connect.detail.offChainNote"),
             error_network: loc.t("send.lock.netNotFound"),
             blocked_title: s("selfCallBlockedTitle"),
             close: s("close"),
@@ -610,6 +614,7 @@ mod tests {
             s.still_confirming.as_ref(),
             s.unknown_outcome.as_ref(),
             s.signed.as_ref(),
+            s.error_off_chain.as_ref(),
             s.fee_refresh.as_ref(),
             s.fee_stale.as_ref(),
             s.fee_unreachable.as_ref(),
@@ -618,7 +623,8 @@ mod tests {
             assert!(
                 !text.starts_with("send.")
                     && !text.starts_with("componentsUi.")
-                    && !text.starts_with("clearSigning."),
+                    && !text.starts_with("clearSigning.")
+                    && !text.starts_with("connect."),
                 "echoed a key: {text}"
             );
         }

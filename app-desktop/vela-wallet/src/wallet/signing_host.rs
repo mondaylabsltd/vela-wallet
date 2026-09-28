@@ -250,10 +250,11 @@ pub struct SigningHost {
         Option<String>,
         Option<crate::ctap::usb::TouchRequest>,
     ),
-    /// The phone's QR ran its whole window with nobody scanning (083 W19).
-    /// The request is still open — nothing was answered — and the column
-    /// says what happened, with Retry, until the person chooses.
-    pub qr_expired: bool,
+    /// The phone's QR ran its whole window with nobody scanning (083 W19), or
+    /// the phone scanned and its connection never came up (H4). The request
+    /// is still open — nothing was answered — and the column says which,
+    /// with Retry, until the person chooses.
+    pub phone_stop: Option<sign_executor::PhoneStop>,
     /// The column was closed while the signature was still to come
     /// ([`crate::signing::status::ClosePlan::AfterCancel`]): whatever the
     /// ceremony waits behind is stopped, and the close is made once the core
@@ -368,7 +369,7 @@ impl SigningHost {
             channel,
             watching: false,
             ceremony_seen: Default::default(),
-            qr_expired: false,
+            phone_stop: None,
             close_after_cancel: false,
             page_asked: false,
             closed: false,
@@ -648,7 +649,7 @@ impl SigningHost {
 
     pub fn approve(&mut self, cx: &mut Context<Self>) {
         self.approved = true;
-        self.qr_expired = false;
+        self.phone_stop = None;
         // Nothing re-prices under a slide that has gone.
         self.requote_scheduled = None;
         let opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
@@ -701,11 +702,12 @@ impl SigningHost {
         cx.notify();
     }
 
-    /// The timeout card's Retry: the same approval again, with a new QR.
+    /// The phone card's Retry — a scan that ran out, a connection that never
+    /// came up (083): the same approval again, with a new QR.
     /// When the sheet could not be approved as it stands now (a quote gone
     /// stale into a failure), the form comes back instead, to say why.
     pub fn retry(&mut self, cx: &mut Context<Self>) {
-        self.qr_expired = false;
+        self.phone_stop = None;
         let armed = crate::signing::live::confirm_enabled(
             &self.view,
             &self.guard_view,
@@ -763,7 +765,7 @@ impl SigningHost {
                 cx.notify();
             }
             ClosePlan::Now => {
-                self.qr_expired = false;
+                self.phone_stop = None;
                 self.dispatch_sign(SignEvent::SwipeDismissed, cx);
             }
         }
@@ -1097,15 +1099,16 @@ impl SigningHost {
         // `Hidden` is the core saying the request is over — the column closes
         // on the machine's word, never on a click this file interpreted.
         self.closed = self.view.surface == vela_core::app::sign_request::SignSurface::Hidden;
-        // The ceremony came back with no signature — dismissed, or a QR
-        // nobody scanned — and the core kept the request, unanswered (083).
+        // The ceremony came back with no signature — dismissed, a QR nobody
+        // scanned, a phone that never connected — and the core kept the
+        // request, unanswered (083).
         // The form is the person's again: not approved, and a slide that can
         // be slid, where the committed knob used to stay stuck at the end.
         if was_running && self.back_on_form() {
             self.approved = false;
             crate::signing::components::reset_slide();
-            if self.ctx.scan_expired.swap(false, Ordering::SeqCst) {
-                self.qr_expired = true;
+            if let Some(stop) = self.ctx.take_phone_stop() {
+                self.phone_stop = Some(stop);
             }
         }
         if self.ceremony_ahead() {
@@ -1122,7 +1125,7 @@ impl SigningHost {
             )
         {
             self.close_after_cancel = false;
-            self.qr_expired = false;
+            self.phone_stop = None;
             self.dispatch_sign(SignEvent::SwipeDismissed, cx);
         }
     }
