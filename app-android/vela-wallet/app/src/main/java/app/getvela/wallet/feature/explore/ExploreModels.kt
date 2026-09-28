@@ -65,6 +65,8 @@ data class TabModel(
     val selected: Boolean,
     /** The start page's own tab — drawn with the sail, not a favicon. */
     val startPage: Boolean,
+    /** Spec 079: the page as it last left the screen; the drawn stand-in when there is none yet. */
+    val snapshot: androidx.compose.ui.graphics.ImageBitmap? = null,
 )
 
 /**
@@ -105,6 +107,10 @@ data class BrowserModel(
     val failureReason: String? = null,
     /** Spec 079: a retry is running — the panel stays and says "正在重试…". */
     val retrying: Boolean = false,
+    /** Spec 079: the page's chain could not be reached — one line under the address bar; `null` when it can. */
+    val chainNotice: String? = null,
+    /** Spec 079: the chain notice's retry is in flight. */
+    val chainAsking: Boolean = false,
     /** The page's renderer died: the tab shows the reload panel until the person asks. */
     val crashed: Boolean = false,
 )

@@ -60,7 +60,7 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
-    "32eb2f2bb3b866d59424d046668bfb543c074100a8f10319501d5696cc55c604",
+    "e3ef90a6040fe896a34c6b32fcab232417bf1dd70e62d473c88a0bed7dc97d5f",
     // NEWEST FIRST. `choose_version` walks this order and takes the first one
     // the endpoint still serves, so whatever stands at the front is what a
     // wallet opens when several versions are published.

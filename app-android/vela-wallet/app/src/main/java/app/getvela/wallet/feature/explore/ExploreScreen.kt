@@ -47,6 +47,7 @@ import app.getvela.wallet.feature.explore.components.ExploreMetrics
 import app.getvela.wallet.feature.explore.components.ExploreSearchField
 import app.getvela.wallet.feature.explore.components.ExploreTabsScreen
 import app.getvela.wallet.feature.explore.components.BrowserNotice
+import app.getvela.wallet.feature.explore.components.ChainNotice
 import app.getvela.wallet.feature.explore.components.GroupManageSheetContent
 import app.getvela.wallet.feature.explore.components.PickerOption
 import app.getvela.wallet.feature.explore.components.PickerSheetContent
@@ -84,6 +85,8 @@ class ExploreCallbacks(
     val onDisconnect: () -> Unit = {},
     /** The consent card's answer (spec 044). */
     val onConsent: (approved: Boolean) -> Unit = {},
+    /** Spec 079: the chain notice's retry — one read of the page's chain. */
+    val onChainRetry: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -206,6 +209,17 @@ fun ExploreScreen(
                     progress = model.browser.progress,
                     onSubmitUrl = onOpenUrl,
                 )
+                // Spec 079: the page loaded but its chain cannot be reached — said
+                // once, under the address bar, while the page stays usable.
+                model.browser.chainNotice?.takeIf { page != null && !model.browser.failed && !model.browser.crashed }?.let { notice ->
+                    ChainNotice(
+                        text = notice,
+                        action = strings.t("connect.browser.retry"),
+                        busy = model.browser.chainAsking,
+                        busyLabel = strings.t("explore.loadRetrying"),
+                        onAction = { live?.onChainRetry?.invoke() },
+                    )
+                }
                 Box(Modifier.weight(1f)) {
                     when {
                         // The renderer died: the app is fine, the page is gone,

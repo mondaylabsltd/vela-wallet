@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -541,6 +542,48 @@ fun PickerSheetContent(
  * died, or the address could not be reached. One sentence of what happened,
  * one of what to do, one button that does it.
  */
+/**
+ * One line under the address bar (spec 079): the page's chain could not be
+ * reached, so what it shows may be missing. The page stays usable; Retry asks
+ * the chain once.
+ */
+@Composable
+fun ChainNotice(
+    text: String,
+    action: String,
+    busy: Boolean,
+    busyLabel: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.bgBase)
+            .drawBehind {
+                val y = size.height - VelaBorder.hairline.toPx() / 2
+                drawLine(colors.borderBase, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), VelaBorder.hairline.toPx())
+            }
+            .padding(horizontal = VelaSizing.screenPaddingX, vertical = VelaSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        Icon(VelaIcons.TriangleAlert, null, tint = colors.warningBase, modifier = Modifier.size(VelaIconSize.sm))
+        Text(text = text, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, modifier = Modifier.weight(1f))
+        Text(
+            text = if (busy) busyLabel else action,
+            color = if (busy) colors.fgMuted else colors.accentBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.semibold,
+            fontSize = VelaTextSize.sm,
+            modifier = Modifier
+                .clickable(enabled = !busy, onClick = onAction)
+                .padding(vertical = VelaSpacing.xs),
+        )
+    }
+}
+
 @Composable
 fun BrowserNotice(
     title: String,

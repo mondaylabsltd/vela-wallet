@@ -1281,9 +1281,17 @@ window.VelaCS = window.VelaCS || {};
       view.refuse = true;
       view.warnings.push({ tone: 'danger', key: 'refuse.opMismatch' });
     }
-    return decoded.calls.length === 1
-      ? { method: 'eth_sendTransaction', origin: intent.origin, params: [decoded.calls[0]] }
-      : { method: 'wallet_sendCalls', origin: intent.origin, params: [{ calls: decoded.calls }] };
+    // Spec 079: the fee leg is the fee row, not a second leg of a "batch" — a
+    // plain send read as 批量 of two. Only a leg the fee row shows in full
+    // leaves the list: `inBandLeg` decoded it as a plain payment, and the row
+    // draws its amount and its recipient from the calldata. Anything else the
+    // requester calls the fee stays a leg, drawn like every other.
+    var feeIndex = view.fee && view.fee.leg ? view.fee.leg.index : -1;
+    var shown = decoded.calls.filter(function (_, i) { return i !== feeIndex; });
+    if (!shown.length) shown = decoded.calls;
+    return shown.length === 1
+      ? { method: 'eth_sendTransaction', origin: intent.origin, params: [shown[0]] }
+      : { method: 'wallet_sendCalls', origin: intent.origin, params: [{ calls: shown }] };
   }
 
   function resolve(requested, ctx) {

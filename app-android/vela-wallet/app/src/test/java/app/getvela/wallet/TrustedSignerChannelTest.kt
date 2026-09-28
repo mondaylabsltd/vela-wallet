@@ -69,7 +69,7 @@ class TrustedSignerChannelTest {
     /** How many times the wallet was brought back over the page. */
     private val broughtBack = java.util.concurrent.atomic.AtomicInteger(0)
 
-    private fun channel(timeoutMs: Long = 20_000L, page: (Visit) -> Unit) = TrustedSignerChannel(
+    private fun channel(timeoutMs: Long = 20_000L, reachable: Boolean = true, page: (Visit) -> Unit) = TrustedSignerChannel(
         signerUrl = { "https://sign.getvela.app/" },
         openPage = { url ->
             thread { page(Visit(url)) }
@@ -78,6 +78,7 @@ class TrustedSignerChannelTest {
         bringBack = { broughtBack.incrementAndGet() },
         words = { words },
         timeoutMs = timeoutMs,
+        reachable = { reachable },
     )
 
     /**
@@ -188,6 +189,33 @@ class TrustedSignerChannelTest {
 
         val waiting = channel(timeoutMs = 300L) { }
         assertEquals("timeout", failureOf { waiting.sign(request, digest, keys) }.message)
+    }
+
+    /** Spec 079: a tab closed on a page that never loaded is told as that, and the request stays open. */
+    @Test
+    fun `back from a page whose address does not answer, the card says it and a retry clears it`() {
+        val probed = java.util.concurrent.atomic.AtomicInteger(0)
+        val down = channel(reachable = false) { probed.incrementAndGet() }
+        val up = channel(reachable = true) { }
+        runBlocking {
+            for ((ch, expectUnreachable) in listOf(down to true, up to false)) {
+                val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+                scope.launch { runCatching { ch.sign(request, digest, keys) } }
+                val waiting = withTimeout(5_000) { ch.state.first { it is TrustedSignerChannel.State.Waiting } }
+                ch.personReturned()
+                val after = ch.state.value as TrustedSignerChannel.State.Waiting
+                assertEquals(expectUnreachable, after.unreachable)
+                assertEquals("the same visit, not a new one", (waiting as TrustedSignerChannel.State.Waiting).url, after.url)
+                if (expectUnreachable) {
+                    ch.reopen()
+                    assertEquals("a retry is waiting again", false, (ch.state.value as TrustedSignerChannel.State.Waiting).unreachable)
+                }
+                ch.cancel()
+                withTimeout(5_000) { ch.state.first { it == TrustedSignerChannel.State.Idle } }
+                scope.cancel()
+            }
+        }
+        assertEquals("the retry opened the same page again", 2, probed.get())
     }
 
     // --- spec 075 over spec 076's transport: a flow of several requests -------
