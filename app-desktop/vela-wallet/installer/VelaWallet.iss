@@ -27,6 +27,9 @@
 #define MyAppName "Vela Wallet"
 #define MyAppPublisher "Vela Wallet"
 #define MyAppExeName "vela-wallet.exe"
+; The runtime the bundled redistributable carries, e.g. "14.51.36247.0" — what
+; a per-user install compares the machine's runtime against (spec 083 H9).
+#define MyVCRedistVersion GetVersionNumbersString(MyVCRedist)
 
 [Setup]
 AppId={{6B7B5D7C-E7B7-47FB-94A6-5CCB2216A6CC}
@@ -51,7 +54,13 @@ WizardStyle=modern
 ArchitecturesAllowed={#MyArchitecturesAllowed}
 ArchitecturesInstallIn64BitMode={#MyArchitecturesAllowed}
 MinVersion=10.0
+; Spec 083 H9: per-machine by default, so an existing install upgrades where it
+; is (UsePreviousPrivileges, on by default, keeps a found install's mode without
+; asking). A person may choose "Install for me only" in the dialog, or pass
+; /CURRENTUSER: no administrator prompt, {autopf} becomes
+; %LOCALAPPDATA%\Programs and HKA becomes HKCU. /ALLUSERS forces per-machine.
 PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=dialog commandline
 CloseApplications=yes
 SetupLogging=yes
 
@@ -73,14 +82,18 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDi
 ; Windows routes a scheme by these keys; without them the browser reports the
 ; navigation cancelled and the wallet waits out its timeout.
 ;
-; Per-user (HKCU), so no elevation is needed and two accounts on one machine
-; keep their own wallet. The same scheme the phones register; it is not
-; exclusive, which is why the callback carries a one-time token and the core
-; verifies the assertion itself.
-Root: HKCU; Subkey: "Software\Classes\velawallet"; ValueType: string; ValueName: ""; ValueData: "URL:Vela Wallet"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\velawallet"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\velawallet\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
-Root: HKCU; Subkey: "Software\Classes\velawallet\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+; HKA (spec 083 H9): the install's own root — HKLM for a per-machine install,
+; which every account on the machine starts the app from, and HKCU for a
+; per-user one. HKCU under an administrator install wrote the key into the
+; hive of whoever approved the elevation, which is not always the person
+; installing (Inno's "UsedUserAreasWarning"). Keys an older install wrote to
+; HKCU point at the same exe and win for that account, so they keep working.
+; The same scheme the phones register; it is not exclusive, which is why the
+; callback carries a one-time token and the core verifies the assertion itself.
+Root: HKA; Subkey: "Software\Classes\velawallet"; ValueType: string; ValueName: ""; ValueData: "URL:Vela Wallet"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\velawallet"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\velawallet\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
+Root: HKA; Subkey: "Software\Classes\velawallet\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
@@ -111,9 +124,41 @@ begin
   end;
 end;
 
+{ Whether the runtime the redistributable registers under RootKey is the
+  bundled one or newer. }
+function VCRuntimeIn(RootKey: Integer; Bundled: Int64): Boolean;
+var
+  Key: String;
+  Installed, Major, Minor, Bld, Rbld: Cardinal;
+begin
+  Result := False;
+  Key := 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\{#MyArchitecture}';
+  if not RegQueryDWordValue(RootKey, Key, 'Installed', Installed) or (Installed <> 1) then
+    Exit;
+  if RegQueryDWordValue(RootKey, Key, 'Major', Major) and
+     RegQueryDWordValue(RootKey, Key, 'Minor', Minor) and
+     RegQueryDWordValue(RootKey, Key, 'Bld', Bld) and
+     RegQueryDWordValue(RootKey, Key, 'Rbld', Rbld) then
+    Result := ComparePackedVersion(PackVersionComponents(Major, Minor, Bld, Rbld), Bundled) >= 0;
+end;
+
+{ Spec 083 H9: the redistributable installs for the whole machine, so in a
+  per-user install it would raise the administrator prompt the person chose
+  to avoid. There it runs only when this machine lacks the runtime or has an
+  older one — Windows then asks once, for Microsoft's runtime alone. It lives
+  in either registry view depending on the redistributable's build. }
+function VCRuntimeCurrent(): Boolean;
+var
+  Bundled: Int64;
+begin
+  Result := StrToVersion('{#MyVCRedistVersion}', Bundled) and
+    (VCRuntimeIn(HKLM64, Bundled) or VCRuntimeIn(HKLM32, Bundled));
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
-    InstallVCRedist();
+    if IsAdminInstallMode() or not VCRuntimeCurrent() then
+      InstallVCRedist();
   end;
 end;

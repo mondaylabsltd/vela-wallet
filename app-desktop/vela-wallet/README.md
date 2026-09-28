@@ -209,6 +209,33 @@ The generated installer is **unsigned** until a code-signing certificate is
 configured. It works, but Windows SmartScreen can show an “unknown publisher”
 warning on first release. Sign the final installer before a public release.
 
+#### For everyone, or for me only
+
+The installer installs **for every account on the machine** by default
+(`C:\Program Files\Vela Wallet`, Windows asks for an administrator). On a
+machine with no Vela yet, Setup first asks which. **Install for me only** puts
+the app in `%LOCALAPPDATA%\Programs\Vela Wallet`, makes its shortcuts,
+uninstall entry and `velawallet://` handler the person's own, and asks for no
+administrator ([spec 083](../../specs/083-windows-dapp-browser-stability/results.md)
+H9). The same choice from a command line, e.g. for an unattended install:
+
+```powershell
+# One account, no administrator prompt:
+.\VelaWallet-Setup-<version>-x64.exe /CURRENTUSER /VERYSILENT
+# Every account (the default); run from an elevated shell to skip the prompt:
+.\VelaWallet-Setup-<version>-x64.exe /ALLUSERS /VERYSILENT
+```
+
+- **An upgrade stays where the app is.** A newer installer finds the existing
+  install and uses its mode without asking, so a per-machine install still
+  needs the administrator — run an unattended upgrade of one from an elevated
+  shell. Passing `/CURRENTUSER` over a per-machine install puts a second copy
+  beside it; uninstall the per-machine one first to move it.
+- **The Visual C++ runtime is machine-wide.** A per-user install runs
+  Microsoft's redistributable only when the machine lacks the bundled runtime
+  or has an older one — and then Windows asks for an administrator once, for
+  that runtime alone.
+
 ### Fedora / RHEL
 
 ```bash
