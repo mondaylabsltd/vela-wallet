@@ -27,6 +27,7 @@ fn android_codes_map_to_their_class() {
         (-7, C::Offline),   // ERROR_IO
         (-1, C::Offline),   // ERROR_UNKNOWN — net::ERR_EMPTY_RESPONSE on the Xiaomi
         (-11, C::Certificate),
+        (-5, C::Proxy),  // ERROR_PROXY_AUTHENTICATION
         (-15, C::Other), // ERROR_TOO_MANY_REQUESTS
     ] {
         assert_eq!(class(P::Android, code, None), Some(want), "android {code}");
@@ -37,7 +38,8 @@ fn android_codes_map_to_their_class() {
 fn apple_codes_map_to_their_class() {
     let url = Some("NSURLErrorDomain");
     for (code, want) in [
-        (-1000, C::NotFound),
+        // 082 G31: every -1000 seen was the per-app proxy refusing CONNECT.
+        (-1000, C::Offline),
         (-1002, C::NotFound),
         (-1003, C::NotFound),
         (-1006, C::NotFound),
@@ -62,6 +64,30 @@ fn apple_codes_map_to_their_class() {
         Some(C::Other)
     );
     assert_eq!(class(P::Apple, 7, Some("SomethingElse")), Some(C::Other));
+}
+
+/// 082 RD9: the proxy is named only when it could not be used; a proxy that
+/// answered the CONNECT spoke for the host.
+#[test]
+fn apple_proxy_failures_name_the_proxy() {
+    let cf = Some("kCFErrorDomainCFNetwork");
+    for (code, want) in [
+        (306, C::Proxy),   // kCFErrorHTTPProxyConnectionFailure
+        (307, C::Proxy),   // kCFErrorHTTPBadProxyCredentials
+        (308, C::Proxy),   // kCFErrorPACFileError
+        (309, C::Proxy),   // kCFErrorPACFileAuth
+        (310, C::Proxy),   // kCFErrorHTTPSProxyConnectionFailure
+        (311, C::Refused), // unexpected response to CONNECT: the proxy answered
+        (305, C::Other),
+        (312, C::Other),
+    ] {
+        assert_eq!(class(P::Apple, code, cf), Some(want), "cfnetwork {code}");
+    }
+    // The same numbers in NSURLErrorDomain mean nothing of the kind.
+    assert_eq!(
+        class(P::Apple, 306, Some("NSURLErrorDomain")),
+        Some(C::Other)
+    );
 }
 
 #[test]
@@ -97,6 +123,7 @@ fn the_desktop_probe_codes_map_to_their_class() {
         (probe_code::TIMEOUT, C::Timeout),
         (probe_code::TLS, C::Certificate),
         (probe_code::CONNECT, C::Offline),
+        (probe_code::PROXY, C::Proxy),
         (0, C::Other),
     ] {
         assert_eq!(class(P::Probe, code, None), Some(want), "probe {code}");
@@ -119,14 +146,19 @@ fn every_failure_carries_its_sentence_and_retry_verdict() {
         (C::NotFound, "explore.loadNotFound"),
         (C::Certificate, "explore.loadCertificate"),
         (C::Other, "connect.browser.loadFailed"),
+        (C::Proxy, "explore.loadProxy"),
     ] {
         assert_eq!(reason_key(c), key);
     }
+    assert_eq!(
+        classify(P::Probe, probe_code::PROXY, None, false).map(|f| (f.reason_key, f.auto_retry)),
+        Some(("explore.loadProxy".to_owned(), true))
+    );
 }
 
 #[test]
 fn network_failures_retry_three_times_on_a_growing_wait() {
-    for c in [C::Offline, C::Timeout, C::Refused] {
+    for c in [C::Offline, C::Timeout, C::Refused, C::Proxy] {
         let schedule: Vec<_> = (1..=4).map(|attempt| retry_delay_ms(c, attempt)).collect();
         assert_eq!(
             schedule,
@@ -294,6 +326,7 @@ fn a_failed_probe_is_classified_by_the_core() {
             false,
         ),
         (probe_code::CONNECT, C::Offline, "explore.loadOffline", true),
+        (probe_code::PROXY, C::Proxy, "explore.loadProxy", true),
         (0, C::Other, "connect.browser.loadFailed", true),
     ] {
         let mut watch = LoadWatch::default();
@@ -769,7 +802,7 @@ fn a_stalled_load_is_a_timeout_that_retries() {
 /// typo and a wrong certificate are not.
 #[test]
 fn only_what_the_network_can_heal_is_retried_when_it_returns() {
-    for class in [C::Offline, C::Timeout, C::Refused, C::Other] {
+    for class in [C::Offline, C::Timeout, C::Refused, C::Other, C::Proxy] {
         assert!(retry_when_network_returns(class), "{class:?}");
     }
     for class in [C::Certificate, C::NotFound] {

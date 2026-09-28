@@ -8,9 +8,10 @@
 //! live here, and every shell draws the same panel with the same words:
 //!
 //! - [`classify`] — the platform's raw error (Android `WebViewClient.ERROR_*`,
-//!   Apple `NSURLErrorDomain`, or the desktop's own probe) → one class, the
-//!   corpus key of its sentence, and whether retrying can help. A cancelled
-//!   navigation is not a failure.
+//!   Apple `NSURLErrorDomain` / `kCFErrorDomainCFNetwork`, or the desktop's
+//!   own probe) → one class, the corpus key of its sentence, and whether
+//!   retrying can help. A cancelled navigation is not a failure. A proxy that
+//!   could not be used is said to be the proxy (spec 082, RD9).
 //! - [`retry_delay_ms`] — the short, capped schedule a failed page retries on
 //!   while it is in front. No platform here may listen for connectivity
 //!   (Android's manifest refuses ACCESS_NETWORK_STATE, spec 047), so this is
@@ -57,6 +58,16 @@ pub enum LoadFailureClass {
     Certificate,
     /// Anything else.
     Other,
+    /// The proxy itself could not be used (spec 082, RD9, ruling 3 "when the
+    /// proxy fails, say so"): the connection to it failed or timed out, or
+    /// its PAC file could not be fetched or run. Retried on the offline
+    /// schedule.
+    ///
+    /// A proxy that ANSWERED — a 502, or a CONNECT it closed with no reply —
+    /// spoke for the host: the site keeps its own class (refused, offline…).
+    /// Calling that "your proxy isn't responding" would blame a working proxy
+    /// for every blocked or missing site (RX).
+    Proxy,
 }
 
 /// A classified main-frame failure.
@@ -77,16 +88,26 @@ pub mod probe_code {
     pub const TIMEOUT: i64 = 3;
     pub const TLS: i64 = 4;
     pub const CONNECT: i64 = 5;
+    /// The route's proxy could not be reached, timed out before answering,
+    /// or its PAC could not run (spec 082, RD2/RD9) — never a proxy that
+    /// answered for the host.
+    pub const PROXY: i64 = 6;
 }
 
 const NS_URL_ERROR_DOMAIN: &str = "NSURLErrorDomain";
 const WEBKIT_ERROR_DOMAIN: &str = "WebKitErrorDomain";
+const CF_NETWORK_ERROR_DOMAIN: &str = "kCFErrorDomainCFNetwork";
 
 /// The failure a platform error stands for, or `None` when it is not a
 /// failure at all (a navigation the page or the person cancelled, a frame
 /// load a newer navigation interrupted). `certificate` is set by a shell that
 /// learned of the failure from its certificate callback rather than an error
 /// code (Android `onReceivedSslError`).
+///
+/// [`LoadFailureClass::Proxy`] only when the proxy itself could not be used
+/// (unreached, timed out, PAC failed). A proxy that answered — a 502, or a
+/// CONNECT closed with no reply (Apple CFNetwork 311, the chaos proxy's
+/// `drop`) — speaks for the host, which keeps its own class.
 pub fn classify(
     platform: LoadPlatform,
     code: i64,
@@ -98,6 +119,8 @@ pub fn classify(
     }
     let class = match platform {
         LoadPlatform::Android => match code {
+            // ERROR_PROXY_AUTHENTICATION — the proxy refused the app itself.
+            -5 => LoadFailureClass::Proxy,
             // ERROR_HOST_LOOKUP, ERROR_BAD_URL, ERROR_UNSUPPORTED_SCHEME
             -2 | -12 | -10 => LoadFailureClass::NotFound,
             // ERROR_CONNECT
@@ -118,11 +141,24 @@ pub fn classify(
                 102 | 204 => return None,
                 _ => LoadFailureClass::Other,
             },
+            Some(CF_NETWORK_ERROR_DOMAIN) => match code {
+                // HTTP / HTTPS proxy connection failure, bad proxy
+                // credentials, PAC file error, PAC file auth.
+                306..=310 => LoadFailureClass::Proxy,
+                // An unexpected answer to CONNECT: the proxy answered for
+                // the host.
+                311 => LoadFailureClass::Refused,
+                _ => LoadFailureClass::Other,
+            },
             Some(NS_URL_ERROR_DOMAIN) | None => match code {
                 // NSURLErrorCancelled — a navigation replaced by another.
                 -999 => return None,
-                // bad URL, cannot find host, DNS lookup failed, unsupported URL
-                -1000 | -1003 | -1006 | -1002 => LoadFailureClass::NotFound,
+                // NSURLErrorBadURL. Vela never hands WebKit a malformed
+                // address; every -1000 seen (082 G31, SC-006) was the
+                // per-app proxy refusing the CONNECT — the network, retried.
+                -1000 => LoadFailureClass::Offline,
+                // cannot find host, DNS lookup failed, unsupported URL
+                -1003 | -1006 | -1002 => LoadFailureClass::NotFound,
                 -1001 => LoadFailureClass::Timeout,
                 -1004 => LoadFailureClass::Refused,
                 // not connected, connection lost, roaming off, data not
@@ -141,6 +177,7 @@ pub fn classify(
             probe_code::TIMEOUT => LoadFailureClass::Timeout,
             probe_code::TLS => LoadFailureClass::Certificate,
             probe_code::CONNECT => LoadFailureClass::Offline,
+            probe_code::PROXY => LoadFailureClass::Proxy,
             _ => LoadFailureClass::Other,
         },
     };
@@ -167,6 +204,7 @@ pub fn reason_key(class: LoadFailureClass) -> &'static str {
         LoadFailureClass::NotFound => "explore.loadNotFound",
         LoadFailureClass::Certificate => "explore.loadCertificate",
         LoadFailureClass::Other => "connect.browser.loadFailed",
+        LoadFailureClass::Proxy => "explore.loadProxy",
     }
 }
 
@@ -177,14 +215,17 @@ pub fn reason_key(class: LoadFailureClass) -> &'static str {
 /// certificate that is wrong is a warning — neither heals by asking again.
 pub fn retry_delay_ms(class: LoadFailureClass, attempt: u32) -> Option<u32> {
     match class {
-        LoadFailureClass::Offline | LoadFailureClass::Timeout | LoadFailureClass::Refused => {
-            match attempt {
-                1 => Some(2_000),
-                2 => Some(5_000),
-                3 => Some(10_000),
-                _ => None,
-            }
-        }
+        // A proxy that comes back (a node switch, a client restart) does so on
+        // the network's time scale.
+        LoadFailureClass::Offline
+        | LoadFailureClass::Timeout
+        | LoadFailureClass::Refused
+        | LoadFailureClass::Proxy => match attempt {
+            1 => Some(2_000),
+            2 => Some(5_000),
+            3 => Some(10_000),
+            _ => None,
+        },
         LoadFailureClass::Other => (attempt == 1).then_some(3_000),
         LoadFailureClass::NotFound | LoadFailureClass::Certificate => None,
     }
@@ -346,7 +387,8 @@ pub fn retry_when_network_returns(class: LoadFailureClass) -> bool {
         LoadFailureClass::Offline
         | LoadFailureClass::Timeout
         | LoadFailureClass::Refused
-        | LoadFailureClass::Other => true,
+        | LoadFailureClass::Other
+        | LoadFailureClass::Proxy => true,
         LoadFailureClass::NotFound | LoadFailureClass::Certificate => false,
     }
 }
