@@ -21,6 +21,10 @@
 //!   Uniswap's title and icon).
 //! - [`site_letter`] — the avatar letter, skipping the `app.` / `www.` / `m.`
 //!   that made app.uniswap.org an "A".
+//! - [`LoadWatch`] — the desktop's own account of a load (spec 082, RD4):
+//!   asked, probed, failed, retried. Moved here from the desktop shell so the
+//!   rules have one home and one set of tests; the desktop uses it through
+//!   the crate (no FFI export), the phones share its constants.
 
 use serde::{Deserialize, Serialize};
 
@@ -248,4 +252,286 @@ pub fn site_letter(host: &str) -> String {
         .find(char::is_ascii_alphanumeric)
         .map(|c| c.to_ascii_uppercase().to_string())
         .unwrap_or_else(|| "?".to_owned())
+}
+
+// ---------------------------------------------------------------------------
+// The load watch (spec 079 US3 / R4; moved into the core by spec 082, RD4)
+// ---------------------------------------------------------------------------
+//
+// wry 0.56 reports a load only when it COMMITS (`Started`) and when it
+// finishes, and implements no `didFail*`: a navigation that fails is silent,
+// and WKWebView keeps drawing the page it was on. So the desktop showed
+// nothing at all on a bad network — no progress after Go, no failure, no
+// reason, no retry (the 079 audit's F3–F5, "worse" than both phones).
+//
+// The watch is the shell's own account of a load, decided here with no UI in
+// it so the tests can drive every turn:
+//
+// - **Asked** — `navigate`, reload, Retry: loading from that instant, not from
+//   the engine's commit.
+// - **No commit in 3 s** — probe the address natively (HEAD, 5 s) and feed its
+//   error through [`classify`] with the probe's codes. A probe that fails is
+//   the failure panel, with its reason.
+// - **A probe that answers** — the site is up and slow: keep waiting, and call
+//   it a timeout at 20 s.
+// - **A commit at any time** clears everything: the page is there.
+// - **Retry** — automatic for the network classes, on [`retry_delay_ms`]'s
+//   schedule, only while the page is in front; the panel stays up, saying it
+//   is trying again, until a commit takes its place. A wrong name or a bad
+//   certificate is never retried by itself.
+//
+// Every timer and every probe carries the load's number; an answer for an
+// older load is dropped, which is how a new address wins over a retry of the
+// old one.
+
+/// How long a load may go without committing before the desktop probes the
+/// address.
+pub const WATCHDOG_MS: u32 = 3_000;
+/// The desktop probe's own budget.
+pub const PROBE_BUDGET_MS: u32 = 5_000;
+/// A load that has not committed by now is given up on, on every client —
+/// unless the engine shows it is getting somewhere ([`ENGINE_LIVE_PROGRESS`]).
+pub const GIVE_UP_MS: u32 = 20_000;
+/// Engine progress above this means the site is answering. WebKit starts a
+/// provisional load at 0.1, so anything past 0.15 is the page arriving.
+pub const ENGINE_LIVE_PROGRESS: f64 = 0.15;
+
+/// Who asked for a load.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Asked {
+    /// An address, a link, a tab, a reload: a new load.
+    Navigation,
+    /// The panel's Retry: the count starts over, the panel stays.
+    Retry,
+    /// The schedule's own attempt: the panel stays, the count goes on.
+    AutoRetry,
+}
+
+/// The shell's account of the page's current load.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LoadWatch {
+    /// The address asked for last — what a retry loads again.
+    pub url: Option<String>,
+    /// The load's number: every timer and probe carries it.
+    pub generation: u64,
+    pub requested_at_ms: f64,
+    /// Asked for, not committed yet.
+    pub loading: bool,
+    /// Committed, not finished: the hairline stays until the page is done.
+    pub committed: bool,
+    pub probing: bool,
+    /// The failure the panel shows. Stays through a retry.
+    pub failure: Option<LoadFailure>,
+    /// A retry is running under the panel.
+    pub retrying: bool,
+    /// Automatic attempts since the last commit or the last Retry.
+    pub attempt: u32,
+    /// An automatic attempt came due while the page was not in front.
+    pub retry_due: bool,
+    /// How the next reported request was asked for (set by the page just
+    /// before it tells the engine to load).
+    pub next_asked: Option<Asked>,
+}
+
+/// What a probe's answer means for the load.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Probed {
+    /// For another load, or one already committed: nothing.
+    Ignored,
+    /// The site answered: wait for the engine until this instant (ms, the
+    /// clock `requested` was given).
+    WaitUntil(f64),
+    /// The failure panel, with its reason.
+    Failed,
+}
+
+impl LoadWatch {
+    /// The engine was asked to load `url`. Returns the load's number when a
+    /// watchdog should run — never for `about:blank` and the like, which are
+    /// the wallet's own pages and cannot fail on a network.
+    pub fn requested(&mut self, url: &str, now_ms: f64) -> Option<u64> {
+        let asked = self.next_asked.take().unwrap_or(Asked::Navigation);
+        self.generation += 1;
+        self.probing = false;
+        self.committed = false;
+        self.retry_due = false;
+        if !is_web_url(url) {
+            self.url = None;
+            self.loading = false;
+            self.failure = None;
+            self.retrying = false;
+            self.attempt = 0;
+            return None;
+        }
+        self.url = Some(url.to_owned());
+        self.requested_at_ms = now_ms;
+        self.loading = true;
+        match asked {
+            Asked::Navigation => {
+                self.failure = None;
+                self.retrying = false;
+                self.attempt = 0;
+            }
+            Asked::Retry => {
+                self.retrying = self.failure.is_some();
+                self.attempt = 0;
+            }
+            Asked::AutoRetry => self.retrying = self.failure.is_some(),
+        }
+        Some(self.generation)
+    }
+
+    /// A document committed at `url`: the page is there, whatever was asked —
+    /// unless it is not a web page while a web page is being waited on.
+    /// WKWebView commits an empty `about:blank` when the first load of a
+    /// fresh view is refused (seen on the Mac, spec 079): that is the engine
+    /// giving up, not the site arriving.
+    pub fn committed(&mut self, url: &str) {
+        if self.ignores(url) {
+            return;
+        }
+        self.loading = false;
+        self.committed = true;
+        self.probing = false;
+        self.failure = None;
+        self.retrying = false;
+        self.attempt = 0;
+        self.retry_due = false;
+    }
+
+    /// The load of `url` finished — the engine's blank page finishing is not
+    /// the site's load finishing (see [`Self::committed`]).
+    pub fn finished(&mut self, url: &str) {
+        if self.ignores(url) {
+            return;
+        }
+        self.committed = false;
+        self.loading = false;
+        self.probing = false;
+    }
+
+    /// A document that is not a web page while a web page is being waited
+    /// on (or has failed): the engine giving up, not the site.
+    fn ignores(&self, url: &str) -> bool {
+        !is_web_url(url) && self.url.is_some() && (self.loading || self.failure.is_some())
+    }
+
+    /// [`WATCHDOG_MS`] after load `generation` was asked for: the address to
+    /// probe, if it still has not committed.
+    pub fn watchdog(&mut self, generation: u64) -> Option<String> {
+        if generation != self.generation || !self.loading || self.probing {
+            return None;
+        }
+        self.probing = true;
+        self.url.clone()
+    }
+
+    /// The probe of load `generation` answered: `Ok` — the site is reachable;
+    /// `Err(code)` — one of [`probe_code`]'s, or anything else for "other".
+    pub fn probed(&mut self, generation: u64, answer: Result<(), i64>) -> Probed {
+        if generation != self.generation || !self.loading {
+            return Probed::Ignored;
+        }
+        self.probing = false;
+        match answer {
+            Ok(()) => Probed::WaitUntil(self.requested_at_ms + f64::from(GIVE_UP_MS)),
+            Err(code) => {
+                self.fail(classify(LoadPlatform::Probe, code, None, false));
+                Probed::Failed
+            }
+        }
+    }
+
+    /// [`GIVE_UP_MS`] after load `generation` was asked for, with a site that
+    /// answered the probe: still nothing committed is a timeout.
+    pub fn give_up(&mut self, generation: u64) -> bool {
+        if generation != self.generation || !self.loading {
+            return false;
+        }
+        self.fail(classify(
+            LoadPlatform::Probe,
+            probe_code::TIMEOUT,
+            None,
+            false,
+        ));
+        true
+    }
+
+    fn fail(&mut self, failure: Option<LoadFailure>) {
+        self.loading = false;
+        self.probing = false;
+        self.retrying = false;
+        // `None` would be "not a failure" — never the probe's case, but the
+        // classifier is the one to say so.
+        if let Some(failure) = failure {
+            self.failure = Some(failure);
+        }
+    }
+
+    /// After a failure: the wait (ms) before the next automatic attempt, with
+    /// the load it belongs to — `None` when the class is never retried by
+    /// itself or the schedule has run out. Counts the attempt.
+    pub fn schedule_retry(&mut self) -> Option<(u64, u32)> {
+        let failure = self.failure.as_ref()?;
+        if !failure.auto_retry || self.loading {
+            return None;
+        }
+        let wait = retry_delay_ms(failure.class, self.attempt + 1)?;
+        self.attempt += 1;
+        Some((self.generation, wait))
+    }
+
+    /// An automatic attempt for load `generation` came due. The address to
+    /// load again when the page is in front; otherwise it waits for the page
+    /// to come back ([`Self::take_due`]).
+    pub fn retry_fired(&mut self, generation: u64, in_front: bool) -> Option<String> {
+        if generation != self.generation || self.failure.is_none() || self.loading {
+            return None;
+        }
+        if !in_front {
+            self.retry_due = true;
+            return None;
+        }
+        self.next_asked = Some(Asked::AutoRetry);
+        self.url.clone()
+    }
+
+    /// The page is in front again: an attempt that came due while it was not.
+    pub fn take_due(&mut self) -> Option<String> {
+        if !std::mem::take(&mut self.retry_due) || self.failure.is_none() || self.loading {
+            return None;
+        }
+        self.next_asked = Some(Asked::AutoRetry);
+        self.url.clone()
+    }
+
+    /// The panel's Retry: the address to load again.
+    pub fn retry(&mut self) -> Option<String> {
+        if self.loading {
+            return None;
+        }
+        self.next_asked = Some(Asked::Retry);
+        self.url.clone()
+    }
+
+    /// The hairline: from the moment a load is asked for until it finishes or
+    /// fails.
+    #[must_use]
+    pub fn busy(&self) -> bool {
+        self.loading || self.committed
+    }
+}
+
+/// The host of an address as typed, for the panel's small line: userinfo
+/// dropped, the port kept, nothing normalised.
+#[must_use]
+pub fn host_of(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    rest.split(['/', '?', '#'])
+        .next()
+        .unwrap_or(rest)
+        .rsplit('@')
+        .next()
+        .unwrap_or_default()
+        .to_owned()
 }
