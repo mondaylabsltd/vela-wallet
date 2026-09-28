@@ -11,6 +11,7 @@ use vela_core::app::browser_load::{
     AddressBar, Asked, BarLock, EngineSample, EngineVerdict, LoadFailureClass as C, LoadFinished,
     LoadPlatform as P, LoadWatch, Probed, RetryAction, SiteLabel, ENGINE_LIVE_PROGRESS, GIVE_UP_MS,
 };
+use vela_core::app::browser_load::same_address;
 
 fn class(platform: P, code: i64, domain: Option<&str>) -> Option<C> {
     classify(platform, code, domain, false).map(|failure| failure.class)
@@ -1015,4 +1016,178 @@ fn a_site_named_by_its_host_is_said_once() {
         label("app.uniswap.org", None)
     );
     assert_eq!(site_label("Uniswap", ""), label("Uniswap", None));
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 round 2 (T190): the retry race, one address spelling, hung loads
+// ---------------------------------------------------------------------------
+
+/// RJ8: one comparison of addresses everywhere the watch compares them.
+#[test]
+fn same_address_ignores_what_does_not_change_the_page() {
+    let same = [
+        ("https://app.uniswap.org", "https://app.uniswap.org/"),
+        ("HTTPS://App.Uniswap.ORG/", "https://app.uniswap.org"),
+        ("https://app.uniswap.org:443/swap", "https://app.uniswap.org/swap"),
+        ("http://127.0.0.1:80/", "http://127.0.0.1"),
+        ("https://app.uniswap.org/swap/", "https://app.uniswap.org/swap"),
+        ("https://app.uniswap.org/swap#top", "https://app.uniswap.org/swap"),
+        ("https://a.test/x?q=1", "https://a.test/x?q=1#frag"),
+    ];
+    for (a, b) in same {
+        assert!(same_address(a, b), "{a} = {b}");
+        assert!(same_address(b, a), "{b} = {a}");
+    }
+    let different = [
+        ("https://app.uniswap.org", "http://app.uniswap.org"),
+        ("https://app.uniswap.org:8443", "https://app.uniswap.org"),
+        ("https://app.uniswap.org/Swap", "https://app.uniswap.org/swap"),
+        ("https://a.test/x?q=1", "https://a.test/x?q=2"),
+        ("https://a.test/x?q=1", "https://a.test/x"),
+        ("https://a.test/x//", "https://a.test/x"),
+        ("https://a.test", "https://b.test"),
+    ];
+    for (a, b) in different {
+        assert!(!same_address(a, b), "{a} ≠ {b}");
+    }
+}
+
+/// One failed attempt of the wallet's own load at `url`: the engine picks it
+/// up (spelled `engine_url`), stops with no commit, and the probe fails.
+fn fail_once(watch: &mut LoadWatch, generation: u64, engine_url: &str, at: f64) {
+    watch.engine(&sample(true, 0.1, engine_url), at + 100.);
+    let stopped = watch.engine(&sample(false, 0.1, engine_url), at + 1_000.);
+    assert!(
+        matches!(stopped, EngineVerdict::StoppedWithoutCommit { generation: g, .. } if g == generation),
+        "{stopped:?}"
+    );
+    assert_eq!(
+        watch.probed(generation, Err(probe_code::CONNECT)),
+        Probed::Failed
+    );
+}
+
+/// DX14 (G43): the engine reports `https://app.uniswap.org/` for a typed
+/// `https://app.uniswap.org`, and its poll sees the retry start before the
+/// wallet's own `requested`. That is the wallet's own attempt — never a load
+/// the page started: the count goes on, three attempts at +2, +5 and +10 s,
+/// and the panel stays up between them.
+#[test]
+fn the_wallet_s_own_retry_is_never_taken_for_a_page_load() {
+    const TYPED: &str = "https://app.uniswap.org";
+    const ENGINE: &str = "https://app.uniswap.org/";
+    let mut watch = LoadWatch::default();
+    let mut generation = watch.requested(TYPED, 0.).unwrap_or_default();
+    let mut now = 0.;
+    fail_once(&mut watch, generation, ENGINE, now);
+    let mut waits = Vec::new();
+    while let Some((due, wait)) = watch.schedule_retry() {
+        waits.push(wait);
+        now += 1_000. + f64::from(wait);
+        let RetryAction::Load(url) = watch.retry_fired(due, true) else {
+            panic!("attempt {} is a load", waits.len());
+        };
+        assert_eq!(url, TYPED);
+        // The engine is seen starting BEFORE the wallet reports the request.
+        assert_eq!(
+            watch.engine(&sample(true, 0.1, ENGINE), now),
+            EngineVerdict::Nothing,
+            "the wallet's own attempt, not a page load"
+        );
+        assert!(!watch.page_initiated);
+        assert_eq!(watch.attempt, u32::try_from(waits.len()).unwrap_or_default());
+        assert!(watch.failure.is_some(), "the panel stays up");
+        generation = watch.requested(&url, now).unwrap_or_default();
+        assert!(watch.retrying && !watch.page_initiated);
+        fail_once(&mut watch, generation, ENGINE, now);
+    }
+    assert_eq!(waits, vec![2_000, 5_000, 10_000], "three attempts, no restart");
+}
+
+/// The panel's own Retry, seen starting by the engine first, is the same.
+#[test]
+fn the_panel_s_retry_seen_first_by_the_engine_is_the_wallet_s() {
+    let mut watch = LoadWatch::default();
+    let generation = watch.requested(SITE, 0.).unwrap_or_default();
+    fail_once(&mut watch, generation, SITE, 0.);
+    let url = watch.retry().unwrap_or_default();
+    assert_eq!(
+        watch.engine(&sample(true, 0.1, SITE), 5_000.),
+        EngineVerdict::Nothing
+    );
+    assert!(!watch.page_initiated);
+    watch.requested(&url, 5_100.);
+    assert!(watch.retrying, "the panel stays, saying it is trying again");
+}
+
+/// L2 (G44): WebKit's provisional load hangs at 0.1. The probe says why
+/// quickly, and the attempts that fall due while WebKit is still on it are
+/// given back — until the load is 20 s old: the next one is a real load,
+/// which cancels the hung one, instead of waiting for WebKit's own minute.
+#[test]
+fn a_hung_provisional_load_is_replaced_after_twenty_seconds() {
+    let (mut watch, generation) = engine_on_site();
+    watch.watchdog(generation);
+    assert_eq!(
+        watch.probed(generation, Err(probe_code::PROXY)),
+        Probed::Failed
+    );
+    let mut now = 5_000.;
+    let mut given_back = 0;
+    loop {
+        let (due, wait) = watch.schedule_retry().unwrap_or_default();
+        now += f64::from(wait);
+        // WebKit is still on it, still at 0.1.
+        watch.engine(&sample(true, 0.1, SITE), now);
+        match watch.retry_fired(due, true) {
+            RetryAction::EngineStillLoading => {
+                assert!(now < f64::from(GIVE_UP_MS), "given back at {now}");
+                given_back += 1;
+            }
+            RetryAction::Load(url) => {
+                assert_eq!(url, SITE);
+                assert!(now >= f64::from(GIVE_UP_MS), "loaded again at {now}");
+                break;
+            }
+            other => panic!("{other:?} at {now}"),
+        }
+    }
+    assert!(given_back > 0, "the young load was protected");
+}
+
+/// DX1: a 9 s proxy latency keeps WebKit at 0.1 until it commits; the
+/// attempts before that are all given back — one `loadRequest`, never a
+/// restart.
+#[test]
+fn a_slow_load_is_never_restarted_before_it_commits() {
+    let (mut watch, generation) = engine_on_site();
+    watch.watchdog(generation);
+    assert_eq!(
+        watch.probed(generation, Err(probe_code::TIMEOUT)),
+        Probed::Failed
+    );
+    let (due, wait) = watch.schedule_retry().unwrap_or_default();
+    watch.engine(&sample(true, 0.1, SITE), 8_000. + f64::from(wait) - 2_000.);
+    assert_eq!(
+        watch.retry_fired(due, true),
+        RetryAction::EngineStillLoading
+    );
+    watch.committed(SITE);
+    assert!(watch.failure.is_none() && watch.attempt == 0);
+    assert_eq!(watch.retry_fired(due, true), RetryAction::Nothing);
+}
+
+/// A live load past 20 s (the page arriving) is still never replaced.
+#[test]
+fn a_live_load_is_never_replaced() {
+    let (mut watch, generation) = engine_on_site();
+    watch.engine(&sample(true, 0.5, SITE), 4_000.);
+    watch.watchdog(generation);
+    watch.probed(generation, Err(probe_code::TIMEOUT));
+    let (due, _) = watch.schedule_retry().unwrap_or_default();
+    watch.engine(&sample(true, 0.6, SITE), 25_000.);
+    assert_eq!(
+        watch.retry_fired_at(due, true, 25_000.),
+        RetryAction::EngineStillLoading
+    );
 }

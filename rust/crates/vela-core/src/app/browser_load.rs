@@ -480,6 +480,15 @@ pub struct LoadWatch {
     pub engine_stopped: bool,
     /// This load was started by the page, not the wallet: no automatic retry.
     pub page_initiated: bool,
+    /// The address the wallet's own attempt (an automatic retry, or the
+    /// panel's Retry) handed the engine, until the wallet reports it
+    /// requested (spec 082 RJ8). The engine's poll can see that load start
+    /// first; it is the wallet's own, never a load the page started.
+    pub own_request: Option<String>,
+    /// The latest clock the watch has been given (a request, an engine poll,
+    /// or a `*_at` call) — how old the engine's load is when an attempt falls
+    /// due (RJ9).
+    pub clock_ms: f64,
 }
 
 /// What a probe's answer means for the load.
@@ -523,6 +532,8 @@ impl LoadWatch {
     /// the wallet's own pages and cannot fail on a network.
     pub fn requested(&mut self, url: &str, now_ms: f64) -> Option<u64> {
         let asked = self.next_asked.take().unwrap_or(Asked::Navigation);
+        self.own_request = None;
+        self.clock_ms = self.clock_ms.max(now_ms);
         self.generation += 1;
         self.probing = false;
         self.committed = false;
@@ -609,8 +620,12 @@ impl LoadWatch {
             .url
             .as_deref()
             .filter(|url| sample.loading && is_web_url(url));
+        self.clock_ms = self.clock_ms.max(now_ms);
         let was_loading = std::mem::replace(&mut self.engine_loading, web.is_some());
-        if web.is_some() && self.loading && is_live(sample.progress) {
+        // The page arriving counts while the panel is up too: the probe may
+        // have given up on a load the engine is still bringing in, and that
+        // load is never replaced (RJ9).
+        if web.is_some() && (self.loading || self.failure.is_some()) && is_live(sample.progress) {
             self.engine_live = true;
         }
         match (was_loading, web) {
@@ -621,9 +636,21 @@ impl LoadWatch {
     }
 
     fn engine_started(&mut self, url: &str, progress: f64, now_ms: f64) -> EngineVerdict {
-        // The wallet's own load (asked, or committed and finishing), or the
-        // address already watched starting again.
-        if self.busy() || self.url.as_deref() == Some(url) {
+        // The wallet's own load (asked, or committed and finishing), the
+        // address already watched starting again, or the wallet's own attempt
+        // seen by the poll before the wallet reported it (RJ8, G43: taking it
+        // for a page load reset the attempt count, and the schedule restarted
+        // — seven attempts in 42 s).
+        let own_attempt = self
+            .own_request
+            .as_deref()
+            .is_some_and(|own| same_address(own, url))
+            || matches!(self.next_asked, Some(Asked::AutoRetry | Asked::Retry));
+        let watched = self
+            .url
+            .as_deref()
+            .is_some_and(|watched| same_address(watched, url));
+        if self.busy() || own_attempt || watched {
             // A load the engine had stopped and has taken up again is not
             // stopped any more: a probe that answers now means "wait".
             if self.loading {
@@ -742,9 +769,24 @@ impl LoadWatch {
         Some((self.generation, wait))
     }
 
+    /// [`Self::retry_fired`] with the clock of the moment it came due.
+    pub fn retry_fired_at(&mut self, generation: u64, in_front: bool, now_ms: f64) -> RetryAction {
+        self.clock_ms = self.clock_ms.max(now_ms);
+        self.retry_fired(generation, in_front)
+    }
+
+    /// [`Self::take_due`] with the clock of the moment the page came back.
+    pub fn take_due_at(&mut self, now_ms: f64) -> RetryAction {
+        self.clock_ms = self.clock_ms.max(now_ms);
+        self.take_due()
+    }
+
     /// An automatic attempt for load `generation` came due. The address to
     /// load again when the page is in front and the engine is not still on
     /// it; otherwise it waits for the page to come back ([`Self::take_due`]).
+    /// The load's age is measured on the latest clock the watch has seen
+    /// ([`Self::clock_ms`]; the Mac polls the engine several times a second,
+    /// and [`Self::retry_fired_at`] gives it exactly).
     pub fn retry_fired(&mut self, generation: u64, in_front: bool) -> RetryAction {
         if generation != self.generation || self.failure.is_none() || self.loading {
             return RetryAction::Nothing;
@@ -765,16 +807,25 @@ impl LoadWatch {
     }
 
     fn retry_now(&mut self) -> RetryAction {
-        if self.engine_loading {
+        let age_ms = self.clock_ms - self.requested_at_ms;
+        if self.engine_loading && (self.engine_live || age_ms < f64::from(GIVE_UP_MS)) {
             // The panel is up because the probe gave up, not the engine: a
             // second request now would restart a load that may be about to
             // arrive (W7). The attempt is given back.
+            //
+            // Only while that load is young or live (RJ9, G44): WebKit can
+            // hold a provisional load at 0.1 for its own full minute, and
+            // every attempt given back meant no attempt at all for ~60 s.
+            // Past GIVE_UP_MS with nothing arriving — the phones'
+            // `should_give_up` — the attempt is a real load, and the new
+            // request cancels the hung one.
             self.attempt = self.attempt.saturating_sub(1);
             return RetryAction::EngineStillLoading;
         }
         match self.url.clone() {
             Some(url) => {
                 self.next_asked = Some(Asked::AutoRetry);
+                self.own_request = Some(url.clone());
                 RetryAction::Load(url)
             }
             None => RetryAction::Nothing,
@@ -787,6 +838,7 @@ impl LoadWatch {
             return None;
         }
         self.next_asked = Some(Asked::Retry);
+        self.own_request.clone_from(&self.url);
         self.url.clone()
     }
 
@@ -810,6 +862,61 @@ pub fn host_of(url: &str) -> String {
         .next()
         .unwrap_or_default()
         .to_owned()
+}
+
+/// Whether two addresses name the same page (spec 082 RJ8): the scheme and
+/// the host compared case-insensitively, a default port (80 for http, 443
+/// for https) dropped, an empty path read as `/`, one trailing slash
+/// ignored, the fragment ignored. The path and the query are compared as
+/// written. WebKit reports `https://app.uniswap.org/` for a typed
+/// `https://app.uniswap.org`; the watch compared them literally.
+#[must_use]
+pub fn same_address(a: &str, b: &str) -> bool {
+    comparable_address(a) == comparable_address(b)
+}
+
+/// The spelling [`same_address`] compares.
+fn comparable_address(url: &str) -> String {
+    let url = url.trim();
+    let url = url.split_once('#').map_or(url, |(before, _)| before);
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return url.to_owned();
+    };
+    let scheme = scheme.to_ascii_lowercase();
+    let end = rest.find(['/', '?']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(end);
+    let (userinfo, hostport) = match authority.rsplit_once('@') {
+        Some((user, host)) => (Some(user), host),
+        None => (None, authority),
+    };
+    let mut hostport = hostport.to_ascii_lowercase();
+    let default_port = match scheme.as_str() {
+        "http" => Some(":80"),
+        "https" => Some(":443"),
+        _ => None,
+    };
+    if let Some(port) = default_port {
+        if let Some(host) = hostport.strip_suffix(port) {
+            hostport = host.to_owned();
+        }
+    }
+    let (path, query) = match tail.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (tail, None),
+    };
+    let path = path.strip_suffix('/').unwrap_or(path);
+    let mut out = format!("{scheme}://");
+    if let Some(user) = userinfo {
+        out.push_str(user);
+        out.push('@');
+    }
+    out.push_str(&hostport);
+    out.push_str(path);
+    if let Some(query) = query {
+        out.push('?');
+        out.push_str(query);
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
