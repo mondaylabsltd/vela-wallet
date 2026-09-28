@@ -160,8 +160,34 @@ enum CoreHTTP {
         /// 2xx, but the body was not JSON. Some proxies answer HTML.
         case nonJSON
         case timeout
-        /// Never reached a server: DNS, refused, offline, TLS.
+        /// A socket failure after the request may have been written — a reset,
+        /// a connection lost mid-answer — or one this file cannot place.
         case network
+        /// Nothing left the device (spec 082 RA1, contract §2): DNS, a refused
+        /// connection, no route, the TLS handshake, a URL refused before it
+        /// was sent. Routed like `network`; the difference is that a submit
+        /// may say "not sent" only after this.
+        case notConnected
+    }
+
+    /// Whether a `URLError` proves the request never left the device — the
+    /// contract's iOS list (§2), plus `.badURL`: a URL the loader refused
+    /// (the per-app proxy refusing CONNECT surfaces as -1000, research RE4)
+    /// is a request that was never written.
+    static func neverLeftTheDevice(_ error: URLError) -> Bool {
+        switch error.code {
+        case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
+             .notConnectedToInternet, .secureConnectionFailed,
+             .serverCertificateHasBadDate, .serverCertificateUntrusted,
+             .serverCertificateHasUnknownRoot, .serverCertificateNotYetValid,
+             .clientCertificateRejected, .clientCertificateRequired,
+             .appTransportSecurityRequiresSecureConnection,
+             .internationalRoamingOff, .dataNotAllowed, .callIsActive,
+             .badURL, .unsupportedURL:
+            return true
+        default:
+            return false
+        }
     }
 
     /// One JSON-RPC call, with the envelope preserved.
@@ -175,12 +201,13 @@ enum CoreHTTP {
         params: [Any],
         timeout: TimeInterval = Timeout.rpcRead
     ) async -> RpcReply {
-        guard var request = request(url, timeout: timeout) else { return .network }
+        // Refused before sending (not https) or never encoded: nothing left.
+        guard var request = request(url, timeout: timeout) else { return .notConnected }
         let payload: [String: Any] = [
             "jsonrpc": "2.0", "id": 1, "method": method, "params": params,
         ]
         guard let body = try? JSONSerialization.data(withJSONObject: payload) else {
-            return .network
+            return .notConnected
         }
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -195,6 +222,8 @@ enum CoreHTTP {
             return .response(object)
         } catch let error as URLError where error.code == .timedOut {
             return .timeout
+        } catch let error as URLError where neverLeftTheDevice(error) {
+            return .notConnected
         } catch {
             return .network
         }

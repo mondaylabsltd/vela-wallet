@@ -23,8 +23,12 @@ struct TrackEntryWire: Decodable, Equatable {
     /// network fees settle; the relay sends it itself), `confirmed`, `dropped`
     /// (reverted, terminal), `rejected` (the relay refused it, nothing was
     /// sent), `unreachable` (the bundler could not be asked all window — fate
-    /// unknown), and the window-expiry case. Collapsing these into
+    /// unknown), the window-expiry case, and `not_sent` (spec 082 RA4: a
+    /// may-have-been-sent op the relay said twice, a minute apart, it never
+    /// had — terminal, and the records read failed). Collapsing these into
     /// success/failure is what turns "we could not find out" into "it failed".
+    /// A string rather than an enum on purpose: a status this build has never
+    /// heard of must not fail the whole view.
     let status: String
     let txHash: String?
     /// The core is still following this entry — in its wait window or past
@@ -34,9 +38,31 @@ struct TrackEntryWire: Decodable, Equatable {
     let submittedAtMs: Double?
     /// Where the operation is in its life, for the words (spec 079): `landing`
     /// (inside the wait window), `still_confirming` (past it and still asked
-    /// about — never a failure), `unknown` (past the 24-hour line), `final`.
+    /// about — never a failure), `unknown` (past the 24-hour line), `final`,
+    /// and `maybe_sent` (spec 082: the submit's reply was lost and neither
+    /// the relay nor the chain has shown the op yet).
     /// The status says why; this says when, the same way on every client.
     let outcome: String?
+    /// The bundle transaction the relay's status named while no receipt has
+    /// (spec 082 RA7, the 079 D2 explorer link). A link only: `txHash` above
+    /// is the verdict's.
+    var relayTxHash: String? = nil
+
+    /// This entry as the core's own `TrackEntryView` JSON — what
+    /// `signEndingState` and `sendReceiptOutcomeOf` read.
+    var coreJSON: String {
+        CoreJSON.string([
+            "user_op_hash": userOpHash,
+            "chain_id": chainId,
+            "record_ids": recordIds,
+            "status": status,
+            "tx_hash": txHash.map { $0 as Any } ?? NSNull(),
+            "polling": polling,
+            "submitted_at_ms": submittedAtMs.map { $0 as Any } ?? NSNull(),
+            "outcome": outcome ?? "landing",
+            "relay_tx_hash": relayTxHash.map { $0 as Any } ?? NSNull(),
+        ])
+    }
 }
 
 struct TrackViewWire: Decodable, Equatable {

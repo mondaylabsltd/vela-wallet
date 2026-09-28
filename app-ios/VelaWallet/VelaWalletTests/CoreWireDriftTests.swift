@@ -227,3 +227,240 @@ struct CoreWireDriftTests {
         }
     }
 }
+
+// MARK: - Spec 082 (T103): every new variant, as the core emits it
+
+/// Answers a bridge's effects one at a time until `answer` declines one (it
+/// returns `nil`) or nothing is left — the order a `CoreDriver` would, minus
+/// the concurrency. What it saw is returned for the assertions.
+@MainActor
+struct BridgeRun {
+    private(set) var operations: [[String: Any]] = []
+    private(set) var view: [String: Any] = [:]
+    private var queue: [[String: Any]] = []
+
+    var tags: [String] { operations.compactMap { $0["type"] as? String } }
+
+    mutating func take(_ result: String) throws {
+        let object = try CoreJSON.object(result)
+        if let view = object["view"] as? [String: Any] { self.view = view }
+        queue += object["effects"] as? [[String: Any]] ?? []
+    }
+
+    /// Runs until `answer` returns `nil` for an operation (left unanswered)
+    /// or the queue is empty.
+    mutating func drain(
+        _ bridge: CoreBridge, limit: Int = 60, answer: ([String: Any]) -> String?
+    ) throws {
+        var steps = 0
+        while !queue.isEmpty, steps < limit {
+            steps += 1
+            let effect = queue.removeFirst()
+            guard let id = (effect["id"] as? NSNumber)?.uint64Value,
+                  let operation = effect["operation"] as? [String: Any]
+            else { continue }
+            operations.append(operation)
+            guard let reply = answer(operation) else { return }
+            try take(bridge.resolveEffect(effectId: id, resultJson: reply))
+        }
+    }
+}
+
+@MainActor
+struct CoreWire082Tests {
+
+    private let me = "0x88cca0eedbf2c4426110bbfc998f048689266894"
+    private let now = 1_757_000_000_000.0
+    private let opHash = "0x" + String(repeating: "ab", count: 32)
+
+    /// `SignView.phase` walks preparing → awaiting signature → submitting on
+    /// the ceremony events, and a lost reply's `op_submitted` shows as
+    /// `pendingOpMaybeSent` and on the tracker handoff with its head block.
+    @Test func theSignViewCarriesItsPhaseAndAMaybeSentHandoff() throws {
+        let core = SignRequestCore()
+        let idle = try CoreJSON.decode(SignViewWire.self, from: try CoreJSON.object(core.view()))
+        #expect(idle.phase == .idle)
+        #expect(!idle.pendingOpMaybeSent)
+
+        _ = try core.dispatch(eventJson: CoreJSON.string(["type": "networks_changed", "chain_ids": [100]]))
+        _ = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "accounts_changed",
+            "accounts": [["address": me, "credential_id": "cred-1"]],
+            "active_index": 0,
+        ]))
+        _ = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "request_arrived", "id": "req-1", "method": "eth_sendTransaction",
+            "params_json": #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x1"}]"#,
+            "origin": "http://192.168.50.9:8137", "transport_id": "tab-1",
+            "dedicated_transport": true, "per_request_chain": 100, "dapp": NSNull(),
+            "granted_address": me, "requested_address": NSNull(), "request_ts_ms": NSNull(),
+            "now_ms": now,
+        ]))
+
+        var run = BridgeRun()
+        try run.take(core.dispatch(eventJson: CoreJSON.string([
+            "type": "approve_tapped",
+            "opts": [
+                "max_fee_per_gas": NSNull(), "bundler_cost_wei": NSNull(), "gas_fee_token": NSNull(),
+                "quoted_fee": ["amount": "1000", "recipient": me, "tier": "fast"],
+                "fee_collector": NSNull(), "params_override_json": NSNull(), "intent": NSNull(),
+                "unlimited_approved": false,
+            ],
+        ])))
+        #expect(try CoreJSON.decode(SignViewWire.self, from: run.view).phase == .preparing)
+        try run.drain(core) { operation in
+            switch operation["type"] as? String {
+            case "check_bundler_funding": return CoreJSON.string(["type": "pre_check", "funding": NSNull()])
+            case "attempt_sponsorship":
+                return CoreJSON.string(["type": "sponsorship", "outcome": ["type": "denied", "reason": NSNull()]])
+            default: return nil
+            }
+        }
+        #expect(run.tags.last == "sign_and_submit")
+        #expect(try CoreJSON.decode(SignViewWire.self, from: run.view).phase == .preparing,
+                "the network work before the prompt is never 'waiting for your signature'")
+
+        try run.take(core.dispatch(eventJson: CoreJSON.string(["type": "ceremony_started", "id": "req-1"])))
+        #expect(try CoreJSON.decode(SignViewWire.self, from: run.view).phase == .awaitingSignature)
+        try run.take(core.dispatch(eventJson: CoreJSON.string(["type": "ceremony_done", "id": "req-1"])))
+        #expect(try CoreJSON.decode(SignViewWire.self, from: run.view).phase == .submitting)
+
+        try run.take(core.dispatch(eventJson: CoreJSON.string([
+            "type": "op_submitted", "id": "req-1", "user_op_hash": opHash, "now_ms": now,
+            "maybe_sent": true, "submit_block": 48_000_000,
+        ])))
+        let sent = try CoreJSON.decode(SignViewWire.self, from: run.view)
+        #expect(sent.pendingOpMaybeSent)
+        #expect(sent.pendingOpHash == opHash)
+        #expect(sent.trackerHandoff?.maybeSent == true)
+        #expect(sent.trackerHandoff?.submitBlock == 48_000_000)
+    }
+
+    /// A restored may-have-been-sent record is followed as `maybe_sent`, and
+    /// the tracker reads the chain for the op's own event (ruling 8).
+    @Test func aMaybeSentTrackerEntryDecodesWithItsFindEvent() throws {
+        let core = TxTrackerCore()
+        var run = BridgeRun()
+        try run.take(core.dispatch(eventJson: CoreJSON.string(["type": "app_resumed"])))
+        try run.drain(core) { operation in
+            switch operation["type"] as? String {
+            case "now": return CoreJSON.string(["type": "clock", "now_ms": now])
+            case "load_pending_txs":
+                return CoreJSON.string([
+                    "type": "records_loaded", "now_ms": now,
+                    "records": [[
+                        "record_id": "dapp-1-tx", "user_op_hash": opHash, "chain_id": 100,
+                        // 30 s ago: inside the wait window, past the first
+                        // status interval, when the chain is read too.
+                        "submitted_at_ms": now - 30_000, "maybe_sent": true, "submit_block": 48_000_000,
+                    ]],
+                ])
+            case "poll_receipt":
+                return CoreJSON.string(["type": "receipt_pending", "user_op_hash": opHash, "now_ms": now])
+            case "poll_status":
+                return CoreJSON.string(["type": "status_unavailable", "user_op_hash": opHash, "now_ms": now])
+            default: return nil
+            }
+        }
+        let find = try #require(run.operations.first { $0["type"] as? String == "find_op_event" })
+        // The head is not known yet: the first read asks for it alone.
+        #expect(find["from_block"] is NSNull)
+        #expect((find["user_op_hash"] as? String) == opHash)
+        #expect((find["topic0"] as? String)?.hasPrefix("0x") == true)
+
+        let view = try CoreJSON.decode(TrackViewWire.self, from: run.view)
+        let entry = try #require(view.entry(userOpHash: opHash))
+        #expect(entry.outcome == "maybe_sent")
+        #expect(entry.status == "pending")
+        #expect(entry.relayTxHash == nil)
+    }
+
+    /// The pool's view carries the chains a first pass could not reach.
+    @Test func thePoolViewCarriesUnreachedChains() throws {
+        let initial = try CoreJSON.decode(RpcPoolViewWire.self, from: try CoreJSON.object(RpcPoolCore().view()))
+        #expect(initial.unreachedChains.isEmpty)
+    }
+
+    /// Empty calldata is a plain send: the core's card, exact, and a zero
+    /// value marked as such.
+    @Test func aPlainSendDecodesWithItsCard() throws {
+        func resolve(_ value: String) throws -> ClearSigningViewWire {
+            let core = ClearSigningCore()
+            let result = try core.dispatch(eventJson: CoreJSON.string([
+                "type": "resolve_transaction",
+                "to": "0x76875e38fc6bc2dedcaed807ce00782db5c0d141", "data": "0x", "value": value,
+                "chain_id": 100, "locale": SigningController.defaultLocale,
+            ]))
+            return try CoreJSON.decode(ClearSigningViewWire.self, from: CoreJSON.object(result)["view"] as? [String: Any] ?? [:])
+        }
+        let dust = try resolve("0x38d7ea4c68000")
+        #expect(dust.surface == .plainSend)
+        #expect(dust.plainSend?.amount == "0.001")
+        #expect(dust.plainSend?.noValue == false)
+        #expect(dust.plainSend?.to == (try checksumAddress(addressHex: "0x76875e38fc6bc2dedcaed807ce00782db5c0d141")))
+
+        let zero = try resolve("0x0")
+        #expect(zero.surface == .plainSend)
+        #expect(zero.plainSend?.noValue == true)
+        #expect(zero.plainSend?.amount == "0")
+    }
+
+    /// A dApp transaction is a feed row with its kind, status and site, and
+    /// the feed names History's empty line.
+    @Test func aDappRowDecodesWithKindStatusAndSite() throws {
+        let core = ActivityFeedCore()
+        var run = BridgeRun()
+        try run.take(core.dispatch(eventJson: CoreJSON.string(["type": "account_switched", "address": me])))
+        try run.drain(core) { operation in
+            switch operation["type"] as? String {
+            case "read_tx_store":
+                return CoreJSON.string([
+                    "type": "store_loaded", "now_ms": now,
+                    "read_id": (operation["read_id"] as? NSNumber)?.intValue ?? 0,
+                    "records": [[
+                        "id": "dapp-1-tx", "user_op_hash": opHash, "tx_hash": "", "from": me,
+                        "to": "0x76875e38fc6bc2dedcaed807ce00782db5c0d141", "to_name": NSNull(),
+                        "value": "0x38d7ea4c68000", "symbol": "xDAI", "decimals": 18, "logo_urls": NSNull(),
+                        "chain_id": 100, "timestamp": now / 1000, "day_start_ms": now,
+                        "status": "pending", "kind": "dapp_tx", "usd": NSNull(),
+                        "dapp_origin": "http://192.168.50.9:8137",
+                    ]],
+                ])
+            case "scan_incoming_transfers": return CoreJSON.string(["type": "sync_completed", "new_count": 0])
+            default: return nil
+            }
+        }
+        let view = try CoreJSON.decode(FeedViewWire.self, from: run.view)
+        let item = try #require(view.rows.compactMap { row -> FeedItemWire? in
+            if case .item(let item) = row { return item } else { return nil }
+        }.first)
+        #expect(item.kind == .dappTx)
+        #expect(item.status == .pending)
+        #expect(item.site == "192.168.50.9:8137")
+        #expect(view.transactions.first?.dappOrigin == "http://192.168.50.9:8137")
+        #expect(view.historyEmptyKey == "history.emptyTitle")
+        #expect(view.homeEmptyKey == "home.emptyNoActivity")
+    }
+
+    /// One variant this build has never heard of must not fail the view it
+    /// sits in: each reads as its most cautious known neighbour.
+    @Test func anUnknownVariantDoesNotFailTheView() throws {
+        let sign = try CoreJSON.decoder.decode(SignPhaseWire.self, from: Data(#""a_future_phase""#.utf8))
+        #expect(sign == .preparing)
+        let surface = try CoreJSON.decoder.decode(ClearSurface.self, from: Data(#""a_future_surface""#.utf8))
+        #expect(surface == .blindTransaction)
+        let kind = try CoreJSON.decoder.decode(FeedTxKindWire.self, from: Data(#""a_future_kind""#.utf8))
+        #expect(kind == .send)
+        let status = try CoreJSON.decoder.decode(FeedTxStatusWire.self, from: Data(#""a_future_status""#.utf8))
+        #expect(status == .pending)
+        let tracker = try CoreJSON.decode(TrackViewWire.self, from: [
+            "entries": [[
+                "user_op_hash": opHash, "chain_id": 100, "record_ids": ["r"],
+                "status": "a_future_status", "tx_hash": NSNull(), "polling": true,
+                "submitted_at_ms": now, "outcome": "a_future_outcome", "relay_tx_hash": NSNull(),
+            ]],
+        ])
+        #expect(tracker.entries.first?.status == "a_future_status")
+    }
+}
+

@@ -270,6 +270,10 @@ struct ParityTests {
             "day_start_ms": 1_700_000_000_000,
             "tx_hash": hash ?? NSNull(),
             "batch": NSNull(),
+            // Spec 082 RG1: the core names what the row is.
+            "kind": direction == "in" ? "receive" : "send",
+            "status": "confirmed",
+            "site": NSNull(),
         ])
     }
 

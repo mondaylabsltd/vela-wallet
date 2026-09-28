@@ -729,7 +729,19 @@ final class SigningController {
         func field(_ name: String) -> String? {
             (call[name] as? String).flatMap { $0.isEmpty ? nil : $0 }
         }
-        return (to: field("to"), data: field("data"), value: field("value"))
+        return (to: field("to"), data: field("data"), value: valueText(call["value"]))
+    }
+
+    /// The first call's `value` as the core must see it (spec 082 RC6): a
+    /// string as written, a JSON number AS TEXT — which the core refuses to
+    /// print (RC4), so the sheet shows the blind rung rather than a calm
+    /// "0" — and absent or JSON null as nothing (= 0).
+    static func valueText(_ raw: Any?) -> String? {
+        switch raw {
+        case let text as String: return text.isEmpty ? nil : text
+        case let number as NSNumber: return number.stringValue
+        default: return nil
+        }
     }
 
     static func clearKickoff(

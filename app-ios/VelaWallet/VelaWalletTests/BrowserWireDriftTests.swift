@@ -197,7 +197,10 @@ struct BrowserWireDriftTests {
             "params": [["chainId": "0x1"]],
         ])))
         let tab = try CoreJSON.decode(DbrViewWire.self, from: try view(from: signed))
-        #expect(tab.tab("t1")?.connectedAddress == "0x88cca0eedbf2c4426110bbfc998f048689266894")
+        // Spec 082 RG10: the grant is kept in the wallet's own spelling
+        // (EIP-55), whatever case it was handed in — one account, one spelling
+        // toward the page.
+        #expect(tab.tab("t1")?.connectedAddress == "0x88cCA0EeDbF2C4426110bbFc998F048689266894")
         #expect(tab.signing == DbrSigningViewWire(tab: "t1", id: "2"))
         // The page goes away with its sheet up: the sheet is cancelled.
         asked += tags(try effects(from: try page(["t": "hello", "doc": "d2"])))

@@ -560,38 +560,29 @@ enum SigningLive {
         clear: ClearSigningViewWire, to: String?, valueHex: String?, dataBytes: Int,
         context: Context
     ) -> [SigningBlock] {
-        // A plain native transfer — no calldata — is the one transaction the
-        // core resolves **without** a descriptor: resolved, and no result.
-        // Drawing the blind "cannot decode (0 bytes)" card for it reads a dust
-        // send as a contract interaction, which is what Android shipped for
-        // one screenshot.
-        if clear.resolved, clear.result == nil, clear.message == nil, clear.blindTyped == nil,
-           dataBytes == 0, let to {
-            return plainTransferBlocks(to: to, valueHex: valueHex, context: context)
-        }
-        return blocksBySurface(clear: clear, to: to, dataBytes: dataBytes, context: context)
+        // Spec 082 RC1: a plain native transfer — no calldata — is the core's
+        // verdict now (`ClearSurface.plainSend`), not a guess drawn here. The
+        // interception this replaced read "no result and no bytes" and printed
+        // its own figure; the core's card is exact and refuses a value it
+        // cannot read, which then falls to the blind rung like any other.
+        blocksBySurface(clear: clear, to: to, dataBytes: dataBytes, context: context)
     }
 
-    private static func plainTransferBlocks(
-        to: String, valueHex: String?, context: Context
-    ) -> [SigningBlock] {
+    /// The core's plain send card (RC1–RC5), in the look the wallet's own send
+    /// has always had: 发送 · −amount coin · 接收方. A zero value reads
+    /// "0 coin" with no minus (RC3): only a simulation may say nothing leaves.
+    /// The coin is the fee row's symbol (RC5).
+    static func plainSendBlocks(_ plain: ClearPlainSendWire, context: Context) -> [SigningBlock] {
         let loc = context.loc
-        let wei = GuardExecutor.decimal(fromWordHex: padded(valueHex ?? "0x0")) ?? "0"
         return [
             .intent(text: s(loc, "intentSend"), tone: .neutral),
             .amount(
-                line: AmountLine(sign: "−", value: SendLive.fromBase(wei, decimals: 18),
+                line: AmountLine(sign: plain.noValue ? "" : "−", value: plain.amount,
                                  symbol: context.nativeSymbol),
                 card: true
             ),
-            .party(label: s(loc, "recipientLabel"), name: AddressText.short(to), address: to),
+            .party(label: s(loc, "recipientLabel"), name: AddressText.short(plain.to), address: plain.to),
         ]
-    }
-
-    private static func padded(_ hex: String) -> String {
-        let digits = hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
-        if digits.isEmpty { return "0x00" }
-        return digits.count % 2 == 0 ? "0x" + digits : "0x0" + digits
     }
 
     /// What the simulation found, or that it could not look.
@@ -717,7 +708,17 @@ enum SigningLive {
                 }))
             }
             return blocks
+        case .plainSend:
+            // `plainSend` is present exactly when the surface is; a view
+            // without it is drawn as the blind rung rather than as nothing.
+            if let plain = clear.plainSend { return plainSendBlocks(plain, context: context) }
+            return blindTransactionBlocks(to: to, dataBytes: dataBytes, loc: loc)
         case .blindTransaction:
+            return blindTransactionBlocks(to: to, dataBytes: dataBytes, loc: loc)
+        }
+    }
+
+    private static func blindTransactionBlocks(to: String?, dataBytes: Int, loc: Loc) -> [SigningBlock] {
             var blocks: [SigningBlock] = [
                 .intent(text: s(loc, "intentContractCall"), tone: .caution),
                 .warning(tone: .caution,
@@ -732,7 +733,6 @@ enum SigningLive {
                 ))
             }
             return blocks
-        }
     }
 
     private static func tone(of risk: ClearRisk) -> SigningTone {

@@ -28,6 +28,13 @@ enum FeedDirectionWire: String, Decodable {
 
 enum FeedTxStatusWire: String, Decodable {
     case pending, confirmed, failed
+
+    /// A lifecycle this build has never heard of reads as pending — never as
+    /// confirmed, and never as a view that fails to decode.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = FeedTxStatusWire(rawValue: raw) ?? .pending
+    }
 }
 
 enum FeedTxKindWire: String, Decodable {
@@ -36,6 +43,13 @@ enum FeedTxKindWire: String, Decodable {
     case signMessage = "sign_message"
     case signTypedData = "sign_typed_data"
     case connect
+
+    /// A kind this build has never heard of reads as a send, the core's own
+    /// default for an untyped record — the row still shows, with its status.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = FeedTxKindWire(rawValue: raw) ?? .send
+    }
 }
 
 enum FeedBatchKindWire: String, Decodable {
@@ -65,6 +79,9 @@ struct FeedTxRecordWire: Decodable, Equatable {
     /// `nil` = a legacy untyped record, which the core reads as `send`.
     let kind: FeedTxKindWire?
     let usd: String?
+    /// The origin of the site that asked, for a `dapp_tx` record (spec 082
+    /// RG1); `nil` for every other kind.
+    var dappOrigin: String? = nil
 }
 
 struct FeedBatchTransferWire: Decodable, Equatable {
@@ -118,6 +135,13 @@ struct FeedItemWire: Decodable, Equatable {
     let dayStartMs: Double
     let txHash: String?
     let batch: FeedBatchWire?
+    /// What the row is (spec 082 RG1): `send` (a folded batch too),
+    /// `receive` or `dappTx`. The shell draws from this and never guesses.
+    var kind: FeedTxKindWire = .send
+    /// The record's lifecycle; the tracker alone moves it off `pending`.
+    var status: FeedTxStatusWire = .confirmed
+    /// `dappTx` only: `host[:port]` of the site that asked.
+    var site: String? = nil
 }
 
 /// A date header or an item, in render order.
@@ -170,4 +194,9 @@ struct FeedViewWire: Decodable, Equatable {
     /// `nil` while balance privacy is on — the core withholds it there rather
     /// than trusting the shell to mask it.
     let toast: FeedToastWire?
+    /// The corpus key of History's empty line (spec 082 RG5), chosen by the
+    /// core from the chain filter. Loading vs empty stays the shell's.
+    var historyEmptyKey: String = "history.emptyTitle"
+    /// The corpus key of the home Activity's empty line, chosen the same way.
+    var homeEmptyKey: String = "home.emptyNoActivity"
 }

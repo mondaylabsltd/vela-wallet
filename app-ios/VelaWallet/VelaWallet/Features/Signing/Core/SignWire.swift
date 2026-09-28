@@ -139,6 +139,33 @@ struct SignTrackerHandoffWire: Decodable, Equatable {
     let userOpHash: String
     let recordIds: [String]
     let chainId: Int
+    /// The submit's reply was lost and `userOpHash` is the local hash (spec
+    /// 082 RA3): forwarded to the tracker's `submitted`, which then follows
+    /// the op as "may have been sent" to its end.
+    var maybeSent: Bool = false
+    /// The chain head read before the first submit POST — where the tracker's
+    /// relay-independent landing check starts (ruling 8). `nil` = unknown.
+    var submitBlock: Int? = nil
+}
+
+/// What the signing sheet is doing, in the words a person reads (spec 082
+/// RA9, G22). The network work before the passkey is "preparing", never
+/// "waiting for your signature": the core moves to `awaitingSignature` only
+/// when the shell says the prompt is up (`ceremony_started`).
+///
+/// A phase this build has never heard of reads as `preparing` rather than
+/// failing the whole view — a sheet that says "preparing" a moment too long is
+/// honest; a sheet that cannot render is not.
+enum SignPhaseWire: String, Decodable, Equatable {
+    case idle
+    case preparing
+    case awaitingSignature = "awaiting_signature"
+    case submitting
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SignPhaseWire(rawValue: raw) ?? .preparing
+    }
 }
 
 /// Why an arriving request never reached the sheet.
@@ -202,6 +229,12 @@ struct SignViewWire: Decodable, Equatable {
     let globalChainId: Int
     /// Present when the self-call guard refused the request (spec 081).
     let blocked: SignBlockedViewWire?
+    /// The sheet's words (spec 082 RA9) — read instead of `isSigning` /
+    /// `isSubmitting`, which the core keeps only until every shell reads this.
+    var phase: SignPhaseWire = .idle
+    /// The sheet's op may have been sent: its submit reply was lost (spec 082
+    /// RA3). The caption says so, and there is no Retry.
+    var pendingOpMaybeSent: Bool = false
 
     static let empty = SignViewWire(
         surface: .hidden, request: nil, isSigning: false, isSubmitting: false,
