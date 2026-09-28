@@ -108,7 +108,7 @@ fn rest_get(chain_id: u32, path: &str) -> Rest {
     //
     // Over the candidate chain (spec 038): a refused proxy is retried on the
     // next route, not reported as the relay being down.
-    let mut response = match proxy::with_candidates(REST_TIMEOUT, |agent| {
+    let mut response = match proxy::with_candidates_for(&url, REST_TIMEOUT, |agent| {
         agent.get(&url).header("accept", "application/json").call()
     }) {
         Ok(response) => response,
@@ -909,7 +909,7 @@ fn request_sponsorship(chain_id: u32, safe: &str, required_wei: u128) -> (bool, 
     // pay twice, and a relay that honours the key collapses the two.
     let idempotency = format!("sponsor:{chain_id}:{safe}:{required}");
     let body = json!({ "requiredWei": required });
-    let answer = proxy::with_candidates(SPONSOR_TIMEOUT, |agent| {
+    let answer = proxy::with_candidates_for(&url, SPONSOR_TIMEOUT, |agent| {
         let mut response = agent
             .post(&url)
             .config()
