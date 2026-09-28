@@ -140,7 +140,7 @@ resets its slide, and opens without the network after one visit.
 
 ### Clients (native half)
 - [x] T055 [US7] Android: when the route is `KeyMethod.TrustedSigner` (`A/feature/send/core/UserOpSpine.kt:95-104`), `A/feature/signing/SigningSheet.kt:210` draws a primary button `componentsUi.signing.continueToSigner` instead of `SlideToConfirm`, sending the same approve (`A/navigation/VelaNavHost.kt:689`)
-- [ ] T056 [US7] Android: if the Custom Tab cannot open the page (no answer and the tab reports a navigation failure, or the person returns without a result), the waiting card shows `componentsUi.signing.signerUnreachable` + Retry (`A/feature/signing/trustedsigner/TrustedSignerTab.kt`, `TrustedSignerChannel.kt`), keeping the request open
+- [X] T056 [US7] Android: if the Custom Tab cannot open the page (no answer and the tab reports a navigation failure, or the person returns without a result), the waiting card shows `componentsUi.signing.signerUnreachable` + Retry (`A/feature/signing/trustedsigner/TrustedSignerTab.kt`, `TrustedSignerChannel.kt`), keeping the request open — done: on return with no answer the page's address is probed (HEAD, no fragment); unreachable → `componentsUi.signing.signerDown` + `connect.browser.retry`; the "签名中…" line is not drawn under the card. Xiaomi: T5 rows pass (evidence/android-after/t5-*.jpg)
 - [ ] T057 [P] [US7] iOS: the same button in `I/Features/Signing/SigningSheet.swift:67` for the trusted-signer route (`I/Core/UserOpSpine.swift:475`); unreachable handling around `I/Features/Signing/TrustedSigner/TrustedSigner.swift:357`
 - [ ] T058 [P] [US7] Desktop: the same button in `D/wallet/page.rs:14593` for the trusted-signer route (`D/executor/send.rs:113,149`)
 - [ ] T059 [US7] Owner step (outward-facing): deploy `TS/dist/` incl. `_headers` to sign.getvela.app; then verify headers with `curl -I https://sign.getvela.app/b/<hash>/sign`
@@ -151,7 +151,7 @@ resets its slide, and opens without the network after one visit.
 
 ## Phase 7: User Story 4 — when the site's chain cannot be reached, the browser says so (P2)
 
-- [ ] T060 [US4] Android: expose `RpcPool.view` to the browser (`A/VelaWalletApplication.kt` `browser` lazy) and show a one-line notice under the address bar in `A/feature/explore/ExploreScreen.kt` when the tab's chain (`DbrTabView`) ∈ `failed_chains` ∖ `rate_limited_chains`, with Retry (one `eth_blockNumber` through the pool)
+- [X] T060 [US4] Android: expose `RpcPool.view` to the browser (`A/VelaWalletApplication.kt` `browser` lazy) and show a one-line notice under the address bar in `A/feature/explore/ExploreScreen.kt` when the tab's chain (`DbrTabView`) ∈ `failed_chains` ∖ `rate_limited_chains`, with Retry (one `eth_blockNumber` through the pool) — done: `BrowserController.poolView` + `askChain`; `ExploreLive.chainUnreachable`; C1/C2 pass on the Xiaomi with `drop match=gnosischain` (evidence/android-after/t060-chain-down.jpg)
 - [ ] T061 [P] [US4] iOS: the same from `pool.failedChains` (today only in `I/App/RootView.swift:2415`) into `I/Features/Explore/ExploreScreen.swift`
 - [ ] T062 [P] [US4] Desktop: expose `failed_chains` from `D/executor/pool.rs:358` and draw the notice in `D/wallet/page.rs`
 - [ ] T063 [P] [US4] Tests per client: shown for failed, hidden for rate-limited, cleared on the next answer
@@ -175,7 +175,7 @@ resets its slide, and opens without the network after one visit.
 
 ## Phase 9: User Story 6 — tabs can be told apart (P3)
 
-- [ ] T074 [US6] Android: snapshot the WebView (scaled bitmap) on `detach()` in `A/feature/browser/core/BrowserController.kt`; keep per tab in memory; draw it in `A/feature/explore/components/ExploreTabs.kt` tab cards (start pages keep the drawing)
+- [X] T074 [US6] Android: snapshot the WebView (scaled bitmap) on `detach()` in `A/feature/browser/core/BrowserController.kt`; keep per tab in memory; draw it in `A/feature/explore/components/ExploreTabs.kt` tab cards (start pages keep the drawing) — done: snapshot on `detach()` (360 px wide), `BrowserController.snapshots`; U6 passes (evidence/android-after/t074-two-tabs.jpg)
 - [ ] T075 [P] [US6] iOS: `WKWebView.takeSnapshot` on leaving a tab; draw in `I/Components/Explore/TabCardView.swift:32-37`
 
 ---

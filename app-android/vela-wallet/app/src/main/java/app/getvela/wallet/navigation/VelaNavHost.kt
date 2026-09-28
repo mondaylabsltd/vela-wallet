@@ -653,6 +653,18 @@ fun VelaNavHost(
                 val trustedSignerState by trustedSigner.state.collectAsStateWithLifecycle()
                 val trustedSignerNotice by trustedSigner.notice.collectAsStateWithLifecycle()
                 val trustedSignerWaiting = trustedSignerState is app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel.State.Waiting
+                val trustedSignerUnreachable = (trustedSignerState as? app.getvela.wallet.feature.signing.trustedsigner.TrustedSignerChannel.State.Waiting)?.unreachable == true
+                // Spec 079: back in the wallet with the page still unanswered —
+                // a moment's grace for an answer already on its way, then ask
+                // whether the page could have opened at all.
+                val returnScope = rememberCoroutineScope()
+                androidx.lifecycle.compose.LifecycleResumeEffect(trustedSigner) {
+                    val check = returnScope.launch {
+                        kotlinx.coroutines.delay(1_200)
+                        trustedSigner.personReturned()
+                    }
+                    onPauseOrDispose { check.cancel() }
+                }
                 // Spec 079: the tracker's view (the receipt's clock and outcome),
                 // how the last request ended, and the last sheet drawn — the
                 // aftercare keeps its header once the core has closed it.
@@ -693,6 +705,7 @@ fun VelaNavHost(
                         chainId = signChain,
                         feeOpen = feeOpen,
                         trustedSignerWaiting = trustedSignerWaiting,
+                        trustedSignerUnreachable = trustedSignerUnreachable,
                         trustedSignerNotice = trustedSignerNotice,
                         explorerUrl = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.explorer_url,
                         track = signView.pending_op_hash?.let { op -> trackView.entries.firstOrNull { it.user_op_hash.equals(op, ignoreCase = true) } },
@@ -1198,6 +1211,9 @@ fun VelaNavHost(
                         val engineState by (engine?.state ?: kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.browser.core.EngineState())).collectAsStateWithLifecycle()
                         val exploreView by browser.explore.collectAsStateWithLifecycle()
                         val historyView by browser.history.collectAsStateWithLifecycle()
+                        val snapshots by browser.snapshots.collectAsStateWithLifecycle()
+                        val poolVerdicts by browser.poolView.collectAsStateWithLifecycle()
+                        val chainAsking by browser.chainAsking.collectAsStateWithLifecycle()
                         val dapp by browser.dapp.collectAsStateWithLifecycle()
                         val networks by application.container.settings.networks.collectAsStateWithLifecycle()
                         val tabView = dapp.tabs.firstOrNull { it.tab == exploreView.selected_tab }
@@ -1209,8 +1225,8 @@ fun VelaNavHost(
                             chainDot = WalletLive.badge(siteChain.toLong()),
                             chainId = siteChain,
                         )
-                        val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings, tabView, identity) {
-                            app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, tabView, identity)
+                        val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings, tabView, identity, snapshots, poolVerdicts, chainAsking) {
+                            app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, tabView, identity, snapshots, poolVerdicts, chainAsking)
                         }
                         val consentCard = dapp.consent?.let { c ->
                             // Secure is the core's word (a loopback test page is), not a prefix check.
@@ -1314,6 +1330,7 @@ fun VelaNavHost(
                                 onRecentClear = { browser.clearRecent() },
                                 onDisconnect = { browser.revoke() },
                                 onConsent = { approved -> if (approved) browser.consentApproved() else browser.consentRejected() },
+                                onChainRetry = { browser.askChain(siteChain) },
                             ),
                             consent = consentCard,
                             // Issue #273, D1 option (b): a web address opens here; an
@@ -2209,6 +2226,7 @@ fun VelaNavHost(
                 app.getvela.wallet.feature.signing.SigningLive.Context(
                     strings = csStrings, chainName = "", chainDot = androidx.compose.ui.graphics.Color.Unspecified,
                     nativeSymbol = "", walletName = "", walletAddress = "", trustedSignerWaiting = true,
+                    trustedSignerUnreachable = (trustedSignerSheet as? TrustedSignerChannel.State.Waiting)?.unreachable == true,
                 ),
             )?.let { waitModel ->
                 app.getvela.wallet.feature.signing.TrustedSignerWaitingSheet(

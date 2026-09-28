@@ -78,6 +78,14 @@ object ExploreLive {
         val chainId: Int = 0,
     )
 
+    /**
+     * The page's chain could not be reached (spec 079): the pool failed it on
+     * its last try, and not because the endpoint is merely busy — a
+     * rate-limited chain keeps quiet everywhere (the pool's invariant ④).
+     */
+    fun chainUnreachable(chainId: Int, pool: app.getvela.wallet.feature.wallet.core.RpcPoolView): Boolean =
+        chainId in pool.failed_chains && chainId !in pool.rate_limited_chains
+
     fun home(
         fallback: ExploreScreenModel,
         view: ExploreView,
@@ -87,6 +95,11 @@ object ExploreLive {
         /** The core's view of the tab in front (spec 070) — connection, chain, lock, crash. */
         tab: DbrTabView? = null,
         identity: Identity = Identity(),
+        /** Spec 079: each tab's page as it last left the screen. */
+        snapshots: Map<String, androidx.compose.ui.graphics.ImageBitmap> = emptyMap(),
+        /** Spec 079: the pool's verdicts, for the page's chain notice. */
+        pool: app.getvela.wallet.feature.wallet.core.RpcPoolView = app.getvela.wallet.feature.wallet.core.RpcPoolView(),
+        chainAsking: Boolean = false,
     ): ExploreScreenModel {
         val connected = tab?.connected_address != null
         val favorites = view.favorites.map { tileOf(it) }
@@ -102,6 +115,7 @@ object ExploreLive {
                 site = open.url?.let { url -> SiteModel(id = url, name = open.title, host = open.host, letter = letterOf(open.host), tint = tintOf(open.host), iconUrls = iconsOf(url)) },
                 selected = view.selected_tab == open.id,
                 startPage = open.url == null,
+                snapshot = snapshots[open.id].takeIf { open.url != null },
             )
         }
         // The page's origin, or — when its renderer died and there is no engine —
@@ -138,6 +152,9 @@ object ExploreLive {
                 failed = engine?.failed ?: false,
                 failureReason = engine?.failure?.reasonKey?.let { strings.t(it) },
                 retrying = engine?.retrying ?: false,
+                chainNotice = strings.t("explore.chainDown", mapOf("chain" to identity.chainName))
+                    .takeIf { engine != null && tab != null && chainUnreachable(identity.chainId, pool) },
+                chainAsking = chainAsking,
                 crashed = tab?.crashed ?: false,
             ),
             connection = engine?.let { e -> connection(fallback.connection, e, strings, tab, identity) } ?: fallback.connection,

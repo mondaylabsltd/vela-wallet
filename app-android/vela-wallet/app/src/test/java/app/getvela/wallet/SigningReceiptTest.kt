@@ -60,6 +60,23 @@ class SigningReceiptTest {
     }
 
     @Test
+    fun `a page that never opened is the waiting card's to say, with a retry`() {
+        val wait = SigningLive.trustedSignerWait(ctx.copy(trustedSignerWaiting = true, trustedSignerUnreachable = true))
+        assertEquals(strings.t("componentsUi.signing.signerDown"), wait?.title)
+        assertEquals(strings.t("connect.browser.retry"), wait?.reopen)
+        assertEquals("", wait?.hint)
+        val drawn = app.getvela.wallet.feature.signing.SigningFixtures.build(app.getvela.wallet.feature.signing.SigningScreenState.CS1, strings)
+        val request = app.getvela.wallet.feature.signing.core.IncomingRequest("r1", "personal_sign", "[\"0x48\",\"0x88cCA0EeDbF2C4426110bbFc998F048689266894\"]", "http://127.0.0.1:8137", "tab-1", 100)
+        val sheet = SigningLive.model(
+            drawn, request, SignView(surface = SignSurface.Sheet, is_signing = true),
+            app.getvela.wallet.feature.signing.core.ClearSigningView(), app.getvela.wallet.feature.signing.core.GuardView(),
+            app.getvela.wallet.feature.send.core.FeeView(confirm_fee_ready = true),
+            ctx.copy(trustedSignerWaiting = true, trustedSignerUnreachable = true),
+        )
+        assertTrue("no \"signing…\" above a page that did not open", sheet.blocks.none { it is SigningBlock.Sentence && it.text == strings.t("componentsUi.signing.signing") })
+    }
+
+    @Test
     fun `a request not yet approved has no receipt`() {
         assertNull(SigningLive.receipt(SignView(surface = SignSurface.Sheet), blocks, ctx))
     }

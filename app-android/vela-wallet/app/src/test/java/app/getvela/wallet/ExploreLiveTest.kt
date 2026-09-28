@@ -15,6 +15,7 @@ import app.getvela.wallet.feature.explore.ExploreFixtures
 import app.getvela.wallet.feature.explore.ExploreScreenState
 import app.getvela.wallet.feature.explore.GroupAction
 import app.getvela.wallet.feature.explore.TileModel
+import app.getvela.wallet.feature.wallet.core.RpcPoolView
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -98,6 +99,43 @@ class ExploreLiveTest {
         assertTrue(model.browser.failed)
         assertEquals(strings.t("explore.loadOffline"), model.browser.failureReason)
         assertTrue(model.browser.retrying)
+    }
+
+    /** Spec 079: the page's chain notice is the pool's verdict — never for a chain merely busy. */
+    @Test
+    fun `a chain the pool could not reach is named once, and a busy one is not`() {
+        val view = ExploreView(tabs = listOf(ExploreTab("t1", "http://127.0.0.1:8137/", "", "127.0.0.1:8137")), selected_tab = "t1", ready = true)
+        val engine = EngineState(url = "http://127.0.0.1:8137/", origin = "http://127.0.0.1:8137", host = "127.0.0.1:8137")
+        val tab = DbrTabView(tab = "t1", origin = "http://127.0.0.1:8137", chain_id = 100)
+        val identity = ExploreLive.Identity(chainName = "Gnosis", chainId = 100)
+        val down = RpcPoolView(failed_chains = listOf(100))
+        val busy = RpcPoolView(failed_chains = listOf(100), rate_limited_chains = listOf(100))
+        val other = RpcPoolView(failed_chains = listOf(1))
+
+        val named = ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = down)
+        assertEquals(strings.t("explore.chainDown", mapOf("chain" to "Gnosis")), named.browser.chainNotice)
+        assertTrue(named.browser.chainNotice!!.contains("Gnosis"))
+        assertNull(ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = busy).browser.chainNotice)
+        assertNull(ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = other).browser.chainNotice)
+        assertNull("no page, no notice", ExploreLive.home(fallback, view, BhistView(), null, strings, tab, identity, pool = down).browser.chainNotice)
+    }
+
+    /** Spec 079: a tab card shows its page's snapshot; a start page keeps the drawing. */
+    @Test
+    fun `a tab with a page carries its snapshot, a start page does not`() {
+        val view = ExploreView(
+            tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/", "Uniswap", "app.uniswap.org"), ExploreTab("t2", null, "", "")),
+            selected_tab = "t1",
+            ready = true,
+        )
+        // A plain JVM test has no android.graphics.Bitmap; any ImageBitmap stands in.
+        val image = java.lang.reflect.Proxy.newProxyInstance(
+            javaClass.classLoader,
+            arrayOf(androidx.compose.ui.graphics.ImageBitmap::class.java),
+        ) { proxy, method, args -> if (method.name == "equals") proxy === args?.firstOrNull() else if (method.name == "hashCode") 1 else null } as androidx.compose.ui.graphics.ImageBitmap
+        val model = ExploreLive.home(fallback, view, BhistView(), null, strings, snapshots = mapOf("t1" to image, "t2" to image))
+        assertEquals(image, model.tabs.first { it.id == "t1" }.snapshot)
+        assertNull(model.tabs.first { it.id == "t2" }.snapshot)
     }
 
     @Test

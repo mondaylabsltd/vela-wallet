@@ -63,6 +63,8 @@ object SigningLive {
         val feeOpen: Boolean = false,
         /** Spec 071: the Trusted Signer's page is open for this request. */
         val trustedSignerWaiting: Boolean = false,
+        /** Spec 079: back from the page with no answer, and its address does not answer. */
+        val trustedSignerUnreachable: Boolean = false,
         /** Spec 071: why the last Trusted Signer attempt did not sign. */
         val trustedSignerNotice: String? = null,
         /** Spec 079: the chain's explorer base, for the landed receipt's link. */
@@ -93,6 +95,15 @@ object SigningLive {
     fun trustedSignerWait(ctx: Context): TrustedSignerWaitModel? {
         if (!ctx.trustedSignerWaiting) return null
         val s = ctx.strings
+        // Spec 079: the page never opened — say so, and the button is a retry.
+        if (ctx.trustedSignerUnreachable) {
+            return TrustedSignerWaitModel(
+                title = s.s("signerDown"),
+                hint = "",
+                reopen = s.t("connect.browser.retry"),
+                cancel = s.t("common.cancel"),
+            )
+        }
         return TrustedSignerWaitModel(
             title = s.s("trustedSignerWaiting"),
             hint = s.s("trustedSignerWaitingHint"),
@@ -232,7 +243,7 @@ object SigningLive {
         val refused = sign.blocked != null
         val blocks =
             if (refused) statusBlocks(sign, s)
-            else statusBlocks(sign, s) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx) +
+            else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx) +
                 simBlocks(sim, ctx) + guardBlocks(guard, s)
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.
@@ -574,7 +585,8 @@ object SigningLive {
         return listOfNotNull(intent, figure).joinToString(" · ").ifBlank { null }
     }
 
-    fun statusBlocks(sign: SignView, s: VelaStrings): List<SigningBlock> = buildList {
+    /** [signerPageOpen]: the Trusted Signer's waiting card speaks for the signature (spec 079 — "签名中…" above "签名页没能打开" contradicted it). */
+    fun statusBlocks(sign: SignView, s: VelaStrings, signerPageOpen: Boolean = false): List<SigningBlock> = buildList {
         // Spec 081: the core refused this request outright — it would have
         // changed who controls the account. Nothing else on the sheet matters,
         // and `confirm_gate_open` is already false, so say it and stop.
@@ -615,6 +627,7 @@ object SigningLive {
         }
         when {
             sign.pending_op_hash != null -> add(SigningBlock.Positive(s.s("submitted")))
+            signerPageOpen -> Unit
             sign.is_signing || sign.is_submitting -> add(SigningBlock.Sentence(s.s("signing"), SigningTone.Neutral))
         }
     }
