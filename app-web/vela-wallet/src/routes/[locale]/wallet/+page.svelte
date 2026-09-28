@@ -49,6 +49,7 @@
 	import { followActiveAccount } from '$lib/dapp/follow';
 	import { subscribeNetworks } from '$lib/services/networks';
 	import { inExtension } from '$lib/dapp/transport';
+	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
@@ -235,10 +236,9 @@
 	 * in an ordinary tab answers nobody's dApp request, so the marker is what
 	 * decides — not merely "is this the extension", which a tab also is.
 	 */
-	const inPanel =
-		typeof location !== 'undefined' &&
-		inExtension() &&
-		new URLSearchParams(location.search).has('panel');
+	// Spec 082 RB9: `?panel` OR the mark its first load left, because
+	// Wallet → Settings → Wallet drops the query (G23c).
+	const inPanel = typeof location !== 'undefined' && inExtension() && isPanelDocument();
 	/** The request host, so the ONE sheet can tell it a landing is on screen. */
 	let dappHost = $state<ReturnType<typeof DappRequestHost> | null>(null);
 	/** The fee-coin sheet is a shell surface: the core has no state for it. */

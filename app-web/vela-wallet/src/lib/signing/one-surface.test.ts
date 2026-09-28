@@ -92,16 +92,39 @@ describe('the side panel is the wallet', () => {
 	});
 });
 
-describe('the panel hears about a request that arrives while it is open', () => {
-	it('watches the same storage keys the worker writes', async () => {
-		// The panel stays open now, so `sidePanel.open` on a second request only
-		// SHOWS it — no reload, no fresh mount. The page learns from the worker's
-		// own record of pending requests, and this pins the two spellings of that
-		// key together.
+describe('the panel and the worker spell their shared names alike (spec 082 §13)', () => {
+	// The app bundle must not import the worker's modules, so each name the two
+	// sides share is declared twice — and pinned together here, so a rename
+	// cannot leave one side talking to nobody.
+	it('the surface port and the ledger prefix', async () => {
 		const worker = await import('../../../extension/lib/protocol.js');
-		const app = read(join(SRC, 'lib/dapp/transport.ts'));
-		const declared = /const REQUEST_PREFIX = '([^']+)'/.exec(app)?.[1];
-		expect(declared).toBe(worker.REQUEST_PREFIX);
+		const panel = await import('$lib/dapp/panel-surface.svelte');
+		expect(panel.SURFACE_PORT).toBe(worker.SURFACE_PORT);
+		expect(panel.REQUEST_PREFIX).toBe(worker.REQUEST_PREFIX);
+		expect(worker.SURFACE_PORT).toBe('vela.surface');
+		expect(worker.DOC_PORT).toBe('vela.doc');
+		expect(worker.REQUEST_PREFIX).toBe('vela.req.');
+	});
+
+	it('the page bridge opens the port the worker listens for', () => {
+		const content = read(join(ROOT, 'extension/content.js'));
+		const background = read(join(ROOT, 'extension/background.js'));
+		expect(content).toMatch(/name: DOC_PORT/);
+		expect(background).toMatch(/port\.name === DOC_PORT/);
+		expect(background).toMatch(/port\.name === SURFACE_PORT/);
+	});
+
+	it('the worker counters the bug report reads', async () => {
+		const swlog = await import('../../../extension/lib/swlog.js');
+		const report = await import('$lib/services/bug-report');
+		expect(report.SW_COUNTS_KEY).toBe(swlog.SW_COUNTS_KEY);
+	});
+
+	it('the panel no longer asks by tab — the worker owns the queue (RB7)', () => {
+		const background = read(join(ROOT, 'extension/background.js'));
+		const transport = read(join(SRC, 'lib/dapp/transport.ts'));
+		expect(background).not.toMatch(/requestCurrent|nextForPanel/);
+		expect(transport).not.toMatch(/requestCurrent|panelTabId/);
 	});
 });
 

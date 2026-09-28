@@ -23,6 +23,7 @@
 	import ParallelSpaceBadge from '$lib/dev/ParallelSpaceBadge.svelte';
 	import ReportToastHost from '$lib/settings/ui/ReportToastHost.svelte';
 	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
+	import { isPanelDocument, panelSurface } from '$lib/dapp/panel-surface.svelte';
 
 	let { children } = $props();
 
@@ -77,7 +78,21 @@
 		if (updated.current && to?.url && !willUnload) location.href = to.url.href;
 	});
 
+	/**
+	 * Spec 082 RB9: the extension's side panel keeps its port to the worker for
+	 * as long as the document lives — started HERE, above every route, so
+	 * Wallet → Settings → Wallet does not drop it — and a request the worker
+	 * says this window owes brings the panel back to the wallet, which is where
+	 * a request is answered.
+	 */
+	const walletHref = $derived(resolve('/[locale]/wallet', { locale: page.params.locale ?? 'en' }));
+	$effect(() => {
+		if (panelSurface.caller?.kind !== 'panel' || !panelSurface.current) return;
+		if (page.route.id !== '/[locale]/wallet') void goto(walletHref);
+	});
+
 	onMount(() => {
+		if (isPanelDocument()) void panelSurface.start();
 		// The custom-network snapshot, warmed once per document (spec 038 #E9)
 		// so send, signing and the RPC pool see an added network on a fresh
 		// load, not only after the wallet page or a Settings write.
