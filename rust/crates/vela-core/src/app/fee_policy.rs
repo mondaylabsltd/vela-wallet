@@ -691,24 +691,67 @@ pub enum FeeFailure {
     /// times the client's own on-chain measurement — refused rather than
     /// signed, to protect the user from a runaway or hostile relayer quote.
     GasQuoteTooHigh,
+    /// A chain read the quote needs (the account's deployment, today) got no
+    /// answer from the chain's nodes (spec 082 RJ13, G48): nothing could be
+    /// priced, and it is the chain node — not Vela's relay — that is out of
+    /// reach. `rate_limited`: the nodes answered, but only with rate limits.
+    /// Asked again on the same schedule as a relay failure.
+    ChainRead { rate_limited: bool },
 }
+
+/// Bound on each automatic re-quote (spec 082 RJ12): a re-ask that has not
+/// answered in this time is a failure again, and the schedule goes on. With
+/// the 8 s step this puts the fee back within 8 + 6 = 14 s of the relay
+/// returning (SC-003).
+pub const REQUOTE_TIMEOUT_MS: u32 = 6_000;
 
 /// The wait before automatic re-quote `attempt` (1-based) after a failure a
 /// recovering network or relay can clear, or `None` for one no retry fixes
 /// (spec 079 FR-008). The device pass had the fee row read "点击重试" with the
 /// relay down and stay that way after it came back; every client now asks
 /// again on this schedule while the sheet is open and not yet approved.
+///
+/// Spec 082 RJ12 (G47): 3 s, 6 s, then every 8 s. The 12 s and 15 s steps put
+/// the fee back 15.8–19 s after the relay returned; with [`REQUOTE_TIMEOUT_MS`]
+/// on each ask, a wait and its ask never exceed 15 s.
 pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
     match failure {
         FeeFailure::QuoteUnavailable
         | FeeFailure::FeeTokenUnavailable
         | FeeFailure::EstimateFailed
-        | FeeFailure::GasQuoteTooHigh => Some(match attempt {
+        | FeeFailure::GasQuoteTooHigh
+        | FeeFailure::ChainRead { .. } => Some(match attempt {
             0 | 1 => 3_000,
             2 => 6_000,
-            3 => 12_000,
-            _ => 15_000,
+            _ => 8_000,
         }),
+        FeeFailure::MissingPublicKey | FeeFailure::CalculationFailed => None,
+    }
+}
+
+/// The corpus key of the reason line under a failed fee (spec 082 RJ13) — the
+/// one choice every shell used to make for itself. `None` = no reason line:
+/// the failure is not the network's (a missing key, a calculation that cannot
+/// come out), and the row keeps its dash.
+///
+/// - the relay could not quote → `componentsUi.funding.denialNetworkError`
+///   ("Couldn't reach Vela — …, we'll retry automatically");
+/// - a chain node rate-limits the read → `home.balanceDetailStatusRetrying`;
+/// - a chain node cannot be reached → `explore.chainDown`, whose `{{chain}}`
+///   the shell fills with the chain's name.
+///
+/// G48: a public node's `eth_getCode` rate limit on Ethereum read "无法连接
+/// Vela 服务" with no fault anywhere near Vela.
+pub fn failure_reason_key(failure: FeeFailure) -> Option<&'static str> {
+    match failure {
+        FeeFailure::QuoteUnavailable
+        | FeeFailure::FeeTokenUnavailable
+        | FeeFailure::EstimateFailed
+        | FeeFailure::GasQuoteTooHigh => Some("componentsUi.funding.denialNetworkError"),
+        FeeFailure::ChainRead { rate_limited: true } => Some("home.balanceDetailStatusRetrying"),
+        FeeFailure::ChainRead {
+            rate_limited: false,
+        } => Some("explore.chainDown"),
         FeeFailure::MissingPublicKey | FeeFailure::CalculationFailed => None,
     }
 }

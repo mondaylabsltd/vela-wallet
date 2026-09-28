@@ -3793,15 +3793,29 @@ fn tempo_pays_in_a_held_stablecoin_when_the_default_is_not_held() {
 // Spec 079 — a fee that failed for a reason that can pass is asked again
 // ---------------------------------------------------------------------------
 
-#[test]
-fn a_recoverable_quote_failure_is_asked_again_on_a_growing_wait() {
-    use vela_core::app::fee_policy::{requote_delay_ms, FeeFailure};
-    for failure in [
+/// Every failure a recovering relay or chain node can clear (spec 082 RJ12,
+/// RJ13): 3 s, 6 s, then every 8 s — no 12 s / 15 s steps, so the fee is back
+/// within 8 + 6 = 14 s of the relay returning (SC-003).
+fn recoverable() -> [vela_core::app::fee_policy::FeeFailure; 6] {
+    use vela_core::app::fee_policy::FeeFailure;
+    [
         FeeFailure::QuoteUnavailable,
         FeeFailure::FeeTokenUnavailable,
         FeeFailure::EstimateFailed,
         FeeFailure::GasQuoteTooHigh,
-    ] {
+        FeeFailure::ChainRead {
+            rate_limited: true,
+        },
+        FeeFailure::ChainRead {
+            rate_limited: false,
+        },
+    ]
+}
+
+#[test]
+fn a_recoverable_quote_failure_is_asked_again_on_a_growing_wait() {
+    use vela_core::app::fee_policy::requote_delay_ms;
+    for failure in recoverable() {
         let schedule: Vec<_> = (1..=6)
             .map(|attempt| requote_delay_ms(failure, attempt))
             .collect();
@@ -3810,14 +3824,82 @@ fn a_recoverable_quote_failure_is_asked_again_on_a_growing_wait() {
             vec![
                 Some(3_000),
                 Some(6_000),
-                Some(12_000),
-                Some(15_000),
-                Some(15_000),
-                Some(15_000)
+                Some(8_000),
+                Some(8_000),
+                Some(8_000),
+                Some(8_000)
             ],
             "{failure:?}"
         );
     }
+}
+
+/// G47: each automatic re-quote is bounded, so the wait plus the ask that
+/// follows it never passes the 15 s the fee has to be back in.
+#[test]
+fn every_wait_plus_its_re_quote_fits_in_fifteen_seconds() {
+    use vela_core::app::fee_policy::{requote_delay_ms, REQUOTE_TIMEOUT_MS};
+    assert_eq!(REQUOTE_TIMEOUT_MS, 6_000);
+    for failure in recoverable() {
+        for attempt in 0..=40 {
+            let delay = requote_delay_ms(failure, attempt).unwrap_or(0);
+            assert!(
+                delay + REQUOTE_TIMEOUT_MS <= 15_000,
+                "{failure:?} attempt {attempt}: {delay} + {REQUOTE_TIMEOUT_MS}"
+            );
+        }
+    }
+}
+
+/// RJ13: the words under the fee row are the core's choice, not each shell's.
+/// A relay that cannot quote is "couldn't reach Vela"; a chain node that
+/// cannot be read names the chain (or the rate limit) — never Vela; a
+/// failure no network caused gets no reason line.
+#[test]
+fn the_fee_row_s_reason_is_the_core_s_key() {
+    use vela_core::app::fee_policy::{failure_reason_key, FeeFailure};
+    for failure in [
+        FeeFailure::QuoteUnavailable,
+        FeeFailure::FeeTokenUnavailable,
+        FeeFailure::EstimateFailed,
+        FeeFailure::GasQuoteTooHigh,
+    ] {
+        assert_eq!(
+            failure_reason_key(failure),
+            Some("componentsUi.funding.denialNetworkError"),
+            "{failure:?}"
+        );
+    }
+    assert_eq!(
+        failure_reason_key(FeeFailure::ChainRead { rate_limited: true }),
+        Some("home.balanceDetailStatusRetrying")
+    );
+    assert_eq!(
+        failure_reason_key(FeeFailure::ChainRead {
+            rate_limited: false
+        }),
+        Some("explore.chainDown")
+    );
+    for failure in [FeeFailure::MissingPublicKey, FeeFailure::CalculationFailed] {
+        assert_eq!(failure_reason_key(failure), None, "{failure:?}");
+    }
+}
+
+/// The wire: the old failures stay plain strings; the chain read is tagged.
+#[test]
+fn the_chain_read_failure_s_wire_shape() {
+    use vela_core::app::fee_policy::FeeFailure;
+    assert_eq!(
+        serde_json::to_value(FeeFailure::QuoteUnavailable).unwrap_or_default(),
+        serde_json::json!("quote_unavailable")
+    );
+    let chain = FeeFailure::ChainRead { rate_limited: true };
+    let json = serde_json::to_value(chain).unwrap_or_default();
+    assert_eq!(
+        json,
+        serde_json::json!({ "chain_read": { "rate_limited": true } })
+    );
+    assert_eq!(serde_json::from_value::<FeeFailure>(json).ok(), Some(chain));
 }
 
 #[test]
