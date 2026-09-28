@@ -13161,7 +13161,7 @@ impl WalletPage {
                 return;
             }
             crate::webview::Load::Started(url) => {
-                self.load_watch.committed();
+                self.load_watch.committed(&url);
                 cx.notify();
                 DbrEvent::NavigationStarted { tab, url }
             }
@@ -14311,22 +14311,16 @@ impl WalletPage {
     ) {
         let host = self.browser_host(cx);
         host.update(cx, |host, cx| host.follow_networks(cx));
-        // What the account holds on each network: the home screen's own
-        // figures, read now — the picker opens at once and never waits on
-        // the network (spec 079 FR-017).
-        let money = self.money(cx);
-        let balances = wallet_live::network_balances(
-            &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
-            &self.locale,
-            &money,
-        );
+        // The figures are filled in as it draws (`menu_overlay`): the picker
+        // opens at once, never waits on the network, and a balance that lands
+        // while it is open appears in it (spec 079 FR-017).
         self.site_networks = crate::wallet::signing_host::known_chain_ids()
             .into_iter()
             .map(|chain_id| explore_fixtures::NetworkPick {
                 chain_id,
                 name: SharedString::from(crate::flows::live::chain_name(chain_id)),
                 current: chain_id == current,
-                amount: balances.get(&chain_id).cloned(),
+                amount: None,
             })
             .collect();
         self.menu_origin = Some(origin);
@@ -17089,6 +17083,17 @@ impl WalletPage {
         };
         let actions = self.menu_actions(kind, cx);
         let card = if matches!(kind, ContactsMenu::SiteNetwork) {
+            // What the account holds on each network: the home screen's own
+            // figures, as they stand now.
+            let money = self.money(cx);
+            let balances = wallet_live::network_balances(
+                &resident::resident::<BalanceDashboard>(cx).read(cx).view(),
+                &self.locale,
+                &money,
+            );
+            for row in &mut self.site_networks {
+                row.amount = balances.get(&row.chain_id).cloned();
+            }
             explore_components::network_pick_card(
                 theme,
                 &mut self.icons,

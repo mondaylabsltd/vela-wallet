@@ -572,6 +572,7 @@ pub fn network_pick_card(
         let line = div()
             .id(ElementId::from(("network-pick", i)))
             .flex()
+            .flex_none()
             .items_center()
             .gap(px(12.))
             .h(px(44.))

@@ -338,8 +338,11 @@ pub fn current_url() -> Option<String> {
 /// named a site that had not loaded — and, on a failure, never would.
 #[must_use]
 pub fn host() -> Option<String> {
-    let url =
-        committed_url().or_else(|| BROWSER.with(|slot| slot.borrow().as_ref()?.view.url().ok()))?;
+    // Only a WEB document counts as committed here: WKWebView commits an
+    // empty `about:blank` when a fresh view's first load is refused.
+    let url = committed_url()
+        .filter(|url| vela_core::app::dapp_permissions::origin_of(url).is_some())
+        .or_else(|| BROWSER.with(|slot| slot.borrow().as_ref()?.view.url().ok()))?;
     let rest = url.split_once("://").map(|(_, rest)| rest).unwrap_or(&url);
     let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
     (!host.is_empty()).then(|| host.to_owned())

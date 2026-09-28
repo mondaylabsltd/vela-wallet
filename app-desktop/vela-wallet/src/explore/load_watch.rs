@@ -127,8 +127,15 @@ impl LoadWatch {
         Some(self.generation)
     }
 
-    /// A document committed: the page is there, whatever was asked.
-    pub fn committed(&mut self) {
+    /// A document committed at `url`: the page is there, whatever was asked —
+    /// unless it is not a web page while a web page is being waited on.
+    /// WKWebView commits an empty `about:blank` when the first load of a
+    /// fresh view is refused (seen on this Mac, spec 079): that is the engine
+    /// giving up, not the site arriving.
+    pub fn committed(&mut self, url: &str) {
+        if !is_web(url) && self.url.is_some() && (self.loading || self.failure.is_some()) {
+            return;
+        }
         self.loading = false;
         self.committed = true;
         self.probing = false;
@@ -360,7 +367,7 @@ mod tests {
         let generation = watch.requested(SITE, 1_000.);
         assert!(generation.is_some());
         assert!(watch.loading && watch.busy());
-        watch.committed();
+        watch.committed(SITE);
         assert!(!watch.loading && watch.busy(), "committed, still finishing");
         watch.finished();
         assert!(!watch.busy());
@@ -378,7 +385,7 @@ mod tests {
         // A commit before the watchdog: nothing to probe.
         let mut quick = LoadWatch::default();
         let generation = quick.requested(SITE, 0.).unwrap_or_default();
-        quick.committed();
+        quick.committed(SITE);
         assert_eq!(quick.watchdog(generation), None);
     }
 
@@ -457,7 +464,7 @@ mod tests {
         let generation = late.requested(SITE, 0.).unwrap_or_default();
         late.watchdog(generation);
         late.probed(generation, Ok(()));
-        late.committed();
+        late.committed(SITE);
         assert!(!late.give_up(generation));
         assert!(late.failure.is_none());
     }
@@ -471,8 +478,32 @@ mod tests {
         watch.watchdog(generation);
         watch.probed(generation, Err(probe_code::CONNECT));
         assert!(watch.failure.is_some());
-        watch.committed();
+        watch.committed(SITE);
         assert!(watch.failure.is_none() && !watch.retrying && watch.attempt == 0);
+    }
+
+    /// The engine's own blank page is not the site: a refused first load
+    /// commits `about:blank`, and the watch keeps waiting (and probes).
+    #[test]
+    fn an_engine_blank_page_is_not_the_site_arriving() {
+        let mut watch = LoadWatch::default();
+        let generation = watch
+            .requested("http://127.0.0.1:9/", 0.)
+            .unwrap_or_default();
+        watch.committed("about:blank");
+        assert!(watch.loading, "still waiting on the site");
+        assert_eq!(
+            watch.watchdog(generation).as_deref(),
+            Some("http://127.0.0.1:9/")
+        );
+        watch.probed(generation, Err(probe_code::REFUSED));
+        watch.committed("about:blank");
+        assert!(
+            watch.failure.is_some(),
+            "the panel stays over the blank page"
+        );
+        watch.committed("http://127.0.0.1:9/");
+        assert!(watch.failure.is_none());
     }
 
     /// The network classes retry by themselves on the core's schedule (2 s,
