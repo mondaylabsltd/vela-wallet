@@ -96,6 +96,11 @@ pub struct SignContext {
     /// rather than adding a second full one. Set by the host at the tap,
     /// before the submit is asked for.
     pub approved_at_ms: Option<f64>,
+    /// The page that asked is gone (spec 082 RB2, the money rule). Shared
+    /// with every clone, so the column's close reaches a submit already
+    /// running: it is read before the ceremony, when it answers, and right
+    /// before the relay POST — nothing is signed or sent for nobody.
+    asker_gone: Arc<AtomicBool>,
 }
 
 impl SignContext {
@@ -132,6 +137,19 @@ impl SignContext {
         }
     }
 
+    /// The page that asked left (its tab closed or moved on): from now on
+    /// nothing is signed or sent for this request (RB2). An operation
+    /// already past the relay POST is recorded and followed as ever.
+    pub fn asker_left(&self) {
+        self.asker_gone.store(true, Ordering::SeqCst);
+    }
+
+    /// Is the page that asked still there?
+    #[must_use]
+    pub fn still_asked(&self) -> bool {
+        !self.asker_gone.load(Ordering::SeqCst)
+    }
+
     #[must_use]
     pub fn new(account: &Account, ceremony: Ceremony) -> Self {
         // Deliberately `SendContext::new`'s derivation, called rather than
@@ -151,6 +169,7 @@ impl SignContext {
             account_name: send.account_name,
             trusted_signer: send.trusted_signer,
             approved_at_ms: None,
+            asker_gone: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -327,8 +346,12 @@ fn sign_and_submit(
     quoted: Option<user_op::QuotedFee>,
     sink: &crate::resident::Sink<Event>,
 ) -> SignSubmitOutcome {
+    // RB2: the page left between the approval and this worker starting.
+    if !ctx.still_asked() {
+        return asker_gone(id);
+    }
     if is_message(method) {
-        return sign_message(ctx, chain_id, address, method, params_json);
+        return sign_message(ctx, id, chain_id, address, method, params_json);
     }
     let Some(calls) = calls_of(method, params_json) else {
         return SignSubmitOutcome::Failed {
@@ -353,6 +376,7 @@ fn sign_and_submit(
         None => Signer::Passkey(&mut sign),
     };
     let edges = |edge: CeremonyEdge| sink.send(ceremony_event(id, edge));
+    let asked = || ctx.still_asked();
     let submitted = user_op::submit(
         chain_id,
         address,
@@ -362,9 +386,11 @@ fn sign_and_submit(
         signer,
         quoted,
         &edges,
+        &asked,
     );
     let submitted = match submitted {
         Ok(submitted) => submitted,
+        Err(user_op::SubmitFailure::AskerGone) => return asker_gone(id),
         Err(failure) => return submit_failure(chain_id, address, failure),
     };
     let user_op_hash = submitted.user_op_hash.clone();
@@ -397,6 +423,16 @@ fn sign_and_submit(
     after_receipt_wait(user_op_hash, receipt)
 }
 
+/// The page that asked is gone and nothing was signed or sent (RB2): the core
+/// is told `AskerGone` — no answer, no record, the sheet clears.
+fn asker_gone(id: &str) -> SignSubmitOutcome {
+    vlog!(
+        "dapp",
+        "request {id}: the page that asked is gone; nothing signed or sent"
+    );
+    SignSubmitOutcome::AskerGone
+}
+
 /// The core event for one edge of request `id`'s ceremony (spec 082 RA9).
 fn ceremony_event(id: &str, edge: CeremonyEdge) -> Event {
     match edge {
@@ -410,6 +446,7 @@ fn ceremony_event(id: &str, edge: CeremonyEdge) -> Event {
 /// sign, answered as the EIP-1271 envelope — nothing submitted, no receipt.
 fn sign_message(
     ctx: &SignContext,
+    id: &str,
     chain_id: u32,
     address: &str,
     method: &str,
@@ -436,6 +473,7 @@ fn sign_message(
         },
         None => Signer::Passkey(&mut sign),
     };
+    let asked = || ctx.still_asked();
     match user_op::sign_message(
         chain_id,
         address,
@@ -443,8 +481,10 @@ fn sign_message(
         &ctx.keys,
         signer,
         &user_op::quiet,
+        &asked,
     ) {
         Ok(signature) => SignSubmitOutcome::Succeeded { result: signature },
+        Err(user_op::SubmitFailure::AskerGone) => asker_gone(id),
         Err(failure) => submit_failure(chain_id, address, failure),
     }
 }
@@ -635,6 +675,8 @@ fn submit_failure(
             message: NOT_SENT_DAPP_DETAIL.to_owned(),
         },
         user_op::SubmitFailure::Other(message) => SignSubmitOutcome::Failed { message },
+        // Nothing signed or sent for a page that has gone (RB2).
+        user_op::SubmitFailure::AskerGone => SignSubmitOutcome::AskerGone,
     }
 }
 
@@ -1218,6 +1260,78 @@ mod tests {
                 .any(|op| matches!(op.operation, SignOperation::SignAndSubmit { .. })),
             "a page that is gone gets nothing signed"
         );
+    }
+
+    /// RB2, the money rule, past the commitment point: the tab that asked
+    /// closed while Touch ID was up. The core keeps an inflight it has
+    /// already handed to the submit, so the shell is the one that must stop
+    /// — the page's close marks the request's context, the running submit
+    /// (the executor's clone of it) sees that before the ceremony and before
+    /// the relay POST, and answers `AskerGone`: nothing sent, no answer to a
+    /// page that is not there, no record, nothing handed to the tracker.
+    #[test]
+    fn a_page_gone_during_the_passkey_gets_nothing_sent_answered_or_recorded() {
+        let (mut host, ops) = approved_send("rid-left");
+        let precheck = only(&ops, "the pre-check").id;
+        let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
+        let submit = only(&ops, "the submit").id;
+        host.dispatch(ceremony_event("rid-left", CeremonyEdge::Started));
+
+        // The column's context, and the copy the running submit holds.
+        let ctx = context(Some("http://127.0.0.1:8137"));
+        let running = ctx.clone();
+        assert!(running.still_asked());
+        ctx.asker_left();
+        let dropped = host.dispatch(Event::TransportDropped {
+            transport_id: TAB.to_owned(),
+        });
+        assert!(
+            answers(&dropped).is_empty(),
+            "the page has its 4900 already"
+        );
+        assert!(
+            !running.still_asked(),
+            "the submit already running sees the page leave"
+        );
+
+        // The executor stops before the ceremony — no event, no relay.
+        let (tx, mut rx) = futures::channel::mpsc::unbounded();
+        let outcome = sign_and_submit(
+            &running,
+            "rid-left",
+            100,
+            ME,
+            "eth_sendTransaction",
+            r#"[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x38d7ea4c68000"}]"#,
+            None,
+            None,
+            &crate::resident::Sink::new(tx),
+        );
+        assert_eq!(outcome, SignSubmitOutcome::AskerGone);
+        assert!(rx.try_recv().is_err(), "no ceremony edge, no OpSubmitted");
+        // A ceremony or a POST that the check stopped reports the same.
+        assert_eq!(
+            submit_failure(100, ME, user_op::SubmitFailure::AskerGone),
+            SignSubmitOutcome::AskerGone
+        );
+
+        let after = host.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome,
+                now_ms: 9_000.0,
+            },
+        );
+        assert!(answers(&after).is_empty(), "nobody is left to answer");
+        assert!(
+            !after.iter().any(|op| matches!(
+                op.operation,
+                SignOperation::PersistRecord { .. } | SignOperation::UpdateRecord { .. }
+            )),
+            "nothing was sent, so nothing is recorded"
+        );
+        assert!(host.view().tracker_handoff.is_none());
+        assert!(host.view().pending_op_hash.is_none());
     }
 
     /// Spec 082 RG3 (T072): every background record write — the pending

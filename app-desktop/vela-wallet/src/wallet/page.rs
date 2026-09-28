@@ -13861,33 +13861,56 @@ impl WalletPage {
     }
 
     /// The page that asked is gone and already has its 4900: close its sheet,
-    /// unanswered. A column showing something else is left alone.
+    /// unanswered. A column showing something else is left alone — and so is
+    /// one this request left in the background after its approval, whose
+    /// submit may be running still.
     #[cfg(not(target_os = "linux"))]
     fn cancel_dapp_signing(&mut self, id: &str, cx: &mut Context<Self>) {
-        let Some(host) = self.signing_host.clone() else {
-            return;
-        };
-        let ours = {
+        let ours = |host: &gpui::Entity<crate::wallet::signing_host::SigningHost>,
+                    cx: &gpui::App| {
             let host = host.read(cx);
             host.transport_id == crate::wallet::signing_host::BROWSER_TRANSPORT
                 && host.request_id == id
         };
-        if !ours {
+        let shown = self.signing_host.clone().filter(|host| ours(host, cx));
+        let unseen = self
+            .signing_background
+            .iter()
+            .find(|host| ours(host, cx))
+            .cloned();
+        let Some(host) = shown.clone().or(unseen) else {
             return;
-        }
-        host.update(cx, |host, cx| {
+        };
+        // Spec 082 RB2 (the money rule): from here nothing is signed or sent
+        // for this request — a submit already running asks before its
+        // ceremony, when the ceremony answers, and right before the relay
+        // POST. The core stops a pipeline still before the passkey itself.
+        let owed = host.update(cx, |host, cx| {
+            host.asker_left();
             host.dispatch_sign(
                 vela_core::app::sign_request::Event::TransportDropped {
                     transport_id: crate::wallet::signing_host::BROWSER_TRANSPORT.to_owned(),
                 },
                 cx,
             );
+            host.owed_unseen()
         });
-        // Gone whatever the machine did with it: a decoded intent must never
-        // outlive the page that asked for it.
-        self.signing_host = None;
-        if self.panel == PanelId::Signing {
-            self.panel = PanelId::None;
+        // …but a submit that already reached the relay must still be recorded
+        // and handed to the tracker, so its machines run on, unseen, until it
+        // ends. Nothing else of it stays: a decoded intent must never outlive
+        // the page that asked for it.
+        if owed {
+            if !self.signing_background.contains(&host) {
+                self.signing_background.push(host.clone());
+            }
+        } else {
+            self.signing_background.retain(|kept| kept != &host);
+        }
+        if shown.is_some() {
+            self.signing_host = None;
+            if self.panel == PanelId::Signing {
+                self.panel = PanelId::None;
+            }
         }
         cx.notify();
     }
@@ -14035,9 +14058,9 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         let answers = host.update(cx, |host, _| host.take_answers());
-        let (closed, responded, approved) = {
+        let (closed, owed) = {
             let read = host.read(cx);
-            (read.closed, read.responded, read.approved)
+            (read.closed, read.owed_unseen())
         };
         // WHETHER there is a column is the core's answer, not this file's —
         // and only for the column on screen: a column already replaced (its
@@ -14069,7 +14092,7 @@ impl WalletPage {
                 // …unless it was closed after the approval and the core has
                 // not answered the page yet (FR-002): nothing was refused, so
                 // its machines keep running, unseen, until the answer is out.
-                if approved && !responded {
+                if owed && !self.signing_background.contains(host) {
                     self.signing_background.push(host.clone());
                 }
                 // …and unless its ending is showing: the column stays for it
@@ -14081,8 +14104,9 @@ impl WalletPage {
                 self.panel = PanelId::Signing;
             }
         }
-        // A request running unseen has answered: its machines can go.
-        if responded {
+        // A request running unseen owes nothing more — it has answered, or
+        // its page left and its submit is over (RB2): its machines can go.
+        if !owed {
             self.signing_background.retain(|kept| kept != host);
         }
         if let Some(tab) = tab {

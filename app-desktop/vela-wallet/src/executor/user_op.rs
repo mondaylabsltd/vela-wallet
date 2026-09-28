@@ -79,6 +79,10 @@ pub enum SubmitFailure {
     /// The relay was never reached (`NotSent { rejection: None }`): the dApp
     /// is told the core's fixed sentence, never the pool's text.
     NotSent,
+    /// The page that asked is gone (spec 082 RB2): the check before the
+    /// ceremony, after it, or right before the relay POST stopped the
+    /// submit. Nothing was signed or sent.
+    AskerGone,
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
@@ -91,6 +95,11 @@ impl From<SubmitFailure> for SendSubmitFailure {
             SubmitFailure::BundlerUnderfunded => SendSubmitFailure::BundlerUnderfunded,
             SubmitFailure::NotSent => SendSubmitFailure::Other {
                 message: Some(NOT_SENT_DAPP_DETAIL.to_owned()),
+            },
+            // The wallet's own Send is never withdrawn by a page
+            // ([`always_asked`]); diagnostics only, should that change.
+            SubmitFailure::AskerGone => SendSubmitFailure::Other {
+                message: Some("the request was withdrawn; nothing was sent".to_owned()),
             },
             SubmitFailure::Other(message) => SendSubmitFailure::Other {
                 message: (!message.is_empty()).then_some(message),
@@ -128,6 +137,17 @@ pub type Edges<'a> = &'a dyn Fn(CeremonyEdge);
 
 /// Edges nobody listens to.
 pub fn quiet(_: CeremonyEdge) {}
+
+/// Is the request still wanted — is the page that asked still there (spec
+/// 082 RB2, the money rule)? Asked before the ceremony opens, when it
+/// answers, and right before the relay POST: nothing is signed or sent for a
+/// page that has gone, however far its submit had got.
+pub type Asked<'a> = &'a dyn Fn() -> bool;
+
+/// A request no page can withdraw — the wallet's own Send.
+pub fn always_asked() -> bool {
+    true
+}
 
 fn other(message: impl Into<String>) -> SubmitFailure {
     SubmitFailure::Other(message.into())
@@ -179,13 +199,21 @@ impl Signer<'_> {
         keys: &[WalletKey],
         operation: Option<(&UserOperation, &[MultiSendCall])>,
         edges: Edges<'_>,
+        asked: Asked<'_>,
     ) -> Result<Assertion, SubmitFailure> {
-        edges(CeremonyEdge::Started);
-        let signed = self.ceremony(digest, chain_id, safe, keys, operation);
-        if signed.is_ok() {
-            edges(CeremonyEdge::Signed);
+        // No prompt for a page that has gone (RB2).
+        if !asked() {
+            return Err(SubmitFailure::AskerGone);
         }
-        signed
+        edges(CeremonyEdge::Started);
+        let signed = self.ceremony(digest, chain_id, safe, keys, operation)?;
+        // The page left while the prompt was up: the signature is dropped
+        // here, so the relay POST after it never happens.
+        if !asked() {
+            return Err(SubmitFailure::AskerGone);
+        }
+        edges(CeremonyEdge::Signed);
+        Ok(signed)
     }
 
     fn ceremony(
@@ -357,7 +385,7 @@ pub fn simulate_gas(
 /// why nothing did.
 #[allow(
     clippy::too_many_arguments,
-    reason = "the operation, its signer, and who hears the ceremony"
+    reason = "the operation, its signer, who hears the ceremony and whether it is still wanted"
 )]
 pub fn submit(
     chain_id: u32,
@@ -368,6 +396,7 @@ pub fn submit(
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
     edges: Edges<'_>,
+    asked: Asked<'_>,
 ) -> Result<Submitted, SubmitFailure> {
     let outcome = submit_inner(
         chain_id,
@@ -377,7 +406,11 @@ pub fn submit(
         keys,
         signer,
         quoted_fee,
-        edges,
+        Tail {
+            head: None,
+            edges,
+            asked,
+        },
     );
     // The SCREEN gets the core's sentence — SC-305: no relay text reaches a
     // person. The OPERATOR gets the detail, because a submit that failed
@@ -404,7 +437,7 @@ fn submit_inner(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-    edges: Edges<'_>,
+    tail: Tail<'_>,
 ) -> Result<Submitted, SubmitFailure> {
     let inner: Vec<MultiSendCall> = calls
         .iter()
@@ -419,7 +452,7 @@ fn submit_inner(
         .name("vela-submit-head".to_owned())
         .spawn(move || chain::head_block(chain_id))
         .ok();
-    let tail = Tail { head, edges };
+    let tail = Tail { head, ..tail };
     if is_tempo_chain(chain_id) {
         let fee_token = gas_fee_token.unwrap_or(TEMPO_DEFAULT_FEE_TOKEN);
         return submit_tempo(
@@ -439,10 +472,12 @@ fn submit_inner(
 }
 
 /// What the shared tail needs besides the operation: the head read started
-/// before the ceremony, and who hears the ceremony's edges.
+/// before the ceremony, who hears the ceremony's edges, and whether the page
+/// that asked is still there (RB2).
 struct Tail<'a> {
     head: Option<std::thread::JoinHandle<Option<u64>>>,
     edges: Edges<'a>,
+    asked: Asked<'a>,
 }
 
 /// Deployment status and the nonce, together, with the two refusals.
@@ -807,6 +842,7 @@ fn sign_and_submit(
         keys,
         Some((&op, inner)),
         tail.edges,
+        tail.asked,
     )?;
     op.signature = envelope(&assertion, keys)?;
 
@@ -824,6 +860,17 @@ fn sign_and_submit(
     // of it, so this is the hash of exactly what goes out.
     let local_hash = user_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?;
     let submit_block = tail.head.and_then(|head| head.join().ok()).flatten();
+    // The last moment a page that left can still stop it (RB2): past this
+    // line the operation may reach the relay, and then it is recorded and
+    // followed like any other.
+    if !(tail.asked)() {
+        crate::diag::vlog!(
+            "relay",
+            "op={} not sent: the page that asked is gone",
+            crate::diag::short(&local_hash)
+        );
+        return Err(SubmitFailure::AskerGone);
+    }
     match relay::send_user_op(&op, chain_id, extra, tier, &local_hash) {
         SubmitVerdict::Accepted { user_op_hash } => {
             // RA5: the local nonce moves only for an operation the relay
@@ -862,10 +909,11 @@ pub fn sign_message(
     keys: &[WalletKey],
     mut signer: Signer<'_>,
     edges: Edges<'_>,
+    asked: Asked<'_>,
 ) -> Result<String, SubmitFailure> {
     let challenge = compute_safe_message_hash(original_hash, u64::from(chain_id), safe)
         .map_err(|e| other(e.to_string()))?;
-    let assertion = signer.sign(&challenge, chain_id, safe, keys, None, edges)?;
+    let assertion = signer.sign(&challenge, chain_id, safe, keys, None, edges, asked)?;
     let hex = |text: &str| from_hex(text).map_err(|e| other(e.to_string()));
     let signature = eip1271_envelope_signature(
         &hex(&assertion.authenticator_data_hex)?,
@@ -1115,7 +1163,15 @@ mod tests {
             log.borrow_mut().push("touch id");
             Ok(assertion.clone())
         };
-        let signed = Signer::Passkey(&mut touch).sign(&[7; 32], 100, "0xsafe", &[], None, &edges);
+        let signed = Signer::Passkey(&mut touch).sign(
+            &[7; 32],
+            100,
+            "0xsafe",
+            &[],
+            None,
+            &edges,
+            &always_asked,
+        );
         assert!(signed.is_ok());
         assert_eq!(log.take(), vec!["started", "touch id", "signed"]);
 
@@ -1126,9 +1182,62 @@ mod tests {
                 message: None,
             })
         };
-        let declined =
-            Signer::Passkey(&mut dismissed).sign(&[7; 32], 100, "0xsafe", &[], None, &edges);
+        let declined = Signer::Passkey(&mut dismissed).sign(
+            &[7; 32],
+            100,
+            "0xsafe",
+            &[],
+            None,
+            &edges,
+            &always_asked,
+        );
         assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
+        assert_eq!(log.take(), vec!["started", "touch id"]);
+    }
+
+    /// Spec 082 RB2 (money rule): nothing is signed for a page that has gone.
+    /// Asked before the prompt opens — a gone page gets no prompt at all —
+    /// and again when it answers: a page that left while Touch ID was up gets
+    /// its signature dropped, so the relay POST that follows never happens.
+    #[test]
+    fn a_page_that_left_gets_nothing_signed() {
+        let log = std::cell::RefCell::new(Vec::<&str>::new());
+        let edges = |edge: CeremonyEdge| {
+            log.borrow_mut().push(match edge {
+                CeremonyEdge::Started => "started",
+                CeremonyEdge::Signed => "signed",
+            });
+        };
+        let assertion = Assertion {
+            credential_id: "cred0".to_owned(),
+            signature_der_hex: String::new(),
+            authenticator_data_hex: String::new(),
+            client_data_json_hex: String::new(),
+            user_id_hex: None,
+            authenticator_attachment: String::new(),
+            signer_origin: None,
+        };
+        let here = std::cell::Cell::new(false);
+        let asked = || here.get();
+        let mut touch = |_: &[u8]| {
+            log.borrow_mut().push("touch id");
+            Ok(assertion.clone())
+        };
+        let gone =
+            Signer::Passkey(&mut touch).sign(&[7; 32], 100, "0xsafe", &[], None, &edges, &asked);
+        assert_eq!(gone.err(), Some(SubmitFailure::AskerGone));
+        assert!(log.take().is_empty(), "no prompt for a page that is gone");
+
+        // Here when the prompt opened, gone by the time it answered.
+        here.set(true);
+        let mut leaves = |_: &[u8]| {
+            log.borrow_mut().push("touch id");
+            here.set(false);
+            Ok(assertion.clone())
+        };
+        let left =
+            Signer::Passkey(&mut leaves).sign(&[7; 32], 100, "0xsafe", &[], None, &edges, &asked);
+        assert_eq!(left.err(), Some(SubmitFailure::AskerGone));
         assert_eq!(log.take(), vec!["started", "touch id"]);
     }
 
@@ -1259,7 +1368,15 @@ mod tests {
                 channel: &channel,
                 only: None,
             };
-            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)), &edges)
+            signer.sign(
+                &digest,
+                100,
+                &op.sender,
+                &keys,
+                Some((&op, &inner)),
+                &edges,
+                &always_asked,
+            )
         };
         let _ = answering.join();
         assert_eq!(
@@ -1289,7 +1406,15 @@ mod tests {
                 channel: &channel,
                 only: None,
             };
-            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)), &edges)
+            signer.sign(
+                &digest,
+                100,
+                &op.sender,
+                &keys,
+                Some((&op, &inner)),
+                &edges,
+                &always_asked,
+            )
         };
         let _ = declining.join();
         // Opened, never signed: no "done" edge for a ceremony that returned
@@ -1341,6 +1466,7 @@ mod tests {
                     only: Some(&keys[1].credential_id),
                 },
                 &quiet,
+                &always_asked,
             );
             let _ = answering.join();
             (signed, channel.ended())
@@ -1403,6 +1529,7 @@ mod tests {
                 only: None,
             },
             &quiet,
+            &always_asked,
         );
         let _ = answering.join();
         let signature = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));

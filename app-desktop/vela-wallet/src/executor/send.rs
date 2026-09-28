@@ -603,6 +603,8 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                     // The send column reads its own flags for the prompt
                     // (`signing_started`, the Trusted Signer's channel).
                     &user_op::quiet,
+                    // The person's own payment: no page can withdraw it.
+                    &user_op::always_asked,
                 ) {
                     // Accepted, or may have been sent (spec 082 RA4): either
                     // way it is recorded and tracked — a lost reply is never

@@ -211,6 +211,33 @@ pub struct SigningHost {
     requote_attempt: u32,
     requote_scheduled: Option<u64>,
     requote_seq: u64,
+    /// Submits running on a worker (the `Streaming` arm): counted from the
+    /// dispatch until the core has their result. A request whose page left
+    /// keeps its machines only while one runs (spec 082 RB2).
+    streaming: u32,
+}
+
+/// Whether a request's machines keep running, unseen, once its column goes
+/// (spec 079 FR-002, 082 RB2). Nothing is owed once the page has its answer.
+/// A page that LEFT is owed nothing either — but a submit still running for
+/// it may already have POSTed, and its `OpSubmitted` must reach the core so
+/// the operation is recorded and followed; once that run ends, nothing is
+/// left to do. Otherwise a request closed after its approval runs on until
+/// the page has its answer.
+#[must_use]
+pub fn runs_unseen(
+    approved: bool,
+    responded: bool,
+    asker_gone: bool,
+    submit_running: bool,
+) -> bool {
+    if responded {
+        return false;
+    }
+    if asker_gone {
+        return submit_running;
+    }
+    approved
 }
 
 impl SigningHost {
@@ -276,6 +303,7 @@ impl SigningHost {
             requote_attempt: 0,
             requote_scheduled: None,
             requote_seq: 0,
+            streaming: 0,
         };
         // The stored default speed (spec 069), read now and followed while
         // the sheet is up: the column sits beside Settings, which may change it.
@@ -638,6 +666,36 @@ impl SigningHost {
         speed_control::pick(self, tier, cx);
     }
 
+    /// The page that asked is gone (spec 082 RB2): a submit already running
+    /// stops before its ceremony, when the ceremony answers, or right before
+    /// the relay POST — whichever it reaches next.
+    pub fn asker_left(&self) {
+        self.ctx.asker_left();
+    }
+
+    /// Has the page that asked gone?
+    #[must_use]
+    pub fn asker_gone(&self) -> bool {
+        !self.ctx.still_asked()
+    }
+
+    /// Is a submit running for this request?
+    #[must_use]
+    pub fn submit_running(&self) -> bool {
+        self.streaming > 0
+    }
+
+    /// [`runs_unseen`] for this request.
+    #[must_use]
+    pub fn owed_unseen(&self) -> bool {
+        runs_unseen(
+            self.approved,
+            self.responded,
+            self.asker_gone(),
+            self.submit_running(),
+        )
+    }
+
     pub fn dispatch_sign(&mut self, event: SignEvent, cx: &mut Context<Self>) {
         let pending = self.sign.dispatch(event);
         self.pump_sign(pending, cx);
@@ -681,6 +739,7 @@ impl SigningHost {
                     .detach();
                 }
                 SignAnswer::Streaming(work) => {
+                    self.streaming += 1;
                     let (tx, mut rx) = futures::channel::mpsc::unbounded();
                     cx.spawn(async move |host, cx| {
                         let work = cx
@@ -694,8 +753,13 @@ impl SigningHost {
                                 .ok();
                         }
                         let result = work.await;
-                        host.update(cx, |host, cx| host.resolve_sign(id, result, cx))
-                            .ok();
+                        host.update(cx, |host, cx| {
+                            // Over before the core hears it, so the redraw
+                            // its answer causes sees nothing running.
+                            host.streaming = host.streaming.saturating_sub(1);
+                            host.resolve_sign(id, result, cx);
+                        })
+                        .ok();
                     })
                     .detach();
                 }
@@ -1078,6 +1142,34 @@ fn typed_data_of(params_json: &str) -> String {
 mod tests {
     use super::*;
     use vela_core::app::fee_policy::FeePolicy;
+
+    /// Spec 079 FR-002 and 082 RB2: which requests keep their machines,
+    /// unseen, once their column goes. One closed after the approval keeps
+    /// them until the page has its answer. One whose page LEFT keeps them only
+    /// while its submit is still running — a POST that already went must
+    /// reach the core, so it is recorded and handed to the tracker, never
+    /// dropped with the column — and lets them go once that run ends.
+    #[test]
+    fn a_request_runs_unseen_only_while_something_is_owed() {
+        // approved, responded, asker gone, submit running
+        assert!(
+            runs_unseen(true, false, false, false),
+            "FR-002: the answer is owed"
+        );
+        assert!(
+            !runs_unseen(true, true, false, true),
+            "answered: nothing owed"
+        );
+        assert!(!runs_unseen(false, false, false, false), "never approved");
+        assert!(
+            runs_unseen(true, false, true, true),
+            "the page left mid-submit: the op may be on its way"
+        );
+        assert!(
+            !runs_unseen(true, false, true, false),
+            "the page left and nothing runs: nothing to record, nobody to answer"
+        );
+    }
 
     /// Spec 079 FR-008: 3 s, 6 s, 12 s, then every 15 s.
     #[test]
