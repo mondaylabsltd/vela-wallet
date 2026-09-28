@@ -4799,7 +4799,10 @@ fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOut
         }
         SendReceiptOutcome::FeeHeld => {
             // Waiting, not failure: queued until fees settle (invariant ⑦).
+            // The hold stage comes only from the relay's status, so the relay
+            // holds the op: no longer "may have been sent" (RA10).
             model.fee_held = true;
+            model.receipt_maybe_sent = false;
         }
         SendReceiptOutcome::Acknowledged => {
             // The relay holds it: the ordinary "submitted" words (RA10).

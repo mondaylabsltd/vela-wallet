@@ -5147,6 +5147,28 @@ fn the_tracker_ends_a_maybe_sent_send() {
     );
 }
 
+/// Review of T026 (RA10): a fee hold is the relay's own word that it holds
+/// the op (the hold stage comes only from its status), so a may-have-been-sent
+/// Send that the relay parks for fees goes back to the ordinary words with the
+/// hold line — not "it may have been sent" under a hold the relay announced.
+#[test]
+fn a_fee_hold_is_the_relay_acknowledging_a_maybe_sent_send() {
+    use vela_core::app::tx_tracker::{TrackOutcome, TrackStatus};
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.resolve(submitted_maybe(HASH));
+    let entry = track_entry(TrackStatus::FeeHeld, TrackOutcome::StillConfirming, None);
+    let outcome = receipt_outcome_of(&entry).expect("a fee hold is news");
+    sut.dispatch(Event::ReceiptUpdate {
+        user_op_hash: HASH.to_owned(),
+        outcome,
+    });
+    let receipt = sut.view().receipt.expect("receipt");
+    assert_eq!(receipt.status, SendReceiptStatus::Submitted);
+    assert_eq!(receipt.hold_reason, Some(SendHoldReason::FeeHold));
+}
+
 /// The one tracker → receipt mapping, row by row.
 #[test]
 fn receipt_outcome_of_maps_every_tracker_status() {
