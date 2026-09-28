@@ -333,12 +333,13 @@ export interface NativeSend {
  * Read the way `dapp-submit` reads the call it submits, so the figure and the
  * recipient drawn are the ones signed. `null` keeps the blind rung, which says
  * nothing false: more than one call (a batch whose first leg is a plain send
- * is more than that send), any calldata, a recipient that is not an address,
- * a value the executor would read differently from the site (it takes every
- * value as hex — a bare "1000" is 0x1000 there) or could not sign at all (more
- * than a uint256), a chain whose coin the wallet cannot name — Tempo has
- * none, and "ETH" on a custom network would be a guess — or a call that names
- * a chain of its own other than the sheet's.
+ * is more than that send), any calldata (in `data` or web3.js's `input`), a
+ * recipient that is not an address, a value the executor would read
+ * differently from the site (it takes every value as hex — a bare "1000" is
+ * 0x1000 there) or could not sign at all (more than a uint256), a chain whose
+ * coin the wallet cannot name — Tempo has none, and "ETH" on a custom network
+ * would be a guess — or a call that names a chain of its own other than the
+ * sheet's.
  *
  * That last one is the executor's rule too: `resolveChainId` lets a
  * `chainId` in `params[0]` win over the request's chain, and reads it
@@ -370,8 +371,19 @@ export function nativeSendOf(
 	else if (request.kind === 'batch' && Array.isArray(first?.calls) && first.calls.length === 1)
 		call = first.calls[0];
 	if (typeof call !== 'object' || call === null) return null;
-	const { to, value, data } = call as { to?: unknown; value?: unknown; data?: unknown };
-	if (data !== undefined && data !== null && data !== '' && data !== '0x') return null;
+	const { to, value, data, input } = call as {
+		to?: unknown;
+		value?: unknown;
+		data?: unknown;
+		input?: unknown;
+	};
+	// Calldata in `input` (web3.js spells it that way) is still calldata. The
+	// executor drops it (`txDict.data ?? '0x'`) and would sign a bare transfer
+	// to a contract that meant to be called; a calm "Send" would hide that, so
+	// only the blind rung may draw it.
+	for (const bytes of [data, input]) {
+		if (bytes !== undefined && bytes !== null && bytes !== '' && bytes !== '0x') return null;
+	}
 	if (typeof to !== 'string' || !isAddress(to)) return null;
 	let wei: bigint;
 	if (value === undefined || value === null || value === '') wei = 0n;
@@ -402,7 +414,8 @@ function nativeSendBlocks(send: NativeSend, m: SigningMessages): Block[] {
 		{
 			kind: 'amount',
 			line: {
-				sign: '-',
+				// Nothing leaves on a zero-value call: "0", not "-0" (the desktop draws it so).
+				sign: send.wei === 0n ? '' : '-',
 				value:
 					frac === undefined
 						? groupDigits(whole)

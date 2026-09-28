@@ -1294,6 +1294,9 @@ describe('a plain native send reads as a send', () => {
 		});
 		// Absent is zero, as `dapp-submit` reads it (`value ?? '0x0'`).
 		expect(nativeSendOf(tx({ to: TO }))?.wei).toBe(0n);
+		// An empty `input` is no calldata, as an empty `data` is none.
+		expect(nativeSendOf(tx({ to: TO, value: '0x1', input: '0x' }))?.wei).toBe(1n);
+		expect(nativeSendOf(tx({ to: TO, value: '0x1', input: null }))?.wei).toBe(1n);
 		expect(nativeSendOf(batch([{ to: TO, value: '0x1' }]))?.wei).toBe(1n);
 		// A call that names the sheet's own chain, in either spelling the
 		// executor reads, is still the send drawn.
@@ -1309,6 +1312,11 @@ describe('a plain native send reads as a send', () => {
 	it('keeps everything else on the blind rung', () => {
 		const blind = [
 			tx({ to: TO, value: '0x1', data: '0xdeadbeef' }),
+			// Calldata spelled `input` (web3.js) is calldata the executor drops:
+			// drawn calm, a router call would be signed as a bare transfer.
+			tx({ to: TO, value: '0x1', input: '0xdeadbeef' }),
+			tx({ to: TO, value: '0x1', data: '0x', input: '0x3593564c' }),
+			batch([{ to: TO, value: '0x1', input: '0xdeadbeef' }]),
 			tx({ to: TO, value: '0xzz' }),
 			// The executor reads every value as hex: a bare "1000" is 0x1000 there.
 			tx({ to: TO, value: '1000' }),
@@ -1357,6 +1365,15 @@ describe('a plain native send reads as a send', () => {
 			{ kind: 'party', label: m.labelRecipient, name: shortenAddress(TO), address: TO }
 		]);
 		expect(summaryOf(model.blocks)).toBe(`${m.intentSend} · -0.001 xDAI`);
+	});
+
+	it('a zero-value call moves nothing, so its figure carries no minus', () => {
+		const model = sheet(JSON.stringify([{ to: TO }]));
+		expect(model.blocks.find((b) => b.kind === 'amount')).toEqual({
+			kind: 'amount',
+			line: { sign: '', value: '0', symbol: 'xDAI', tone: 'neutral' }
+		});
+		expect(summaryOf(model.blocks)).toBe(`${m.intentSend} · 0 xDAI`);
 	});
 
 	it("groups the whole part the person's way, like the amounts the core decodes", () => {
