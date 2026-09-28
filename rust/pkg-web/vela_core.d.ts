@@ -752,18 +752,39 @@ export function encodeType(typed_data_json: string): string;
 export function extractAttestationPublicKey(attestation_object: Uint8Array): P256PublicKey;
 
 /**
+ * The corpus key of the reason line under a failed fee, or `undefined` for
+ * none (spec 082 RJ13) — the one choice every shell used to make itself.
+ * `explore.chainDown` takes `{{chain}}`. `failure` as for
+ * [`fee_requote_delay_ms`].
+ */
+export function feeFailureReasonKey(failure: string): string | undefined;
+
+/**
  * The wait in ms before automatic fee re-quote `attempt` (1-based) after
- * `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
- * `undefined` when no retry can fix it (spec 079 FR-008) — the extension's
- * signing sheet re-asks on the same schedule as every other client.
+ * `failure` (see [`fee_failure_of`]), or `undefined` when no retry can fix
+ * it (spec 079 FR-008) — the extension's signing sheet re-asks on the same
+ * schedule as every other client: 3 s, 6 s, then every 8 s (spec 082 RJ12).
  */
 export function feeRequoteDelayMs(failure: string, attempt: number): number | undefined;
+
+/**
+ * The bound on each automatic fee re-quote, in ms (spec 082 RJ12).
+ */
+export function feeRequoteTimeoutMs(): number;
 
 /**
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
  */
 export function feeSignalsCacheTtlMs(): number;
+
+/**
+ * A signed balance change from signed base units, or `undefined` for zero
+ * or unreadable text: the token ladder, dust written exactly (never `−0`),
+ * U+2212 / `+` (spec 082 RJ15). `preset` is the number preset's wire name;
+ * anything else is `comma_dot`.
+ */
+export function formatSignedTokenAmount(delta_base_units: string, decimals: number, preset: string): string | undefined;
 
 export function fromBase64Url(s: string): Uint8Array;
 
@@ -1147,6 +1168,14 @@ export function trustedSignerUsesWalletPasskeys(url: string): boolean;
 export function typicalInclusionSeconds(chain_id: number): number;
 
 /**
+ * A failed relay gas estimate, classified (spec 082 RJ19): `error_json` is
+ * the JSON-RPC `error` member or the whole body. Answers the core's
+ * `EstimateFailure` as JSON — `{"type":"reverts","reason":null|"…"}` or
+ * `{"type":"unavailable"}`.
+ */
+export function userOpEstimateFailure(error_json: string): string;
+
+/**
  * `topics[0]` of the `eth_getLogs` filter a `FindOpEvent` asks for (ruling
  * 8): the EntryPoint's `UserOperationEvent`; `topics[1]` is the op's hash.
  */
@@ -1165,6 +1194,12 @@ export function userOpHash(op_json: string, chain_id: bigint): string;
  * relay refusal to quote (RA10) — a fixed sentence, never the pool's text.
  */
 export function userOpNotSentDetail(): string;
+
+/**
+ * The dApp's `-32603` detail for an operation the relay refused (spec 082
+ * RJ3) — a fixed sentence.
+ */
+export function userOpRefusedDappDetail(): string;
 
 /**
  * The relay's lifecycle-status method (RA7) — the only spelling it serves.
@@ -1186,6 +1221,12 @@ export function userOpStatusMethod(): string;
  * The local nonce advances on `accepted` only.
  */
 export function userOpSubmitStep(reply_json: string, attempt: number, maybe_delivered: boolean, local_hash: string): string;
+
+/**
+ * How long the page waits for `ClearToPost` after `OpSigned` before it gives
+ * up without POSTing (spec 082 RJ1), in ms.
+ */
+export function userOpWriteAheadWaitMs(): number;
 
 /**
  * `kind` is `"create"` or `"get"` (anything else errors — the caller is
@@ -1334,7 +1375,9 @@ export interface InitOutput {
     readonly extcachecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly extcachecore_view: (a: number) => [number, number, number, number];
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
+    readonly feeFailureReasonKey: (a: number, b: number) => [number, number];
     readonly feeRequoteDelayMs: (a: number, b: number, c: number) => number;
+    readonly feeRequoteTimeoutMs: () => number;
     readonly feeSignalsCacheTtlMs: () => number;
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;
@@ -1348,6 +1391,7 @@ export interface InitOutput {
     readonly feetierprefcore_new: () => number;
     readonly feetierprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly feetierprefcore_view: (a: number) => [number, number, number, number];
+    readonly formatSignedTokenAmount: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly fromBase64Url: (a: number, b: number) => [number, number, number, number];
     readonly fromHex: (a: number, b: number) => [number, number, number, number];
     readonly functionSelector: (a: number, b: number) => [number, number, number, number];
@@ -1472,11 +1516,14 @@ export interface InitOutput {
     readonly txtrackercore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly txtrackercore_view: (a: number) => [number, number, number, number];
     readonly typicalInclusionSeconds: (a: number) => number;
+    readonly userOpEstimateFailure: (a: number, b: number) => [number, number];
     readonly userOpEventTopic: () => [number, number];
     readonly userOpHash: (a: number, b: number, c: bigint) => [number, number, number, number];
     readonly userOpNotSentDetail: () => [number, number];
+    readonly userOpRefusedDappDetail: () => [number, number];
     readonly userOpStatusMethod: () => [number, number];
     readonly userOpSubmitStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly userOpWriteAheadWaitMs: () => number;
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];

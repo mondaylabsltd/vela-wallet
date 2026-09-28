@@ -3391,10 +3391,30 @@ export function extractAttestationPublicKey(attestation_object) {
 }
 
 /**
+ * The corpus key of the reason line under a failed fee, or `undefined` for
+ * none (spec 082 RJ13) — the one choice every shell used to make itself.
+ * `explore.chainDown` takes `{{chain}}`. `failure` as for
+ * [`fee_requote_delay_ms`].
+ * @param {string} failure
+ * @returns {string | undefined}
+ */
+export function feeFailureReasonKey(failure) {
+    const ptr0 = passStringToWasm0(failure, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.feeFailureReasonKey(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
  * The wait in ms before automatic fee re-quote `attempt` (1-based) after
- * `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
- * `undefined` when no retry can fix it (spec 079 FR-008) — the extension's
- * signing sheet re-asks on the same schedule as every other client.
+ * `failure` (see [`fee_failure_of`]), or `undefined` when no retry can fix
+ * it (spec 079 FR-008) — the extension's signing sheet re-asks on the same
+ * schedule as every other client: 3 s, 6 s, then every 8 s (spec 082 RJ12).
  * @param {string} failure
  * @param {number} attempt
  * @returns {number | undefined}
@@ -3407,6 +3427,15 @@ export function feeRequoteDelayMs(failure, attempt) {
 }
 
 /**
+ * The bound on each automatic fee re-quote, in ms (spec 082 RJ12).
+ * @returns {number}
+ */
+export function feeRequoteTimeoutMs() {
+    const ret = wasm.feeRequoteTimeoutMs();
+    return ret >>> 0;
+}
+
+/**
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
  * @returns {number}
@@ -3414,6 +3443,30 @@ export function feeRequoteDelayMs(failure, attempt) {
 export function feeSignalsCacheTtlMs() {
     const ret = wasm.feeSignalsCacheTtlMs();
     return ret >>> 0;
+}
+
+/**
+ * A signed balance change from signed base units, or `undefined` for zero
+ * or unreadable text: the token ladder, dust written exactly (never `−0`),
+ * U+2212 / `+` (spec 082 RJ15). `preset` is the number preset's wire name;
+ * anything else is `comma_dot`.
+ * @param {string} delta_base_units
+ * @param {number} decimals
+ * @param {string} preset
+ * @returns {string | undefined}
+ */
+export function formatSignedTokenAmount(delta_base_units, decimals, preset) {
+    const ptr0 = passStringToWasm0(delta_base_units, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(preset, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.formatSignedTokenAmount(ptr0, len0, decimals, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
 }
 
 /**
@@ -4724,6 +4777,29 @@ export function typicalInclusionSeconds(chain_id) {
 }
 
 /**
+ * A failed relay gas estimate, classified (spec 082 RJ19): `error_json` is
+ * the JSON-RPC `error` member or the whole body. Answers the core's
+ * `EstimateFailure` as JSON — `{"type":"reverts","reason":null|"…"}` or
+ * `{"type":"unavailable"}`.
+ * @param {string} error_json
+ * @returns {string}
+ */
+export function userOpEstimateFailure(error_json) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(error_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.userOpEstimateFailure(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * `topics[0]` of the `eth_getLogs` filter a `FindOpEvent` asks for (ruling
  * 8): the EntryPoint's `UserOperationEvent`; `topics[1]` is the op's hash.
  * @returns {string}
@@ -4790,6 +4866,24 @@ export function userOpNotSentDetail() {
 }
 
 /**
+ * The dApp's `-32603` detail for an operation the relay refused (spec 082
+ * RJ3) — a fixed sentence.
+ * @returns {string}
+ */
+export function userOpRefusedDappDetail() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.userOpRefusedDappDetail();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * The relay's lifecycle-status method (RA7) — the only spelling it serves.
  * @returns {string}
  */
@@ -4846,6 +4940,16 @@ export function userOpSubmitStep(reply_json, attempt, maybe_delivered, local_has
     } finally {
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
+}
+
+/**
+ * How long the page waits for `ClearToPost` after `OpSigned` before it gives
+ * up without POSTing (spec 082 RJ1), in ms.
+ * @returns {number}
+ */
+export function userOpWriteAheadWaitMs() {
+    const ret = wasm.userOpWriteAheadWaitMs();
+    return ret >>> 0;
 }
 
 /**
