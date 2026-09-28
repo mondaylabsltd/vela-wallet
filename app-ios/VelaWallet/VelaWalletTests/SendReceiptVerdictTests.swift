@@ -147,4 +147,105 @@ struct SendReceiptVerdictTests {
         #expect((reply["submit_block"] as? NSNumber)?.uint64Value == 0x2dc6c00)
         #expect((reply["user_op_hash"] as? String)?.count == 66)
     }
+
+    /// Ruling 1, the Android finding (e7b8cdd4) checked on this client: the
+    /// send core keeps "signing" — and its Cancel — from the passkey until
+    /// the relay answers, so a Cancel can land while the POST is out. The
+    /// POST must run to its verdict and the op be reported: dropping it would
+    /// leave an op the relay may hold with no record and no tracker, the
+    /// slide one swipe from paying twice.
+    @Test func aCancelWhileThePostIsOutStillReportsTheOp() async throws {
+        let fixture = TrustedSignerFixture()
+        let scripted = ScriptedRelayPort()
+        scripted.rpc["eth_getCode"] = .ok("0x")
+        scripted.rpc["eth_blockNumber"] = .ok("0x2dc6c00")
+        scripted.rpc["eth_estimateUserOperationGas"] = .ok([
+            "verificationGasLimit": "0x30d40", "callGasLimit": "0x30d40", "preVerificationGas": "0xc350",
+        ] as [String: Any])
+        let relayHash = "0x" + String(repeating: "cd", count: 32)
+        scripted.detailed["eth_sendUserOperation"] = [
+            RpcCallResult(outcome: .ok(relayHash), maybeDelivered: false, heldErrorJson: nil),
+        ]
+        let port = HeldPostPort(scripted)
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accounts = ScriptedAccounts()
+        accounts.keyList = fixture.keys
+        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
+        let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
+        spine.trustedSigner = ScriptedTrustedSigner { digest in
+            let data = try! JSONSerialization.data(withJSONObject: fixture.result(for: digest))
+            return .outcome(trustedSignerVerify(
+                resultJson: String(decoding: data, as: UTF8.self), digest: digest, keys: fixture.keys
+            ))
+        }
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let accountStore = AccountStore(defaults: defaults)
+        let pool = RpcPool(store: store, accounts: accountStore)
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: pool, spine: spine, accounts: accounts,
+            fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil),
+            identity: RecipientIdentity(store: store, pool: pool, accounts: accountStore),
+            metadata: TokenMetadata(store: store, pool: pool), accountStore: accountStore,
+            balances: { nil }, networks: { nil }, ports: SendExecutor.Ports()
+        )
+        let submit = Task {
+            try CoreJSON.object(await executor.perform([
+                "type": "submit_user_op", "chain_id": 100, "account": fixture.account,
+                "public_key_hex": NSNull(),
+                "calls": [["to": fixture.account, "value": "1000", "data": "0x"] as [String: Any]],
+                "gas_fee_token": NSNull(),
+                "quoted_fee": ["amount": "1000", "recipient": fixture.account] as [String: Any],
+            ]))
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while !port.holding, Date() < deadline { try await Task.sleep(nanoseconds: 5_000_000) }
+        try #require(port.holding, "the POST never went out")
+
+        // The person taps Cancel while the relay has the POST.
+        _ = await executor.perform(["type": "cancel_passkey_sign"])
+        port.release()
+
+        let reply = try await submit.value
+        #expect(reply["type"] as? String == "submitted", "a cancel after the passkey dropped the op: \(reply)")
+        #expect(reply["user_op_hash"] as? String == relayHash)
+        #expect(scripted.calls.filter { $0 == "eth_sendUserOperation" }.count == 1, "one POST, never a second")
+    }
+}
+
+/// A relay port that holds the submit POST until released — the moment a
+/// person can still tap Cancel.
+@MainActor
+final class HeldPostPort: RelayPort {
+    private let inner: ScriptedRelayPort
+    private var held: CheckedContinuation<Void, Never>?
+    private(set) var holding = false
+
+    init(_ inner: ScriptedRelayPort) { self.inner = inner }
+
+    func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome {
+        await callDetailed(chainId: chainId, method: method, params: params, kind: kind).outcome
+    }
+
+    func callDetailed(chainId: Int, method: String, params: [Any], kind: String) async -> RpcCallResult {
+        if method == "eth_sendUserOperation" {
+            await withCheckedContinuation { continuation in
+                held = continuation
+                holding = true
+            }
+        }
+        return await inner.callDetailed(chainId: chainId, method: method, params: params, kind: kind)
+    }
+
+    func release() {
+        holding = false
+        held?.resume()
+        held = nil
+    }
+
+    func bundlerBase(chainId: Int) async -> String? { await inner.bundlerBase(chainId: chainId) }
+    func bestRpcUrl(chainId: Int) async -> String? { await inner.bestRpcUrl(chainId: chainId) }
+    func restGet(url: String, xRpcUrl: String?) async -> CoreHTTP.RestAnswer {
+        await inner.restGet(url: url, xRpcUrl: xRpcUrl)
+    }
 }
