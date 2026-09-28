@@ -2056,7 +2056,9 @@ pub fn token_amount_text_down(value: &str) -> String {
     })
 }
 
-fn with_decimal_mark(figure: String) -> String {
+/// A `.`-decimal figure in the person's decimal mark — here, and for the
+/// signing column's exact native send (083 W10).
+pub(crate) fn with_decimal_mark(figure: String) -> String {
     let decimal = crate::executor::format_prefs::current()
         .number
         .separators()

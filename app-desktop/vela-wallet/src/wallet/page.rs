@@ -14621,14 +14621,17 @@ impl WalletPage {
                                 address.eq_ignore_ascii_case(&call.to)
                             });
                         if !named {
-                            let label = if single {
-                                self.signing.label_interacting.clone()
+                            // A call with no calldata calls no contract: its
+                            // `to` is who receives the coin (083 W10).
+                            let word = if matches!(call.data.as_str(), "" | "0x") {
+                                &self.signing.label_recipient
                             } else {
-                                SharedString::from(format!(
-                                    "{} {}",
-                                    self.signing.label_interacting,
-                                    i + 1
-                                ))
+                                &self.signing.label_interacting
+                            };
+                            let label = if single {
+                                word.clone()
+                            } else {
+                                SharedString::from(format!("{word} {}", i + 1))
                             };
                             rows.push((label, SharedString::from(call.to.clone()), false));
                         }

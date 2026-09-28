@@ -86,6 +86,20 @@ pub fn fee_of_another_tier(fee: &FeeView, speed_tier: Option<FeeTier>) -> bool {
 pub struct RequestFacts {
     pub to: Option<String>,
     pub data_bytes: usize,
+    /// The request only moves the chain's own coin (083 W10) — there was
+    /// nothing to decode, so it is a send, not the blind rung.
+    pub native_send: Option<NativeSend>,
+}
+
+/// A plain native send: one call, no calldata. Read by the host from the
+/// very calls the executor submits (`executor::sign_request::calls_of`), so
+/// the figure and the recipient on the sheet are the ones that get signed.
+#[derive(Clone)]
+pub struct NativeSend {
+    pub to: String,
+    pub wei: u128,
+    /// The chain's own coin, as the wallet's chain table names it.
+    pub symbol: String,
 }
 
 /// The cap the person chose, where the decode still says "Unlimited".
@@ -228,7 +242,15 @@ pub fn blocks(clear: &ClearSigningView, facts: &RequestFacts, s: &SigningStrings
             .as_ref()
             .map(|typed| blind_typed_blocks(typed, s))
             .unwrap_or_default(),
-        ClearSurface::BlindTransaction => blind_tx_blocks(facts, s),
+        // The core resolves an empty-calldata request with no result and
+        // leaves the transfer to the shell (`ReqKind::TxPlain`); until 083 it
+        // fell through to the blind rung and a 0.001 xDAI send read "contract
+        // interaction, unable to decode (0 bytes)". The phones draw their own
+        // transfer here too (`SigningLive.plainTransferBlocks`).
+        ClearSurface::BlindTransaction => facts.native_send.as_ref().map_or_else(
+            || blind_tx_blocks(facts, s),
+            |send| native_send_blocks(send, s),
+        ),
     }
 }
 
@@ -1066,6 +1088,45 @@ fn blind_tx_blocks(facts: &RequestFacts, s: &SigningStrings) -> Vec<Block> {
     out
 }
 
+/// A send of the chain's own coin, in the gallery's send layout: what it
+/// does, how much, to whom — and no decode warning, because there was no
+/// calldata to decode.
+///
+/// The one figure this file composes, and not a second authority on "how
+/// much": the wei is the executor's own reading of the request, and a
+/// chain's own coin has 18 decimals. Exact, never rounded — every wei that
+/// will be signed.
+fn native_send_blocks(send: &NativeSend, s: &SigningStrings) -> Vec<Block> {
+    vec![
+        Block::Intent {
+            text: s.intent_send.clone(),
+            tone: Tone::Neutral,
+        },
+        Block::Amount {
+            line: crate::signing::fixtures::AmountLine {
+                sign: SharedString::default(),
+                value: SharedString::from(crate::wallet::live::with_decimal_mark(
+                    vela_core::app::fee_policy::from_base_units(send.wei, 18),
+                )),
+                symbol: SharedString::from(send.symbol.clone()),
+                token: None,
+                fiat: None,
+                caption: None,
+                tone: Tone::Neutral,
+            },
+            card: false,
+            note: None,
+            compact: false,
+        },
+        Block::Party {
+            label: s.label_recipient.clone(),
+            name: SharedString::from(crate::wallet::live::shorten_address(&send.to)),
+            address: Some(SharedString::from(send.to.clone())),
+            badge: None,
+        },
+    ]
+}
+
 /// The blocks a decoded request draws, in the order they are read.
 ///
 /// Intent first — what this DOES — then what is wrong with it, then the
@@ -1543,6 +1604,7 @@ mod tests {
         let facts = RequestFacts {
             to: Some("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned()),
             data_bytes: 196,
+            native_send: None,
         };
         let cases: Vec<(ClearSurface, ClearSigningView)> = vec![
             (ClearSurface::Loading, pristine()),
@@ -1602,6 +1664,7 @@ mod tests {
         let facts = RequestFacts {
             to: Some("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned()),
             data_bytes: 196,
+            native_send: None,
         };
         let drawn = blocks(
             &surfaced(ClearSurface::BlindTransaction, pristine()),
@@ -1626,6 +1689,91 @@ mod tests {
                 .any(|block| matches!(block, Block::Amount { .. })),
             "the shell invented an amount"
         );
+    }
+
+    /// 083 W10: a dApp's 0.001 xDAI send, through the real core, reads as a
+    /// send — not "contract interaction, unable to decode (0 bytes)" over an
+    /// unverified contract — and its slide still says "confirm send".
+    #[test]
+    fn a_plain_native_send_reads_as_a_send() {
+        const TO: &str = "0x76875eb2c6d2ea8d6b7fc7e0ce6d2c1e6ac0d141";
+        let s = strings();
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
+        let params = format!(r#"[{{"to":"{TO}","value":"0x38d7ea4c68000"}}]"#);
+        let kickoff =
+            crate::wallet::signing_host::clear_kickoff("eth_sendTransaction", &params, 100, None)
+                .unwrap_or_else(|| unreachable!("a transaction starts the decode"));
+        let _ = host.dispatch(kickoff);
+        let clear = localized_terms(&host.view(), &s);
+        assert_eq!(
+            clear.surface,
+            ClearSurface::BlindTransaction,
+            "the core leaves the transfer to the shell"
+        );
+        let facts = RequestFacts {
+            to: Some(TO.to_owned()),
+            data_bytes: 0,
+            native_send: Some(NativeSend {
+                to: TO.to_owned(),
+                wei: 1_000_000_000_000_000,
+                symbol: "xDAI".to_owned(),
+            }),
+        };
+
+        let drawn = blocks(&clear, &facts, &s);
+        assert!(
+            matches!(drawn.first(), Some(Block::Intent { text, tone: Tone::Neutral }) if *text == s.intent_send),
+            "a send, not a contract interaction"
+        );
+        assert!(
+            !drawn
+                .iter()
+                .any(|block| matches!(block, Block::Warning { .. })),
+            "nothing was left to decode, so nothing to warn about"
+        );
+        let figure = crate::wallet::live::with_decimal_mark("0.001".to_owned());
+        assert!(
+            drawn.iter().any(|block| matches!(
+                block,
+                Block::Amount { line, .. } if line.value == figure && line.symbol == "xDAI"
+            )),
+            "the amount, exactly, in the chain's own coin"
+        );
+        assert!(
+            drawn.iter().any(|block| matches!(
+                block,
+                Block::Party { label, address: Some(address), badge: None, .. }
+                    if *label == s.label_recipient && address == TO
+            )),
+            "who receives it, and no 'interacting with, unverified' row"
+        );
+        assert_eq!(
+            crate::signing::status::summary_of(&drawn),
+            Some(SharedString::from(format!(
+                "{} · {figure} xDAI",
+                s.intent_send
+            ))),
+            "the receipt names the send too"
+        );
+        assert_eq!(
+            confirm_label(&clear, &s),
+            SharedString::from(format!("{} · {}", s.slide_to_confirm, s.confirm_send))
+        );
+
+        // Calldata the host did not read as a plain send stays blind as today.
+        let blind = blocks(
+            &clear,
+            &RequestFacts {
+                native_send: None,
+                ..facts
+            },
+            &s,
+        );
+        assert!(matches!(
+            blind.first(),
+            Some(Block::Intent { text, .. }) if *text == s.intent_contract_call
+        ));
     }
 
     /// `eth_sign` is the hard-warning surface, never the calm message view —

@@ -940,7 +940,39 @@ fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
         // Hex, so two characters per byte; an odd tail is a malformed payload
         // and rounds DOWN rather than claiming a byte that is not there.
         data_bytes: data.trim_start_matches("0x").len() / 2,
+        native_send: native_send_of(request),
     }
+}
+
+/// A request that only moves the chain's own coin (083 W10), read from the
+/// calls the executor will submit rather than from `first_call`: the figure
+/// and the recipient drawn are then the ones signed.
+///
+/// `None` keeps the blind rung, which says nothing false: more than one call
+/// (a batch whose first leg is a plain send is more than that send), any
+/// calldata (the core's own `TxPlain` test is empty or `0x`), a recipient
+/// that is not an address, or a chain whose coin the wallet cannot name —
+/// Tempo has none, and "ETH" on a custom network would be a guess.
+fn native_send_of(request: &IncomingRequest) -> Option<crate::signing::live::NativeSend> {
+    let calls = crate::executor::sign_request::calls_of(&request.method, &request.params_json)?;
+    let [call] = calls.as_slice() else {
+        return None;
+    };
+    let plain = matches!(call.data.as_str(), "" | "0x")
+        && vela_core::app::contacts::is_address(&call.to)
+        && !vela_core::app::fee_policy::is_tempo_chain(request.chain_id);
+    if !plain {
+        return None;
+    }
+    let symbol = vela_core::app::network_admin::BUILTIN_CHAINS
+        .iter()
+        .find(|chain| chain.chain_id == request.chain_id)?
+        .native_symbol;
+    Some(crate::signing::live::NativeSend {
+        to: call.to.clone(),
+        wei: call.value.parse().ok()?,
+        symbol: symbol.to_owned(),
+    })
 }
 
 /// A batch decodes from its first leg today, which is what the phone's sheet
@@ -1175,6 +1207,84 @@ mod tests {
         assert_eq!(to.as_deref(), Some("0x1"));
         assert_eq!(data.as_deref(), Some("0xdead"));
         assert_eq!(value, None, "an absent value stays absent, never a zero");
+    }
+
+    /// 083 W10: a plain native send is read as one — and only a plain native
+    /// send, from the calls the executor will submit.
+    #[test]
+    fn only_a_single_empty_call_is_a_native_send() {
+        const TO: &str = "0x76875eb2c6d2ea8d6b7fc7e0ce6d2c1e6ac0d141";
+        let request = |method: &str, params: String, chain_id: u32| IncomingRequest {
+            id: "1".to_owned(),
+            method: method.to_owned(),
+            params_json: params,
+            origin: "https://example.com".to_owned(),
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            chain_id,
+            granted_address: None,
+        };
+        let send = |params: String, chain_id: u32| {
+            native_send_of(&request("eth_sendTransaction", params, chain_id))
+        };
+
+        let dust = send(
+            format!(r#"[{{"to":"{TO}","value":"0x38d7ea4c68000"}}]"#),
+            100,
+        )
+        .unwrap_or_else(|| unreachable!("0.001 xDAI with no calldata is a send"));
+        assert_eq!(dust.wei, 1_000_000_000_000_000);
+        assert_eq!(dust.symbol, "xDAI", "Gnosis' own coin");
+        assert_eq!(dust.to, TO);
+        let empty = send(format!(r#"[{{"to":"{TO}","value":"0x1","data":"0x"}}]"#), 1)
+            .unwrap_or_else(|| unreachable!("`0x` is no calldata"));
+        assert_eq!((empty.wei, empty.symbol.as_str()), (1, "ETH"));
+        assert_eq!(
+            send(format!(r#"[{{"to":"{TO}"}}]"#), 1).map(|s| s.wei),
+            Some(0),
+            "an absent value is zero, as the executor reads it"
+        );
+
+        // Everything else stays on the blind rung.
+        let blind = [
+            (
+                format!(r#"[{{"to":"{TO}","value":"0x1","data":"0xdeadbeef"}}]"#),
+                100,
+            ),
+            (format!(r#"[{{"to":"{TO}","value":"0xzz"}}]"#), 100),
+            (r#"[{"to":"0xbbb","value":"0x1"}]"#.to_owned(), 100),
+            (format!(r#"[{{"to":"{TO}","value":"0x1"}}]"#), 4217),
+            (format!(r#"[{{"to":"{TO}","value":"0x1"}}]"#), 999_999),
+        ];
+        for (params, chain_id) in blind {
+            assert!(
+                send(params.clone(), chain_id).is_none(),
+                "{params} on {chain_id}"
+            );
+        }
+
+        let batch = |calls: &str| {
+            native_send_of(&request(
+                "wallet_sendCalls",
+                format!(r#"[{{"calls":{calls}}}]"#),
+                100,
+            ))
+        };
+        assert!(batch(&format!(r#"[{{"to":"{TO}","value":"0x1"}}]"#)).is_some());
+        assert!(
+            batch(&format!(
+                r#"[{{"to":"{TO}","value":"0x1"}},{{"to":"{TO}","data":"0xdead"}}]"#
+            ))
+            .is_none(),
+            "a batch is more than its first leg"
+        );
+        assert!(
+            native_send_of(&request(
+                "personal_sign",
+                r#"["0xdead","0xabc"]"#.to_owned(),
+                1
+            ))
+            .is_none()
+        );
     }
 
     /// `eth_signTypedData_v4` is `[address, json]`.
