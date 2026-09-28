@@ -2069,7 +2069,10 @@ mod core_082_exports {
             json!({ "type": "unavailable" })
         );
         assert_eq!(signing::fee_requote_timeout_ms(), 6_000);
-        assert_eq!(signing::fee_requote_delay_ms("quote_unavailable", 4), Some(8_000));
+        assert_eq!(
+            signing::fee_requote_delay_ms("quote_unavailable", 4),
+            Some(8_000)
+        );
         let chain = r#"{"chain_read":{"rate_limited":true}}"#;
         assert_eq!(signing::fee_requote_delay_ms(chain, 2), Some(6_000));
         assert_eq!(

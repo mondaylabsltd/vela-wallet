@@ -5,13 +5,13 @@
 
 #![cfg(feature = "crux")]
 
+use vela_core::app::browser_load::same_address;
 use vela_core::app::browser_load::{
     address_bar, classify, host_of, probe_code, reason_key, retry_delay_ms,
     retry_when_network_returns, should_give_up, site_label, site_letter, stalled, visit_to_record,
     AddressBar, Asked, BarLock, EngineSample, EngineVerdict, LoadFailureClass as C, LoadFinished,
     LoadPlatform as P, LoadWatch, Probed, RetryAction, SiteLabel, ENGINE_LIVE_PROGRESS, GIVE_UP_MS,
 };
-use vela_core::app::browser_load::same_address;
 
 fn class(platform: P, code: i64, domain: Option<&str>) -> Option<C> {
     classify(platform, code, domain, false).map(|failure| failure.class)
@@ -1028,10 +1028,19 @@ fn same_address_ignores_what_does_not_change_the_page() {
     let same = [
         ("https://app.uniswap.org", "https://app.uniswap.org/"),
         ("HTTPS://App.Uniswap.ORG/", "https://app.uniswap.org"),
-        ("https://app.uniswap.org:443/swap", "https://app.uniswap.org/swap"),
+        (
+            "https://app.uniswap.org:443/swap",
+            "https://app.uniswap.org/swap",
+        ),
         ("http://127.0.0.1:80/", "http://127.0.0.1"),
-        ("https://app.uniswap.org/swap/", "https://app.uniswap.org/swap"),
-        ("https://app.uniswap.org/swap#top", "https://app.uniswap.org/swap"),
+        (
+            "https://app.uniswap.org/swap/",
+            "https://app.uniswap.org/swap",
+        ),
+        (
+            "https://app.uniswap.org/swap#top",
+            "https://app.uniswap.org/swap",
+        ),
         ("https://a.test/x?q=1", "https://a.test/x?q=1#frag"),
     ];
     for (a, b) in same {
@@ -1041,7 +1050,10 @@ fn same_address_ignores_what_does_not_change_the_page() {
     let different = [
         ("https://app.uniswap.org", "http://app.uniswap.org"),
         ("https://app.uniswap.org:8443", "https://app.uniswap.org"),
-        ("https://app.uniswap.org/Swap", "https://app.uniswap.org/swap"),
+        (
+            "https://app.uniswap.org/Swap",
+            "https://app.uniswap.org/swap",
+        ),
         ("https://a.test/x?q=1", "https://a.test/x?q=2"),
         ("https://a.test/x?q=1", "https://a.test/x"),
         ("https://a.test/x//", "https://a.test/x"),
@@ -1095,13 +1107,20 @@ fn the_wallet_s_own_retry_is_never_taken_for_a_page_load() {
             "the wallet's own attempt, not a page load"
         );
         assert!(!watch.page_initiated);
-        assert_eq!(watch.attempt, u32::try_from(waits.len()).unwrap_or_default());
+        assert_eq!(
+            watch.attempt,
+            u32::try_from(waits.len()).unwrap_or_default()
+        );
         assert!(watch.failure.is_some(), "the panel stays up");
         generation = watch.requested(&url, now).unwrap_or_default();
         assert!(watch.retrying && !watch.page_initiated);
         fail_once(&mut watch, generation, ENGINE, now);
     }
-    assert_eq!(waits, vec![2_000, 5_000, 10_000], "three attempts, no restart");
+    assert_eq!(
+        waits,
+        vec![2_000, 5_000, 10_000],
+        "three attempts, no restart"
+    );
 }
 
 /// The panel's own Retry, seen starting by the engine first, is the same.

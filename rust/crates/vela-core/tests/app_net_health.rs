@@ -134,19 +134,11 @@ fn offline_then_back_once_each() {
 /// A miss with no chain (a probe, a relay call) counts as its own source.
 #[test]
 fn a_miss_with_no_source_counts_as_its_own() {
-    let (state, edges) = run(&[
-        (false, None, 0.0),
-        (false, None, 5.0),
-        (false, None, 11.0),
-    ]);
+    let (state, edges) = run(&[(false, None, 0.0), (false, None, 5.0), (false, None, 11.0)]);
     assert!(!state.online, "three unattributed misses are three sources");
     assert_eq!(edges.last(), Some(&Some(NetEdge::WentOffline)));
 
-    let (state, _) = run(&[
-        miss(GNOSIS, 0.0),
-        miss(GNOSIS, 5.0),
-        (false, None, 11.0),
-    ]);
+    let (state, _) = run(&[miss(GNOSIS, 0.0), miss(GNOSIS, 5.0), (false, None, 11.0)]);
     assert!(!state.online, "a chain and an unattributed miss are two");
 }
 
@@ -190,8 +182,7 @@ fn the_state_and_edges_travel_as_json() {
             "run_started_ms": null,
         })
     );
-    let old: NetHealth =
-        serde_json::from_str(r#"{"misses":2,"online":true}"#).unwrap_or_default();
+    let old: NetHealth = serde_json::from_str(r#"{"misses":2,"online":true}"#).unwrap_or_default();
     assert_eq!(old.misses, 2);
     assert!(old.sources.is_empty());
     assert_eq!(

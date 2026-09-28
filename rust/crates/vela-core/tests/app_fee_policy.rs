@@ -3803,9 +3803,7 @@ fn recoverable() -> [vela_core::app::fee_policy::FeeFailure; 6] {
         FeeFailure::FeeTokenUnavailable,
         FeeFailure::EstimateFailed,
         FeeFailure::GasQuoteTooHigh,
-        FeeFailure::ChainRead {
-            rate_limited: true,
-        },
+        FeeFailure::ChainRead { rate_limited: true },
         FeeFailure::ChainRead {
             rate_limited: false,
         },

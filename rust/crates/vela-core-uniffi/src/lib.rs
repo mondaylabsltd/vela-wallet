@@ -2873,7 +2873,10 @@ mod tests_082 {
         assert_eq!((reverts.kind.as_str(), reverts.reason), ("reverts", None));
         assert_eq!(user_op_estimate_failure("null".into()).kind, "unavailable");
         assert_eq!(fee_requote_timeout_ms(), 6_000);
-        assert_eq!(fee_requote_delay_ms("quote_unavailable".into(), 3), Some(8_000));
+        assert_eq!(
+            fee_requote_delay_ms("quote_unavailable".into(), 3),
+            Some(8_000)
+        );
         let chain = r#"{"chain_read":{"rate_limited":false}}"#;
         assert_eq!(fee_requote_delay_ms(chain.into(), 1), Some(3_000));
         assert_eq!(

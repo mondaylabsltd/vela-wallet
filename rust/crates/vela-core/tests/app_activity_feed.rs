@@ -14,9 +14,9 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::activity_feed::{
     dapp_site, history_empty_key, home_empty_key, is_stable, native_amount, tx_usd_value,
-    ActivityFeed, Event, FeedBatchKind, FeedCounterpartyRole, FeedDirection, FeedItem, FeedOperation as Op, FeedRow,
-    FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus, FeedView, HISTORY_EMPTY_ALL,
-    HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED,
+    ActivityFeed, Event, FeedBatchKind, FeedCounterpartyRole, FeedDirection, FeedItem,
+    FeedOperation as Op, FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus,
+    FeedView, HISTORY_EMPTY_ALL, HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED,
 };
 
 type Sut = DomainDriver<ActivityFeed>;
@@ -1335,7 +1335,13 @@ fn transfer_to_founder() -> String {
 #[test]
 fn a_token_transfer_names_its_recipient_and_links_no_op_hash() {
     let op = "0x4d558afa2e899ead13277162dfa5b25fa7f9b1bc809de0b9f90f7713449439d7";
-    let mut rejected = dapp_tx("dapp-w3-tx", "http://127.0.0.1:8137", GNOSIS_USDC, "0x0", 100_000.0);
+    let mut rejected = dapp_tx(
+        "dapp-w3-tx",
+        "http://127.0.0.1:8137",
+        GNOSIS_USDC,
+        "0x0",
+        100_000.0,
+    );
     rejected.call_data = Some(transfer_to_founder());
     rejected.status = FeedTxStatus::Failed;
     rejected.user_op_hash = op.to_owned();
@@ -1356,13 +1362,23 @@ fn a_token_transfer_names_its_recipient_and_links_no_op_hash() {
 /// as the contract ("interacting with"), not as a recipient.
 #[test]
 fn a_swap_call_names_the_contract() {
-    let mut swap = dapp_tx("dapp-s-tx", "https://app.uniswap.org", "0xRouter", "0x0", 100_000.0);
+    let mut swap = dapp_tx(
+        "dapp-s-tx",
+        "https://app.uniswap.org",
+        "0xRouter",
+        "0x0",
+        100_000.0,
+    );
     swap.call_data = Some(format!("0x3593564c{}", "00".repeat(96)));
     let sut = boot(vec![swap]);
     let row = &items(&sut)[0];
     assert_eq!(row.counterparty.as_deref(), Some("0xRouter"));
     assert_eq!(row.counterparty_role, FeedCounterpartyRole::Contract);
-    assert_eq!(row.tx_hash.as_deref(), Some("0xtxdapp-s-tx"), "a real tx hash stays");
+    assert_eq!(
+        row.tx_hash.as_deref(),
+        Some("0xtxdapp-s-tx"),
+        "a real tx hash stays"
+    );
 
     // A transfer selector with the wrong length is not a transfer.
     let mut odd = dapp_tx("dapp-o-tx", "https://x.test", "0xToken", "0x0", 100_000.0);
@@ -1377,7 +1393,13 @@ fn a_swap_call_names_the_contract() {
 /// map it yet): `to`, as a recipient — today's row, unchanged.
 #[test]
 fn a_plain_send_is_unchanged() {
-    let plain = dapp_tx("dapp-p-tx", "https://x.test", "0xFriend", "0x2386f26fc10000", 100_000.0);
+    let plain = dapp_tx(
+        "dapp-p-tx",
+        "https://x.test",
+        "0xFriend",
+        "0x2386f26fc10000",
+        100_000.0,
+    );
     let sut = boot(vec![plain]);
     let row = &items(&sut)[0];
     assert_eq!(row.counterparty.as_deref(), Some("0xFriend"));
@@ -1409,5 +1431,8 @@ fn the_new_fields_default_on_the_wire() {
         serde_json::to_value(FeedCounterpartyRole::Contract).unwrap_or_default(),
         serde_json::json!("contract")
     );
-    assert_eq!(FeedCounterpartyRole::default(), FeedCounterpartyRole::Recipient);
+    assert_eq!(
+        FeedCounterpartyRole::default(),
+        FeedCounterpartyRole::Recipient
+    );
 }
