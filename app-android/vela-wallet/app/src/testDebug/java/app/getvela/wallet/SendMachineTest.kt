@@ -209,7 +209,11 @@ class SendMachineTest {
         c.setAmount("0.001")
         withTimeout(10_000) { c.send.first { it.can_continue } }
         c.continueTapped()
-        withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.fee != null && it.can_confirm } }
+        try {
+            withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.fee != null && it.can_confirm } }
+        } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+            throw AssertionError("DIAG never reached confirm: alert=${c.alert.value} || send=${c.send.value} || fee=${c.fee.value}", timeout)
+        }
         c.slideConfirm()
     }
 
