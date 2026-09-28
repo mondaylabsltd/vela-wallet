@@ -175,10 +175,18 @@ export const SW_COUNTS_KEY = 'vela.sw.counts';
 const SW_COUNTER = /^[a-z]+\.[a-z_]+(?:\.[a-z][a-z_]*\d{0,3})?$/;
 
 /**
+ * The worker's events that are a failure when they carry a cause: a request
+ * that ended without a decision, a claim refused, an endpoint that failed.
+ * Not every counter with a third segment is one — swlog names a counter by
+ * its cause OR its `kind`, and `req.arrived.sign` is an arrival.
+ */
+const SW_FAILURE_EVENTS = new Set(['req.settled', 'req.claim', 'read.fail']);
+
+/**
  * The worker's failure counters as report lines — `sw:req.settled.page_left
- * ×2` (spec 082 RB14): the counters that carry a cause, plus a read that
- * reached no node at all. Counters and classes only: a counter's name is a
- * closed word list, and nothing the worker logs next to it (a host, a tab)
+ * ×2` (spec 082 RB14): the failure events that carry a cause, plus a read
+ * that reached no node at all. Counters and classes only: a counter's name is
+ * a closed word list, and nothing the worker logs next to it (a host, a tab)
  * is read here.
  */
 export function workerFailureLines(counts: unknown): string[] {
@@ -187,8 +195,11 @@ export function workerFailureLines(counts: unknown): string[] {
 	for (const [key, value] of Object.entries(counts as Record<string, unknown>)) {
 		if (!SW_COUNTER.test(key)) continue;
 		if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) continue;
-		const hasCause = key.split('.').length === 3;
-		if (!hasCause && key !== 'read.exhausted') continue;
+		const [area, event, cause] = key.split('.');
+		const failure =
+			key === 'read.exhausted' ||
+			(cause !== undefined && SW_FAILURE_EVENTS.has(`${area}.${event}`));
+		if (!failure) continue;
 		lines.push(`sw:${key} ×${value}`);
 	}
 	return lines.sort();

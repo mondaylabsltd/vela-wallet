@@ -547,6 +547,37 @@ describe('the extension worker’s counters (spec 082 RB14)', () => {
 		]);
 	});
 
+	it('read the worker’s REAL counters: an arrival is not a failure', async () => {
+		// The worker logs every step through swlog, and swlog names a counter
+		// by its cause — or, failing that, its `kind`. `req.arrived` carries
+		// the request's kind (`sign`, `connect`), so its counter is
+		// `req.arrived.sign`: a closed word with a third segment, which the
+		// failures line must not read as a failure.
+		const { createSwLog, SW_COUNTS_KEY: WORKER_COUNTS_KEY } = await import(
+			'../../../extension/lib/swlog.js'
+		);
+		const stored: Record<string, unknown> = {};
+		const storage = {
+			get: async (keys: string[]) => Object.fromEntries(keys.map((k) => [k, stored[k]])),
+			set: async (items: Record<string, unknown>) => void Object.assign(stored, items)
+		};
+		const swlog = createSwLog({ storage, sink: { info: () => {} } });
+		// The calls background.js makes, field for field.
+		void swlog.log('req.arrived', { kind: 'sign', tab: 3, host: 'https://app.example' });
+		void swlog.log('req.arrived', { kind: 'connect', tab: 3, host: 'https://app.example' });
+		void swlog.log('req.surface', { surface: 'panel', tab: 3 });
+		void swlog.log('req.claim', { phase: 'sign', live: true, cause: undefined, tab: 3 });
+		void swlog.log('req.answered', { delivered: true, outcome: 'ok', tab: 3 });
+		void swlog.log('req.settled', { cause: 'page_left', tab: 3 });
+		void swlog.log('read.fail', { chain: 100, host: 'https://rpc.example/k', kind: 'timeout' });
+		await swlog.flush();
+
+		expect(workerFailureLines(stored[WORKER_COUNTS_KEY])).toEqual([
+			'sw:read.fail.timeout ×1',
+			'sw:req.settled.page_left ×1'
+		]);
+	});
+
 	it('carry no URL, no address and no value a counter name could smuggle', () => {
 		const lines = workerFailureLines({
 			'read.fail.https://rpc.example/key': 1,
