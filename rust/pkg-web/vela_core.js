@@ -3314,6 +3314,22 @@ export function extractAttestationPublicKey(attestation_object) {
 }
 
 /**
+ * The wait in ms before automatic fee re-quote `attempt` (1-based) after
+ * `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
+ * `undefined` when no retry can fix it (spec 079 FR-008) — the extension's
+ * signing sheet re-asks on the same schedule as every other client.
+ * @param {string} failure
+ * @param {number} attempt
+ * @returns {number | undefined}
+ */
+export function feeRequoteDelayMs(failure, attempt) {
+    const ptr0 = passStringToWasm0(failure, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.feeRequoteDelayMs(ptr0, len0, attempt);
+    return ret === Number.MAX_SAFE_INTEGER ? undefined : ret;
+}
+
+/**
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
  * @returns {number}

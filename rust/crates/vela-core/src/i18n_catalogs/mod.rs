@@ -87,7 +87,7 @@ pub(crate) fn embedded(
         #[cfg(feature = "i18n-vi")]
         "vi" => Some((
             vi::BLOB,
-            crate::i18n::catalog::StaticOffsets::U16(&vi::OFFSETS),
+            crate::i18n::catalog::StaticOffsets::U32(&vi::OFFSETS),
             &vi::PRESENT,
         )),
         #[cfg(feature = "i18n-id")]

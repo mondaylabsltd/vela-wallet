@@ -58,6 +58,11 @@
     "pageCrashedBody": "Trang đã đóng đột ngột. Ví của bạn không bị ảnh hưởng — tải lại để tiếp tục.",
     "walletConnectUnsupported": "Không hỗ trợ liên kết WalletConnect. Hãy mở dApp trong Khám phá và kết nối từ đó.",
     "scanUnrecognized": "Mã này không phải địa chỉ web hay địa chỉ ví.",
-    "linkCopied": "Đã sao chép liên kết"
+    "linkCopied": "Đã sao chép liên kết",
+    "loadOffline": "Kết nối không ổn định, không mở được trang.",
+    "loadNotFound": "Không tìm thấy trang web này. Hãy kiểm tra địa chỉ.",
+    "loadCertificate": "Chứng chỉ của trang web không hợp lệ nên Vela đã chặn.",
+    "loadRetrying": "Đang thử lại…",
+    "chainDown": "Không kết nối được {{chain}} — dữ liệu trang có thể thiếu."
   }
 }

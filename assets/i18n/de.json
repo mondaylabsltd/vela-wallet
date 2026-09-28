@@ -1403,7 +1403,11 @@
    "selfCallBlockedTitle": "Vela signiert diese Anfrage nicht",
    "selfCallBlockedBody": "Diese Anfrage würde ändern, wer deine Wallet kontrolliert ({{function}}). Einmal signiert, kann sie deine Wallet jemand anderem übergeben — deshalb lehnt Vela sie ab. Es wurde nichts signiert.",
    "selfCallBlockedLegBody": "Schritt {{index}} dieser Anfrage würde ändern, wer deine Wallet kontrolliert ({{function}}). Einmal signiert, kann sie deine Wallet jemand anderem übergeben — deshalb lehnt Vela die ganze Anfrage ab. Es wurde nichts signiert.",
-   "selfCallBlockedSafeTx": "Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion für eine spätere Ausführung freigibt. Vela lehnt ab: So eine Signatur lässt sich auch ohne dich verwenden. Es wurde nichts signiert."
+   "selfCallBlockedSafeTx": "Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion für eine spätere Ausführung freigibt. Vela lehnt ab: So eine Signatur lässt sich auch ohne dich verwenden. Es wurde nichts signiert.",
+   "stillConfirming": "Noch nicht in der Chain. Vela prüft weiter – bitte nicht erneut senden.",
+   "unknownOutcome": "Nach 24 Stunden noch unbestätigt.",
+   "openSigner": "Auf der Signaturseite bestätigen",
+   "signerDown": "Die Signaturseite ließ sich nicht öffnen. Prüfe deine Verbindung."
   },
   "signingApprove": {
    "resultingTotal": "Neue Gesamtfreigabe",
@@ -1837,6 +1841,11 @@
   "pageCrashedBody": "Die Seite wurde unerwartet beendet. Deine Wallet ist nicht betroffen – lade neu, um fortzufahren.",
   "walletConnectUnsupported": "WalletConnect-Links werden nicht unterstützt. Öffne die dApp in „Entdecken“ und verbinde dich dort.",
   "scanUnrecognized": "Dieser Code ist weder eine Webadresse noch eine Wallet-Adresse.",
-  "linkCopied": "Link kopiert"
+  "linkCopied": "Link kopiert",
+  "loadOffline": "Instabile Verbindung – die Seite ließ sich nicht öffnen.",
+  "loadNotFound": "Diese Website wurde nicht gefunden. Prüfe die Adresse.",
+  "loadCertificate": "Das Zertifikat dieser Website ist ungültig, Vela hat sie blockiert.",
+  "loadRetrying": "Neuer Versuch…",
+  "chainDown": "{{chain}} nicht erreichbar – Daten auf der Seite sind eventuell unvollständig."
  }
 }

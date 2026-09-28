@@ -1403,7 +1403,11 @@
    "selfCallBlockedTitle": "Vela 不會簽這筆請求",
    "selfCallBlockedBody": "這筆請求會改變誰能控制你的錢包（{{function}}）。簽一次就可能把錢包交到別人手上，所以 Vela 拒絕了它。什麼都沒有簽。",
    "selfCallBlockedLegBody": "這筆請求的第 {{index}} 步會改變誰能控制你的錢包（{{function}}）。簽一次就可能把錢包交到別人手上，所以 Vela 拒絕了整筆請求。什麼都沒有簽。",
-   "selfCallBlockedSafeTx": "這筆請求要你的鑰匙授權一筆之後才執行的 Safe 交易。Vela 拒絕了它——這樣的簽章可以在你不在場時被使用。什麼都沒有簽。"
+   "selfCallBlockedSafeTx": "這筆請求要你的鑰匙授權一筆之後才執行的 Safe 交易。Vela 拒絕了它——這樣的簽章可以在你不在場時被使用。什麼都沒有簽。",
+   "stillConfirming": "還沒上鏈。Vela 會繼續查看，請不要重複送出。",
+   "unknownOutcome": "超過 24 小時仍未確認。",
+   "openSigner": "前往簽名頁確認",
+   "signerDown": "簽名頁沒能開啟，請檢查網路。"
   },
   "currency": {
    "title": "顯示貨幣",
@@ -1837,6 +1841,11 @@
   "pageCrashedBody": "頁面意外關閉。你的錢包不受影響——重新載入即可繼續。",
   "walletConnectUnsupported": "尚不支援 WalletConnect 連結。請在「探索」中開啟該 dApp，並從頁面內連接。",
   "scanUnrecognized": "此 QR 碼既不是網址，也不是錢包地址。",
-  "linkCopied": "連結已複製"
+  "linkCopied": "連結已複製",
+  "loadOffline": "網路不穩定，頁面沒能開啟。",
+  "loadNotFound": "找不到這個網站，請檢查網址。",
+  "loadCertificate": "網站憑證有問題，Vela 已阻止開啟。",
+  "loadRetrying": "正在重試…",
+  "chainDown": "暫時連不上 {{chain}}，頁面資料可能不完整。"
  }
 }

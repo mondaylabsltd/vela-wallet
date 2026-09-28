@@ -439,8 +439,18 @@ for (let i = 1; i < PATHS.length; i++) {
 //   The core names each one (`clear_signing::ClearTerm`, whose serialized name
 //   IS the leaf) and the shells translate it; the 19 words the old app already
 //   had are reused, these are the rest. Same branch: 1744 + 29 = 1773.
-if (PATHS.length !== 1773) fail(`expected 1773 paths (1684 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1684) fail(`expected 1684 leaf paths, got ${leafSet.size}`);
+// 1782 (079, 2026-09-28): + 5 `explore.{load{Offline,NotFound,Certificate,
+//   Retrying},chainDown}` and 4 `componentsUi.signing.{stillConfirming,
+//   unknownOutcome,openSigner,signerDown}` — the browser says why a page did not open and that it
+//   is retrying, names an unreachable chain, and the signing sheet says what
+//   happens after the signature (owner's device pass on the Xiaomi). "Signed",
+//   "Submitting" and the generic load failure reuse `signHandoff.signed`,
+//   `send.txSubmitting` and `connect.browser.loadFailed`; offline, timeout and
+//   refused share one sentence (to a person all three are "the network, retrying").
+//   That is what keeps ja + en inside SC-005, which main left ~900 bytes of.
+//   Same branches: 1773 + 9 = 1782.
+if (PATHS.length !== 1782) fail(`expected 1782 paths (1693 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1693) fail(`expected 1693 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

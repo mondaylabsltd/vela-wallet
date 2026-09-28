@@ -237,7 +237,11 @@
       "selfCallBlockedTitle": "Vela는 이 요청에 서명하지 않습니다",
       "selfCallBlockedBody": "이 요청은 지갑을 누가 통제하는지를 바꿉니다({{function}}). 한 번 서명하는 것만으로 지갑이 다른 사람에게 넘어갈 수 있어 Vela가 거부했습니다. 아무것도 서명하지 않았습니다.",
       "selfCallBlockedLegBody": "이 요청의 {{index}}번째 단계가 지갑을 누가 통제하는지를 바꿉니다({{function}}). 한 번 서명하는 것만으로 지갑이 다른 사람에게 넘어갈 수 있어 Vela가 요청 전체를 거부했습니다. 아무것도 서명하지 않았습니다.",
-      "selfCallBlockedSafeTx": "이 요청은 나중에 실행될 Safe 트랜잭션을 승인하도록 키에 요구합니다. 그런 서명은 사용자가 없어도 사용될 수 있어 Vela가 거부했습니다. 아무것도 서명하지 않았습니다."
+      "selfCallBlockedSafeTx": "이 요청은 나중에 실행될 Safe 트랜잭션을 승인하도록 키에 요구합니다. 그런 서명은 사용자가 없어도 사용될 수 있어 Vela가 거부했습니다. 아무것도 서명하지 않았습니다.",
+      "stillConfirming": "아직 체인에 기록되지 않았습니다. Vela가 계속 확인합니다. 다시 보내지 마세요.",
+      "unknownOutcome": "24시간이 지나도 확인되지 않았습니다.",
+      "openSigner": "서명 페이지에서 확인",
+      "signerDown": "서명 페이지를 열지 못했습니다. 연결을 확인하세요."
     },
     "signingApprove": {
       "resultingTotal": "새 총 승인 한도",

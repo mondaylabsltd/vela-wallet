@@ -58,6 +58,11 @@
     "pageCrashedBody": "La page s’est fermée de manière inattendue. Votre portefeuille n’est pas concerné — rechargez pour continuer.",
     "walletConnectUnsupported": "Les liens WalletConnect ne sont pas pris en charge. Ouvrez la dApp dans Explorer et connectez-vous depuis la page.",
     "scanUnrecognized": "Ce code n’est ni une adresse web ni une adresse de portefeuille.",
-    "linkCopied": "Lien copié"
+    "linkCopied": "Lien copié",
+    "loadOffline": "Connexion instable — la page ne s’est pas ouverte.",
+    "loadNotFound": "Ce site est introuvable. Vérifiez l’adresse.",
+    "loadCertificate": "Le certificat de ce site n’est pas valide, Vela l’a bloqué.",
+    "loadRetrying": "Nouvelle tentative…",
+    "chainDown": "{{chain}} injoignable — les données de la page peuvent être incomplètes."
   }
 }

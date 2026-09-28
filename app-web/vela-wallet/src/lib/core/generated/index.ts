@@ -336,6 +336,7 @@ export * from './TrackEntryView';
 export * from './TrackEvent';
 export * from './TrackLifecycle';
 export * from './TrackOperation';
+export * from './TrackOutcome';
 export * from './TrackPendingRecord';
 export * from './TrackRecordPatch';
 export * from './TrackRecordStatus';

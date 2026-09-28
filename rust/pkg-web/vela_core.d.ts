@@ -726,6 +726,14 @@ export function encodeType(typed_data_json: string): string;
 export function extractAttestationPublicKey(attestation_object: Uint8Array): P256PublicKey;
 
 /**
+ * The wait in ms before automatic fee re-quote `attempt` (1-based) after
+ * `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
+ * `undefined` when no retry can fix it (spec 079 FR-008) — the extension's
+ * signing sheet re-asks on the same schedule as every other client.
+ */
+export function feeRequoteDelayMs(failure: string, attempt: number): number | undefined;
+
+/**
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
  */
@@ -1199,6 +1207,7 @@ export interface InitOutput {
     readonly extcachecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly extcachecore_view: (a: number) => [number, number, number, number];
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
+    readonly feeRequoteDelayMs: (a: number, b: number, c: number) => number;
     readonly feeSignalsCacheTtlMs: () => number;
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;

@@ -58,6 +58,11 @@
     "pageCrashedBody": "The page closed unexpectedly. Your wallet is not affected — reload to continue.",
     "walletConnectUnsupported": "WalletConnect links aren’t supported. Open the dApp in Explore and connect from there.",
     "scanUnrecognized": "This code isn’t a web address or a wallet address.",
-    "linkCopied": "Link copied"
+    "linkCopied": "Link copied",
+    "loadOffline": "Unstable connection — the page didn't open.",
+    "loadNotFound": "Site not found. Check the address.",
+    "loadCertificate": "This site's certificate is invalid, so Vela blocked it.",
+    "loadRetrying": "Retrying…",
+    "chainDown": "Can't reach {{chain}} — page data may be incomplete."
   }
 }

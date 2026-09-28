@@ -1406,7 +1406,11 @@
    "selfCallBlockedTitle": "Vela non firma questa richiesta",
    "selfCallBlockedBody": "Questa richiesta cambierebbe chi controlla il tuo wallet ({{function}}). Firmarla una volta può consegnarlo a qualcun altro, quindi Vela la rifiuta. Non è stato firmato nulla.",
    "selfCallBlockedLegBody": "Il passaggio {{index}} di questa richiesta cambierebbe chi controlla il tuo wallet ({{function}}). Firmarla una volta può consegnarlo a qualcun altro, quindi Vela rifiuta l’intera richiesta. Non è stato firmato nulla.",
-   "selfCallBlockedSafeTx": "Questa richiesta chiede alla tua chiave di autorizzare una transazione Safe da eseguire più tardi. Vela la rifiuta: una firma così può essere usata senza di te. Non è stato firmato nulla."
+   "selfCallBlockedSafeTx": "Questa richiesta chiede alla tua chiave di autorizzare una transazione Safe da eseguire più tardi. Vela la rifiuta: una firma così può essere usata senza di te. Non è stato firmato nulla.",
+   "stillConfirming": "Non ancora sulla chain. Vela continua a controllare: non inviarla di nuovo.",
+   "unknownOutcome": "Ancora non confermata dopo 24 ore.",
+   "openSigner": "Conferma nella pagina di firma",
+   "signerDown": "Impossibile aprire la pagina di firma. Controlla la connessione."
   },
   "signingApprove": {
    "resultingTotal": "Nuovo limite totale",
@@ -1841,6 +1845,11 @@
   "pageCrashedBody": "La pagina si è chiusa inaspettatamente. Il tuo wallet non è coinvolto: ricarica per continuare.",
   "walletConnectUnsupported": "I link WalletConnect non sono supportati. Apri la dApp in Esplora e connettiti da lì.",
   "scanUnrecognized": "Questo codice non è né un indirizzo web né un indirizzo di wallet.",
-  "linkCopied": "Link copiato"
+  "linkCopied": "Link copiato",
+  "loadOffline": "Connessione instabile: la pagina non si è aperta.",
+  "loadNotFound": "Sito non trovato. Controlla l’indirizzo.",
+  "loadCertificate": "Il certificato di questo sito non è valido, Vela l’ha bloccato.",
+  "loadRetrying": "Nuovo tentativo…",
+  "chainDown": "{{chain}} non raggiungibile: i dati della pagina potrebbero essere incompleti."
  }
 }
