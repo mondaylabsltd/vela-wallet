@@ -1598,6 +1598,76 @@ pub const SUBMIT_RETRY_DELAY_MS: u32 = 3_000;
 /// The dApp's `-32603` detail for "definitely not sent" with no relay
 /// rejection to quote (RA10): a fixed sentence, never the pool's raw text.
 pub const NOT_SENT_DAPP_DETAIL: &str = "relay unreachable; nothing was sent";
+/// The dApp's `-32603` detail for an operation the relay refused (spec 082
+/// RJ3): the tracker's `Rejected`, or a submit-time `NotSent` with a
+/// rejection that is not "relayer unavailable". A fixed sentence — the
+/// relay's own words are diagnostics, never the page's.
+pub const REFUSED_DAPP_DETAIL: &str = "the network refused this transaction; nothing was sent";
+/// How long a shell waits for the core's `ClearToPost` after it reported the
+/// signed operation (`OpSigned`, spec 082 RJ1). The record must be on disk
+/// before the first byte goes to the relay; with no clearance in this time
+/// the shell does not POST and reports the submit failed — nothing was sent.
+pub const WRITE_AHEAD_WAIT_MS: u32 = 5_000;
+
+/// What a failed relay gas estimate says about the call (spec 082 RJ19).
+#[cfg(feature = "crux")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EstimateFailure {
+    /// The relay simulated the operation and it reverts: the sheet warns
+    /// (`componentsUi.signing.simWillFail`, or `simWillFailReason` with the
+    /// reason). A warning informs, it never blocks (L-D5).
+    Reverts {
+        /// The decoded `Error(string)`, sanitised and capped exactly like a
+        /// simulation's revert reason (RG8); `None` when the relay sent no
+        /// readable reason.
+        reason: Option<String>,
+    },
+    /// No answer, a timeout, an exhausted pool, a rate limit, or any other
+    /// refusal: nothing is known about the call.
+    Unavailable,
+}
+
+/// Classify the relay's answer to a failed gas estimate (spec 082 RJ19).
+///
+/// `error_json` is the JSON-RPC `error` member, or the whole body carrying
+/// one; anything else — empty, `null`, not JSON — is no answer. The call
+/// reverts when the error's text (its `message`, or a string `data`) says
+/// "reverted" or names `AA23`, or its code is ERC-4337's `-32521`
+/// (execution-phase revert). The relay's `-32500` alone is a validation
+/// refusal (AA21 prefund, a signature) and says nothing about the call. The
+/// reason is read only from ABI-encoded revert bytes, through
+/// `sim_outcome::revert_reason` — the prose around them is never shown.
+#[cfg(feature = "crux")]
+#[must_use]
+pub fn estimate_failure(error_json: &str) -> EstimateFailure {
+    const EXECUTION_REVERTED_CODE: i64 = -32_521;
+    let Ok(value) = serde_json::from_str::<Value>(error_json) else {
+        return EstimateFailure::Unavailable;
+    };
+    let error = value.get("error").unwrap_or(&value);
+    if !error.is_object() {
+        return EstimateFailure::Unavailable;
+    }
+    let text = |key: &str| {
+        error
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_lowercase()
+    };
+    let words = format!("{} {}", text("message"), text("data"));
+    let reverts = words.contains("reverted")
+        || words.contains("aa23")
+        || error.get("code").and_then(Value::as_i64) == Some(EXECUTION_REVERTED_CODE);
+    if !reverts {
+        return EstimateFailure::Unavailable;
+    }
+    let call = serde_json::json!({ "error": error });
+    EstimateFailure::Reverts {
+        reason: crate::app::sim_outcome::revert_reason(&call),
+    }
+}
 
 /// What one `eth_sendUserOperation` POST came back with, as the pool
 /// concluded it.
