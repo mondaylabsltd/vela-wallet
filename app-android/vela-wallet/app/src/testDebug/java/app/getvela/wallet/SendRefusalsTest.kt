@@ -248,6 +248,49 @@ class SendRefusalsTest {
         assertEquals(1, relaySends)
     }
 
+    /**
+     * Spec 082, owner ruling 1: once the passkey has returned, the operation
+     * is signed and on its way — the core keeps the button saying Cancel
+     * until the relay answers, but a cancel can only stop the ceremony
+     * (`Passkey.cancelSign()`), never the POST. Killing the POST in flight
+     * dropped an op the relay may already hold: no receipt, no row, no
+     * tracker, and the confirm page back with its slide — a second payment
+     * one swipe away.
+     */
+    @Test
+    fun `a cancel after the passkey returned leaves the POST to its verdict and the op is followed`() = runBlocking {
+        seedAccount(); scriptRelay()
+        val posting = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        port.before = { method ->
+            if (method == "eth_sendUserOperation") {
+                posting.complete(Unit)
+                release.await()
+            }
+        }
+        val c = controller()
+        c.toConfirm()
+        c.slideConfirm()
+        withTimeout(30_000) { posting.await() }
+        assertEquals(1, signs)
+        // The POST is out and the core still reads "signing": the button under
+        // the notice says Cancel, and the person taps it.
+        assertEquals(SendTxStatus.Signing, withTimeout(10_000) { c.send.first { it.tx_status == SendTxStatus.Signing } }.tx_status)
+        c.cancelSigning()
+        withTimeout(10_000) { c.send.first { it.tx_status != SendTxStatus.Signing } }
+        delay(200)
+        release.complete(Unit)
+        val receipt = withTimeout(30_000) { c.send.first { it.receipt != null } }
+        assertEquals(app.getvela.wallet.feature.send.core.SendReceiptStatus.Submitted, receipt.receipt!!.status)
+        assertEquals("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", receipt.user_op_hash)
+        assertEquals("the POST ran to its answer", 1, relaySends)
+        // …and the row is on disk for the tracker to follow.
+        withTimeout(10_000) {
+            while (store.values[app.getvela.wallet.core.data.KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty()) delay(20)
+        }
+        assertTrue(store.values.getValue(app.getvela.wallet.core.data.KeyValueStore.Keys.TRANSACTIONS).contains(receipt.user_op_hash!!))
+    }
+
     @Test
     fun `the relay's refusal is the confirm page's notice, with a retry`() = runBlocking {
         seedAccount(); scriptRelay()

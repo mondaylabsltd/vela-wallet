@@ -18,6 +18,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -158,8 +159,19 @@ class SendExecutor(
         fun holdingsHanded(round: HoldingsRound?) {}
     }
 
+    /**
+     * The submit a cancel may still stop — until its passkey returns. From
+     * then on the operation is signed and goes to the relay, and a cancel is
+     * `Passkey.cancelSign()` with no ceremony to cancel: the POST runs to the
+     * core's verdict (spec 082, owner ruling 1). Stopping it mid-flight
+     * dropped an op the relay may hold — no row, no tracker — and put the
+     * slide back one swipe from paying twice.
+     */
     @Volatile
     private var signing: Job? = null
+
+    /** Orders a cancel against the passkey's return: exactly one of them wins. */
+    private val cancelLock = Any()
 
     suspend fun perform(operation: SendOperation): SendShellResult = when (operation) {
         is SendOperation.FetchTokens -> fetchTokens(operation.address)
@@ -203,7 +215,8 @@ class SendExecutor(
             SendShellResult.AccountCredential(accounts.publicKeyOf(operation.account_id))
         is SendOperation.SubmitUserOp -> submit(operation)
         SendOperation.CancelPasskeySign -> {
-            signing?.cancel(CancellationException("cancelled by the person"))
+            val stopped = synchronized(cancelLock) { signing?.also { it.cancel(CancellationException("cancelled by the person")) } }
+            if (stopped == null) VelaLog.event("send.submit", "cancel after the signature: the submit runs to its verdict")
             SendShellResult.PasskeyCancelAcknowledged
         }
         is SendOperation.PersistTxRecords -> {
@@ -378,9 +391,18 @@ class SendExecutor(
     // -- the submit spine ---------------------------------------------------------
 
     private suspend fun submit(op: SendOperation.SubmitUserOp): SendShellResult = coroutineScope {
-        signing = currentCoroutineContext().job
+        val job = currentCoroutineContext().job
+        synchronized(cancelLock) { signing = job }
+        // Only this submit's own hold is let go: a later attempt's must stay.
+        val release = { synchronized(cancelLock) { if (signing === job) signing = null } }
+        // The passkey returned. A cancel that came first stops the submit
+        // here, before anything is sent; after this line none can.
+        val passkeyReturned = {
+            release()
+            job.ensureActive()
+        }
         try {
-            val submitted = submitInner(op)
+            val submitted = submitInner(op, ceremonyDone = passkeyReturned)
             SendShellResult.Submitted(
                 user_op_hash = submitted.userOpHash,
                 now_ms = now(),
@@ -394,7 +416,7 @@ class SendExecutor(
             VelaLog.event("send.submit", "cancelled")
             SendShellResult.SubmitFailed(SendSubmitFailure.PasskeyCancelled)
         } finally {
-            signing = null
+            release()
         }
     }
 
@@ -408,7 +430,7 @@ class SendExecutor(
     }, trustedSigner = trustedSigner)
 
     /** The spine (spec 044 T028): one implementation for a person's transfer and a dApp's transaction. */
-    private suspend fun submitInner(op: SendOperation.SubmitUserOp): UserOpSpine.Submitted = try {
+    private suspend fun submitInner(op: SendOperation.SubmitUserOp, ceremonyDone: () -> Unit): UserOpSpine.Submitted = try {
         spine.submit(
             chainId = op.chain_id,
             account = op.account,
@@ -416,6 +438,8 @@ class SendExecutor(
             gasFeeToken = op.gas_fee_token,
             quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
             signingStarted = { ports.signingStarted() },
+            // The passkey returned: past here nothing a cancel can stop.
+            ceremonyDone = ceremonyDone,
         )
     } catch (refused: UserOpSpine.Refused) {
         throw SubmitRefused(
