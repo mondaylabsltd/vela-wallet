@@ -33,8 +33,46 @@ fn tone_color(theme: &Theme, tone: Tone) -> Hsla {
     }
 }
 
+/// Who is asking and on which network — the header's facts alone, kept by
+/// the page so the column's ending (spec 079: the tick, "not landed yet")
+/// still names the site after the core has closed the request.
+#[derive(Clone)]
+pub struct HeaderModel {
+    pub dapp_name: SharedString,
+    pub dapp_host: SharedString,
+    pub dapp_letter: SharedString,
+    pub dapp_tint: Hsla,
+    pub dapp_own: bool,
+    pub dapp_icon_urls: Vec<SharedString>,
+    pub network_name: SharedString,
+    pub network_dot: Hsla,
+    pub network_logo: Option<SharedString>,
+}
+
+impl HeaderModel {
+    #[must_use]
+    pub fn of(model: &SigningModel) -> Self {
+        Self {
+            dapp_name: model.dapp_name.clone(),
+            dapp_host: model.dapp_host.clone(),
+            dapp_letter: model.dapp_letter.clone(),
+            dapp_tint: model.dapp_tint,
+            dapp_own: model.dapp_own,
+            dapp_icon_urls: model.dapp_icon_urls.clone(),
+            network_name: model.network_name.clone(),
+            network_dot: model.network_dot,
+            network_logo: model.network_logo.clone(),
+        }
+    }
+}
+
 /// The dApp header: who is asking, and on which network.
 pub fn header(theme: &Theme, model: &SigningModel) -> Div {
+    header_view(theme, &HeaderModel::of(model))
+}
+
+/// The header from its facts alone.
+pub fn header_view(theme: &Theme, model: &HeaderModel) -> Div {
     div()
         .flex()
         .items_center()

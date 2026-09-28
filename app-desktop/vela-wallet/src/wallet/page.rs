@@ -580,14 +580,20 @@ pub struct WalletPage {
     /// A once-a-second redraw is running for a waiting receipt (078 F-04):
     /// the countdown and the ring move with the clock, not with the core.
     receipt_ticking: bool,
-    /// A dApp transaction landing in the signing column (078 G-04, spec 077):
-    /// the operation, its chain, and when the column raised it.
+    /// How the last request ended, held in the signing column after the core
+    /// closed it (078 G-04, spec 079): the tick, or "not landed yet" until
+    /// the tracker sees it land.
     dapp_landing: Option<DappLanding>,
-    /// The operation a landing was last raised for — dismissed or not. One
-    /// landing per operation: the handoff stays in the view after Done, and
-    /// gating on "is one showing" raised the same receipt again forever (the
-    /// web measured exactly that in its packaged extension).
-    dapp_landed_op: Option<String>,
+    /// Numbers each ending, so a tick's timer closes only its own.
+    dapp_landing_seq: u64,
+    /// The signing column's header and one-line summary as last drawn — what
+    /// the ending still shows once the request is gone (spec 079).
+    signing_last: Option<(signing_components::HeaderModel, Option<SharedString>)>,
+    /// A request the person closed after approving it (spec 079 FR-002): its
+    /// machines keep running, unseen, until the core answers the page — the
+    /// close refused nothing, so the answer must still get out.
+    #[cfg(not(target_os = "linux"))]
+    signing_background: Vec<gpui::Entity<crate::wallet::signing_host::SigningHost>>,
     /// The contacts header search (078 X-05 / C-02): the web filters the
     /// A–Z list as it is typed, in the shell (`letterSections`).
     contacts_query: String,
@@ -1127,7 +1133,10 @@ impl WalletPage {
             scan_camera_failure: None,
             receipt_ticking: false,
             dapp_landing: None,
-            dapp_landed_op: None,
+            dapp_landing_seq: 0,
+            signing_last: None,
+            #[cfg(not(target_os = "linux"))]
+            signing_background: Vec::new(),
             contacts_query: String::new(),
             balance_detail_open: false,
             contacts_query_focus: cx.focus_handle(),
@@ -5325,16 +5334,9 @@ impl WalletPage {
                             // file used to just hide the column, which left
                             // the dApp's promise hanging until a navigation
                             // happened to settle it.
-                            #[cfg(not(target_os = "linux"))]
-                            if this.panel == PanelId::Signing
-                                && let Some(host) = this.signing_host.clone()
-                            {
-                                host.update(cx, |host, cx| {
-                                    host.dispatch_sign(
-                                        vela_core::app::sign_request::Event::SwipeDismissed,
-                                        cx,
-                                    );
-                                });
+                            if this.panel == PanelId::Signing {
+                                this.close_signing_column(cx);
+                                return;
                             }
                             this.panel = PanelId::None;
                             cx.notify();
@@ -13118,6 +13120,71 @@ impl WalletPage {
         return true;
     }
 
+    /// The open request's operation has been accepted — its receipt counts.
+    fn request_submitted(&self, cx: &gpui::App) -> bool {
+        #[cfg(not(target_os = "linux"))]
+        return self
+            .signing_host
+            .as_ref()
+            .is_some_and(|host| host.read(cx).view.pending_op_hash.is_some());
+        #[cfg(target_os = "linux")]
+        {
+            let _ = cx;
+            false
+        }
+    }
+
+    /// Where the open request stands once it has been approved (spec 079),
+    /// with its chain — `None` while it is still a request to decide on.
+    #[cfg(not(target_os = "linux"))]
+    fn open_request_receipt(
+        &self,
+        summary: Option<&SharedString>,
+        cx: &mut Context<Self>,
+    ) -> Option<(crate::signing::status::SigningReceipt, u32)> {
+        let entries = resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
+            .read(cx)
+            .view()
+            .entries;
+        let host = self.signing_host.as_ref()?.read(cx);
+        if host.view.surface != vela_core::app::sign_request::SignSurface::Sheet {
+            return None;
+        }
+        let track = host.view.pending_op_hash.as_ref().and_then(|op| {
+            entries
+                .into_iter()
+                .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))
+        });
+        let clock = signing_clock(host.chain_id, host.seen_submitted_ms);
+        crate::signing::status::approved(
+            &host.view,
+            crate::signing::status::on_chain(&host.raw.0),
+            summary,
+            track.as_ref(),
+            &clock,
+            &self.signing,
+        )
+        .map(|receipt| (receipt, host.chain_id))
+    }
+
+    /// The column's close — its ✕, Esc, and the receipt's own button. The
+    /// core decides what it answers: a request not yet approved is refused
+    /// (4001); one approved is merely no longer watched, and its answer still
+    /// reaches the page (spec 079 FR-002). An ending on screen just goes.
+    fn close_signing_column(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = self.signing_host.clone() {
+            host.update(cx, |host, cx| {
+                host.dispatch_sign(vela_core::app::sign_request::Event::SwipeDismissed, cx);
+            });
+        }
+        self.dapp_landing = None;
+        if self.panel == PanelId::Signing {
+            self.panel = PanelId::None;
+        }
+        cx.notify();
+    }
+
     #[cfg(not(target_os = "linux"))]
     fn signing_busy(&self, cx: &gpui::App) -> bool {
         self.signing_host.as_ref().is_some_and(|host| {
@@ -13181,37 +13248,55 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         let answers = host.update(cx, |host, _| host.take_answers());
-        let closed = host.read(cx).closed;
-        // The transaction was handed to the tracker: it is landing HERE (the
-        // web's `watchLanding`). Raised once per operation.
-        if self.signing_host.as_ref() == Some(host)
-            && let Some(handoff) = host.read(cx).view.tracker_handoff.clone()
-            && self.dapp_landed_op.as_deref() != Some(handoff.user_op_hash.as_str())
-        {
-            self.dapp_landed_op = Some(handoff.user_op_hash.clone());
-            self.dapp_landing = Some(DappLanding {
-                op_hash: handoff.user_op_hash,
-                chain_id: handoff.chain_id,
-                raised_at_ms: crate::executor::now_ms(),
-            });
-        }
+        let (closed, responded, approved) = {
+            let read = host.read(cx);
+            (read.closed, read.responded, read.approved)
+        };
         // WHETHER there is a column is the core's answer, not this file's —
         // and only for the column on screen: a column already replaced (its
         // request over) must not close the one that took its place.
         if self.signing_host.as_ref() == Some(host) {
             if closed {
+                // Spec 079: how it ended stays on screen — the tick, or "not
+                // landed yet" — for as long as the person is looking at the
+                // column. A column they already closed opens for nothing.
+                let ending = {
+                    let read = host.read(cx);
+                    read.ending.clone().map(|ending| DappLanding {
+                        ending,
+                        chain_id: read.chain_id,
+                        seq: 0,
+                        seen_submitted_ms: read.seen_submitted_ms,
+                        closing: false,
+                    })
+                };
+                if let Some(mut landing) = ending.filter(|_| self.panel == PanelId::Signing) {
+                    self.dapp_landing_seq += 1;
+                    landing.seq = self.dapp_landing_seq;
+                    self.dapp_landing = Some(landing);
+                }
                 // The request is over: the column goes, and so do its
                 // machines — a decoded intent must never outlive the request
                 // it decoded.
                 self.signing_host = None;
-                // …unless its transaction is landing: the column stays for
-                // the receipt until the person is done with it.
+                // …unless it was closed after the approval and the core has
+                // not answered the page yet (FR-002): nothing was refused, so
+                // its machines keep running, unseen, until the answer is out.
+                if approved && !responded {
+                    self.signing_background.push(host.clone());
+                }
+                // …and unless its ending is showing: the column stays for it
+                // until the person is done with it.
                 if self.panel == PanelId::Signing && self.dapp_landing.is_none() {
                     self.panel = PanelId::None;
                 }
             } else {
                 self.panel = PanelId::Signing;
             }
+        }
+        // A request running unseen has answered: its machines can go.
+        if responded {
+            self.signing_background.retain(|kept| kept != host);
         }
         if let Some(tab) = tab {
             for answer in answers {
@@ -14219,6 +14304,32 @@ impl WalletPage {
         #[cfg(target_os = "linux")]
         let _ = cx;
 
+        // Spec 079: once approved, the column is the send receipt — the form,
+        // its fee and its dimmed slide are gone from the first frame after the
+        // approval, not when the core closes the sheet ninety seconds later.
+        // What the column was about is kept for the ending.
+        #[cfg(not(target_os = "linux"))]
+        if self.signing_host.is_some() && !funding && !refused {
+            let summary = crate::signing::status::summary_of(&model.blocks);
+            let header = signing_components::HeaderModel::of(&model);
+            self.signing_last = Some((header.clone(), summary.clone()));
+            if let Some((receipt, chain_id)) = self.open_request_receipt(summary.as_ref(), cx) {
+                let on_close: panels::Click =
+                    Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.close_signing_column(cx);
+                    }));
+                return self.signing_receipt_view(
+                    theme,
+                    window,
+                    Some(&header),
+                    &receipt,
+                    chain_id,
+                    on_close,
+                    cx,
+                );
+            }
+        }
+
         // Passed ONLY when the three machines agreed. A shut slide that still
         // carried an action would be a control the core said no to, waiting
         // for a click to say yes.
@@ -15147,89 +15258,115 @@ impl WalletPage {
         .detach();
     }
 
-    /// The landing receipt (the web's `DappReceipt` over `StatusHero`): where
-    /// a dApp transaction stands, read from the tracker the signing host
-    /// already handed it to — submitting until the tracker has it, submitted
-    /// with the ring, confirmed with its transaction hash and explorer, or
-    /// failed. Nothing here answers the request: the site was answered before
-    /// this was drawn, so Done closes a surface, never a conversation.
+    /// The column once the core has closed the request (the web's
+    /// `DappReceipt` over `StatusHero`, spec 079): the tick — a message
+    /// signed, a transaction landed — which goes by itself, or "not landed
+    /// yet, Vela keeps checking" for as long as the tracker follows it, and
+    /// then its landing. Nothing here answers the request: the site was
+    /// answered before this was drawn, so Done closes a surface, never a
+    /// conversation.
     fn dapp_receipt_body(&mut self, theme: &Theme, window: &Window, cx: &mut Context<Self>) -> Div {
-        use crate::flows::fixtures::ReceiptStage;
-        use vela_core::app::tx_tracker::TrackStatus;
         let Some(landing) = self.dapp_landing.clone() else {
             return div();
         };
-        let entry = resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
-            .read(cx)
-            .view()
-            .entries
-            .into_iter()
-            .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(&landing.op_hash));
-        let s = &self.signing;
-        // `Unreachable` is NOT a failure: the wallet could not ask, which is
-        // not the chain saying no, and a cross for it would be a verdict this
-        // wallet does not have.
-        let (stage, title, captions, hash, explorer) = match entry.as_ref() {
-            None => (
-                ReceiptStage::Submitting,
-                s.receipt_confirming.clone(),
-                vec![],
-                None,
-                None,
-            ),
-            Some(entry) => match (entry.status, entry.tx_hash.clone()) {
-                (TrackStatus::Confirmed, Some(tx)) => {
-                    let url = crate::executor::custom_tokens::explorer_base(landing.chain_id)
-                        .map(|base| SharedString::from(format!("{base}/tx/{tx}")));
-                    (
-                        ReceiptStage::Confirmed,
-                        s.receipt_confirmed.clone(),
-                        vec![],
-                        Some((s.receipt_tx_hash.clone(), tx)),
-                        url.map(|url| (s.receipt_explorer.clone(), url)),
-                    )
-                }
-                (TrackStatus::Dropped | TrackStatus::Rejected, _) => (
-                    ReceiptStage::Failed,
-                    s.receipt_failed.clone(),
-                    vec![s.receipt_failed_hint.clone()],
-                    Some((s.receipt_op_hash.clone(), landing.op_hash.clone())),
-                    None,
-                ),
-                _ => (
-                    ReceiptStage::Submitted,
-                    s.receipt_submitted.clone(),
-                    vec![s.receipt_confirming_hint.clone()],
-                    // The OPERATION hash: there is no transaction until it
-                    // lands, and labelling one as the other sends a person to
-                    // search an explorer for nothing.
-                    Some((s.receipt_op_hash.clone(), landing.op_hash.clone())),
-                    None,
-                ),
-            },
-        };
-        let progress = match stage {
-            ReceiptStage::Submitted => {
-                let since = entry
-                    .as_ref()
-                    .and_then(|entry| entry.submitted_at_ms)
-                    .unwrap_or(landing.raised_at_ms);
-                let elapsed = ((crate::executor::now_ms() - since) / 1000.).max(0.) as u64;
-                vela_core::app::network_admin::typical_inclusion_s(landing.chain_id)
-                    .and_then(|typical| flows_live::ring_progress(elapsed, u64::from(typical)))
+        let track = match &landing.ending {
+            crate::signing::status::SigningEnding::StillConfirming { user_op_hash } => {
+                resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
+                    .read(cx)
+                    .view()
+                    .entries
+                    .into_iter()
+                    .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(user_op_hash))
             }
-            ReceiptStage::Confirmed => Some(1.),
             _ => None,
         };
-        if stage == ReceiptStage::Submitted {
+        let (header, summary) = self.signing_last.clone().unzip();
+        let clock = signing_clock(landing.chain_id, landing.seen_submitted_ms);
+        let receipt = crate::signing::status::ended(
+            &landing.ending,
+            summary.flatten().as_ref(),
+            track.as_ref(),
+            &clock,
+            &self.signing,
+        );
+        // A tick is seen, then it goes: nobody should have to close a success.
+        if let Some(wait) = receipt
+            .closes_after_ms(&landing.ending)
+            .filter(|_| !landing.closing)
+        {
+            let seq = landing.seq;
+            cx.spawn(async move |page, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(wait))
+                    .await;
+                page.update(cx, |this, cx| {
+                    if this.dapp_landing.as_ref().is_some_and(|l| l.seq == seq) {
+                        this.dapp_landing = None;
+                        if this.panel == PanelId::Signing && this.no_signing_host() {
+                            this.panel = PanelId::None;
+                        }
+                        cx.notify();
+                    }
+                })
+                .ok();
+            })
+            .detach();
+            // Scheduled once per ending: a redraw must not stack timers.
+            if let Some(shown) = self.dapp_landing.as_mut() {
+                shown.closing = true;
+            }
+        }
+        let on_done: panels::Click = Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            this.dapp_landing = None;
+            if this.panel == PanelId::Signing && this.no_signing_host() {
+                this.panel = PanelId::None;
+            }
+            cx.notify();
+        }));
+        self.signing_receipt_view(
+            theme,
+            window,
+            header.as_ref(),
+            &receipt,
+            landing.chain_id,
+            on_done,
+            cx,
+        )
+    }
+
+    /// The receipt the signing column shows after an approval — the send
+    /// receipt's hero, the hash (copied whole on a click), the explorer once
+    /// there is a transaction, and one button.
+    #[allow(clippy::too_many_arguments, reason = "one view, named parts")]
+    fn signing_receipt_view(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        header: Option<&signing_components::HeaderModel>,
+        receipt: &crate::signing::status::SigningReceipt,
+        chain_id: u32,
+        on_cta: panels::Click,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        use crate::flows::fixtures::ReceiptStage;
+        if receipt.stage == ReceiptStage::Submitted {
             self.tick_landing(cx);
         }
-
-        let hero = panels::status_hero(theme, &mut self.icons, stage, progress, &title, &captions);
-        // Centred in the column, as the web's `.receipt` (`min-height: 100%;
-        // justify-content: center`): the column's height less its header.
+        let hero = panels::status_hero(
+            theme,
+            &mut self.icons,
+            receipt.stage,
+            receipt.progress,
+            &receipt.title,
+            &receipt.captions,
+        );
+        // Centred in what is left of the column, as the web's `.receipt`
+        // (`min-height: 100%; justify-content: center`).
+        let reserved = if header.is_some() { 190. } else { 120. };
         let mut body = div()
-            .min_h(px((f32::from(window.viewport_size().height) - 120.).max(0.)))
+            .min_h(px(
+                (f32::from(window.viewport_size().height) - reserved).max(0.)
+            ))
             .flex()
             .flex_col()
             .items_center()
@@ -15237,7 +15374,7 @@ impl WalletPage {
             .gap(px(8.))
             .p(px(16.))
             .child(hero);
-        if let Some((label, value)) = hash {
+        if let Some((label, value)) = receipt.hash.clone() {
             // A click copies the whole hash and answers with a tick for 1.5 s
             // where the hash was (`DappReceipt`'s own affordance).
             let copied = self.copied.as_deref() == Some("dapp-receipt-hash");
@@ -15279,33 +15416,43 @@ impl WalletPage {
                     })),
             );
         }
-        if let Some((label, url)) = explorer {
+        let explorer = receipt.explorer_tx.as_ref().and_then(|tx| {
+            crate::executor::custom_tokens::explorer_base(chain_id)
+                .map(|base| SharedString::from(format!("{}/tx/{tx}", base.trim_end_matches('/'))))
+        });
+        if let Some(url) = explorer {
             body = body.child(
                 div()
                     .id("dapp-receipt-explorer")
                     .cursor_pointer()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.accent)
-                    .child(label)
+                    .child(self.signing.view_on_explorer.clone())
                     .on_click(move |_, _, cx| cx.open_url(&url)),
             );
         }
-        body.child(
+        let cta = if receipt.cta_accent {
+            // `<Button variant="primary">` — the default pill shape.
+            crate::flows::components::accent_button(theme, receipt.cta.clone()).rounded_full()
+        } else {
+            crate::flows::components::ghost_button(theme, receipt.cta.clone())
+        };
+        body = body.child(
             div().mt(px(8.)).w_full().child(
-                // `<Button variant="primary">` — the default pill shape.
-                crate::flows::components::accent_button(theme, self.signing.receipt_done.clone())
-                    .rounded_full()
-                    .id("dapp-receipt-done")
+                cta.id("dapp-receipt-done")
                     .cursor_pointer()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.dapp_landing = None;
-                        if this.panel == PanelId::Signing && this.no_signing_host() {
-                            this.panel = PanelId::None;
-                        }
-                        cx.notify();
-                    })),
+                    .on_click(on_cta),
             ),
-        )
+        );
+        match header {
+            Some(header) => div()
+                .flex()
+                .flex_col()
+                .gap(px(16.))
+                .child(signing_components::header_view(theme, header))
+                .child(body),
+            None => body,
+        }
     }
 
     /// Keep a landing receipt's ring moving: redraw once a second while it
@@ -15322,7 +15469,8 @@ impl WalletPage {
                     .await;
                 let go_on = page
                     .update(cx, |this, cx| {
-                        let go_on = this.dapp_landing.is_some() && this.panel == PanelId::Signing;
+                        let go_on = this.panel == PanelId::Signing
+                            && (this.dapp_landing.is_some() || this.request_submitted(cx));
                         if go_on {
                             cx.notify();
                         } else {
@@ -16845,19 +16993,12 @@ impl Render for WalletPage {
                         // Escape is the ✕: a signing column tells its core,
                         // as the web's `onclose` does, or the dApp's request
                         // hangs and every later one is refused as busy.
-                        #[cfg(not(target_os = "linux"))]
-                        if this.panel == PanelId::Signing
-                            && let Some(host) = this.signing_host.clone()
-                        {
-                            host.update(cx, |host, cx| {
-                                host.dispatch_sign(
-                                    vela_core::app::sign_request::Event::SwipeDismissed,
-                                    cx,
-                                );
-                            });
+                        if this.panel == PanelId::Signing {
+                            this.close_signing_column(cx);
+                        } else {
+                            this.panel = PanelId::None;
+                            cx.notify();
                         }
-                        this.panel = PanelId::None;
-                        cx.notify();
                     }
                 }
                 if ks.key == "f11" {
@@ -16884,9 +17025,14 @@ impl Render for WalletPage {
 /// A dApp transaction landing in the signing column (078 G-04).
 #[derive(Clone, Debug)]
 struct DappLanding {
-    op_hash: String,
+    ending: crate::signing::status::SigningEnding,
     chain_id: u32,
-    raised_at_ms: f64,
+    /// Its number (`dapp_landing_seq`) — a tick's timer closes only its own.
+    seq: u64,
+    /// When the column first saw the operation accepted.
+    seen_submitted_ms: Option<f64>,
+    /// Its tick's timer is running.
+    closing: bool,
 }
 
 /// What the scanner read that it cannot act on (078 F-02).
@@ -16950,6 +17096,17 @@ fn backup_request(
 
 /// The host of a signer page address, for its badge — the address itself is
 /// already in the field under it.
+/// The chain's clock for a signing receipt (spec 079): now, its usual
+/// inclusion time and its name.
+fn signing_clock(chain_id: u32, seen_submitted_ms: Option<f64>) -> crate::signing::status::Clock {
+    crate::signing::status::Clock {
+        now_ms: crate::executor::now_ms(),
+        typical_s: vela_core::app::network_admin::typical_inclusion_s(chain_id).map(u32::from),
+        chain_name: crate::flows::live::chain_name(chain_id).to_string(),
+        seen_submitted_ms,
+    }
+}
+
 fn page_host(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     rest.split(['/', '?', '#'])

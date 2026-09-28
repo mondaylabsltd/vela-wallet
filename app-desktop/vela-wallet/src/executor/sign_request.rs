@@ -503,18 +503,42 @@ fn wei_of(value: Option<&Value>) -> Option<String> {
 /// not a transaction that did not happen, and the caller answers with the
 /// userOpHash rather than an error.
 fn await_receipt(user_op_hash: &str, chain_id: u32) -> Option<String> {
-    let deadline = std::time::Instant::now() + RECEIPT_BUDGET;
-    while std::time::Instant::now() < deadline {
-        let poll = relay::user_op_receipt(user_op_hash, chain_id);
-        if let Some(resolution) = poll.resolution {
-            // A receipt that says the operation reverted is still a receipt:
-            // the tx hash is real and the dApp should have it. What it is NOT
-            // is this wallet's business to relabel.
-            return Some(resolution.tx_hash);
+    wait_within(RECEIPT_BUDGET, RECEIPT_POLL, |left| {
+        // A receipt that says the operation reverted is still a receipt: the
+        // tx hash is real and the dApp should have it. What it is NOT is this
+        // wallet's business to relabel.
+        relay::user_op_receipt_within(user_op_hash, chain_id, left)
+            .resolution
+            .map(|resolution| resolution.tx_hash)
+    })
+}
+
+/// Ask `poll` until it answers or `budget` is spent, sleeping `every`
+/// between asks — and giving each ask only what is LEFT of the budget (spec
+/// 079, device-found on Android: with the relay unreachable one poll hung for
+/// its own timeouts and retries, and the page waited 268 s for a two-minute
+/// wait). The page is answered on time; the tracker keeps following the
+/// operation after.
+fn wait_within<T>(
+    budget: Duration,
+    every: Duration,
+    mut poll: impl FnMut(Duration) -> Option<T>,
+) -> Option<T> {
+    let deadline = std::time::Instant::now() + budget;
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            return None;
         }
-        std::thread::sleep(RECEIPT_POLL);
+        if let Some(answer) = poll(left) {
+            return Some(answer);
+        }
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            return None;
+        }
+        std::thread::sleep(every.min(left));
     }
-    None
 }
 
 /// A submit that failed, in the core's vocabulary.
@@ -893,6 +917,36 @@ mod tests {
     /// Issue 262: a receipt that is late is not a confirmation. The core hears
     /// `ReceiptPending` (answer the page, keep the record pending); only a
     /// receipt in time is `Succeeded` with the TX hash.
+    #[test]
+    fn every_poll_gets_only_what_is_left_of_the_wait() {
+        let budget = Duration::from_millis(300);
+        let started = std::time::Instant::now();
+        let mut given = Vec::new();
+        let answer: Option<()> = wait_within(budget, Duration::from_millis(40), |left| {
+            given.push(left);
+            // A relay that holds every call for as long as it is allowed.
+            std::thread::sleep(left.min(Duration::from_millis(120)));
+            None
+        });
+        assert!(answer.is_none(), "no receipt is not a failure, it is none");
+        assert!(
+            started.elapsed() < budget + Duration::from_millis(150),
+            "the wait ends on time: {:?}",
+            started.elapsed()
+        );
+        assert!(given.len() >= 2, "it asks again while there is time");
+        assert!(given.iter().all(|left| *left <= budget));
+        assert!(
+            given.windows(2).all(|pair| pair[1] < pair[0]),
+            "each ask gets less: {given:?}"
+        );
+        // An answer ends the wait at once.
+        assert_eq!(
+            wait_within(budget, Duration::from_millis(40), |_| Some("0xtx")),
+            Some("0xtx")
+        );
+    }
+
     #[test]
     fn a_late_receipt_is_reported_pending_never_succeeded() {
         assert_eq!(

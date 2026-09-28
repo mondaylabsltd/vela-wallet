@@ -168,6 +168,44 @@ pub fn bundler_call(chain_id: u32, method: &str, params: Value) -> Result<Value,
     dispatch(chain_id, RpcKind::Bundler, method, params)
 }
 
+/// [`bundler_call`], waiting at most `budget` for the answer (spec 079): a
+/// caller with a deadline of its own — the dApp's receipt wait — must not be
+/// held past it by one call's timeouts and retries. The call itself runs on
+/// to its end inside the pool (its verdicts still count); only this caller
+/// stops waiting, and a late answer goes nowhere.
+pub fn bundler_call_within(
+    chain_id: u32,
+    method: &str,
+    params: Value,
+    budget: Duration,
+) -> Result<Value, PoolError> {
+    let (reply, answer) = channel();
+    {
+        let Ok(tx) = sender().lock() else {
+            return Err(PoolError::Unavailable);
+        };
+        if tx
+            .send(Message::Ask(Request::Call {
+                chain_id,
+                kind: RpcKind::Bundler,
+                method: method.to_owned(),
+                params,
+                reply,
+            }))
+            .is_err()
+        {
+            return Err(PoolError::Unavailable);
+        }
+    }
+    match answer.recv_timeout(budget) {
+        Ok(result) => result,
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(PoolError::Failed {
+            rate_limited: false,
+        }),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(PoolError::Unavailable),
+    }
+}
+
 /// The REST base of the bundler the pool would submit to for this chain
 /// (`getActiveBundlerBaseUrl`, invariant ③): the `/v1/account`, `/v1/treasury`
 /// and `/v1/sponsor` calls must reach the SAME relay the user operation goes

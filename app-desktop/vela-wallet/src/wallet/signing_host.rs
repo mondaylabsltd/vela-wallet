@@ -156,6 +156,17 @@ pub struct SigningHost {
     /// after it is taken, and the tracker merges by hash anyway, but handing
     /// the same submission over on every render is a poll nobody asked for.
     handed_off: Option<String>,
+    /// Spec 079: how the request ended, read off the answer the core sent —
+    /// a message signed, a transaction landed, or the operation hash because
+    /// the wait ran out. The page keeps it on screen after the core closes
+    /// the column (the tick, or "not landed yet").
+    pub ending: Option<crate::signing::status::SigningEnding>,
+    /// Spec 079: when this column first saw the operation accepted — the
+    /// receipt's ring starts here until the tracker has its own clock.
+    pub seen_submitted_ms: Option<f64>,
+    /// The person approved this request (the slide, or the button that opens
+    /// the Trusted Signer's page). A close after this refuses nothing.
+    pub approved: bool,
 }
 
 impl SigningHost {
@@ -215,6 +226,9 @@ impl SigningHost {
             channel,
             closed: false,
             handed_off: None,
+            ending: None,
+            seen_submitted_ms: None,
+            approved: false,
         };
         // The stored default speed (spec 069), read now and followed while
         // the sheet is up: the column sits beside Settings, which may change it.
@@ -460,6 +474,7 @@ impl SigningHost {
     }
 
     pub fn approve(&mut self, cx: &mut Context<Self>) {
+        self.approved = true;
         let opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
     }
@@ -556,6 +571,9 @@ impl SigningHost {
             }
         }
         self.view = self.sign.view();
+        if self.view.pending_op_hash.is_some() && self.seen_submitted_ms.is_none() {
+            self.seen_submitted_ms = Some(now_ms());
+        }
         // A free upgrade is decided only while the person can still choose —
         // never under a slide that has already gone.
         let on_form = self.view.surface == vela_core::app::sign_request::SignSurface::Sheet
@@ -629,6 +647,19 @@ impl SigningHost {
         } = operation
         {
             self.responded = true;
+            // Spec 079: what this answer says about how the request ended —
+            // read BEFORE the sheet is cleared, while the hash this column
+            // submitted is still known.
+            let submitted = self.handed_off.clone().or_else(|| {
+                self.view.pending_op_hash.clone().or_else(|| {
+                    self.view
+                        .tracker_handoff
+                        .as_ref()
+                        .map(|handoff| handoff.user_op_hash.clone())
+                })
+            });
+            self.ending =
+                crate::signing::status::ending_of(&self.raw.0, payload, submitted.as_deref());
             // The wallet's own requests (the Ethereum backup, spec 062) ride
             // their own transport: there is no page to tell.
             if transport_id != WALLET_TRANSPORT {
