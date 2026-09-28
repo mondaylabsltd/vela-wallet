@@ -933,7 +933,7 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
 /// The blind rung's two facts: who it goes to, and how many bytes of calldata
 /// nobody could read. Both come from the first leg, like the decode does.
 fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
-    let call = first_call(&request.params_json);
+    let call = first_call(&request.method, &request.params_json);
     let data = call.as_ref().and_then(|c| c.1.clone()).unwrap_or_default();
     crate::signing::live::RequestFacts {
         to: call.and_then(|c| c.0),
@@ -954,6 +954,17 @@ fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
 /// that is not an address, or a chain whose coin the wallet cannot name —
 /// Tempo has none, and "ETH" on a custom network would be a guess.
 fn native_send_of(request: &IncomingRequest) -> Option<crate::signing::live::NativeSend> {
+    // A batch is counted as the site SENT it, not as `calls_of` reads it:
+    // `calls_of` drops a leg it cannot read (one with no `to` — a deployment,
+    // which EIP-5792 allows), so `[send, deploy]` would otherwise count as one
+    // call and draw a calm "send 1 ETH" over a batch that is more than that
+    // (083 W10 review).
+    if request.method == "wallet_sendCalls" {
+        let params: serde_json::Value = serde_json::from_str(&request.params_json).ok()?;
+        if params.get(0)?.get("calls")?.as_array()?.len() != 1 {
+            return None;
+        }
+    }
     let calls = crate::executor::sign_request::calls_of(&request.method, &request.params_json)?;
     let [call] = calls.as_slice() else {
         return None;
@@ -964,10 +975,9 @@ fn native_send_of(request: &IncomingRequest) -> Option<crate::signing::live::Nat
     if !plain {
         return None;
     }
-    let symbol = vela_core::app::network_admin::BUILTIN_CHAINS
-        .iter()
-        .find(|chain| chain.chain_id == request.chain_id)?
-        .native_symbol;
+    // The core's one spelling of a built-in chain's coin; a custom network
+    // has none, and stays blind.
+    let symbol = vela_core::app::network_admin::builtin_native_symbol(request.chain_id)?;
     Some(crate::signing::live::NativeSend {
         to: call.to.clone(),
         wei: call.value.parse().ok()?,
@@ -1002,7 +1012,7 @@ pub fn clear_kickoff(
     use vela_core::app::clear_signing::{ClearLocale, ClearSignMethod};
     match method {
         "eth_sendTransaction" | "wallet_sendCalls" => {
-            let call = first_call(params_json);
+            let call = first_call(method, params_json);
             Some(ClearEvent::ResolveTransaction {
                 to: call.as_ref().and_then(|c| c.0.clone()),
                 data: call.as_ref().and_then(|c| c.1.clone()),
@@ -1047,13 +1057,26 @@ fn string_params(params_json: &str) -> Vec<String> {
         .collect()
 }
 
-fn first_call(params_json: &str) -> Option<(Option<String>, Option<String>, Option<String>)> {
+/// The call the decode and the blind rung read: a batch's first leg, or a
+/// transaction's own call — chosen by METHOD, the way the executor's
+/// `calls_of` chooses what gets submitted.
+///
+/// It used to follow a `calls` key whatever the method (083 review): an
+/// `eth_sendTransaction` carrying a stray `"calls":[{…harmless…}]` beside a
+/// malicious top-level call had its headline decoded from the harmless one
+/// while the malicious one was signed. And a `wallet_sendCalls` with no
+/// `calls` is nothing — its envelope is never submitted, so it is not read.
+fn first_call(
+    method: &str,
+    params_json: &str,
+) -> Option<(Option<String>, Option<String>, Option<String>)> {
     let params: serde_json::Value = serde_json::from_str(params_json).ok()?;
     let first = params.get(0)?;
-    let call = first
-        .get("calls")
-        .and_then(|calls| calls.get(0))
-        .unwrap_or(first);
+    let call = if method == "wallet_sendCalls" {
+        first.get("calls")?.get(0)?
+    } else {
+        first
+    };
     let field = |name: &str| {
         call.get(name)
             .and_then(serde_json::Value::as_str)
@@ -1193,7 +1216,7 @@ mod tests {
     fn the_decoder_is_handed_the_call_and_not_the_envelope() {
         let single = r#"[{"from":"0xaaa","to":"0xbbb","data":"0xabcd","value":"0x1"}]"#;
         assert_eq!(
-            first_call(single),
+            first_call("eth_sendTransaction", single),
             Some((
                 Some("0xbbb".to_owned()),
                 Some("0xabcd".to_owned()),
@@ -1202,11 +1225,74 @@ mod tests {
         );
 
         let batch = r#"[{"calls":[{"to":"0x1","data":"0xdead"},{"to":"0x2"}]}]"#;
-        let (to, data, value) =
-            first_call(batch).unwrap_or_else(|| unreachable!("a batch has a first leg"));
+        let (to, data, value) = first_call("wallet_sendCalls", batch)
+            .unwrap_or_else(|| unreachable!("a batch has a first leg"));
         assert_eq!(to.as_deref(), Some("0x1"));
         assert_eq!(data.as_deref(), Some("0xdead"));
         assert_eq!(value, None, "an absent value stays absent, never a zero");
+
+        assert_eq!(
+            first_call("wallet_sendCalls", r#"[{"to":"0xbbb","data":"0xabcd"}]"#),
+            None,
+            "a batch with no calls submits nothing, so its envelope is not decoded"
+        );
+    }
+
+    /// 083 review: an `eth_sendTransaction` is decoded from its OWN call.
+    ///
+    /// A stray `calls` key is not a batch for this method — the executor's
+    /// `calls_of` submits the top-level call — so a harmless-looking leg
+    /// beside a malicious call must not become the headline. Checked where
+    /// the decode starts (`clear_kickoff`) and where the blind rung reads its
+    /// facts (`facts_of`), not only in the helper.
+    #[test]
+    fn a_stray_calls_key_does_not_hide_the_signed_call() {
+        const SIGNED: &str = "0x1111111111111111111111111111111111111111";
+        const DECOY: &str = "0x2222222222222222222222222222222222222222";
+        let params = format!(
+            r#"[{{"to":"{SIGNED}","data":"0x095ea7b3ffff","value":"0x0","calls":[{{"to":"{DECOY}","value":"0x1"}}]}}]"#
+        );
+
+        assert_eq!(
+            first_call("eth_sendTransaction", &params),
+            Some((
+                Some(SIGNED.to_owned()),
+                Some("0x095ea7b3ffff".to_owned()),
+                Some("0x0".to_owned())
+            ))
+        );
+        let submitted = crate::executor::sign_request::calls_of("eth_sendTransaction", &params)
+            .unwrap_or_else(|| unreachable!("a transaction has its call"));
+        assert_eq!(submitted.len(), 1);
+        assert_eq!(submitted[0].to, SIGNED, "what the executor signs");
+
+        let Some(ClearEvent::ResolveTransaction { to, data, .. }) =
+            clear_kickoff("eth_sendTransaction", &params, 1, None)
+        else {
+            unreachable!("a transaction starts the decode")
+        };
+        assert_eq!(
+            to.as_deref(),
+            Some(SIGNED),
+            "the decode reads the signed call"
+        );
+        assert_eq!(data.as_deref(), Some("0x095ea7b3ffff"));
+
+        let facts = facts_of(&IncomingRequest {
+            id: "1".to_owned(),
+            method: "eth_sendTransaction".to_owned(),
+            params_json: params,
+            origin: "https://example.com".to_owned(),
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            chain_id: 1,
+            granted_address: None,
+        });
+        assert_eq!(facts.to.as_deref(), Some(SIGNED));
+        assert_eq!(facts.data_bytes, 6);
+        assert!(
+            facts.native_send.is_none(),
+            "the decoy's plain send is not what is signed"
+        );
     }
 
     /// 083 W10: a plain native send is read as one — and only a plain native
@@ -1277,6 +1363,15 @@ mod tests {
             .is_none(),
             "a batch is more than its first leg"
         );
+        // 083 W10 review: a leg `calls_of` cannot read (no `to` — a
+        // deployment) still counts; the batch is not a lone send.
+        assert!(
+            batch(&format!(
+                r#"[{{"to":"{TO}","value":"0xde0b6b3a7640000"}},{{"data":"0x6080"}}]"#
+            ))
+            .is_none(),
+            "an unreadable leg is still a leg"
+        );
         assert!(
             native_send_of(&request(
                 "personal_sign",
@@ -1284,6 +1379,81 @@ mod tests {
                 1
             ))
             .is_none()
+        );
+
+        // 083 W10 review: the blind rung's facts carry it — the path the
+        // sheet actually reads, not only the helper.
+        let facts = facts_of(&request(
+            "eth_sendTransaction",
+            format!(r#"[{{"to":"{TO}","value":"0x1"}}]"#),
+            100,
+        ));
+        assert!(facts.native_send.is_some());
+        assert_eq!(facts.data_bytes, 0);
+    }
+
+    /// 083 W10 review: from the request a dApp sent to the blocks the sheet
+    /// draws, through the real core and the host's own `facts_of` — nothing
+    /// built by hand in between. A 0.001 xDAI send reads as a send; the same
+    /// request with calldata stays on the blind rung.
+    #[test]
+    fn a_dapp_native_send_reaches_the_sheet_as_a_send() {
+        use crate::signing::fixtures::Block;
+        const TO: &str = "0x76875eb2c6d2ea8d6b7fc7e0ce6d2c1e6ac0d141";
+        let s = crate::signing::SigningStrings::resolve(&crate::loc::Loc::from_env());
+        let drawn = |params: String| {
+            let request = IncomingRequest {
+                id: "1".to_owned(),
+                method: "eth_sendTransaction".to_owned(),
+                params_json: params,
+                origin: "https://example.com".to_owned(),
+                transport_id: BROWSER_TRANSPORT.to_owned(),
+                chain_id: 100,
+                granted_address: None,
+            };
+            let mut clear = CoreHost::<ClearSigning>::new();
+            let kickoff = clear_kickoff(
+                &request.method,
+                &request.params_json,
+                request.chain_id,
+                None,
+            )
+            .unwrap_or_else(|| unreachable!("a transaction starts the decode"));
+            let _ = clear.dispatch(kickoff);
+            let view = crate::signing::live::localized_terms(&clear.view(), &s);
+            crate::signing::live::blocks(&view, &facts_of(&request), &s)
+        };
+
+        let send = drawn(format!(r#"[{{"to":"{TO}","value":"0x38d7ea4c68000"}}]"#));
+        assert!(
+            matches!(send.first(), Some(Block::Intent { text, .. }) if *text == s.intent_send),
+            "a send, not a contract interaction"
+        );
+        assert!(
+            !send
+                .iter()
+                .any(|block| matches!(block, Block::Warning { .. })),
+            "nothing was left to decode"
+        );
+        assert!(send.iter().any(|block| matches!(
+            block,
+            Block::Amount { line, .. } if line.symbol == "xDAI"
+        )));
+        assert!(send.iter().any(|block| matches!(
+            block,
+            Block::Party { label, address: Some(address), badge: None, .. }
+                if *label == s.label_recipient && address == TO
+        )));
+
+        let blind = drawn(format!(
+            r#"[{{"to":"{TO}","value":"0x38d7ea4c68000","data":"0xdeadbeef"}}]"#
+        ));
+        assert!(
+            !blind.iter().any(|block| matches!(
+                block,
+                Block::Intent { text, .. } if *text == s.intent_send
+            )),
+            "calldata nobody decoded is never drawn as a send"
         );
     }
 

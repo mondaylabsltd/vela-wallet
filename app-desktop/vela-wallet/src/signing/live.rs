@@ -1105,8 +1105,9 @@ fn native_send_blocks(send: &NativeSend, s: &SigningStrings) -> Vec<Block> {
         Block::Amount {
             line: crate::signing::fixtures::AmountLine {
                 sign: SharedString::default(),
-                value: SharedString::from(crate::wallet::live::with_decimal_mark(
-                    vela_core::app::fee_policy::from_base_units(send.wei, 18),
+                value: SharedString::from(exact_coin_figure(
+                    send.wei,
+                    crate::executor::format_prefs::current().number,
                 )),
                 symbol: SharedString::from(send.symbol.clone()),
                 token: None,
@@ -1125,6 +1126,47 @@ fn native_send_blocks(send: &NativeSend, s: &SigningStrings) -> Vec<Block> {
             badge: None,
         },
     ]
+}
+
+/// A chain coin's wei as an exact figure in the person's number format
+/// (083 W10): the whole part grouped the way every other amount on the sheet
+/// is — the core's decoded sends, the gallery's "1,000" — so 25000 xDAI does
+/// not read "25000"; the fraction kept whole, so no wei is rounded away.
+///
+/// Built from the core's own digit grouping over the digit string, never a
+/// float: a u128 of wei does not survive an f64.
+fn exact_coin_figure(wei: u128, preset: vela_core::l10n::number::NumberPreset) -> String {
+    let plain = vela_core::app::fee_policy::from_base_units(wei, 18);
+    let (whole, fraction) = plain
+        .split_once('.')
+        .map_or((plain.as_str(), None), |(whole, fraction)| {
+            (whole, Some(fraction))
+        });
+    let grouped = vela_core::l10n::number::group_digits(whole, preset);
+    match fraction {
+        Some(fraction) => format!("{grouped}{}{fraction}", preset.separators().decimal),
+        None => grouped,
+    }
+}
+
+/// What the technical details call a call's destination (083 W10).
+///
+/// A call with no calldata calls no contract — its `to` is who receives the
+/// coin, so it is the recipient, not "interacting with". `leg` is the call's
+/// 1-based place in a batch, `None` for a lone call. The core's own
+/// `TxPlain` test: calldata empty or `0x`. Its one caller, the page's
+/// technical details, does not exist on Linux (no in-app browser).
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+pub fn tech_destination_label(data: &str, leg: Option<usize>, s: &SigningStrings) -> SharedString {
+    let word = if matches!(data, "" | "0x") {
+        &s.label_recipient
+    } else {
+        &s.label_interacting
+    };
+    match leg {
+        None => word.clone(),
+        Some(leg) => SharedString::from(format!("{word} {leg}")),
+    }
 }
 
 /// The blocks a decoded request draws, in the order they are read.
@@ -1732,7 +1774,10 @@ mod tests {
                 .any(|block| matches!(block, Block::Warning { .. })),
             "nothing was left to decode, so nothing to warn about"
         );
-        let figure = crate::wallet::live::with_decimal_mark("0.001".to_owned());
+        let figure = exact_coin_figure(
+            1_000_000_000_000_000,
+            crate::executor::format_prefs::current().number,
+        );
         assert!(
             drawn.iter().any(|block| matches!(
                 block,
@@ -1774,6 +1819,63 @@ mod tests {
             blind.first(),
             Some(Block::Intent { text, .. }) if *text == s.intent_contract_call
         ));
+    }
+
+    /// 083 W10 review: a coin figure is grouped like every other amount on
+    /// the sheet — 25000 xDAI does not read "25000" — and stays exact to the
+    /// last wei, in each of the four number formats.
+    #[test]
+    fn a_coin_figure_is_grouped_and_exact() {
+        use vela_core::l10n::number::NumberPreset;
+        const COIN: u128 = 1_000_000_000_000_000_000;
+        let cases = [
+            (25_000 * COIN, NumberPreset::CommaDot, "25,000"),
+            (25_000 * COIN + COIN / 2, NumberPreset::DotComma, "25.000,5"),
+            (
+                1_234_567 * COIN + 1,
+                NumberPreset::SpaceComma,
+                "1 234 567,000000000000000001",
+            ),
+            (
+                1_234_567 * COIN + COIN / 2,
+                NumberPreset::Indian,
+                "12,34,567.5",
+            ),
+            (COIN / 1_000, NumberPreset::CommaDot, "0.001"),
+            (COIN / 1_000, NumberPreset::DotComma, "0,001"),
+            (1, NumberPreset::CommaDot, "0.000000000000000001"),
+            (999 * COIN, NumberPreset::DotComma, "999"),
+            (0, NumberPreset::CommaDot, "0"),
+        ];
+        for (wei, preset, figure) in cases {
+            assert_eq!(
+                exact_coin_figure(wei, preset),
+                figure,
+                "{wei} wei, {preset:?}"
+            );
+        }
+    }
+
+    /// 083 W10 review: the technical details name a call's destination by
+    /// what the call does — no calldata is a recipient, anything else is the
+    /// contract being called — and number it inside a batch.
+    #[test]
+    fn a_call_without_calldata_names_its_recipient() {
+        let s = strings();
+        assert_eq!(tech_destination_label("", None, &s), s.label_recipient);
+        assert_eq!(tech_destination_label("0x", None, &s), s.label_recipient);
+        assert_eq!(
+            tech_destination_label("0xa9059cbb", None, &s),
+            s.label_interacting
+        );
+        assert_eq!(
+            tech_destination_label("0x", Some(2), &s),
+            SharedString::from(format!("{} 2", s.label_recipient))
+        );
+        assert_eq!(
+            tech_destination_label("0xdead", Some(1), &s),
+            SharedString::from(format!("{} 1", s.label_interacting))
+        );
     }
 
     /// `eth_sign` is the hard-warning surface, never the calm message view —

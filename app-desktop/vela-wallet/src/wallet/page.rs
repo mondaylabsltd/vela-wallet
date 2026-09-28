@@ -14623,16 +14623,11 @@ impl WalletPage {
                         if !named {
                             // A call with no calldata calls no contract: its
                             // `to` is who receives the coin (083 W10).
-                            let word = if matches!(call.data.as_str(), "" | "0x") {
-                                &self.signing.label_recipient
-                            } else {
-                                &self.signing.label_interacting
-                            };
-                            let label = if single {
-                                word.clone()
-                            } else {
-                                SharedString::from(format!("{word} {}", i + 1))
-                            };
+                            let label = crate::signing::live::tech_destination_label(
+                                &call.data,
+                                (!single).then_some(i + 1),
+                                &self.signing,
+                            );
                             rows.push((label, SharedString::from(call.to.clone()), false));
                         }
                         rows.push((
