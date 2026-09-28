@@ -912,7 +912,7 @@ describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
 });
 
 describe('the receipt', () => {
-	const receipt = (status: 'submitted' | 'confirmed' | 'failed') => ({
+	const receipt = (status: 'submitted' | 'confirmed' | 'failed' | 'maybe_sent' | 'not_sent') => ({
 		status,
 		hold_reason: null,
 		kind: null,
@@ -1011,6 +1011,38 @@ describe('the receipt', () => {
 		);
 		expect(model.breakdown).toBeUndefined();
 		expect(model.breakdownTitle).toBeUndefined();
+	});
+
+	it('a lost relay reply is "may have been sent": the clock, the op hash, no Retry (RA10, G21)', () => {
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				user_op_hash: '0xlocal',
+				receipt: receipt('maybe_sent'),
+				selected_token: ETH
+			})
+		);
+		expect(model.stage).toBe('submitted');
+		expect(model.title).toBe(m['send.txSubmitting']);
+		expect(model.captions).toEqual([m['componentsUi.signing.maybeSent']]);
+		expect(model.hash).toMatchObject({
+			label: m['componentsTx.receipt.userOpHash'],
+			value: '0xlocal'
+		});
+		expect(model.cta).toBe(m['send.txCloseBackground']);
+		expect(model.stage).not.toBe('failed');
+	});
+
+	it('provably not sent is failed, with "your funds are safe" (RA4)', () => {
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({ tx_status: 'confirmed', user_op_hash: '0xlocal', receipt: receipt('not_sent') })
+		);
+		expect(model.stage).toBe('failed');
+		expect(model.title).toBe(m['componentsTx.receipt.statusFailed']);
+		expect(model.captions).toEqual([m['send.txErrorGeneric']]);
+		expect(model.cta).toBe(m['componentsTx.receipt.done']);
 	});
 
 	it('a refused submit is the failed stage, worded by the core’s key', () => {

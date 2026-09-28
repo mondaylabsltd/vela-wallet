@@ -314,7 +314,12 @@ export const WALLET_FLOW_KEYS = [
 	'send.txElapsed',
 	'send.txSlowConfirm',
 	'componentsTx.receipt.txHash',
-	'componentsTx.receipt.done'
+	'componentsTx.receipt.done',
+	// Spec 082 RA10: a lost relay reply ("may have been sent") and a provable
+	// "not sent", on the Send receipt as on the signing sheet.
+	'componentsUi.signing.maybeSent',
+	'componentsTx.receipt.userOpHash',
+	'componentsTx.receipt.statusFailed'
 ] as const;
 
 export type WalletFlowKey = (typeof WALLET_FLOW_KEYS)[number];

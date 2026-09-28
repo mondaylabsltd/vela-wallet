@@ -1132,6 +1132,49 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 	const to = send.recipient_identity?.name ?? shortenAddress(send.recipient);
 	const status = send.receipt?.status;
 
+	/*
+	 * Spec 082 RA10: the relay's reply was lost after the op may have left.
+	 * NEVER "failed — try again" (G21: the op had landed 42 s before the old
+	 * sheet said so, and a second send pays twice): the clock, "It may have
+	 * been sent. Vela keeps checking — don't send it again.", the operation
+	 * hash it is followed under, and the one way out. No success haptic —
+	 * the core plays none for it.
+	 */
+	if (status === 'maybe_sent') {
+		return {
+			...model,
+			header,
+			...parts,
+			stage: 'submitted',
+			title: m['send.txSubmitting'],
+			captions: [m['componentsUi.signing.maybeSent']],
+			hash: send.user_op_hash
+				? {
+						label: m['componentsTx.receipt.userOpHash'],
+						value: send.user_op_hash,
+						copyLabel: m['componentsUi.identiconViewer.copyAddress']
+					}
+				: undefined,
+			cta: m['send.txCloseBackground'],
+			ctaAccent: false
+		};
+	}
+
+	// RA4/RA10: provably not sent (the relay never admitted it) — failed, and
+	// "your funds are safe" is now true.
+	if (status === 'not_sent') {
+		return {
+			...model,
+			header,
+			stage: 'failed',
+			title: m['componentsTx.receipt.statusFailed'],
+			captions: [m['send.txErrorGeneric']],
+			hash: undefined,
+			cta: m['componentsTx.receipt.done'],
+			ctaAccent: false
+		};
+	}
+
 	if (status === 'failed' || send.tx_status === 'error') {
 		return {
 			...model,
