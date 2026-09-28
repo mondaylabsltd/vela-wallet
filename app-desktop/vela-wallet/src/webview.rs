@@ -83,6 +83,10 @@ const META_JS: &str = r#"
   };
   document.addEventListener('DOMContentLoaded', meta);
   window.addEventListener('load', meta);
+  // A page restored from the back-forward cache runs neither: it says what
+  // it is called when it is shown again (spec 082 G70, a stale tab title
+  // after Back).
+  window.addEventListener('pageshow', (event) => { if (event.persisted) meta(); });
 })();
 "#;
 
@@ -261,6 +265,31 @@ pub fn navigate(url: &str) {
     if asked {
         report(Load::Requested(url.to_owned()));
     }
+}
+
+thread_local! {
+    /// How often the wallet took the keyboard back — for the tests.
+    static FOCUS_ASKS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Give the keyboard back to the wallet's own view (spec 082 G41).
+///
+/// A page that holds focus is WebKit's first responder, and AppKit sends it
+/// every key — focusing a gpui element changes nothing there. So a typed URL
+/// landed in a dApp's field and two pastes ran together in the page. wry's
+/// `focus_parent` makes gpui's view the first responder again; a click into
+/// the page hands the keyboard back to WebKit by itself.
+pub fn focus_parent() {
+    FOCUS_ASKS.with(|asks| asks.set(asks.get() + 1));
+    with_view(|view| {
+        let _ = view.focus_parent();
+    });
+}
+
+/// How many times [`focus_parent`] was asked on this thread.
+#[cfg(test)]
+pub fn focus_parent_asks() -> u64 {
+    FOCUS_ASKS.with(std::cell::Cell::get)
 }
 
 /// Back and forward: the engine's own (spec 082 RD6, wry's `go_back` /
@@ -754,6 +783,23 @@ mod tests {
         );
         assert_eq!(meta_url("", "https://app.example/"), "https://app.example/");
         assert!(META_JS.contains("location.href") && META_JS.contains("responseStatus"));
+    }
+
+    /// Spec 082 G70: a page restored from the back-forward cache runs no
+    /// `load`, so it reports its title when it is shown again.
+    #[test]
+    fn a_page_back_from_the_cache_reports_its_title() {
+        assert!(META_JS.contains("'pageshow'") && META_JS.contains("event.persisted"));
+    }
+
+    /// Spec 082 G41: taking the keyboard back is asked even before the
+    /// webview exists (nothing to move then) — the counter is what the page's
+    /// callers are checked against.
+    #[test]
+    fn focus_parent_is_counted() {
+        let before = focus_parent_asks();
+        focus_parent();
+        assert_eq!(focus_parent_asks(), before + 1);
     }
 
     /// The injected provider is the core's, for THIS host: it posts through

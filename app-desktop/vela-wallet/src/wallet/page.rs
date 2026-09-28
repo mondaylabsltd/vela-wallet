@@ -12933,8 +12933,17 @@ impl WalletPage {
         };
         let field = explore_components::address_field(theme, &mut self.icons, &bar, typing);
         let address: gpui::AnyElement = if live_address {
-            let editor_click =
-                crate::ui::editor::mouse_down(&self.address_focus, address_change.clone());
+            let editor_click = {
+                // A press in the open bar is a focus of it too (G41): the
+                // keyboard comes back from WebKit before the caret moves.
+                let place_caret =
+                    crate::ui::editor::mouse_down(&self.address_focus, address_change.clone());
+                move |event: &gpui::MouseDownEvent, window: &mut Window, cx: &mut gpui::App| {
+                    #[cfg(not(target_os = "linux"))]
+                    crate::webview::focus_parent();
+                    place_caret(event, window, cx);
+                }
+            };
             let editor_keys = crate::ui::editor::key_down(
                 &self.address_focus,
                 crate::ui::editor::Wrap::None,
@@ -13373,8 +13382,17 @@ impl WalletPage {
             self.address_selected = false;
             self.address_draft = Some(current);
         }
-        window.focus(&self.address_focus, cx);
+        self.focus_address(window, cx);
         cx.notify();
+    }
+
+    /// Every focus of the address bar (spec 082 G41): the keyboard is taken
+    /// back from WebKit first — while a page is WebKit's first responder,
+    /// AppKit sends it every key whatever gpui has focused.
+    fn focus_address(&self, window: &mut Window, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        crate::webview::focus_parent();
+        window.focus(&self.address_focus, cx);
     }
 
     /// What the bar names right now — the core's `address_bar` over the
@@ -18117,6 +18135,44 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 082 G41: every way into the address bar takes the keyboard back
+    /// from WebKit — `edit_address` through `focus_address`, and a press in
+    /// the open bar before its caret moves. The bar's focus handle is focused
+    /// nowhere else.
+    #[test]
+    fn the_address_bar_takes_the_keyboard_back_from_the_page() {
+        // The needles are assembled, so this test's own text never matches.
+        let source = include_str!("page.rs");
+        let focus_bar = ["window.focus(&self.", "address_focus"].concat();
+        let ask_webkit = ["crate::webview::", "focus_parent();"].concat();
+        let body = |name: &str| {
+            let start = source
+                .find(&["fn ", name, "("].concat())
+                .unwrap_or_else(|| unreachable!("{name} is gone"));
+            let rest = &source[start..];
+            &rest[..rest.find("\n    }\n").unwrap_or(rest.len())]
+        };
+        assert!(body("edit_address").contains(&["self.focus_", "address(window, cx)"].concat()));
+        let focus = body("focus_address");
+        let asked = focus
+            .find(&ask_webkit)
+            .unwrap_or_else(|| unreachable!("focus_address no longer asks WebKit"));
+        let focused = focus
+            .find(&focus_bar)
+            .unwrap_or_else(|| unreachable!("focus_address no longer focuses the bar"));
+        assert!(asked < focused, "WebKit is asked before the bar is focused");
+        // The one other focus of the bar: its press, which asks first too.
+        let press = source
+            .find(&["let place_", "caret ="].concat())
+            .unwrap_or_else(|| unreachable!("the bar's press is gone"));
+        assert!(source[press..press + 600].contains(&ask_webkit));
+        assert_eq!(
+            source.matches(&focus_bar).count(),
+            1,
+            "a focus of the bar that skips WebKit"
+        );
+    }
 
     /// **Linux has three destinations, as the web does** (owner call,
     /// 2026-09-24): no in-app browser, so no Explore — not in the sidebar, and
