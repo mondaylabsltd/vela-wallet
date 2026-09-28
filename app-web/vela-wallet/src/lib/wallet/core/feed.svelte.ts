@@ -70,6 +70,17 @@ class Feed {
 		dispatchActivityFeed({ type: 'live_tick' });
 	}
 
+	/**
+	 * Records were written or patched outside the feed — a dApp request's
+	 * pending row, a tracker verdict (spec 082 RG3). The core's own
+	 * `ReconcileCompleted`: it re-reads the store without celebrating, and `0`
+	 * is a whole no-op.
+	 */
+	reconciled(count: number): void {
+		if (!this.#booted || count <= 0) return;
+		dispatchActivityFeed({ type: 'reconcile_completed', resolved_count: count });
+	}
+
 	/** Balance privacy changed — the core withholds the toast (invariant ④). */
 	privacyChanged(hidden: boolean): void {
 		if (!this.#booted) return;

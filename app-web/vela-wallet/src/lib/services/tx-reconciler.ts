@@ -24,7 +24,8 @@
  */
 
 import { loadTransactions, updateTransaction } from './records';
-import { rpcCall } from './rpc-adapter';
+import { rpcCall, USER_OP_STATUS_METHOD } from './rpc-adapter';
+import { parseUserOpStatus } from '$lib/core/kernels';
 import { autoAddReceivedTokens, type ReceiptLog } from './token-autoadd';
 
 /** Stop re-polling a pending submission after this age (it stays pending = unknown). */
@@ -71,8 +72,10 @@ export interface UserOpStatus {
 	status: UserOpLifecycle;
 	/** Executor stage that last touched the op, e.g. `in_band_settlement_hold`. */
 	stage?: string;
-	/** Human-readable diagnostic from that stage. */
+	/** Human-readable diagnostic from that stage — for logs, never for a verdict. */
 	detail?: string;
+	/** The relay's bundle tx, when it names one (079 D2's explorer link). */
+	txHash?: string;
 }
 
 /** The executor stage that parks an op until network fees fit its signed reimbursement. */
@@ -85,8 +88,12 @@ export function isFeeHold(status: UserOpStatus | null): boolean {
 
 /**
  * Ask the relay what became of an op. Never throws: an unreachable or older relay
- * (the method is a Vela extension) simply yields null, and callers fall back to
- * receipt-only behaviour.
+ * simply yields null, and callers fall back to receipt-only behaviour.
+ *
+ * The method's name and the reading of its answer are the core's
+ * (`tx_tracker::USER_OP_STATUS_METHOD`, `parse_user_op_status` — spec 082 RA7):
+ * the web asked a spelling the relay never served (G13), and a status string
+ * the core does not know parses to nothing rather than to a guess.
  */
 export async function pollUserOpStatus(
 	userOpHash: string,
@@ -94,17 +101,18 @@ export async function pollUserOpStatus(
 ): Promise<UserOpStatus | null> {
 	if (!userOpHash) return null;
 	try {
-		const res = await rpcCall('eth_getUserOperationStatus', [userOpHash], chainId);
+		const res = await rpcCall(USER_OP_STATUS_METHOD, [userOpHash], chainId);
 		if (res.error || !res.result || typeof res.result !== 'object') return null;
-		const result = res.result as Record<string, unknown>;
-		const status = typeof result.status === 'string' ? (result.status as UserOpLifecycle) : null;
-		if (!status) return null;
+		const answer = parseUserOpStatus(JSON.stringify(res.result));
+		if (!answer) return null;
+		// The executor's own words go to the log line that names a refusal;
+		// nothing decides on them.
+		const detail = (res.result as { last_executor_error?: unknown }).last_executor_error;
 		return {
-			status,
-			stage:
-				typeof result.last_executor_stage === 'string' ? result.last_executor_stage : undefined,
-			detail:
-				typeof result.last_executor_error === 'string' ? result.last_executor_error : undefined
+			status: answer.status,
+			stage: answer.stage ?? undefined,
+			detail: typeof detail === 'string' ? detail : undefined,
+			txHash: answer.tx_hash ?? undefined
 		};
 	} catch {
 		return null;

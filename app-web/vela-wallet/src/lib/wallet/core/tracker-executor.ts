@@ -41,6 +41,7 @@
 import { loadTransactions, updateTransactions } from '$lib/services/records';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { pollUserOpStatus, requestUserOpReceipt } from '$lib/services/tx-reconciler';
+import { rpcCall } from '$lib/services/rpc-adapter';
 
 import type { TrackLifecycle } from '$lib/core/generated/TrackLifecycle';
 import type { TrackPendingRecord } from '$lib/core/generated/TrackPendingRecord';
@@ -109,10 +110,73 @@ function toPendingRecords(txs: LocalTransaction[]): TrackPendingRecord[] {
 			user_op_hash: tx.userOpHash,
 			chain_id: tx.chainId,
 			// Stored in SECONDS; the core measures every deadline in epoch ms.
-			submitted_at_ms: tx.timestamp * 1000
+			submitted_at_ms: tx.timestamp * 1000,
+			// Spec 082 T182: a may-have-been-sent op stays one across a reload —
+			// its MaybeSent outcome, its NotSent end and its find-event. A row
+			// from before 082 has neither field: `false` / unknown.
+			maybe_sent: tx.maybeSent === true,
+			submit_block: asBlock(tx.submitBlock)
 		});
 	}
 	return records;
+}
+
+/** A stored block number the core's `u64` can take, else unknown. */
+function asBlock(value: unknown): number | null {
+	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/** `eth_blockNumber`'s hex quantity, or `null` for anything else. */
+function blockOf(result: unknown): number | null {
+	if (typeof result !== 'string' || !/^0x[0-9a-fA-F]+$/.test(result)) return null;
+	return asBlock(Number.parseInt(result, 16));
+}
+
+/** The chain head through the pool, or `null` when no node answered it. */
+async function readHead(chainId: number): Promise<number | null> {
+	try {
+		const response = await rpcCall('eth_blockNumber', [], chainId);
+		return response.error ? null : blockOf(response.result);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * The relay-independent landing check's one read (spec 082 ruling 8): the op's
+ * own `UserOperationEvent` in a bounded window, through the pool, answered AS
+ * IT CAME. A result is `logs_json`; a JSON-RPC error — a range limit the pool
+ * now hands back instead of banning the endpoint (T180) — is `error_json`; a
+ * pool that reached nobody is neither. Whether an error is a range limit is
+ * the core's call (`rpc_pool::is_log_range_error`), never this file's.
+ */
+async function findOpEvent(
+	operation: Extract<TrackEffect['operation'], { type: 'find_op_event' }>
+): Promise<{ logs_json: string | null; error_json: string | null; head_block: number | null }> {
+	const toHex = (block: number) => '0x' + block.toString(16);
+	const logs =
+		operation.from_block === null
+			? Promise.resolve({ logs_json: null, error_json: null })
+			: rpcCall(
+					'eth_getLogs',
+					[
+						{
+							address: operation.entry_point,
+							topics: [operation.topic0, operation.user_op_hash],
+							fromBlock: toHex(operation.from_block),
+							toBlock: toHex(operation.to_block ?? operation.from_block)
+						}
+					],
+					operation.chain_id
+				).then(
+					(response) =>
+						response.error
+							? { logs_json: null, error_json: JSON.stringify(response.error) }
+							: { logs_json: JSON.stringify(response.result ?? null), error_json: null },
+					() => ({ logs_json: null, error_json: null })
+				);
+	const [found, head_block] = await Promise.all([logs, readHead(operation.chain_id)]);
+	return { ...found, head_block };
 }
 
 export function createTxTrackerExecutor(ports: TrackShellPorts) {
@@ -197,7 +261,9 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 					user_op_hash: hash,
 					status: status.status as TrackLifecycle,
 					stage: status.stage ?? null,
-					now_ms
+					now_ms,
+					// The relay's bundle tx — an explorer link while no receipt has.
+					tx_hash: status.txHash ?? null
 				};
 			}
 
@@ -230,10 +296,12 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 
 			case 'notify_confirmed': {
 				const hash = normalize(operation.user_op_hash);
-				// The balances moved: the hero refetches (issue 188). First, and
-				// unconditionally — the auto-add below may take a store read, and
-				// the figure is the part the person is waiting on.
-				ports.confirmed(operation.chain_id);
+				// The balance read is `holdings_moved`'s now (spec 082 RE8): the
+				// core asks for it after a confirmation AND after a failed op that
+				// spent gas, and never for one that did not land. A confirmation
+				// the find-event saw on chain has no receipt poll behind it, so it
+				// has no logs here — and no auto-add: token_trust is never handed
+				// anything but a receipt's own logs.
 				const logs = logsByHash.get(hash);
 				logsByHash.delete(hash);
 				if (logs && logs.length > 0) {
@@ -242,6 +310,22 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 				}
 				fromByHash.delete(hash);
 				return { type: 'notified' };
+			}
+
+			case 'holdings_moved':
+				// An op of ours landed on this chain — confirmed, or failed with
+				// gas spent. The hero refetches past the token cache (issue 188).
+				ports.confirmed(operation.chain_id);
+				return { type: 'notified' };
+
+			case 'find_op_event': {
+				const found = await findOpEvent(operation);
+				return {
+					type: 'op_event',
+					user_op_hash: normalize(operation.user_op_hash),
+					now_ms: Date.now(),
+					...found
+				};
 			}
 		}
 	}
@@ -277,7 +361,18 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 				// patch-pending state — and the feed is told nothing changed.
 				return { type: 'records_patched' };
 			case 'notify_confirmed':
+			case 'holdings_moved':
 				return { type: 'notified' };
+			case 'find_op_event':
+				// No answer: the core reads the same window on the next tick.
+				return {
+					type: 'op_event',
+					user_op_hash: normalize(operation.user_op_hash),
+					now_ms,
+					logs_json: null,
+					error_json: null,
+					head_block: null
+				};
 		}
 	}
 

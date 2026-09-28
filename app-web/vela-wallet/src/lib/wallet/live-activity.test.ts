@@ -26,6 +26,9 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		day_start_ms: 0,
 		tx_hash: '0xabc',
 		batch: null,
+		kind: partial.direction === 'in' ? 'receive' : 'send',
+		status: 'confirmed',
+		site: null,
 		...partial
 	};
 }
@@ -117,7 +120,9 @@ describe('liveActivityGroups', () => {
 			],
 			transactions: [],
 			new_item_id: null,
-			toast: null
+			toast: null,
+			history_empty_key: 'history.emptyTitle',
+			home_empty_key: 'home.emptyNoActivity'
 		};
 		const groups = liveActivityGroups(view, m, false);
 		expect(groups.map((g) => [g.label, g.rows.length])).toEqual([

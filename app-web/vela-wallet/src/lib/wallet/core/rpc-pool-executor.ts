@@ -87,6 +87,11 @@ async function post(
 ): Promise<PostResult> {
 	const controller = new AbortController();
 	let timedOut = false;
+	// Spec 082 RA1: `fetch` cannot tell a refused connection from a reply lost
+	// after the request went out, so a thrown fetch is `network` — "it may have
+	// arrived". The one fact the browser does give is that it is offline:
+	// then nothing can have left, and the call is `not_connected`.
+	const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
 	const timer = setTimeout(() => {
 		timedOut = true;
 		controller.abort();
@@ -114,7 +119,7 @@ async function post(
 			: null;
 		return { outcome: { type: 'response', error }, body };
 	} catch {
-		return { outcome: { type: timedOut ? 'timeout' : 'network' } };
+		return { outcome: { type: offline ? 'not_connected' : timedOut ? 'timeout' : 'network' } };
 	} finally {
 		clearTimeout(timer);
 	}

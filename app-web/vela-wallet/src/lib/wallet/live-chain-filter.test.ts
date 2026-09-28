@@ -69,7 +69,10 @@ function item(id: string, chain_id: number): FeedItem {
 		timestamp: 1_700_000_000,
 		day_start_ms: 0,
 		tx_hash: '0xabc',
-		batch: null
+		batch: null,
+		kind: 'receive',
+		status: 'confirmed',
+		site: null
 	};
 }
 
@@ -79,6 +82,8 @@ const FEED: FeedView = {
 	transactions: [],
 	new_item_id: null,
 	toast: null,
+	history_empty_key: 'history.emptyTitle',
+	home_empty_key: 'home.emptyNoActivity',
 	rows: [
 		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
 		{ type: 'item', item: item('a', 1) },

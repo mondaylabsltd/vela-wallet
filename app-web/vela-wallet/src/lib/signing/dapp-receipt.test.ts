@@ -177,6 +177,7 @@ describe("the receipt reads the tracker's entry", () => {
 			polling: true,
 			submitted_at_ms: 1_000,
 			outcome: 'landing',
+			relay_tx_hash: null,
 			...over
 		};
 	}

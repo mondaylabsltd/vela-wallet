@@ -62,6 +62,9 @@ function item(id: string, partial: Partial<FeedItem> = {}): FeedItem {
 		day_start_ms: 0,
 		tx_hash: '0x' + 'c3'.repeat(32),
 		batch: null,
+		kind: partial.direction === 'in' ? 'receive' : 'send',
+		status: 'confirmed',
+		site: null,
 		...partial
 	};
 }
@@ -70,6 +73,8 @@ const FEED: FeedView = {
 	transactions: [],
 	new_item_id: null,
 	toast: null,
+	history_empty_key: 'history.emptyTitle',
+	home_empty_key: 'home.emptyNoActivity',
 	rows: [
 		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
 		{ type: 'item', item: item('a') },
@@ -243,7 +248,8 @@ describe('the status a transaction detail reports (issue 211)', () => {
 			day_start_ms: 0,
 			status,
 			kind: 'send',
-			usd: null
+			usd: null,
+			dapp_origin: null
 		};
 	}
 

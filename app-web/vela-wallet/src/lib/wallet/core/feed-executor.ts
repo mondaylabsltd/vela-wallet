@@ -92,7 +92,10 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 		day_start_ms: dayStartMs(timestamp),
 		status: STATUSES.includes(tx.status) ? tx.status : 'confirmed',
 		kind: (rawKind as FeedTxKind | undefined) ?? null,
-		usd: typeof tx.usd === 'string' ? tx.usd : null
+		usd: typeof tx.usd === 'string' ? tx.usd : null,
+		// The site that asked, for a dApp transaction (spec 082 RG1): the core
+		// names the row's site from it; every other kind carries none.
+		dapp_origin: typeof tx.dappOrigin === 'string' && tx.dappOrigin ? tx.dappOrigin : null
 	};
 }
 

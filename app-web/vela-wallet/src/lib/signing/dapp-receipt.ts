@@ -166,6 +166,7 @@ export function landingFromEntry(
 				: { kind: 'submitted', opHash };
 		case 'dropped':
 		case 'rejected':
+		case 'not_sent':
 			return { kind: 'failed', opHash };
 		case 'pending':
 		case 'fee_held':
@@ -177,6 +178,7 @@ export function landingFromEntry(
 				case 'unknown':
 					return { kind: 'unknown', opHash };
 				case 'landing':
+				case 'maybe_sent':
 				case 'final':
 					return { kind: 'submitted', opHash };
 			}
