@@ -349,7 +349,9 @@ pub struct SignRecord {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum SignRecordClose {
-    Confirmed { tx_hash: String },
+    Confirmed {
+        tx_hash: String,
+    },
     Failed,
     /// The relay accepted the write-ahead record's op (spec 082 RJ1): the
     /// record's `maybeSent` becomes false and it stays pending — only the
@@ -508,9 +510,7 @@ pub enum SignSubmitOutcome {
     /// reverted (owner ruling 9: the page gets its tx hash, the sheet and
     /// Activity say it failed); batch: the userOpHash; signatures: the
     /// EIP-1271 signature hex.
-    Succeeded {
-        result: String,
-    },
+    Succeeded { result: String },
     /// The bundler accepted the op but its receipt did not arrive inside the
     /// shell's wait (~120 s). The page is still answered — with the op hash,
     /// since a dApp expects SOME hash — but nothing is known to have landed,
@@ -520,9 +520,7 @@ pub enum SignSubmitOutcome {
     /// bundler forever while its record claimed "confirmed"). The core never
     /// tries to tell a tx hash from an op hash — both are 32-byte hex — so
     /// the shell must say which one it holds.
-    ReceiptPending {
-        user_op_hash: String,
-    },
+    ReceiptPending { user_op_hash: String },
     /// User dismissed the passkey sheet — never an error, never a response
     /// (`dapp-connection.tsx:808-812`).
     PasskeyCancelled,
@@ -981,6 +979,16 @@ pub fn ending_state(ending: &SignEnding, track: Option<&TrackEntryView>) -> Sign
     match entry.status {
         TrackStatus::Confirmed => SignEndingState::Confirmed { tx_hash: tx_hash() },
         TrackStatus::Dropped => SignEndingState::Reverted { tx_hash: tx_hash() },
+        // A landed answer holds a tx hash (a receipt, or the tracker's own
+        // verdict): "never sent" / "refused" against it can only be stale —
+        // reached while the POST was still out — and would say "send it
+        // again" over money that moved. It follows the tracker to its real
+        // verdict (082 round-2 review, DX6's rule for the other two words).
+        TrackStatus::NotSent | TrackStatus::Rejected if landed => SignEndingState::Following {
+            user_op_hash: op,
+            outcome: TrackOutcome::Landing,
+            fee_held: false,
+        },
         TrackStatus::NotSent => SignEndingState::NotSent,
         TrackStatus::Rejected => SignEndingState::Refused,
         TrackStatus::Pending
@@ -1088,6 +1096,10 @@ struct Inflight {
     /// The record written ahead of the POST (spec 082 RJ1), until the
     /// relay's verdict (`OpSubmitted`) or a proven "not sent" withdraws it.
     write_ahead: Option<WriteAhead>,
+    /// `OpSubmitted` said the relay took the op (`maybe_sent: false`): the
+    /// tracker's `NotSent` — a verdict on an op the relay never showed it
+    /// holds — can only be stale for it (082 round-2 review).
+    accepted: bool,
 }
 
 /// The write-ahead record of one submit (RJ1).
@@ -1463,7 +1475,12 @@ impl App for SignRequest {
                 render()
             }
             Event::ShellCompleted { attempt, result } => {
-                if attempt != model.attempt {
+                // The account switch belongs to the request that asked for
+                // it, never to a pipeline: a pipeline killed or answered early
+                // (the attempt moving on) must not strand a newer request's
+                // switch ack, or that request stays `reconcile_pending` and
+                // can never be approved (082 round-2 review).
+                if attempt != model.attempt && !matches!(result, SignShellResult::AccountSwitched) {
                     // A result from a rejected pipeline (BUG-2): the 4001 is
                     // out, nothing may still submit or answer this id.
                     return Command::done();
@@ -2108,6 +2125,7 @@ fn approve_with(
         op_hash: None,
         ceremony: Ceremony::NotYet,
         write_ahead: None,
+        accepted: false,
     });
 
     if matches!(
@@ -2520,6 +2538,7 @@ fn on_op_submitted(
         let chain_id = match model.inflight.as_mut() {
             Some(fl) => {
                 fl.ceremony = Ceremony::Done;
+                fl.accepted = !maybe_sent;
                 fl.chain_id
             }
             None => return Command::done(),
@@ -2558,11 +2577,18 @@ fn on_op_submitted(
         };
         fl.op_hash = Some(user_op_hash.clone());
         fl.record_id = Some(record_id.clone());
+        fl.accepted = !maybe_sent;
         // Whatever the shell said about the prompt, an op on its way to the
         // relay has been signed (RA9).
         fl.ceremony = Ceremony::Done;
         (
-            pending_tx_record(fl, &record_id, &user_op_hash, now_ms, (maybe_sent, submit_block)),
+            pending_tx_record(
+                fl,
+                &record_id,
+                &user_op_hash,
+                now_ms,
+                (maybe_sent, submit_block),
+            ),
             fl.chain_id,
         )
     };
@@ -2627,6 +2653,11 @@ fn on_op_tracked(
             ),
             Some(true),
         ),
+        // Stale for an op the relay accepted: the tracker reached it before
+        // it learned `admitted` (a verdict while the POST was still out). The
+        // tracker's own verdict follows; "nothing was sent" never answers an
+        // op on its way (082 round-2 review).
+        (TrackStatus::NotSent, _) if fl.accepted => return Command::done(),
         (TrackStatus::NotSent, _) => (
             err_payload(
                 CODE_INTERNAL,
