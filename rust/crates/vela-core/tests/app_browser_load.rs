@@ -35,7 +35,7 @@ fn android_codes_map_to_their_class() {
 #[test]
 fn webview2_statuses_map_to_their_class() {
     for (code, want) in [
-        (0, C::Other),  // UNKNOWN
+        (0, C::Other), // UNKNOWN
         (1, C::Certificate),
         (2, C::Certificate),
         (3, C::Certificate),
@@ -55,15 +55,26 @@ fn webview2_statuses_map_to_their_class() {
         (18, C::Other),
         (99, C::Other),
     ] {
-        assert_eq!(class(P::WebView2, code, None), Some(want), "webview2 {code}");
+        assert_eq!(
+            class(P::WebView2, code, None),
+            Some(want),
+            "webview2 {code}"
+        );
     }
-    assert_eq!(class(P::WebView2, 14, None), None, "a replaced navigation is not a failure");
+    assert_eq!(
+        class(P::WebView2, 14, None),
+        None,
+        "a replaced navigation is not a failure"
+    );
     assert_eq!(class(P::WebView2, 8, None), class(P::Android, -1, None));
     for code in 1..=5 {
         let failure = classify(P::WebView2, code, None, false);
         assert!(failure.is_some_and(|f| !f.auto_retry && f.reason_key == "explore.loadCertificate"));
     }
-    assert_eq!(serde_json::to_string(&P::WebView2).ok().as_deref(), Some("\"webview2\""));
+    assert_eq!(
+        serde_json::to_string(&P::WebView2).ok().as_deref(),
+        Some("\"webview2\"")
+    );
 }
 
 #[test]

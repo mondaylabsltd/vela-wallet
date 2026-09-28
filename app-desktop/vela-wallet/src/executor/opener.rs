@@ -31,8 +31,9 @@ pub fn open(url: &str, cx: &mut gpui::App) {
 /// (community, feedback) go through [`open`] and keep their length: a
 /// prefilled issue form can be longer than the cap.
 pub fn open_from_page(url: &str, cx: &mut gpui::App) {
-    if let Some(value) = command_value(url) {
-        open(&value, cx);
+    match command_value(url) {
+        Some(value) => open(&value, cx),
+        None => eprintln!("[vela-wallet] opener: an address too long to hand over was refused"),
     }
 }
 
@@ -67,7 +68,14 @@ pub fn command_value(url: &str) -> Option<String> {
             let _ = write!(value, "%{byte:02X}");
         }
     }
-    (value.len() <= COMMAND_VALUE_MAX).then_some(value)
+    // The cap is for handing an address to another APP's command line. A web
+    // page opened in the person's browser keeps its length (083 review): a
+    // long dApp URL must still open there.
+    let web = ["https://", "http://"].iter().any(|scheme| {
+        url.get(..scheme.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(scheme))
+    });
+    (web || value.len() <= COMMAND_VALUE_MAX).then_some(value)
 }
 
 #[cfg(test)]
@@ -76,6 +84,19 @@ mod tests {
 
     /// 083: a page's quote or space never reaches a handler's command line
     /// as itself — the injection the engine's own launch escaped.
+    /// 083 review: a long web address still opens in the system browser,
+    /// escaped; only another app's command line has the cap.
+    #[test]
+    fn a_long_web_address_is_not_refused() {
+        let long = format!("https://app.example/{}", "a".repeat(3000));
+        assert_eq!(
+            command_value(&long).map(|value| value.len()),
+            Some(long.len())
+        );
+        let long_mail = format!("mailto:a@b.example?body={}", "a".repeat(3000));
+        assert_eq!(command_value(&long_mail), None);
+    }
+
     #[test]
     fn a_pages_address_is_escaped_before_another_program_sees_it() {
         assert_eq!(

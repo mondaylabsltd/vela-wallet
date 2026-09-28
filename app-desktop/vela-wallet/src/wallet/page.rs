@@ -12279,11 +12279,12 @@ impl WalletPage {
             );
         });
         match url {
+            // The tab on screen picked again is left alone (083 review): a
+            // navigation there reloaded the dApp, settled what it had asked
+            // (4900) and, on macOS, let Back cross into another tab.
+            Some(_) if same_tab && self.browsing => {}
             Some(url) => {
-                // The tab on screen picked again keeps its own history.
-                if !same_tab || !self.browsing {
-                    self.browser_tab_changes();
-                }
+                self.browser_tab_changes();
                 self.browsing = true;
                 self.browser_home = url.to_owned();
                 #[cfg(not(target_os = "linux"))]
@@ -12319,12 +12320,11 @@ impl WalletPage {
         match next {
             // The neighbour's page replaces this one, and its hello is what
             // retires the closed page's document in the core.
+            // Closing a tab behind the one on screen leaves that page alone —
+            // its document, its history and what it asked (083 review).
+            Some(_) if !was_shown && self.browsing => {}
             Some(url) => {
-                // Closing a tab behind the one on screen leaves that one's
-                // history as it was.
-                if was_shown || !self.browsing {
-                    self.browser_tab_changes();
-                }
+                self.browser_tab_changes();
                 self.browsing = true;
                 self.browser_home = url.clone();
                 #[cfg(not(target_os = "linux"))]
