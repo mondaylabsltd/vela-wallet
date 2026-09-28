@@ -1257,37 +1257,17 @@ fun VelaNavHost(
                             onPageBack = { browser.back() },
                             onPageForward = { browser.forward() },
                             onPageReload = { browser.reload() },
-                            networkOptions = run {
-                                // Spec 079 (owner): each network's logo and what the
-                                // account holds on it — the home screen's own figures,
-                                // never fetched here, and nothing shown rather than 0.
-                                val money = WalletLive.Money.of(currency)
-                                val walletBalances = application.container.wallet.balances.value
-                                val heldUsd = walletBalances.tokens
-                                    .filter { !it.spam && it.price_usd != null && it.chain_id !in walletBalances.failed_chain_ids }
-                                    .groupBy { it.chain_id }
-                                    .mapValues { (_, rows) -> rows.sumOf { (it.balance.toDoubleOrNull() ?: 0.0) * (it.price_usd ?: 0.0) } }
-                                networks.networks.map { n ->
-                                    val chain = n.chain_id.toInt()
-                                    app.getvela.wallet.feature.explore.components.PickerOption(
-                                        id = n.chain_id.toString(),
-                                        label = chainNames[chain] ?: n.chain_id.toString(),
-                                        selected = chain == siteChain,
-                                        logoUrl = app.getvela.wallet.core.marks.Marks.chainLogoUrl(chain),
-                                        amount = heldUsd[chain]?.takeIf { it >= 0.005 && !walletBalances.hidden }?.let(money::fiat),
-                                    )
-                                }
-                            },
+                            // Spec 079 (owner): each network's logo and what the
+                            // account holds on it; each account's identicon.
+                            networkOptions = app.getvela.wallet.feature.browser.ExploreLive.networkOptions(
+                                networks = networks.networks,
+                                names = chainNames,
+                                siteChain = siteChain,
+                                balances = application.container.wallet.balances.value,
+                                fiat = WalletLive.Money.of(currency)::fiat,
+                            ),
                             onPickNetwork = { id -> id.toIntOrNull()?.let(browser::pickSiteChain) },
-                            accountOptions = session.accounts.map { row ->
-                                app.getvela.wallet.feature.explore.components.PickerOption(
-                                    id = row.index.toString(),
-                                    label = row.name.ifBlank { app.getvela.wallet.feature.browser.ExploreLive.shortAddress(row.address) },
-                                    detail = app.getvela.wallet.feature.browser.ExploreLive.shortAddress(row.address),
-                                    selected = row.address.equals(session.address, ignoreCase = true),
-                                    identiconSeed = row.address,
-                                )
-                            },
+                            accountOptions = app.getvela.wallet.feature.browser.ExploreLive.accountOptions(session.accounts, session.address),
                             // Every connected site follows the wallet's account (the
                             // core re-pins each grant and tells the pages).
                             onPickAccount = { id -> id.toIntOrNull()?.let { index -> application.container.session.switchAccount(index) } },

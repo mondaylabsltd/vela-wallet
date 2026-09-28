@@ -79,6 +79,59 @@ object ExploreLive {
     )
 
     /**
+     * What the account holds on each chain, in dollars (spec 079, owner: "需要能看到
+     * 这个网络上的余额") — the home screen's own figures, never fetched here. A
+     * chain whose read failed and a token with no price count for nothing.
+     */
+    fun heldUsdByChain(balances: app.getvela.wallet.feature.wallet.core.BalanceView): Map<Int, Double> =
+        balances.tokens
+            .filter { !it.spam && it.price_usd != null && it.chain_id !in balances.failed_chain_ids }
+            .groupBy { it.chain_id }
+            .mapValues { (_, rows) -> rows.sumOf { (it.balance.toDoubleOrNull() ?: 0.0) * (it.price_usd ?: 0.0) } }
+
+    /**
+     * The connection panel's network rows (spec 079): each with its logo and the
+     * account's balance there — nothing rather than a zero or a figure the person
+     * chose to hide.
+     */
+    fun networkOptions(
+        networks: List<app.getvela.wallet.feature.settings.core.NetNetworkRow>,
+        names: Map<Int, String>,
+        siteChain: Int,
+        balances: app.getvela.wallet.feature.wallet.core.BalanceView,
+        fiat: (Double) -> String,
+    ): List<app.getvela.wallet.feature.explore.components.PickerOption> {
+        val held = heldUsdByChain(balances)
+        return networks.map { n ->
+            val chain = n.chain_id.toInt()
+            app.getvela.wallet.feature.explore.components.PickerOption(
+                id = n.chain_id.toString(),
+                label = names[chain] ?: n.chain_id.toString(),
+                selected = chain == siteChain,
+                logoUrl = app.getvela.wallet.core.marks.Marks.chainLogoUrl(chain),
+                amount = held[chain]?.takeIf { it >= MIN_SHOWN_USD && !balances.hidden }?.let(fiat),
+            )
+        }
+    }
+
+    /** The account rows (spec 079): each account's identicon, from its address. */
+    fun accountOptions(
+        accounts: List<app.getvela.wallet.feature.onboarding.core.SessionAccountRow>,
+        active: String,
+    ): List<app.getvela.wallet.feature.explore.components.PickerOption> = accounts.map { row ->
+        app.getvela.wallet.feature.explore.components.PickerOption(
+            id = row.index.toString(),
+            label = row.name.ifBlank { shortAddress(row.address) },
+            detail = shortAddress(row.address),
+            selected = row.address.equals(active, ignoreCase = true),
+            identiconSeed = row.address,
+        )
+    }
+
+    /** Below half a cent the row says nothing: dust is not a balance worth reading. */
+    private const val MIN_SHOWN_USD = 0.005
+
+    /**
      * The page's chain could not be reached (spec 079): the pool failed it on
      * its last try, and not because the endpoint is merely busy — a
      * rate-limited chain keeps quiet everywhere (the pool's invariant ④).

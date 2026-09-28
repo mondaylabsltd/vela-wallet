@@ -77,6 +77,29 @@ class SigningReceiptTest {
     }
 
     @Test
+    fun `a failed quote is asked again only until the approval`() {
+        val open = SignView(surface = SignSurface.Sheet)
+        assertTrue(app.getvela.wallet.feature.signing.core.SigningController.mayRequote(open, answered = false))
+        for (after in listOf(open.copy(is_signing = true), open.copy(is_submitting = true), open.copy(pending_op_hash = op), SignView(surface = SignSurface.Hidden))) {
+            assertTrue("no re-quote once approved or closed: $after", !app.getvela.wallet.feature.signing.core.SigningController.mayRequote(after, answered = false))
+        }
+        assertTrue(!app.getvela.wallet.feature.signing.core.SigningController.mayRequote(open, answered = true))
+    }
+
+    @Test
+    fun `a site whose name is its host says it once`() {
+        val drawn = app.getvela.wallet.feature.signing.SigningFixtures.build(app.getvela.wallet.feature.signing.SigningScreenState.CS1, strings)
+        val request = app.getvela.wallet.feature.signing.core.IncomingRequest("r1", "personal_sign", "[\"0x48\",\"0x88cCA0EeDbF2C4426110bbFc998F048689266894\"]", "http://127.0.0.1:8137", "tab-1", 100)
+        val model = SigningLive.model(
+            drawn, request, SignView(surface = SignSurface.Sheet),
+            app.getvela.wallet.feature.signing.core.ClearSigningView(), app.getvela.wallet.feature.signing.core.GuardView(),
+            app.getvela.wallet.feature.send.core.FeeView(confirm_fee_ready = true), ctx,
+        )
+        assertEquals("127.0.0.1:8137", model.dappName)
+        assertEquals("", model.dappHost)
+    }
+
+    @Test
     fun `a request not yet approved has no receipt`() {
         assertNull(SigningLive.receipt(SignView(surface = SignSurface.Sheet), blocks, ctx))
     }

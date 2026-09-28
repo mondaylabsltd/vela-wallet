@@ -65,7 +65,8 @@ class SigningLiveTest {
         assertEquals("0.001", amount.line.value)
         assertEquals("XDAI", amount.line.symbol)
         assertEquals(founder, model.blocks.filterIsInstance<SigningBlock.Party>().single().address)
-        assertEquals("127.0.0.1:8137", model.dappHost)
+        assertEquals("127.0.0.1:8137", model.dappName)
+        assertEquals("the host is said once, as the name (spec 079 F14)", "", model.dappHost)
         assertEquals(strings.t("componentsUi.signing.confirmSend"), model.confirmAction)
         assertTrue(model.confirmEnabled)
     }

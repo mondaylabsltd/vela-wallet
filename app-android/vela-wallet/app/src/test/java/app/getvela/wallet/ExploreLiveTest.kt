@@ -138,6 +138,42 @@ class ExploreLiveTest {
         assertNull(model.tabs.first { it.id == "t2" }.snapshot)
     }
 
+    /** Spec 079 (owner): network rows carry a logo and the home screen's balance, never a zero; accounts their identicon. */
+    @Test
+    fun `network rows carry a logo and what the account holds, accounts their identicon`() {
+        val nets = listOf(100L, 56L, 1L, 42161L).map { app.getvela.wallet.feature.settings.core.NetNetworkRow(id = it.toString(), chain_id = it, display_name = "", native_symbol = "") }
+        fun token(chain: Int, balance: String, price: Double?, spam: Boolean = false) =
+            app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = chain, symbol = "T", name = "T", balance = balance, decimals = 18, price_usd = price, spam = spam)
+        val balances = app.getvela.wallet.feature.wallet.core.BalanceView(
+            tokens = listOf(
+                token(100, "2.5", 1.0), token(100, "1000", 1.0, spam = true),
+                token(56, "0.001", 1.0),
+                token(42161, "3", 2000.0),
+            ),
+            failed_chain_ids = listOf(42161),
+        )
+        val rows = ExploreLive.networkOptions(nets, mapOf(100 to "Gnosis", 56 to "BNB Chain", 1 to "Ethereum"), siteChain = 100, balances = balances, fiat = { "$" + "%.2f".format(it) })
+        val gnosis = rows.first { it.id == "100" }
+        assertEquals("Gnosis", gnosis.label)
+        assertTrue(gnosis.selected)
+        // The logo host is configured at runtime; here it may be unset, so the
+        // row must carry exactly what the marks helper names for that chain.
+        assertEquals(app.getvela.wallet.core.marks.Marks.chainLogoUrl(100), gnosis.logoUrl)
+        assertEquals("spam never counts", "$2.50", gnosis.amount)
+        assertNull("dust says nothing", rows.first { it.id == "56" }.amount)
+        assertNull("nothing held says nothing, never 0", rows.first { it.id == "1" }.amount)
+        assertNull("a chain whose read failed says nothing", rows.first { it.id == "42161" }.amount)
+        assertNull("hidden balances stay hidden", ExploreLive.networkOptions(nets, emptyMap(), 100, balances.copy(hidden = true)) { "x" }.first { it.id == "100" }.amount)
+
+        val accounts = ExploreLive.accountOptions(
+            listOf(app.getvela.wallet.feature.onboarding.core.SessionAccountRow(0, "Main", "0x88cCA0EeDbF2C4426110bbFc998F048689266894"), app.getvela.wallet.feature.onboarding.core.SessionAccountRow(1, "", "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141")),
+            active = "0x76875E38FC6BC2DEDCAED807CE00782DB5C0D141",
+        )
+        assertEquals("0x88cCA0EeDbF2C4426110bbFc998F048689266894", accounts[0].identiconSeed)
+        assertTrue(accounts[1].selected)
+        assertEquals(ExploreLive.shortAddress("0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"), accounts[1].label)
+    }
+
     @Test
     fun `nothing remembered is the empty start page`() {
         val model = ExploreLive.home(fallback, ExploreView(ready = true), BhistView(), null, strings)

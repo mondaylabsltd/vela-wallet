@@ -335,14 +335,12 @@ class SigningController(
                         return@collect
                     }
                     if (fee.busy || pending?.isActive == true) return@collect
-                    val view = signHost.view.value
-                    if (view.surface != SignSurface.Sheet || view.is_signing || view.is_submitting || answered) return@collect
+                    if (!mayRequote(signHost.view.value, answered)) return@collect
                     attempt += 1
                     val wait = uniffi.vela_core_uniffi.feeRequoteDelayMs(feeFailureWire(failure), attempt.toUInt()) ?: return@collect
                     pending = scope.launch {
                         kotlinx.coroutines.delay(wait.toLong())
-                        val now = signHost.view.value
-                        if (this@SigningController.fee.value.failed != null && !answered && !now.is_signing && !now.is_submitting) {
+                        if (this@SigningController.fee.value.failed != null && mayRequote(signHost.view.value, answered)) {
                             speedControl.refresh()
                         }
                     }
@@ -429,6 +427,14 @@ class SigningController(
     fun guardGrant() = guardHost.dispatch(GuardEvent.GrantDeliberatelyChosen, GuardEvent.serializer())
 
     companion object {
+        /**
+         * Spec 079: a failed quote is asked again only while the sheet is up and
+         * nothing has been approved — not signing, not submitting, not submitted,
+         * and the page not yet answered.
+         */
+        fun mayRequote(view: SignView, answered: Boolean): Boolean =
+            view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting && view.pending_op_hash == null && !answered
+
         /** What the confirm slides into: the fee as quoted, the guard's rewrite, the intent (the desktop's `approve_opts`). */
         fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView): SignApproveOpts = SignApproveOpts(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,

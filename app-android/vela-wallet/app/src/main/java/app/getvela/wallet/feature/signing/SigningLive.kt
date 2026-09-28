@@ -248,9 +248,11 @@ object SigningLive {
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.
         val own = request.transportId == WALLET_TRANSPORT
+        val name = if (own) "Vela Wallet" else host
         return fallback.copy(
-            dappName = if (own) "Vela Wallet" else host,
-            dappHost = if (own) "" else host,
+            dappName = name,
+            // A site whose name IS its host says it once (spec 079 F14).
+            dappHost = host.takeUnless { own || it == name }.orEmpty(),
             dappLetter = ExploreLive.letterOf(host),
             dappTint = ExploreLive.tintOf(host),
             dappOwn = own,
