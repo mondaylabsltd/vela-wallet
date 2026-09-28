@@ -241,6 +241,14 @@ fun SigningSheetContent(
         val action = model.confirmAction
         if (waiting != null) {
             TrustedSignerWaiting(waiting, onReopen = onTrustedSignerReopen, onCancel = onTrustedSignerCancel)
+        } else if (hint != null && action != null && model.confirmAsButton) {
+            // Spec 079: one slide per signature — the page's own.
+            app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(
+                text = model.confirmButtonLabel,
+                onClick = onConfirm,
+                enabled = model.confirmEnabled,
+                modifier = Modifier.fillMaxWidth(),
+            )
         } else if (hint != null && action != null) {
             SlideToConfirm(
                 hint = hint,

@@ -71,6 +71,8 @@ object SigningLive {
         val track: app.getvela.wallet.feature.send.core.TrackEntryView? = null,
         /** Spec 079: the chain's usual inclusion time (the core's table), for the receipt's ring. */
         val typicalS: Int? = null,
+        /** Spec 079: this account signs on the Trusted Signer's page — its slide is the one consent. */
+        val trustedSignerRoute: Boolean = false,
     )
 
     /** The transport of a request the WALLET made of itself (`VelaWalletApplication`). */
@@ -269,6 +271,8 @@ object SigningLive {
             signerName = ctx.walletName,
             signerSeed = ctx.walletAddress,
             confirmHint = if (refused) null else s.s("slideToConfirm"),
+            confirmAsButton = !refused && ctx.trustedSignerRoute,
+            confirmButtonLabel = s.s("openSigner"),
             confirmAction = if (refused) null else confirmLabel(clear, s),
             confirmEnabled = !refused && confirmEnabled(sign, guard, fee, clear, speed),
             panelTitle = s.s("signatureRequest"),

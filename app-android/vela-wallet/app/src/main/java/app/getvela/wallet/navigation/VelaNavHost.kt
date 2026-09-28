@@ -679,6 +679,7 @@ fun VelaNavHost(
                     val signSim by controller.sim.collectAsStateWithLifecycle()
                     val signRequest by controller.request.collectAsStateWithLifecycle()
                     val feeOpen by controller.feeOpen.collectAsStateWithLifecycle()
+                    val trustedSignerRoute by controller.trustedSignerRoute.collectAsStateWithLifecycle()
                     val signChain = signRequest?.chainId ?: 0
                     val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
                         strings = strings,
@@ -696,6 +697,7 @@ fun VelaNavHost(
                         explorerUrl = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.explorer_url,
                         track = signView.pending_op_hash?.let { op -> trackView.entries.firstOrNull { it.user_op_hash.equals(op, ignoreCase = true) } },
                         typicalS = uniffi.vela_core_uniffi.networkTypicalInclusionS(signChain.toUInt())?.toInt(),
+                        trustedSignerRoute = trustedSignerRoute,
                     )
                     signRequest?.let { request ->
                         if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
@@ -1273,6 +1275,7 @@ fun VelaNavHost(
                             // Every connected site follows the wallet's account (the
                             // core re-pins each grant and tells the pages).
                             onPickAccount = { id -> id.toIntOrNull()?.let { index -> application.container.session.switchAccount(index) } },
+                            signingOpen = signingController != null,
                             live = app.getvela.wallet.feature.explore.ExploreCallbacks(
                                 onOpenSite = { url -> browser.open(url) },
                                 onTabOpen = { id -> browser.selectTab(id) },

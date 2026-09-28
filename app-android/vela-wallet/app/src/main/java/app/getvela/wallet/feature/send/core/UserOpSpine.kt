@@ -225,6 +225,7 @@ class UserOpSpine(
             trustedSignerRequest(
                 TrustedSignerInput(
                     method = asked.method, paramsJson = asked.paramsJson, origin = asked.origin,
+                    originSeenByBrowser = asked.seenByBrowser,
                     chainId = chainId.toUInt(), chainName = labels.chainName, nativeSymbol = labels.nativeSymbol,
                     account = account, accountName = labels.accountName,
                     credentialIdsHex = allowed.map { it.credentialId }, calls = emptyList(),
@@ -332,6 +333,7 @@ class UserOpSpine(
             trustedSignerRequest(
                 TrustedSignerInput(
                     method = intent?.method.orEmpty(), paramsJson = intent?.paramsJson ?: "[]", origin = intent?.origin.orEmpty(),
+                    originSeenByBrowser = intent?.seenByBrowser ?: false,
                     chainId = chainId.toUInt(), chainName = labels.chainName, nativeSymbol = labels.nativeSymbol,
                     account = account, accountName = labels.accountName,
                     credentialIdsHex = allowed.map { it.credentialId }, calls = calls,

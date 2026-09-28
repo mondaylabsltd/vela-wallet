@@ -45,6 +45,21 @@ class SigningReceiptTest {
         TrackEntryView(user_op_hash = op, chain_id = 100, status = status, tx_hash = txHash, submitted_at_ms = 1.0, outcome = outcome)
 
     @Test
+    fun `an account that signs on the Trusted Signer's page gets a button, not a second slide`() {
+        val drawn = app.getvela.wallet.feature.signing.SigningFixtures.build(app.getvela.wallet.feature.signing.SigningScreenState.CS1, strings)
+        val request = app.getvela.wallet.feature.signing.core.IncomingRequest("r1", "personal_sign", "[\"0x48\",\"0x88cCA0EeDbF2C4426110bbFc998F048689266894\"]", "http://127.0.0.1:8137", "tab-1", 100)
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        val clear = app.getvela.wallet.feature.signing.core.ClearSigningView()
+        val guard = app.getvela.wallet.feature.signing.core.GuardView()
+        val fee = app.getvela.wallet.feature.send.core.FeeView(confirm_fee_ready = true)
+        val slide = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx)
+        assertTrue(!slide.confirmAsButton)
+        val button = SigningLive.model(drawn, request, sign, clear, guard, fee, ctx.copy(trustedSignerRoute = true))
+        assertTrue(button.confirmAsButton)
+        assertEquals(strings.t("componentsUi.signing.openSigner"), button.confirmButtonLabel)
+    }
+
+    @Test
     fun `a request not yet approved has no receipt`() {
         assertNull(SigningLive.receipt(SignView(surface = SignSurface.Sheet), blocks, ctx))
     }

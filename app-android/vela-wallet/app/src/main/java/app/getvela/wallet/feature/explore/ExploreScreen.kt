@@ -120,6 +120,12 @@ fun ExploreScreen(
     scanner: (@Composable (onUrl: (String) -> Unit, onClose: () -> Unit) -> Unit)? = null,
     /** The connection sheet's "Switch account" — the host's own switcher. */
     onSwitchAccount: (() -> Unit)? = null,
+    /**
+     * Spec 079: a page's signing request is up. The browser's own sheets give
+     * way to it rather than stack behind it (device-found: the connection
+     * panel sat under the signing sheet after an account switch).
+     */
+    signingOpen: Boolean = false,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -141,6 +147,12 @@ fun ExploreScreen(
     /** Which pick-one sheet is up over the connection panel: `"network"` or `"account"`. */
     var picker by remember { mutableStateOf<String?>(null) }
     val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(signingOpen) {
+        if (signingOpen) {
+            sheet = null
+            picker = null
+        }
+    }
     // Spec 070: system Back walks the page's own history first, then leaves
     // the page for the start page — it used to leave 探索 altogether. The
     // switcher goes back to where it came from. (Registered before the

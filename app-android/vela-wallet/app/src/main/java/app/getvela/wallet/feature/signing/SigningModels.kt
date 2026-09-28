@@ -260,6 +260,13 @@ data class SigningScreenModel(
     /** Spec 079: the ✕'s label — the sheet's one explicit close. */
     val closeLabel: String = "",
     /**
+     * Spec 079 (owner: one slide): the account signs on the Trusted Signer's
+     * page, whose slide is the consent — the sheet's action is a button that
+     * goes there ([confirmButtonLabel], "去签名页确认"), not a second slide.
+     */
+    val confirmAsButton: Boolean = false,
+    val confirmButtonLabel: String = "",
+    /**
      * Spec 079: once the person has approved, the sheet stops being a form and
      * shows this — the send receipt's own model and words, so a dApp
      * transaction and a send look the same while they land.

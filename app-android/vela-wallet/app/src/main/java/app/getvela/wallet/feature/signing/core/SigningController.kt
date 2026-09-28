@@ -136,8 +136,19 @@ class SigningController(
     private val _sim = MutableStateFlow<SimOutcome?>(null)
     val sim: StateFlow<SimOutcome?> = _sim
 
+    private val spine = UserOpSpine(relay, accounts, signer, measureCall, trustedSigner = trustedSigner)
+
+    /**
+     * Spec 079 (owner: one slide, not two): this account signs through the
+     * Trusted Signer's page, whose own slide is the consent — so the sheet
+     * offers a button that goes there instead of a second slide. Read once per
+     * request from the same route the spine will sign over.
+     */
+    private val _trustedSignerRoute = MutableStateFlow(false)
+    val trustedSignerRoute: StateFlow<Boolean> = _trustedSignerRoute
+
     private val signExecutor = SignExecutor(
-        spine = UserOpSpine(relay, accounts, signer, measureCall, trustedSigner = trustedSigner),
+        spine = spine,
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {
@@ -169,6 +180,8 @@ class SigningController(
         receiptWaitMs = receiptWaitMs,
         receiptPollMs = receiptPollMs,
         origin = { _request.value?.origin.orEmpty() },
+        // A page in this app's browser — never the wallet's own requests (the key backup).
+        originSeenByBrowser = { _request.value?.let { it.transportId != app.getvela.wallet.feature.signing.SigningLive.WALLET_TRANSPORT } ?: false },
     )
     private val clearExecutor = ClearExecutor(dataBase = { ports.dataBase() }, ethCall = { c, to, d -> ports.ethCall(c, to, d) })
     private val guardExecutor = GuardExecutor(ethCall = { c, to, d -> ports.ethCall(c, to, d).first })
@@ -258,6 +271,10 @@ class SigningController(
 
     fun open(request: IncomingRequest) {
         _request.value = request
+        scope.launch {
+            val first = runCatching { accounts.keysOf(wallet.address) }.getOrNull()?.firstOrNull() ?: return@launch
+            _trustedSignerRoute.value = runCatching { spine.routeFor(wallet.address, first).method == app.getvela.wallet.feature.onboarding.core.KeyMethod.TrustedSigner }.getOrDefault(false)
+        }
         // Each request starts at the stored default: a pick is one-shot.
         speedControl.reset()
         dispatchSign(SignEvent.NetworksChanged(knownChains()))
