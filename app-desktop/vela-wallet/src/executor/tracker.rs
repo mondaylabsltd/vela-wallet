@@ -332,6 +332,16 @@ impl Machine for TxTracker {
             }
 
             TrackOperation::Now => Answer::Now(TrackShellResult::Clock { now_ms: now_ms() }),
+
+            // Spec 082 RJ4: the bundle transaction the relay named. Answered
+            // with no receipt until T221 reads it through the chain pool.
+            TrackOperation::TxReceipt { user_op_hash, .. } => {
+                Answer::Now(TrackShellResult::TxReceipt {
+                    user_op_hash: user_op_hash.clone(),
+                    now_ms: now_ms(),
+                    receipt_json: None,
+                })
+            }
         }
     }
 }
@@ -503,6 +513,7 @@ pub fn submitted(handoff: Handoff, cx: &mut App) {
                 chain_id: handoff.chain_id,
                 maybe_sent: handoff.maybe_sent,
                 submit_block: handoff.submit_block,
+                admitted: false,
             },
             cx,
         );

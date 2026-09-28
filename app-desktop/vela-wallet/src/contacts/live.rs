@@ -477,6 +477,7 @@ mod tests {
                     kind: vela_core::app::activity_feed::FeedTxKind::Send,
                     status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
                     site: None,
+                    counterparty_role: Default::default(),
                 },
             }],
             ..host.view()
@@ -555,6 +556,7 @@ mod tests {
                 kind: vela_core::app::activity_feed::FeedTxKind::Receive,
                 status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
                 site: None,
+                counterparty_role: Default::default(),
             },
         };
         let feed = FeedView {

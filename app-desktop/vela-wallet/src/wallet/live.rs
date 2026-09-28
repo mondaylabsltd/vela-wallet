@@ -613,6 +613,7 @@ mod tests {
             kind: Some(vela_core::app::activity_feed::FeedTxKind::Receive),
             usd: None,
             dapp_origin: None,
+            call_data: None,
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -734,6 +735,7 @@ mod tests {
             },
             status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
             site: None,
+            counterparty_role: Default::default(),
         }
     }
 
@@ -801,6 +803,7 @@ mod tests {
             kind: Some(vela_core::app::activity_feed::FeedTxKind::DappTx),
             usd: None,
             dapp_origin: Some("http://127.0.0.1:8137".to_owned()),
+            call_data: None,
         }
     }
 
@@ -1357,6 +1360,7 @@ mod tests {
                         kind: vela_core::app::activity_feed::FeedTxKind::Receive,
                         status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
                         site: None,
+                        counterparty_role: Default::default(),
                     },
                 }],
                 ..host.view()

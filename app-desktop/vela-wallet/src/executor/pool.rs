@@ -838,6 +838,10 @@ fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Route
 static HEALTH: Mutex<NetHealth> = Mutex::new(NetHealth {
     misses: 0,
     online: true,
+    sources: Vec::new(),
+    unsourced: 0,
+    last_reach_ms: None,
+    run_started_ms: None,
 });
 /// Bumped on every "came back" edge. The browser reads it on its poll and
 /// retries a failed page (and the balances are invalidated right here), so no
@@ -874,7 +878,7 @@ fn feed_health(reached: bool) -> Option<NetEdge> {
     let Ok(mut health) = HEALTH.lock() else {
         return None;
     };
-    let (next, edge) = net_health_step(*health, reached);
+    let (next, edge) = net_health_step(health.clone(), reached, None, now_ms());
     *health = next;
     edge
 }

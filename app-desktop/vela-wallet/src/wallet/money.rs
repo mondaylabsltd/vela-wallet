@@ -750,6 +750,7 @@ impl SendHost {
                 chain_id,
                 maybe_sent,
                 submit_block,
+                admitted: _,
             } => {
                 self.tracked_hash = Some(user_op_hash.to_lowercase());
                 self.last_receipt = None;
@@ -1199,6 +1200,9 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
         FeeFailure::CalculationFailed => SendEstimateFailure::CalculationFailed,
         FeeFailure::EstimateFailed => SendEstimateFailure::EstimateFailed,
         FeeFailure::GasQuoteTooHigh => SendEstimateFailure::GasQuoteTooHigh,
+        // A chain read the quote needed got no answer (spec 082 RJ13): to the
+        // send machine, a quote that could not be had.
+        FeeFailure::ChainRead { .. } => SendEstimateFailure::QuoteUnavailable,
     }
 }
 

@@ -107,6 +107,7 @@ fn to_record(row: &Value) -> Option<FeedTxRecord> {
         // The site that asked, for a dApp transaction (spec 082 RG1) — the
         // stored `dappOrigin`, as `sign_request::persist_record` writes it.
         dapp_origin: optional("dappOrigin"),
+        call_data: None,
     })
 }
 

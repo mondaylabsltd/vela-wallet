@@ -640,6 +640,14 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
 
         SendOperation::TrackSubmitted { .. } => SendAnswer::Screen,
 
+        // Spec 082 RJ1, before T220 wires the write-ahead: nothing asks for
+        // these yet, and each is answered as the core expects.
+        SendOperation::ClearToPost { .. } => SendAnswer::Now(SendShellResult::PostCleared),
+        SendOperation::MarkAdmitted { .. } | SendOperation::DeleteTxRecords { .. } => {
+            SendAnswer::Now(SendShellResult::RecordsPersisted)
+        }
+        SendOperation::TrackWithdrawn { .. } => SendAnswer::Now(SendShellResult::TrackHandedOff),
+
         SendOperation::ResolveIdentity { address } => {
             let address = address.clone();
             SendAnswer::Blocking(Box::new(move || SendShellResult::IdentityResolved {
@@ -929,6 +937,7 @@ mod tests {
                 chain_id: 100,
                 maybe_sent: false,
                 submit_block: None,
+                admitted: false,
             },
             SendOperation::ShowAlert {
                 kind: vela_core::app::send::SendAlertKind::InvalidAddress,

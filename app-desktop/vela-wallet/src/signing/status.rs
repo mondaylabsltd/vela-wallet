@@ -281,7 +281,7 @@ fn drawn(
             out
         }
         // The relay refused it or never had it: nothing was sent.
-        SignEndingState::NotSent => {
+        SignEndingState::NotSent | SignEndingState::Refused => {
             captions.push(s.error_generic.clone());
             let mut out = receipt(
                 ReceiptStage::Failed,

@@ -4568,6 +4568,7 @@ mod tests {
                 kind: FeedTxKind::DappTx,
                 status: FeedTxStatus::Pending,
                 site: Some("127.0.0.1:8137".to_owned()),
+                counterparty_role: Default::default(),
             };
             let view = FeedView {
                 rows: vec![FeedRow::Item { item }],
@@ -4637,6 +4638,7 @@ mod tests {
                     vela_core::app::activity_feed::FeedTxStatus::Pending
                 },
                 site: None,
+                counterparty_role: Default::default(),
             };
             let view = FeedView {
                 rows: vec![
@@ -4670,6 +4672,7 @@ mod tests {
                     kind: None,
                     usd: None,
                     dapp_origin: None,
+                    call_data: None,
                 }],
                 ..host.view()
             };
@@ -5134,6 +5137,7 @@ mod tests {
             kind: vela_core::app::activity_feed::FeedTxKind::Receive,
             status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
             site: None,
+            counterparty_role: Default::default(),
         };
         let view = FeedView {
             rows: vec![

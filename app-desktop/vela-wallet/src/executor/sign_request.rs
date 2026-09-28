@@ -211,6 +211,22 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
             }))
         }
 
+        // Spec 082 RJ1: the write-ahead record is on disk — the submit may
+        // POST. Nothing asks for it before T219 wires the write-ahead.
+        SignOperation::ClearToPost { .. } => {
+            SignAnswer::Blocking(Box::new(|| SignShellResult::Responded))
+        }
+
+        // Spec 082 RJ1: a write-ahead record whose op is proven never sent.
+        SignOperation::DeleteRecord { record_id } => {
+            let record_id = record_id.clone();
+            SignAnswer::Blocking(Box::new(move || {
+                delete_record(&record_id);
+                crate::executor::tracker::records_written();
+                SignShellResult::RecordUpdated
+            }))
+        }
+
         SignOperation::UpdateRecord { record_id, close } => {
             let (record_id, close) = (record_id.clone(), close.clone());
             SignAnswer::Blocking(Box::new(move || {
@@ -356,6 +372,7 @@ fn sign_and_submit(
     let Some(calls) = calls_of(method, params_json) else {
         return SignSubmitOutcome::Failed {
             message: format!("{method} carried no transaction this wallet could read"),
+            refused: false,
         };
     };
 
@@ -455,6 +472,7 @@ fn sign_message(
     let Some(original) = message_hash(method, params_json) else {
         return SignSubmitOutcome::Failed {
             message: format!("{method} carried nothing this wallet could sign"),
+            refused: false,
         };
     };
     let mut sign = |challenge: &[u8]| {
@@ -668,13 +686,18 @@ fn submit_failure(
         }
         user_op::SubmitFailure::RelayerUnavailable => SignSubmitOutcome::Failed {
             message: "the relay could not be reached".to_owned(),
+            refused: false,
         },
         // Nothing left the device (spec 082 RA10): the dApp's -32603 carries
         // the core's fixed sentence, never the pool's "all endpoints failed".
         user_op::SubmitFailure::NotSent => SignSubmitOutcome::Failed {
             message: NOT_SENT_DAPP_DETAIL.to_owned(),
+            refused: false,
         },
-        user_op::SubmitFailure::Other(message) => SignSubmitOutcome::Failed { message },
+        user_op::SubmitFailure::Other(message) => SignSubmitOutcome::Failed {
+            message,
+            refused: false,
+        },
         // Nothing signed or sent for a page that has gone (RB2).
         user_op::SubmitFailure::AskerGone => SignSubmitOutcome::AskerGone,
     }
@@ -805,8 +828,25 @@ fn update_record(record_id: &str, close: &vela_core::app::sign_request::SignReco
             row["txHash"] = json!(tx_hash);
         }
         SignRecordClose::Failed => row["status"] = json!("failed"),
+        // Spec 082 RJ1: the relay took the written-ahead op. It stays
+        // pending — only the tracker closes it — and no longer "may have
+        // been sent".
+        SignRecordClose::Admitted => row["maybeSent"] = json!(false),
     }
     let _ = storage::write_value(TX_KEY, Value::Array(rows));
+}
+
+/// Remove a record whose op is proven never sent (spec 082 RJ1): the
+/// write-ahead wrote it before the POST, and nothing left the device.
+fn delete_record(record_id: &str) {
+    let Ok(Some(Value::Array(mut rows))) = storage::read_value(TX_KEY) else {
+        return;
+    };
+    let before = rows.len();
+    rows.retain(|row| row.get("id").and_then(Value::as_str) != Some(record_id));
+    if rows.len() != before {
+        let _ = storage::write_value(TX_KEY, Value::Array(rows));
+    }
 }
 
 /// The first element of a JSON-RPC params array, when it is an object.
