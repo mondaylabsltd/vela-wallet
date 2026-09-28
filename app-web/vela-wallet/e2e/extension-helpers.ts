@@ -14,11 +14,19 @@
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { chromium, type BrowserContext, type Page } from '@playwright/test';
 
 const APP_ROOT = join(import.meta.dirname, '..');
-export const EXTENSION_DIST = join(APP_ROOT, 'extension/dist');
+/**
+ * The package the suites load: `extension/dist`, or the isolated run's own
+ * directory (`VELA_EXTENSION_DIST`, set by `playwright.isolated.config.ts`) —
+ * so a test run never loads, or rebuilds, the package a running browser has
+ * open (spec 082 RJ21).
+ */
+export const EXTENSION_DIST = process.env.VELA_EXTENSION_DIST
+	? resolve(APP_ROOT, process.env.VELA_EXTENSION_DIST)
+	: join(APP_ROOT, 'extension/dist');
 
 /** Has `pnpm build:extension` run? Suites skip rather than fail obscurely. */
 export const extensionBuilt = (): boolean => existsSync(join(EXTENSION_DIST, 'manifest.json'));

@@ -16,6 +16,11 @@
  *   4. prints the package's size, which is a budget (SC-308).
  *
  * Usage: node extension/build.mjs [--skip-build]
+ *
+ * The package goes to `extension/dist`, or to `VELA_EXTENSION_DIST` (relative
+ * to the app, or absolute) — the isolated e2e's own directory, so a test run
+ * never rewrites the package a running browser has loaded (spec 082 RJ21).
+ * `vite.config.ts` reads the same variable for the pages it prerenders.
  */
 import { execFileSync } from 'node:child_process';
 import { build as esbuild } from 'esbuild';
@@ -28,12 +33,14 @@ import {
 	statSync,
 	writeFileSync
 } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP = join(HERE, '..');
-const DIST = join(HERE, 'dist');
+const DIST = process.env.VELA_EXTENSION_DIST
+	? resolve(APP, process.env.VELA_EXTENSION_DIST)
+	: join(HERE, 'dist');
 const SITE = DIST;
 /**
  * Where kit puts the client bundle — `kit.appDir`, which vite.config.ts moves
@@ -82,7 +89,7 @@ if (!process.argv.includes('--skip-build')) {
 }
 if (!existsSync(join(SITE, APP_DIR))) {
 	console.error(
-		`[extension] no build output at extension/dist/${APP_DIR} — run without --skip-build` +
+		`[extension] no build output at ${relative(APP, DIST)}/${APP_DIR} — run without --skip-build` +
 			' (or check that vite.config.ts still sets kit.appDir for the extension target)'
 	);
 	process.exit(1);
