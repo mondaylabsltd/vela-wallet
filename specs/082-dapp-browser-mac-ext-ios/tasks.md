@@ -95,16 +95,16 @@ The four file chains run in parallel:
 routing (T180, next free id, placed after T015), live in this group because `rpc_pool.rs` is this
 group's file.
 
-- [ ] T010 [P] `rust/crates/vela-core/src/user_op.rs`: add `user_op_hash(op, chain_id) -> Result<String, CoreError>` (RA6).
+- [x] T010 [P] `rust/crates/vela-core/src/user_op.rs`: add `user_op_hash(op, chain_id) -> Result<String, CoreError>` (RA6).
   - EntryPoint v0.7 `getUserOpHash`: `keccak(abi.encode(keccak(abi.encode(sender, nonce, keccak(initCode), keccak(callData), accountGasLimits, preVerificationGas, gasFees, keccak(packedPaymasterAndData))), ENTRY_POINT, chainId))`.
   - `packedPaymasterAndData` mirrors `user_op_to_json` (`:629-655`): empty, or `paymaster ‖ u128 0 ‖ u128 0 ‖ data`. The signature is excluded; the result is 0x-lowercase.
   - Add the `USER_OPERATION_EVENT_TOPIC` constant (keccak of `UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)`) here, so T019 only reads this file.
   - Proof: in-file `mod tests` (empty paymaster, paymaster packing, the signature excluded, a nonce/gas change moves the hash, the topic constant equals its keccak).
-- [ ] T011 Chain vectors for `user_op_hash` in new `CT/user_op_hash.rs` and `CT/fixtures/userop-hash-gnosis.json` (RA6, the phase-0 gate); proof: `cargo test -p vela-core --test user_op_hash`; (after T010).
+- [x] T011 Chain vectors for `user_op_hash` in new `CT/user_op_hash.rs` and `CT/fixtures/userop-hash-gnosis.json` (RA6, the phase-0 gate); proof: `cargo test -p vela-core --test user_op_hash`; (after T010).
   - Make one read-only Gnosis fetch per tx (`eth_getTransactionByHash`, `eth_getTransactionReceipt`): tx `0xc6f3544fc4e3ac769e92c92ab4804cd3f38ffb8d607ba07b5103a59710094dc4` (block 48478729, nonce 22, `EV/extension/w1-lost-reply-landed.txt`), and the desktop's G21 op (block 48479132, nonce 41, `0xa6180e26…`: find it by the fixture Safe's `UserOperationEvent` in that block).
   - Store the `handleOps` input and the event topics in `CT/fixtures/userop-hash-gnosis.json`.
   - Proof: new `CT/user_op_hash.rs` decodes `handleOps` into a `UserOperation` and asserts `user_op_hash(op, 100) == topics[1]` for both txs.
-- [ ] T012 `rust/crates/vela-core/src/user_op.rs`: add `SubmitReply`, `SubmitVerdict {Accepted, MaybeSent, NotSent{rejection}}`, `SubmitStep`, `SUBMIT_MAX_RETRIES = 3`, `SUBMIT_RETRY_DELAY_MS = 3000` and `submit_step(reply, attempt, maybe_delivered, local_hash)`, with the six ordered rules of RA1; (after T010).
+- [x] T012 `rust/crates/vela-core/src/user_op.rs`: add `SubmitReply`, `SubmitVerdict {Accepted, MaybeSent, NotSent{rejection}}`, `SubmitStep`, `SUBMIT_MAX_RETRIES = 3`, `SUBMIT_RETRY_DELAY_MS = 3000` and `submit_step(reply, attempt, maybe_delivered, local_hash)`, with the six ordered rules of RA1; (after T010).
   - The `[existingHash:0x…]` marker is read from the raw error JSON first, then from `relay_error_message`.
   - Add `NOT_SENT_DAPP_DETAIL`, the fixed dApp text for "relay unreachable; nothing was sent" (RA10). The clients log `userop.hash_mismatch` when an Accepted hash ≠ the local one.
   - Proof: new `CT/user_op_submit.rs` has one test per rule:
@@ -115,10 +115,10 @@ group's file.
     - AA25 on attempt 2 after a lost reply on attempt 1 → MaybeSent (RA1 rationale);
     - an error while `!maybe_delivered` → NotSent{Some(rejection)};
     - exhaustion while `!maybe_delivered` → NotSent{None}.
-- [ ] T013 [P] `C/rpc_pool.rs`: add `RpcTransportOutcome::NotConnected` (routed like `Network`) and `may_have_delivered(outcome)` (true for Timeout, Network, NonJson and HTTP 5xx; false for NotConnected, any JSON answer and HTTP 4xx) (RA1).
+- [x] T013 [P] `C/rpc_pool.rs`: add `RpcTransportOutcome::NotConnected` (routed like `Network`) and `may_have_delivered(outcome)` (true for Timeout, Network, NonJson and HTTP 5xx; false for NotConnected, any JSON answer and HTTP 4xx) (RA1).
   - `RpcCallVerdict::Respond{url, maybe_delivered}` and `Failed{rate_limited, maybe_delivered}` carry a sticky OR over every POST of the call.
   - Proof: `CT/app_rpc_pool.rs`: every outcome's flag; the OR over two POSTs (Timeout then NotConnected → true); NotConnected fails over like Network; old JSON without the fields still decodes.
-- [ ] T014 `C/rpc_pool.rs`: the view set `unreached_chains` (RF1); (after T013).
+- [x] T014 `C/rpc_pool.rs`: the view set `unreached_chains` (RF1); (after T013).
   - A call whose first pass saw every endpoint of the chain fail on transport, with no rate-limit signal, adds the chain at "Pass swept clean" (`:1622`).
   - Any usable answer removes it (`clear_chain_failure`, `:1841-1846`); `failed_chains` keeps its meaning.
   - Expose `cooldown_ms(n)` (30 s · 2^(n−1), cap 300 s) and keep `RPC_READ_TIMEOUT_MS = 8000` public for RF2.
@@ -127,19 +127,19 @@ group's file.
     - a rate-limited pass → not added;
     - the next good answer clears it;
     - the `cooldown_ms` values for n = 1..6.
-- [ ] T015 `C/rpc_pool.rs`: `OPTIONAL_METHODS = ["eth_simulateV1"]` and `is_optional_method` (RG7); (after T014).
+- [x] T015 `C/rpc_pool.rs`: `OPTIONAL_METHODS = ["eth_simulateV1"]` and `is_optional_method` (RG7); (after T014).
   - A JSON error to an optional method → `Route::NotServed` → `Respond{url}` with `clear_chain_failure`: no score change, no ban, and `conclude_failed` never classifies the chain.
   - A rate-limit signal still fails over.
   - Proof: `CT/app_rpc_pool.rs`: Arbitrum `-32603 "method handler crashed"` on `eth_simulateV1` → answered, and the chain is in neither `failed_chains` nor `unreached_chains`; plan words on it do not ban the endpoint for `eth_call`; 429 on it fails over.
-- [ ] T180 `C/rpc_pool.rs`: a range limit on `eth_getLogs` is an answer, not a chain fault (ruling 8's find-event read, RG7's pattern); proof: `CT/app_rpc_pool.rs`; (after T015).
+- [x] T180 `C/rpc_pool.rs`: a range limit on `eth_getLogs` is an answer, not a chain fault (ruling 8's find-event read, RG7's pattern); proof: `CT/app_rpc_pool.rs`; (after T015).
   - Why: T019 halves its window on a range error, so the error must reach the tracker. Today it never does: a message with "exceeded" matches `is_permanent_rpc_error` (`rpc_pool.rs:600-622`) and bans the endpoint for every method, and `-32005` matches `is_transient_server_error` (`:627-641`), fails over, and after the last endpoint puts the chain in `failed_chains` — a false Gnosis notice and home banner while an op may have been sent.
   - Add the pure `is_log_range_error(error) -> bool`: a JSON error whose message names a block range or a result cap (for example `-32005 "query returned more than 10000 results"`, `"exceed maximum block range: 50000"`, `"Log response size exceeded … block range"`, `-32602 "block range is too large"`).
   - For `eth_getLogs` it is checked before the ban and fail-over checks: the call concludes `Respond{url}` carrying the error, with no ban, no score change and no chain classification. A rate-limit signal (`"rate limit exceeded"`, 429) still fails over. Other methods keep today's routing.
   - Proof: `CT/app_rpc_pool.rs`: each message above on `eth_getLogs` → answered, the endpoint not banned, the chain in neither `failed_chains` nor `unreached_chains`; `"rate limit exceeded"` on `eth_getLogs` still fails over; the same range text on `eth_call` is routed as today.
-- [ ] T016 [P] `C/tx_tracker.rs`: `USER_OP_STATUS_METHOD = "pimlico_getUserOperationStatus"`, `TrackStatusAnswer{status, stage, tx_hash}` and `parse_user_op_status(json)` (an unknown status string → None) (RA7).
+- [x] T016 [P] `C/tx_tracker.rs`: `USER_OP_STATUS_METHOD = "pimlico_getUserOperationStatus"`, `TrackStatusAnswer{status, stage, tx_hash}` and `parse_user_op_status(json)` (an unknown status string → None) (RA7).
   - `PollStatus` uses the constant; `TrackShellResult::Status` gains `tx_hash` (the 079 D2 explorer link).
   - Proof: `CT/app_tx_tracker.rs`: the live probe's `{"status":"not_found","transactionHash":null}` parses; `included` with a hash parses; `"pending?"` → None; no string `eth_getUserOperationStatus` remains in `tx_tracker.rs`.
-- [ ] T017 `C/tx_tracker.rs`: MaybeSent and NotSent ends (RA4); (after T016).
+- [x] T017 `C/tx_tracker.rs`: MaybeSent and NotSent ends (RA4); (after T016).
   - `Submitted`, `TrackPendingRecord` and the entry gain `maybe_sent`; the entry also gains `acknowledged` and `not_found_streak`.
   - `TrackOutcome::MaybeSent` holds while `maybe_sent ∧ ¬acknowledged ∧ ¬terminal ∧ ¬abandoned` (Unknown still wins at 24 h). Status polls continue past the 120 s window for such entries at `receipt_interval_ms`.
   - `NOT_FOUND_GRACE_MS = 60_000` and `NOT_FOUND_CONFIRMATIONS = 2` → the new terminal `EntryStatus`/`TrackStatus::NotSent`, with records patched `failed` through `fail_records`. `StatusUnavailable` changes nothing.
@@ -150,11 +150,11 @@ group's file.
     - a plain (non-maybe-sent) entry's `not_found` stays inert, as in 079;
     - 24 h with no answer → Unknown and records untouched ("time alone never produces a failure");
     - a reload restores `maybe_sent` from `TrackPendingRecord`.
-- [ ] T018 `C/tx_tracker.rs`: `TrackOperation::HoldingsMoved{chain_id}`, answered `Notified` (RE8); (after T017).
+- [x] T018 `C/tx_tracker.rs`: `TrackOperation::HoldingsMoved{chain_id}`, answered `Notified` (RE8); (after T017).
   - Emitted after `UpdateTxRecords` + `NotifyConfirmed` on a confirmed receipt, and alone after the fail patch on a failed receipt that carries a tx hash.
   - Never emitted on pending, unreachable, age or `NotSent`.
   - Proof: `CT/app_tx_tracker.rs`, one case each.
-- [ ] T019 `C/tx_tracker.rs`: the relay-independent landing check (ruling 8, plan Q1); proof: `CT/app_tx_tracker.rs`; (after T018, T010 and T180).
+- [x] T019 `C/tx_tracker.rs`: the relay-independent landing check (ruling 8, plan Q1); proof: `CT/app_tx_tracker.rs`; (after T018, T010 and T180).
   - `submit_block: Option<u64>` on `Submitted`, `TrackPendingRecord` and the entry.
   - For an entry with `maybe_sent ∧ ¬acknowledged ∧ ¬terminal ∧ ¬abandoned`, emit `TrackOperation::FindOpEvent{chain_id, entry_point, user_op_hash, from_block, to_block}` on the status-poll cadence. The shell runs `eth_getLogs{address: entry_point, topics: [USER_OPERATION_EVENT_TOPIC, user_op_hash], fromBlock, toBlock}` through the pool and answers `TrackShellResult::OpEvent{logs_json, error_json, head_block}` with the pool's answer as it came (a result, or the JSON error the pool now returns for a range limit, T180).
   - Ranges are bounded (`FIND_OP_MAX_RANGE`), step forward from `submit_block` and are clipped to the head. The core judges the error with `rpc_pool::is_log_range_error` (no shell decides it, FR-020): a range error halves the window, down to one block; any other error retries the same range on the next tick. With `submit_block` unknown, the first op asks for the head only (`from_block: None`), and the scan starts at `head − FIND_OP_LOOKBACK_BLOCKS`.
@@ -166,33 +166,33 @@ group's file.
     - caught up with the head → wait for the next tick;
     - no FindOpEvent for a plain or acknowledged entry;
     - `submit_block` survives a reload.
-- [ ] T020 [P] `C/sign_request.rs`: `maybe_sent` and `submit_block` on `Event::OpSubmitted`, `SignTrackerHandoff` and `SignRecord`, plus `SignView.pending_op_maybe_sent` (RA3).
+- [x] T020 [P] `C/sign_request.rs`: `maybe_sent` and `submit_block` on `Event::OpSubmitted`, `SignTrackerHandoff` and `SignRecord`, plus `SignView.pending_op_maybe_sent` (RA3).
   - `on_op_submitted` (`:1940-1990`) copies both into the persisted pending record and the handoff.
   - Proof: `CT/app_sign_request.rs`:
     - `OpSubmitted{maybe_sent: true}` → a pending record under the local hash and a handoff with the flag;
     - the rid settles Submitted (never signs twice);
     - a swipe after commit is a dismiss, not a 4001;
     - old JSON without the fields decodes.
-- [ ] T021 `C/sign_request.rs`: `SignPhase {Idle, Preparing, AwaitingSignature, Submitting}` (RA9); (after T020).
+- [x] T021 `C/sign_request.rs`: `SignPhase {Idle, Preparing, AwaitingSignature, Submitting}` (RA9); (after T020).
   - `Event::CeremonyStarted{id}` and `CeremonyDone{id}` are id-guarded and accepted only while that inflight is in `Submitting`. `Inflight.ceremony` is `NotYet | Up | Done`, and `SignView.phase` is derived per data-model §3.
   - `is_signing` / `is_submitting` are kept until every shell reads `phase`.
   - Proof: `CT/app_sign_request.rs`: each row of the data-model phase table; a stale id is dropped; Precheck/Sponsoring → Preparing (never AwaitingSignature during the network wait, G22).
-- [ ] T022 `C/sign_request.rs`: `SignEnding`, `ending_of(method, payload, submitted_user_op)` (Landed also carries `user_op_hash`), `SignEndingState` and `ending_state(ending, track)` (RA8 1–2); (after T021 and T017).
+- [x] T022 `C/sign_request.rs`: `SignEnding`, `ending_of(method, payload, submitted_user_op)` (Landed also carries `user_op_hash`), `SignEndingState` and `ending_state(ending, track)` (RA8 1–2); (after T021 and T017).
   - The mapping: tracker Confirmed → Confirmed; Dropped → Reverted; NotSent/Rejected → NotSent; else `Following{outcome, fee_held}`; no entry → `Following(Landing)`.
   - Proof: `CT/app_sign_request.rs`: every row of the data-model ending table, including `Following{MaybeSent}`.
-- [ ] T023 `C/sign_request.rs`: `on_submit` Succeeded with a record (`:2143-2162`) answers the page only and no longer emits `UpdateRecord Confirmed` (`:2152-2156`), so the tracker alone closes on-chain records (RA8 3, W3); (after T022).
+- [x] T023 `C/sign_request.rs`: `on_submit` Succeeded with a record (`:2143-2162`) answers the page only and no longer emits `UpdateRecord Confirmed` (`:2152-2156`), so the tracker alone closes on-chain records (RA8 3, W3); (after T022).
   - A receipt that reverted inside the window is still answered its tx hash (ruling 9).
   - Proof: update the `CT/app_sign_request.rs` cases that expected the Confirmed patch, and add a test: a reverted receipt → an `Ok(tx hash)` answer and no record patch from `sign_request`.
-- [ ] T024 `C/sign_request.rs`: `DAPP_TX_ANSWER_WINDOW_MS = 120_000` measured from `ApproveTapped`, and the pure `dapp_receipt_wait_ms(elapsed_ms) = max(10_000, window − elapsed)` (RA12); (after T023).
+- [x] T024 `C/sign_request.rs`: `DAPP_TX_ANSWER_WINDOW_MS = 120_000` measured from `ApproveTapped`, and the pure `dapp_receipt_wait_ms(elapsed_ms) = max(10_000, window − elapsed)` (RA12); (after T023).
   - Proof: `CT/app_sign_request.rs` for 0 s, 46 s, 115 s and 200 s elapsed.
-- [ ] T025 `C/sign_request.rs`: `Event::TransportDropped` also stops an inflight of that transport in Precheck, Sponsoring or ReactiveSponsoring (inflight cleared, attempt bumped, effect aborted); past the commitment point nothing changes (RB2); (after T024).
+- [x] T025 `C/sign_request.rs`: `Event::TransportDropped` also stops an inflight of that transport in Precheck, Sponsoring or ReactiveSponsoring (inflight cleared, attempt bumped, effect aborted); past the commitment point nothing changes (RB2); (after T024).
   - Add `SignSubmitOutcome::AskerGone` (serde `{"type":"asker_gone"}`): nothing sent, no answer, no record, and the sheet clears if it still shows that request.
   - `EXTENSION_REQUEST_TTL_MS` is unchanged and public for export.
   - Proof: `CT/app_sign_request.rs`:
     - drop during precheck → the later `on_precheck` result does not sign (the hole at `:2014-2033`);
     - drop after the passkey → the pipeline continues;
     - AskerGone → no Respond and no PersistRecord.
-- [ ] T026 `C/send.rs`: `SendShellResult::Submitted{maybe_sent, submit_block}`, `SendOperation::TrackSubmitted{maybe_sent, submit_block}`, `SendTxRecord.maybe_sent`, `SendReceiptStatus::{MaybeSent, NotSent}` and `SendReceiptOutcome::Failed{rejected, not_sent}` (RA4, RA10); (after T017).
+- [x] T026 `C/send.rs`: `SendShellResult::Submitted{maybe_sent, submit_block}`, `SendOperation::TrackSubmitted{maybe_sent, submit_block}`, `SendTxRecord.maybe_sent`, `SendReceiptStatus::{MaybeSent, NotSent}` and `SendReceiptOutcome::Failed{rejected, not_sent}` (RA4, RA10); (after T017).
   - MaybeSent never fires the success haptic. `TrackStatus::NotSent` → `Failed{rejected: false, not_sent: true}`, never the fee-rejected words.
   - Proof: `CT/app_send.rs`:
     - MaybeSent → receipt status MaybeSent and no haptic op;

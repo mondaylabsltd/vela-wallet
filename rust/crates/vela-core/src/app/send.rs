@@ -58,6 +58,7 @@ use super::fee_policy::{
     FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
+use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
@@ -650,6 +651,16 @@ pub struct SendTxRecord {
     /// `'$' + usd.toFixed(2)` when > 0 — a stored-record format, not i18n
     /// (ported verbatim).
     pub usd: Option<String>,
+    /// The submit's reply was lost; `user_op_hash` is the locally computed
+    /// hash (spec 082 RA4). Persisted with the record so a restart hands the
+    /// tracker a may-have-been-sent op again (`TrackPendingRecord`).
+    #[serde(default)]
+    pub maybe_sent: bool,
+    /// The head read before the first submit POST, persisted likewise —
+    /// where the tracker's relay-independent landing check starts (ruling 8).
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+    pub submit_block: Option<u64>,
 }
 
 /// Estimate failure vocabulary — `fee_policy::FeeFailure` plus the send-side
@@ -703,10 +714,53 @@ pub enum SendReceiptOutcome {
     },
     Failed {
         rejected: bool,
+        /// The relay never had a may-have-been-sent op (tracker `NotSent`,
+        /// spec 082 RA4): "not sent", never the fee-rejected words.
+        #[serde(default)]
+        not_sent: bool,
     },
     /// The relay parked the op until fees settle — pending, new wording only
     /// (invariant ⑦).
     FeeHeld,
+    /// The relay has shown it holds an op whose submit reply was lost (spec
+    /// 082 RA10): the receipt goes back to the ordinary "submitted" words.
+    Acknowledged,
+}
+
+/// The receipt verdict a tracker entry stands for, or `None` while there is
+/// nothing new to say (spec 082 — the one mapping, where the desktop and the
+/// web each had their own). Only a definitive drop, rejection or never-sent
+/// may be `Failed`; a slow, unreachable or 24 h-old op sends nothing
+/// (invariant ⑤).
+pub fn receipt_outcome_of(entry: &TrackEntryView) -> Option<SendReceiptOutcome> {
+    match entry.status {
+        TrackStatus::Confirmed => entry
+            .tx_hash
+            .clone()
+            .filter(|hash| !hash.is_empty())
+            .map(|tx_hash| SendReceiptOutcome::Confirmed { tx_hash }),
+        TrackStatus::Dropped => Some(SendReceiptOutcome::Failed {
+            rejected: false,
+            not_sent: false,
+        }),
+        TrackStatus::Rejected => Some(SendReceiptOutcome::Failed {
+            rejected: true,
+            not_sent: false,
+        }),
+        TrackStatus::NotSent => Some(SendReceiptOutcome::Failed {
+            rejected: false,
+            not_sent: true,
+        }),
+        TrackStatus::FeeHeld => Some(SendReceiptOutcome::FeeHeld),
+        TrackStatus::Pending | TrackStatus::Unreachable | TrackStatus::AcceptedNotLanded => {
+            match entry.outcome {
+                TrackOutcome::Landing | TrackOutcome::StillConfirming => {
+                    Some(SendReceiptOutcome::Acknowledged)
+                }
+                TrackOutcome::MaybeSent | TrackOutcome::Unknown | TrackOutcome::Final => None,
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -890,6 +944,12 @@ pub enum SendOperation {
         user_op_hash: String,
         record_ids: Vec<String>,
         chain_id: u32,
+        /// Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA4).
+        #[serde(default)]
+        maybe_sent: bool,
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        submit_block: Option<u64>,
     },
     /// `resolveRecipientIdentity(addr)`.
     ResolveIdentity {
@@ -964,6 +1024,15 @@ pub enum SendShellResult {
     Submitted {
         user_op_hash: String,
         now_ms: f64,
+        /// The submit's reply was lost and `user_op_hash` is the local hash
+        /// (spec 082 RA4): the payment may be on its way, so it is recorded,
+        /// tracked and shown as such — never an error, never "try again".
+        #[serde(default)]
+        maybe_sent: bool,
+        /// The head read before the first POST (ruling 8); `None` = unknown.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        submit_block: Option<u64>,
     },
     SubmitFailed {
         failure: SendSubmitFailure,
@@ -1346,6 +1415,8 @@ struct PersistCtx {
     user_op_hash: String,
     record_ids: Vec<String>,
     chain_id: u32,
+    maybe_sent: bool,
+    submit_block: Option<u64>,
 }
 
 /// What `Max` stands for while it is in force.
@@ -1452,6 +1523,10 @@ pub struct Model {
     /// same snapshot discipline — those were already captured at submit).
     receipt_signed: Option<SendLine>,
     receipt_failed: bool,
+    /// The failure is the relay never having the op (spec 082 RA4).
+    receipt_not_sent: bool,
+    /// The submit's reply was lost; cleared when the relay acknowledges.
+    receipt_maybe_sent: bool,
     fee_held: bool,
     /// The submit result's clock (#D3); `None` until the relay accepted.
     submitted_at_ms: Option<f64>,
@@ -1565,6 +1640,13 @@ pub enum SendReceiptStatus {
     Submitted,
     Confirmed,
     Failed,
+    /// The submit's reply was lost and the relay has not yet shown it holds
+    /// the op (spec 082 RA10): "It may have been sent. Vela keeps checking —
+    /// don't send it again." No Retry, and no success haptic was played.
+    MaybeSent,
+    /// The relay never had it (spec 082 RA4): "not sent" — never the
+    /// fee-rejected words.
+    NotSent,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -4363,6 +4445,8 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.user_op_hash = None;
     model.tx_error = None;
     model.receipt_failed = false;
+    model.receipt_not_sent = false;
+    model.receipt_maybe_sent = false;
     model.submitted_at_ms = None;
     model.receipt_signed = None;
     model.fee_held = false;
@@ -4701,17 +4785,28 @@ fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOut
         SendReceiptOutcome::Confirmed { tx_hash } => {
             model.tx_hash = Some(tx_hash);
         }
-        SendReceiptOutcome::Failed { rejected } => {
+        SendReceiptOutcome::Failed { rejected, not_sent } => {
             // A definitive failure stamps the receipt — it never turns the
             // submitted payment back into an error state (invariant ⑤).
             model.receipt_failed = true;
-            if rejected {
+            if not_sent {
+                // Never sent is its own ending (spec 082), and it is not the
+                // fee-rejected one whatever else the shell says.
+                model.receipt_not_sent = true;
+            } else if rejected {
                 model.fee_rejected = true;
             }
         }
         SendReceiptOutcome::FeeHeld => {
             // Waiting, not failure: queued until fees settle (invariant ⑦).
+            // The hold stage comes only from the relay's status, so the relay
+            // holds the op: no longer "may have been sent" (RA10).
             model.fee_held = true;
+            model.receipt_maybe_sent = false;
+        }
+        SendReceiptOutcome::Acknowledged => {
+            // The relay holds it: the ordinary "submitted" words (RA10).
+            model.receipt_maybe_sent = false;
         }
     }
     render()
@@ -4752,7 +4847,9 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
         R::Submitted {
             user_op_hash,
             now_ms,
-        } => accept_submitted(model, id, user_op_hash, now_ms),
+            maybe_sent,
+            submit_block,
+        } => accept_submitted(model, id, user_op_hash, now_ms, (maybe_sent, submit_block)),
         R::SubmitFailed { failure } => accept_submit_failed(model, id, failure),
         R::RecordsPersisted => {
             let Some((expect, ctx)) = model.flights.persist.clone() else {
@@ -4772,6 +4869,8 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
                     user_op_hash: ctx.user_op_hash,
                     record_ids: ctx.record_ids,
                     chain_id: ctx.chain_id,
+                    maybe_sent: ctx.maybe_sent,
+                    submit_block: ctx.submit_block,
                 },
             )
         }
@@ -5122,7 +5221,13 @@ fn accept_treasury(model: &mut Model, id: u64, probe: SendTreasuryProbe) -> Cmd 
     }
 }
 
-fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f64) -> Cmd {
+fn accept_submitted(
+    model: &mut Model,
+    id: u64,
+    user_op_hash: String,
+    now_ms: f64,
+    (maybe_sent, submit_block): (bool, Option<u64>),
+) -> Cmd {
     let Pipeline::Submitting {
         id: expect,
         gen,
@@ -5157,6 +5262,7 @@ fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f6
     model.receipt_signed = lines.first().cloned();
     model.user_op_hash = Some(user_op_hash.clone());
     model.submitted_at_ms = Some(now_ms);
+    model.receipt_maybe_sent = maybe_sent;
     model.tx = SendTxStatus::Confirmed;
     model.lock.end(gen);
 
@@ -5191,13 +5297,14 @@ fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f6
                 chain_id,
                 timestamp_s,
                 usd: (usd > 0.0).then(|| format!("${usd:.2}")),
+                maybe_sent,
+                submit_block,
             }
         })
         .collect();
     let record_ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
 
     let clear_id = next(model);
-    let haptic_id = next(model);
     let persist_id = next(model);
     model.flights.persist = Some((
         persist_id,
@@ -5205,19 +5312,32 @@ fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f6
             user_op_hash,
             record_ids,
             chain_id,
+            maybe_sent,
+            submit_block,
         },
     ));
-    Command::all([
-        issue(
+    let mut commands = Vec::new();
+    if !maybe_sent {
+        // The success haptic says "sent" — a lost reply has not earned it
+        // (spec 082 RA10); the receipt says "may have been sent" instead.
+        let haptic_id = next(model);
+        commands.push(issue(
             haptic_id,
             SendOperation::Haptic {
                 kind: SendHapticKind::Success,
             },
-        ),
-        issue(clear_id, SendOperation::ClearTokenCache { address: from }),
-        issue(persist_id, SendOperation::PersistTxRecords { records }),
-        render(),
-    ])
+        ));
+    }
+    commands.push(issue(
+        clear_id,
+        SendOperation::ClearTokenCache { address: from },
+    ));
+    commands.push(issue(
+        persist_id,
+        SendOperation::PersistTxRecords { records },
+    ));
+    commands.push(render());
+    Command::all(commands)
 }
 
 fn accept_submit_failed(model: &mut Model, id: u64, failure: SendSubmitFailure) -> Cmd {
@@ -5384,10 +5504,14 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
         })
         .collect();
     Some(SendReceiptView {
-        status: if model.receipt_failed {
+        status: if model.receipt_failed && model.receipt_not_sent {
+            SendReceiptStatus::NotSent
+        } else if model.receipt_failed {
             SendReceiptStatus::Failed
         } else if model.tx_hash.is_some() {
             SendReceiptStatus::Confirmed
+        } else if model.receipt_maybe_sent {
+            SendReceiptStatus::MaybeSent
         } else {
             SendReceiptStatus::Submitted
         },

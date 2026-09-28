@@ -34,6 +34,24 @@
 //! - Past 24h the machine stops polling but the record stays pending — an
 //!   honest "unknown", never a fabricated failure (`tx-reconciler.ts:16-23`).
 //!
+//! Spec 082 — a submit whose reply was lost (G21, owner rulings 1 and 8):
+//!
+//! ```text
+//! Submitted{maybe_sent} ─► MaybeSent ──relay status ≠ not_found / any receipt──► ordinary op
+//!     │ status polls past the window     │ its own UserOperationEvent on chain (find-event)
+//!     │ + the find-event, same cadence   ▼
+//!     │                              Confirmed / Dropped (+ HoldingsMoved)
+//!     └─ not_found ×2 past 60 s, and the chain read to its head with no event ─► NotSent (records failed)
+//! ```
+//!
+//! - A may-have-been-sent op is never "try again" while anything could still
+//!   show it landed: the relay's word is joined by the chain's before NotSent.
+//! - The relay-independent landing check reads the EntryPoint's
+//!   `UserOperationEvent` for the op's own hash in bounded windows from the
+//!   head read before the submit; the core, not the shell, reads a range
+//!   limit (`rpc_pool::is_log_range_error`) and halves the window.
+//! - `HoldingsMoved` asks for a balance read only when an op landed.
+//!
 //! The shell owns the regex wording layer that used to *be* the classification
 //! (`/dropped from the network/`, `UserOpRejectedError` instanceof checks):
 //! it maps RPC answers to the typed results below, and this core owns every
@@ -100,6 +118,70 @@ pub fn receipt_interval_ms(in_window: bool, age_ms: f64) -> f64 {
 /// reimbursement — `FEE_HOLD_STAGE` (`tx-reconciler.ts:84`).
 pub const FEE_HOLD_STAGE: &str = "in_band_settlement_hold";
 
+/// A relay `not_found` counts only from this age on (spec 082 RA4): before
+/// it, the relay may simply not have written the op down yet.
+pub const NOT_FOUND_GRACE_MS: f64 = 60_000.0;
+/// Consecutive `not_found` answers (each at ≥ [`NOT_FOUND_GRACE_MS`], no
+/// receipt, nothing else from the relay in between) that end a may-have-been-
+/// sent op as never sent. The relay answers `not_found` only for hashes it
+/// never admitted (`relay:wire.rs:597-620`).
+pub const NOT_FOUND_CONFIRMATIONS: u32 = 2;
+
+/// The widest `eth_getLogs` window the find-event asks for, in blocks (ruling
+/// 8). Alchemy's documented 2K is the strictest common paid cap; stricter
+/// public nodes answer a range error and the window halves (dRPC's free tier
+/// on Gnosis passes 100 and refuses 500), looser ones never see a wider ask.
+pub const FIND_OP_MAX_RANGE: u64 = 2_000;
+/// Where the find-event starts below the head when the head before the first
+/// submit POST is unknown (ruling 8): ≥ 20 minutes on the fastest chain Vela
+/// serves (Arbitrum, 0.25 s blocks), hours elsewhere.
+pub const FIND_OP_LOOKBACK_BLOCKS: u64 = 5_000;
+
+/// The relay's lifecycle-status method (spec 082 RA7, G13). The relay serves
+/// only this name; the `eth_`-prefixed spelling every client had been asking
+/// answers `-32601` there (`evidence/relay-status-probe.txt`).
+pub const USER_OP_STATUS_METHOD: &str = "pimlico_getUserOperationStatus";
+
+/// One parsed answer of [`USER_OP_STATUS_METHOD`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct TrackStatusAnswer {
+    pub status: TrackLifecycle,
+    /// The executor stage that last touched the op (`last_executor_stage`),
+    /// e.g. [`FEE_HOLD_STAGE`].
+    pub stage: Option<String>,
+    /// The bundle transaction the relay names, when it has one — an explorer
+    /// link for an op that is still pending (079 D2).
+    pub tx_hash: Option<String>,
+}
+
+/// Parse the `result` of [`USER_OP_STATUS_METHOD`] — the one parser every
+/// client uses (RA7). A whole JSON-RPC body is accepted too (its `result` is
+/// read; an `error` is no answer). `None` for anything that is not an object
+/// with a known `status` string: an unknown status is not guessed at.
+pub fn parse_user_op_status(result_json: &str) -> Option<TrackStatusAnswer> {
+    let value: serde_json::Value = serde_json::from_str(result_json).ok()?;
+    let result = match value.get("status") {
+        Some(_) => &value,
+        None => value.get("result")?,
+    };
+    let status_text = result.get("status")?.as_str()?;
+    let status: TrackLifecycle =
+        serde_json::from_value(serde_json::Value::String(status_text.to_owned())).ok()?;
+    let text = |key: &str| {
+        result
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+    };
+    Some(TrackStatusAnswer {
+        status,
+        stage: text("last_executor_stage"),
+        tx_hash: text("transactionHash"),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Protocol
 // ---------------------------------------------------------------------------
@@ -117,8 +199,9 @@ pub enum TrackOperation {
     /// `ReceiptPending`; `success !== false` → `Receipt`; `success === false`
     /// → `ReceiptFailed`.
     PollReceipt { user_op_hash: String, chain_id: u32 },
-    /// `eth_getUserOperationStatus` (a Vela relay extension). Null / error /
-    /// older relay → `StatusUnavailable` (`tx-reconciler.ts:96-115`).
+    /// [`USER_OP_STATUS_METHOD`], parsed with [`parse_user_op_status`]. Null /
+    /// error / unknown status / older relay → `StatusUnavailable`
+    /// (`tx-reconciler.ts:96-115`).
     PollStatus { user_op_hash: String, chain_id: u32 },
     /// Load still-pending submissions from storage: records with
     /// `status === 'pending'`, a `userOpHash` and `txHash === ''`
@@ -140,6 +223,29 @@ pub enum TrackOperation {
         user_op_hash: String,
         chain_id: u32,
         tx_hash: String,
+    },
+    /// The account's holdings on this chain changed because an op of ours
+    /// landed — confirmed, or failed with gas spent (spec 082 RE8, G26). The
+    /// shell re-reads the balance; answered [`TrackShellResult::Notified`].
+    /// Never for an op that did not land (pending, unreachable, age, NotSent,
+    /// a relay rejection).
+    HoldingsMoved { chain_id: u32 },
+    /// The relay-independent landing check (spec 082 ruling 8): run
+    /// `eth_getLogs{address: entry_point, topics: [topic0, user_op_hash],
+    /// fromBlock, toBlock}` and `eth_blockNumber` through the pool and answer
+    /// [`TrackShellResult::OpEvent`] with what came back — the shell judges
+    /// nothing. `from_block: None` asks for the head only (no logs read).
+    /// `topic0` is `user_op::USER_OPERATION_EVENT_TOPIC`, carried here so no
+    /// shell needs another export to build the filter.
+    FindOpEvent {
+        chain_id: u32,
+        entry_point: String,
+        topic0: String,
+        user_op_hash: String,
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        from_block: Option<u64>,
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        to_block: Option<u64>,
     },
     /// Read the clock. The core owns every cadence decision but no clock —
     /// each `Tick`/resume asks, and the answer drives one scheduler pass.
@@ -192,7 +298,7 @@ pub enum TrackShellResult {
         user_op_hash: String,
         now_ms: f64,
     },
-    /// The relay's view of an op with no receipt (`eth_getUserOperationStatus`).
+    /// The relay's view of an op with no receipt ([`USER_OP_STATUS_METHOD`]).
     Status {
         user_op_hash: String,
         status: TrackLifecycle,
@@ -200,6 +306,9 @@ pub enum TrackShellResult {
         /// `in_band_settlement_hold`.
         stage: Option<String>,
         now_ms: f64,
+        /// The relay's bundle tx, when it names one ([`TrackStatusAnswer`]).
+        #[serde(default)]
+        tx_hash: Option<String>,
     },
     /// The status endpoint yielded nothing (unreachable or an older relay).
     StatusUnavailable {
@@ -209,6 +318,22 @@ pub enum TrackShellResult {
     RecordsLoaded {
         records: Vec<TrackPendingRecord>,
         now_ms: f64,
+    },
+    /// The pool's answer to [`TrackOperation::FindOpEvent`], as it came
+    /// (ruling 8): `logs_json` the `eth_getLogs` result (the log array), or
+    /// `error_json` the JSON-RPC error member the pool answered (a range
+    /// limit is one, T180), plus the head from `eth_blockNumber`. Neither =
+    /// no answer. The core decides what a range error is, never the shell.
+    OpEvent {
+        user_op_hash: String,
+        now_ms: f64,
+        #[serde(default)]
+        logs_json: Option<String>,
+        #[serde(default)]
+        error_json: Option<String>,
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        head_block: Option<u64>,
     },
     RecordsPatched,
     Notified,
@@ -254,6 +379,15 @@ pub struct TrackPendingRecord {
     pub user_op_hash: String,
     pub chain_id: u32,
     pub submitted_at_ms: f64,
+    /// The submit ended "may have been sent" (spec 082 RA4) — persisted with
+    /// the record so a restart keeps following it as such.
+    #[serde(default)]
+    pub maybe_sent: bool,
+    /// The chain head read before the first submit POST, persisted with the
+    /// record: where the relay-independent landing check starts (ruling 8).
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+    pub submit_block: Option<u64>,
 }
 
 /// Storage vocabulary is `pending | confirmed | failed` — a relay rejection
@@ -293,6 +427,16 @@ pub enum Event {
         user_op_hash: String,
         record_ids: Vec<String>,
         chain_id: u32,
+        /// The submit ended "may have been sent" (spec 082 RA4, ruling 1):
+        /// the hash is the locally computed one and the relay may never have
+        /// seen it. Followed to its end — see [`TrackOutcome::MaybeSent`].
+        #[serde(default)]
+        maybe_sent: bool,
+        /// The chain head read once before the first submit POST; `None` =
+        /// unknown (ruling 8's find-event then starts below the head).
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        submit_block: Option<u64>,
     },
     /// The shell's cadence timer. Any frequency is safe — the core enforces
     /// every throttle, so a chatty shell can never double-poll the bundler.
@@ -336,6 +480,10 @@ enum EntryStatus {
     },
     /// The relay refused it before any block — nothing was sent.
     Rejected,
+    /// A may-have-been-sent op the relay never admitted (spec 082 RA4): it
+    /// answered `not_found` [`NOT_FOUND_CONFIRMATIONS`] times past the grace,
+    /// with no receipt. Nothing will land. Terminal.
+    NotSent,
     /// The bundler was unreachable for the whole wait window: the op's fate
     /// is genuinely unknown, which is NOT the same as "pending".
     Unknown,
@@ -345,7 +493,10 @@ impl EntryStatus {
     fn is_terminal(&self) -> bool {
         matches!(
             self,
-            EntryStatus::Confirmed { .. } | EntryStatus::Failed { .. } | EntryStatus::Rejected
+            EntryStatus::Confirmed { .. }
+                | EntryStatus::Failed { .. }
+                | EntryStatus::Rejected
+                | EntryStatus::NotSent
         )
     }
 }
@@ -384,6 +535,70 @@ struct Entry {
     aborted: bool,
     /// Older than 24h — polls stopped for good, record left pending.
     abandoned: bool,
+    /// The bundle tx the relay's status named (spec 082 RA7) — a link for an
+    /// op that has not produced a receipt yet. Never a verdict.
+    relay_tx_hash: Option<String>,
+    /// The submit ended "may have been sent" (spec 082 RA4).
+    maybe_sent: bool,
+    /// The relay has shown it holds the op: a receipt, or any status other
+    /// than `not_found`. From then on the op is an ordinary one.
+    acknowledged: bool,
+    /// Consecutive `not_found` answers at age ≥ [`NOT_FOUND_GRACE_MS`].
+    not_found_streak: u32,
+    /// The head read before the first submit POST (ruling 8); `None` = unknown.
+    submit_block: Option<u64>,
+    /// The find-event scan (ruling 8) — see [`FindScan`].
+    find: FindScan,
+}
+
+/// Where the relay-independent landing check stands for one entry.
+#[derive(Clone, Debug)]
+struct FindScan {
+    /// The next block to read; `None` until a start is known (the submit's
+    /// head, or the first head read minus [`FIND_OP_LOOKBACK_BLOCKS`]).
+    from: Option<u64>,
+    /// The current window width, ≤ [`FIND_OP_MAX_RANGE`], halved on a range
+    /// error down to one block, doubled again after a clean full-width read.
+    width: u64,
+    /// The highest head the shell has reported.
+    head: Option<u64>,
+    /// The window asked and not yet answered (`from None` = head only).
+    in_flight: Option<(Option<u64>, Option<u64>)>,
+    /// Issue time of the last find op — the status-poll cadence.
+    last_ms: Option<f64>,
+    /// Every block from the start up to here has been read, with no event.
+    scanned_through: Option<u64>,
+}
+
+impl FindScan {
+    fn new(submit_block: Option<u64>, submitted_at_ms: Option<f64>) -> Self {
+        FindScan {
+            from: submit_block,
+            width: FIND_OP_MAX_RANGE,
+            head: None,
+            in_flight: None,
+            last_ms: submitted_at_ms,
+            scanned_through: None,
+        }
+    }
+
+    /// The chain has been read, with no event, up to the latest head seen —
+    /// what a relay's `not_found` must be joined by before "not sent".
+    fn caught_up(&self) -> bool {
+        matches!((self.scanned_through, self.head), (Some(through), Some(head)) if through >= head)
+    }
+
+    /// The next window, or `None` (head only) when there is nothing to read
+    /// below a known head yet.
+    fn next_window(&self) -> Option<(u64, u64)> {
+        let head = self.head?;
+        let from = self.from?;
+        if from > head {
+            return None;
+        }
+        let to = from.saturating_add(self.width.max(1) - 1).min(head);
+        Some((from, to))
+    }
 }
 
 impl Entry {
@@ -403,6 +618,29 @@ impl Entry {
             window_closed: false,
             aborted: false,
             abandoned: false,
+            relay_tx_hash: None,
+            maybe_sent: false,
+            acknowledged: false,
+            not_found_streak: 0,
+            submit_block: None,
+            find: FindScan::new(None, submitted_at_ms),
+        }
+    }
+
+    /// Spec 082 RA4: still in the dark about whether the relay ever had it.
+    fn in_doubt(&self) -> bool {
+        self.maybe_sent && !self.acknowledged && !self.status.is_terminal() && !self.abandoned
+    }
+
+    /// Merge what a submit (or a reloaded record) knows: "may have been
+    /// sent" is sticky, and the first known head wins.
+    fn merge_submit_facts(&mut self, maybe_sent: bool, submit_block: Option<u64>) {
+        self.maybe_sent |= maybe_sent;
+        if self.submit_block.is_none() {
+            self.submit_block = submit_block;
+            if self.find.from.is_none() && self.find.scanned_through.is_none() {
+                self.find.from = submit_block;
+            }
         }
     }
 
@@ -465,6 +703,10 @@ pub enum TrackStatus {
     /// The bundler accepted it but produced no receipt in the window — it
     /// may still land.
     AcceptedNotLanded,
+    /// May have been sent, and the relay never had it (spec 082 RA4): two
+    /// `not_found` answers past the grace, no receipt. Terminal; the records
+    /// are failed. Its words are "not sent", never the fee-rejected ones.
+    NotSent,
 }
 
 /// Where an op is in its life, for the words a person reads (spec 079): the
@@ -484,6 +726,10 @@ pub enum TrackOutcome {
     Unknown,
     /// Confirmed, dropped or rejected — the status says which.
     Final,
+    /// The submit's reply was lost and the relay has not yet shown it holds
+    /// the op (spec 082 RA4, ruling 1): "it may have been sent — Vela keeps
+    /// checking, don't send it again". Never "try again".
+    MaybeSent,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -501,6 +747,11 @@ pub struct TrackEntryView {
     pub polling: bool,
     pub submitted_at_ms: Option<f64>,
     pub outcome: TrackOutcome,
+    /// The bundle tx the relay's status named while no receipt has (spec 082
+    /// RA7, the 079 D2 explorer link). A link only — `tx_hash` above is the
+    /// verdict's.
+    #[serde(default)]
+    pub relay_tx_hash: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -529,7 +780,15 @@ impl App for TxTracker {
                 user_op_hash,
                 record_ids,
                 chain_id,
-            } => submitted(model, &user_op_hash, record_ids, chain_id),
+                maybe_sent,
+                submit_block,
+            } => submitted(
+                model,
+                &user_op_hash,
+                record_ids,
+                chain_id,
+                (maybe_sent, submit_block),
+            ),
             Event::Tick => {
                 // Inert unless something still needs the clock — a tracker
                 // with only terminal/abandoned entries makes no requests.
@@ -576,6 +835,7 @@ impl App for TxTracker {
                     EntryStatus::Confirmed { .. } => TrackStatus::Confirmed,
                     EntryStatus::Failed { .. } => TrackStatus::Dropped,
                     EntryStatus::Rejected => TrackStatus::Rejected,
+                    EntryStatus::NotSent => TrackStatus::NotSent,
                     EntryStatus::Unknown => TrackStatus::Unreachable,
                 };
                 let tx_hash = match &entry.status {
@@ -588,6 +848,8 @@ impl App for TxTracker {
                     TrackOutcome::Final
                 } else if entry.abandoned {
                     TrackOutcome::Unknown
+                } else if entry.in_doubt() {
+                    TrackOutcome::MaybeSent
                 } else if entry.window_closed || entry.aborted {
                     TrackOutcome::StillConfirming
                 } else {
@@ -602,6 +864,7 @@ impl App for TxTracker {
                     polling: !entry.status.is_terminal() && !entry.abandoned,
                     submitted_at_ms: entry.submitted_at_ms,
                     outcome,
+                    relay_tx_hash: entry.relay_tx_hash.clone(),
                 }
             })
             .collect();
@@ -624,9 +887,23 @@ fn submitted(
     user_op_hash: &str,
     record_ids: Vec<String>,
     chain_id: u32,
+    (maybe_sent, submit_block): (bool, Option<u64>),
 ) -> Command<TrackEffect, Event> {
     let key = normalize(user_op_hash);
     let attempt = model.attempt;
+    // A verdict that nothing was sent (NotSent, Rejected) does not outlive a
+    // new submit of the identical op — same nonce (never bumped for a
+    // may-have-been-sent op, RA5), calldata, gas and fees, so the same hash.
+    // New records mark the new submission; the same hand-off again is an
+    // echo and changes nothing. Merged into the dead entry, the new op would
+    // go unpolled and read "not sent" at once, over an op the relay holds.
+    let new_life = model.entries.get(&key).is_some_and(|entry| {
+        matches!(entry.status, EntryStatus::NotSent | EntryStatus::Rejected)
+            && record_ids.iter().any(|id| !entry.record_ids.contains(id))
+    });
+    if new_life {
+        model.entries.remove(&key);
+    }
     let entry = model
         .entries
         .entry(key.clone())
@@ -634,6 +911,7 @@ fn submitted(
     for id in record_ids {
         entry.merge_record_id(id);
     }
+    entry.merge_submit_facts(maybe_sent, submit_block);
 
     // First receipt poll goes out immediately, like `waitForReceipt`'s first
     // loop iteration. A second consumer of an already-tracked hash joins the
@@ -710,6 +988,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             entry.receipt_in_flight = false;
             entry.last_receipt_poll_ms = Some(now_ms);
             entry.saw_clean_response = true;
+            entry.acknowledged = true;
             if entry.status.is_terminal() {
                 // Already resolved by another path — never double-resolve.
                 return Command::done();
@@ -719,31 +998,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             };
             let ids = entry.record_ids.clone();
             let chain_id = entry.chain_id;
-            let attempt = model.attempt;
-            // Patch first, notify second — the reconciler's order
-            // (`tx-reconciler.ts:236-240`): flip the records, then hand the
-            // authentic logs to token_trust.
-            Command::all([
-                shell_request(
-                    attempt,
-                    TrackOperation::UpdateTxRecords {
-                        ids,
-                        patch: TrackRecordPatch {
-                            status: TrackRecordStatus::Confirmed,
-                            tx_hash: Some(tx_hash.clone()),
-                        },
-                    },
-                ),
-                shell_request(
-                    attempt,
-                    TrackOperation::NotifyConfirmed {
-                        user_op_hash: key,
-                        chain_id,
-                        tx_hash,
-                    },
-                ),
-                render(),
-            ])
+            confirm_records(model.attempt, key, chain_id, ids, tx_hash)
         }
         TrackShellResult::ReceiptFailed {
             user_op_hash,
@@ -757,14 +1012,17 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             entry.receipt_in_flight = false;
             entry.last_receipt_poll_ms = Some(now_ms);
             entry.saw_clean_response = true;
+            entry.acknowledged = true;
             if entry.status.is_terminal() {
                 return Command::done();
             }
             // "Dropped from the network" — the one receipt shape that may
-            // fail records, and it terminates tracking immediately (③).
+            // fail records, and it terminates tracking immediately (③). It
+            // landed, so gas was spent: the holdings moved too (RE8).
+            let landed = (!tx_hash.is_empty()).then_some(entry.chain_id);
             entry.status = EntryStatus::Failed { tx_hash };
             let ids = entry.record_ids.clone();
-            fail_records(model.attempt, ids)
+            fail_records(model.attempt, ids, landed)
         }
 
         // -- non-answers ------------------------------------------------------
@@ -803,6 +1061,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             status,
             stage,
             now_ms,
+            tx_hash,
         } => {
             let key = normalize(&user_op_hash);
             let rejected_ids = {
@@ -815,20 +1074,50 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                     // flight — a late "rejected" must never un-confirm.
                     return Command::done();
                 }
+                if let Some(tx_hash) = tx_hash.filter(|hash| !hash.is_empty()) {
+                    entry.relay_tx_hash = Some(tx_hash);
+                }
                 entry.last_status = Some((status, stage));
                 if status == TrackLifecycle::Rejected {
                     // The relay refused it before any block: nothing was
                     // sent, nothing will land. Terminal, immediately (③).
+                    entry.acknowledged = true;
                     entry.status = EntryStatus::Rejected;
                     Some(entry.record_ids.clone())
+                } else if status == TrackLifecycle::NotFound {
+                    // Spec 082 RA4: only a may-have-been-sent op the relay has
+                    // never shown it holds is ended by `not_found` — a plain
+                    // op's stays inert (079), and so does one the relay has
+                    // already acknowledged. Inside the grace it is ignored.
+                    let age = now_ms - entry.submitted_at_ms.unwrap_or(now_ms);
+                    if entry.in_doubt() && age >= NOT_FOUND_GRACE_MS {
+                        entry.not_found_streak = entry.not_found_streak.saturating_add(1);
+                    }
+                    // Ruling 8: the relay's word alone is not enough — the chain
+                    // must have been read up to its head with no event for this
+                    // op, or a relay that lost track of a landed op would say
+                    // "not sent" over money that moved.
+                    if entry.in_doubt()
+                        && entry.not_found_streak >= NOT_FOUND_CONFIRMATIONS
+                        && entry.find.caught_up()
+                    {
+                        entry.status = EntryStatus::NotSent;
+                        Some(entry.record_ids.clone())
+                    } else {
+                        None
+                    }
                 } else {
-                    // Everything else — including `included`/`failed` — is
-                    // recorded only, verbatim from `waitForReceipt`.
+                    // Anything else means the relay holds the op: it is an
+                    // ordinary one from here on (RA4), and the streak resets.
+                    // Beyond that — including `included`/`failed` — recorded
+                    // only, verbatim from `waitForReceipt`.
+                    entry.acknowledged = true;
+                    entry.not_found_streak = 0;
                     None
                 }
             };
             match rejected_ids {
-                Some(ids) => fail_records(model.attempt, ids),
+                Some(ids) => fail_records(model.attempt, ids, None),
                 None => run_scheduler(model, now_ms),
             }
         }
@@ -865,9 +1154,28 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                 // and a record whose entry is already terminal is not
                 // resurrected (the patch simply hasn't landed yet).
                 entry.merge_record_id(record.record_id);
+                // A restart keeps a may-have-been-sent op one (spec 082).
+                entry.merge_submit_facts(record.maybe_sent, record.submit_block);
             }
             run_scheduler(model, now_ms)
         }
+
+        TrackShellResult::OpEvent {
+            user_op_hash,
+            now_ms,
+            logs_json,
+            error_json,
+            head_block,
+        } => on_op_event(
+            model,
+            &user_op_hash,
+            now_ms,
+            OpEventAnswer {
+                logs_json,
+                error_json,
+                head_block,
+            },
+        ),
 
         // Acks — nothing may change.
         TrackShellResult::RecordsPatched | TrackShellResult::Notified => Command::done(),
@@ -950,13 +1258,24 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
 
         // Status cadence: every 12s while the window is open, first poll a
         // full interval after submission (the receipt usually needs no
-        // second endpoint). Stamped at issue, as `lastStatusAt` is.
-        if in_window
-            && !entry.status_in_flight
-            && entry
-                .last_status_poll_ms
-                .is_none_or(|last| now_ms - last >= STATUS_POLL_INTERVAL_MS)
-        {
+        // second endpoint). Stamped at issue, as `lastStatusAt` is. A
+        // may-have-been-sent op the relay has not acknowledged is asked past
+        // the window too, at the receipt pace (spec 082 RA4): in exactly this
+        // fault the relay was silent during the window.
+        let status_interval = if in_window {
+            Some(STATUS_POLL_INTERVAL_MS)
+        } else if entry.in_doubt() {
+            Some(receipt_interval)
+        } else {
+            None
+        };
+        let status_due = status_interval.is_some_and(|interval| {
+            !entry.status_in_flight
+                && entry
+                    .last_status_poll_ms
+                    .is_none_or(|last| now_ms - last >= interval)
+        });
+        if status_due {
             entry.status_in_flight = true;
             entry.last_status_poll_ms = Some(now_ms);
             commands.push(shell_request(
@@ -967,10 +1286,246 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
                 },
             ));
         }
+
+        // Ruling 8: while the relay has not shown it holds a may-have-been-
+        // sent op, read the chain for the op's own event, on the same
+        // cadence as the status polls.
+        let find_interval = if in_window {
+            STATUS_POLL_INTERVAL_MS
+        } else {
+            receipt_interval
+        };
+        if entry.in_doubt()
+            && entry.find.in_flight.is_none()
+            && entry
+                .find
+                .last_ms
+                .is_none_or(|last| now_ms - last >= find_interval)
+        {
+            entry.find.last_ms = Some(now_ms);
+            commands.push(find_op(attempt, hash, entry));
+        }
     }
 
     commands.push(render());
     Command::all(commands)
+}
+
+// ---------------------------------------------------------------------------
+// The relay-independent landing check (ruling 8)
+// ---------------------------------------------------------------------------
+
+/// One find op for `entry`: the next window below the known head, or the head
+/// alone when there is none.
+fn find_op(attempt: u64, hash: &str, entry: &mut Entry) -> Command<TrackEffect, Event> {
+    let window = entry.find.next_window();
+    let (from_block, to_block) = match window {
+        Some((from, to)) => (Some(from), Some(to)),
+        None => (None, None),
+    };
+    entry.find.in_flight = Some((from_block, to_block));
+    shell_request(
+        attempt,
+        TrackOperation::FindOpEvent {
+            chain_id: entry.chain_id,
+            entry_point: crate::safe::ENTRY_POINT.to_owned(),
+            topic0: crate::user_op::USER_OPERATION_EVENT_TOPIC.to_owned(),
+            user_op_hash: hash.to_owned(),
+            from_block,
+            to_block,
+        },
+    )
+}
+
+struct OpEventAnswer {
+    logs_json: Option<String>,
+    error_json: Option<String>,
+    head_block: Option<u64>,
+}
+
+/// What the op's own `UserOperationEvent` said, if the logs hold it.
+enum Found {
+    Landed {
+        tx_hash: String,
+        success: bool,
+    },
+    Nothing,
+    /// Not a log array — no answer.
+    Unreadable,
+}
+
+/// Read the op's event out of an `eth_getLogs` result: the EntryPoint's
+/// `UserOperationEvent` whose `topics[1]` is this op's hash. `data` is
+/// `(uint256 nonce, bool success, uint256 actualGasCost, uint256
+/// actualGasUsed)`; `success` is its second word.
+fn find_in_logs(logs_json: &str, user_op_hash: &str) -> Found {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(logs_json) else {
+        return Found::Unreadable;
+    };
+    let logs = match value.get("result") {
+        Some(result) => result,
+        None => &value,
+    };
+    let Some(logs) = logs.as_array() else {
+        return Found::Unreadable;
+    };
+    let text = |log: &serde_json::Value, key: &str| {
+        log.get(key)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    for log in logs {
+        if log.get("removed").and_then(serde_json::Value::as_bool) == Some(true) {
+            continue;
+        }
+        if !text(log, "address").eq_ignore_ascii_case(crate::safe::ENTRY_POINT) {
+            continue;
+        }
+        let topics: Vec<&str> = log
+            .get("topics")
+            .and_then(serde_json::Value::as_array)
+            .map(|topics| {
+                topics
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ours = topics.first().is_some_and(|topic| {
+            topic.eq_ignore_ascii_case(crate::user_op::USER_OPERATION_EVENT_TOPIC)
+        }) && topics
+            .get(1)
+            .is_some_and(|topic| topic.eq_ignore_ascii_case(user_op_hash));
+        if !ours {
+            continue;
+        }
+        let tx_hash = text(log, "transactionHash");
+        let data = text(log, "data");
+        let data = data.strip_prefix("0x").unwrap_or(&data);
+        // The second 32-byte word; anything unreadable is not a verdict.
+        let Some(word) = data.get(64..128) else {
+            continue;
+        };
+        if tx_hash.is_empty() || !word.bytes().all(|b| b.is_ascii_hexdigit()) {
+            continue;
+        }
+        let success = word.bytes().any(|b| b != b'0');
+        return Found::Landed { tx_hash, success };
+    }
+    Found::Nothing
+}
+
+/// The JSON-RPC error member the pool answered, as the range rule reads it.
+fn error_info(error_json: &str) -> Option<super::rpc_pool::RpcErrorInfo> {
+    let value: serde_json::Value = serde_json::from_str(error_json).ok()?;
+    let error = value.get("error").unwrap_or(&value);
+    let code = error
+        .get("code")
+        .and_then(serde_json::Value::as_i64)
+        .and_then(|code| i32::try_from(code).ok());
+    let message = error
+        .get("message")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
+    Some(super::rpc_pool::RpcErrorInfo { code, message })
+}
+
+fn on_op_event(
+    model: &mut Model,
+    user_op_hash: &str,
+    now_ms: f64,
+    answer: OpEventAnswer,
+) -> Command<TrackEffect, Event> {
+    let key = normalize(user_op_hash);
+    let attempt = model.attempt;
+    let Some(entry) = model.entries.get_mut(&key) else {
+        return Command::done();
+    };
+    let Some((asked_from, asked_to)) = entry.find.in_flight.take() else {
+        return Command::done(); // unsolicited — dropped by construction
+    };
+    if let Some(head) = answer.head_block {
+        entry.find.head = Some(entry.find.head.map_or(head, |known| known.max(head)));
+    }
+    if entry.status.is_terminal() {
+        return Command::done(); // resolved meanwhile — never double-resolve
+    }
+
+    // A head-only answer: start the scan, and read the first window now.
+    let Some((from, to)) = asked_from.zip(asked_to) else {
+        if entry.find.from.is_none() {
+            if let Some(head) = entry.find.head {
+                entry.find.from = Some(head.saturating_sub(FIND_OP_LOOKBACK_BLOCKS));
+            }
+        }
+        return continue_scan(attempt, &key, entry, now_ms);
+    };
+
+    if let Some(logs_json) = answer.logs_json.as_deref() {
+        match find_in_logs(logs_json, &key) {
+            Found::Landed { tx_hash, success } => {
+                // The op's own event on chain: a fact no later relay
+                // `not_found` can undo (the entry is terminal from here).
+                entry.acknowledged = true;
+                let ids = entry.record_ids.clone();
+                let chain_id = entry.chain_id;
+                return if success {
+                    entry.status = EntryStatus::Confirmed {
+                        tx_hash: tx_hash.clone(),
+                    };
+                    confirm_records(attempt, key, chain_id, ids, tx_hash)
+                } else {
+                    entry.status = EntryStatus::Failed { tx_hash };
+                    fail_records(attempt, ids, Some(chain_id))
+                };
+            }
+            Found::Nothing => {
+                // A clean read of the full width shows the node takes it:
+                // grow back toward the widest window. At the head the ask
+                // is only the new blocks, so one range error there (often a
+                // load-balanced node a block behind) would otherwise pin the
+                // scan to a sliver for good — and on a fast chain a catch-up
+                // of one block per read never reaches the head.
+                let asked = to.saturating_sub(from).saturating_add(1);
+                if asked >= entry.find.width {
+                    entry.find.width = entry.find.width.saturating_mul(2).min(FIND_OP_MAX_RANGE);
+                }
+                entry.find.scanned_through = Some(to);
+                entry.find.from = Some(to.saturating_add(1));
+                return continue_scan(attempt, &key, entry, now_ms);
+            }
+            Found::Unreadable => return render(),
+        }
+    }
+    if let Some(info) = answer.error_json.as_deref().and_then(error_info) {
+        if super::rpc_pool::is_log_range_error(&info) {
+            let asked = to.saturating_sub(from).saturating_add(1);
+            let halved = (asked / 2).max(1);
+            if halved < asked {
+                entry.find.width = halved;
+                return continue_scan(attempt, &key, entry, now_ms);
+            }
+        }
+    }
+    // Any other error, or no answer: the same window on the next tick.
+    render()
+}
+
+/// After an answer that moved the scan: read the next window at once while
+/// there is one below the known head (a catch-up is bounded by the gap);
+/// caught up, wait for the next tick.
+fn continue_scan(
+    attempt: u64,
+    key: &str,
+    entry: &mut Entry,
+    now_ms: f64,
+) -> Command<TrackEffect, Event> {
+    if !entry.in_doubt() || entry.find.next_window().is_none() {
+        return render();
+    }
+    entry.find.last_ms = Some(now_ms);
+    Command::all([find_op(attempt, key, entry), render()])
 }
 
 // ---------------------------------------------------------------------------
@@ -1014,7 +1569,8 @@ fn clock_of(result: &TrackShellResult) -> Option<f64> {
         | TrackShellResult::ReceiptUnreachable { now_ms, .. }
         | TrackShellResult::Status { now_ms, .. }
         | TrackShellResult::StatusUnavailable { now_ms, .. }
-        | TrackShellResult::RecordsLoaded { now_ms, .. } => Some(*now_ms),
+        | TrackShellResult::RecordsLoaded { now_ms, .. }
+        | TrackShellResult::OpEvent { now_ms, .. } => Some(*now_ms),
         TrackShellResult::RecordsPatched | TrackShellResult::Notified => None,
     }
 }
@@ -1027,25 +1583,71 @@ fn stamp_unstamped(model: &mut Model, now_ms: f64) {
         if entry.submitted_at_ms.is_none() {
             entry.submitted_at_ms = Some(now_ms);
             entry.last_status_poll_ms = Some(now_ms);
+            entry.find.last_ms = Some(now_ms);
         }
     }
 }
 
-/// The ONLY constructor of a `failed` patch — reachable from exactly two
-/// places: a `success === false` receipt and a relay rejection (③). Timeouts,
-/// aborts and unreachable bundlers can never arrive here (①).
-fn fail_records(attempt: u64, ids: Vec<String>) -> Command<TrackEffect, Event> {
+/// The ONLY constructor of a `failed` patch — reachable from a `success ===
+/// false` receipt, a relay rejection (③) and, since spec 082, a relay that
+/// never admitted a may-have-been-sent op (RA4). Timeouts, aborts, age and
+/// unreachable bundlers can never arrive here (①). `landed` names the chain
+/// when the op reached a block (gas spent): the holdings moved (RE8).
+fn fail_records(
+    attempt: u64,
+    ids: Vec<String>,
+    landed: Option<u32>,
+) -> Command<TrackEffect, Event> {
+    let mut commands = vec![shell_request(
+        attempt,
+        TrackOperation::UpdateTxRecords {
+            ids,
+            patch: TrackRecordPatch {
+                status: TrackRecordStatus::Failed,
+                tx_hash: None,
+            },
+        },
+    )];
+    if let Some(chain_id) = landed {
+        commands.push(shell_request(
+            attempt,
+            TrackOperation::HoldingsMoved { chain_id },
+        ));
+    }
+    commands.push(render());
+    Command::all(commands)
+}
+
+/// A landed op: patch first, notify second — the reconciler's order
+/// (`tx-reconciler.ts:236-240`): flip the records, then hand the authentic
+/// logs to token_trust — and then the balance (spec 082 RE8).
+fn confirm_records(
+    attempt: u64,
+    user_op_hash: String,
+    chain_id: u32,
+    ids: Vec<String>,
+    tx_hash: String,
+) -> Command<TrackEffect, Event> {
     Command::all([
         shell_request(
             attempt,
             TrackOperation::UpdateTxRecords {
                 ids,
                 patch: TrackRecordPatch {
-                    status: TrackRecordStatus::Failed,
-                    tx_hash: None,
+                    status: TrackRecordStatus::Confirmed,
+                    tx_hash: Some(tx_hash.clone()),
                 },
             },
         ),
+        shell_request(
+            attempt,
+            TrackOperation::NotifyConfirmed {
+                user_op_hash,
+                chain_id,
+                tx_hash,
+            },
+        ),
+        shell_request(attempt, TrackOperation::HoldingsMoved { chain_id }),
         render(),
     ])
 }

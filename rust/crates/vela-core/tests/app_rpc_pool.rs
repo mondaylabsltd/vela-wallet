@@ -16,12 +16,13 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::rpc_pool::{
     backoff_with_jitter_ms, cooldown_ms, endpoint_score, get_logs_range_cap, is_ban_active,
-    is_permanent_rpc_error, is_rate_limit_signal, is_transient_server_error,
-    qualifies_for_perma_ban, record_failure, record_success, select_urls, source_priority,
-    strip_chain_suffix, Event, RpcBanEntry, RpcCallVerdict, RpcEndpointSeed, RpcEndpointStats,
-    RpcErrorInfo, RpcKind, RpcOperation as Op, RpcPool, RpcShellResult as Res, RpcSource,
-    RpcTransportOutcome as Out, BUNDLER_RPC_TIMEOUT_MS, PERMA_BAN_TTL_MS, PING_TIMEOUT_MS,
-    POOL_REFRESH_MS, RPC_READ_TIMEOUT_MS, TEMP_BAN_TTL_MS,
+    is_log_range_error, is_optional_method, is_permanent_rpc_error, is_rate_limit_signal,
+    is_transient_server_error, may_have_delivered, qualifies_for_perma_ban, record_failure,
+    record_success, select_urls, source_priority, strip_chain_suffix, Event, RpcBanEntry,
+    RpcCallVerdict, RpcEndpointSeed, RpcEndpointStats, RpcErrorInfo, RpcKind, RpcOperation as Op,
+    RpcPool, RpcPoolView, RpcShellResult as Res, RpcSource, RpcTransportOutcome as Out,
+    BUNDLER_RPC_TIMEOUT_MS, OPTIONAL_METHODS, PERMA_BAN_TTL_MS, PING_TIMEOUT_MS, POOL_REFRESH_MS,
+    RPC_READ_TIMEOUT_MS, TEMP_BAN_TTL_MS,
 };
 
 type Sut = DomainDriver<RpcPool>;
@@ -199,6 +200,19 @@ fn respond(id: &str, url: &str) -> Op {
         call_id: id.to_owned(),
         verdict: RpcCallVerdict::Respond {
             url: url.to_owned(),
+            maybe_delivered: false,
+        },
+    }
+}
+
+/// A delivered answer after an earlier endpoint of the same call timed out:
+/// that endpoint may have acted on it too (spec 082 RA1).
+fn respond_after_loss(id: &str, url: &str) -> Op {
+    Op::Conclude {
+        call_id: id.to_owned(),
+        verdict: RpcCallVerdict::Respond {
+            url: url.to_owned(),
+            maybe_delivered: true,
         },
     }
 }
@@ -721,7 +735,10 @@ fn rate_limited_chain_is_transient_never_the_banner() {
         ops,
         vec![Op::Conclude {
             call_id: "c1".to_owned(),
-            verdict: RpcCallVerdict::Failed { rate_limited: true },
+            verdict: RpcCallVerdict::Failed {
+                rate_limited: true,
+                maybe_delivered: false
+            },
         }]
     );
     assert!(sut.resolve(Res::Concluded).is_empty());
@@ -789,8 +806,10 @@ fn final_pass_only_classification_ported_verbatim() {
         ops,
         vec![Op::Conclude {
             call_id: "c1".to_owned(),
+            // A network error may have been acted on (spec 082 RA1).
             verdict: RpcCallVerdict::Failed {
-                rate_limited: false
+                rate_limited: false,
+                maybe_delivered: true
             },
         }]
     );
@@ -850,8 +869,10 @@ fn bundler_retries_once_and_never_classifies_chains() {
         ops,
         vec![Op::Conclude {
             call_id: "b1".to_owned(),
+            // A network error may have been acted on (spec 082 RA1).
             verdict: RpcCallVerdict::Failed {
-                rate_limited: false
+                rate_limited: false,
+                maybe_delivered: true
             },
         }]
     );
@@ -1010,7 +1031,7 @@ fn perma_ban_zero_success_six_failures_24h_ttl() {
         let ops = sut.resolve(outcome(&id, USER, Out::Timeout, 8_000.0, t + 8_000.0));
         assert_eq!(ops, vec![rpc_post(&id, PUB1, "eth_call")]);
         let ops = sut.resolve(outcome(&id, PUB1, ok(), 50.0, t + 8_100.0));
-        assert_eq!(ops, vec![respond(&id, PUB1)]);
+        assert_eq!(ops, vec![respond_after_loss(&id, PUB1)]);
         assert!(sut.resolve(Res::Concluded).is_empty());
     }
 
@@ -1079,7 +1100,7 @@ fn one_success_means_temp_ban_and_expiry_restores_selection() {
         let ops = sut.resolve(outcome(&id, USER, Out::Timeout, 8_000.0, t + 8_000.0));
         assert_eq!(ops, vec![rpc_post(&id, PUB1, "eth_call")]);
         let ops = sut.resolve(outcome(&id, PUB1, ok(), 50.0, t + 8_100.0));
-        assert_eq!(ops, vec![respond(&id, PUB1)]);
+        assert_eq!(ops, vec![respond_after_loss(&id, PUB1)]);
         assert!(sut.resolve(Res::Concluded).is_empty());
     }
 
@@ -1811,7 +1832,7 @@ fn best_rpc_url_follows_the_pool_ranking_not_collection_order() {
     let ops = sut.resolve(outcome("f1", USER, Out::Timeout, 10.0, T0 + 2_010.0));
     assert_eq!(ops, vec![rpc_post("f1", PUB1, "eth_call")]);
     let ops = sut.resolve(outcome("f1", PUB1, ok(), 20.0, T0 + 2_020.0));
-    assert_eq!(ops, vec![respond("f1", PUB1)]);
+    assert_eq!(ops, vec![respond_after_loss("f1", PUB1)]);
     assert!(sut.resolve(Res::Concluded).is_empty());
 
     // Guard against a vacuous assertion: USER really is below the publics now.
@@ -2015,7 +2036,7 @@ fn cooldown_reorders_then_recovers() {
     let ops = sut.resolve(outcome("c1", USER, Out::Timeout, 8_000.0, T0 + 9_000.0));
     assert_eq!(ops, vec![rpc_post("c1", PUB1, "eth_call")]);
     let ops = sut.resolve(outcome("c1", PUB1, ok(), 40.0, T0 + 9_100.0));
-    assert_eq!(ops, vec![respond("c1", PUB1)]);
+    assert_eq!(ops, vec![respond_after_loss("c1", PUB1)]);
     assert!(sut.resolve(Res::Concluded).is_empty());
 
     // Inside USER's 30s cooldown the public endpoint leads.
@@ -2132,7 +2153,10 @@ fn permanent_rate_limit_signal_classifies_final_pass() {
             },
             Op::Conclude {
                 call_id: "c1".to_owned(),
-                verdict: RpcCallVerdict::Failed { rate_limited: true },
+                verdict: RpcCallVerdict::Failed {
+                    rate_limited: true,
+                    maybe_delivered: false
+                },
             },
         ]
     );
@@ -2205,4 +2229,585 @@ fn stale_results_are_dropped_by_construction() {
     assert_eq!(ops, vec![rpc_post("c3", USER, "eth_call")]);
     let ops = sut.resolve(outcome("c3", USER, ok(), 30.0, T0 + 3_050.0));
     assert_eq!(ops, vec![respond("c3", USER)]);
+}
+
+// ===========================================================================
+// Spec 082 — did it leave the device (RA1), the chain notice after one pass
+// (RF1), optional methods (RG7) and the eth_getLogs range answer (T180)
+// ===========================================================================
+
+fn failed(rate_limited: bool, maybe_delivered: bool) -> RpcCallVerdict {
+    RpcCallVerdict::Failed {
+        rate_limited,
+        maybe_delivered,
+    }
+}
+
+fn conclude(id: &str, verdict: RpcCallVerdict) -> Op {
+    Op::Conclude {
+        call_id: id.to_owned(),
+        verdict,
+    }
+}
+
+fn bundler_post_to(id: &str, url: &str) -> Op {
+    bundler_post(id, url, Some(USER))
+}
+
+/// T013: which transport outcomes may have been acted on by the endpoint.
+#[test]
+fn may_have_delivered_is_true_only_where_an_answer_can_have_been_lost() {
+    for out in [
+        Out::Timeout,
+        Out::Network,
+        Out::NonJson,
+        Out::HttpError { status: 500 },
+        Out::HttpError { status: 502 },
+        Out::HttpError { status: 599 },
+    ] {
+        assert!(may_have_delivered(&out), "{out:?}");
+    }
+    for out in [
+        Out::NotConnected,
+        ok(),
+        rpc_err(Some(-32000), "AA25 invalid account nonce"),
+        Out::HttpError { status: 400 },
+        Out::HttpError { status: 401 },
+        Out::HttpError { status: 404 },
+        Out::HttpError { status: 429 },
+        Out::HttpError { status: 600 },
+    ] {
+        assert!(!may_have_delivered(&out), "{out:?}");
+    }
+}
+
+/// Drive one bundler call (one RPC endpoint, two bundlers) through both
+/// passes with the given outcomes, in POST order.
+fn bundler_two_passes(outcomes: [Out; 4]) -> Vec<Op> {
+    let mut sut = Sut::new();
+    sut.dispatch(bundler_call("b1", T0));
+    let ops = sut.resolve(config(
+        vec![seed(USER, RpcSource::User)],
+        vec![
+            seed(BUSER, RpcSource::User),
+            seed(BRELAY, RpcSource::Builtin),
+        ],
+        T0,
+    ));
+    assert_eq!(ops, vec![bundler_post_to("b1", BUSER)]);
+    let [first, second, third, fourth] = outcomes;
+    let ops = sut.resolve(outcome("b1", BUSER, first, 10.0, T0 + 100.0));
+    assert_eq!(ops, vec![bundler_post_to("b1", BRELAY)]);
+    sut.resolve(outcome("b1", BRELAY, second, 10.0, T0 + 200.0));
+    sut.resolve(Res::Jitter {
+        call_id: "b1".to_owned(),
+        value: 0.0,
+    });
+    let ops = sut.resolve(Res::BackoffElapsed {
+        call_id: "b1".to_owned(),
+        now_ms: T0 + 300.0,
+    });
+    assert_eq!(ops.len(), 1);
+    let first_url = match &ops[0] {
+        Op::JsonRpcPost { url, .. } => url.clone(),
+        other => unreachable!("{other:?}"),
+    };
+    let ops = sut.resolve(outcome("b1", &first_url, third, 10.0, T0 + 400.0));
+    let second_url = match &ops[0] {
+        Op::JsonRpcPost { url, .. } => url.clone(),
+        other => unreachable!("{other:?}"),
+    };
+    sut.resolve(outcome("b1", &second_url, fourth, 10.0, T0 + 500.0))
+}
+
+/// T013: the flag is a sticky OR over every POST of the call — one timeout
+/// anywhere, and the submit may have been sent however the rest ended.
+#[test]
+fn maybe_delivered_is_an_or_over_every_post_of_the_call() {
+    assert_eq!(
+        bundler_two_passes([
+            Out::Timeout,
+            Out::NotConnected,
+            Out::NotConnected,
+            Out::NotConnected
+        ]),
+        vec![conclude("b1", failed(false, true))]
+    );
+    assert_eq!(
+        bundler_two_passes([
+            Out::NotConnected,
+            Out::NotConnected,
+            Out::NotConnected,
+            Out::HttpError { status: 503 }
+        ]),
+        vec![conclude("b1", failed(false, true))]
+    );
+    // Nothing ever left the device: the one case a submit may call "not sent".
+    assert_eq!(
+        bundler_two_passes([
+            Out::NotConnected,
+            Out::NotConnected,
+            Out::NotConnected,
+            Out::NotConnected
+        ]),
+        vec![conclude("b1", failed(false, false))]
+    );
+}
+
+/// T013: `NotConnected` is routed exactly like `Network` — fail over, and the
+/// endpoint cools down just the same.
+#[test]
+fn not_connected_fails_over_like_network() {
+    for out in [Out::Network, Out::NotConnected] {
+        let mut sut = loaded(T0);
+        sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+        let ops = sut.resolve(outcome("c1", USER, out.clone(), 5.0, T0 + 1_005.0));
+        assert_eq!(ops, vec![rpc_post("c1", PUB1, "eth_call")], "{out:?}");
+        let ops = sut.resolve(outcome("c1", PUB1, ok(), 20.0, T0 + 1_030.0));
+        let delivered = matches!(out, Out::Network);
+        assert_eq!(
+            ops,
+            vec![conclude(
+                "c1",
+                RpcCallVerdict::Respond {
+                    url: PUB1.to_owned(),
+                    maybe_delivered: delivered
+                }
+            )],
+            "{out:?}"
+        );
+        sut.resolve(Res::Concluded);
+        // USER is cooling down after either failure: PUB1 leads.
+        let ops = sut.dispatch(rpc_call("c2", "eth_call", T0 + 2_000.0));
+        assert_eq!(ops, vec![rpc_post("c2", PUB1, "eth_call")], "{out:?}");
+    }
+}
+
+/// T013/T014: a shell that predates 082 sends none of the new fields.
+#[test]
+fn old_json_without_the_new_fields_still_decodes() {
+    let respond: RpcCallVerdict = serde_json::from_str(r#"{"type":"respond","url":"https://a"}"#)
+        .unwrap_or(failed(true, true));
+    assert_eq!(
+        respond,
+        RpcCallVerdict::Respond {
+            url: "https://a".to_owned(),
+            maybe_delivered: false
+        }
+    );
+    let gave_up: RpcCallVerdict = serde_json::from_str(r#"{"type":"failed","rate_limited":true}"#)
+        .unwrap_or(failed(false, true));
+    assert_eq!(gave_up, failed(true, false));
+    let view: Option<RpcPoolView> =
+        serde_json::from_str(r#"{"failed_chains":[100],"rate_limited_chains":[],"banned":[]}"#)
+            .ok();
+    assert_eq!(view.map(|v| v.unreached_chains), Some(Vec::new()));
+    let out: Option<Out> = serde_json::from_str(r#"{"type":"not_connected"}"#).ok();
+    assert_eq!(out, Some(Out::NotConnected));
+}
+
+/// T014 (RF1): every endpoint of a 3-endpoint chain black-holed — unreached
+/// after ONE pass, while `failed_chains` still waits for the last pass.
+#[test]
+fn a_black_holed_chain_is_unreached_after_one_pass() {
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let ops = sut.resolve(outcome("c1", USER, Out::Timeout, 8_000.0, T0 + 9_000.0));
+    assert_eq!(ops, vec![rpc_post("c1", PUB1, "eth_call")]);
+    assert!(
+        sut.view().unreached_chains.is_empty(),
+        "not before the pass ends"
+    );
+    let ops = sut.resolve(outcome("c1", PUB1, Out::NotConnected, 5.0, T0 + 9_005.0));
+    assert_eq!(ops, vec![rpc_post("c1", PUB2, "eth_call")]);
+    let ops = sut.resolve(outcome("c1", PUB2, Out::Timeout, 8_000.0, T0 + 17_005.0));
+    assert_eq!(
+        ops,
+        vec![Op::DrawJitter {
+            call_id: "c1".to_owned()
+        }]
+    );
+    let view = sut.view();
+    assert_eq!(view.unreached_chains, vec![CHAIN]);
+    assert!(
+        view.failed_chains.is_empty(),
+        "failed_chains keeps its meaning"
+    );
+
+    // The next usable answer — here another call, while c1 still backs off —
+    // clears it.
+    let ops = sut.dispatch(rpc_call("c2", "eth_blockNumber", T0 + 18_000.0));
+    assert_eq!(ops.len(), 1);
+    let url = match &ops[0] {
+        Op::JsonRpcPost { url, .. } => url.clone(),
+        other => unreachable!("{other:?}"),
+    };
+    sut.resolve_matching(
+        |op| matches!(op, Op::JsonRpcPost { call_id, .. } if call_id == "c2"),
+        outcome("c2", &url, ok(), 30.0, T0 + 18_030.0),
+    );
+    assert!(sut.view().unreached_chains.is_empty());
+}
+
+/// T014: a pass with a rate-limit signal, or with any endpoint that answered,
+/// is not "unreached" — someone is there.
+#[test]
+fn a_rate_limited_or_answering_pass_is_not_unreached() {
+    for first in [
+        Out::HttpError { status: 429 },
+        rpc_err(Some(-32603), "internal error"),
+        rpc_err(None, "usage limit exceeded"),
+    ] {
+        let mut sut = loaded(T0);
+        sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+        let ops = sut.resolve(outcome("c1", USER, first.clone(), 5.0, T0 + 1_005.0));
+        assert!(
+            ops.contains(&rpc_post("c1", PUB1, "eth_call")),
+            "{first:?}: {ops:?}"
+        );
+        if ops
+            .first()
+            .is_some_and(|op| matches!(op, Op::PersistBans { .. }))
+        {
+            sut.resolve(Res::Persisted);
+        }
+        sut.resolve(outcome("c1", PUB1, Out::Timeout, 8_000.0, T0 + 9_005.0));
+        let ops = sut.resolve(outcome("c1", PUB2, Out::Timeout, 8_000.0, T0 + 17_005.0));
+        assert_eq!(
+            ops,
+            vec![Op::DrawJitter {
+                call_id: "c1".to_owned()
+            }],
+            "{first:?}"
+        );
+        assert!(sut.view().unreached_chains.is_empty(), "{first:?}");
+    }
+}
+
+/// T014: the cooldown rule, exposed for the extension's worker (RF2), and the
+/// read timeout it pins.
+#[test]
+fn the_cooldown_doubles_from_30s_to_a_300s_cap() {
+    let values: Vec<f64> = (1..=6).map(cooldown_ms).collect();
+    assert_eq!(
+        values,
+        vec![30_000.0, 60_000.0, 120_000.0, 240_000.0, 300_000.0, 300_000.0]
+    );
+    assert_eq!(RPC_READ_TIMEOUT_MS, 8_000);
+}
+
+/// T015 (RG7): Arbitrum's public node crashes on `eth_simulateV1`. That is an
+/// answer — "not served here" — and says nothing about the endpoint or chain.
+#[test]
+fn an_optional_method_s_error_is_an_answer_not_a_fault() {
+    assert_eq!(OPTIONAL_METHODS, &["eth_simulateV1"]);
+    assert!(is_optional_method("eth_simulateV1"));
+    assert!(!is_optional_method("eth_call"));
+
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("s1", "eth_simulateV1", T0 + 1_000.0));
+    let ops = sut.resolve(outcome(
+        "s1",
+        USER,
+        rpc_err(Some(-32603), "method handler crashed"),
+        40.0,
+        T0 + 1_040.0,
+    ));
+    assert_eq!(ops, vec![respond("s1", USER)]);
+    sut.resolve(Res::Concluded);
+    let view = sut.view();
+    assert!(view.failed_chains.is_empty());
+    assert!(view.unreached_chains.is_empty());
+    assert!(view.banned.is_empty());
+
+    // Plan words on it do not ban the endpoint for `eth_call`.
+    sut.dispatch(rpc_call("s2", "eth_simulateV1", T0 + 2_000.0));
+    let ops = sut.resolve(outcome(
+        "s2",
+        USER,
+        rpc_err(None, "eth_simulateV1 requires an active subscription"),
+        40.0,
+        T0 + 2_040.0,
+    ));
+    assert_eq!(ops, vec![respond("s2", USER)]);
+    sut.resolve(Res::Concluded);
+    assert!(sut.view().banned.is_empty());
+    let ops = sut.dispatch(rpc_call("c3", "eth_call", T0 + 3_000.0));
+    assert_eq!(ops, vec![rpc_post("c3", USER, "eth_call")]);
+}
+
+/// T015: throttling on an optional method still fails over — as a 429 and as
+/// rate-limit words — without banning anything.
+#[test]
+fn a_rate_limit_on_an_optional_method_still_fails_over() {
+    for limited in [
+        Out::HttpError { status: 429 },
+        rpc_err(None, "rate limit exceeded"),
+    ] {
+        let mut sut = loaded(T0);
+        sut.dispatch(rpc_call("s1", "eth_simulateV1", T0 + 1_000.0));
+        let ops = sut.resolve(outcome("s1", USER, limited.clone(), 10.0, T0 + 1_010.0));
+        assert_eq!(
+            ops,
+            vec![rpc_post("s1", PUB1, "eth_simulateV1")],
+            "{limited:?}"
+        );
+        assert!(sut.view().banned.is_empty(), "{limited:?}");
+    }
+}
+
+/// T015: an optional method that reaches nothing never classifies the chain —
+/// no banner, no notice — though its caller still hears "failed".
+#[test]
+fn an_optional_method_never_classifies_the_chain() {
+    let mut sut = Sut::new();
+    sut.dispatch(rpc_call("s1", "eth_simulateV1", T0));
+    let ops = sut.resolve(config1(T0));
+    assert_eq!(ops, vec![rpc_post("s1", PUB1, "eth_simulateV1")]);
+    let mut now = T0;
+    for pass in 0..3 {
+        now += 8_000.0;
+        let ops = sut.resolve(outcome("s1", PUB1, Out::Timeout, 8_000.0, now));
+        if pass == 2 {
+            assert_eq!(ops, vec![conclude("s1", failed(false, true))]);
+            break;
+        }
+        assert!(sut.view().unreached_chains.is_empty());
+        sut.resolve(Res::Jitter {
+            call_id: "s1".to_owned(),
+            value: 0.0,
+        });
+        sut.resolve(Res::BackoffElapsed {
+            call_id: "s1".to_owned(),
+            now_ms: now,
+        });
+    }
+    let view = sut.view();
+    assert!(view.failed_chains.is_empty());
+    assert!(view.unreached_chains.is_empty());
+    assert!(view.rate_limited_chains.is_empty());
+}
+
+/// T180 (ruling 8): the range limits the find-event will meet on Gnosis's
+/// providers are answers on `eth_getLogs` — the endpoint is not banned and
+/// the chain is in neither failed nor unreached.
+#[test]
+fn a_log_range_limit_is_an_answer_not_a_chain_fault() {
+    let messages = [
+        err(Some(-32005), "query returned more than 10000 results"),
+        err(None, "exceed maximum block range: 50000"),
+        err(
+            None,
+            "Log response size exceeded. You can make eth_getLogs requests with up to a 2K block range and no limit on the response size",
+        ),
+        err(Some(-32602), "block range is too large"),
+    ];
+    for error in messages {
+        assert!(is_log_range_error(&error), "{error:?}");
+        let mut sut = loaded(T0);
+        sut.dispatch(rpc_call("g1", "eth_getLogs", T0 + 1_000.0));
+        let ops = sut.resolve(outcome(
+            "g1",
+            USER,
+            Out::Response {
+                error: Some(error.clone()),
+            },
+            40.0,
+            T0 + 1_040.0,
+        ));
+        assert!(
+            matches!(
+                ops.as_slice(),
+                [Op::Conclude { verdict: RpcCallVerdict::RangeCap { url, .. }, .. }] if url == USER
+            ),
+            "{error:?}: {ops:?}"
+        );
+        sut.resolve(Res::Concluded);
+        let view = sut.view();
+        assert!(view.banned.is_empty(), "{error:?}");
+        assert!(view.failed_chains.is_empty(), "{error:?}");
+        assert!(view.unreached_chains.is_empty(), "{error:?}");
+    }
+    for not_range in [
+        err(None, "rate limit exceeded"),
+        err(Some(-32000), "execution reverted"),
+        err(Some(-32602), "invalid params"),
+    ] {
+        assert!(!is_log_range_error(&not_range), "{not_range:?}");
+    }
+}
+
+/// T180: throttling on `eth_getLogs` fails over as before — including a
+/// throttle message that happens to name a block range, which must not make
+/// the find-event shrink its window.
+#[test]
+fn a_rate_limit_on_get_logs_still_fails_over() {
+    for message in [
+        "rate limit exceeded",
+        "rate limit exceeded for block range queries",
+    ] {
+        let mut sut = loaded(T0);
+        sut.dispatch(rpc_call("g1", "eth_getLogs", T0 + 1_000.0));
+        let ops = sut.resolve(outcome(
+            "g1",
+            USER,
+            rpc_err(None, message),
+            10.0,
+            T0 + 1_010.0,
+        ));
+        assert!(
+            ops.contains(&rpc_post("g1", PUB1, "eth_getLogs")),
+            "{message}: {ops:?}"
+        );
+        assert!(
+            !ops.iter().any(|op| matches!(
+                op,
+                Op::Conclude {
+                    verdict: RpcCallVerdict::RangeCap { .. },
+                    ..
+                }
+            )),
+            "{message}"
+        );
+    }
+}
+
+/// T180: the same range text on another method is routed exactly as before —
+/// "exceeded" still bans on `eth_call`, `-32005` still fails over there, and a
+/// `-32602` is still an answer.
+#[test]
+fn range_text_on_another_method_is_routed_as_today() {
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    let ops = sut.resolve(outcome(
+        "c1",
+        USER,
+        rpc_err(None, "Log response size exceeded. You can make eth_getLogs requests with up to a 2K block range"),
+        10.0,
+        T0 + 1_010.0,
+    ));
+    assert_eq!(
+        ops,
+        vec![
+            Op::PersistBans {
+                entries: vec![temp_ban(USER, T0 + 1_010.0)]
+            },
+            rpc_post("c1", PUB1, "eth_call"),
+        ]
+    );
+
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("c2", "eth_call", T0 + 1_000.0));
+    let ops = sut.resolve(outcome(
+        "c2",
+        USER,
+        rpc_err(Some(-32005), "query returned more than 10000 results"),
+        10.0,
+        T0 + 1_010.0,
+    ));
+    assert_eq!(ops, vec![rpc_post("c2", PUB1, "eth_call")]);
+
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("c3", "eth_call", T0 + 1_000.0));
+    let ops = sut.resolve(outcome(
+        "c3",
+        USER,
+        rpc_err(Some(-32602), "block range is too large"),
+        10.0,
+        T0 + 1_010.0,
+    ));
+    assert_eq!(ops, vec![respond("c3", USER)]);
+}
+
+/// T180: the range answers Gnosis's public endpoints actually gave on
+/// 2026-09-28 for the find-event's filter (EntryPoint + the event topic):
+/// dRPC's free tier (500 blocks refused, 100 passed) and publicnode's two
+/// caps. Each must read as a range limit, or the find-event would retry the
+/// same window forever instead of halving it.
+#[test]
+fn gnosis_s_live_range_answers_are_range_errors() {
+    let drpc = err(
+        Some(35),
+        "ranges over 10000 blocks are not supported on free plan",
+    );
+    assert!(is_log_range_error(&drpc));
+    assert_eq!(get_logs_range_cap(&drpc), Some(10_000.0));
+    let publicnode = err(
+        Some(-32602),
+        "Block range 20001 exceeds the maximum of 10000 blocks per logs request. Use a narrower fromBlock/toBlock range or increase Receipt.MaxBlockDepth.",
+    );
+    assert!(is_log_range_error(&publicnode));
+    let publicnode_wide = err(Some(-32701), "exceed maximum block range: 50000");
+    assert_eq!(get_logs_range_cap(&publicnode_wide), Some(50_000.0));
+    // 1rpc's plan limit is throttling, not a range: it still fails over.
+    let one_rpc = err(
+        Some(-32001),
+        "You've reached the usage limit for your current plan. To continue with higher limits and uninterrupted access, please upgrade here",
+    );
+    assert!(!is_log_range_error(&one_rpc));
+    let mut sut = loaded(T0);
+    sut.dispatch(rpc_call("g1", "eth_getLogs", T0 + 1_000.0));
+    let ops = sut.resolve(outcome(
+        "g1",
+        USER,
+        Out::Response {
+            error: Some(one_rpc),
+        },
+        10.0,
+        T0 + 1_010.0,
+    ));
+    assert_eq!(ops, vec![rpc_post("g1", PUB1, "eth_getLogs")]);
+}
+
+/// Review of T180 (contract §2: on `eth_getLogs` a rate-limit signal is
+/// checked before the ban rules and only fails over). The find-event reads
+/// `eth_getLogs` on every tick while an op may have been sent, so a throttled
+/// public node answers it often: "exceeded" used to ban that endpoint for an
+/// hour for EVERY method — the relay's gas reads and the balance included —
+/// and a chain of throttled nodes emptied itself. Throttling on `eth_getLogs`
+/// fails over with no ban, the chain is classified rate-limited (never the
+/// banner).
+#[test]
+fn a_throttled_get_logs_fails_over_without_a_ban() {
+    for error in [
+        err(None, "rate limit exceeded"),
+        err(None, "rate limit exceeded for block range queries"),
+        err(Some(-32005), "limit exceeded"),
+        err(
+            Some(-32029),
+            "daily request count exceeded, request rate limited",
+        ),
+    ] {
+        let mut sut = loaded(T0);
+        sut.dispatch(rpc_call("g1", "eth_getLogs", T0 + 1_000.0));
+        let ops = sut.resolve(outcome(
+            "g1",
+            USER,
+            Out::Response {
+                error: Some(error.clone()),
+            },
+            10.0,
+            T0 + 1_010.0,
+        ));
+        assert_eq!(
+            ops,
+            vec![rpc_post("g1", PUB1, "eth_getLogs")],
+            "{error:?}: fail over, no PersistBans"
+        );
+        assert!(sut.view().banned.is_empty(), "{error:?}");
+        // Every endpoint throttled: a rate-limited chain, never the banner's
+        // "fix your RPC", and still no ban.
+        sut.resolve(outcome(
+            "g1",
+            PUB1,
+            Out::Response {
+                error: Some(error.clone()),
+            },
+            10.0,
+            T0 + 1_020.0,
+        ));
+        let view = sut.view();
+        assert!(view.banned.is_empty(), "{error:?}");
+        assert!(view.unreached_chains.is_empty(), "{error:?}");
+    }
 }
