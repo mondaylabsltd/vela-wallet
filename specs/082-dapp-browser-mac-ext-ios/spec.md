@@ -48,6 +48,15 @@ turning the system proxy on and off. Screenshots and log excerpts go in `evidenc
 7. **L-D3 is in scope** (the owner's instruction to carry 079's leftovers into 082): an
    on-chain dApp transaction appears in Activity with its status.
 
+8. **A relay-independent landing check is in 082** (plan Q1): while an operation may have been
+   sent and the relay is silent, the tracker also looks for the operation's own event on chain
+   (EntryPoint `UserOperationEvent` by the locally computed operation hash), so "may have been
+   sent" resolves without the relay and the last double-payment path closes.
+9. **A dApp transaction that reverts inside the wait answers the page with its tx hash** on all
+   four clients (plan Q2); the sheet and Activity say it failed, with the explorer link.
+10. **The desktop says why a tab switch is held**: "请先完成或取消这个请求" in the address bar
+    while a connect or signing request is open (plan Q3; `explore.requestOpen`).
+
 ## What 082 starts from: 079's leftovers
 
 These are recorded in `specs/079-android-dapp-browser-stability/results.md` ("Not done" and
@@ -92,6 +101,10 @@ Evidence names refer to `evidence/<client>/<name>.jpg` (screenshots, resized) an
 | L-D3 live | P1 | Extension | Confirmed on the device: after two dApp sends landed, Activity still reads "No activity yet" | `strip-ext-w1.png` (right) |
 | L-D6 live | P2 | Desktop | Confirmed on the device: `eth_requestAccounts` → `0x88cCA0EeDb…`; `accountsChanged` → `0x88cca0eedb…` | `p30-dapp-log.png` |
 | G28 | **P1** | iPhone | **The address bar names a site the page is not.** Type `https://app.uniswap.org` while the tab still shows jumper.exchange: the bar at once reads "🔒 app.uniswap.org" while Jumper's page stays on screen, live and tappable, for 30 s and more; the progress hairline sits at ~7 %; no failure, no words (W5: no load watchdog on iOS). The rule from 079 (L1) is the reverse: the old host stays until the new page commits. The same hang made 7 of 8 "working" dApps in the SC-006 run never commit, so Recents held only example.com | `strip-uni.png` (`ios-i26-uni-{5,12,30}s.png`), `strip-sc006.png` |
+| G32 | **P1** | iPhone | **A site that never answers gets 60–75 s of silence.** `blackhole example` → type example.org: nothing but the host in the bar until WebKit's own `-1001` at ~62 s; the panel "无法加载此页面 / 网络不稳定，页面没能打开。/ 正在重试…" appears at ~75 s (desktop: panel at 5–8 s through its watchdog). Worse, for that whole minute the bar reads "🔒 example.org" over the previous site — here the test dApp, still **connected** (green dot) and clickable (G28). Row IX2 | `ios-i33-ix2-{10,45,90}s.jpg`, console `browser load failed: https://example.org/ — -1001 → timeout` |
+| G33 | P2 | iPhone, Extension | **An unreachable chain says nothing for a minute.** iPhone: every Gnosis node black-holed (chaos log: 3 × HOLE each for rpc.gnosischain.com, gnosis-rpc.publicnode.com, 1rpc.io) → Block number → no chain notice within 60 s (079 C1 expects a one-line notice naming Gnosis); after `pass` the next read answered. Extension: each dApp read hung 45–57 s, then `-32603 "Vela could not reach a node for chain 100: Failed to fetch"` (raw fetch text), no notice, no memory of the dead nodes between calls (W11; G20 below) | `ios-i35-c1-60s.jpg`, `evidence/chaos-proxy.log` 16:17–16:18 |
+| G20 | P1 | Extension | Every dApp read on a chain whose nodes are unreachable takes 45–57 s and ends in `-32603 … Failed to fetch`; the next call pays the same again; the first call after recovery took 6.3 s | `logs/ext-cdp.jsonl`, rows EX10/EX11 |
+| S7 results | — | Extension, iPhone | Relay refused at the quote: the fee row names the cause ("Couldn't reach Vela — check your connection. We'll retry…" / "无法连接 Vela 服务 — 请检查网络，稍后会自动重试。") with a retry control and a shut slide; after `pass` the fee came back with no tap in 8 s (extension) and 14 s (iPhone) — pass (SC-003) | `ext-e14-fee-relay-down.jpg`, `ext-e15-fee-back.jpg`, `ios-i34-s7-relay-down.jpg` |
 | SC-006 iPhone | — | iPhone | 10 × `https://vela-tN.invalid`: each "找不到这个网站，请检查网址。", no retry, none in Recents (pass). 10 real dApps: curve.fi `-1004 → refused` and sushi.com `-1005 → offline` panels (pass); the other 8 did not commit within 9 s (see G28), so only example.com reached Recents — the Recents rule held, the loads did not | console `browser load failed` lines, `strip-sc006.png` |
 | G26 | P2 | iPhone | The home balance does not move after the app's own send: xDAI read 0.38167 thirty minutes after this phone sent 0.011 (chain: 0.35967); only a pull-to-refresh corrected it. A person who just paid sees the old balance | `ios-i20-home-assets.png`, `ios-i21-home-after-refresh.png` |
 | G24 | P2 | iPhone | The same wallet lists USDC on Base (0.470005) on the desktop but not on the iPhone; Base ETH appears on the iPhone only some time after a cold start (absent at 14:17, present at 15:28) | `p05-home-loaded.png`, `ios-i01-launch.png`, `ios-i20-home-assets.png` |
