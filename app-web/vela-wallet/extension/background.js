@@ -26,7 +26,9 @@
  *     before the relay POST, so nothing is ever signed or sent for a page that
  *     is gone (RB5);
  *   - a request that ends without a decision answers 4900, never 4001 and
- *     never Chrome's own error text (RB6).
+ *     never Chrome's own error text (RB6) — except a claimed submit whose
+ *     claim carried the operation hash: that one may have been sent, and its
+ *     page is told the hash when its surface goes (RJ2), never 4900.
  *
  * The rules are pure functions in `lib/request-life.js`; this file performs
  * them and logs every step through `lib/swlog.js` (RB14).
@@ -80,7 +82,8 @@ import {
 	nextForWindow,
 	recoveryPlan,
 	settlement,
-	surfaceAfterOpen
+	surfaceAfterOpen,
+	withClaim
 } from './lib/request-life.js';
 import { createSwLog } from './lib/swlog.js';
 import {
@@ -283,6 +286,48 @@ async function settle(rid, cause) {
 	return true;
 }
 
+/**
+ * End a request whose surface went after it was claimed for submit with its
+ * operation hash (RJ2): it may have been sent, so the page is told that hash
+ * — once, as the answer the surface would have given for a lost relay reply
+ * (ruling 1 + RA2) — and its receipt reads for it are translated from now on
+ * (RF3). The wallet's own record of it, written before the POST, is what the
+ * tracker resumes on the next boot.
+ */
+async function answerMaybeSent(rid, cause, opHash) {
+	const record = records.get(rid);
+	if (!record) return false;
+	records.delete(rid);
+	await unpersist(rid);
+	const owner = ownerOf(record);
+	postTo(owner, { type: 'withdrawn', rid, cause });
+	const delivered = await deliver(record, { result: opHash });
+	void swlog.log('req.answered', {
+		cause,
+		maybe_sent: 1,
+		delivered,
+		outcome: 'ok',
+		tab: record.tabId
+	});
+	void rememberOp(opHash, { chainId: record.chainId });
+	if (record.surface === 'window' && record.surfaceWindowId !== undefined) {
+		chrome.windows.remove(record.surfaceWindowId).catch(() => {});
+	}
+	if (owner.kind === 'panel') pushOwed(owner);
+	return delivered;
+}
+
+/**
+ * One request ended by a browser event or a recovery step: `{rid, cause}` is
+ * settled 4900; `{rid, cause, answer: {ok}}` — a claimed submit that may have
+ * been sent — is answered with its hash (RJ2).
+ */
+function end(step) {
+	return step.answer
+		? answerMaybeSent(step.rid, step.cause, step.answer.ok)
+		: settle(step.rid, step.cause);
+}
+
 /** The surface's answer, delivered to the page by its document. */
 async function answer(rid, payload, opHash, caller) {
 	const record = records.get(rid);
@@ -464,7 +509,7 @@ async function resume() {
 			const record = records.get(step.rid);
 			if (!record) return;
 			if (step.action === 'settle') {
-				await settle(step.rid, step.cause);
+				await end(step);
 				return;
 			}
 			if (await probeAlive(record)) {
@@ -546,11 +591,8 @@ function onSurfacePort(port) {
 		if (caller.kind === 'panel') void swlog.log('panel.down', { window: caller.windowId });
 		void loaded.then(() => {
 			if (surfaces.has(key)) return;
-			for (const { rid, cause } of affectedBy([...records.values()], {
-				type: 'surface_closed',
-				caller
-			})) {
-				void settle(rid, cause);
+			for (const step of affectedBy([...records.values()], { type: 'surface_closed', caller })) {
+				void end(step);
 			}
 		});
 	});
@@ -583,7 +625,10 @@ async function onSurfaceMessage(port, message, caller, setCaller) {
 			return;
 		}
 		case 'claim': {
-			const live = await claim(message.rid, message.phase, caller);
+			const live = await claim(message.rid, message.phase, caller, {
+				opHash: message.opHash,
+				chainId: message.chainId
+			});
 			try {
 				port.postMessage({ type: 'claimResult', nonce: message.nonce, ...live });
 			} catch {
@@ -614,9 +659,10 @@ async function onSurfaceMessage(port, message, caller, setCaller) {
 /**
  * RB5: is the request live enough to act on? A live claim moves it to
  * `claimed` and tells the page, which extends its own deadline; a request
- * past its limit, or whose page is gone, is settled right here.
+ * past its limit, or whose page is gone, is settled right here. A live
+ * `submit` claim keeps the operation hash and chain it carries (RJ2).
  */
-async function claim(rid, phase, caller) {
+async function claim(rid, phase, caller, detail = {}) {
 	const record = records.get(rid);
 	let docAttached = record ? docPorts.has(record.documentId) : false;
 	if (record && !docAttached) docAttached = await probeAlive(record);
@@ -628,10 +674,10 @@ async function claim(rid, phase, caller) {
 		tab: record?.tabId
 	});
 	if (verdict.live) {
-		record.state = 'claimed';
-		record.claimedAt = Date.now();
-		await persist(record);
-		void toPage(record, { type: 'claimed', id: record.id });
+		const claimed = withClaim(record, { phase, now: Date.now(), ...detail });
+		records.set(rid, claimed);
+		await persist(claimed);
+		void toPage(claimed, { type: 'claimed', id: claimed.id });
 		return { live: true };
 	}
 	if (record && (verdict.cause === 'expired' || verdict.cause === 'page_left')) {
@@ -646,7 +692,7 @@ async function claim(rid, phase, caller) {
 
 function settleAll(event) {
 	void loaded.then(() => {
-		for (const { rid, cause } of affectedBy([...records.values()], event)) void settle(rid, cause);
+		for (const step of affectedBy([...records.values()], event)) void end(step);
 	});
 }
 

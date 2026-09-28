@@ -13,11 +13,15 @@
  * `vela.req.<tabId>:<pageRequestId>`:
  *
  *   { v, rid, id, method, params, origin, tabId, windowId, documentId,
- *     sentAt, at, surface, surfaceWindowId, state, claimedAt? }
+ *     sentAt, at, surface, surfaceWindowId, state, claimedAt?, phase?,
+ *     opHash?, chainId? }
  *
  * `state` goes `created` → `shown` → `claimed`; the record leaves the ledger
- * when it is answered or settled, never otherwise.
+ * when it is answered or settled, never otherwise. `phase` is the last live
+ * claim's; a `submit` claim may carry the operation's hash and chain
+ * (`opHash`, `chainId`, RJ2), sent right before the relay POST.
  */
+import { isHash32 } from './op-receipt.js';
 import { REQUEST_TTL_MS, SETTLE, settleError } from './protocol.js';
 
 /** The record schema this worker writes. */
@@ -103,6 +107,40 @@ export function claimVerdict(record, { now, ttlMs = REQUEST_TTL_MS, docAttached,
 }
 
 /**
+ * The record after a LIVE claim (RB5): `claimed` from now, at `phase`. A
+ * `submit` claim that carries the operation hash and its chain keeps both
+ * (RJ2) — a hash that is not a 32-byte hex, or a chain that is not a positive
+ * integer, is not kept. Pure: returns a new record.
+ */
+export function withClaim(record, { phase, now, opHash, chainId }) {
+	const next = { ...record, state: 'claimed', claimedAt: now, phase };
+	if (phase === 'submit' && isHash32(opHash)) {
+		next.opHash = opHash;
+		if (Number.isInteger(chainId) && chainId > 0) next.chainId = chainId;
+	}
+	return next;
+}
+
+/**
+ * The operation hash a request may already have been sent under (RJ2), or
+ * `null`: only a record claimed for SUBMIT whose claim carried the hash. From
+ * that claim on, the bytes may be on their way to the relay, so a request that
+ * ends without its surface's answer is answered with this hash — ruling 1 +
+ * RA2, "may have been sent" — and never 4900, which a dApp reads as "not sent"
+ * and pays again. Before the hash exists nothing was sent, and 4900 is right.
+ */
+export function maybeSentHash(record) {
+	if (!record || record.state !== 'claimed' || record.phase !== 'submit') return null;
+	return isHash32(record.opHash) ? record.opHash : null;
+}
+
+/** `{rid, cause}` — plus the answer a may-have-been-sent request is owed. */
+function ending(record, cause) {
+	const hash = maybeSentHash(record);
+	return hash ? { rid: record.rid, cause, answer: { ok: hash } } : { rid: record.rid, cause };
+}
+
+/**
  * Does `caller` — `{kind:'panel', windowId}` or `{kind:'window', rid}` — own
  * this record? A panel owns its window's panel queue; a dedicated window owns
  * the one request it was opened for.
@@ -127,20 +165,23 @@ export function callerOwns(record, caller) {
  *     read — then nothing is settled on that account;
  *   - `openWindows`: the window ids that exist, or `null` when unknown.
  *
- * Returns `[{ rid, action: 'settle', cause } | { rid, action: 'probe' }]`: a
- * probe asks the page, by `documentId`, whether it still owns the id (`alive`)
- * and keeps the record if it does.
+ * Returns `[{ rid, action: 'settle', cause, answer? } | { rid, action: 'probe' }]`:
+ * a probe asks the page, by `documentId`, whether it still owns the id
+ * (`alive`) and keeps the record if it does. A settle carries `answer:
+ * {ok: opHash}` for a claimed submit that may have been sent (RJ2): the page
+ * is told that hash, not 4900.
  */
 export function recoveryPlan(records, { now, ttlMs = REQUEST_TTL_MS, panelWindows, openWindows }) {
 	const plan = [];
+	const settle = (record, cause) => plan.push({ action: 'settle', ...ending(record, cause) });
 	for (const record of records) {
 		if (!record || typeof record.rid !== 'string') continue;
 		if (now >= deadlineOf(record, ttlMs)) {
-			plan.push({ rid: record.rid, action: 'settle', cause: 'expired' });
+			settle(record, 'expired');
 			continue;
 		}
 		if (record.surface === 'panel' && panelWindows && !panelWindows.has(record.surfaceWindowId)) {
-			plan.push({ rid: record.rid, action: 'settle', cause: 'surface_closed' });
+			settle(record, 'surface_closed');
 			continue;
 		}
 		if (
@@ -148,7 +189,7 @@ export function recoveryPlan(records, { now, ttlMs = REQUEST_TTL_MS, panelWindow
 			openWindows &&
 			(record.surfaceWindowId === undefined || !openWindows.has(record.surfaceWindowId))
 		) {
-			plan.push({ rid: record.rid, action: 'settle', cause: 'surface_closed' });
+			settle(record, 'surface_closed');
 			continue;
 		}
 		plan.push({ rid: record.rid, action: 'probe' });
@@ -169,7 +210,9 @@ export function recoveryPlan(records, { now, ttlMs = REQUEST_TTL_MS, panelWindow
  *   - `{type:'window_removed', windowId}` — a window closed: its dedicated
  *     request window's request, and every request its panel owed.
  *
- * Returns `[{ rid, cause }]`.
+ * Returns `[{ rid, cause, answer? }]`. When the SURFACE went (not the page), a
+ * claimed submit that may have been sent carries `answer: {ok: opHash}` —
+ * RJ2 supersedes RB10 for those records only.
  */
 export function affectedBy(records, event) {
 	const out = [];
@@ -195,7 +238,8 @@ export function affectedBy(records, event) {
 			default:
 				break;
 		}
-		if (cause) out.push({ rid: record.rid, cause });
+		if (!cause) continue;
+		out.push(cause === 'surface_closed' ? ending(record, cause) : { rid: record.rid, cause });
 	}
 	return out;
 }

@@ -14,11 +14,13 @@ import {
 	callerOwns,
 	claimVerdict,
 	deadlineOf,
+	maybeSentHash,
 	newRecord,
 	nextForWindow,
 	recoveryPlan,
 	settlement,
-	surfaceAfterOpen
+	surfaceAfterOpen,
+	withClaim
 } from '../../../extension/lib/request-life.js';
 import {
 	ERR,
@@ -30,7 +32,12 @@ import {
 
 const NOW = 1_800_000_000_000;
 
-type Rec = ReturnType<typeof newRecord> & { claimedAt?: number };
+type Rec = ReturnType<typeof newRecord> & {
+	claimedAt?: number;
+	phase?: string;
+	opHash?: string;
+	chainId?: number;
+};
 
 function record(over: Partial<Rec> = {}): Rec {
 	return {
@@ -240,6 +247,94 @@ describe('what a browser event ends (data-model §4)', () => {
 		]);
 		expect(affectedBy([a, w], { type: 'window_removed', windowId: 3 })).toEqual([
 			{ rid: '7:a', cause: 'surface_closed' }
+		]);
+	});
+});
+
+/**
+ * RJ2 (G35, P0): once the panel's claim for SUBMIT carries the operation
+ * hash, the bytes may already be on their way. The page must then hear that
+ * hash — ruling 1 + RA2, "may have been sent" — never 4900, which a dApp reads
+ * as "not sent" and pays again. Before the hash exists (nothing signed or
+ * sent), 4900 stays right.
+ */
+describe('a claimed submit that may have been sent (RJ2, G35)', () => {
+	const OP = `0x${'ab'.repeat(32)}`;
+	const submitting = (over: Partial<Rec> = {}) =>
+		record({
+			rid: '7:tx',
+			state: 'claimed',
+			claimedAt: NOW - 500,
+			phase: 'submit',
+			opHash: OP,
+			chainId: 100,
+			...over
+		} as Partial<Rec>);
+
+	it('a live submit claim keeps the operation hash and its chain on the record', () => {
+		const signed = withClaim(record(), { phase: 'sign', now: NOW });
+		expect(signed).toMatchObject({ state: 'claimed', claimedAt: NOW, phase: 'sign' });
+		expect(signed).not.toHaveProperty('opHash');
+		const sent = withClaim(signed, { phase: 'submit', now: NOW + 1, opHash: OP, chainId: 100 });
+		expect(sent).toMatchObject({ phase: 'submit', opHash: OP, chainId: 100, claimedAt: NOW + 1 });
+		expect(maybeSentHash(sent)).toBe(OP);
+	});
+
+	it('keeps no hash that is not one, and no chain that is not one', () => {
+		const sent = withClaim(record({ state: 'claimed' }), {
+			phase: 'submit',
+			now: NOW,
+			opHash: '0x1234',
+			chainId: -1
+		});
+		expect(sent).not.toHaveProperty('opHash');
+		expect(sent).not.toHaveProperty('chainId');
+		expect(maybeSentHash(sent)).toBeNull();
+	});
+
+	it('names the hash only for a claimed submit that carried one', () => {
+		expect(maybeSentHash(submitting())).toBe(OP);
+		expect(maybeSentHash(submitting({ phase: 'sign' } as Partial<Rec>))).toBeNull();
+		expect(maybeSentHash(submitting({ opHash: undefined } as Partial<Rec>))).toBeNull();
+		expect(maybeSentHash(submitting({ state: 'shown' }))).toBeNull();
+		expect(maybeSentHash(null)).toBeNull();
+	});
+
+	it('the panel closing answers the claimed submit with its hash, and settles the rest', () => {
+		const owed = record({ rid: '7:sign', state: 'claimed', phase: 'sign' } as Partial<Rec>);
+		expect(affectedBy([submitting(), owed], { type: 'surface_closed', caller: PANEL })).toEqual([
+			{ rid: '7:tx', cause: 'surface_closed', answer: { ok: OP } },
+			{ rid: '7:sign', cause: 'surface_closed' }
+		]);
+	});
+
+	it('a window closing does the same', () => {
+		expect(affectedBy([submitting()], { type: 'window_removed', windowId: 3 })).toEqual([
+			{ rid: '7:tx', cause: 'surface_closed', answer: { ok: OP } }
+		]);
+	});
+
+	it('the page leaving is still page_left: nobody is there to hear a hash', () => {
+		expect(affectedBy([submitting()], { type: 'doc_closed', documentId: 'doc-a' })).toEqual([
+			{ rid: '7:tx', cause: 'page_left' }
+		]);
+	});
+
+	it('a restarted worker answers it with its hash when its panel is gone or its time is up', () => {
+		const facts = {
+			now: NOW,
+			ttlMs: REQUEST_TTL_MS,
+			panelWindows: new Set<number>(),
+			openWindows: new Set([3])
+		};
+		const signOnly = record({ rid: '7:sign', state: 'claimed', phase: 'sign' } as Partial<Rec>);
+		expect(recoveryPlan([submitting(), signOnly], facts)).toEqual([
+			{ rid: '7:tx', action: 'settle', cause: 'surface_closed', answer: { ok: OP } },
+			{ rid: '7:sign', action: 'settle', cause: 'surface_closed' }
+		]);
+		const late = submitting({ claimedAt: NOW - REQUEST_TTL_MS - 1 });
+		expect(recoveryPlan([late], { ...facts, panelWindows: new Set([3]) })).toEqual([
+			{ rid: '7:tx', action: 'settle', cause: 'expired', answer: { ok: OP } }
 		]);
 	});
 });

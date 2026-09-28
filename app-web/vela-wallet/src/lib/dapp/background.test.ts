@@ -191,6 +191,21 @@ function makeEnv() {
 		});
 	}
 
+	/** A message from one of the wallet's own pages (the fallbacks: requestAnswer / requestDetail). */
+	function sendFromWallet(message: Record<string, unknown>) {
+		return new Promise<any>((resolve) => {
+			const sender = { url: 'chrome-extension://ext/en/wallet.html?panel' };
+			let answered = false;
+			for (const fn of listeners.message ?? []) {
+				const keep = fn(message, sender, (reply: unknown) => {
+					answered = true;
+					resolve(reply);
+				});
+				if (keep !== true && !answered) resolve(undefined);
+			}
+		});
+	}
+
 	function openPage(tabId: number, documentId: string, origin = 'https://a.example', windowId = 3) {
 		const page: FakePage = {
 			tabId,
@@ -247,6 +262,7 @@ function makeEnv() {
 		emit,
 		portPair,
 		sendFromPage,
+		sendFromWallet,
 		openPage,
 		ask,
 		leave,
@@ -537,6 +553,163 @@ describe('Chrome’s panel ✕ (EX6)', () => {
 		]);
 		expect(reqKeys(env.session)).toEqual([]);
 		expect(String(env.session.data['vela.sw.log'])).toMatch(/req\.settled cause=surface_closed/);
+	});
+});
+
+/**
+ * RJ2 (G35, P0): the device pass closed the side panel after the slide — the
+ * submit claim was in, the relay had the operation — and the page was told
+ * 4900 "The browser closed…" while nonce 26 landed 13 s later. A dApp that
+ * reads 4900 as "not sent" pays twice. A claimed submit that carried its
+ * operation hash is answered with that hash instead, exactly once, on every
+ * way its surface can go; before the hash exists, 4900 is still right.
+ */
+describe('a claimed submit whose surface went (RJ2, G35)', () => {
+	const OP = `0x${'ab'.repeat(32)}`;
+
+	async function submitting(env: Env, panel: ReturnType<Env['panel']>) {
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'tx:1', 'eth_sendTransaction');
+		await settleAll();
+		panel.post({ type: 'claim', rid: '7:tx:1', phase: 'sign', nonce: 1 });
+		panel.post({
+			type: 'claim',
+			rid: '7:tx:1',
+			phase: 'submit',
+			nonce: 2,
+			opHash: OP,
+			chainId: 100
+		});
+		await settleAll();
+		expect(panel.received).toContainEqual({ type: 'claimResult', nonce: 2, live: true });
+		return page;
+	}
+
+	it('the panel closed after the submit claim: the page gets the op hash once, never 4900', async () => {
+		const env = makeEnv();
+		await startWorker(env);
+		const panel = env.panel();
+		const page = await submitting(env, panel);
+		expect(env.session.data['vela.req.7:tx:1']).toMatchObject({
+			phase: 'submit',
+			opHash: OP,
+			chainId: 100
+		});
+
+		panel.close();
+		await settleAll();
+		expect(page.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+		expect(reqKeys(env.session)).toEqual([]);
+		// The page's receipt reads for that hash are translated from now on (RF3).
+		expect(env.local.data[`vela.ext.op.${OP}`]).toMatchObject({ chainId: 100 });
+		const log = String(env.session.data['vela.sw.log']);
+		expect(log).toMatch(/req\.answered cause=surface_closed maybe_sent=1/);
+		expect(log).not.toMatch(/req\.settled/);
+		expect(log).not.toContain(OP);
+
+		// The panel's own answer, arriving late by the message fallback, is not a second one.
+		const late = await env.sendFromWallet({
+			type: 'requestAnswer',
+			rid: '7:tx:1',
+			result: `0x${'cd'.repeat(32)}`
+		});
+		expect(late).toEqual({ delivered: false });
+		expect(page.answers).toHaveLength(1);
+	});
+
+	it('claimed only for sign (nothing signed yet has a hash): still 4900', async () => {
+		const env = makeEnv();
+		await startWorker(env);
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'tx:1', 'eth_sendTransaction');
+		await settleAll();
+		panel.post({ type: 'claim', rid: '7:tx:1', phase: 'sign', nonce: 1 });
+		await settleAll();
+		panel.close();
+		await settleAll();
+		expect(page.answers).toEqual([
+			{
+				id: 'tx:1',
+				result: undefined,
+				error: { code: 4900, message: 'The browser closed before the request finished' }
+			}
+		]);
+	});
+
+	it('a submit claim with no hash (an older panel) is still 4900', async () => {
+		const env = makeEnv();
+		await startWorker(env);
+		const panel = env.panel();
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 'tx:1', 'eth_sendTransaction');
+		await settleAll();
+		panel.post({ type: 'claim', rid: '7:tx:1', phase: 'sign', nonce: 1 });
+		panel.post({ type: 'claim', rid: '7:tx:1', phase: 'submit', nonce: 2 });
+		await settleAll();
+		panel.close();
+		await settleAll();
+		expect(page.answers[0].error?.code).toBe(4900);
+	});
+
+	it('the window closing answers it with the hash too', async () => {
+		const env = makeEnv();
+		await startWorker(env);
+		const panel = env.panel();
+		const page = await submitting(env, panel);
+		env.emit('windowRemoved', 3);
+		await settleAll();
+		expect(page.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+	});
+
+	it('a worker restart with the panel gone: the hash for the claimed submit, 4900 for the rest', async () => {
+		const env = makeEnv();
+		const a = env.openPage(7, 'doc-a');
+		a.owed.add('tx:1');
+		const b = env.openPage(9, 'doc-b');
+		b.owed.add('s:1');
+		const base = {
+			v: 1,
+			params: [],
+			origin: 'https://a.example',
+			windowId: 3,
+			surface: 'panel',
+			surfaceWindowId: 3,
+			state: 'claimed',
+			sentAt: Date.now() - 20_000,
+			at: Date.now() - 20_000,
+			claimedAt: Date.now() - 5_000
+		};
+		env.session.data['vela.req.7:tx:1'] = {
+			...base,
+			rid: '7:tx:1',
+			id: 'tx:1',
+			method: 'eth_sendTransaction',
+			tabId: 7,
+			documentId: 'doc-a',
+			phase: 'submit',
+			opHash: OP,
+			chainId: 100
+		};
+		env.session.data['vela.req.9:s:1'] = {
+			...base,
+			rid: '9:s:1',
+			id: 's:1',
+			method: 'eth_sendTransaction',
+			tabId: 9,
+			documentId: 'doc-b',
+			phase: 'sign'
+		};
+		// No side panel is up in any window.
+		await startWorker(env);
+		await settleAll();
+		expect(a.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+		expect(b.answers[0].error).toEqual({
+			code: 4900,
+			message: 'The browser closed before the request finished'
+		});
+		expect(reqKeys(env.session)).toEqual([]);
+		expect(env.local.data[`vela.ext.op.${OP}`]).toMatchObject({ chainId: 100 });
 	});
 });
 
