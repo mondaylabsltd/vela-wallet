@@ -332,6 +332,16 @@ libc = "0.2"
 [target.'cfg(windows)'.dependencies]
 raw-window-handle = "0.6"
 
+# WebView2's own words, which wry 0.56 answers without reading (spec 083):
+# the HRESULT inside a failed build (no runtime vs. a profile folder it may not
+# write), a load's IsErrorPage / IsSuccess / WebErrorStatus, a renderer dying,
+# a certificate error, a new window's IsUserInitiated. Exactly the versions wry
+# 0.56.1 resolves in Cargo.lock — a second copy would make wry's
+# `ICoreWebView2` a different type from ours — so a wry bump that moves them
+# fails to compile here instead of drifting. Bump the three together.
+webview2-com = "0.38.2"
+windows-core = "0.61.2"
+
 # `GetTimeZoneInformation`, for the one fact the core cannot derive: which day
 # a timestamp belongs to. Bindings rather than a hand-rolled
 # `TIME_ZONE_INFORMATION`, because getting that struct's layout wrong is

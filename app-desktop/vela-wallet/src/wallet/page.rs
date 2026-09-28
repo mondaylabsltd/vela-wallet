@@ -12307,6 +12307,14 @@ impl WalletPage {
             self.identity.is_some() && explore_tabs.ready && !explore_tabs.tabs.is_empty();
         let tabs = if live_tabs {
             explore_live::tab_models(&explore_tabs, &self.explore)
+        } else if self.identity.is_some() {
+            // Signed in, before the core has a tab on record (a fresh profile,
+            // the first page opening): the page's own tab — never the gallery's
+            // demo "Uniswap · Polymarket", which did nothing (083 W9).
+            vec![explore_live::pending_tab(
+                &self.explore,
+                browsing.then_some(self.browser_home.as_str()),
+            )]
         } else {
             explore_fixtures::tabs(&self.explore, browsing)
         };
@@ -12500,7 +12508,9 @@ impl WalletPage {
         let host = if live_browser {
             // Before any web page has committed in this view (the engine's
             // blank page is not one), the site being loaded is the only name
-            // there is (spec 079).
+            // there is (spec 079). With neither, NO name: the gallery's demo
+            // host stood here once, a lock beside a site that was not there
+            // (083 W1c).
             let loading = self
                 .load_watch
                 .url
@@ -12510,12 +12520,12 @@ impl WalletPage {
             crate::webview::host()
                 .filter(|host| !host.starts_with("about:"))
                 .or(loading)
-                .map_or_else(|| explore_fixtures::uniswap().host, SharedString::from)
+                .map(SharedString::from)
         } else {
-            explore_fixtures::uniswap().host
+            Some(explore_fixtures::uniswap().host)
         };
         #[cfg(target_os = "linux")]
-        let host = explore_fixtures::uniswap().host;
+        let host = Some(explore_fixtures::uniswap().host);
         // The lock tells the truth: the core's judgement of the site on
         // screen, the same one that decides whether it may ask to sign.
         let secure = !live_browser || tab_view.as_ref().is_none_or(|tab| tab.secure);
@@ -12541,16 +12551,28 @@ impl WalletPage {
                     .as_ref()
                     .is_some_and(|host| host.read(cx).chain_unreachable(*chain_id))
             });
-        let (host, secure) = match &failed_load {
-            Some((_, url)) => (
-                SharedString::from(crate::explore::load_watch::host_of(url)),
+        // Spec 083 W1c: the engine has not started (starting, or refused): the
+        // address asked for is named by its address alone, as a failed load's.
+        #[cfg(not(target_os = "linux"))]
+        let unbuilt = (live_browser && !crashed && !crate::webview::ready())
+            .then(|| self.browser_home.clone())
+            .filter(|url| !url.is_empty());
+        #[cfg(target_os = "linux")]
+        let unbuilt: Option<String> = None;
+        let (host, secure) = match failed_load
+            .as_ref()
+            .map(|(_, url)| url)
+            .or(unbuilt.as_ref())
+        {
+            Some(url) => (
+                Some(SharedString::from(crate::explore::load_watch::host_of(url))),
                 url.to_ascii_lowercase().starts_with("https://"),
             ),
             None => (host, secure),
         };
         let bar = explore_components::AddressBar {
-            browsing,
-            host,
+            browsing: browsing && host.is_some(),
+            host: host.unwrap_or_default(),
             secure,
             placeholder: self.explore.search_placeholder.clone(),
             draft: self.address_draft.clone().map(SharedString::from),
@@ -12651,7 +12673,11 @@ impl WalletPage {
                 // Over the failure panel, reload is its Retry: the address
                 // that failed, not the page before it.
                 Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    if this.load_watch.failure.is_some() {
+                    if crate::webview::engine_failure().is_some() {
+                        // Over the engine's panel, reload starts the engine (083).
+                        crate::webview::retry_engine();
+                        cx.notify();
+                    } else if this.load_watch.failure.is_some() {
                         this.load_retry(cx);
                     } else {
                         crate::webview::reload();
@@ -12681,6 +12707,10 @@ impl WalletPage {
             })
             .detach();
         }
+        #[cfg(not(target_os = "linux"))]
+        let engine_failed = live_browser.then(crate::webview::engine_failure).flatten();
+        #[cfg(target_os = "linux")]
+        let engine_failed: Option<crate::explore::engine::EngineFailure> = None;
         let body: gpui::AnyElement = if live_browser && crashed {
             // The renderer is gone and the page with it; the core has already
             // settled what it asked. Said, with the way back — never a blank
@@ -12694,6 +12724,11 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             crate::webview::hide();
             self.load_failed_panel(theme, &failure, &url, cx)
+                .into_any_element()
+        } else if let Some(failure) = engine_failed {
+            // Spec 083 W1b: the engine itself did not start. Said once, with the
+            // two ways on — never a blank page retried sixty times a second.
+            self.engine_failed_panel(theme, failure, cx)
                 .into_any_element()
         } else if live_browser {
             #[cfg(not(target_os = "linux"))]
@@ -12879,6 +12914,86 @@ impl WalletPage {
                     .child(SharedString::from(crate::explore::load_watch::host_of(url))),
             )
             .child(div().pt(px(4.)).child(button))
+    }
+
+    /// The engine did not start (spec 083 W1b): the load-failed title, the
+    /// site, the platform's code for support, and the two ways on — Retry, and
+    /// the same page in the system browser. A missing runtime puts the system
+    /// browser first: Retry cannot install one.
+    fn engine_failed_panel(
+        &mut self,
+        theme: &Theme,
+        failure: crate::explore::engine::EngineFailure,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let host = crate::explore::load_watch::host_of(&self.browser_home);
+        let detail = match failure.code() {
+            Some(code) if host.is_empty() => format!("WebView2 {code}"),
+            Some(code) => format!("{host} · WebView2 {code}"),
+            None => host,
+        };
+        let retry = outline_button(
+            ElementId::from("engine-retry"),
+            theme,
+            &mut self.icons,
+            Some(Icon::RefreshCw),
+            self.explore.load_retry.clone(),
+        )
+        .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::retry_engine();
+            cx.notify();
+        }));
+        let system = outline_button(
+            ElementId::from("engine-open-system"),
+            theme,
+            &mut self.icons,
+            Some(Icon::ExternalLink),
+            self.explore.open_in_system_browser.clone(),
+        )
+        .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            if !this.browser_home.is_empty() {
+                crate::executor::opener::open(&this.browser_home, cx);
+            }
+        }));
+        let runtime_missing = failure == crate::explore::engine::EngineFailure::RuntimeMissing;
+        let buttons = div().flex().gap(px(12.)).pt(px(4.));
+        let buttons = if runtime_missing {
+            buttons.child(system).child(retry)
+        } else {
+            buttons.child(retry).child(system)
+        };
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(12.))
+            .p(px(32.))
+            .child(icon_img(
+                &mut self.icons,
+                Icon::TriangleAlert,
+                false,
+                theme.warning_base,
+                28.,
+            ))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(self.explore.load_failed.clone()),
+            )
+            .child(
+                div()
+                    .max_w(px(360.))
+                    .text_center()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_subtle)
+                    .child(SharedString::from(detail)),
+            )
+            .child(buttons)
     }
 
     /// The renderer behind the page died (spec 070 FR-013; macOS reports it).

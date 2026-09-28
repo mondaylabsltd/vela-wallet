@@ -93,14 +93,55 @@ pub fn path() -> Result<PathBuf> {
     // against a temporary directory instead of the developer's real wallet,
     // which is not a hypothetical concern: every function in this file
     // REWRITES the document.
-    if let Ok(dir) = std::env::var("VELA_STATE_DIR")
-        && !dir.is_empty()
-    {
-        return Ok(PathBuf::from(dir).join("wallet.json"));
+    if let Some(dir) = state_dir_override() {
+        return Ok(dir.join("wallet.json"));
     }
     let base = dirs::config_dir()
         .ok_or_else(|| StorageError("this system has no configuration directory".to_owned()))?;
     Ok(base.join("VelaWallet").join("wallet.json"))
+}
+
+/// `VELA_STATE_DIR`, when set — one reading, so the wallet document and the
+/// browser's profile (spec 083) always move together.
+fn state_dir_override() -> Option<PathBuf> {
+    std::env::var("VELA_STATE_DIR")
+        .ok()
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Where WebView2 keeps the dApp browser's profile — cookies, storage, cache
+/// (spec 083 W1).
+///
+/// Given WebView2 no folder, it made one BESIDE THE EXE, and the installer
+/// puts the exe in `C:\Program Files`, which the person cannot write: the
+/// engine refused to start (0x80070005) and the installed browser never
+/// opened. LOCAL app data, because a browser cache must not roam with the
+/// profile; inside `VELA_STATE_DIR` when that is set, so an isolated run has
+/// cookies of its own.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn browser_profile_dir() -> Option<PathBuf> {
+    profile_dir_in(state_dir_override(), dirs::data_local_dir())
+}
+
+fn profile_dir_in(state: Option<PathBuf>, local: Option<PathBuf>) -> Option<PathBuf> {
+    match state {
+        Some(dir) => Some(dir.join("WebView2")),
+        None => local.map(|base| base.join("VelaWallet").join("WebView2")),
+    }
+}
+
+/// Delete that profile, whole (spec 083; the erase of 081 FR-017 when no
+/// browser was opened this session). A folder already gone is gone.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn remove_browser_profile() -> std::io::Result<()> {
+    let Some(dir) = browser_profile_dir() else {
+        return Ok(());
+    };
+    match fs::remove_dir_all(&dir) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        done => done,
+    }
 }
 
 fn read_all() -> Result<Map<String, Value>> {
@@ -710,6 +751,47 @@ pub(crate) mod tests {
     /// one lock rather than run in parallel — the alternative is a shared
     /// document two tests rewrite at once, which is exactly the interleave the
     /// file lock in this module exists to prevent.
+    /// Spec 083 W1: the browser's profile is the person's own local folder —
+    /// never beside the exe — and follows an isolated state directory.
+    #[test]
+    fn the_browser_profile_is_a_folder_the_person_can_write() {
+        let local = Some(PathBuf::from(r"C:\Users\p\AppData\Local"));
+        assert_eq!(
+            profile_dir_in(None, local.clone()),
+            Some(
+                PathBuf::from(r"C:\Users\p\AppData\Local")
+                    .join("VelaWallet")
+                    .join("WebView2")
+            )
+        );
+        assert_eq!(
+            profile_dir_in(Some(PathBuf::from("isolated")), local),
+            Some(PathBuf::from("isolated").join("WebView2")),
+            "an isolated run has cookies of its own"
+        );
+        assert_eq!(profile_dir_in(None, None), None);
+    }
+
+    /// Spec 083: an erase with no browser open this session deletes the
+    /// profile folder itself, and a second erase is not an error.
+    #[test]
+    fn the_browser_profile_can_be_removed_without_a_browser() {
+        with_temp_state("browser-profile", || {
+            let Some(dir) = browser_profile_dir() else {
+                unreachable!("a state dir is set");
+            };
+            let cookies = dir.join("EBWebView").join("Default");
+            if fs::create_dir_all(&cookies).is_err()
+                || fs::write(cookies.join("Cookies"), b"x").is_err()
+            {
+                unreachable!("could not seed the profile");
+            }
+            assert!(remove_browser_profile().is_ok());
+            assert!(!dir.exists());
+            assert!(remove_browser_profile().is_ok(), "already gone is gone");
+        });
+    }
+
     pub(crate) fn with_temp_state<T>(name: &str, body: impl FnOnce() -> T) -> T {
         let Ok(_guard) = SERIAL.lock() else {
             unreachable!("the test lock is poisoned");

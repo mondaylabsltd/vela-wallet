@@ -48,6 +48,8 @@ use gpui::{Bounds, Pixels, Window};
 
 use vela_core::app::dapp_rpc::{ProviderHost, provider_script};
 
+use crate::explore::engine::EngineFailure;
+
 /// What the page calls itself, reported to the wallet — UI plumbing, not the
 /// provider.
 ///
@@ -180,10 +182,54 @@ struct Browser {
     /// not cross the platform boundary sixty times a second.
     bounds: Option<Bounds<Pixels>>,
     visible: bool,
+    /// The profile the view was built on (spec 083). wry reads it only while
+    /// building, but documents a context as outliving its views.
+    #[cfg(windows)]
+    _context: wry::WebContext,
 }
 
 thread_local! {
     static BROWSER: RefCell<Option<Browser>> = const { RefCell::new(None) };
+    /// Why the engine did not start (spec 083 W1b). While set, nothing builds
+    /// again until the person asks: a refused folder or a missing runtime does
+    /// not fix itself between frames, and each attempt on Windows filed a
+    /// crash report.
+    static FAILED: std::cell::Cell<Option<EngineFailure>> = const { std::cell::Cell::new(None) };
+}
+
+/// Why the engine did not start, if it did not (spec 083).
+#[must_use]
+pub fn engine_failure() -> Option<EngineFailure> {
+    FAILED.get()
+}
+
+/// The person asked to try the engine again: the next frame builds it.
+pub fn retry_engine() {
+    FAILED.set(None);
+}
+
+/// Whether a view exists to show.
+#[must_use]
+pub fn ready() -> bool {
+    BROWSER.with(|slot| slot.borrow().is_some())
+}
+
+/// Whether a frame may start building one: not after a failure the person
+/// has not retried, and — on Windows — not while one is being built.
+fn may_build() -> bool {
+    #[cfg(windows)]
+    if BUILDING.get() {
+        return false;
+    }
+    FAILED.get().is_none()
+}
+
+/// Keep what a build produced: the view, or why there is none.
+fn settle(built: Result<Browser, EngineFailure>) {
+    match built {
+        Ok(browser) => BROWSER.with(|slot| *slot.borrow_mut() = Some(browser)),
+        Err(failure) => FAILED.set(Some(failure)),
+    }
 }
 
 /// Draw the browser at `bounds`, building it on first call.
@@ -192,23 +238,26 @@ thread_local! {
 /// webview follows the column through window resizes and through a third
 /// column opening beside it — the signing panel included.
 pub fn place(bounds: Bounds<Pixels>, window: &Window, home: &str, cx: &mut gpui::App) {
-    #[cfg(windows)]
-    if BROWSER.with(|slot| slot.borrow().is_none()) {
-        build_later(window, home, cx);
-        return;
+    if !ready() {
+        // Once per start, and again only on the person's Retry (spec 083):
+        // this runs every frame, and before 083 a refused build was retried
+        // sixty times a second.
+        if !may_build() {
+            return;
+        }
+        #[cfg(windows)]
+        {
+            build_later(window, home, cx);
+            return;
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = cx;
+            settle(build(window, home));
+        }
     }
-    #[cfg(not(windows))]
-    let _ = cx;
     BROWSER.with(|slot| {
         let mut slot = slot.borrow_mut();
-        #[cfg(not(windows))]
-        if slot.is_none() {
-            *slot = build(window, home).map(|view| Browser {
-                view,
-                bounds: None,
-                visible: false,
-            });
-        }
         let Some(browser) = slot.as_mut() else {
             return;
         };
@@ -312,11 +361,32 @@ pub fn committed_url() -> Option<String> {
 /// contradict, and failing the whole erase over an absent web view would tell
 /// people their wallet records survived when they did not.
 pub fn clear_browsing_data() -> bool {
-    BROWSER.with(|slot| {
+    let live = BROWSER.with(|slot| {
         slot.borrow()
             .as_ref()
-            .is_some_and(|browser| browser.view.clear_all_browsing_data().is_ok())
-    })
+            .map(|browser| browser.view.clear_all_browsing_data().is_ok())
+    });
+    live.unwrap_or_else(clear_profile_on_disk)
+}
+
+/// No view this session (spec 083): on Windows the profile is a folder of
+/// the wallet's own that nothing holds open, so the folder goes — the same
+/// clear, without starting an engine to ask for it.
+#[cfg(windows)]
+fn clear_profile_on_disk() -> bool {
+    if BUILDING.get() {
+        // An engine is starting on that folder right now.
+        return false;
+    }
+    crate::executor::storage::remove_browser_profile()
+        .inspect_err(|error| eprintln!("[vela-wallet] erase: browser profile kept: {error}"))
+        .is_ok()
+}
+
+/// macOS: WKWebView's default store, reachable only through a live view.
+#[cfg(not(windows))]
+fn clear_profile_on_disk() -> bool {
+    false
 }
 
 /// The document the browser is on, whole. `None` before the first page.
@@ -404,14 +474,7 @@ fn build_later(window: &Window, home: &str, cx: &mut gpui::App) {
     BUILDING.set(true);
     let home = home.to_owned();
     cx.spawn(async move |cx| {
-        let built = build(&ParentHwnd(hwnd), &home);
-        BROWSER.with(|slot| {
-            *slot.borrow_mut() = built.map(|view| Browser {
-                view,
-                bounds: None,
-                visible: false,
-            });
-        });
+        settle(build(&ParentHwnd(hwnd), &home));
         BUILDING.set(false);
         // Paint again, so `place` sizes and shows what was just built.
         cx.update(|cx| cx.refresh_windows());
@@ -442,8 +505,27 @@ impl wry::raw_window_handle::HasWindowHandle for ParentHwnd {
 fn build<W: wry::raw_window_handle::HasWindowHandle>(
     window: &W,
     home: &str,
-) -> Option<wry::WebView> {
-    let builder = wry::WebViewBuilder::new()
+) -> Result<Browser, EngineFailure> {
+    // Spec 083 W1: WebView2 given no folder made its profile beside the exe —
+    // `C:\Program Files\Vela Wallet` once installed, which the person cannot
+    // write, so the installed browser never started. The person's own local
+    // app data instead (or the isolated state dir).
+    #[cfg(windows)]
+    let profile = crate::executor::storage::browser_profile_dir();
+    #[cfg(windows)]
+    if let Some(dir) = &profile {
+        // So a missing parent is never why WebView2 refuses.
+        let _ = std::fs::create_dir_all(dir);
+    }
+    #[cfg(windows)]
+    let mut context = wry::WebContext::new(profile);
+    // Hidden from creation: a failed build leaks wry's container window, and a
+    // visible one would sit over the wallet (083 W1b).
+    #[cfg(windows)]
+    let builder = wry::WebViewBuilder::new_with_web_context(&mut context).with_visible(false);
+    #[cfg(not(windows))]
+    let builder = wry::WebViewBuilder::new();
+    let builder = builder
         .with_initialization_script(provider_script(ProviderHost::Desktop))
         .with_initialization_script(META_JS)
         .with_ipc_handler(on_ipc)
@@ -467,13 +549,36 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             let _ = view.set_visible(false);
             // The first page is a load the wallet asked for, like any other.
             report(Load::Requested(home.to_owned()));
-            Some(view)
+            Ok(Browser {
+                view,
+                bounds: None,
+                visible: false,
+                #[cfg(windows)]
+                _context: context,
+            })
         }
         Err(error) => {
-            eprintln!("[vela-wallet] browser: {error}");
-            None
+            let failure = EngineFailure::from_hresult(hresult_of(&error));
+            // Once per attempt, and attempts are the person's (083 W1b).
+            eprintln!("[vela-wallet] browser: the engine did not start ({failure:?}): {error}");
+            Err(failure)
         }
     }
+}
+
+/// The platform's code inside a failed build: tells a missing runtime from a
+/// refused profile folder (spec 083).
+#[cfg(windows)]
+fn hresult_of(error: &wry::Error) -> Option<i32> {
+    match error {
+        wry::Error::WebView2Error(webview2_com::Error::WindowsError(error)) => Some(error.code().0),
+        _ => None,
+    }
+}
+
+#[cfg(not(windows))]
+fn hresult_of(_: &wry::Error) -> Option<i32> {
+    None
 }
 
 fn report(load: Load) {

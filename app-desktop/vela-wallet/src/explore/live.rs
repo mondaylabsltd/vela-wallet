@@ -137,6 +137,40 @@ pub fn tab_models(view: &ExploreView, strings: &ExploreStrings) -> Vec<TabModel>
         .collect()
 }
 
+/// The one tab a signed-in person has before the core records any (spec 083
+/// W9): the site being opened, named by its host, or the start page. Until
+/// 083 this gap drew the gallery's demo tabs — "Uniswap · Polymarket" —
+/// neither of which was open or did anything.
+pub fn pending_tab(strings: &ExploreStrings, opening: Option<&str>) -> TabModel {
+    let host = opening
+        .map(crate::explore::load_watch::host_of)
+        .filter(|host| !host.is_empty());
+    match (opening, host) {
+        (Some(url), Some(host)) => TabModel {
+            id: "tab",
+            title: SharedString::from(host.clone()),
+            site: Some(SiteModel {
+                id: "tab",
+                name: SharedString::from(host.clone()),
+                letter: SharedString::from(letter_of(&host)),
+                tint: tint_of(&host),
+                host: SharedString::from(host),
+                subtitle: None,
+                meta: None,
+                url: None,
+                icon_urls: icons_of(url, None),
+            }),
+            selected: true,
+        },
+        _ => TabModel {
+            id: "tab",
+            title: strings.start_page.clone(),
+            site: None,
+            selected: true,
+        },
+    }
+}
+
 /// The origin of the history row a screen row was drawn from.
 ///
 /// Rows are keyed on screen by HOST, and every rule in the core is written

@@ -6,6 +6,7 @@
 //! same division spec 015 set and spec 018 kept.
 
 pub mod components;
+pub mod engine;
 pub mod fixtures;
 pub mod live;
 pub mod load_watch;
