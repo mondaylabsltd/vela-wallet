@@ -63,9 +63,9 @@ or gains a test"), and each client's mapping gets a unit test. Device checks are
 - [x] T023b [US1] iOS receipt wait: cap each poll by what is left of the window (`I/Features/Signing/Core/SignExecutor.swift` receipt loop) — Android's page waited 268 s with the relay down
 
 ### Desktop
-- [ ] T024 [P] [US1] In `D/signing/live.rs` + `D/wallet/page.rs` (`signing_body` ~14002): switch to the status view as soon as `is_signing`/`is_submitting`/`pending_op_hash` (not only after the core closes the sheet, `page.rs:15156`); hide the dimmed slide (`page.rs:14592`); map every tracker status, not just Submitted (`page.rs:15199`), incl. still-confirming/unknown
-- [ ] T025 [P] [US1] Desktop tests beside `D/signing/live.rs` for the mapping
-- [ ] T025a [US1] Desktop tracker clock ticks while any entry is `polling`; receipt wait capped by the remaining window (`D/executor/tracker.rs`, `D/executor/sign_request.rs` `await_receipt`)
+- [X] T024 [P] [US1] In `D/signing/live.rs` + `D/wallet/page.rs` (`signing_body` ~14002): switch to the status view as soon as `is_signing`/`is_submitting`/`pending_op_hash` (not only after the core closes the sheet, `page.rs:15156`); hide the dimmed slide (`page.rs:14592`); map every tracker status, not just Submitted (`page.rs:15199`), incl. still-confirming/unknown — done on 079-desktop
+- [X] T025 [P] [US1] Desktop tests beside `D/signing/live.rs` for the mapping — done on 079-desktop
+- [X] T025a [US1] Desktop tracker clock ticks while any entry is `polling`; receipt wait capped by the remaining window (`D/executor/tracker.rs`, `D/executor/sign_request.rs` `await_receipt`) — done on 079-desktop
 
 ### Extension
 - [x] T026 [P] [US1] `W/signing/SigningHost.svelte:375`: `dismissible={false}` for the signing sheet and the consent card (`W/dapp/DappRequestHost.svelte`); explicit ✕ keeps `reject_tapped`; `W/wallet/ui/BottomSheet.svelte` gains a non-dismissible mode (no scrim click, no Esc, no drag)
@@ -84,7 +84,7 @@ or gains a test"), and each client's mapping gets a unit test. Device checks are
 - [x] T029 [US2] Android: reuse `FeeRefreshButton` (`A/feature/flows/components/FlowBlocks.kt:1207`) in `A/feature/signing/SigningFee.kt`; `A/feature/signing/SigningLive.kt` sets its label (`send.feeRefresh`) and `refreshing`; `QuoteUnavailable` shows `componentsUi.funding.denialNetworkError`
 - [x] T030 [US2] Android: schedule re-quotes with `feeRequoteDelayMs` in `A/feature/signing/core/SigningController.kt` while the sheet is open and unapproved; cancel on approve/close
 - [x] T031 [P] [US2] iOS: refresh control in `I/Components/Signing/SigningFooter.swift` (`SigningFeeView`) calling the uncalled `refreshFee()` (`I/Features/Signing/Core/SigningController.swift:400`); reason line; re-quote timer
-- [ ] T032 [P] [US2] Desktop: refresh icon in `D/signing/components.rs:809` row; reason instead of "—" (`D/flows/live.rs:1089-1090`); honour `stale` on this sheet; re-quote timer in `D/wallet/signing_host.rs`
+- [X] T032 [P] [US2] Desktop: refresh icon in `D/signing/components.rs:809` row; reason instead of "—" (`D/flows/live.rs:1089-1090`); honour `stale` on this sheet; re-quote timer in `D/wallet/signing_host.rs` — done on 079-desktop
 - [x] T033 [P] [US2] Extension: refresh control + stale note in the signing fee row (`W/signing/live.ts:468-478`, reuse `W/flows/ui/FeeRow.svelte`'s control); re-quote with `fee_requote_delay_ms` over wasm
 - [ ] T034 [P] [US2] (Android, iOS and web done) Tests per client for the reason mapping and the timer stopping on approve (Android `AT/`, iOS `IT/`, desktop in-crate, web unit)
 
@@ -111,9 +111,9 @@ Recents only for loaded pages, from one document.
 - [x] T042 [P] [US3] Hermetic tests in `IT/` for the engine state transitions (fake navigation delegate events)
 
 ### Desktop
-- [ ] T043 [P] [US3] `D/webview.rs` + `D/wallet/browser_host.rs`: `loading` from the request; watchdog (research R4) — no commit in 3 s → native HEAD probe → `classify(Probe, …)`; success keeps waiting to 20 s → timeout; commit clears; visit URL from the page script's own message (`webview.rs:459` reads the view URL today)
-- [ ] T044 [US3] Desktop panel + progress in `D/wallet/page.rs` (`explore_content` ~12289) and `D/explore/components.rs`: a progress hairline and the failure panel (reason, host, Retry, retrying)
-- [ ] T045 [P] [US3] Desktop tests for the watchdog decisions and the visit URL
+- [X] T043 [P] [US3] `D/webview.rs` + `D/wallet/browser_host.rs`: `loading` from the request; watchdog (research R4) — no commit in 3 s → native HEAD probe → `classify(Probe, …)`; success keeps waiting to 20 s → timeout; commit clears; visit URL from the page script's own message (`webview.rs:459` reads the view URL today) — done on 079-desktop
+- [X] T044 [US3] Desktop panel + progress in `D/wallet/page.rs` (`explore_content` ~12289) and `D/explore/components.rs`: a progress hairline and the failure panel (reason, host, Retry, retrying) — done on 079-desktop
+- [X] T045 [P] [US3] Desktop tests for the watchdog decisions and the visit URL — done on 079-desktop
 
 **Checkpoint**: L1–L6 on the Xiaomi (fault proxy), the iPhone (Wi-Fi proxy) and the Mac.
 
@@ -142,7 +142,7 @@ resets its slide, and opens without the network after one visit.
 - [x] T055 [US7] Android: when the route is `KeyMethod.TrustedSigner` (`A/feature/send/core/UserOpSpine.kt:95-104`), `A/feature/signing/SigningSheet.kt:210` draws a primary button `componentsUi.signing.continueToSigner` instead of `SlideToConfirm`, sending the same approve (`A/navigation/VelaNavHost.kt:689`)
 - [X] T056 [US7] Android: if the Custom Tab cannot open the page (no answer and the tab reports a navigation failure, or the person returns without a result), the waiting card shows `componentsUi.signing.signerUnreachable` + Retry (`A/feature/signing/trustedsigner/TrustedSignerTab.kt`, `TrustedSignerChannel.kt`), keeping the request open — done: on return with no answer the page's address is probed (HEAD, no fragment); unreachable → `componentsUi.signing.signerDown` + `connect.browser.retry`; the "签名中…" line is not drawn under the card. Xiaomi: T5 rows pass (evidence/android-after/t5-*.jpg)
 - [X] T057 [P] [US7] iOS: the same button in `I/Features/Signing/SigningSheet.swift:67` for the trusted-signer route (`I/Core/UserOpSpine.swift:475`); unreachable handling around `I/Features/Signing/TrustedSigner/TrustedSigner.swift:357` — done on `079-ios`: primary `componentsUi.signing.openSigner` button, `originSeenByBrowser`; the tab's own signals (`safariViewControllerDidFinish` + 1.2 s, `didCompleteInitialLoad(false)`) start a HEAD to the page's address (no fragment/query); unreachable → `componentsUi.signing.signerDown` + `connect.browser.retry`, no "签名中…" under the card
-- [ ] T058 [P] [US7] Desktop: the same button in `D/wallet/page.rs:14593` for the trusted-signer route (`D/executor/send.rs:113,149`)
+- [X] T058 [P] [US7] Desktop: the same button in `D/wallet/page.rs:14593` for the trusted-signer route (`D/executor/send.rs:113,149`) — done on 079-desktop
 - [ ] T059 [US7] Owner step (outward-facing): deploy `TS/dist/` incl. `_headers` to sign.getvela.app; then verify headers with `curl -I https://sign.getvela.app/b/<hash>/sign`; the build to release is `e3ef90a6040fe896a34c6b32fcab232417bf1dd70e62d473c88a0bed7dc97d5f` (then `LAUNCH` = that hash)
 
 **Checkpoint**: T1–T3 on the Xiaomi with the owner's fingerprint; T4–T5 after T059.
@@ -153,7 +153,7 @@ resets its slide, and opens without the network after one visit.
 
 - [X] T060 [US4] Android: expose `RpcPool.view` to the browser (`A/VelaWalletApplication.kt` `browser` lazy) and show a one-line notice under the address bar in `A/feature/explore/ExploreScreen.kt` when the tab's chain (`DbrTabView`) ∈ `failed_chains` ∖ `rate_limited_chains`, with Retry (one `eth_blockNumber` through the pool) — done: `BrowserController.poolView` + `askChain`; `ExploreLive.chainUnreachable`; C1/C2 pass on the Xiaomi with `drop match=gnosischain` (evidence/android-after/t060-chain-down.jpg)
 - [x] T061 [P] [US4] iOS: the same from `pool.failedChains` (today only in `I/App/RootView.swift:2415`) into `I/Features/Explore/ExploreScreen.swift`
-- [ ] T062 [P] [US4] Desktop: expose `failed_chains` from `D/executor/pool.rs:358` and draw the notice in `D/wallet/page.rs`
+- [X] T062 [P] [US4] Desktop: expose `failed_chains` from `D/executor/pool.rs:358` and draw the notice in `D/wallet/page.rs` — done on 079-desktop
 - [ ] T063 [P] [US4] Tests per client: shown for failed, hidden for rate-limited, cleared on the next answer
 
 ---
@@ -167,7 +167,7 @@ resets its slide, and opens without the network after one visit.
 - [x] T068 [US5] Android: signing header shows the host once when name == host (`SigningComponents.kt` `SigningHeader`); site avatars use the recorded favicon via `RemoteLogo` with `browserSiteLetter` fallback (`A/feature/explore/components/ExploreComponents.kt` `LetterAvatar`, `A/feature/browser/ExploreLive.kt:letterOf` removed)
 - [x] T069 [P] [US5] iOS: `lock.open` in `I/Components/Explore/AddressBarView.swift:107-113`; icon-only in `ConnectionPanelView.swift:44-47`, `SiteMenuSheetView.swift:39-42`; consent title drawn (`ConnectionPanelView.swift:33`); network rows logo + balance (`ConnectionPanelView.swift:127-131`); header host once (`SigningLive.swift:205-206`); favicon avatars + `browserSiteLetter` (`ExploreLive.swift:381-382`, `LetterAvatarView.swift`)
 - [x] T070 [US5] iOS consent approve word → `connect.browser.connect` (today "批准")
-- [ ] T071 [P] [US5] Desktop: open-lock icon for http (`D/explore/components.rs:497-498`); icon-only connection panel (`D/wallet/page.rs:13699-13703,13791`); network rows logo + balance and the per-chain dot (fix `chain_ethereum()` at `page.rs:13732`); wire "switch account" (`page.rs:13836`); header host once (`D/signing/live.rs:1328-1329`); favicon avatars + `site_letter` (`D/explore/live.rs:152-154`)
+- [X] T071 [P] [US5] Desktop: open-lock icon for http (`D/explore/components.rs:497-498`); icon-only connection panel (`D/wallet/page.rs:13699-13703,13791`); network rows logo + balance and the per-chain dot (fix `chain_ethereum()` at `page.rs:13732`); wire "switch account" (`page.rs:13836`); header host once (`D/signing/live.rs:1328-1329`); favicon avatars + `site_letter` (`D/explore/live.rs:152-154`) — done on 079-desktop
 - [x] T072 [P] [US5] Extension: header host once (`W/signing/live.ts:705,722-723`)
 - [ ] T073 [P] [US5] Tests per client: lock state per scheme, no visible safety text (UI string sweep), picker rows carry logo/balance/identicon, header dedupe
 
