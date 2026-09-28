@@ -24,10 +24,20 @@
  *   - the port closing — Chrome's ✕, a reload — is how the worker learns the
  *     surface is gone, and a 20 s ping keeps it awake while a person decides.
  *
+ * The port is held only while this surface OWES something — a request shown
+ * or waiting, or a submit it claimed and has not answered (RJ20, G63). Chrome
+ * stops an idle worker after ~30 s and the port closes with it; reconnecting
+ * then only started the worker again, every 30 s, for as long as the panel
+ * stood open. A quiet panel stays disconnected until the worker writes a
+ * request for this window into `storage.session`, which brings the port back
+ * at once (RB8); a claim or an answer reconnects by itself.
+ *
  * The panel stays the panel (RB9): the first `?panel` load marks the document
  * in sessionStorage, so Wallet → Settings → Wallet (which drops the query) is
  * still the panel. The port is started from the root layout, so it outlives
- * every in-app navigation.
+ * every in-app navigation — and `caller` and `current` are `$state`, so the
+ * layout's effect sees a request arrive while Settings shows and goes to the
+ * wallet, where it is answered (G55).
  */
 import type { ExtensionRequest } from './transport';
 
@@ -53,6 +63,12 @@ export type SurfaceAnswer = {
 	result?: unknown;
 	error?: { code: number; message: string };
 };
+/**
+ * What a `submit` claim carries (RJ2): the operation's hash and chain, sent
+ * right before the relay POST. From then on the worker answers the page with
+ * that hash, never 4900, if this surface goes before it answers.
+ */
+export type SubmitClaim = { opHash: string; chainId: number };
 
 interface PortLike {
 	postMessage(message: unknown): void;
@@ -121,13 +137,41 @@ function isRequest(value: unknown): value is ExtensionRequest {
 
 type Withdrawn = (rid: string, cause: string) => void;
 
+/** The route a request is answered on (the wallet, where `DappRequestHost` lives). */
+const WALLET_ROUTE = '/[locale]/wallet';
+
+/**
+ * RB9 (G55): the side panel owes a request while another screen shows —
+ * Settings, Contacts, Feedback — so it goes to the wallet, where the request
+ * rises. Only the panel moves; a request window, or a page that is no surface
+ * at all, stays where it is.
+ */
+export function panelNeedsWallet(facts: {
+	caller: SurfaceCaller | null;
+	current: ExtensionRequest | null;
+	routeId: string | null;
+}): boolean {
+	return facts.caller?.kind === 'panel' && facts.current !== null && facts.routeId !== WALLET_ROUTE;
+}
+
+/** Is `value` a ledger record this surface owns (the worker's `callerOwns`)? */
+function ownsRecord(caller: SurfaceCaller, value: unknown): boolean {
+	if (!value || typeof value !== 'object') return false;
+	const record = value as { rid?: unknown; surface?: unknown; surfaceWindowId?: unknown };
+	if (caller.kind === 'panel') {
+		return record.surface === 'panel' && record.surfaceWindowId === caller.windowId;
+	}
+	return record.surface === 'window' && record.rid === caller.rid;
+}
+
 export class PanelSurface {
 	/** The request this surface owes an answer for, as the worker handed it. */
 	current = $state<ExtensionRequest | null>(null);
 
 	#runtime: SurfaceRuntime | null;
 	#chrome: ChromeLike | undefined;
-	#caller: SurfaceCaller | null = null;
+	/** `$state`: the root layout's RB9 effect reads it (G55). */
+	#caller = $state<SurfaceCaller | null>(null);
 	#port: PortLike | null = null;
 	#nonce = 0;
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- port bookkeeping, never drawn
@@ -136,6 +180,9 @@ export class PanelSurface {
 	#answers = new Map<string, (delivered: boolean) => void>();
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- listeners, never drawn
 	#withdrawn = new Set<Withdrawn>();
+	/** Requests claimed for submit and not yet answered (RJ2): the port stays up for them. */
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- port bookkeeping, never drawn
+	#submitting = new Set<string>();
 	#failures = 0;
 	#reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	#ping: ReturnType<typeof setInterval> | null = null;
@@ -178,12 +225,19 @@ export class PanelSurface {
 		this.#caller = resolved;
 		this.#stopped = false;
 		this.#connect();
-		// The worker also writes the ledger into storage.session; a write while
-		// this port is down (a worker restart the port has not noticed yet)
-		// brings it back at once (RB8).
+		// The worker also writes the ledger into storage.session; a request
+		// written for THIS surface while the port is down — a quiet panel, or a
+		// worker restart the port has not noticed yet — brings it back at once
+		// (RB8). A record leaving, or another window's, does not (RJ20).
 		this.#wake = (changes, area) => {
-			if (area !== 'session' || this.#port) return;
-			if (Object.keys(changes).some((key) => key.startsWith(REQUEST_PREFIX))) this.#reconnectNow();
+			const caller = this.#caller;
+			if (area !== 'session' || this.#port || !caller) return;
+			const ours = Object.entries(changes).some(
+				([key, change]) =>
+					key.startsWith(REQUEST_PREFIX) &&
+					ownsRecord(caller, (change as { newValue?: unknown } | null)?.newValue)
+			);
+			if (ours) this.#reconnectNow();
 		};
 		try {
 			api?.storage?.onChanged?.addListener(this.#wake);
@@ -220,8 +274,24 @@ export class PanelSurface {
 		}
 		for (const resolve of this.#claims.values()) resolve(false);
 		this.#claims.clear();
+		this.#submitting.clear();
 		this.#caller = null;
 		this.current = null;
+	}
+
+	/**
+	 * Does this surface owe anything the worker must hear about — a request
+	 * shown or waiting, a submit it claimed and has not answered, or a claim
+	 * or answer still out on the port? Only then is a closed port reopened
+	 * (RJ20).
+	 */
+	#owes(): boolean {
+		return (
+			this.current !== null ||
+			this.#submitting.size > 0 ||
+			this.#claims.size > 0 ||
+			this.#answers.size > 0
+		);
 	}
 
 	/** Called with `(rid, cause)` when the worker withdraws a request. */
@@ -239,18 +309,25 @@ export class PanelSurface {
 	 * Is `rid` still live enough to act on (RB5)? Asked twice at most — the
 	 * second time on a port reopened if the first one died (a worker restart);
 	 * no answer to either within 5 s is "no".
+	 *
+	 * A `submit` claim carries the operation's hash and chain (RJ2): once the
+	 * worker holds them, a surface that goes before answering gets its page
+	 * told that hash — it may have been sent — rather than 4900.
 	 */
-	async claim(rid: string, phase: ClaimPhase): Promise<boolean> {
+	async claim(rid: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean> {
 		if (!this.#caller) return false;
 		for (let attempt = 0; attempt < 2; attempt += 1) {
 			if (attempt > 0) this.#reconnectNow();
-			const answer = await this.#claimOnce(rid, phase);
-			if (answer !== null) return answer;
+			const answer = await this.#claimOnce(rid, phase, phase === 'submit' ? submit : undefined);
+			if (answer !== null) {
+				if (answer && phase === 'submit') this.#submitting.add(rid);
+				return answer;
+			}
 		}
 		return false;
 	}
 
-	#claimOnce(rid: string, phase: ClaimPhase): Promise<boolean | null> {
+	#claimOnce(rid: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean | null> {
 		return new Promise((resolve) => {
 			const nonce = (this.#nonce += 1);
 			const timer = setTimeout(() => {
@@ -262,7 +339,13 @@ export class PanelSurface {
 				this.#claims.delete(nonce);
 				resolve(live);
 			});
-			this.#post({ type: 'claim', rid, phase, nonce });
+			this.#post({
+				type: 'claim',
+				rid,
+				phase,
+				nonce,
+				...(submit ? { opHash: submit.opHash, chainId: submit.chainId } : {})
+			});
 		});
 	}
 
@@ -322,6 +405,7 @@ export class PanelSurface {
 	}
 
 	#settleCurrent(rid: string): void {
+		this.#submitting.delete(rid);
 		if (this.current?.rid === rid) this.current = null;
 	}
 
@@ -354,7 +438,10 @@ export class PanelSurface {
 			if (this.#port !== port) return;
 			this.#port = null;
 			if (Date.now() - upAt > 5_000) this.#failures = 0;
-			this.#scheduleReconnect();
+			// Nothing owed: Chrome stopped an idle worker. Reconnecting would only
+			// start it again (G63); the storage listener and the next claim or
+			// answer bring the port back when there is something to say.
+			if (this.#owes()) this.#scheduleReconnect();
 		});
 		try {
 			port.postMessage({ type: 'hello', ...this.#caller });
@@ -398,6 +485,7 @@ export class PanelSurface {
 				return;
 			case 'withdrawn': {
 				const rid = String(message.rid ?? '');
+				this.#submitting.delete(rid);
 				if (this.current?.rid === rid) this.current = null;
 				for (const callback of this.#withdrawn) {
 					try {
