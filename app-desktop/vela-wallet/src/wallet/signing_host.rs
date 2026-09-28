@@ -182,10 +182,11 @@ pub struct SigningHost {
     /// Empty until the simulation answers, and empty forever when it cannot —
     /// the sheet says so rather than showing an empty list as "nothing moves".
     pub sim: Vec<vela_core::app::token_trust::TrustSimJudgment>,
-    /// The simulation was attempted and could not answer (no `eth_simulateV1`
-    /// on this endpoint, every RPC down, params refused). A different sentence
-    /// from "it ran and found nothing".
-    pub sim_unavailable: bool,
+    /// What the simulation's answer says beside its balances (spec 082 RG6,
+    /// the core's `sim_outcome::notice`): a revert is a danger, a node that
+    /// could not check is a caution — a different sentence from "it ran and
+    /// found nothing", which says nothing here.
+    pub sim_notice: Option<vela_core::app::sim_outcome::SimNotice>,
     /// The submission already handed to the tracker: the records it closes
     /// (the key it is deduped by — spec 082: a may-have-been-sent op is
     /// handed over under its local hash, and the dedupe must not hang on a
@@ -248,7 +249,7 @@ impl SigningHost {
         let (view, clear_view, guard_view) = (sign.view(), clear.view(), guard.view());
         let mut host = Self {
             sim: Vec::new(),
-            sim_unavailable: false,
+            sim_notice: None,
             transport_id: request.transport_id.clone(),
             request_id: request.id.clone(),
             responded: false,
@@ -469,26 +470,27 @@ impl SigningHost {
         cx: &mut Context<Self>,
     ) {
         cx.spawn(async move |host, cx| {
-            let judged = cx
+            let (judged, notice) = cx
                 .background_executor()
                 .spawn(async move {
-                    let Some(deltas) = crate::executor::sim::simulate(&wallet, &calls, chain_id)
-                    else {
-                        return None;
-                    };
-                    Some(crate::executor::token_trust::judge(
-                        &wallet, chain_id, deltas,
-                    ))
+                    use vela_core::app::sim_outcome::{SimOutcome, notice};
+                    let outcome = crate::executor::sim::simulate(&wallet, &calls, chain_id);
+                    let notice = notice(&outcome);
+                    match outcome {
+                        SimOutcome::Deltas { deltas } => (
+                            crate::executor::token_trust::judge(&wallet, chain_id, deltas),
+                            notice,
+                        ),
+                        // A revert moves nothing, and a node that could not
+                        // check says nothing about what moves. NOT "nothing
+                        // moves" — the notice is the sentence for each.
+                        _ => (Vec::new(), notice),
+                    }
                 })
                 .await;
             host.update(cx, |host, cx| {
-                match judged {
-                    Some(judgments) => host.sim = judgments,
-                    // Could not ask. NOT "nothing moves" — the sheet has a
-                    // different sentence for each, and conflating them would
-                    // tell somebody a drain is a no-op.
-                    None => host.sim_unavailable = true,
-                }
+                host.sim = judged;
+                host.sim_notice = notice;
                 cx.notify();
             })
             .ok();

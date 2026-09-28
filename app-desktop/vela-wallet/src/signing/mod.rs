@@ -161,6 +161,9 @@ pub struct SigningStrings {
     pub warn_unlimited: SharedString,
     pub warn_expired: SharedString,
     pub warn_will_fail: SharedString,
+    /// Spec 082 RG8: "Expected to fail: {{reason}} — …", with the core's
+    /// sanitised `Error(string)` reason filled in.
+    pub warn_will_fail_reason: SharedString,
     pub warn_hex_message: SharedString,
     pub warn_blind_typed: SharedString,
     pub warn_eth_sign: SharedString,
@@ -395,6 +398,7 @@ impl SigningStrings {
             warn_unlimited: s("unlimitedWarning"),
             warn_expired: s("expiredWarning"),
             warn_will_fail: s("simWillFail"),
+            warn_will_fail_reason: s("simWillFailReason"),
             warn_hex_message: s("hexMessageWarning"),
             warn_blind_typed: s("blindTypedWarning"),
             warn_eth_sign: s("ethSignWarning"),
@@ -539,6 +543,8 @@ mod tests {
         }
         assert!(s.summary_send.contains("{{amount}}"));
         assert!(s.byte_size.contains("{{n}}"));
+        // Spec 082 RG8: the revert sentence carries its reason's slot.
+        assert!(s.warn_will_fail_reason.contains("{{reason}}"));
     }
 
     /// The landing receipt's words are the send receipt's own keys, outside

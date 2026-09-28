@@ -1639,8 +1639,9 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     tone: Tone::Caution,
                     text: fill(&s.warn_selector_not_listed, &[("bytes", "4")]).into(),
                 },
+                // Spec 082 L-D5: a node that could not check is a caution.
                 Block::Warning {
-                    tone: Tone::Danger,
+                    tone: Tone::Caution,
                     text: s.warn_sim_unavailable.clone(),
                 },
                 Block::Rows(vec![row(s.label_amount.clone(), "0.25 ETH ≈ $640.10")]),

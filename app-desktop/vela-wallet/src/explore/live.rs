@@ -26,20 +26,18 @@ use super::fixtures::{GroupAction, GroupModel, SiteModel, TabModel};
 /// site name itself after another one.
 #[must_use]
 pub fn site_of(entry: &BhistEntry) -> SiteModel {
-    let name = if entry.title.trim().is_empty() {
-        entry.host.clone()
-    } else {
-        entry.title.clone()
-    };
+    // The core's one wording (spec 082 RE7): a title that is its host — or
+    // no title — is said once; any other title stands over the host.
+    let label = vela_core::app::browser_load::site_label(&entry.title, &entry.host);
     SiteModel {
         // Keyed by ORIGIN, which is what the core dedupes on, so a row's
         // element id is stable across visits to the same site.
         id: "recent",
-        name: SharedString::from(name),
+        name: SharedString::from(label.name),
         host: SharedString::from(entry.host.clone()),
         letter: SharedString::from(letter_of(&entry.host)),
         tint: tint_of(&entry.host),
-        subtitle: Some(SharedString::from(entry.host.clone())),
+        subtitle: label.host_line.map(SharedString::from),
         // No "2 hours ago": there is no word for it in the corpus, and an
         // English one on a Chinese screen is worse than no line at all
         // (phase 22's rule about showing a key to somebody who reads Chinese).
@@ -263,12 +261,24 @@ mod tests {
         assert_eq!(row.letter, SharedString::from("E"));
     }
 
-    /// A page with no title is its host, not a blank row.
+    /// A page with no title is its host, not a blank row — said once.
     #[test]
     fn an_untitled_page_falls_back_to_its_host() {
         let row = site_of(&entry("127.0.0.1:8137", "   "));
         assert_eq!(row.name, SharedString::from("127.0.0.1:8137"));
+        assert_eq!(row.subtitle, None, "the host is not said twice");
         assert_eq!(row.letter, SharedString::from("1"));
+    }
+
+    /// Spec 082 RE7 (G8 parity): a page titled with its own host is named
+    /// once, whatever the case of the letters.
+    #[test]
+    fn a_title_that_is_its_host_is_said_once() {
+        let row = site_of(&entry("127.0.0.1:8137", "127.0.0.1:8137"));
+        assert_eq!(row.name, SharedString::from("127.0.0.1:8137"));
+        assert_eq!(row.subtitle, None);
+        let row = site_of(&entry("app.example", "APP.EXAMPLE"));
+        assert_eq!(row.subtitle, None);
     }
 
     /// One colour per host, every launch.

@@ -243,6 +243,27 @@ pub fn blocks(clear: &ClearSigningView, facts: &RequestFacts, s: &SigningStrings
     }
 }
 
+/// The core's simulation notice as one warning: its tone from the core's
+/// risk, its words from the core's key.
+fn sim_notice_block(notice: &vela_core::app::sim_outcome::SimNotice, s: &SigningStrings) -> Block {
+    use vela_core::app::clear_signing::ClearRisk;
+    use vela_core::app::sim_outcome::{KEY_WILL_FAIL, KEY_WILL_FAIL_REASON};
+    let tone = match notice.risk {
+        ClearRisk::Danger => Tone::Danger,
+        ClearRisk::Caution => Tone::Caution,
+        ClearRisk::Safe | ClearRisk::Normal => Tone::Neutral,
+    };
+    let text = match (notice.key, notice.reason.as_deref()) {
+        (KEY_WILL_FAIL_REASON, Some(reason)) => SharedString::from(crate::signing::fill(
+            &s.warn_will_fail_reason,
+            &[("reason", reason)],
+        )),
+        (KEY_WILL_FAIL | KEY_WILL_FAIL_REASON, _) => s.warn_will_fail.clone(),
+        _ => s.warn_sim_unavailable.clone(),
+    };
+    Block::Warning { tone, text }
+}
+
 /// A dApp's plain value transfer (spec 082 G14, RC1–RC5): what the phones
 /// always drew — "Send", the amount card in the fee row's coin, and who it
 /// goes to — instead of "Contract interaction" over bytes that do not exist.
@@ -298,23 +319,23 @@ fn plain_send_blocks(
 ///   emit any `Transfer` it likes from a contract it controls, so an
 ///   unverified receipt shows its DIRECTION and its name and no figure at all.
 ///
-/// `unavailable` is a different sentence from an empty list, and the
-/// difference is the whole point: "it ran and nothing moves" invites a
-/// signature, "it could not be checked" is the corpus's own advice to reject.
+/// `notice` is the core's reading of the answer (spec 082 RG6,
+/// `sim_outcome::notice`) and a different sentence from an empty list: a
+/// revert is the danger "expected to fail" (with the sanitised reason when
+/// there is one), a node that could not check is the caution "couldn't check
+/// — review it" — never the look of "this will fail" — and "it ran and
+/// nothing moves" says nothing here.
 #[must_use]
 pub fn sim_blocks(
     judgments: &[vela_core::app::token_trust::TrustSimJudgment],
-    unavailable: bool,
+    notice: Option<&vela_core::app::sim_outcome::SimNotice>,
     chain_id: u32,
     s: &SigningStrings,
 ) -> Vec<Block> {
     use vela_core::app::token_trust::TrustSimJudgment as J;
 
-    if unavailable {
-        return vec![Block::Warning {
-            tone: Tone::Danger,
-            text: s.warn_sim_unavailable.clone(),
-        }];
+    if let Some(notice) = notice {
+        return vec![sim_notice_block(notice, s)];
     }
     if judgments.is_empty() {
         return Vec::new();
@@ -421,7 +442,7 @@ mod sim_block_tests {
                     decimals: 18,
                 },
             ],
-            false,
+            None,
             100,
             &s,
         );
@@ -448,7 +469,7 @@ mod sim_block_tests {
                 token: Some("0xbad".to_owned()),
                 delta: "1000000000000000000000000".to_owned(),
             }],
-            false,
+            None,
             100,
             &s,
         );
@@ -469,18 +490,60 @@ mod sim_block_tests {
     /// the corpus's own advice to reject.
     #[test]
     fn an_unavailable_simulation_is_not_an_empty_one() {
+        use vela_core::app::sim_outcome::{SimOutcome, notice};
         let s = strings();
-        let unavailable = sim_blocks(&[], true, 100, &s);
+        // Spec 082 L-D5: a node that could not check is a caution, never the
+        // danger that says the transaction will fail.
+        let unavailable = sim_blocks(&[], notice(&SimOutcome::NotOffered).as_ref(), 100, &s);
         assert!(matches!(
             unavailable.first(),
             Some(Block::Warning {
-                tone: Tone::Danger,
+                tone: Tone::Caution,
+                text,
+            }) if *text == s.warn_sim_unavailable
+        ));
+        let unreachable = sim_blocks(&[], notice(&SimOutcome::Unreachable).as_ref(), 100, &s);
+        assert!(matches!(
+            unreachable.first(),
+            Some(Block::Warning {
+                tone: Tone::Caution,
                 ..
             })
         ));
         // Nothing to say, so nothing is said — the sheet's other blocks are
         // the transaction's account of itself.
-        assert!(sim_blocks(&[], false, 100, &s).is_empty());
+        assert!(sim_blocks(&[], None, 100, &s).is_empty());
+    }
+
+    /// A call the chain says fails is the danger, with the core's sanitised
+    /// reason when there is one (RG8).
+    #[test]
+    fn a_revert_is_a_danger_with_its_reason() {
+        use vela_core::app::sim_outcome::{SimOutcome, notice};
+        let s = strings();
+        let with_reason = notice(&SimOutcome::Reverts {
+            reason: Some("ERC20: transfer amount exceeds balance".to_owned()),
+        });
+        let Some(Block::Warning { tone, text }) = sim_blocks(&[], with_reason.as_ref(), 100, &s)
+            .first()
+            .cloned()
+        else {
+            unreachable!("a warning");
+        };
+        assert_eq!(tone, Tone::Danger);
+        assert!(
+            text.contains("ERC20: transfer amount exceeds balance"),
+            "{text}"
+        );
+        assert!(!text.contains("{{"), "{text}");
+        let bare = notice(&SimOutcome::Reverts { reason: None });
+        assert!(matches!(
+            sim_blocks(&[], bare.as_ref(), 100, &s).first(),
+            Some(Block::Warning {
+                tone: Tone::Danger,
+                text,
+            }) if *text == s.warn_will_fail
+        ));
     }
 
     /// The chain's own coin is named from the registry, not from a guess.
@@ -491,7 +554,7 @@ mod sim_block_tests {
             &[J::Native {
                 delta: "-10000000000000000".to_owned(),
             }],
-            false,
+            None,
             100,
             &s,
         );
