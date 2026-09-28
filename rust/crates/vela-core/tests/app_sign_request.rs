@@ -707,6 +707,7 @@ fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
         chain_id: handoff.chain_id,
         maybe_sent: handoff.maybe_sent,
         submit_block: handoff.submit_block,
+        admitted: false,
     });
     tracker.resolve(TRes::Clock { now_ms: NOW });
     tracker.resolve(TRes::ReceiptPending {
@@ -2068,6 +2069,7 @@ fn a_revert_inside_the_wait_answers_the_tx_hash_and_the_tracker_fails_the_record
         chain_id: handoff.chain_id,
         maybe_sent: handoff.maybe_sent,
         submit_block: handoff.submit_block,
+        admitted: false,
     });
     tracker.resolve(TRes::Clock { now_ms: NOW });
     let ops = tracker.resolve(TRes::ReceiptFailed {
