@@ -31,11 +31,16 @@
 	import DappReceipt from '$lib/signing/ui/DappReceipt.svelte';
 	import {
 		dappReceiptModel,
+		endsOnSignedTick,
+		landingFromEntry,
 		landingToRaise,
 		receiptProgress,
+		SIGNED_TICK_MS,
+		trackEntryFor,
 		type DappReceiptCopy,
 		type DappReceiptState
 	} from '$lib/signing/dapp-receipt';
+	import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
 	import { explorerBaseURL } from '$lib/services/networks';
 	import { typicalInclusionSeconds } from '$lib/core/kernels';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
@@ -116,25 +121,56 @@
 	}
 
 	/**
-	 * What the tracker says, as the receipt's own state.
+	 * What the tracker says, as the receipt's own state (`landingFromEntry`).
 	 *
 	 * `dropped` / `rejected` are failures with a hash to look at; `unreachable`
 	 * is NOT — the wallet could not ask, which is not the chain saying no, and
-	 * a cross drawn for it would be a verdict this wallet does not have.
+	 * a cross drawn for it would be a verdict this wallet does not have. Past
+	 * the wait window the entry's `outcome` says "still confirming", and past
+	 * 24 h "unknown" — never "submitted" forever (spec 079, F13).
 	 */
 	function readTracker(opHash: string): void {
-		const wanted = opHash.toLowerCase();
-		const entry = txTrackerView().entries.find((row) => row.user_op_hash.toLowerCase() === wanted);
-		if (!entry) return;
-		if (entry.status === 'confirmed' && entry.tx_hash) {
-			landing = { kind: 'confirmed', opHash, txHash: entry.tx_hash };
-		} else if (entry.status === 'dropped' || entry.status === 'rejected') {
-			landing = { kind: 'failed', opHash };
-		} else {
-			landing = { kind: 'submitted', opHash };
-		}
+		const entry = trackEntryFor(txTrackerView().entries, opHash);
+		const next = landingFromEntry(entry, opHash);
+		if (!entry || !next) return;
+		landing = next;
 		if (entry.submitted_at_ms) landedAtMs = entry.submitted_at_ms;
 	}
+
+	/**
+	 * Spec 079: a message signature ends on the tick. The core clears the
+	 * sheet the moment it answers, and the sheet used to simply vanish — the
+	 * person never saw that it had signed. The request the sheet last showed
+	 * is matched against the answer the resident recorded; a match that
+	 * carried a signature raises "已签名！" for a beat, then it goes by itself.
+	 *
+	 * Neither is `$state`: the effect below writes them and must not re-run
+	 * because it did.
+	 */
+	let shownRequest: { id: string; kind: SignMethodKind } | null = null;
+	let answerSeen: unknown = null;
+	let signedTick = $state(false);
+	$effect(() => {
+		const request = signRequest.view.request;
+		if (request && signRequest.view.surface !== 'hidden') {
+			shownRequest = { id: request.id, kind: request.kind };
+		}
+	});
+	$effect(() => {
+		const answer = signRequest.answered;
+		if (!receipt || !answer || answer === answerSeen) return;
+		answerSeen = answer;
+		const shown = shownRequest;
+		// One answer per shown request: an id a site reuses later is not the
+		// request this sheet drew.
+		if (shown?.id === answer.id) shownRequest = null;
+		if (endsOnSignedTick(answer, shown)) signedTick = true;
+	});
+	$effect(() => {
+		if (!signedTick) return;
+		const timer = setTimeout(() => (signedTick = false), SIGNED_TICK_MS);
+		return () => clearTimeout(timer);
+	});
 
 	/**
 	 * The operation a landing has already been raised for.
@@ -363,6 +399,18 @@
 				unsubscribeTracker = undefined;
 				onreceiptdone?.();
 			}}
+		/>
+	</div>
+{:else if signedTick && receipt && !model}
+	<!--
+		Spec 079: the message is signed — the tick, the same landing layer and
+		disc, gone by itself (`SIGNED_TICK_MS`). A new request's sheet wins
+		over it (`!model`); the page already has its signature.
+	-->
+	<div class="landing-over">
+		<DappReceipt
+			model={dappReceiptModel({ kind: 'signed' }, receipt, () => null)}
+			ondone={() => (signedTick = false)}
 		/>
 	</div>
 {:else if model}

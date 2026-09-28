@@ -207,6 +207,13 @@ export interface SigningMessages {
 		txHashLabel: string;
 		explorer: string;
 		done: string;
+		/**
+		 * Spec 079: an op past its wait window, an op past 24 h, and a
+		 * message signed — the words Android's aftercare says, no new keys.
+		 */
+		stillConfirming: string;
+		unknownOutcome: string;
+		signed: string;
 	};
 	viewOnExplorer: string;
 	byteSize: string;

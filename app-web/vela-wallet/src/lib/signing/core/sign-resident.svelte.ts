@@ -58,8 +58,23 @@ export const INITIAL_SIGN_VIEW: SignView = {
 
 const MAX_TRACKED_TRANSPORTS = 32;
 
+/** The last answer a request got — its id, and whether it carried a result. */
+export interface SignAnswer {
+	id: string;
+	/** A result went out (a signature, a hash) — not a refusal, not an empty ack. */
+	ok: boolean;
+}
+
 class SignRequest {
 	view = $state<SignView>(INITIAL_SIGN_VIEW);
+	/**
+	 * Spec 079: the last answer, as the sheet needs it. The core clears the
+	 * sheet the moment it answers, so a message signature used to just vanish;
+	 * the sheet matches this against the request it showed to draw the signed
+	 * tick first. Written AFTER the answer went out — the answer goes first
+	 * and unconditionally, and nothing here can delay or swallow it.
+	 */
+	answered = $state<SignAnswer | null>(null);
 
 	#loop: SignRequestSession | null = null;
 	#booting: Promise<void> | null = null;
@@ -105,7 +120,22 @@ class SignRequest {
 				},
 				onError: (error) => console.error('[sign_request] core fault:', error),
 				ports: {
-					transportFor: (id) => this.#transports.get(id) ?? null,
+					transportFor: (id) => {
+						const transport = this.#transports.get(id);
+						if (!transport) return null;
+						return {
+							sendResponse: (rid, result, error) => {
+								try {
+									transport.sendResponse(rid, result, error);
+								} finally {
+									this.answered = {
+										id: rid,
+										ok: !error && result !== undefined && result !== null && result !== ''
+									};
+								}
+							}
+						};
+					},
 					opSubmitted: (id, userOpHash) =>
 						this.dispatch({
 							type: 'op_submitted',

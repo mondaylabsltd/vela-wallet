@@ -942,7 +942,12 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			opHashLabel: k('componentsTx.receipt.userOpHash'),
 			txHashLabel: k('componentsTx.receipt.txHash'),
 			explorer: k('componentsTx.receipt.explorer'),
-			done: k('componentsTx.receipt.done')
+			done: k('componentsTx.receipt.done'),
+			// Spec 079: what the landing says when the wait ran out, when the
+			// tracker gave up at 24 h, and when a message was signed.
+			stillConfirming: k('componentsUi.signing.stillConfirming'),
+			unknownOutcome: k('componentsUi.signing.unknownOutcome'),
+			signed: k('clearSigning.alertSignedTitle')
 		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),

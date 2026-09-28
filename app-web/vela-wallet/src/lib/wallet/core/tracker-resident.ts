@@ -25,11 +25,14 @@
  * Two shell responsibilities the core deliberately refuses:
  *
  * - **Cadence.** `Tick` may arrive at any frequency — every throttle is the
- *   core's — so the ticker here is a dumb 3 s interval that exists only while
- *   some op is inside its 120 s wait window. Once every entry is post-window
- *   (fee-held, accepted-not-landed, unreachable) the interval stops and those
- *   entries converge on focus/resume at the core's 12 s reconcile pace, which is
- *   exactly the cadence `waitForReceipt` + the Home-focus reconciler had.
+ *   core's — so the ticker here is a dumb 3 s interval that exists while the
+ *   core is still following ANY op (`TrackEntryView.polling`). It used to stop
+ *   at the end of the 120 s wait window, and an op past it was asked about
+ *   only on the next focus/resume: the sheet said "submitted" forever and never
+ *   saw it land (spec 079, F13). Past the window the core paces the asking
+ *   itself — 12 s, then 60 s after ten minutes, then 300 s after an hour, and
+ *   nothing past 24 h (`tx_tracker::receipt_interval_ms`) — so a tick it does
+ *   not want costs one wasm call and no request.
  * - **Who cares about an outcome.** The core knows hashes, not surfaces. A
  *   caller may hand `trackSubmitted` a listener; it is fired once per verdict
  *   and dropped when the entry becomes terminal.
@@ -133,11 +136,17 @@ function deliver(view: TrackView): void {
 }
 
 /**
- * Run the interval only while something is inside its wait window. Everything
- * else converges on `HomeFocused` / `AppResumed`, at the core's own 12 s pace.
+ * Whether the tracker needs the clock: the core is still following some op.
+ * Not "inside its wait window" — an op past it still lands, and the core, not
+ * this interval, decides how often it is asked about (spec 079).
  */
+export function trackerNeedsClock(view: TrackView): boolean {
+	return view.entries.some((entry) => entry.polling);
+}
+
+/** Run the interval while the core still follows an op; stop it when none is left. */
 function syncTicker(view: TrackView): void {
-	const wanted = view.entries.some((entry) => entry.polling && entry.status === 'pending');
+	const wanted = trackerNeedsClock(view);
 	if (wanted && !ticker) {
 		ticker = setInterval(() => {
 			session?.dispatch({ type: 'tick' });

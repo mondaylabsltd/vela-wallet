@@ -8,11 +8,15 @@
 import { describe, expect, it } from 'vitest';
 import {
 	dappReceiptModel,
+	endsOnSignedTick,
+	landingFromEntry,
 	landingToRaise,
 	receiptProgress,
+	trackEntryFor,
 	type DappReceiptCopy
 } from './dapp-receipt';
 import { ringProgress } from '$lib/flows/ui/ring';
+import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
 
 const copy: DappReceiptCopy = {
 	confirming: 'Confirming…',
@@ -24,7 +28,10 @@ const copy: DappReceiptCopy = {
 	opHashLabel: 'UserOp Hash',
 	txHashLabel: 'Tx Hash',
 	explorer: 'Explorer',
-	done: 'Done'
+	done: 'Done',
+	stillConfirming: 'Not on-chain yet. Vela keeps checking — don’t send it again.',
+	unknownOutcome: 'Still unconfirmed after 24 hours.',
+	signed: 'Signed!'
 };
 
 const OP = '0x' + 'a1'.repeat(32);
@@ -79,12 +86,130 @@ describe('the receipt a dApp transaction lands on', () => {
 		const states = [
 			{ kind: 'submitting' as const },
 			{ kind: 'submitted' as const, opHash: OP },
+			{ kind: 'still_confirming' as const, opHash: OP },
+			{ kind: 'unknown' as const, opHash: OP },
 			{ kind: 'confirmed' as const, opHash: OP, txHash: TX },
-			{ kind: 'failed' as const, opHash: OP }
+			{ kind: 'failed' as const, opHash: OP },
+			{ kind: 'signed' as const }
 		];
 		for (const state of states) {
 			expect(dappReceiptModel(state, copy, explorer).cta).toBe(copy.done);
 		}
+	});
+});
+
+describe('an operation that has not landed when the wait runs out (spec 079)', () => {
+	it('says it is still confirming — a clock and the operation hash, never a cross', () => {
+		const model = dappReceiptModel({ kind: 'still_confirming', opHash: OP }, copy, explorer);
+		expect(model.stage).toBe('submitted');
+		expect(model.title).toBe(copy.submitted);
+		expect(model.captions).toEqual([copy.stillConfirming]);
+		expect(model.hash).toEqual({ label: copy.opHashLabel, value: OP });
+		expect(model.explorer).toBeUndefined();
+	});
+
+	it('past 24 hours it says unknown, not pending forever and not failed', () => {
+		const model = dappReceiptModel({ kind: 'unknown', opHash: OP }, copy, explorer);
+		expect(model.stage).toBe('submitted');
+		expect(model.captions).toEqual([copy.unknownOutcome]);
+		expect(model.hash?.value).toBe(OP);
+	});
+});
+
+describe('a message signature (spec 079)', () => {
+	it('ends on the tick and "Signed!", with no hash — nothing went to a chain', () => {
+		const model = dappReceiptModel({ kind: 'signed' }, copy, explorer);
+		expect(model.stage).toBe('confirmed');
+		expect(model.title).toBe(copy.signed);
+		expect(model.hash).toBeUndefined();
+		expect(model.explorer).toBeUndefined();
+	});
+});
+
+describe('which answer ends on the signed tick', () => {
+	it('a signature for the message the sheet showed', () => {
+		for (const kind of ['personal_sign', 'typed_data', 'eth_sign'] as const) {
+			expect(endsOnSignedTick({ id: 'r1', ok: true }, { id: 'r1', kind })).toBe(true);
+		}
+	});
+
+	it('never a refusal, a transaction, or an answer for another request', () => {
+		expect(endsOnSignedTick({ id: 'r1', ok: false }, { id: 'r1', kind: 'personal_sign' })).toBe(
+			false
+		);
+		expect(endsOnSignedTick({ id: 'r1', ok: true }, { id: 'r1', kind: 'transaction' })).toBe(false);
+		expect(endsOnSignedTick({ id: 'r1', ok: true }, { id: 'r1', kind: 'batch' })).toBe(false);
+		expect(endsOnSignedTick({ id: 'r2', ok: true }, { id: 'r1', kind: 'personal_sign' })).toBe(
+			false
+		);
+		expect(endsOnSignedTick({ id: 'r1', ok: true }, null)).toBe(false);
+	});
+});
+
+describe("the receipt reads the tracker's entry", () => {
+	function entry(over: Partial<TrackEntryView>): TrackEntryView {
+		return {
+			user_op_hash: OP,
+			chain_id: 100,
+			record_ids: ['dapp-1-tx'],
+			status: 'pending',
+			tx_hash: null,
+			polling: true,
+			submitted_at_ms: 1_000,
+			outcome: 'landing',
+			...over
+		};
+	}
+
+	it('keeps what it shows while the tracker holds no entry yet', () => {
+		expect(landingFromEntry(undefined, OP)).toBeNull();
+	});
+
+	it('inside the window: the ringed wait', () => {
+		expect(landingFromEntry(entry({}), OP)).toEqual({ kind: 'submitted', opHash: OP });
+	});
+
+	it('confirmed with a hash lands; confirmed without one is still landing', () => {
+		expect(
+			landingFromEntry(entry({ status: 'confirmed', tx_hash: TX, outcome: 'final' }), OP)
+		).toEqual({ kind: 'confirmed', opHash: OP, txHash: TX });
+		expect(landingFromEntry(entry({ status: 'confirmed', outcome: 'final' }), OP)).toEqual({
+			kind: 'submitted',
+			opHash: OP
+		});
+	});
+
+	it('a dropped or refused op is a failure with its hash', () => {
+		for (const status of ['dropped', 'rejected'] as const) {
+			expect(landingFromEntry(entry({ status, outcome: 'final' }), OP)).toEqual({
+				kind: 'failed',
+				opHash: OP
+			});
+		}
+	});
+
+	it('every unlanded status past the window reads still-confirming — time never makes a failure', () => {
+		for (const status of ['pending', 'fee_held', 'unreachable', 'accepted_not_landed'] as const) {
+			expect(landingFromEntry(entry({ status, outcome: 'still_confirming' }), OP)).toEqual({
+				kind: 'still_confirming',
+				opHash: OP
+			});
+		}
+	});
+
+	it('abandoned at 24 h reads unknown', () => {
+		expect(
+			landingFromEntry(
+				entry({ status: 'accepted_not_landed', outcome: 'unknown', polling: false }),
+				OP
+			)
+		).toEqual({ kind: 'unknown', opHash: OP });
+	});
+
+	it('finds the entry however the hash is cased', () => {
+		const entries = [entry({ user_op_hash: OP.toLowerCase() })];
+		expect(trackEntryFor(entries, OP.toUpperCase().replace('0X', '0x'))).toBe(entries[0]);
+		expect(trackEntryFor(entries, TX)).toBeUndefined();
 	});
 });
 
