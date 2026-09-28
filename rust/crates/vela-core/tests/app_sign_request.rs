@@ -16,11 +16,11 @@ use vela_core::app::sign_request::{
     method_kind, required_capabilities, sign_account_index, Event, SignAccountRef, SignApproveOpts,
     SignDappIdentity, SignEnding, SignEndingState, SignErrorKind, SignFundingNeeded,
     SignFundingPresentation, SignMethodKind, SignNotice, SignOperation as Op, SignPhase,
-    SignQuotedFee, SignRecord, SignRecordClose, SignRecordKind, SignRecordStatus, SignRequest,
-    SignResponsePayload, SignSettledOutcome, SignShellResult as Res, SignSponsorship,
-    SignSubmitOutcome, SignSurface, SignSwipeAction, SignTrackerHandoff, CODE_INTERNAL,
-    CODE_INVALID_PARAMS, CODE_UNAUTHORIZED, CODE_UNSUPPORTED_CAPABILITY, CODE_UNSUPPORTED_CHAIN,
-    CODE_USER_REJECTED, DAPP_TX_ANSWER_WINDOW_MS, EXTENSION_REQUEST_TTL_MS,
+    SignQuotedFee, SignRecord, SignRecordKind, SignRecordStatus, SignRequest, SignResponsePayload,
+    SignSettledOutcome, SignShellResult as Res, SignSponsorship, SignSubmitOutcome, SignSurface,
+    SignSwipeAction, SignTrackerHandoff, CODE_INTERNAL, CODE_INVALID_PARAMS, CODE_UNAUTHORIZED,
+    CODE_UNSUPPORTED_CAPABILITY, CODE_UNSUPPORTED_CHAIN, CODE_USER_REJECTED,
+    DAPP_TX_ANSWER_WINDOW_MS, EXTENSION_REQUEST_TTL_MS,
 };
 use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
