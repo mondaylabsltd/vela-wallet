@@ -950,14 +950,14 @@ The `TS/` tasks touch no other group's file and may start at any time. T141 edit
 (`rust/crates/vela-core/src/trusted_signer/integrity.rs`), and that moves the core fingerprint. It
 therefore waits for the Phase 2 checkpoint, and T046 re-runs after it before any device build.
 
-- [ ] T138 [P] [US4] L-HOST: the signing page names the site once, in `TS/src/lib/resolve.js` and `TS/src/lib/render.js` (RG11, FR-013); proof: new `TS/samples/origin-line-test.mjs`.
+- [x] T138 [P] [US4] L-HOST: the signing page names the site once, in `TS/src/lib/resolve.js` and `TS/src/lib/render.js` (RG11, FR-013); proof: new `TS/samples/origin-line-test.mjs`.
   - `TS/src/lib/resolve.js` `baseView` (`:169-212`) adds `originShown: !!host && host.toLowerCase() !== ((known && known.name) || '').toLowerCase()`; the ceremony view (`:1034-1036`) sets it too.
   - `TS/src/lib/render.js:448-449, 490` draws the host line only when it is set. `view.dapp.origin` stays for `warn.claimedOrigin`.
   - Proof: new `TS/samples/origin-line-test.mjs`: name == host → one line; a different name → two lines; the claimed-origin warning is still drawn.
-- [ ] T139 [US4] A no-calldata call is a send, in `TS/src/lib/resolve.js` (RC8, G14); proof: new `TS/samples/plain-send-test.mjs`; (after T138).
+- [x] T139 [US4] A no-calldata call is a send, in `TS/src/lib/resolve.js` (RC8, G14); proof: new `TS/samples/plain-send-test.mjs`; (after T138).
   - `TS/src/lib/resolve.js:242-287`: `hasCalldata` is false for absent, "", "0x" and "0X"; every no-calldata call takes the send path, including value 0 (amount "0", no out-minus, no `ui.simNoOther`). The blind ladder (`:348-366`) sees only calldata.
   - Proof: new `TS/samples/plain-send-test.mjs`.
-- [ ] T140 [US4] Rebuild `TS/dist` (`bun TS/samples/build-single.mjs`, `_headers` included) and record the new hash; (after T139).
+- [x] T140 [US4] Rebuild `TS/dist` (`bun TS/samples/build-single.mjs`, `_headers` included) and record the new hash; (after T139). Built `9df169ea0b6ba9ccf717361e961282b8dd57df40187b9ac89a40c6a5f9b0c6f5` (e1cc53a8).
   - Proof: every sample suite passes: `hostile-test.mjs`, `takeover-test.mjs`, `fee-leg-test.mjs`, `unlimited-line-test.mjs`, `single-file-test.mjs`, `slider-test.mjs`, `ceremony-test.mjs`, `channels-test.mjs`, `origin-line-test.mjs` and `plain-send-test.mjs`.
 - [ ] T141 [US4] Put the new hash at the front of `BUILD_ALLOWED` in `rust/crates/vela-core/src/trusted_signer/integrity.rs`; `LAUNCH` is unchanged; (after T140 and T047).
   - Then re-run T046 (pkg-web, xcframework, `.so`).
