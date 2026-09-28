@@ -12,10 +12,11 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::tx_tracker::{
-    receipt_interval_ms, Event, TrackLifecycle, TrackOperation as Op, TrackOutcome,
-    TrackPendingRecord, TrackRecordPatch, TrackRecordStatus, TrackShellResult as Res, TrackStatus,
-    TxTracker, ABANDON_AGE_MS, FEE_HOLD_STAGE, RECONCILE_MIN_INTERVAL_MS,
-    SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS, WAIT_WINDOW_MS,
+    parse_user_op_status, receipt_interval_ms, Event, TrackLifecycle, TrackOperation as Op,
+    TrackOutcome, TrackPendingRecord, TrackRecordPatch, TrackRecordStatus, TrackShellResult as Res,
+    TrackStatus, TrackStatusAnswer, TxTracker, ABANDON_AGE_MS, FEE_HOLD_STAGE,
+    RECONCILE_MIN_INTERVAL_MS, SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS,
+    USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
 };
 
 type Sut = DomainDriver<TxTracker>;
@@ -189,6 +190,7 @@ fn fee_hold_stays_pending_and_later_confirms() {
             status: TrackLifecycle::Queued,
             stage: Some(FEE_HOLD_STAGE.to_owned()),
             now_ms: T0 + 12_800.0,
+            tx_hash: None,
         })
         .is_empty());
     assert_eq!(
@@ -228,6 +230,7 @@ fn rejected_marks_failed_and_terminates_immediately() {
         status: TrackLifecycle::Rejected,
         stage: None,
         now_ms: T0 + 12_500.0,
+        tx_hash: None,
     });
     assert_eq!(ops, vec![fail_patch()]);
     assert_eq!(entry_status(&sut), TrackStatus::Rejected);
@@ -280,6 +283,7 @@ fn non_rejected_status_answers_never_fail_records() {
             status: TrackLifecycle::Failed,
             stage: None,
             now_ms: T0 + 12_500.0,
+            tx_hash: None,
         })
         .is_empty());
     assert_eq!(entry_status(&sut), TrackStatus::Pending);
@@ -612,6 +616,7 @@ fn late_rejected_status_never_unconfirms_a_receipt() {
         status: TrackLifecycle::Rejected,
         stage: None,
         now_ms: T0 + 12_400.0,
+        tx_hash: None,
     });
     assert_eq!(ops, vec![], "no failed patch after a confirmation");
     assert_eq!(entry_status(&sut), TrackStatus::Confirmed);
@@ -779,4 +784,101 @@ fn an_aborted_op_reads_still_confirming() {
         user_op_hash: HASH.to_owned(),
     });
     assert_eq!(outcome(&sut), TrackOutcome::StillConfirming);
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 T016 (RA7, G13) — the relay's status method and its one parser
+// ---------------------------------------------------------------------------
+
+/// The relay serves `pimlico_getUserOperationStatus`; the spelling every
+/// client asked for answered -32601 (`evidence/relay-status-probe.txt`).
+#[test]
+fn the_status_method_is_the_one_the_relay_serves() {
+    assert_eq!(USER_OP_STATUS_METHOD, "pimlico_getUserOperationStatus");
+    let source = include_str!("../src/app/tx_tracker.rs");
+    assert!(
+        !source.contains(&format!("eth_get{}", "UserOperationStatus")),
+        "the dead method name is gone from the tracker"
+    );
+}
+
+#[test]
+fn the_live_probe_s_answers_parse() {
+    // Verbatim from the 2026-09-28 probe.
+    assert_eq!(
+        parse_user_op_status(r#"{"status":"not_found","transactionHash":null}"#),
+        Some(TrackStatusAnswer {
+            status: TrackLifecycle::NotFound,
+            stage: None,
+            tx_hash: None,
+        })
+    );
+    assert_eq!(
+        parse_user_op_status(&format!(
+            r#"{{"status":"included","transactionHash":"{TX}","last_executor_stage":"bundled"}}"#
+        )),
+        Some(TrackStatusAnswer {
+            status: TrackLifecycle::Included,
+            stage: Some("bundled".to_owned()),
+            tx_hash: Some(TX.to_owned()),
+        })
+    );
+    // The whole JSON-RPC body is read through to its result.
+    assert_eq!(
+        parse_user_op_status(
+            r#"{"jsonrpc":"2.0","id":1,"result":{"status":"queued","last_executor_stage":"in_band_settlement_hold"}}"#
+        ),
+        Some(TrackStatusAnswer {
+            status: TrackLifecycle::Queued,
+            stage: Some(FEE_HOLD_STAGE.to_owned()),
+            tx_hash: None,
+        })
+    );
+}
+
+/// An unknown status string is not guessed at — the e2e stub's `pending` was
+/// never a relay status.
+#[test]
+fn an_unknown_status_parses_to_nothing() {
+    for junk in [
+        r#"{"status":"pending?"}"#,
+        r#"{"status":"pending"}"#,
+        r#"{"status":7}"#,
+        r#"{"transactionHash":"0x1"}"#,
+        r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"method not found"}}"#,
+        "null",
+        "not json",
+    ] {
+        assert_eq!(parse_user_op_status(junk), None, "{junk}");
+    }
+}
+
+/// The relay's bundle tx rides the view as a link while no receipt exists —
+/// never as the verdict's `tx_hash`.
+#[test]
+fn the_relay_s_tx_hash_is_a_link_not_a_verdict() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let ops = tick(&mut sut, T0 + 12_400.0);
+    assert_eq!(ops, vec![poll_receipt(), poll_status()]);
+    assert!(sut.resolve(receipt_pending(T0 + 12_700.0)).is_empty());
+    assert!(sut
+        .resolve(Res::Status {
+            user_op_hash: HASH.to_owned(),
+            status: TrackLifecycle::Submitted,
+            stage: None,
+            now_ms: T0 + 12_800.0,
+            tx_hash: Some(TX.to_owned()),
+        })
+        .is_empty());
+    let view = sut.view();
+    assert_eq!(view.entries[0].relay_tx_hash.as_deref(), Some(TX));
+    assert_eq!(view.entries[0].tx_hash, None);
+    assert_eq!(view.entries[0].status, TrackStatus::Pending);
+    // A shell that predates the field still decodes.
+    let old: Option<Res> = serde_json::from_str(&format!(
+        r#"{{"type":"status","user_op_hash":"{HASH}","status":"queued","stage":null,"now_ms":1}}"#
+    ))
+    .ok();
+    assert!(matches!(old, Some(Res::Status { tx_hash: None, .. })));
 }

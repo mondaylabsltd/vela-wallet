@@ -100,6 +100,51 @@ pub fn receipt_interval_ms(in_window: bool, age_ms: f64) -> f64 {
 /// reimbursement — `FEE_HOLD_STAGE` (`tx-reconciler.ts:84`).
 pub const FEE_HOLD_STAGE: &str = "in_band_settlement_hold";
 
+/// The relay's lifecycle-status method (spec 082 RA7, G13). The relay serves
+/// only this name; the `eth_`-prefixed spelling every client had been asking
+/// answers `-32601` there (`evidence/relay-status-probe.txt`).
+pub const USER_OP_STATUS_METHOD: &str = "pimlico_getUserOperationStatus";
+
+/// One parsed answer of [`USER_OP_STATUS_METHOD`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct TrackStatusAnswer {
+    pub status: TrackLifecycle,
+    /// The executor stage that last touched the op (`last_executor_stage`),
+    /// e.g. [`FEE_HOLD_STAGE`].
+    pub stage: Option<String>,
+    /// The bundle transaction the relay names, when it has one — an explorer
+    /// link for an op that is still pending (079 D2).
+    pub tx_hash: Option<String>,
+}
+
+/// Parse the `result` of [`USER_OP_STATUS_METHOD`] — the one parser every
+/// client uses (RA7). A whole JSON-RPC body is accepted too (its `result` is
+/// read; an `error` is no answer). `None` for anything that is not an object
+/// with a known `status` string: an unknown status is not guessed at.
+pub fn parse_user_op_status(result_json: &str) -> Option<TrackStatusAnswer> {
+    let value: serde_json::Value = serde_json::from_str(result_json).ok()?;
+    let result = match value.get("status") {
+        Some(_) => &value,
+        None => value.get("result")?,
+    };
+    let status_text = result.get("status")?.as_str()?;
+    let status: TrackLifecycle =
+        serde_json::from_value(serde_json::Value::String(status_text.to_owned())).ok()?;
+    let text = |key: &str| {
+        result
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+    };
+    Some(TrackStatusAnswer {
+        status,
+        stage: text("last_executor_stage"),
+        tx_hash: text("transactionHash"),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Protocol
 // ---------------------------------------------------------------------------
@@ -117,8 +162,9 @@ pub enum TrackOperation {
     /// `ReceiptPending`; `success !== false` → `Receipt`; `success === false`
     /// → `ReceiptFailed`.
     PollReceipt { user_op_hash: String, chain_id: u32 },
-    /// `eth_getUserOperationStatus` (a Vela relay extension). Null / error /
-    /// older relay → `StatusUnavailable` (`tx-reconciler.ts:96-115`).
+    /// [`USER_OP_STATUS_METHOD`], parsed with [`parse_user_op_status`]. Null /
+    /// error / unknown status / older relay → `StatusUnavailable`
+    /// (`tx-reconciler.ts:96-115`).
     PollStatus { user_op_hash: String, chain_id: u32 },
     /// Load still-pending submissions from storage: records with
     /// `status === 'pending'`, a `userOpHash` and `txHash === ''`
@@ -192,7 +238,7 @@ pub enum TrackShellResult {
         user_op_hash: String,
         now_ms: f64,
     },
-    /// The relay's view of an op with no receipt (`eth_getUserOperationStatus`).
+    /// The relay's view of an op with no receipt ([`USER_OP_STATUS_METHOD`]).
     Status {
         user_op_hash: String,
         status: TrackLifecycle,
@@ -200,6 +246,9 @@ pub enum TrackShellResult {
         /// `in_band_settlement_hold`.
         stage: Option<String>,
         now_ms: f64,
+        /// The relay's bundle tx, when it names one ([`TrackStatusAnswer`]).
+        #[serde(default)]
+        tx_hash: Option<String>,
     },
     /// The status endpoint yielded nothing (unreachable or an older relay).
     StatusUnavailable {
@@ -384,6 +433,9 @@ struct Entry {
     aborted: bool,
     /// Older than 24h — polls stopped for good, record left pending.
     abandoned: bool,
+    /// The bundle tx the relay's status named (spec 082 RA7) — a link for an
+    /// op that has not produced a receipt yet. Never a verdict.
+    relay_tx_hash: Option<String>,
 }
 
 impl Entry {
@@ -403,6 +455,7 @@ impl Entry {
             window_closed: false,
             aborted: false,
             abandoned: false,
+            relay_tx_hash: None,
         }
     }
 
@@ -501,6 +554,11 @@ pub struct TrackEntryView {
     pub polling: bool,
     pub submitted_at_ms: Option<f64>,
     pub outcome: TrackOutcome,
+    /// The bundle tx the relay's status named while no receipt has (spec 082
+    /// RA7, the 079 D2 explorer link). A link only — `tx_hash` above is the
+    /// verdict's.
+    #[serde(default)]
+    pub relay_tx_hash: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -602,6 +660,7 @@ impl App for TxTracker {
                     polling: !entry.status.is_terminal() && !entry.abandoned,
                     submitted_at_ms: entry.submitted_at_ms,
                     outcome,
+                    relay_tx_hash: entry.relay_tx_hash.clone(),
                 }
             })
             .collect();
@@ -803,6 +862,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             status,
             stage,
             now_ms,
+            tx_hash,
         } => {
             let key = normalize(&user_op_hash);
             let rejected_ids = {
@@ -814,6 +874,9 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                     // e.g. the receipt confirmed while this poll was in
                     // flight — a late "rejected" must never un-confirm.
                     return Command::done();
+                }
+                if let Some(tx_hash) = tx_hash.filter(|hash| !hash.is_empty()) {
+                    entry.relay_tx_hash = Some(tx_hash);
                 }
                 entry.last_status = Some((status, stage));
                 if status == TrackLifecycle::Rejected {
