@@ -652,6 +652,57 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		expect(page.answers[0].error?.code).toBe(4900);
 	});
 
+	it('the surface’s own close settlement (4900) is not a second way to tell the page "not sent"', async () => {
+		// DappRequestHost answers what it still owes with the core's close
+		// settlement when it is torn down — the panel's page going (pagehide), or
+		// an in-app navigation off the wallet unmounting it while the port stays
+		// up. For a claimed submit that carried its hash, that is surface loss.
+		const env = makeEnv();
+		await startWorker(env);
+		const panel = env.panel();
+		const page = await submitting(env, panel);
+		panel.post({
+			type: 'answer',
+			rid: '7:tx:1',
+			error: { code: 4900, message: 'The browser closed before the request finished' }
+		});
+		await settleAll();
+		expect(page.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+		expect(env.local.data[`vela.ext.op.${OP}`]).toMatchObject({ chainId: 100 });
+		expect(String(env.session.data['vela.sw.log'])).toMatch(/req\.answered .*maybe_sent=1/);
+		panel.close();
+		await settleAll();
+		expect(page.answers).toHaveLength(1);
+
+		// The same by the message fallback (the port was down when it answered).
+		const env2 = makeEnv();
+		await startWorker(env2);
+		const panel2 = env2.panel();
+		const page2 = await submitting(env2, panel2);
+		const reply = await env2.sendFromWallet({
+			type: 'requestAnswer',
+			rid: '7:tx:1',
+			error: { code: 4900, message: 'The browser closed before the request finished' }
+		});
+		expect(reply).toEqual({ delivered: true });
+		expect(page2.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+	});
+
+	it('a real error answer for a claimed submit still goes through (RJ3: refused, nothing sent)', async () => {
+		const env = makeEnv();
+		await startWorker(env);
+		const panel = env.panel();
+		const page = await submitting(env, panel);
+		const refused = {
+			code: -32603,
+			message: 'the network refused this transaction; nothing was sent'
+		};
+		panel.post({ type: 'answer', rid: '7:tx:1', error: refused });
+		await settleAll();
+		expect(page.answers).toEqual([{ id: 'tx:1', result: undefined, error: refused }]);
+		expect(env.local.data[`vela.ext.op.${OP}`]).toBeUndefined();
+	});
+
 	it('the window closing answers it with the hash too', async () => {
 		const env = makeEnv();
 		await startWorker(env);
@@ -795,6 +846,81 @@ describe('claims (RB5)', () => {
 			cause: 'wrong_surface'
 		});
 		expect(a.answers).toEqual([]);
+	});
+});
+
+/**
+ * RJ20 (G63) lets an idle side panel stay disconnected after Chrome stops the
+ * worker; the storage write of a request for its window brings it back. Chrome
+ * reports the manifest's global panel as `windowId: -1`, so the port was the
+ * worker's only sign that a panel is up. A request with no user gesture left
+ * (EX2: `setTimeout(() => ethereum.request(…), 6000)`) cannot open the panel,
+ * and must still be shown IN the open panel — no window beside it (RB8).
+ */
+describe('a request with no gesture, to an idle panel (RB8 EX2 × RJ20 G63)', () => {
+	/** The idle panel: it reconnects shortly after a record for its window is written. */
+	function idlePanel(env: Env, windowId = 3, delayMs = 20) {
+		const panels: ReturnType<Env['panel']>[] = [];
+		const set = env.session.set.bind(env.session);
+		env.session.set = async (items: Record<string, unknown>) => {
+			await set(items);
+			const ours = Object.entries(items).some(
+				([key, value]) =>
+					key.startsWith('vela.req.') &&
+					(value as { surfaceWindowId?: number }).surfaceWindowId === windowId
+			);
+			if (ours && panels.length === 0) {
+				setTimeout(() => panels.push(env.panel(windowId)), delayMs);
+			}
+		};
+		return panels;
+	}
+
+	it('shows it in the panel that is open, and opens no window', async () => {
+		const env = makeEnv();
+		env.globalPanel.up = true;
+		env.chrome.sidePanel.open.mockRejectedValueOnce(
+			new Error('`sidePanel.open()` may only be called in response to a user gesture.')
+		);
+		// A fresh worker (Chrome stopped the last one): no surface port is up.
+		await startWorker(env);
+		const panels = idlePanel(env);
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 's:1');
+		await new Promise((resolve) => setTimeout(resolve, 80));
+		await settleAll();
+		expect(env.chrome.windows.create).not.toHaveBeenCalled();
+		expect(panels).toHaveLength(1);
+		expect(owedOf(panels[0])).toEqual(['7:s:1']);
+		expect(env.session.data['vela.req.7:s:1']).toMatchObject({ surface: 'panel' });
+	});
+
+	it('with no side panel up anywhere, the window opens at once', async () => {
+		const env = makeEnv();
+		env.chrome.sidePanel.open.mockRejectedValueOnce(new Error('no gesture'));
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const started = Date.now();
+		await env.ask(page, 's:1');
+		await settleAll();
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
+		expect(Date.now() - started).toBeLessThan(500);
+		expect(env.session.data['vela.req.7:s:1']).toMatchObject({ surface: 'window' });
+	});
+
+	it('a panel up in ANOTHER window only: the window opens once this one’s panel stays quiet', async () => {
+		const env = makeEnv();
+		env.globalPanel.up = true;
+		env.chrome.sidePanel.open.mockRejectedValueOnce(new Error('no gesture'));
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		await env.ask(page, 's:1');
+		await settleAll();
+		expect(env.chrome.windows.create).not.toHaveBeenCalled();
+		await new Promise((resolve) => setTimeout(resolve, 1_200));
+		await settleAll();
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
+		expect(env.session.data['vela.req.7:s:1']).toMatchObject({ surface: 'window' });
 	});
 });
 

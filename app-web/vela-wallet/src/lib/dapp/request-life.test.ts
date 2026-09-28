@@ -20,6 +20,7 @@ import {
 	recoveryPlan,
 	settlement,
 	surfaceAfterOpen,
+	surfaceAnswer,
 	withClaim
 } from '../../../extension/lib/request-life.js';
 import {
@@ -336,6 +337,27 @@ describe('a claimed submit that may have been sent (RJ2, G35)', () => {
 		expect(recoveryPlan([late], { ...facts, panelWindows: new Set([3]) })).toEqual([
 			{ rid: '7:tx', action: 'settle', cause: 'expired', answer: { ok: OP } }
 		]);
+	});
+
+	it('the surface’s own close settlement (4900) becomes the hash; a real answer goes as given', () => {
+		const closing = {
+			error: { code: 4900, message: 'The browser closed before the request finished' }
+		};
+		expect(surfaceAnswer(submitting(), closing)).toEqual({
+			payload: { result: OP },
+			maybeSent: OP
+		});
+		// Before the hash exists nothing was sent: 4900 is right.
+		const signOnly = record({ state: 'claimed', phase: 'sign' } as Partial<Rec>);
+		expect(surfaceAnswer(signOnly, closing)).toEqual({ payload: closing, maybeSent: null });
+		// RJ3's refusal, a 4001 and a result are the surface's answer, not a loss.
+		const refused = { error: { code: -32603, message: 'refused' } };
+		expect(surfaceAnswer(submitting(), refused)).toEqual({ payload: refused, maybeSent: null });
+		const rejected = { error: { code: 4001, message: 'rejected' } };
+		expect(surfaceAnswer(submitting(), rejected)).toEqual({ payload: rejected, maybeSent: null });
+		const ok = { result: `0x${'cd'.repeat(32)}` };
+		expect(surfaceAnswer(submitting(), ok)).toEqual({ payload: ok, maybeSent: null });
+		expect(SETTLE.surface_closed.code).toBe(4900);
 	});
 });
 

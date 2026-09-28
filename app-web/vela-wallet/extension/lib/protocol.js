@@ -65,6 +65,14 @@ export const CLAIM_TIMEOUT_MS = 5_000;
 export const SURFACE_PING_MS = 20_000;
 /** A side panel that neither opened nor failed in this long is given up on. */
 export const PANEL_OPEN_WAIT_MS = 2_000;
+/**
+ * When the panel could not be opened (no user gesture left) and Chrome cannot
+ * say which window its side panel is in (`windowId: -1`), how long an idle
+ * panel — one that holds no port (RJ20, G63) and wakes on the request just
+ * written for its window — has to say hello before a request window opens
+ * instead (RB8, EX2).
+ */
+export const PANEL_HELLO_WAIT_MS = 1_000;
 /** content.js's reconnect backoff after its port to the worker closed. */
 export const RECONNECT_BACKOFF_MS = [0, 250, 1_000, 3_000];
 

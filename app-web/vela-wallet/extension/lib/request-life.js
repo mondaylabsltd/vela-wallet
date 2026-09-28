@@ -137,6 +137,31 @@ export function maybeSentHash(record) {
 	return isHash32(record.opHash) ? record.opHash : null;
 }
 
+/**
+ * What the page is told when the SURFACE answers (RJ2). A surface answers what
+ * it still owes with the close settlement — 4900, "it may have happened" (RB6)
+ * — when it is torn down: the panel's page going (`pagehide`), or an in-app
+ * navigation off the wallet unmounting the request host while the port stays
+ * up. For a claimed submit that carried its operation hash that is surface
+ * loss like any other, so the page is told the hash, never 4900 (which a dApp
+ * reads as "not sent" and pays again). Every other answer — a result, or a
+ * real error such as RJ3's "refused; nothing was sent" — goes as the surface
+ * gave it.
+ *
+ * Returns `{ payload, maybeSent }`: `maybeSent` is the hash when it replaced
+ * the settlement, else `null`.
+ *
+ * @param {object} record
+ * @param {{ result?: unknown, error?: { code?: unknown } }} payload
+ */
+export function surfaceAnswer(record, payload) {
+	const hash = maybeSentHash(record);
+	if (hash && payload?.error && payload.error.code === SETTLE.surface_closed.code) {
+		return { payload: { result: hash }, maybeSent: hash };
+	}
+	return { payload, maybeSent: null };
+}
+
 /** `{rid, cause}` — plus the answer a may-have-been-sent request is owed. */
 function ending(record, cause) {
 	const hash = maybeSentHash(record);

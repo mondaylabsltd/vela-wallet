@@ -49,6 +49,7 @@ import {
 	DOC_PORT,
 	ENDPOINTS_KEY,
 	ERR,
+	PANEL_HELLO_WAIT_MS,
 	PANEL_OPEN_WAIT_MS,
 	PERM_PREFIX,
 	READ_SLOW_MS,
@@ -83,6 +84,7 @@ import {
 	recoveryPlan,
 	settlement,
 	surfaceAfterOpen,
+	surfaceAnswer,
 	withClaim
 } from './lib/request-life.js';
 import { createSwLog } from './lib/swlog.js';
@@ -328,19 +330,26 @@ function end(step) {
 		: settle(step.rid, step.cause);
 }
 
-/** The surface's answer, delivered to the page by its document. */
-async function answer(rid, payload, opHash, caller) {
+/**
+ * The surface's answer, delivered to the page by its document. A surface's own
+ * close settlement (4900) for a claimed submit that carried its hash is surface
+ * loss: the page is told the hash instead (RJ2, `surfaceAnswer`).
+ */
+async function answer(rid, given, opHash, caller) {
 	const record = records.get(rid);
 	if (!record || (caller && !callerOwns(record, caller))) return false;
+	const { payload, maybeSent } = surfaceAnswer(record, given);
 	records.delete(rid);
 	await unpersist(rid);
 	const delivered = await deliver(record, payload);
 	void swlog.log('req.answered', {
+		...(maybeSent ? { cause: 'surface_settled', maybe_sent: 1 } : {}),
 		delivered,
 		outcome: payload.error ? 'error' : 'ok',
 		tab: record.tabId
 	});
-	if (!payload.error) void rememberOp(payload.result, opHash);
+	if (maybeSent) void rememberOp(maybeSent, { chainId: record.chainId });
+	else if (!payload.error) void rememberOp(payload.result, opHash);
 	if (record.surface === 'window' && record.surfaceWindowId !== undefined) {
 		chrome.windows.remove(record.surfaceWindowId).catch(() => {});
 	}
@@ -432,6 +441,29 @@ async function openRequestWindow(record) {
 	}
 }
 
+/** surface key → the callbacks waiting for that surface's `hello`. */
+const helloWaiters = new Map();
+
+/**
+ * Does the surface `key` say hello within `ms`? `true` at once when its port
+ * is already up.
+ */
+function panelHello(key, ms) {
+	if (surfaces.has(key)) return Promise.resolve(true);
+	return new Promise((resolve) => {
+		const waiting = helloWaiters.get(key) ?? new Set();
+		helloWaiters.set(key, waiting);
+		const done = (up) => {
+			clearTimeout(timer);
+			waiting.delete(done);
+			if (waiting.size === 0 && helloWaiters.get(key) === waiting) helloWaiters.delete(key);
+			resolve(up);
+		};
+		const timer = setTimeout(() => done(surfaces.has(key)), ms);
+		waiting.add(done);
+	});
+}
+
 /** A request that arrived: into the ledger, onto its surface. */
 async function admit(record, panelAttempt) {
 	await loaded;
@@ -461,9 +493,16 @@ async function admit(record, panelAttempt) {
 
 	const opened = await within(panelAttempt, PANEL_OPEN_WAIT_MS, 'timeout');
 	if (opened === 'ok' || !records.has(record.rid)) return;
-	const panelOpen =
-		surfaces.has(surfaceKey(owner)) ||
-		((await panelWindows())?.has(record.surfaceWindowId) ?? false);
+	const key = surfaceKey(owner);
+	let panelOpen = surfaces.has(key);
+	if (!panelOpen) {
+		const up = await panelWindows();
+		// `null`: Chrome cannot say which window its side panel is in (the
+		// global panel reports -1). An idle panel holds no port (RJ20, G63) but
+		// wakes on the record just written for its window — so it is given a
+		// moment to say hello before a window opens beside it (RB8, EX2).
+		panelOpen = up ? up.has(record.surfaceWindowId) : await panelHello(key, PANEL_HELLO_WAIT_MS);
+	}
 	const where = surfaceAfterOpen({ opened, panelOpen, preference: surfacePreference });
 	if (where === 'window' && records.has(record.rid)) await openRequestWindow(record);
 }
@@ -612,6 +651,7 @@ async function onSurfaceMessage(port, message, caller, setCaller) {
 			surfaces.set(surfaceKey(next), { port, caller: next });
 			if (next.kind === 'panel') void swlog.log('panel.up', { window: next.windowId });
 			pushOwed(next);
+			for (const done of [...(helloWaiters.get(surfaceKey(next)) ?? [])]) done(true);
 			return;
 		}
 		case 'shown': {
