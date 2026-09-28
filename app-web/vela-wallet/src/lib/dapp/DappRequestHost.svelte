@@ -360,12 +360,15 @@
 		busy = true;
 		const rid = owing;
 		owing = null;
-		if (rid) await rejectRequest(rid);
+		// The card goes BEFORE the answer is awaited: the worker hands the next
+		// request of the window over as soon as it has this answer, and a card
+		// cleared after the await would clear THAT one (EX4 caught it).
 		if (mode === 'panel') {
 			request = null;
 			stage = { kind: 'loading' };
-			busy = false;
 		}
+		if (rid) await rejectRequest(rid);
+		if (mode === 'panel') busy = false;
 		leave();
 	}
 
