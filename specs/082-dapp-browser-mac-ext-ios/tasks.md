@@ -1204,35 +1204,36 @@ gone; a record exists before the bytes leave (RJ1).
 
 ### WEB_A — web and extension fixes with no new core export
 
-- [ ] T209 [P] [US1] RJ2, the worker half: `X/lib/request-life.js` and `X/background.js` (G35); proof: `W/dapp/request-life.test.ts`, `W/dapp/background.test.ts`.
+- [x] T209 [P] [US1] RJ2, the worker half: `X/lib/request-life.js` and `X/background.js` (G35); proof: `W/dapp/request-life.test.ts`, `W/dapp/background.test.ts`.
   - The `submit` claim may carry `{opHash, chainId}`; the worker stores them on the record (`phase: 'submit'`).
   - `affectedBy` (`surface_closed`, `window_removed`) and `recoveryPlan` return `{rid, cause, answer: {ok: opHash}}` for a claimed-submit record with an op hash; `background.js` then answers `ok(opHash)` once (`:541-553`), writes `vela.ext.op.<hash>` (RF3) and logs `req.answered cause=surface_closed maybe_sent=1`. Without an op hash → 4900 as today.
   - Tests: claimed submit + panel port closed → one ok(op hash), no 4900; claimed (sign phase, no op hash) → 4900; worker restart with the panel gone → the same split.
-- [ ] T210 [P] [US1] `W/dapp/panel-surface.svelte.ts`: a reactive caller and a quiet idle panel (G55, G63, RJ20); proof: `W/dapp/panel-surface.test.ts`.
+- [x] T210 [P] [US1] `W/dapp/panel-surface.svelte.ts`: a reactive caller and a quiet idle panel (G55, G63, RJ20); proof: `W/dapp/panel-surface.test.ts`.
   - `caller` is `$state` (`:130`).
   - After a disconnect, reconnect only while a request is owed or a submit is claimed (`:353-358`); otherwise reconnect when `chrome.storage.session` changes a `vela.req.*` for this window.
   - Tests: a request owed after start → `current` set and the layout effect sees it; idle disconnect → no reconnect until a record appears.
-- [ ] T211 [US1] `WR/+layout.svelte`, `WR/[locale]/wallet/+page.svelte` and `W/dapp/follow.ts`: requests on any screen, the account follow and the grant rewrite from any route, the filtered empty state (G55, G58, G62); proof: `W/dapp/follow.test.ts` and a layout test; (after T210).
+- [x] T211 [US1] `WR/+layout.svelte`, `WR/[locale]/wallet/+page.svelte` and `W/dapp/follow.ts`: requests on any screen, the account follow and the grant rewrite from any route, the filtered empty state (G55, G58, G62); proof: `W/dapp/follow.test.ts` and a layout test; (after T210).
   - The RB9 effect (`+layout.svelte:88-91`) reads `panelSurface.caller` and `current` reactively and goes to the wallet when a request is owed.
   - `followActiveAccount` and `normalizeGrantSpelling` move from the wallet page (`:1300-1321`) to the layout; `followedAddress` lives in `follow.ts` (module state), so a remount is not a boot.
   - The sidebar's chain filter also calls `feed.chainFilter(chainId)` (`+page.svelte:1866, 1973`).
   - Tests: an account switch from Settings → `accountsChanged` once with EIP-55; a boot on Settings rewrites a lower-case grant; filter Gnosis → `history.emptyFilter` / `home.emptyNoActivityNetwork` keys.
-- [ ] T212 [P] [US2] `X/panel.js` and `X/lib/locales.js`: the panel opens in the pinned language (G59); proof: new `W/dapp/panel-locale.test.ts`.
+- [x] T212 [P] [US2] `X/panel.js` and `X/lib/locales.js`: the panel opens in the pinned language (G59); proof: new `W/dapp/panel-locale.test.ts`.
   - A pure `panelLocale(pinned, uiLanguage)` in `locales.js`; `panel.js` reads the wallet's pinned `vela.language` (the key the wallet writes) before `chrome.i18n.getUILanguage()` (`:19`).
-- [ ] T213 [US1] `X/lib/protocol.js` and `X/background.js`: timeouts are named, cooled endpoints are skipped (G64, RJ20); proof: `W/dapp/protocol.test.ts`; (after T209).
+- [x] T213 [US1] `X/lib/protocol.js` and `X/background.js`: timeouts are named, cooled endpoints are skipped (G64, RJ20); proof: `W/dapp/protocol.test.ts`; (after T209).
   - `readFailureKind` reports `timeout` for the 8 s timer's abort (`:206-210`).
   - `orderEndpoints` (`:155-165`) returns only un-cooled endpoints while any is left; with all cooled, only the one whose cooldown ends first.
   - Tests: an abort by the timer → `timeout`; three cooled + none live → one endpoint tried.
-- [ ] T214 [P] [US2] `W/signing/SigningHost.svelte`: no fall-back after an ending, no tick over a waiting card (G37 part, G65); proof: new `W/signing/SigningHost.svelte.test.ts` (the `SigningSheet.svelte.test.ts` pattern).
+- [x] T214 [P] [US2] `W/signing/SigningHost.svelte`: no fall-back after an ending, no tick over a waiting card (G37 part, G65); proof: new `W/signing/SigningHost.svelte.test.ts` (the `SigningSheet.svelte.test.ts` pattern).
   - After a landing for op X was raised and closed, the sheet for the same request is never shown again as submitting (`:245-278`); it waits hidden for the answer.
   - When another request is already owed, the full-panel 已签名！ tick is skipped and the next card shows at once.
   - Tests: confirmed landing auto-closes → no Submitting sheet for that rid; tick skipped with a queued request, shown with none (L-PANEL unchanged).
-- [ ] T215 [P] [US2] `W/signing/ui/AmountHero.svelte`: a long amount fits at 360 px (G60); proof: new `W/signing/ui/AmountHero.svelte.test.ts` at 360 px.
+- [x] T215 [P] [US2] `W/signing/ui/AmountHero.svelte`: a long amount fits at 360 px (G60); proof: new `W/signing/ui/AmountHero.svelte.test.ts` at 360 px.
   - The amount wraps at digit groups or scales down to a floor; it never runs off the edge (`:60-73`).
 - [ ] T216 [US1] `E2E/extension-lifecycle.e2e.ts` and `app-web/vela-wallet/playwright.isolated.config.ts` (+ its build script): the missing lifecycle cases, and an isolated build (G66, RJ21); proof: the suite on port 4174; (after T209, T211 and T228).
   - New: a dust send in the panel, the panel closed after the submit claim → the page gets one ok(op hash), never 4900; the case at `:220` (close before any claim → 4900) stays.
   - New: the panel on Settings, then Connect from tab B → the card shows without a tap.
   - The isolated config builds the extension into its own output directory and loads it from there; it never rewrites `extension/dist`.
+  - Status (WEB_A, 43f12b4f): the Settings case, the isolated build (`VELA_EXTENSION_DIST`) and a worker-level G35 case (a stand-in surface claims submit with an op hash, then goes → one ok(op hash)) are in and green on 4174. Still open: the dust send through the panel's own UI — it needs T228 (the panel's claim carrying `{opHash, chainId}`) and a hermetic relay the side panel can reach (Playwright's routes do not reach it); device row post2-E1 covers it meanwhile.
 
 ### DESK_B — desktop adoption of the core changes (after T185–T194)
 
