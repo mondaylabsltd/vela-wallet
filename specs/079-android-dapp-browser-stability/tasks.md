@@ -81,8 +81,8 @@ or gains a test"), and each client's mapping gets a unit test. Device checks are
 **Goal**: refresh control; plain reason for an unreachable service; automatic re-quote.
 **Independent test**: quickstart S7–S8.
 
-- [ ] T029 [US2] Android: reuse `FeeRefreshButton` (`A/feature/flows/components/FlowBlocks.kt:1207`) in `A/feature/signing/SigningFee.kt`; `A/feature/signing/SigningLive.kt` sets its label (`send.feeRefresh`) and `refreshing`; `QuoteUnavailable` shows `componentsUi.funding.denialNetworkError`
-- [ ] T030 [US2] Android: schedule re-quotes with `feeRequoteDelayMs` in `A/feature/signing/core/SigningController.kt` while the sheet is open and unapproved; cancel on approve/close
+- [x] T029 [US2] Android: reuse `FeeRefreshButton` (`A/feature/flows/components/FlowBlocks.kt:1207`) in `A/feature/signing/SigningFee.kt`; `A/feature/signing/SigningLive.kt` sets its label (`send.feeRefresh`) and `refreshing`; `QuoteUnavailable` shows `componentsUi.funding.denialNetworkError`
+- [x] T030 [US2] Android: schedule re-quotes with `feeRequoteDelayMs` in `A/feature/signing/core/SigningController.kt` while the sheet is open and unapproved; cancel on approve/close
 - [ ] T031 [P] [US2] iOS: refresh control in `I/Components/Signing/SigningFooter.swift` (`SigningFeeView`) calling the uncalled `refreshFee()` (`I/Features/Signing/Core/SigningController.swift:400`); reason line; re-quote timer
 - [ ] T032 [P] [US2] Desktop: refresh icon in `D/signing/components.rs:809` row; reason instead of "—" (`D/flows/live.rs:1089-1090`); honour `stale` on this sheet; re-quote timer in `D/wallet/signing_host.rs`
 - [ ] T033 [P] [US2] Extension: refresh control + stale note in the signing fee row (`W/signing/live.ts:468-478`, reuse `W/flows/ui/FeeRow.svelte`'s control); re-quote with `fee_requote_delay_ms` over wasm
@@ -99,11 +99,11 @@ Recents only for loaded pages, from one document.
 **Independent test**: quickstart L1–L6.
 
 ### Android
-- [ ] T035 [US3] In `A/feature/browser/core/BrowserController.kt` `BrowserEngine`: set `loading=true, progress≥10` in `load()`, `reload()` and for main-frame http(s) navigations in `shouldOverrideUrlLoading`; add `retrying` and `failure: LoadFailure?` to `EngineState`; classify in `onReceivedError`/`onReceivedSslError` with `browserLoadClassify(Android, …)`
-- [ ] T036 [US3] Keep the panel through a retry: `reload()` on a failed tab sets `retrying=true` and leaves `failure` until `onPageCommitVisible`/`onPageFinished` without error; auto-retry timer from `browserLoadRetryDelayMs` only while the engine is attached (`attach`/`detach`)
-- [ ] T037 [US3] Visit rule: replace `FAVICON_JS` + `view.title` with one script returning `{href,title,icon}` and pass it through `browserLoadVisit` before `BhistEvent.VisitRecorded` in `BrowserController.kt` `loadFinished`
-- [ ] T038 [US3] Panel UI in `A/feature/explore/ExploreScreen.kt` (`BrowserNotice` for `failed`): reason line from `failure.reason_key`, host, Retry, "正在重试…" while `retrying`; the panel covers the WebView fully (no engine page visible)
-- [ ] T039 [P] [US3] Tests: `AT/BrowserMachineTest.kt` (or new `AT/BrowserLoadTest.kt`) — loading on request, panel persists through retry, no visit on failure, visit fields from one document
+- [x] T035 [US3] In `A/feature/browser/core/BrowserController.kt` `BrowserEngine`: set `loading=true, progress≥10` in `load()`, `reload()` and for main-frame http(s) navigations in `shouldOverrideUrlLoading`; add `retrying` and `failure: LoadFailure?` to `EngineState`; classify in `onReceivedError`/`onReceivedSslError` with `browserLoadClassify(Android, …)`
+- [x] T036 [US3] Keep the panel through a retry: `reload()` on a failed tab sets `retrying=true` and leaves `failure` until `onPageCommitVisible`/`onPageFinished` without error; auto-retry timer from `browserLoadRetryDelayMs` only while the engine is attached (`attach`/`detach`)
+- [x] T037 [US3] Visit rule: replace `FAVICON_JS` + `view.title` with one script returning `{href,title,icon}` and pass it through `browserLoadVisit` before `BhistEvent.VisitRecorded` in `BrowserController.kt` `loadFinished`
+- [x] T038 [US3] Panel UI in `A/feature/explore/ExploreScreen.kt` (`BrowserNotice` for `failed`): reason line from `failure.reason_key`, host, Retry, "正在重试…" while `retrying`; the panel covers the WebView fully (no engine page visible)
+- [x] T039 [P] [US3] Tests: `AT/BrowserMachineTest.kt` (or new `AT/BrowserLoadTest.kt`) — loading on request, panel persists through retry, no visit on failure, visit fields from one document
 
 ### iOS
 - [ ] T040 [P] [US3] `I/Features/Explore/Core/BrowserEngine.swift`: loading in `load()`/`reload()`; classify `didFail`/`didFailProvisional` via `browserLoadClassify(Apple, …)` (ignore -999); `retrying` + auto-retry while in front; replace `localizedDescription` (`:377`) with the reason key; one-script `{href,title,icon}` → `browserLoadVisit` (fix `?? title` at `:213` and the async icon at `:233-243`)
@@ -126,20 +126,20 @@ resets its slide, and opens without the network after one visit.
 **Independent test**: quickstart T1–T5.
 
 ### Core
-- [ ] T046 [US7] `rust/crates/vela-core/src/trusted_signer.rs:312-361`: fill `context.dapp = { name: host, origin, source: "vela_browser" }` for requests forwarded by an in-app browser (the dApp origin the sign request carries); tests beside the existing trusted-signer tests
-- [ ] T047 [US7] `rust/crates/vela-core/src/trusted_signer.rs:541-564`: build the page URL on the content-addressed path `/b/<hash>/sign` with the newest hash of `trusted_signer/integrity.rs` `BUILD_ALLOWED`; tests for the URL shape
+- [x] T046 [US7] `rust/crates/vela-core/src/trusted_signer.rs:312-361`: fill `context.dapp = { name: host, origin, source: "vela_browser" }` for requests forwarded by an in-app browser (the dApp origin the sign request carries); tests beside the existing trusted-signer tests
+- [x] T047 [US7] `rust/crates/vela-core/src/trusted_signer.rs:541-564`: build the page URL on the content-addressed path `/b/<hash>/sign` with the newest hash of `trusted_signer/integrity.rs` `BUILD_ALLOWED`; tests for the URL shape
 
 ### Signer page (`TS/`)
-- [ ] T048 [US7] `TS/src/lib/resolve.js:176,1356-1357`: when `answersToWallet` and `context.dapp.source === "vela_browser"`, the header names the host and adds a neutral "来自 Vela 浏览器" tag; no `warn.claimedOrigin`; every other channel unchanged
+- [ ] T048 [US7] **Owner decision needed.** The page cannot tell who opened it: anyone can open sign.getvela.app with a forged fragment claiming `source: "vela_browser"` and a `velawallet:` callback, so dropping `warn.claimedOrigin` for those requests would let a phishing page look vouched for. With T046 the header already names the host (`context.dapp.name`) instead of "未知站点"; what remains is the warning's words and tone (`TS/src/lib/resolve.js:1356-1357`, `TS/src/lib/locales/*.js` `warn.claimedOrigin`)
 - [ ] T049 [US7] Plain intent: the fee leg is shown as the fee row, and the intent says what the person does (`resolve.js:1284-1286,1313-1315`) instead of "批量"
-- [ ] T050 [US7] Layout (`TS/src/lib/render.js:473-541`, `TS/src/sheet.css:460-469`): explanation and 技术细节 folded; fee note folded; slider sticky at the bottom
-- [ ] T051 [US7] Failures (`TS/src/sign.js:67,229-237,468-470`): `NotAllowedError` and `AbortError` → one everyday sentence; other errors → the same sentence with the raw text inside 技术细节; the knob returns to the start; a reload with no request → "这个签名请求已结束，请回到 Vela 重新发起"
-- [ ] T052 [US7] Words in every page locale `TS/src/lib/locales/*.js` (new tag, failure sentence, ended sentence; `ui.ceremonyFailed` rewritten without "仪式")
-- [ ] T053 [US7] `TS/dist/_headers` (emitted by `TS/samples/build-single.mjs`): `/b/*` → `Cache-Control: public, max-age=31536000, immutable`; root unchanged; rebuild (`bun samples/build-single.mjs`), add the new hash to `BUILD_ALLOWED` in `rust/crates/vela-core/src/trusted_signer/integrity.rs`, keep `--check` green
-- [ ] T054 [P] [US7] Signer page tests (the package's test runner) for T048–T051
+- [ ] T050 [US7] (sticky slider done in 005f8e1d; folding the explanation and fee note still open) Layout (`TS/src/lib/render.js:473-541`, `TS/src/sheet.css:460-469`): explanation and 技术细节 folded; fee note folded; slider sticky at the bottom
+- [x] T051 [US7] Failures (`TS/src/sign.js:67,229-237,468-470`): `NotAllowedError` and `AbortError` → one everyday sentence; other errors → the same sentence with the raw text inside 技术细节; the knob returns to the start; a reload with no request → "这个签名请求已结束，请回到 Vela 重新发起"
+- [x] T052 [US7] Words in every page locale `TS/src/lib/locales/*.js` (new tag, failure sentence, ended sentence; `ui.ceremonyFailed` rewritten without "仪式")
+- [x] T053 [US7] `TS/dist/_headers` (emitted by `TS/samples/build-single.mjs`): `/b/*` → `Cache-Control: public, max-age=31536000, immutable`; root unchanged; rebuild (`bun samples/build-single.mjs`), add the new hash to `BUILD_ALLOWED` in `rust/crates/vela-core/src/trusted_signer/integrity.rs`, keep `--check` green
+- [x] T054 [P] [US7] Signer page tests (the package's test runner) for T048–T051
 
 ### Clients (native half)
-- [ ] T055 [US7] Android: when the route is `KeyMethod.TrustedSigner` (`A/feature/send/core/UserOpSpine.kt:95-104`), `A/feature/signing/SigningSheet.kt:210` draws a primary button `componentsUi.signing.continueToSigner` instead of `SlideToConfirm`, sending the same approve (`A/navigation/VelaNavHost.kt:689`)
+- [x] T055 [US7] Android: when the route is `KeyMethod.TrustedSigner` (`A/feature/send/core/UserOpSpine.kt:95-104`), `A/feature/signing/SigningSheet.kt:210` draws a primary button `componentsUi.signing.continueToSigner` instead of `SlideToConfirm`, sending the same approve (`A/navigation/VelaNavHost.kt:689`)
 - [ ] T056 [US7] Android: if the Custom Tab cannot open the page (no answer and the tab reports a navigation failure, or the person returns without a result), the waiting card shows `componentsUi.signing.signerUnreachable` + Retry (`A/feature/signing/trustedsigner/TrustedSignerTab.kt`, `TrustedSignerChannel.kt`), keeping the request open
 - [ ] T057 [P] [US7] iOS: the same button in `I/Features/Signing/SigningSheet.swift:67` for the trusted-signer route (`I/Core/UserOpSpine.swift:475`); unreachable handling around `I/Features/Signing/TrustedSigner/TrustedSigner.swift:357`
 - [ ] T058 [P] [US7] Desktop: the same button in `D/wallet/page.rs:14593` for the trusted-signer route (`D/executor/send.rs:113,149`)
@@ -160,11 +160,11 @@ resets its slide, and opens without the network after one visit.
 
 ## Phase 8: User Story 5 — honest, complete chrome (P2)
 
-- [ ] T064 [US5] Android icons: add `LockOpen` (lucide lock-open) to `A/core/designsystem/components/VelaIcons.kt`; `A/feature/explore/components/BrowserChrome.kt` `AddressBar`: closed lock `fgMuted` for secure, open lock `warningBase` for http, no text; content descriptions `explore.httpsA11y` / `connect.browser.a11yInsecure`
-- [ ] T065 [US5] Android: remove the visible status text and green from `ConnectionPanel` and `SiteMenuSheetContent` (`A/feature/explore/components/ExploreSheets.kt`) and from `A/feature/browser/ExploreLive.kt` (`statusLine`), icon only
-- [ ] T066 [US5] Android consent: draw `connection.title` in `ConnectionPanel` and make Connect the primary filled button (`ExploreSheets.kt`); unify the approve word with iOS/desktop/extension on `connect.browser.connect` (iOS uses "批准" today — T070)
-- [ ] T067 [US5] Android pickers: `PickerOption` gains `logoUrl`/`identiconSeed`/`amount` (`ExploreSheets.kt:442`); `A/navigation/VelaNavHost.kt:1181,1189` fill network logo (the `core/marks` source) + per-network balance from the balance dashboard's cached figures (display currency; blank when unknown) and account identicons
-- [ ] T068 [US5] Android: signing header shows the host once when name == host (`SigningComponents.kt` `SigningHeader`); site avatars use the recorded favicon via `RemoteLogo` with `browserSiteLetter` fallback (`A/feature/explore/components/ExploreComponents.kt` `LetterAvatar`, `A/feature/browser/ExploreLive.kt:letterOf` removed)
+- [x] T064 [US5] Android icons: add `LockOpen` (lucide lock-open) to `A/core/designsystem/components/VelaIcons.kt`; `A/feature/explore/components/BrowserChrome.kt` `AddressBar`: closed lock `fgMuted` for secure, open lock `warningBase` for http, no text; content descriptions `explore.httpsA11y` / `connect.browser.a11yInsecure`
+- [x] T065 [US5] Android: remove the visible status text and green from `ConnectionPanel` and `SiteMenuSheetContent` (`A/feature/explore/components/ExploreSheets.kt`) and from `A/feature/browser/ExploreLive.kt` (`statusLine`), icon only
+- [x] T066 [US5] Android consent: draw `connection.title` in `ConnectionPanel` and make Connect the primary filled button (`ExploreSheets.kt`); unify the approve word with iOS/desktop/extension on `connect.browser.connect` (iOS uses "批准" today — T070)
+- [x] T067 [US5] Android pickers: `PickerOption` gains `logoUrl`/`identiconSeed`/`amount` (`ExploreSheets.kt:442`); `A/navigation/VelaNavHost.kt:1181,1189` fill network logo (the `core/marks` source) + per-network balance from the balance dashboard's cached figures (display currency; blank when unknown) and account identicons
+- [x] T068 [US5] Android: signing header shows the host once when name == host (`SigningComponents.kt` `SigningHeader`); site avatars use the recorded favicon via `RemoteLogo` with `browserSiteLetter` fallback (`A/feature/explore/components/ExploreComponents.kt` `LetterAvatar`, `A/feature/browser/ExploreLive.kt:letterOf` removed)
 - [ ] T069 [P] [US5] iOS: `lock.open` in `I/Components/Explore/AddressBarView.swift:107-113`; icon-only in `ConnectionPanelView.swift:44-47`, `SiteMenuSheetView.swift:39-42`; consent title drawn (`ConnectionPanelView.swift:33`); network rows logo + balance (`ConnectionPanelView.swift:127-131`); header host once (`SigningLive.swift:205-206`); favicon avatars + `browserSiteLetter` (`ExploreLive.swift:381-382`, `LetterAvatarView.swift`)
 - [ ] T070 [US5] iOS consent approve word → `connect.browser.connect` (today "批准")
 - [ ] T071 [P] [US5] Desktop: open-lock icon for http (`D/explore/components.rs:497-498`); icon-only connection panel (`D/wallet/page.rs:13699-13703,13791`); network rows logo + balance and the per-chain dot (fix `chain_ethereum()` at `page.rs:13732`); wire "switch account" (`page.rs:13836`); header host once (`D/signing/live.rs:1328-1329`); favicon avatars + `site_letter` (`D/explore/live.rs:152-154`)
