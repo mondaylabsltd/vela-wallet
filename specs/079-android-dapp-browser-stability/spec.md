@@ -419,9 +419,8 @@ sign.getvela.app dropped at the proxy after one visit, a message signature still
 
 - **FR-021**: Nothing in this spec may change which origin, frame, chain or account a request is
   attributed to, or any answer code the core decides (070's invariants).
-- **FR-022**: New words MUST exist in all 15 locales; existing strings are reused where one already says
-  it (`connect.browser.title`, `componentsUi.signing.submitted`, `componentsTx.receipt.*`,
-  `send.feeRefresh`, `componentsUi.funding.denialNetworkError`).
+- **FR-022**: New words MUST exist in all 15 locales and fit the ja + en residency budget (SC-005);
+  existing strings are reused wherever one already says it (list in contracts/core-rules.md §4).
 
 ### Key Entities
 

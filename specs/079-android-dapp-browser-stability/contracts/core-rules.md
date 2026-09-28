@@ -12,7 +12,7 @@ pub enum LoadFailureClass { Offline, Timeout, NotFound, Refused, Certificate, Ot
 
 pub struct LoadFailure {
     pub class: LoadFailureClass,
-    /// Corpus key of the panel's reason line, e.g. "explore.loadFailedOffline".
+    /// Corpus key of the panel's reason line (§4), e.g. "explore.loadOffline".
     pub reason_key: &'static str,
     /// false for NotFound and Certificate.
     pub auto_retry: bool,
@@ -44,9 +44,10 @@ pub fn visit_to_record(load: LoadFinished) -> Option<Visit>;
 pub fn site_letter(host: &str) -> String;
 ```
 
-Exported: `browserLoadClassify(platform, code, domain, certificate) -> LoadFailure?`,
-`browserLoadRetryDelayMs(class, attempt) -> UInt?`, `browserLoadVisit(...) -> Visit?`,
-`browserSiteLetter(host) -> String`.
+Exported (UniFFI): `browserLoadClassify(platform: "android"|"apple"|"probe", code, domain,
+certificate) -> BrowserLoadFailure?` (`class` as its snake_case name), `browserLoadRetryDelayMs(class,
+attempt) -> UInt?`, `browserLoadVisit(url, title, icon, mainFrameFailed, httpStatus) -> BrowserVisit?`,
+`browserSiteLetter(host) -> String`. Desktop calls the crate directly.
 
 Tests (`tests/app_browser_load.rs`): every row of research R1's table for both platforms; the
 cancelled cases return `None`; the retry schedule for each class; visit rules (failed, 404, 500,
@@ -58,8 +59,9 @@ cancelled cases return `None`; the retry schedule for each class; visit rules (f
 - Receipt cadence past the wait window grows with the record's age:
   `RECONCILE_MIN_INTERVAL_MS` until 10 min, 60 000 ms until 1 h, 300 000 ms until
   `ABANDON_AGE_MS` (24 h, unchanged).
+- `receipt_interval_ms(in_window, age_ms)` is public (the cadence table).
 - `TrackEntryView` gains `outcome: TrackOutcome` = `Landing` (in window) | `StillConfirming`
-  (`AcceptedNotLanded`, window closed, still polling) | `Unknown` (abandoned) | `Final` (terminal).
+  (window closed or aborted, still polling) | `Unknown` (abandoned at 24 h) | `Final` (terminal).
 - Unchanged invariant: time alone never produces `Dropped`/`Rejected`.
 
 Tests: cadence at 5 min / 30 min / 3 h; `outcome` for each state; no terminal status from age.
@@ -67,37 +69,43 @@ Tests: cadence at 5 min / 30 min / 3 h; `outcome` for each state; no terminal st
 ## 3. `app::fee_policy` (changed)
 
 ```rust
-/// Delay before re-quote `attempt` (1-based) after a failure the service may recover from
-/// (`QuoteUnavailable`, `FeeTokenUnavailable`): 3000, 6000, 12000, then 15000 for every later one.
-/// `None` for failures a retry cannot fix (`MissingPublicKey`, `CalculationFailed`, estimate refusal).
-pub fn requote_delay_ms(failure: &FeeFailure, attempt: u32) -> Option<u32>;
+/// Delay before re-quote `attempt` (1-based) after a failure a recovering network or relay can
+/// clear (`QuoteUnavailable`, `FeeTokenUnavailable`, `EstimateFailed`, `GasQuoteTooHigh`):
+/// 3000, 6000, 12000, then 15000 for every later one. `None` for `MissingPublicKey` and
+/// `CalculationFailed`.
+pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32>;
 ```
 
-Exported: `feeRequoteDelayMs(failureJson, attempt) -> UInt?`.
+Exported: UniFFI `feeRequoteDelayMs(failure: "quote_unavailable"|…, attempt) -> UInt?`; wasm
+`feeRequoteDelayMs(failure, attempt)` for the extension.
 
 ## 4. Corpus keys (new, all 15 locales)
 
-| Key | zh (source) |
-|---|---|
-| `explore.loadFailedOffline` | 网络连接不稳定，页面没能打开。 |
-| `explore.loadFailedTimeout` | 网站响应太慢，页面没能打开。 |
-| `explore.loadFailedNotFound` | 找不到这个网站，请检查网址。 |
-| `explore.loadFailedRefused` | 网站拒绝了连接，稍后再试。 |
-| `explore.loadFailedCertificate` | 这个网站的安全证书有问题，Vela 已阻止打开。 |
-| `explore.loadFailedOther` | 页面没能打开。 |
-| `explore.loadRetrying` | 正在重试… |
-| `explore.chainUnreachable` | {{chain}} 网络暂时连接不上，页面数据可能不完整。 |
-| `componentsUi.signing.signed` | 已签名 |
-| `componentsUi.signing.submitting` | 正在提交… |
-| `componentsUi.signing.stillConfirming` | 已提交，但还没上链。Vela 会继续查看，请不要重复发送。可以先关闭。 |
-| `componentsUi.signing.unknownOutcome` | 超过 24 小时仍未确认，请到区块浏览器查看。 |
-| `componentsUi.signing.continueToSigner` | 去签名页确认 |
-| `componentsUi.signing.signerUnreachable` | 签名页没能打开，请检查网络后重试。 |
-| `explore.httpsA11y` | HTTPS |
+Budget note: the ja + en runtime catalog cap (SC-005, 138 800 bytes) had ~900 bytes left on main;
+079 lands at 138 750. That is why three lines reuse existing strings and offline / timeout /
+refused share one sentence (the class still drives the retry schedule). **The next corpus
+addition needs the owner to raise the cap or trim elsewhere.**
 
-Reused, not new: `connect.browser.title`, `connect.browser.retry`, `connect.browser.a11yInsecure`
-(screen readers, http), `componentsUi.signing.submitted`, `componentsTx.receipt.statusConfirmed`,
+| Key | zh (source) | Used for |
+|---|---|---|
+| `explore.loadOffline` | 网络不稳定，页面没能打开。 | classes offline, timeout, refused |
+| `explore.loadNotFound` | 找不到这个网站，请检查网址。 | not_found |
+| `explore.loadCertificate` | 网站证书有问题，Vela 已阻止打开。 | certificate |
+| `explore.loadRetrying` | 正在重试… | the panel during an attempt |
+| `explore.chainDown` | 暂时连不上 {{chain}}，页面数据可能不完整。 | chain notice |
+| `componentsUi.signing.stillConfirming` | 还没上链。Vela 会继续查看，请不要重复发送。 | outcome `still_confirming` |
+| `componentsUi.signing.unknownOutcome` | 超过 24 小时仍未确认。 | outcome `unknown` (+ `viewOnExplorer` link) |
+| `componentsUi.signing.openSigner` | 去签名页确认 | trusted-signer button |
+| `componentsUi.signing.signerDown` | 签名页没能打开，请检查网络。 | signer page unreachable |
+
+Reused, not new: `connect.browser.loadFailed` (class `other`), `signHandoff.signed` (message signed),
+`send.txSubmitting` (submitting), `componentsUi.signing.submitted` (waiting),
+`componentsUi.signing.viewOnExplorer`, `connect.browser.title`, `connect.browser.retry`,
+`connect.browser.a11yInsecure` (screen readers, http), `componentsTx.receipt.statusConfirmed`,
 `send.feeRefresh`, `componentsUi.funding.denialNetworkError`, `explore.close`.
+
+No screen-reader text for the https lock: the closed lock is decorative and the host is read out;
+the http open lock keeps `connect.browser.a11yInsecure`.
 
 Removed from visible UI (kept in the corpus until every client stops reading it, then deleted in the
 same change that removes the last reader): `explore.secureSite`, `connect.browser.a11ySecure`.

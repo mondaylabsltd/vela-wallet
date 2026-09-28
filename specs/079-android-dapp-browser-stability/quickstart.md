@@ -30,7 +30,7 @@ the build products). Faults: Wi-Fi ▸ Configure Proxy ▸ Manual `<mac-ip>:8899
 | # | Do | Expect |
 |---|---|---|
 | L1 | `latency=6000 match=example`, type `example.com`, Go | progress within 0.5 s; old host stays until commit |
-| L2 | `drop match=uniswap`, open `app.uniswap.org` | Vela panel: host + "网站拒绝了连接…" (or the offline line); never the engine page |
+| L2 | `drop match=uniswap`, open `app.uniswap.org` | Vela panel: host + "网络不稳定，页面没能打开。"; never the engine page |
 | L3 | leave L2's panel up | "正在重试…" at ~2 s, ~5 s, ~10 s, then stops; restore `pass` before the third → the page loads by itself |
 | L4 | tap Retry with the fault still on | the panel stays with "正在重试…" for the whole attempt (1 s frames: 0 frames of an engine page) |
 | L5 | `https://expired.badssl.com/` | certificate line, no automatic retry, no "continue anyway" |
