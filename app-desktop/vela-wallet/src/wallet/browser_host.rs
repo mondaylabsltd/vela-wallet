@@ -148,6 +148,9 @@ pub struct BrowserHost {
     chain_health: ChainHealth,
     /// A re-read is scheduled while something is down.
     health_watching: bool,
+    /// Spec 082 RJ11: the page's reads in flight, and the 1 s health beat
+    /// that runs while there are any.
+    read_watch: ReadWatch,
     /// The chain whose notice Retry is out (spec 082 RF4): busy until its one
     /// read settles.
     retrying: Option<u32>,
@@ -179,6 +182,43 @@ pub fn chain_down(chain_id: u32, health: &ChainHealth) -> bool {
 /// never from the network — an answer from anywhere in the app clears it.
 const HEALTH_RECHECK: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// How often the health is read while a page's read is in flight (spec 082
+/// RJ11, G46): the pool marks a chain unreached after a call's FIRST pass
+/// (~14 s), but a read that has not settled yet told nobody — the notice came
+/// only when the whole call gave up (43.7 s in C1).
+pub const READ_HEALTH_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The page's reads in flight, and whether the 1 s health beat runs
+/// (RJ11). Pure: the host counts, the beat asks.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReadWatch {
+    in_flight: usize,
+    running: bool,
+}
+
+impl ReadWatch {
+    /// A read went out: whether the beat must be started (it is not running).
+    pub fn started(&mut self) -> bool {
+        self.in_flight += 1;
+        !std::mem::replace(&mut self.running, true)
+    }
+
+    /// A read settled.
+    pub fn settled(&mut self) {
+        self.in_flight = self.in_flight.saturating_sub(1);
+    }
+
+    /// One beat: whether to read the health now and beat again. With no
+    /// read left the beat stops (and the 5 s recheck keeps watching a chain
+    /// that is down).
+    pub fn tick(&mut self) -> bool {
+        if self.in_flight == 0 {
+            self.running = false;
+        }
+        self.running
+    }
+}
+
 impl BrowserHost {
     /// The machine, told about the world before it reads the store.
     ///
@@ -198,6 +238,7 @@ impl BrowserHost {
             wallet: None,
             chain_health: ChainHealth::default(),
             health_watching: false,
+            read_watch: ReadWatch::default(),
             retrying: None,
         };
         host.follow_wallet(cx);
@@ -227,6 +268,9 @@ impl BrowserHost {
                     crate::webview::deliver(&tab, &message_json);
                 }
                 Outbound::Work { id, work, neutral } => {
+                    if self.read_watch.started() {
+                        self.watch_reads(cx);
+                    }
                     cx.spawn(async move |host, cx| {
                         // A panic in the work is survived (spec 038) and the
                         // page still gets its neutral answer — a read that
@@ -237,6 +281,7 @@ impl BrowserHost {
                             .await
                             .unwrap_or(neutral);
                         host.update(cx, |host, cx| {
+                            host.read_watch.settled();
                             host.resolve(id, result, cx);
                             // The read went through the pool: whether the
                             // page's chain answered is known now (spec 079).
@@ -334,6 +379,30 @@ impl BrowserHost {
                 cx,
             );
         }
+    }
+
+    /// The 1 s beat while a page's read is in flight (RJ11): the notice
+    /// appears once the pool's first pass reached nothing, not when the call
+    /// gives up.
+    fn watch_reads(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |host, cx| {
+            loop {
+                cx.background_executor().timer(READ_HEALTH_EVERY).await;
+                let beat = host
+                    .update(cx, |host, cx| {
+                        let beat = host.read_watch.tick();
+                        if beat {
+                            host.refresh_health(cx);
+                        }
+                        beat
+                    })
+                    .unwrap_or(false);
+                if !beat {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     /// Read the pool's view of which chains are down, off the frame.
@@ -740,10 +809,28 @@ pub enum LoadStep {
 #[derive(Clone, Debug, Default)]
 pub struct LoadDriver {
     pub watch: LoadWatch,
+    /// The load whose "skipped (engine still loading)" line is written
+    /// (spec 082 RJ9, G44): once per load, not every 2–5 s.
+    skip_logged: Option<u64>,
+    /// How many of those lines were written — for the tests.
+    pub skip_lines: u32,
 }
 
 fn host(url: &str) -> String {
     crate::diag::host_of(url)
+}
+
+/// The route a probe took, for its log line (spec 082 G67): a dev build's
+/// fault proxy is every route there is, and was logged as `system`.
+fn probe_route(
+    failure: Option<&crate::executor::proxy::ProxyFailure>,
+    dev: Option<&str>,
+) -> String {
+    match (dev, failure) {
+        (Some(dev), _) => format!("dev-proxy {dev}"),
+        (None, Some(failure)) => failure.proxy.clone(),
+        (None, None) => "system".to_owned(),
+    }
 }
 
 fn how_word(asked: Asked) -> &'static str {
@@ -853,15 +940,14 @@ impl LoadDriver {
     /// The probe of load `generation` answered.
     pub fn probed(&mut self, generation: u64, answer: &ProbeAnswer, now_ms: f64) -> Vec<LoadStep> {
         if generation == self.watch.generation {
+            let dev = crate::executor::proxy::dev_proxy()
+                .map(|proxy| format!("{}:{}", proxy.host(), proxy.port()));
             crate::diag::vlog!(
                 "browser",
                 "probe host={} gen={generation} verdict={} route={}",
                 self.watched_host(),
                 verdict_word(answer.verdict),
-                answer
-                    .proxy
-                    .as_ref()
-                    .map_or_else(|| "system".to_owned(), |failure| failure.proxy.clone())
+                probe_route(answer.proxy.as_ref(), dev.as_deref())
             );
         }
         match self.watch.probed(generation, answer.verdict) {
@@ -935,11 +1021,15 @@ impl LoadDriver {
             // W7: WebKit is still on this load — no second request, and the
             // attempt comes due again on the same wait.
             RetryAction::EngineStillLoading => {
-                crate::diag::vlog!(
-                    "browser",
-                    "retry host={} skipped (engine still loading)",
-                    self.watched_host()
-                );
+                if self.skip_logged != Some(self.watch.generation) {
+                    self.skip_logged = Some(self.watch.generation);
+                    self.skip_lines += 1;
+                    crate::diag::vlog!(
+                        "browser",
+                        "retry host={} skipped (engine still loading)",
+                        self.watched_host()
+                    );
+                }
                 self.schedule()
             }
             RetryAction::NotInFront | RetryAction::Nothing => Vec::new(),
@@ -1776,6 +1866,115 @@ mod tests {
                 .iter()
                 .any(|step| matches!(step, LoadStep::Retry { .. }))
         );
+    }
+
+    // -- spec 082 RJ11, RJ9, G67: the chain notice, the skip, the route ------
+
+    /// C1 (G46): a read to Gnosis is out; the pool's first pass reaches
+    /// nothing and marks chain 100 unreached at 14 s. With the 1 s beat the
+    /// notice is up by 15 s — not at 43.7 s, when the call gave up. The beat
+    /// stops once no read is left.
+    #[test]
+    fn the_chain_notice_comes_after_the_first_pass_while_the_read_waits() {
+        let pool = |at_ms: u64| ChainHealth {
+            unreached: if at_ms >= 14_000 {
+                vec![100]
+            } else {
+                Vec::new()
+            },
+            ..ChainHealth::default()
+        };
+        let beat = u64::try_from(READ_HEALTH_EVERY.as_millis()).unwrap_or(u64::MAX);
+        let mut watch = ReadWatch::default();
+        assert!(watch.started(), "the first read starts the beat");
+        assert!(!watch.started(), "a second read joins it");
+        watch.settled();
+        let mut shown_at = None;
+        let mut at_ms = 0;
+        while watch.tick() {
+            at_ms += beat;
+            if at_ms >= 43_700 {
+                // The call gives up; nothing is in flight any more.
+                watch.settled();
+            }
+            if shown_at.is_none() && chain_down(100, &pool(at_ms)) {
+                shown_at = Some(at_ms);
+            }
+            assert!(at_ms < 60_000, "the beat never stopped");
+        }
+        assert!(
+            shown_at.is_some_and(|at| at <= 15_000),
+            "notice at {shown_at:?}"
+        );
+        assert!(watch.started(), "a later read starts the beat again");
+    }
+
+    /// L2 (G44, RJ9): WebKit's provisional load hangs; every attempt that
+    /// falls due is given back — and says so once for the load, not every
+    /// 2–5 s (35 lines in L2).
+    #[test]
+    fn a_skipped_attempt_is_logged_once_per_load() {
+        let mut load = LoadDriver::default();
+        load.requested("https://app.uniswap.org/", 0.0);
+        let generation_n = load.watch.generation;
+        load.watchdog(generation_n);
+        load.probed(
+            generation_n,
+            &ProbeAnswer {
+                verdict: Err(vela_core::app::browser_load::probe_code::TIMEOUT),
+                proxy: None,
+            },
+            3_500.0,
+        );
+        assert!(load.watch.failure.is_some());
+        load.watch.engine_loading = true;
+        for _ in 0..10 {
+            let steps = load.retry_fired(generation_n, true);
+            assert!(
+                steps
+                    .iter()
+                    .any(|step| matches!(step, LoadStep::Retry { .. })),
+                "the attempt comes due again"
+            );
+        }
+        assert_eq!(load.skip_lines, 1, "ten skips, one line");
+        // The next load has a line of its own.
+        load.requested("https://app.uniswap.org/", 60_000.0);
+        let next = load.watch.generation;
+        load.watchdog(next);
+        load.probed(
+            next,
+            &ProbeAnswer {
+                verdict: Err(vela_core::app::browser_load::probe_code::TIMEOUT),
+                proxy: None,
+            },
+            63_500.0,
+        );
+        load.watch.engine_loading = true;
+        load.retry_fired(next, true);
+        load.retry_fired(next, true);
+        assert_eq!(load.skip_lines, 2);
+    }
+
+    /// G67: with `VELA_DEV_PROXY` in force the probe's route is the dev
+    /// proxy — it was logged `route=system`.
+    #[test]
+    fn the_probe_names_its_route() {
+        use crate::executor::proxy::{ProxyFailure, ProxyFailureKind};
+        let dead = ProxyFailure {
+            proxy: "127.0.0.1:9".to_owned(),
+            kind: ProxyFailureKind::Unreachable,
+        };
+        assert_eq!(
+            probe_route(None, Some("127.0.0.1:8899")),
+            "dev-proxy 127.0.0.1:8899"
+        );
+        assert_eq!(
+            probe_route(Some(&dead), Some("127.0.0.1:9")),
+            "dev-proxy 127.0.0.1:9"
+        );
+        assert_eq!(probe_route(Some(&dead), None), "127.0.0.1:9");
+        assert_eq!(probe_route(None, None), "system");
     }
 
     // -- spec 082 T069: network-back parity ---------------------------------
