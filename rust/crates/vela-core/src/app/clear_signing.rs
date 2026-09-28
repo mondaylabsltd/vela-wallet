@@ -57,6 +57,13 @@
 //! - **`eth_sign` is never a calm message view** (`SigningSheet.tsx:465-470`),
 //!   and while a descriptor resolves the view stays "loading" — a blind view
 //!   must never flash first (`SigningSheet.tsx:441-447`).
+//! - **Empty calldata is a plain send, whatever the recipient** (spec 082
+//!   G14, RC1–RC5). A value transfer to an address that has code is still a
+//!   value transfer; it was drawn as a blind contract call with no amount.
+//!   The verdict lives here, once, so no shell intercepts it with its own
+//!   copy. The value is read hex-only and printed exactly: a value that does
+//!   not read that way leaves the request blind rather than state a figure a
+//!   submit path reads differently.
 //!
 //! ## Canon rulings (inventory integration notes)
 //!
@@ -1016,10 +1023,10 @@ pub struct ClearBlindTyped {
 /// (`SigningSheet.tsx:407-487`).
 ///
 /// The full order is `typed permit → editable approval → LOADING → CLEAR SIGN →
-/// batch → ETH_SIGN → MESSAGE → BLIND TYPED → BLIND TX`; the two approval
-/// surfaces and the batch list belong to `approval_guard`, so the sheet
-/// interleaves exactly two verdicts and decides nothing itself. Everything
-/// upper-cased above is decided here.
+/// batch → ETH_SIGN → MESSAGE → BLIND TYPED → PLAIN SEND | BLIND TX`; the two
+/// approval surfaces and the batch list belong to `approval_guard`, so the
+/// sheet interleaves exactly two verdicts and decides nothing itself.
+/// Everything upper-cased above is decided here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearSurface"))]
@@ -1036,6 +1043,36 @@ pub enum ClearSurface {
     MessageSign,
     BlindTypedData,
     BlindTransaction,
+    /// A transaction with no calldata: a plain transfer of the native coin,
+    /// whatever the recipient is (082 G14, RC1–RC2). Drawn from
+    /// [`ClearSigningView::plain_send`] — the intent Send, an amount card
+    /// with the shell's fee-row native symbol, and the recipient — never the
+    /// blind rung. A request whose `to` or `value` cannot be read exactly
+    /// stays [`Self::BlindTransaction`].
+    PlainSend,
+}
+
+/// What a plain native send moves, for the [`ClearSurface::PlainSend`] card
+/// (082 RC1–RC5). Every figure is exact: nothing here is rounded, so the card
+/// never states an amount the submit path reads differently.
+///
+/// The coin symbol is not here. The shell writes the one its fee row already
+/// uses (RC5), so a card never shows "xDAI" beside "XDAI".
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearPlainSend"))]
+pub struct ClearPlainSend {
+    /// The recipient, EIP-55.
+    pub to: String,
+    /// The value in wei as plain decimal digits (no grouping) — a machine
+    /// field, for a shell that needs the number rather than the words.
+    pub value_wei: String,
+    /// `value_wei / 10^18`, exact, trailing zeros trimmed, written with the
+    /// request's [`ClearLocale`] marks; `"0"` when nothing moves.
+    pub amount: String,
+    /// The value is zero. The card still reads "Send · 0 <coin>", but with
+    /// no minus sign and a neutral Confirm (RC3): only a simulation may say
+    /// that nothing leaves, because the recipient's code can still spend.
+    pub no_value: bool,
 }
 
 /// The SEMANTICS of the confirm button (inventory ㉔). The words stay in the
@@ -1300,8 +1337,8 @@ enum ReqKind {
     None,
     /// `eth_sendTransaction` with calldata.
     TxCall,
-    /// `eth_sendTransaction` with no calldata — the plain native transfer that
-    /// reads "Confirm Send", matching its eyebrow.
+    /// `eth_sendTransaction` with no calldata — the plain native transfer.
+    /// [`Model::plain_send`] says whether it could be read exactly.
     TxPlain,
     Typed,
     PersonalSign,
@@ -1316,6 +1353,11 @@ pub struct Model {
     /// A resolution concluded (result may still be `None` ⇒ blind sign).
     resolved: bool,
     result: Option<ClearSignResult>,
+    /// The plain send a no-calldata transaction reads as (082 RC1). `None`
+    /// for every other request, and for a plain transfer whose `to` or
+    /// `value` could not be read exactly — that one stays blind. Reset
+    /// wherever `result` is; `result` itself stays `None` for a plain send.
+    plain_send: Option<ClearPlainSend>,
     message: Option<ClearMessageView>,
     /// Survives the run so the surface/confirm verdicts stay decidable.
     kind: ReqKind,
@@ -1372,6 +1414,10 @@ pub struct ClearSigningView {
     /// approval half of the same buzz is `approval_guard`'s verdict; the sheet
     /// ORs the two machines' answers and decides nothing.
     pub danger_haptic: bool,
+    /// The plain send card (082 RC1). `Some` exactly when [`Self::surface`]
+    /// is [`ClearSurface::PlainSend`].
+    #[serde(default)]
+    pub plain_send: Option<ClearPlainSend>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1411,6 +1457,7 @@ impl App for ClearSigning {
                 model.run = None;
                 model.resolved = false;
                 model.result = None;
+                model.plain_send = None;
                 model.blind_typed = None;
                 model.kind = match method {
                     ClearSignMethod::PersonalSign => ReqKind::PersonalSign,
@@ -1433,6 +1480,7 @@ impl App for ClearSigning {
                 model.run = None;
                 model.resolved = false;
                 model.result = None;
+                model.plain_send = None;
                 model.message = None;
                 model.blind_typed = None;
                 model.kind = ReqKind::None;
@@ -1453,6 +1501,7 @@ impl App for ClearSigning {
     }
 
     fn view(&self, model: &Model) -> ClearSigningView {
+        let surface = surface_of(model);
         ClearSigningView {
             resolving: model.run.is_some(),
             resolved: model.resolved,
@@ -1481,13 +1530,19 @@ impl App for ClearSigning {
                 r
             }),
             message: model.message.clone(),
-            surface: surface_of(model),
+            surface,
             confirm: confirm_of(model),
             blind_typed: model.blind_typed.clone(),
             danger_haptic: matches!(
                 model.message.as_ref().map(|m| m.danger_class),
                 Some(ClearDangerClass::EthSign) | Some(ClearDangerClass::SiwePhish)
             ),
+            // Read off the surface, so the card and the surface can never
+            // disagree: no card without the surface, no surface without it.
+            plain_send: model
+                .plain_send
+                .clone()
+                .filter(|_| surface == ClearSurface::PlainSend),
         }
     }
 }
@@ -1502,6 +1557,9 @@ fn surface_of(model: &Model) -> ClearSurface {
         ReqKind::None => ClearSurface::None,
         ReqKind::EthSign => ClearSurface::EthSign,
         ReqKind::PersonalSign => ClearSurface::MessageSign,
+        // Empty calldata is a plain send whatever the recipient (082 RC2) —
+        // when its recipient and value read exactly; otherwise it is blind.
+        ReqKind::TxPlain if model.plain_send.is_some() => ClearSurface::PlainSend,
         ReqKind::TxCall | ReqKind::TxPlain => {
             if model.result.is_some() {
                 ClearSurface::ClearSign
@@ -1532,11 +1590,16 @@ fn confirm_of(model: &Model) -> ClearConfirm {
     }
     match model.kind {
         ReqKind::PersonalSign | ReqKind::Typed => ClearConfirm::Sign,
-        // A plain native send reads "Confirm Send", matching its eyebrow —
-        // the same sentence the decoded ERC-20 transfer gets.
-        ReqKind::TxPlain => ClearConfirm::ConfirmIntent {
-            intent: "send".to_owned(),
-            intent_term: Some(ClearTerm::IntentSend),
+        // A plain native send that moves coin reads "Confirm Send", matching
+        // its eyebrow — the same sentence the decoded ERC-20 transfer gets.
+        // One that moves nothing, or could not be read, is a neutral
+        // "Confirm" (082 RC3): "Confirm send" would promise a transfer.
+        ReqKind::TxPlain => match &model.plain_send {
+            Some(plain) if !plain.no_value => ClearConfirm::ConfirmIntent {
+                intent: "send".to_owned(),
+                intent_term: Some(ClearTerm::IntentSend),
+            },
+            _ => ClearConfirm::Confirm,
         },
         // Blind contract call, `eth_sign`, nothing presented: a neutral
         // "Confirm", never "Approve".
@@ -1560,17 +1623,24 @@ fn start_tx(
     model.run = None;
     model.resolved = false;
     model.result = None;
+    model.plain_send = None;
     model.message = None;
     model.blind_typed = None;
     model.kind = ReqKind::TxCall;
 
-    let data = data.unwrap_or_default();
-    if data.is_empty() || data == "0x" {
-        // Plain ETH transfer — the modal shows its native transfer UI.
+    if is_empty_calldata(data.as_deref()) {
+        // A plain transfer of the native coin, WHATEVER the recipient (082
+        // G14, RC2): no `eth_getCode`, because code at `to` does not change
+        // what this request moves, and a probe would add a way to fail on a
+        // bad network. What a recipient's `receive()` does is the simulation
+        // block's to say. `result` stays `None`, so every reader keyed on it
+        // is untouched (RC1).
         model.kind = ReqKind::TxPlain;
+        model.plain_send = plain_send_of(to.as_deref(), value.as_deref(), &locale);
         model.resolved = true;
         return render();
     }
+    let data = data.unwrap_or_default();
 
     // Contract deployment — calm "Deploy contract", never a scary red
     // "Unknown" (raw create, or the canonical CREATE2 deployers).
@@ -1625,6 +1695,7 @@ fn start_typed(
     model.run = None;
     model.resolved = false;
     model.result = None;
+    model.plain_send = None;
     model.message = None;
     model.kind = ReqKind::Typed;
 
@@ -1657,6 +1728,104 @@ fn start_typed(
         step: Step::AwaitClock,
     });
     requests(model, vec![ClearOperation::Now])
+}
+
+// ---------------------------------------------------------------------------
+// Plain native send (082 G14, RC1–RC5)
+// ---------------------------------------------------------------------------
+
+/// The native coin's decimals on every chain this wallet signs for.
+const NATIVE_DECIMALS: usize = 18;
+
+/// `2^256 − 1` has 64 hex digits; a value with more significant digits
+/// cannot be a transaction's value.
+const U256_HEX_DIGITS: usize = 64;
+
+/// Whether a transaction carries no calldata: absent, `""`, `"0x"` or
+/// `"0X"`, after trimming whitespace (082 RC1). Such a request calls no
+/// function: it is a plain transfer of the native coin, whatever the
+/// recipient is (RC2).
+pub fn is_empty_calldata(data: Option<&str>) -> bool {
+    data.map(str::trim)
+        .is_none_or(|d| d.is_empty() || d.eq_ignore_ascii_case("0x"))
+}
+
+/// The plain send card of a no-calldata transaction, or `None` when its
+/// recipient or its value cannot be read exactly — that request stays
+/// [`ClearSurface::BlindTransaction`] (082 RC1, RC4, RC5).
+///
+/// - `to` must be `0x` and 40 hex digits, in any case, and is written back
+///   EIP-55. The dApp's own mixed case is not judged as a checksum: every
+///   address rule in this crate reads the shape (`ADDRESS_RE`).
+/// - `value` is read hex-only (RC4). Absent, `""` and `"0x"` are zero;
+///   `"0x"` and hex digits are that exact number, up to `2^256 − 1`. Decimal
+///   text, `"null"`, a sign, whitespace, `"0X"`, any other character, or an
+///   overflow is refused. Three submit paths send the value as hex and the
+///   desktop's also takes decimal, so a card that printed decimal `"1000"`
+///   would state a figure some submit path reads as `0x1000`: it states none.
+/// - `amount` is `value / 10^18` exactly, trailing zeros trimmed, grouped and
+///   marked by `locale` — no rounding and no "wei" fallback (RC5).
+pub fn plain_send_of(
+    to: Option<&str>,
+    value: Option<&str>,
+    locale: &ClearLocale,
+) -> Option<ClearPlainSend> {
+    let to = to.filter(|t| is_hex_address_shape(t))?;
+    let to = primitives::checksum_address(to).ok()?;
+    let value_wei = plain_value_wei(value)?;
+    Some(ClearPlainSend {
+        to,
+        amount: exact_native_amount(&value_wei, locale),
+        no_value: value_wei == "0",
+        value_wei,
+    })
+}
+
+/// RC4: the value as exact decimal digits, or `None` when it is not
+/// hex-readable (see [`plain_send_of`]).
+fn plain_value_wei(value: Option<&str>) -> Option<String> {
+    let value = match value {
+        None => return Some("0".to_owned()),
+        Some(v) if v.is_empty() || v == "0x" => return Some("0".to_owned()),
+        Some(v) => v,
+    };
+    let body = value.strip_prefix("0x")?;
+    if !body.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let significant = body.trim_start_matches('0');
+    if significant.len() > U256_HEX_DIGITS {
+        return None;
+    }
+    if significant.is_empty() {
+        return Some("0".to_owned());
+    }
+    hex_to_dec(significant)
+}
+
+/// `wei / 10^18` exactly, trailing zeros trimmed, with the locale's grouping
+/// and decimal mark (RC5). Unlike [`format_wei_amount`] it never shortens a
+/// fraction and never falls back to "wei": the card states the whole figure.
+fn exact_native_amount(wei_dec: &str, locale: &ClearLocale) -> String {
+    let digits = dec_normalize(wei_dec);
+    if digits == "0" {
+        return "0".to_owned();
+    }
+    let (whole, frac) = if digits.len() <= NATIVE_DECIMALS {
+        (
+            "0".to_owned(),
+            format!("{digits:0>width$}", width = NATIVE_DECIMALS),
+        )
+    } else {
+        let split = digits.len() - NATIVE_DECIMALS;
+        (digits[..split].to_owned(), digits[split..].to_owned())
+    };
+    let (_, decimal, _) = locale.separators();
+    let whole = group_digits(&whole, locale);
+    match frac.trim_end_matches('0') {
+        "" => whole,
+        frac => format!("{whole}{decimal}{frac}"),
+    }
 }
 
 // ---------------------------------------------------------------------------
