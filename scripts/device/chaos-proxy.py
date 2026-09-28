@@ -23,6 +23,7 @@ network location, the iPhone's Settings > Wi-Fi > Configure Proxy, Shadowrocket
 toggles, airplane mode, or `adb shell settings put global http_proxy`.
 
 Control: curl 'http://127.0.0.1:8899/__chaos?mode=drop&match=vela-relay'
+         (CHAOS_PORT=<n> runs another instance on its own port: one per client under test.)
   mode      pass | latency | throttle | drop | blackhole | reset_mid | mute | stall
             (mute: the request reaches the host, its reply never comes back;
              stall: CONNECT is answered 200 and the upstream is never opened)
@@ -39,6 +40,8 @@ import asyncio, json, os, random, re, sys, time, urllib.parse
 CFG = {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": ""}
 UPSTREAM = os.environ.get("CHAOS_UPSTREAM", "")
 BIND = os.environ.get("CHAOS_BIND", "127.0.0.1")
+# One proxy per client under test, so a fault set for one never reaches another (spec 082).
+PORT = int(os.environ.get("CHAOS_PORT", "8899"))
 LIVE = set()  # (host, client_writer, upstream_writer)
 LOG = open(sys.argv[1] if len(sys.argv) > 1 else "chaos.log", "a", buffering=1)
 
@@ -225,8 +228,8 @@ async def handle(cr, cw):
 
 
 async def main():
-    srv = await asyncio.start_server(handle, BIND, 8899)
-    log("listening", BIND, 8899, "upstream", UPSTREAM or "direct")
+    srv = await asyncio.start_server(handle, BIND, PORT)
+    log("listening", BIND, PORT, "upstream", UPSTREAM or "direct")
     async with srv:
         await srv.serve_forever()
 
