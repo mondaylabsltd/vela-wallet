@@ -156,6 +156,7 @@ export * from './FeeView';
 export * from './FeedBatch';
 export * from './FeedBatchKind';
 export * from './FeedBatchTransfer';
+export * from './FeedDapp';
 export * from './FeedDirection';
 export * from './FeedEvent';
 export * from './FeedItem';

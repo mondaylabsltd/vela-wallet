@@ -1311,6 +1311,100 @@ mod tests {
         });
     }
 
+    /// The row this writes is the one Activity draws (083 H2, 079 D3): read
+    /// back by the feed's own reader, folded by the core, titled by what the
+    /// site asked, labelled with the site — and closed in place when it lands.
+    /// Before 083 the core dropped every `dapp_tx` row, so a dApp's operation
+    /// was on disk and on no screen.
+    #[test]
+    fn a_dapp_transaction_is_in_activity_with_its_site_until_it_lands() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{
+            ActivityFeed, Event as FeedEvent, FeedOperation, FeedShellResult, FeedTxStatus,
+        };
+        use vela_core::app::clear_signing::ClearTerm;
+
+        // Answer the feed's asks from the store, as its executor does.
+        fn settle(
+            host: &mut CoreHost<ActivityFeed>,
+            mut pending: Vec<crate::core_host::Pending<FeedOperation>>,
+        ) {
+            while let Some(next) = pending.pop() {
+                let result = match &next.operation {
+                    FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
+                        records: crate::executor::activity_feed::read_records(),
+                        now_ms: 1_757_000_001_000.0,
+                        read_id: *read_id,
+                    },
+                    FeedOperation::ScanIncomingTransfers { .. } => {
+                        FeedShellResult::SyncCompleted { new_count: 0 }
+                    }
+                    FeedOperation::ResolveRecipientIdentity { addr } => {
+                        FeedShellResult::AliasResolved {
+                            addr: addr.clone(),
+                            name: None,
+                        }
+                    }
+                    _ => continue,
+                };
+                pending.extend(host.resolve(next.id, result));
+            }
+        }
+
+        storage::tests::with_temp_state("sign-record-feed", || {
+            let mut record = record(
+                SignRecordKind::DappTx,
+                r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x2386f26fc10000"}]"#,
+            );
+            record.dapp_origin = "http://127.0.0.1:5173".to_owned();
+            record.intent = Some("Send".to_owned());
+            persist_record(&record);
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: record.from.clone(),
+            });
+            settle(&mut host, asks);
+
+            let loc = crate::loc::Loc::from_env();
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            assert_eq!(rows.len(), 1, "the dApp's transaction is in Activity");
+            let row = &rows[0];
+            assert_eq!(row.kind, crate::wallet::fixtures::ActivityKind::Dapp);
+            assert_eq!(
+                Some(&row.title),
+                s.terms.get(&ClearTerm::IntentSend),
+                "a plain send reads as one"
+            );
+            assert_eq!(row.subtitle.as_ref(), "127.0.0.1", "the site, not the port");
+            // 0x2386f26fc10000 wei is 0.01 of the coin, going out.
+            assert!(
+                row.amount.starts_with('\u{2212}') && row.amount.ends_with("01"),
+                "{}",
+                row.amount
+            );
+            assert_eq!(row.unit.as_ref(), "xDAI");
+            assert_eq!(view.transactions[0].status, FeedTxStatus::Pending);
+
+            // It lands: the same row closes, and the feed's re-read shows it.
+            update_record(
+                &record.record_id,
+                &SignRecordClose::Confirmed {
+                    tx_hash: "0xdeadbeef".to_owned(),
+                },
+            );
+            let asks = host.dispatch(FeedEvent::ReconcileCompleted { resolved_count: 1 });
+            settle(&mut host, asks);
+            let view = host.view();
+            assert_eq!(view.transactions.len(), 1);
+            assert_eq!(view.transactions[0].status, FeedTxStatus::Confirmed);
+            assert_eq!(view.transactions[0].tx_hash, "0xdeadbeef");
+        });
+    }
+
     /// A signature moves nothing, and its row must not claim otherwise.
     #[test]
     fn a_signature_row_carries_no_amount() {

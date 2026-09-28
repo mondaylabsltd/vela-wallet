@@ -1021,8 +1021,18 @@ impl SigningHost {
     }
 
     fn resolve_sign(&mut self, id: u64, result: SignShellResult, cx: &mut Context<Self>) {
+        // The dApp's record is on disk now — opened pending, or closed. The
+        // feed re-reads at once rather than at its next tick, so Activity
+        // shows the operation the moment the site's is on its way (083 H2).
+        let wrote_record = matches!(
+            result,
+            SignShellResult::RecordPersisted | SignShellResult::RecordUpdated
+        );
         let pending = self.sign.resolve(id, result);
         self.pump_sign(pending, cx);
+        if wrote_record {
+            crate::executor::activity_feed::focus_tick(cx);
+        }
     }
 
     fn resolve_clear(&mut self, id: u64, result: ClearShellResult, cx: &mut Context<Self>) {

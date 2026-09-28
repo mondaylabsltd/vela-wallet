@@ -780,6 +780,26 @@ fn record_id_for(method: &str, now_ms: f64) -> String {
     format!("dapp-{ms}-{suffix}")
 }
 
+/// The intent a plain native send records when the sheet hands none (083 H2).
+///
+/// A transfer with no calldata has no decoded result, so no shell has an
+/// intent to pass — yet its confirm already reads "Send" (`clear_signing`,
+/// `ReqKind::TxPlain`). Recording that word is what lets Activity say
+/// "Send 0.01 ETH" instead of calling somebody's payment a contract
+/// interaction. `data` is the field the submit path reads, so "no calldata"
+/// here is what actually goes on chain.
+fn plain_send_intent(method: &str, params: &Value) -> Option<String> {
+    if method != "eth_sendTransaction" {
+        return None;
+    }
+    let data = params
+        .get(0)?
+        .get("data")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    (data.is_empty() || data == "0x").then(|| "Send".to_owned())
+}
+
 // ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
@@ -1727,6 +1747,11 @@ fn approve_with(
         .map(|d| d.name.clone())
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| pending.origin.clone());
+    let intent = opts
+        .intent
+        .clone()
+        .filter(|intent| !intent.trim().is_empty())
+        .or_else(|| plain_send_intent(&pending.method, &parsed));
 
     model.inflight = Some(Inflight {
         id: pending.id.clone(),
@@ -1738,7 +1763,7 @@ fn approve_with(
         address: signer.address.clone(),
         credential_id: signer.credential_id,
         record_origin,
-        intent: opts.intent.clone(),
+        intent,
         max_fee_per_gas: opts.max_fee_per_gas.clone(),
         gas_fee_token: opts.gas_fee_token.clone(),
         // The tier the shell copied from the displayed estimate, filtered to

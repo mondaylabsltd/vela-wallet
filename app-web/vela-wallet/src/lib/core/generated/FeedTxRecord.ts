@@ -46,4 +46,15 @@ kind: FeedTxKind | null,
 /**
  * Legacy pre-formatted USD (e.g. `"$1.00"`), as stored.
  */
-usd: string | null, };
+usd: string | null, 
+/**
+ * `dapp_tx` only (083 H2): the site that asked, as the signing path
+ * stored it (`dappOrigin`) — an origin, or the dApp's own name. Absent
+ * on every other kind and from a shell that does not map it yet.
+ */
+dapp_origin?: string | null, 
+/**
+ * `dapp_tx` only (083 H2): the intent recorded at approve time
+ * (`intent`, e.g. "Swap").
+ */
+intent?: string | null, };

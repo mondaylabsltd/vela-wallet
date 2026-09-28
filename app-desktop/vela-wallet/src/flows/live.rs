@@ -331,6 +331,7 @@ pub fn tx_detail(
     view: &FeedView,
     id: &str,
     s: &FlowStrings,
+    wallet: &crate::wallet::WalletStrings,
     hidden: bool,
     locale: &str,
     currency: &crate::wallet::live::Money,
@@ -343,6 +344,18 @@ pub fn tx_detail(
     let record = view.transactions.iter().find(|record| record.id == item.id);
 
     let mut facts = Vec::new();
+    // The site that asked, for a dApp's transaction (083 H2) — first, because
+    // it is the one fact the person recognises.
+    if let Some(site) = item.dapp.as_ref().and_then(|dapp| dapp.site.as_ref()) {
+        facts.push(FactRow {
+            label: s.detail_app.clone(),
+            value: SharedString::from(site.clone()),
+            lead: FactLead::None,
+            mono: false,
+            copy: None,
+            note: None,
+        });
+    }
     // Who it was with. The identicon is seeded by the ADDRESS even when a name
     // is known — the avatar is how somebody checks the name is on the address
     // they meant, so seeding it from the name would defeat its purpose.
@@ -406,15 +419,20 @@ pub fn tx_detail(
     Some(crate::flows::fixtures::TxDetail {
         breakdown_title,
         breakdown,
-        title: SharedString::from(crate::wallet::fill(
-            if incoming {
-                &s.tx_label_received
-            } else {
-                &s.tx_label_sent
-            },
-            "symbol",
-            &item.symbol,
-        )),
+        // What a dApp's call did, not "Sent" plus a coin it may never have
+        // moved (083 H2).
+        title: match item.dapp.as_ref() {
+            Some(dapp) => crate::wallet::live::dapp_title(dapp, wallet),
+            None => SharedString::from(crate::wallet::fill(
+                if incoming {
+                    &s.tx_label_received
+                } else {
+                    &s.tx_label_sent
+                },
+                "symbol",
+                &item.symbol,
+            )),
+        },
         status: StatusChip {
             text: match status {
                 FeedTxStatus::Confirmed => s.status_confirmed.clone(),
@@ -4489,6 +4507,7 @@ mod tests {
                 day_start_ms: today,
                 tx_hash: Some("0xdead".to_owned()),
                 batch: None,
+                dapp: None,
             };
             let view = FeedView {
                 rows: vec![
@@ -4521,6 +4540,8 @@ mod tests {
                     status: FeedTxStatus::Pending,
                     kind: None,
                     usd: None,
+                    dapp_origin: None,
+                    intent: None,
                 }],
                 ..host.view()
             };
@@ -4529,10 +4550,12 @@ mod tests {
             assert_eq!(history_ids(&view), vec!["a".to_owned(), "b".to_owned()]);
 
             let s = strings();
+            let w = wallet_strings();
             let received = tx_detail(
                 &view,
                 "a",
                 &s,
+                &w,
                 false,
                 "en-US",
                 crate::wallet::live::Money::usd(),
@@ -4565,6 +4588,7 @@ mod tests {
                 &view,
                 "b",
                 &s,
+                &w,
                 false,
                 "en-US",
                 crate::wallet::live::Money::usd(),
@@ -4580,6 +4604,7 @@ mod tests {
                 &view,
                 "a",
                 &s,
+                &w,
                 true,
                 "en-US",
                 crate::wallet::live::Money::usd(),
@@ -4595,6 +4620,7 @@ mod tests {
                     &view,
                     "gone",
                     &s,
+                    &w,
                     false,
                     "en-US",
                     crate::wallet::live::Money::usd()
@@ -4611,6 +4637,64 @@ mod tests {
             };
             assert!(drawn.delete_label.is_none(), "a picture deletes nothing");
         });
+    }
+
+    /// A dApp's transaction opens to what it did and where it came from
+    /// (083 H2): the intent as the title rather than "Sent xDAI", the site as
+    /// the first fact, then the contract it called; a call that moved no coin
+    /// has no figure.
+    #[test]
+    fn a_dapp_transaction_detail_names_its_site_and_intent() {
+        use vela_core::app::activity_feed::{
+            ActivityFeed, Event as FeedEvent, FeedDapp, FeedDirection, FeedItem,
+        };
+        use vela_core::app::clear_signing::ClearTerm;
+
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let _ = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        let item = FeedItem {
+            id: "dapp-1-tx".to_owned(),
+            direction: FeedDirection::Out,
+            counterparty: Some("0xAbCdEf0000000000000000000000000000000001".to_owned()),
+            alias: None,
+            value: None,
+            symbol: String::new(),
+            decimals: None,
+            usd_value: 0.0,
+            chain_id: 100,
+            timestamp: 1_756_000_000.0,
+            day_start_ms: 0.0,
+            tx_hash: None,
+            batch: None,
+            dapp: Some(FeedDapp {
+                site: Some("app.uniswap.org".to_owned()),
+                intent: Some("Swap".to_owned()),
+                intent_term: Some(ClearTerm::IntentSwap),
+            }),
+        };
+        let view = FeedView {
+            rows: vec![FeedRow::Item { item }],
+            ..host.view()
+        };
+        let (s, w) = (strings(), wallet_strings());
+        let detail = tx_detail(
+            &view,
+            "dapp-1-tx",
+            &s,
+            &w,
+            false,
+            "en-US",
+            crate::wallet::live::Money::usd(),
+        )
+        .unwrap_or_else(|| unreachable!("the row exists"));
+        assert_eq!(Some(&detail.title), w.terms.get(&ClearTerm::IntentSwap));
+        assert_eq!(detail.facts[0].label, s.detail_app);
+        assert_eq!(detail.facts[0].value.as_ref(), "app.uniswap.org");
+        assert_eq!(detail.facts[1].label, s.detail_to, "then the contract");
+        assert_eq!(detail.amount.as_ref(), "", "no coin moved, no figure");
+        assert_eq!(detail.fiat.as_ref(), "");
     }
 
     /// The QR encodes what the CORE says, and a live one is never the demo
@@ -4973,6 +5057,7 @@ mod tests {
             day_start_ms: day,
             tx_hash: None,
             batch: None,
+            dapp: None,
         };
         let view = FeedView {
             rows: vec![

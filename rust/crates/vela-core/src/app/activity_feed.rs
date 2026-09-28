@@ -62,6 +62,9 @@
 //! - `alias_map`/`alias_attempted` survive an account switch (both are
 //!   session-lived refs in TS) — an address→name fact is account-agnostic.
 //! - The web-only `velaSimulateReceipt` dev hook is not ported.
+//! - A dApp's transaction (`dapp_tx`) is a row too (083 H2, 079 D3); the TS
+//!   feed showed only sends and receives, so a stuck dApp swap was visible
+//!   nowhere. Signatures and connections stay out: they move nothing.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -72,6 +75,8 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
+
+use super::clear_signing::ClearTerm;
 
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
 pub const TOAST_MS: u32 = 2_800;
@@ -145,6 +150,15 @@ pub struct FeedTxRecord {
     pub kind: Option<FeedTxKind>,
     /// Legacy pre-formatted USD (e.g. `"$1.00"`), as stored.
     pub usd: Option<String>,
+    /// `dapp_tx` only (083 H2): the site that asked, as the signing path
+    /// stored it (`dappOrigin`) — an origin, or the dApp's own name. Absent
+    /// on every other kind and from a shell that does not map it yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dapp_origin: Option<String>,
+    /// `dapp_tx` only (083 H2): the intent recorded at approve time
+    /// (`intent`, e.g. "Swap").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent: Option<String>,
 }
 
 impl FeedTxRecord {
@@ -244,6 +258,28 @@ pub struct FeedItem {
     pub day_start_ms: f64,
     pub tx_hash: Option<String>,
     pub batch: Option<FeedBatch>,
+    /// A dApp transaction's site and intent (083 H2); `None` on every other
+    /// row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dapp: Option<FeedDapp>,
+}
+
+/// What a dApp transaction row says beyond its money (083 H2, 079 D3): which
+/// site asked and what the call did.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeedDapp {
+    /// The site as a person reads it: the host of a stored origin
+    /// (`app.uniswap.org`, `127.0.0.1`), or the dApp's name when the record
+    /// holds a name. `None` when the record names no site.
+    pub site: Option<String>,
+    /// The intent recorded at approve time, as the descriptor wrote it
+    /// ("Swap"; "Send" for a plain native transfer). `None` is a call nobody
+    /// decoded, which the shell reads as "Contract interaction".
+    pub intent: Option<String>,
+    /// `intent` as a word the shell can translate
+    /// (`componentsUi.signing.<leaf>`).
+    pub intent_term: Option<ClearTerm>,
 }
 
 /// A date header or an item — the grouped feed, in render order
@@ -634,7 +670,9 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 .iter()
                 .filter(|t| match t.kind() {
                     FeedTxKind::Receive => t.to.to_lowercase() == lc,
-                    FeedTxKind::Send => t.from.to_lowercase() == lc,
+                    // 083 H2: a dApp's transaction is this account's money
+                    // moving too — its detail needs the record like a send's.
+                    FeedTxKind::Send | FeedTxKind::DappTx => t.from.to_lowercase() == lc,
                     _ => false,
                 })
                 .cloned()
@@ -828,6 +866,7 @@ fn build_items(records: &[FeedTxRecord], address: &str) -> Vec<FeedItem> {
                     _ => Some(send_item(t)),
                 }
             }
+            FeedTxKind::DappTx if t.from.to_lowercase() == lc => Some(dapp_item(t)),
             _ => None,
         };
         let Some(item) = item else {
@@ -859,6 +898,7 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         day_start_ms: t.day_start_ms,
         tx_hash: non_empty(&t.tx_hash),
         batch: None,
+        dapp: None,
     }
 }
 
@@ -878,7 +918,95 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         day_start_ms: t.day_start_ms,
         tx_hash: non_empty(&t.tx_hash),
         batch: None,
+        dapp: None,
     }
+}
+
+/// A dApp's transaction (083 H2, 079 D3). Every client has stored these since
+/// the signing path learned to (`buildSigningRecord`) and the feed dropped
+/// them, so a swap stuck in the relay was visible nowhere. Status needs
+/// nothing here: the tracker settles the record like a send's, and the
+/// detail reads it from the record.
+///
+/// The stored `value` is the call's own wei figure as the page sent it
+/// (`0x…`), scaled here into the human decimal every other row carries. A
+/// call that moves no coin shows no amount rather than "0 ETH" — what it did
+/// to tokens is the intent's to say, not a figure this record holds.
+fn dapp_item(t: &FeedTxRecord) -> FeedItem {
+    let value = wei(&t.value)
+        .filter(|wei| *wei > 0)
+        .map(|wei| super::fee_policy::from_base_units(wei, t.decimals));
+    let usd_value = value.as_ref().map_or(0.0, |value| {
+        tx_usd_value(&FeedTxRecord {
+            value: value.clone(),
+            ..t.clone()
+        })
+    });
+    let intent = t
+        .intent
+        .as_deref()
+        .map(str::trim)
+        .filter(|intent| !intent.is_empty())
+        .map(str::to_owned);
+    FeedItem {
+        id: t.id.clone(),
+        direction: FeedDirection::Out,
+        // The contract or recipient; a batch (`wallet_sendCalls`) has none.
+        counterparty: non_empty(&t.to),
+        alias: t.to_name.clone(),
+        symbol: if value.is_some() {
+            t.symbol.clone()
+        } else {
+            String::new()
+        },
+        decimals: value.as_ref().map(|_| t.decimals),
+        value,
+        usd_value,
+        chain_id: t.chain_id,
+        timestamp: t.timestamp,
+        day_start_ms: t.day_start_ms,
+        tx_hash: non_empty(&t.tx_hash),
+        batch: None,
+        dapp: Some(FeedDapp {
+            site: t.dapp_origin.as_deref().and_then(site_of),
+            intent_term: intent.as_deref().and_then(ClearTerm::of),
+            intent,
+        }),
+    }
+}
+
+/// A JSON-RPC quantity — `0x` hex as a page sends it, or decimal digits.
+/// `None` when it is neither, or beyond `u128`: no figure beats a wrong one.
+fn wei(value: &str) -> Option<u128> {
+    let value = value.trim();
+    match value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        Some("") => Some(0),
+        Some(hex) => u128::from_str_radix(hex, 16).ok(),
+        None if !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()) => {
+            value.parse().ok()
+        }
+        None => None,
+    }
+}
+
+/// The site a record names, as a person reads it (083 H2): an origin's host
+/// (`https://app.uniswap.org` → `app.uniswap.org`, `http://127.0.0.1:5173` →
+/// `127.0.0.1`), or the dApp's own name verbatim — the signing path stores
+/// `requestDApp(...)?.name ?? origin`. An origin that will not parse names
+/// nothing rather than something half-read.
+fn site_of(origin: &str) -> Option<String> {
+    let origin = origin.trim();
+    if origin.is_empty() {
+        return None;
+    }
+    if !origin.contains("://") {
+        return Some(origin.to_owned());
+    }
+    // The SIWE binding's host reading: lower-cased, no port, fail safe.
+    super::clear_signing::siwe_host(Some(origin))
 }
 
 /// `batchSendToActivity`: one row for the whole group, per-line breakdown
@@ -926,6 +1054,7 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         day_start_ms: first.day_start_ms,
         tx_hash: non_empty(&batch.tx_hash),
         batch: Some(batch),
+        dapp: None,
     })
 }
 

@@ -11,9 +11,10 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::activity_feed::{
-    is_stable, tx_usd_value, ActivityFeed, Event, FeedBatchKind, FeedDirection,
+    is_stable, tx_usd_value, ActivityFeed, Event, FeedBatchKind, FeedDapp, FeedDirection,
     FeedOperation as Op, FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus,
 };
+use vela_core::app::clear_signing::ClearTerm;
 
 type Sut = DomainDriver<ActivityFeed>;
 
@@ -49,6 +50,8 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         status: FeedTxStatus::Confirmed,
         kind: None,
         usd: None,
+        dapp_origin: None,
+        intent: None,
     }
 }
 
@@ -73,6 +76,26 @@ fn recv(id: &str, from: &str, value: &str, symbol: &str, ts: f64) -> FeedTxRecor
     r.to = ADDR.to_owned();
     r.value = value.to_owned();
     r.symbol = symbol.to_owned();
+    r
+}
+
+/// A transaction a dApp asked this account to send, in the shape every
+/// client's signing path stores (`buildSigningRecord`): the call's own wei
+/// figure, the chain's coin at 18 decimals, the site's origin (083 H2).
+fn dapp_tx(id: &str, to: &str, wei_hex: &str, intent: Option<&str>, ts: f64) -> FeedTxRecord {
+    let mut r = base(id, ts);
+    r.kind = Some(FeedTxKind::DappTx);
+    r.from = ADDR.to_owned();
+    r.to = to.to_owned();
+    r.value = wei_hex.to_owned();
+    r.symbol = "xDAI".to_owned();
+    r.decimals = 18;
+    r.chain_id = 100;
+    r.status = FeedTxStatus::Pending;
+    r.tx_hash = String::new();
+    r.user_op_hash = format!("0xop{id}");
+    r.dapp_origin = Some("http://127.0.0.1:5173".to_owned());
+    r.intent = intent.map(str::to_owned);
     r
 }
 
@@ -292,9 +315,13 @@ fn feed_and_transactions_are_account_scoped() {
     drain_aliases(&mut sut);
 
     let ids: Vec<String> = items(&sut).into_iter().map(|i| i.id).collect();
-    assert_eq!(ids, vec!["s1", "r1", "l1"]);
+    assert_eq!(
+        ids,
+        vec!["s1", "r1", "d1", "l1"],
+        "a dApp's transaction is a row (083 H2)"
+    );
     let tx_ids: Vec<String> = sut.view().transactions.into_iter().map(|t| t.id).collect();
-    assert_eq!(tx_ids, vec!["s1", "r1", "l1"]);
+    assert_eq!(tx_ids, vec!["s1", "r1", "d1", "l1"]);
 }
 
 // ---------------------------------------------------------------------------
@@ -959,4 +986,132 @@ fn a_stale_read_never_eats_the_celebration_the_sync_earned() {
         sut.view().toast.is_some(),
         "the receipt's own read must celebrate"
     );
+}
+
+// ---------------------------------------------------------------------------
+// 083 H2 (079 D3) — a dApp's transaction is in Activity
+// ---------------------------------------------------------------------------
+
+/// A plain native send a site asked for reads as a send of its amount, from
+/// that site: the page's wei figure scaled to the coin, the origin's host.
+#[test]
+fn a_dapp_native_send_is_a_row_with_its_amount_and_site() {
+    let sut = boot(vec![dapp_tx(
+        "dapp-1-tx",
+        "0xCafe",
+        "0x2386f26fc10000",
+        Some("Send"),
+        100_000.0,
+    )]);
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.direction, FeedDirection::Out);
+    assert_eq!(row.value.as_deref(), Some("0.01"), "0x2386f26fc10000 wei");
+    assert_eq!(row.symbol, "xDAI");
+    assert_eq!(row.decimals, Some(18));
+    assert_eq!(row.counterparty.as_deref(), Some("0xCafe"));
+    assert_eq!(row.tx_hash, None, "pending: no hash yet");
+    assert_eq!(
+        row.dapp,
+        Some(FeedDapp {
+            site: Some("127.0.0.1".to_owned()),
+            intent: Some("Send".to_owned()),
+            intent_term: Some(ClearTerm::IntentSend),
+        })
+    );
+    // The detail reads the status off the record, which is in the view.
+    assert_eq!(sut.view().transactions[0].status, FeedTxStatus::Pending);
+}
+
+/// A call that moves no coin shows no "0 xDAI"; a decoded one carries its
+/// intent, an undecoded one none (the shell reads "Contract interaction"); a
+/// batch (`wallet_sendCalls`) has no single counterparty.
+#[test]
+fn a_dapp_contract_call_carries_its_intent_and_no_zero_amount() {
+    let mut swap = dapp_tx("dapp-2-tx", "0xRouter", "0x0", Some("Swap"), 200_000.0);
+    swap.dapp_origin = Some("https://app.uniswap.org".to_owned());
+    let mut blind = dapp_tx("dapp-3-tx", "", "0x0", None, 190_000.0);
+    blind.dapp_origin = Some("Some dApp".to_owned());
+    let sut = boot(vec![swap, blind]);
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 2);
+
+    assert_eq!(rows[0].value, None);
+    assert_eq!(rows[0].symbol, "");
+    assert_eq!(rows[0].decimals, None);
+    assert!(rows[0].usd_value.abs() < f64::EPSILON);
+    let swap = rows[0].dapp.clone().expect("a dApp row");
+    assert_eq!(swap.site.as_deref(), Some("app.uniswap.org"));
+    assert_eq!(swap.intent_term, Some(ClearTerm::IntentSwap));
+
+    assert_eq!(
+        rows[1].counterparty, None,
+        "a batch has no single recipient"
+    );
+    let blind = rows[1].dapp.clone().expect("a dApp row");
+    assert_eq!(
+        blind.site.as_deref(),
+        Some("Some dApp"),
+        "a stored name, verbatim"
+    );
+    assert_eq!((blind.intent, blind.intent_term), (None, None));
+}
+
+/// Another account's dApp transaction is not this account's Activity, and a
+/// record from a shell that stores no origin names no site.
+#[test]
+fn a_dapp_row_is_account_scoped_and_survives_a_missing_origin() {
+    let mut ours = dapp_tx("d-ours", "0xCafe", "0x1", None, 100_000.0);
+    ours.dapp_origin = None;
+    let mut theirs = dapp_tx("d-theirs", "0xCafe", "0x1", None, 90_000.0);
+    theirs.from = OTHER.to_owned();
+    let sut = boot(vec![ours, theirs]);
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, "d-ours");
+    assert_eq!(rows[0].value.as_deref(), Some("0.000000000000000001"));
+    assert_eq!(rows[0].dapp.as_ref().and_then(|d| d.site.clone()), None);
+    let tx_ids: Vec<String> = sut.view().transactions.into_iter().map(|t| t.id).collect();
+    assert_eq!(tx_ids, vec!["d-ours"]);
+}
+
+/// Pending -> landed: the tracker patches the dApp record in place and says
+/// so; the re-read carries the confirmed record and its hash, like a send's,
+/// and never celebrates, because money leaving is not money arriving.
+#[test]
+fn a_dapp_row_settles_when_the_tracker_lands_it() {
+    let pending = dapp_tx("dapp-4-tx", "0xCafe", "0x1", Some("Send"), 100_000.0);
+    let mut sut = boot(vec![pending.clone()]);
+    assert_eq!(sut.view().transactions[0].status, FeedTxStatus::Pending);
+
+    let ops = sut.dispatch(Event::ReconcileCompleted { resolved_count: 1 });
+    assert_eq!(shapes(ops), vec![read_op()]);
+    let mut landed = pending;
+    landed.status = FeedTxStatus::Confirmed;
+    landed.tx_hash = "0xlanded".to_owned();
+    sut.resolve(loaded(&sut, vec![landed], T0 + 1_000.0));
+    drain_aliases(&mut sut);
+
+    assert_eq!(sut.view().transactions[0].status, FeedTxStatus::Confirmed);
+    assert_eq!(items(&sut)[0].tx_hash.as_deref(), Some("0xlanded"));
+    assert!(sut.view().toast.is_none());
+    assert!(sut.view().new_item_id.is_none());
+}
+
+/// A shell that has not mapped the new fields yet still loads: both are
+/// optional on the wire, and a record that carries neither serializes as
+/// before.
+#[test]
+fn the_dapp_fields_are_optional_on_the_wire() {
+    let json = r#"{"id":"x","user_op_hash":"","tx_hash":"","from":"","to":"","to_name":null,
+        "value":"1","symbol":"USDC","decimals":6,"logo_urls":null,"chain_id":1,"timestamp":1,
+        "day_start_ms":0,"status":"confirmed","kind":"send","usd":null}"#;
+    let record: FeedTxRecord = serde_json::from_str(json).expect("an older shell's record");
+    assert_eq!(
+        (record.dapp_origin.clone(), record.intent.clone()),
+        (None, None)
+    );
+    let out = serde_json::to_value(&record).expect("serializes");
+    assert!(out.get("dapp_origin").is_none() && out.get("intent").is_none());
 }

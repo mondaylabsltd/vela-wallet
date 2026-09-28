@@ -2171,3 +2171,67 @@ fn malformed_params_fail_closed_at_approve() {
         "nothing unparseable is ever signed"
     );
 }
+
+// ===========================================================================
+// 083 H2 — the record says what the transaction did
+// ===========================================================================
+
+/// Approve `params` with the sheet's `intent`, submit, and return the intent
+/// the pending record carries.
+fn recorded_intent(id: &str, method: &str, params: &str, intent: Option<&str>) -> Option<String> {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global(id, method, params).event());
+    sut.dispatch(approve(SignApproveOpts {
+        intent: intent.map(str::to_owned),
+        ..SignApproveOpts::default()
+    }));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]),
+        "{ops:?}"
+    );
+    let ops = sut.dispatch(Event::OpSubmitted {
+        id: id.to_owned(),
+        user_op_hash: "0xop".to_owned(),
+        now_ms: 9_000.0,
+    });
+    match ops.as_slice() {
+        [Op::PersistRecord { record }] => record.intent.clone(),
+        other => panic!("the pending record first: {other:?}"),
+    }
+}
+
+/// A plain native send has no decoded result, so the sheet hands no intent;
+/// the record says "Send" — the word its confirm already read — so Activity
+/// can show "Send 1 ETH" rather than a contract interaction.
+#[test]
+fn a_plain_native_send_records_the_send_intent() {
+    assert_eq!(
+        recorded_intent("req-h2a", "eth_sendTransaction", &plain_send_params(), None),
+        Some("Send".to_owned())
+    );
+}
+
+/// Calldata nobody decoded stays without an intent (the shell reads
+/// "Contract interaction"), and the sheet's own decoded intent always wins.
+#[test]
+fn a_contract_call_records_only_the_sheets_intent() {
+    let call = tx_params("0xdeadbeef");
+    assert_eq!(
+        recorded_intent("req-h2b", "eth_sendTransaction", &call, None),
+        None
+    );
+    assert_eq!(
+        recorded_intent("req-h2c", "eth_sendTransaction", &call, Some("Swap")),
+        Some("Swap".to_owned())
+    );
+    assert_eq!(
+        recorded_intent(
+            "req-h2d",
+            "eth_sendTransaction",
+            &plain_send_params(),
+            Some("Transfer")
+        ),
+        Some("Transfer".to_owned())
+    );
+}

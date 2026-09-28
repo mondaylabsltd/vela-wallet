@@ -6249,6 +6249,7 @@ impl WalletPage {
                             &feed,
                             id,
                             &self.flow_strings,
+                            &self.strings,
                             hidden,
                             &self.locale,
                             &currency,

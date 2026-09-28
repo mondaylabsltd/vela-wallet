@@ -610,6 +610,8 @@ mod tests {
             status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
             kind: Some(vela_core::app::activity_feed::FeedTxKind::Receive),
             usd: None,
+            dapp_origin: None,
+            intent: None,
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -724,6 +726,7 @@ mod tests {
             day_start_ms: 0.0,
             tx_hash: None,
             batch: None,
+            dapp: None,
         }
     }
 
@@ -786,6 +789,53 @@ mod tests {
         assert!(!rows[0].positive);
         assert_eq!(rows[1].amount, SharedString::from("+120"));
         assert!(rows[1].positive);
+    }
+
+    /// A dApp's call (083 H2): titled by what it did — the sheet's words, and
+    /// "Contract interaction" for a call nobody decoded — labelled with the
+    /// site that asked, and with no figure when it moved no coin. Without a
+    /// site it says who it went to, like a send.
+    #[test]
+    fn a_dapp_call_is_titled_by_its_intent_and_labelled_with_its_site() {
+        use vela_core::app::activity_feed::FeedDapp;
+        use vela_core::app::clear_signing::ClearTerm;
+
+        let dapp = |id: &str, site: Option<&str>, intent: Option<&str>| {
+            let mut row = item(id, false, None, "");
+            row.decimals = None;
+            row.dapp = Some(FeedDapp {
+                site: site.map(str::to_owned),
+                intent: intent.map(str::to_owned),
+                intent_term: intent.and_then(ClearTerm::of),
+            });
+            FeedRow::Item { item: row }
+        };
+        let view = feed_with(
+            vec![
+                dapp("blind", Some("app.uniswap.org"), None),
+                dapp("swap", Some("app.uniswap.org"), Some("Swap")),
+                dapp("odd", None, Some("Frobnicate")),
+            ],
+            Vec::new(),
+        );
+        let s = strings();
+        let rows = activity_rows(
+            &view,
+            &s,
+            &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
+            false,
+        );
+        assert_eq!(rows[0].title, s.intent_contract_call);
+        assert_eq!(rows[0].subtitle.as_ref(), "app.uniswap.org");
+        assert_eq!(rows[0].amount.as_ref(), "", "no coin moved, no figure");
+        assert_eq!(rows[0].unit.as_ref(), "");
+        assert_eq!(Some(&rows[1].title), s.terms.get(&ClearTerm::IntentSwap));
+        // A descriptor's word with no translation is still better than none.
+        assert_eq!(rows[2].title.as_ref(), "Frobnicate");
+        assert_eq!(
+            rows[2].subtitle.to_string(),
+            crate::wallet::fill(&s.to_name, "name", "0xAbCd…0001")
+        );
     }
 
     /// `value` is the human amount already. Scaling it by `decimals` would
@@ -1192,6 +1242,7 @@ mod tests {
                         day_start_ms: 0.0,
                         tx_hash: None,
                         batch: None,
+                        dapp: None,
                     },
                 }],
                 ..host.view()
@@ -1963,7 +2014,7 @@ pub(crate) fn activity_row(
         .alias
         .clone()
         .or_else(|| item.counterparty.as_ref().map(|a| shorten_address(a)));
-    let subtitle = who.map_or_else(
+    let to_who = who.map_or_else(
         || SharedString::from(""),
         |name| {
             SharedString::from(crate::wallet::fill(
@@ -1973,13 +2024,18 @@ pub(crate) fn activity_row(
             ))
         },
     );
+    // A dApp's transaction is labelled with the site that asked (083 H2) —
+    // the router it called is an address nobody chose.
+    let site = item.dapp.as_ref().and_then(|dapp| dapp.site.clone());
+    let subtitle = site.map_or(to_who, SharedString::from);
 
     ActivityRowModel {
         kind,
-        title: match kind {
-            ActivityKind::Sent => s.label_sent.clone(),
-            ActivityKind::Received => s.label_received.clone(),
-            ActivityKind::Dapp => s.label_dapp.clone(),
+        title: match (kind, item.dapp.as_ref()) {
+            (_, Some(dapp)) => dapp_title(dapp, s),
+            (ActivityKind::Sent, None) => s.label_sent.clone(),
+            (ActivityKind::Received, None) => s.label_received.clone(),
+            (ActivityKind::Dapp, None) => s.label_dapp.clone(),
         },
         subtitle,
         // The chain this happened on, drawn as its logo where the endpoint has
@@ -1999,6 +2055,21 @@ pub(crate) fn activity_row(
         badge: badge(item.chain_id),
         day: None,
     }
+}
+
+/// What a dApp's transaction did, as a title (083 H2): the intent recorded at
+/// approve time in the reader's words ("发送" for a plain native send,
+/// "兑换"…), the descriptor's own word when there is no translation, and
+/// "合约交互" for a call nobody decoded — the signing sheet's words for the
+/// same call.
+pub(crate) fn dapp_title(
+    dapp: &vela_core::app::activity_feed::FeedDapp,
+    s: &WalletStrings,
+) -> SharedString {
+    dapp.intent_term
+        .and_then(|term| s.terms.get(&term).cloned())
+        .or_else(|| dapp.intent.clone().map(SharedString::from))
+        .unwrap_or_else(|| s.intent_contract_call.clone())
 }
 
 /// `+120` / `−2`. The minus is U+2212, not a hyphen — the mocks use it and it
@@ -2072,7 +2143,13 @@ pub(crate) fn amount_text_of(item: &FeedItem, incoming: bool, hidden: bool) -> S
     if hidden {
         return SharedString::from(crate::wallet::fixtures::MASK);
     }
-    SharedString::from(format!("{} {}", amount_text(item, incoming), item.symbol))
+    let amount = amount_text(item, incoming);
+    // A dApp call that moved no coin has no figure (083 H2) — nothing, not a
+    // stray space where one would be.
+    if amount.is_empty() {
+        return amount;
+    }
+    SharedString::from(format!("{amount} {}", item.symbol))
 }
 
 pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {

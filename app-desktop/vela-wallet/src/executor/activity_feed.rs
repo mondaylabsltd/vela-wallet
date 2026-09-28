@@ -104,6 +104,11 @@ fn to_record(row: &Value) -> Option<FeedTxRecord> {
                 _ => None,
             }),
         usd: optional("usd"),
+        // A dApp transaction's site and decoded intent, which the core turns
+        // into the row's label (083 H2). Both are what `persist_record` in the
+        // sign executor writes, in the bytes every client writes them.
+        dapp_origin: optional("dappOrigin"),
+        intent: optional("intent"),
     })
 }
 
@@ -230,7 +235,10 @@ fn native_symbol(chain_id: u32) -> String {
         )
 }
 
-fn read_records() -> Vec<FeedTxRecord> {
+/// Every stored row, as the core reads it. Crate-visible so the sign
+/// executor's test can prove the row it writes is the one Activity draws
+/// (083 H2).
+pub(crate) fn read_records() -> Vec<FeedTxRecord> {
     let Ok(Some(Value::Array(rows))) = storage::read_value(TX_KEY) else {
         return Vec::new();
     };
