@@ -70,15 +70,27 @@
 //! on the next candidate, and only when the last one refuses is the failure
 //! reported, with the one bit the screen needs: did it fail to get out of
 //! THIS MACHINE (`local`), or did a route exist and the far end not answer?
-//! The list is re-derived after any failure and every [`REDERIVE_AFTER`], so
+//! The list is re-derived at a dead end and every [`REDERIVE_AFTER`], so
 //! a proxy that comes back or a setting that changes is honoured without a
 //! restart. Contract: `specs/038-first-run-parity/contracts/proxy-candidates.md`.
+//!
+//! Where a request starts on that list is remembered per HOST (spec 083 W13).
+//! It used to be one index for the whole process, moved by any failure: one
+//! slow site through the proxy sent the wallet's RPC, relay and prices Direct
+//! for a minute — from behind a firewall, the route that does not work. Now a
+//! failure moves only its host, and a success pins the route that carried
+//! it. Only a proxy that refuses the connection outright — a failure every
+//! host would meet — moves everyone, and that shared route is also the one
+//! [`agent`] hands to callers that cannot walk. What was learned lasts until
+//! the list is re-derived.
 //!
 //! What is deliberately NOT handled: `mode = 'auto'` (a PAC URL is a JavaScript
 //! program, and running one to reach the key registry is not a trade this app
 //! makes) and KDE's `kioslaverc`. Both fall through to no proxy, which is the
 //! behaviour before this module existed.
 
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -97,8 +109,8 @@ pub fn agent(timeout: Duration) -> Agent {
     agent_over(current().proxy(), timeout)
 }
 
-/// Is this url on this machine (or its own network's name for it)?
-fn is_local(url: &str) -> bool {
+/// The host a url names, without its port or an IPv6 literal's brackets.
+fn host_of(url: &str) -> &str {
     let host = url
         .split_once("://")
         .map_or(url, |(_, rest)| rest)
@@ -113,7 +125,12 @@ fn is_local(url: &str) -> bool {
             host
         }
     });
-    let host = host.trim_start_matches('[').trim_end_matches(']');
+    host.trim_start_matches('[').trim_end_matches(']')
+}
+
+/// Is this url on this machine (or its own network's name for it)?
+fn is_local(url: &str) -> bool {
+    let host = host_of(url);
     if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") {
         return true;
     }
@@ -163,8 +180,30 @@ impl Candidate {
 
 struct Candidates {
     list: Vec<Candidate>,
+    /// Where a host with nothing learned starts, and the route [`agent`]
+    /// hands out. Only a route that fails every host moves it (083 W13).
     current: usize,
+    /// 083 W13: the route each host last got through on, or was moved to.
+    /// Learned under this derivation only, so a re-derive starts every host
+    /// afresh and the map never holds more than a minute's hosts.
+    hosts: HashMap<String, usize>,
     derived_at: Instant,
+    /// Which derivation this is: a request that started on an older list
+    /// must not write what it learned into a newer one.
+    generation: u64,
+}
+
+impl Candidates {
+    fn of(list: Vec<Candidate>) -> Self {
+        static GENERATIONS: AtomicU64 = AtomicU64::new(0);
+        Candidates {
+            list,
+            current: 0,
+            hosts: HashMap::new(),
+            derived_at: Instant::now(),
+            generation: GENERATIONS.fetch_add(1, Ordering::Relaxed),
+        }
+    }
 }
 
 fn state() -> &'static Mutex<Option<Candidates>> {
@@ -192,44 +231,115 @@ fn derive_candidates() -> Vec<Candidate> {
     list
 }
 
-/// The candidate every request goes through right now.
+/// The list, derived afresh when there is none or it is older than
+/// [`REDERIVE_AFTER`].
+fn fresh(slot: &mut Option<Candidates>) -> &mut Candidates {
+    if slot
+        .as_ref()
+        .is_some_and(|c| c.derived_at.elapsed() >= REDERIVE_AFTER)
+    {
+        *slot = None;
+    }
+    slot.get_or_insert_with(|| Candidates::of(derive_candidates()))
+}
+
+/// The candidate a request that names no host goes through right now.
 fn current() -> Candidate {
     let Ok(mut guard) = state().lock() else {
         return Candidate::Direct;
     };
-    let stale = guard
-        .as_ref()
-        .is_none_or(|c| c.derived_at.elapsed() >= REDERIVE_AFTER);
-    if stale {
-        *guard = Some(Candidates {
-            list: derive_candidates(),
-            current: 0,
-            derived_at: Instant::now(),
-        });
-    }
-    guard
-        .as_ref()
-        .and_then(|c| c.list.get(c.current).cloned())
+    let candidates = fresh(&mut guard);
+    candidates
+        .list
+        .get(candidates.current)
+        .cloned()
         .unwrap_or(Candidate::Direct)
 }
 
-/// A request through the current candidate could not get through. Move to
-/// the next one; `false` when there is none left — the list is then dropped
-/// so the next request derives it afresh rather than sitting on a dead end.
-fn advance() -> bool {
+/// What one request walks: its own copy of the list, so what other requests
+/// do meanwhile cannot make it skip a route (083 W13).
+struct Walk {
+    list: Vec<Candidate>,
+    /// The later of everyone's route and what this host has learned.
+    start: usize,
+    generation: u64,
+}
+
+fn begin(host: &str) -> Walk {
     let Ok(mut guard) = state().lock() else {
-        return false;
+        return Walk {
+            list: vec![Candidate::Direct],
+            start: 0,
+            generation: 0,
+        };
     };
-    let Some(candidates) = guard.as_mut() else {
-        return false;
-    };
-    if candidates.current + 1 < candidates.list.len() {
-        candidates.current += 1;
-        true
-    } else {
-        *guard = None;
-        false
+    let candidates = fresh(&mut guard);
+    let learned = candidates.hosts.get(host).copied().unwrap_or(0);
+    Walk {
+        start: candidates
+            .current
+            .max(learned)
+            .min(candidates.list.len().saturating_sub(1)),
+        list: candidates.list.clone(),
+        generation: candidates.generation,
     }
+}
+
+/// Change the list a walk started on — or nothing, once it was re-derived.
+fn learn(generation: u64, change: impl FnOnce(&mut Candidates)) {
+    if let Ok(mut guard) = state().lock()
+        && let Some(candidates) = guard.as_mut().filter(|c| c.generation == generation)
+    {
+        change(candidates);
+    }
+}
+
+/// Route `at` failed for `host`: the host starts past it from now on, and
+/// everyone does when the route itself is dead. `max`, not `+= 1`: two
+/// requests failing on one route at once move one step, not two (083 W13).
+fn step_past(generation: u64, host: &str, at: usize, route_is_dead: bool) {
+    learn(generation, |candidates| {
+        let next = at + 1;
+        if next >= candidates.list.len() {
+            return;
+        }
+        let learned = candidates.hosts.entry(host.to_owned()).or_insert(next);
+        *learned = (*learned).max(next);
+        if route_is_dead {
+            candidates.current = candidates.current.max(next);
+        }
+    });
+}
+
+/// Every route from the walk's start failed for `host`. The host forgets
+/// what it learned, so its next request starts where everyone does. If
+/// everyone's route had itself moved on, this is the dead end the list is
+/// dropped for: the next request re-derives it, and a proxy that came back
+/// is tried again.
+fn exhausted(generation: u64, host: &str) {
+    let Ok(mut guard) = state().lock() else {
+        return;
+    };
+    match guard.as_mut() {
+        Some(candidates) if candidates.generation == generation => {
+            if candidates.current > 0 {
+                *guard = None;
+            } else {
+                candidates.hosts.remove(host);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// A route every host would fail on: the proxy would not take the
+/// connection. Anything else — a timeout, a proxy that took the request and
+/// could not reach this host, a reset, a TLS failure — may be about the host
+/// alone (a dead dApp, a black-holed node, a bad certificate), and moving
+/// everyone off a working proxy for it is the 083 W13 failure.
+fn route_is_dead(candidate: &Candidate, error: &ureq::Error) -> bool {
+    candidate.proxy().is_some()
+        && matches!(error, ureq::Error::Io(io) if io.kind() == std::io::ErrorKind::ConnectionRefused)
 }
 
 /// The proxy to configure on an agent right now, or `None` for direct.
@@ -244,7 +354,7 @@ pub fn system_proxy() -> Option<Proxy> {
 /// A transport failure, after every candidate was tried.
 #[derive(Debug)]
 pub struct Transport {
-    /// The last candidate's error, verbatim.
+    /// The most telling of the routes' errors, verbatim (see [`Failure`]).
     pub error: ureq::Error,
     /// Every route refused inside this machine: the proxies would not take
     /// the connection and a direct attempt could not even resolve or route
@@ -299,45 +409,75 @@ fn resolver_said_no(message: &str) -> bool {
         || message.contains("No address associated with hostname")
 }
 
-/// Run one request over the candidate chain.
-///
-/// `call` is invoked with an agent for the current candidate; a transport
-/// failure advances to the next candidate and calls it again, once per
-/// candidate. The first `Ok` — or the first non-transport `Err`, which is the
-/// server talking — is returned as-is. Loopback targets never take a proxy
-/// (see [`agent_for`]); callers with such a url should use that instead.
-pub fn with_candidates<T>(
-    timeout: Duration,
-    mut call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
-) -> Result<T, Transport> {
-    loop {
-        let candidate = current();
-        let agent = agent_over(candidate.proxy(), timeout);
-        match call(&agent) {
-            Ok(value) => return Ok(value),
-            Err(error) if is_transport(&error) => {
-                let was_direct = candidate.proxy().is_none();
-                if advance() {
-                    continue;
-                }
-                return Err(Transport {
-                    local: was_direct && failed_inside_this_machine(&error),
-                    error,
-                });
-            }
-            Err(error) => {
-                return Err(Transport {
-                    error,
-                    local: false,
-                });
-            }
+/// One route's failure, kept while the walk goes on.
+struct Failure {
+    error: ureq::Error,
+    direct: bool,
+    /// The proxy would not take the connection ([`route_is_dead`]).
+    route_is_dead: bool,
+}
+
+impl Failure {
+    /// How much this failure says about the far end, for choosing the one a
+    /// caller hears when every route failed (083 W13). Only the last route's
+    /// error used to be kept, so a sponsorship that timed out through the
+    /// proxy — and may have been paid — read as `network_error` because
+    /// Direct then failed a lookup.
+    ///
+    /// 2: a timeout — the request may have arrived, the one fact a caller
+    /// must not lose. 1: the far end, or a proxy on its behalf, answered with
+    /// a failure. 0: it never left this machine (a proxy that refused, a
+    /// name nothing resolved) — says nothing about the host.
+    fn weight(&self) -> u8 {
+        if matches!(self.error, ureq::Error::Timeout(_)) {
+            2
+        } else if self.route_is_dead || failed_inside_this_machine(&self.error) {
+            0
+        } else {
+            1
+        }
+    }
+
+    /// The earlier failure stands unless the later one says more — first
+    /// wins among equals, so the route the person's setup intends speaks.
+    /// Among failures that never left the machine the LAST stands, so
+    /// `local` is still judged on the direct attempt, as before 083.
+    fn or_more_telling(kept: Option<Self>, new: Self) -> Self {
+        match kept {
+            Some(kept) if kept.weight() > 0 && kept.weight() >= new.weight() => kept,
+            _ => new,
+        }
+    }
+
+    fn into_transport(self) -> Transport {
+        Transport {
+            local: self.direct && failed_inside_this_machine(&self.error),
+            error: self.error,
         }
     }
 }
 
+/// Run one request over the candidate chain.
+///
+/// `call` is invoked with an agent for the first candidate worth trying; a
+/// transport failure moves to the next candidate and calls it again, once
+/// per candidate. The first `Ok` — or the first non-transport `Err`, which
+/// is the server talking — is returned as-is. Loopback targets never take a
+/// proxy (see [`agent_for`]); callers with such a url should use that
+/// instead. A caller that names no url shares one entry of what is learned
+/// with every other such caller (083 W13; [`with_candidates_for`] learns per
+/// host).
+pub fn with_candidates<T>(
+    timeout: Duration,
+    call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
+) -> Result<T, Transport> {
+    walk("", timeout, call)
+}
+
 /// [`with_candidates`] for ONE url: a loopback target never takes a proxy
 /// (the [`agent_for`] rule), so it runs direct and once; everything else
-/// walks the chain. The pool's per-endpoint calls go through here (T028).
+/// walks the chain, from the route that last worked for its host. The
+/// pool's per-endpoint calls go through here (T028).
 pub fn with_candidates_for<T>(
     url: &str,
     timeout: Duration,
@@ -349,7 +489,56 @@ pub fn with_candidates_for<T>(
             error,
         });
     }
-    with_candidates(timeout, call)
+    walk(&host_of(url).to_ascii_lowercase(), timeout, call)
+}
+
+/// The walk behind both: from the later of everyone's route and `host`'s,
+/// on this request's own copy of the list (083 W13).
+fn walk<T>(
+    host: &str,
+    timeout: Duration,
+    mut call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
+) -> Result<T, Transport> {
+    let Walk {
+        list,
+        start,
+        generation,
+    } = begin(host);
+    let mut kept = None;
+    for (at, candidate) in list.iter().enumerate().skip(start) {
+        match call(&agent_over(candidate.proxy(), timeout)) {
+            Ok(value) => {
+                learn(generation, |candidates| {
+                    candidates.hosts.insert(host.to_owned(), at);
+                });
+                return Ok(value);
+            }
+            Err(error) if is_transport(&error) => {
+                let failure = Failure {
+                    route_is_dead: route_is_dead(candidate, &error),
+                    direct: candidate.proxy().is_none(),
+                    error,
+                };
+                step_past(generation, host, at, failure.route_is_dead);
+                kept = Some(Failure::or_more_telling(kept.take(), failure));
+            }
+            Err(error) => {
+                return Err(Transport {
+                    error,
+                    local: false,
+                });
+            }
+        }
+    }
+    exhausted(generation, host);
+    Err(kept.map_or(
+        // Not reached: the list always holds Direct and `start` is on it.
+        Transport {
+            error: ureq::Error::ConnectionFailed,
+            local: false,
+        },
+        Failure::into_transport,
+    ))
 }
 
 /// One agent per way out and timeout, kept for the life of the process.
@@ -731,13 +920,254 @@ mod candidates {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Ok(mut state) = state().lock() {
-            *state = Some(Candidates {
-                list,
-                current: 0,
-                derived_at: Instant::now(),
-            });
+            *state = Some(Candidates::of(list));
         }
         guard
+    }
+
+    /// Leave no test-shaped state behind for the next test.
+    fn uninstall() {
+        if let Ok(mut guard) = state().lock() {
+            *guard = None;
+        }
+    }
+
+    /// A server on this machine that answers `ok` to `requests` requests.
+    fn serve(requests: usize) -> String {
+        let server = std::net::TcpListener::bind("127.0.0.1:0").expect("loopback");
+        let port = server.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in server.incoming().take(requests) {
+                use std::io::{Read as _, Write as _};
+                let mut stream = stream.unwrap();
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok",
+                );
+            }
+        });
+        format!("http://127.0.0.1:{port}/")
+    }
+
+    /// A proxy that takes the connection and never says a word: what a
+    /// black-holed host looks like from behind v2rayN. Kept alive by the
+    /// caller; nothing accepts, the backlog completes the handshake.
+    fn black_hole() -> (std::net::TcpListener, Proxy) {
+        let hole = std::net::TcpListener::bind("127.0.0.1:0").expect("loopback");
+        let port = hole.local_addr().unwrap().port();
+        let proxy = Proxy::new(&format!("http://127.0.0.1:{port}")).unwrap();
+        (hole, proxy)
+    }
+
+    /// One GET over `host`'s walk, and how many routes it took.
+    fn get(host: &str, url: &str, timeout: Duration) -> (Result<String, Transport>, usize) {
+        let mut tries = 0;
+        let answer = walk(host, timeout, |agent| {
+            tries += 1;
+            agent.get(url).call()?.body_mut().read_to_string()
+        });
+        (answer, tries)
+    }
+
+    fn learned(host: &str) -> Option<usize> {
+        let guard = state().lock().unwrap();
+        guard.as_ref().and_then(|c| c.hosts.get(host).copied())
+    }
+
+    fn everyone() -> Option<usize> {
+        state().lock().unwrap().as_ref().map(|c| c.current)
+    }
+
+    /// Spec 083 W13: a node black-holed behind the proxy timed out once, and
+    /// the wallet's every other host went Direct for a minute. A timeout is
+    /// about its host: the next host still starts at the proxy.
+    #[test]
+    fn a_timeout_moves_only_its_host() {
+        let url = serve(2);
+        let (_hole, proxy) = black_hole();
+        let _serial = install(vec![Candidate::Env(proxy), Candidate::Direct]);
+        let timeout = Duration::from_millis(300);
+
+        let (answer, tries) = get("slow.example", &url, timeout);
+        assert_eq!(answer.expect("direct after the proxy timed out"), "ok");
+        assert_eq!(tries, 2);
+        assert_eq!(everyone(), Some(0), "everyone else keeps the proxy");
+        assert_eq!(learned("slow.example"), Some(1));
+
+        let (answer, tries) = get("other.example", &url, timeout);
+        assert_eq!(answer.expect("direct after the proxy timed out"), "ok");
+        assert_eq!(tries, 2, "another host still started at the proxy");
+        uninstall();
+    }
+
+    /// The route that carried a host is where its next request starts: one
+    /// slow proxy attempt per host per derivation, not one per request.
+    #[test]
+    fn a_success_pins_the_route_that_worked() {
+        let url = serve(2);
+        let (_hole, proxy) = black_hole();
+        let _serial = install(vec![Candidate::Env(proxy), Candidate::Direct]);
+        let timeout = Duration::from_millis(300);
+
+        let (answer, tries) = get("pinned.example", &url, timeout);
+        assert_eq!(answer.expect("direct after the proxy timed out"), "ok");
+        assert_eq!(tries, 2);
+
+        let started = Instant::now();
+        let (answer, tries) = get("pinned.example", &url, timeout);
+        assert_eq!(answer.expect("direct, first"), "ok");
+        assert_eq!(tries, 1, "the host went straight to the route that worked");
+        assert!(started.elapsed() < timeout, "no proxy timeout paid again");
+        assert_eq!(learned("pinned.example"), Some(1));
+        uninstall();
+    }
+
+    /// Two requests refused by a dead proxy at the same moment. The shared
+    /// index used to move twice — past Direct, off the end — and the second
+    /// request failed without Direct ever being tried. Each request walks
+    /// its own copy now, and a route moves everyone one step, not two.
+    #[test]
+    fn concurrent_failures_still_try_every_route() {
+        let url = serve(2);
+        let dead = Proxy::new("http://127.0.0.1:1").unwrap();
+        let _serial = install(vec![Candidate::Env(dead), Candidate::Direct]);
+        let together = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let requests: Vec<_> = ["a.example", "b.example"]
+            .into_iter()
+            .map(|host| {
+                let (url, together) = (url.clone(), together.clone());
+                std::thread::spawn(move || {
+                    let mut tries = 0;
+                    let answer = walk(host, Duration::from_secs(5), |agent| {
+                        tries += 1;
+                        if tries == 1 {
+                            // Both on the proxy before either fails.
+                            together.wait();
+                        }
+                        agent.get(&url).call()?.body_mut().read_to_string()
+                    });
+                    (answer.map_err(|failure| failure.error.to_string()), tries)
+                })
+            })
+            .collect();
+        for request in requests {
+            let (answer, tries) = request.join().unwrap();
+            assert_eq!(answer.expect("direct after the refusal"), "ok");
+            assert_eq!(tries, 2, "the proxy, then Direct — none skipped");
+        }
+        assert_eq!(everyone(), Some(1), "a refusing proxy moves everyone, once");
+        uninstall();
+    }
+
+    /// When every route failed, the caller hears the failure that says most
+    /// about the far end — not simply the last route's.
+    #[test]
+    fn the_most_telling_failure_is_reported() {
+        let through = Candidate::Env(Proxy::new("http://127.0.0.1:10808").unwrap());
+        let proxy = |error| Failure {
+            route_is_dead: route_is_dead(&through, &error),
+            direct: false,
+            error,
+        };
+        let direct = |error| Failure {
+            route_is_dead: false,
+            direct: true,
+            error,
+        };
+        let refused = || ureq::Error::Io(std::io::ErrorKind::ConnectionRefused.into());
+        let pick = |first, then| Failure::or_more_telling(Some(first), then).into_transport();
+
+        // The sponsorship case: timed out through the proxy — it may have
+        // been paid — then Direct could not look the name up.
+        let heard = pick(
+            proxy(ureq::Error::Timeout(ureq::Timeout::Global)),
+            direct(ureq::Error::HostNotFound),
+        );
+        assert!(matches!(heard.error, ureq::Error::Timeout(_)));
+        assert!(!heard.local, "a route existed and the far end was silent");
+
+        // Nothing left the machine: the direct attempt speaks, and says so.
+        let heard = pick(proxy(refused()), direct(ureq::Error::HostNotFound));
+        assert!(matches!(heard.error, ureq::Error::HostNotFound));
+        assert!(heard.local);
+
+        // Two answers from beyond the machine: the intended route's stands.
+        let heard = pick(
+            proxy(ureq::Error::ConnectProxyFailed("502".to_owned())),
+            direct(ureq::Error::Io(std::io::ErrorKind::ConnectionReset.into())),
+        );
+        assert!(matches!(heard.error, ureq::Error::ConnectProxyFailed(_)));
+
+        // ...unless a later route timed out: that request may have arrived.
+        let heard = pick(
+            proxy(ureq::Error::ConnectProxyFailed("502".to_owned())),
+            direct(ureq::Error::Timeout(ureq::Timeout::Global)),
+        );
+        assert!(matches!(heard.error, ureq::Error::Timeout(_)));
+    }
+
+    /// The list is re-derived on its schedule, and what hosts learned goes
+    /// with it; a request that started on the old list writes nothing into
+    /// the new one. At a dead end the list is dropped only when everyone's
+    /// route had moved — a single host's dead end forgets that host alone.
+    #[test]
+    fn the_list_is_re_derived_and_learning_starts_over() {
+        let dead = Proxy::new("http://127.0.0.1:1").unwrap();
+        let _serial = install(vec![Candidate::Env(dead), Candidate::Direct]);
+        let old = state().lock().unwrap().as_ref().unwrap().generation;
+        step_past(old, "slow.example", 0, false);
+        assert_eq!(learned("slow.example"), Some(1));
+        assert_eq!(everyone(), Some(0));
+
+        // A host's own dead end forgets that host; the list stands.
+        exhausted(old, "slow.example");
+        assert_eq!(learned("slow.example"), None);
+        assert!(state().lock().unwrap().is_some());
+
+        // Everyone's route moved, then a walk ran out: the list goes.
+        step_past(old, "slow.example", 0, true);
+        assert_eq!(everyone(), Some(1));
+        exhausted(old, "slow.example");
+        assert!(state().lock().unwrap().is_none());
+
+        // On its schedule: a minute-old list is derived afresh.
+        let mut minute_old = Candidates::of(vec![Candidate::Direct]);
+        minute_old.derived_at = Instant::now()
+            .checked_sub(REDERIVE_AFTER)
+            .expect("a machine up longer than a minute");
+        minute_old.hosts.insert("pinned.example".to_owned(), 0);
+        let stale = minute_old.generation;
+        *state().lock().unwrap() = Some(minute_old);
+        let _ = current();
+        let (generation, forgot, current, ends_direct) = {
+            let guard = state().lock().unwrap();
+            let fresh = guard.as_ref().unwrap();
+            (
+                fresh.generation,
+                fresh.hosts.is_empty(),
+                fresh.current,
+                matches!(fresh.list.last(), Some(Candidate::Direct)),
+            )
+        };
+        assert_ne!(generation, stale, "derived afresh");
+        assert!(forgot, "nothing learned survives");
+        assert_eq!(current, 0);
+        assert!(ends_direct, "Direct is always last");
+
+        // What the old list's requests learn now lands nowhere.
+        learn(stale, |candidates| {
+            candidates.hosts.insert("slow.example".to_owned(), 1);
+        });
+        step_past(stale, "slow.example", 0, true);
+        assert_eq!(learned("slow.example"), None);
+        assert_eq!(everyone(), Some(0));
+        exhausted(stale, "slow.example");
+        assert!(
+            state().lock().unwrap().is_some(),
+            "not dropped by an old walk"
+        );
+        uninstall();
     }
 
     /// The dictionary captured on the founder's Mac on 2026-09-11 — the one
