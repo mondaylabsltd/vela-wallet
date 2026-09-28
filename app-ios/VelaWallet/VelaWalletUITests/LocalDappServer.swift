@@ -85,3 +85,71 @@ final class LocalDappServer {
         listener.cancel()
     }
 }
+
+/// A site that is there and never answers (spec 082 T122, RH4): a loopback
+/// listener that accepts every connection, reads what it is sent, and says
+/// nothing back — ever. The stall the probe never covered, with no proxy and
+/// nothing outside this test runner: WebKit connects, sends its request, and
+/// waits. Only the browser's own watchdog can end that.
+final class SilentListener {
+
+    private let listener: NWListener
+    private let queue = DispatchQueue(label: "vela.silent")
+    /// Held so a connection is never torn down by being forgotten — a close
+    /// would be an answer.
+    private var connections: [NWConnection] = []
+    private let lock = NSLock()
+    /// The port the system gave it. Not a fixed number: loopback is shared
+    /// with the Mac on a simulator, and a fixed port another suite (or a
+    /// device pass's own test dApp) already serves would answer for it.
+    private(set) var port: UInt16 = 0
+    var url: String { "http://127.0.0.1:\(port)/" }
+
+    init() throws {
+        let parameters = NWParameters.tcp
+        parameters.allowLocalEndpointReuse = false
+        listener = try NWListener(using: parameters, on: .any)
+    }
+
+    /// Starts listening and waits (up to 5 s) for the port it was given.
+    @discardableResult
+    func start() -> Bool {
+        let ready = DispatchSemaphore(value: 0)
+        listener.stateUpdateHandler = { state in
+            if case .ready = state { ready.signal() }
+            if case .failed = state { ready.signal() }
+        }
+        listener.newConnectionHandler = { [weak self] connection in
+            self?.hold(connection)
+            connection.start(queue: .global())
+            self?.drain(connection)
+        }
+        listener.start(queue: queue)
+        _ = ready.wait(timeout: .now() + 5)
+        port = listener.port?.rawValue ?? 0
+        return port != 0
+    }
+
+    /// Read and discard, forever — the request arrives, nothing leaves.
+    private func drain(_ connection: NWConnection) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] _, _, complete, error in
+            guard !complete, error == nil else { return }
+            self?.drain(connection)
+        }
+    }
+
+    private func hold(_ connection: NWConnection) {
+        lock.lock()
+        connections.append(connection)
+        lock.unlock()
+    }
+
+    func stop() {
+        lock.lock()
+        let held = connections
+        connections.removeAll()
+        lock.unlock()
+        held.forEach { $0.cancel() }
+        listener.cancel()
+    }
+}
