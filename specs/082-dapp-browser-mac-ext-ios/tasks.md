@@ -377,12 +377,12 @@ Chains:
 - `page.rs`: T058 → T059 → T060 → T062 → T063 → T064 → T065 → T066 (also after T051) → T068 → T069 (also after T050) → T073 (also after T072); T058 → T061 → T067;
 - T074 (gates) last.
 
-- [ ] T048 [P] [US8] New `D/diag.rs` (RD12), registered in `D/main.rs`.
+- [x] T048 [P] [US8] New `D/diag.rs` (RD12), registered in `D/main.rs`.
   - `vlog!(area, …)` prints `[vela-wallet] HH:MM:SS.mmm area: …`, using libc `localtime_r`.
   - Redaction helpers: `host_of(url)` (host[:port] only; RPC URLs carry API keys, `D/executor/pool.rs:733-735`; the Trusted Signer fragment carries the request) and `short(hash)`.
   - Each later desktop task adds its own contract §15 lines through it.
   - Proof: in-crate tests: `host_of` strips path, query, fragment and userinfo; `/v3/<key>` never survives; the time format.
-- [ ] T049 [P] [US1] Update `D/executor/*`, `D/signing/*`, `D/wallet/*` and `D/gallery.rs` for the new core types so the crate compiles against the Phase 2 core (the desktop's wire mirror); proof: `cargo test` in `app-desktop/vela-wallet`.
+- [x] T049 [P] [US1] Update `D/executor/*`, `D/signing/*`, `D/wallet/*` and `D/gallery.rs` for the new core types so the crate compiles against the Phase 2 core (the desktop's wire mirror); proof: `cargo test` in `app-desktop/vela-wallet`.
   - Exhaustive matches for:
     - `TrackStatus::NotSent`, `TrackOutcome::MaybeSent`, `TrackOperation::{HoldingsMoved, FindOpEvent}`;
     - `SignSubmitOutcome::AskerGone`, `ClearSurface::PlainSend`, `SendReceiptStatus::{MaybeSent, NotSent}`;
@@ -390,7 +390,7 @@ Chains:
     - the new `FeedItem` / `SignView` fields.
   - Files: `D/executor/{tracker,sign_request,send,pool,clear_signing,activity_feed}.rs`, `D/signing/*`, `D/wallet/*`, and the fixture/gallery constructors (`D/signing/fixtures.rs`, `D/wallet/fixtures.rs`, `D/gallery.rs`). This is the desktop's wire mirror.
   - Proof: `cd app-desktop/vela-wallet && cargo test && cargo test --features dev-fixtures` compile and pass.
-- [ ] T050 [US1] Submit via the core `submit_step` in `D/executor/relay.rs`, `D/executor/user_op.rs` and `D/executor/pool.rs` (RA1, RA5, RA10, ruling 8); proof: in-crate fake-relay tests; (after T048 and T049).
+- [x] T050 [US1] Submit via the core `submit_step` in `D/executor/relay.rs`, `D/executor/user_op.rs` and `D/executor/pool.rs` (RA1, RA5, RA10, ruling 8); proof: in-crate fake-relay tests; (after T048 and T049).
   - Replace the busy loop in `D/executor/relay.rs:595-616`, and the "relay unreachable, try again" mapping in `D/executor/user_op.rs:726-729`.
   - Compute `user_op_hash` before the first POST, and read `eth_blockNumber` once for `submit_block` (best effort).
   - Map ureq errors to `NotConnected` in `D/executor/pool.rs` (HostNotFound, ConnectionFailed, Timeout(Resolve|Connect), Io ConnectionRefused / AddrNotAvailable / HostUnreachable / NetworkUnreachable, TLS handshake, proxy CONNECT failure) and OR `maybe_delivered`.
@@ -401,22 +401,22 @@ Chains:
     - a fake relay: mute → MaybeSent with the local hash and the nonce cache untouched;
     - refused → NotSent;
     - `[existingHash:]` → Accepted.
-- [ ] T051 [US1] One answer after a lost reply, and phase events, in `D/executor/sign_request.rs` (RA2, RA9, RA12, RB2, ruling 9); proof: in-crate answer tests; (after T050).
+- [x] T051 [US1] One answer after a lost reply, and phase events, in `D/executor/sign_request.rs` (RA2, RA9, RA12, RB2, ruling 9); proof: in-crate answer tests; (after T050).
   - MaybeSent → `OpSubmitted{maybe_sent: true, submit_block}` and the same receipt wait.
   - The wait comes from `dapp_receipt_wait_ms`, replacing `RECEIPT_BUDGET` 90 s (`D/executor/sign_request.rs:156, 506`); one Ok answer (tx hash in the window, else the op hash).
   - A receipt that reverted in the window → its tx hash.
   - Dispatch `CeremonyStarted` / `CeremonyDone` around the Touch ID and Trusted Signer ceremonies.
   - Drop the result of an attempt the core aborted after `TransportDropped`.
   - Proof: in-crate tests: a mute relay → exactly one `Ok(op hash)`; a reverted receipt → `Ok(tx hash)`; the ceremony events are ordered around the passkey call; an aborted attempt never reaches the relay.
-- [ ] T052 [US7] Relay status in `D/executor/relay.rs` (RA7, G13); proof: `live_an_unknown_hash_is_pending_not_unreachable`; (after T050).
+- [x] T052 [US7] Relay status in `D/executor/relay.rs` (RA7, G13); proof: `live_an_unknown_hash_is_pending_not_unreachable`; (after T050).
   - `USER_OP_STATUS_METHOD` + `parse_user_op_status` replace `D/executor/relay.rs:727-759`; delete the local parser.
   - `TrackShellResult::Status` carries `tx_hash`; log `tracker: op=<short> status=…`.
   - Proof: the live test `live_an_unknown_hash_is_pending_not_unreachable` (`relay.rs:1260-1262`) now fails on None, and passes with `-- --ignored` against the relay (`not_found`, not -32601).
-- [ ] T053 [US7] `D/executor/tracker.rs` runs `FindOpEvent` (ruling 8) and `HoldingsMoved` (RE8); proof: in-crate fake-pool tests; (after T049).
+- [x] T053 [US7] `D/executor/tracker.rs` runs `FindOpEvent` (ruling 8) and `HoldingsMoved` (RE8); proof: in-crate fake-pool tests; (after T049).
   - FindOpEvent: `eth_getLogs` on the EntryPoint (and `eth_blockNumber` for the head) through the pool, answered as `OpEvent{logs_json, error_json, head_block}` with the pool's answer as it came; the core judges a range error (T180).
   - HoldingsMoved → `balance_dashboard::invalidate()` (`D/executor/balance_dashboard.rs`), then `Notified`.
   - Proof: in-crate tests with a fake pool: found success, found failure, a range error, a head-only query; HoldingsMoved invalidates once.
-- [ ] T054 [US2] Signing sheet words and endings in `D/signing/status.rs`, `D/signing/live.rs` and `D/signing/mod.rs` (RA8, RA9, RA10, G22); proof: `live.rs` mapping tests and a resolve test; (after T051).
+- [x] T054 [US2] Signing sheet words and endings in `D/signing/status.rs`, `D/signing/live.rs` and `D/signing/mod.rs` (RA8, RA9, RA10, G22); proof: `live.rs` mapping tests and a resolve test; (after T051).
   - `D/signing/status.rs:91-118, 353-374` derives through `ending_of` / `ending_state`; delete the local derivation (one of the three copies).
   - `D/signing/live.rs`: stage words come from `SignView.phase`:
     - Preparing → `send.txPreparing`;
@@ -431,11 +431,11 @@ Chains:
     - a resolve-without-echo test (the `signing/mod.rs:560-590` pattern);
     - a `live.rs` mapping test for every `SignEndingState`;
     - "Waiting for biometric" never shows while `phase == Preparing`.
-- [ ] T055 [US7] The wallet's own Send in `D/executor/send.rs` and `D/wallet/money.rs` (RA4, RA10); proof: in-crate receipt mapping tests; (after T050).
+- [x] T055 [US7] The wallet's own Send in `D/executor/send.rs` and `D/wallet/money.rs` (RA4, RA10); proof: in-crate receipt mapping tests; (after T050).
   - `D/executor/send.rs` submits through the same `submit_step` path and reports `Submitted{maybe_sent, submit_block}`.
   - `D/wallet/money.rs` draws `SendReceiptStatus::MaybeSent` (the maybeSent caption, no success haptic) and `NotSent` via `Failed{not_sent}`, never "fees stayed above…" (`money.rs:935`).
   - Proof: in-crate receipt mapping tests.
-- [ ] T056 [US4] Plain send in `D/signing/live.rs` and `D/wallet/signing_host.rs` (RC1, RC5, RC6, G14); proof: `live.rs` tests; (after T054).
+- [x] T056 [US4] Plain send in `D/signing/live.rs` and `D/wallet/signing_host.rs` (RC1, RC5, RC6, G14); proof: `live.rs` tests; (after T054).
   - `D/signing/live.rs:231, 1044-1067` draws `ClearSurface::PlainSend`: intent send, an amount card with `network_admin::builtin_native_symbol`, the recipient party, and 确认发送, or a neutral 确认 when `no_value`. The blind rung no longer shows for empty calldata.
   - `D/wallet/signing_host.rs:1025-1029` passes a present non-string `value` as text.
   - Proof: `live.rs` tests (the `:1621-1630` pattern):
@@ -533,7 +533,7 @@ Chains:
   - Home Activity: rows; skeletons while `BalanceView.balance_unknown`; else `empty_state(Inbox, home.emptyNoActivity, home.emptySubtitle)`. Under a sidebar chain filter, the core's `home_empty_key` (no caption) (`D/wallet/page.rs`).
   - History: `history_empty_key`. Delete the desktop's own branch (`D/flows/live.rs:219-222`) and update the tests at `:4945-4946`.
   - Proof: in-crate tests for the three states and both filters.
-- [ ] T181 [US7] A may-have-been-sent op survives a relaunch on the desktop, in `D/executor/sign_request.rs` (`persist_record`), `D/executor/send.rs` (`PersistTxRecords`) and `D/executor/tracker.rs` (`pending_records`) (RA3, RA4, rulings 1 and 8, US3 AS2); proof: an in-crate `pending_records` round-trip test; (after T051, T053 and T055).
+- [x] T181 [US7] A may-have-been-sent op survives a relaunch on the desktop, in `D/executor/sign_request.rs` (`persist_record`), `D/executor/send.rs` (`PersistTxRecords`) and `D/executor/tracker.rs` (`pending_records`) (RA3, RA4, rulings 1 and 8, US3 AS2); proof: an in-crate `pending_records` round-trip test; (after T051, T053 and T055).
   - Why: each shell maps a stored row into `TrackPendingRecord` by hand with only id, hash, chain and time (`tracker.rs:82-110`). After a relaunch the entry would lose `maybe_sent` (no MaybeSent outcome, no NotSent end, no FindOpEvent) and `submit_block`, so ruling 1's "track it to its end" would stop at the first restart.
   - The stored row gains `maybeSent` and `submitBlock`, written from `SignRecord` / `SendTxRecord`. `pending_records` puts them into `TrackPendingRecord`, and the handoff into `tx_tracker` `Event::Submitted` (from `SignTrackerHandoff` and `SendOperation::TrackSubmitted`; grep `Event::Submitted` under `D/`) carries both.
   - Proof: a row written for a MaybeSent op reads back as `TrackPendingRecord{maybe_sent: true, submit_block: Some(n)}`; an old row without the keys reads back as `false` / `None`.
