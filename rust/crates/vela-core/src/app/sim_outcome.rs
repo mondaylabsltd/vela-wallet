@@ -9,7 +9,8 @@
 //! ```text
 //! pool gave up                           ─► Unreachable ─► Caution  simUnavailableWarning
 //! JSON-RPC error, or no call results     ─► NotOffered  ─► Caution  simUnavailableWarning
-//! any call with status 0x0 (or an error) ─► Reverts     ─► Danger   simWillFailReason | simWillFail
+//! any call with status 0x0 or an error   ─► Reverts     ─► Danger   simWillFailReason | simWillFail
+//! a status neither 0 nor 1 (no error)    ─► NotOffered  ─► Caution  simUnavailableWarning
 //! otherwise                              ─► Deltas      ─► none (token_trust draws the balances)
 //! ```
 //!
@@ -32,7 +33,10 @@
 //! loses the characters no name may carry (controls, bidi overrides, zero
 //! width and the other invisible formatting codepoints), every run of
 //! whitespace becomes one space, and it is capped at
-//! [`REVERT_REASON_MAX_CHARS`] characters.
+//! [`REVERT_REASON_MAX_CHARS`] characters. A reason that still carries `$t(`
+//! is dropped whole: the corpus engine expands that reference after
+//! `{{reason}}` is filled in, so it would print a wallet sentence of the
+//! contract's choosing inside the danger line.
 //!
 //! ## What it must never do
 //!
@@ -57,6 +61,11 @@ pub const ERROR_STRING_SELECTOR: [u8; 4] = [0x08, 0xc3, 0x79, 0xa0];
 
 /// The longest revert reason a sheet prints, in characters (research RG8).
 pub const REVERT_REASON_MAX_CHARS: usize = 64;
+
+/// What the corpus engine reads as a reference to another sentence
+/// (`i18n::interpolate::find_nest`). A revert reason containing it is no
+/// reason (see [`revert_reason`]).
+const NESTING_OPENER: &str = "$t(";
 
 /// The corpus key for a revert with a readable reason (`{{reason}}`).
 pub const KEY_WILL_FAIL_REASON: &str = "componentsUi.signing.simWillFailReason";
@@ -184,11 +193,23 @@ pub fn classify(reply: SimReply, user: &str) -> SimOutcome {
     }
     // The calls run in order inside one simulated block, so the FIRST failure
     // is the one the person needs to hear about; a later call's reason would
-    // describe a world the first failure already ended.
-    if let Some(failed) = calls.iter().find(|call| !succeeded(call)) {
+    // describe a world the first failure already ended. A failure the node
+    // reported speaks even beside a call whose status nobody can read.
+    if let Some(failed) = calls
+        .iter()
+        .find(|call| call_status(call) == CallStatus::Failed)
+    {
         return SimOutcome::Reverts {
             reason: revert_reason(failed),
         };
+    }
+    // A status that is neither 0 nor 1 is an answer nobody can read: "could
+    // not check", never a danger and never "nothing moves".
+    if calls
+        .iter()
+        .any(|call| call_status(call) == CallStatus::Unreadable)
+    {
+        return SimOutcome::NotOffered;
     }
     let logs: Vec<&Value> = calls
         .iter()
@@ -226,14 +247,36 @@ pub fn notice(outcome: &SimOutcome) -> Option<SimNotice> {
     }
 }
 
-/// A call counts as success only when it says so. A present `status` decides
-/// (`1` succeeded, anything else failed — two spellings are in the wild,
-/// `"0x1"` and a number); a node that omits it is read by its `error`.
-fn succeeded(call: &Value) -> bool {
-    match call.get("status") {
-        Some(Value::String(status)) => quantity(status) == Some(1),
-        Some(Value::Number(status)) => status.as_u64() == Some(1),
-        _ => call.get("error").is_none_or(Value::is_null),
+/// What one call result says about itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CallStatus {
+    Succeeded,
+    Failed,
+    /// A status that is neither 0 nor 1, and no error beside it.
+    Unreadable,
+}
+
+/// "Any call with status 0x0 or an error" fails (RG6): an error is never
+/// outvoted by a success status, so a contradictory answer cannot hide a
+/// revert. Otherwise the status decides — `1` succeeded, `0` failed, two
+/// spellings in the wild (`"0x1"` and a number) — and a call with neither a
+/// status nor an error ran. Any other status is unreadable (review of 082 G:
+/// reading it as a revert drew the danger line on a call the node may well
+/// have run).
+fn call_status(call: &Value) -> CallStatus {
+    if call.get("error").is_some_and(|error| !error.is_null()) {
+        return CallStatus::Failed;
+    }
+    let status = match call.get("status") {
+        None | Some(Value::Null) => return CallStatus::Succeeded,
+        Some(Value::String(status)) => quantity(status),
+        Some(Value::Number(status)) => status.as_u64(),
+        Some(_) => None,
+    };
+    match status {
+        Some(1) => CallStatus::Succeeded,
+        Some(0) => CallStatus::Failed,
+        _ => CallStatus::Unreadable,
     }
 }
 
@@ -258,7 +301,8 @@ fn quantity(text: &str) -> Option<u64> {
 /// revert bytes go), and decodes only `Error(string)`
 /// ([`ERROR_STRING_SELECTOR`]). The node's own `error.message` is never used:
 /// it is prose around the same untrusted bytes. The text is sanitised and
-/// capped (see the module doc); a reason that sanitises to nothing is `None`.
+/// capped (see the module doc); a reason that sanitises to nothing, or that
+/// carries a `$t(` sentence reference, is `None`.
 pub fn revert_reason(call: &Value) -> Option<String> {
     let candidates = [
         call.get("returnData").and_then(Value::as_str),
@@ -296,7 +340,8 @@ fn word_as_usize(word: &[u8]) -> Option<usize> {
 
 /// The reason as a sheet may print it: invisible and control characters
 /// dropped, whitespace runs folded to one space, trimmed, at most
-/// [`REVERT_REASON_MAX_CHARS`] characters (a cut one ends in `…`).
+/// [`REVERT_REASON_MAX_CHARS`] characters (a cut one ends in `…`). `None`
+/// when nothing printable is left, or when it carries [`NESTING_OPENER`].
 fn sanitise(raw: &str) -> Option<String> {
     let mut out = String::new();
     let mut space = false;
@@ -316,7 +361,12 @@ fn sanitise(raw: &str) -> Option<String> {
         }
         out.push(c);
     }
-    if out.is_empty() {
+    // The corpus engine expands `$t(key)` in a rendered sentence after
+    // `{{reason}}` is filled in: a reason carrying one would print a wallet
+    // sentence of the contract's choosing inside the danger line. Checked
+    // after the invisible characters are gone, so none of them can hide one.
+    // Such a reason is no reason; the danger stays, in the plain words.
+    if out.is_empty() || out.contains(NESTING_OPENER) {
         return None;
     }
     if out.chars().count() > REVERT_REASON_MAX_CHARS {

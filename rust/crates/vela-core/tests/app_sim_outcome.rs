@@ -307,8 +307,8 @@ fn the_first_failure_gives_the_reason() {
     );
 }
 
-/// Two spellings of a status are in the wild; a status decides over `error`,
-/// and a call with neither ran.
+/// Two spellings of a status are in the wild; a call with neither a status
+/// nor an error ran, and a call with an error failed.
 #[test]
 fn status_spellings_and_the_error_fallback() {
     for call in [
@@ -317,6 +317,7 @@ fn status_spellings_and_the_error_fallback() {
         json!({ "status": "0x01", "logs": [] }),
         json!({ "logs": [] }),
         json!({ "logs": [], "error": null }),
+        json!({ "status": null, "logs": [] }),
     ] {
         assert_eq!(
             classify(result(vec![call.clone()]), ME),
@@ -327,7 +328,7 @@ fn status_spellings_and_the_error_fallback() {
     for call in [
         json!({ "status": 0, "logs": [] }),
         json!({ "status": "0x0", "logs": [] }),
-        json!({ "status": "0x2", "logs": [] }),
+        json!({ "status": "0x00", "logs": [] }),
         json!({ "logs": [], "error": { "code": 3 } }),
     ] {
         assert!(
@@ -338,6 +339,68 @@ fn status_spellings_and_the_error_fallback() {
             "{call}"
         );
     }
+}
+
+/// Review of 082 G: a status nobody can read (not 0, not 1) is "could not
+/// check" — a caution. Read as a revert it drew the danger line on a call the
+/// node may well have run; read as success it said "nothing moves" on an
+/// answer nobody understood.
+#[test]
+fn a_status_nobody_can_read_is_could_not_check() {
+    for call in [
+        json!({ "status": "0x2", "logs": [] }),
+        json!({ "status": "success", "logs": [] }),
+        json!({ "status": "1", "logs": [] }),
+        json!({ "status": 2, "logs": [] }),
+        json!({ "status": 1.5, "logs": [] }),
+        json!({ "status": true, "logs": [] }),
+        json!({ "status": {}, "logs": [] }),
+    ] {
+        let outcome = classify(result(vec![call.clone()]), ME);
+        assert_eq!(outcome, SimOutcome::NotOffered, "{call}");
+        assert_eq!(
+            notice(&outcome).map(|n| (n.risk, n.key)),
+            Some((ClearRisk::Caution, KEY_UNAVAILABLE)),
+            "{call}"
+        );
+    }
+    // A call the node says failed still speaks, whatever else the answer
+    // holds: an unreadable status beside it does not hide the revert.
+    let reply = result(vec![
+        json!({ "status": "weird", "logs": [] }),
+        reverted_call(&error_string("boom")),
+    ]);
+    assert_eq!(
+        classify(reply, ME),
+        SimOutcome::Reverts {
+            reason: Some("boom".to_owned())
+        }
+    );
+    // And an unreadable status WITH an error is a failed call.
+    let call = json!({ "status": "weird", "error": { "code": 3 } });
+    assert_eq!(
+        classify(result(vec![call]), ME),
+        SimOutcome::Reverts { reason: None }
+    );
+}
+
+/// Review of 082 G: "any call with status 0x0 or an error" reverts (RG6) — an
+/// error is never outvoted by a success status, so a contradictory answer
+/// cannot hide a revert behind "nothing moves".
+#[test]
+fn an_error_fails_the_call_whatever_its_status_says() {
+    let call = json!({
+        "status": "0x1",
+        "returnData": error_string("Too little received"),
+        "logs": [transfer(USDC, OTHER, ME, 5)],
+        "error": { "code": 3, "message": "execution reverted" },
+    });
+    assert_eq!(
+        classify(result(vec![call]), ME),
+        SimOutcome::Reverts {
+            reason: Some("Too little received".to_owned())
+        }
+    );
 }
 
 /// Every call ran: the user's moves, and no notice of its own (the balances
@@ -538,6 +601,39 @@ fn a_malformed_error_string_is_no_reason() {
     assert_eq!(revert_reason(&json!({})), None);
 }
 
+/// Review of 082 G: the corpus engine expands `$t(key)` in a rendered
+/// sentence AFTER `{{reason}}` is filled in, so a reason carrying `$t(` would
+/// print a wallet sentence of the contract's choosing inside the danger line
+/// (RG8: the text is the contract's, drawn on a signing sheet). Such a reason
+/// is no reason — the danger stays, in the plain words.
+#[test]
+fn a_reason_that_would_name_a_wallet_sentence_is_no_reason() {
+    for text in [
+        "$t(componentsUi.signing.simUnavailableWarning)",
+        "ok $t(send.title) tail",
+        // No closing parenthesis: a locale's template may supply one.
+        "$t(componentsUi.signing.simUnavailableWarning",
+        // Characters the sanitiser drops must not assemble one either.
+        "$\u{200B}t(componentsUi.signing.simUnavailableWarning)",
+        "$\u{202E}t\u{FEFF}(x)",
+    ] {
+        assert_eq!(reason_of(text), None, "{text:?}");
+        let outcome = classify(result(vec![reverted_call(&error_string(text))]), ME);
+        assert_eq!(outcome, SimOutcome::Reverts { reason: None }, "{text:?}");
+        assert_eq!(
+            notice(&outcome).map(|n| (n.risk, n.key)),
+            Some((ClearRisk::Danger, KEY_WILL_FAIL)),
+            "{text:?}"
+        );
+    }
+    // A dollar sign, a `t` and a parenthesis apart are ordinary text.
+    assert_eq!(
+        reason_of("min $5 (t) per call").as_deref(),
+        Some("min $5 (t) per call")
+    );
+    assert_eq!(reason_of("$ t(x)").as_deref(), Some("$ t(x)"));
+}
+
 // ---------------------------------------------------------------------------
 // The netting (moved from the desktop; vectors from iOS and Android)
 // ---------------------------------------------------------------------------
@@ -683,4 +779,39 @@ fn the_notice_keys_are_in_the_corpus() {
     }
     let template = i18n.t(KEY_WILL_FAIL_REASON, &opts).expect("the sentence");
     assert!(template.contains("{{reason}}"), "{template}");
+}
+
+/// Review of 082 G, end to end: whatever a reverting contract writes, the
+/// drawn line never contains a wallet sentence it did not ask for.
+#[cfg(feature = "i18n-en")]
+#[test]
+fn a_revert_reason_cannot_draw_a_wallet_sentence() {
+    use vela_core::i18n::{Options, Var};
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let unavailable = i18n
+        .t(KEY_UNAVAILABLE, &Options::default())
+        .expect("the caution sentence");
+    let outcome = classify(
+        result(vec![reverted_call(&error_string(&format!(
+            "$t({KEY_UNAVAILABLE})"
+        )))]),
+        ME,
+    );
+    let line = notice(&outcome).expect("a notice");
+    let drawn = match line.reason.as_deref() {
+        Some(reason) => {
+            let vars = [("reason", Var::Str(reason))];
+            i18n.t(
+                line.key,
+                &Options {
+                    vars: &vars,
+                    ..Options::default()
+                },
+            )
+        }
+        None => i18n.t(line.key, &Options::default()),
+    }
+    .expect("the drawn line");
+    assert!(!drawn.contains(&unavailable), "{drawn}");
+    assert_eq!(line.risk, ClearRisk::Danger);
 }
