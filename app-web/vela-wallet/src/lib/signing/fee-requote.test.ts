@@ -11,7 +11,8 @@ import { describe, expect, it } from 'vitest';
 import '$lib/i18n/wasm-init.server';
 import { feeRequoteDelayMs } from '$lib/core/kernels';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
-import { FeeRequoteTimer, heldFeeFailure } from './fee-requote';
+import { FeeRequoteTimer, heldFeeFailure, withLostContext } from './fee-requote';
+import { IDLE_FEE_VIEW } from '$lib/flows/core/fee-quote.svelte';
 
 /** A timer whose clock is the test's: `advance(ms)` fires what is due. */
 function harness() {
@@ -185,5 +186,23 @@ describe('heldFeeFailure — the reason stays put while the sheet asks again', (
 	it('a first measurement with no failure behind it holds nothing', () => {
 		expect(heldFeeFailure(null, BUSY)).toBeNull();
 		expect(heldFeeFailure('quote_unavailable', null)).toBeNull();
+	});
+});
+
+describe('withLostContext — a chain that could not be read is a failure the sheet says and retries', () => {
+	it('an idle view after a lost context reads as the relay/chain out of reach, slide shut', () => {
+		const view = withLostContext(IDLE_FEE_VIEW, true);
+		expect(view.failed).toBe('quote_unavailable');
+		expect(view.confirm_fee_ready).toBe(false);
+		// …which the core's schedule retries, like every other one of its kind.
+		expect(feeRequoteDelayMs(view.failed!, 1)).toBe(3000);
+	});
+
+	it('changes nothing while measuring, over a quote, over a real failure, or with the context in hand', () => {
+		const busy = { ...IDLE_FEE_VIEW, busy: true };
+		expect(withLostContext(busy, true)).toBe(busy);
+		const failed = { ...IDLE_FEE_VIEW, failed: 'missing_public_key' as const };
+		expect(withLostContext(failed, true)).toBe(failed);
+		expect(withLostContext(IDLE_FEE_VIEW, false)).toBe(IDLE_FEE_VIEW);
 	});
 });

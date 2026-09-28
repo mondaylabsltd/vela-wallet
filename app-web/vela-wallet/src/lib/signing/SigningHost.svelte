@@ -43,7 +43,7 @@
 	import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
 	import { explorerBaseURL } from '$lib/services/networks';
 	import { feeRequoteDelayMs, typicalInclusionSeconds } from '$lib/core/kernels';
-	import { FeeRequoteTimer, heldFeeFailure } from '$lib/signing/fee-requote';
+	import { FeeRequoteTimer, heldFeeFailure, withLostContext } from '$lib/signing/fee-requote';
 	import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
@@ -299,12 +299,20 @@
 	 * been approved or answered. On the Xiaomi the row said "点击重试" with the
 	 * relay down and stayed that way after it came back.
 	 */
+	/**
+	 * The fee in force as this sheet reads it — a quote the chain could not
+	 * even be asked about (`contextLost`) is a recoverable failure here, said
+	 * and retried, never an idle row over an open slide (`withLostContext`).
+	 */
+	const feeShown = $derived(
+		withLostContext(speedControl.feeInForce, speedControl.feeQuote.contextLost)
+	);
 	const requoter = new FeeRequoteTimer({
 		delayMs: feeRequoteDelayMs,
 		requote: () => speedControl.refresh()
 	});
 	$effect(() => {
-		const view = speedControl.feeInForce;
+		const view = feeShown;
 		const request = signView.request;
 		const open =
 			request !== null &&
@@ -327,7 +335,7 @@
 	let feeFailing = $state<FeeFailure | null>(null);
 	let feeFailingFor = '';
 	$effect(() => {
-		const view = speedControl.feeInForce;
+		const view = feeShown;
 		const id = signView.request?.id ?? '';
 		const previous = id === feeFailingFor ? untrack(() => feeFailing) : null;
 		feeFailingFor = id;
@@ -347,7 +355,7 @@
 			sign: signView,
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
-			fee: speedControl.feeInForce,
+			fee: feeShown,
 			feeFailing,
 			feeOpen,
 			speed: {
@@ -477,7 +485,7 @@
 		onfee={() => {
 			// Failed → ask again. More than one coin → open the list, here in the
 			// sheet. Otherwise the host's own surface, if it has one.
-			if (fee.view?.failed) fee.requote();
+			if (feeShown.failed) fee.requote();
 			else if ((fee.view?.options.length ?? 0) > 1) feeOpen = !feeOpen;
 			else onfee();
 		}}
