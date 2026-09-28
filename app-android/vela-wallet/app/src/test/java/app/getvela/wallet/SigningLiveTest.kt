@@ -152,6 +152,26 @@ class SigningLiveTest {
         assertEquals("the reader passes the number as text", "1000", SigningController.firstCall("""[{"to":"$founder","value":1000}]""")?.third)
     }
 
+    /**
+     * RC6 on the submit side: a leg the reader refuses (a number where the
+     * value should be, no `to`, a value that is not hex) refuses the whole
+     * batch. Dropping it sent the others alone — a batch the dApp never asked
+     * for, answered as if it had run.
+     */
+    @Test
+    fun `a batch with an unreadable leg is refused whole, never sent a leg short`() {
+        val ok = """{"to":"$founder","value":"0x1"}"""
+        assertEquals(2, SignExecutor.callsOf("wallet_sendCalls", """[{"calls":[$ok,$ok]}]""")?.size)
+        for (bad in listOf("""{"to":"$founder","value":1000}""", """{"value":"0x1"}""", """{"to":"$founder","value":"0x12zz"}""")) {
+            assertNull(bad, SignExecutor.callsOf("wallet_sendCalls", """[{"calls":[$ok,$bad]}]"""))
+            assertNull(bad, SignExecutor.callsOf("wallet_sendCalls", """[{"calls":[$bad,$ok]}]"""))
+        }
+        // One call: a number is refused, a JSON null is zero.
+        assertNull(SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":1000}]"""))
+        assertEquals("0", SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":null}]""")?.single()?.value)
+        assertEquals("1000", SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":"0x3e8"}]""")?.single()?.value)
+    }
+
     @Test
     fun `the slide waits for the guard and the fee, and a contract call with bytes stays blind`() {
         val params = """[{"to":"$founder","data":"0xdeadbeef"}]"""

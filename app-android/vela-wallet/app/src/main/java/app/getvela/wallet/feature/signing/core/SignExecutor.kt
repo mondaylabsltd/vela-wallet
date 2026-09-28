@@ -317,7 +317,10 @@ class SignExecutor(
             return when (method) {
                 "wallet_sendCalls" -> {
                     val raw = first.optJSONArray("calls") ?: return null
-                    val calls = (0 until raw.length()).mapNotNull { raw.optJSONObject(it)?.let(::call) }
+                    // Every leg or none: a leg this reader refuses refuses the
+                    // batch. Dropping it sent the others alone — a batch the
+                    // page never asked for, answered as if it had run.
+                    val calls = (0 until raw.length()).map { index -> raw.optJSONObject(index)?.let(::call) ?: return null }
                     calls.takeIf { it.isNotEmpty() }
                 }
                 else -> call(first)?.let { listOf(it) }
