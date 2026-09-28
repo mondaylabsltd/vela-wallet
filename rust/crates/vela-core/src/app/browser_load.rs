@@ -283,6 +283,22 @@ pub fn site_letter(host: &str) -> String {
 // Every timer and every probe carries the load's number; an answer for an
 // older load is dropped, which is how a new address wins over a retry of the
 // old one.
+//
+// Spec 082 puts the engine's own account first where the shell can read it
+// (RD3, RD7 — the Mac polls WebKit's `isLoading`, `estimatedProgress` and
+// `URL` into [`LoadWatch::engine`]; Windows stays probe-only):
+//
+// - **The engine stopping with no commit is the failure**; the probe then only
+//   says why, and a probe that answers means "other", not "wait".
+// - **The probe never overrules a live engine**: a certificate verdict from the
+//   probe while the engine is still loading is [`Probed::Deferred`] (the probe's
+//   TLS stack is not WebKit's), and a due retry while the engine is still on
+//   the load is [`RetryAction::EngineStillLoading`] — no second request (W7).
+// - **A slow but answering site is never cut**: 20 s gives up only on a load
+//   whose progress never rose above [`ENGINE_LIVE_PROGRESS`] (DX5).
+// - **A load the wallet did not start** (a link, a form, a script) is watched
+//   like any other ([`EngineVerdict::PageStarted`]), with manual Retry only:
+//   the original may have been a POST (W18).
 
 /// How long a load may go without committing before the desktop probes the
 /// address.
@@ -296,6 +312,11 @@ pub const GIVE_UP_MS: u32 = 20_000;
 /// provisional load at 0.1, so anything past 0.15 is the page arriving.
 pub const ENGINE_LIVE_PROGRESS: f64 = 0.15;
 
+/// Whether an engine's progress says the site is answering.
+fn is_live(progress: f64) -> bool {
+    progress > ENGINE_LIVE_PROGRESS
+}
+
 /// Who asked for a load.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Asked {
@@ -305,6 +326,40 @@ pub enum Asked {
     Retry,
     /// The schedule's own attempt: the panel stays, the count goes on.
     AutoRetry,
+    /// The page itself (a link, a form, a script): the wallet only saw the
+    /// engine start it (RD7). Retried by hand only.
+    Page,
+}
+
+/// One poll of the engine (the Mac: WebKit's `isLoading`,
+/// `estimatedProgress` and `URL`, RD3).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EngineSample {
+    pub loading: bool,
+    /// 0.0 – 1.0.
+    pub progress: f64,
+    /// The engine's address — the provisional one while a load is under way;
+    /// `None` for a view that has never loaded.
+    pub url: Option<String>,
+}
+
+/// What an engine sample means for the watch.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EngineVerdict {
+    Nothing,
+    /// The engine started a load the wallet did not ask for. It is now watched
+    /// as load `generation` (hairline, watchdog, probe, panel) — arm the
+    /// watchdog as for any request.
+    PageStarted {
+        generation: u64,
+        url: String,
+    },
+    /// The engine stopped load `generation` with no commit: probe `url` to say
+    /// why (the watch counts the probe as running).
+    StoppedWithoutCommit {
+        generation: u64,
+        url: String,
+    },
 }
 
 /// The shell's account of the page's current load.
@@ -331,6 +386,17 @@ pub struct LoadWatch {
     /// How the next reported request was asked for (set by the page just
     /// before it tells the engine to load).
     pub next_asked: Option<Asked>,
+    /// The engine is loading a web page, as last sampled. Every request
+    /// clears it, so a stop seen afterwards is this load's stop.
+    pub engine_loading: bool,
+    /// This load's progress rose above [`ENGINE_LIVE_PROGRESS`]: the site is
+    /// answering, and [`GIVE_UP_MS`] does not cut it.
+    pub engine_live: bool,
+    /// The engine stopped this load with no commit: a probe that answers now
+    /// means "other", not "wait".
+    pub engine_stopped: bool,
+    /// This load was started by the page, not the wallet: no automatic retry.
+    pub page_initiated: bool,
 }
 
 /// What a probe's answer means for the load.
@@ -343,6 +409,26 @@ pub enum Probed {
     WaitUntil(f64),
     /// The failure panel, with its reason.
     Failed,
+    /// A certificate verdict while the engine is still loading: not believed.
+    /// The engine decides — a commit, or a stop and a second probe.
+    Deferred,
+}
+
+/// What a due automatic attempt does.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RetryAction {
+    /// Load this address again (the watch takes the request as
+    /// [`Asked::AutoRetry`]).
+    Load(String),
+    /// The engine is still on this load: nothing navigates (W7), and the
+    /// attempt is not spent — [`LoadWatch::schedule_retry`] gives the same
+    /// wait again.
+    EngineStillLoading,
+    /// The page is not in front: the attempt waits for it
+    /// ([`LoadWatch::take_due`]).
+    NotInFront,
+    /// For another load, or nothing to retry.
+    Nothing,
 }
 
 impl LoadWatch {
@@ -355,19 +441,24 @@ impl LoadWatch {
         self.probing = false;
         self.committed = false;
         self.retry_due = false;
+        self.engine_loading = false;
+        self.engine_live = false;
+        self.engine_stopped = false;
+        self.page_initiated = asked == Asked::Page;
         if !is_web_url(url) {
             self.url = None;
             self.loading = false;
             self.failure = None;
             self.retrying = false;
             self.attempt = 0;
+            self.page_initiated = false;
             return None;
         }
         self.url = Some(url.to_owned());
         self.requested_at_ms = now_ms;
         self.loading = true;
         match asked {
-            Asked::Navigation => {
+            Asked::Navigation | Asked::Page => {
                 self.failure = None;
                 self.retrying = false;
                 self.attempt = 0;
@@ -416,6 +507,68 @@ impl LoadWatch {
         !is_web_url(url) && self.url.is_some() && (self.loading || self.failure.is_some())
     }
 
+    /// One poll of the engine (RD3, RD7). The engine counts as loading only
+    /// while it is on a web page: its own blank page is it giving up.
+    ///
+    /// - It starts loading a web address the wallet did not ask for, while
+    ///   nothing of the wallet's is under way → [`EngineVerdict::PageStarted`]
+    ///   (the same address starting again is not a new load).
+    /// - It stops with this load not committed →
+    ///   [`EngineVerdict::StoppedWithoutCommit`], unless a probe is already
+    ///   running, whose answer then classifies it.
+    pub fn engine(&mut self, sample: &EngineSample, now_ms: f64) -> EngineVerdict {
+        let web = sample
+            .url
+            .as_deref()
+            .filter(|url| sample.loading && is_web_url(url));
+        let was_loading = std::mem::replace(&mut self.engine_loading, web.is_some());
+        if web.is_some() && self.loading && is_live(sample.progress) {
+            self.engine_live = true;
+        }
+        match (was_loading, web) {
+            (false, Some(url)) => self.engine_started(url, sample.progress, now_ms),
+            (true, None) => self.engine_stopped_loading(),
+            _ => EngineVerdict::Nothing,
+        }
+    }
+
+    fn engine_started(&mut self, url: &str, progress: f64, now_ms: f64) -> EngineVerdict {
+        // The wallet's own load (asked, or committed and finishing), or the
+        // address already watched starting again.
+        if self.busy() || self.url.as_deref() == Some(url) {
+            return EngineVerdict::Nothing;
+        }
+        self.next_asked = Some(Asked::Page);
+        let Some(generation) = self.requested(url, now_ms) else {
+            return EngineVerdict::Nothing;
+        };
+        self.engine_loading = true;
+        self.engine_live = is_live(progress);
+        EngineVerdict::PageStarted {
+            generation,
+            url: url.to_owned(),
+        }
+    }
+
+    fn engine_stopped_loading(&mut self) -> EngineVerdict {
+        // Committed and finished, or the panel is already up.
+        if !self.loading {
+            return EngineVerdict::Nothing;
+        }
+        self.engine_stopped = true;
+        if self.probing {
+            return EngineVerdict::Nothing;
+        }
+        let Some(url) = self.url.clone() else {
+            return EngineVerdict::Nothing;
+        };
+        self.probing = true;
+        EngineVerdict::StoppedWithoutCommit {
+            generation: self.generation,
+            url,
+        }
+    }
+
     /// [`WATCHDOG_MS`] after load `generation` was asked for: the address to
     /// probe, if it still has not committed.
     pub fn watchdog(&mut self, generation: u64) -> Option<String> {
@@ -428,24 +581,41 @@ impl LoadWatch {
 
     /// The probe of load `generation` answered: `Ok` — the site is reachable;
     /// `Err(code)` — one of [`probe_code`]'s, or anything else for "other".
+    ///
+    /// Once the engine has stopped this load, the probe only classifies: a
+    /// site that answers is "other" (the engine failed where a HEAD did not).
+    /// While the engine is still loading, a certificate verdict is
+    /// [`Probed::Deferred`].
     pub fn probed(&mut self, generation: u64, answer: Result<(), i64>) -> Probed {
         if generation != self.generation || !self.loading {
             return Probed::Ignored;
         }
         self.probing = false;
         match answer {
+            Ok(()) if self.engine_stopped => {
+                self.fail(Some(failure(LoadFailureClass::Other)));
+                Probed::Failed
+            }
             Ok(()) => Probed::WaitUntil(self.requested_at_ms + f64::from(GIVE_UP_MS)),
             Err(code) => {
-                self.fail(classify(LoadPlatform::Probe, code, None, false));
+                let verdict = classify(LoadPlatform::Probe, code, None, false);
+                let certificate = verdict
+                    .as_ref()
+                    .is_some_and(|failure| failure.class == LoadFailureClass::Certificate);
+                if certificate && self.engine_loading {
+                    return Probed::Deferred;
+                }
+                self.fail(verdict);
                 Probed::Failed
             }
         }
     }
 
     /// [`GIVE_UP_MS`] after load `generation` was asked for, with a site that
-    /// answered the probe: still nothing committed is a timeout.
+    /// answered the probe: still nothing committed is a timeout — unless the
+    /// engine's progress showed the page arriving, which is never cut.
     pub fn give_up(&mut self, generation: u64) -> bool {
-        if generation != self.generation || !self.loading {
+        if generation != self.generation || !self.loading || self.engine_live {
             return false;
         }
         self.fail(classify(
@@ -470,10 +640,11 @@ impl LoadWatch {
 
     /// After a failure: the wait (ms) before the next automatic attempt, with
     /// the load it belongs to — `None` when the class is never retried by
-    /// itself or the schedule has run out. Counts the attempt.
+    /// itself, the schedule has run out, or the page started the load (it may
+    /// have been a POST; the person retries it). Counts the attempt.
     pub fn schedule_retry(&mut self) -> Option<(u64, u32)> {
         let failure = self.failure.as_ref()?;
-        if !failure.auto_retry || self.loading {
+        if !failure.auto_retry || self.loading || self.page_initiated {
             return None;
         }
         let wait = retry_delay_ms(failure.class, self.attempt + 1)?;
@@ -482,27 +653,42 @@ impl LoadWatch {
     }
 
     /// An automatic attempt for load `generation` came due. The address to
-    /// load again when the page is in front; otherwise it waits for the page
-    /// to come back ([`Self::take_due`]).
-    pub fn retry_fired(&mut self, generation: u64, in_front: bool) -> Option<String> {
+    /// load again when the page is in front and the engine is not still on
+    /// it; otherwise it waits for the page to come back ([`Self::take_due`]).
+    pub fn retry_fired(&mut self, generation: u64, in_front: bool) -> RetryAction {
         if generation != self.generation || self.failure.is_none() || self.loading {
-            return None;
+            return RetryAction::Nothing;
         }
         if !in_front {
             self.retry_due = true;
-            return None;
+            return RetryAction::NotInFront;
         }
-        self.next_asked = Some(Asked::AutoRetry);
-        self.url.clone()
+        self.retry_now()
     }
 
     /// The page is in front again: an attempt that came due while it was not.
-    pub fn take_due(&mut self) -> Option<String> {
+    pub fn take_due(&mut self) -> RetryAction {
         if !std::mem::take(&mut self.retry_due) || self.failure.is_none() || self.loading {
-            return None;
+            return RetryAction::Nothing;
         }
-        self.next_asked = Some(Asked::AutoRetry);
-        self.url.clone()
+        self.retry_now()
+    }
+
+    fn retry_now(&mut self) -> RetryAction {
+        if self.engine_loading {
+            // The panel is up because the probe gave up, not the engine: a
+            // second request now would restart a load that may be about to
+            // arrive (W7). The attempt is given back.
+            self.attempt = self.attempt.saturating_sub(1);
+            return RetryAction::EngineStillLoading;
+        }
+        match self.url.clone() {
+            Some(url) => {
+                self.next_asked = Some(Asked::AutoRetry);
+                RetryAction::Load(url)
+            }
+            None => RetryAction::Nothing,
+        }
     }
 
     /// The panel's Retry: the address to load again.

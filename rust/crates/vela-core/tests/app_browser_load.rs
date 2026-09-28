@@ -7,7 +7,8 @@
 
 use vela_core::app::browser_load::{
     classify, host_of, probe_code, reason_key, retry_delay_ms, site_letter, visit_to_record, Asked,
-    LoadFailureClass as C, LoadFinished, LoadPlatform as P, LoadWatch, Probed,
+    EngineSample, EngineVerdict, LoadFailureClass as C, LoadFinished, LoadPlatform as P, LoadWatch,
+    Probed, RetryAction, ENGINE_LIVE_PROGRESS, GIVE_UP_MS,
 };
 
 fn class(platform: P, code: i64, domain: Option<&str>) -> Option<C> {
@@ -385,7 +386,9 @@ fn network_failures_retry_on_the_schedule_with_the_panel_up() {
             break;
         };
         waits.push(wait);
-        let url = watch.retry_fired(due, true).unwrap_or_default();
+        let RetryAction::Load(url) = watch.retry_fired(due, true) else {
+            unreachable!("in front, the engine idle: a load");
+        };
         generation = watch.requested(&url, 0.).unwrap_or_default();
         assert!(watch.retrying, "the panel stays through the attempt");
         assert!(watch.failure.is_some(), "never the engine's own page");
@@ -410,10 +413,10 @@ fn a_retry_waits_for_the_page_to_be_in_front() {
     watch.watchdog(generation);
     watch.probed(generation, Err(probe_code::TIMEOUT));
     let (due, _) = watch.schedule_retry().unwrap_or_default();
-    assert_eq!(watch.retry_fired(due, false), None);
+    assert_eq!(watch.retry_fired(due, false), RetryAction::NotInFront);
     assert!(watch.retry_due);
-    assert_eq!(watch.take_due().as_deref(), Some(SITE));
-    assert_eq!(watch.take_due(), None, "once");
+    assert_eq!(watch.take_due(), RetryAction::Load(SITE.to_owned()));
+    assert_eq!(watch.take_due(), RetryAction::Nothing, "once");
 }
 
 /// A new address wins: every answer for the old load is dropped.
@@ -428,7 +431,7 @@ fn a_new_address_abandons_the_old_load() {
     assert_eq!(watch.probed(old, Err(probe_code::DNS)), Probed::Ignored);
     assert!(watch.failure.is_none());
     assert!(!watch.give_up(old));
-    assert_eq!(watch.retry_fired(old, true), None);
+    assert_eq!(watch.retry_fired(old, true), RetryAction::Nothing);
     assert_eq!(
         watch.watchdog(new).as_deref(),
         Some("https://other.example/")
@@ -465,5 +468,261 @@ fn the_host_line_drops_userinfo_and_keeps_the_port() {
     assert_eq!(
         host_of("https://user@app.example:8443/x?y#z"),
         "app.example:8443"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The engine's own account first (spec 082 T030, RD3, RD7)
+// ---------------------------------------------------------------------------
+
+fn sample(loading: bool, progress: f64, url: &str) -> EngineSample {
+    EngineSample {
+        loading,
+        progress,
+        url: Some(url.to_owned()),
+    }
+}
+
+/// A watch whose load of `SITE` the engine has picked up (WebKit's first
+/// provisional progress, 0.1).
+fn engine_on_site() -> (LoadWatch, u64) {
+    let mut watch = LoadWatch::default();
+    let generation = watch.requested(SITE, 0.).unwrap_or_default();
+    assert_eq!(
+        watch.engine(&sample(true, 0.1, SITE), 250.),
+        EngineVerdict::Nothing,
+        "the wallet's own load"
+    );
+    assert!(watch.engine_loading);
+    (watch, generation)
+}
+
+/// W7: the probe gave up at ~8 s while WebKit was still on the page; the
+/// retry due at ~10 s must not send a second request for it.
+#[test]
+fn a_retry_never_restarts_a_load_the_engine_is_still_on() {
+    let (mut watch, generation) = engine_on_site();
+    watch.watchdog(generation);
+    assert_eq!(
+        watch.probed(generation, Err(probe_code::TIMEOUT)),
+        Probed::Failed,
+        "the panel shows fast"
+    );
+    let (due, wait) = watch.schedule_retry().unwrap_or_default();
+    assert_eq!(wait, 2_000);
+    assert_eq!(
+        watch.retry_fired(due, true),
+        RetryAction::EngineStillLoading
+    );
+    assert_eq!(
+        watch.schedule_retry(),
+        Some((due, 2_000)),
+        "the attempt was not spent"
+    );
+    // Brought back to the front while the engine is still on it: the same.
+    assert_eq!(watch.retry_fired(due, false), RetryAction::NotInFront);
+    assert_eq!(watch.take_due(), RetryAction::EngineStillLoading);
+    // The engine gives up too (the panel is already up), and the next
+    // attempt is a real load.
+    watch.schedule_retry();
+    assert_eq!(
+        watch.engine(&sample(false, 0.1, SITE), 30_000.),
+        EngineVerdict::Nothing
+    );
+    assert_eq!(
+        watch.retry_fired(due, true),
+        RetryAction::Load(SITE.to_owned())
+    );
+}
+
+/// The engine stopping with no commit IS the failure; the probe only says
+/// why — and a site that answers the probe is "other", not "wait".
+#[test]
+fn the_engine_stopping_without_a_commit_is_the_failure() {
+    let (mut watch, generation) = engine_on_site();
+    assert_eq!(
+        watch.engine(&sample(false, 0.1, SITE), 1_200.),
+        EngineVerdict::StoppedWithoutCommit {
+            generation,
+            url: SITE.to_owned()
+        }
+    );
+    assert!(watch.probing && watch.loading);
+    assert_eq!(watch.watchdog(generation), None, "the probe is running");
+    assert_eq!(watch.probed(generation, Ok(())), Probed::Failed);
+    assert_eq!(
+        watch.failure.as_ref().map(|failure| failure.class),
+        Some(C::Other)
+    );
+
+    // A probe that fails gives its own class.
+    let (mut watch, generation) = engine_on_site();
+    watch.engine(&sample(false, 0.1, SITE), 1_200.);
+    watch.probed(generation, Err(probe_code::DNS));
+    assert_eq!(
+        watch.failure.as_ref().map(|failure| failure.class),
+        Some(C::NotFound)
+    );
+
+    // Stopped while the watchdog's probe is out: that probe classifies it.
+    let (mut watch, generation) = engine_on_site();
+    watch.watchdog(generation);
+    assert_eq!(
+        watch.engine(&sample(false, 0.1, SITE), 3_500.),
+        EngineVerdict::Nothing
+    );
+    assert_eq!(watch.probed(generation, Ok(())), Probed::Failed);
+
+    // WebKit's blank page after a refused first load is the engine stopping.
+    let (mut watch, generation) = engine_on_site();
+    assert!(matches!(
+        watch.engine(&sample(true, 0.1, "about:blank"), 600.),
+        EngineVerdict::StoppedWithoutCommit { generation: g, .. } if g == generation
+    ));
+
+    // A load that committed and then finished is not a failure.
+    let (mut watch, _) = engine_on_site();
+    watch.committed(SITE);
+    assert_eq!(
+        watch.engine(&sample(false, 1.0, SITE), 900.),
+        EngineVerdict::Nothing
+    );
+    watch.finished(SITE);
+    assert!(watch.failure.is_none() && !watch.busy());
+}
+
+/// W18: a load the page started (a link, a form, a script) is watched like
+/// any other — hairline, watchdog, probe, panel — but only retried by hand.
+#[test]
+fn a_load_the_page_started_is_watched_and_retried_by_hand_only() {
+    let (mut watch, _) = engine_on_site();
+    watch.committed(SITE);
+    watch.engine(&sample(false, 1.0, SITE), 900.);
+    watch.finished(SITE);
+
+    let pool = "https://app.example/pool";
+    let EngineVerdict::PageStarted { generation, url } =
+        watch.engine(&sample(true, 0.1, pool), 5_000.)
+    else {
+        unreachable!("an unasked load");
+    };
+    assert_eq!(url, pool);
+    assert!(watch.page_initiated && watch.loading && watch.busy());
+    assert_eq!(watch.requested_at_ms, 5_000.);
+    assert_eq!(watch.watchdog(generation).as_deref(), Some(pool));
+    watch.probed(generation, Err(probe_code::CONNECT));
+    assert_eq!(
+        watch.failure.as_ref().map(|failure| failure.class),
+        Some(C::Offline)
+    );
+    assert_eq!(watch.schedule_retry(), None, "manual Retry only");
+
+    // The person's Retry is the wallet's own load: the schedule applies again.
+    let again = watch.retry().unwrap_or_default();
+    assert_eq!(again, pool);
+    let generation = watch.requested(&again, 9_000.).unwrap_or_default();
+    assert!(!watch.page_initiated);
+    watch.watchdog(generation);
+    watch.probed(generation, Err(probe_code::CONNECT));
+    assert!(watch.schedule_retry().is_some());
+}
+
+/// Only a NEW web address with nothing of the wallet's under way is a page
+/// load: not the wallet's own request, not the same address starting again,
+/// not the engine's blank page.
+#[test]
+fn the_wallet_s_own_loads_are_never_page_loads() {
+    let (watch, generation) = engine_on_site();
+    assert_eq!(watch.generation, generation, "the request, not a new load");
+    assert!(!watch.page_initiated);
+
+    let mut settled = LoadWatch::default();
+    settled.requested(SITE, 0.);
+    settled.committed(SITE);
+    settled.finished(SITE);
+    assert_eq!(
+        settled.engine(&sample(true, 0.1, SITE), 1_000.),
+        EngineVerdict::Nothing,
+        "the same address starting again"
+    );
+    settled.engine(&sample(false, 1.0, SITE), 1_500.);
+    assert_eq!(
+        settled.engine(&sample(true, 0.1, "about:blank"), 2_000.),
+        EngineVerdict::Nothing
+    );
+    // Committed and still finishing (a poll that missed the start): the
+    // wallet's load, whatever the address says after a redirect.
+    let mut finishing = LoadWatch::default();
+    finishing.requested("http://app.example/", 0.);
+    finishing.committed("https://app.example/");
+    assert_eq!(
+        finishing.engine(&sample(true, 0.8, "https://app.example/"), 300.),
+        EngineVerdict::Nothing
+    );
+}
+
+/// DX5: a site whose page is arriving is never cut at 20 s; one stuck at
+/// WebKit's first 0.1 still is.
+#[test]
+fn a_page_that_is_arriving_is_never_given_up_on() {
+    let (mut watch, generation) = engine_on_site();
+    watch.engine(&sample(true, 0.4, SITE), 8_000.);
+    watch.watchdog(generation);
+    assert_eq!(
+        watch.probed(generation, Ok(())),
+        Probed::WaitUntil(f64::from(GIVE_UP_MS))
+    );
+    assert!(!watch.give_up(generation), "progress 0.4 at 20 s");
+    assert!(watch.loading && watch.failure.is_none());
+
+    let (mut stuck, generation) = engine_on_site();
+    stuck.engine(&sample(true, ENGINE_LIVE_PROGRESS, SITE), 8_000.);
+    stuck.watchdog(generation);
+    stuck.probed(generation, Ok(()));
+    assert!(stuck.give_up(generation), "never rose above the threshold");
+    assert_eq!(
+        stuck.failure.as_ref().map(|failure| failure.class),
+        Some(C::Timeout)
+    );
+}
+
+/// The probe's TLS stack is not WebKit's: while the engine is still loading,
+/// a certificate verdict waits for the engine; after it stops, it stands.
+#[test]
+fn a_certificate_verdict_waits_for_a_loading_engine() {
+    let (mut watch, generation) = engine_on_site();
+    watch.watchdog(generation);
+    assert_eq!(
+        watch.probed(generation, Err(probe_code::TLS)),
+        Probed::Deferred
+    );
+    assert!(watch.loading && !watch.probing && watch.failure.is_none());
+    // The engine committed after all: nothing was ever shown.
+    watch.committed(SITE);
+    assert!(watch.failure.is_none());
+
+    let (mut watch, generation) = engine_on_site();
+    watch.watchdog(generation);
+    watch.probed(generation, Err(probe_code::TLS));
+    let EngineVerdict::StoppedWithoutCommit { .. } =
+        watch.engine(&sample(false, 0.1, SITE), 6_000.)
+    else {
+        unreachable!("stopped with no commit");
+    };
+    assert_eq!(
+        watch.probed(generation, Err(probe_code::TLS)),
+        Probed::Failed
+    );
+    assert_eq!(
+        watch.failure.as_ref().map(|failure| failure.class),
+        Some(C::Certificate)
+    );
+    // Without an engine to ask (Windows), the probe's verdict stands at once.
+    let mut probe_only = LoadWatch::default();
+    let generation = probe_only.requested(SITE, 0.).unwrap_or_default();
+    probe_only.watchdog(generation);
+    assert_eq!(
+        probe_only.probed(generation, Err(probe_code::TLS)),
+        Probed::Failed
     );
 }
