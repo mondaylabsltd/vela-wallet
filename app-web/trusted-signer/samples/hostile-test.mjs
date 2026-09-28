@@ -189,7 +189,9 @@ try {
   check('the signing account is shown as an address', text.includes('0x88cC'));
   check('the account name is shown (it points at a passkey)', text.includes('Daily wallet'));
   check('the full address is available to copy', text.includes('复制完整地址'));
-  check('the self-reported origin is called out', /自述|self-reported/.test(text));
+  // Spec 079 T048: kept (the page cannot tell who opened it), in plain words
+  // that say what to go by instead.
+  check('the self-reported origin is called out', /网站名称是它自己提供的，无法核实/.test(text));
 } catch (error) {
   console.log('FAILED: ' + error.message);
   process.exitCode = 1;

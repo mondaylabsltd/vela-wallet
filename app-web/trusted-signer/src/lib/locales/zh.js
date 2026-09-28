@@ -133,7 +133,7 @@ window.VelaCS.i18n.register('zh', {
   'warn.deploy': '部署后这份代码将永久存在，并可能持有你之后转入的资产。',
   'warn.typedUnknown': '未知的 EIP-712 结构 — 逐字读完下面每个字段再决定。',
   'warn.unverifiedDecimals': '精度未经验证 — 数字可能不是它看起来的意思。',
-  'warn.claimedOrigin': '站点身份由请求方自述，此通道无法核实。',
+  'warn.claimedOrigin': '网站名称是它自己提供的，无法核实，请以下方内容为准。',
 
   // 界面
   'ui.aboutToSign': '你正在签署',

@@ -128,7 +128,7 @@ window.VelaCS.i18n.register('en', {
   'warn.deploy': 'Once deployed this code is permanent, and it may hold assets you send it later.',
   'warn.typedUnknown': 'Unknown EIP-712 structure — read every field below before deciding.',
   'warn.unverifiedDecimals': 'Decimals unverified — the number may not mean what it appears to.',
-  'warn.claimedOrigin': 'The site identity is self-reported by the requester; this channel cannot verify it.',
+  'warn.claimedOrigin': "The site's name comes from the site itself and can't be checked — go by the details below.",
 
   'ui.aboutToSign': 'You are signing',
   'ui.techDetails': 'Technical details',
