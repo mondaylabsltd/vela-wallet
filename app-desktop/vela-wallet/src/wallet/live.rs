@@ -610,6 +610,7 @@ mod tests {
             status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
             kind: Some(vela_core::app::activity_feed::FeedTxKind::Receive),
             usd: None,
+            dapp_origin: None,
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -724,6 +725,13 @@ mod tests {
             day_start_ms: 0.0,
             tx_hash: None,
             batch: None,
+            kind: if incoming {
+                vela_core::app::activity_feed::FeedTxKind::Receive
+            } else {
+                vela_core::app::activity_feed::FeedTxKind::Send
+            },
+            status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+            site: None,
         }
     }
 
@@ -1192,6 +1200,9 @@ mod tests {
                         day_start_ms: 0.0,
                         tx_hash: None,
                         batch: None,
+                        kind: vela_core::app::activity_feed::FeedTxKind::Receive,
+                        status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+                        site: None,
                     },
                 }],
                 ..host.view()

@@ -21,7 +21,7 @@ use vela_core::app::clear_signing::{
     UNKNOWN_AMOUNT,
 };
 use vela_core::app::fee_policy::{FeeTier, FeeView};
-use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignView};
+use vela_core::app::sign_request::{SignErrorKind, SignFundingPresentation, SignPhase, SignView};
 
 use crate::signing::fixtures::{AllowanceInput, Block, ChipState, FeeModel, FeeTokenOption};
 use crate::signing::{SigningStrings, Tone};
@@ -86,6 +86,10 @@ pub fn fee_of_another_tier(fee: &FeeView, speed_tier: Option<FeeTier>) -> bool {
 pub struct RequestFacts {
     pub to: Option<String>,
     pub data_bytes: usize,
+    /// The chain's own coin as the fee row spells it
+    /// (`network_admin::builtin_native_symbol`) — the plain send's amount card
+    /// names it, so one card never says "xDAI" beside "XDAI" (spec 082 RC5).
+    pub native_symbol: String,
 }
 
 /// The cap the person chose, where the decode still says "Unlimited".
@@ -229,7 +233,52 @@ pub fn blocks(clear: &ClearSigningView, facts: &RequestFacts, s: &SigningStrings
             .map(|typed| blind_typed_blocks(typed, s))
             .unwrap_or_default(),
         ClearSurface::BlindTransaction => blind_tx_blocks(facts, s),
+        // Spec 082 G14 (RC1): empty calldata is a send whatever the
+        // recipient; the core decided it and scaled the amount.
+        ClearSurface::PlainSend => clear
+            .plain_send
+            .as_ref()
+            .map(|plain| plain_send_blocks(plain, facts, s))
+            .unwrap_or_default(),
     }
+}
+
+/// A dApp's plain value transfer (spec 082 G14, RC1–RC5): what the phones
+/// always drew — "Send", the amount card in the fee row's coin, and who it
+/// goes to — instead of "Contract interaction" over bytes that do not exist.
+/// A zero-value call keeps the card with no minus sign (RC3): only a
+/// simulation may say that nothing leaves.
+fn plain_send_blocks(
+    plain: &vela_core::app::clear_signing::ClearPlainSend,
+    facts: &RequestFacts,
+    s: &SigningStrings,
+) -> Vec<Block> {
+    vec![
+        Block::Intent {
+            text: s.intent_send.clone(),
+            tone: Tone::Neutral,
+        },
+        Block::Amount {
+            line: crate::signing::fixtures::AmountLine {
+                sign: SharedString::from(if plain.no_value { "" } else { "−" }),
+                value: SharedString::from(plain.amount.clone()),
+                symbol: SharedString::from(facts.native_symbol.clone()),
+                token: None,
+                fiat: None,
+                caption: None,
+                tone: Tone::Neutral,
+            },
+            card: true,
+            note: None,
+            compact: false,
+        },
+        Block::Party {
+            label: s.label_recipient.clone(),
+            name: SharedString::from(crate::wallet::live::shorten_address(&plain.to)),
+            address: Some(SharedString::from(plain.to.clone())),
+            badge: None,
+        },
+    ]
 }
 
 /// What the CHAIN said this request would move — the one block on a signing
@@ -869,7 +918,8 @@ pub fn status_blocks(sign: &SignView, s: &SigningStrings) -> Vec<Block> {
     // and "Signing…" beside a submitted operation reads as a second signature.
     if sign.pending_op_hash.is_some() {
         out.push(Block::Positive(s.status_submitted.clone()));
-    } else if sign.is_signing || sign.is_submitting {
+    } else if sign.phase != SignPhase::Idle {
+        // The core's phase (spec 082 RA9), not the two flags it replaces.
         out.push(Block::Sentence {
             text: s.status_signing.clone(),
             tone: Tone::Neutral,
@@ -1543,6 +1593,7 @@ mod tests {
         let facts = RequestFacts {
             to: Some("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned()),
             data_bytes: 196,
+            native_symbol: "xDAI".to_owned(),
         };
         let cases: Vec<(ClearSurface, ClearSigningView)> = vec![
             (ClearSurface::Loading, pristine()),
@@ -1581,6 +1632,18 @@ mod tests {
                 },
             ),
             (ClearSurface::BlindTransaction, pristine()),
+            (
+                ClearSurface::PlainSend,
+                ClearSigningView {
+                    plain_send: Some(vela_core::app::clear_signing::ClearPlainSend {
+                        to: "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".to_owned(),
+                        value_wei: "1000000000000000".to_owned(),
+                        amount: "0.001".to_owned(),
+                        no_value: false,
+                    }),
+                    ..pristine()
+                },
+            ),
         ];
         for (surface, base) in cases {
             let drawn = blocks(&surfaced(surface, base), &facts, &s);
@@ -1595,6 +1658,107 @@ mod tests {
         assert!(blocks(&surfaced(ClearSurface::None, pristine()), &facts, &s).is_empty());
     }
 
+    /// A dApp's `eth_sendTransaction` with no calldata, through the real
+    /// reader (`signing_host::clear_kickoff`) and the real core, drawn.
+    fn plain(call: serde_json::Value) -> (Vec<Block>, SharedString) {
+        let s = strings();
+        let params = serde_json::json!([call]).to_string();
+        let event =
+            crate::wallet::signing_host::clear_kickoff("eth_sendTransaction", &params, 100, None)
+                .unwrap_or_else(|| unreachable!("a transaction starts the ladder"));
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
+        let _ = host.dispatch(event);
+        let view = host.view();
+        let facts = RequestFacts {
+            to: Some(RECIPIENT.to_owned()),
+            data_bytes: 0,
+            native_symbol: "xDAI".to_owned(),
+        };
+        (blocks(&view, &facts, &s), confirm_label(&view, &s))
+    }
+
+    const RECIPIENT: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+
+    fn amount_of(drawn: &[Block]) -> Option<(String, String, String)> {
+        drawn.iter().find_map(|block| match block {
+            Block::Amount { line, .. } => Some((
+                line.sign.to_string(),
+                line.value.to_string(),
+                line.symbol.to_string(),
+            )),
+            _ => None,
+        })
+    }
+
+    /// Spec 082 G14 (DX-G14): a plain value transfer is a send — "Send",
+    /// −0.001 xDAI on its card, the recipient — and confirmed as one. Never
+    /// "Contract interaction" over bytes that do not exist.
+    #[test]
+    fn a_plain_value_transfer_is_a_send() {
+        let s = strings();
+        let (drawn, confirm) = plain(serde_json::json!({
+            "to": RECIPIENT.to_lowercase(),
+            "value": "0x38d7ea4c68000",
+        }));
+        assert!(
+            matches!(drawn.first(), Some(Block::Intent { text, .. }) if *text == s.intent_send)
+        );
+        assert_eq!(
+            amount_of(&drawn),
+            Some(("−".to_owned(), "0.001".to_owned(), "xDAI".to_owned()))
+        );
+        let recipient = drawn.iter().find_map(|block| match block {
+            Block::Party { label, address, .. } if *label == s.label_recipient => address.clone(),
+            _ => None,
+        });
+        assert_eq!(
+            recipient.as_deref(),
+            Some(RECIPIENT),
+            "EIP-55, from the core"
+        );
+        assert!(!drawn.iter().any(|block| matches!(
+            block,
+            Block::Intent { text, .. } if *text == s.intent_contract_call
+        )));
+        assert!(confirm.contains(s.confirm_send.as_ref()), "{confirm}");
+    }
+
+    /// RC3: nothing moves — the same card, no minus, and a neutral confirm.
+    /// Absent is zero too.
+    #[test]
+    fn a_zero_value_transfer_is_a_send_of_nothing() {
+        let s = strings();
+        for call in [
+            serde_json::json!({ "to": RECIPIENT, "value": "0x0" }),
+            serde_json::json!({ "to": RECIPIENT }),
+            serde_json::json!({ "to": RECIPIENT, "value": null, "data": "0x" }),
+        ] {
+            let (drawn, confirm) = plain(call.clone());
+            assert_eq!(
+                amount_of(&drawn),
+                Some((String::new(), "0".to_owned(), "xDAI".to_owned())),
+                "{call}"
+            );
+            assert!(!confirm.contains(s.confirm_send.as_ref()), "{confirm}");
+            assert!(confirm.contains(s.confirm_plain.as_ref()), "{confirm}");
+        }
+    }
+
+    /// RC4/RC6: a `value` that is a JSON number reaches the core as text and
+    /// is refused — the contract card with NO amount, never a calm "0 xDAI"
+    /// over a call the submit reads as 1000 wei.
+    #[test]
+    fn a_numeric_value_is_never_drawn_as_zero() {
+        let s = strings();
+        let (drawn, _) = plain(serde_json::json!({ "to": RECIPIENT, "value": 1000 }));
+        assert_eq!(amount_of(&drawn), None);
+        assert!(matches!(
+            drawn.first(),
+            Some(Block::Intent { text, .. }) if *text == s.intent_contract_call
+        ));
+    }
+
     /// The blind rung says the two things that are still true, and no more.
     #[test]
     fn a_blind_transaction_says_only_what_is_true_about_it() {
@@ -1602,6 +1766,7 @@ mod tests {
         let facts = RequestFacts {
             to: Some("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned()),
             data_bytes: 196,
+            native_symbol: "xDAI".to_owned(),
         };
         let drawn = blocks(
             &surfaced(ClearSurface::BlindTransaction, pristine()),
@@ -2184,6 +2349,7 @@ mod tests {
         let s = strings();
         let signing = SignView {
             is_signing: true,
+            phase: SignPhase::AwaitingSignature,
             ..pristine_sign()
         };
         assert!(status_blocks(&signing, &s).iter().any(|block| matches!(
@@ -2195,6 +2361,7 @@ mod tests {
         // operation reads as a second signature.
         let submitted = SignView {
             is_signing: true,
+            phase: SignPhase::Submitting,
             pending_op_hash: Some("0xhash".to_owned()),
             ..pristine_sign()
         };

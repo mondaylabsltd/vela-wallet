@@ -186,15 +186,18 @@ pub struct SigningHost {
     /// on this endpoint, every RPC down, params refused). A different sentence
     /// from "it ran and found nothing".
     pub sim_unavailable: bool,
-    /// The hash already handed to the tracker. The handoff stays on the view
-    /// after it is taken, and the tracker merges by hash anyway, but handing
-    /// the same submission over on every render is a poll nobody asked for.
-    handed_off: Option<String>,
+    /// The submission already handed to the tracker: the records it closes
+    /// (the key it is deduped by — spec 082: a may-have-been-sent op is
+    /// handed over under its local hash, and the dedupe must not hang on a
+    /// hash) and the hash it went under. The handoff stays on the view after
+    /// it is taken; handing the same submission over on every render is a
+    /// poll nobody asked for.
+    handed_off: Option<(Vec<String>, String)>,
     /// Spec 079: how the request ended, read off the answer the core sent —
     /// a message signed, a transaction landed, or the operation hash because
     /// the wait ran out. The page keeps it on screen after the core closes
     /// the column (the tick, or "not landed yet").
-    pub ending: Option<crate::signing::status::SigningEnding>,
+    pub ending: Option<vela_core::app::sign_request::SignEnding>,
     /// Spec 079: when this column first saw the operation accepted — the
     /// receipt's ring starts here until the tracker has its own clock.
     pub seen_submitted_ms: Option<f64>,
@@ -518,6 +521,8 @@ impl SigningHost {
 
     pub fn approve(&mut self, cx: &mut Context<Self>) {
         self.approved = true;
+        // The dApp's answer window starts at the tap (spec 082 RA12).
+        self.ctx.approved_at_ms = Some(now_ms());
         // Nothing re-prices under a slide that has gone.
         self.requote_scheduled = None;
         let opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
@@ -714,13 +719,20 @@ impl SigningHost {
         // next launch. The send column has done this since phase 4; this is the
         // same promise for the path a dApp drives.
         if let Some(handoff) = self.view.tracker_handoff.clone()
-            && self.handed_off.as_deref() != Some(handoff.user_op_hash.as_str())
+            && self
+                .handed_off
+                .as_ref()
+                .is_none_or(|(records, _)| *records != handoff.record_ids)
         {
-            self.handed_off = Some(handoff.user_op_hash.clone());
+            self.handed_off = Some((handoff.record_ids.clone(), handoff.user_op_hash.clone()));
             crate::executor::tracker::submitted(
-                handoff.user_op_hash,
-                handoff.record_ids,
-                handoff.chain_id,
+                crate::executor::tracker::Handoff {
+                    user_op_hash: handoff.user_op_hash,
+                    record_ids: handoff.record_ids,
+                    chain_id: handoff.chain_id,
+                    maybe_sent: handoff.maybe_sent,
+                    submit_block: handoff.submit_block,
+                },
                 cx,
             );
         }
@@ -749,7 +761,7 @@ impl SigningHost {
             return None;
         };
         let submitted = [
-            self.handed_off.as_deref(),
+            self.handed_off.as_ref().map(|(_, hash)| hash.as_str()),
             self.view.pending_op_hash.as_deref(),
             self.view
                 .tracker_handoff
@@ -775,7 +787,7 @@ impl SigningHost {
             // Spec 079: what this answer says about how the request ended —
             // read BEFORE the sheet is cleared, while the hash this column
             // submitted is still known.
-            let submitted = self.handed_off.clone().or_else(|| {
+            let submitted = self.handed_off.clone().map(|(_, hash)| hash).or_else(|| {
                 self.view.pending_op_hash.clone().or_else(|| {
                     self.view
                         .tracker_handoff
@@ -940,6 +952,9 @@ fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
         // Hex, so two characters per byte; an odd tail is a malformed payload
         // and rounds DOWN rather than claiming a byte that is not there.
         data_bytes: data.trim_start_matches("0x").len() / 2,
+        native_symbol: vela_core::app::network_admin::builtin_native_symbol(request.chain_id)
+            .unwrap_or("—")
+            .to_owned(),
     }
 }
 
@@ -1027,7 +1042,19 @@ fn first_call(params_json: &str) -> Option<(Option<String>, Option<String>, Opti
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned)
     };
-    Some((field("to"), field("data"), field("value")))
+    Some((field("to"), field("data"), value_text(call.get("value"))))
+}
+
+/// The first call's `value` as the core is told it (spec 082 RC6): a string
+/// as written, a present non-string (a JSON number) as its text — so the core
+/// refuses it rather than reading it as absent, which drew a calm "0" over a
+/// call that moves 1000 wei — and nothing for an absent or `null` one.
+fn value_text(value: Option<&serde_json::Value>) -> Option<String> {
+    match value? {
+        serde_json::Value::Null => None,
+        serde_json::Value::String(text) => Some(text.clone()),
+        other => Some(other.to_string()),
+    }
 }
 
 /// `eth_signTypedData_v4`'s payload: `[address, json]` — the JSON is the

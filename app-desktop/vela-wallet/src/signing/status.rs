@@ -26,13 +26,19 @@
 use gpui::SharedString;
 
 use vela_core::app::sign_request::{
-    SignErrorKind, SignMethodKind, SignResponsePayload, SignView, method_kind,
+    SignEnding, SignEndingState, SignErrorKind, SignMethodKind, SignPhase, SignView, ending_state,
+    method_kind,
 };
-use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
+use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome};
 
 use crate::flows::fixtures::ReceiptStage;
 use crate::signing::SigningStrings;
 use crate::signing::fixtures::Block;
+
+/// How a request ended, as the core reads the answer it sent
+/// (`sign_request::ending_of`, spec 082 RA8) — the desktop's own copy of that
+/// reading is gone.
+pub use vela_core::app::sign_request::ending_of;
 
 /// Where an approved request stands, as the column draws it.
 #[derive(Clone, Debug, PartialEq)]
@@ -48,18 +54,6 @@ pub struct SigningReceipt {
     pub explorer_tx: Option<String>,
     pub cta: SharedString,
     pub cta_accent: bool,
-}
-
-/// How a request ended when the core answered the page and closed its sheet.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SigningEnding {
-    /// A message was signed.
-    Signed,
-    /// The operation landed inside the wait; the page got this hash.
-    Landed { tx_hash: String },
-    /// The wait ran out; the page got the operation hash and the tracker
-    /// keeps following it.
-    StillConfirming { user_op_hash: String },
 }
 
 /// The chain's clock, for the ring and the "~9s remaining" line.
@@ -81,38 +75,6 @@ pub fn on_chain(method: &str) -> bool {
         method_kind(method),
         SignMethodKind::Transaction | SignMethodKind::Batch
     )
-}
-
-/// The ending an answer stands for, or `None` when there is nothing to show —
-/// a refusal (the page was told why; the column said so) or an empty answer.
-/// `submitted` is the operation this request handed the tracker: an answer
-/// that IS that hash means the wait ran out before a receipt.
-#[must_use]
-pub fn ending_of(
-    method: &str,
-    payload: &SignResponsePayload,
-    submitted: Option<&str>,
-) -> Option<SigningEnding> {
-    let SignResponsePayload::Ok {
-        result: Some(result),
-    } = payload
-    else {
-        return None;
-    };
-    if result.trim().is_empty() {
-        return None;
-    }
-    if !on_chain(method) {
-        return Some(SigningEnding::Signed);
-    }
-    Some(match submitted {
-        Some(op) if op.eq_ignore_ascii_case(result) => SigningEnding::StillConfirming {
-            user_op_hash: op.to_owned(),
-        },
-        _ => SigningEnding::Landed {
-            tx_hash: result.clone(),
-        },
-    })
 }
 
 /// The request in one line, from the blocks the column already drew: what it
@@ -148,8 +110,11 @@ pub fn summary_of(blocks: &[Block]) -> Option<SharedString> {
 /// The column after the approval, while the core still holds the request —
 /// `None` while it is still a request (the form is drawn).
 ///
-/// `track` is the tracker's entry for the operation this request submitted,
-/// when there is one.
+/// The stage words are the core's `phase` (spec 082 RA9): "preparing" for
+/// the whole pre-check and relay estimate, "waiting for biometric" only while
+/// the prompt is really up, "submitting" once it has signed. `track` is the
+/// tracker's entry for the operation this request submitted, when there is
+/// one.
 #[must_use]
 pub fn approved(
     sign: &SignView,
@@ -160,7 +125,7 @@ pub fn approved(
     s: &SigningStrings,
 ) -> Option<SigningReceipt> {
     let lead = || summary.cloned().into_iter().collect::<Vec<_>>();
-    if !on_chain && (sign.is_signing || sign.is_submitting) {
+    if !on_chain && sign.phase != SignPhase::Idle {
         return Some(receipt(
             ReceiptStage::Submitting,
             s.status_signing.clone(),
@@ -187,115 +152,180 @@ pub fn approved(
             true,
         ));
     }
+    // The operation left: from here on it is the core's ending, as the
+    // tracker knows it. Before the tracker has taken it, the view's own flag
+    // says whether its reply was lost.
     if let Some(op) = sign.pending_op_hash.as_deref() {
-        let track = track.filter(|entry| entry.user_op_hash.eq_ignore_ascii_case(op));
-        return Some(following(op, track, lead(), clock, s));
+        let ending = SignEnding::StillConfirming {
+            user_op_hash: op.to_owned(),
+        };
+        let state = ending_state(&ending, track);
+        let state = match state {
+            SignEndingState::Following {
+                user_op_hash,
+                outcome: TrackOutcome::Landing,
+                fee_held,
+            } if sign.pending_op_maybe_sent && !tracked(op, track) => SignEndingState::Following {
+                user_op_hash,
+                outcome: TrackOutcome::MaybeSent,
+                fee_held,
+            },
+            other => other,
+        };
+        return Some(drawn(&state, Some(op), track, lead(), clock, s));
     }
-    if sign.is_submitting {
-        let mut captions = lead();
-        captions.push(s.tx_background_hint.clone());
-        return Some(receipt(
+    match sign.phase {
+        SignPhase::Idle => None,
+        SignPhase::Preparing => Some(receipt(
             ReceiptStage::Submitting,
-            s.tx_submitting.clone(),
-            captions,
-            s.tx_close_background.clone(),
+            s.tx_preparing.clone(),
+            lead(),
+            s.close.clone(),
             false,
-        ));
-    }
-    // The passkey is up (or the Trusted Signer's page is — its own dialog
-    // stands over this one).
-    if sign.is_signing {
-        return Some(receipt(
+        )),
+        // The passkey is up (or the Trusted Signer's page is — its own dialog
+        // stands over this one).
+        SignPhase::AwaitingSignature => Some(receipt(
             ReceiptStage::Submitting,
             s.tx_signing.clone(),
             lead(),
             s.close.clone(),
             false,
-        ));
+        )),
+        SignPhase::Submitting => {
+            let mut captions = lead();
+            captions.push(s.tx_background_hint.clone());
+            Some(receipt(
+                ReceiptStage::Submitting,
+                s.tx_submitting.clone(),
+                captions,
+                s.tx_close_background.clone(),
+                false,
+            ))
+        }
     }
-    None
+}
+
+/// Has the tracker taken this operation yet?
+fn tracked(op: &str, track: Option<&TrackEntryView>) -> bool {
+    track.is_some_and(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))
 }
 
 /// The ending of a request whose sheet the core has closed.
 #[must_use]
 pub fn ended(
-    ending: &SigningEnding,
+    ending: &SignEnding,
     summary: Option<&SharedString>,
     track: Option<&TrackEntryView>,
     clock: &Clock,
     s: &SigningStrings,
 ) -> SigningReceipt {
     let lead = || summary.cloned().into_iter().collect::<Vec<_>>();
-    match ending {
-        SigningEnding::Signed => receipt(
-            ReceiptStage::Confirmed,
-            s.signed.clone(),
-            lead(),
-            s.receipt_done.clone(),
-            true,
-        )
-        .with_progress(Some(1.)),
-        SigningEnding::Landed { tx_hash } => landed(tx_hash, lead(), clock, s),
-        SigningEnding::StillConfirming { user_op_hash } => {
-            let track = track.filter(|entry| entry.user_op_hash.eq_ignore_ascii_case(user_op_hash));
-            following(user_op_hash, track, lead(), clock, s)
-        }
-    }
+    let op = match ending {
+        SignEnding::Signed => None,
+        SignEnding::Landed { user_op_hash, .. } => user_op_hash.as_deref(),
+        SignEnding::StillConfirming { user_op_hash } => Some(user_op_hash.as_str()),
+    };
+    // Even a transaction the page got its tx hash for is not drawn done
+    // until the tracker says it is (RA8, W3: a reverted op read "confirmed").
+    drawn(&ending_state(ending, track), op, track, lead(), clock, s)
 }
 
-/// An operation the relay accepted, as the tracker has it — every status.
-fn following(
-    op: &str,
+/// One `SignEndingState` in the send receipt's words (spec 082 RA10).
+fn drawn(
+    state: &SignEndingState,
+    op: Option<&str>,
     track: Option<&TrackEntryView>,
     mut captions: Vec<SharedString>,
     clock: &Clock,
     s: &SigningStrings,
 ) -> SigningReceipt {
-    let op_hash = Some((s.receipt_op_hash.clone(), op.to_owned()));
-    if let Some(entry) = track {
-        match entry.status {
-            TrackStatus::Confirmed => {
-                if let Some(tx) = entry.tx_hash.as_deref() {
-                    return landed(tx, captions, clock, s);
-                }
-            }
-            // Reverted on chain: the send receipt's own sentence for it, and
-            // the explorer, which says why.
-            TrackStatus::Dropped => {
-                captions.push(s.receipt_failed_hint.clone());
-                let mut out = receipt(
-                    ReceiptStage::Failed,
-                    s.receipt_failed.clone(),
-                    captions,
-                    s.receipt_done.clone(),
-                    true,
-                );
-                out.hash = entry
-                    .tx_hash
-                    .clone()
-                    .map(|tx| (s.receipt_tx_hash.clone(), tx))
-                    .or(op_hash);
-                out.explorer_tx = entry.tx_hash.clone();
-                return out;
-            }
-            // The relay refused it: nothing was sent.
-            TrackStatus::Rejected => {
-                captions.push(s.error_generic.clone());
-                let mut out = receipt(
-                    ReceiptStage::Failed,
-                    s.receipt_failed.clone(),
-                    captions,
-                    s.receipt_done.clone(),
-                    true,
-                );
-                out.hash = op_hash;
-                return out;
-            }
-            _ => {}
+    let op_hash = op.map(|op| (s.receipt_op_hash.clone(), op.to_owned()));
+    match state {
+        SignEndingState::Signed => receipt(
+            ReceiptStage::Confirmed,
+            s.signed.clone(),
+            captions,
+            s.receipt_done.clone(),
+            true,
+        )
+        .with_progress(Some(1.)),
+        SignEndingState::Confirmed { tx_hash } if !tx_hash.is_empty() => {
+            landed(tx_hash, captions, clock, s)
         }
+        // Confirmed with no transaction named is still confirmed; the hash
+        // shown is the operation's.
+        SignEndingState::Confirmed { .. } => {
+            let mut out = landed("", captions, clock, s);
+            out.hash = op_hash;
+            out.explorer_tx = None;
+            out
+        }
+        // Landed and reverted: the send receipt's own sentence for it, and
+        // the explorer, which says why.
+        SignEndingState::Reverted { tx_hash } => {
+            captions.push(s.receipt_failed_hint.clone());
+            let mut out = receipt(
+                ReceiptStage::Failed,
+                s.receipt_failed.clone(),
+                captions,
+                s.receipt_done.clone(),
+                true,
+            );
+            let tx = Some(tx_hash.clone()).filter(|tx| !tx.is_empty());
+            out.hash = tx
+                .clone()
+                .map(|tx| (s.receipt_tx_hash.clone(), tx))
+                .or(op_hash);
+            out.explorer_tx = tx;
+            out
+        }
+        // The relay refused it or never had it: nothing was sent.
+        SignEndingState::NotSent => {
+            captions.push(s.error_generic.clone());
+            let mut out = receipt(
+                ReceiptStage::Failed,
+                s.receipt_failed.clone(),
+                captions,
+                s.receipt_done.clone(),
+                true,
+            );
+            out.hash = op_hash;
+            out
+        }
+        SignEndingState::Following {
+            user_op_hash,
+            outcome,
+            fee_held,
+        } => following(user_op_hash, *outcome, *fee_held, track, captions, clock, s),
     }
-    let outcome = track.map_or(TrackOutcome::Landing, |entry| entry.outcome);
-    let held = track.is_some_and(|entry| entry.status == TrackStatus::FeeHeld);
+}
+
+/// An operation on its way, in the words its outcome stands for.
+fn following(
+    op: &str,
+    outcome: TrackOutcome,
+    held: bool,
+    track: Option<&TrackEntryView>,
+    mut captions: Vec<SharedString>,
+    clock: &Clock,
+    s: &SigningStrings,
+) -> SigningReceipt {
+    // Ruling 1: the reply was lost. Still "submitting", with the one sentence
+    // that is true now and the hash Vela follows — and no retry anywhere,
+    // which would be the second payment.
+    if outcome == TrackOutcome::MaybeSent {
+        captions.push(s.maybe_sent.clone());
+        let mut out = receipt(
+            ReceiptStage::Submitted,
+            s.tx_submitting.clone(),
+            captions,
+            s.tx_close_background.clone(),
+            false,
+        );
+        out.hash = Some((s.receipt_op_hash.clone(), op.to_owned()));
+        return out;
+    }
     let mut out = receipt(
         ReceiptStage::Submitted,
         s.tx_submitted_title.clone(),
@@ -308,7 +338,7 @@ fn following(
         TrackOutcome::Unknown => captions.push(s.unknown_outcome.clone()),
         // Past the window: handed to the network, not landed, still watched.
         TrackOutcome::StillConfirming => captions.push(s.still_confirming.clone()),
-        TrackOutcome::Landing | TrackOutcome::Final => {
+        TrackOutcome::Landing | TrackOutcome::Final | TrackOutcome::MaybeSent => {
             captions.push(if held {
                 s.tx_held_fees.clone()
             } else {
@@ -317,6 +347,7 @@ fn following(
             // Count, don't spin (spec 038 #D3): the chain's usual time, then
             // what is left of it, then "almost there", then "taking longer".
             let since = track
+                .filter(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))
                 .and_then(|entry| entry.submitted_at_ms)
                 .or(clock.seen_submitted_ms);
             if let (Some(since), Some(typical)) = (since, clock.typical_s) {
@@ -350,7 +381,7 @@ fn following(
     // The OPERATION hash: there is no transaction until it lands, and
     // labelling one as the other sends a person to search an explorer for
     // nothing.
-    out.hash = op_hash;
+    out.hash = Some((s.receipt_op_hash.clone(), op.to_owned()));
     out
 }
 
@@ -405,9 +436,9 @@ impl SigningReceipt {
     /// How long it stays — a message's tick is shorter than a landing, which
     /// carries a hash somebody may want to read (Android's 1.4 s / 2.6 s).
     #[must_use]
-    pub fn closes_after_ms(&self, ending: &SigningEnding) -> Option<u64> {
+    pub fn closes_after_ms(&self, ending: &SignEnding) -> Option<u64> {
         (self.stage == ReceiptStage::Confirmed).then_some(match ending {
-            SigningEnding::Signed => 1_400,
+            SignEnding::Signed => 1_400,
             _ => 2_600,
         })
     }
@@ -416,7 +447,8 @@ impl SigningReceipt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vela_core::app::sign_request::{SignErrorNotice, SignSurface};
+    use vela_core::app::sign_request::{SignErrorNotice, SignResponsePayload, SignSurface};
+    use vela_core::app::tx_tracker::TrackStatus;
 
     use crate::signing::Tone;
     use crate::signing::fixtures::AmountLine;
@@ -447,6 +479,7 @@ mod tests {
             polling: !matches!(outcome, TrackOutcome::Final | TrackOutcome::Unknown),
             submitted_at_ms: Some(1_000.),
             outcome,
+            relay_tx_hash: None,
         }
     }
 
@@ -469,13 +502,39 @@ mod tests {
         assert!(approved(&view(|_| {}), true, None, None, &clock(0.), &s).is_none());
     }
 
+    /// Spec 082 RA9 (G22): the pre-check and the relay's estimate read
+    /// "preparing" — "waiting for biometric" never shows before the prompt
+    /// is really up.
+    #[test]
+    fn preparing_is_never_waiting_for_biometric() {
+        let s = strings();
+        let preparing = approved(
+            &view(|v| {
+                v.is_signing = true;
+                v.phase = SignPhase::Preparing;
+            }),
+            true,
+            Some(&summary()),
+            None,
+            &clock(0.),
+            &s,
+        )
+        .unwrap_or_else(|| unreachable!("approved"));
+        assert_eq!(preparing.stage, ReceiptStage::Submitting);
+        assert_eq!(preparing.title, s.tx_preparing);
+        assert_ne!(preparing.title, s.tx_signing);
+        assert!(!preparing.captions.contains(&s.tx_signing));
+        // The form, not a receipt, before anything was approved.
+        assert!(approved(&view(|_| {}), true, None, None, &clock(0.), &s).is_none());
+    }
+
     /// The passkey, the submission and the wait are each named in the send's
     /// own words, and the slide is gone from the first of them.
     #[test]
     fn signing_submitting_and_waiting_read_as_the_send_receipt() {
         let s = strings();
         let signing = approved(
-            &view(|v| v.is_signing = true),
+            &view(|v| v.phase = SignPhase::AwaitingSignature),
             true,
             Some(&summary()),
             None,
@@ -488,7 +547,7 @@ mod tests {
         assert_eq!(signing.captions, vec![summary()]);
 
         let submitting = approved(
-            &view(|v| v.is_submitting = true),
+            &view(|v| v.phase = SignPhase::Submitting),
             true,
             None,
             None,
@@ -497,6 +556,7 @@ mod tests {
         )
         .unwrap_or_else(|| unreachable!("approved"));
         assert_eq!(submitting.title, s.tx_submitting);
+        assert_eq!(submitting.captions, vec![s.tx_background_hint.clone()]);
         assert_eq!(submitting.cta, s.tx_close_background);
 
         let waiting = approved(
@@ -535,7 +595,7 @@ mod tests {
         let s = strings();
         let both = approved(
             &view(|v| {
-                v.is_signing = true;
+                v.phase = SignPhase::AwaitingSignature;
                 v.pending_op_hash = Some(OP.to_owned());
             }),
             true,
@@ -552,20 +612,26 @@ mod tests {
     #[test]
     fn a_message_never_says_submitting() {
         let s = strings();
-        let out = approved(
-            &view(|v| v.is_submitting = true),
-            false,
-            None,
-            None,
-            &clock(0.),
-            &s,
-        )
-        .unwrap_or_else(|| unreachable!("approved"));
-        assert_eq!(out.title, s.status_signing);
-        let signed = ended(&SigningEnding::Signed, None, None, &clock(0.), &s);
+        for phase in [
+            SignPhase::Preparing,
+            SignPhase::AwaitingSignature,
+            SignPhase::Submitting,
+        ] {
+            let out = approved(
+                &view(|v| v.phase = phase),
+                false,
+                None,
+                None,
+                &clock(0.),
+                &s,
+            )
+            .unwrap_or_else(|| unreachable!("approved"));
+            assert_eq!(out.title, s.status_signing, "{phase:?}");
+        }
+        let signed = ended(&SignEnding::Signed, None, None, &clock(0.), &s);
         assert_eq!(signed.stage, ReceiptStage::Confirmed);
         assert_eq!(signed.title, s.signed);
-        assert_eq!(signed.closes_after_ms(&SigningEnding::Signed), Some(1_400));
+        assert_eq!(signed.closes_after_ms(&SignEnding::Signed), Some(1_400));
     }
 
     /// A submission that failed says so in the send flow's words; a refusal
@@ -645,6 +711,19 @@ mod tests {
         assert_eq!(rejected.stage, ReceiptStage::Failed);
         assert!(rejected.captions.contains(&s.error_generic));
 
+        // Spec 082 RA4: never had it — nothing was sent, not "failed" on time.
+        let not_sent = at(TrackStatus::NotSent, TrackOutcome::Final, None);
+        assert_eq!(not_sent.stage, ReceiptStage::Failed);
+        assert_eq!(not_sent.title, s.receipt_failed);
+        assert!(not_sent.captions.contains(&s.error_generic));
+
+        // The reply was lost and the relay has not shown it holds the op.
+        let maybe = at(TrackStatus::Pending, TrackOutcome::MaybeSent, None);
+        assert_eq!(maybe.stage, ReceiptStage::Submitted);
+        assert_eq!(maybe.title, s.tx_submitting);
+        assert!(maybe.captions.contains(&s.maybe_sent));
+        assert_eq!(maybe.cta, s.tx_close_background);
+
         let held = at(TrackStatus::FeeHeld, TrackOutcome::Landing, None);
         assert_eq!(held.stage, ReceiptStage::Submitted);
         assert!(held.captions.contains(&s.tx_held_fees));
@@ -669,8 +748,9 @@ mod tests {
         assert!(unknown.captions.contains(&s.unknown_outcome));
     }
 
-    /// The core's answer, read back: a message signed, a transaction landed
-    /// inside the wait, or the operation hash because the wait ran out.
+    /// The core's answer, read back by the core's own rule: a message signed,
+    /// a transaction landed inside the wait, or the operation hash because
+    /// the wait ran out.
     #[test]
     fn the_answer_says_how_it_ended() {
         let ok = |result: &str| SignResponsePayload::Ok {
@@ -678,17 +758,18 @@ mod tests {
         };
         assert_eq!(
             ending_of("personal_sign", &ok("0xsig"), None),
-            Some(SigningEnding::Signed)
+            Some(SignEnding::Signed)
         );
         assert_eq!(
             ending_of("eth_sendTransaction", &ok(TX), Some(OP)),
-            Some(SigningEnding::Landed {
-                tx_hash: TX.to_owned()
+            Some(SignEnding::Landed {
+                tx_hash: TX.to_owned(),
+                user_op_hash: Some(OP.to_owned()),
             })
         );
         assert_eq!(
             ending_of("wallet_sendCalls", &ok(&OP.to_uppercase()), Some(OP)),
-            Some(SigningEnding::StillConfirming {
+            Some(SignEnding::StillConfirming {
                 user_op_hash: OP.to_owned()
             })
         );
@@ -713,7 +794,7 @@ mod tests {
     #[test]
     fn an_ending_follows_the_tracker() {
         let s = strings();
-        let still = SigningEnding::StillConfirming {
+        let still = SignEnding::StillConfirming {
             user_op_hash: OP.to_owned(),
         };
         let waiting = ended(
@@ -745,17 +826,164 @@ mod tests {
             landed_later.hash,
             Some((s.receipt_tx_hash.clone(), TX.to_owned()))
         );
-        let landed = SigningEnding::Landed {
+        // Spec 082 RA8 (W3): a transaction the page got its tx hash for is
+        // not "confirmed" until the tracker says so — it may have reverted.
+        let landed = SignEnding::Landed {
             tx_hash: TX.to_owned(),
+            user_op_hash: Some(OP.to_owned()),
         };
-        let tick = ended(&landed, None, None, &clock(0.), &s);
+        let unconfirmed = ended(&landed, None, None, &clock(0.), &s);
+        assert_eq!(unconfirmed.stage, ReceiptStage::Submitted);
+        assert_eq!(unconfirmed.closes_after_ms(&landed), None);
+        let tick = ended(
+            &landed,
+            None,
+            Some(&entry(
+                TrackStatus::Confirmed,
+                TrackOutcome::Final,
+                Some(TX),
+            )),
+            &clock(0.),
+            &s,
+        );
         assert_eq!(tick.explorer_tx.as_deref(), Some(TX));
         assert_eq!(tick.closes_after_ms(&landed), Some(2_600));
+        let reverted = ended(
+            &landed,
+            None,
+            Some(&entry(TrackStatus::Dropped, TrackOutcome::Final, Some(TX))),
+            &clock(0.),
+            &s,
+        );
+        assert_eq!(reverted.stage, ReceiptStage::Failed);
+        assert!(reverted.captions.contains(&s.receipt_failed_hint));
+        assert_eq!(reverted.explorer_tx.as_deref(), Some(TX));
         // Another operation's entry is not this one's.
         let mut other = entry(TrackStatus::Confirmed, TrackOutcome::Final, Some(TX));
         other.user_op_hash = "0xother".to_owned();
         let unmoved = ended(&still, None, Some(&other), &clock(0.), &s);
         assert_eq!(unmoved.stage, ReceiptStage::Submitted);
+    }
+
+    /// Every `SignEndingState` the core can hand over has its own drawing
+    /// (spec 082 RA8/RA10) — the tick, the explorer, the two crosses and
+    /// their sentences, and each way of still being on its way.
+    #[test]
+    fn every_ending_state_is_drawn() {
+        let s = strings();
+        let draw =
+            |state: SignEndingState| drawn(&state, Some(OP), None, Vec::new(), &clock(0.), &s);
+
+        let signed = draw(SignEndingState::Signed);
+        assert_eq!(
+            (signed.stage, signed.title.clone()),
+            (ReceiptStage::Confirmed, s.signed.clone())
+        );
+
+        let confirmed = draw(SignEndingState::Confirmed {
+            tx_hash: TX.to_owned(),
+        });
+        assert_eq!(confirmed.stage, ReceiptStage::Confirmed);
+        assert_eq!(confirmed.explorer_tx.as_deref(), Some(TX));
+
+        let reverted = draw(SignEndingState::Reverted {
+            tx_hash: TX.to_owned(),
+        });
+        assert_eq!(reverted.stage, ReceiptStage::Failed);
+        assert_eq!(reverted.title, s.receipt_failed);
+        assert_eq!(reverted.captions, vec![s.receipt_failed_hint.clone()]);
+        assert_eq!(reverted.explorer_tx.as_deref(), Some(TX));
+
+        let not_sent = draw(SignEndingState::NotSent);
+        assert_eq!(not_sent.stage, ReceiptStage::Failed);
+        assert_eq!(not_sent.title, s.receipt_failed);
+        assert_eq!(not_sent.captions, vec![s.error_generic.clone()]);
+        assert!(not_sent.explorer_tx.is_none());
+
+        let following = |outcome, fee_held| {
+            draw(SignEndingState::Following {
+                user_op_hash: OP.to_owned(),
+                outcome,
+                fee_held,
+            })
+        };
+        let maybe = following(TrackOutcome::MaybeSent, false);
+        assert_eq!(maybe.title, s.tx_submitting);
+        assert_eq!(maybe.captions, vec![s.maybe_sent.clone()]);
+        assert_eq!(maybe.hash, Some((s.receipt_op_hash.clone(), OP.to_owned())));
+        assert_eq!(maybe.cta, s.tx_close_background);
+        assert!(
+            !maybe.cta_accent,
+            "no retry, no accent: nothing to do again"
+        );
+        assert!(
+            following(TrackOutcome::Landing, false)
+                .captions
+                .contains(&s.tx_waiting_confirm)
+        );
+        assert!(
+            following(TrackOutcome::Landing, true)
+                .captions
+                .contains(&s.tx_held_fees)
+        );
+        assert!(
+            following(TrackOutcome::StillConfirming, false)
+                .captions
+                .contains(&s.still_confirming)
+        );
+        assert!(
+            following(TrackOutcome::Unknown, false)
+                .captions
+                .contains(&s.unknown_outcome)
+        );
+        for outcome in [
+            TrackOutcome::Landing,
+            TrackOutcome::StillConfirming,
+            TrackOutcome::Unknown,
+            TrackOutcome::MaybeSent,
+            TrackOutcome::Final,
+        ] {
+            assert_eq!(
+                following(outcome, false).stage,
+                ReceiptStage::Submitted,
+                "{outcome:?}"
+            );
+        }
+    }
+
+    /// Before the tracker has taken a may-have-been-sent op, the view's own
+    /// flag says what the words are.
+    #[test]
+    fn a_lost_reply_says_so_before_the_tracker_has_it() {
+        let s = strings();
+        let maybe = approved(
+            &view(|v| {
+                v.phase = SignPhase::Submitting;
+                v.pending_op_hash = Some(OP.to_owned());
+                v.pending_op_maybe_sent = true;
+            }),
+            true,
+            None,
+            None,
+            &clock(0.),
+            &s,
+        )
+        .unwrap_or_else(|| unreachable!("approved"));
+        assert_eq!(maybe.captions, vec![s.maybe_sent.clone()]);
+        // Once the relay has shown it holds the op, the ordinary wait.
+        let acknowledged = approved(
+            &view(|v| {
+                v.pending_op_hash = Some(OP.to_owned());
+                v.pending_op_maybe_sent = true;
+            }),
+            true,
+            None,
+            Some(&entry(TrackStatus::Pending, TrackOutcome::Landing, None)),
+            &clock(0.),
+            &s,
+        )
+        .unwrap_or_else(|| unreachable!("approved"));
+        assert!(acknowledged.captions.contains(&s.tx_waiting_confirm));
     }
 
     #[test]

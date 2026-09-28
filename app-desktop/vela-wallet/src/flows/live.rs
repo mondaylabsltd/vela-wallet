@@ -2918,6 +2918,23 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
     let held = (hold == Some(SendHoldReason::FeeHold)).then(|| s.tx_held_fees.clone());
     let rejected = (hold == Some(SendHoldReason::FeeRejected)).then(|| s.tx_rejected_fees.clone());
 
+    // Spec 082 RA4/RA10: the relay never had it — nothing was sent, which is
+    // exactly what the generic failure says. Never the fee-rejected words: no
+    // fee was ever refused.
+    if status == Some(SendReceiptStatus::NotSent) {
+        return SendReceipt {
+            stage: ReceiptStage::Failed,
+            progress: None,
+            explorer: None,
+            cta_accent: false,
+            breakdown_title: None,
+            breakdown: Vec::new(),
+            title: s.tx_error_generic.clone(),
+            captions: Vec::new(),
+            hash: None,
+            cta: s.done.clone(),
+        };
+    }
     if status == Some(SendReceiptStatus::Failed) || send.tx_status == SendTxStatus::Error {
         return SendReceipt {
             stage: ReceiptStage::Failed,
@@ -2930,6 +2947,27 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             captions: rejected.into_iter().collect(),
             hash: None,
             cta: s.done.clone(),
+        };
+    }
+    // Spec 082 RA10 (ruling 1): the reply was lost and the payment may be on
+    // its way. Still "submitting", with the one sentence that is true now, the
+    // hash Vela is following, and a way to close — never a retry, which would
+    // be a second payment.
+    if status == Some(SendReceiptStatus::MaybeSent) {
+        return SendReceipt {
+            stage: ReceiptStage::Submitted,
+            progress: None,
+            explorer: None,
+            cta_accent: false,
+            breakdown_title: breakdown_title.clone(),
+            breakdown: breakdown.clone(),
+            title: s.tx_submitting.clone(),
+            captions: vec![s.tx_maybe_sent.clone()],
+            hash: send
+                .user_op_hash
+                .clone()
+                .map(|hash| (s.tx_hash.clone(), hash.into())),
+            cta: s.tx_close_background.clone(),
         };
     }
     if status == Some(SendReceiptStatus::Confirmed) {
@@ -3795,6 +3833,32 @@ mod tests {
         assert!(failed.explorer.is_none() && failed.hash.is_none());
     }
 
+    /// Spec 082 RA10 (ruling 1): a payment whose reply was lost is still
+    /// "submitting", captioned "it may have been sent — don't send it again",
+    /// with a way to close and no retry; one the relay never had is the plain
+    /// failure — never "fees stayed above…", since no fee was refused, even
+    /// when the core still carries a fee reason.
+    #[test]
+    fn a_lost_reply_may_have_been_sent_and_a_never_held_op_was_not_sent() {
+        use vela_core::app::send::{SendHoldReason, SendReceiptStatus};
+        let s = strings();
+        let maybe = receipt_with(SendReceiptStatus::MaybeSent, None);
+        assert_eq!(maybe.stage, ReceiptStage::Submitted);
+        assert_eq!(maybe.title, s.tx_submitting);
+        assert_eq!(maybe.captions, vec![s.tx_maybe_sent.clone()]);
+        assert_eq!(maybe.cta, s.tx_close_background);
+        assert!(maybe.explorer.is_none());
+
+        let not_sent = receipt_with(
+            SendReceiptStatus::NotSent,
+            Some(SendHoldReason::FeeRejected),
+        );
+        assert_eq!(not_sent.stage, ReceiptStage::Failed);
+        assert_eq!(not_sent.title, s.tx_error_generic);
+        assert!(not_sent.captions.is_empty(), "never the fee-rejected words");
+        assert_eq!(not_sent.cta, s.done);
+    }
+
     /// The ring eases toward full and never reaches it by waiting: ~70% at
     /// the chain's usual time, under the 92% ceiling at any length.
     #[test]
@@ -4489,6 +4553,13 @@ mod tests {
                 day_start_ms: today,
                 tx_hash: Some("0xdead".to_owned()),
                 batch: None,
+                kind: if incoming {
+                    vela_core::app::activity_feed::FeedTxKind::Receive
+                } else {
+                    vela_core::app::activity_feed::FeedTxKind::Send
+                },
+                status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+                site: None,
             };
             let view = FeedView {
                 rows: vec![
@@ -4521,6 +4592,7 @@ mod tests {
                     status: FeedTxStatus::Pending,
                     kind: None,
                     usd: None,
+                    dapp_origin: None,
                 }],
                 ..host.view()
             };
@@ -4973,6 +5045,9 @@ mod tests {
             day_start_ms: day,
             tx_hash: None,
             batch: None,
+            kind: vela_core::app::activity_feed::FeedTxKind::Receive,
+            status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+            site: None,
         };
         let view = FeedView {
             rows: vec![

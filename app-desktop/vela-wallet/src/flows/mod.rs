@@ -425,6 +425,9 @@ pub struct FlowStrings {
     pub tx_submitting: SharedString,
     pub tx_preparing: SharedString,
     pub tx_background_hint: SharedString,
+    /// Spec 082 RA10: a payment whose submit reply was lost — "it may have
+    /// been sent; Vela keeps checking, don't send it again".
+    pub tx_maybe_sent: SharedString,
     pub tx_error_generic: SharedString,
     pub tx_error_bundler_fund: SharedString,
     pub first_time_tag: SharedString,
@@ -716,6 +719,7 @@ impl FlowStrings {
             tx_submitting: s("send.txSubmitting"),
             tx_preparing: s("send.txPreparingBiometric"),
             tx_background_hint: s("send.txBackgroundHint"),
+            tx_maybe_sent: s("componentsUi.signing.maybeSent"),
             tx_error_generic: s("send.txErrorGeneric"),
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
@@ -806,6 +810,7 @@ mod tests {
             (s.fee_token_hint.as_ref(), "send.feeTokenHint"),
             (s.pick_contact_title.as_ref(), "send.pickContactTitle"),
             (s.tx_submitted_title.as_ref(), "send.txSubmittedTitle"),
+            (s.tx_maybe_sent.as_ref(), "componentsUi.signing.maybeSent"),
             (s.native_alias_title.as_ref(), "addToken.nativeAliasTitle"),
             (s.bad_amount.as_ref(), "send.badAmount"),
             (s.batch_dup.as_ref(), "send.batchDup"),

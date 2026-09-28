@@ -15682,17 +15682,24 @@ impl WalletPage {
         let Some(landing) = self.dapp_landing.clone() else {
             return div();
         };
-        let track = match &landing.ending {
-            crate::signing::status::SigningEnding::StillConfirming { user_op_hash } => {
-                resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
-                    .read(cx)
-                    .view()
-                    .entries
-                    .into_iter()
-                    .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(user_op_hash))
-            }
+        // The operation this ending follows — a landed one too: its tick is
+        // the tracker's to give (spec 082 RA8, W3).
+        let op = match &landing.ending {
+            vela_core::app::sign_request::SignEnding::StillConfirming { user_op_hash }
+            | vela_core::app::sign_request::SignEnding::Landed {
+                user_op_hash: Some(user_op_hash),
+                ..
+            } => Some(user_op_hash.clone()),
             _ => None,
         };
+        let track = op.and_then(|op| {
+            resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
+                .read(cx)
+                .view()
+                .entries
+                .into_iter()
+                .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(&op))
+        });
         let (header, summary) = self.signing_last.clone().unzip();
         let clock = signing_clock(landing.chain_id, landing.seen_submitted_ms);
         let receipt = crate::signing::status::ended(
@@ -17456,7 +17463,7 @@ impl Render for WalletPage {
 /// A dApp transaction landing in the signing column (078 G-04).
 #[derive(Clone, Debug)]
 struct DappLanding {
-    ending: crate::signing::status::SigningEnding,
+    ending: vela_core::app::sign_request::SignEnding,
     chain_id: u32,
     /// Its number (`dapp_landing_seq`) — a tick's timer closes only its own.
     seq: u64,

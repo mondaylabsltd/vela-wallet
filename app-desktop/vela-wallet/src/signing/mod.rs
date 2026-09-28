@@ -52,6 +52,9 @@ pub struct SigningStrings {
     /// send receipt's own words (`send.tx*`) — a dApp transaction and a send
     /// must read the same while they land (Android's receipt, word for word).
     pub tx_signing: SharedString,
+    /// Spec 082 RA9: the pre-check and the relay's estimate, before any
+    /// prompt — "preparing", never "waiting for biometric".
+    pub tx_preparing: SharedString,
     pub tx_submitting: SharedString,
     pub tx_background_hint: SharedString,
     pub tx_submitted_title: SharedString,
@@ -69,6 +72,9 @@ pub struct SigningStrings {
     pub still_confirming: SharedString,
     /// Past the tracker's 24 h line: fate unknown.
     pub unknown_outcome: SharedString,
+    /// Spec 082 RA10 (ruling 1): the submit's reply was lost — "it may have
+    /// been sent; Vela keeps checking, don't send it again".
+    pub maybe_sent: SharedString,
     /// A message signed ("已签名！") — `signHandoff.signed` reads "已发送" in
     /// zh, which a message that went nowhere is not (Android's choice).
     pub signed: SharedString,
@@ -291,6 +297,7 @@ impl SigningStrings {
             receipt_explorer: loc.t("componentsTx.receipt.explorer"),
             receipt_done: loc.t("componentsTx.receipt.done"),
             tx_signing: loc.t("send.txSigning"),
+            tx_preparing: loc.t("send.txPreparing"),
             tx_submitting: loc.t("send.txSubmitting"),
             tx_background_hint: loc.t("send.txBackgroundHint"),
             tx_submitted_title: loc.t("send.txSubmittedTitle"),
@@ -303,6 +310,7 @@ impl SigningStrings {
             tx_held_fees: loc.t("send.txHeldFees"),
             still_confirming: s("stillConfirming"),
             unknown_outcome: s("unknownOutcome"),
+            maybe_sent: s("maybeSent"),
             signed: loc.t("clearSigning.alertSignedTitle"),
             signing_account: s("signingAccount"),
             advanced_toggle: s("advancedToggle"),
@@ -563,6 +571,8 @@ mod tests {
         let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
         for text in [
             s.tx_signing.as_ref(),
+            s.tx_preparing.as_ref(),
+            s.maybe_sent.as_ref(),
             s.tx_submitting.as_ref(),
             s.tx_background_hint.as_ref(),
             s.tx_submitted_title.as_ref(),

@@ -60,7 +60,7 @@ use vela_core::app::send::{
     SendRecipientDraft, SendShellResult, SendStage, SendView,
 };
 use vela_core::app::sign_pref::SignPref;
-use vela_core::app::tx_tracker::{TrackStatus, TxTracker};
+use vela_core::app::tx_tracker::TxTracker;
 
 use crate::ceremony::CeremonyChannel;
 use crate::core_host::{CoreHost, Pending};
@@ -160,7 +160,11 @@ pub struct SendHost {
     last_counted_second: Option<u64>,
     signing_reported: bool,
     tracked_hash: Option<String>,
-    last_track_status: Option<TrackStatus>,
+    /// The last receipt verdict handed to the send machine — deduped on the
+    /// verdict itself, not the tracker's status: a may-have-been-sent op the
+    /// relay then acknowledges changes its outcome while its status stays
+    /// `pending` (spec 082 RA10).
+    last_receipt: Option<SendReceiptOutcome>,
 }
 
 /// The active account, whole — the send flow signs as it.
@@ -229,7 +233,7 @@ impl SendHost {
             last_counted_second: None,
             signing_reported: false,
             tracked_hash: None,
-            last_track_status: None,
+            last_receipt: None,
         };
 
         // The Trusted Signer's channel speaks up whenever a ceremony waits,
@@ -703,10 +707,21 @@ impl SendHost {
                 user_op_hash,
                 record_ids,
                 chain_id,
+                maybe_sent,
+                submit_block,
             } => {
                 self.tracked_hash = Some(user_op_hash.to_lowercase());
-                self.last_track_status = None;
-                tracker::submitted(user_op_hash.clone(), record_ids.clone(), *chain_id, cx);
+                self.last_receipt = None;
+                tracker::submitted(
+                    tracker::Handoff {
+                        user_op_hash: user_op_hash.clone(),
+                        record_ids: record_ids.clone(),
+                        chain_id: *chain_id,
+                        maybe_sent: *maybe_sent,
+                        submit_block: *submit_block,
+                    },
+                    cx,
+                );
                 self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
                 return;
             }
@@ -921,23 +936,15 @@ impl SendHost {
         else {
             return;
         };
-        if self.last_track_status == Some(entry.status) {
+        // The core's one mapping (spec 082): a slow or unreachable poll sends
+        // nothing (invariant ⑤); "not sent" is never the fee-rejected words.
+        let Some(outcome) = vela_core::app::send::receipt_outcome_of(entry) else {
+            return;
+        };
+        if self.last_receipt.as_ref() == Some(&outcome) {
             return;
         }
-        self.last_track_status = Some(entry.status);
-        // Only the three verdicts `ReceiptUpdate` accepts; a slow or
-        // unreachable poll sends nothing (invariant ⑤).
-        let outcome = match entry.status {
-            TrackStatus::Confirmed => SendReceiptOutcome::Confirmed {
-                tx_hash: entry.tx_hash.clone().unwrap_or_default(),
-            },
-            TrackStatus::Dropped => SendReceiptOutcome::Failed { rejected: false },
-            TrackStatus::Rejected => SendReceiptOutcome::Failed { rejected: true },
-            TrackStatus::FeeHeld => SendReceiptOutcome::FeeHeld,
-            TrackStatus::Pending | TrackStatus::Unreachable | TrackStatus::AcceptedNotLanded => {
-                return;
-            }
-        };
+        self.last_receipt = Some(outcome.clone());
         self.dispatch(
             SendEvent::ReceiptUpdate {
                 user_op_hash: entry.user_op_hash.clone(),
