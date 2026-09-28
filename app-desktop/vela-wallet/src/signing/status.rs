@@ -181,17 +181,26 @@ pub fn escape_closes(swipe: SignSwipeAction, plan: ClosePlan) -> bool {
 }
 
 /// The title and body keys of the card a phone's stop is told with (083). A
-/// connection that never came up is "connection failed" and the onboarding's
-/// "the request never arrived — check your network": nothing reached the
-/// phone, and the network is what a person can check before trying again.
+/// connection that never came up is the onboarding's own pair — "the network
+/// connection is unstable", "the request never arrived — check your network":
+/// nothing reached the phone, and the network is what a person can check
+/// before trying again. One that dropped once the phone was asked has the
+/// same title, but the request DID arrive, so the body is what is true
+/// whatever the phone did (H4 review): a transaction was not submitted and
+/// the funds are safe; a message went nowhere — `on_chain` says which. The
+/// title is a card's sentence case, as the timeout's is: the connection list's
+/// "Connection Failed" is a status label, title-cased in en, id and tr.
 #[must_use]
-pub const fn phone_stop_words(stop: PhoneStop) -> (&'static str, &'static str) {
+pub const fn phone_stop_words(stop: PhoneStop, on_chain: bool) -> (&'static str, &'static str) {
+    const LINK: &str = "onboarding.common.networkTitle";
     match stop {
         PhoneStop::ScanExpired => (
             "onboarding.common.timeoutTitle",
             "onboarding.common.timeoutBody",
         ),
-        PhoneStop::LinkFailed => ("connect.list.connFailed", "onboarding.common.networkBody"),
+        PhoneStop::LinkFailed => (LINK, "onboarding.common.networkBody"),
+        PhoneStop::Dropped if on_chain => (LINK, "send.txErrorGeneric"),
+        PhoneStop::Dropped => (LINK, "connect.detail.offChainNote"),
     }
 }
 
@@ -1069,18 +1078,52 @@ mod tests {
         assert_eq!(failed.cta, s.receipt_done, "the close stays");
     }
 
-    /// 083: the two phone stops are told apart — a scan nobody answered is
-    /// its window; a phone that scanned and never connected is the
-    /// connection — each in words every catalogue has.
+    /// 083: the phone stops are told apart — a scan nobody answered is its
+    /// window; a phone that scanned and never connected is the connection
+    /// and the network; one that dropped once asked (H4 review) is the
+    /// connection, and not "the request never arrived", which was false
+    /// there: its body is the transaction's "not submitted, funds safe" or
+    /// the message's "nothing went on chain" — each in words every
+    /// catalogue has, checked in every one of them (not in whatever language
+    /// the machine running the test is set to), and titled in a card's
+    /// sentence case, as the timeout is.
     #[test]
     fn a_phone_stop_says_which_stop_it_was() {
-        let scan = phone_stop_words(PhoneStop::ScanExpired);
-        let link = phone_stop_words(PhoneStop::LinkFailed);
-        assert_ne!(scan.0, link.0);
-        assert_ne!(scan.1, link.1);
-        let loc = crate::loc::Loc::from_env();
-        for key in [scan.0, scan.1, link.0, link.1] {
-            assert_ne!(loc.t(key).as_ref(), key, "`{key}` echoed the key");
+        for on_chain in [true, false] {
+            let scan = phone_stop_words(PhoneStop::ScanExpired, on_chain);
+            let link = phone_stop_words(PhoneStop::LinkFailed, on_chain);
+            let dropped = phone_stop_words(PhoneStop::Dropped, on_chain);
+            assert_ne!(scan.0, link.0);
+            assert_ne!(scan.1, link.1);
+            assert_eq!(dropped.0, link.0, "the connection, both times");
+            assert_ne!(dropped.1, link.1, "but the request did arrive");
+            assert_ne!(dropped.1, scan.1);
+            for (language, loc) in crate::loc::Loc::every_language() {
+                for key in [scan.0, scan.1, link.0, link.1, dropped.0, dropped.1] {
+                    assert_ne!(
+                        loc.t(key).as_ref(),
+                        key,
+                        "{language}: `{key}` echoed the key"
+                    );
+                }
+            }
+        }
+        let en = crate::loc::Loc::for_language("en");
+        assert_eq!(
+            en.t(phone_stop_words(PhoneStop::LinkFailed, true).0)
+                .as_ref(),
+            "Network connection is unstable",
+            "a card's sentence case, not the list's \"Connection Failed\""
+        );
+        for (language, loc) in crate::loc::Loc::every_language() {
+            let s = SigningStrings::resolve(&loc);
+            let body = |on_chain| loc.t(phone_stop_words(PhoneStop::Dropped, on_chain).1);
+            assert_eq!(body(true), s.error_generic, "{language}: not submitted");
+            assert_eq!(
+                body(false),
+                s.error_off_chain,
+                "{language}: nothing on chain"
+            );
         }
     }
 

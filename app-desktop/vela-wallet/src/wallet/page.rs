@@ -13892,14 +13892,19 @@ impl WalletPage {
     /// What the open request's ceremony waits on the person for, as a card
     /// for the column (083 W19): the phone's QR, the phone's or the key's own
     /// prompt, or a phone that stopped — a scan whose window closed with no
-    /// phone, a phone that scanned and never connected (H4). `None` when only
-    /// the request itself does.
+    /// phone, a phone that scanned and never connected, one that dropped once
+    /// asked (H4). `None` when only the request itself does.
     #[cfg(not(target_os = "linux"))]
     fn signing_ceremony_card(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
         let host = self.signing_host.clone()?;
-        let (qr, touch, stopped) = {
+        let (qr, touch, stopped, on_chain) = {
             let read = host.read(cx);
-            (read.qr_showing(), read.touch_waiting(), read.phone_stop)
+            (
+                read.qr_showing(),
+                read.touch_waiting(),
+                read.phone_stop,
+                crate::signing::status::on_chain(&read.raw.0),
+            )
         };
         let card = if let Some(payload) = qr {
             let host = host.clone();
@@ -13927,7 +13932,7 @@ impl WalletPage {
         } else if let Some(stop) = stopped {
             // Nothing was answered: Retry shows a new code, and the close is
             // the column's own — a refusal, made by the person.
-            let (title, body) = crate::signing::status::phone_stop_words(stop);
+            let (title, body) = crate::signing::status::phone_stop_words(stop, on_chain);
             let seconds = crate::ctap::cable::SCAN_TIMEOUT.as_secs_f64();
             let retry = {
                 let host = host.clone();

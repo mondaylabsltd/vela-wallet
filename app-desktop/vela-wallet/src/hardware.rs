@@ -311,7 +311,7 @@ pub fn signin_method_card(
 /// colour on purpose.
 ///
 /// **No buttons.** The answer is the phone; there is nothing to press. It clears
-/// itself the moment the tunnel is up.
+/// itself the moment the phone's advert is found (083 H5).
 pub fn qr_card(
     theme: &Theme,
     loc: &Loc,

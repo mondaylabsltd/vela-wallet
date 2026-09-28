@@ -130,6 +130,36 @@ impl PasskeyFailure {
                 .as_deref()
                 .is_some_and(|message| message.starts_with(cable::PHONE_LINK_FAILED))
     }
+
+    /// The phone was connected and asked, and the connection dropped before
+    /// its answer came back (083 H4 review): the tunnel went silent, or its
+    /// socket failed. Whatever the phone did, nothing signed reached this
+    /// desktop — and the desktop sends only what it holds — so another try
+    /// can work, and cannot send anything twice. A tunnel the phone closed is
+    /// not this: that is its own cancel.
+    pub(crate) fn phone_dropped(&self) -> bool {
+        self.kind == FailureKind::Other
+            && self
+                .message
+                .as_deref()
+                .is_some_and(|message| message.starts_with(cable::PHONE_DROPPED))
+    }
+
+    /// Which of the phone's stops this is, when it is one another try can
+    /// fix (083): the scan ran out, the connection never came up, or it
+    /// dropped once the phone was asked.
+    pub(crate) fn phone_stop(&self) -> Option<crate::executor::sign_request::PhoneStop> {
+        use crate::executor::sign_request::PhoneStop;
+        if self.scan_ran_out() {
+            Some(PhoneStop::ScanExpired)
+        } else if self.phone_link_failed() {
+            Some(PhoneStop::LinkFailed)
+        } else if self.phone_dropped() {
+            Some(PhoneStop::Dropped)
+        } else {
+            None
+        }
+    }
 }
 
 /// A core ceremony failure, in this shell's type. Same shape, different enum —
@@ -146,10 +176,7 @@ fn ceremony_failure(error: CeremonyError) -> PasskeyFailure {
         .as_deref()
         .is_some_and(|message| message.contains(cable::TUNNEL_CLOSED))
     {
-        return PasskeyFailure::classified(
-            FailureKind::Cancelled,
-            "your phone ended the session before signing".to_owned(),
-        );
+        return PasskeyFailure::classified(FailureKind::Cancelled, cable::PHONE_ENDED);
     }
     PasskeyFailure {
         kind: match error.kind {
@@ -193,6 +220,13 @@ fn hybrid_failure(error: HybridError) -> PasskeyFailure {
         // Dismissing the QR is dismissing the ceremony — what closing the
         // system's passkey sheet already is on every other path.
         HybridError::Cancelled => PasskeyFailure::cancelled(),
+        // The person cancelled on the phone while it connected: the phone's
+        // answer, as its hang-up mid-prompt is (`ceremony_failure`) — the
+        // request goes back to its form, with no card that blames a network
+        // (083 H4 review).
+        HybridError::PhoneEnded => {
+            PasskeyFailure::classified(FailureKind::Cancelled, error.to_string())
+        }
         other => PasskeyFailure::other(other.to_string()),
     }
 }
@@ -244,7 +278,7 @@ pub type CredentialPicker = Arc<dyn Fn(Vec<CredentialChoice>) -> Option<usize> +
 
 /// Shows (or clears) the caBLE QR the person scans with their phone. `Some` with
 /// the `FIDO:/…` payload while the hybrid handshake waits for a scan; `None`
-/// once the tunnel is up or the attempt ends.
+/// once the phone's advert is found (083 H5) or the attempt ends.
 pub type QrNotifier = Arc<dyn Fn(Option<String>) + Send + Sync>;
 
 pub use crate::ctap::usb::CancelProbe;
@@ -937,20 +971,39 @@ fn phone_prompt(kind: TouchKind, product: &str) -> TouchRequest {
     }
 }
 
+/// The phone's card while its connection comes up (083 H5): the same words,
+/// and a Cancel. Unlike the prompt's, this one stops something — the phone
+/// has been asked nothing yet, and a dismissal here means it never is
+/// ([`hybrid_ready`], [`asked_nothing_yet`]). Without it the card covered
+/// the window through the tunnel and the handshake with nothing to press
+/// (083 H4 review), where the QR's Cancel had been.
+fn phone_connecting() -> TouchRequest {
+    TouchRequest {
+        cancellable: true,
+        ..phone_prompt(TouchKind::Presence, HYBRID_PRODUCT)
+    }
+}
+
 /// The phone scanned the QR and its advert decrypted (083 H5). The tunnel and
 /// the handshake can take seconds more, and the QR stood over them as if
 /// nobody had scanned — so it comes down now, and the phone's card says to
-/// look at the phone.
+/// look at the phone. Not over a QR dismissed in the same instant: the flow
+/// the person just cancelled gets no card.
 fn phone_found(ceremony: &Ceremony) {
     (ceremony.qr)(None);
-    (ceremony.touch)(Some(phone_prompt(TouchKind::Presence, HYBRID_PRODUCT)));
+    if (ceremony.cancelled)() {
+        return;
+    }
+    (ceremony.touch)(Some(phone_connecting()));
 }
 
 /// The hybrid setup, back. The QR comes down however it ended. A dismissal
-/// made while the tunnel came up, where nothing polls, is honoured here rather
-/// than carried on into a prompt for a ceremony the person has walked away
-/// from. The phone's card goes with a failure or a dismissal (083 H5), and
-/// stays for a phone that is connected: its prompt is next.
+/// made while the tunnel came up — the connecting card's Cancel, the QR's,
+/// a column's close — is honoured here rather than carried on into a prompt
+/// for a ceremony the person has walked away from; a phone that did connect
+/// is told goodbye, so it is not left waiting for a request. The phone's
+/// card goes with a failure or a dismissal (083 H5), and stays for a phone
+/// that is connected: its prompt is next.
 fn hybrid_ready(
     ceremony: &Ceremony,
     result: Result<Box<dyn Cable>, HybridError>,
@@ -958,12 +1011,27 @@ fn hybrid_ready(
     (ceremony.qr)(None);
     if (ceremony.cancelled)() {
         (ceremony.touch)(None);
+        if let Ok(mut cable) = result {
+            cable.cancel();
+        }
         return Err(PasskeyFailure::cancelled());
     }
     result.map_err(|error| {
         (ceremony.touch)(None);
         hybrid_failure(error)
     })
+}
+
+/// The connecting card can still be dismissed in the breath between the
+/// handshake and the ceremony's first request (083 H4 review): the phone is
+/// then asked nothing, and told goodbye.
+fn asked_nothing_yet(cable: &mut dyn Cable, ceremony: &Ceremony) -> Result<(), PasskeyFailure> {
+    if (ceremony.cancelled)() {
+        (ceremony.touch)(None);
+        cable.cancel();
+        return Err(PasskeyFailure::cancelled());
+    }
+    Ok(())
 }
 
 /// Wall-clock seconds since the epoch, for the QR's freshness field. The core is
@@ -982,6 +1050,7 @@ fn register_hybrid(
     ceremony: &Ceremony,
 ) -> Result<Registration, PasskeyFailure> {
     let mut cable = run_hybrid(ceremony, false)?;
+    asked_nothing_yet(cable.as_mut(), ceremony)?;
     let host = DesktopHost { ceremony };
     let outcome = ceremony::Client {
         cable: cable.as_mut(),
@@ -1020,6 +1089,7 @@ fn assert_over(
     challenge: &[u8],
     credential_id: Option<&str>,
 ) -> Result<ceremony::Assertion, PasskeyFailure> {
+    asked_nothing_yet(cable, ceremony)?;
     let host = DesktopHost { ceremony };
     let outcome = ceremony::Client {
         cable,
@@ -1165,27 +1235,109 @@ mod tests {
     }
 
     /// 083 H4: a phone found whose connection never came up — the tunnel, or
-    /// the handshake through it — is the one hybrid failure another try can
-    /// fix. Nothing else is: no phone at all is the scan timeout, no radio is
-    /// Bluetooth, a dismissal is the person's.
+    /// the handshake through it — is the one hybrid SETUP failure another try
+    /// can fix. Nothing else is: no phone at all is the scan timeout, no
+    /// radio is Bluetooth, a dismissal is the person's — and so (review) is a
+    /// phone that hung up while it connected: its own cancel, back to the
+    /// form, never "check your network".
     #[test]
     fn only_a_connection_that_never_came_up_is_worth_another_try() {
+        use crate::executor::sign_request::PhoneStop;
         for error in [
             HybridError::Tunnel("cannot reach cable.ua5v.com: refused".to_owned()),
-            HybridError::Handshake("it closed before the signature".to_owned()),
+            HybridError::Handshake("the phone stopped answering".to_owned()),
         ] {
             let failure = hybrid_failure(error);
             assert!(failure.phone_link_failed(), "{:?}", failure.message);
             assert!(!failure.scan_ran_out());
+            assert!(!failure.phone_dropped());
+            assert_eq!(failure.phone_stop(), Some(PhoneStop::LinkFailed));
         }
+        assert_eq!(
+            hybrid_failure(HybridError::NoAdvert).phone_stop(),
+            Some(PhoneStop::ScanExpired)
+        );
         for error in [
             HybridError::NoAdvert,
             HybridError::Bluetooth("no Bluetooth adapter".to_owned()),
             HybridError::BadAdvert,
+            HybridError::PhoneEnded,
             HybridError::Cancelled,
         ] {
             assert!(!hybrid_failure(error).phone_link_failed());
         }
+        for error in [
+            HybridError::Bluetooth("no Bluetooth adapter".to_owned()),
+            HybridError::BadAdvert,
+            HybridError::PhoneEnded,
+            HybridError::Cancelled,
+        ] {
+            assert_eq!(hybrid_failure(error).phone_stop(), None);
+        }
+        let hung_up = hybrid_failure(HybridError::PhoneEnded);
+        assert_eq!(hung_up.kind, FailureKind::Cancelled, "the phone's answer");
+        assert_eq!(hung_up.message.as_deref(), Some(cable::PHONE_ENDED));
+    }
+
+    /// A connected phone whose every exchange fails with `error`.
+    struct Failing(fn() -> CableError);
+    impl Cable for Failing {
+        fn exchange(
+            &mut self,
+            _request: &[u8],
+            _touch: Option<TouchKind>,
+        ) -> Result<Vec<u8>, CableError> {
+            Err((self.0)())
+        }
+        fn cancel(&mut self) {}
+        fn product(&self) -> &str {
+            HYBRID_PRODUCT
+        }
+        fn path(&self) -> &str {
+            "WebSocket"
+        }
+    }
+
+    /// 083 H4 review: a connected phone whose connection drops once it was
+    /// asked is the third stop another try can fix — said as the phone's
+    /// connection dropping, never the core's "The security key stopped
+    /// responding. Unplug it…" — and the card comes down. A tunnel the phone
+    /// closed is still its own cancel, and no stop at all.
+    #[test]
+    fn a_phone_that_drops_once_asked_is_worth_another_try() {
+        use crate::executor::sign_request::PhoneStop;
+        let channel = crate::ceremony::CeremonyChannel::new();
+        let ceremony = channel.ceremony(0);
+        (ceremony.touch)(Some(phone_prompt(TouchKind::Presence, HYBRID_PRODUCT)));
+
+        let mut silent = cable::PhoneCable(Box::new(Failing(|| CableError::TimedOut)));
+        let dropped = assert_over(&mut silent, &ceremony, &[0x11; 32], None)
+            .err()
+            .unwrap_or_else(|| unreachable!("a silent phone signs nothing"));
+        assert!(dropped.phone_dropped(), "{:?}", dropped.message);
+        assert_eq!(dropped.phone_stop(), Some(PhoneStop::Dropped));
+        assert!(
+            dropped
+                .message
+                .as_deref()
+                .is_some_and(|words| !words.contains("security key")),
+            "{:?}",
+            dropped.message
+        );
+        assert_eq!(channel.touch_waiting(), None, "no card over the failure");
+
+        let mut hung_up = cable::PhoneCable(Box::new(Failing(|| {
+            CableError::Other(format!("caBLE transport: {}", cable::TUNNEL_CLOSED))
+        })));
+        let closed = assert_over(&mut hung_up, &ceremony, &[0x11; 32], None)
+            .err()
+            .unwrap_or_else(|| unreachable!("a closed tunnel signs nothing"));
+        assert_eq!(
+            closed.kind,
+            FailureKind::Cancelled,
+            "the phone's own cancel"
+        );
+        assert_eq!(closed.phone_stop(), None);
     }
 
     /// A cable that is connected and is never asked anything here.
@@ -1215,7 +1367,7 @@ mod tests {
     fn a_found_phone_takes_the_qr_down_and_says_look_at_the_phone() {
         let channel = crate::ceremony::CeremonyChannel::new();
         let ceremony = channel.ceremony(0);
-        let phone = Some(phone_prompt(TouchKind::Presence, HYBRID_PRODUCT));
+        let phone = Some(phone_connecting());
 
         (ceremony.qr)(Some("FIDO:/083".to_owned()));
         phone_found(&ceremony);
@@ -1224,6 +1376,10 @@ mod tests {
         assert!(
             channel.touch_waiting().is_some_and(|card| card.remote),
             "the phone's words, not a security key's"
+        );
+        assert!(
+            channel.touch_waiting().is_some_and(|card| card.cancellable),
+            "a way out while it connects, where the QR's Cancel was"
         );
         assert!(!(ceremony.cancelled)(), "a scan is not a dismissal");
         assert!(hybrid_ready(&ceremony, Ok(Box::new(Connected))).is_ok());
@@ -1234,7 +1390,7 @@ mod tests {
         let broken = hybrid_ready(
             &ceremony,
             Err(HybridError::Handshake(
-                "it closed before the signature".to_owned(),
+                "the phone stopped answering".to_owned(),
             )),
         );
         assert!(broken.is_err_and(|failure| failure.phone_link_failed()));
@@ -1247,6 +1403,71 @@ mod tests {
         let closed = hybrid_ready(&ceremony, Ok(Box::new(Connected)));
         assert!(closed.is_err_and(|failure| failure.kind == FailureKind::Cancelled));
         assert_eq!(channel.touch_waiting(), None);
+    }
+
+    /// A connected phone that counts its goodbyes and must be asked nothing.
+    struct Waiting(Arc<std::sync::atomic::AtomicUsize>);
+    impl Cable for Waiting {
+        fn exchange(
+            &mut self,
+            _request: &[u8],
+            _touch: Option<TouchKind>,
+        ) -> Result<Vec<u8>, CableError> {
+            unreachable!("a dismissed ceremony asks the phone nothing")
+        }
+        fn cancel(&mut self) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        fn product(&self) -> &str {
+            HYBRID_PRODUCT
+        }
+        fn path(&self) -> &str {
+            "WebSocket"
+        }
+    }
+
+    /// 083 H4 review: the connecting card's Cancel stops what it says. The
+    /// card comes down at once; a phone that connected meanwhile is asked
+    /// nothing and told goodbye; the ceremony comes back a dismissal — and
+    /// so it does for a Cancel in the breath between the handshake and the
+    /// first request. A QR dismissed in the instant its phone was found
+    /// raises no card over the flow the person just left.
+    #[test]
+    fn the_connecting_card_stops_the_ceremony() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let channel = crate::ceremony::CeremonyChannel::new();
+        let ceremony = channel.ceremony(0);
+        let goodbyes = Arc::new(AtomicUsize::new(0));
+
+        (ceremony.qr)(Some("FIDO:/083".to_owned()));
+        phone_found(&ceremony);
+        channel.cancel_touch();
+        assert_eq!(channel.touch_waiting(), None, "the card comes down at once");
+        let cancelled = hybrid_ready(&ceremony, Ok(Box::new(Waiting(Arc::clone(&goodbyes)))));
+        assert!(cancelled.is_err_and(|failure| failure.kind == FailureKind::Cancelled));
+        assert_eq!(goodbyes.load(Ordering::SeqCst), 1, "told goodbye");
+
+        (ceremony.qr)(Some("FIDO:/083".to_owned()));
+        phone_found(&ceremony);
+        let mut connected = hybrid_ready(&ceremony, Ok(Box::new(Waiting(Arc::clone(&goodbyes)))))
+            .unwrap_or_else(|failure| unreachable!("connected: {failure:?}"));
+        channel.cancel_touch();
+        let late = assert_over(connected.as_mut(), &ceremony, &[0x11; 32], None)
+            .err()
+            .unwrap_or_else(|| unreachable!("a dismissed ceremony signs nothing"));
+        assert_eq!(late.kind, FailureKind::Cancelled);
+        assert_eq!(goodbyes.load(Ordering::SeqCst), 2);
+        assert_eq!(channel.touch_waiting(), None);
+
+        (ceremony.qr)(Some("FIDO:/083".to_owned()));
+        channel.cancel_qr();
+        phone_found(&ceremony);
+        assert_eq!(channel.qr_showing(), None);
+        assert_eq!(
+            channel.touch_waiting(),
+            None,
+            "no card over a cancelled flow"
+        );
     }
 
     /// The clientDataJSON this client signs must be readable by the SAME

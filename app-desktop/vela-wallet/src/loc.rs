@@ -18,8 +18,12 @@ impl Loc {
     /// → `LANG` → `en` (spec 007 FR-007) — resolved through the same ladder
     /// i18next uses (`resolve_language`).
     pub fn from_env() -> Self {
-        let requested = requested_tag();
+        Self::for_language(&requested_tag())
+    }
 
+    /// The engine for one requested language tag, resolved the same way —
+    /// what [`Self::from_env`] builds for the language in force.
+    pub(crate) fn for_language(requested: &str) -> Self {
         let mut engine = match I18n::embedded() {
             Ok(engine) => engine,
             // `i18n-en` is a compile-time feature of this binary; construction
@@ -29,7 +33,7 @@ impl Loc {
             Err(_) => return Self::key_echo(),
         };
 
-        let state = engine.change_language(&requested);
+        let state = engine.change_language(requested);
         if let Some(resolved) = state.resolved_language.as_deref()
             && resolved != "en"
             && let Ok(catalog) = Catalog::embedded(resolved)
@@ -37,6 +41,16 @@ impl Loc {
             engine.load_catalog(catalog);
         }
         Self { engine }
+    }
+
+    /// Every language the app ships, each its own engine: for a test that
+    /// must hold in all of them, whatever language the machine running it is
+    /// set to.
+    #[cfg(test)]
+    pub(crate) fn every_language() -> impl Iterator<Item = (&'static str, Self)> {
+        vela_core::i18n::SUPPORTED
+            .into_iter()
+            .map(|tag| (tag, Self::for_language(tag)))
     }
 
     /// An engine with only the `en` catalog missing-in-action: `t()` echoes

@@ -250,10 +250,11 @@ pub struct SigningHost {
         Option<String>,
         Option<crate::ctap::usb::TouchRequest>,
     ),
-    /// The phone's QR ran its whole window with nobody scanning (083 W19), or
-    /// the phone scanned and its connection never came up (H4). The request
-    /// is still open — nothing was answered — and the column says which,
-    /// with Retry, until the person chooses.
+    /// The phone's QR ran its whole window with nobody scanning (083 W19),
+    /// the phone scanned and its connection never came up (H4), or it
+    /// dropped once the phone was asked (H4 review). The request is still
+    /// open — nothing was answered — and the column says which, with Retry,
+    /// until the person chooses.
     pub phone_stop: Option<sign_executor::PhoneStop>,
     /// The column was closed while the signature was still to come
     /// ([`crate::signing::status::ClosePlan::AfterCancel`]): whatever the
@@ -663,7 +664,8 @@ impl SigningHost {
         self.channel.qr_showing()
     }
 
-    /// What a key (or the phone, once its tunnel is up) is waiting for.
+    /// What a key is waiting for — or the phone, from the moment its advert
+    /// is found: connecting, and then its prompt (083 H5).
     pub fn touch_waiting(&self) -> Option<crate::ctap::usb::TouchRequest> {
         self.channel.touch_waiting()
     }
@@ -2361,6 +2363,171 @@ mod approve_tests {
         assert_eq!(channel.qr_showing(), None, "the QR comes down");
         assert!((ceremony.cancelled)(), "and the scan behind it is told");
         assert!(signer.stopped(), "no Trusted Signer wait goes on or starts");
+    }
+
+    /// A request's context, as the column fixes it when the request opens.
+    fn sign_context() -> SignContext {
+        let account = Account {
+            id: "cred0".to_owned(),
+            name: "savings".to_owned(),
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: String::new(),
+            keys: vec![vela_core::app::AccountKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                name: String::new(),
+                transports: "hybrid".to_owned(),
+                signer_origin: None,
+            }],
+            signed_in_with: None,
+        };
+        SignContext::new(&account, CeremonyChannel::new().ceremony(0))
+    }
+
+    /// 083 H4 (review): a phone stop, through the column, answers the page
+    /// exactly once. The prompt comes back with the phone's connection gone
+    /// — never up, or dropped once asked — and the executor tells the core a
+    /// dismissal and the column which stop: the core keeps the request, the
+    /// form is back, and the column takes the stop for its card
+    /// (`pump_sign`). The card's 关闭 is the column's close, told at once
+    /// (`close`), and refuses once; a second adds nothing. Its 重试 is the
+    /// approval again (`retry` → `approve` → `dispatch_sign`, which resets
+    /// the prompt): nothing is told the page until that one ends, and then
+    /// its answer is the only one.
+    ///
+    /// Driven the way the tests beside it drive the column: the core machine
+    /// and the column's own decisions, in the order `pump_sign`, `close` and
+    /// `retry` make them — a `SigningHost` is a gpui entity, and this crate
+    /// builds gpui without its test support.
+    #[test]
+    fn a_phone_stop_card_answers_the_page_exactly_once() {
+        use crate::ctap::cable::{HybridError, PHONE_DROPPED};
+        use crate::executor::passkey::PasskeyFailure;
+        use crate::executor::sign_request::{PhoneStop, around_prompt};
+        use crate::signing::status::{ClosePlan, Signature, close_plan};
+        use vela_core::app::FailureKind;
+        use vela_core::app::sign_request::{SignSubmitOutcome, SignSurface};
+
+        let ctx = sign_context();
+        let stops = [
+            (
+                HybridError::Tunnel("cannot reach cable.auth.com".to_owned()).to_string(),
+                PhoneStop::LinkFailed,
+            ),
+            (
+                format!("{PHONE_DROPPED}: the phone stopped answering"),
+                PhoneStop::Dropped,
+            ),
+        ];
+        // The prompt comes back as the phone left it; the pipeline (user_op)
+        // reports a dismissed prompt as `PasskeyCancelled`.
+        let stopped = |sign: &mut CoreHost<SignRequest>, submit: u64, error: &str| {
+            ctx.prompt_reset();
+            let prompt = around_prompt(&ctx, || Err(PasskeyFailure::other(error)));
+            assert!(prompt.is_err_and(|failure| failure.kind == FailureKind::Cancelled));
+            let back = sign.resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: SignSubmitOutcome::PasskeyCancelled,
+                    now_ms: 1.0,
+                },
+            );
+            assert!(answers_in(&back).is_empty(), "the core kept the request");
+            assert!(back_on_form_of(&sign.view(), false), "the form is back");
+        };
+
+        for (error, stop) in &stops {
+            // 关闭.
+            let mut sign = CoreHost::<SignRequest>::new();
+            let submit = approved_to_its_signature(&mut sign);
+            stopped(&mut sign, submit, error);
+            assert_eq!(ctx.take_phone_stop(), Some(*stop), "the card: {error}");
+            assert_eq!(
+                close_plan(&close_facts_of(&sign.view(), Signature::Asked, false)),
+                ClosePlan::Now,
+                "the card's close is told at once"
+            );
+            let refused = sign.dispatch(SignEvent::SwipeDismissed);
+            assert_eq!(answers_in(&refused), vec![("7".to_owned(), Some(4001))]);
+            assert_eq!(sign.view().surface, SignSurface::Hidden);
+            assert!(answers_in(&sign.dispatch(SignEvent::SwipeDismissed)).is_empty());
+
+            // 重试: the approval again, which signs this time.
+            let mut sign = CoreHost::<SignRequest>::new();
+            let submit = approved_to_its_signature(&mut sign);
+            stopped(&mut sign, submit, error);
+            assert!(sign.view().confirm_gate_open, "the slide can go again");
+            // A stop the column had not taken yet is not carried into the
+            // new approval: `dispatch_sign` resets the prompt first.
+            ctx.prompt_reset();
+            assert_eq!(ctx.take_phone_stop(), None, "an approval starts clean");
+            let again = sign.dispatch(SignEvent::ApproveTapped {
+                opts: SignApproveOpts::default(),
+            });
+            assert!(answers_in(&again).is_empty(), "a retry answers nothing");
+            let submit = match again.as_slice() {
+                [
+                    Pending {
+                        id,
+                        operation: SignOperation::SignAndSubmit { .. },
+                    },
+                ] => *id,
+                other => unreachable!("a retry signs at once: {}", other.len()),
+            };
+            // Record, then respond — the core's order.
+            let mut ops = sign.resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: SignSubmitOutcome::Succeeded {
+                        result: "0x1626ba7e".to_owned(),
+                    },
+                    now_ms: 2.0,
+                },
+            );
+            let mut answered = answers_in(&ops);
+            while let Some(record) = ops.iter().find_map(|pending| match pending.operation {
+                SignOperation::PersistRecord { .. } => {
+                    Some((pending.id, SignShellResult::RecordPersisted))
+                }
+                SignOperation::UpdateRecord { .. } => {
+                    Some((pending.id, SignShellResult::RecordUpdated))
+                }
+                _ => None,
+            }) {
+                ops = sign.resolve(record.0, record.1);
+                answered.extend(answers_in(&ops));
+            }
+            assert_eq!(answered, vec![("7".to_owned(), None)], "the retry's answer");
+            assert!(answers_in(&sign.dispatch(SignEvent::SwipeDismissed)).is_empty());
+        }
+
+        // The phone hung up while it connected (review): the person's own
+        // cancel on the phone. The form is back with no card — nothing
+        // blames the network — and the column's close from the form refuses
+        // once, as it does after any dismissal.
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+        ctx.prompt_reset();
+        let hung_up = around_prompt(&ctx, || {
+            Err(PasskeyFailure::classified(
+                FailureKind::Cancelled,
+                crate::ctap::cable::PHONE_ENDED,
+            ))
+        });
+        assert!(hung_up.is_err_and(|failure| failure.kind == FailureKind::Cancelled));
+        let back = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::PasskeyCancelled,
+                now_ms: 1.0,
+            },
+        );
+        assert!(answers_in(&back).is_empty(), "the core kept the request");
+        assert!(back_on_form_of(&sign.view(), false), "the form is back");
+        assert_eq!(ctx.take_phone_stop(), None, "no card");
+        let refused = sign.dispatch(SignEvent::SwipeDismissed);
+        assert_eq!(answers_in(&refused), vec![("7".to_owned(), Some(4001))]);
     }
 
     /// An unpriced sheet approves with no quote rather than a zero.

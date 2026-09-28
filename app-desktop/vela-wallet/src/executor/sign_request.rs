@@ -32,8 +32,8 @@
 //!   used to end in the op hash — until the core's cap, which ends in an
 //!   error, never in a hash nobody can find ([`crate::executor::landing`]).
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -76,6 +76,10 @@ pub enum PhoneStop {
     /// The phone scanned, and its relay tunnel or the encrypted channel
     /// through it never came up (H4).
     LinkFailed,
+    /// The phone was connected and asked, and the connection dropped before
+    /// its answer arrived (H4 review) — whatever it did, nothing signed
+    /// reached this desktop, so nothing went anywhere.
+    Dropped,
 }
 
 /// What the ceremony needs, fixed when the REQUEST opens.
@@ -104,12 +108,10 @@ pub struct SignContext {
     /// raises nothing — the column's close reads this as "the phone signed,
     /// the operation goes on", and must not read it after a no (083 review).
     pub signature_done: Arc<AtomicBool>,
-    /// The phone's QR ran its whole scan window with no phone (083 W19) —
-    /// told to the column, which says so; the page is told nothing.
-    pub scan_expired: Arc<AtomicBool>,
-    /// The phone scanned, and the connection to it never came up (083 H4) —
-    /// told to the column the same way, with its own words.
-    pub phone_failed: Arc<AtomicBool>,
+    /// Why the phone's ceremony came back unsigned, when it was the phone's
+    /// doing and another try can help (083 W19, H4) — told to the column,
+    /// which says which; the page is told nothing.
+    pub phone_stop: Arc<Mutex<Option<PhoneStop>>>,
     /// The column was closed while this approval's signature was still to
     /// come (083 review): a prompt not yet open never opens — the ceremony
     /// comes back unsigned at once, and the column's close becomes a refusal
@@ -138,29 +140,24 @@ impl SignContext {
     /// A pipeline starting over — an approval, a retry, a top-up's Continue —
     /// starts with no prompt asked yet (083).
     pub fn prompt_reset(&self) {
-        for flag in [
-            &self.signing_started,
-            &self.signature_done,
-            &self.scan_expired,
-            &self.phone_failed,
-            &self.abandoned,
-        ] {
+        for flag in [&self.signing_started, &self.signature_done, &self.abandoned] {
             flag.store(false, Ordering::SeqCst);
         }
+        self.take_phone_stop();
     }
 
     /// Why the last prompt came back unsigned, when it was the phone's doing
-    /// and another try can help (083): nobody scanned its QR in time, or the
-    /// connection to it never came up. Taken once.
+    /// and another try can help (083): nobody scanned its QR in time, the
+    /// connection to it never came up, or it dropped once the phone was
+    /// asked. Taken once.
     pub fn take_phone_stop(&self) -> Option<PhoneStop> {
-        let expired = self.scan_expired.swap(false, Ordering::SeqCst);
-        let failed = self.phone_failed.swap(false, Ordering::SeqCst);
-        if expired {
-            Some(PhoneStop::ScanExpired)
-        } else if failed {
-            Some(PhoneStop::LinkFailed)
-        } else {
-            None
+        self.phone_stop.lock().ok().and_then(|mut stop| stop.take())
+    }
+
+    /// The column is told why the prompt came back unsigned.
+    fn tell_phone_stop(&self, stop: PhoneStop) {
+        if let Ok(mut slot) = self.phone_stop.lock() {
+            *slot = Some(stop);
         }
     }
 
@@ -206,8 +203,7 @@ impl SignContext {
             ceremony: send.ceremony,
             signing_started: send.signing_started,
             signature_done: Arc::new(AtomicBool::new(false)),
-            scan_expired: Arc::new(AtomicBool::new(false)),
-            phone_failed: Arc::new(AtomicBool::new(false)),
+            phone_stop: Arc::default(),
             abandoned: Arc::new(AtomicBool::new(false)),
             site: None,
             account_name: send.account_name,
@@ -490,13 +486,17 @@ fn is_message(method: &str) -> bool {
 ///
 /// H4: so is a phone whose connection never came up. As a failure the page
 /// got the transport's words and the column a transaction's failure — with
-/// only 完成, where another try (a new QR) is what can work.
+/// only 完成, where another try (a new QR) is what can work. And (review) so
+/// is one that dropped once the phone was asked: the page got "The security
+/// key stopped responding" or the OS's socket error, though nothing signed
+/// had reached this desktop — and the desktop submits only what it holds,
+/// so another try cannot send anything twice.
 ///
 /// Review: a column closed before the prompt opened asks nothing — the
 /// ceremony comes back unsigned at once, and the column's waiting close
 /// refuses. Otherwise the QR went up in a column nobody drew, and the core,
 /// which had only stopped watching, heard the scan run out 90 s later.
-fn around_prompt(
+pub(crate) fn around_prompt(
     ctx: &SignContext,
     prompt: impl FnOnce() -> Result<Assertion, PasskeyFailure>,
 ) -> Result<Assertion, PasskeyFailure> {
@@ -508,16 +508,12 @@ fn around_prompt(
     if answer.is_ok() {
         ctx.signature_done.store(true, Ordering::SeqCst);
     }
-    answer.map_err(|failure| {
-        let told = if failure.scan_ran_out() {
-            &ctx.scan_expired
-        } else if failure.phone_link_failed() {
-            &ctx.phone_failed
-        } else {
-            return failure;
-        };
-        told.store(true, Ordering::SeqCst);
-        PasskeyFailure::cancelled()
+    answer.map_err(|failure| match failure.phone_stop() {
+        Some(stop) => {
+            ctx.tell_phone_stop(stop);
+            PasskeyFailure::cancelled()
+        }
+        None => failure,
     })
 }
 
@@ -960,7 +956,7 @@ mod tests {
             !ctx.signature_done.load(Ordering::SeqCst),
             "a no is not a signature"
         );
-        assert!(!ctx.scan_expired.load(Ordering::SeqCst));
+        assert_eq!(ctx.take_phone_stop(), None);
 
         let signed = around_prompt(&ctx, || {
             Ok(Assertion {
@@ -998,8 +994,9 @@ mod tests {
         .unwrap_or_else(|| unreachable!("no phone, no assertion"));
         assert_eq!(ran_out.kind, FailureKind::Cancelled);
         assert_eq!(ran_out.message, None, "no scan English for the page");
-        assert!(
-            ctx.scan_expired.load(Ordering::SeqCst),
+        assert_eq!(
+            ctx.take_phone_stop(),
+            Some(PhoneStop::ScanExpired),
             "the column is told"
         );
         assert_eq!(
@@ -1030,7 +1027,7 @@ mod tests {
         let ctx = context(Some("https://app.uniswap.org"));
         for (error, stop) in [
             (
-                HybridError::Handshake("it closed before the signature".to_owned()),
+                HybridError::Handshake("the phone stopped answering".to_owned()),
                 PhoneStop::LinkFailed,
             ),
             (
@@ -1048,6 +1045,51 @@ mod tests {
             assert_eq!(ctx.take_phone_stop(), Some(stop), "{error}");
             assert_eq!(ctx.take_phone_stop(), None, "told once");
         }
+    }
+
+    /// 083 H4 review: a phone that was asked and then dropped is not an
+    /// answer either — not "-32603 The security key stopped responding", nor
+    /// the OS's socket error. Nothing signed reached this desktop, so the
+    /// request stays open for another try, and the column is told this was
+    /// the third stop. A new approval starts with none told.
+    #[test]
+    fn a_phone_that_dropped_once_asked_is_not_an_answer() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        let dropped = around_prompt(&ctx, || {
+            Err(PasskeyFailure::other(format!(
+                "{}: the phone stopped answering",
+                crate::ctap::cable::PHONE_DROPPED
+            )))
+        })
+        .err()
+        .unwrap_or_else(|| unreachable!("a dropped phone signs nothing"));
+        assert_eq!(dropped.kind, FailureKind::Cancelled);
+        assert_eq!(dropped.message, None, "no transport English");
+        assert!(!ctx.signature_done.load(Ordering::SeqCst));
+
+        ctx.prompt_reset();
+        assert_eq!(ctx.take_phone_stop(), None, "an approval starts clean");
+
+        let _ = around_prompt(&ctx, || {
+            Err(PasskeyFailure::other(format!(
+                "{}: connection reset",
+                crate::ctap::cable::PHONE_DROPPED
+            )))
+        });
+        assert_eq!(ctx.take_phone_stop(), Some(PhoneStop::Dropped));
+
+        // The phone's own cancel (a tunnel it closed) is the person's: no
+        // stop, and the core hears a dismissal as before.
+        let cancelled = around_prompt(&ctx, || {
+            Err(PasskeyFailure::classified(
+                FailureKind::Cancelled,
+                "your phone ended the session before signing",
+            ))
+        })
+        .err()
+        .unwrap_or_else(|| unreachable!("a cancel signs nothing"));
+        assert_eq!(cancelled.kind, FailureKind::Cancelled);
+        assert_eq!(ctx.take_phone_stop(), None);
     }
 
     /// 083 (review): a column closed before its prompt opened asks nothing —

@@ -57,10 +57,22 @@ route — done. D4 consent shows account + network — done. D5 (per-user instal
 - **H2** W17 / 079 D3: a landed dApp transaction is not in 活动 (every client).
 - **H3** SC-007 on the web: the web still draws a plain transfer on its blind branch; its signing
   status also says "waiting for biometric" while preparing.
-- **H4** Failure wording for a message signature says "交易未能提交…请重试" with only 完成; the page
-  gets the transport's English detail (`dapp_rpc.rs` passes it through by design).
-- **H5** While the phone's tunnel connects the QR stays up; a "phone connected — confirm on the
-  phone" state would bridge the seconds between scan and prompt.
+- **H4** — **done on desktop** (a4ecf408 and its review fixes; no device run yet). A failed message
+  signature says 链下签名 — 未向链上发送任何内容。, not the transaction's sentence. A phone that
+  scanned but never connected (tunnel or handshake), or whose connection dropped once it was asked, no
+  longer answers the page -32603 in transport English: the request stays open under 网络连接不稳定
+  with 重试 / 关闭 (the body: the request never arrived; or, once asked, the transaction was not
+  submitted / nothing went on chain), and 关闭 is the person's 4001. **Owner to confirm this change in
+  what a dApp sees** — it follows W19's scan timeout; before, an immediate -32603. A tunnel the phone
+  closes while connecting is the phone's cancel: back to the form, as mid-prompt (spec 038 finding
+  18). macOS: a BLE channel that will not open falls through to the tunnel, as on Linux. Not done: a
+  relay failure after a transaction was signed (a retry could sign the same nonce twice — owner
+  decision); vi `networkBody` says "máy chủ" (server) — right where the line is shared (balance,
+  onboarding), loose on the phone card; a phone-only line needs a new key and the translation pass.
+- **H5** — **done on desktop**: the QR comes down the moment the phone's advert decrypts, and
+  "查看你的手机" — with a Cancel, since the phone has been asked nothing yet — stands over the
+  connection. The tunnel upgrade and the handshake's two frames wait 15 s each, not 130 s: the phone
+  answers them with nobody touching it (confirm in the `[vela-cable]` log on the device).
 - **H6** D3b hedged reads (a dApp read still waits one endpoint's 8 s before the next).
 - **H7** A profile folder WebView2 accepts but cannot use makes the engine wait forever (only an
   artificial ACL produced it; research R1).
