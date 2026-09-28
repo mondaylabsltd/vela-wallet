@@ -161,6 +161,23 @@ fn gallery_bar_caption_pad(caption: bool) -> f32 {
     if caption { CAPTION_H + 4. - 8. } else { 0. }
 }
 
+/// The panel a switch of section leaves (spec 082 RJ18): a signing column
+/// that was only hidden comes back with Explore; anywhere else no panel.
+fn panel_after_switch(destination: Section, signing_kept: bool) -> PanelId {
+    if destination == Section::Explore && signing_kept {
+        PanelId::Signing
+    } else {
+        PanelId::None
+    }
+}
+
+/// Whether a request's ending that arrives now is kept (RJ18): the column is
+/// on screen, or only hidden by a switch of section. One the person closed
+/// opens for nothing.
+fn keeps_ending(panel: PanelId, signing_hidden: bool) -> bool {
+    panel == PanelId::Signing || signing_hidden
+}
+
 /// A close of the window (or Quit) the RD14 hold refused, counted (spec 082
 /// RJ17). `main.rs` bumps it; every wallet page observes it and says why.
 #[derive(Clone, Copy, Debug, Default)]
@@ -633,6 +650,9 @@ pub struct WalletPage {
     dapp_landing: Option<DappLanding>,
     /// Numbers each ending, so a tick's timer closes only its own.
     dapp_landing_seq: u64,
+    /// Spec 082 RJ18: the signing column was left for another section, not
+    /// closed — its ending is kept, and shown again when Explore returns.
+    signing_hidden: bool,
     /// The signing column's header and one-line summary as last drawn — what
     /// the ending still shows once the request is gone (spec 079).
     signing_last: Option<(signing_components::HeaderModel, Option<SharedString>)>,
@@ -1227,6 +1247,7 @@ impl WalletPage {
             receipt_ticking: false,
             dapp_landing: None,
             dapp_landing_seq: 0,
+            signing_hidden: false,
             signing_last: None,
             #[cfg(not(target_os = "linux"))]
             signing_background: Vec::new(),
@@ -3493,8 +3514,17 @@ impl WalletPage {
                         // Leaving 设置 leaves the accounts panel with it.
                         this.close_switcher(cx);
                     }
+                    // RJ18: a signing column left for another section is
+                    // hidden, not closed; it comes back with Explore.
+                    if this.panel == PanelId::Signing {
+                        this.signing_hidden = true;
+                    }
+                    let kept = this.signing_hidden && this.signing_to_show();
                     this.section = destination;
-                    this.panel = PanelId::None;
+                    this.panel = panel_after_switch(destination, kept);
+                    if this.panel == PanelId::Signing {
+                        this.signing_hidden = false;
+                    }
                     this.menu = None;
                     cx.notify();
                 })),
@@ -12513,6 +12543,15 @@ impl WalletPage {
         cx.notify();
     }
 
+    /// Something the signing column would show: an ending, or its request.
+    fn signing_to_show(&self) -> bool {
+        #[cfg(not(target_os = "linux"))]
+        let live = self.signing_host.is_some();
+        #[cfg(target_os = "linux")]
+        let live = false;
+        self.dapp_landing.is_some() || live
+    }
+
     /// The window's close (or Quit) was held while a submit POST was out
     /// (RD14, RJ17): the submitting column comes forward — the dApp's signing
     /// column, else the Send screen — and over the browser the bar says
@@ -14192,6 +14231,7 @@ impl WalletPage {
             });
         }
         self.dapp_landing = None;
+        self.signing_hidden = false;
         if self.panel == PanelId::Signing {
             self.panel = PanelId::None;
         }
@@ -14240,6 +14280,7 @@ impl WalletPage {
         .detach();
         self.signing_host = Some(host.clone());
         self.panel = PanelId::Signing;
+        self.signing_hidden = false;
         // A new request is what the column is about now.
         self.dapp_landing = None;
         // A new request opens closed: the last one's decision to look at the
@@ -14283,7 +14324,11 @@ impl WalletPage {
                         closing: false,
                     })
                 };
-                if let Some(mut landing) = ending.filter(|_| self.panel == PanelId::Signing) {
+                // RJ18: also while the column is only hidden by a switch of
+                // section — the "don't send it again" trace comes back.
+                if let Some(mut landing) =
+                    ending.filter(|_| keeps_ending(self.panel, self.signing_hidden))
+                {
                     self.dapp_landing_seq += 1;
                     landing.seq = self.dapp_landing_seq;
                     self.dapp_landing = Some(landing);
@@ -18287,6 +18332,31 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 082 RJ18 (G51, T181): a may-have-been-sent ending on screen →
+    /// 钱包 → back to 探索: the ending is there. One that arrives while the
+    /// column is hidden is kept too; one the person closed is not.
+    #[test]
+    fn a_dapp_ending_survives_a_switch_of_section() {
+        // The ending on screen: the column is Signing, the landing is kept.
+        let landing = true;
+        let mut panel = PanelId::Signing;
+        let mut hidden = false;
+        // → 钱包.
+        if panel == PanelId::Signing {
+            hidden = true;
+        }
+        panel = panel_after_switch(Section::Wallet, hidden && landing);
+        assert_eq!(panel, PanelId::None, "no signing column over the wallet");
+        // The request ends while the column is away: its ending is kept.
+        assert!(keeps_ending(panel, hidden));
+        // → 探索: the ending is there again.
+        panel = panel_after_switch(Section::Explore, hidden && landing);
+        assert_eq!(panel, PanelId::Signing);
+        // Closed by the person (✕, Done): nothing comes back.
+        assert!(!keeps_ending(PanelId::None, false));
+        assert_eq!(panel_after_switch(Section::Explore, false), PanelId::None);
+    }
 
     /// Spec 082 RJ17 (G68, DX9): a held close says 提交至网络… in the bar
     /// when the browser is in front, and brings the submitting column
