@@ -754,8 +754,13 @@ fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
     );
 }
 
+/// Spec 082 RA8 (was: sign_request patched the record failed and answered
+/// -32603 — "no eternal pending"). Past `OpSubmitted` the tracker holds the
+/// record and alone closes it: a dropped op's failed receipt patches it
+/// failed there, so nothing is left pending forever. The page gets the op
+/// hash, never a failure it would retry over an op the relay accepted.
 #[test]
-fn failed_submit_patches_the_pending_record_failed() {
+fn a_failure_after_the_hand_off_leaves_the_record_to_the_tracker() {
     let mut sut = boot();
     sut.dispatch(Arrive::global("req-8", "eth_sendTransaction", &plain_send_params()).event());
     sut.dispatch(approve(SignApproveOpts::default()));
@@ -767,24 +772,23 @@ fn failed_submit_patches_the_pending_record_failed() {
         maybe_sent: false,
         submit_block: None,
     });
+    let handoff = sut.view().tracker_handoff.expect("the tracker holds it");
+    assert_eq!(handoff.record_ids, vec!["dapp-6000-tx".to_owned()]);
+    assert!(sut.resolve(Res::RecordPersisted).is_empty());
     let ops = sut.resolve(Res::Submit {
         outcome: SignSubmitOutcome::Failed {
             message: "dropped from the network".to_owned(),
         },
         now_ms: 7_000.0,
     });
-    assert!(
-        matches!(&ops[0], Op::UpdateRecord { record_id, close: SignRecordClose::Failed }
-            if record_id == "dapp-6000-tx"),
-        "no eternal pending: {ops:?}"
+    assert_eq!(ops.len(), 1, "no record patch from here: {ops:?}");
+    assert_eq!(
+        response_ok(&ops[0]),
+        Some((WP.to_owned(), Some("0xop".to_owned())))
     );
-    let (code, kind, _) = response_error(&ops[1]).expect("error response");
-    assert_eq!((code, kind), (CODE_INTERNAL, SignErrorKind::SubmitFailed));
-    // Modal stays open with the error; closing is a dismiss.
     let view = sut.view();
-    assert_eq!(view.surface, SignSurface::Sheet);
-    assert_eq!(view.error.expect("error").kind, SignErrorKind::SubmitFailed);
-    assert_eq!(view.swipe_action, SignSwipeAction::Dismiss);
+    assert!(view.error.is_none());
+    assert_eq!(view.surface, SignSurface::Hidden);
 }
 
 // ===========================================================================
@@ -2215,4 +2219,66 @@ fn asker_gone_answers_nothing_and_records_nothing() {
         Arrive::extension("rid-g", "eth_sendTransaction", &plain_send_params(), 1).event(),
     );
     assert_eq!(sut.view().notice, None, "not settled");
+}
+
+/// Review of T020/T023 (RA2, RA8, G21): once `OpSubmitted` has handed the op
+/// to the tracker it is on its way — or may be. Any later outcome that is not
+/// a receipt or the op hash (a shell's receipt wait that threw, a stray
+/// Underfunded, a passkey or asker event that can no longer be true) used to
+/// answer the page -32603, show "submit failed" and patch the record failed
+/// from here: the G21 double payment for a may-have-been-sent op (the dApp
+/// reads -32603 as "not sent" and asks again) and a second writer racing the
+/// tracker over an on-chain record. The page now gets exactly one answer, the
+/// op hash (079's still-confirming contract), the rid settles Submitted, the
+/// record is left to the tracker, and the sheet is not an error.
+#[test]
+fn after_the_hand_off_a_failure_is_answered_with_the_op_hash() {
+    let failures = [
+        SignSubmitOutcome::Failed {
+            message: "All bundler endpoints failed".to_owned(),
+        },
+        SignSubmitOutcome::Underfunded {
+            message: "bundler underfunded".to_owned(),
+            funding: None,
+        },
+        SignSubmitOutcome::PasskeyCancelled,
+        SignSubmitOutcome::AskerGone,
+    ];
+    for (n, outcome) in failures.into_iter().enumerate() {
+        let id = format!("req-h{n}");
+        let mut sut = submitting(&id);
+        sut.dispatch(op_submitted_maybe(&id));
+        assert!(sut.resolve(Res::RecordPersisted).is_empty());
+        let ops = sut.resolve(Res::Submit {
+            outcome: outcome.clone(),
+            now_ms: 60_000.0,
+        });
+        assert!(
+            !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
+            "{outcome:?}: the tracker alone closes the record: {ops:?}"
+        );
+        assert!(
+            !ops.iter().any(|op| response_error(op).is_some()),
+            "{outcome:?}: never -32603 over a sent op: {ops:?}"
+        );
+        assert_eq!(
+            ops.iter().filter_map(response_ok).collect::<Vec<_>>(),
+            vec![(WP.to_owned(), Some(LOCAL_OP.to_owned()))],
+            "{outcome:?}: one Ok answer, the op hash"
+        );
+        let view = sut.view();
+        assert!(
+            view.error.is_none(),
+            "{outcome:?}: no 'submit failed' sheet"
+        );
+        // The rid settled Submitted: a replay never signs twice.
+        sut.dispatch(Arrive::global(&id, "eth_sendTransaction", &plain_send_params()).event());
+        assert_eq!(
+            sut.view().notice,
+            Some(SignNotice::AlreadySettled {
+                outcome: SignSettledOutcome::Submitted
+            }),
+            "{outcome:?}"
+        );
+    }
 }

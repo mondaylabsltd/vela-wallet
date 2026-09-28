@@ -2465,6 +2465,25 @@ fn on_submit(
     if !matches!(fl.stage, Stage::Submitting) {
         return Command::done();
     }
+    // Spec 082 RA2/RA8 (G21): once `OpSubmitted` handed the op to the tracker
+    // it is on its way — or may be. The only honest answers left are a
+    // receipt's tx hash or the op hash: a failure would tell the page "not
+    // sent" (it asks again: the double payment), show "submit failed", and
+    // patch a record only the tracker may close. So whatever else a shell
+    // reports now is answered as the wait running out.
+    let outcome = match (&fl.op_hash, fl.record_id.is_some(), outcome) {
+        (
+            Some(op_hash),
+            true,
+            SignSubmitOutcome::Failed { .. }
+            | SignSubmitOutcome::Underfunded { .. }
+            | SignSubmitOutcome::PasskeyCancelled
+            | SignSubmitOutcome::AskerGone,
+        ) => SignSubmitOutcome::ReceiptPending {
+            user_op_hash: op_hash.clone(),
+        },
+        (_, _, outcome) => outcome,
+    };
     match outcome {
         SignSubmitOutcome::PasskeyCancelled => {
             // Keep the modal open, send nothing — never an error, never a
