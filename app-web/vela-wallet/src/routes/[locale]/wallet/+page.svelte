@@ -46,7 +46,6 @@
 	import { preferences } from '$lib/services/preferences.svelte';
 	import { publishExtSnapshot } from '$lib/dapp/core/ext-cache';
 	import { publishExtChains } from '$lib/dapp/core/ext-chains';
-	import { followActiveAccount, normalizeGrantSpelling } from '$lib/dapp/follow';
 	import { subscribeNetworks } from '$lib/services/networks';
 	import { inExtension } from '$lib/dapp/transport';
 	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
@@ -1294,30 +1293,22 @@
 		return subscribeNetworks(() => void publishExtChains());
 	});
 
+	// A connected site follows the active account, and old grants get the
+	// core's spelling — from the ROOT LAYOUT since 082 round 2 (G58), so a
+	// switch made on any screen reaches the site (`$lib/dapp/follow`).
+
 	/**
-	 * A connected site follows the active account (spec 027 T350's rule,
-	 * performed). The FIRST address the session settles on is a boot, not a
-	 * switch: only a change from one known address to another asks the core to
-	 * re-pin the grants, and the worker announces each re-pinned grant to the
-	 * site's tabs as `accountsChanged`.
+	 * Spec 082 G62: the network filter reaches the feed's CORE, which narrows
+	 * its rows and picks the empty lines ("none on this network" under a
+	 * filter). The sidebar and the phone's sheet only set `chainFilter`; the
+	 * core was never told, so a filtered empty list still said "no activity".
+	 * An effect over the filter, not the two pickers: a filter chosen on
+	 * another screen reaches the core when the wallet mounts, and the feed is
+	 * booted before it is told.
 	 */
-	let followedAddress: string | null = null;
-	// Spec 082 RG10 (L-D6): grants written before 082 are lower-case; the core
-	// spells an address EIP-55. Rewritten once per wallet boot, so a site never
-	// sees one account in two spellings.
-	onMount(() => {
-		if (inExtension()) void normalizeGrantSpelling();
-	});
 	$effect(() => {
-		const view = session.view;
-		if (view.loading || !inExtension() || !view.address) return;
-		const previous = followedAddress;
-		followedAddress = view.address;
-		if (previous === null || previous.toLowerCase() === view.address.toLowerCase()) return;
-		void followActiveAccount({
-			activeAddress: view.address,
-			addresses: view.accounts.map((row) => row.account.address)
-		});
+		const chainId = chainFilter.chainId;
+		void feed.boot().then(() => feed.chainFilter(chainId));
 	});
 
 	// The account the balances belong to. `account_changed` is also the

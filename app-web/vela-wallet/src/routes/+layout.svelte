@@ -23,7 +23,8 @@
 	import ParallelSpaceBadge from '$lib/dev/ParallelSpaceBadge.svelte';
 	import ReportToastHost from '$lib/settings/ui/ReportToastHost.svelte';
 	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
-	import { isPanelDocument, panelSurface } from '$lib/dapp/panel-surface.svelte';
+	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
+	import { inExtension } from '$lib/dapp/transport';
 
 	let { children } = $props();
 
@@ -84,11 +85,48 @@
 	 * Wallet → Settings → Wallet does not drop it — and a request the worker
 	 * says this window owes brings the panel back to the wallet, which is where
 	 * a request is answered.
+	 *
+	 * Every fact is read on every run (G55: the effect used to read a field
+	 * that was not reactive first, return while it was null, and never run
+	 * again — a request that arrived on Settings waited for a tap).
 	 */
 	const walletHref = $derived(resolve('/[locale]/wallet', { locale: page.params.locale ?? 'en' }));
 	$effect(() => {
-		if (panelSurface.caller?.kind !== 'panel' || !panelSurface.current) return;
-		if (page.route.id !== '/[locale]/wallet') void goto(walletHref);
+		const needed = panelNeedsWallet({
+			caller: panelSurface.caller,
+			current: panelSurface.current,
+			routeId: page.route.id
+		});
+		if (needed) void goto(walletHref);
+	});
+
+	/**
+	 * Spec 082 RJ20 (G58): in the extension, a connected site follows the
+	 * active account from EVERY screen — a switch made in Settings (切换账户)
+	 * reached no site while this lived in the wallet page — and grants written
+	 * before 082 get the core's EIP-55 spelling at boot, whichever screen the
+	 * wallet opens on. Both are the dApp channel's code, so they are loaded
+	 * only inside the extension: Welcome never carries them (`budgets.e2e.ts`).
+	 */
+	onMount(() => {
+		if (!inExtension()) return;
+		let stop: (() => void) | undefined;
+		let gone = false;
+		void Promise.all([import('$lib/dapp/follow'), import('$lib/session/core/session.svelte')]).then(
+			([follow, { session }]) => {
+				if (gone) return;
+				void follow.normalizeGrantSpelling();
+				stop = $effect.root(() => {
+					$effect(() => {
+						void follow.sessionFollower.note(session.view);
+					});
+				});
+			}
+		);
+		return () => {
+			gone = true;
+			stop?.();
+		};
 	});
 
 	onMount(() => {

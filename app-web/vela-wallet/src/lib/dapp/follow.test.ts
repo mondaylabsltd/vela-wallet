@@ -13,7 +13,7 @@ import '$lib/i18n/wasm-init.server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planAccountSwitch } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
-import { followActiveAccount, normalizeGrantSpelling } from './follow';
+import { SessionFollower, followActiveAccount, normalizeGrantSpelling } from './follow';
 import { checksumAddress } from '$lib/core/kernels';
 import { PERM_PREFIX } from './keys';
 import type { DAppGrant } from './grants';
@@ -173,6 +173,42 @@ describe('followActiveAccount writes what the core authored', () => {
 		expect(store.get(PERM_PREFIX + 'https://c.example')).toEqual(
 			grantFor('https://c.example', BOB)
 		);
+	});
+
+	/**
+	 * Spec 082 G58: the device pass switched to Parallel Two in Settings →
+	 * 切换账户 and the site kept `eth_accounts` = One. The follow now runs
+	 * from the root layout on every route, with the last address kept in the
+	 * module — so the switch is seen wherever it is made, and a screen that
+	 * mounts again is not a boot.
+	 */
+	it('follows a switch made on any screen, once, in the core’s spelling', async () => {
+		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
+		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
+		const follower = new SessionFollower();
+		const view = (address: string, loading = false) => ({
+			loading,
+			address,
+			accounts: [ALICE, BOB].map((a) => ({ account: { address: a } }))
+		});
+
+		// Still loading, then the boot: nothing is re-pinned.
+		expect(follower.note(view('', true))).toBeNull();
+		expect(follower.note(view(ALICE))).toBeNull();
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual(
+			grantFor('https://a.example', ALICE)
+		);
+
+		// The switch, made in Settings: the site is re-pinned to BOB, EIP-55.
+		const outcome = await follower.note(view(BOB), NOW);
+		expect(outcome).toEqual({ repinned: ['https://a.example'], removed: [] });
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toMatchObject({
+			address: checksumAddress(BOB)
+		});
+
+		// The wallet screen mounting again sees the same account: not a boot, not a switch.
+		expect(follower.note(view(BOB))).toBeNull();
+		expect(follower.note(view(checksumAddress(BOB)))).toBeNull();
 	});
 
 	it('normalises nothing off the extension', async () => {

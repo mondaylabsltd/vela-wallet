@@ -111,6 +111,9 @@ export function claimVerdict(record, { now, ttlMs = REQUEST_TTL_MS, docAttached,
  * `submit` claim that carries the operation hash and its chain keeps both
  * (RJ2) — a hash that is not a 32-byte hex, or a chain that is not a positive
  * integer, is not kept. Pure: returns a new record.
+ *
+ * @param {object} record
+ * @param {{ phase: string, now: number, opHash?: unknown, chainId?: unknown }} claim
  */
 export function withClaim(record, { phase, now, opHash, chainId }) {
 	const next = { ...record, state: 'claimed', claimedAt: now, phase };
