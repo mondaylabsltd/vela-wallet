@@ -130,7 +130,7 @@ pub const ENFORCE: bool = false;
 /// first without the very network this is about not needing, so it moves to a
 /// new page only after that page is deployed (release: deploy `dist/`, then set
 /// this). Always a member of [`BUILD_ALLOWED`] (tested).
-pub const LAUNCH: &str = "584b7102a089759f410312dfa37a8834bfcdc25033a71d6a338cf1f80e6305a5";
+pub const LAUNCH: &str = "e3ef90a6040fe896a34c6b32fcab232417bf1dd70e62d473c88a0bed7dc97d5f";
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).
