@@ -1,0 +1,34 @@
+Phase 9 CORE gates (T185–T198), branch 082-core-h, worktree vela-wallet-082-core-h, 2026-09-29.
+Measured at 141b2d8c (the corpus, exports and generated TS committed; this file and the docs follow).
+
+cd rust && cargo test -p vela-core --features i18n-all,crux
+  passed 2094 failed 0 ignored 0 across 52 test binaries (lib + integration + doc)
+  round-2 suites: user_op_submit 16, app_fee_policy 121, app_net_health 9, l10n_parity 19 (+5 in-file),
+  app_activity_feed 41, core_082_wiring 6, app_browser_load 49, app_tx_tracker 58,
+  app_sign_request 79, app_send 164
+cd rust && cargo test -p vela-core --features i18n-all,crux --test i18n_residency -- --nocapture
+  runtime_json_catalogs_fit_the_same_budget: ja + en 138671 bytes of SC005_BUDGET 138800 (129 B headroom)
+  residency_is_bounded_at_two_under_any_sequence: ja + en 134651 bytes resident
+cargo clippy -p vela-core --features crux -- -D warnings                          clean
+cargo clippy -p vela-core --all-targets --features i18n-all,crux -- -D warnings   clean
+cargo clippy -p vela-core-uniffi -p vela-core-wasm --all-targets -- -D warnings   clean
+cargo test -p vela-core-uniffi   15 passed (the_round_2_exports, three_misses_from_two_chains_after_ten_quiet_seconds_go_offline)
+cargo test -p vela-core-wasm     10 passed (core_082_exports::the_round_2_exports_are_the_core_s)
+cargo check -p vela-core-wasm --target wasm32-unknown-unknown                   ok
+cargo check -p vela-core --target wasm32-unknown-unknown --features crux        ok
+npm --prefix scripts run gen:i18n     1785 paths / 1696 leaves / 89 branches (pins moved, history entry)
+npm --prefix scripts run lint:i18n    no new defects
+npm --prefix scripts run verify:i18n  75440 comparisons, zero divergences from i18next@26.3.1
+npm --prefix scripts run dump:vectors tests/vectors/i18n-exhaustive.json regenerated
+node rust/scripts/gen-core-types.mjs --check   onboarding 27, session 13, wallet-state 371 current
+node scripts/check-event-payloads.mjs          11 mismatches (expected until IOS T236 / AND T244):
+  iOS TrackerStore.swift:92 "submitted" without "admitted"; iOS SignExecutor.swift "failed" x10
+  without "refused" (the ruler then matches NetHealthBody). Both fields are serde-defaulted, so the
+  core still reads those events; the wires adopt the fields in T236/T244.
+bash rust/scripts/check-ios-core-fresh.sh      "no xcframework stamp" — NOT rebuilt here (BIND step)
+
+Not done here (the BIND step regenerates, per the orchestrator's split):
+  rust/pkg-web + the wasm asset (npm --prefix scripts run build:wasm, then sync:wasm in
+  app-web/vela-wallet): paths.rs moved with the corpus and the exports grew, so the fingerprint moves;
+  VelaCoreKit xcframework (rust/scripts/build-ios-xcframework.sh; check-ios-core-fresh.sh must print ok);
+  rust/bindings/kotlin + the Android .so (the T046 recipe).

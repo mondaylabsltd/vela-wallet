@@ -49,6 +49,34 @@ hand-off into the tracker's `Submitted` carries both, so a may-have-been-sent op
 `MaybeSent` outcome, its `NotSent` end and its find-event (§2) across a restart. A row stored
 before 082 reads back as `false` / `None`.
 
+**Write-ahead (round 2, RJ1).** The record exists before the bytes leave. The shell signs, computes
+the local hash and reads the head, then reports `OpSigned` (sign_request: `Event::OpSigned{id, …}`;
+send: `Event::OpSigned{…}`) and POSTs nothing until the core's `ClearToPost` — which comes only once
+the record is on disk and the tracker holds it (`maybe_sent: true`). No clearance within
+`WRITE_AHEAD_WAIT_MS` (5 s) → no POST, the submit reports failed.
+
+```
+signed ─OpSigned─► record pending, maybe_sent: true ─RecordPersisted─► hand-off(maybe_sent) + ClearToPost ─► POST
+POST ─► Accepted{same hash}          ─► record Admitted (maybeSent → false, still pending) + hand-off(admitted: true)
+POST ─► MaybeSent{same hash}         ─► nothing new (the record already says so)
+POST ─► Accepted{another hash}       ─► withdraw the write-ahead (delete + tracker Withdrawn), record under the relay's hash
+POST ─► NotSent (or no clearance)    ─► withdraw the write-ahead (delete + tracker Withdrawn), then today's answer
+quit / crash anywhere after OpSigned ─► one pending maybe_sent record; the tracker resolves it on the next launch
+```
+
+**Withdraw.** A proven "not sent" after the write-ahead deletes the record(s) (`DeleteRecord` /
+`DeleteTxRecords`) and hands the tracker `Withdrawn{user_op_hash, record_ids}` (sign: through
+`SignView.tracker_withdraw`; send: `SendOperation::TrackWithdrawn`). The tracker drops those ids and
+forgets an entry left with none — no patch, no balance read — so S5 still shows no Activity row once
+the verdict is in, and a later submit of the same op is tracked afresh.
+
+| Verdict (round 2) | Record | dApp answer | Sheet |
+|---|---|---|---|
+| `Accepted` | the write-ahead record, `Admitted` | tx hash / op hash; or at once from `OpTracked` (Confirmed/Dropped with a tx hash → tx hash; Rejected → -32603 `REFUSED_DAPP_DETAIL`; NotSent → -32603 `NOT_SENT_DAPP_DETAIL`) | as before; a tracker `Rejected` → error + `failure_refused` (`componentsUi.signing.refused`, no Retry) |
+| `MaybeSent` | the write-ahead record, unchanged | as above | as before |
+| `NotSent{Some(r)}`, r ≠ RelayerUnavailable | withdrawn | -32603 `REFUSED_DAPP_DETAIL` (`Failed{refused: true}`) | cross, `statusFailed` + `componentsUi.signing.refused` |
+| `NotSent{None}` / `NotSent{RelayerUnavailable}` | withdrawn | -32603 `NOT_SENT_DAPP_DETAIL` | cross, `statusFailed` + `txErrorGeneric` |
+
 ## 2. Tracked operation (a `tx_tracker` entry) — [RA4, RA7, RE8, ruling 8]
 
 | Field | Meaning |
@@ -102,6 +130,17 @@ user_op_hash]`) and `eth_blockNumber` through the pool and answers what came bac
 the range error (FR-020). The pool answers a range error on `eth_getLogs` instead of banning the
 endpoint or classifying the chain (T180), so it reaches this machine.
 
+Round 2 (RJ1, RJ4):
+
+```
+Submitted{admitted: true}                  ─► acknowledged = true (outcome never MaybeSent; not_found stops counting)
+Withdrawn{hash, ids}                       ─► ids dropped; no id left → entry removed (no patch, no HoldingsMoved)
+Pending ──Status{tx_hash}──► relay_tx_hash ─► TxReceipt{chain, tx_hash, op} at the receipt cadence (one in flight)
+  TxReceipt: the op's event, success, no ExecutionFailure in its own logs ─► Confirmed (+ NotifyConfirmed + HoldingsMoved)
+  TxReceipt: the op's event, failure or ExecutionFailure                  ─► Dropped (records failed, + HoldingsMoved)
+  TxReceipt: null / no answer / mined without the op's event              ─► ask again
+```
+
 Polling: status polls (and the find-event) continue past the 120 s window while
 `maybe_sent ∧ ¬acknowledged`, at `receipt_interval_ms(false, age)`; a plain entry's `not_found`
 stays inert (079 unchanged). Status comes from `pimlico_getUserOperationStatus` only
@@ -132,8 +171,9 @@ Ceremony events carry the request id and are dropped unless that inflight is in 
 | `Signed` (message) | — | `Signed` | tick, "已签名", closes itself |
 | `Landed{tx, op?}` / `StillConfirming{op}` | `Confirmed` | `Confirmed{tx}` | tick + short hash + explorer |
 | same | `Dropped` | `Reverted{tx}` | cross, `statusFailed` + `failedHint` + explorer |
-| same | `NotSent` / `Rejected` | `NotSent` | cross, `statusFailed` + `txErrorGeneric` |
-| same | pending | `Following{op, outcome, fee_held}` | outcome `MaybeSent` → `maybeSent` caption; `Landing` → ring; `StillConfirming` → `stillConfirming`; `Unknown` → unknown sentence |
+| same | `NotSent` | `NotSent` | cross, `statusFailed` + `txErrorGeneric` |
+| same | `Rejected` | `Refused` (round 2) | cross, `statusFailed` + `componentsUi.signing.refused`, no Retry |
+| same | pending | `Following{op, outcome, fee_held}` | outcome `MaybeSent` → `maybeSent` caption (a `Landed` answer draws `Landing` instead, DX6); `Landing` → ring; `StillConfirming` → `stillConfirming`; `Unknown` → unknown sentence |
 | same | none yet | `Following{…, Landing}` | ring |
 
 The core no longer patches a dApp record Confirmed from `on_submit`; the tracker closes on-chain
@@ -211,6 +251,11 @@ carries `opHash`; read by `forwardRead` for receipt lookups.
 `DappTx` rows (from == me): direction Out; counterparty `to` if any; value from hex or decimal wei
 through `from_base_units`, and 0 → no amount (value `None`, symbol ""). Message signatures and
 connects never become rows.
+
+Round 2 (RJ16): `FeedTxRecord.call_data` (from the stored request) and `FeedItem.counterparty_role`
+(`Recipient` default | `Contract`): exact `transfer(address,uint256)` → the decoded recipient
+(EIP-55), `Recipient`; other call data → `to`, `Contract`; none → `to`, `Recipient`. `tx_hash` is
+`None` when it equals `user_op_hash`.
 
 `FeedView` gains `history_empty_key` (`history.emptyTitle` | `history.emptyFilter`) and
 `home_empty_key` (`home.emptyNoActivity` | `home.emptyNoActivityNetwork`), both from `chain_filter`.
@@ -290,6 +335,8 @@ failed ──2/5/10 s timer (in front) | Retry | network CameBack (healing class
 requested ──Stop──► idle (committed page and bar kept, no panel)
 desktop: engine loading with no wallet request and a new URL ──► requested (page_initiated)
 desktop: retry timer while the engine still loads the same URL ──► no navigate (EngineStillLoading)
+desktop (round 2): … only while that load is < GIVE_UP_MS old or live; past it, not live ──► requested (the new load cancels the hung one)
+desktop (round 2): the engine starting the wallet's own retry (own_request, same_address) before `requested` ──► nothing (attempt kept)
 ```
 
 New failure class `proxy` (reason `explore.loadProxy`, Offline retry schedule); Apple -1000 → `offline`.
@@ -307,8 +354,10 @@ tab does nothing; closing a background tab does not reload.
 
 ## 11. Network health, logo misses, balance read plan — [RE3, RE9, RE10]
 
-- `NetHealth{misses, online}`; `net_health_step(state, reached)` → edge `WentOffline` at the 3rd
-  miss, `CameBack` on the first reach after offline.
+- `NetHealth{misses, online, sources, unsourced, last_reach_ms, run_started_ms}`;
+  `net_health_step(state, reached, source, now_ms)` → edge `WentOffline` at the 3rd miss in a row
+  from ≥ 2 sources (chains; a miss with no chain is its own) with nothing reached for 10 s (round 2,
+  RJ14), `CameBack` on the first reach after offline; any reach resets the run.
 - `MarkMiss = NotFound | Refused | NotAnImage | Throttled | ServerError | Transport | Unknown`; TTL
   None (session) for the first three, 60 000 ms otherwise; transient misses clear on `CameBack`.
 - `ReadSlot{kind: Native|Stable|Wrapped|Custom, contract, symbol, known_decimals, peg_usd}`; order
