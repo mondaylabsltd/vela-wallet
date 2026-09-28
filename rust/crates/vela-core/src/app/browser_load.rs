@@ -26,8 +26,13 @@
 //!   asked, probed, failed, retried. Moved here from the desktop shell so the
 //!   rules have one home and one set of tests; the desktop uses it through
 //!   the crate (no FFI export), the phones share its constants.
+//! - [`address_bar`] and [`site_label`] — what the bar names and with which
+//!   lock (spec 082, RE1: never a pending host over a shown page), and a name
+//!   that is its host said once (RE7).
 
 use serde::{Deserialize, Serialize};
+
+use super::dapp_permissions::{is_insecure_public_origin, origin_of};
 
 /// Where an error code comes from: each platform numbers its errors itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -791,4 +796,128 @@ pub fn host_of(url: &str) -> String {
         .next()
         .unwrap_or_default()
         .to_owned()
+}
+
+// ---------------------------------------------------------------------------
+// What the address bar names, and a site named once (spec 082, RE1, RE7)
+// ---------------------------------------------------------------------------
+
+/// The padlock beside the bar's host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BarLock {
+    /// A document from an origin the wallet signs for: https, or http on
+    /// loopback / a private network (the dev and on-device test dApps).
+    Closed,
+    /// A document over public http, where anyone on the path can change it.
+    Open,
+    /// Nothing from that host is on screen: a failure panel, a load that has
+    /// not committed, an empty tab.
+    None,
+}
+
+/// What the address bar shows: the host, its lock, and the address that
+/// share, copy, favourite and the edit field act on.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddressBar {
+    pub url: String,
+    /// `origin_of`'s host: lower-case, a non-default port kept.
+    pub host: String,
+    pub lock: BarLock,
+}
+
+/// What the bar names (RE1, G28), first match:
+///
+/// 1. a failure panel is up (`failed_url`) → the failed host, no lock —
+///    nothing from that host is on screen;
+/// 2. a document committed (`shown_url`) → its host, [`BarLock::Closed`] or
+///    [`BarLock::Open`] from `!is_insecure_public_origin`;
+/// 3. a load pending in an EMPTY tab (`pending_url`) → the pending host, no
+///    lock;
+/// 4. otherwise nothing.
+///
+/// A pending load never renames a tab that shows a document: iOS rebuilt the
+/// bar from WebKit's provisional URL, so a page could put any host over its
+/// own content while its next load was pending (the G28 spoof shape). Host
+/// and lock always come from the same URL. `shown_url` is the committed
+/// document (the commit callback), never the engine's current URL; an
+/// address that is not a web page (`about:blank`) is no document.
+#[must_use]
+pub fn address_bar(
+    shown_url: Option<&str>,
+    pending_url: Option<&str>,
+    failed_url: Option<&str>,
+) -> AddressBar {
+    if let Some(url) = given(failed_url) {
+        let host = origin_of(url).map_or_else(|| host_of(url), |origin| origin_host(&origin));
+        return AddressBar {
+            url: url.to_owned(),
+            host,
+            lock: BarLock::None,
+        };
+    }
+    if let Some((url, origin)) = given(shown_url).and_then(|url| Some((url, origin_of(url)?))) {
+        let lock = if is_insecure_public_origin(&origin) {
+            BarLock::Open
+        } else {
+            BarLock::Closed
+        };
+        return AddressBar {
+            url: url.to_owned(),
+            host: origin_host(&origin),
+            lock,
+        };
+    }
+    if let Some((url, origin)) = given(pending_url).and_then(|url| Some((url, origin_of(url)?))) {
+        return AddressBar {
+            url: url.to_owned(),
+            host: origin_host(&origin),
+            lock: BarLock::None,
+        };
+    }
+    AddressBar {
+        url: String::new(),
+        host: String::new(),
+        lock: BarLock::None,
+    }
+}
+
+/// A URL a shell passed, trimmed; `None` when absent or blank.
+fn given(url: Option<&str>) -> Option<&str> {
+    url.map(str::trim).filter(|url| !url.is_empty())
+}
+
+/// `https://app.example:8443` → `app.example:8443`.
+fn origin_host(origin: &str) -> String {
+    origin
+        .split_once("://")
+        .map_or(origin, |(_, host)| host)
+        .to_owned()
+}
+
+/// A site's name and the host line under it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SiteLabel {
+    pub name: String,
+    /// `None`: the name already is the host — say it once.
+    pub host_line: Option<String>,
+}
+
+/// A name that is its host is said once (RE7, 079 F14): an empty title, or
+/// one equal to the host ignoring ASCII case, → the host alone; otherwise the
+/// title over the host. Recents, the signing header and the consent sheet on
+/// every client, and the signer page's L-HOST rule, use this one wording.
+#[must_use]
+pub fn site_label(title: &str, host: &str) -> SiteLabel {
+    let (title, host) = (title.trim(), host.trim());
+    if title.is_empty() || title.eq_ignore_ascii_case(host) {
+        return SiteLabel {
+            name: host.to_owned(),
+            host_line: None,
+        };
+    }
+    SiteLabel {
+        name: title.to_owned(),
+        host_line: (!host.is_empty()).then(|| host.to_owned()),
+    }
 }

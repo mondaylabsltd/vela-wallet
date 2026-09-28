@@ -6,10 +6,10 @@
 #![cfg(feature = "crux")]
 
 use vela_core::app::browser_load::{
-    classify, host_of, probe_code, reason_key, retry_delay_ms, retry_when_network_returns,
-    should_give_up, site_letter, stalled, visit_to_record, Asked, EngineSample, EngineVerdict,
-    LoadFailureClass as C, LoadFinished, LoadPlatform as P, LoadWatch, Probed, RetryAction,
-    ENGINE_LIVE_PROGRESS, GIVE_UP_MS,
+    address_bar, classify, host_of, probe_code, reason_key, retry_delay_ms,
+    retry_when_network_returns, should_give_up, site_label, site_letter, stalled, visit_to_record,
+    AddressBar, Asked, BarLock, EngineSample, EngineVerdict, LoadFailureClass as C, LoadFinished,
+    LoadPlatform as P, LoadWatch, Probed, RetryAction, SiteLabel, ENGINE_LIVE_PROGRESS, GIVE_UP_MS,
 };
 
 fn class(platform: P, code: i64, domain: Option<&str>) -> Option<C> {
@@ -808,4 +808,152 @@ fn only_what_the_network_can_heal_is_retried_when_it_returns() {
     for class in [C::Certificate, C::NotFound] {
         assert!(!retry_when_network_returns(class), "{class:?}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// The address bar and a site named once (spec 082 T033, RE1, RE7)
+// ---------------------------------------------------------------------------
+
+fn bar(url: &str, host: &str, lock: BarLock) -> AddressBar {
+    AddressBar {
+        url: url.to_owned(),
+        host: host.to_owned(),
+        lock,
+    }
+}
+
+/// G28: a page may start a load of any address; until it commits, the bar
+/// keeps naming the document on screen.
+#[test]
+fn a_pending_load_never_renames_the_page_on_screen() {
+    let jumper = "https://jumper.exchange/?fromChain=100";
+    let uniswap = "https://app.uniswap.org/#/swap";
+    assert_eq!(
+        address_bar(Some(jumper), Some(uniswap), None),
+        bar(jumper, "jumper.exchange", BarLock::Closed)
+    );
+    // After the commit it is the new page's, with its own lock.
+    assert_eq!(
+        address_bar(Some(uniswap), None, None),
+        bar(uniswap, "app.uniswap.org", BarLock::Closed)
+    );
+}
+
+/// A failure panel names the failed host, with no lock: nothing from that
+/// host is on screen — whatever is committed or pending behind it.
+#[test]
+fn a_failure_names_the_failed_host_without_a_lock() {
+    assert_eq!(
+        address_bar(
+            Some("https://jumper.exchange/"),
+            Some("https://app.uniswap.org/"),
+            Some("https://app.uniswap.org/#/swap"),
+        ),
+        bar(
+            "https://app.uniswap.org/#/swap",
+            "app.uniswap.org",
+            BarLock::None
+        )
+    );
+    assert_eq!(
+        address_bar(None, None, Some("http://127.0.0.1:9/")),
+        bar("http://127.0.0.1:9/", "127.0.0.1:9", BarLock::None)
+    );
+}
+
+/// The lock is the signing rule's: https, and http on loopback or a private
+/// network, are closed; public http is open.
+#[test]
+fn the_lock_follows_the_origin_rule() {
+    for (url, host, lock) in [
+        (
+            "https://app.uniswap.org/",
+            "app.uniswap.org",
+            BarLock::Closed,
+        ),
+        ("http://127.0.0.1:8137/", "127.0.0.1:8137", BarLock::Closed),
+        ("http://localhost:5173/", "localhost:5173", BarLock::Closed),
+        (
+            "http://192.168.50.9:8137/x",
+            "192.168.50.9:8137",
+            BarLock::Closed,
+        ),
+        ("http://10.0.0.8/", "10.0.0.8", BarLock::Closed),
+        ("http://example.com/", "example.com", BarLock::Open),
+        (
+            "http://10.0.0.1.evil.com/",
+            "10.0.0.1.evil.com",
+            BarLock::Open,
+        ),
+    ] {
+        assert_eq!(
+            address_bar(Some(url), None, None),
+            bar(url, host, lock),
+            "{url}"
+        );
+    }
+}
+
+/// The host is the origin's: a non-default port kept, a default one and any
+/// userinfo dropped, lower-cased.
+#[test]
+fn the_host_keeps_a_non_default_port() {
+    assert_eq!(
+        address_bar(Some("http://127.0.0.1:8137/"), None, None).host,
+        "127.0.0.1:8137"
+    );
+    assert_eq!(
+        address_bar(Some("https://App.Example:443/x"), None, None).host,
+        "app.example"
+    );
+    assert_eq!(
+        address_bar(Some("https://user@app.example:8443/"), None, None).host,
+        "app.example:8443"
+    );
+}
+
+/// An empty tab shows where it is going, with no lock; a tab with nothing
+/// shows nothing. The engine's blank page is not a document.
+#[test]
+fn an_empty_tab_names_its_pending_load() {
+    let pending = "https://app.uniswap.org/";
+    let going = bar(pending, "app.uniswap.org", BarLock::None);
+    assert_eq!(address_bar(None, Some(pending), None), going);
+    assert_eq!(address_bar(Some("about:blank"), Some(pending), None), going);
+    assert_eq!(address_bar(Some("  "), Some(pending), None), going);
+    assert_eq!(address_bar(None, None, None), bar("", "", BarLock::None));
+    assert_eq!(
+        address_bar(Some("about:blank"), Some("about:blank"), None),
+        bar("", "", BarLock::None)
+    );
+}
+
+fn label(name: &str, host_line: Option<&str>) -> SiteLabel {
+    SiteLabel {
+        name: name.to_owned(),
+        host_line: host_line.map(str::to_owned),
+    }
+}
+
+/// A name that is its host is said once; a real name sits over its host.
+#[test]
+fn a_site_named_by_its_host_is_said_once() {
+    assert_eq!(
+        site_label("127.0.0.1:8137", "127.0.0.1:8137"),
+        label("127.0.0.1:8137", None)
+    );
+    assert_eq!(
+        site_label("Uniswap", "app.uniswap.org"),
+        label("Uniswap", Some("app.uniswap.org"))
+    );
+    assert_eq!(
+        site_label("APP.Uniswap.ORG", "app.uniswap.org"),
+        label("app.uniswap.org", None),
+        "ASCII case is not a second name"
+    );
+    assert_eq!(
+        site_label("  ", "app.uniswap.org"),
+        label("app.uniswap.org", None)
+    );
+    assert_eq!(site_label("Uniswap", ""), label("Uniswap", None));
 }
