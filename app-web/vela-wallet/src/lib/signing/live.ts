@@ -14,9 +14,10 @@
  *    chosen. The slider arms only when both are true (and the fee, when the
  *    request has one, is ready). Its own doc in the drawn component says the
  *    shell must AND them — this is that place.
- * 2. **Dismissal is rejection.** The 022 interaction contract draws no reject
+ * 2. **The ✕ is the refusal.** The 022 interaction contract draws no reject
  *    button: closing the sheet IS the refusal, and the route answers the
- *    requester with 4001.
+ *    requester with 4001 — but since spec 079 only the header's ✕ closes it
+ *    (no scrim, drag or Escape: a stray touch lost the owner a request).
  */
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
@@ -756,6 +757,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			action: clear.confirm.type === 'confirm_intent' ? clear.confirm.intent : m.confirmPlain,
 			enabled
 		},
+		closeLabel: m.close,
 		panelTitle: m.panelTitle
 	};
 }

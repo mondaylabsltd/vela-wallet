@@ -255,10 +255,13 @@ export interface SigningModel {
 		address?: string;
 	};
 	/**
-	 * The slide. There is no reject button anywhere in this vocabulary:
-	 * closing the sheet is the rejection (product contract, SPEC 签名).
+	 * The slide. There is no reject BUTTON anywhere in this vocabulary; the
+	 * header's quiet ✕ is the refusal, and since spec 079 nothing else closes
+	 * the sheet (owner ruling: no swipe, scrim or Escape rejection).
 	 */
 	confirm: { hint: string; action: string; enabled: boolean };
+	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
+	closeLabel?: string;
 	/**
 	 * Spec 081: the request was refused outright (it would have changed who
 	 * controls the account). There is no fee to show and nothing to slide —

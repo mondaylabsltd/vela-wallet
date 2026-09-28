@@ -7,15 +7,16 @@
 	/**
 	 * The phone signing sheet (spec 022) — a bottom sheet over the page that
 	 * asked for the signature, so the site you are dealing with never leaves
-	 * the screen. It is the app's one sheet (`BottomSheet`, `signing` skin):
-	 * the same grabber, drag, scrim and Escape as every other, and past the
-	 * desktop breakpoint the same centred card it always was.
+	 * the screen. It is the app's one sheet (`BottomSheet`, `signing` skin),
+	 * and past the desktop breakpoint the same centred card it always was.
 	 *
-	 * Dismissal is rejection. The scrim, the drag and Escape all do the same
-	 * thing, and none of them is labelled "Reject", because a wallet with a
-	 * reject button teaches people to reach for it without reading. While the
-	 * signature is in flight (`dismissible: false`) none of them does anything
-	 * — the drag resists and comes back.
+	 * It closes only on its ✕ (spec 079, owner ruling: "除非用户明确关掉，不应该
+	 * 很容易误操作，比如下滑就关掉了" — a stray touch on the scrim threw the dApp's
+	 * request away and the site had to ask again). No drag, no scrim tap, no
+	 * Escape. The ✕ is quiet and is not labelled "Reject", because a wallet with
+	 * a big reject button teaches people to reach for it without reading; before
+	 * the approval it is the refusal (the host answers 4001). While the
+	 * signature is in flight (`dismissible: false`) the ✕ is shut too.
 	 */
 	interface Props {
 		model: SigningModel;
@@ -44,10 +45,27 @@
 		onspeed,
 		onspeedpick
 	}: Props = $props();
+
+	let sheet = $state<{ close: () => void }>();
 </script>
 
-<BottomSheet title={model.panelTitle} hideTitle variant="signing" {dismissible} {onclose}>
-	<SigningHeader dapp={model.dapp} network={model.network} />
+<BottomSheet
+	bind:this={sheet}
+	title={model.panelTitle}
+	hideTitle
+	variant="signing"
+	dismissible={dismissible ? 'explicit' : false}
+	{onclose}
+>
+	<!-- A refused request (spec 081) already offers its one way out, the
+	     labelled Close under the refusal; a second ✕ would be two doors. -->
+	<SigningHeader
+		dapp={model.dapp}
+		network={model.network}
+		closeLabel={model.closeLabel}
+		closeDisabled={!dismissible}
+		onclose={onclose && !model.dismissOnly ? () => sheet?.close() : undefined}
+	/>
 	<SigningBody
 		{model}
 		{onconfirm}

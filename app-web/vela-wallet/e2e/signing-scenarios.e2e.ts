@@ -139,15 +139,30 @@ test('an unlimited approval is kept as asked and said in danger; a cap is one ch
 	await expect(page.getByText(/^5 /).first()).toBeVisible();
 });
 
-test('rejecting answers the requester with 4001 — dismissal IS the refusal', async ({ page }) => {
+test('rejecting answers the requester with 4001 — the ✕ IS the refusal', async ({ page }) => {
 	await openWallet(page);
 	await fire(page, 'personal_sign', ['0x68656c6c6f', '0xD400866e00B055B20752a826CD5C89b811de130b']);
 
 	const sheet = page.getByRole('button', { name: /^Slide to confirm/ });
 	await expect(sheet).toBeVisible({ timeout: 25_000 });
 
-	// The 022 contract: there is no reject button. Closing is the answer.
+	// Spec 079: a stray Escape or a tap on the scrim no longer throws the
+	// request away — the sheet stays, and the page has no answer.
 	await page.keyboard.press('Escape');
+	await page
+		.locator('.scrim')
+		.first()
+		.click({ position: { x: 10, y: 10 } });
+	await page.waitForTimeout(800);
+	await expect(sheet).toBeVisible();
+	expect(
+		await page.evaluate(
+			() => (window as unknown as { __error?: { code?: number } }).__error?.code ?? null
+		)
+	).toBeNull();
+
+	// The 022 contract: there is no reject button. The quiet ✕ is the answer.
+	await page.getByRole('button', { name: en('componentsUi.signing.close'), exact: true }).click();
 	await expect
 		.poll(
 			async () =>

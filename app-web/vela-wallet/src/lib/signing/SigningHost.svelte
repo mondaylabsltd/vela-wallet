@@ -367,8 +367,12 @@
 	</div>
 {:else if model}
 	<!--
-		Dismissal IS rejection (the 022 interaction contract draws no reject
-		button), so closing answers the transport with 4001 through the core.
+		The ✕ IS the rejection (the 022 interaction contract draws no reject
+		button), so closing answers the transport with 4001 through the core —
+		and since spec 079 the ✕ is the ONLY way it closes: no scrim, no drag,
+		no Escape (`SigningSheet` → `BottomSheet dismissible="explicit"`).
+		After an answer (an error on the sheet) the core turns the same event
+		into a plain dismiss, never a second response.
 	-->
 	<SigningSheetView
 		{model}

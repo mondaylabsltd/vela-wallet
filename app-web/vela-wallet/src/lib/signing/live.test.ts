@@ -307,6 +307,12 @@ describe('the fee the sheet shows', () => {
 	});
 });
 
+describe('the sheet’s one close (spec 079)', () => {
+	it('names its ✕ with the sheet’s own word', () => {
+		expect(buildSigningModel(inputs())?.closeLabel).toBe(m.close);
+	});
+});
+
 /**
  * Spec 069: the dApp sheet chooses a speed exactly as the send form does —
  * the same core machine, the same builder, the same words.
