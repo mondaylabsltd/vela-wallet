@@ -76,6 +76,20 @@ route — done. D4 consent shows account + network — done. D5 (per-user instal
   connection. The tunnel upgrade and the handshake's two frames wait 15 s each, not 130 s: the phone
   answers them with nobody touching it (confirm in the `[vela-cable]` log on the device).
 - **H6** D3b hedged reads (a dApp read still waits one endpoint's 8 s before the next).
+- **H4** Failure wording for a message signature says "交易未能提交…请重试" with only 完成; the page
+  gets the transport's English detail (`dapp_rpc.rs` passes it through by design).
+- **H5** While the phone's tunnel connects the QR stays up; a "phone connected — confirm on the
+  phone" state would bridge the seconds between scan and prompt.
+- **H6** D3b hedged reads — **done on desktop only** (d712d1f1 and its review fixes; `executor/pool.rs`
+  is shared, so macOS and Linux get it too — **owner to confirm desktop-first**). A read silent for
+  1.5 s also asks the endpoint the core asks next (its own queue: a node cooling after a timeout or a
+  429 is not asked early); the caller takes that answer early only if it is a result or a revert — a
+  range cap or a missing method waits for the core's order. Writes, filter methods and bundler calls
+  are never hedged; hedges have their own 8-thread budget and stop while the core's own workers are
+  down to their last 8. The policy is the core's (`HEDGE_AFTER_MS`, `is_hedged_read`, `early_verdict`,
+  `RpcPoolView.pending_urls`); **web, iOS and Android still wait one endpoint's 8 s** — follow-up:
+  hedge in their pool drivers too (`pending_urls` is not on the wire yet). A user RPC slower than
+  1.5 s now sends those reads to the next node, public ones included. No Windows device run yet.
 - **H7** A profile folder WebView2 accepts but cannot use makes the engine wait forever (only an
   artificial ACL produced it; research R1).
 - **H8** After a certificate failure the tab keeps the previous page's title.

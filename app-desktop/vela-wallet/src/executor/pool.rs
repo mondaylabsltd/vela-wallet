@@ -34,11 +34,12 @@
 //! `if` that decides where a call goes next, it is in the wrong file.
 //!
 //! Hedged reads (spec 083 H6) keep that rule: a read silent for 1.5 s also
-//! asks the next endpoint, the caller takes the first answer the core's own
-//! classifier accepts, and the core is still told every outcome in its own
-//! order — see [`Hedge`].
+//! asks the endpoint the core will ask next — named by the core's own view,
+//! never by a tier walk here — the caller may take that answer only when the
+//! core says it is one every node gives alike, and the core is still told
+//! every outcome in its own order. See [`Hedge`].
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::Read as _;
 use std::sync::mpsc::{RecvTimeoutError, Sender, channel};
 use std::sync::{Mutex, OnceLock};
@@ -50,9 +51,9 @@ use vela_core::app::network_admin::{
     BUILTIN_CHAINS, NetProviderId, PROVIDER_ORDER, build_provider_rpc_url,
 };
 use vela_core::app::rpc_pool::{
-    Event, RPC_READ_TIMEOUT_MS, RpcBanEntry, RpcCallVerdict, RpcEndpointSeed, RpcKind,
-    RpcOperation, RpcShellResult, RpcSource, RpcTransportOutcome, concluding_verdict,
-    is_ban_active,
+    Event, HEDGE_AFTER_MS, RPC_READ_TIMEOUT_MS, RpcBanEntry, RpcCallVerdict, RpcEndpointSeed,
+    RpcKind, RpcOperation, RpcPoolView, RpcShellResult, RpcSource, RpcTransportOutcome,
+    early_verdict, is_ban_active, is_hedged_read,
 };
 
 use crate::core_host::CoreHost;
@@ -114,45 +115,15 @@ const PUBLIC_RPCS: &[(u32, &[&str])] = &[
 ];
 
 /// How long a read waits on one endpoint before the same read also goes to
-/// the next (spec 083 D3b, hand-off H6). A black-holed node used to hold a
-/// dApp's read — and the wallet's own — for the core's whole 8 s read timeout
-/// before the next node was asked at all.
-const HEDGE_AFTER: Duration = Duration::from_millis(1_500);
+/// the endpoint the core asks next (spec 083 D3b, hand-off H6). The delay,
+/// which reads may be hedged ([`is_hedged_read`]), where a hedge goes
+/// ([`RpcPoolView::pending_urls`]) and which early answer a caller may take
+/// ([`early_verdict`]) are the core's, so another shell can hedge alike;
+/// this file only sends the post and holds the reply.
+const HEDGE_AFTER: Duration = Duration::from_millis(HEDGE_AFTER_MS as u64);
 
-/// The reads a hedge may repeat (083 H6). Each answers from chain state and
-/// changes nothing, so asking two nodes costs one request and never a second
-/// effect. Anything that writes — `eth_sendRawTransaction`, which a dApp's
-/// page sends through [`call`] too — is absent and never hedged, and so are
-/// the filter methods, whose ids live on one node only.
-const HEDGED_READS: &[&str] = &[
-    "eth_blockNumber",
-    "eth_call",
-    "eth_chainId",
-    "eth_createAccessList",
-    "eth_estimateGas",
-    "eth_feeHistory",
-    "eth_gasPrice",
-    "eth_getBalance",
-    "eth_getBlockByHash",
-    "eth_getBlockByNumber",
-    "eth_getBlockReceipts",
-    "eth_getBlockTransactionCountByHash",
-    "eth_getBlockTransactionCountByNumber",
-    "eth_getCode",
-    "eth_getLogs",
-    "eth_getProof",
-    "eth_getStorageAt",
-    "eth_getTransactionByBlockHashAndIndex",
-    "eth_getTransactionByBlockNumberAndIndex",
-    "eth_getTransactionByHash",
-    "eth_getTransactionCount",
-    "eth_getTransactionReceipt",
-    "eth_maxPriorityFeePerGas",
-    "eth_simulateV1",
-    "eth_syncing",
-    "net_version",
-    "web3_clientVersion",
-];
+/// After a hedge found no free worker, how long before the read tries again.
+const HEDGE_RETRY: Duration = Duration::from_millis(250);
 
 /// What a caller asked for and where to send the answer.
 enum Request {
@@ -405,16 +376,40 @@ const MAX_WORKERS: usize = 32;
 
 static WORKERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// How many hedges may be on the wire at once, process-wide (083 H6).
+///
+/// Their own budget, deliberately NOT a share of [`MAX_WORKERS`]: at that
+/// ceiling the core's own post runs inline on the pool thread, which is every
+/// caller in the process waiting — the queue of one this file exists to
+/// avoid. A hedge is an optimisation and must never be the reason a real
+/// post loses its worker; past this budget a read simply is not hedged, and
+/// the core's sweep answers as it did before hedging.
+const MAX_HEDGES: usize = MAX_WORKERS / 4;
+
+static HEDGES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Workers the core's own operations keep to themselves (083 H6): a hedge
+/// goes out only while fewer than `MAX_WORKERS - WORKER_RESERVE` of them are
+/// busy. A caller a hedge answered sooner asks again sooner, and until the
+/// core has seen a silent node's first timeout every new read still goes
+/// there first and holds a worker for the whole read timeout. Near the
+/// ceiling hedging stops, callers wait out the core's own sweep again, and
+/// that back-pressure is what keeps the core's posts off the pool thread.
+const WORKER_RESERVE: usize = MAX_WORKERS / 4;
+
+/// A blocking operation handed to a worker thread, and what it reports back.
+type Work = Box<dyn FnOnce() -> Message + Send>;
+
 /// What the shell is holding for one in-flight call.
 struct InFlight {
     params: Value,
     /// Taken by whoever answers the caller first: the core's verdict, or a
-    /// hedge whose answer the core would accept itself (083 H6).
+    /// hedge whose answer the core's [`early_verdict`] lets through (083 H6).
     reply: Option<Sender<Result<Value, PoolError>>>,
     /// The last body received, per URL. `Conclude { Respond { url } }` names
     /// which one the core accepted — the core never sees a body itself.
     bodies: HashMap<String, Value>,
-    /// Only a read in [`HEDGED_READS`] through the RPC pool has one.
+    /// Only a read the core calls hedged ([`is_hedged_read`]) has one.
     hedge: Option<Hedge>,
 }
 
@@ -432,39 +427,57 @@ impl InFlight {
 /// The core still walks its endpoints one at a time and is told every
 /// outcome, truthfully, with its real latency, in its own order — its bans,
 /// cooldowns and scores are exactly what they were. A hedge only asks an
-/// endpoint EARLY: the caller takes the first answer the core would accept
-/// itself, and when the core reaches that endpoint the outcome is already in
-/// hand, so no endpoint is asked twice for one read. The loser is abandoned:
-/// once the core concludes, a hedge that comes back later is dropped.
+/// endpoint EARLY, and only the endpoint the core will ask next: the first of
+/// the current pass's remaining queue (`RpcPoolView::pending_urls`) not
+/// already hedged and not banned since the pass began. An endpoint the core
+/// has set aside — cooling after a timeout, backing off after a 429 — sits at
+/// the back of that queue, so it is hedged only when the core would reach it
+/// anyway. When the core does reach a hedged endpoint the outcome is already
+/// in hand (or on the wire) and is used instead of a second request, so a
+/// pass asks each endpoint once, hedged or not, exactly as the core would.
+///
+/// The caller may take a hedge's answer before the core reaches it only when
+/// the core's [`early_verdict`] says it is an answer every node gives alike;
+/// anything else waits for the core's order. The loser is abandoned: once the
+/// core concludes, a hedge that comes back later is dropped.
 struct Hedge {
-    chain_id: u32,
     method: String,
     /// The post the core is waiting on, and when it went out.
     current: Option<(String, Instant)>,
-    /// Every endpoint this read has asked. None is hedged twice, which is
-    /// what bounds a read to one extra request per endpoint in its pool.
-    asked: HashSet<String>,
     /// Hedges on the wire: when each went out, and the core's operation id
     /// once the core has reached that endpoint and waits on it too.
     flying: HashMap<String, (Instant, Option<u64>)>,
     /// Hedges that came back before the core asked for their endpoint.
     landed: HashMap<String, RpcShellResult>,
-    /// Nothing is left to hedge to, or no worker would take one.
-    spent: bool,
+    /// Nothing is left in the core's queue to hedge its current post to:
+    /// nothing more is sent until the core moves on to its next post.
+    stalled: bool,
+    /// No hedge worker was free when this read was due: it tries again at
+    /// this instant rather than giving up on the post.
+    retry: Option<Instant>,
+}
+
+/// What the core met when it reached an endpoint of a hedged read.
+enum Reached {
+    /// A hedge already has the outcome: it is the core's answer.
+    Landed(RpcShellResult),
+    /// A hedge is on the wire there: the core waits on it, no second post.
+    Flying,
+    /// Nobody has asked it yet: the core's own post goes out.
+    Fresh,
 }
 
 impl Hedge {
     /// `Some` for a read that may be hedged; a write, and anything for the
     /// bundler, never is.
-    fn for_call(chain_id: u32, kind: RpcKind, method: &str) -> Option<Self> {
-        (kind == RpcKind::Rpc && HEDGED_READS.contains(&method)).then(|| Self {
-            chain_id,
+    fn for_call(kind: RpcKind, method: &str) -> Option<Self> {
+        is_hedged_read(kind, method).then(|| Self {
             method: method.to_owned(),
             current: None,
-            asked: HashSet::new(),
             flying: HashMap::new(),
             landed: HashMap::new(),
-            spent: false,
+            stalled: false,
+            retry: None,
         })
     }
 
@@ -472,30 +485,45 @@ impl Hedge {
     /// still unanswered: one extra request on the wire per read, never a
     /// fan-out.
     fn due(&self) -> Option<Instant> {
-        if self.spent || self.flying.values().any(|(_, core)| core.is_none()) {
+        if self.stalled || self.flying.values().any(|(_, core)| core.is_none()) {
             return None;
         }
-        self.current.as_ref().map(|(_, sent)| *sent + HEDGE_AFTER)
+        let (_, sent) = self.current.as_ref()?;
+        let due = *sent + HEDGE_AFTER;
+        Some(self.retry.map_or(due, |retry| retry.max(due)))
     }
 
-    /// The next endpoint in the pool's own tier order that this read has not
-    /// asked and the core has not banned.
-    fn target(
-        &self,
-        endpoints: &[RpcEndpointSeed],
-        banned: &[RpcBanEntry],
-        now_ms: f64,
-    ) -> Option<String> {
-        endpoints
+    /// The endpoint the core will ask next: the first of its remaining queue
+    /// (`pending`, best first) not already hedged this pass and not banned
+    /// since the pass was drawn up. No order of this file's own.
+    fn target(&self, pending: &[String], banned: &[RpcBanEntry], now_ms: f64) -> Option<String> {
+        pending
             .iter()
-            .map(|endpoint| &endpoint.url)
             .find(|url| {
-                !self.asked.contains(*url)
+                !self.flying.contains_key(*url)
+                    && !self.landed.contains_key(*url)
                     && !banned
                         .iter()
                         .any(|ban| ban.url == **url && is_ban_active(ban, now_ms))
             })
             .cloned()
+    }
+
+    /// The core has reached `url` with its operation `id`.
+    fn reached(&mut self, url: &str, id: u64) -> Reached {
+        // The core moved on: its next post may be hedged afresh.
+        self.stalled = false;
+        self.retry = None;
+        if let Some(result) = self.landed.remove(url) {
+            return Reached::Landed(result);
+        }
+        if let Some((sent, core)) = self.flying.get_mut(url) {
+            *core = Some(id);
+            self.current = Some((url.to_owned(), *sent));
+            return Reached::Flying;
+        }
+        self.current = Some((url.to_owned(), Instant::now()));
+        Reached::Fresh
     }
 }
 
@@ -515,7 +543,9 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
     loop {
         // 083 H6: a read whose endpoint has been silent for `HEDGE_AFTER`
         // asks the next one. The wait below wakes for the earliest such read.
-        hedge_due_reads(&host, &mut inflight, workers);
+        hedge_due_reads(|| host.view(), &mut inflight, &mut |work| {
+            spawn_hedge(workers, work)
+        });
         let message = match inflight.values().filter_map(InFlight::hedge_due).min() {
             Some(due) => match rx.recv_timeout(due.saturating_duration_since(Instant::now())) {
                 Ok(message) => message,
@@ -567,7 +597,7 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                         params,
                         reply: Some(reply),
                         bodies: HashMap::new(),
-                        hedge: Hedge::for_call(chain_id, kind, &method),
+                        hedge: Hedge::for_call(kind, &method),
                     },
                 );
                 let pending = host.dispatch(Event::CallRequested {
@@ -654,17 +684,14 @@ fn drain(
                 .get_mut(call_id)
                 .and_then(|call| call.hedge.as_mut())
         {
-            if let Some(result) = hedge.landed.remove(url) {
-                queue.extend(host.resolve(next.id, result));
-                continue;
+            match hedge.reached(url, next.id) {
+                Reached::Landed(result) => {
+                    queue.extend(host.resolve(next.id, result));
+                    continue;
+                }
+                Reached::Flying => continue,
+                Reached::Fresh => {}
             }
-            if let Some((sent, core)) = hedge.flying.get_mut(url) {
-                *core = Some(next.id);
-                hedge.current = Some((url.clone(), *sent));
-                continue;
-            }
-            hedge.asked.insert(url.clone());
-            hedge.current = Some((url.clone(), Instant::now()));
         }
         if offload(next.id, &next.operation, inflight, workers) {
             continue;
@@ -690,28 +717,34 @@ fn post_answered(inflight: &mut HashMap<String, InFlight>, result: &RpcShellResu
     }
 }
 
-/// Send the next endpoint every read whose current one has been silent for
-/// [`HEDGE_AFTER`] (083 H6).
+/// Send every read whose current endpoint has been silent for [`HEDGE_AFTER`]
+/// to the endpoint the core will ask next (083 H6).
+///
+/// `view` is the core's (its queues and its ban truth), read once per round
+/// and only when some read is due. `spawn` hands a hedge to a worker
+/// ([`spawn_hedge`]); `false` means none was free, and the read tries again
+/// after [`HEDGE_RETRY`].
 fn hedge_due_reads(
-    host: &CoreHost<RpcPoolApp>,
+    mut view: impl FnMut() -> RpcPoolView,
     inflight: &mut HashMap<String, InFlight>,
-    workers: &Sender<Message>,
+    spawn: &mut impl FnMut(Work) -> bool,
 ) {
     let now = Instant::now();
-    // The core's ban truth, read once per round and only when a read is due.
-    let mut banned: Option<Vec<RpcBanEntry>> = None;
+    let mut core: Option<RpcPoolView> = None;
     for (call_id, call) in inflight.iter_mut() {
         if !call.hedge_due().is_some_and(|due| due <= now) {
             continue;
         }
-        let banned = banned.get_or_insert_with(|| host.view().banned);
+        let core = core.get_or_insert_with(&mut view);
         let Some(hedge) = call.hedge.as_mut() else {
             continue;
         };
-        // The same six tiers `LoadPoolConfig` hands the core.
-        let (endpoints, _) = collect_endpoints(hedge.chain_id);
-        let Some(url) = hedge.target(&endpoints, banned, now_ms()) else {
-            hedge.spent = true;
+        let pending = core
+            .pending_urls
+            .get(call_id)
+            .map_or(&[][..], Vec::as_slice);
+        let Some(url) = hedge.target(pending, &core.banned, now_ms()) else {
+            hedge.stalled = true;
             continue;
         };
         let (call_id, target, method, params) = (
@@ -735,20 +768,26 @@ fn hedge_due_reads(
                 },
             }
         });
-        // At the worker ceiling a hedge is not sent; the core's sweep still
-        // answers, as it did before hedging.
-        if !spawn_worker(workers, work) {
-            hedge.spent = true;
+        // No hedge worker free: not sent now, tried again shortly; the
+        // core's sweep answers meanwhile, as it did before hedging.
+        if !spawn(work) {
+            hedge.retry = Some(now + HEDGE_RETRY);
             continue;
         }
-        hedge.asked.insert(url.clone());
+        hedge.retry = None;
         hedge.flying.insert(url, (now, None));
     }
 }
 
-/// A hedge came back (083 H6). The caller has it now if the core would
-/// accept it; the core has it when it reaches that endpoint — at once, as
-/// the returned operation, when it already waits there.
+/// A hedge came back (083 H6). The caller has it now only if the core says
+/// it is an answer every node gives alike ([`early_verdict`]): a result or a
+/// revert. A range cap, an unsupported method — a fact about THAT node — is
+/// the core's to conclude with when it reaches that endpoint in its own
+/// order, after the endpoints before it have failed; handed over here, it
+/// would beat the preferred node's real answer whenever that node was merely
+/// slower than the hedge delay. The core has every outcome when it reaches
+/// that endpoint — at once, as the returned operation, when it already waits
+/// there.
 fn hedge_landed(
     inflight: &mut HashMap<String, InFlight>,
     result: RpcShellResult,
@@ -770,7 +809,7 @@ fn hedge_landed(
     if let Some(body) = body {
         call.bodies.insert(url.clone(), body);
     }
-    if let Some(verdict) = concluding_verdict(RpcKind::Rpc, &hedge.method, url, outcome)
+    if let Some(verdict) = early_verdict(RpcKind::Rpc, &hedge.method, url, outcome)
         && let Some(reply) = call.reply.take()
     {
         let _ = reply.send(answer(&verdict, &call.bodies));
@@ -798,7 +837,7 @@ fn offload(
     inflight: &HashMap<String, InFlight>,
     workers: &Sender<Message>,
 ) -> bool {
-    let work: Box<dyn FnOnce() -> Message + Send> = match operation {
+    let work: Work = match operation {
         RpcOperation::JsonRpcPost {
             call_id,
             url,
@@ -877,31 +916,49 @@ fn offload(
 
         _ => return false,
     };
-    spawn_worker(workers, work)
+    spawn_worker(workers, work, &WORKERS, MAX_WORKERS)
 }
 
-/// Run `work` on a worker thread that reports back through the channel.
-/// `false` at the ceiling, or when the OS refuses a thread.
-fn spawn_worker(workers: &Sender<Message>, work: Box<dyn FnOnce() -> Message + Send>) -> bool {
+/// Hand a hedge to a worker from the hedges' own budget (083 H6) — and only
+/// while the core's own operations have [`WORKER_RESERVE`] workers to spare,
+/// so a hedge is never the reason a core post runs on the pool thread.
+fn spawn_hedge(workers: &Sender<Message>, work: Work) -> bool {
     use std::sync::atomic::Ordering;
 
-    if WORKERS.load(Ordering::Relaxed) >= MAX_WORKERS {
+    WORKERS.load(Ordering::Relaxed) < MAX_WORKERS - WORKER_RESERVE
+        && spawn_worker(workers, work, &HEDGES, MAX_HEDGES)
+}
+
+/// Run `work` on a worker thread that reports back through the channel,
+/// counted against `budget` — [`WORKERS`] for the core's own operations,
+/// [`HEDGES`] for hedges, so neither can take the other's threads. `false`
+/// at `ceiling`, or when the OS refuses a thread. Only the pool thread
+/// spawns, so the check and the increment cannot race each other.
+fn spawn_worker(
+    workers: &Sender<Message>,
+    work: Work,
+    budget: &'static std::sync::atomic::AtomicUsize,
+    ceiling: usize,
+) -> bool {
+    use std::sync::atomic::Ordering;
+
+    if budget.load(Ordering::Relaxed) >= ceiling {
         return false;
     }
-    WORKERS.fetch_add(1, Ordering::Relaxed);
+    budget.fetch_add(1, Ordering::Relaxed);
     let workers = workers.clone();
     let spawned = std::thread::Builder::new()
         .name("vela-rpc-work".to_owned())
         .spawn(move || {
             let message = work();
-            WORKERS.fetch_sub(1, Ordering::Relaxed);
+            budget.fetch_sub(1, Ordering::Relaxed);
             // The pool thread is gone only if it panicked; there is nobody
             // left to tell, and the caller's own reply channel closing is
             // what reports it.
             let _ = workers.send(message);
         });
     if spawned.is_err() {
-        WORKERS.fetch_sub(1, Ordering::Relaxed);
+        budget.fetch_sub(1, Ordering::Relaxed);
         return false;
     }
     true
@@ -1122,6 +1179,13 @@ fn post(
 /// Bans are NOT filtered here — they are the core's state, and it says so:
 /// "Do NOT filter banned URLs — bans are this core's state."
 fn collect_endpoints(chain_id: u32) -> (Vec<RpcEndpointSeed>, Vec<RpcEndpointSeed>) {
+    // A test's loopback pool, in an order and tiers the stored settings
+    // cannot express (they hold two endpoints per chain at most).
+    #[cfg(test)]
+    if let Some(rpc) = tests::seeded_pool(chain_id) {
+        return (rpc, Vec::new());
+    }
+
     let mut rpc = Vec::new();
     let mut seen = std::collections::HashSet::new();
     let mut add = |url: String, source: RpcSource, into: &mut Vec<RpcEndpointSeed>| {
@@ -1597,6 +1661,14 @@ mod tests {
         delay: Duration,
         response: Option<String>,
     ) -> (String, std::sync::Arc<Mutex<Vec<Instant>>>) {
+        scripted_node_seq(vec![(delay, response)])
+    }
+
+    /// [`scripted_node`], answering its n-th request by `script[n]` — and
+    /// every request past the script by its last entry.
+    fn scripted_node_seq(
+        script: Vec<(Duration, Option<String>)>,
+    ) -> (String, std::sync::Arc<Mutex<Vec<Instant>>>) {
         use std::io::Write as _;
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0")
@@ -1607,14 +1679,21 @@ mod tests {
             .unwrap_or_else(|error| unreachable!("no port: {error}"));
         let log = std::sync::Arc::new(Mutex::new(Vec::new()));
         let seen = std::sync::Arc::clone(&log);
+        let script = std::sync::Arc::new(script);
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
-                let (seen, response) = (std::sync::Arc::clone(&seen), response.clone());
+                let (seen, script) = (std::sync::Arc::clone(&seen), std::sync::Arc::clone(&script));
                 std::thread::spawn(move || {
                     let _ = read_request(&stream);
-                    if let Ok(mut seen) = seen.lock() {
+                    let index = seen.lock().map_or(0, |mut seen| {
                         seen.push(Instant::now());
-                    }
+                        seen.len().saturating_sub(1)
+                    });
+                    let (delay, response) = script
+                        .get(index)
+                        .or_else(|| script.last())
+                        .cloned()
+                        .unwrap_or((Duration::ZERO, None));
                     std::thread::sleep(delay);
                     if let Some(response) = response {
                         let _ = (&stream).write_all(response.as_bytes());
@@ -1634,8 +1713,50 @@ mod tests {
 
     const ANSWER: &str = r#"{"jsonrpc":"2.0","id":1,"result":"0x2a"}"#;
 
+    /// A JSON-RPC answer whose `result` is `result`.
+    fn result_body(result: &str) -> String {
+        format!(r#"{{"jsonrpc":"2.0","id":1,"result":"{result}"}}"#)
+    }
+
+    /// The `result` member a caller received, if it received one.
+    fn result_of(answer: &Result<Value, PoolError>) -> Option<Value> {
+        answer
+            .as_ref()
+            .ok()
+            .and_then(|body| body.get("result").cloned())
+    }
+
     fn arrivals(log: &Mutex<Vec<Instant>>) -> Vec<Instant> {
         log.lock().map(|seen| seen.clone()).unwrap_or_default()
+    }
+
+    /// Chains whose pool a test hands in whole (see `collect_endpoints`).
+    static SEEDED: Mutex<Vec<(u32, Vec<RpcEndpointSeed>)>> = Mutex::new(Vec::new());
+
+    pub(super) fn seeded_pool(chain_id: u32) -> Option<Vec<RpcEndpointSeed>> {
+        let seeded = SEEDED.lock().ok()?;
+        seeded
+            .iter()
+            .find(|(id, _)| *id == chain_id)
+            .map(|(_, rpc)| rpc.clone())
+    }
+
+    /// One chain whose pool is exactly `nodes`, with these tiers.
+    fn seed_pool(chain_id: u32, nodes: &[(&str, RpcSource)]) {
+        let Ok(mut seeded) = SEEDED.lock() else {
+            unreachable!("the seed lock is poisoned");
+        };
+        seeded.retain(|(id, _)| *id != chain_id);
+        seeded.push((
+            chain_id,
+            nodes
+                .iter()
+                .map(|(url, source)| RpcEndpointSeed {
+                    url: (*url).to_owned(),
+                    source: *source,
+                })
+                .collect(),
+        ));
     }
 
     /// One chain whose pool asks `first` (its per-network override) and then
@@ -1667,6 +1788,19 @@ mod tests {
             .is_some_and(|tx| tx.send(Message::Ask(Request::Open { reply })).is_ok());
         assert!(sent, "the pool thread is gone");
         answer.recv().unwrap_or(usize::MAX)
+    }
+
+    /// Wait, at most `within`, for the pool to close every call; the count
+    /// still open.
+    fn settle(within: Duration) -> usize {
+        let began = Instant::now();
+        loop {
+            let open = open_calls();
+            if open == 0 || began.elapsed() >= within {
+                return open;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
 
     /// 083 H6, the case W13 measured: the chain's first node swallows reads.
@@ -1746,11 +1880,9 @@ mod tests {
             assert!(arrivals(&second_log).is_empty(), "a write was hedged");
 
             // Nor is anything bound for the bundler, whatever it is called.
-            assert!(Hedge::for_call(CHAIN, RpcKind::Rpc, "eth_sendRawTransaction").is_none());
-            assert!(
-                Hedge::for_call(CHAIN, RpcKind::Bundler, "eth_getUserOperationReceipt").is_none()
-            );
-            assert!(Hedge::for_call(CHAIN, RpcKind::Rpc, "eth_call").is_some());
+            assert!(Hedge::for_call(RpcKind::Rpc, "eth_sendRawTransaction").is_none());
+            assert!(Hedge::for_call(RpcKind::Bundler, "eth_getUserOperationReceipt").is_none());
+            assert!(Hedge::for_call(RpcKind::Rpc, "eth_call").is_some());
         });
     }
 
@@ -1793,49 +1925,506 @@ mod tests {
         });
     }
 
-    /// 083 H6, the bound: a read hedges to each endpoint at most once, with at
-    /// most one hedge unanswered at a time, never to a banned endpoint, and
-    /// stops when the pool is spent.
-    #[test]
-    fn a_read_hedges_each_endpoint_once_and_one_at_a_time() {
-        let seeds: Vec<RpcEndpointSeed> = ["https://a", "https://b", "https://c", "https://d"]
-            .into_iter()
-            .map(|url| RpcEndpointSeed {
+    /// One round of the real `hedge_due_reads` against `view`, with a hedge
+    /// worker free or none: how many times it read the core's view, and how
+    /// many hedges it sent.
+    fn hedge_round(
+        view: &RpcPoolView,
+        inflight: &mut HashMap<String, InFlight>,
+        free: bool,
+    ) -> (usize, usize) {
+        let (mut views, mut sent) = (0, 0);
+        hedge_due_reads(
+            || {
+                views += 1;
+                view.clone()
+            },
+            inflight,
+            &mut |_work| {
+                sent += usize::from(free);
+                free
+            },
+        );
+        (views, sent)
+    }
+
+    fn the_hedge(inflight: &mut HashMap<String, InFlight>) -> &mut Hedge {
+        inflight
+            .get_mut("r1")
+            .and_then(|call| call.hedge.as_mut())
+            .unwrap_or_else(|| unreachable!("r1 is a hedged read"))
+    }
+
+    /// The core posts to `url`, and that post has been silent two seconds:
+    /// a hedge is due.
+    fn silent_for_two_seconds(hedge: &mut Hedge, url: &str, id: u64) {
+        assert!(matches!(hedge.reached(url, id), Reached::Fresh));
+        let then = Instant::now()
+            .checked_sub(Duration::from_secs(2))
+            .unwrap_or_else(|| unreachable!("the clock is younger than two seconds"));
+        hedge.current = Some((url.to_owned(), then));
+    }
+
+    /// A hedge's outcome, landed before the core reached its endpoint.
+    fn land(hedge: &mut Hedge, url: &str) {
+        assert!(hedge.flying.remove(url).is_some(), "{url} was not hedged");
+        hedge.landed.insert(
+            url.to_owned(),
+            RpcShellResult::PostOutcome {
+                call_id: "r1".to_owned(),
                 url: url.to_owned(),
-                source: RpcSource::Public,
-            })
-            .collect();
+                outcome: RpcTransportOutcome::Timeout,
+                latency_ms: 8_000.0,
+                now_ms: now_ms(),
+            },
+        );
+    }
+
+    fn flying(inflight: &mut HashMap<String, InFlight>) -> Vec<String> {
+        the_hedge(inflight).flying.keys().cloned().collect()
+    }
+
+    /// 083 H6, the real round (`hedge_due_reads`, review finding 5): a due
+    /// read is hedged to the endpoint the CORE will ask next — the first of
+    /// its remaining queue, whatever the tiers say — with one hedge
+    /// unanswered at a time, never to an endpoint banned since the pass
+    /// began, and not at all once the queue is spent; the core's next post
+    /// lifts that. A read that found no hedge worker free tries again after
+    /// `HEDGE_RETRY` instead of giving up on the post (review finding 3). The
+    /// view is read only when a read is due.
+    #[test]
+    fn a_due_read_is_hedged_down_the_cores_own_queue() {
         let now = now_ms();
-        let banned = [RpcBanEntry {
-            url: "https://c".to_owned(),
-            banned_at_ms: now - 1_000.0,
-            permanent: false,
-        }];
-        let Some(mut hedge) = Hedge::for_call(1, RpcKind::Rpc, "eth_call") else {
+        let mut view = RpcPoolView {
+            failed_chains: Vec::new(),
+            rate_limited_chains: Vec::new(),
+            banned: vec![RpcBanEntry {
+                url: "https://c".to_owned(),
+                banned_at_ms: now - 1_000.0,
+                permanent: false,
+            }],
+            // The core's own order: `https://tier-one` is the pool's first
+            // tier, cooling after a timeout, so the core put it last.
+            pending_urls: [(
+                "r1".to_owned(),
+                ["https://b", "https://c", "https://d", "https://tier-one"]
+                    .map(str::to_owned)
+                    .to_vec(),
+            )]
+            .into_iter()
+            .collect(),
+        };
+        let Some(hedge) = Hedge::for_call(RpcKind::Rpc, "eth_call") else {
             unreachable!("eth_call is a read");
         };
         assert_eq!(hedge.due(), None, "nothing to hedge before the core posts");
+        let (reply, _answer) = channel();
+        let mut inflight = HashMap::from([(
+            "r1".to_owned(),
+            InFlight {
+                params: json!([]),
+                reply: Some(reply),
+                bodies: HashMap::new(),
+                hedge: Some(hedge),
+            },
+        )]);
 
-        // The core posts to the first endpoint.
-        let sent_at = Instant::now();
-        hedge.asked.insert("https://a".to_owned());
-        hedge.current = Some(("https://a".to_owned(), sent_at));
-        assert_eq!(hedge.due(), Some(sent_at + HEDGE_AFTER));
+        // Not yet due: the core's post has only just gone out.
+        assert!(matches!(
+            the_hedge(&mut inflight).reached("https://a", 1),
+            Reached::Fresh
+        ));
+        assert_eq!(hedge_round(&view, &mut inflight, true), (0, 0));
 
-        // Each hedge, as `hedge_due_reads` sends it, then lands failing.
-        let mut targets = Vec::new();
-        while hedge.due().is_some() {
-            let Some(url) = hedge.target(&seeds, &banned, now) else {
-                hedge.spent = true;
-                continue;
-            };
-            hedge.asked.insert(url.clone());
-            hedge.flying.insert(url.clone(), (sent_at, None));
-            assert_eq!(hedge.due(), None, "two hedges unanswered at once");
-            hedge.flying.remove(&url);
-            targets.push(url);
+        silent_for_two_seconds(the_hedge(&mut inflight), "https://a", 1);
+        assert_eq!(hedge_round(&view, &mut inflight, true), (1, 1));
+        assert_eq!(flying(&mut inflight), ["https://b"]);
+        // One unanswered hedge at a time.
+        assert_eq!(hedge_round(&view, &mut inflight, true), (0, 0));
+
+        // B lands failing; C was banned since the pass began, so D is next.
+        land(the_hedge(&mut inflight), "https://b");
+        assert_eq!(hedge_round(&view, &mut inflight, true), (1, 1));
+        assert_eq!(flying(&mut inflight), ["https://d"]);
+
+        // The core's last, cooling endpoint is hedged only after every
+        // endpoint the core puts before it.
+        land(the_hedge(&mut inflight), "https://d");
+        assert_eq!(hedge_round(&view, &mut inflight, true), (1, 1));
+        assert_eq!(flying(&mut inflight), ["https://tier-one"]);
+        land(the_hedge(&mut inflight), "https://tier-one");
+
+        // The queue is spent: nothing is sent, and nothing more is due.
+        assert_eq!(hedge_round(&view, &mut inflight, true), (1, 0));
+        assert_eq!(the_hedge(&mut inflight).due(), None);
+        assert_eq!(hedge_round(&view, &mut inflight, true), (0, 0));
+
+        // The core reaches a landed hedge: its outcome, no second post.
+        assert!(matches!(
+            the_hedge(&mut inflight).reached("https://b", 2),
+            Reached::Landed(_)
+        ));
+
+        // A new pass. No hedge worker free: the read waits `HEDGE_RETRY`,
+        // neither spinning nor giving up on this post.
+        view.pending_urls
+            .insert("r1".to_owned(), vec!["https://e".to_owned()]);
+        silent_for_two_seconds(the_hedge(&mut inflight), "https://a", 3);
+        assert_eq!(hedge_round(&view, &mut inflight, false), (1, 0));
+        assert!(flying(&mut inflight).is_empty());
+        let retry = the_hedge(&mut inflight).due();
+        assert!(
+            retry.is_some_and(|at| at > Instant::now() && at <= Instant::now() + HEDGE_RETRY),
+            "{retry:?}"
+        );
+        assert_eq!(
+            hedge_round(&view, &mut inflight, true),
+            (0, 0),
+            "retried at once"
+        );
+        std::thread::sleep(HEDGE_RETRY);
+        assert_eq!(hedge_round(&view, &mut inflight, true), (1, 1));
+        assert_eq!(flying(&mut inflight), ["https://e"]);
+
+        // A caller with its answer is hedged no further.
+        land(the_hedge(&mut inflight), "https://e");
+        view.pending_urls
+            .insert("r1".to_owned(), vec!["https://g".to_owned()]);
+        if let Some(call) = inflight.get_mut("r1") {
+            call.reply = None;
         }
-        assert_eq!(targets, ["https://b", "https://d"]);
+        assert_eq!(hedge_round(&view, &mut inflight, true), (0, 0));
+    }
+
+    /// 083 H6, review finding 2: the hedge goes where the CORE goes next,
+    /// not down the tiers. A — the user's override, the first tier —
+    /// swallows a read and fails, so the core cools it for 30 s and puts it
+    /// LAST. On the next read B, first now, is slow: the hedge must go to C,
+    /// which answers, and A must not be asked again. A tier walk sent that
+    /// hedge to the cooling A and waited on it.
+    #[test]
+    fn a_hedge_goes_where_the_core_goes_next_not_to_a_cooling_node() {
+        const CHAIN: u32 = 424_247;
+
+        storage::tests::with_temp_state("pool-hedge-order", || {
+            let (a, a_log) = scripted_node(Duration::from_secs(2), None);
+            let (b, b_log) = scripted_node_seq(vec![
+                (Duration::ZERO, Some(http("200 OK", &result_body("0xb")))),
+                (
+                    Duration::from_millis(2_500),
+                    Some(http("200 OK", &result_body("0xb"))),
+                ),
+            ]);
+            let (c, c_log) =
+                scripted_node(Duration::ZERO, Some(http("200 OK", &result_body("0xc"))));
+            seed_pool(
+                CHAIN,
+                &[
+                    (&a, RpcSource::User),
+                    (&b, RpcSource::Default),
+                    (&c, RpcSource::Public),
+                ],
+            );
+
+            // Read 1: A is silent, the hedge to B answers, then A fails.
+            let first = call(CHAIN, "eth_call", json!([]));
+            assert_eq!(result_of(&first), Some(json!("0xb")), "{first:?}");
+            assert_eq!(settle(Duration::from_secs(3)), 0, "read 1 was left open");
+            assert_eq!(arrivals(&a_log).len(), 1);
+
+            // Read 2: the core asks B, slow now; next it would ask C, and
+            // the cooling A only after that.
+            let began = Instant::now();
+            let second = call(CHAIN, "eth_call", json!([]));
+            let waited = began.elapsed();
+            assert_eq!(
+                result_of(&second),
+                Some(json!("0xc")),
+                "the hedge did not go to C: {second:?}"
+            );
+            assert!(
+                waited < HEDGE_AFTER + Duration::from_millis(900),
+                "{waited:?}"
+            );
+            assert_eq!(settle(Duration::from_secs(3)), 0, "read 2 was left open");
+            assert_eq!(arrivals(&a_log).len(), 1, "the cooling node was hedged");
+            assert_eq!(arrivals(&b_log).len(), 2);
+            assert_eq!(arrivals(&c_log).len(), 1);
+        });
+    }
+
+    /// 083 H6, review finding 1: a hedged node's cap or gap never beats the
+    /// preferred node's real answer. The first node is merely slow (2.5 s);
+    /// the hedged second node answers at once with a fact about ITSELF — a
+    /// getLogs range cap, a -32601 "method does not exist" — and the caller
+    /// still gets the first node's answer. A revert, which every node gives
+    /// alike, is still the caller's the moment the hedge brings it.
+    #[test]
+    fn a_hedged_nodes_cap_or_gap_never_beats_the_preferred_nodes_answer() {
+        const LOGS: u32 = 424_248;
+        const SIMULATE: u32 = 424_249;
+        const REVERT: u32 = 424_250;
+        const SLOW: Duration = Duration::from_millis(2_500);
+        const LOGS_BODY: &str = r#"{"jsonrpc":"2.0","id":1,"result":[{"logIndex":"0x0"}]}"#;
+        const CAPPED: &str = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"block range exceeded: maximum is 500"}}"#;
+        const MISSING: &str = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"the method eth_simulateV1 does not exist/is not available"}}"#;
+        const REVERTED: &str = r#"{"jsonrpc":"2.0","id":1,"error":{"code":3,"message":"execution reverted","data":"0x"}}"#;
+
+        storage::tests::with_temp_state("pool-hedge-early", || {
+            let (logs, _) = scripted_node(SLOW, Some(http("200 OK", LOGS_BODY)));
+            let (capped, capped_log) = scripted_node(Duration::ZERO, Some(http("200 OK", CAPPED)));
+            seed_pool(
+                LOGS,
+                &[(&logs, RpcSource::User), (&capped, RpcSource::Public)],
+            );
+            let (simulates, _) = scripted_node(SLOW, Some(http("200 OK", ANSWER)));
+            let (missing, missing_log) =
+                scripted_node(Duration::ZERO, Some(http("200 OK", MISSING)));
+            seed_pool(
+                SIMULATE,
+                &[(&simulates, RpcSource::User), (&missing, RpcSource::Public)],
+            );
+            let (dead, _) = scripted_node(Duration::from_secs(3), None);
+            let (reverts, _) = scripted_node(Duration::ZERO, Some(http("200 OK", REVERTED)));
+            seed_pool(
+                REVERT,
+                &[(&dead, RpcSource::User), (&reverts, RpcSource::Public)],
+            );
+
+            let read = |chain_id: u32, method: &'static str| {
+                std::thread::spawn(move || {
+                    let began = Instant::now();
+                    let answer = call(chain_id, method, json!([]));
+                    (answer, began.elapsed())
+                })
+            };
+            let joined = |reader: std::thread::JoinHandle<(Result<Value, PoolError>, Duration)>| {
+                reader
+                    .join()
+                    .unwrap_or_else(|_| unreachable!("a reader panicked"))
+            };
+            let (logs_read, simulate_read, revert_read) = (
+                read(LOGS, "eth_getLogs"),
+                read(SIMULATE, "eth_simulateV1"),
+                read(REVERT, "eth_call"),
+            );
+
+            let (answer, waited) = joined(logs_read);
+            assert_eq!(
+                result_of(&answer),
+                Some(json!([{ "logIndex": "0x0" }])),
+                "a public node's range cap beat the logs: {answer:?}"
+            );
+            assert!(waited >= SLOW, "{waited:?}");
+
+            let (answer, waited) = joined(simulate_read);
+            assert_eq!(
+                result_of(&answer),
+                Some(json!("0x2a")),
+                "a node without the method beat the answer: {answer:?}"
+            );
+            assert!(waited >= SLOW, "{waited:?}");
+
+            let (answer, waited) = joined(revert_read);
+            assert_eq!(
+                answer
+                    .as_ref()
+                    .ok()
+                    .and_then(|body| body.pointer("/error/code").cloned()),
+                Some(json!(3)),
+                "{answer:?}"
+            );
+            assert!(
+                waited < HEDGE_AFTER + Duration::from_millis(900),
+                "a revert waited for the dead node: {waited:?}"
+            );
+
+            // Each hedged node was asked once, and every call closed.
+            assert_eq!(arrivals(&capped_log).len(), 1);
+            assert_eq!(arrivals(&missing_log).len(), 1);
+            assert_eq!(settle(Duration::from_secs(3)), 0);
+        });
+    }
+
+    /// 083 H6: when the core's own post answers first, that is the caller's
+    /// answer, and the hedge that lands after it is dropped — no second
+    /// reply, nothing reopened.
+    #[test]
+    fn the_cores_own_answer_wins_and_the_late_hedge_is_dropped() {
+        const CHAIN: u32 = 424_251;
+
+        storage::tests::with_temp_state("pool-hedge-late", || {
+            let (first, first_log) = scripted_node(
+                Duration::from_millis(2_000),
+                Some(http("200 OK", &result_body("0xa"))),
+            );
+            let (second, second_log) = scripted_node(
+                Duration::from_millis(1_500),
+                Some(http("200 OK", &result_body("0xb"))),
+            );
+            seed_pool(
+                CHAIN,
+                &[(&first, RpcSource::User), (&second, RpcSource::Public)],
+            );
+
+            let began = Instant::now();
+            let answer = call(CHAIN, "eth_call", json!([]));
+            let waited = began.elapsed();
+            assert_eq!(result_of(&answer), Some(json!("0xa")), "{answer:?}");
+            assert!(waited < Duration::from_millis(2_900), "{waited:?}");
+            assert_eq!(arrivals(&second_log).len(), 1, "no hedge was sent");
+
+            // The hedge lands at about 3 s, into a call that is gone.
+            std::thread::sleep(Duration::from_millis(3_400).saturating_sub(began.elapsed()));
+            assert_eq!(open_calls(), 0, "the late hedge reopened the call");
+            assert_eq!(arrivals(&first_log).len(), 1);
+            assert_eq!(arrivals(&second_log).len(), 1);
+        });
+    }
+
+    /// 083 H6: hedges follow one another down a longer pool. A swallows the
+    /// read; B, hedged at 1.5 s, fails half a second later; C is hedged the
+    /// moment B fails, and answers. Each node is asked once, and the core,
+    /// told both failures in its own order, starts the next read at C.
+    #[test]
+    fn hedges_follow_one_another_down_a_three_node_pool() {
+        const CHAIN: u32 = 424_252;
+
+        storage::tests::with_temp_state("pool-hedge-three", || {
+            let (a, a_log) = scripted_node(Duration::from_secs(4), None);
+            let (b, b_log) = scripted_node(Duration::from_millis(500), None);
+            let (c, c_log) =
+                scripted_node(Duration::ZERO, Some(http("200 OK", &result_body("0xc"))));
+            seed_pool(
+                CHAIN,
+                &[
+                    (&a, RpcSource::User),
+                    (&b, RpcSource::Default),
+                    (&c, RpcSource::Public),
+                ],
+            );
+
+            let began = Instant::now();
+            let answer = call(CHAIN, "eth_call", json!([]));
+            let waited = began.elapsed();
+            assert_eq!(result_of(&answer), Some(json!("0xc")), "{answer:?}");
+            assert!(
+                waited >= HEDGE_AFTER + Duration::from_millis(500),
+                "{waited:?}"
+            );
+            assert!(
+                waited < HEDGE_AFTER + Duration::from_millis(1_400),
+                "{waited:?}"
+            );
+            assert_eq!(settle(Duration::from_secs(4)), 0, "the read was left open");
+            for log in [&a_log, &b_log, &c_log] {
+                assert_eq!(arrivals(log).len(), 1, "a node was asked twice");
+            }
+
+            let again = Instant::now();
+            let answer = call(CHAIN, "eth_call", json!([]));
+            assert_eq!(result_of(&answer), Some(json!("0xc")), "{answer:?}");
+            assert!(
+                again.elapsed() < HEDGE_AFTER,
+                "the core never learned A and B failed"
+            );
+            assert_eq!(arrivals(&a_log).len(), 1);
+            assert_eq!(arrivals(&b_log).len(), 1);
+        });
+    }
+
+    /// 083 H6, review finding 3: a hedge never costs the core's own post
+    /// its worker. Hedges spend their own budget — with every hedge slot
+    /// taken a hedge is refused and the core's post still gets a worker —
+    /// and none is sent at all once the core's own workers are down to
+    /// their reserve, so the core's next post never runs on the pool thread.
+    #[test]
+    fn a_hedge_never_takes_a_worker_the_cores_own_post_needs() {
+        use std::sync::atomic::Ordering;
+
+        storage::tests::with_temp_state("pool-hedge-budget", || {
+            let (tx, rx) = channel();
+            let work =
+                || -> Work { Box::new(|| Message::Ask(Request::Refresh { chain_id: None })) };
+            // Relative, so a worker still finishing from another test is
+            // counted rather than overwritten.
+            HEDGES.fetch_add(MAX_HEDGES, Ordering::Relaxed);
+            let hedged = spawn_hedge(&tx, work());
+            let posted = spawn_worker(&tx, work(), &WORKERS, MAX_WORKERS);
+            HEDGES.fetch_sub(MAX_HEDGES, Ordering::Relaxed);
+            assert!(!hedged, "a hedge past its budget was sent");
+            assert!(posted, "the core's post lost its worker to the hedges");
+            assert!(rx.recv_timeout(Duration::from_secs(5)).is_ok());
+
+            // The core's workers busy down to their reserve: no hedge, though
+            // the hedges' own budget is untouched.
+            let busy = MAX_WORKERS - WORKER_RESERVE;
+            WORKERS.fetch_add(busy, Ordering::Relaxed);
+            let hedged = spawn_hedge(&tx, work());
+            let posted = spawn_worker(&tx, work(), &WORKERS, MAX_WORKERS);
+            WORKERS.fetch_sub(busy, Ordering::Relaxed);
+            assert!(!hedged, "a hedge ate into the core's reserve");
+            assert!(posted, "the reserve was not there for the core's post");
+            assert!(rx.recv_timeout(Duration::from_secs(5)).is_ok());
+
+            // With room again, a hedge goes out.
+            assert!(spawn_hedge(&tx, work()), "no hedge with every worker free");
+            assert!(rx.recv_timeout(Duration::from_secs(5)).is_ok());
+        });
+    }
+
+    /// 083 H6, review finding 5: the timeout path, as W13's black hole
+    /// really behaves — the first node accepts the read and never answers,
+    /// so the core's own post runs into its full read timeout. The caller
+    /// has the hedge's answer at `HEDGE_AFTER`; the core, told the timeout
+    /// when it happens, takes the hedge's outcome for the second node rather
+    /// than asking again, and closes the call. The next read goes to the
+    /// second node first and waits for no hedge.
+    #[test]
+    fn a_node_that_never_answers_times_out_behind_the_hedge() {
+        const CHAIN: u32 = 424_253;
+        let timeout = Duration::from_millis(u64::from(RPC_READ_TIMEOUT_MS));
+
+        storage::tests::with_temp_state("pool-hedge-timeout", || {
+            let (dead, dead_log) = scripted_node(timeout + Duration::from_secs(5), None);
+            let (live, live_log) =
+                scripted_node(Duration::ZERO, Some(http("200 OK", &result_body("0xb"))));
+            seed_pool(
+                CHAIN,
+                &[(&dead, RpcSource::User), (&live, RpcSource::Public)],
+            );
+
+            let began = Instant::now();
+            let answer = call(CHAIN, "eth_call", json!([]));
+            let waited = began.elapsed();
+            assert_eq!(result_of(&answer), Some(json!("0xb")), "{answer:?}");
+            assert!(
+                waited >= HEDGE_AFTER && waited < HEDGE_AFTER + Duration::from_secs(1),
+                "{waited:?}"
+            );
+
+            // Still open while the core waits out the first node...
+            assert_eq!(open_calls(), 1, "the core stopped waiting early");
+            // ...and closed once its read timeout has passed.
+            let left = timeout.saturating_sub(began.elapsed()) + Duration::from_secs(3);
+            assert_eq!(settle(left), 0, "the timed-out read was left open");
+            assert!(began.elapsed() >= timeout, "closed before the timeout");
+            assert_eq!(arrivals(&dead_log).len(), 1);
+            assert_eq!(
+                arrivals(&live_log).len(),
+                1,
+                "the second node was asked twice"
+            );
+
+            let again = Instant::now();
+            let answer = call(CHAIN, "eth_call", json!([]));
+            assert_eq!(result_of(&answer), Some(json!("0xb")), "{answer:?}");
+            assert!(
+                again.elapsed() < HEDGE_AFTER,
+                "the core never learned the first node timed out"
+            );
+            assert_eq!(arrivals(&dead_log).len(), 1);
+        });
     }
 
     /// The pool, against the real network, through the real routing.

@@ -159,6 +159,12 @@ pub const BUNDLER_BACKOFF_CAP_MS: u32 = 1_000;
 /// Read RPC timeout — `NET_TIMEOUTS.rpcRead` (`net.ts:25`); `poolRpcCall`
 /// always posts with this shorter timeout (`rpc-pool.ts:765`).
 pub const RPC_READ_TIMEOUT_MS: u32 = 8_000;
+/// How long a read waits on one endpoint before a shell also asks the
+/// endpoint this machine will ask next — hedged reads (spec 083 D3b,
+/// hand-off H6; see [`is_hedged_read`], [`early_verdict`] and
+/// [`RpcPoolView::pending_urls`]). Without it a black-holed node holds every
+/// read for the whole [`RPC_READ_TIMEOUT_MS`] before the next node is asked.
+pub const HEDGE_AFTER_MS: u32 = 1_500;
 /// Bundler JSON-RPC timeout — `NET_TIMEOUTS.bundlerRpc` (`net.ts:27`).
 pub const BUNDLER_RPC_TIMEOUT_MS: u32 = 15_000;
 /// Per-endpoint `eth_chainId` ping timeout — `NET_TIMEOUTS.rpcPing` (`net.ts:29`).
@@ -935,6 +941,15 @@ pub struct RpcPoolView {
     /// The ban map as persisted (expired entries may linger until the next
     /// prune — check [`is_ban_active`] with a current timestamp).
     pub banned: Vec<RpcBanEntry>,
+    /// Per routed call, the endpoints its current pass has still to try, in
+    /// the order it will try them (the endpoint it is waiting on is already
+    /// off the list). For a shell that asks the next endpoint early — the
+    /// desktop's hedged reads, spec 083 H6 — so the early ask goes where this
+    /// machine goes next, past its cooldowns and 429 back-offs, never around
+    /// them. Shell-local: never serialized, never in the bindings.
+    #[serde(skip)]
+    #[cfg_attr(feature = "bindings", ts(skip))]
+    pub pending_urls: BTreeMap<String, Vec<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1040,6 +1055,14 @@ impl App for RpcPool {
             failed_chains: model.failed_chains.iter().copied().collect(),
             rate_limited_chains: model.rate_limited_chains.iter().copied().collect(),
             banned: model.bans.values().cloned().collect(),
+            pending_urls: model
+                .calls
+                .iter()
+                .filter(|(_, session)| !session.queue.is_empty())
+                .map(|(call_id, session)| {
+                    (call_id.clone(), session.queue.iter().cloned().collect())
+                })
+                .collect(),
         }
     }
 }
@@ -1734,33 +1757,89 @@ fn route_of(kind: RpcKind, method: &str, outcome: &RpcTransportOutcome) -> Route
     }
 }
 
-/// The verdict this one outcome would conclude a call with, or `None` when
-/// the sweep would fail over — the classification [`handle_outcome`] applies,
-/// asked without a session.
+/// The reads a shell may hedge (spec 083 H6). Each answers from chain state
+/// and changes nothing, so asking two nodes costs one request and never a
+/// second effect. Anything that writes — `eth_sendRawTransaction`, which a
+/// dApp's page sends through the same pool — is absent, and so are the
+/// filter methods, whose ids live on one node only.
+const HEDGED_READS: &[&str] = &[
+    "eth_blockNumber",
+    "eth_call",
+    "eth_chainId",
+    "eth_createAccessList",
+    "eth_estimateGas",
+    "eth_feeHistory",
+    "eth_gasPrice",
+    "eth_getBalance",
+    "eth_getBlockByHash",
+    "eth_getBlockByNumber",
+    "eth_getBlockReceipts",
+    "eth_getBlockTransactionCountByHash",
+    "eth_getBlockTransactionCountByNumber",
+    "eth_getCode",
+    "eth_getLogs",
+    "eth_getProof",
+    "eth_getStorageAt",
+    "eth_getTransactionByBlockHashAndIndex",
+    "eth_getTransactionByBlockNumberAndIndex",
+    "eth_getTransactionByHash",
+    "eth_getTransactionCount",
+    "eth_getTransactionReceipt",
+    "eth_maxPriorityFeePerGas",
+    "eth_simulateV1",
+    "eth_syncing",
+    "net_version",
+    "web3_clientVersion",
+];
+
+/// Whether a shell may ask the next endpoint early for this call (spec 083
+/// H6): a read on the list above, through the RPC pool. Never a write, never
+/// a filter, never anything bound for the bundler.
+pub fn is_hedged_read(kind: RpcKind, method: &str) -> bool {
+    kind == RpcKind::Rpc && HEDGED_READS.contains(&method)
+}
+
+/// The verdict an outcome may hand the caller BEFORE this machine reaches
+/// that endpoint in its own order, or `None` when it must wait for it.
 ///
-/// For a shell that asks the next endpoint before the current one has
-/// answered (desktop hedged reads, spec 083 H6): the caller may have an
-/// answer the moment one arrives, but only one this machine would hand back
-/// itself — a ban-class or transient error is still the sweep's to route.
-/// The machine is still told every outcome, in its own order.
-pub fn concluding_verdict(
+/// For a shell that asks the next endpoint while the current one is still
+/// silent (desktop hedged reads, spec 083 H6). An early answer has to be one
+/// every healthy node gives alike, because it beats the preferred node's
+/// answer rather than following that node's failure: a result, or an
+/// execution revert (code 3, or a message naming the revert) — facts about
+/// chain state. Anything else this machine would still conclude with is a
+/// fact about the NODE that answered: a getLogs range cap, a -32601 "method
+/// not found", a missing trace or simulate method. Handed over early, a
+/// weaker public node's cap or gap would replace the preferred node's real
+/// answer whenever that node was merely slower than the hedge delay; such
+/// an outcome waits, and is this machine's to conclude with only when it
+/// reaches that endpoint — after the endpoints before it have failed.
+///
+/// Always a subset of what [`handle_outcome`] concludes with: an outcome the
+/// machine would ban or fail over (an "execution reverted: … exceeded" that
+/// reads as permanent, say) is never an answer here either.
+pub fn early_verdict(
     kind: RpcKind,
     method: &str,
     url: &str,
     outcome: &RpcTransportOutcome,
 ) -> Option<RpcCallVerdict> {
+    let node_independent = match outcome {
+        RpcTransportOutcome::Response { error: None } => true,
+        RpcTransportOutcome::Response { error: Some(error) } => {
+            error.code == Some(3)
+                || error
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.to_lowercase().contains("revert"))
+        }
+        _ => false,
+    };
     match route_of(kind, method, outcome) {
-        Route::Success => Some(RpcCallVerdict::Respond {
+        Route::Success if node_independent => Some(RpcCallVerdict::Respond {
             url: url.to_owned(),
         }),
-        Route::RangeCap(max_span) => Some(RpcCallVerdict::RangeCap {
-            url: url.to_owned(),
-            max_span,
-        }),
-        Route::Ban { .. }
-        | Route::Transient { .. }
-        | Route::RateLimited429
-        | Route::PlainFailure => None,
+        _ => None,
     }
 }
 
