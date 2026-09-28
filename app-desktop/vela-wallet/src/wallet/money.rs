@@ -165,6 +165,40 @@ pub struct SendHost {
     /// relay then acknowledges changes its outcome while its status stays
     /// `pending` (spec 082 RA10).
     last_receipt: Option<SendReceiptOutcome>,
+    /// The submit running on a worker (spec 082 RA4, ruling 1): the page
+    /// keeps a column closed under it running, unseen, until it is in.
+    submits: Submits,
+}
+
+/// A send column's submits in flight (spec 082 RA4, ruling 1): counted from
+/// the `SubmitUserOp` dispatch until the core has the result — the moment the
+/// payment's records are written and the tracker is handed the op, both in
+/// that same turn. A column closed before then keeps its machines, unseen:
+/// the POST goes on either way, and dropping them dropped the only thing that
+/// would record and follow it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Submits(u32);
+
+impl Submits {
+    /// `operation` is starting on a worker; `true` when it is the submit.
+    fn started(&mut self, operation: &SendOperation) -> bool {
+        let submit = matches!(operation, SendOperation::SubmitUserOp { .. });
+        if submit {
+            self.0 += 1;
+        }
+        submit
+    }
+
+    /// A submit's result reached the core.
+    fn settled(&mut self) {
+        self.0 = self.0.saturating_sub(1);
+    }
+
+    /// Is a submit running?
+    #[must_use]
+    pub fn running(self) -> bool {
+        self.0 > 0
+    }
 }
 
 /// The active account, whole — the send flow signs as it.
@@ -187,6 +221,12 @@ pub fn account_by_address(address: &str) -> Option<Account> {
 }
 
 impl SendHost {
+    /// Is a submit running for this column (spec 082 RA4)?
+    #[must_use]
+    pub fn submit_running(&self) -> bool {
+        self.submits.running()
+    }
+
     pub fn open(
         account: Account,
         params: SendOpenParams,
@@ -234,6 +274,7 @@ impl SendHost {
             signing_reported: false,
             tracked_hash: None,
             last_receipt: None,
+            submits: Submits::default(),
         };
 
         // The Trusted Signer's channel speaks up whenever a ceremony waits,
@@ -776,10 +817,19 @@ impl SendHost {
         match send_executor::perform(&effect.operation, &self.ctx) {
             SendAnswer::Now(result) => self.resolve_send(id, result, cx),
             SendAnswer::Blocking(work) => {
+                let submit = self.submits.started(&effect.operation);
                 cx.spawn(async move |host, cx| {
                     let result = cx.background_executor().spawn(async move { work() }).await;
-                    host.update(cx, |host, cx| host.resolve_send(id, result, cx))
-                        .ok();
+                    host.update(cx, |host, cx| {
+                        // Settled before the core hears it: the records and
+                        // the tracker hand-off happen in this same turn, and
+                        // the redraw it causes lets a closed column go.
+                        if submit {
+                            host.submits.settled();
+                        }
+                        host.resolve_send(id, result, cx);
+                    })
+                    .ok();
                 })
                 .detach();
             }
@@ -1187,6 +1237,38 @@ mod tests {
     use crate::resident::{Answer, Machine};
     #[cfg(feature = "dev-fixtures")]
     use vela_core::app::fee_policy::FeeOperation;
+
+    /// Spec 082 RA4 / ruling 1: a send column closed (✕, Esc, another
+    /// panel, another flow) while its submit runs must not take the submit's
+    /// answer with it — that answer is what writes the payment's record and
+    /// hands it to the tracker, and the POST goes on either way. The column
+    /// counts the submit from its dispatch until the core has its result;
+    /// only then may its machines go.
+    #[test]
+    fn a_column_closed_mid_submit_runs_until_its_result_is_in() {
+        let mut submits = Submits::default();
+        assert!(!submits.running());
+        assert!(
+            !submits.started(&SendOperation::CancelPasskeySign),
+            "only the submit is money in flight"
+        );
+        assert!(!submits.running());
+        let submit = SendOperation::SubmitUserOp {
+            chain_id: 100,
+            account: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            calls: Vec::new(),
+            max_fee_per_gas: None,
+            gas_fee_token: None,
+            quoted_fee: None,
+        };
+        assert!(submits.started(&submit));
+        assert!(submits.running(), "closed now, it runs on unseen");
+        submits.settled();
+        assert!(!submits.running(), "its result is in: the machines may go");
+        submits.settled();
+        assert!(!submits.running(), "never below nothing");
+    }
 
     /// Issue #265: an import ADDS to the recipients already on the form, and
     /// replaces them only when the person chose "Replace them instead".

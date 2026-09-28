@@ -604,6 +604,10 @@ pub struct WalletPage {
     /// open and discarded with it — a second send starts from a fresh
     /// machine, never a resumed one.
     send_host: Option<gpui::Entity<SendHost>>,
+    /// Send columns closed while their submit ran (spec 082 RA4, ruling 1):
+    /// kept, unseen, until the core has the submit's result — which is what
+    /// writes the payment's record and hands it to the tracker.
+    send_background: Vec<gpui::Entity<SendHost>>,
     /// The signing journey's four machines, born with a dApp request and gone
     /// when the core hides the sheet. `None` means the panel draws its mock,
     /// which is what the gallery and an unsigned-in window get.
@@ -1172,6 +1176,7 @@ impl WalletPage {
             balance_detail_open: false,
             contacts_query_focus: cx.focus_handle(),
             send_host: None,
+            send_background: Vec::new(),
             #[cfg(not(target_os = "linux"))]
             signing_host: None,
             backup_for: None,
@@ -5702,7 +5707,7 @@ impl WalletPage {
     ) {
         self.flows = FlowPanel::entry(entry);
         self.panel = PanelId::Flow;
-        self.send_host = None;
+        self.let_send_go(cx);
         self.send_fee_picker = false;
         if entry == FlowEntry::AddToken {
             // Every add starts on ERC-20 with a clean network search, as the
@@ -5735,6 +5740,24 @@ impl WalletPage {
         }
     }
 
+    /// The send column goes, and its machines with it — unless its submit is
+    /// still running (spec 082 RA4, ruling 1): the POST goes on whatever the
+    /// column does, and its answer is what records the payment and hands it
+    /// to the tracker, so the machines run on, unseen, until it is in.
+    fn let_send_go(&mut self, cx: &mut Context<Self>) {
+        let Some(host) = self.send_host.take() else {
+            return;
+        };
+        if host.read(cx).submit_running() {
+            // As when the machines went with the column: a Trusted Signer
+            // wait nobody can see stops (nothing is signed). A submit past
+            // its signature is not stopped by that.
+            host.read(cx).trusted_signer().close();
+            crate::diag::vlog!("send", "column closed during a submit; it finishes unseen");
+            self.send_background.push(host);
+        }
+    }
+
     /// Spec 032: the send journey's machines, born with the flow. The mocks
     /// keep drawing when there is no account to send from.
     fn open_send(&mut self, params: SendOpenParams, cx: &mut Context<Self>) {
@@ -5744,7 +5767,13 @@ impl WalletPage {
         let display = self.send_display(cx);
         let window_handle = self.window_handle;
         let host = cx.new(|cx| SendHost::open(account, params, display, window_handle, cx));
-        cx.observe(&host, |_, _, cx| cx.notify()).detach();
+        cx.observe(&host, |page, _, cx| {
+            // A column that ran on unseen goes once its submit is in.
+            page.send_background
+                .retain(|kept| kept.read(cx).submit_running());
+            cx.notify();
+        })
+        .detach();
         self.send_host = Some(host);
         // Every send starts on 全部: a chip left lit from the last one would
         // hide tokens with nothing on screen saying why.
@@ -5804,7 +5833,7 @@ impl WalletPage {
     fn sync_send_flow(&mut self, cx: &mut Context<Self>) -> Option<FlowPanel> {
         if let Some(host) = self.send_host.clone() {
             if host.read(cx).closed {
-                self.send_host = None;
+                self.let_send_go(cx);
                 self.send_fee_picker = false;
                 self.flows.clear();
                 self.panel = PanelId::None;
@@ -5837,7 +5866,7 @@ impl WalletPage {
                 }),
                 Some(FlowPanel::Dsd2f) => self.send_fee_picker = false,
                 Some(FlowPanel::Dsd1) | None => {
-                    self.send_host = None;
+                    self.let_send_go(cx);
                     self.flows.clear();
                     self.panel = PanelId::None;
                 }
@@ -17688,7 +17717,7 @@ impl Render for WalletPage {
 
         // The column was closed under a live send: its machines go with it.
         if self.panel != PanelId::Flow && self.send_host.is_some() {
-            self.send_host = None;
+            self.let_send_go(cx);
             self.send_fee_picker = false;
         }
 
