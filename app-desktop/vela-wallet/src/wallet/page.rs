@@ -12628,11 +12628,24 @@ impl WalletPage {
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
                     this.edit_address(window, cx);
                 }))
-                .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
-                    if !this.address_key(event, cx) {
-                        editor_keys(event, window, cx);
+                // The page's own keys (Enter, Esc) run under the page's lease;
+                // the editor's run AFTER it is released. The editor reports a
+                // paste, a delete or a cut through `address_change`, which
+                // updates this page — inside a `cx.listener` that is a nested
+                // update, gpui panics, and AppKit's key dispatch cannot unwind,
+                // so the app aborted on ⌘V or Backspace in the address bar
+                // (082 G3).
+                .on_key_down({
+                    let page = cx.entity().downgrade();
+                    move |event: &KeyDownEvent, window: &mut Window, cx: &mut gpui::App| {
+                        let handled = page
+                            .update(cx, |this, cx| this.address_key(event, cx))
+                            .unwrap_or(false);
+                        if !handled {
+                            editor_keys(event, window, cx);
+                        }
                     }
-                }))
+                })
                 .into_any_element()
         } else {
             field.into_any_element()

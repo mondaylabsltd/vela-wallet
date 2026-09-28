@@ -322,7 +322,34 @@ pub fn clear_browsing_data() -> bool {
 /// The document the browser is on, whole. `None` before the first page.
 #[must_use]
 pub fn current_url() -> Option<String> {
-    BROWSER.with(|slot| slot.borrow().as_ref()?.view.url().ok())
+    BROWSER.with(|slot| view_url(&slot.borrow().as_ref()?.view))
+}
+
+/// The webview's URL, or `None` while it has none.
+///
+/// `wry::WebView::url` unwraps WKWebView's `URL`, which is nil while a fresh
+/// view's first navigation has not committed — a refused CONNECT through a
+/// proxy leaves it nil, with no `about:blank` either. Reading it then panicked
+/// inside a draw, which AppKit cannot unwind, and the app aborted on the first
+/// failed page of a new tab (082 G29). So WebKit is asked first.
+fn view_url(view: &wry::WebView) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        use wry::WebViewExtMacOS as _;
+        let webview = view.webview();
+        // wry speaks objc2 0.6 and this crate 0.5, so the object crosses as a
+        // plain pointer; only whether `URL` is nil is read through it.
+        let raw = std::ptr::from_ref(&*webview)
+            .cast::<objc2::runtime::AnyObject>()
+            .cast_mut();
+        // SAFETY: `raw` is the live WKWebView wry owns for as long as `view`;
+        // `URL` takes no arguments and returns an NSURL or nil.
+        let url: *mut objc2::runtime::AnyObject = unsafe { objc2::msg_send![raw, URL] };
+        if url.is_null() {
+            return None;
+        }
+    }
+    view.url().ok()
 }
 
 /// The host the toolbar shows.
@@ -342,7 +369,7 @@ pub fn host() -> Option<String> {
     // empty `about:blank` when a fresh view's first load is refused.
     let url = committed_url()
         .filter(|url| vela_core::app::dapp_permissions::origin_of(url).is_some())
-        .or_else(|| BROWSER.with(|slot| slot.borrow().as_ref()?.view.url().ok()))?;
+        .or_else(|| BROWSER.with(|slot| view_url(&slot.borrow().as_ref()?.view)))?;
     let rest = url.split_once("://").map(|(_, rest)| rest).unwrap_or(&url);
     let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
     (!host.is_empty()).then(|| host.to_owned())
