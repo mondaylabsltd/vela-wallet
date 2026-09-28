@@ -56,9 +56,11 @@ bun samples/single-file-test.mjs   # 12/12 发布出去的单文件页：CSP 实
 bun samples/desktop-demo.mjs --auto #  8/8 桌面应用全流程 + 自验签
 bun samples/takeover-test.mjs      # 18/18 自调用 / delegatecall / SafeTx 拒签（与 vela-core self_call_guard 同一规则）
 bun samples/unlimited-line-test.mjs # 11/11 「无限额」的线：uint256 2^200、uint160 2^152（与 vela-core approval_guard 同一条线）
+node samples/origin-line-test.mjs   # 17/17 站点名就是主机时页头只写一次（082 L-HOST，与 vela-core site_label 同一规则）
+node samples/plain-send-test.mjs    # 43/43 没有 calldata 的调用就是发送，金额 0 也是（082 G14，与 vela-core is_empty_calldata 同一规则）
 ```
 
-> 数字是 2026-09-27 实测的（desktop-demo 仍是 09-24 的数）。浏览器套件要用 `bun` 跑：
+> 数字是 2026-09-27 实测的（desktop-demo 仍是 09-24 的数；082 的两个新套件与其余各套件 09-28 重跑，数不变）。浏览器套件要用 `bun` 跑：
 > 用 `node` 时 `test-kit` 等页面服务器那一步的 `fetch` 不认自签证书，会报「page server never came up」。
 >
 > `secure-vectors.mjs`、`ble-loopback.mjs`、
