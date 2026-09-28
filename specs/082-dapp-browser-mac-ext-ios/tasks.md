@@ -278,7 +278,7 @@ Owns `C/activity_feed.rs`, `C/sim_outcome.rs`, `C/dapp_permissions.rs`, `C/dapp_
 `rust/crates/vela-core/provider/inpage.js`, `CT/app_activity_feed.rs`, `CT/app_sim_outcome.rs`
 (new), `CT/app_dapp_permissions.rs` and `CT/app_dapp_browser.rs`.
 
-- [ ] T037 [P] `C/activity_feed.rs`: dApp transactions become rows (RG1, RG2, RG4).
+- [x] T037 [P] `C/activity_feed.rs`: dApp transactions become rows (RG1, RG2, RG4).
   - `FeedTxRecord.dapp_origin`. `FeedItem` gains `kind: FeedTxKind {Send, Receive, DappTx}` (a folded batch is Send), `status: FeedTxStatus` (a batch uses its first line's) and `site` (DappTx only, `host[:port]`).
   - `accept()` (`:633-640`) keeps DappTx with `from == me`; `build_items()` gets a `dapp_item()` arm (`:811-832`). The value comes from `fee_policy::from_base_units` of hex or decimal wei, and 0 means no amount.
   - Message signatures and connects never become rows.
@@ -288,9 +288,9 @@ Owns `C/activity_feed.rs`, `C/sim_outcome.rs`, `C/dapp_permissions.rs`, `C/dapp_
     - a MaybeSent record under a local hash → a Pending DappTx row (RG4);
     - `personal_sign` → no row;
     - a batch's status is its first line's.
-- [ ] T038 `C/activity_feed.rs`: `FeedView.history_empty_key` (`history.emptyTitle` when `chain_filter` is None, `history.emptyFilter` when Some) and `home_empty_key` (`home.emptyNoActivity` / `home.emptyNoActivityNetwork`) (RG5, RX); (after T037).
+- [x] T038 `C/activity_feed.rs`: `FeedView.history_empty_key` (`history.emptyTitle` when `chain_filter` is None, `history.emptyFilter` when Some) and `home_empty_key` (`home.emptyNoActivity` / `home.emptyNoActivityNetwork`) (RG5, RX); (after T037).
   - Proof: `CT/app_activity_feed.rs`, both keys for both filter states.
-- [ ] T039 [P] `C/sim_outcome.rs`: `SimReply`, `SimOutcome {Deltas, Reverts{reason}, NotOffered, Unreachable}`, `SimNotice`, `classify(reply, user)`, `notice(outcome)` and `revert_reason(call)` (RG6, RG8).
+- [x] T039 [P] `C/sim_outcome.rs`: `SimReply`, `SimOutcome {Deltas, Reverts{reason}, NotOffered, Unreachable}`, `SimNotice`, `classify(reply, user)`, `notice(outcome)` and `revert_reason(call)` (RG6, RG8).
   - `revert_reason` decodes only `Error(string)` 0x08c379a0, strips what `name_verify::is_never_in_a_name` rejects, and caps at 64 characters.
   - Move `derive_deltas` and its helpers from `app-desktop/vela-wallet/src/executor/sim.rs:98-226` (the desktop copy is deleted in T057).
   - `notice`: Reverts → Danger `simWillFailReason` / `simWillFail`; NotOffered or Unreachable → Caution `simUnavailableWarning`; Deltas → none.
@@ -301,11 +301,11 @@ Owns `C/activity_feed.rs`, `C/sim_outcome.rs`, `C/dapp_permissions.rs`, `C/dapp_
     - a custom error → reason None;
     - bidi/control characters stripped and 64-char cap;
     - an empty array result → NotOffered.
-- [ ] T040 [P] `C/dapp_permissions.rs`: `dapp_spelling(addr)` = `primitives::checksum_address` (input unchanged if unparseable), applied in `popup_approved` (`:478-521`) and `popup_account_switch` (`:526-568`); `resolve_granted` is unchanged (RG10).
+- [x] T040 [P] `C/dapp_permissions.rs`: `dapp_spelling(addr)` = `primitives::checksum_address` (input unchanged if unparseable), applied in `popup_approved` (`:478-521`) and `popup_account_switch` (`:526-568`); `resolve_granted` is unchanged (RG10).
   - Proof: `CT/app_dapp_permissions.rs`: a lower-case grant is written EIP-55; an account switch answers EIP-55; `resolve_granted` still matches case-insensitively.
-- [ ] T041 `C/dapp_browser.rs`: `AccountSwitched.active_address` (`:493-496`) and `sites_listed` (`:785-789`) use `dapp_spelling` (RG10); (after T040).
+- [x] T041 `C/dapp_browser.rs`: `AccountSwitched.active_address` (`:493-496`) and `sites_listed` (`:785-789`) use `dapp_spelling` (RG10); (after T040).
   - Proof: `CT/app_dapp_browser.rs`: the account-changed event carries the same EIP-55 spelling as connect (L-D6), and loaded lower-case sites are normalised.
-- [ ] T042 [P] `rust/crates/vela-core/provider/inpage.js`: `applyAccounts` (`:162-170, 337, 411`) keeps the wallet's spelling as sent, and change detection compares case-insensitively (RG10).
+- [x] T042 [P] `rust/crates/vela-core/provider/inpage.js`: `applyAccounts` (`:162-170, 337, 411`) keeps the wallet's spelling as sent, and change detection compares case-insensitively (RG10).
   - Proof: the provider case in `W/dapp/core-table.test.ts` (T094) and `IT/ProviderScriptTests.swift` (T121). Every client embeds this file (`dapp_rpc::PROVIDER_JS`, `X/build.mjs`) and picks it up on rebuild.
 
 ### Group I18N — one task, one commit

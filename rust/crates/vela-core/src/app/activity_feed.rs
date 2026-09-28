@@ -49,6 +49,18 @@
 //! - `FocusTick`/`LiveTick` cadence (focus + 30s auto-refresh, 10s while the
 //!   Activity tab is visible) stays in the shell: which tab is visible is
 //!   render-domain state the core never sees. The core owns the toast timer.
+//! - After every `PersistRecord` / `UpdateRecord` a shell dispatches
+//!   `ReconcileCompleted { resolved_count: 1 }`, so a new or patched row
+//!   shows at once instead of on the next tick (spec 082 RG3).
+//!
+//! # Rows the core decides (spec 082, L-D3 / L-D7)
+//!
+//! Every [`FeedItem`] says what it is ([`FeedItem::kind`]), where its record
+//! stands ([`FeedItem::status`]) and, for a transaction a dApp asked for,
+//! which site asked ([`FeedItem::site`]); the shells delete their own guesses.
+//! Message signatures and connects never become rows. The empty lines of
+//! History and of the home Activity are corpus keys on [`FeedView`], chosen by
+//! the chain filter.
 //!
 //! # Fidelity notes
 //!
@@ -76,6 +88,18 @@ use ts_rs::TS;
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
 pub const TOAST_MS: u32 = 2_800;
 
+/// History with nothing to show on every network (spec 082 RG5, L-D7).
+pub const HISTORY_EMPTY_ALL: &str = "history.emptyTitle";
+/// History with nothing to show on the chosen network.
+pub const HISTORY_EMPTY_FILTERED: &str = "history.emptyFilter";
+/// The home Activity with nothing to show on every network.
+pub const HOME_EMPTY_ALL: &str = "home.emptyNoActivity";
+/// The home Activity with nothing to show on the chosen network.
+pub const HOME_EMPTY_FILTERED: &str = "home.emptyNoActivityNetwork";
+
+/// A dApp transaction's `value` is wei of the chain's native coin.
+pub const NATIVE_DECIMALS: u32 = 18;
+
 /// Symbols treated as ≈ $1 so stablecoin transfers are never shown as $0.00
 /// (`activity.ts:150-152`, verbatim).
 pub const STABLE_SYMBOLS: [&str; 15] = [
@@ -88,11 +112,16 @@ pub const STABLE_SYMBOLS: [&str; 15] = [
 // ---------------------------------------------------------------------------
 
 /// The `LocalTransaction.type` union (`storage.ts:390-391`). A record with no
-/// type is a legacy row and defaults to `send`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// type is a legacy row and defaults to `send` — which is also the
+/// [`Default`], so a [`FeedItem`] decoded from before spec 082 reads as one.
+///
+/// A [`FeedItem`] only ever carries `Send`, `Receive` or `DappTx`: message
+/// signatures and connects never become rows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum FeedTxKind {
+    #[default]
     Send,
     Receive,
     DappTx,
@@ -145,11 +174,16 @@ pub struct FeedTxRecord {
     pub kind: Option<FeedTxKind>,
     /// Legacy pre-formatted USD (e.g. `"$1.00"`), as stored.
     pub usd: Option<String>,
+    /// The origin of the site that asked, for a `dapp_tx` record (the stored
+    /// `dappOrigin`, spec 082 RG1). `None` for every other kind, and for a
+    /// shell that predates the field.
+    #[serde(default)]
+    pub dapp_origin: Option<String>,
 }
 
 impl FeedTxRecord {
     fn kind(&self) -> FeedTxKind {
-        self.kind.unwrap_or(FeedTxKind::Send)
+        self.kind.unwrap_or_default()
     }
 }
 
@@ -244,6 +278,25 @@ pub struct FeedItem {
     pub day_start_ms: f64,
     pub tx_hash: Option<String>,
     pub batch: Option<FeedBatch>,
+    /// What the row is (spec 082 RG1): `Send` (a folded batch too),
+    /// `Receive` or `DappTx`. The shell draws from this and never guesses.
+    #[serde(default)]
+    pub kind: FeedTxKind,
+    /// The record's lifecycle; a folded batch carries its first line's. The
+    /// tracker is the only thing that moves a record off `Pending`, so a row
+    /// says "confirmed" or "failed" only when the stored record does.
+    #[serde(default = "status_unknown")]
+    pub status: FeedTxStatus,
+    /// `DappTx` only: `host[:port]` of the site that asked ([`dapp_site`]).
+    #[serde(default)]
+    pub site: Option<String>,
+}
+
+/// The status of a [`FeedItem`] decoded from before spec 082, which carried
+/// none. `Pending` because it claims nothing: only the tracker closes a
+/// record, and a default must never say money landed or failed.
+fn status_unknown() -> FeedTxStatus {
+    FeedTxStatus::Pending
 }
 
 /// A date header or an item — the grouped feed, in render order
@@ -489,6 +542,15 @@ pub struct FeedView {
     /// `None` while balance privacy is on — invariant ④ enforced here, not
     /// in the shell.
     pub toast: Option<FeedToast>,
+    /// The corpus key of History's empty line (spec 082 RG5):
+    /// [`HISTORY_EMPTY_ALL`] with no chain filter, [`HISTORY_EMPTY_FILTERED`]
+    /// with one. Whether the list is loading or empty stays the shell's.
+    #[serde(default)]
+    pub history_empty_key: String,
+    /// The corpus key of the home Activity's empty line: [`HOME_EMPTY_ALL`] /
+    /// [`HOME_EMPTY_FILTERED`], chosen the same way.
+    #[serde(default)]
+    pub home_empty_key: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -613,6 +675,8 @@ impl App for ActivityFeed {
             transactions: model.records.clone(),
             new_item_id: model.celebration.as_ref().map(|c| c.item_id.clone()),
             toast,
+            history_empty_key: history_empty_key(model.chain_filter).to_owned(),
+            home_empty_key: home_empty_key(model.chain_filter).to_owned(),
         }
     }
 }
@@ -634,8 +698,11 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 .iter()
                 .filter(|t| match t.kind() {
                     FeedTxKind::Receive => t.to.to_lowercase() == lc,
-                    FeedTxKind::Send => t.from.to_lowercase() == lc,
-                    _ => false,
+                    FeedTxKind::Send | FeedTxKind::DappTx => t.from.to_lowercase() == lc,
+                    // Message signatures and connects move nothing: never rows.
+                    FeedTxKind::SignMessage | FeedTxKind::SignTypedData | FeedTxKind::Connect => {
+                        false
+                    }
                 })
                 .cloned()
                 .collect();
@@ -828,6 +895,7 @@ fn build_items(records: &[FeedTxRecord], address: &str) -> Vec<FeedItem> {
                     _ => Some(send_item(t)),
                 }
             }
+            FeedTxKind::DappTx if t.from.to_lowercase() == lc => Some(dapp_item(t)),
             _ => None,
         };
         let Some(item) = item else {
@@ -859,6 +927,9 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         day_start_ms: t.day_start_ms,
         tx_hash: non_empty(&t.tx_hash),
         batch: None,
+        kind: FeedTxKind::Receive,
+        status: t.status,
+        site: None,
     }
 }
 
@@ -878,6 +949,47 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         day_start_ms: t.day_start_ms,
         tx_hash: non_empty(&t.tx_hash),
         batch: None,
+        kind: FeedTxKind::Send,
+        status: t.status,
+        site: None,
+    }
+}
+
+/// A transaction a dApp asked for (spec 082 RG1, RG2): out from this account,
+/// to the contract or address it named, with the site that asked.
+///
+/// `value` is the native coin in wei — hex or decimal, as the request carried
+/// it — shown through `fee_policy::from_base_units`; zero, or a value that is
+/// not a number, is no amount at all (`value` `None`, no symbol), so a
+/// contract call never reads as money moving. A pending record under a local
+/// operation hash (a submit whose reply was lost, RG4) is a `Pending` row
+/// like any other until the tracker patches it.
+fn dapp_item(t: &FeedTxRecord) -> FeedItem {
+    let value = native_amount(&t.value);
+    let usd_value = value.as_deref().map_or(0.0, |amount| {
+        usd_value_of(t.usd.as_deref(), &t.symbol, amount)
+    });
+    FeedItem {
+        id: t.id.clone(),
+        direction: FeedDirection::Out,
+        counterparty: non_empty(&t.to),
+        alias: t.to_name.clone(),
+        symbol: if value.is_some() {
+            t.symbol.clone()
+        } else {
+            String::new()
+        },
+        decimals: value.is_some().then_some(NATIVE_DECIMALS),
+        value,
+        usd_value,
+        chain_id: t.chain_id,
+        timestamp: t.timestamp,
+        day_start_ms: t.day_start_ms,
+        tx_hash: non_empty(&t.tx_hash),
+        batch: None,
+        kind: FeedTxKind::DappTx,
+        status: t.status,
+        site: t.dapp_origin.as_deref().and_then(dapp_site),
     }
 }
 
@@ -925,6 +1037,10 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         timestamp: batch.timestamp,
         day_start_ms: first.day_start_ms,
         tx_hash: non_empty(&batch.tx_hash),
+        kind: FeedTxKind::Send,
+        // `build_batch` took the first line's.
+        status: batch.status,
+        site: None,
         batch: Some(batch),
     })
 }
@@ -987,9 +1103,15 @@ fn build_batch(group: &[&FeedTxRecord]) -> Option<FeedBatch> {
 /// missing/zero but the token is a known stablecoin, falls back to the token
 /// amount (≈ $1 each) — a received USDT never shows $0.00 (invariant ⑧).
 pub fn tx_usd_value(t: &FeedTxRecord) -> f64 {
+    usd_value_of(t.usd.as_deref(), &t.symbol, &t.value)
+}
+
+/// [`tx_usd_value`] over its three inputs, so a dApp row (whose stored
+/// `value` is wei) is valued on its human amount.
+fn usd_value_of(usd: Option<&str>, symbol: &str, value: &str) -> f64 {
     // `tx.usd ? parseFloat(tx.usd.replace(/[^0-9.]/g, '')) : 0` — an absent
     // OR empty string is falsy.
-    let stored = match t.usd.as_deref() {
+    let stored = match usd {
         Some(usd) if !usd.is_empty() => {
             let cleaned: String = usd
                 .chars()
@@ -1002,9 +1124,9 @@ pub fn tx_usd_value(t: &FeedTxRecord) -> f64 {
     if stored.is_finite() && stored > 0.0 {
         return stored;
     }
-    if is_stable(&t.symbol) {
+    if is_stable(symbol) {
         // `parseFloat(tx.value || '0')`.
-        let raw = if t.value.is_empty() { "0" } else { &t.value };
+        let raw = if value.is_empty() { "0" } else { value };
         let amount = js_parse_float(raw);
         if amount.is_finite() && amount > 0.0 {
             return amount;
@@ -1068,6 +1190,51 @@ fn js_parse_float(s: &str) -> f64 {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// History's empty-line key for a chain filter (spec 082 RG5).
+pub fn history_empty_key(chain_filter: Option<u32>) -> &'static str {
+    match chain_filter {
+        None => HISTORY_EMPTY_ALL,
+        Some(_) => HISTORY_EMPTY_FILTERED,
+    }
+}
+
+/// The home Activity's empty-line key for a chain filter (spec 082 RG5, RX:
+/// the desktop home under a filter needs the "on this network" line).
+pub fn home_empty_key(chain_filter: Option<u32>) -> &'static str {
+    match chain_filter {
+        None => HOME_EMPTY_ALL,
+        Some(_) => HOME_EMPTY_FILTERED,
+    }
+}
+
+/// `host[:port]` of a stored dApp origin — the row's site, verbatim as the
+/// browser named it (lower-cased host, default port dropped). `None` for an
+/// origin that is not http(s) or does not parse.
+pub fn dapp_site(origin: &str) -> Option<String> {
+    let origin = super::dapp_permissions::origin_of(origin.trim())?;
+    origin
+        .split_once("://")
+        .map(|(_, host_port)| host_port.to_owned())
+}
+
+/// A wei amount (hex `0x…` or decimal) as a human decimal of the native coin;
+/// `None` for zero, and for anything that is not a whole number that fits.
+pub fn native_amount(wei: &str) -> Option<String> {
+    let wei = wei.trim();
+    let (digits, radix) = match wei.strip_prefix("0x").or_else(|| wei.strip_prefix("0X")) {
+        Some(hex) => (hex, 16),
+        None => (wei, 10),
+    };
+    if digits.is_empty() || !digits.chars().all(|c| c.is_digit(radix)) {
+        return None;
+    }
+    let value = u128::from_str_radix(digits, radix).ok()?;
+    if value == 0 {
+        return None;
+    }
+    Some(super::fee_policy::from_base_units(value, NATIVE_DECIMALS))
+}
 
 /// `txHash || undefined`.
 fn non_empty(s: &str) -> Option<String> {
