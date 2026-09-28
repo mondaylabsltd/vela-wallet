@@ -18,6 +18,7 @@ import { FeeSpeedCore } from '$lib/core/client';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
+import { numberSeparators } from '$lib/services/locale-format';
 import { CLEAR_TERMS } from './terms';
 import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
@@ -1267,9 +1268,9 @@ describe('a plain native send reads as a send', () => {
 		params_json: JSON.stringify([call]),
 		chain_id
 	});
-	const batch = (calls: Record<string, unknown>[]) => ({
+	const batch = (calls: Record<string, unknown>[], extra: Record<string, unknown> = {}) => ({
 		kind: 'batch' as const,
-		params_json: JSON.stringify([{ version: '2.0.0', calls }]),
+		params_json: JSON.stringify([{ version: '2.0.0', ...extra, calls }]),
 		chain_id: 100
 	});
 	const sheet = (params_json: string, chain_id = 100) =>
@@ -1294,6 +1295,15 @@ describe('a plain native send reads as a send', () => {
 		// Absent is zero, as `dapp-submit` reads it (`value ?? '0x0'`).
 		expect(nativeSendOf(tx({ to: TO }))?.wei).toBe(0n);
 		expect(nativeSendOf(batch([{ to: TO, value: '0x1' }]))?.wei).toBe(1n);
+		// A call that names the sheet's own chain, in either spelling the
+		// executor reads, is still the send drawn.
+		expect(nativeSendOf(tx({ to: TO, value: '0x1', chainId: '0x64' }, 100))?.wei).toBe(1n);
+		expect(nativeSendOf(tx({ to: TO, value: '0x1', chainId: 100 }, 100))?.wei).toBe(1n);
+		expect(nativeSendOf(tx({ to: TO, value: '0x1', chainId: '100' }, 100))?.wei).toBe(1n);
+		expect(nativeSendOf(batch([{ to: TO, value: '0x1' }], { chainId: '0x64' }))?.wei).toBe(1n);
+		// The largest value a uint256 holds can still be encoded and signed.
+		const max = (1n << 256n) - 1n;
+		expect(nativeSendOf(tx({ to: TO, value: `0x${max.toString(16)}` }))?.wei).toBe(max);
 	});
 
 	it('keeps everything else on the blind rung', () => {
@@ -1315,6 +1325,19 @@ describe('a plain native send reads as a send', () => {
 			]),
 			batch([{ to: TO, value: '0xde0b6b3a7640000' }, { data: '0x6080' }]),
 			batch([]),
+			// More than a uint256: the executor cannot encode it, so cannot sign it.
+			tx({ to: TO, value: `0x1${'0'.repeat(64)}` }),
+			// A call naming another chain is submitted THERE (`resolveChainId`
+			// lets it win): "1 xDAI" drawn while 1 ETH is signed on chain 1.
+			tx({ to: TO, value: '0xde0b6b3a7640000', chainId: '0x1' }),
+			tx({ to: TO, value: '0x1', chainId: 1 }),
+			// Read as leniently as the executor reads it: "1x" is chain 1 there.
+			tx({ to: TO, value: '0x1', chainId: '1x' }),
+			// A chain nobody can read, or a shape nobody sent: blind, not a guess.
+			tx({ to: TO, value: '0x1', chainId: 'gnosis' }),
+			tx({ to: TO, value: '0x1', chainId: { id: 100 } }),
+			tx({ to: TO, value: '0x1', chainId: true }),
+			batch([{ to: TO, value: '0x1' }], { chainId: '0x1' }),
 			{ kind: 'personal_sign' as const, params_json: '["0xdead","0xabc"]', chain_id: 1 },
 			{ kind: 'transaction' as const, params_json: 'not json', chain_id: 1 }
 		];
@@ -1334,6 +1357,20 @@ describe('a plain native send reads as a send', () => {
 			{ kind: 'party', label: m.labelRecipient, name: shortenAddress(TO), address: TO }
 		]);
 		expect(summaryOf(model.blocks)).toBe(`${m.intentSend} · -0.001 xDAI`);
+	});
+
+	it("groups the whole part the person's way, like the amounts the core decodes", () => {
+		const { group, decimal } = numberSeparators();
+		const amountOf = (value: string) =>
+			sheet(JSON.stringify([{ to: TO, value }])).blocks.find((b) => b.kind === 'amount');
+		// 25,000 xDAI — exact, not "25000".
+		expect(amountOf('0x54b40b1f852bda00000')).toMatchObject({
+			line: { value: `25${group}000`, symbol: 'xDAI' }
+		});
+		// 1,234.5 xDAI: grouped whole part, every fractional digit kept.
+		expect(amountOf(`0x${1_234_500_000_000_000_000_000n.toString(16)}`)).toMatchObject({
+			line: { value: `1${group}234${decimal}5` }
+		});
 	});
 
 	it('the same request with calldata still says it could not be decoded', () => {

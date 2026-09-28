@@ -45,6 +45,8 @@ import { isTempoChain } from '$lib/services/tempo';
 import { feeRequoteDelayMs } from '$lib/core/kernels';
 import { exactAmount, trimBalance } from '$lib/wallet/live';
 import { fromBaseUnits } from '$lib/services/eip681';
+import { resolveChainId } from '$lib/services/chain-id';
+import { groupDigits, numberSeparators } from '$lib/services/locale-format';
 import { chainName } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
@@ -309,6 +311,9 @@ export function calldataBytes(paramsJson: string): number {
 	}
 }
 
+/** The first value a uint256 cannot hold — `abi_encode_uint256` refuses it. */
+const UINT256_LIMIT = 1n << 256n;
+
 /** A request that only moves the chain's own coin (083 H3). */
 export interface NativeSend {
 	to: string;
@@ -330,9 +335,16 @@ export interface NativeSend {
  * nothing false: more than one call (a batch whose first leg is a plain send
  * is more than that send), any calldata, a recipient that is not an address,
  * a value the executor would read differently from the site (it takes every
- * value as hex — a bare "1000" is 0x1000 there), or a chain whose coin the
- * wallet cannot name — Tempo has none, and "ETH" on a custom network would be
- * a guess.
+ * value as hex — a bare "1000" is 0x1000 there) or could not sign at all (more
+ * than a uint256), a chain whose coin the wallet cannot name — Tempo has
+ * none, and "ETH" on a custom network would be a guess — or a call that names
+ * a chain of its own other than the sheet's.
+ *
+ * That last one is the executor's rule too: `resolveChainId` lets a
+ * `chainId` in `params[0]` win over the request's chain, and reads it
+ * leniently (`"1x"` is chain 1, which the core does not switch to). A send of
+ * "1 POL" drawn on Polygon while the passkey signed 1 ETH on chain 1 would be
+ * a calm, specific lie; blind says nothing false.
  */
 export function nativeSendOf(
 	request: Pick<SignRequestView, 'kind' | 'params_json' | 'chain_id'>
@@ -344,7 +356,14 @@ export function nativeSendOf(
 		return null;
 	}
 	if (!Array.isArray(params)) return null;
-	const first = params[0] as { calls?: unknown } | null | undefined;
+	const first = params[0] as { calls?: unknown; chainId?: unknown } | null | undefined;
+	// Both a transaction and a batch carry their chain on `params[0]`, which is
+	// where `handleSendTransaction` / `handleSendCalls` read it.
+	const embedded = first?.chainId;
+	if (embedded != null) {
+		if (typeof embedded !== 'string' && typeof embedded !== 'number') return null;
+		if (resolveChainId(0, embedded) !== request.chain_id) return null;
+	}
 	let call: unknown = null;
 	if (request.kind === 'transaction') call = first;
 	// Counted as the site sent it: every leg, readable or not, is a leg.
@@ -359,6 +378,9 @@ export function nativeSendOf(
 	else if (typeof value === 'string' && /^0x[0-9a-fA-F]*$/.test(value))
 		wei = BigInt(value === '0x' ? '0' : value);
 	else return null;
+	// More than a uint256 cannot be encoded, so cannot be signed: the submit
+	// would fail after a calm sheet showed an impossible figure.
+	if (wei >= UINT256_LIMIT) return null;
 	const symbol = isTempoChain(request.chain_id)
 		? undefined
 		: chainMeta(request.chain_id)?.nativeSymbol;
@@ -369,16 +391,22 @@ export function nativeSendOf(
  * A send of the chain's own coin, in the decoded send's layout: what it does,
  * how much, to whom — and no decode warning, because there was no calldata to
  * decode. Exact, never rounded: every wei that will be signed (a chain's own
- * coin has 18 decimals).
+ * coin has 18 decimals). The whole part is grouped the person's way, like the
+ * amounts the core decodes on the same sheet (and the desktop's
+ * `exact_coin_figure`): 25000 xDAI reads "25,000", not "25000".
  */
 function nativeSendBlocks(send: NativeSend, m: SigningMessages): Block[] {
+	const [whole, frac] = fromBaseUnits(send.wei, 18).split('.');
 	return [
 		{ kind: 'intent', text: m.intentSend, tone: 'neutral' },
 		{
 			kind: 'amount',
 			line: {
 				sign: '-',
-				value: exactAmount(fromBaseUnits(send.wei, 18)),
+				value:
+					frac === undefined
+						? groupDigits(whole)
+						: `${groupDigits(whole)}${numberSeparators().decimal}${frac}`,
 				symbol: send.symbol,
 				tone: 'neutral'
 			}
