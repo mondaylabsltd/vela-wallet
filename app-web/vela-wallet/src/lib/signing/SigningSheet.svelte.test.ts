@@ -102,6 +102,13 @@ describe('the signing sheet closes only on its ✕', () => {
 		expect(view.close).toBeNull();
 		await view.screen.unmount();
 	});
+
+	it('the header says the site once when its name is its host', async () => {
+		const view = await drawn({});
+		expect(view.sheet.querySelector('.header .name')?.textContent).toBe('app.example');
+		expect(view.sheet.querySelector('.header .host')).toBeNull();
+		await view.screen.unmount();
+	});
 });
 
 describe('the signing fee row (spec 079 US2)', () => {

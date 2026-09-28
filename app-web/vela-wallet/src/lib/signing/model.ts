@@ -241,7 +241,10 @@ export interface SigningModel {
 	id: SigningStateId;
 	dapp: {
 		name: string;
-		/** The observed origin's host. EMPTY for the wallet's own request: there is no site. */
+		/**
+		 * The observed origin's host. EMPTY for the wallet's own request (there
+		 * is no site), and when the name IS the host (spec 079: said once).
+		 */
 		host: string;
 		letter: string;
 		tint: string;

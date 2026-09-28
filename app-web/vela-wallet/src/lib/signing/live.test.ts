@@ -416,6 +416,38 @@ describe('the fee can be refreshed, and says why it failed', () => {
 	});
 });
 
+/** Spec 079 (F14): "127.0.0.1:8137" over "127.0.0.1:8137". */
+describe('the header says the site once', () => {
+	it('a site with no name of its own is named by its host, and the host line goes', () => {
+		const model = buildSigningModel(inputs());
+		expect(model?.dapp.name).toBe('app.example');
+		expect(model?.dapp.host).toBe('');
+	});
+
+	it('a named site keeps its host under the name', () => {
+		const named = {
+			...OPEN_SIGN,
+			request: {
+				...REQUEST,
+				dapp: { name: 'Example App', url: 'https://app.example' }
+			}
+		};
+		const model = buildSigningModel(inputs({ sign: named }));
+		expect(model?.dapp.name).toBe('Example App');
+		expect(model?.dapp.host).toBe('app.example');
+	});
+
+	it('a port is part of the host, said once too', () => {
+		const local = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, origin: 'http://127.0.0.1:8137' }
+		};
+		const model = buildSigningModel(inputs({ sign: local }));
+		expect(model?.dapp.name).toBe('127.0.0.1:8137');
+		expect(model?.dapp.host).toBe('');
+	});
+});
+
 describe('the sheet’s one close (spec 079)', () => {
 	it('names its ✕ with the sheet’s own word', () => {
 		expect(buildSigningModel(inputs())?.closeLabel).toBe(m.close);
@@ -505,7 +537,9 @@ describe('a decoded request', () => {
 		expect(model.blocks[0]).toMatchObject({ kind: 'intent', text: 'Send USDC' });
 		expect(model.blocks[1]).toMatchObject({ kind: 'amount' });
 		expect(model.blocks.find((b) => b.kind === 'party')).toMatchObject({ name: 'alice.eth' });
-		expect(model.dapp.host).toBe('app.example');
+		// Named by its host, said once (spec 079 F14).
+		expect(model.dapp.name).toBe('app.example');
+		expect(model.dapp.host).toBe('');
 		expect(model.network.name).toBe('Ethereum');
 	});
 

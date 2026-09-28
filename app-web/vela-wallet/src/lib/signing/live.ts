@@ -754,7 +754,8 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 
 	const request = sign.request;
 	const dapp = request.dapp;
-	const name = dapp?.name ?? new URL(request.origin).host;
+	const host = new URL(request.origin).host;
+	const name = dapp?.name ?? host;
 	const own = ownRequest;
 
 	// Rule 1: the gate is an AND. The core may allow the request; the guard may
@@ -772,7 +773,11 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT, own: true }
 			: {
 					name,
-					host: new URL(request.origin).host,
+					// Spec 079 (F14): a site with no name of its own is named by
+					// its host — said once. "127.0.0.1:8137" over "127.0.0.1:8137"
+					// was the header of every extension request (it hands the core
+					// no dApp name). The host line stays whenever it adds something.
+					host: name === host ? '' : host,
 					letter: letterOf(name),
 					tint: NEUTRAL_TINT,
 					iconUrls: siteIconUrls(request.origin)
