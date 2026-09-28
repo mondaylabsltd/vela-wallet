@@ -31,6 +31,8 @@
 		onfeepick?: (id: string) => void;
 		onspeed?: () => void;
 		onspeedpick?: (id: string) => void;
+		/** Spec 079: the fee row's refresh control. */
+		onfeerefresh?: () => void;
 	}
 
 	let {
@@ -43,7 +45,8 @@
 		onfee,
 		onfeepick,
 		onspeed,
-		onspeedpick
+		onspeedpick,
+		onfeerefresh
 	}: Props = $props();
 
 	let sheet = $state<{ close: () => void }>();
@@ -76,5 +79,6 @@
 		{onfeepick}
 		{onspeed}
 		{onspeedpick}
+		{onfeerefresh}
 	/>
 </BottomSheet>

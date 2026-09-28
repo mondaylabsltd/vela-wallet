@@ -209,9 +209,28 @@ export type FeeModel =
 			speed?: FeeSpeedModel;
 			/**
 			 * Why the slide is shut: the coin that pays is not there (issue 262 —
-			 * 0 ETH on mainnet, quoted in ETH, signed and never bundled).
+			 * 0 ETH on mainnet, quoted in ETH, signed and never bundled) — or,
+			 * spec 079, why there is no fee at all: the relay could not be
+			 * reached, and the sheet will ask again by itself.
 			 */
 			warning?: string;
+			/**
+			 * Spec 079: the send form's refresh control — its accessible name.
+			 * The owner: "似乎没有刷新网络费的按钮呀". Live only.
+			 */
+			refreshLabel?: string;
+			/** A measurement is out: the control turns and refuses a second tap. */
+			refreshing?: boolean;
+			/**
+			 * The quote's TTL elapsed (`FeeView.stale`) — the send form's calm
+			 * note, beside the control that fixes it. Never a warning tone.
+			 */
+			staleNote?: string;
+			/**
+			 * The chevron: only where a tap opens the list of coins. A failed
+			 * quote with one coin is still tapped to ask again, but opens nothing.
+			 */
+			chevron?: boolean;
 	  }
 	/** Off-chain signature: the ✓ line, in place of a fee row. */
 	| { kind: 'offchain'; note: string }

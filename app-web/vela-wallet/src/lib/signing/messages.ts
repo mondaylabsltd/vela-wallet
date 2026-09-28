@@ -158,6 +158,16 @@ export interface SigningMessages {
 	feeTokenTitle: string;
 	/** Issue 262: the selected coin cannot pay — the send form's issue-211 sentence ({{sym}}). */
 	feeShort: string;
+	/** Spec 079: the send form's refresh control (`send.feeRefresh`). */
+	feeRefresh: string;
+	/** Spec 079: the send form's stale note (`send.feeStale`). */
+	feeStale: string;
+	/**
+	 * Spec 079: a quote that failed for a reason that can pass — the relay out
+	 * of reach — and will be asked again by itself
+	 * (`componentsUi.funding.denialNetworkError`).
+	 */
+	feeNetworkError: string;
 	/**
 	 * The speed control under the fee row (spec 069) — the send form's words,
 	 * so the two surfaces name a speed identically.

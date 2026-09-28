@@ -175,7 +175,12 @@ describe('the fee the sheet shows', () => {
 			// again. The row is drawn as the fee STATED — no chevron, no pointer
 			// (spec 081, dead-controls #6: it was a button whose handler, live,
 			// was `SigningHost`'s defaulted no-op).
-			tappable: false
+			tappable: false,
+			// Spec 079: the send form's refresh control, and no chevron — one
+			// coin, so there is no list for a tap to open.
+			refreshLabel: m.feeRefresh,
+			refreshing: false,
+			chevron: false
 		});
 	});
 
@@ -304,6 +309,110 @@ describe('the fee the sheet shows', () => {
 
 	it('shows the coin alone when nothing can price it', () => {
 		expect(buildSigningModel(inputs())?.fee).toMatchObject({ value: '0.0021 ETH' });
+	});
+});
+
+/**
+ * Spec 079 (the owner: "似乎没有刷新网络费的按钮呀"; F12: a relay that did not
+ * answer turned the fee into "点击重试" with no reason, and nothing asked again
+ * when it came back).
+ */
+describe('the fee can be refreshed, and says why it failed', () => {
+	const ETH_OPTION = {
+		symbol: 'ETH',
+		contract: null,
+		decimals: 18,
+		balance: '1500000000000000000',
+		recipient: '0x1',
+		usd_balance: '4500',
+		usd_price: '3000',
+		amount: '2100000000000000',
+		insufficient: false,
+		selected: true
+	};
+	const failedWith = (failed: FeeView['failed']): FeeView => ({
+		...QUOTED_FEE,
+		fee: null,
+		busy: false,
+		failed,
+		confirm_fee_ready: false,
+		options: [ETH_OPTION]
+	});
+
+	it('a shown fee carries the send form’s refresh, still while nothing is measuring', () => {
+		const fee = buildSigningModel(inputs())?.fee;
+		expect(fee).toMatchObject({ refreshLabel: m.feeRefresh, refreshing: false });
+	});
+
+	it('the control turns while a measurement is out', () => {
+		const fee = buildSigningModel(
+			inputs({ fee: { ...QUOTED_FEE, fee: null, busy: true, confirm_fee_ready: false } })
+		)?.fee;
+		expect(fee).toMatchObject({ value: m.feeEstimating, refreshing: true });
+	});
+
+	it('a relay out of reach says so, and that the sheet asks again — the row is still a retry', () => {
+		const fee = buildSigningModel(inputs({ fee: failedWith('quote_unavailable') }))?.fee;
+		expect(fee).toMatchObject({
+			value: m.feeRetry,
+			warning: m.feeNetworkError,
+			tappable: true,
+			// One coin: a tap asks again but opens no list, so no chevron.
+			chevron: false,
+			refreshLabel: m.feeRefresh
+		});
+	});
+
+	it('every failure a retry can clear gets the sentence; the ones it cannot, none', () => {
+		// The core's schedule (`requote_delay_ms`) decides — the sentence
+		// promises the retry the timer makes.
+		for (const failed of [
+			'quote_unavailable',
+			'fee_token_unavailable',
+			'estimate_failed',
+			'gas_quote_too_high'
+		] as const) {
+			expect(buildSigningModel(inputs({ fee: failedWith(failed) }))?.fee, failed).toMatchObject({
+				warning: m.feeNetworkError
+			});
+		}
+		for (const failed of ['missing_public_key', 'calculation_failed'] as const) {
+			const fee = buildSigningModel(inputs({ fee: failedWith(failed) }))?.fee;
+			expect(fee, failed).toMatchObject({ value: m.feeRetry, tappable: true });
+			expect(fee && 'warning' in fee ? fee.warning : undefined, failed).toBeUndefined();
+		}
+	});
+
+	it('the reason stays said while the sheet asks again, and goes with an answer', () => {
+		const asking: FeeView = { ...QUOTED_FEE, fee: null, busy: true, confirm_fee_ready: false };
+		expect(
+			buildSigningModel(inputs({ fee: asking, feeFailing: 'quote_unavailable' }))?.fee
+		).toMatchObject({ value: m.feeEstimating, warning: m.feeNetworkError });
+		// A first measurement, with no failure behind it, says nothing yet.
+		const first = buildSigningModel(inputs({ fee: asking, feeFailing: null }))?.fee;
+		expect(first && 'warning' in first ? first.warning : 'x').toBeUndefined();
+		// The answer: a quote, and no sentence.
+		const answered = buildSigningModel(inputs({ feeFailing: null }))?.fee;
+		expect(answered && 'warning' in answered ? answered.warning : 'x').toBeUndefined();
+	});
+
+	it('an old quote gets the send form’s calm note — not while a fresh one is out', () => {
+		expect(buildSigningModel(inputs({ fee: { ...QUOTED_FEE, stale: true } }))?.fee).toMatchObject({
+			staleNote: m.feeStale
+		});
+		const fresh = buildSigningModel(inputs())?.fee;
+		expect(fresh && 'staleNote' in fresh ? fresh.staleNote : 'x').toBeUndefined();
+	});
+
+	it('a message has no fee row, so no refresh', () => {
+		const message = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' as const }
+		};
+		expect(buildSigningModel(inputs({ sign: message }))?.fee).toEqual({
+			kind: 'offchain',
+			note: m.okNoNetworkFee
+		});
 	});
 });
 

@@ -4,6 +4,8 @@
 	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
 	import PositiveNote from './PositiveNote.svelte';
 	import FeeSpeedRow from '$lib/flows/ui/FeeSpeedRow.svelte';
+	import FeeRefreshButton from '$lib/flows/ui/FeeRefreshButton.svelte';
+	import FeeStaleNote from '$lib/flows/ui/FeeStaleNote.svelte';
 	import type { FeeModel } from '../model';
 
 	interface Props {
@@ -18,9 +20,14 @@
 		 */
 		onspeed?: () => void;
 		onspeedpick?: (id: string) => void;
+		/**
+		 * Spec 079: the send form's refresh control — ask for the fee again.
+		 * Absent in the gallery, where the control is drawn shut.
+		 */
+		onrefresh?: () => void;
 	}
 
-	let { fee, ontoggle, onpick, onspeed, onspeedpick }: Props = $props();
+	let { fee, ontoggle, onpick, onspeed, onspeedpick, onrefresh }: Props = $props();
 </script>
 
 {#if fee.kind === 'offchain'}
@@ -58,28 +65,52 @@
 			{/each}
 		</section>
 	{:else}
-		{#if fee.tappable}
-			<button type="button" class="row" onclick={ontoggle}>
-				<span class="label">{fee.label}</span>
-				<span class="value">{fee.value}</span>
-				<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
-			</button>
-		{:else}
-			<!-- One coin, and a quote in hand: there is nothing to choose and
-			     nothing to ask again, so this is the fee STATED. No chevron, no
-			     pointer, no press — the house rule that a control which cannot act
-			     is not drawn as one (spec 081, dead-controls #6). -->
-			<div class="row stated">
-				<span class="label">{fee.label}</span>
-				<span class="value">{fee.value}</span>
-			</div>
+		<!-- The card is the LINE, not the button inside it (the send form's
+		     row, spec 068): the fee and its refresh are two controls of their
+		     own on one surface — a refresh nested in the row's button would be
+		     invalid markup and an ambiguous tap. -->
+		<div class="line">
+			{#if fee.tappable}
+				<button type="button" class="row" onclick={ontoggle}>
+					<span class="label">{fee.label}</span>
+					<span class="value">{fee.value}</span>
+					<!-- The chevron only where a tap opens the list of coins; a
+					     failed quote with one coin is tapped to ask again. -->
+					{#if fee.chevron !== false}
+						<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
+					{/if}
+				</button>
+			{:else}
+				<!-- One coin, and a quote in hand: there is nothing to choose, so
+				     this is the fee STATED. No chevron, no pointer, no press — the
+				     house rule that a control which cannot act is not drawn as one
+				     (spec 081, dead-controls #6). -->
+				<div class="row stated">
+					<span class="label">{fee.label}</span>
+					<span class="value">{fee.value}</span>
+				</div>
+			{/if}
+			{#if fee.refreshLabel !== undefined}
+				<FeeRefreshButton
+					label={fee.refreshLabel}
+					refreshing={fee.refreshing === true}
+					{onrefresh}
+				/>
+			{/if}
+		</div>
+		{#if fee.refreshLabel !== undefined}
+			<!-- The send form's calm note, in its standing line: the slide
+			     below does not move when a quote grows old. -->
+			<FeeStaleNote note={fee.staleNote} />
 		{/if}
 		{#if fee.speed}
 			<FeeSpeedRow speed={fee.speed} ontoggle={onspeed} onselect={onspeedpick} />
 		{/if}
 	{/if}
 	{#if fee.warning}
-		<!-- Issue 262: the reason the slide is shut, under the row that fixes it. -->
+		<!-- Issue 262: the reason the slide is shut, under the row that fixes it
+		     — the coin cannot pay, or (spec 079) the relay could not be reached
+		     and the sheet is asking again. -->
 		<p class="warning" role="alert">{fee.warning}</p>
 	{/if}
 {/if}
@@ -93,15 +124,24 @@
 		color: var(--color-error-base);
 	}
 
-	.row {
+	.line {
 		display: flex;
 		align-items: center;
-		gap: var(--space-md);
 		width: 100%;
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-sunken);
+	}
+
+	.row {
+		display: flex;
+		flex: 1 1 auto;
+		align-items: center;
+		gap: var(--space-md);
+		min-width: 0;
 		padding: var(--space-lg) var(--space-xl);
 		border: none;
 		border-radius: var(--radius-lg);
-		background: var(--color-bg-sunken);
+		background: none;
 		font-family: var(--font-ui);
 		color: var(--color-fg-muted);
 		cursor: pointer;

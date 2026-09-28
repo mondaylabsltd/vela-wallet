@@ -23,6 +23,7 @@ import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
@@ -38,6 +39,7 @@ import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL } from '$lib/services/tokens-model';
+import { feeRequoteDelayMs } from '$lib/core/kernels';
 import { exactAmount, trimBalance } from '$lib/wallet/live';
 import { fromBaseUnits } from '$lib/services/eip681';
 import { chainName } from '$lib/services/networks';
@@ -71,6 +73,12 @@ export interface SigningLiveInputs {
 	 * where there is no fee session behind the sheet.
 	 */
 	speed?: { view: FeeSpeedView; feeOptions(tier: FeeTier): FeeView['options'] };
+	/**
+	 * Spec 079: the failure a re-ask is still answering (`heldFeeFailure`) —
+	 * so the reason line stays put while the sheet asks again, instead of
+	 * blinking out for every "estimating".
+	 */
+	feeFailing?: FeeFailure | null;
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -466,17 +474,48 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// a failed quote can be asked again, and two or more coins open a list. One
 	// coin and a quote is a fact with nothing behind it, and a row that says
 	// otherwise is the tap that does nothing (spec 081, dead-controls #6).
-	const tappable = fee.failed !== null || fee.options.length > 1;
+	const choosable = fee.options.length > 1;
+	const tappable = fee.failed !== null || choosable;
+	// Spec 079 (the owner: "似乎没有刷新网络费的按钮呀"): the send form's own
+	// refresh control, turning while a measurement is out — the same generic
+	// busy flag the "estimating" value reads, so the row can never claim to be
+	// both settled and measuring. The chevron only where a tap opens a list.
+	const refresh = { refreshLabel: m.feeRefresh, refreshing: fee.busy, chevron: choosable };
+	// Spec 079: WHY there is no fee, when it is something a retry can clear —
+	// the relay out of reach, a busy estimate — and that the sheet will ask
+	// again by itself (it does: `FeeRequoteTimer`, on the core's schedule). The
+	// core's schedule decides which failures those are, so the sentence and
+	// the timer cannot disagree. A missing key or a calculation that cannot
+	// come out gets no network sentence: the network did not cause it.
+	const reason = (failure: FeeFailure | null | undefined): string | undefined =>
+		failure != null && feeRequoteDelayMs(failure, 1) !== null ? m.feeNetworkError : undefined;
 	if (!fee.fee || ofAnotherTier) {
 		// Asked and not answered yet, or asked and refused: say so in the fee's
 		// own row. A sheet that drew nothing here let a person slide on a
 		// mainnet transaction without ever being told what it costs — and the
 		// slide stays shut in both states, as it does on the phones.
 		if (fee.busy || ofAnotherTier) {
-			return { kind: 'onchain', label: m.feeLabel, value: m.feeEstimating, speed, tappable };
+			return {
+				kind: 'onchain',
+				label: m.feeLabel,
+				value: m.feeEstimating,
+				speed,
+				tappable,
+				// Asking again after a failure: the reason stays said.
+				warning: fee.busy ? reason(inputs.feeFailing) : undefined,
+				...refresh
+			};
 		}
 		if (fee.failed)
-			return { kind: 'onchain', label: m.feeLabel, value: m.feeRetry, speed, tappable };
+			return {
+				kind: 'onchain',
+				label: m.feeLabel,
+				value: m.feeRetry,
+				speed,
+				tappable,
+				warning: reason(fee.failed),
+				...refresh
+			};
 		return { kind: 'hidden' };
 	}
 	// The send screens' own line, through the send screens' own formatter: the
@@ -524,7 +563,19 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 		!fee.busy && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
 			? fill(m.feeShort, { sym: selected.symbol })
 			: undefined;
-	return { kind: 'onchain', label: m.feeLabel, value, selector, speed, warning, tappable };
+	return {
+		kind: 'onchain',
+		label: m.feeLabel,
+		value,
+		selector,
+		speed,
+		warning,
+		tappable,
+		...refresh,
+		// The send form's rule (spec 068): a quote past its TTL is OLD, not
+		// wrong — said calmly, and not while a fresh measurement is out.
+		staleNote: fee.stale && !fee.busy ? m.feeStale : undefined
+	};
 }
 
 /**

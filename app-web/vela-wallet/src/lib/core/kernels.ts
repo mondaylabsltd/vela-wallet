@@ -14,6 +14,7 @@ import * as wasm from '../../../../../rust/pkg-web/vela_core.js';
 import type { Assertion } from '$lib/onboarding/core/passkey';
 import type { Account } from '$lib/core/generated/Account';
 import type { KeyMethod } from '$lib/core/generated/KeyMethod';
+import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 
 export {
 	PROXY_CREATION_CODE,
@@ -757,6 +758,17 @@ export function peggedNativeUsd(symbol: string): number | null {
  */
 export function typicalInclusionSeconds(chainId: number): number {
 	return wasm.typicalInclusionSeconds(chainId);
+}
+
+/**
+ * The wait before automatic fee re-quote `attempt` (1-based) after `failure`,
+ * or `null` when no retry can fix it (`fee_policy::requote_delay_ms`, spec 079:
+ * 3 s, 6 s, 12 s, then every 15 s for a relay out of reach or a busy estimate;
+ * never for a missing public key or a calculation that cannot come out). The
+ * signing sheet re-asks on the schedule every other client uses.
+ */
+export function feeRequoteDelayMs(failure: FeeFailure, attempt: number): number | null {
+	return wasm.feeRequoteDelayMs(failure, attempt) ?? null;
 }
 
 /**

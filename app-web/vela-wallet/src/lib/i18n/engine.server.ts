@@ -898,6 +898,9 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeRetry: k('componentsUi.gas.estimateFailed'),
 		feeTokenTitle: k('componentsUi.signing.feeTokenTitle'),
 		feeShort: k('send.warnInsufficientGas'),
+		feeRefresh: k('send.feeRefresh'),
+		feeStale: k('send.feeStale'),
+		feeNetworkError: k('componentsUi.funding.denialNetworkError'),
 		speed: {
 			label: k('send.feeSpeedLabel'),
 			once: k('send.feeSpeedOnce'),

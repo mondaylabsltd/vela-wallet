@@ -42,11 +42,13 @@
 	} from '$lib/signing/dapp-receipt';
 	import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
 	import { explorerBaseURL } from '$lib/services/networks';
-	import { typicalInclusionSeconds } from '$lib/core/kernels';
+	import { feeRequoteDelayMs, typicalInclusionSeconds } from '$lib/core/kernels';
+	import { FeeRequoteTimer, heldFeeFailure } from '$lib/signing/fee-requote';
+	import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 
 	interface Props {
 		messages: SigningMessages;
@@ -290,6 +292,48 @@
 		});
 	});
 
+	/**
+	 * Spec 079: a quote that failed for a reason that can pass (the relay out
+	 * of reach, a busy estimate) is asked again by itself, on the core's
+	 * schedule — while the sheet is up, for THIS request's fee, and nothing has
+	 * been approved or answered. On the Xiaomi the row said "点击重试" with the
+	 * relay down and stayed that way after it came back.
+	 */
+	const requoter = new FeeRequoteTimer({
+		delayMs: feeRequoteDelayMs,
+		requote: () => speedControl.refresh()
+	});
+	$effect(() => {
+		const view = speedControl.feeInForce;
+		const request = signView.request;
+		const open =
+			request !== null &&
+			signView.surface === 'sheet' &&
+			// This request's own quote — never the last request's failure
+			// left in the session (a message has no fee to ask about).
+			quotedFor === request.id &&
+			!signView.is_signing &&
+			!signView.is_submitting &&
+			signView.error === null &&
+			signView.blocked === null;
+		untrack(() => requoter.observe(view, open));
+	});
+	onMount(() => () => requoter.stop());
+	/**
+	 * The failure the row keeps saying while a re-ask is out
+	 * (`heldFeeFailure`) — for this request only: the last request's failure
+	 * is not carried onto the next one's "estimating".
+	 */
+	let feeFailing = $state<FeeFailure | null>(null);
+	let feeFailingFor = '';
+	$effect(() => {
+		const view = speedControl.feeInForce;
+		const id = signView.request?.id ?? '';
+		const previous = id === feeFailingFor ? untrack(() => feeFailing) : null;
+		feeFailingFor = id;
+		feeFailing = heldFeeFailure(previous, view);
+	});
+
 	/** The fee-coin list is open. Like Send's: every coin the relay takes, the core's verdict on each. */
 	let feeOpen = $state(false);
 	$effect(() => {
@@ -304,6 +348,7 @@
 			clear: signingSheet.clear,
 			guard: signingSheet.guard,
 			fee: speedControl.feeInForce,
+			feeFailing,
 			feeOpen,
 			speed: {
 				view: speedControl.view,
@@ -460,6 +505,7 @@
 			}
 			feeOpen = false;
 		}}
+		onfeerefresh={() => speedControl.refresh()}
 		onspeed={() => speedControl.toggle()}
 		onspeedpick={(id) => {
 			if (id === 'fast' || id === 'standard' || id === 'slow') speedControl.pick(id);
