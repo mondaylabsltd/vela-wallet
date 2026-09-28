@@ -221,6 +221,11 @@ function main() {
 			console.error('build-single --check: dist/index.json does not match what dist/b/ holds');
 			process.exit(1);
 		}
+		const headers = join(DIST, '_headers');
+		if (!existsSync(headers) || readFileSync(headers, 'utf8') !== HEADERS) {
+			console.error('build-single --check: dist/_headers is missing or not this build\'s cache rules');
+			process.exit(1);
+		}
 		const root = join(DIST, 'sign.html');
 		if (!existsSync(root) || readFileSync(root, 'utf8') !== built.html) {
 			console.error(
@@ -258,6 +263,11 @@ function main() {
 	// exactly what every client did before 076 — the check, when it is
 	// enforced, always asks by hash.
 	writeFileSync(join(DIST, 'sign.html'), built.html);
+	// Spec 079: a version at `b/<sha256>/` never changes — its path IS its
+	// content — so the browser may keep it for a year and open it with no
+	// network (a signature needs none). The root stays revalidated: it moves
+	// with every release. Cloudflare Pages reads this file from the deploy root.
+	writeFileSync(join(DIST, '_headers'), HEADERS);
 	console.log(
 		`build-single: ${fresh ? 'published' : 'already published'} ` +
 			`dist/b/${built.hash}/sign.html — ${built.html.length} bytes, ` +
@@ -268,6 +278,13 @@ function main() {
 	console.log(`  allow-set: add ${built.hash} to BUILD_ALLOWED, at the FRONT`);
 	console.log(`  CSP ${built.csp}`);
 }
+
+/** The host's header rules (Cloudflare Pages `_headers`). */
+export const HEADERS = [
+	'/b/*',
+	'  Cache-Control: public, max-age=31536000, immutable',
+	'',
+].join('\n');
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
 	main();

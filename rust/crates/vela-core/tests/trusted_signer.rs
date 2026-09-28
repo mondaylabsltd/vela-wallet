@@ -232,7 +232,12 @@ fn the_url_channel_round_trips() {
         "http://127.0.0.1:51234/vela",
         "tok en",
     );
-    assert!(url.starts_with("https://sign.getvela.app/sign.html?ch=url#i="));
+    // Spec 079: the official host opens the pinned, content-addressed version.
+    let pinned = format!(
+        "https://sign.getvela.app/b/{}/sign?ch=url#i=",
+        vela_core::trusted_signer::integrity::LAUNCH
+    );
+    assert!(url.starts_with(&pinned), "{url}");
     let fragment = url.split_once('#').unwrap().1;
     let mut parts = fragment.split('&').map(|p| p.split_once('=').unwrap());
     let (_, i) = parts.next().unwrap();
@@ -652,4 +657,34 @@ fn a_browser_seen_origin_is_named_to_the_page() {
     );
     let relayed = request(&input(false));
     assert!(relayed["context"].get("dapp").is_none());
+}
+
+/// Spec 079: the version the phones open is one this build accepts, and a base
+/// that already names a version (the desktop's verified pick) or another host
+/// is used as given.
+#[test]
+fn the_launch_pin_is_allowed_and_a_named_version_is_left_alone() {
+    use vela_core::trusted_signer::integrity::{BUILD_ALLOWED, LAUNCH};
+    assert!(BUILD_ALLOWED.contains(&LAUNCH));
+    let built = json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 1 } });
+    let named = url_launch(
+        "https://sign.getvela.app/b/abc/",
+        &built,
+        "velawallet://sign-result",
+        "t",
+    );
+    assert!(
+        named.starts_with("https://sign.getvela.app/b/abc/sign.html?ch=url#"),
+        "{named}"
+    );
+    let local = url_launch(
+        "https://127.0.0.1:8443",
+        &built,
+        "velawallet://sign-result",
+        "t",
+    );
+    assert!(
+        local.starts_with("https://127.0.0.1:8443/sign.html?ch=url#"),
+        "{local}"
+    );
 }

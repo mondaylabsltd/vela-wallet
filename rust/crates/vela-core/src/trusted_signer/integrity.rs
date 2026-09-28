@@ -60,6 +60,7 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    "32eb2f2bb3b866d59424d046668bfb543c074100a8f10319501d5696cc55c604",
     // NEWEST FIRST. `choose_version` walks this order and takes the first one
     // the endpoint still serves, so whatever stands at the front is what a
     // wallet opens when several versions are published.
@@ -123,9 +124,17 @@ pub const BUILD_ALLOWED: &[&str] = &[
 /// and not before. Until then the shells check, log and open.
 pub const ENFORCE: bool = false;
 
+/// The version the phone apps open (spec 079). Content-addressed, so the host's
+/// `/b/*` immutable rule lets the browser keep it and open it with no network —
+/// a signature needs none. It must be LIVE: the phones cannot read the index
+/// first without the very network this is about not needing, so it moves to a
+/// new page only after that page is deployed (release: deploy `dist/`, then set
+/// this). Always a member of [`BUILD_ALLOWED`] (tested).
+pub const LAUNCH: &str = "584b7102a089759f410312dfa37a8834bfcdc25033a71d6a338cf1f80e6305a5";
+
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).
-const OFFICIAL_HOST: &str = "sign.getvela.app";
+pub(crate) const OFFICIAL_HOST: &str = "sign.getvela.app";
 
 /// Why the check could not be completed. Every one of these fails closed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
