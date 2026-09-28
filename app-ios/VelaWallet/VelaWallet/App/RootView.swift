@@ -1353,6 +1353,11 @@ struct RootView: View {
                         // Idempotent: the network list must be read before a
                         // page asks to switch, even on a cold deep link here.
                         settings.open()
+                        // Spec 079: the connection panel shows what the account
+                        // holds per network — the home's own figures. On a cold
+                        // deep link here the home never appeared, so nothing had
+                        // read them (iPhone pass: every row blank). Idempotent.
+                        wallet.open(address: session.view.address)
                         // The chains a site may switch to are the wallet's own.
                         // The settings machine may not have read them yet; the
                         // catalogue stands in until it has, and the change
