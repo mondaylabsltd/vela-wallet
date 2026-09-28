@@ -1,0 +1,21 @@
+[vela-wallet] wallet: locale `zh`, gallery false, section Explore
+[vela-wallet] core: tx_tracker booting
+[vela-wallet] core: activity_feed booting
+[vela-wallet] core: balance_dashboard booting
+[vela-wallet] core: explore_sites booting
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wallet] browser: WebView2 error: WindowsError(Error { code: HRESULT(0x80070005), message: "拒绝访问。" })
+[vela-wall
