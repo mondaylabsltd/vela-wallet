@@ -1610,9 +1610,18 @@ fn attest_safe_op_hash_inner(
         }
     }
 
-    let user_op = user_op::UserOperation {
-        sender: op.sender,
-        nonce: op.nonce,
+    let user_op = attest_operation(op, call_data)?;
+    user_op::calculate_safe_op_hash(&user_op, chain_id)
+}
+
+/// The shell's operation as the core's `UserOperation`, the signature left
+/// empty (neither hash covers it). `call_data` is `op.call_data_hex`, already
+/// decoded by the caller.
+fn attest_operation(
+    op: AttestOp,
+    call_data: Vec<u8>,
+) -> Result<vela_core::user_op::UserOperation, vela_core::CoreError> {
+    Ok(vela_core::user_op::UserOperation {
         init_code: attest_bytes(&op.init_code_hex)?,
         call_data,
         verification_gas_limit: attest_decimal(&op.verification_gas_limit, "verificationGasLimit")?,
@@ -1624,9 +1633,10 @@ fn attest_safe_op_hash_inner(
             "maxPriorityFeePerGas",
         )?,
         paymaster_and_data: attest_bytes(&op.paymaster_and_data_hex)?,
+        sender: op.sender,
+        nonce: op.nonce,
         signature: Vec::new(),
-    };
-    user_op::calculate_safe_op_hash(&user_op, chain_id)
+    })
 }
 
 /// The SafeOp hash of `op_json`, on `chain_id` — after checking that its
@@ -1647,6 +1657,118 @@ pub fn attest_safe_message_hash(
 ) -> JsResult<Vec<u8>> {
     vela_core::user_op::compute_safe_message_hash(original_hash, chain_id, safe_address)
         .map_err(err)
+}
+
+// ---------------------------------------------------------------------------
+// The submit verdict (spec 082 RA1, RA6, RA10, ruling 8). The web computes the
+// operation's hash before the first POST, asks the core what each POST's
+// answer means, and — when the reply is lost — follows the op by that hash
+// through the relay's status and the chain's `UserOperationEvent`.
+// ---------------------------------------------------------------------------
+
+fn user_op_hash_inner(op_json: &str, chain_id: u64) -> Result<String, vela_core::CoreError> {
+    let op: AttestOp = serde_json::from_str(op_json)
+        .map_err(|e| vela_core::CoreError::Internal(format!("userOpHash: operation: {e}")))?;
+    let call_data = attest_bytes(&op.call_data_hex)?;
+    let user_op = attest_operation(op, call_data)?;
+    vela_core::user_op::user_op_hash(&user_op, chain_id)
+}
+
+/// The EntryPoint v0.7 `getUserOpHash` of `op_json` on `chain_id`,
+/// 0x-lowercase — `user_op::user_op_hash`. `op_json` is the operation in the
+/// `attestSafeOpHash` shape (gas fields decimal strings, byte fields hex); any
+/// signature is ignored, so the hash is known before the passkey signs.
+#[wasm_bindgen(js_name = userOpHash)]
+pub fn user_op_hash(op_json: &str, chain_id: u64) -> JsResult<String> {
+    user_op_hash_inner(op_json, chain_id).map_err(err)
+}
+
+/// The reply as the core's `SubmitReply`. The core's own JSON is accepted
+/// (`{"hash":"0x…"}`, `{"error":"<error member as JSON text>"}`,
+/// `"no_answer"`), and so is an `error` member handed over as the object
+/// itself, which is what a JSON-RPC client holds.
+fn submit_reply_of(
+    reply_json: &str,
+) -> Result<vela_core::user_op::SubmitReply, vela_core::CoreError> {
+    use vela_core::user_op::SubmitReply;
+    let bad = |what: &str| vela_core::CoreError::Internal(format!("userOpSubmitStep: {what}"));
+    let value: serde_json::Value =
+        serde_json::from_str(reply_json).map_err(|e| bad(&format!("reply: {e}")))?;
+    if let Some(error) = value.get("error").filter(|error| !error.is_null()) {
+        return Ok(SubmitReply::Error(match error {
+            serde_json::Value::String(text) => text.clone(),
+            other => other.to_string(),
+        }));
+    }
+    serde_json::from_value(value).map_err(|e| bad(&format!("reply: {e}")))
+}
+
+fn user_op_submit_step_inner(
+    reply_json: &str,
+    attempt: u32,
+    maybe_delivered: bool,
+    local_hash: &str,
+) -> Result<String, vela_core::CoreError> {
+    let reply = submit_reply_of(reply_json)?;
+    let step = vela_core::user_op::submit_step(&reply, attempt, maybe_delivered, local_hash);
+    serde_json::to_string(&step)
+        .map_err(|e| vela_core::CoreError::Internal(format!("userOpSubmitStep: {e}")))
+}
+
+/// One step of the submit loop — `user_op::submit_step` (RA1). `reply_json`
+/// is what the POST came back with (see [`submit_reply_of`]); `attempt` is the
+/// 0-based count of POSTs of this op, the one just answered included;
+/// `maybe_delivered` is the OR over every POST of this op of the pool's
+/// `maybe_delivered`; `local_hash` is [`user_op_hash`]'s answer.
+///
+/// Answers the core's `SubmitStep` as JSON:
+/// `{"retry_after":{"delay_ms":3000}}`, or `{"done":<verdict>}` where the
+/// verdict is `{"type":"accepted","user_op_hash":…}`,
+/// `{"type":"maybe_sent","user_op_hash":…}` or
+/// `{"type":"not_sent","rejection":null|"relayer_unavailable"|"bundler_underfunded"|{"other":…}}`.
+/// The local nonce advances on `accepted` only.
+#[wasm_bindgen(js_name = userOpSubmitStep)]
+pub fn user_op_submit_step(
+    reply_json: &str,
+    attempt: u32,
+    maybe_delivered: bool,
+    local_hash: &str,
+) -> JsResult<String> {
+    user_op_submit_step_inner(reply_json, attempt, maybe_delivered, local_hash).map_err(err)
+}
+
+/// The dApp's `-32603` detail for a request that was not sent and has no
+/// relay refusal to quote (RA10) — a fixed sentence, never the pool's text.
+#[wasm_bindgen(js_name = userOpNotSentDetail)]
+#[must_use]
+pub fn user_op_not_sent_detail() -> String {
+    vela_core::user_op::NOT_SENT_DAPP_DETAIL.to_owned()
+}
+
+/// `topics[0]` of the `eth_getLogs` filter a `FindOpEvent` asks for (ruling
+/// 8): the EntryPoint's `UserOperationEvent`; `topics[1]` is the op's hash.
+#[wasm_bindgen(js_name = userOpEventTopic)]
+#[must_use]
+pub fn user_op_event_topic() -> String {
+    vela_core::user_op::USER_OPERATION_EVENT_TOPIC.to_owned()
+}
+
+/// The relay's lifecycle-status method (RA7) — the only spelling it serves.
+#[wasm_bindgen(js_name = userOpStatusMethod)]
+#[must_use]
+pub fn user_op_status_method() -> String {
+    vela_core::app::tx_tracker::USER_OP_STATUS_METHOD.to_owned()
+}
+
+/// The status method's answer — its `result`, or the whole JSON-RPC body —
+/// as the core's `TrackStatusAnswer` JSON (`{"status","stage","tx_hash"}`),
+/// or `undefined` when it is no answer (an error, or a status the core does
+/// not know). `tx_tracker::parse_user_op_status`.
+#[wasm_bindgen(js_name = parseUserOpStatus)]
+#[must_use]
+pub fn parse_user_op_status(json: &str) -> Option<String> {
+    vela_core::app::tx_tracker::parse_user_op_status(json)
+        .and_then(|answer| serde_json::to_string(&answer).ok())
 }
 
 // ---------------------------------------------------------------------------
@@ -1685,4 +1807,475 @@ pub fn dapp_provider_script(host: &str) -> String {
         "desktop" => ProviderHost::Desktop,
         _ => ProviderHost::Android,
     })
+}
+
+// ---------------------------------------------------------------------------
+// sign_request — how a dApp request ends, and its clocks (spec 082 RA8, RA12,
+// RB2). The sheet draws the ending the tracker knows, never its own guess.
+// ---------------------------------------------------------------------------
+
+fn sign_ending_of_inner(
+    method: &str,
+    payload_json: &str,
+    submitted_user_op: Option<&str>,
+) -> Result<Option<String>, vela_core::CoreError> {
+    use vela_core::app::sign_request::{ending_of, SignResponsePayload};
+    let payload: SignResponsePayload = serde_json::from_str(payload_json)
+        .map_err(|e| vela_core::CoreError::Internal(format!("signEndingOf: payload: {e}")))?;
+    ending_of(method, &payload, submitted_user_op)
+        .map(|ending| {
+            serde_json::to_string(&ending)
+                .map_err(|e| vela_core::CoreError::Internal(format!("signEndingOf: {e}")))
+        })
+        .transpose()
+}
+
+/// The ending of a request whose answer to the page was `payload_json` (the
+/// core's `SignResponsePayload` JSON) — `sign_request::ending_of`. Answers
+/// the `SignEnding` JSON (`{"type":"signed"}`,
+/// `{"type":"landed","tx_hash","user_op_hash"}`,
+/// `{"type":"still_confirming","user_op_hash"}`), or `undefined` when there is
+/// nothing to show. `submitted_user_op` is the op this request handed the
+/// tracker.
+#[wasm_bindgen(js_name = signEndingOf)]
+pub fn sign_ending_of(
+    method: &str,
+    payload_json: &str,
+    submitted_user_op: Option<String>,
+) -> JsResult<Option<String>> {
+    sign_ending_of_inner(method, payload_json, submitted_user_op.as_deref()).map_err(err)
+}
+
+fn sign_ending_state_inner(
+    ending_json: &str,
+    entry_json: Option<&str>,
+) -> Result<String, vela_core::CoreError> {
+    use vela_core::app::sign_request::{ending_state, SignEnding};
+    use vela_core::app::tx_tracker::TrackEntryView;
+    let bad = |what: String| vela_core::CoreError::Internal(format!("signEndingState: {what}"));
+    let ending: SignEnding =
+        serde_json::from_str(ending_json).map_err(|e| bad(format!("ending: {e}")))?;
+    let entry: Option<TrackEntryView> = match entry_json.map(str::trim) {
+        None | Some("") => None,
+        Some(json) => serde_json::from_str(json).map_err(|e| bad(format!("entry: {e}")))?,
+    };
+    serde_json::to_string(&ending_state(&ending, entry.as_ref())).map_err(|e| bad(e.to_string()))
+}
+
+/// What the sheet draws for `ending_json` (a `SignEnding`) once the tracker
+/// has had its say — `sign_request::ending_state`. `entry_json` is the
+/// tracker's `TrackEntryView` for the op (`null`, `undefined` or `""` = not
+/// taken yet; an entry for another op is ignored). Answers the
+/// `SignEndingState` JSON: `{"type":"signed"}`, `{"type":"confirmed","tx_hash"}`,
+/// `{"type":"reverted","tx_hash"}`, `{"type":"not_sent"}` or
+/// `{"type":"following","user_op_hash","outcome","fee_held"}`.
+#[wasm_bindgen(js_name = signEndingState)]
+pub fn sign_ending_state(ending_json: &str, entry_json: Option<String>) -> JsResult<String> {
+    sign_ending_state_inner(ending_json, entry_json.as_deref()).map_err(err)
+}
+
+/// How long to wait for the receipt when the submit answered `elapsed_ms`
+/// after the approve tap: what is left of the 120 s answer window, never less
+/// than 10 s — `sign_request::dapp_receipt_wait_ms` (RA12).
+#[wasm_bindgen(js_name = dappReceiptWaitMs)]
+#[must_use]
+pub fn dapp_receipt_wait_ms(elapsed_ms: f64) -> f64 {
+    vela_core::app::sign_request::dapp_receipt_wait_ms(elapsed_ms)
+}
+
+/// A sign request older than this (ms) is never signed —
+/// `sign_request::EXTENSION_REQUEST_TTL_MS`. The extension worker pins its
+/// `REQUEST_TTL_MS` to it (RB2).
+#[wasm_bindgen(js_name = signRequestTtlMs)]
+#[must_use]
+pub fn sign_request_ttl_ms() -> f64 {
+    vela_core::app::sign_request::EXTENSION_REQUEST_TTL_MS
+}
+
+// ---------------------------------------------------------------------------
+// rpc_pool — the two clocks the extension worker keeps in JavaScript (RF2).
+// The worker cannot load the core; its tests pin its copies to these.
+// ---------------------------------------------------------------------------
+
+/// The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
+#[wasm_bindgen(js_name = rpcReadTimeoutMs)]
+#[must_use]
+pub fn rpc_read_timeout_ms() -> u32 {
+    vela_core::app::rpc_pool::RPC_READ_TIMEOUT_MS
+}
+
+/// How long an endpoint rests after `consecutive_failures` failures in a
+/// row, ms: `30 s · 2^(n−1)`, capped at 300 s, `0` for none —
+/// `rpc_pool::cooldown_ms`.
+#[wasm_bindgen(js_name = rpcCooldownMs)]
+#[must_use]
+pub fn rpc_cooldown_ms(consecutive_failures: u32) -> f64 {
+    vela_core::app::rpc_pool::cooldown_ms(consecutive_failures)
+}
+
+// ---------------------------------------------------------------------------
+// Site names, logo misses and the balance read (spec 082 RE7, RE9, RE10)
+// ---------------------------------------------------------------------------
+
+/// A site's name and the line under it — `browser_load::site_label` (RE7):
+/// `{"name","host_line"}`, `host_line` `null` when the name already is the
+/// host, so it is said once.
+#[wasm_bindgen(js_name = browserSiteLabel)]
+#[must_use]
+pub fn browser_site_label(title: &str, host: &str) -> String {
+    serde_json::to_string(&vela_core::app::browser_load::site_label(title, host))
+        .unwrap_or_default()
+}
+
+/// The class of a logo miss: the HTTP status when the miss had one (it is the
+/// stronger evidence), else `kind` as the core's `MarkMiss` wire name
+/// (`"not_found"`, `"refused"`, `"not_an_image"`, `"throttled"`,
+/// `"server_error"`, `"transport"`, `"unknown"`); a name the core does not know
+/// is `unknown`.
+fn mark_miss_of(kind: &str, status: Option<u16>) -> vela_core::app::remote_mark::MarkMiss {
+    use vela_core::app::remote_mark::{mark_miss_of_status, MarkMiss};
+    match status {
+        Some(status) => mark_miss_of_status(status),
+        None => serde_json::from_value(serde_json::Value::String(kind.to_owned()))
+            .unwrap_or(MarkMiss::Unknown),
+    }
+}
+
+/// How long a logo that did not load stays failed, ms — `undefined` for the
+/// session (asking again will not help), a number for a miss that may heal
+/// (RE10). The web's `<img onerror>` has no status: `markMissTtlMs("unknown")`.
+/// See [`mark_miss_of`] for `kind` and `status`.
+#[wasm_bindgen(js_name = markMissTtlMs)]
+#[must_use]
+pub fn mark_miss_ttl_ms(kind: &str, status: Option<u16>) -> Option<u32> {
+    vela_core::app::remote_mark::mark_miss_ttl_ms(mark_miss_of(kind, status))
+}
+
+fn balance_read_plan_inner(
+    chain_id: u32,
+    stables_json: &str,
+    wrapped_native: Option<&str>,
+    custom_json: &str,
+) -> Result<String, vela_core::CoreError> {
+    use vela_core::app::balance_dashboard::{read_plan, StableRef, TokenRef};
+    let bad = |what: String| vela_core::CoreError::Internal(format!("balanceReadPlan: {what}"));
+    fn list<T: serde::de::DeserializeOwned>(json: &str) -> Result<Vec<T>, serde_json::Error> {
+        if json.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        serde_json::from_str(json)
+    }
+    let stables: Vec<StableRef> = list(stables_json).map_err(|e| bad(format!("stables: {e}")))?;
+    let custom: Vec<TokenRef> = list(custom_json).map_err(|e| bad(format!("custom: {e}")))?;
+    let plan = read_plan(chain_id, &stables, wrapped_native, &custom);
+    serde_json::to_string(&plan).map_err(|e| bad(e.to_string()))
+}
+
+/// Which balances one chain's read covers, in order —
+/// `balance_dashboard::read_plan` (RE9): the native coin, the registry
+/// stablecoins, the wrapped native, the person's own tokens, each contract
+/// once. `stables_json` is the chain data's `stables[]` (`[{symbol,
+/// contract}]`), `custom_json` the person's tokens on this chain
+/// (`[{contract, symbol, name?, decimals}]`); `""` is an empty list.
+/// Answers a JSON array of `ReadSlot`
+/// (`{kind, contract, symbol, name, known_decimals, peg_usd}`).
+#[wasm_bindgen(js_name = balanceReadPlan)]
+pub fn balance_read_plan(
+    chain_id: u32,
+    stables_json: &str,
+    wrapped_native: Option<String>,
+    custom_json: &str,
+) -> JsResult<String> {
+    balance_read_plan_inner(
+        chain_id,
+        stables_json,
+        wrapped_native.as_deref(),
+        custom_json,
+    )
+    .map_err(err)
+}
+
+// ---------------------------------------------------------------------------
+// Tests: each 082 export answers what the core function it wraps answers, in
+// the JSON shape its doc names. The `_inner` functions carry the fallible
+// ones — a `JsValue` cannot be built off wasm.
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod core_082_exports {
+    use super::*;
+    use serde_json::{json, Value};
+
+    const SAFE: &str = "0x1111111111111111111111111111111111111111";
+    const OP_HASH: &str = "0x2222222222222222222222222222222222222222222222222222222222222222";
+
+    fn parse(text: &str) -> Value {
+        serde_json::from_str(text).unwrap_or_else(|e| unreachable!("{text}: {e}"))
+    }
+
+    fn ok<T>(result: Result<T, vela_core::CoreError>) -> T {
+        result.unwrap_or_else(|e| unreachable!("{e}"))
+    }
+
+    fn op_json() -> String {
+        json!({
+            "sender": SAFE,
+            "nonce": "0x29",
+            "init_code_hex": "0x",
+            "call_data_hex": "0x541d63c80102",
+            "verification_gas_limit": "300000",
+            "call_gas_limit": "450000",
+            "pre_verification_gas": "60000",
+            "max_fee_per_gas": "2000000000",
+            "max_priority_fee_per_gas": "1000000000",
+            "paymaster_and_data_hex": "0x3333333333333333333333333333333333333333abcd",
+            "signature": "0xabab"
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn the_op_hash_is_the_core_s_and_ignores_the_signature() {
+        let core = ok(vela_core::user_op::user_op_hash(
+            &vela_core::user_op::UserOperation {
+                sender: SAFE.to_owned(),
+                nonce: "0x29".to_owned(),
+                init_code: Vec::new(),
+                call_data: vec![0x54, 0x1d, 0x63, 0xc8, 0x01, 0x02],
+                verification_gas_limit: 300_000,
+                call_gas_limit: 450_000,
+                pre_verification_gas: 60_000,
+                max_fee_per_gas: 2_000_000_000,
+                max_priority_fee_per_gas: 1_000_000_000,
+                paymaster_and_data: ok(vela_core::primitives::from_hex(
+                    "3333333333333333333333333333333333333333abcd",
+                )),
+                signature: vec![0xcd; 65],
+            },
+            100,
+        ));
+        assert_eq!(ok(user_op_hash_inner(&op_json(), 100)), core);
+        assert_ne!(ok(user_op_hash_inner(&op_json(), 1)), core);
+        assert!(user_op_hash_inner("{}", 100).is_err());
+    }
+
+    #[test]
+    fn a_submit_reply_becomes_the_core_s_step() {
+        let step = |reply: &str, attempt: u32, maybe: bool| {
+            parse(&ok(user_op_submit_step_inner(
+                reply, attempt, maybe, OP_HASH,
+            )))
+        };
+        let relay_hash = format!("0x{}", "ab".repeat(32));
+        assert_eq!(
+            step(&json!({ "hash": relay_hash }).to_string(), 0, false),
+            json!({"done": {"type": "accepted", "user_op_hash": relay_hash}})
+        );
+        assert_eq!(
+            step("\"no_answer\"", 0, false),
+            json!({"done": {"type": "not_sent", "rejection": null}})
+        );
+        assert_eq!(
+            step("\"no_answer\"", 0, true),
+            json!({"done": {"type": "maybe_sent", "user_op_hash": OP_HASH}})
+        );
+        // The error member as the object a client holds, and as the core's
+        // JSON text, are one reply.
+        let busy = json!({"code": -32000, "message": "currently processing, Retry later"});
+        let as_object = json!({ "error": busy }).to_string();
+        let as_text = json!({ "error": busy.to_string() }).to_string();
+        assert_eq!(
+            step(&as_object, 0, false),
+            json!({"retry_after": {"delay_ms": vela_core::user_op::SUBMIT_RETRY_DELAY_MS}})
+        );
+        assert_eq!(step(&as_object, 3, false), step(&as_text, 3, false));
+        let existing =
+            json!({"error": {"message": format!("AA25 invalid nonce [existingHash:{OP_HASH}]")}});
+        assert_eq!(
+            step(&existing.to_string(), 1, false),
+            json!({"done": {"type": "accepted", "user_op_hash": OP_HASH}})
+        );
+        let refused = json!({"error": {"message": "The gas relayer is unavailable right now."}});
+        assert_eq!(
+            step(&refused.to_string(), 0, false),
+            json!({"done": {"type": "not_sent", "rejection": "relayer_unavailable"}})
+        );
+        assert!(user_op_submit_step_inner("{\"other\":1}", 0, false, OP_HASH).is_err());
+        assert!(user_op_submit_step_inner("not json", 0, false, OP_HASH).is_err());
+        // A null `error` is no error member: not a reply the core can read.
+        assert!(user_op_submit_step_inner("{\"error\":null}", 0, false, OP_HASH).is_err());
+    }
+
+    #[test]
+    fn the_fixed_words_are_the_core_s() {
+        assert_eq!(
+            user_op_not_sent_detail(),
+            vela_core::user_op::NOT_SENT_DAPP_DETAIL
+        );
+        assert_eq!(
+            user_op_event_topic(),
+            vela_core::user_op::USER_OPERATION_EVENT_TOPIC
+        );
+        assert_eq!(user_op_status_method(), "pimlico_getUserOperationStatus");
+    }
+
+    #[test]
+    fn a_status_answer_is_parsed_once_by_the_core() {
+        let answer = parse_user_op_status(
+            &json!({"jsonrpc": "2.0", "id": 1, "result": {
+                "status": "submitted", "transactionHash": "0xabc", "last_executor_stage": "fee_hold"
+            }})
+            .to_string(),
+        );
+        assert_eq!(
+            answer.as_deref().map(parse),
+            Some(json!({"status": "submitted", "stage": "fee_hold", "tx_hash": "0xabc"}))
+        );
+        assert_eq!(parse_user_op_status("{\"status\":\"teleported\"}"), None);
+        assert_eq!(parse_user_op_status("{\"error\":{\"code\":-32601}}"), None);
+    }
+
+    fn entry(status: &str, outcome: &str, tx_hash: Option<&str>) -> String {
+        json!({
+            "user_op_hash": OP_HASH,
+            "chain_id": 100,
+            "record_ids": ["r1"],
+            "status": status,
+            "tx_hash": tx_hash,
+            "polling": status == "pending",
+            "submitted_at_ms": 1.0,
+            "outcome": outcome
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn the_sheet_ending_waits_for_the_tracker() {
+        let answered = json!({"type": "ok", "result": OP_HASH}).to_string();
+        let ending = ok(sign_ending_of_inner(
+            "eth_sendTransaction",
+            &answered,
+            Some(OP_HASH),
+        ))
+        .unwrap_or_else(|| unreachable!("an op-hash answer has an ending"));
+        assert_eq!(
+            parse(&ending),
+            json!({"type": "still_confirming", "user_op_hash": OP_HASH})
+        );
+        assert_eq!(
+            ok(sign_ending_of_inner(
+                "personal_sign",
+                &json!({"type": "ok", "result": "0x01"}).to_string(),
+                None
+            ))
+            .as_deref()
+            .map(parse),
+            Some(json!({"type": "signed"}))
+        );
+        let refused =
+            json!({"type": "err", "code": 4001, "kind": "user_rejected", "message": null});
+        assert_eq!(
+            ok(sign_ending_of_inner(
+                "eth_sendTransaction",
+                &refused.to_string(),
+                None
+            )),
+            None
+        );
+
+        let state = |entry: Option<&str>| parse(&ok(sign_ending_state_inner(&ending, entry)));
+        let following_landing = json!({"type": "following", "user_op_hash": OP_HASH, "outcome": "landing", "fee_held": false});
+        assert_eq!(state(None), following_landing);
+        assert_eq!(state(Some("")), following_landing);
+        assert_eq!(state(Some("null")), following_landing);
+        assert_eq!(
+            state(Some(&entry("confirmed", "final", Some("0xfeed")))),
+            json!({"type": "confirmed", "tx_hash": "0xfeed"})
+        );
+        assert_eq!(
+            state(Some(&entry("dropped", "final", Some("0xdead")))),
+            json!({"type": "reverted", "tx_hash": "0xdead"})
+        );
+        assert_eq!(
+            state(Some(&entry("not_sent", "final", None))),
+            json!({"type": "not_sent"})
+        );
+        assert_eq!(
+            state(Some(&entry("pending", "maybe_sent", None))),
+            json!({"type": "following", "user_op_hash": OP_HASH, "outcome": "maybe_sent", "fee_held": false})
+        );
+        assert!(sign_ending_state_inner("{\"type\":\"nope\"}", None).is_err());
+        assert!(sign_ending_state_inner(&ending, Some("{}")).is_err());
+    }
+
+    #[test]
+    fn the_clocks_are_the_core_s() {
+        assert!((dapp_receipt_wait_ms(0.0) - 120_000.0).abs() < f64::EPSILON);
+        assert!((dapp_receipt_wait_ms(46_000.0) - 74_000.0).abs() < f64::EPSILON);
+        assert!((dapp_receipt_wait_ms(115_000.0) - 10_000.0).abs() < f64::EPSILON);
+        assert!((sign_request_ttl_ms() - 300_000.0).abs() < f64::EPSILON);
+        assert_eq!(rpc_read_timeout_ms(), 8_000);
+        let cooldowns: Vec<f64> = (0..=6).map(rpc_cooldown_ms).collect();
+        assert_eq!(
+            cooldowns,
+            vec![0.0, 30_000.0, 60_000.0, 120_000.0, 240_000.0, 300_000.0, 300_000.0]
+        );
+    }
+
+    #[test]
+    fn a_site_is_named_once_when_its_name_is_its_host() {
+        assert_eq!(
+            parse(&browser_site_label("App.Uniswap.org", "app.uniswap.org")),
+            json!({"name": "app.uniswap.org", "host_line": null})
+        );
+        assert_eq!(
+            parse(&browser_site_label("Uniswap", "app.uniswap.org")),
+            json!({"name": "Uniswap", "host_line": "app.uniswap.org"})
+        );
+    }
+
+    #[test]
+    fn a_logo_miss_heals_unless_the_image_is_not_there() {
+        assert_eq!(mark_miss_ttl_ms("unknown", None), Some(60_000));
+        assert_eq!(mark_miss_ttl_ms("transport", None), Some(60_000));
+        assert_eq!(mark_miss_ttl_ms("not_found", None), None);
+        assert_eq!(mark_miss_ttl_ms("teleported", None), Some(60_000));
+        // The status is the stronger evidence.
+        assert_eq!(mark_miss_ttl_ms("unknown", Some(404)), None);
+        assert_eq!(mark_miss_ttl_ms("not_found", Some(503)), Some(60_000));
+        assert_eq!(mark_miss_ttl_ms("unknown", Some(200)), None);
+    }
+
+    #[test]
+    fn the_balance_read_plan_is_the_core_s() {
+        let usdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+        let stables = json!([{ "symbol": "USDC", "contract": usdc, "type": "usd" }]).to_string();
+        let custom =
+            json!([{ "contract": usdc.to_lowercase(), "symbol": "MYUSDC", "decimals": 6 }])
+                .to_string();
+        let plan = parse(&ok(balance_read_plan_inner(8453, &stables, None, &custom)));
+        let core = vela_core::app::balance_dashboard::read_plan(
+            8453,
+            &[vela_core::app::balance_dashboard::StableRef {
+                symbol: "USDC".to_owned(),
+                contract: usdc.to_owned(),
+            }],
+            None,
+            &[vela_core::app::balance_dashboard::TokenRef {
+                contract: usdc.to_lowercase(),
+                symbol: "MYUSDC".to_owned(),
+                name: String::new(),
+                decimals: 6,
+            }],
+        );
+        assert_eq!(plan, serde_json::to_value(&core).unwrap_or_default());
+        assert_eq!(plan[0]["kind"], "native");
+        assert_eq!(plan[1]["kind"], "stable");
+        assert_eq!(
+            parse(&ok(balance_read_plan_inner(8453, "", None, " "))),
+            json!([{"kind": "native", "contract": null, "symbol": "", "name": "",
+                    "known_decimals": null, "peg_usd": null}])
+        );
+        assert!(balance_read_plan_inner(8453, "{", None, "").is_err());
+    }
 }
