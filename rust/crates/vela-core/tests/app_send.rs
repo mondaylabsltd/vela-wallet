@@ -3707,6 +3707,7 @@ fn a_single_send_persists_one_record_then_hands_off_to_the_tracker() {
             chain_id: 1,
             maybe_sent: false,
             submit_block: None,
+            admitted: false,
         }
     );
     assert!(sut.resolve(Res::TrackHandedOff).is_empty());
@@ -5071,6 +5072,7 @@ fn a_maybe_sent_send_reads_maybe_sent_and_plays_no_success_haptic() {
             chain_id: 1,
             maybe_sent: true,
             submit_block: Some(SUBMIT_BLOCK),
+            admitted: false,
         }]
     );
 }
@@ -5263,4 +5265,308 @@ fn old_send_json_without_the_new_fields_still_decodes() {
         record.map(|r| (r.maybe_sent, r.submit_block)),
         Some((false, None))
     );
+}
+
+// ===========================================================================
+// Spec 082 round 2 (T189, RJ1): the wallet's own Send writes ahead too
+// ===========================================================================
+
+const LOCAL_HASH: &str = "0x5538ce6978ab8924cce04d68c11cded19c36a8773e94656be6ada6315477ba1f";
+const OTHER_HASH: &str = "0xa035b480c649967d6713388a017a91c8aea0c9732ed7f4ab51caba8a99199135";
+const SIGNED_BLOCK: u64 = 48_487_600;
+
+fn is_op(kind: fn(&Op) -> bool) -> impl Fn(&Op) -> bool {
+    move |op| kind(op)
+}
+
+fn is_persist_records(op: &Op) -> bool {
+    matches!(op, Op::PersistTxRecords { .. })
+}
+
+fn is_submit_op(op: &Op) -> bool {
+    matches!(op, Op::SubmitUserOp { .. })
+}
+
+/// A split to two recipients, slid into the in-flight submit.
+fn split_submitting() -> Sut {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    sut.dispatch(Event::RecipientsChanged {
+        recipients: vec![
+            SendRecipientDraft {
+                id: "rcpt_1".to_owned(),
+                address: RECIPIENT.to_owned(),
+                amount: "0.5".to_owned(),
+                name: Some("Bob".to_owned()),
+            },
+            SendRecipientDraft {
+                id: "rcpt_2".to_owned(),
+                address: RECIPIENT_B.to_owned(),
+                amount: "0.25".to_owned(),
+                name: None,
+            },
+        ],
+    });
+    continue_to_confirm(&mut sut, native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut
+}
+
+fn split_ids(hash: &str) -> Vec<String> {
+    vec![format!("{hash}-0"), format!("{hash}-1")]
+}
+
+/// Signed, and the records written ahead — the tracker told and the POST
+/// cleared, in that order, only once the records are on disk.
+fn signed_and_cleared(sut: &mut Sut) -> Vec<SendTxRecord> {
+    let ops = sut.dispatch(Event::OpSigned {
+        user_op_hash: LOCAL_HASH.to_owned(),
+        submit_block: Some(SIGNED_BLOCK),
+        now_ms: 1_754_000_000_200.0,
+    });
+    let [Op::PersistTxRecords { records }] = ops.as_slice() else {
+        panic!("the records first, and nothing else: {ops:?}")
+    };
+    let records = records.clone();
+    let ops = sut.resolve_matching(is_op(is_persist_records), Res::RecordsPersisted);
+    assert_eq!(
+        ops,
+        vec![
+            Op::TrackSubmitted {
+                user_op_hash: LOCAL_HASH.to_owned(),
+                record_ids: split_ids(LOCAL_HASH),
+                chain_id: 1,
+                maybe_sent: true,
+                submit_block: Some(SIGNED_BLOCK),
+                admitted: false,
+            },
+            Op::ClearToPost {
+                user_op_hash: LOCAL_HASH.to_owned()
+            },
+        ]
+    );
+    assert!(sut
+        .resolve_matching(|op| matches!(op, Op::TrackSubmitted { .. }), Res::TrackHandedOff)
+        .is_empty());
+    assert!(sut
+        .resolve_matching(|op| matches!(op, Op::ClearToPost { .. }), Res::PostCleared)
+        .is_empty());
+    records
+}
+
+/// RJ1 (G34): both split records are written — "may have been sent" — before
+/// the POST is cleared; the receipt screen still waits for the verdict.
+#[test]
+fn a_split_send_is_written_before_it_is_cleared_to_post() {
+    let mut sut = split_submitting();
+    let records = signed_and_cleared(&mut sut);
+    assert_eq!(
+        records.iter().map(|r| r.id.clone()).collect::<Vec<_>>(),
+        split_ids(LOCAL_HASH)
+    );
+    assert!(records.iter().all(|r| r.maybe_sent
+        && r.user_op_hash == LOCAL_HASH
+        && r.submit_block == Some(SIGNED_BLOCK)));
+    assert_eq!(records[0].to, RECIPIENT);
+    assert_eq!(records[1].to, RECIPIENT_B);
+    let view = sut.view();
+    assert_ne!(view.stage, SendStage::Receipt, "the receipt waits for the verdict");
+    assert_eq!(view.tx_status, SendTxStatus::Submitting);
+    assert!(sut.outstanding().iter().any(is_submit_op), "still submitting");
+}
+
+/// RJ1: accepted — the records are marked admitted (no second write), the
+/// tracker told `admitted`, and the success haptic plays: it was sent.
+#[test]
+fn accepted_marks_the_written_records_admitted() {
+    let mut sut = split_submitting();
+    signed_and_cleared(&mut sut);
+    let ops = sut.resolve_matching(is_op(is_submit_op), {
+        let mut result = submitted(LOCAL_HASH);
+        if let Res::Submitted { submit_block, .. } = &mut result {
+            *submit_block = Some(SIGNED_BLOCK);
+        }
+        result
+    });
+    assert!(!ops.iter().any(is_persist_records), "no second record: {ops:?}");
+    assert!(ops.contains(&Op::MarkAdmitted {
+        record_ids: split_ids(LOCAL_HASH)
+    }));
+    assert!(ops.contains(&Op::TrackSubmitted {
+        user_op_hash: LOCAL_HASH.to_owned(),
+        record_ids: split_ids(LOCAL_HASH),
+        chain_id: 1,
+        maybe_sent: false,
+        submit_block: Some(SIGNED_BLOCK),
+        admitted: true,
+    }));
+    assert!(ops.contains(&Op::Haptic {
+        kind: SendHapticKind::Success
+    }));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::Receipt);
+    assert_eq!(
+        view.receipt.expect("receipt").status,
+        SendReceiptStatus::Submitted
+    );
+}
+
+/// A lost reply after the write-ahead: nothing new is written, no success
+/// haptic (it has not earned it), the receipt says "may have been sent".
+#[test]
+fn a_lost_reply_after_the_write_ahead_writes_nothing_new() {
+    let mut sut = split_submitting();
+    signed_and_cleared(&mut sut);
+    let ops = sut.resolve_matching(
+        is_op(is_submit_op),
+        Res::Submitted {
+            user_op_hash: LOCAL_HASH.to_owned(),
+            now_ms: 1_754_000_000_500.0,
+            maybe_sent: true,
+            submit_block: Some(SIGNED_BLOCK),
+        },
+    );
+    assert!(
+        !ops.iter().any(|op| matches!(
+            op,
+            Op::PersistTxRecords { .. }
+                | Op::MarkAdmitted { .. }
+                | Op::TrackSubmitted { .. }
+                | Op::Haptic { .. }
+        )),
+        "{ops:?}"
+    );
+    assert_eq!(
+        sut.view().receipt.expect("receipt").status,
+        SendReceiptStatus::MaybeSent
+    );
+}
+
+/// RJ1: proven not sent — both records deleted and withdrawn from the
+/// tracker, then today's error.
+#[test]
+fn not_sent_deletes_both_written_records() {
+    let mut sut = split_submitting();
+    signed_and_cleared(&mut sut);
+    let ops = sut.resolve_matching(
+        is_op(is_submit_op),
+        Res::SubmitFailed {
+            failure: SendSubmitFailure::Other {
+                message: Some("relay unreachable; nothing was sent".to_owned()),
+            },
+        },
+    );
+    assert!(ops.contains(&Op::DeleteTxRecords {
+        ids: split_ids(LOCAL_HASH)
+    }));
+    assert!(ops.contains(&Op::TrackWithdrawn {
+        user_op_hash: LOCAL_HASH.to_owned(),
+        record_ids: split_ids(LOCAL_HASH),
+    }));
+    assert!(ops.contains(&Op::Haptic {
+        kind: SendHapticKind::Error
+    }));
+    assert!(!ops.contains(&Op::Haptic {
+        kind: SendHapticKind::Success
+    }));
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Error);
+    assert_eq!(view.tx_error, Some(SendTxErrorKey::Generic));
+}
+
+/// A submit that fails before the write-ahead's records were even acked
+/// (the shell's WRITE_AHEAD_WAIT_MS ran out): the late ack neither tells the
+/// tracker nor clears a POST.
+#[test]
+fn a_late_ack_after_the_failure_clears_nothing() {
+    let mut sut = split_submitting();
+    let ops = sut.dispatch(Event::OpSigned {
+        user_op_hash: LOCAL_HASH.to_owned(),
+        submit_block: None,
+        now_ms: 1_754_000_000_200.0,
+    });
+    assert!(matches!(ops.as_slice(), [Op::PersistTxRecords { .. }]));
+    let ops = sut.resolve_matching(
+        is_op(is_submit_op),
+        Res::SubmitFailed {
+            failure: SendSubmitFailure::Other { message: None },
+        },
+    );
+    assert!(ops.contains(&Op::DeleteTxRecords {
+        ids: split_ids(LOCAL_HASH)
+    }));
+    let late = sut.resolve_matching(is_op(is_persist_records), Res::RecordsPersisted);
+    assert!(late.is_empty(), "{late:?}");
+}
+
+/// The relay answering with another hash: withdraw the write-ahead, then
+/// today's records under the relay's hash.
+#[test]
+fn another_relay_hash_withdraws_and_writes_under_the_relay_s() {
+    let mut sut = split_submitting();
+    signed_and_cleared(&mut sut);
+    let ops = sut.resolve_matching(is_op(is_submit_op), submitted(OTHER_HASH));
+    assert!(ops.contains(&Op::DeleteTxRecords {
+        ids: split_ids(LOCAL_HASH)
+    }));
+    assert!(ops.contains(&Op::TrackWithdrawn {
+        user_op_hash: LOCAL_HASH.to_owned(),
+        record_ids: split_ids(LOCAL_HASH),
+    }));
+    let records = ops
+        .iter()
+        .find_map(|op| match op {
+            Op::PersistTxRecords { records } => Some(records.clone()),
+            _ => None,
+        })
+        .expect("today's write");
+    assert_eq!(
+        records.iter().map(|r| r.id.clone()).collect::<Vec<_>>(),
+        split_ids(OTHER_HASH)
+    );
+}
+
+/// Stray `OpSigned`s: outside a submit, and a second one, are dropped.
+#[test]
+fn a_stray_op_signed_is_dropped() {
+    let mut sut = boot(vec![eth("2")]);
+    assert!(sut
+        .dispatch(Event::OpSigned {
+            user_op_hash: LOCAL_HASH.to_owned(),
+            submit_block: None,
+            now_ms: 1.0,
+        })
+        .is_empty());
+    let mut sut = split_submitting();
+    signed_and_cleared(&mut sut);
+    assert!(sut
+        .dispatch(Event::OpSigned {
+            user_op_hash: LOCAL_HASH.to_owned(),
+            submit_block: None,
+            now_ms: 2.0,
+        })
+        .is_empty());
+}
+
+/// The round-2 send wire.
+#[test]
+fn the_round_2_send_wire() {
+    assert_eq!(
+        serde_json::to_value(Op::ClearToPost {
+            user_op_hash: "0x1".to_owned()
+        })
+        .unwrap_or_default(),
+        serde_json::json!({ "type": "clear_to_post", "user_op_hash": "0x1" })
+    );
+    let old: Option<Op> = serde_json::from_str(
+        r#"{"type":"track_submitted","user_op_hash":"0x1","record_ids":[],"chain_id":1}"#,
+    )
+    .ok();
+    assert!(matches!(old, Some(Op::TrackSubmitted { admitted: false, .. })));
+    let signed: Option<Event> = serde_json::from_str(
+        r#"{"type":"op_signed","user_op_hash":"0x1","submit_block":null,"now_ms":1}"#,
+    )
+    .ok();
+    assert!(matches!(signed, Some(Event::OpSigned { .. })));
 }
