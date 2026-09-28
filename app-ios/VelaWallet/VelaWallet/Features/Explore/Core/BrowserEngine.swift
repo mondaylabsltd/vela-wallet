@@ -59,17 +59,59 @@ final class BrowserEngine: NSObject {
     /// `estimatedProgress`, 0…1, for the bar under the address.
     private(set) var progress: Double = 0
 
-    /// Why the last navigation did not happen, in the SYSTEM's words, or `nil`
-    /// when nothing has failed since the last successful load.
+    /// Why the last navigation did not happen — the core's class for it, the
+    /// corpus key of its sentence and whether retrying can help (spec 079,
+    /// `browserLoadClassify`) — or `nil` when nothing has failed since the
+    /// last load that got through.
     ///
     /// Both failure callbacks once turned a dead navigation into `loading =
     /// false` and said nothing else, so a page that could not be reached drew
     /// a white rectangle with an empty address bar — 058 found
-    /// `app.uniswap.org` doing exactly that on the founder's phone.
-    private(set) var failure: String?
+    /// `app.uniswap.org` doing exactly that on the founder's phone. Until 079
+    /// the panel then printed the system's own sentence and a code.
+    private(set) var failure: BrowserLoadFailure?
+    /// Spec 079: the page as it was last seen, for the tab switcher's card.
+    private(set) var snapshot: UIImage?
+    /// Wide enough for a card, small enough that a dozen tabs cost little.
+    static let snapshotWidth: CGFloat = 360
+
+    /// The corpus key of the failure's reason, for screens that draw it.
+    var failureReasonKey: String? { failure?.reasonKey }
     /// Where the failed navigation was going. `webView.url` is `nil` after a
     /// provisional failure — the URL is discarded with the navigation.
     private(set) var failedURL: String = ""
+    /// This attempt already said how it failed (spec 079): WebKit's blank that
+    /// may follow is then not a second, different failure.
+    private var attemptFailed = false
+    /// A retry of the failed page is running (spec 079): the panel stays up
+    /// and says so, and gives way only to a page that got through.
+    private(set) var retrying = false
+    /// The delay of the automatic retry now scheduled, if one is.
+    private(set) var retryPendingMs: UInt32?
+    /// Whether this tab's page is on screen and the app in front — the only
+    /// time a failed page retries by itself (spec 079 FR-012).
+    private(set) var onScreen = false
+    private var appActive = true
+    /// Automatic attempts made for the failure on screen; a new address or
+    /// the person's own Retry starts the count again.
+    private var retryAttempt: UInt32 = 0
+    private var retryTask: Task<Void, Never>?
+    /// The main document's HTTP status this navigation, when it had one — a
+    /// site's own 404 page is not a visit.
+    private var navHttpStatus: Int?
+    /// How a load is asked of WebKit. A seam, so tests drive the engine
+    /// without a socket.
+    var loader: (URLRequest) -> Void
+
+    /// Where the web view says it is — a seam, so a test can play WebKit's
+    /// own blank document without loading one.
+    var reportedURL: () -> URL?
+
+    /// Where the load hairline starts the moment a load is asked for
+    /// (spec 079): on a slow network the engine's own progress starts only
+    /// at the commit, seconds later, and a tap that changes nothing reads as
+    /// a tap that did nothing.
+    static let requestedProgress = 0.1
 
     let webView: WKWebView
 
@@ -105,7 +147,10 @@ final class BrowserEngine: NSObject {
         // One tab, one web view. A page cannot conjure a second.
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
 
-        self.webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        self.webView = webView
+        self.loader = { [weak webView] request in webView?.load(request) }
+        self.reportedURL = { [weak webView] in webView?.url }
         super.init()
 
         ProviderBridge.install(into: configuration.userContentController, handler: self)
@@ -123,28 +168,137 @@ final class BrowserEngine: NSObject {
 
     // MARK: - Driving
 
+    /// A new address: the old failure and its retries are over.
     func load(_ text: String) {
         guard !tornDown, let target = URL(string: text) else { return }
-        webView.load(URLRequest(url: target))
+        cancelRetry()
+        retryAttempt = 0
+        failure = nil
+        retrying = false
+        requested()
+        loader(URLRequest(url: target))
     }
 
-    func goBack() { webView.goBack() }
-    func goForward() { webView.goForward() }
+    func goBack() {
+        guard webView.canGoBack else { return }
+        requested()
+        webView.goBack()
+    }
 
-    /// Reload — or re-attempt the navigation that failed.
+    func goForward() {
+        guard webView.canGoForward else { return }
+        requested()
+        webView.goForward()
+    }
+
+    /// Reload — or, on a failed page, the person's Retry: the panel stays,
+    /// saying it is retrying, and the automatic count starts again.
     ///
     /// `WKWebView.reload()` reloads the CURRENT document, and a provisional
     /// failure left none: on that path the page has to be asked for again.
     func reload() {
-        if failure != nil, !failedURL.isEmpty {
-            load(failedURL)
+        cancelRetry()
+        if failure != nil {
+            retryAttempt = 0
+            retry()
             return
         }
-        if webView.url == nil, !url.isEmpty {
-            load(url)
+        requested()
+        if liveURL == nil, !url.isEmpty, let target = URL(string: url) {
+            loader(URLRequest(url: target))
             return
         }
         webView.reload()
+    }
+
+    /// The person or the page asked for a load (spec 079): progress shows
+    /// now, not when the engine commits. The address bar keeps the committed
+    /// host until then.
+    func requested() {
+        guard !tornDown else { return }
+        progress = max(loading ? progress : 0, Self.requestedProgress)
+        loading = true
+        onStateChanged()
+    }
+
+    /// One more attempt at the page that failed. The failure stays — the
+    /// panel with it — until a page gets through.
+    private func retry() {
+        guard !tornDown else { return }
+        let target = failedURL.isEmpty ? url : failedURL
+        guard let request = URL(string: target).map({ URLRequest(url: $0) }) else { return }
+        retrying = true
+        requested()
+        loader(request)
+    }
+
+    // MARK: - Retrying by itself (spec 079)
+
+    /// This tab's page came on screen, or left it. A page that failed while
+    /// out of sight retries once it is looked at again; one leaving is
+    /// photographed for the tab switcher while it is still drawn.
+    func setOnScreen(_ shown: Bool) {
+        onScreen = shown
+        if shown { resumeRetry() } else { cancelRetry(); captureSnapshot() }
+    }
+
+    /// Photograph the page as it is now (spec 079, the tab switcher's card).
+    /// Only a page in a window can be drawn; `done` runs either way.
+    func captureSnapshot(_ done: @escaping () -> Void = {}) {
+        guard !tornDown, webView.window != nil, webView.bounds.width > 0 else {
+            done()
+            return
+        }
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = NSNumber(value: Double(Self.snapshotWidth))
+        webView.takeSnapshot(with: configuration) { [weak self] image, _ in
+            MainActor.assumeIsolated {
+                if let image, let self, !self.tornDown { self.snapshot = image }
+                done()
+            }
+        }
+    }
+
+    /// The app came to the front, or left it.
+    func setAppActive(_ active: Bool) {
+        appActive = active
+        active ? resumeRetry() : cancelRetry()
+    }
+
+    private func resumeRetry() {
+        guard let failure, retryTask == nil, !retrying else { return }
+        scheduleRetry(failure)
+    }
+
+    /// The core's schedule (2 s, 5 s, 10 s for the network classes; once at
+    /// 3 s for "other"; never for a wrong name or a certificate), and only
+    /// while this page is on screen and the app in front.
+    private func scheduleRetry(_ failure: BrowserLoadFailure) {
+        cancelRetry()
+        guard failure.autoRetry, onScreen, appActive,
+              let wait = browserLoadRetryDelayMs(class: failure.class, attempt: retryAttempt + 1)
+        else { return }
+        retryPendingMs = wait
+        retryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.fireRetry()
+        }
+    }
+
+    /// The scheduled attempt, now. Tests call it rather than waiting.
+    func fireRetry() {
+        retryTask = nil
+        retryPendingMs = nil
+        guard failure != nil, onScreen, appActive else { return }
+        retryAttempt += 1
+        retry()
+    }
+
+    private func cancelRetry() {
+        retryTask?.cancel()
+        retryTask = nil
+        retryPendingMs = nil
     }
 
     /// Post one message into this tab's page. The bridge drops it unless it is
@@ -158,6 +312,7 @@ final class BrowserEngine: NSObject {
     func tearDown() {
         guard !tornDown else { return }
         tornDown = true
+        cancelRetry()
         observations.forEach { $0.invalidate() }
         observations.removeAll()
         let controller = webView.configuration.userContentController
@@ -196,7 +351,7 @@ final class BrowserEngine: NSObject {
     }
 
     private func metaChanged() {
-        guard !tornDown, webView.url != nil else { return }
+        guard !tornDown, liveURL != nil else { return }
         update(loading: loading)
         guard !url.isEmpty, !origin.isEmpty else { return }
         onMeta(url, title)
@@ -206,11 +361,14 @@ final class BrowserEngine: NSObject {
         // A provisional failure discards the URL, so fall back to the one the
         // navigation was for: an address bar that empties itself tells a
         // person their tap did nothing.
-        let current = webView.url?.absoluteString ?? (failure != nil ? failedURL : url)
+        let live = liveURL
+        let current = live?.absoluteString ?? (failure != nil ? failedURL : url)
         url = current
         origin = ProviderBridge.origin(of: current)
         host = Self.hostOf(origin: origin)
-        title = webView.title ?? title
+        // The document's own title — never the previous page's kept over a
+        // nil (spec 079 F2: `?? title` recorded one site under another's).
+        title = live == nil ? title : (webView.title ?? "")
         canGoBack = webView.canGoBack
         canGoForward = webView.canGoForward
         self.loading = loading
@@ -223,24 +381,41 @@ final class BrowserEngine: NSObject {
         return String(rest.prefix { $0 != "/" })
     }
 
-    /// The page's declared icon, or the origin's `/favicon.ico`. Read from the
-    /// page's DOM once it has loaded; never fetched here.
-    private func readFavicon() {
-        let script = """
-        (() => { const l = document.querySelector('link[rel~="icon"], link[rel="apple-touch-icon"]');
-          return l && l.href ? l.href : ''; })()
-        """
-        let fallback = origin.isEmpty ? "" : origin + "/favicon.ico"
-        webView.evaluateJavaScript(script, in: nil, in: .defaultClient) { [weak self] result in
+    /// The document's own address, title and icon, absolute, in ONE read —
+    /// three reads could straddle two documents (spec 079 R3). Evaluated in
+    /// the page's own world, never the provider's.
+    static let pageFactsScript = """
+    (() => { const l = document.querySelector('link[rel~="icon"], link[rel="apple-touch-icon"]');
+      return JSON.stringify({ href: location.href, title: document.title, icon: l && l.href ? l.href : '' }); })()
+    """
+
+    /// The visit a finished load is — the core's rule (`browserLoadVisit`):
+    /// nothing for a failed load, an error status, a non-web address or an
+    /// engine document; otherwise the page's own url, title and icon.
+    static func visit(facts: Any?, httpStatus: Int?) -> BrowserVisit? {
+        guard let text = facts as? String,
+              let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+              let href = object["href"] as? String
+        else { return nil }
+        let icon = (object["icon"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return browserLoadVisit(
+            url: href, title: object["title"] as? String ?? "", icon: icon,
+            mainFrameFailed: false, httpStatus: httpStatus.flatMap { UInt16(exactly: $0) }
+        )
+    }
+
+    /// A load finished: read the page once, and record it only if the core
+    /// says it is a visit. Never fetched here — the icon is the page's claim.
+    private func recordVisit() {
+        let status = navHttpStatus
+        webView.evaluateJavaScript(Self.pageFactsScript, in: nil, in: .defaultClient) { [weak self] result in
             MainActor.assumeIsolated {
-                guard let self, !self.tornDown else { return }
-                var href = fallback
-                if case .success(let value) = result, let text = value as? String,
-                   text.hasPrefix("https://") || text.hasPrefix("http://") {
-                    href = text
-                }
-                self.favicon = href
-                self.onVisited(self.url, self.title, href)
+                guard let self, !self.tornDown,
+                      case .success(let facts) = result,
+                      let visit = Self.visit(facts: facts, httpStatus: status)
+                else { return }
+                self.favicon = visit.favicon ?? ""
+                self.onVisited(visit.url, visit.title ?? "", visit.favicon ?? "")
             }
         }
     }
@@ -272,14 +447,19 @@ extension BrowserEngine: WKNavigationDelegate {
         _ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!
     ) {
         let attempt = webView.url?.absoluteString
-        MainActor.assumeIsolated {
-            // A new attempt clears the last failure — and remembers where it
-            // is going, because that is the only moment the URL is knowable if
-            // this one fails too.
-            failure = nil
-            if let attempt, !attempt.isEmpty { failedURL = attempt }
-            update(loading: true)
-        }
+        MainActor.assumeIsolated { provisionalStarted(attempt: attempt) }
+    }
+
+    /// A new attempt remembers where it is going, because that is the only
+    /// moment the URL is knowable if this one fails too. It does NOT clear a
+    /// failure (spec 079): the panel stays through a retry and gives way only
+    /// to a page that commits.
+    func provisionalStarted(attempt: String?) {
+        guard !tornDown else { return }
+        navHttpStatus = nil
+        attemptFailed = false
+        if let attempt, !attempt.isEmpty, attempt != "about:blank" { failedURL = attempt }
+        update(loading: true)
     }
 
     /// The document changed: THIS is when the core hears a navigation began.
@@ -294,19 +474,83 @@ extension BrowserEngine: WKNavigationDelegate {
     nonisolated func webView(
         _ webView: WKWebView, didCommit navigation: WKNavigation!
     ) {
-        MainActor.assumeIsolated {
-            failure = nil
-            update(loading: true)
-            onNavigationStarted(url)
-        }
+        MainActor.assumeIsolated { committed() }
+    }
+
+    /// The site answered and its document is on its way: whatever failed
+    /// before is over. (WebKit draws no error page of its own, so a commit is
+    /// always the site — unlike Android's WebView.)
+    func committed() {
+        guard !tornDown, !Self.isEngineBlank(reportedURL()) else { return }
+        clearFailure()
+        update(loading: true)
+        onNavigationStarted(url)
     }
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        MainActor.assumeIsolated { finished() }
+    }
+
+    func finished() {
+        guard !tornDown else { return }
+        if Self.isEngineBlank(reportedURL()) {
+            if !attemptFailed, !(failedURL.isEmpty && url.isEmpty) {
+                // Behind a proxy — the Mac's for the simulator, Shadowrocket on
+                // the iPhone, the norm for many of the people this is for — a
+                // first load the site never answered ends HERE, on WebKit's
+                // blank, with no failure callback at all (measured: provisional
+                // start, then only the blank's commit and finish). The page that
+                // was asked for did not arrive, so it is a failure, told as a
+                // connection that closed without an answer: the class Android
+                // gives the same empty response (`ERR_EMPTY_RESPONSE`). A retry
+                // ends the same way, so this also closes a retry's attempt.
+                fail(code: NSURLErrorNetworkConnectionLost, domain: NSURLErrorDomain)
+                onLoadFinished(url)
+            } else {
+                // The load that led here failed and said so; keep its panel.
+                update(loading: false)
+            }
+            return
+        }
+        clearFailure()
+        update(loading: false)
+        onLoadFinished(url)
+        if !origin.isEmpty { recordVisit() }
+        captureSnapshot()
+    }
+
+    /// WebKit's own empty document. A fresh view whose first load was refused
+    /// commits and finishes `about:blank` (spec 079 — found on the Mac, then
+    /// on the iPhone as a white page with an empty address bar and no panel):
+    /// it is not the site arriving and not an address. A person cannot open
+    /// it in the main frame themselves; the address bar never loads it.
+    static func isEngineBlank(_ url: URL?) -> Bool { url?.absoluteString == "about:blank" }
+
+    /// The address the page is really at — `nil` for none, or for WebKit's blank.
+    private var liveURL: URL? {
+        let reported = reportedURL()
+        return Self.isEngineBlank(reported) ? nil : reported
+    }
+
+    private func clearFailure() {
+        cancelRetry()
+        retryAttempt = 0
+        failure = nil
+        retrying = false
+    }
+
+    /// The main document's response: its HTTP status, for the visit rule.
+    nonisolated func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+    ) {
+        let status = navigationResponse.isForMainFrame
+            ? (navigationResponse.response as? HTTPURLResponse)?.statusCode
+            : nil
         MainActor.assumeIsolated {
-            failure = nil
-            update(loading: false)
-            onLoadFinished(url)
-            if !origin.isEmpty { readFavicon() }
+            if let status { navHttpStatus = status }
+            decisionHandler(.allow)
         }
     }
 
@@ -330,14 +574,19 @@ extension BrowserEngine: WKNavigationDelegate {
         didFailProvisionalNavigation navigation: WKNavigation!,
         withError error: Error
     ) {
-        let described = Self.describe(error)
-        let attempt = (error as NSError)
-            .userInfo[NSURLErrorFailingURLStringErrorKey] as? String
+        let nsError = error as NSError
+        let attempt = nsError.userInfo[NSURLErrorFailingURLStringErrorKey] as? String
         MainActor.assumeIsolated {
-            if let attempt, !attempt.isEmpty { failedURL = attempt }
-            fail(described)
-            onLoadFinished(url)
+            provisionalFailed(code: nsError.code, domain: nsError.domain, attempt: attempt)
         }
+    }
+
+    /// A navigation that never committed, through the core's classifier.
+    func provisionalFailed(code: Int, domain: String, attempt: String?) {
+        guard !tornDown else { return }
+        if let attempt, !attempt.isEmpty { failedURL = attempt }
+        fail(code: code, domain: domain)
+        onLoadFinished(url)
     }
 
     /// The renderer died (memory pressure, a crash). The app does not: the
@@ -353,28 +602,27 @@ extension BrowserEngine: WKNavigationDelegate {
         }
     }
 
-    /// A navigation that did not happen, recorded and reported.
-    private func fail(_ described: String) {
-        // Cancellation is not a failure: a page that navigates while the last
-        // request is in flight cancels it, and every redirect chain does this.
-        guard described != Self.cancelled else {
+    /// A navigation that did not happen, classified by the core (spec 079)
+    /// and shown with its reason; retried on the core's schedule when a
+    /// retry can help.
+    private func fail(code: Int, domain: String) {
+        // Not a failure (the core's `None`): a cancelled navigation — a page
+        // that navigates while the last request is in flight cancels it, and
+        // every redirect chain does this — or a frame load interrupted by a
+        // new one. A retry cut short that way is simply over.
+        guard let classified = browserLoadClassify(
+            platform: "apple", code: Int64(code), domain: domain, certificate: false
+        ) else {
+            retrying = false
             update(loading: false)
             return
         }
-        failure = described
+        failure = classified
+        attemptFailed = true
+        retrying = false
         update(loading: false)
-        print("[vela-wallet] browser load failed: \(failedURL) — \(described)")
-    }
-
-    nonisolated static let cancelled = "cancelled"
-
-    /// The system's own words for what went wrong, kept short enough to sit
-    /// under a sentence from the corpus.
-    nonisolated static func describe(_ error: Error) -> String {
-        let nsError = error as NSError
-        guard nsError.domain == NSURLErrorDomain else { return nsError.localizedDescription }
-        if nsError.code == NSURLErrorCancelled { return cancelled }
-        return "\(nsError.localizedDescription) (\(nsError.code))"
+        print("[vela-wallet] browser load failed: \(failedURL) — \(domain) \(code) → \(classified.class)")
+        scheduleRetry(classified)
     }
 
     /// `http` and `https` load here; `about:blank` and `about:srcdoc` load
@@ -391,12 +639,22 @@ extension BrowserEngine: WKNavigationDelegate {
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
         let target = navigationAction.request.url
+        let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
         switch Self.policy(
             scheme: target?.scheme,
-            isMainFrame: navigationAction.targetFrame?.isMainFrame ?? true,
+            isMainFrame: isMainFrame,
             linkActivated: navigationAction.navigationType == .linkActivated
         ) {
         case .allow:
+            // A new document the page asked for (a link, a form, a script):
+            // progress from the tap, not from the commit (spec 079). Not for a
+            // jump within the same document — no load follows one.
+            if isMainFrame, let target {
+                let current = webView.url
+                MainActor.assumeIsolated {
+                    if Self.leavesDocument(from: current, to: target) { requested() }
+                }
+            }
             decisionHandler(.allow)
         case .cancel:
             decisionHandler(.cancel)
@@ -409,6 +667,18 @@ extension BrowserEngine: WKNavigationDelegate {
     }
 
     enum Policy: Equatable { case allow, cancel, handToSystem }
+
+    /// Whether going to `target` loads a new document: anything but a jump to
+    /// a fragment of the page already showing.
+    nonisolated static func leavesDocument(from current: URL?, to target: URL) -> Bool {
+        guard let current else { return true }
+        func bare(_ url: URL) -> String {
+            var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            components?.fragment = nil
+            return components?.string ?? url.absoluteString
+        }
+        return bare(current) != bare(target) || target.fragment == nil
+    }
 
     /// The rule above, as a pure function.
     nonisolated static func policy(scheme: String?, isMainFrame: Bool, linkActivated: Bool) -> Policy {

@@ -1403,7 +1403,11 @@
    "selfCallBlockedTitle": "Vela はこの要求に署名しません",
    "selfCallBlockedBody": "この要求は、ウォレットを誰が管理するかを変更します（{{function}}）。一度署名するだけでウォレットを他人に渡してしまう可能性があるため、Vela は拒否しました。何も署名していません。",
    "selfCallBlockedLegBody": "この要求の {{index}} 番目の処理が、ウォレットを誰が管理するかを変更します（{{function}}）。一度署名するだけでウォレットを他人に渡してしまう可能性があるため、Vela は要求全体を拒否しました。何も署名していません。",
-   "selfCallBlockedSafeTx": "この要求は、後で実行される Safe トランザクションの承認を鍵に求めています。そのような署名はあなたがいない場所でも使えるため、Vela は拒否しました。何も署名していません。"
+   "selfCallBlockedSafeTx": "この要求は、後で実行される Safe トランザクションの承認を鍵に求めています。そのような署名はあなたがいない場所でも使えるため、Vela は拒否しました。何も署名していません。",
+   "stillConfirming": "未確定です。Vela が確認を続けます。再送信しないでください。",
+   "unknownOutcome": "24 時間経っても未確認です。",
+   "openSigner": "署名ページで確認",
+   "signerDown": "署名ページを開けません。接続を確認してください。"
   },
   "signingApprove": {
    "resultingTotal": "新しい承認上限",
@@ -1837,6 +1841,11 @@
   "pageCrashedBody": "ページが予期せず終了しました。ウォレットには影響ありません。再読み込みして続けてください。",
   "walletConnectUnsupported": "WalletConnect のリンクには対応していません。「探索」で dApp を開き、ページから接続してください。",
   "scanUnrecognized": "このコードはウェブアドレスでもウォレットアドレスでもありません。",
-  "linkCopied": "リンクをコピーしました"
+  "linkCopied": "リンクをコピーしました",
+  "loadOffline": "接続が不安定で開けませんでした。",
+  "loadNotFound": "サイトが見つかりません。URL を確認してください。",
+  "loadCertificate": "証明書が無効なため、Vela がブロックしました。",
+  "loadRetrying": "再試行中…",
+  "chainDown": "{{chain}} に接続できず、データが不完全な可能性があります。"
  }
 }

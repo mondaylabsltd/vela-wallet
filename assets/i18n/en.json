@@ -1455,7 +1455,11 @@
    "selfCallBlockedTitle": "Vela can’t sign this",
    "selfCallBlockedBody": "This request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses it. Nothing was signed.",
    "selfCallBlockedLegBody": "Step {{index}} of this request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses the whole request. Nothing was signed.",
-   "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed."
+   "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed.",
+   "stillConfirming": "Not on-chain yet. Vela keeps checking — don't send it again.",
+   "unknownOutcome": "Still unconfirmed after 24 hours.",
+   "openSigner": "Continue to signing page",
+   "signerDown": "Couldn't open the signing page. Check your connection."
   },
   "currency": {
    "title": "Display currency",
@@ -1847,6 +1851,11 @@
   "pageCrashedBody": "The page closed unexpectedly. Your wallet is not affected — reload to continue.",
   "walletConnectUnsupported": "WalletConnect links aren’t supported. Open the dApp in Explore and connect from there.",
   "scanUnrecognized": "This code isn’t a web address or a wallet address.",
-  "linkCopied": "Link copied"
+  "linkCopied": "Link copied",
+  "loadOffline": "Unstable connection — the page didn't open.",
+  "loadNotFound": "Site not found. Check the address.",
+  "loadCertificate": "This site's certificate is invalid, so Vela blocked it.",
+  "loadRetrying": "Retrying…",
+  "chainDown": "Can't reach {{chain}} — page data may be incomplete."
  }
 }

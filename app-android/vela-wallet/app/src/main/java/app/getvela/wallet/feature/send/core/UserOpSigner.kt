@@ -88,4 +88,10 @@ data class TrustedSignerLabels(val chainName: String? = null, val nativeSymbol: 
  * method and params, and the site's origin. The wallet's own send has none —
  * the core builds `wallet_sendCalls` from its calls.
  */
-data class TrustedSignerIntent(val method: String, val paramsJson: String, val origin: String)
+data class TrustedSignerIntent(
+    val method: String,
+    val paramsJson: String,
+    val origin: String,
+    /** Spec 079: the origin was read from this app's own browser engine, not claimed by another app. */
+    val seenByBrowser: Boolean = false,
+)

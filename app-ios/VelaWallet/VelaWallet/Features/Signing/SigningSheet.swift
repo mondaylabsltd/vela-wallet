@@ -7,8 +7,15 @@
 //  asked for the signature, so the site you are dealing with never leaves
 //  the screen.
 //
-//  Dismissal is rejection. There is no "Reject" button anywhere, because a
-//  wallet with one teaches people to reach for it without reading.
+//  The header's ✕ is the one way to refuse (spec 079, owner ruling: "除非用户
+//  明确关掉，不应该很容易误操作，比如下滑就关掉了" — a stray swipe used to throw
+//  the dApp's request away). No swipe closes it: the presenter sets
+//  `.interactiveDismissDisabled()`. There is still no big "Reject" button,
+//  because a wallet with one teaches people to reach for it without reading.
+//
+//  After the approval the form gives way to the send receipt's own body
+//  (`SigningModel.receipt`); closing then refuses nothing — the core routes
+//  the same close to a plain dismiss once the commitment point has passed.
 //
 
 import SwiftUI
@@ -31,6 +38,13 @@ struct SigningSheet: View {
     var onFeePick: (String) -> Void = { _ in }
     /// The speed control (spec 069): `nil` folds or unfolds it; an id picks.
     var onSpeed: (String?) -> Void = { _ in }
+    /// Spec 079: the header's ✕ and the receipt's button — the sheet's one
+    /// explicit close. `nil` in the gallery, which has nothing to close.
+    var onClose: (() -> Void)?
+    /// Spec 079: the landed receipt's "view on explorer".
+    var onExplorer: () -> Void = {}
+    /// Spec 079: the fee row's refresh — measure again.
+    var onRefreshFee: (() -> Void)?
 
     @State private var techOverride: Bool?
 
@@ -42,39 +56,76 @@ struct SigningSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Tokens.Space.s16) {
                 SigningHeaderView(dapp: model.dapp, network: model.network, own: model.dappOwn,
-                                  iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl)
+                                  iconUrls: model.dappIconUrls, networkLogoUrl: model.networkLogoUrl,
+                                  onClose: onClose, closeLabel: model.closeLabel)
                     .padding(.top, Tokens.Space.s8)
 
-                ForEach(model.blocks) { block in
-                    blockView(block)
-                }
-
-                Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
-
-                if !model.tech.isEmpty {
-                    TechDetailsView(tech: model.tech, open: techOpen)
-                }
-                if let fee = model.fee {
-                    SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
-                                   speed: model.feeSpeed, onSpeed: onSpeed)
-                }
-                SigningSignerRow(label: model.signer.label, name: model.signer.name,
-                                 seed: model.signer.seed)
-                // Spec 081: a refused request offers no confirm control at
-                // all. It is not disabled — it is absent, because the wallet
-                // never offered it.
-                if let confirm = model.confirm {
-                    SlideToConfirmView(
-                        hint: confirm.hint, action: confirm.action,
-                        enabled: confirm.enabled, onConfirm: onConfirm
-                    )
-                    .padding(.bottom, Tokens.Space.s16)
+                // Spec 079: approved — the receipt replaces the form.
+                if let receipt = model.receipt {
+                    receiptBody(receipt)
+                } else {
+                    form
                 }
             }
             .padding(.horizontal, Tokens.Layout.screenPaddingX)
         }
         .background(theme.bgRaised.ignoresSafeArea())
         .accessibilityLabel(model.panelTitle)
+    }
+
+    /// The send receipt's own body and its one button, so a dApp transaction
+    /// and a send look the same while they land.
+    private func receiptBody(_ receipt: SendReceiptModel) -> some View {
+        VStack(spacing: Tokens.Space.s24) {
+            SendReceiptBody(model: receipt, onExplorer: onExplorer)
+                .padding(.top, Tokens.Space.s16)
+            if let onClose {
+                VelaButton(title: receipt.cta, kind: receipt.ctaAccent ? .primary : .secondary,
+                           action: onClose)
+                    .accessibilityIdentifier("signing.receipt.cta")
+            }
+        }
+        .padding(.bottom, Tokens.Space.s16)
+    }
+
+    @ViewBuilder
+    private var form: some View {
+        ForEach(model.blocks) { block in
+            blockView(block)
+        }
+
+        Divider().overlay(theme.borderBase).padding(.top, Tokens.Space.s4)
+
+        if !model.tech.isEmpty {
+            TechDetailsView(tech: model.tech, open: techOpen)
+        }
+        if let fee = model.fee {
+            SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
+                           speed: model.feeSpeed, onSpeed: onSpeed,
+                           refresh: onRefreshFee == nil ? nil : model.feeRefresh,
+                           onRefresh: onRefreshFee, chevron: model.feeChevron)
+        }
+        SigningSignerRow(label: model.signer.label, name: model.signer.name,
+                         seed: model.signer.seed)
+        // Spec 081: a refused request offers no confirm control at
+        // all. It is not disabled — it is absent, because the wallet
+        // never offered it.
+        if let confirm = model.confirm {
+            if model.confirmAsButton {
+                // Spec 079: one slide per signature — the page's own. The
+                // button sends the same approve the slide would.
+                VelaButton(title: model.confirmButtonLabel, kind: .primary,
+                           enabled: confirm.enabled, action: onConfirm)
+                    .padding(.bottom, Tokens.Space.s16)
+                    .accessibilityIdentifier("signing.openSigner")
+            } else {
+                SlideToConfirmView(
+                    hint: confirm.hint, action: confirm.action,
+                    enabled: confirm.enabled, onConfirm: onConfirm
+                )
+                .padding(.bottom, Tokens.Space.s16)
+            }
+        }
     }
 
     /// The universal renderer: blocks in mock order, out. Nothing here knows

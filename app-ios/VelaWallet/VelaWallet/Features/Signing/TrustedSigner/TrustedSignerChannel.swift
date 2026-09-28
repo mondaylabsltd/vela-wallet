@@ -129,6 +129,30 @@ final class TrustedSignerChannel: TrustedSignerConversation {
     /// business and not this class's.
     var openPage: ((URL) -> Void)?
 
+    // MARK: Spec 079 — a page that never opened
+
+    /// Whether the page's address answers at all — any HTTP status counts.
+    /// Asked only when the person is back with no answer, or the tab said its
+    /// first load failed; given the address alone (`probeUrl`), never the
+    /// request. The app injects `headProbe`; tests inject a verdict.
+    var reachable: (URL) async -> Bool = { _ in true }
+    /// The current visit's page could not open: the person came back with no
+    /// answer (or the tab's first load failed) and the page's address does
+    /// not answer. The waiting card says so and offers a retry; the request
+    /// stays open.
+    private(set) var unreachable = false
+    /// Told whenever `unreachable` changes — the waiting card's model.
+    var onUnreachableChanged: (Bool) -> Void = { _ in }
+    /// The visit (by its token) whose page the tab reported as loaded: a page
+    /// that opened is not "a page that could not open", whatever the network
+    /// says now — it may have come from the cache (spec 079 FR-027).
+    private var loadedVisit: String?
+
+    /// A moment's grace after the person is back before asking: the answer
+    /// may already be on its way (the tab often outlives the navigation to
+    /// the callback). Android's 1.2 s.
+    static let returnGrace: TimeInterval = 1.2
+
     /// Terminal: a timeout, a cancel, or a request that could not go out.
     /// Answered to every later caller.
     private var terminal: Ending?
@@ -191,6 +215,8 @@ final class TrustedSignerChannel: TrustedSignerConversation {
         TrustedSignerCallbacks.forget(token)
         token = Self.freshToken()
         current = ask
+        loadedVisit = nil
+        setUnreachable(false)
         guard let url = visit(ask) else { return .unavailable }
         armDeadline()
         openPage?(url)
@@ -308,7 +334,85 @@ final class TrustedSignerChannel: TrustedSignerConversation {
     /// signature the person just approved into a refusal. The callback that
     /// is on its way settles the request; if none comes, the clock does, and
     /// the waiting sheet keeps its two ways on in the meantime.
-    func pageClosed() {}
+    ///
+    /// Spec 079: after a moment's grace, a page that never reported loading
+    /// is asked about — see `personReturned`.
+    func pageClosed(grace: TimeInterval = TrustedSignerChannel.returnGrace) {
+        Task { @MainActor [weak self] in await self?.personReturned(after: grace) }
+    }
+
+    /// The tab reported its first load: it opened, or it could not.
+    func pageLoaded(_ loaded: Bool) async {
+        if loaded {
+            loadedVisit = token
+            return
+        }
+        // No answer can be on its way from a page that never loaded: no grace.
+        await personReturned(after: 0, ignoringLoad: true)
+    }
+
+    /// Spec 079: the person is back and the page has not answered. A closed
+    /// tab does not say why — a page that never loaded looks the same as a
+    /// mind changed — so ask whether the page's address answers at all; when
+    /// it does not, the waiting card says the page could not open. The request
+    /// stays open either way: retry, or cancel.
+    func personReturned(after grace: TimeInterval = 0, ignoringLoad: Bool = false) async {
+        let visit = token
+        guard !stopped, !unreachable, ignoringLoad || loadedVisit != visit else { return }
+        if grace > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(grace * 1_000_000_000))
+        }
+        // Still the same visit, still unanswered.
+        guard !stopped, token == visit, !unreachable,
+              let page = launchUrl.flatMap(Self.probeUrl)
+        else { return }
+        let answers = await reachable(page)
+        guard !answers, !stopped, token == visit else { return }
+        setUnreachable(true)
+    }
+
+    /// The card's Retry: the same page, the same visit, waiting again.
+    func retried() {
+        loadedVisit = nil
+        setUnreachable(false)
+    }
+
+    private func setUnreachable(_ value: Bool) {
+        guard unreachable != value else { return }
+        unreachable = value
+        onUnreachableChanged(value)
+    }
+
+    /// The page's address alone: no fragment (where the request rides) and
+    /// no query, so nothing of the request reaches a server. Web addresses
+    /// only.
+    nonisolated static func probeUrl(_ url: URL) -> URL? {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased(), scheme == "https" || scheme == "http"
+        else { return nil }
+        components.fragment = nil
+        components.query = nil
+        return components.url
+    }
+
+    /// One HEAD to the page's address, five seconds at most: any HTTP answer
+    /// means the page could have opened; no answer means it could not.
+    /// Ephemeral — no cookie, no cache.
+    nonisolated static func headProbe(_ url: URL) async -> Bool {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 5)
+        request.httpMethod = "HEAD"
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 5
+        let session = URLSession(configuration: configuration)
+        defer { session.finishTasksAndInvalidate() }
+        do {
+            let (_, response) = try await session.data(for: request)
+            return response is HTTPURLResponse
+        } catch {
+            return false
+        }
+    }
 
     /// One request's verdict, to whoever is waiting for it — or kept for the
     /// caller that has not asked yet.

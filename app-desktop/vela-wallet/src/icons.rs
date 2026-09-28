@@ -88,6 +88,9 @@ pub enum Icon {
     Share2,
     Power,
     Lock,
+    /// Lucide `lock-open`: a page on plain http (spec 079, owner: a lock, and
+    /// only a lock, says whether the connection is https).
+    LockOpen,
     /// The group manager's drag handle. Part of the shared spec-022 glyph
     /// contract so all four platforms extract the same lucide source; the
     /// desktop mocks have no group manager (DE2 manages favourites by
@@ -255,6 +258,9 @@ fn body(icon: Icon, solid: bool) -> &'static str {
         Icon::Power => r##"<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>"##,
         Icon::Lock => {
             r##"<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>"##
+        }
+        Icon::LockOpen => {
+            r##"<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>"##
         }
         Icon::GripVertical => {
             r##"<circle cx="9" cy="5.5" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="9" cy="18.5" r="1.2"/><circle cx="16" cy="5.5" r="1.2"/><circle cx="16" cy="12" r="1.2"/><circle cx="16" cy="18.5" r="1.2"/>"##

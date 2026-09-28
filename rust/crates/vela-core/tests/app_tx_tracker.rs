@@ -12,9 +12,10 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::tx_tracker::{
-    Event, TrackLifecycle, TrackOperation as Op, TrackPendingRecord, TrackRecordPatch,
-    TrackRecordStatus, TrackShellResult as Res, TrackStatus, TxTracker, ABANDON_AGE_MS,
-    FEE_HOLD_STAGE, WAIT_WINDOW_MS,
+    receipt_interval_ms, Event, TrackLifecycle, TrackOperation as Op, TrackOutcome,
+    TrackPendingRecord, TrackRecordPatch, TrackRecordStatus, TrackShellResult as Res, TrackStatus,
+    TxTracker, ABANDON_AGE_MS, FEE_HOLD_STAGE, RECONCILE_MIN_INTERVAL_MS,
+    SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS, WAIT_WINDOW_MS,
 };
 
 type Sut = DomainDriver<TxTracker>;
@@ -665,4 +666,117 @@ fn abort_keeps_tracking_and_a_late_receipt_still_confirms() {
     let ops = sut.resolve(receipt_confirmed(T0 + WAIT_WINDOW_MS + 5_300.0));
     assert_eq!(ops, vec![confirm_patch(), notify_confirmed()]);
     assert_eq!(entry_status(&sut), TrackStatus::Confirmed);
+}
+
+// ---------------------------------------------------------------------------
+// Spec 079 — the asking slows with age; the words follow the lifecycle
+// ---------------------------------------------------------------------------
+
+const MINUTE: f64 = 60_000.0;
+
+/// The cadence table itself: 3 s in the window, 12 s for the first ten
+/// minutes, once a minute until an hour, once every five minutes after.
+#[test]
+fn receipt_polls_slow_down_as_an_op_ages() {
+    assert_eq!(receipt_interval_ms(true, 30_000.0), 3_000.0);
+    assert_eq!(
+        receipt_interval_ms(false, 5.0 * MINUTE),
+        RECONCILE_MIN_INTERVAL_MS
+    );
+    assert_eq!(
+        receipt_interval_ms(false, 30.0 * MINUTE),
+        SLOW_RECEIPT_INTERVAL_MS
+    );
+    assert_eq!(
+        receipt_interval_ms(false, 180.0 * MINUTE),
+        SLOWEST_RECEIPT_INTERVAL_MS
+    );
+}
+
+/// Driven through the machine: at 30 minutes old a poll 20 s after the last
+/// answer is not due; one a minute after is. Still no patch anywhere.
+#[test]
+fn a_half_hour_old_op_is_asked_once_a_minute() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+
+    let at = T0 + 30.0 * MINUTE;
+    assert_eq!(tick(&mut sut, at), vec![poll_receipt()]);
+    assert!(sut.resolve(receipt_pending(at + 200.0)).is_empty());
+    assert_eq!(
+        tick(&mut sut, at + 20_000.0),
+        vec![],
+        "not due at a 12 s pace any more"
+    );
+    assert_eq!(tick(&mut sut, at + 61_000.0), vec![poll_receipt()]);
+    assert!(sut.resolve(receipt_pending(at + 61_300.0)).is_empty());
+    assert_eq!(
+        entry_status(&sut),
+        TrackStatus::AcceptedNotLanded,
+        "time never fails it"
+    );
+    assert_eq!(sut.outstanding(), vec![], "no patch was issued anywhere");
+}
+
+/// Three hours old: five minutes between polls.
+#[test]
+fn a_three_hour_old_op_is_asked_every_five_minutes() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+
+    let at = T0 + 180.0 * MINUTE;
+    assert_eq!(tick(&mut sut, at), vec![poll_receipt()]);
+    assert!(sut.resolve(receipt_pending(at + 200.0)).is_empty());
+    assert_eq!(tick(&mut sut, at + 2.0 * MINUTE), vec![]);
+    assert_eq!(
+        tick(&mut sut, at + 5.0 * MINUTE + 1_000.0),
+        vec![poll_receipt()]
+    );
+}
+
+fn outcome(sut: &Sut) -> TrackOutcome {
+    sut.view().entries[0].outcome
+}
+
+/// The four words a client picks from, in the order an op lives them.
+#[test]
+fn the_outcome_follows_the_lifecycle_never_the_clock_alone() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    assert_eq!(outcome(&sut), TrackOutcome::Landing);
+
+    tick(&mut sut, T0 + WAIT_WINDOW_MS + 500.0);
+    assert!(sut
+        .resolve(receipt_pending(T0 + WAIT_WINDOW_MS + 800.0))
+        .is_empty());
+    assert_eq!(outcome(&sut), TrackOutcome::StillConfirming);
+
+    assert_eq!(tick(&mut sut, T0 + ABANDON_AGE_MS + 1_000.0), vec![]);
+    assert_eq!(outcome(&sut), TrackOutcome::Unknown);
+    assert_eq!(
+        entry_status(&sut),
+        TrackStatus::AcceptedNotLanded,
+        "unknown, not failed"
+    );
+}
+
+#[test]
+fn a_landed_op_is_final() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    assert_eq!(tick(&mut sut, T0 + 3_400.0), vec![poll_receipt()]);
+    sut.resolve(receipt_confirmed(T0 + 3_700.0));
+    assert_eq!(outcome(&sut), TrackOutcome::Final);
+}
+
+/// An abort (the person closed the waiting sheet) keeps tracking, worded as
+/// still confirming — it is not landing any more as far as the sheet goes.
+#[test]
+fn an_aborted_op_reads_still_confirming() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    sut.dispatch(Event::Abort {
+        user_op_hash: HASH.to_owned(),
+    });
+    assert_eq!(outcome(&sut), TrackOutcome::StillConfirming);
 }

@@ -1406,7 +1406,11 @@
    "selfCallBlockedTitle": "A Vela não assina esta solicitação",
    "selfCallBlockedBody": "Esta solicitação mudaria quem controla a sua carteira ({{function}}). Assinar uma vez pode entregar a carteira a outra pessoa, então a Vela recusa. Nada foi assinado.",
    "selfCallBlockedLegBody": "A etapa {{index}} desta solicitação mudaria quem controla a sua carteira ({{function}}). Assinar uma vez pode entregar a carteira a outra pessoa, então a Vela recusa a solicitação inteira. Nada foi assinado.",
-   "selfCallBlockedSafeTx": "Esta solicitação pede que a sua chave autorize uma transação Safe para ser executada depois. A Vela recusa — uma assinatura dessas pode ser usada sem você. Nada foi assinado."
+   "selfCallBlockedSafeTx": "Esta solicitação pede que a sua chave autorize uma transação Safe para ser executada depois. A Vela recusa — uma assinatura dessas pode ser usada sem você. Nada foi assinado.",
+   "stillConfirming": "Ainda não está na rede. O Vela continua verificando — não envie de novo.",
+   "unknownOutcome": "Ainda sem confirmação após 24 horas.",
+   "openSigner": "Confirmar na página de assinatura",
+   "signerDown": "A página de assinatura não abriu. Verifique sua conexão."
   },
   "signingApprove": {
    "resultingTotal": "Novo limite total",
@@ -1841,6 +1845,11 @@
   "pageCrashedBody": "A página foi fechada inesperadamente. Sua carteira não foi afetada — recarregue para continuar.",
   "walletConnectUnsupported": "Links do WalletConnect não são compatíveis. Abra o dApp em Explorar e conecte-se por lá.",
   "scanUnrecognized": "Este código não é um endereço web nem um endereço de carteira.",
-  "linkCopied": "Link copiado"
+  "linkCopied": "Link copiado",
+  "loadOffline": "Conexão instável — a página não abriu.",
+  "loadNotFound": "Não foi possível encontrar este site. Confira o endereço.",
+  "loadCertificate": "O certificado deste site é inválido, e o Vela o bloqueou.",
+  "loadRetrying": "Tentando de novo…",
+  "chainDown": "Sem conexão com {{chain}} — os dados da página podem estar incompletos."
  }
 }

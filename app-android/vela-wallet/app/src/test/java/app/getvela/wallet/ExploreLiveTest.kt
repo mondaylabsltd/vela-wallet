@@ -15,6 +15,7 @@ import app.getvela.wallet.feature.explore.ExploreFixtures
 import app.getvela.wallet.feature.explore.ExploreScreenState
 import app.getvela.wallet.feature.explore.GroupAction
 import app.getvela.wallet.feature.explore.TileModel
+import app.getvela.wallet.feature.wallet.core.RpcPoolView
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -83,7 +84,94 @@ class ExploreLiveTest {
         assertFalse(model.browser.secure)
         assertTrue(model.browser.crashed)
         assertFalse(model.connection.secure)
-        assertEquals(strings.t("connect.browser.a11yInsecure"), model.siteMenuSheet.statusLine)
+        // Spec 079 (owner): the open lock alone says it — no words either way.
+        assertEquals("", model.siteMenuSheet.statusLine)
+        assertFalse(model.siteMenuSheet.secure)
+    }
+
+    /** Spec 079: a failed page says why in the core's words, and says it is retrying. */
+    @Test
+    fun `a failed page carries its reason and its retry`() {
+        val view = ExploreView(tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/", "", "app.uniswap.org")), selected_tab = "t1", ready = true)
+        val failure = uniffi.vela_core_uniffi.BrowserLoadFailure(`class` = "offline", reasonKey = "explore.loadOffline", autoRetry = true)
+        val engine = EngineState(url = "https://app.uniswap.org/", origin = "https://app.uniswap.org", host = "app.uniswap.org", failed = true, failure = failure, retrying = true)
+        val model = ExploreLive.home(fallback, view, BhistView(), engine, strings)
+        assertTrue(model.browser.failed)
+        assertEquals(strings.t("explore.loadOffline"), model.browser.failureReason)
+        assertTrue(model.browser.retrying)
+    }
+
+    /** Spec 079: the page's chain notice is the pool's verdict — never for a chain merely busy. */
+    @Test
+    fun `a chain the pool could not reach is named once, and a busy one is not`() {
+        val view = ExploreView(tabs = listOf(ExploreTab("t1", "http://127.0.0.1:8137/", "", "127.0.0.1:8137")), selected_tab = "t1", ready = true)
+        val engine = EngineState(url = "http://127.0.0.1:8137/", origin = "http://127.0.0.1:8137", host = "127.0.0.1:8137")
+        val tab = DbrTabView(tab = "t1", origin = "http://127.0.0.1:8137", chain_id = 100)
+        val identity = ExploreLive.Identity(chainName = "Gnosis", chainId = 100)
+        val down = RpcPoolView(failed_chains = listOf(100))
+        val busy = RpcPoolView(failed_chains = listOf(100), rate_limited_chains = listOf(100))
+        val other = RpcPoolView(failed_chains = listOf(1))
+
+        val named = ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = down)
+        assertEquals(strings.t("explore.chainDown", mapOf("chain" to "Gnosis")), named.browser.chainNotice)
+        assertTrue(named.browser.chainNotice!!.contains("Gnosis"))
+        assertNull(ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = busy).browser.chainNotice)
+        assertNull(ExploreLive.home(fallback, view, BhistView(), engine, strings, tab, identity, pool = other).browser.chainNotice)
+        assertNull("no page, no notice", ExploreLive.home(fallback, view, BhistView(), null, strings, tab, identity, pool = down).browser.chainNotice)
+    }
+
+    /** Spec 079: a tab card shows its page's snapshot; a start page keeps the drawing. */
+    @Test
+    fun `a tab with a page carries its snapshot, a start page does not`() {
+        val view = ExploreView(
+            tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/", "Uniswap", "app.uniswap.org"), ExploreTab("t2", null, "", "")),
+            selected_tab = "t1",
+            ready = true,
+        )
+        // A plain JVM test has no android.graphics.Bitmap; any ImageBitmap stands in.
+        val image = java.lang.reflect.Proxy.newProxyInstance(
+            javaClass.classLoader,
+            arrayOf(androidx.compose.ui.graphics.ImageBitmap::class.java),
+        ) { proxy, method, args -> if (method.name == "equals") proxy === args?.firstOrNull() else if (method.name == "hashCode") 1 else null } as androidx.compose.ui.graphics.ImageBitmap
+        val model = ExploreLive.home(fallback, view, BhistView(), null, strings, snapshots = mapOf("t1" to image, "t2" to image))
+        assertEquals(image, model.tabs.first { it.id == "t1" }.snapshot)
+        assertNull(model.tabs.first { it.id == "t2" }.snapshot)
+    }
+
+    /** Spec 079 (owner): network rows carry a logo and the home screen's balance, never a zero; accounts their identicon. */
+    @Test
+    fun `network rows carry a logo and what the account holds, accounts their identicon`() {
+        val nets = listOf(100L, 56L, 1L, 42161L).map { app.getvela.wallet.feature.settings.core.NetNetworkRow(id = it.toString(), chain_id = it, display_name = "", native_symbol = "") }
+        fun token(chain: Int, balance: String, price: Double?, spam: Boolean = false) =
+            app.getvela.wallet.feature.wallet.core.BalanceToken(chain_id = chain, symbol = "T", name = "T", balance = balance, decimals = 18, price_usd = price, spam = spam)
+        val balances = app.getvela.wallet.feature.wallet.core.BalanceView(
+            tokens = listOf(
+                token(100, "2.5", 1.0), token(100, "1000", 1.0, spam = true),
+                token(56, "0.001", 1.0),
+                token(42161, "3", 2000.0),
+            ),
+            failed_chain_ids = listOf(42161),
+        )
+        val rows = ExploreLive.networkOptions(nets, mapOf(100 to "Gnosis", 56 to "BNB Chain", 1 to "Ethereum"), siteChain = 100, balances = balances, fiat = { "$" + "%.2f".format(it) })
+        val gnosis = rows.first { it.id == "100" }
+        assertEquals("Gnosis", gnosis.label)
+        assertTrue(gnosis.selected)
+        // The logo host is configured at runtime; here it may be unset, so the
+        // row must carry exactly what the marks helper names for that chain.
+        assertEquals(app.getvela.wallet.core.marks.Marks.chainLogoUrl(100), gnosis.logoUrl)
+        assertEquals("spam never counts", "$2.50", gnosis.amount)
+        assertNull("dust says nothing", rows.first { it.id == "56" }.amount)
+        assertNull("nothing held says nothing, never 0", rows.first { it.id == "1" }.amount)
+        assertNull("a chain whose read failed says nothing", rows.first { it.id == "42161" }.amount)
+        assertNull("hidden balances stay hidden", ExploreLive.networkOptions(nets, emptyMap(), 100, balances.copy(hidden = true)) { "x" }.first { it.id == "100" }.amount)
+
+        val accounts = ExploreLive.accountOptions(
+            listOf(app.getvela.wallet.feature.onboarding.core.SessionAccountRow(0, "Main", "0x88cCA0EeDbF2C4426110bbFc998F048689266894"), app.getvela.wallet.feature.onboarding.core.SessionAccountRow(1, "", "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141")),
+            active = "0x76875E38FC6BC2DEDCAED807CE00782DB5C0D141",
+        )
+        assertEquals("0x88cCA0EeDbF2C4426110bbFc998F048689266894", accounts[0].identiconSeed)
+        assertTrue(accounts[1].selected)
+        assertEquals(ExploreLive.shortAddress("0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"), accounts[1].label)
     }
 
     @Test
@@ -98,7 +186,8 @@ class ExploreLiveTest {
 
     @Test
     fun `a host's letter and colour are stable, and hidden system groups stay off the page`() {
-        assertEquals("A", ExploreLive.letterOf("app.uniswap.org"))
+        // Spec 079: the core's letter rule skips the `app.` everyone puts in front.
+        assertEquals("U", ExploreLive.letterOf("app.uniswap.org"))
         assertEquals("1", ExploreLive.letterOf("127.0.0.1:8137"))
         assertEquals("?", ExploreLive.letterOf("···"))
         assertEquals(ExploreLive.tintOf("app.uniswap.org"), ExploreLive.tintOf("app.uniswap.org"))

@@ -58,6 +58,11 @@
     "pageCrashedBody": "ページが予期せず終了しました。ウォレットには影響ありません。再読み込みして続けてください。",
     "walletConnectUnsupported": "WalletConnect のリンクには対応していません。「探索」で dApp を開き、ページから接続してください。",
     "scanUnrecognized": "このコードはウェブアドレスでもウォレットアドレスでもありません。",
-    "linkCopied": "リンクをコピーしました"
+    "linkCopied": "リンクをコピーしました",
+    "loadOffline": "接続が不安定で開けませんでした。",
+    "loadNotFound": "サイトが見つかりません。URL を確認してください。",
+    "loadCertificate": "証明書が無効なため、Vela がブロックしました。",
+    "loadRetrying": "再試行中…",
+    "chainDown": "{{chain}} に接続できず、データが不完全な可能性があります。"
   }
 }

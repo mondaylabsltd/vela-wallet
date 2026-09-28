@@ -42,6 +42,8 @@ class SignExecutor(
     private val receiptPollMs: Long = 3_000L,
     /** The asking site's origin — what the Trusted Signer names as the requester (spec 071). */
     private val origin: () -> String = { "" },
+    /** Spec 079: whether [origin] was read from the in-app browser (a page), not the wallet's own request. */
+    private val originSeenByBrowser: () -> Boolean = { false },
 ) {
     /** User-op hashes whose pending record has been written — the response never precedes the record. */
     private val persisted = MutableStateFlow<Set<String>>(emptySet())
@@ -168,7 +170,7 @@ class SignExecutor(
                 gasFeeToken = op.gas_fee_token,
                 quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
                 signingStarted = { ports.signingStarted() },
-                intent = TrustedSignerIntent(op.method, op.params_json, origin()),
+                intent = TrustedSignerIntent(op.method, op.params_json, origin(), originSeenByBrowser()),
             )
             ports.opSubmitted(op.id, hash)
             // §4: the durable record precedes anything the dApp could poll —
@@ -199,7 +201,7 @@ class SignExecutor(
                 spine.signMessage(
                     op.chain_id, op.address, original,
                     signingStarted = { ports.signingStarted() },
-                    intent = TrustedSignerIntent(op.method, op.params_json, origin()),
+                    intent = TrustedSignerIntent(op.method, op.params_json, origin(), originSeenByBrowser()),
                 ),
             )
         } catch (refused: UserOpSpine.Refused) {
@@ -213,11 +215,19 @@ class SignExecutor(
 
     private suspend fun awaitReceipt(chainId: Int, userOpHash: String): String? {
         val deadline = System.currentTimeMillis() + receiptWaitMs
-        while (System.currentTimeMillis() < deadline) {
-            when (val answer = relay.userOpReceipt(chainId, userOpHash)) {
-                is RelayClient.ReceiptAnswer.Resolved -> return answer.txHash
-                else -> delay(receiptPollMs)
-            }
+        while (true) {
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining <= 0) break
+            // Each poll gets only what is left of the window (spec 079,
+            // device-found): with the relay unreachable a single poll hung for
+            // its own timeouts and retries, and the page waited 268 s for a
+            // two-minute wait. The pool's await is cancellable; a late answer
+            // is dropped, and the tracker keeps following the operation.
+            val answer = withTimeoutOrNull(remaining) { relay.userOpReceipt(chainId, userOpHash) }
+            if (answer is RelayClient.ReceiptAnswer.Resolved) return answer.txHash
+            val left = deadline - System.currentTimeMillis()
+            if (left <= 0) break
+            delay(minOf(receiptPollMs, left))
         }
         return null
     }

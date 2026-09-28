@@ -58,6 +58,11 @@
     "pageCrashedBody": "Halaman tertutup secara tak terduga. Dompetmu tidak terpengaruh — muat ulang untuk melanjutkan.",
     "walletConnectUnsupported": "Tautan WalletConnect belum didukung. Buka dApp di Jelajahi dan hubungkan dari sana.",
     "scanUnrecognized": "Kode ini bukan alamat web maupun alamat dompet.",
-    "linkCopied": "Tautan disalin"
+    "linkCopied": "Tautan disalin",
+    "loadOffline": "Koneksi tidak stabil, halaman tidak terbuka.",
+    "loadNotFound": "Situs ini tidak ditemukan. Periksa alamatnya.",
+    "loadCertificate": "Sertifikat situs ini tidak valid, jadi Vela memblokirnya.",
+    "loadRetrying": "Mencoba lagi…",
+    "chainDown": "{{chain}} tidak terjangkau — data halaman mungkin tidak lengkap."
   }
 }

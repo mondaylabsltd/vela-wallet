@@ -23,8 +23,7 @@ struct SiteTileView: View {
             VStack(spacing: Tokens.Space.s8) {
                 switch tile {
                 case .site(let site):
-                    LetterAvatarView(letter: site.letter, tint: site.tint,
-                                     size: ExploreGeometry.tileAvatar)
+                    SiteAvatarView(site: site, size: ExploreGeometry.tileAvatar)
                     Text(verbatim: site.name)
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgBase)

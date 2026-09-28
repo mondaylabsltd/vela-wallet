@@ -136,8 +136,19 @@ class SigningController(
     private val _sim = MutableStateFlow<SimOutcome?>(null)
     val sim: StateFlow<SimOutcome?> = _sim
 
+    private val spine = UserOpSpine(relay, accounts, signer, measureCall, trustedSigner = trustedSigner)
+
+    /**
+     * Spec 079 (owner: one slide, not two): this account signs through the
+     * Trusted Signer's page, whose own slide is the consent — so the sheet
+     * offers a button that goes there instead of a second slide. Read once per
+     * request from the same route the spine will sign over.
+     */
+    private val _trustedSignerRoute = MutableStateFlow(false)
+    val trustedSignerRoute: StateFlow<Boolean> = _trustedSignerRoute
+
     private val signExecutor = SignExecutor(
-        spine = UserOpSpine(relay, accounts, signer, measureCall, trustedSigner = trustedSigner),
+        spine = spine,
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {
@@ -169,6 +180,8 @@ class SigningController(
         receiptWaitMs = receiptWaitMs,
         receiptPollMs = receiptPollMs,
         origin = { _request.value?.origin.orEmpty() },
+        // A page in this app's browser — never the wallet's own requests (the key backup).
+        originSeenByBrowser = { _request.value?.let { it.transportId != app.getvela.wallet.feature.signing.SigningLive.WALLET_TRANSPORT } ?: false },
     )
     private val clearExecutor = ClearExecutor(dataBase = { ports.dataBase() }, ethCall = { c, to, d -> ports.ethCall(c, to, d) })
     private val guardExecutor = GuardExecutor(ethCall = { c, to, d -> ports.ethCall(c, to, d).first })
@@ -223,6 +236,10 @@ class SigningController(
      */
     val feeOpen = MutableStateFlow(false)
 
+    /** The `FeeFailure` wire name the core's schedule takes (`quote_unavailable`, …). */
+    private fun feeFailureWire(failure: app.getvela.wallet.feature.send.core.FeeFailure): String =
+        app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.send.core.FeeFailure.serializer(), failure).trim('"')
+
     /** A tap on the fee row: a failed quote is asked again; with more than one coin, the list opens or closes. */
     fun feeTapped() {
         val view = fee.value
@@ -254,6 +271,10 @@ class SigningController(
 
     fun open(request: IncomingRequest) {
         _request.value = request
+        scope.launch {
+            val first = runCatching { accounts.keysOf(wallet.address) }.getOrNull()?.firstOrNull() ?: return@launch
+            _trustedSignerRoute.value = runCatching { spine.routeFor(wallet.address, first).method == app.getvela.wallet.feature.onboarding.core.KeyMethod.TrustedSigner }.getOrDefault(false)
+        }
         // Each request starts at the stored default: a pick is one-shot.
         speedControl.reset()
         dispatchSign(SignEvent.NetworksChanged(knownChains()))
@@ -295,6 +316,33 @@ class SigningController(
                     val view = signHost.view.value
                     if (fee.stale && !fee.busy && view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting && !answered) {
                         speedControl.requoteStale()
+                    }
+                }
+            }
+            // Spec 079: a quote that failed for a reason that can pass (the
+            // relay unreachable, a busy estimate) is asked again on the core's
+            // schedule — 3 s, 6 s, 12 s, then every 15 s — while the sheet is up
+            // and nothing is signing. On the Xiaomi the row said "点击重试" with
+            // the relay down and stayed that way after it came back.
+            scope.launch {
+                var attempt = 0
+                var pending: kotlinx.coroutines.Job? = null
+                fee.collect { fee ->
+                    val failure = fee.failed
+                    if (failure == null) {
+                        attempt = 0
+                        pending?.cancel()
+                        return@collect
+                    }
+                    if (fee.busy || pending?.isActive == true) return@collect
+                    if (!mayRequote(signHost.view.value, answered)) return@collect
+                    attempt += 1
+                    val wait = uniffi.vela_core_uniffi.feeRequoteDelayMs(feeFailureWire(failure), attempt.toUInt()) ?: return@collect
+                    pending = scope.launch {
+                        kotlinx.coroutines.delay(wait.toLong())
+                        if (this@SigningController.fee.value.failed != null && mayRequote(signHost.view.value, answered)) {
+                            speedControl.refresh()
+                        }
                     }
                 }
             }
@@ -355,7 +403,20 @@ class SigningController(
     fun refreshFee() = speedControl.refresh()
     fun reject() = dispatchSign(SignEvent.RejectTapped)
     fun dismiss() = dispatchSign(SignEvent.DismissTapped)
-    fun swipeDismissed() = dispatchSign(SignEvent.SwipeDismissed)
+    fun swipeDismissed() {
+        val now = sign.value
+        if (now.is_signing || now.is_submitting || now.pending_op_hash != null) closedAfterApproval = true
+        dispatchSign(SignEvent.SwipeDismissed)
+    }
+
+    /**
+     * Spec 079: the person closed the sheet after approving. The operation goes
+     * on and the page still gets its answer, but the ending does not come back
+     * over whatever they went to (the iOS behaviour, owner-aligned 2026-09-28).
+     */
+    @Volatile
+    var closedAfterApproval = false
+        private set
     fun fundingCancelled() = dispatchSign(SignEvent.FundingCancelled)
     fun guardPreset(mode: GuardEditorMode) = guardHost.dispatch(GuardEvent.PresetSelected(mode), GuardEvent.serializer())
     fun guardCustomAmount(text: String) = guardHost.dispatch(GuardEvent.CustomAmountChanged(text), GuardEvent.serializer())
@@ -366,6 +427,14 @@ class SigningController(
     fun guardGrant() = guardHost.dispatch(GuardEvent.GrantDeliberatelyChosen, GuardEvent.serializer())
 
     companion object {
+        /**
+         * Spec 079: a failed quote is asked again only while the sheet is up and
+         * nothing has been approved — not signing, not submitting, not submitted,
+         * and the page not yet answered.
+         */
+        fun mayRequote(view: SignView, answered: Boolean): Boolean =
+            view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting && view.pending_op_hash == null && !answered
+
         /** What the confirm slides into: the fee as quoted, the guard's rewrite, the intent (the desktop's `approve_opts`). */
         fun approveOpts(fee: FeeView, clear: ClearSigningView, guard: GuardView): SignApproveOpts = SignApproveOpts(
             max_fee_per_gas = fee.fee?.max_fee_per_gas,

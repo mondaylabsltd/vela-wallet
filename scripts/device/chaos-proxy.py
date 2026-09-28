@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""A fault-injecting HTTP/CONNECT proxy for device passes (spec 079).
+
+Every client's traffic — the page, the wallet's RPC pool, the relay, the signing
+page — goes through it, so a fault can be aimed at one host and repeated.
+
+Run:   CHAOS_UPSTREAM=127.0.0.1:1088 python3 scripts/device/chaos-proxy.py chaos.log
+       (CHAOS_UPSTREAM: an HTTP proxy the Mac itself needs to reach the internet;
+        unset = connect directly.  CHAOS_BIND=0.0.0.0 to serve a phone on the LAN.)
+
+Android: adb reverse tcp:8899 tcp:8899
+         adb shell settings put global http_proxy 127.0.0.1:8899
+         (restore: adb shell settings put global http_proxy :0)
+         OkHttp keeps pooled connections: force-stop the app after pointing it here.
+iPhone:  Settings > Wi-Fi > (network) > Configure Proxy > Manual: <mac-lan-ip>:8899,
+         with CHAOS_BIND=0.0.0.0. Turn it back to Off afterwards.
+Desktop: the embedded WebView follows the macOS system proxy; point a throwaway
+         network location at 127.0.0.1:8899 rather than editing the one in use.
+
+Control: curl 'http://127.0.0.1:8899/__chaos?mode=drop&match=vela-relay'
+  mode      pass | latency | throttle | drop | blackhole | reset_mid
+  latency   ms added before the upstream connect (latency / throttle)
+  bps       bytes/second each direction (throttle)
+  drop      probability 0..1 that a matching connection is refused (drop)
+  match     regex on host; only matching hosts get the fault ('' = all)
+  GET /__chaos with no query prints the config. Switching a fault on also cuts
+  the live tunnels it matches — a real drop does not spare open connections.
+Every connection is logged: time, host:port, verdict.
+"""
+import asyncio, json, os, random, re, sys, time, urllib.parse
+
+CFG = {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": ""}
+UPSTREAM = os.environ.get("CHAOS_UPSTREAM", "")
+BIND = os.environ.get("CHAOS_BIND", "127.0.0.1")
+LIVE = set()  # (host, client_writer, upstream_writer)
+LOG = open(sys.argv[1] if len(sys.argv) > 1 else "chaos.log", "a", buffering=1)
+
+
+def log(*a):
+    LOG.write(time.strftime("%H:%M:%S ") + " ".join(str(x) for x in a) + "\n")
+
+
+def applies(host):
+    return CFG["mode"] != "pass" and (not CFG["match"] or re.search(CFG["match"], host))
+
+
+async def pipe(r, w, bps):
+    try:
+        while True:
+            chunk = await r.read(16384 if not bps else max(1, min(16384, bps // 10)))
+            if not chunk:
+                break
+            w.write(chunk)
+            await w.drain()
+            if bps:
+                await asyncio.sleep(len(chunk) / bps)
+    except Exception:
+        pass
+    finally:
+        try:
+            w.close()
+        except Exception:
+            pass
+
+
+async def handle(cr, cw):
+    try:
+        head = await cr.readuntil(b"\r\n\r\n")
+    except Exception:
+        cw.close()
+        return
+    line = head.split(b"\r\n", 1)[0].decode("latin1")
+    method, target, _ = (line.split(" ") + ["", ""])[:3]
+    if target.startswith("/__chaos"):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(target).query)
+        for k, v in q.items():
+            CFG[k] = type(CFG.get(k, ""))(v[0]) if k in CFG else v[0]
+        log("CONFIG", json.dumps(CFG))
+        cut = [c for c in list(LIVE) if applies(c[0])]
+        for h, a, b in cut:
+            for w in (a, b):
+                try: w.close()
+                except Exception: pass
+            LIVE.discard((h, a, b))
+        if cut: log("CUT", len(cut), "live tunnels:", ",".join(sorted({c[0] for c in cut})))
+        body = json.dumps(CFG).encode()
+        cw.write(b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
+        await cw.drain()
+        cw.close()
+        return
+    if method == "CONNECT":
+        host, _, port = target.rpartition(":")
+        port = int(port or 443)
+        rest = b""
+    else:
+        u = urllib.parse.urlparse(target)
+        host, port = u.hostname or "", u.port or 80
+        path = (u.path or "/") + (("?" + u.query) if u.query else "")
+        rest = head.replace(target.encode(), path.encode(), 1)
+    fault = applies(host)
+    verdict = CFG["mode"] if fault else "pass"
+    if fault and CFG["mode"] == "drop" and random.random() < CFG["drop"]:
+        log("DROP", f"{host}:{port}")
+        cw.close()
+        return
+    if fault and CFG["mode"] == "blackhole":
+        log("HOLE", f"{host}:{port}")
+        await asyncio.sleep(600)
+        cw.close()
+        return
+    if fault and CFG["latency"]:
+        await asyncio.sleep(CFG["latency"] / 1000)
+    t0 = time.time()
+    try:
+        if UPSTREAM:
+            # Through the proxy this machine itself needs to reach the internet.
+            up_host, _, up_port = UPSTREAM.rpartition(":")
+            ur, uw = await asyncio.wait_for(asyncio.open_connection(up_host, int(up_port)), 20)
+            uw.write(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode())
+            await uw.drain()
+            resp = await asyncio.wait_for(ur.readuntil(b"\r\n\r\n"), 20)
+            if b" 200" not in resp.split(b"\r\n", 1)[0]:
+                raise ConnectionError(resp.split(b"\r\n", 1)[0].decode("latin1"))
+        else:
+            ur, uw = await asyncio.wait_for(asyncio.open_connection(host, port), 20)
+    except Exception as e:
+        log("FAIL", f"{host}:{port}", type(e).__name__)
+        cw.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n")
+        cw.close()
+        return
+    log(verdict.upper(), f"{host}:{port}", f"{int((time.time()-t0)*1000)}ms")
+    if method == "CONNECT":
+        cw.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        await cw.drain()
+    else:
+        uw.write(rest)
+        await uw.drain()
+    bps = CFG["bps"] if fault and CFG["mode"] == "throttle" else 0
+    if fault and CFG["mode"] == "reset_mid":
+        async def cut():
+            await asyncio.sleep(1.5)
+            log("RESET", f"{host}:{port}")
+            cw.close(); uw.close()
+        asyncio.create_task(cut())
+    entry = (host, cw, uw)
+    LIVE.add(entry)
+    try:
+        await asyncio.gather(pipe(cr, uw, bps), pipe(ur, cw, bps))
+    finally:
+        LIVE.discard(entry)
+
+
+async def main():
+    srv = await asyncio.start_server(handle, BIND, 8899)
+    log("listening", BIND, 8899, "upstream", UPSTREAM or "direct")
+    async with srv:
+        await srv.serve_forever()
+
+
+asyncio.run(main())

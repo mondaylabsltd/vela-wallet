@@ -60,6 +60,9 @@ final class SignExecutor {
         /// Who asked, as the Trusted Signer's page is told it (spec 071): the
         /// origin the browser observed, empty for the wallet's own request.
         var origin: () -> String = { "" }
+        /// Spec 079: whether `origin` was read from the in-app browser (a
+        /// page), never the wallet's own request.
+        var originSeenByBrowser: () -> Bool = { false }
         /// The Trusted Signer ended without a signature. The core hears a
         /// cancelled ceremony — the request stays open and may be signed
         /// another way — and the sheet says which sentence applies.
@@ -226,7 +229,10 @@ final class SignExecutor {
                 quotedFee: quoted,
                 // The FINAL params — a guard's rewrite included — are what the
                 // page decodes, as they are what is signed.
-                asked: UserOpSpine.Asked(method: method, paramsJson: paramsJson, origin: ports.origin()),
+                asked: UserOpSpine.Asked(
+                    method: method, paramsJson: paramsJson, origin: ports.origin(),
+                    seenByBrowser: ports.originSeenByBrowser()
+                ),
                 signingStarted: { [ports] in ports.signingStarted() }
             )
             ports.opSubmitted(operation["id"] as? String ?? "", hash)
@@ -272,7 +278,10 @@ final class SignExecutor {
                 chainId: chainId,
                 account: address,
                 originalHash: original,
-                asked: UserOpSpine.Asked(method: method, paramsJson: paramsJson, origin: ports.origin()),
+                asked: UserOpSpine.Asked(
+                    method: method, paramsJson: paramsJson, origin: ports.origin(),
+                    seenByBrowser: ports.originSeenByBrowser()
+                ),
                 signingStarted: { [ports] in ports.signingStarted() }
             )
             return ["type": "succeeded", "result": signature]
@@ -303,16 +312,56 @@ final class SignExecutor {
 
     private func awaitReceipt(chainId: Int, userOpHash: String) async -> String? {
         let deadline = Date().addingTimeInterval(receiptWaitMs / 1000)
-        while Date() < deadline {
-            if case .resolved(_, let txHash, _, _) = await relay.userOpReceipt(
-                chainId: chainId, userOpHash: userOpHash
-            ), !txHash.isEmpty {
+        while true {
+            let remaining = deadline.timeIntervalSinceNow
+            if remaining <= 0 { break }
+            // Each poll gets only what is left of the window (spec 079,
+            // Android device pass): with the relay unreachable one poll hung
+            // for its own timeouts and retries, and the page waited 268 s for
+            // a two-minute wait. A late answer is dropped; the tracker keeps
+            // following the operation either way.
+            let relay = self.relay
+            let answer = await Self.within(seconds: remaining) {
+                await relay.userOpReceipt(chainId: chainId, userOpHash: userOpHash)
+            }
+            if case .resolved(_, let txHash, _, _)? = answer, !txHash.isEmpty {
                 return txHash
             }
-            try? await Task.sleep(nanoseconds: UInt64(receiptPollMs) * 1_000_000)
+            let left = deadline.timeIntervalSinceNow
+            if left <= 0 { break }
+            let pause = min(receiptPollMs / 1000, left)
+            try? await Task.sleep(nanoseconds: UInt64(pause * 1_000_000_000))
         }
         return nil
     }
+
+    /// `work`'s answer if it comes within `seconds`, else `nil` — and the
+    /// caller goes on at the deadline, whatever `work` is still doing (it is
+    /// cancelled, and a late answer is dropped). The first to finish wins;
+    /// both sides run on the main actor, so exactly one resumes.
+    static func within<T>(
+        seconds: Double, _ work: @escaping @MainActor () async -> T
+    ) async -> T? {
+        let once = FirstOnce()
+        return await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
+            let job = Task { @MainActor in
+                let value = await work()
+                guard !once.done else { return }
+                once.done = true
+                continuation.resume(returning: value)
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+                guard !once.done else { return }
+                once.done = true
+                job.cancel()
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
+    /// Which side of `within` answered first.
+    private final class FirstOnce { var done = false }
 
     // MARK: - The pure parts
 

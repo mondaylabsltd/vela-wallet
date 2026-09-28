@@ -59,7 +59,9 @@ class SigningHeaderAndRouteTest {
     fun `a site gets its own icon over its initial - https only`() {
         val site = model("https://app.uniswap.org", "tab-1", ctx())
         assertFalse(site.dappOwn)
-        assertEquals("app.uniswap.org", site.dappHost)
+        // Its name is its host, said once (spec 079 F14).
+        assertEquals("app.uniswap.org", site.dappName)
+        assertEquals("", site.dappHost)
         assertEquals(listOf("https://app.uniswap.org/apple-touch-icon.png", "https://app.uniswap.org/favicon.ico"), site.dappIconUrls)
         assertTrue(SigningLive.siteIconUrls("http://app.uniswap.org").isEmpty())
         assertTrue(SigningLive.siteIconUrls("https://").isEmpty())

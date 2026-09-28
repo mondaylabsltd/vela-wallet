@@ -133,7 +133,7 @@ window.VelaCS.i18n.register('zh', {
   'warn.deploy': '部署后这份代码将永久存在，并可能持有你之后转入的资产。',
   'warn.typedUnknown': '未知的 EIP-712 结构 — 逐字读完下面每个字段再决定。',
   'warn.unverifiedDecimals': '精度未经验证 — 数字可能不是它看起来的意思。',
-  'warn.claimedOrigin': '站点身份由请求方自述，此通道无法核实。',
+  'warn.claimedOrigin': '网站名称是它自己提供的，无法核实，请以下方内容为准。',
 
   // 界面
   'ui.aboutToSign': '你正在签署',
@@ -179,7 +179,9 @@ window.VelaCS.i18n.register('zh', {
   'ui.digest': '签名摘要 · {kind}',
   'ui.digestUnwrapped': '未包 SafeMessage：这是 EOA 式签名，Safe 的 EIP-1271 不会认',
   'ui.wrongCredential': '回答这次签名的不是这个账户的钥匙 —— 签名已丢弃，没有回传。',
-  'ui.ceremonyFailed': '没有签成：仪式被取消、超时，或这台设备上没有这个账户的钥匙。签名请求永远不会新建钥匙 —— 新建的是另一个账户。',
+  'ui.ceremonyFailed': '没有签成。可能是你取消了、等太久了，或这台设备上没有这个账户的钥匙。可以再滑一次。',
+  'ui.notSigned': '没有签成，可以再滑一次。',
+  'ui.requestEnded': '这个签名请求已经结束。请回到 Vela 重新发起。',
   'tag.self': '本账户',
   'tag.calledContract': '被调用合约',
   'tag.localDescriptor': '本页已收录',

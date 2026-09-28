@@ -655,6 +655,28 @@ fn to_trust_log(log: &Value) -> Option<TrustReceiptLog> {
 }
 
 pub fn user_op_receipt(user_op_hash: &str, chain_id: u32) -> ReceiptPoll {
+    receipt_poll(user_op_hash, |params| {
+        pool::bundler_call(chain_id, "eth_getUserOperationReceipt", params)
+    })
+}
+
+/// [`user_op_receipt`], answered within `budget` (spec 079): the dApp's
+/// receipt wait gives each poll only what is left of its window. Past the
+/// budget the relay counts as not reached — never as a failure.
+pub fn user_op_receipt_within(
+    user_op_hash: &str,
+    chain_id: u32,
+    budget: std::time::Duration,
+) -> ReceiptPoll {
+    receipt_poll(user_op_hash, |params| {
+        pool::bundler_call_within(chain_id, "eth_getUserOperationReceipt", params, budget)
+    })
+}
+
+fn receipt_poll(
+    user_op_hash: &str,
+    call: impl FnOnce(Value) -> Result<Value, pool::PoolError>,
+) -> ReceiptPoll {
     let unreachable = ReceiptPoll {
         reached_bundler: false,
         resolution: None,
@@ -662,11 +684,7 @@ pub fn user_op_receipt(user_op_hash: &str, chain_id: u32) -> ReceiptPoll {
     if user_op_hash.is_empty() {
         return unreachable;
     }
-    let Ok(body) = pool::bundler_call(
-        chain_id,
-        "eth_getUserOperationReceipt",
-        json!([user_op_hash]),
-    ) else {
+    let Ok(body) = call(json!([user_op_hash])) else {
         return unreachable;
     };
     if body.get("error").is_some() {

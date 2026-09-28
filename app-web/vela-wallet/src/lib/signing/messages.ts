@@ -158,6 +158,16 @@ export interface SigningMessages {
 	feeTokenTitle: string;
 	/** Issue 262: the selected coin cannot pay — the send form's issue-211 sentence ({{sym}}). */
 	feeShort: string;
+	/** Spec 079: the send form's refresh control (`send.feeRefresh`). */
+	feeRefresh: string;
+	/** Spec 079: the send form's stale note (`send.feeStale`). */
+	feeStale: string;
+	/**
+	 * Spec 079: a quote that failed for a reason that can pass — the relay out
+	 * of reach — and will be asked again by itself
+	 * (`componentsUi.funding.denialNetworkError`).
+	 */
+	feeNetworkError: string;
 	/**
 	 * The speed control under the fee row (spec 069) — the send form's words,
 	 * so the two surfaces name a speed identically.
@@ -207,6 +217,30 @@ export interface SigningMessages {
 		txHashLabel: string;
 		explorer: string;
 		done: string;
+		/**
+		 * Spec 079: an op past its wait window, an op past 24 h, and a
+		 * message signed — the words Android's aftercare says, no new keys.
+		 */
+		stillConfirming: string;
+		unknownOutcome: string;
+		signed: string;
+	};
+	/**
+	 * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): what
+	 * the sheet says once the person has approved, in the SEND receipt's words,
+	 * as Android's signing receipt says them — never a greyed slide.
+	 */
+	status: {
+		/** `send.txSigning` — the passkey prompt is up. */
+		signing: string;
+		/** `send.txSubmitting` */
+		submitting: string;
+		/** `send.txBackgroundHint` — closing keeps it running. */
+		backgroundHint: string;
+		/** `componentsUi.signing.signing` — a message never "submits". */
+		messageSigning: string;
+		/** `send.txErrorGeneric` — the submission failed; funds are safe. */
+		failedHint: string;
 	};
 	viewOnExplorer: string;
 	byteSize: string;

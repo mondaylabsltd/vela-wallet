@@ -20,7 +20,7 @@ struct SiteRowView: View {
             onOpen(site.id)
         } label: {
             HStack(spacing: Tokens.Space.s12) {
-                LetterAvatarView(letter: site.letter, tint: site.tint)
+                SiteAvatarView(site: site)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: site.name)
                         .typeRole(Typography.rowTitle.scaled(textScale))

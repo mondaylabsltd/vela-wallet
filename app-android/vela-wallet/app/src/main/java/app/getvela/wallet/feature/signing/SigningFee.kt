@@ -46,13 +46,15 @@ fun SigningFee(
     /** Spec 069: the speed control under the fee — fold/unfold, and a speed by id. */
     onToggleSpeed: () -> Unit = {},
     onPickSpeed: (String) -> Unit = {},
+    /** Spec 079: the refresh control (the send form's own). */
+    onRefresh: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     when (fee) {
         is FeeModel.Hidden -> Unit
         is FeeModel.OffChain -> SigningPositive(fee.note, modifier, quiet = true)
         is FeeModel.OnChain -> Column(modifier = modifier.fillMaxWidth()) {
-            SigningFeeBody(fee, onFee, onPick, onToggleSpeed, onPickSpeed)
+            SigningFeeBody(fee, onFee, onPick, onToggleSpeed, onPickSpeed, onRefresh)
             // Issue #262: the reason the slide below is shut, said where the fix is.
             fee.warning?.let {
                 Text(
@@ -75,6 +77,7 @@ private fun SigningFeeBody(
     onPick: (String) -> Unit,
     onToggleSpeed: () -> Unit,
     onPickSpeed: (String) -> Unit,
+    onRefresh: (() -> Unit)?,
 ) {
     val colors = VelaTheme.colors
     run {
@@ -108,10 +111,15 @@ private fun SigningFeeBody(
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.base,
                     )
-                    Icon(
-                        VelaIcons.ChevronRight, null, tint = colors.fgMuted,
-                        modifier = Modifier.size(VelaIconSize.sm),
-                    )
+                    if (fee.chevron) {
+                        Icon(
+                            VelaIcons.ChevronRight, null, tint = colors.fgMuted,
+                            modifier = Modifier.size(VelaIconSize.sm),
+                        )
+                    }
+                    fee.refreshLabel?.let { label ->
+                        app.getvela.wallet.feature.flows.components.FeeRefreshButton(label = label, refreshing = fee.refreshing, onRefresh = onRefresh)
+                    }
                 }
             }
             fee.speed?.let { speed ->

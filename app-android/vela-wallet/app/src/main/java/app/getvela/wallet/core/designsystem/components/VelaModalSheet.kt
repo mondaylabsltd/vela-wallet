@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -53,6 +55,12 @@ import androidx.compose.ui.unit.dp
  * sheet's edge unless the sheet carries it in. The settings sheets do (078
  * round 3); the rest keep their current rendering until each is checked at the
  * largest size.
+ *
+ * [dismissible] `false`: the sheet closes only when its content says so — no
+ * drag, no tap on the scrim, no system Back, and no drag handle suggesting
+ * otherwise. The signing and consent sheets (owner, spec 079: "除非用户明确关掉，
+ * 不应该很容易误操作，比如下滑就关掉了" — a stray swipe threw away the dApp's
+ * request, and the page had to ask again). Such a sheet MUST draw its own close.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +71,7 @@ fun VelaModalSheet(
     containerColor: Color = BottomSheetDefaults.ContainerColor,
     dragHandle: @Composable (() -> Unit)? = { BottomSheetDefaults.DragHandle() },
     followAppTextSize: Boolean = false,
+    dismissible: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val appDensity = LocalDensity.current
@@ -70,10 +79,15 @@ fun VelaModalSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         sheetState = sheetState,
+        sheetGesturesEnabled = dismissible,
         containerColor = containerColor,
-        dragHandle = dragHandle,
+        dragHandle = if (dismissible) dragHandle else null,
         // Bottom only: the top inset is the offset-dependent one (rule 1).
         contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom) },
+        properties = ModalBottomSheetProperties(
+            shouldDismissOnBackPress = dismissible,
+            shouldDismissOnClickOutside = dismissible,
+        ),
     ) {
         val sheetDensity = LocalDensity.current
         // Below the status bar, whatever the content: the window's height less
@@ -85,6 +99,9 @@ fun VelaModalSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (window > 0) Modifier.heightIn(max = cap) else Modifier)
+                // No handle on an undismissible sheet: its room stays, so the
+                // content sits where it always did.
+                .then(if (dismissible) Modifier else Modifier.padding(top = SHEET_CHROME / 2))
                 .nestedScroll(SheetOverscrollGuard),
         ) {
             val column = this

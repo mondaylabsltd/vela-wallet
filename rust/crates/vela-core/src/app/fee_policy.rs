@@ -693,6 +693,26 @@ pub enum FeeFailure {
     GasQuoteTooHigh,
 }
 
+/// The wait before automatic re-quote `attempt` (1-based) after a failure a
+/// recovering network or relay can clear, or `None` for one no retry fixes
+/// (spec 079 FR-008). The device pass had the fee row read "点击重试" with the
+/// relay down and stay that way after it came back; every client now asks
+/// again on this schedule while the sheet is open and not yet approved.
+pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
+    match failure {
+        FeeFailure::QuoteUnavailable
+        | FeeFailure::FeeTokenUnavailable
+        | FeeFailure::EstimateFailed
+        | FeeFailure::GasQuoteTooHigh => Some(match attempt {
+            0 | 1 => 3_000,
+            2 => 6_000,
+            3 => 12_000,
+            _ => 15_000,
+        }),
+        FeeFailure::MissingPublicKey | FeeFailure::CalculationFailed => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Pure money math — line-by-line ports, shared with the send/sign machines
 // ---------------------------------------------------------------------------

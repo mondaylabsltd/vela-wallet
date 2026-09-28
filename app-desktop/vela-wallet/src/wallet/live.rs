@@ -332,6 +332,42 @@ pub fn balance_detail(
     }
 }
 
+/// What the account holds on each network, in the display currency (spec 079
+/// FR-017, owner: "需要能看到这个网络上的余额吧") — the home screen's own
+/// figures, never fetched for the picker. A network gets no figure at all
+/// rather than a made-up zero when its balance is not known (it failed, or
+/// only rate-limited), when nothing priced is held there, and when balances
+/// are hidden: the privacy mask covers every money surface.
+#[must_use]
+pub fn network_balances(
+    view: &BalanceView,
+    locale: &str,
+    money: &Money,
+) -> std::collections::HashMap<u32, SharedString> {
+    let mut sums: std::collections::HashMap<u32, f64> = std::collections::HashMap::new();
+    if view.hidden {
+        return std::collections::HashMap::new();
+    }
+    for token in view.tokens.iter().filter(|token| {
+        !token.spam
+            && !view.failed_chain_ids.contains(&token.chain_id)
+            && !view.rate_limited_chain_ids.contains(&token.chain_id)
+    }) {
+        let Some(price) = token.price_usd else {
+            continue;
+        };
+        let usd = token.balance.parse::<f64>().unwrap_or(f64::NAN) * price;
+        if usd.is_finite() {
+            *sums.entry(token.chain_id).or_default() += usd;
+        }
+    }
+    sums.into_iter()
+        // Half a cent is the smallest figure a person reads as money.
+        .filter(|(_, usd)| *usd >= 0.005)
+        .map(|(chain_id, usd)| (chain_id, SharedString::from(money.text(usd, locale))))
+        .collect()
+}
+
 /// `$1,383.28` → `("$1,383", Some("28"))`.
 ///
 /// The hero draws the minor units smaller than the number — the design
@@ -408,6 +444,49 @@ mod tests {
         assert_eq!(token_amount_text_down("1234.567"), "1234.56");
         assert_eq!(token_amount_text_down("0.0000001234"), "0.00000012");
         assert_eq!(token_amount_text_down("3"), "3");
+    }
+
+    /// Spec 079: the picker's figure per network — the home screen's own
+    /// numbers, nothing where they are not known, nothing under the privacy
+    /// mask, never a zero.
+    #[test]
+    fn each_network_shows_what_the_account_holds_there() {
+        let token = |chain_id: u32, balance: &str, price: Option<f64>, spam: bool| BalanceToken {
+            chain_id,
+            symbol: "T".to_owned(),
+            name: "T".to_owned(),
+            balance: balance.to_owned(),
+            decimals: 18,
+            token_address: None,
+            price_usd: price,
+            spam,
+        };
+        let mut shown = view(Some(10.));
+        shown.tokens = vec![
+            token(1, "2", Some(3.), false),
+            token(1, "1", Some(1.5), false),
+            token(100, "0.001", Some(1.), false),
+            token(8453, "5", None, false),
+            token(10, "9", Some(1.), true),
+            token(42161, "4", Some(1.), false),
+            token(137, "4", Some(1.), false),
+        ];
+        shown.failed_chain_ids = vec![42161];
+        shown.rate_limited_chain_ids = vec![137];
+        let money = Money::usd();
+        let figures = network_balances(&shown, "en", money);
+        assert_eq!(
+            figures.get(&1),
+            Some(&SharedString::from(money.text(7.5, "en")))
+        );
+        for chain_id in [100, 8453, 10, 42161, 137] {
+            assert!(
+                !figures.contains_key(&chain_id),
+                "chain {chain_id}: dust, unpriced, spam, failed and rate-limited have no figure"
+            );
+        }
+        shown.hidden = true;
+        assert!(network_balances(&shown, "en", money).is_empty());
     }
 
     /// A real `BalanceView` with the total substituted.

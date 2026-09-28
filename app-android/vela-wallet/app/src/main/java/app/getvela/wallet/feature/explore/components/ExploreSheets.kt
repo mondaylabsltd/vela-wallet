@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,7 +56,7 @@ fun SiteMenuSheetContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
-            LetterAvatar(sheet.site.letter, sheet.site.tint)
+            SiteAvatar(sheet.site)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
                 Text(
                     text = sheet.site.host,
@@ -70,17 +71,20 @@ fun SiteMenuSheetContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
                 ) {
-                    val tone = if (sheet.secure) colors.successBase else colors.warningBase
+                    // Spec 079 (owner): a lock, and only a lock — https is not "safe".
                     Icon(
-                        if (sheet.secure) VelaIcons.Lock else VelaIcons.TriangleAlert, null, tint = tone,
+                        if (sheet.secure) VelaIcons.Lock else VelaIcons.LockOpen, null,
+                        tint = if (sheet.secure) colors.fgMuted else colors.warningBase,
                         modifier = Modifier.size(VelaIconSize.xs),
                     )
-                    Text(
-                        text = sheet.statusLine,
-                        color = tone,
-                        fontFamily = VelaFontFamily,
-                        fontSize = VelaTextSize.base,
-                    )
+                    if (sheet.statusLine.isNotBlank()) {
+                        Text(
+                            text = sheet.statusLine,
+                            color = colors.fgMuted,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.base,
+                        )
+                    }
                 }
             }
             Icon(
@@ -155,12 +159,22 @@ fun ConnectionPanel(
             .padding(bottom = VelaSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(VelaSpacing.xl),
     ) {
+        // Spec 079: the consent says what is being asked — "连接到 {host}".
+        if (connection.primaryAction && connection.title.isNotBlank()) {
+            Text(
+                text = connection.title,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.xl2,
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
         ) {
-            LetterAvatar(connection.site.letter, connection.site.tint)
+            SiteAvatar(connection.site)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
                 Text(
                     text = connection.site.host,
@@ -174,17 +188,20 @@ fun ConnectionPanel(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(VelaSpacing.sm),
                 ) {
-                    val tone = if (connection.secure) colors.successBase else colors.warningBase
+                    // Spec 079 (owner): a lock, and only a lock — https is not "safe".
                     Icon(
-                        if (connection.secure) VelaIcons.Lock else VelaIcons.TriangleAlert, null, tint = tone,
+                        if (connection.secure) VelaIcons.Lock else VelaIcons.LockOpen, null,
+                        tint = if (connection.secure) colors.fgMuted else colors.warningBase,
                         modifier = Modifier.size(VelaIconSize.xs),
                     )
-                    Text(
-                        text = connection.statusLine,
-                        color = tone,
-                        fontFamily = VelaFontFamily,
-                        fontSize = VelaTextSize.base,
-                    )
+                    if (connection.statusLine.isNotBlank()) {
+                        Text(
+                            text = connection.statusLine,
+                            color = colors.fgMuted,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.base,
+                        )
+                    }
                 }
             }
             Icon(
@@ -252,11 +269,11 @@ fun ConnectionPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
             ) {
-                Box(
-                    Modifier
-                        .size(VelaSpacing.md)
-                        .background(connection.networkDot, CircleShape),
-                )
+                app.getvela.wallet.core.marks.RemoteLogo(urls = listOfNotNull(connection.networkLogoUrl), size = VelaSpacing.xl) {
+                    Box(Modifier.size(VelaSpacing.xl), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(VelaSpacing.md).background(connection.networkDot, CircleShape))
+                    }
+                }
                 Text(
                     text = connection.networkName,
                     color = colors.fgBase,
@@ -281,16 +298,21 @@ fun ConnectionPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(VelaSizing.controlLg)
-                .border(
-                    VelaBorder.hairline, colors.borderStrong,
-                    RoundedCornerShape(VelaRadius.lg),
+                .then(
+                    // Spec 079: the consent's Connect is the primary action; a
+                    // connected site's Disconnect stays the quiet outlined one.
+                    if (connection.primaryAction) {
+                        Modifier.background(colors.accentBase, RoundedCornerShape(VelaRadius.lg))
+                    } else {
+                        Modifier.border(VelaBorder.hairline, colors.borderStrong, RoundedCornerShape(VelaRadius.lg))
+                    },
                 )
                 .clickable(onClick = onDisconnect),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = connection.disconnect,
-                color = colors.fgBase,
+                color = if (connection.primaryAction) app.getvela.wallet.core.designsystem.tokens.VelaOnAccent else colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.lg,
@@ -439,7 +461,18 @@ private fun Divider() {
 
 /** One row of a pick-one sheet (spec 070): the site's network, the account it sees. */
 @androidx.compose.runtime.Immutable
-data class PickerOption(val id: String, val label: String, val detail: String = "", val selected: Boolean = false)
+data class PickerOption(
+    val id: String,
+    val label: String,
+    val detail: String = "",
+    val selected: Boolean = false,
+    /** Spec 079: a network's logo (the owner: "切换网络，没有网络logo呀"). */
+    val logoUrl: String? = null,
+    /** Spec 079: an account's identicon seed — its address (the owner: "缺少了 nimiq 账户logo"). */
+    val identiconSeed: String? = null,
+    /** Spec 079: what the account holds on this network, in the display currency; `null` when not known. */
+    val amount: String? = null,
+)
 
 /**
  * A pick-one sheet: a title and rows, the chosen one checked. The network a
@@ -483,11 +516,20 @@ fun PickerSheetContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
             ) {
+                when {
+                    option.identiconSeed != null -> IdenticonAvatar(tappable = false, seed = option.identiconSeed, size = ExploreMetrics.rowAvatar)
+                    option.logoUrl != null -> app.getvela.wallet.core.marks.RemoteLogo(urls = listOf(option.logoUrl), size = ExploreMetrics.rowAvatar) {
+                        LetterAvatar(option.label.take(1).uppercase(), colors.fgSubtle, size = ExploreMetrics.rowAvatar)
+                    }
+                }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
                     Text(text = option.label, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xl, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (option.detail.isNotBlank()) {
                         Text(text = option.detail, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1)
                     }
+                }
+                option.amount?.let {
+                    Text(text = it, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, maxLines = 1)
                 }
                 if (option.selected) Icon(VelaIcons.Check, null, tint = colors.accentBase, modifier = Modifier.size(VelaIconSize.sm))
             }
@@ -500,8 +542,61 @@ fun PickerSheetContent(
  * died, or the address could not be reached. One sentence of what happened,
  * one of what to do, one button that does it.
  */
+/**
+ * One line under the address bar (spec 079): the page's chain could not be
+ * reached, so what it shows may be missing. The page stays usable; Retry asks
+ * the chain once.
+ */
 @Composable
-fun BrowserNotice(title: String, body: String, action: String, onAction: () -> Unit, modifier: Modifier = Modifier) {
+fun ChainNotice(
+    text: String,
+    action: String,
+    busy: Boolean,
+    busyLabel: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.bgBase)
+            .drawBehind {
+                val y = size.height - VelaBorder.hairline.toPx() / 2
+                drawLine(colors.borderBase, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), VelaBorder.hairline.toPx())
+            }
+            .padding(horizontal = VelaSizing.screenPaddingX, vertical = VelaSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+    ) {
+        Icon(VelaIcons.TriangleAlert, null, tint = colors.warningBase, modifier = Modifier.size(VelaIconSize.sm))
+        Text(text = text, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, modifier = Modifier.weight(1f))
+        Text(
+            text = if (busy) busyLabel else action,
+            color = if (busy) colors.fgMuted else colors.accentBase,
+            fontFamily = VelaFontFamily,
+            fontWeight = VelaFontWeight.semibold,
+            fontSize = VelaTextSize.sm,
+            modifier = Modifier
+                .clickable(enabled = !busy, onClick = onAction)
+                .padding(vertical = VelaSpacing.xs),
+        )
+    }
+}
+
+@Composable
+fun BrowserNotice(
+    title: String,
+    body: String,
+    action: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Spec 079: the host, small, under the reason. */
+    detail: String = "",
+    /** Spec 079: a retry is running — the button says [busyLabel] and takes no tap. */
+    busy: Boolean = false,
+    busyLabel: String = "",
+) {
     val colors = VelaTheme.colors
     Column(
         modifier = modifier
@@ -516,15 +611,24 @@ fun BrowserNotice(title: String, body: String, action: String, onAction: () -> U
         if (body.isNotBlank()) {
             Text(text = body, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, textAlign = TextAlign.Center)
         }
+        if (detail.isNotBlank()) {
+            Text(text = detail, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm, textAlign = TextAlign.Center)
+        }
         Box(
             modifier = Modifier
                 .height(VelaSizing.controlLg)
                 .border(VelaBorder.hairline, colors.borderStrong, CircleShape)
-                .clickable(onClick = onAction)
+                .clickable(enabled = !busy, onClick = onAction)
                 .padding(horizontal = VelaSpacing.xl4),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = action, color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.semibold, fontSize = VelaTextSize.lg)
+            Text(
+                text = if (busy && busyLabel.isNotBlank()) busyLabel else action,
+                color = if (busy) colors.fgMuted else colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.lg,
+            )
         }
     }
 }

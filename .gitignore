@@ -42,3 +42,6 @@ specs/002-penpot-design-source/generator/assets/library.json
 .vscode
 app-android/vela-wallet/.idea/deploymentTargetSelector.xml
 app-android/vela-wallet/.idea/inspectionProfiles/Project_Default.xml
+
+# Python dev scripts (scripts/device)
+__pycache__/

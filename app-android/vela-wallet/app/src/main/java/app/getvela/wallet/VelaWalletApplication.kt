@@ -12,6 +12,7 @@ import app.getvela.wallet.core.diagnostics.CrashReport
 import app.getvela.wallet.core.data.Preferences
 import app.getvela.wallet.feature.send.core.SendAddNetworkOutcome
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
+import app.getvela.wallet.feature.signing.SigningAftercare
 import app.getvela.wallet.feature.signing.core.SimDeltas
 import android.app.Application
 import app.getvela.wallet.core.data.ThemePreferenceRepository
@@ -60,6 +61,7 @@ import app.getvela.wallet.core.platform.Haptics
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.NetworkEndpointSource
 import app.getvela.wallet.feature.wallet.core.RpcPool
+import app.getvela.wallet.core.net.VelaHttp
 import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.WalletController
 import java.util.Locale
@@ -374,6 +376,21 @@ class AppContainer(private val app: Application) {
             // connected to the same page.
             appName = "Vela Wallet " + BuildConfig.VERSION_NAME,
             appIcon = { appMark() },
+            // Spec 079: the page's address alone — the request rides in the
+            // fragment and never goes to a server, and neither does it here.
+            reachable = { url: String ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        val probe = url.substringBefore('#').substringBefore('?')
+                        VelaHttp.client.newBuilder()
+                            .callTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                            .build()
+                            .newCall(okhttp3.Request.Builder().url(probe).head().build())
+                            .execute()
+                            .use { true }
+                    }.getOrDefault(false)
+                }
+            },
             labels = { chainId, account ->
                 val network = settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
                 TrustedSignerLabels(
@@ -490,6 +507,12 @@ class AppContainer(private val app: Application) {
 
     /** The signing sheet's controller while a page's request is open (spec 044). */
     val signing = kotlinx.coroutines.flow.MutableStateFlow<SigningController?>(null)
+
+    /**
+     * Spec 079: how the last request ended, kept on screen after the core
+     * closes its sheet (the tick, or "not landed yet"). Cleared by its sheet.
+     */
+    val signingAftercare = kotlinx.coroutines.flow.MutableStateFlow<SigningAftercare?>(null)
 
     private val signingScope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
 
@@ -621,6 +644,10 @@ class AppContainer(private val app: Application) {
                 return@launch
             }
             lateinit var controller: SigningController
+            // Spec 079: the operation this request submitted, to tell "landed"
+            // from "the wait ran out" when the core answers the page.
+            var submittedUserOp: String? = null
+            signingAftercare.value = null
             controller = SigningController(
                 scope = signingScope,
                 relay = relay,
@@ -641,10 +668,25 @@ class AppContainer(private val app: Application) {
                 ports = object : SigningController.Ports {
                     override fun respond(transportId: String, id: String, payload: SignResponsePayload) {
                         answer(payload)
+                        // Closed by the person after approving: the answer still
+                        // goes, the ending does not reappear (spec 079).
+                        signingAftercare.value = if (controller.closedAfterApproval) {
+                            null
+                        } else {
+                            SigningAftercare.of(
+                                method = request.method,
+                                chainId = request.chainId,
+                                payload = payload,
+                                submittedUserOp = submittedUserOp,
+                            )
+                        }
                         // Answered either way: the sheet closes off this, page or no page.
                         controller.markAnswered()
                     }
-                    override fun opSubmitted(id: String, userOpHash: String) = rememberUserOp(userOpHash)
+                    override fun opSubmitted(id: String, userOpHash: String) {
+                        submittedUserOp = userOpHash
+                        rememberUserOp(userOpHash)
+                    }
                     override fun signingStarted() = Unit
                     override fun recordsPersisted() = wallet.feedReconciled()
                     override fun recordPersisted(recordId: String) = Unit

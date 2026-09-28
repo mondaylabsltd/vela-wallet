@@ -65,7 +65,8 @@ class SigningLiveTest {
         assertEquals("0.001", amount.line.value)
         assertEquals("XDAI", amount.line.symbol)
         assertEquals(founder, model.blocks.filterIsInstance<SigningBlock.Party>().single().address)
-        assertEquals("127.0.0.1:8137", model.dappHost)
+        assertEquals("127.0.0.1:8137", model.dappName)
+        assertEquals("the host is said once, as the name (spec 079 F14)", "", model.dappHost)
         assertEquals(strings.t("componentsUi.signing.confirmSend"), model.confirmAction)
         assertTrue(model.confirmEnabled)
     }
@@ -336,6 +337,24 @@ class SigningLiveTest {
         val model = SigningLive.feeModel(ClearSigningView(), fee, ctx) as FeeModel.OnChain
         assertNull(model.warning)
         assertFalse(model.tappable)
+    }
+
+    /** Spec 079: the fee can always be asked again, and a fee that could not be quoted says why. */
+    @Test
+    fun `the fee row carries the send form's refresh and says why a quote failed`() {
+        val shown = SigningLive.feeModel(ClearSigningView(), FeeView(fee = estimate(FeeAssetView.Native, "1"), options = listOf(eth.copy(balance = "1", amount = "1", insufficient = false)), confirm_fee_ready = true), ctx) as FeeModel.OnChain
+        assertEquals(strings.t(I18nKeys.Flows.FEE_REFRESH), shown.refreshLabel)
+        assertFalse("one coin: no list, so no chevron", shown.chevron)
+
+        val measuring = SigningLive.feeModel(ClearSigningView(), FeeView(busy = true), ctx) as FeeModel.OnChain
+        assertTrue(measuring.refreshing)
+
+        val down = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable), ctx) as FeeModel.OnChain
+        assertEquals(strings.t("componentsUi.funding.denialNetworkError"), down.warning)
+        assertTrue("a failed quote is tapped to ask again", down.tappable)
+
+        val broken = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.MissingPublicKey), ctx) as FeeModel.OnChain
+        assertNull("no network sentence for a failure the network did not cause", broken.warning)
     }
 
     /** The approve signs the coin that was picked, in that coin's units (the send core's own rule). */

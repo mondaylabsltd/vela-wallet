@@ -6857,6 +6857,130 @@ public func FfiConverterTypeAbiValue_lower(_ value: AbiValue) -> RustBuffer {
 }
 
 
+/**
+ * A main-frame load failure as every browser shell draws it (spec 079):
+ * `class` is one of `offline | timeout | not_found | refused | certificate |
+ * other`, `reason_key` the corpus key of the panel's sentence.
+ */
+public struct BrowserLoadFailure: Equatable, Hashable {
+    public var `class`: String
+    public var reasonKey: String
+    public var autoRetry: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(`class`: String, reasonKey: String, autoRetry: Bool) {
+        self.`class` = `class`
+        self.reasonKey = reasonKey
+        self.autoRetry = autoRetry
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BrowserLoadFailure: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBrowserLoadFailure: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BrowserLoadFailure {
+        return
+            try BrowserLoadFailure(
+                class: FfiConverterString.read(from: &buf), 
+                reasonKey: FfiConverterString.read(from: &buf), 
+                autoRetry: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BrowserLoadFailure, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.`class`, into: &buf)
+        FfiConverterString.write(value.reasonKey, into: &buf)
+        FfiConverterBool.write(value.autoRetry, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBrowserLoadFailure_lift(_ buf: RustBuffer) throws -> BrowserLoadFailure {
+    return try FfiConverterTypeBrowserLoadFailure.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBrowserLoadFailure_lower(_ value: BrowserLoadFailure) -> RustBuffer {
+    return FfiConverterTypeBrowserLoadFailure.lower(value)
+}
+
+
+/**
+ * A visit for Recents, from one document (spec 079).
+ */
+public struct BrowserVisit: Equatable, Hashable {
+    public var url: String
+    public var title: String?
+    public var favicon: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, title: String?, favicon: String?) {
+        self.url = url
+        self.title = title
+        self.favicon = favicon
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BrowserVisit: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBrowserVisit: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BrowserVisit {
+        return
+            try BrowserVisit(
+                url: FfiConverterString.read(from: &buf), 
+                title: FfiConverterOptionString.read(from: &buf), 
+                favicon: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BrowserVisit, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.favicon, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBrowserVisit_lift(_ buf: RustBuffer) throws -> BrowserVisit {
+    return try FfiConverterTypeBrowserVisit.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBrowserVisit_lower(_ value: BrowserVisit) -> RustBuffer {
+    return FfiConverterTypeBrowserVisit.lower(value)
+}
+
+
 public struct BytesDisplay: Equatable, Hashable {
     public var value: Double
     public var unit: String
@@ -8657,6 +8781,10 @@ public struct TrustedSignerInput: Equatable, Hashable {
      * The requesting site's origin; empty for the wallet's own send.
      */
     public var origin: String
+    /**
+     * Spec 079: the origin was observed by the wallet's own browser engine.
+     */
+    public var originSeenByBrowser: Bool
     public var chainId: UInt32
     public var chainName: String?
     public var nativeSymbol: String?
@@ -8686,7 +8814,10 @@ public struct TrustedSignerInput: Equatable, Hashable {
          */paramsJson: String, 
         /**
          * The requesting site's origin; empty for the wallet's own send.
-         */origin: String, chainId: UInt32, chainName: String?, nativeSymbol: String?, account: String, accountName: String?, 
+         */origin: String, 
+        /**
+         * Spec 079: the origin was observed by the wallet's own browser engine.
+         */originSeenByBrowser: Bool = false, chainId: UInt32, chainName: String?, nativeSymbol: String?, account: String, accountName: String?, 
         /**
          * The account's credential ids, hex.
          */credentialIdsHex: [String], 
@@ -8699,6 +8830,7 @@ public struct TrustedSignerInput: Equatable, Hashable {
         self.method = method
         self.paramsJson = paramsJson
         self.origin = origin
+        self.originSeenByBrowser = originSeenByBrowser
         self.chainId = chainId
         self.chainName = chainName
         self.nativeSymbol = nativeSymbol
@@ -8727,6 +8859,7 @@ public struct FfiConverterTypeTrustedSignerInput: FfiConverterRustBuffer {
                 method: FfiConverterString.read(from: &buf), 
                 paramsJson: FfiConverterString.read(from: &buf), 
                 origin: FfiConverterString.read(from: &buf), 
+                originSeenByBrowser: FfiConverterBool.read(from: &buf), 
                 chainId: FfiConverterUInt32.read(from: &buf), 
                 chainName: FfiConverterOptionString.read(from: &buf), 
                 nativeSymbol: FfiConverterOptionString.read(from: &buf), 
@@ -8741,6 +8874,7 @@ public struct FfiConverterTypeTrustedSignerInput: FfiConverterRustBuffer {
         FfiConverterString.write(value.method, into: &buf)
         FfiConverterString.write(value.paramsJson, into: &buf)
         FfiConverterString.write(value.origin, into: &buf)
+        FfiConverterBool.write(value.originSeenByBrowser, into: &buf)
         FfiConverterUInt32.write(value.chainId, into: &buf)
         FfiConverterOptionString.write(value.chainName, into: &buf)
         FfiConverterOptionString.write(value.nativeSymbol, into: &buf)
@@ -10896,6 +11030,54 @@ fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeBrowserLoadFailure: FfiConverterRustBuffer {
+    typealias SwiftType = BrowserLoadFailure?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBrowserLoadFailure.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBrowserLoadFailure.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeBrowserVisit: FfiConverterRustBuffer {
+    typealias SwiftType = BrowserVisit?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBrowserVisit.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBrowserVisit.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCableAdvert: FfiConverterRustBuffer {
     typealias SwiftType = CableAdvert?
 
@@ -11602,6 +11784,64 @@ public func bestNativeDexPrice(groups: [NativeQuoteGroup]) -> Double?  {
 })
 }
 /**
+ * The platform's raw load error → the one failure every shell shows, or
+ * `None` when it is not a failure (a cancelled navigation). `platform` is
+ * `"android"`, `"apple"` or `"probe"`; `domain` is the `NSError` domain on
+ * Apple; `certificate` is set when the failure came from a certificate
+ * callback rather than an error code.
+ */
+public func browserLoadClassify(platform: String, code: Int64, domain: String?, certificate: Bool) -> BrowserLoadFailure?  {
+    return try!  FfiConverterOptionTypeBrowserLoadFailure.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_load_classify(
+        FfiConverterString.lower(platform),
+        FfiConverterInt64.lower(code),
+        FfiConverterOptionString.lower(domain),
+        FfiConverterBool.lower(certificate),uniffiCallStatus
+    )
+})
+}
+/**
+ * The wait before automatic attempt `attempt` (1-based) of a failed page
+ * load of `class`, or `None` to stop.
+ */
+public func browserLoadRetryDelayMs(`class`: String, attempt: UInt32) -> UInt32?  {
+    return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_load_retry_delay_ms(
+        FfiConverterString.lower(`class`),
+        FfiConverterUInt32.lower(attempt),uniffiCallStatus
+    )
+})
+}
+/**
+ * The visit a finished load is, or `None` (a failed load, an error status,
+ * an engine document). All fields from ONE read of the page itself.
+ */
+public func browserLoadVisit(url: String, title: String, icon: String?, mainFrameFailed: Bool, httpStatus: UInt16?) -> BrowserVisit?  {
+    return try!  FfiConverterOptionTypeBrowserVisit.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_load_visit(
+        FfiConverterString.lower(url),
+        FfiConverterString.lower(title),
+        FfiConverterOptionString.lower(icon),
+        FfiConverterBool.lower(mainFrameFailed),
+        FfiConverterOptionUInt16.lower(httpStatus),uniffiCallStatus
+    )
+})
+}
+/**
+ * A site avatar's letter: `app.uniswap.org` → "U".
+ */
+public func browserSiteLetter(host: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_site_letter(
+        FfiConverterString.lower(host),uniffiCallStatus
+    )
+})
+}
+/**
  * Issue 212: may the relay's gas quote for one tier be held?
  */
 public func bundlerQuoteCacheable(maxFeePerGas: String) -> Bool  {
@@ -11841,6 +12081,20 @@ public func extractAttestationPublicKey(attestationObject: Data)throws  -> P256P
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_extract_attestation_public_key(
         FfiConverterData.lower(attestationObject),uniffiCallStatus
+    )
+})
+}
+/**
+ * The wait before automatic fee re-quote `attempt` (1-based) after
+ * `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
+ * `None` when no retry can fix it (spec 079 FR-008).
+ */
+public func feeRequoteDelayMs(failure: String, attempt: UInt32) -> UInt32?  {
+    return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_fee_requote_delay_ms(
+        FfiConverterString.lower(failure),
+        FfiConverterUInt32.lower(attempt),uniffiCallStatus
     )
 })
 }
@@ -12115,6 +12369,20 @@ public func matchSelector(sig: String, calldata: Data)throws  -> Bool  {
     uniffi_vela_core_uniffi_fn_func_match_selector(
         FfiConverterString.lower(sig),
         FfiConverterData.lower(calldata),uniffiCallStatus
+    )
+})
+}
+/**
+ * A shipped network's usual time to include an operation, in seconds; `None`
+ * for a network Vela does not ship (the receipt then circles instead of
+ * drawing a promise). The dApp signing sheet's wait reads the same number as
+ * the send receipt (spec 079; the web's dApp receipt reads it over wasm).
+ */
+public func networkTypicalInclusionS(chainId: UInt32) -> UInt32?  {
+    return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_network_typical_inclusion_s(
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
     )
 })
 }
@@ -13417,6 +13685,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_best_native_dex_price() != 43798) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_load_classify() != 39421) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_load_retry_delay_ms() != 12497) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_load_visit() != 23241) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_site_letter() != 47269) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_bundler_quote_cacheable() != 62844) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13484,6 +13764,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_extract_attestation_public_key() != 65487) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_fee_requote_delay_ms() != 6275) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_fee_signals_cache_ttl_ms() != 43504) {
@@ -13559,6 +13842,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_match_selector() != 41973) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_network_typical_inclusion_s() != 781) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_parse_existing_user_op_hash() != 36967) {

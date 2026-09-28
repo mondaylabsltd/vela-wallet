@@ -85,6 +85,15 @@
     knob.addEventListener('pointerup', release);
     knob.addEventListener('pointercancel', release);
 
+    // After a failed attempt the knob goes back to the start (spec 079): parked
+    // at the end with its label faded, a second try looked like a dead control.
+    element.__reset = function () {
+      dragging = false;
+      knob.style.transition = 'transform 220ms cubic-bezier(.2,1.2,.3,1)';
+      moveTo(0);
+      setTimeout(function () { knob.style.transition = ''; }, 260);
+    };
+
     // Keyboard and automation: End, or a programmatic confirm.
     element.tabIndex = 0;
     element.addEventListener('keydown', function (event) {
@@ -227,14 +236,18 @@
         request.busy = false;
         if (request.gone) return;
         slider.classList.remove('slide-off');
+        if (slider.__reset) slider.__reset();
         phase('card');
-        if (error && error.name === 'NotAllowedError') {
+        if (error && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
           // Cancelled, timed out, or this device simply holds no key for the
-          // account. WebAuthn deliberately does not say which.
+          // account. WebAuthn deliberately does not say which — so the words
+          // cover all three in everyday language (spec 079: no "仪式").
           say('ui.ceremonyFailed');
           return;
         }
-        say(String((error && error.message) || error));
+        // Anything else: the same everyday sentence first; the engine's own
+        // words after it, for whoever reports it.
+        say(t('ui.notSigned') + ' (' + String((error && error.message) || error) + ')');
       });
   }
 
@@ -466,7 +479,10 @@
         loop();
       })
       .catch(function (error) {
-        say(String(error.message || error));
+        var message = String((error && error.message) || error);
+        // A reload (or a link opened twice) finds no request in the address —
+        // the fragment is wiped once read. Say what that means (spec 079).
+        say(/found no request/.test(message) ? 'ui.requestEnded' : message);
       });
   }
 

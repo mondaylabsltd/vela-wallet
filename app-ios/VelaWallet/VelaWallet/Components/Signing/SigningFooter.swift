@@ -22,6 +22,12 @@ struct SigningFeeView: View {
     var speed: FeeSpeedModel?
     /// `nil` folds or unfolds it; an id picks that speed.
     var onSpeed: (String?) -> Void = { _ in }
+    /// Spec 079: the send form's refresh control, beside the figure and
+    /// outside the row's own tap; `nil` draws none (the gallery).
+    var refresh: FeeRefreshModel?
+    var onRefresh: (() -> Void)?
+    /// The chevron: only where a tap opens a coin list.
+    var chevron = true
 
     var body: some View {
         switch fee {
@@ -32,12 +38,16 @@ struct SigningFeeView: View {
         case .onchain(let label, let value, let selector, let warning, let tappable):
             VStack(alignment: .leading, spacing: Tokens.Space.s8) {
                 onchainBody(label: label, value: value, selector: selector, tappable: tappable)
-                // Issue #262: the reason the slide below is shut, said where the fix is.
+                // Issue #262: the reason the slide below is shut, said where
+                // the fix is — and spec 079's "the service cannot be reached,
+                // it will be asked again".
                 if let warning {
                     Text(verbatim: warning)
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.errorBase)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, Tokens.Space.s16)
+                        .accessibilityIdentifier("signing.fee.reason")
                 }
             }
         }
@@ -126,17 +136,18 @@ struct SigningFeeView: View {
             Text(verbatim: value)
                 .typeRole(Typography.label.scaled(textScale))
                 .foregroundStyle(theme.fgBase)
-            // The chevron belongs to the tap. One coin and a good quote is a
-            // statement, not a control.
-            if tappable {
+            // The chevron belongs to the coin list. One coin and a good quote
+            // is a statement, not a control.
+            if tappable, chevron {
                 LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
                     .foregroundStyle(theme.fgMuted)
             }
         }
-        .padding(.horizontal, Tokens.Space.s16)
+        .padding(.leading, Tokens.Space.s16)
+        .padding(.trailing, refresh == nil ? Tokens.Space.s16 : Tokens.Space.s4)
         .padding(.vertical, Tokens.Space.s12)
 
-        return Group {
+        return HStack(spacing: Tokens.Space.s0) {
             if tappable {
                 Button(action: onToggle) {
                     row.contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r12))
@@ -144,6 +155,13 @@ struct SigningFeeView: View {
                 .buttonStyle(.plain)
             } else {
                 row
+            }
+            // Outside the row's tap, so measuring again never opens the list.
+            if let refresh {
+                FeeRefreshButton(label: refresh.label, refreshing: refresh.refreshing,
+                                 onRefresh: onRefresh, disc: theme.bgRaised)
+                    .padding(.trailing, Tokens.Space.s4)
+                    .accessibilityIdentifier("signing.fee.refresh")
             }
         }
     }

@@ -12,7 +12,14 @@
 >
 > 已上线：`sign.getvela.app`，每个版本在 `b/<sha256>/sign.html`，清单在 `index.json`；
 > App 内置的已知哈希在 vela-core `trusted_signer/integrity.rs` 的 `BUILD_ALLOWED`
-> （新版本放最前面）。部署 = 把 `dist/` 拷上去。
+> （新版本放最前面）。部署 = 把 `dist/` 拷上去（含 `_headers`：`/b/*` 一年 immutable）。
+>
+> **079 起手机端打开的是 `integrity::LAUNCH` 指定的内容寻址版本**
+> （`https://sign.getvela.app/b/<LAUNCH>/sign`），浏览器缓存后断网也能打开签名页。
+> 发布顺序因此是：① `bun samples/build-single.mjs` → ② 新哈希加到 `BUILD_ALLOWED`
+> 最前面 → ③ **部署 `dist/`** → ④ 确认 `curl -I …/b/<新哈希>/sign` 为 200 且带
+> `cache-control: public, max-age=31536000, immutable` → ⑤ 再把 `LAUNCH` 改成新哈希。
+> ⑤ 早于 ③ = 手机打开一个还不存在的页面，签不了名。
 
 给下一个接手的人（或下一次对话）。读完这一页就能继续干活。
 

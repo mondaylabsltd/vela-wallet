@@ -237,7 +237,11 @@
       "selfCallBlockedTitle": "Vela 不会签这笔请求",
       "selfCallBlockedBody": "这笔请求会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了它。什么都没有签。",
       "selfCallBlockedLegBody": "这笔请求的第 {{index}} 步会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了整笔请求。什么都没有签。",
-      "selfCallBlockedSafeTx": "这笔请求要你的钥匙授权一笔以后再执行的 Safe 交易。Vela 拒绝了它——这样的签名可以在你不在场时被使用。什么都没有签。"
+      "selfCallBlockedSafeTx": "这笔请求要你的钥匙授权一笔以后再执行的 Safe 交易。Vela 拒绝了它——这样的签名可以在你不在场时被使用。什么都没有签。",
+      "stillConfirming": "还没上链。Vela 会继续查看，请不要重复发送。",
+      "unknownOutcome": "超过 24 小时仍未确认。",
+      "openSigner": "去签名页确认",
+      "signerDown": "签名页没能打开，请检查网络。"
     },
     "currency": {
       "title": "显示货币",

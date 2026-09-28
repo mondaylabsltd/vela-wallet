@@ -79,6 +79,12 @@ fun SigningHeader(
     own: Boolean = false,
     iconUrls: List<String> = emptyList(),
     networkLogoUrl: String? = null,
+    /**
+     * Spec 079: the sheet's one explicit close. It no longer closes on a swipe,
+     * a tap outside or Back (owner ruling), so the close has to be drawn.
+     */
+    onClose: (() -> Unit)? = null,
+    closeLabel: String = "",
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -108,7 +114,8 @@ fun SigningHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (host.isNotEmpty()) {
+            // A site whose name IS its host says it once (spec 079 F14).
+            if (host.isNotEmpty() && host != name) {
                 Text(
                     text = host,
                     color = colors.fgMuted,
@@ -138,6 +145,14 @@ fun SigningHeader(
                 fontFamily = VelaFontFamily,
                 fontSize = VelaTextSize.base,
             )
+        }
+        onClose?.let { close ->
+            Box(
+                modifier = Modifier
+                    .size(VelaSizing.hitTarget)
+                    .clickable(onClick = close),
+                contentAlignment = Alignment.Center,
+            ) { Icon(VelaIcons.Close, closeLabel, tint = colors.fgMuted) }
         }
     }
 }
@@ -864,7 +879,9 @@ fun TrustedSignerWaiting(
         verticalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
     ) {
         Text(model.title, color = colors.fgBase, fontFamily = VelaFontFamily, fontWeight = VelaFontWeight.semibold, fontSize = VelaTextSize.base)
-        Text(model.hint, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+        if (model.hint.isNotBlank()) {
+            Text(model.hint, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+        }
         app.getvela.wallet.core.designsystem.components.VelaPrimaryButton(model.reopen, onReopen, Modifier.fillMaxWidth())
         app.getvela.wallet.core.designsystem.components.VelaSecondaryButton(model.cancel, onCancel, Modifier.fillMaxWidth())
     }

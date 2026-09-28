@@ -58,6 +58,11 @@
     "pageCrashedBody": "La página se cerró de forma inesperada. Tu billetera no se vio afectada: recarga para continuar.",
     "walletConnectUnsupported": "Los enlaces de WalletConnect no son compatibles. Abre la dApp en Explorar y conéctate desde ahí.",
     "scanUnrecognized": "Este código no es una dirección web ni una dirección de billetera.",
-    "linkCopied": "Enlace copiado"
+    "linkCopied": "Enlace copiado",
+    "loadOffline": "Conexión inestable: la página no se abrió.",
+    "loadNotFound": "No se encontró este sitio. Revisa la dirección.",
+    "loadCertificate": "El certificado de este sitio no es válido y Vela lo bloqueó.",
+    "loadRetrying": "Reintentando…",
+    "chainDown": "No se puede conectar con {{chain}}: los datos podrían estar incompletos."
   }
 }

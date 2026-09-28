@@ -132,11 +132,15 @@ fun AddressBar(
                     )
                     LaunchedEffect(Unit) { focus.requestFocus() }
                 } else {
+                    // Spec 079 (owner): a lock, and only a lock. Closed and quiet
+                    // for https — which says the line is encrypted, not that the
+                    // site is honest, so it is decorative to a screen reader too;
+                    // open and in the warning colour for plain http.
                     if (secure) {
-                        Icon(VelaIcons.Lock, secureLabel, tint = colors.fgMuted, modifier = Modifier.size(VelaIconSize.xs))
+                        Icon(VelaIcons.Lock, null, tint = colors.fgMuted, modifier = Modifier.size(VelaIconSize.xs))
                         Spacer(Modifier.size(VelaSpacing.md))
                     } else if (host.isNotBlank()) {
-                        Icon(VelaIcons.TriangleAlert, insecureLabel, tint = colors.warningBase, modifier = Modifier.size(VelaIconSize.xs))
+                        Icon(VelaIcons.LockOpen, insecureLabel, tint = colors.warningBase, modifier = Modifier.size(VelaIconSize.xs))
                         Spacer(Modifier.size(VelaSpacing.md))
                     }
                     Text(

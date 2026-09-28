@@ -276,6 +276,10 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
         // The flow's later requests are their own visits, and the channel has
         // no way to present one: opening a page is this object's business.
         channel.openPage = { [weak self] url in self?.show(url) }
+        // Spec 079: a page that could not open is the card's to say, with a
+        // retry — asked of the page's address alone.
+        channel.reachable = { url in await TrustedSignerChannel.headProbe(url) }
+        channel.onUnreachableChanged = { [weak model] unreachable in model?.unreachable = unreachable }
         guard let url = channel.start() else {
             self.channel = nil
             return .unavailable
@@ -317,11 +321,13 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
 
     /// The same URL, the same one-time token: a person who dismissed the tab
     /// by accident gets the same request back, and the answer still belongs
-    /// to the attempt that is waiting (contract §2).
+    /// to the attempt that is waiting (contract §2). On a page that could not
+    /// open it is the card's Retry (spec 079), and the card waits again.
     func reopen() {
         guard let url = channel?.launchUrl, let sheet = hostSheet,
               sheet.presentedViewController == nil
         else { return }
+        channel?.retried()
         sheet.present(page(url), animated: true)
     }
 
@@ -370,12 +376,31 @@ final class TrustedSigner: NSObject, TrustedSignerPort, TrustedSignerCeremonyPor
     }
 
     // MARK: - SFSafariViewControllerDelegate
+    //
+    // Spec 079's return signal. The page is an in-app tab, so the app never
+    // leaves the foreground: the tab itself says when the person closed it
+    // and whether its first load worked, and those two are what start the
+    // question "could the page open at all?" (a HEAD to its address).
 
-    /// The person closed the tab. A page that had the request was closed
-    /// without signing — the sheet goes back to "not signed" (spec US1); one
-    /// that never connected leaves the waiting sheet, with its two ways on.
+    /// The person closed the tab. Not an answer (see `pageClosed`): after a
+    /// moment's grace, a page that never loaded is asked about, and when its
+    /// address does not answer the waiting card says the page could not open.
     func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
         channel?.pageClosed()
+    }
+
+    /// The tab's first load. A page that loaded is left alone whatever the
+    /// network does next. One that did not is asked about at once; when its
+    /// address does not answer, the tab goes — the app, not the browser's
+    /// error page, says the page could not be reached (FR-028) — and the card
+    /// offers the retry.
+    func safariViewController(_ controller: SFSafariViewController, didCompleteInitialLoad didLoadSuccessfully: Bool) {
+        guard let channel else { return }
+        Task { @MainActor [weak self] in
+            await channel.pageLoaded(didLoadSuccessfully)
+            guard let self, !didLoadSuccessfully, channel.unreachable, self.channel === channel else { return }
+            self.hideTab()
+        }
     }
 
     /// The window's topmost controller — over the signing sheet, over Send.

@@ -237,7 +237,11 @@
       "selfCallBlockedTitle": "Vela bu isteği imzalamaz",
       "selfCallBlockedBody": "Bu istek cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela reddetti. Hiçbir şey imzalanmadı.",
       "selfCallBlockedLegBody": "Bu isteğin {{index}}. adımı cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela isteğin tamamını reddetti. Hiçbir şey imzalanmadı.",
-      "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı."
+      "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı.",
+      "stillConfirming": "Henüz zincire yazılmadı. Vela kontrol ediyor — tekrar göndermeyin.",
+      "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
+      "openSigner": "İmza sayfasında onayla",
+      "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin."
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

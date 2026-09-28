@@ -74,7 +74,70 @@ object ExploreLive {
         val accountAddress: String = "",
         val chainName: String = "",
         val chainDot: Color = Color.Unspecified,
+        /** Spec 079: the page's chain, for its logo. */
+        val chainId: Int = 0,
     )
+
+    /**
+     * What the account holds on each chain, in dollars (spec 079, owner: "需要能看到
+     * 这个网络上的余额") — the home screen's own figures, never fetched here. A
+     * chain whose read failed and a token with no price count for nothing.
+     */
+    fun heldUsdByChain(balances: app.getvela.wallet.feature.wallet.core.BalanceView): Map<Int, Double> =
+        balances.tokens
+            .filter { !it.spam && it.price_usd != null && it.chain_id !in balances.failed_chain_ids }
+            .groupBy { it.chain_id }
+            .mapValues { (_, rows) -> rows.sumOf { (it.balance.toDoubleOrNull() ?: 0.0) * (it.price_usd ?: 0.0) } }
+
+    /**
+     * The connection panel's network rows (spec 079): each with its logo and the
+     * account's balance there — nothing rather than a zero or a figure the person
+     * chose to hide.
+     */
+    fun networkOptions(
+        networks: List<app.getvela.wallet.feature.settings.core.NetNetworkRow>,
+        names: Map<Int, String>,
+        siteChain: Int,
+        balances: app.getvela.wallet.feature.wallet.core.BalanceView,
+        fiat: (Double) -> String,
+    ): List<app.getvela.wallet.feature.explore.components.PickerOption> {
+        val held = heldUsdByChain(balances)
+        return networks.map { n ->
+            val chain = n.chain_id.toInt()
+            app.getvela.wallet.feature.explore.components.PickerOption(
+                id = n.chain_id.toString(),
+                label = names[chain] ?: n.chain_id.toString(),
+                selected = chain == siteChain,
+                logoUrl = app.getvela.wallet.core.marks.Marks.chainLogoUrl(chain),
+                amount = held[chain]?.takeIf { it >= MIN_SHOWN_USD && !balances.hidden }?.let(fiat),
+            )
+        }
+    }
+
+    /** The account rows (spec 079): each account's identicon, from its address. */
+    fun accountOptions(
+        accounts: List<app.getvela.wallet.feature.onboarding.core.SessionAccountRow>,
+        active: String,
+    ): List<app.getvela.wallet.feature.explore.components.PickerOption> = accounts.map { row ->
+        app.getvela.wallet.feature.explore.components.PickerOption(
+            id = row.index.toString(),
+            label = row.name.ifBlank { shortAddress(row.address) },
+            detail = shortAddress(row.address),
+            selected = row.address.equals(active, ignoreCase = true),
+            identiconSeed = row.address,
+        )
+    }
+
+    /** Below half a cent the row says nothing: dust is not a balance worth reading. */
+    private const val MIN_SHOWN_USD = 0.005
+
+    /**
+     * The page's chain could not be reached (spec 079): the pool failed it on
+     * its last try, and not because the endpoint is merely busy — a
+     * rate-limited chain keeps quiet everywhere (the pool's invariant ④).
+     */
+    fun chainUnreachable(chainId: Int, pool: app.getvela.wallet.feature.wallet.core.RpcPoolView): Boolean =
+        chainId in pool.failed_chains && chainId !in pool.rate_limited_chains
 
     fun home(
         fallback: ExploreScreenModel,
@@ -85,6 +148,11 @@ object ExploreLive {
         /** The core's view of the tab in front (spec 070) — connection, chain, lock, crash. */
         tab: DbrTabView? = null,
         identity: Identity = Identity(),
+        /** Spec 079: each tab's page as it last left the screen. */
+        snapshots: Map<String, androidx.compose.ui.graphics.ImageBitmap> = emptyMap(),
+        /** Spec 079: the pool's verdicts, for the page's chain notice. */
+        pool: app.getvela.wallet.feature.wallet.core.RpcPoolView = app.getvela.wallet.feature.wallet.core.RpcPoolView(),
+        chainAsking: Boolean = false,
     ): ExploreScreenModel {
         val connected = tab?.connected_address != null
         val favorites = view.favorites.map { tileOf(it) }
@@ -97,9 +165,10 @@ object ExploreLive {
             TabModel(
                 id = open.id,
                 title = open.title.ifBlank { strings.t("explore.startPage") },
-                site = open.url?.let { url -> SiteModel(id = url, name = open.title, host = open.host, letter = letterOf(open.host), tint = tintOf(open.host)) },
+                site = open.url?.let { url -> SiteModel(id = url, name = open.title, host = open.host, letter = letterOf(open.host), tint = tintOf(open.host), iconUrls = iconsOf(url)) },
                 selected = view.selected_tab == open.id,
                 startPage = open.url == null,
+                snapshot = snapshots[open.id].takeIf { open.url != null },
             )
         }
         // The page's origin, or — when its renderer died and there is no engine —
@@ -134,6 +203,11 @@ object ExploreLive {
                 loading = engine?.loading ?: false,
                 progress = engine?.progress ?: 100,
                 failed = engine?.failed ?: false,
+                failureReason = engine?.failure?.reasonKey?.let { strings.t(it) },
+                retrying = engine?.retrying ?: false,
+                chainNotice = strings.t("explore.chainDown", mapOf("chain" to identity.chainName))
+                    .takeIf { engine != null && tab != null && chainUnreachable(identity.chainId, pool) },
+                chainAsking = chainAsking,
                 crashed = tab?.crashed ?: false,
             ),
             connection = engine?.let { e -> connection(fallback.connection, e, strings, tab, identity) } ?: fallback.connection,
@@ -152,8 +226,9 @@ object ExploreLive {
             siteMenuSheet = engine?.let { e ->
                 val secure = tab?.secure ?: false
                 fallback.siteMenuSheet.copy(
-                    site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host)),
-                    statusLine = if (secure) strings.t("explore.secureSite") else strings.t("connect.browser.a11yInsecure"),
+                    site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host), iconUrls = iconsOf(e.url)),
+                    // Spec 079 (owner): the lock alone — no "安全站点".
+                    statusLine = "",
                     secure = secure,
                     // What each row does now depends on the page: the star's row
                     // unpins a favourite, and Disconnect is offered only to a
@@ -175,16 +250,16 @@ object ExploreLive {
         val connected = tab?.connected_address != null
         val secure = tab?.secure ?: false
         return fallback.copy(
-            site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host)),
-            statusLine = listOfNotNull(
-                if (secure) strings.t("explore.secureSite") else strings.t("connect.browser.a11yInsecure"),
-                strings.t("explore.connectedTag").takeIf { connected },
-            ).joinToString(" · "),
+            site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host), iconUrls = iconsOf(e.url)),
+            // Spec 079 (owner): the lock alone says https; "已连接" is a fact about
+            // the connection, not a claim about the site, so it stays.
+            statusLine = strings.t("explore.connectedTag").takeIf { connected }.orEmpty(),
             accountName = identity.accountName.ifBlank { fallback.accountName },
             accountAddress = shortAddress(tab?.connected_address ?: identity.accountAddress),
             accountSeed = tab?.connected_address ?: identity.accountAddress.ifBlank { fallback.accountSeed },
             networkName = identity.chainName.ifBlank { fallback.networkName },
             networkDot = if (identity.chainDot == Color.Unspecified) fallback.networkDot else identity.chainDot,
+            networkLogoUrl = identity.chainId.takeIf { it > 0 }?.let { app.getvela.wallet.core.marks.Marks.chainLogoUrl(it) },
             secure = secure,
         )
     }
@@ -198,9 +273,11 @@ object ExploreLive {
         val host = consent.origin.substringAfter("://").substringBefore('/')
         return fallback.copy(
             title = strings.t("connect.browser.title", mapOf("host" to host)),
-            site = SiteModel(id = consent.origin, name = host, host = host, letter = letterOf(host), tint = tintOf(host)),
-            statusLine = if (secure) strings.t("explore.secureSite") else strings.t("connect.browser.a11yInsecure"),
+            site = SiteModel(id = consent.origin, name = host, host = host, letter = letterOf(host), tint = tintOf(host), iconUrls = iconsOf(consent.origin)),
+            statusLine = "",
             secure = secure,
+            networkLogoUrl = identity.chainId.takeIf { it > 0 }?.let { app.getvela.wallet.core.marks.Marks.chainLogoUrl(it) },
+            primaryAction = true,
             accountName = identity.accountName.ifBlank { fallback.accountName },
             accountAddress = shortAddress(identity.accountAddress),
             accountSeed = identity.accountAddress.ifBlank { fallback.accountSeed },
@@ -223,6 +300,8 @@ object ExploreLive {
         letter = letterOf(entry.host),
         tint = tintOf(entry.host),
         subtitle = entry.host,
+        // The icon the page named when it was visited, then the usual places.
+        iconUrls = (listOf(entry.favicon).filter { it.startsWith("https://") } + iconsOf(entry.url)).distinct(),
     )
 
     fun tileOf(site: ExploreSite): SiteModel = SiteModel(
@@ -232,7 +311,12 @@ object ExploreLive {
         letter = letterOf(site.host),
         tint = tintOf(site.host),
         subtitle = site.host,
+        iconUrls = iconsOf(site.url),
     )
+
+    /** Spec 079: where a site's icon conventionally lives (the signing header's list), https only. */
+    private fun iconsOf(url: String): List<String> =
+        uniffi.vela_core_uniffi.dappOriginOf(url)?.let(app.getvela.wallet.feature.signing.SigningLive::siteIconUrls).orEmpty()
 
     fun recentGroup(entries: List<BhistEntry>, strings: VelaStrings): GroupModel? {
         if (entries.isEmpty()) return null
@@ -257,9 +341,8 @@ object ExploreLive {
             )
         }
 
-    /** The first letter or digit of the host, upper-cased; `?` for none. */
-    fun letterOf(host: String): String =
-        host.firstOrNull { it.isLetterOrDigit() && it.code < 128 }?.uppercaseChar()?.toString() ?: "?"
+    /** The avatar letter — the core's rule (spec 079): `app.uniswap.org` is "U", not "A". */
+    fun letterOf(host: String): String = uniffi.vela_core_uniffi.browserSiteLetter(host)
 
     /** A stable hue per host (FNV-1a, the desktop's rule): the same site is the same colour everywhere. */
     fun tintOf(host: String): Color {

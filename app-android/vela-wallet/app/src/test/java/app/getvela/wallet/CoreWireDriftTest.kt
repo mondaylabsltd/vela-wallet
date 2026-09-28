@@ -101,6 +101,7 @@ import app.getvela.wallet.feature.send.core.SendSplitRowIssue
 import app.getvela.wallet.feature.send.core.SendDuplicateRowView
 import app.getvela.wallet.feature.send.core.SendRowFieldState
 import app.getvela.wallet.feature.send.core.TrackEntryView
+import app.getvela.wallet.feature.send.core.TrackOutcome
 import app.getvela.wallet.feature.send.core.TrackEvent
 import app.getvela.wallet.feature.send.core.TrackLifecycle
 import app.getvela.wallet.feature.send.core.TrackOperation
@@ -805,6 +806,7 @@ class CoreWireDriftTest {
         assertVariantsExist<TrackEvent>("TrackEvent")
         assertStringUnion<TrackLifecycle>("TrackLifecycle")
         assertStringUnion<TrackStatus>("TrackStatus")
+        assertStringUnion<TrackOutcome>("TrackOutcome")
         assertStringUnion<TrackRecordStatus>("TrackRecordStatus")
     }
 

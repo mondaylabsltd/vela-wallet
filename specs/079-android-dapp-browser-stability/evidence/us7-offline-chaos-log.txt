@@ -1,0 +1,16 @@
+13:31:23 CONFIG {"mode": "drop", "latency": 6000, "bps": 0, "drop": 1.0, "match": "sign\\.getvela"}
+13:31:32 DROP sign.getvela.app:443
+13:31:32 DROP sign.getvela.app:443
+13:31:32 DROP sign.getvela.app:443
+13:31:32 DROP sign.getvela.app:443
+13:31:52 CONFIG {"mode": "pass", "latency": 6000, "bps": 0, "drop": 1.0, "match": "sign\\.getvela"}
+13:32:47 CONFIG {"mode": "drop", "latency": 6000, "bps": 0, "drop": 1.0, "match": "sign\\.getvela"}
+13:34:13 DROP sign.getvela.app:443
+13:34:13 DROP sign.getvela.app:443
+13:34:13 DROP sign.getvela.app:443
+13:34:13 DROP sign.getvela.app:443
+13:39:56 DROP sign.getvela.app:443
+13:39:56 DROP sign.getvela.app:443
+13:39:57 DROP sign.getvela.app:443
+13:39:57 DROP sign.getvela.app:443
+13:40:01 CONFIG {"mode": "pass", "latency": 6000, "bps": 0, "drop": 1.0, "match": "sign\\.getvela"}

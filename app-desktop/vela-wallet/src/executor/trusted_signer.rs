@@ -739,6 +739,10 @@ impl Ask {
             credential_ids_hex: &credential_ids,
             user_op: operation.map(|(op, _)| op),
             calls: operation.map_or(&[][..], |(_, calls)| calls),
+            // Spec 079: the desktop's only dApp source is its own browser
+            // (group C: no WalletPair), so a site origin here was read from
+            // the engine, not claimed by another app.
+            origin_seen_by_browser: !self.origin.is_empty(),
         })
     }
 }

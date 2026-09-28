@@ -47,6 +47,7 @@ import app.getvela.wallet.feature.explore.components.ExploreMetrics
 import app.getvela.wallet.feature.explore.components.ExploreSearchField
 import app.getvela.wallet.feature.explore.components.ExploreTabsScreen
 import app.getvela.wallet.feature.explore.components.BrowserNotice
+import app.getvela.wallet.feature.explore.components.ChainNotice
 import app.getvela.wallet.feature.explore.components.GroupManageSheetContent
 import app.getvela.wallet.feature.explore.components.PickerOption
 import app.getvela.wallet.feature.explore.components.PickerSheetContent
@@ -84,6 +85,8 @@ class ExploreCallbacks(
     val onDisconnect: () -> Unit = {},
     /** The consent card's answer (spec 044). */
     val onConsent: (approved: Boolean) -> Unit = {},
+    /** Spec 079: the chain notice's retry — one read of the page's chain. */
+    val onChainRetry: () -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,6 +123,12 @@ fun ExploreScreen(
     scanner: (@Composable (onUrl: (String) -> Unit, onClose: () -> Unit) -> Unit)? = null,
     /** The connection sheet's "Switch account" — the host's own switcher. */
     onSwitchAccount: (() -> Unit)? = null,
+    /**
+     * Spec 079: a page's signing request is up. The browser's own sheets give
+     * way to it rather than stack behind it (device-found: the connection
+     * panel sat under the signing sheet after an account switch).
+     */
+    signingOpen: Boolean = false,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -141,6 +150,12 @@ fun ExploreScreen(
     /** Which pick-one sheet is up over the connection panel: `"network"` or `"account"`. */
     var picker by remember { mutableStateOf<String?>(null) }
     val searchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(signingOpen) {
+        if (signingOpen) {
+            sheet = null
+            picker = null
+        }
+    }
     // Spec 070: system Back walks the page's own history first, then leaves
     // the page for the start page — it used to leave 探索 altogether. The
     // switcher goes back to where it came from. (Registered before the
@@ -194,6 +209,17 @@ fun ExploreScreen(
                     progress = model.browser.progress,
                     onSubmitUrl = onOpenUrl,
                 )
+                // Spec 079: the page loaded but its chain cannot be reached — said
+                // once, under the address bar, while the page stays usable.
+                model.browser.chainNotice?.takeIf { page != null && !model.browser.failed && !model.browser.crashed }?.let { notice ->
+                    ChainNotice(
+                        text = notice,
+                        action = strings.t("connect.browser.retry"),
+                        busy = model.browser.chainAsking,
+                        busyLabel = strings.t("explore.loadRetrying"),
+                        onAction = { live?.onChainRetry?.invoke() },
+                    )
+                }
                 Box(Modifier.weight(1f)) {
                     when {
                         // The renderer died: the app is fine, the page is gone,
@@ -207,11 +233,18 @@ fun ExploreScreen(
                         page != null -> {
                             page()
                             if (model.browser.failed) {
+                                // Spec 079: why it failed (the core's words for the
+                                // class), the host, and a retry that keeps this panel
+                                // up — the engine's own error page is never shown.
+                                val title = strings.t("connect.browser.loadFailed")
                                 BrowserNotice(
-                                    title = strings.t("connect.browser.loadFailed"),
-                                    body = model.browser.host,
+                                    title = title,
+                                    body = model.browser.failureReason?.takeIf { it != title }.orEmpty(),
+                                    detail = model.browser.host,
                                     action = strings.t("connect.browser.retry"),
                                     onAction = onPageReload,
+                                    busy = model.browser.retrying,
+                                    busyLabel = strings.t("explore.loadRetrying"),
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -269,10 +302,13 @@ fun ExploreScreen(
     }
 
     consent?.let { card ->
+        // Spec 079: like the signing sheet, the consent closes only on its ✕ or
+        // 取消 — a stray swipe must not refuse a connection the person was reading.
         VelaModalSheet(
             onDismissRequest = { live?.onConsent(false) },
             containerColor = colors.bgBase,
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dismissible = false,
         ) {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 ConnectionPanel(

@@ -150,6 +150,10 @@ struct RootView: View {
     /// kept alive only so an operation that may still land gets its record
     /// written, and dropped once it has answered (`closed`).
     @State private var retiredSigning: [SigningController] = []
+    /// How the last request ended, kept on screen after the core closed its
+    /// sheet (spec 079): the tick, or "not landed yet". Cleared by its ✕, by
+    /// itself once a tick has been seen, or by the next request.
+    @State private var signingEnding: SigningEnding?
     /// The account switcher, opened from the browser's connection panel.
     @State private var exploreSwitcherOpen = false
     /// Whether this wallet's founding keys are on Ethereum too (spec 062),
@@ -661,6 +665,19 @@ struct RootView: View {
             guard let request else { return }
             prefillSend(from: request)
         }
+        // Spec 079: a tick is seen, then it goes — nobody should have to
+        // close a success. Here at the root so a tab switch cannot strand it.
+        .task(id: signingTickKey) {
+            guard let key = signingTickKey, let ending = signingEnding else { return }
+            try? await Task.sleep(for: .seconds(ending.aftercare.tickSeconds))
+            guard !Task.isCancelled, signingEnding?.id == key else { return }
+            signingEnding = nil
+        }
+        // A request that asks to sign closes the account switcher it would
+        // otherwise queue behind (spec 079; Android found the same stacking).
+        .onChange(of: signing != nil) { _, up in
+            if up, exploreSwitcherOpen { exploreSwitcherOpen = false }
+        }
         // Every avatar in the app opens the viewer (row 10 of 057's audit).
         //
         // Provided ONCE, here, and reached by the avatar component itself —
@@ -917,6 +934,9 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 wallet.homePoller.sceneActive(phase == .active)
+                // A failed page retries by itself only while the app is in
+                // front (spec 079).
+                browser.appActive(phase == .active)
                 switch phase {
                 case .active: tracker.foregrounded()
                 case .background: tracker.backgrounded()
@@ -1231,13 +1251,17 @@ struct RootView: View {
                             identity: (name: session.view.activeName,
                                        address: session.view.address),
                             chainIds: browser.chainIds,
+                            holdings: WalletLive.networkHoldings(
+                                wallet.balance, display: WalletLive.Display.from(settings.currency)
+                            ),
+                            snapshot: { [browser] tab in browser.snapshot(of: tab) },
                             loc: loc
                         ),
                         loc: loc,
                         signing: SigningFixtures.build(.cs12, loc: loc)
                             .withIdentity(name: session.view.activeName,
                                           address: session.view.address),
-                        signingLive: signing.map { signingModel(for: $0) },
+                        signingLive: signingSheetModel,
                         onSigningConfirm: { signing?.approve() },
                         // **Every chip on the editor is a PRESET, 撤销 included.**
                         //
@@ -1256,7 +1280,14 @@ struct RootView: View {
                         onFee: { signing?.feeTapped() },
                         onFeePick: { id in signing?.pickFee(id) },
                         onSpeed: { id in signing?.speed(id) },
-                        onSigningDismissed: { signing?.swipeDismissed() },
+                        onSigningDismissed: { closeSigningSheet() },
+                        onSigningExplorer: { openSigningExplorer() },
+                        onRefreshFee: { signing?.refreshFee() },
+                        chainNotice: ExploreLive.chainNotice(
+                            chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
+                            failed: pool.failedChains, rateLimited: pool.rateLimitedChains, loc: loc
+                        ),
+                        onChainRetry: { retryPageChain() },
                         controller: browser,
                         camera: camera,
                         onSelectTab: selectTab,
@@ -1322,6 +1353,11 @@ struct RootView: View {
                         // Idempotent: the network list must be read before a
                         // page asks to switch, even on a cold deep link here.
                         settings.open()
+                        // Spec 079: the connection panel shows what the account
+                        // holds per network — the home's own figures. On a cold
+                        // deep link here the home never appeared, so nothing had
+                        // read them (iPhone pass: every row blank). Idempotent.
+                        wallet.open(address: session.view.address)
                         // The chains a site may switch to are the wallet's own.
                         // The settings machine may not have read them yet; the
                         // catalogue stands in until it has, and the change
@@ -1415,6 +1451,110 @@ struct RootView: View {
         signingClosed()
     }
 
+    // MARK: - The signing sheet's ending (spec 079)
+
+    /// A request's ending, and the sheet header it was answered under.
+    struct SigningEnding {
+        let id = UUID()
+        let aftercare: SigningAftercare
+        /// The last live sheet — its header and its blocks (the summary line).
+        let header: SigningModel
+    }
+
+    /// The request whose sheet is up, if any. A controller whose sheet the
+    /// core cleared draws nothing, whatever it is still doing — except in the
+    /// turn between the core clearing it to answer the page and the answer
+    /// going out (`SigningController.shownSign`), so the sheet turns into the
+    /// ending instead of closing and reopening.
+    private var liveSigning: SigningController? {
+        signing.flatMap { $0.shownSign.isVisible ? $0 : nil }
+    }
+
+    /// What the signing sheet shows: the live request, or — once the core
+    /// has answered the page — its ending, in the same sheet, which never
+    /// closes in between.
+    private var signingSheetModel: SigningModel? {
+        if let live = liveSigning { return signingModel(for: live) }
+        return signingEnding.map(endingModel)
+    }
+
+    /// The ending as the sheet draws it: the last header, the send receipt's
+    /// body in the tracker's words.
+    private func endingModel(_ ending: SigningEnding) -> SigningModel {
+        var model = ending.header
+        let chain = ending.aftercare.chainId
+        var context = signingContext(chain: chain, live: nil)
+        if case .stillConfirming(_, let op) = ending.aftercare {
+            context.track = tracker.view?.entry(userOpHash: op)
+        }
+        model.receipt = SigningLive.aftercareReceipt(
+            ending.aftercare, summary: SigningLive.summaryOf(model.blocks), context: context
+        )
+        return model
+    }
+
+    /// While the ending on screen is a tick: its id, so the root's timer
+    /// takes it away after a beat. `nil` otherwise.
+    private var signingTickKey: UUID? {
+        guard liveSigning == nil, let ending = signingEnding,
+              endingModel(ending).receipt?.stage == .confirmed
+        else { return nil }
+        return ending.id
+    }
+
+    /// The core answered the page. Keep the ending on screen — unless the
+    /// person already closed the sheet after approving: a sheet somebody
+    /// closed does not come back by itself.
+    private func signingAnswered(
+        _ incoming: SigningController.Incoming, payload: [String: Any], userOpHash: String?
+    ) {
+        guard let live = signing, live.request?.id == incoming.id, !live.closedByPerson,
+              let aftercare = SigningAftercare.of(
+                  method: incoming.method, chainId: incoming.chainId,
+                  payload: payload, submittedUserOp: userOpHash
+              )
+        else { return }
+        var header = signingModel(for: live)
+        header.receipt = nil
+        signingEnding = SigningEnding(aftercare: aftercare, header: header)
+    }
+
+    /// The sheet's ✕ (and its receipt's button): the live request's close,
+    /// which the core routes by phase, or the ending's.
+    private func closeSigningSheet() {
+        if let live = liveSigning {
+            live.swipeDismissed()
+        } else {
+            signingEnding = nil
+        }
+    }
+
+    /// The landed receipt's explorer link, on the request's own chain.
+    private func openSigningExplorer() {
+        let hash: String?
+        let chain: Int
+        if let ending = signingEnding, liveSigning == nil {
+            chain = ending.aftercare.chainId
+            switch ending.aftercare {
+            case .landed(_, let txHash): hash = txHash
+            case .stillConfirming(_, let op): hash = tracker.view?.entry(userOpHash: op)?.txHash
+            case .signed: hash = nil
+            }
+        } else {
+            return
+        }
+        guard let hash, let url = ExplorerLinks.tx(chainId: chain, hash: hash, store: shelf) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    /// Spec 079 US4: the chain notice's Retry — one read on the page's chain
+    /// through the pool. An answer drops the chain from the failed set, and
+    /// the notice goes with it.
+    private func retryPageChain() {
+        guard let chain = browser.currentTab?.chainId else { return }
+        Task { _ = await pool.call(chainId: chain, method: "eth_blockNumber") }
+    }
+
     /// The sheet's request is over. Drop it, and open the one waiting.
     private func signingClosed() {
         signing = nil
@@ -1485,6 +1625,8 @@ struct RootView: View {
         let credentialId = ((record?["keys"] as? [[String: Any]])?.first?["credential_id"] as? String)
             ?? (record?["credential_id"] as? String) ?? ""
 
+        // The next request takes the sheet; the last one's ending goes.
+        signingEnding = nil
         let controller = SigningController(
             wallet: (address: session.view.address, credentialId: credentialId),
             relay: relayClient,
@@ -1495,7 +1637,10 @@ struct RootView: View {
             preferredTier: { [settings] in settings.feeTier?.tier ?? "fast" },
             numberPreset: { Formats.resolve(Formats.current.number).rawValue },
             ports: SigningController.Ports(
-                respond: respond,
+                respond: { transportId, id, payload, userOpHash in
+                    respond(transportId, id, payload, userOpHash)
+                    signingAnswered(incoming, payload: payload, userOpHash: userOpHash)
+                },
                 trackSubmitted: { [tracker, notifier] hash, ids, chain in
                     notifier.askOnceIfNeeded()
                     tracker.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
@@ -2443,7 +2588,23 @@ struct RootView: View {
             id: "", method: "", paramsJson: "[]", origin: "",
             transportId: "", chainId: chain
         )
-        let context = SigningLive.Context(
+        let context = signingContext(chain: chain, live: live)
+        return SigningLive.model(
+            fallback: SigningFixtures.build(.cs1, loc: loc),
+            request: request,
+            sign: live.shownSign,
+            clear: live.clear,
+            guard: live.guardView,
+            fee: live.fee,
+            context: context,
+            speed: live.speed.map { SendLive.SpeedInputs(view: $0, feeView: live.feeView(of:)) }
+        )
+    }
+
+    /// The facts the signing sheet is drawn from, for the request's chain.
+    /// `live` is `nil` for an ending, which has no machines left to read.
+    private func signingContext(chain: Int, live: SigningController?) -> SigningLive.Context {
+        SigningLive.Context(
             loc: loc,
             chainName: ChainCatalog.meta(chain)?.displayName ?? String(chain),
             chainDot: SettingsLive.chainColor(chain),
@@ -2451,23 +2612,19 @@ struct RootView: View {
             walletName: session.view.activeName,
             walletAddress: session.view.address,
             display: WalletLive.Display.from(settings.currency),
-            origin: live.request?.origin,
+            origin: live?.request?.origin,
             // What the chain said this transaction would do, and how far the
             // asking got. The judgment is the CORE's; this only carries it.
             sim: trust.trust?.sim,
-            simulation: live.simulation,
-            feeOpen: live.feeOpen,
-            trustedSignerNotice: live.trustedSignerNotice
-        )
-        return SigningLive.model(
-            fallback: SigningFixtures.build(.cs1, loc: loc),
-            request: request,
-            sign: live.sign,
-            clear: live.clear,
-            guard: live.guardView,
-            fee: live.fee,
-            context: context,
-            speed: live.speed.map { SendLive.SpeedInputs(view: $0, feeView: live.feeView(of:)) }
+            simulation: live?.simulation ?? .pending,
+            feeOpen: live?.feeOpen ?? false,
+            trustedSignerNotice: live?.trustedSignerNotice,
+            // Spec 079: the receipt — the explorer for its link, the tracker's
+            // entry for its clock and outcome, the chain's usual time.
+            explorerBase: ExplorerLinks.base(chainId: chain, store: shelf),
+            track: tracker.view?.entry(userOpHash: live?.shownSign.pendingOpHash),
+            typicalS: SigningController.typicalInclusionS(chainId: chain),
+            trustedSignerRoute: live?.trustedSignerRoute ?? false
         )
     }
 
@@ -2969,25 +3126,32 @@ struct RootView: View {
         // The wallet's own request, over the page that raised it. Settings
         // keeps its pickers on a sheet of its own INSIDE the screen; the row
         // that opens this one opens no picker, so the two never stand at once.
+        // Spec 079: the same rules as a page's sheet — up while there is a
+        // request or its ending, closed only by its ✕ (never a swipe), the
+        // setter inert because the remaining dismissals are the core's.
         .sheet(isPresented: Binding(
-            get: { signing != nil },
-            set: { open in if !open { signing?.swipeDismissed() } }
+            get: { signingSheetModel != nil },
+            set: { _ in }
         )) {
-            if let signing {
+            if let model = signingSheetModel {
                 SigningSheet(
-                    model: signingModel(for: signing),
-                    onConfirm: { signing.approve() },
-                    onAllowanceChip: { chip in signing.guardPreset(chip) },
-                    onAllowanceAmount: { text in signing.guardCustomAmount(text) },
-                    onAllowanceLegChip: { leg, chip in signing.guardLegPreset(leg, chip) },
-                    onAllowanceLegAmount: { leg, text in signing.guardLegCustomAmount(leg, text) },
-                    onFee: { signing.feeTapped() },
-                    onFeePick: { id in signing.pickFee(id) },
-                    onSpeed: { id in signing.speed(id) }
+                    model: model,
+                    onConfirm: { signing?.approve() },
+                    onAllowanceChip: { chip in signing?.guardPreset(chip) },
+                    onAllowanceAmount: { text in signing?.guardCustomAmount(text) },
+                    onAllowanceLegChip: { leg, chip in signing?.guardLegPreset(leg, chip) },
+                    onAllowanceLegAmount: { leg, text in signing?.guardLegCustomAmount(leg, text) },
+                    onFee: { signing?.feeTapped() },
+                    onFeePick: { id in signing?.pickFee(id) },
+                    onSpeed: { id in signing?.speed(id) },
+                    onClose: { closeSigningSheet() },
+                    onExplorer: { openSigningExplorer() },
+                    onRefreshFee: { signing?.refreshFee() }
                 )
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])
                     .presentationCornerRadius(Tokens.Radius.r20)
+                    .interactiveDismissDisabled()
                     .themed(scheme)
             }
         }

@@ -147,14 +147,30 @@ struct BrowserMemoryTests {
         #expect(room.favorites?.tiles.count == 2)
     }
 
-    /// A site's letter is the host's, `www.` dropped and upper-cased.
+    /// A site's letter is the core's rule (spec 079): the host's first letter
+    /// or digit after a leading `www.`, `app.` or `m.`, upper-cased.
     ///
     /// Without dropping `www.` every site under one domain is a W, which makes
-    /// the grid unreadable at exactly the size it is drawn at.
-    @Test func aSitesLetterIsItsHostsWithoutTheWww() {
+    /// the grid unreadable at exactly the size it is drawn at — and without
+    /// dropping `app.` Uniswap was an A (Android pass, F16).
+    @Test func aSitesLetterIsTheCoresRule() {
         #expect(ExploreLive.site(host: "www.example.com", name: "", origin: "").letter == "E")
-        #expect(ExploreLive.site(host: "app.uniswap.org", name: "", origin: "").letter == "A")
+        #expect(ExploreLive.site(host: "app.uniswap.org", name: "", origin: "").letter == "U")
+        #expect(ExploreLive.site(host: "m.x.io", name: "", origin: "").letter == "X")
+        #expect(ExploreLive.site(host: "127.0.0.1:8137", name: "", origin: "").letter == "1")
         #expect(ExploreLive.site(host: "", name: "", origin: "").letter == "?")
+    }
+
+    /// A site's avatar tries its own icon — the one it named when visited,
+    /// then the usual https places — and never asks over plain http.
+    @Test func aSitesAvatarTriesItsOwnIconOverHttpsOnly() {
+        let site = ExploreLive.site(host: "app.uniswap.org", name: "Uniswap", origin: "https://app.uniswap.org")
+        #expect(site.iconUrls == ["https://app.uniswap.org/apple-touch-icon.png", "https://app.uniswap.org/favicon.ico"])
+        #expect(ExploreLive.site(host: "127.0.0.1:8137", name: "", origin: "http://127.0.0.1:8137").iconUrls.isEmpty)
+        let recorded = ExploreLive.iconUrls(recorded: "https://app.uniswap.org/favicon.png", origin: "https://app.uniswap.org")
+        #expect(recorded.first == "https://app.uniswap.org/favicon.png", "the recorded icon leads")
+        #expect(recorded.count == 3)
+        #expect(ExploreLive.iconUrls(recorded: "http://evil.test/i.png", origin: "http://evil.test").isEmpty)
     }
 
     /// The same host is the same colour on every launch.
@@ -171,66 +187,59 @@ struct BrowserMemoryTests {
         #expect(ExploreLive.tint(for: "") == BrandPalette.unknown)
     }
 
-    /// **An http page is SAID to be insecure**, not merely left unpraised.
-    ///
-    /// 056 asserted the weaker claim — that the line names the host and does
-    /// not say "secure" — because it believed no corpus sentence existed for
-    /// this. 058's copy ruler found `connect.browser.a11yInsecure`, which
-    /// Android has used since 044 and which is translated everywhere. Saying
-    /// nothing about an unencrypted page is not neutral: it reads as fine.
-    @Test func anInsecureOriginIsCalledInsecure() {
-        let secureLabel = loc().t("explore.secureSite")
-        let insecureLabel = loc().t("connect.browser.a11yInsecure")
-        let insecure = ExploreLive.statusLine(
-            secure: false, connected: true, host: "127.0.0.1:8137", loc: loc()
-        )
-        #expect(!insecure.contains(secureLabel))
-        #expect(insecure.contains(insecureLabel))
-        // The sentence is a sentence, not the key echoed back (FR-005's
-        // failure signal would pass a `contains` check against itself).
-        #expect(insecureLabel != "connect.browser.a11yInsecure")
-        #expect(insecure.contains(loc().t("explore.connectedTag")))
-
-        let secure = ExploreLive.statusLine(
-            secure: true, connected: false, host: "app.uniswap.org", loc: loc()
-        )
-        #expect(secure == secureLabel)
+    /// **A lock, and only a lock** (spec 079, owner: "你标记的安全站点 只是https
+    /// 而已，并不代表这个站点真的安全 … 用一把锁代表 https 和非https 就行了，不文字
+    /// 标记"). The line under a site says only what is a fact about the
+    /// connection — "已连接" — and never "安全站点" or "不安全站点"; the http
+    /// lock carries `connect.browser.a11yInsecure` for a screen reader.
+    @Test func theStatusLineMakesNoClaimAboutTheSite() {
+        let words = [loc().t("explore.secureSite"), loc().t("connect.browser.a11yInsecure")]
+        for secure in [true, false] {
+            for connected in [true, false] {
+                let line = ExploreLive.statusLine(secure: secure, connected: connected, host: "x.io", loc: loc())
+                for word in words { #expect(!line.contains(word), "\(line) makes a claim about the site") }
+                #expect(line == (connected ? loc().t("explore.connectedTag") : ""))
+            }
+        }
     }
 
-    /// **A page that cannot be reached says so** (058).
-    ///
-    /// Both failure callbacks used to set `loading = false` and nothing else,
-    /// so an unreachable dApp was a white rectangle under an empty address
-    /// bar. On the founder's iPhone that was `app.uniswap.org`, silent, for
-    /// sixty seconds. The reason is the SYSTEM's, verbatim: "the host could
-    /// not be found" and "the request timed out" are different problems and a
-    /// person debugging their own network needs the difference.
-    @Test func aFailedNavigationIsDescribedInTheSystemsOwnWords() {
-        let timedOut = NSError(
-            domain: NSURLErrorDomain, code: NSURLErrorTimedOut,
-            userInfo: [NSLocalizedDescriptionKey: "The request timed out."]
+    /// **A page that cannot be reached says so** (058) — and since 079 it
+    /// says WHY in the corpus's words, chosen by the core from the failure's
+    /// class, not the system's English sentence and a code. The engine's
+    /// transitions are in `BrowserLoadTests`; this pins the table it reads.
+    @Test func aFailedNavigationIsClassifiedByTheCore() {
+        let timedOut = browserLoadClassify(
+            platform: "apple", code: Int64(NSURLErrorTimedOut), domain: NSURLErrorDomain, certificate: false
         )
-        let described = BrowserEngine.describe(timedOut)
-        #expect(described.contains("timed out"))
-        // The code is carried too: it is what turns "it did not work" into
-        // something somebody can look up.
-        #expect(described.contains("\(NSURLErrorTimedOut)"))
+        #expect(timedOut?.class == "timeout")
+        #expect(timedOut?.reasonKey == "explore.loadOffline")
+        #expect(timedOut?.autoRetry == true)
+        let notFound = browserLoadClassify(
+            platform: "apple", code: Int64(NSURLErrorCannotFindHost), domain: NSURLErrorDomain, certificate: false
+        )
+        #expect(notFound?.reasonKey == "explore.loadNotFound")
+        #expect(notFound?.autoRetry == false, "a typo does not heal")
+        let certificate = browserLoadClassify(
+            platform: "apple", code: Int64(NSURLErrorServerCertificateUntrusted), domain: NSURLErrorDomain,
+            certificate: false
+        )
+        #expect(certificate?.reasonKey == "explore.loadCertificate")
+        #expect(certificate?.autoRetry == false, "a certificate failure is never retried")
     }
 
     /// **A cancelled navigation is not a failure.**
     ///
     /// Every redirect chain and every in-flight navigation a page replaces
     /// cancels the last one. Drawing "couldn't load" there would put an error
-    /// over a page that is loading perfectly well.
+    /// over a page that is loading perfectly well. WebKit's own "frame load
+    /// interrupted" is the same fact.
     @Test func aCancelledNavigationIsNotAFailure() {
-        let cancelled = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled,
-                                userInfo: [:])
-        #expect(BrowserEngine.describe(cancelled) == BrowserEngine.cancelled)
-
-        // And a non-URL error keeps whatever the system called it.
-        let other = NSError(domain: "vela.test", code: 7,
-                            userInfo: [NSLocalizedDescriptionKey: "something else"])
-        #expect(BrowserEngine.describe(other) == "something else")
+        #expect(browserLoadClassify(
+            platform: "apple", code: Int64(NSURLErrorCancelled), domain: NSURLErrorDomain, certificate: false
+        ) == nil)
+        #expect(browserLoadClassify(
+            platform: "apple", code: 102, domain: "WebKitErrorDomain", certificate: false
+        ) == nil)
     }
 
     /// A tab with no title is drawn with its host, never blank.

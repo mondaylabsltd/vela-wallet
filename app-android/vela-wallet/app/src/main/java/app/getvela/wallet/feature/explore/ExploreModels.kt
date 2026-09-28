@@ -30,6 +30,8 @@ data class SiteModel(
     val subtitle: String? = null,
     /** Row-only trailing text — "刚刚", "昨天". Fixture content. */
     val meta: String? = null,
+    /** Spec 079: the site's own icon, best first (https only); the letter shows until one lands, and when none does. */
+    val iconUrls: List<String> = emptyList(),
 )
 
 /** The favourites grid mixes sites with the trailing "add" affordance. */
@@ -63,6 +65,8 @@ data class TabModel(
     val selected: Boolean,
     /** The start page's own tab — drawn with the sail, not a favicon. */
     val startPage: Boolean,
+    /** Spec 079: the page as it last left the screen; the drawn stand-in when there is none yet. */
+    val snapshot: androidx.compose.ui.graphics.ImageBitmap? = null,
 )
 
 /**
@@ -99,6 +103,14 @@ data class BrowserModel(
     val progress: Int = 100,
     /** The main frame could not load (network, certificate): the retry panel stands where the page is. */
     val failed: Boolean = false,
+    /** Spec 079: why, in the core's words for its class; `null` when it did not fail. */
+    val failureReason: String? = null,
+    /** Spec 079: a retry is running — the panel stays and says "正在重试…". */
+    val retrying: Boolean = false,
+    /** Spec 079: the page's chain could not be reached — one line under the address bar; `null` when it can. */
+    val chainNotice: String? = null,
+    /** Spec 079: the chain notice's retry is in flight. */
+    val chainAsking: Boolean = false,
     /** The page's renderer died: the tab shows the reload panel until the person asks. */
     val crashed: Boolean = false,
 )
@@ -138,6 +150,10 @@ data class ConnectionModel(
     val footnote: String,
     /** Spec 070: the lock tells the truth — `false` draws the warning, never a green padlock. */
     val secure: Boolean = true,
+    /** Spec 079: the network's logo; the dot shows until it lands. */
+    val networkLogoUrl: String? = null,
+    /** Spec 079: the consent card — its action is the primary one. */
+    val primaryAction: Boolean = false,
 )
 
 @Immutable

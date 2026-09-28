@@ -2,14 +2,26 @@
 	import LetterAvatar from '$lib/ui/LetterAvatar.svelte';
 	import BrandMark from '$lib/ui/BrandMark.svelte';
 	import RemoteLogo from '$lib/wallet/ui/RemoteLogo.svelte';
+	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import type { SigningModel } from '../model';
 
 	interface Props {
 		dapp: SigningModel['dapp'];
 		network: SigningModel['network'];
+		/**
+		 * Spec 079: the sheet's one close — a quiet ✕ at the end of the row.
+		 * Absent where there is nothing to close (the gallery, the desktop
+		 * third column).
+		 */
+		onclose?: () => void;
+		/** The ✕'s accessible name. */
+		closeLabel?: string;
+		/** The signature is in flight: the ✕ is drawn, and shut. */
+		closeDisabled?: boolean;
 	}
 
-	let { dapp, network }: Props = $props();
+	let { dapp, network, onclose, closeLabel, closeDisabled = false }: Props = $props();
 </script>
 
 <header class="header">
@@ -36,6 +48,17 @@
 		</span>
 		{network.name}
 	</span>
+	{#if onclose}
+		<button
+			type="button"
+			class="close"
+			aria-label={closeLabel}
+			disabled={closeDisabled}
+			onclick={() => onclose?.()}
+		>
+			<Icon icon={UTILITY_ICONS.x} size="lg" />
+		</button>
+	{/if}
 </header>
 
 <style>
@@ -107,6 +130,33 @@
 		place-items: center;
 		width: var(--space-xl);
 		height: var(--space-xl);
+	}
+
+	/* Quiet on purpose (the sheet's rule since 022: no big Reject button) —
+	   the same icon button as the sheet title row's ✕. */
+	.close {
+		display: flex;
+		flex: none;
+		align-items: center;
+		justify-content: center;
+		width: var(--size-control-sm);
+		height: var(--size-control-sm);
+		margin-inline-end: calc(var(--space-md) * -1);
+		border: none;
+		border-radius: var(--radius-full);
+		background: none;
+		color: var(--color-fg-muted);
+		cursor: pointer;
+	}
+
+	.close:hover:not(:disabled) {
+		background: var(--color-bg-sunken);
+		color: var(--color-fg-base);
+	}
+
+	.close:disabled {
+		opacity: var(--opacity-disabled);
+		cursor: default;
 	}
 
 	.dot {

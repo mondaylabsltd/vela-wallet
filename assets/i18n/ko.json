@@ -1403,7 +1403,11 @@
    "selfCallBlockedTitle": "Vela는 이 요청에 서명하지 않습니다",
    "selfCallBlockedBody": "이 요청은 지갑을 누가 통제하는지를 바꿉니다({{function}}). 한 번 서명하는 것만으로 지갑이 다른 사람에게 넘어갈 수 있어 Vela가 거부했습니다. 아무것도 서명하지 않았습니다.",
    "selfCallBlockedLegBody": "이 요청의 {{index}}번째 단계가 지갑을 누가 통제하는지를 바꿉니다({{function}}). 한 번 서명하는 것만으로 지갑이 다른 사람에게 넘어갈 수 있어 Vela가 요청 전체를 거부했습니다. 아무것도 서명하지 않았습니다.",
-   "selfCallBlockedSafeTx": "이 요청은 나중에 실행될 Safe 트랜잭션을 승인하도록 키에 요구합니다. 그런 서명은 사용자가 없어도 사용될 수 있어 Vela가 거부했습니다. 아무것도 서명하지 않았습니다."
+   "selfCallBlockedSafeTx": "이 요청은 나중에 실행될 Safe 트랜잭션을 승인하도록 키에 요구합니다. 그런 서명은 사용자가 없어도 사용될 수 있어 Vela가 거부했습니다. 아무것도 서명하지 않았습니다.",
+   "stillConfirming": "아직 체인에 기록되지 않았습니다. Vela가 계속 확인합니다. 다시 보내지 마세요.",
+   "unknownOutcome": "24시간이 지나도 확인되지 않았습니다.",
+   "openSigner": "서명 페이지에서 확인",
+   "signerDown": "서명 페이지를 열지 못했습니다. 연결을 확인하세요."
   },
   "signingApprove": {
    "resultingTotal": "새 총 승인 한도",
@@ -1837,6 +1841,11 @@
   "pageCrashedBody": "페이지가 예기치 않게 종료되었습니다. 지갑에는 영향이 없습니다. 새로고침하여 계속하세요.",
   "walletConnectUnsupported": "WalletConnect 링크는 지원되지 않습니다. 탐색에서 dApp을 열고 거기서 연결하세요.",
   "scanUnrecognized": "이 코드는 웹 주소도 지갑 주소도 아닙니다.",
-  "linkCopied": "링크가 복사되었습니다"
+  "linkCopied": "링크가 복사되었습니다",
+  "loadOffline": "연결이 불안정해 열지 못했습니다.",
+  "loadNotFound": "이 사이트를 찾을 수 없습니다. 주소를 확인하세요.",
+  "loadCertificate": "인증서가 유효하지 않아 Vela가 차단했습니다.",
+  "loadRetrying": "다시 시도하는 중…",
+  "chainDown": "{{chain}}에 연결할 수 없어 데이터가 불완전할 수 있습니다."
  }
 }

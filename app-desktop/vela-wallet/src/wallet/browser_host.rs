@@ -143,7 +143,24 @@ pub struct BrowserHost {
     /// says nothing.
     chains: Vec<u32>,
     wallet: Option<(Vec<String>, String)>,
+    /// Spec 079 US4: the pool's failed and rate-limited chains, as last read
+    /// — whether the chain of the page in front can be reached at all.
+    chain_health: (Vec<u32>, Vec<u32>),
+    /// A re-read is scheduled while something is down.
+    health_watching: bool,
 }
+
+/// Whether the page's chain gets the notice (spec 079 FR-014): its whole pool
+/// failed, and not merely because providers rate-limit — a rate limit lifts
+/// on its own, and the wallet's standing rule is to stay quiet about it.
+#[must_use]
+pub fn chain_down(chain_id: u32, failed: &[u32], rate_limited: &[u32]) -> bool {
+    failed.contains(&chain_id) && !rate_limited.contains(&chain_id)
+}
+
+/// How often the health is read again while a chain is down: from the view,
+/// never from the network — an answer from anywhere in the app clears it.
+const HEALTH_RECHECK: std::time::Duration = std::time::Duration::from_secs(5);
 
 impl BrowserHost {
     /// The machine, told about the world before it reads the store.
@@ -162,6 +179,8 @@ impl BrowserHost {
             orders: Vec::new(),
             chains: Vec::new(),
             wallet: None,
+            chain_health: (Vec::new(), Vec::new()),
+            health_watching: false,
         };
         host.follow_wallet(cx);
         host.follow_networks(cx);
@@ -199,8 +218,13 @@ impl BrowserHost {
                             .spawn(async move { crate::panic_report::guarded(work) })
                             .await
                             .unwrap_or(neutral);
-                        host.update(cx, |host, cx| host.resolve(id, result, cx))
-                            .ok();
+                        host.update(cx, |host, cx| {
+                            host.resolve(id, result, cx);
+                            // The read went through the pool: whether the
+                            // page's chain answered is known now (spec 079).
+                            host.refresh_health(cx);
+                        })
+                        .ok();
                     })
                     .detach();
                 }
@@ -292,6 +316,69 @@ impl BrowserHost {
                 cx,
             );
         }
+    }
+
+    /// Read the pool's view of which chains are down, off the frame.
+    pub fn refresh_health(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |host, cx| {
+            let health = cx
+                .background_executor()
+                .spawn(async move {
+                    (
+                        crate::executor::pool::failed_chains(),
+                        crate::executor::pool::rate_limited_chains(),
+                    )
+                })
+                .await;
+            host.update(cx, |host, cx| host.health_read(health, cx))
+                .ok();
+        })
+        .detach();
+    }
+
+    fn health_read(&mut self, health: (Vec<u32>, Vec<u32>), cx: &mut Context<Self>) {
+        if health != self.chain_health {
+            self.chain_health = health;
+            cx.notify();
+        }
+        // While something is down, look again: the page may have stopped
+        // asking, and the notice must go by itself once the chain answers
+        // anyone.
+        if !self.chain_health.0.is_empty() && !self.health_watching {
+            self.health_watching = true;
+            cx.spawn(async move |host, cx| {
+                cx.background_executor().timer(HEALTH_RECHECK).await;
+                host.update(cx, |host, cx| {
+                    host.health_watching = false;
+                    host.refresh_health(cx);
+                })
+                .ok();
+            })
+            .detach();
+        }
+    }
+
+    /// Is `chain_id` unreachable, by the pool's last word?
+    #[must_use]
+    pub fn chain_unreachable(&self, chain_id: u32) -> bool {
+        chain_down(chain_id, &self.chain_health.0, &self.chain_health.1)
+    }
+
+    /// The notice's Retry: one read through the pool, then its word again.
+    pub fn retry_chain(&mut self, chain_id: u32, cx: &mut Context<Self>) {
+        cx.spawn(async move |host, cx| {
+            cx.background_executor()
+                .spawn(async move {
+                    let _ = crate::executor::pool::call(
+                        chain_id,
+                        "eth_blockNumber",
+                        serde_json::json!([]),
+                    );
+                })
+                .await;
+            host.update(cx, |host, cx| host.refresh_health(cx)).ok();
+        })
+        .detach();
     }
 
     /// What the page takes away, exactly once.
@@ -621,6 +708,16 @@ mod tests {
             );
             assert_eq!(answers(&out)[0]["result"], json!("0x10"));
         });
+    }
+
+    /// Spec 079 FR-014: the page's chain gets the notice when its whole pool
+    /// failed — and never when providers are only rate-limiting.
+    #[test]
+    fn the_chain_notice_is_for_a_chain_that_is_down_not_throttled() {
+        assert!(chain_down(100, &[100, 1], &[]));
+        assert!(!chain_down(100, &[100], &[100]), "rate-limited stays quiet");
+        assert!(!chain_down(100, &[1], &[]), "another chain's trouble");
+        assert!(!chain_down(100, &[], &[]), "answered again: gone");
     }
 
     /// Consent: one approval writes the grant under the shared key, the

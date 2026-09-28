@@ -58,6 +58,11 @@
     "pageCrashedBody": "頁面意外關閉。你的錢包不受影響——重新載入即可繼續。",
     "walletConnectUnsupported": "暫不支援 WalletConnect 連結。請在「探索」中開啟該 dApp，並從頁面內連接。",
     "scanUnrecognized": "此二維碼既不是網址，也不是錢包地址。",
-    "linkCopied": "連結已複製"
+    "linkCopied": "連結已複製",
+    "loadOffline": "網絡唔穩定，頁面開唔到。",
+    "loadNotFound": "搵唔到呢個網站，請檢查網址。",
+    "loadCertificate": "網站證書有問題，Vela 已經阻止開啟。",
+    "loadRetrying": "重試緊…",
+    "chainDown": "暫時連唔到 {{chain}}，頁面資料可能唔齊。"
   }
 }

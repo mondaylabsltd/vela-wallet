@@ -327,6 +327,50 @@ export function hasPasskeyOverride(): boolean {
 	return override !== null;
 }
 
+/**
+ * Spec 079: who wants to know that a SIGNING ceremony is up, and how it ended.
+ *
+ * The signing sheet stops being a form the moment the person approves, and
+ * its ✕ may close it (the operation carrying on) only once the signature
+ * exists: closed while the passkey prompt is up — or before it has even
+ * appeared — a cancelled prompt would leave the page with no answer at all.
+ * The core's view cannot tell "waiting for the passkey" from "submitting"
+ * (both are its `Submitting` stage), so the ceremony says so itself. Observers
+ * only; nothing here changes what a ceremony does.
+ */
+export type SignCeremonyEvent = 'started' | 'signed' | 'failed';
+const ceremonyListeners = new Set<(event: SignCeremonyEvent) => void>();
+
+export function onSignCeremony(listener: (event: SignCeremonyEvent) => void): () => void {
+	ceremonyListeners.add(listener);
+	return () => {
+		ceremonyListeners.delete(listener);
+	};
+}
+
+function tell(event: SignCeremonyEvent): void {
+	for (const listener of ceremonyListeners) {
+		try {
+			listener(event);
+		} catch {
+			// An observer's fault never touches the ceremony.
+		}
+	}
+}
+
+/** Run one signing ceremony, telling the observers it started and how it ended. */
+async function ceremony(run: () => Promise<Assertion>): Promise<Assertion> {
+	tell('started');
+	try {
+		const assertion = await run();
+		tell('signed');
+		return assertion;
+	} catch (error) {
+		tell('failed');
+		throw error;
+	}
+}
+
 /** Abort the pending ceremony, if any (the core's `cancel_passkey_sign`). */
 export function cancelSign(): void {
 	pendingSign?.abort();
@@ -338,7 +382,14 @@ export function cancelSign(): void {
  * multi-key wallet passes every key so the person is never told the one
  * credential they hold "was not found" (Expo `webSign` semantics).
  */
-export async function signWithAny(
+export function signWithAny(
+	challengeHex: string,
+	credentials: { id: string; transports?: string }[]
+): Promise<Assertion> {
+	return ceremony(() => signWithAnyOnce(challengeHex, credentials));
+}
+
+async function signWithAnyOnce(
 	challengeHex: string,
 	credentials: { id: string; transports?: string }[]
 ): Promise<Assertion> {
@@ -384,7 +435,7 @@ export async function signWithAny(
 	}
 }
 
-export async function sign(
+export function sign(
 	challengeHex: string,
 	credentialId: string,
 	/**
@@ -402,6 +453,15 @@ export async function sign(
 	transports = '',
 	/** Where to look first: the method the key was minted, found or signed in over. */
 	method?: KeyMethod
+): Promise<Assertion> {
+	return ceremony(() => signOnce(challengeHex, credentialId, transports, method));
+}
+
+async function signOnce(
+	challengeHex: string,
+	credentialId: string,
+	transports: string,
+	method: KeyMethod | undefined
 ): Promise<Assertion> {
 	if (override) return override.sign(challengeHex, [credentialId]);
 	assertSupported();

@@ -279,7 +279,11 @@
       "selfCallBlockedTitle": "Vela can’t sign this",
       "selfCallBlockedBody": "This request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses it. Nothing was signed.",
       "selfCallBlockedLegBody": "Step {{index}} of this request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses the whole request. Nothing was signed.",
-      "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed."
+      "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed.",
+      "stillConfirming": "Not on-chain yet. Vela keeps checking — don't send it again.",
+      "unknownOutcome": "Still unconfirmed after 24 hours.",
+      "openSigner": "Continue to signing page",
+      "signerDown": "Couldn't open the signing page. Check your connection."
     },
     "currency": {
       "title": "Display currency",

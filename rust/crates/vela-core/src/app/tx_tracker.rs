@@ -70,6 +70,32 @@ pub const WAIT_WINDOW_MS: f64 = 120_000.0;
 /// The bundler has likely pruned the receipt; hammering it forever helps no
 /// one, and the record stays pending (honest unknown), never failed.
 pub const ABANDON_AGE_MS: f64 = 24.0 * 60.0 * 60.0 * 1000.0;
+/// Past the window, an op this old is asked about once a minute rather than
+/// every [`RECONCILE_MIN_INTERVAL_MS`] (spec 079 FR-005): an op the relay has
+/// sat on for ten minutes is not landing in the next twelve seconds, and a
+/// phone polling it every few seconds for a day is the waste the device pass
+/// logged for two stuck Arbitrum ops.
+pub const SLOW_POLL_AFTER_MS: f64 = 10.0 * 60.0 * 1000.0;
+/// …and once every five minutes past the first hour.
+pub const SLOWEST_POLL_AFTER_MS: f64 = 60.0 * 60.0 * 1000.0;
+pub const SLOW_RECEIPT_INTERVAL_MS: f64 = 60_000.0;
+pub const SLOWEST_RECEIPT_INTERVAL_MS: f64 = 300_000.0;
+
+/// How long to wait between receipt polls for an op of `age_ms`: the 3 s
+/// window cadence while it is open, then a pace that slows with age. Time
+/// only ever slows the asking — it never decides the outcome (the module's
+/// first rule).
+pub fn receipt_interval_ms(in_window: bool, age_ms: f64) -> f64 {
+    if in_window {
+        RECEIPT_POLL_INTERVAL_MS
+    } else if age_ms < SLOW_POLL_AFTER_MS {
+        RECONCILE_MIN_INTERVAL_MS
+    } else if age_ms < SLOWEST_POLL_AFTER_MS {
+        SLOW_RECEIPT_INTERVAL_MS
+    } else {
+        SLOWEST_RECEIPT_INTERVAL_MS
+    }
+}
 /// The executor stage that parks an op until network fees fit its signed
 /// reimbursement — `FEE_HOLD_STAGE` (`tx-reconciler.ts:84`).
 pub const FEE_HOLD_STAGE: &str = "in_band_settlement_hold";
@@ -441,6 +467,25 @@ pub enum TrackStatus {
     AcceptedNotLanded,
 }
 
+/// Where an op is in its life, for the words a person reads (spec 079): the
+/// status says WHY (fee-held, unreachable, accepted-not-landed…); this says
+/// WHEN, and every client words the four the same way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum TrackOutcome {
+    /// Inside the wait window: "submitted, waiting to land".
+    Landing,
+    /// Past the window and still asked about: "not landed yet, Vela keeps
+    /// checking — do not send it again". Never a failure.
+    StillConfirming,
+    /// Past the 24 h line: no longer asked about, fate unknown — check the
+    /// explorer. Still not a failure.
+    Unknown,
+    /// Confirmed, dropped or rejected — the status says which.
+    Final,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct TrackEntryView {
@@ -455,6 +500,7 @@ pub struct TrackEntryView {
     /// False once terminal or abandoned (24h) — drives "check the explorer".
     pub polling: bool,
     pub submitted_at_ms: Option<f64>,
+    pub outcome: TrackOutcome,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -538,6 +584,15 @@ impl App for TxTracker {
                     }
                     _ => None,
                 };
+                let outcome = if entry.status.is_terminal() {
+                    TrackOutcome::Final
+                } else if entry.abandoned {
+                    TrackOutcome::Unknown
+                } else if entry.window_closed || entry.aborted {
+                    TrackOutcome::StillConfirming
+                } else {
+                    TrackOutcome::Landing
+                };
                 TrackEntryView {
                     user_op_hash: hash.clone(),
                     chain_id: entry.chain_id,
@@ -546,6 +601,7 @@ impl App for TxTracker {
                     tx_hash,
                     polling: !entry.status.is_terminal() && !entry.abandoned,
                     submitted_at_ms: entry.submitted_at_ms,
+                    outcome,
                 }
             })
             .collect();
@@ -872,14 +928,11 @@ fn run_scheduler(model: &mut Model, now_ms: f64) -> Command<TrackEffect, Event> 
             }
         }
 
-        // Receipt cadence: 3s inside the window, reconcile pace after it
-        // (or after an abort). One in-flight request per hash, shared (⑤).
+        // Receipt cadence: 3s inside the window, then a pace that slows with
+        // the op's age (or after an abort). One in-flight request per hash,
+        // shared (⑤).
         let in_window = !entry.window_closed && !entry.aborted;
-        let receipt_interval = if in_window {
-            RECEIPT_POLL_INTERVAL_MS
-        } else {
-            RECONCILE_MIN_INTERVAL_MS
-        };
+        let receipt_interval = receipt_interval_ms(in_window, age);
         if !entry.receipt_in_flight
             && entry
                 .last_receipt_poll_ms

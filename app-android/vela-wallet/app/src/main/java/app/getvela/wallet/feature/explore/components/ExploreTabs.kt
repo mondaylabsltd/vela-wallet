@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.explore.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
 import app.getvela.wallet.core.designsystem.components.VelaLogo
@@ -131,7 +133,7 @@ fun ExploreTabsScreen(
     }
 }
 
-/** One card: a stand-in preview, the site's mark and title, and its ✕. */
+/** One card: the page's snapshot (a stand-in before it has one), the site's mark and title, and its ✕. */
 @Composable
 private fun TabCard(
     tab: TabModel,
@@ -150,7 +152,20 @@ private fun TabCard(
                 RoundedCornerShape(VelaRadius.xl),
             ),
     ) {
-        Column(
+        val snapshot = tab.snapshot
+        if (snapshot != null) {
+            // Spec 079: the page itself, as it last left the screen.
+            Image(
+                bitmap = snapshot,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(TAB_CARD_ASPECT)
+                    .clickable { onOpen(tab.id) },
+            )
+        } else Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(TAB_CARD_ASPECT)
@@ -196,7 +211,7 @@ private fun TabCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            tab.site?.let { LetterAvatar(it.letter, it.tint, size = VelaSpacing.xl2) }
+            tab.site?.let { SiteAvatar(it, size = VelaSpacing.xl2) }
             Text(
                 text = tab.title,
                 color = colors.fgBase,

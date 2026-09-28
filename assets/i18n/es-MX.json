@@ -1406,7 +1406,11 @@
    "selfCallBlockedTitle": "Vela no firma esta solicitud",
    "selfCallBlockedBody": "Esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela la rechaza. No se firmó nada.",
    "selfCallBlockedLegBody": "El paso {{index}} de esta solicitud cambiaría quién controla tu wallet ({{function}}). Firmarla una vez puede entregar tu wallet a otra persona, así que Vela rechaza la solicitud completa. No se firmó nada.",
-   "selfCallBlockedSafeTx": "Esta solicitud pide que tu llave autorice una transacción de Safe para ejecutarla después. Vela la rechaza: una firma así puede usarse sin ti. No se firmó nada."
+   "selfCallBlockedSafeTx": "Esta solicitud pide que tu llave autorice una transacción de Safe para ejecutarla después. Vela la rechaza: una firma así puede usarse sin ti. No se firmó nada.",
+   "stillConfirming": "Todavía no está en la cadena. Vela sigue revisando; no la envíes otra vez.",
+   "unknownOutcome": "Sigue sin confirmarse tras 24 horas.",
+   "openSigner": "Confirmar en la página de firma",
+   "signerDown": "No se abrió la página de firma. Revisa tu conexión."
   },
   "signingApprove": {
    "resultingTotal": "Nuevo límite total",
@@ -1841,6 +1845,11 @@
   "pageCrashedBody": "La página se cerró de forma inesperada. Tu billetera no se vio afectada: recarga para continuar.",
   "walletConnectUnsupported": "Los enlaces de WalletConnect no son compatibles. Abre la dApp en Explorar y conéctate desde ahí.",
   "scanUnrecognized": "Este código no es una dirección web ni una dirección de billetera.",
-  "linkCopied": "Enlace copiado"
+  "linkCopied": "Enlace copiado",
+  "loadOffline": "Conexión inestable: la página no se abrió.",
+  "loadNotFound": "No se encontró este sitio. Revisa la dirección.",
+  "loadCertificate": "El certificado de este sitio no es válido y Vela lo bloqueó.",
+  "loadRetrying": "Reintentando…",
+  "chainDown": "No se puede conectar con {{chain}}: los datos podrían estar incompletos."
  }
 }

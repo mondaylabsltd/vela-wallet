@@ -180,13 +180,18 @@ try {
   check('the recipient from the calldata is shown', text.includes('0x9A8b') || text.includes('0x9a8b'));
   check('the amount from the calldata is shown', text.includes('7,654.321'));
   check('the fee leg amount is read out of the calldata', text.includes('0.42'));
+  // Spec 079 folds the fee's explanation under its row; the attribution stays
+  // on the row itself, in sight, and the full sentence is one tap away.
   check('the fee is attributed to the requester, not asserted',
-    /请求方的说法|requester/.test(text));
+    (await ev("(document.querySelector('summary.fee .tag') || {}).innerText || ''")) === '自述' &&
+    /请求方的说法/.test(await ev("(document.querySelector('.fee-note') || {}).textContent || ''")));
   check('the chain is named from its id', text.includes('Ethereum'));
   check('the signing account is shown as an address', text.includes('0x88cC'));
   check('the account name is shown (it points at a passkey)', text.includes('Daily wallet'));
   check('the full address is available to copy', text.includes('复制完整地址'));
-  check('the self-reported origin is called out', /自述|self-reported/.test(text));
+  // Spec 079 T048: kept (the page cannot tell who opened it), in plain words
+  // that say what to go by instead.
+  check('the self-reported origin is called out', /网站名称是它自己提供的，无法核实/.test(text));
 } catch (error) {
   console.log('FAILED: ' + error.message);
   process.exitCode = 1;

@@ -58,6 +58,11 @@
     "pageCrashedBody": "A página foi fechada inesperadamente. Sua carteira não foi afetada — recarregue para continuar.",
     "walletConnectUnsupported": "Links do WalletConnect não são compatíveis. Abra o dApp em Explorar e conecte-se por lá.",
     "scanUnrecognized": "Este código não é um endereço web nem um endereço de carteira.",
-    "linkCopied": "Link copiado"
+    "linkCopied": "Link copiado",
+    "loadOffline": "Conexão instável — a página não abriu.",
+    "loadNotFound": "Não foi possível encontrar este site. Confira o endereço.",
+    "loadCertificate": "O certificado deste site é inválido, e o Vela o bloqueou.",
+    "loadRetrying": "Tentando de novo…",
+    "chainDown": "Sem conexão com {{chain}} — os dados da página podem estar incompletos."
   }
 }

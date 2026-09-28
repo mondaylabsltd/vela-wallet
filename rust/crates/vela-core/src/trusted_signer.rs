@@ -306,6 +306,11 @@ pub struct RequestInput<'a> {
     /// The wallet appends the fee last on every chain, so the page is told
     /// the fee is leg `calls.len()`.
     pub calls: &'a [crate::user_op::MultiSendCall],
+    /// The origin was observed by the wallet's OWN browser engine (spec 079),
+    /// not relayed from another app or extension. The page then names the site
+    /// as Vela's browser saw it instead of calling it unknown — the claimant in
+    /// this channel is the wallet, which read the origin from the engine.
+    pub origin_seen_by_browser: bool,
 }
 
 /// The page's `{intent, context}` (PROTOCOL.md §4, §8.1).
@@ -335,6 +340,17 @@ pub fn request(input: &RequestInput<'_>) -> Value {
         .collect();
     if !allow.is_empty() {
         context.insert("allowCredentials".into(), Value::Array(allow));
+    }
+    if input.origin_seen_by_browser && !input.origin.is_empty() {
+        let host = input
+            .origin
+            .split_once("://")
+            .map_or(input.origin, |(_, rest)| rest)
+            .trim_end_matches('/');
+        context.insert(
+            "dapp".into(),
+            json!({ "name": host, "origin": input.origin, "source": "vela_browser" }),
+        );
     }
     if let Some(op) = input.user_op {
         let mut operation = Map::new();
@@ -536,6 +552,27 @@ pub fn verify(
 // Channels
 // ---------------------------------------------------------------------------
 
+/// The URL channel's page: the bare official host opens the pinned,
+/// content-addressed version (spec 079: [`integrity::LAUNCH`] — cacheable, so it
+/// opens offline); a base that already names a version (`/b/…`, the desktop's
+/// verified pick) or another host goes through [`sign_page`] as given.
+fn launch_page(base: &str, query: &str) -> String {
+    let bare_official = base
+        .trim()
+        .strip_prefix("https://")
+        .map(|rest| rest.trim_end_matches('/'))
+        .is_some_and(|rest| rest == integrity::OFFICIAL_HOST);
+    if bare_official {
+        format!(
+            "https://{}/b/{}/sign?{query}",
+            integrity::OFFICIAL_HOST,
+            integrity::LAUNCH
+        )
+    } else {
+        sign_page(base, query)
+    }
+}
+
 /// `<base>sign.html?<query>` — the base may or may not end in `/`, or already
 /// name `sign.html`.
 fn sign_page(base: &str, query: &str) -> String {
@@ -557,7 +594,7 @@ pub fn url_launch(base: &str, request: &Value, callback: &str, token: &str) -> S
     let deflated = miniz_oxide::deflate::compress_to_vec(request.to_string().as_bytes(), 9);
     format!(
         "{}#i={}&cb={}&t={}&z=1",
-        sign_page(base, "ch=url"),
+        launch_page(base, "ch=url"),
         URL_SAFE_NO_PAD.encode(deflated),
         URL_SAFE_NO_PAD.encode(callback.as_bytes()),
         percent(token),

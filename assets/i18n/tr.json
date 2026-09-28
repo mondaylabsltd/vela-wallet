@@ -1403,7 +1403,11 @@
    "selfCallBlockedTitle": "Vela bu isteği imzalamaz",
    "selfCallBlockedBody": "Bu istek cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela reddetti. Hiçbir şey imzalanmadı.",
    "selfCallBlockedLegBody": "Bu isteğin {{index}}. adımı cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela isteğin tamamını reddetti. Hiçbir şey imzalanmadı.",
-   "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı."
+   "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı.",
+   "stillConfirming": "Henüz zincire yazılmadı. Vela kontrol ediyor — tekrar göndermeyin.",
+   "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
+   "openSigner": "İmza sayfasında onayla",
+   "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin."
   },
   "signingApprove": {
    "resultingTotal": "Yeni toplam izin",
@@ -1837,6 +1841,11 @@
   "pageCrashedBody": "Sayfa beklenmedik şekilde kapandı. Cüzdanın etkilenmedi — devam etmek için yeniden yükle.",
   "walletConnectUnsupported": "WalletConnect bağlantıları desteklenmiyor. dApp’i Keşfet’te aç ve oradan bağlan.",
   "scanUnrecognized": "Bu kod bir web adresi ya da cüzdan adresi değil.",
-  "linkCopied": "Bağlantı kopyalandı"
+  "linkCopied": "Bağlantı kopyalandı",
+  "loadOffline": "Bağlantı kararsız, sayfa açılmadı.",
+  "loadNotFound": "Bu site bulunamadı. Adresi kontrol et.",
+  "loadCertificate": "Sitenin sertifikası geçersiz, Vela siteyi engelledi.",
+  "loadRetrying": "Yeniden deneniyor…",
+  "chainDown": "{{chain}} ağına ulaşılamıyor — sayfadaki veriler eksik olabilir."
  }
 }

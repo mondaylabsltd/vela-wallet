@@ -137,6 +137,10 @@ final class UserOpSpine {
         let method: String
         let paramsJson: String
         let origin: String
+        /// Spec 079: the origin was read from this app's own browser engine
+        /// (a page), not claimed — the page then names the site as the browser
+        /// saw it instead of "未知站点". The wallet's own requests: `false`.
+        var seenByBrowser = false
     }
 
     /// The Trusted Signer's route name — not a place a passkey is, so a route
@@ -512,6 +516,14 @@ final class UserOpSpine {
         }
     }
 
+    /// Spec 079 (owner: one slide, not two): whether this account's
+    /// signatures go to the Trusted Signer's page — the core's route, the one
+    /// `ceremony` takes. The sheet then offers a button that goes there; the
+    /// page's own slide is the one consent.
+    func signsOnTrustedSigner(account: String) async -> Bool {
+        await route(account: account)?.wire.method == Self.trustedSignerMethod
+    }
+
     /// What the page is told: a site's request as it asked, or — `asked`
     /// absent — the wallet's own send, which the core builds from `calls`.
     static func trustedSignerInput(
@@ -527,6 +539,7 @@ final class UserOpSpine {
             method: asked?.method ?? "",
             paramsJson: asked?.paramsJson ?? "",
             origin: asked?.origin ?? "",
+            originSeenByBrowser: asked?.seenByBrowser ?? false,
             chainId: UInt32(chainId),
             chainName: chain?.displayName,
             nativeSymbol: chain?.nativeSymbol,

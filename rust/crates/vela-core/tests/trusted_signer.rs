@@ -179,6 +179,7 @@ fn the_request_carries_the_operation_and_the_wallets_keys() {
             value_hex: "0x1".into(),
             data: vec![],
         }],
+        origin_seen_by_browser: false,
     });
     assert_eq!(built["intent"]["method"], "eth_sendTransaction");
     assert_eq!(built["intent"]["origin"], "https://app.uniswap.org");
@@ -231,7 +232,12 @@ fn the_url_channel_round_trips() {
         "http://127.0.0.1:51234/vela",
         "tok en",
     );
-    assert!(url.starts_with("https://sign.getvela.app/sign.html?ch=url#i="));
+    // Spec 079: the official host opens the pinned, content-addressed version.
+    let pinned = format!(
+        "https://sign.getvela.app/b/{}/sign?ch=url#i=",
+        vela_core::trusted_signer::integrity::LAUNCH
+    );
+    assert!(url.starts_with(&pinned), "{url}");
     let fragment = url.split_once('#').unwrap().1;
     let mut parts = fragment.split('&').map(|p| p.split_once('=').unwrap());
     let (_, i) = parts.next().unwrap();
@@ -622,4 +628,63 @@ fn the_wallets_own_send_is_sent_as_its_calls_with_the_fee_leg_after_them() {
     assert_eq!(batch["calls"][0]["value"], "0x38d7ea4c68000");
     assert_eq!(batch["calls"][0]["data"], "0x");
     assert_eq!(built["context"]["operation"]["feeLegIndex"], 1);
+}
+
+/// Spec 079: a request from the wallet's own browser names the site as the
+/// browser saw it; one relayed from elsewhere carries no `dapp` (the page keeps
+/// its caution).
+#[test]
+fn a_browser_seen_origin_is_named_to_the_page() {
+    use vela_core::trusted_signer::{request, RequestInput};
+    let input = |seen: bool| RequestInput {
+        method: "personal_sign",
+        params: serde_json::json!(["0x48", "0x88cCA0EeDbF2C4426110bbFc998F048689266894"]),
+        origin: "https://app.uniswap.org",
+        chain_id: 100,
+        chain_name: Some("Gnosis"),
+        native_symbol: Some("xDAI"),
+        account: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+        account_name: None,
+        credential_ids_hex: &[],
+        user_op: None,
+        calls: &[],
+        origin_seen_by_browser: seen,
+    };
+    let seen = request(&input(true));
+    assert_eq!(
+        seen["context"]["dapp"],
+        serde_json::json!({ "name": "app.uniswap.org", "origin": "https://app.uniswap.org", "source": "vela_browser" })
+    );
+    let relayed = request(&input(false));
+    assert!(relayed["context"].get("dapp").is_none());
+}
+
+/// Spec 079: the version the phones open is one this build accepts, and a base
+/// that already names a version (the desktop's verified pick) or another host
+/// is used as given.
+#[test]
+fn the_launch_pin_is_allowed_and_a_named_version_is_left_alone() {
+    use vela_core::trusted_signer::integrity::{BUILD_ALLOWED, LAUNCH};
+    assert!(BUILD_ALLOWED.contains(&LAUNCH));
+    let built = json!({ "intent": { "method": "personal_sign" }, "context": { "chainId": 1 } });
+    let named = url_launch(
+        "https://sign.getvela.app/b/abc/",
+        &built,
+        "velawallet://sign-result",
+        "t",
+    );
+    assert!(
+        named.starts_with("https://sign.getvela.app/b/abc/sign.html?ch=url#"),
+        "{named}"
+    );
+    let local = url_launch(
+        "https://127.0.0.1:8443",
+        &built,
+        "velawallet://sign-result",
+        "t",
+    );
+    assert!(
+        local.starts_with("https://127.0.0.1:8443/sign.html?ch=url#"),
+        "{local}"
+    );
 }

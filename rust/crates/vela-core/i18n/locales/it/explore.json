@@ -58,6 +58,11 @@
     "pageCrashedBody": "La pagina si è chiusa inaspettatamente. Il tuo wallet non è coinvolto: ricarica per continuare.",
     "walletConnectUnsupported": "I link WalletConnect non sono supportati. Apri la dApp in Esplora e connettiti da lì.",
     "scanUnrecognized": "Questo codice non è né un indirizzo web né un indirizzo di wallet.",
-    "linkCopied": "Link copiato"
+    "linkCopied": "Link copiato",
+    "loadOffline": "Connessione instabile: la pagina non si è aperta.",
+    "loadNotFound": "Sito non trovato. Controlla l’indirizzo.",
+    "loadCertificate": "Il certificato di questo sito non è valido, Vela l’ha bloccato.",
+    "loadRetrying": "Nuovo tentativo…",
+    "chainDown": "{{chain}} non raggiungibile: i dati della pagina potrebbero essere incompleti."
   }
 }

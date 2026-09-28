@@ -791,22 +791,7 @@ struct FeeRowView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(fee.openLabel)
                 if let refreshLabel = fee.refreshLabel {
-                    Button { onRefresh?() } label: {
-                        // Dimmed while a measurement is out — whoever started
-                        // it — so a second tap is never ambiguous.
-                        LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
-                            .foregroundStyle(fee.refreshing ? theme.fgSubtle : theme.fgMuted)
-                            .frame(width: WalletFlowGeometry.feeRefreshButton,
-                                   height: WalletFlowGeometry.feeRefreshButton)
-                            .background(Circle().fill(theme.bgSunken))
-                            // The target is a little larger than the circle.
-                            .frame(width: WalletFlowGeometry.feeRefreshTarget,
-                                   height: WalletFlowGeometry.feeRefreshTarget)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(onRefresh == nil)
-                    .accessibilityLabel(refreshLabel)
+                    FeeRefreshButton(label: refreshLabel, refreshing: fee.refreshing, onRefresh: onRefresh)
                 }
             }
             .padding(.leading, Tokens.Space.s12)
@@ -821,6 +806,38 @@ struct FeeRowView: View {
                     .padding(.horizontal, Tokens.Space.s12)
             }
         }
+    }
+}
+
+/// The fee row's round refresh control — the send form's (spec 068), and
+/// since spec 079 the signing sheet's too, so "can I ask for a new fee?" has
+/// one answer everywhere. Dimmed while a measurement is out — whoever started
+/// it — so a second tap is never ambiguous.
+struct FeeRefreshButton: View {
+    @Environment(\.theme) private var theme
+
+    let label: String
+    let refreshing: Bool
+    var onRefresh: (() -> Void)?
+    /// The disc's fill — `bgSunken` on the send form's raised card; a sunken
+    /// card (the signing sheet's) passes the raised colour so the disc shows.
+    var disc: Color?
+
+    var body: some View {
+        Button { onRefresh?() } label: {
+            LucideIcon(.refreshCw, size: LucideIconSize.rowGlyph)
+                .foregroundStyle(refreshing ? theme.fgSubtle : theme.fgMuted)
+                .frame(width: WalletFlowGeometry.feeRefreshButton,
+                       height: WalletFlowGeometry.feeRefreshButton)
+                .background(Circle().fill(disc ?? theme.bgSunken))
+                // The target is a little larger than the circle.
+                .frame(width: WalletFlowGeometry.feeRefreshTarget,
+                       height: WalletFlowGeometry.feeRefreshTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(onRefresh == nil)
+        .accessibilityLabel(label)
     }
 }
 

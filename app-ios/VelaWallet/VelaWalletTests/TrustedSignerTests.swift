@@ -212,7 +212,13 @@ struct TrustedSignerChannelTests {
         let url = try #require(channel.start())
 
         let launch = url.absoluteString
-        #expect(launch.hasPrefix("https://sign.getvela.app/sign.html?ch=url#"))
+        // Spec 079: the phones open the pinned, content-addressed version
+        // (`integrity::LAUNCH`, `/b/<sha256>/sign`) — cacheable, so it opens
+        // with no network — never the root page.
+        #expect(launch.hasPrefix("https://sign.getvela.app/b/"))
+        #expect(launch.components(separatedBy: "#")[0].hasSuffix("/sign?ch=url"))
+        let version = launch.dropFirst("https://sign.getvela.app/b/".count).prefix { $0 != "/" }
+        #expect(version.count == 64 && version.allSatisfy(\.isHexDigit), "a sha-256 names the version")
         // The request is in the FRAGMENT, which no server is sent. A query
         // would be in the log of the server that serves the page.
         #expect(launch.contains("#i="))

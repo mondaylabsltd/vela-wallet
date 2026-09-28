@@ -133,6 +133,9 @@ body {
   border-radius: 20px;
   padding: 14px 18px 18px;
   overflow: hidden;
+  /* clip, not hidden, where supported: hidden makes the sheet a scroll
+     container and the sticky slide would stick to it, not to the screen. */
+  overflow: clip;
 }
 
 .grabber {
@@ -405,6 +408,12 @@ body {
 .fee-label { color: var(--muted); }
 .fee-value { margin-left: auto; }
 .fee-chevron { color: var(--faint); }
+/* Spec 079: the fee row is the summary of its own explanation. */
+summary.fee { list-style: none; cursor: pointer; }
+summary.fee::-webkit-details-marker { display: none; }
+summary.fee .fee-chevron { transition: transform 0.15s ease; }
+details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
+.fee-sponsored { margin-top: 6px; padding: 0 4px; color: var(--muted); font-size: 12px; }
 .fee-off .fee-value { color: var(--muted); }
 
 .fee-note {
@@ -458,7 +467,12 @@ body {
 .signer-who { display: inline-flex; align-items: center; gap: 7px; }
 
 .slide {
-  position: relative;
+  /* Spec 079: the one control stays in reach on a phone, however long the
+     card — it used to sit below the fold. Sticky is still positioned, so the
+     knob's own layout is unchanged. */
+  position: sticky;
+  bottom: 12px;
+  z-index: 2;
   display: flex;
   align-items: center;
   margin-top: 14px;
@@ -466,6 +480,7 @@ body {
   padding: 6px;
   border-radius: 999px;
   background: var(--card);
+  box-shadow: 0 0 0 6px var(--surface);
 }
 
 .slide-knob {

@@ -1571,6 +1571,113 @@ pub fn dapp_browser_input(text: String) -> Option<String> {
     vela_core::app::dapp_rpc::browser_input(&text)
 }
 
+/// A main-frame load failure as every browser shell draws it (spec 079):
+/// `class` is one of `offline | timeout | not_found | refused | certificate |
+/// other`, `reason_key` the corpus key of the panel's sentence.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BrowserLoadFailure {
+    pub class: String,
+    pub reason_key: String,
+    pub auto_retry: bool,
+}
+
+/// A visit for Recents, from one document (spec 079).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BrowserVisit {
+    pub url: String,
+    pub title: Option<String>,
+    pub favicon: Option<String>,
+}
+
+fn snake<T: serde::de::DeserializeOwned>(name: &str) -> Option<T> {
+    serde_json::from_value(serde_json::Value::String(name.to_owned())).ok()
+}
+
+fn snake_name<T: serde::Serialize>(value: &T) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// The platform's raw load error → the one failure every shell shows, or
+/// `None` when it is not a failure (a cancelled navigation). `platform` is
+/// `"android"`, `"apple"` or `"probe"`; `domain` is the `NSError` domain on
+/// Apple; `certificate` is set when the failure came from a certificate
+/// callback rather than an error code.
+#[uniffi::export]
+pub fn browser_load_classify(
+    platform: String,
+    code: i64,
+    domain: Option<String>,
+    certificate: bool,
+) -> Option<BrowserLoadFailure> {
+    use vela_core::app::browser_load::{classify, LoadPlatform};
+    let platform: LoadPlatform = snake(&platform)?;
+    classify(platform, code, domain.as_deref(), certificate).map(|failure| BrowserLoadFailure {
+        class: snake_name(&failure.class),
+        reason_key: failure.reason_key,
+        auto_retry: failure.auto_retry,
+    })
+}
+
+/// The wait before automatic attempt `attempt` (1-based) of a failed page
+/// load of `class`, or `None` to stop.
+#[uniffi::export]
+pub fn browser_load_retry_delay_ms(class: String, attempt: u32) -> Option<u32> {
+    use vela_core::app::browser_load::{retry_delay_ms, LoadFailureClass};
+    retry_delay_ms(snake::<LoadFailureClass>(&class)?, attempt)
+}
+
+/// The visit a finished load is, or `None` (a failed load, an error status,
+/// an engine document). All fields from ONE read of the page itself.
+#[uniffi::export]
+pub fn browser_load_visit(
+    url: String,
+    title: String,
+    icon: Option<String>,
+    main_frame_failed: bool,
+    http_status: Option<u16>,
+) -> Option<BrowserVisit> {
+    use vela_core::app::browser_load::{visit_to_record, LoadFinished};
+    visit_to_record(LoadFinished {
+        url,
+        title,
+        icon,
+        main_frame_failed,
+        http_status,
+    })
+    .map(|visit| BrowserVisit {
+        url: visit.url,
+        title: visit.title,
+        favicon: visit.favicon,
+    })
+}
+
+/// A site avatar's letter: `app.uniswap.org` → "U".
+#[uniffi::export]
+pub fn browser_site_letter(host: String) -> String {
+    vela_core::app::browser_load::site_letter(&host)
+}
+
+/// A shipped network's usual time to include an operation, in seconds; `None`
+/// for a network Vela does not ship (the receipt then circles instead of
+/// drawing a promise). The dApp signing sheet's wait reads the same number as
+/// the send receipt (spec 079; the web's dApp receipt reads it over wasm).
+#[uniffi::export]
+pub fn network_typical_inclusion_s(chain_id: u32) -> Option<u32> {
+    vela_core::app::network_admin::typical_inclusion_s(chain_id).map(u32::from)
+}
+
+/// The wait before automatic fee re-quote `attempt` (1-based) after
+/// `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
+/// `None` when no retry can fix it (spec 079 FR-008).
+#[uniffi::export]
+pub fn fee_requote_delay_ms(failure: String, attempt: u32) -> Option<u32> {
+    use vela_core::app::fee_policy::{requote_delay_ms, FeeFailure};
+    requote_delay_ms(snake::<FeeFailure>(&failure)?, attempt)
+}
+
 /// The Safe message hash a passkey signs for EIP-1271 verification (spec
 /// 044): `SafeMessage(bytes message)` under the SAFE's own domain, so a
 /// page's `personal_sign` / typed-data signature verifies on chain.

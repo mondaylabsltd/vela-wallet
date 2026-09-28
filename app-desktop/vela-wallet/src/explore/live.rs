@@ -45,6 +45,8 @@ pub fn site_of(entry: &BhistEntry) -> SiteModel {
         // (phase 22's rule about showing a key to somebody who reads Chinese).
         meta: None,
         url: Some(SharedString::from(entry.url.clone())),
+        // The icon the page named when it was visited, then the usual places.
+        icon_urls: icons_of(&entry.url, Some(&entry.favicon)),
     }
 }
 
@@ -77,6 +79,7 @@ pub fn tile_of(site: &ExploreSite) -> SiteModel {
         subtitle: Some(SharedString::from(site.host.clone())),
         meta: None,
         url: Some(SharedString::from(site.url.clone())),
+        icon_urls: icons_of(&site.url, None),
     }
 }
 
@@ -118,7 +121,7 @@ pub fn tab_models(view: &ExploreView, strings: &ExploreStrings) -> Vec<TabModel>
             } else {
                 SharedString::from(tab.title.clone())
             },
-            site: tab.url.as_ref().map(|_| SiteModel {
+            site: tab.url.as_ref().map(|url| SiteModel {
                 id: "tab",
                 name: SharedString::from(tab.title.clone()),
                 host: SharedString::from(tab.host.clone()),
@@ -127,6 +130,7 @@ pub fn tab_models(view: &ExploreView, strings: &ExploreStrings) -> Vec<TabModel>
                 subtitle: None,
                 meta: None,
                 url: None,
+                icon_urls: icons_of(url, None),
             }),
             selected: view.selected_tab.as_deref() == Some(tab.id.as_str()),
         })
@@ -147,11 +151,35 @@ pub fn live_origin(entries: &[BhistEntry], host: &str) -> Option<String> {
         .map(|entry| entry.origin.clone())
 }
 
-/// The first letter a person would read off the host.
+/// The letter a site's avatar shows until its icon loads — the core's rule
+/// (spec 079 F16): `app.uniswap.org` is "U", not "A".
 fn letter_of(host: &str) -> String {
-    host.chars()
-        .find(char::is_ascii_alphanumeric)
-        .map_or_else(|| "?".to_owned(), |c| c.to_uppercase().to_string())
+    vela_core::app::browser_load::site_letter(host)
+}
+
+/// Where a site's icon may be found, in the order they are tried over its
+/// letter: the icon the page itself named, then the two places sites keep
+/// one — the signing header's own list. HTTPS only (founder's ruling on site
+/// icons): an icon fetched over plain http is a request anybody on the path
+/// can answer.
+#[must_use]
+pub fn icons_of(url: &str, favicon: Option<&str>) -> Vec<SharedString> {
+    let mut icons: Vec<SharedString> = favicon
+        .filter(|icon| icon.to_ascii_lowercase().starts_with("https://"))
+        .map(SharedString::from)
+        .into_iter()
+        .collect();
+    if let Some(origin) = vela_core::app::dapp_permissions::origin_of(url)
+        .filter(|origin| origin.starts_with("https://"))
+    {
+        for path in ["/apple-touch-icon.png", "/favicon.ico"] {
+            let icon = SharedString::from(format!("{origin}{path}"));
+            if !icons.contains(&icon) {
+                icons.push(icon);
+            }
+        }
+    }
+    icons
 }
 
 /// A stable colour per host.
@@ -190,6 +218,36 @@ mod tests {
             favicon: String::new(),
             last_visited_ms: 1.0,
         }
+    }
+
+    /// Spec 079 F16: the site's own icon over the core's letter — the icon
+    /// the page named first, https only, and never for a plain-http site.
+    #[test]
+    fn a_site_wears_its_own_icon_over_the_cores_letter() {
+        let mut visited = entry("app.uniswap.org", "Uniswap");
+        visited.favicon = "https://app.uniswap.org/favicon.png".to_owned();
+        let row = site_of(&visited);
+        assert_eq!(row.letter, SharedString::from("U"), "not \"A\" for app.");
+        assert_eq!(
+            row.icon_urls,
+            vec![
+                SharedString::from("https://app.uniswap.org/favicon.png"),
+                SharedString::from("https://app.uniswap.org/apple-touch-icon.png"),
+                SharedString::from("https://app.uniswap.org/favicon.ico"),
+            ]
+        );
+        assert!(
+            icons_of(
+                "http://127.0.0.1:8137/",
+                Some("http://127.0.0.1:8137/f.ico")
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            icons_of("https://a.example/x", Some("https://a.example/favicon.ico")).len(),
+            2,
+            "one icon is tried once"
+        );
     }
 
     /// The host is the subtitle, always — a page's own title is a claim.

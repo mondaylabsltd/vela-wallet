@@ -41,6 +41,7 @@ pub mod approval_guard;
 pub mod balance_dashboard;
 pub mod batch_import;
 pub mod browser_history;
+pub mod browser_load;
 pub mod clear_signing;
 pub mod contacts;
 pub mod contacts_initials;

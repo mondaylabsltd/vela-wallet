@@ -14,14 +14,16 @@
  *    chosen. The slider arms only when both are true (and the fee, when the
  *    request has one, is ready). Its own doc in the drawn component says the
  *    shell must AND them — this is that place.
- * 2. **Dismissal is rejection.** The 022 interaction contract draws no reject
+ * 2. **The ✕ is the refusal.** The 022 interaction contract draws no reject
  *    button: closing the sheet IS the refusal, and the route answers the
- *    requester with 4001.
+ *    requester with 4001 — but since spec 079 only the header's ✕ closes it
+ *    (no scrim, drag or Escape: a stray touch lost the owner a request).
  */
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { FeeView } from '$lib/core/generated/FeeView';
+import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
@@ -37,6 +39,7 @@ import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL } from '$lib/services/tokens-model';
+import { feeRequoteDelayMs } from '$lib/core/kernels';
 import { exactAmount, trimBalance } from '$lib/wallet/live';
 import { fromBaseUnits } from '$lib/services/eip681';
 import { chainName } from '$lib/services/networks';
@@ -51,9 +54,11 @@ import type {
 	FeeModel,
 	KeyValueRow,
 	SigningModel,
+	SigningStatus,
 	TechModel,
 	Tone
 } from './model';
+import type { ApprovalProgress } from './approval-progress';
 
 export interface SigningLiveInputs {
 	sign: SignView;
@@ -70,6 +75,18 @@ export interface SigningLiveInputs {
 	 * where there is no fee session behind the sheet.
 	 */
 	speed?: { view: FeeSpeedView; feeOptions(tier: FeeTier): FeeView['options'] };
+	/**
+	 * Spec 079: the failure a re-ask is still answering (`heldFeeFailure`) —
+	 * so the reason line stays put while the sheet asks again, instead of
+	 * blinking out for every "estimating".
+	 */
+	feeFailing?: FeeFailure | null;
+	/**
+	 * Spec 079: the approved request's progress — has its signature been made,
+	 * is the passkey prompt up (`approval-progress.ts`). Absent: nothing known,
+	 * so the ✕ stays shut while anything is in flight.
+	 */
+	progress?: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'>;
 	m: SigningMessages;
 	identity: WalletIdentity;
 	identicon: (seed: string) => string;
@@ -465,17 +482,48 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// a failed quote can be asked again, and two or more coins open a list. One
 	// coin and a quote is a fact with nothing behind it, and a row that says
 	// otherwise is the tap that does nothing (spec 081, dead-controls #6).
-	const tappable = fee.failed !== null || fee.options.length > 1;
+	const choosable = fee.options.length > 1;
+	const tappable = fee.failed !== null || choosable;
+	// Spec 079 (the owner: "似乎没有刷新网络费的按钮呀"): the send form's own
+	// refresh control, turning while a measurement is out — the same generic
+	// busy flag the "estimating" value reads, so the row can never claim to be
+	// both settled and measuring. The chevron only where a tap opens a list.
+	const refresh = { refreshLabel: m.feeRefresh, refreshing: fee.busy, chevron: choosable };
+	// Spec 079: WHY there is no fee, when it is something a retry can clear —
+	// the relay out of reach, a busy estimate — and that the sheet will ask
+	// again by itself (it does: `FeeRequoteTimer`, on the core's schedule). The
+	// core's schedule decides which failures those are, so the sentence and
+	// the timer cannot disagree. A missing key or a calculation that cannot
+	// come out gets no network sentence: the network did not cause it.
+	const reason = (failure: FeeFailure | null | undefined): string | undefined =>
+		failure != null && feeRequoteDelayMs(failure, 1) !== null ? m.feeNetworkError : undefined;
 	if (!fee.fee || ofAnotherTier) {
 		// Asked and not answered yet, or asked and refused: say so in the fee's
 		// own row. A sheet that drew nothing here let a person slide on a
 		// mainnet transaction without ever being told what it costs — and the
 		// slide stays shut in both states, as it does on the phones.
 		if (fee.busy || ofAnotherTier) {
-			return { kind: 'onchain', label: m.feeLabel, value: m.feeEstimating, speed, tappable };
+			return {
+				kind: 'onchain',
+				label: m.feeLabel,
+				value: m.feeEstimating,
+				speed,
+				tappable,
+				// Asking again after a failure: the reason stays said.
+				warning: fee.busy ? reason(inputs.feeFailing) : undefined,
+				...refresh
+			};
 		}
 		if (fee.failed)
-			return { kind: 'onchain', label: m.feeLabel, value: m.feeRetry, speed, tappable };
+			return {
+				kind: 'onchain',
+				label: m.feeLabel,
+				value: m.feeRetry,
+				speed,
+				tappable,
+				warning: reason(fee.failed),
+				...refresh
+			};
 		return { kind: 'hidden' };
 	}
 	// The send screens' own line, through the send screens' own formatter: the
@@ -523,7 +571,19 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 		!fee.busy && fee.failed === null && !fee.confirm_fee_ready && selected?.insufficient === true
 			? fill(m.feeShort, { sym: selected.symbol })
 			: undefined;
-	return { kind: 'onchain', label: m.feeLabel, value, selector, speed, warning, tappable };
+	return {
+		kind: 'onchain',
+		label: m.feeLabel,
+		value,
+		selector,
+		speed,
+		warning,
+		tappable,
+		...refresh,
+		// The send form's rule (spec 068): a quote past its TTL is OLD, not
+		// wrong — said calmly, and not while a fresh measurement is out.
+		staleNote: fee.stale && !fee.busy ? m.feeStale : undefined
+	};
 }
 
 /**
@@ -686,6 +746,117 @@ function capText(guard: GuardView): string | null {
 	return `${exactAmount(fromBaseUnits(BigInt(editor.display_amount_raw), meta.decimals))} ${meta.symbol}`;
 }
 
+/**
+ * The request in one line, from the blocks the sheet already drew: what it is
+ * and its figure ("Send · -1 xDAI") — so the status still says WHAT is on its
+ * way once the form has gone (Android's `summaryOf`).
+ */
+export function summaryOf(blocks: Block[]): string | undefined {
+	const intent = blocks.find((b) => b.kind === 'intent');
+	const figure = blocks.flatMap((block) => {
+		if (block.kind === 'amount') {
+			return [`${block.line.sign}${block.line.value} ${block.line.symbol}`.trim()];
+		}
+		if (block.kind === 'swap') {
+			return [
+				`${block.pay.value} ${block.pay.symbol}`.trim() +
+					' → ' +
+					`${block.receive.value} ${block.receive.symbol}`.trim()
+			];
+		}
+		return [];
+	})[0];
+	const line = [intent?.kind === 'intent' ? intent.text : '', figure ?? '']
+		.filter((part) => part !== '')
+		.join(' · ');
+	return line === '' ? undefined : line;
+}
+
+/**
+ * Spec 079 (F11): once the person has approved, the sheet is a STATUS — never
+ * the form with a greyed slide (the owner: "可信签名器签完后，回到签名提示框，
+ * 似乎没有任何提示"). Android's signing receipt, word for word:
+ *
+ * - waiting for the signature: "Waiting for biometric…" (`send.txSigning`);
+ * - signed, going to the relay: "Submitting to network…" + "closing keeps it
+ *   running" (`send.txSubmitting`, `send.txBackgroundHint`);
+ * - a message never submits: "Signing…" throughout;
+ * - the submission failed: the receipt's "Failed" + "your funds are safe"
+ *   (`send.txErrorGeneric`) — the page was told already.
+ *
+ * Once the relay accepts the operation the host's landing (the receipt with
+ * the chain's clock) takes over, as it did before.
+ *
+ * The core's `is_signing` and `is_submitting` are BOTH true through its
+ * `Submitting` stage (passkey and submission are one step there), so "signed"
+ * comes from the ceremony itself (`progress.signed`). `null` = still a request.
+ */
+export function signingStatus(
+	sign: SignView,
+	progress: Pick<ApprovalProgress, 'signed' | 'ceremonyUp'> | undefined,
+	summary: string | undefined,
+	m: SigningMessages
+): SigningStatus | null {
+	const request = sign.request;
+	if (!request || sign.surface === 'hidden') return null;
+	const lines = (...parts: (string | undefined)[]) =>
+		parts.filter((part): part is string => part !== undefined && part !== '');
+	const error = sign.error;
+	if (
+		error !== null &&
+		error.kind !== 'user_rejected' &&
+		(sign.pending_op_hash !== null || error.kind === 'submit_failed')
+	) {
+		return {
+			stage: 'failed',
+			title: m.receipt.failed,
+			captions: lines(summary, m.status.failedHint),
+			closable: true
+		};
+	}
+	if (!sign.is_signing && !sign.is_submitting) return null;
+	// Past the signature: said by the ceremony, or by the core's own reactive
+	// recovery, which only follows a submission.
+	const signed = progress?.signed === true || (sign.is_submitting && !sign.is_signing);
+	const closable = signed && sign.is_submitting && progress?.ceremonyUp !== true;
+	const onChain = request.kind === 'transaction' || request.kind === 'batch';
+	if (!onChain) {
+		return {
+			stage: 'submitting',
+			title: m.status.messageSigning,
+			captions: lines(summary),
+			closable
+		};
+	}
+	if (!signed) {
+		return {
+			stage: 'submitting',
+			title: m.status.signing,
+			captions: lines(summary),
+			closable: false
+		};
+	}
+	return {
+		stage: 'submitting',
+		title: m.status.submitting,
+		captions: lines(summary, m.status.backgroundHint),
+		closable
+	};
+}
+
+/**
+ * What the sheet's ✕ tells the core (spec 079). Before the approval it is the
+ * refusal (`reject_tapped` → 4001). After it, a plain close (`dismiss_tapped`):
+ * the operation carries on, is tracked, and the page still gets its answer —
+ * and only when the status says it may (`closable`); otherwise nothing.
+ */
+export function signingCloseEvent(
+	status: SigningStatus | null | undefined
+): 'reject_tapped' | 'dismiss_tapped' | null {
+	if (!status) return 'reject_tapped';
+	return status.closable ? 'dismiss_tapped' : null;
+}
+
 export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	if (raw.sign.surface === 'hidden' || !raw.sign.request) return null;
 	const ownRequest =
@@ -702,7 +873,8 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 
 	const request = sign.request;
 	const dapp = request.dapp;
-	const name = dapp?.name ?? new URL(request.origin).host;
+	const host = new URL(request.origin).host;
+	const name = dapp?.name ?? host;
 	const own = ownRequest;
 
 	// Rule 1: the gate is an AND. The core may allow the request; the guard may
@@ -710,6 +882,9 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	const feeReady =
 		feeModel(inputs).kind !== 'onchain' || (fee.confirm_fee_ready && !feeOfAnotherTier(inputs));
 	const enabled = sign.confirm_gate_open && guard.confirm_allowed && feeReady && !sign.is_signing;
+
+	const blocks = blocksFor(inputs);
+	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(blocks), m);
 
 	return {
 		id: 'cs1',
@@ -720,7 +895,11 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT, own: true }
 			: {
 					name,
-					host: new URL(request.origin).host,
+					// Spec 079 (F14): a site with no name of its own is named by
+					// its host — said once. "127.0.0.1:8137" over "127.0.0.1:8137"
+					// was the header of every extension request (it hands the core
+					// no dApp name). The host line stays whenever it adds something.
+					host: name === host ? '' : host,
 					letter: letterOf(name),
 					tint: NEUTRAL_TINT,
 					iconUrls: siteIconUrls(request.origin)
@@ -730,7 +909,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			dot: NEUTRAL_TINT,
 			logoUrl: chainLogoURL(request.chain_id)
 		},
-		blocks: blocksFor(inputs),
+		blocks,
 		tech: techModel(inputs),
 		techOpen: false,
 		fee: sign.blocked ? { kind: 'hidden' } : feeModel(inputs),
@@ -756,6 +935,8 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			action: clear.confirm.type === 'confirm_intent' ? clear.confirm.intent : m.confirmPlain,
 			enabled
 		},
+		closeLabel: m.close,
+		...(status ? { status } : {}),
 		panelTitle: m.panelTitle
 	};
 }

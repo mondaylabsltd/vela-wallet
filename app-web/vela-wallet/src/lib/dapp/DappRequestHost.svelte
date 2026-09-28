@@ -358,9 +358,11 @@
 	{/if}
 
 	<!--
-		FR-001: over the wallet, as on Android and iOS. Dismissing the sheet is
-		the same answer as Cancel — the core's 4001 — so the scrim and the × go
-		through `onCancel` rather than merely hiding the card.
+		FR-001: over the wallet, as on Android and iOS. Closing the card is the
+		same answer as Cancel — the core's 4001 — so the × goes through
+		`onCancel` rather than merely hiding the card. Spec 079: the × and
+		Cancel are the ONLY ways out (`dismissible="explicit"`): a stray tap on
+		the scrim, a drag or Escape used to refuse the site's request.
 
 		The layer is this component's, not `BottomSheet`'s: the sheet positions
 		itself `absolute`, which over a scrollable wallet would land wherever the
@@ -369,7 +371,12 @@
 	-->
 	{#if stage.kind === 'consent' && request}
 		<div class="layer">
-			<BottomSheet title={cardTitle} closeLabel={m.cancel} dismissible={!busy} onclose={onCancel}>
+			<BottomSheet
+				title={cardTitle}
+				closeLabel={m.cancel}
+				dismissible={busy ? false : 'explicit'}
+				onclose={onCancel}
+			>
 				<div class="card">
 					<p class="body">{m.body}</p>
 					<p class="method">{request.method}</p>
