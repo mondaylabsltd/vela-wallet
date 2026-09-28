@@ -446,27 +446,27 @@ Chains:
   - `D/executor/sim.rs` normalises the reply into `SimReply` and calls `sim_outcome::classify`. Delete `derive_deltas` and its helpers (`sim.rs:98-226`) and the collapse at `:88-94`.
   - `D/signing/live.rs:264-268` draws `notice`: Caution `simUnavailableWarning`; Danger `simWillFail(Reason)` with the sanitised reason.
   - Proof: in-crate tests: an Arbitrum -32603 → caution tone; status 0x0 → danger with the reason; no copy of `derive_deltas` is left (`grep -n derive_deltas D/` finds only the core call).
-- [ ] T058 [US1] Take `LoadWatch` out of the desktop: delete `D/explore/load_watch.rs`, new `D/explore/probe.rs`, repoint `D/explore/mod.rs`, `D/wallet/page.rs` and `D/wallet/browser_host.rs` (RD4, RD9); proof: `cargo test` incl. the ureq tests in `probe.rs`; (after T049).
+- [x] T058 [US1] Take `LoadWatch` out of the desktop: delete `D/explore/load_watch.rs`, new `D/explore/probe.rs`, repoint `D/explore/mod.rs`, `D/wallet/page.rs` and `D/wallet/browser_host.rs` (RD4, RD9); proof: `cargo test` incl. the ureq tests in `probe.rs`; (after T049).
   - Delete the moved pure part of `D/explore/load_watch.rs`. Rename what stays (`probe()`, `probe_code_of()`, `io_code()` and the two ureq tests) to `D/explore/probe.rs`.
   - Point `D/explore/mod.rs`, `D/wallet/page.rs` and `D/wallet/browser_host.rs` at `vela_core::app::browser_load::LoadWatch`, and take the timings from `WATCHDOG_MS` / `PROBE_BUDGET_MS` / `GIVE_UP_MS`.
   - The probe maps `ProxyFailure` Unreachable / Timeout / PacFailed → `probe_code::PROXY`; RefusedTunnel keeps refused/connect.
   - `ExploreStrings` (`D/explore/mod.rs`) reads `explore.loadProxy`.
   - Proof: `cargo test` (the ureq tests in `probe.rs`, plus a resolve test for `loadProxy`); `load_watch.rs` no longer exists.
-- [ ] T059 [US1] WebKit's own load state first, in `D/webview.rs` and `D/wallet/browser_host.rs` (RD3, RD7, W7, W18); proof: fake engine-sample tests; (after T058).
+- [x] T059 [US1] WebKit's own load state first, in `D/webview.rs` and `D/wallet/browser_host.rs` (RD3, RD7, W7, W18); proof: fake engine-sample tests; (after T058).
   - `D/webview.rs` `engine()` reads `isLoading` / `estimatedProgress` / `URL` (the `view_url` pointer technique, `:335-353`) and wry's `can_go_back/forward`.
   - Poll every 250 ms while a load is watched or a panel is up, and every 500 ms otherwise while Explore is in front; feed `LoadWatch::engine`.
   - `retry_fired` → EngineStillLoading does not navigate: log `browser: retry … skipped (engine still loading)`.
   - PageStarted → hairline, watchdog and panel with the failed host, manual Retry only. The Windows build keeps probe-only.
   - Log lines: asked / committed / finished / watchdog / probe verdict / failed class / engine stopped without commit.
   - Proof: in-crate tests over a fake engine sample stream: one `loadRequest` for a 9 s first byte; a page-initiated load gets a panel with no auto-retry.
-- [ ] T060 [US1] Hold tab switches while a request is open, in `D/wallet/browser_host.rs`, `D/wallet/page.rs`, `D/explore/components.rs` and `D/explore/mod.rs` (RD1, rulings 4 and 10, W14); proof: in-crate hold tests; (after T059).
+- [x] T060 [US1] Hold tab switches while a request is open, in `D/wallet/browser_host.rs`, `D/wallet/page.rs`, `D/explore/components.rs` and `D/explore/mod.rs` (RD1, rulings 4 and 10, W14); proof: in-crate hold tests; (after T059).
   - `holds_navigation(view) = consent ∨ signing ∨ queued_signing > 0` in `D/wallet/browser_host.rs`.
   - One funnel, `browser_go(Go)`, in `D/wallet/page.rs` for: other tab, +, start-page tab, Enter, favourites, Recents, Reload, Open in a new tab, Back/Forward.
   - A held control is drawn at the disabled opacity (`D/explore/components.rs:357-360`) but still takes clicks. A click brings the request's column forward (re-attaching `signing_background`), shows `explore.requestOpen` in the bar's notice slot (`components.rs:459-462`) for 2.5 s, and logs `browser: navigation held`. The typed draft is kept.
   - Re-clicking the shown tab is a no-op (`page.rs:12220-12226`); closing a background tab no longer reloads (`:12248-12262`).
   - `ExploreStrings` reads `requestOpen`.
   - Proof: in-crate tests: every held path returns Held; closing the request's own tab is not held (4900 from the core); a resolve test for `requestOpen`.
-- [ ] T061 [US1] The wallet's HTTP follows the system proxy with no direct fall-back: new `D/executor/proxy_macos.rs` (registered in `D/executor/mod.rs`), `D/executor/proxy.rs`, `app-desktop/vela-wallet/Cargo.toml` (RD2, RD9, ruling 3, W6, W8); proof: settings-seam tests; (after T058).
+- [x] T061 [US1] The wallet's HTTP follows the system proxy with no direct fall-back: new `D/executor/proxy_macos.rs` (registered in `D/executor/mod.rs`), `D/executor/proxy.rs`, `app-desktop/vela-wallet/Cargo.toml` (RD2, RD9, ruling 3, W6, W8); proof: settings-seam tests; (after T058).
   - New `D/executor/proxy_macos.rs`: a CFNetwork `extern "C"` block over `core-foundation` 0.10 / `-sys` 0.8 (add them to `app-desktop/vela-wallet/Cargo.toml`; both are already in Cargo.lock).
     - `CFNetworkCopySystemProxySettings` (5 s cache) and `CFNetworkCopyProxiesForURL`.
     - PAC through `CFNetworkExecuteProxyAutoConfigurationURL/Script` on a `vela-pac` thread with its own run loop: 5 s cap, results cached 5 min, failures 30 s.
@@ -482,39 +482,39 @@ Chains:
     - a PAC failure is a proxy failure (no DIRECT);
     - exceptions and simple hostnames;
     - no state survives between two requests.
-- [ ] T062 [US1] The address bar after Enter, in `D/wallet/page.rs` and `D/explore/components.rs` (RD5, RE1, G7, G30); proof: in-crate bar tests; (after T060).
+- [x] T062 [US1] The address bar after Enter, in `D/wallet/page.rs` and `D/explore/components.rs` (RD5, RE1, G7, G30); proof: in-crate bar tests; (after T060).
   - The bar's `on_click` ignores `event.is_keyboard()`. `address_key` returns `Go | Stop | NotMine`, and Go (when not held) or Stop calls `window.blur()`.
   - `edit_address` (`D/wallet/page.rs:12980-13002`) starts from the bar's address.
   - Host and lock come from core `address_bar`: no fixture host `app.uniswap.org` fallback (`page.rs:12510-12513`), and no lock over a failure panel.
   - While a failure panel is up, the tab title is the failed host.
   - Proof: in-crate tests: a keyboard click does not re-open edit mode; a failed first load shows the failed host with no lock (G30).
-- [ ] T063 [US1] The restored tab and the nav buttons, in `D/wallet/page.rs`, `D/webview.rs` and `D/explore/components.rs` (RD6, G2); proof: in-crate launch tests; (after T062).
+- [x] T063 [US1] The restored tab and the nav buttons, in `D/wallet/page.rs`, `D/webview.rs` and `D/explore/components.rs` (RD6, G2); proof: in-crate launch tests; (after T062).
   - `shown_tab: Option<String>`: a restored tab waits unlit, and the strip lights only `shown_tab` or a selected start-page tab. A meta-handler visit (`page.rs:13122-13138`) goes to `shown_tab`, else the selected start-page tab, else a new tab.
   - The nav buttons take `enabled: [bool; 3]` from `webview::engine()`, all off on the start page. Back/Forward use wry's native `go_back/go_forward` (`D/webview.rs:268-278`, `D/explore/components.rs:668-672`).
   - Log `browser: navigate asked host=… view=<built|pending> composing=<b>`.
   - Proof: in-crate tests: launch with a restored tab → none lit, all nav disabled; Enter over the start page opens a new tab and leaves the restored one intact.
-- [ ] T064 [US2] Stop the chrome jump, in `D/wallet/page.rs` and `D/explore/components.rs` (RD8, G6); proof: a toolbar-y layout test; (after T063).
+- [x] T064 [US2] Stop the chrome jump, in `D/wallet/page.rs` and `D/explore/components.rs` (RD8, G6); proof: a toolbar-y layout test; (after T063).
   - The live canvas uses `.flex_1().min_h(px(0.)).w_full()` (`D/wallet/page.rs:12717-12731`); `tab_strip_with` and `toolbar` get `.flex_none()` (`D/explore/components.rs:230-236, 417-425`).
   - Proof: a layout test comparing the toolbar's y on the start page and on a live page (0 pt); then row DX12.
-- [ ] T065 [US2] The connect consent shows the account and the network, in `D/wallet/page.rs` (RD11, G11); proof: a consent-view test; (after T064).
+- [x] T065 [US2] The connect consent shows the account and the network, in `D/wallet/page.rs` (RD11, G11); proof: a consent-view test; (after T064).
   - `consent_body` (`D/wallet/page.rs:14000-14072`) adds an account row and a changeable network row (`open_site_networks → SiteChainPicked`), both extracted from `connection_body` (`:14127-14285`).
   - The connected panel shows the grant's account (`tab.connected_address`).
   - Proof: an in-crate test that the consent view carries the address and the chain; then row U1/U2.
-- [ ] T066 [US1] The Trusted Signer page could not open, in `D/executor/trusted_signer.rs` and `D/signing/trusted_signer.rs` (RD13, W16); proof: HEAD-probe tests; (after T065 and T051).
+- [x] T066 [US1] The Trusted Signer page could not open, in `D/executor/trusted_signer.rs` and `D/signing/trusted_signer.rs` (RD13, W16); proof: HEAD-probe tests; (after T065 and T051).
   - `D/executor/trusted_signer.rs` + `D/signing/trusted_signer.rs`: while a wait runs and the window becomes active with no answer, HEAD scheme+host+path (fragment stripped) over T061's routes within 5 s.
   - A transport failure → `mark_unreachable()` → the card shows `componentsUi.signing.signerDown` with `connect.browser.retry` as the primary action and Cancel. The request and its 5-minute clock stay.
   - Log `trusted signer: page <host> unreachable`.
   - Proof: in-crate tests: an unreachable HEAD marks it down; a cached page (HEAD ok) is untouched; the fragment is never sent.
-- [ ] T067 [US1] Closing the window during a submit, in `D/executor/relay.rs` and `D/main.rs` (RD14, W17); proof: guard-counter tests; (after T048, T052 and T061).
+- [x] T067 [US1] Closing the window during a submit, in `D/executor/relay.rs` and `D/main.rs` (RD14, W17); proof: guard-counter tests; (after T048, T052 and T061).
   - `SUBMITS_IN_FLIGHT: AtomicU32` with a drop guard around the relay POST (`D/executor/relay.rs:578-615`).
   - `on_window_should_close` and the Quit action (`D/main.rs:401`) refuse once while a submit is in flight: activate, bring the submitting column forward, log `window: close held (submit in flight)`. A second close within 5 s goes through.
   - Proof: in-crate tests for the guard counter and for the second close.
-- [ ] T068 [US1] The chain notice, in `D/wallet/browser_host.rs` and `D/wallet/page.rs` (RF1, RF4, G33, W11); proof: `the_chain_notice_is_for_a_chain_that_is_down_not_throttled` extended; (after T066).
+- [x] T068 [US1] The chain notice, in `D/wallet/browser_host.rs` and `D/wallet/page.rs` (RF1, RF4, G33, W11); proof: `the_chain_notice_is_for_a_chain_that_is_down_not_throttled` extended; (after T066).
   - `D/wallet/browser_host.rs` shows it for `chain ∈ failed_chains ∪ unreached_chains ∧ chain ∉ rate_limited_chains` (the pool view from `D/executor/pool.rs`).
   - Retry (`browser_host.rs:367-382`, `D/wallet/page.rs:12817`) is busy (spinner, full colour, taps ignored) until its `eth_blockNumber` settles.
   - Log `chain notice: shown/cleared/retry → ok|failed`.
   - Proof: extend `the_chain_notice_is_for_a_chain_that_is_down_not_throttled` with an unreached-only chain; test the busy state.
-- [ ] T069 [US1] Network-back parity, in `D/executor/pool.rs` and `D/wallet/browser_host.rs` (RE3, RE10, FR-020); proof: three misses then a reach → one retry; (after T068 and T050).
+- [x] T069 [US1] Network-back parity, in `D/executor/pool.rs` and `D/wallet/browser_host.rs` (RE3, RE10, FR-020); proof: three misses then a reach → one retry; (after T068 and T050).
   - Feed `net_health_step` from pool outcomes in `D/executor/pool.rs`. On `CameBack`, retry the failed shown tab when `retry_when_network_returns(class)`, and invalidate balances.
   - If the desktop's logo loading (`D/marks.rs`, `D/executor/gpui_http.rs`) remembers misses, use `mark_miss_ttl_ms`; otherwise record "no such surface" for W20 in the results matrix.
   - Proof: in-crate tests: three misses then a reach → one retry of the failed tab.
@@ -537,7 +537,7 @@ Chains:
   - Why: each shell maps a stored row into `TrackPendingRecord` by hand with only id, hash, chain and time (`tracker.rs:82-110`). After a relaunch the entry would lose `maybe_sent` (no MaybeSent outcome, no NotSent end, no FindOpEvent) and `submit_block`, so ruling 1's "track it to its end" would stop at the first restart.
   - The stored row gains `maybeSent` and `submitBlock`, written from `SignRecord` / `SendTxRecord`. `pending_records` puts them into `TrackPendingRecord`, and the handoff into `tx_tracker` `Event::Submitted` (from `SignTrackerHandoff` and `SendOperation::TrackSubmitted`; grep `Event::Submitted` under `D/`) carries both.
   - Proof: a row written for a MaybeSent op reads back as `TrackPendingRecord{maybe_sent: true, submit_block: Some(n)}`; an old row without the keys reads back as `false` / `None`.
-- [ ] T074 [US1] Desktop gates in `app-desktop/vela-wallet` (tests, dev-fixtures tests, clippy, the live relay test, the release build); (after T048–T073 and T181).
+- [x] T074 [US1] Desktop gates in `app-desktop/vela-wallet` (tests, dev-fixtures tests, clippy, the live relay test, the release build); (after T048–T073 and T181).
   - `cd app-desktop/vela-wallet && cargo test && cargo test --features dev-fixtures && cargo clippy --all-targets --features dev-fixtures -- -D warnings`
   - live: `cargo test live_an_unknown_hash_is_pending_not_unreachable -- --ignored`
   - `cargo build --release --features dev-fixtures` (for quickstart §1.3)
