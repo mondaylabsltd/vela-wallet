@@ -12735,15 +12735,10 @@ impl WalletPage {
     /// stops running. Hiding the webview alone would leave the page alive and
     /// able to ask for things nobody can see.
     fn close_browser_page(&mut self, cx: &mut Context<Self>) {
+        // Not `TabClosed`: the one webview's tab id must keep answering the
+        // next page (`browser_host::page_gone_events`).
         if let Some(host) = self.browser_host.clone() {
-            host.update(cx, |host, cx| {
-                host.dispatch(
-                    DbrEvent::TabClosed {
-                        tab: BROWSER_TAB.to_owned(),
-                    },
-                    cx,
-                );
-            });
+            host.update(cx, BrowserHost::page_gone);
         }
         #[cfg(not(target_os = "linux"))]
         crate::webview::navigate("about:blank");

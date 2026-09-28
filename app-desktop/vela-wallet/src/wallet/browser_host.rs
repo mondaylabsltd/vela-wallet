@@ -256,6 +256,13 @@ impl BrowserHost {
         self.act(out, cx);
     }
 
+    /// The page on screen is closed ([`page_gone_events`]).
+    pub fn page_gone(&mut self, cx: &mut Context<Self>) {
+        for event in page_gone_events() {
+            self.dispatch(event, cx);
+        }
+    }
+
     fn resolve(&mut self, id: u64, result: DbrShellResult, cx: &mut Context<Self>) {
         let out = self.driver.resolve(id, result);
         self.act(out, cx);
@@ -501,6 +508,32 @@ impl BrowserHost {
     pub fn tab(&self) -> Option<&vela_core::app::dapp_browser::DbrTabView> {
         self.view.tabs.iter().find(|tab| tab.tab == BROWSER_TAB)
     }
+}
+
+/// What the browser machine hears when the page on screen is closed, not
+/// merely hidden — the last tab's ✕, the site menu's Close, an erase.
+///
+/// Not `TabClosed`: every page of this shell is [`BROWSER_TAB`], and a
+/// closed tab id goes on the machine's closed list for good — the next
+/// page's hello and every request after it went unanswered for the rest of
+/// the session. The one webview is loading nothing next (`about:blank`),
+/// and a load that ends with no hello retires the document it replaces: its
+/// open requests are answered 4900 once, a question or a sheet of it goes,
+/// a signing in flight is cancelled (nothing is signed or sent for it), and
+/// its late messages are dropped as a retired document's.
+#[must_use]
+pub fn page_gone_events() -> Vec<Event> {
+    let blank = "about:blank".to_owned();
+    vec![
+        Event::NavigationStarted {
+            tab: BROWSER_TAB.to_owned(),
+            url: blank.clone(),
+        },
+        Event::LoadFinished {
+            tab: BROWSER_TAB.to_owned(),
+            url: blank,
+        },
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -1379,6 +1412,69 @@ mod tests {
             );
             assert!(driver.view().consent.is_some());
             assert!(holds_navigation(&driver.view()));
+        });
+    }
+
+    /// Closing the page on screen (the last tab's ✕, the site menu's Close,
+    /// an erase) settles its requests at once — a connect question goes,
+    /// its request is answered 4900 once — and leaves the one webview's tab
+    /// usable: the next page's hello and requests are answered, and a late
+    /// message from the closed page is not. `TabClosed` put `BROWSER_TAB` on
+    /// the machine's closed list for good, and every later page went
+    /// unanswered for the rest of the session.
+    #[test]
+    fn a_closed_page_leaves_the_browser_answering_the_next_one() {
+        storage::tests::with_temp_state("dbr-host-page-gone", || {
+            let mut driver = booted();
+            page(&mut driver, OTHER, json!({"t":"hello","doc":"d1"}));
+            ask(
+                &mut driver,
+                OTHER,
+                "d1",
+                "1",
+                "eth_requestAccounts",
+                json!([]),
+            );
+            assert!(driver.view().consent.is_some());
+            let out: Vec<Outbound> = page_gone_events()
+                .into_iter()
+                .flat_map(|event| driver.dispatch(event))
+                .collect();
+            assert!(driver.view().consent.is_none(), "its question goes");
+            assert!(!holds_navigation(&driver.view()));
+            let settled = answers(&out);
+            assert_eq!(settled.len(), 1, "one answer, to the page: {settled:?}");
+            assert_eq!(settled[0]["id"], json!("1"));
+            assert_eq!(settled[0]["error"]["code"], json!(4900));
+            // The next page, in the same webview.
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d2"}));
+            let out = ask(&mut driver, DAPP, "d2", "2", "eth_chainId", json!([]));
+            assert_eq!(answers(&out).len(), 1, "the next page is answered");
+            // The closed page, heard late: nothing.
+            let out = ask(&mut driver, OTHER, "d1", "3", "eth_chainId", json!([]));
+            assert!(answers(&out).is_empty(), "the closed page is not");
+        });
+        // A send the column shows when its page is closed: the column is told
+        // to stop — nothing is signed or sent for a page that is gone.
+        storage::tests::with_temp_state("dbr-host-page-gone-sign", || {
+            seed_grant(DAPP, A1, 100);
+            let mut driver = booted();
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+            let out = ask(
+                &mut driver,
+                DAPP,
+                "d1",
+                "1",
+                "eth_sendTransaction",
+                json!([{}]),
+            );
+            assert_eq!(forwarded(&out).len(), 1);
+            let out: Vec<Outbound> = page_gone_events()
+                .into_iter()
+                .flat_map(|event| driver.dispatch(event))
+                .collect();
+            assert_eq!(cancelled(&out), ["1"]);
+            assert!(driver.view().signing.is_none());
         });
     }
 
