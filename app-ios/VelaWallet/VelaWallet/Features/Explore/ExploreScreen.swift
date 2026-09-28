@@ -39,10 +39,12 @@ struct ExploreScreen: View {
     var onFeePick: (String) -> Void = { _ in }
     /// The live sheet's speed control (spec 069): `nil` folds, an id picks.
     var onSpeed: (String?) -> Void = { _ in }
-    /// The sheet went away without a tap. The core routes what that means by
-    /// phase — a refusal before the commitment, a dismissal after it — so the
-    /// shell reports the gesture and decides nothing.
+    /// The signing sheet's ✕ (spec 079: its ONLY close — no swipe). The core
+    /// routes what that means by phase — a refusal before the commitment, a
+    /// dismissal after it — so the shell reports the tap and decides nothing.
     var onSigningDismissed: () -> Void = {}
+    /// Spec 079: the landed receipt's "view on explorer".
+    var onSigningExplorer: () -> Void = {}
     /// The live browser. `nil` is the gallery: every E-state still renders
     /// from fixtures, and a gallery that ran somebody else's JavaScript would
     /// not be a gallery.
@@ -81,6 +83,11 @@ struct ExploreScreen: View {
     /// showing neither.
     @State private var switchAfterDismiss = false
     @State private var signingUp = false
+    /// A page's signing request arrived while one of the browser's own sheets
+    /// was up (spec 079). That sheet gives way first; the signing sheet opens
+    /// once it is really gone — presenting one sheet in the same breath as
+    /// dismissing another is how iOS ends up showing neither.
+    @State private var signingHeld = false
     /// Groups hidden here rather than in the fixture: hiding is something a
     /// person does, and the sheet has to show it happening.
     @State private var hidden: Set<String> = []
@@ -279,12 +286,17 @@ struct ExploreScreen: View {
                 switchAfterDismiss = false
                 onSwitchAccount()
             }
+            signingHeld = false
         }) { sheet in
             sheetContent(sheet)
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(consentOpen ? .hidden : .visible)
                 .presentationDetents([.medium, .large])
                 .presentationCornerRadius(Tokens.Radius.r20)
                 .presentationBackground(theme.bgBase)
+                // Spec 079: like the signing sheet, the consent closes only on
+                // its ✕ or 拒绝 — a stray swipe must not refuse a connection the
+                // person was reading.
+                .interactiveDismissDisabled(consentOpen)
         }
         .sheet(isPresented: $signingUp) {
             if let signing {
@@ -295,9 +307,14 @@ struct ExploreScreen: View {
                     .presentationBackground(theme.bgRaised)
             }
         }
+        // Spec 079: up while there is a request OR its ending (the caller
+        // swaps the live model for the aftercare one without closing), and it
+        // closes only through its ✕ or the request's own end — never a swipe
+        // (owner ruling). The binding's setter is deliberately inert: the only
+        // dismissals left are programmatic, and those are the core's.
         .sheet(isPresented: Binding(
-            get: { signingLive != nil },
-            set: { open in if !open { onSigningDismissed() } }
+            get: { signingLive != nil && !signingHeld && !accountSwitcherOpen },
+            set: { _ in }
         )) {
             if let signingLive {
                 SigningSheet(
@@ -309,13 +326,26 @@ struct ExploreScreen: View {
                     onAllowanceLegAmount: onAllowanceLegAmount,
                     onFee: onFee,
                     onFeePick: onFeePick,
-                    onSpeed: onSpeed
+                    onSpeed: onSpeed,
+                    onClose: onSigningDismissed,
+                    onExplorer: onSigningExplorer
                 )
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])
                     .presentationCornerRadius(Tokens.Radius.r20)
                     .presentationBackground(theme.bgRaised)
+                    .interactiveDismissDisabled()
             }
+        }
+        // A page's signing request closes the browser's own sheets (site
+        // menu, connection panel) instead of stacking behind them — Android
+        // found the connection panel sitting under the signing sheet after an
+        // account switch (spec 079). A site still ASKING to connect keeps its
+        // consent: that answer is the person's to give.
+        .onChange(of: signingLive != nil) { _, up in
+            guard up, sheet != nil, !consentOpen else { return }
+            signingHeld = true
+            sheet = nil
         }
         .alert(loc.t("explore.newGroup"), isPresented: $namingGroup) {
             TextField(loc.t("explore.newGroup"), text: $groupName)

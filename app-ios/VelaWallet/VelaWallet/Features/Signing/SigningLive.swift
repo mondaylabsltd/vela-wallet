@@ -37,6 +37,14 @@ enum SigningLive {
         var feeOpen = false
         /// How the Trusted Signer last ended for this request without signing.
         var trustedSignerNotice: TrustedSignerNotice?
+        /// Spec 079: the chain's explorer base, for the landed receipt's link.
+        var explorerBase: String?
+        /// Spec 079: the tracker's entry for the submitted operation — its
+        /// clock and its outcome.
+        var track: TrackEntryWire?
+        /// Spec 079: the chain's usual inclusion time (the core's table,
+        /// `networkTypicalInclusionS`), for the receipt's ring.
+        var typicalS: Int?
     }
 
     /// The fee list's id for the chain's own coin (the web's `'native'`).
@@ -238,6 +246,10 @@ enum SigningLive {
                                            speedTier: speed?.view.tier)),
             panelTitle: s(loc, "signatureRequest")
         )
+        // Spec 079: the ✕, and — once approved — the send receipt in place of
+        // the form. A refused request never gets that far.
+        model.closeLabel = loc.t("onboarding.common.close")
+        model.receipt = refused ? nil : receipt(sign: sign, blocks: blocks, context: context)
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.
         model.dappOwn = own
@@ -346,6 +358,176 @@ enum SigningLive {
             blocks.append(.sentence(text: s(loc, "signing"), tone: .neutral))
         }
         return blocks
+    }
+
+    // MARK: - After the approval (spec 079)
+
+    /// After the approval the sheet stops being a form — the owner saw nothing
+    /// change after the fingerprint ("可信签名器签完后，回到签名提示框，似乎没有
+    /// 任何提示"). This is the send receipt's own model and words, so a dApp
+    /// transaction lands exactly as a send does: signing → submitting →
+    /// submitted with the chain's clock → (the core answers the page, and the
+    /// aftercare shows the ending). `nil` while the request is still a request.
+    static func receipt(sign: SignViewWire, blocks: [SigningBlock], context: Context) -> SendReceiptModel? {
+        let loc = context.loc
+        let summary = summaryOf(blocks)
+        let header = FlowHeaderModel(title: "", backLabel: "")
+        let closeBackground = loc.t("send.txCloseBackground")
+        // A message never goes to the network: it is signing, then signed —
+        // never "submitting" (device-found on the Xiaomi, spec 079).
+        let onChain = sign.request.map { $0.kind == .transaction || $0.kind == .batch } ?? true
+        if !onChain, sign.isSigning || sign.isSubmitting {
+            return SendReceiptModel(
+                header: header, stage: .submitting, title: s(loc, "signing"),
+                captions: [summary].compactMap { $0 },
+                cta: loc.t("onboarding.common.close"), ctaAccent: false
+            )
+        }
+        // A refusal after the approval (the submission failed): the core's
+        // reason, the sheet's own sentence for it.
+        if let error = sign.error, error.kind != .userRejected,
+           sign.pendingOpHash != nil || error.kind == .submitFailed {
+            return SendReceiptModel(
+                header: header, stage: .failed,
+                title: loc.t("componentsTx.receipt.statusFailed"),
+                captions: [summary, loc.t("send.txErrorGeneric")].compactMap { $0 },
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+            )
+        }
+        if let op = sign.pendingOpHash {
+            let track = context.track.flatMap {
+                $0.userOpHash.caseInsensitiveCompare(op) == .orderedSame ? $0 : nil
+            }
+            let still = track?.outcome == "still_confirming"
+            let typicalLine = context.typicalS.map {
+                loc.t("send.txTypicalTime", vars: ["chainName": context.chainName, "estSecs": String($0)])
+            }
+            var eta: ReceiptEtaModel?
+            if !still, let at = track?.submittedAtMs, let typical = context.typicalS, let typicalLine {
+                eta = ReceiptEtaModel(
+                    submittedAtMs: at, typicalS: typical, typicalLine: typicalLine,
+                    // Filled with its own placeholder: the screen fills the number.
+                    remainingTemplate: loc.t("send.txRemaining", vars: ["remaining": "{{remaining}}"]),
+                    elapsedTemplate: loc.t("send.txElapsed", vars: ["elapsed": "{{elapsed}}"]),
+                    slowLine: loc.t("send.txSlowConfirm")
+                )
+            }
+            return SendReceiptModel(
+                header: header, stage: .submitted,
+                title: loc.t("send.txSubmittedTitle"),
+                captions: [
+                    summary,
+                    still ? s(loc, "stillConfirming") : loc.t("send.txWaitingConfirm"),
+                    eta == nil && !still ? typicalLine : nil,
+                ].compactMap { $0 },
+                cta: closeBackground, ctaAccent: false, eta: eta
+            )
+        }
+        if sign.isSubmitting {
+            return SendReceiptModel(
+                header: header, stage: .submitting, title: loc.t("send.txSubmitting"),
+                captions: [summary, loc.t("send.txBackgroundHint")].compactMap { $0 },
+                cta: closeBackground, ctaAccent: false
+            )
+        }
+        // The passkey is up (or the Trusted Signer's page is, over this sheet).
+        if sign.isSigning {
+            return SendReceiptModel(
+                header: header, stage: .submitting, title: loc.t("send.txSigning"),
+                captions: [summary].compactMap { $0 },
+                cta: loc.t("onboarding.common.close"), ctaAccent: false
+            )
+        }
+        return nil
+    }
+
+    /// The ending of a request whose sheet the core has closed — the same
+    /// receipt, with the tracker's word for an operation still on its way
+    /// (never "failed" on time alone: a timeout is not a failure).
+    static func aftercareReceipt(
+        _ aftercare: SigningAftercare, summary: String?, context: Context
+    ) -> SendReceiptModel {
+        let loc = context.loc
+        let header = FlowHeaderModel(title: "", backLabel: "")
+        func landed(_ txHash: String?) -> SendReceiptModel {
+            let hash = txHash.flatMap { $0.isEmpty ? nil : $0 }
+            return SendReceiptModel(
+                header: header, stage: .confirmed,
+                title: loc.t("componentsTx.receipt.statusConfirmed"),
+                captions: [summary, context.chainName.isEmpty ? nil : context.chainName].compactMap { $0 },
+                hash: hash.map {
+                    ReceiptHashModel(
+                        label: loc.t("componentsTx.receipt.txHash"),
+                        value: "\($0.prefix(10))…\($0.suffix(8))",
+                        copyLabel: loc.t("componentsUi.identiconViewer.copyAddress"),
+                        copyValue: $0
+                    )
+                },
+                viewOnExplorer: hash != nil && !(context.explorerBase ?? "").isEmpty
+                    ? loc.t("history.viewOnExplorer") : nil,
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+            )
+        }
+        switch aftercare {
+        case .signed:
+            return SendReceiptModel(
+                header: header, stage: .confirmed,
+                // "已签名！" — `signHandoff.signed` reads "已发送" in zh, which
+                // a message that went nowhere is not.
+                title: loc.t("clearSigning.alertSignedTitle"),
+                captions: [summary].compactMap { $0 },
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+            )
+        case .landed(_, let txHash):
+            return landed(txHash)
+        case .stillConfirming(_, let op):
+            let track = context.track.flatMap {
+                $0.userOpHash.caseInsensitiveCompare(op) == .orderedSame ? $0 : nil
+            }
+            switch track?.status {
+            case "confirmed":
+                return landed(track?.txHash)
+            case "dropped", "rejected":
+                return SendReceiptModel(
+                    header: header, stage: .failed,
+                    title: loc.t("componentsTx.receipt.statusFailed"),
+                    captions: [summary, loc.t("send.txErrorGeneric")].compactMap { $0 },
+                    cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+                )
+            default:
+                return SendReceiptModel(
+                    header: header, stage: .submitted,
+                    title: loc.t("send.txSubmittedTitle"),
+                    captions: [
+                        summary,
+                        track?.outcome == "unknown" ? s(loc, "unknownOutcome") : s(loc, "stillConfirming"),
+                    ].compactMap { $0 },
+                    cta: loc.t("send.txCloseBackground"), ctaAccent: false
+                )
+            }
+        }
+    }
+
+    /// The request in one line, from the blocks the sheet already drew: what
+    /// it is ("发送", "授权") and its figure — so the receipt still says WHAT
+    /// is landing once the form has gone.
+    static func summaryOf(_ blocks: [SigningBlock]) -> String? {
+        let intent = blocks.lazy.compactMap { block -> String? in
+            if case .intent(let text, _) = block, !text.isEmpty { return text }
+            return nil
+        }.first
+        let figure = blocks.lazy.compactMap { block -> String? in
+            switch block {
+            case .amount(let line, _, _):
+                return "\(line.sign)\(line.value) \(line.symbol)".trimmingCharacters(in: .whitespaces)
+            case .swap(let pay, let receive):
+                return "\(pay.value) \(pay.symbol) → \(receive.value) \(receive.symbol)"
+            default:
+                return nil
+            }
+        }.first
+        let line = [intent, figure].compactMap { $0 }.joined(separator: " · ")
+        return line.isEmpty ? nil : line
     }
 
     // MARK: - What it does

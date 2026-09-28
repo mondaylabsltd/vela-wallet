@@ -38,6 +38,11 @@ struct SigningHeaderView: View {
     var own = false
     var iconUrls: [String] = []
     var networkLogoUrl: String?
+    /// Spec 079: the sheet's one explicit close. It no longer closes on a
+    /// swipe (owner ruling), so the close has to be drawn. `nil` in the
+    /// gallery, which has nothing to close.
+    var onClose: (() -> Void)?
+    var closeLabel = ""
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
@@ -58,7 +63,8 @@ struct SigningHeaderView: View {
                     .typeRole(Typography.rowTitle.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
                     .lineLimit(1)
-                if !dapp.host.isEmpty {
+                // A site whose name IS its host says it once (spec 079 F14).
+                if !dapp.host.isEmpty, dapp.host != dapp.name {
                     Text(verbatim: dapp.host)
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgMuted)
@@ -79,6 +85,17 @@ struct SigningHeaderView: View {
             .padding(.horizontal, Tokens.Space.s12)
             .frame(height: ExploreGeometry.networkChip)
             .background(theme.bgSunken, in: Capsule())
+            if let onClose {
+                Button(action: onClose) {
+                    LucideIcon(.close, size: LucideIconSize.menuRow)
+                        .foregroundStyle(theme.fgMuted)
+                        .frame(width: Tokens.Control.md, height: Tokens.Control.md)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(closeLabel)
+                .accessibilityIdentifier("signing.close")
+            }
         }
     }
 }

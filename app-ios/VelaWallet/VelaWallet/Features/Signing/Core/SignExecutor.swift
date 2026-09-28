@@ -303,16 +303,56 @@ final class SignExecutor {
 
     private func awaitReceipt(chainId: Int, userOpHash: String) async -> String? {
         let deadline = Date().addingTimeInterval(receiptWaitMs / 1000)
-        while Date() < deadline {
-            if case .resolved(_, let txHash, _, _) = await relay.userOpReceipt(
-                chainId: chainId, userOpHash: userOpHash
-            ), !txHash.isEmpty {
+        while true {
+            let remaining = deadline.timeIntervalSinceNow
+            if remaining <= 0 { break }
+            // Each poll gets only what is left of the window (spec 079,
+            // Android device pass): with the relay unreachable one poll hung
+            // for its own timeouts and retries, and the page waited 268 s for
+            // a two-minute wait. A late answer is dropped; the tracker keeps
+            // following the operation either way.
+            let relay = self.relay
+            let answer = await Self.within(seconds: remaining) {
+                await relay.userOpReceipt(chainId: chainId, userOpHash: userOpHash)
+            }
+            if case .resolved(_, let txHash, _, _)? = answer, !txHash.isEmpty {
                 return txHash
             }
-            try? await Task.sleep(nanoseconds: UInt64(receiptPollMs) * 1_000_000)
+            let left = deadline.timeIntervalSinceNow
+            if left <= 0 { break }
+            let pause = min(receiptPollMs / 1000, left)
+            try? await Task.sleep(nanoseconds: UInt64(pause * 1_000_000_000))
         }
         return nil
     }
+
+    /// `work`'s answer if it comes within `seconds`, else `nil` — and the
+    /// caller goes on at the deadline, whatever `work` is still doing (it is
+    /// cancelled, and a late answer is dropped). The first to finish wins;
+    /// both sides run on the main actor, so exactly one resumes.
+    static func within<T>(
+        seconds: Double, _ work: @escaping @MainActor () async -> T
+    ) async -> T? {
+        let once = FirstOnce()
+        return await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
+            let job = Task { @MainActor in
+                let value = await work()
+                guard !once.done else { return }
+                once.done = true
+                continuation.resume(returning: value)
+            }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+                guard !once.done else { return }
+                once.done = true
+                job.cancel()
+                continuation.resume(returning: nil)
+            }
+        }
+    }
+
+    /// Which side of `within` answered first.
+    private final class FirstOnce { var done = false }
 
     // MARK: - The pure parts
 

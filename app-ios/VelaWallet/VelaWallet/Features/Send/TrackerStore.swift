@@ -12,7 +12,8 @@
 //
 //  Three layers, and only the first two are the shell's to schedule:
 //
-//  1. **Foreground** — a tick while anything is pending, at the core's cadence.
+//  1. **Foreground** — a tick while the core follows anything (spec 079: past
+//     the wait window too), at the core's cadence.
 //  2. **Backgrounding** — `beginBackgroundTask` grace, roughly thirty seconds,
 //     read from `backgroundTimeRemaining` rather than assumed.
 //  3. **Later** — a `BGAppRefreshTask`, which iOS runs at its own discretion
@@ -45,7 +46,7 @@ final class TrackerStore {
     /// No effect in flight — `CoreDriver.isIdle`. The foreground tick is not
     /// one: between ticks the machine is waiting on nothing.
     var isIdle: Bool { core.isIdle }
-    /// The foreground tick. Alive only while something is pending.
+    /// The foreground tick. Alive only while the core follows something.
     private var ticker: Task<Void, Never>?
     private var graceTask: UIBackgroundTaskIdentifier = .invalid
 
@@ -87,8 +88,9 @@ final class TrackerStore {
 
     private func commit(_ view: TrackViewWire) {
         self.view = view
-        // The tick exists exactly as long as there is something to follow.
-        if view.hasPending { startTicking() } else { stopTicking() }
+        // The tick exists exactly as long as the core follows something —
+        // not only inside the wait window (spec 079).
+        if view.isFollowing { startTicking() } else { stopTicking() }
     }
 
     private func startTicking() {

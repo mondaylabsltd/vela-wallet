@@ -412,13 +412,36 @@ final class SigningController {
     func reject() { dispatchSign(["type": "reject_tapped"]) }
     func dismiss() { dispatchSign(["type": "dismiss_tapped"]) }
 
-    /// The sheet was swiped away.
+    /// The sheet's ✕ — since spec 079 its only close (no swipe, owner ruling).
     ///
     /// **Always this, never `reject`.** The core routes by phase: the funding
     /// view means cancel the funding; an error, a submitted or a submitting
     /// state means dismiss; anything earlier means refuse. A shell that picked
     /// one itself would answer a page 4001 for a transaction already on chain.
-    func swipeDismissed() { dispatchSign(["type": "swipe_dismissed"]) }
+    func swipeDismissed() {
+        closedByPerson = true
+        dispatchSign(["type": "swipe_dismissed"])
+    }
+
+    /// The last view the core showed a sheet for.
+    private var lastShown: SignViewWire?
+
+    /// What the sheet draws: the core's view, or — in the one turn between
+    /// the core clearing the sheet to answer the page and that answer being
+    /// sent (the answer is an effect, run a turn later) — the view it last
+    /// showed. Spec 079: the sheet stays up across that gap and turns into
+    /// the ending, instead of closing and reopening; presenting a sheet while
+    /// the same one is still leaving is how iOS ends up showing neither.
+    var shownSign: SignViewWire {
+        if sign.isVisible || answered || closedByPerson { return sign }
+        return lastShown ?? sign
+    }
+
+    /// The person closed this request's sheet themselves. After the approval
+    /// that refuses nothing — the operation goes on and the page still gets
+    /// its answer — but the ending is not brought back on screen: a sheet
+    /// somebody closed does not reopen by itself (spec 079).
+    private(set) var closedByPerson = false
 
     /// The page behind this request is gone and has already been answered
     /// (4900, by the browser core). The core clears the sheet; a pipeline
@@ -486,6 +509,7 @@ final class SigningController {
 
     private func commitSign(_ view: SignViewWire) {
         sign = view
+        if view.isVisible { lastShown = view }
         // A free upgrade is decided only while the person can still choose —
         // never under a slide that has already gone.
         let onForm = view.surface == .sheet && !view.isSigning && !view.isSubmitting
@@ -538,6 +562,13 @@ final class SigningController {
     }
 
     // MARK: - The pure parts
+
+    /// The chain's usual time to include an operation, in seconds — the core's
+    /// table, the same number the send receipt counts against (spec 079);
+    /// `nil` for a network Vela does not ship.
+    static func typicalInclusionS(chainId: Int) -> Int? {
+        networkTypicalInclusionS(chainId: UInt32(clamping: chainId)).map { Int($0) }
+    }
 
     /// The user-operation hash when it is what the page is being answered
     /// with — `receipt_pending` answers `ok` with the op hash; a landed one
