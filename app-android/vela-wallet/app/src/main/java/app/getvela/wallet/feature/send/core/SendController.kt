@@ -354,6 +354,9 @@ class SendController(
         FeeFailure.CalculationFailed -> SendEstimateFailure.CalculationFailed
         FeeFailure.EstimateFailed -> SendEstimateFailure.EstimateFailed
         FeeFailure.GasQuoteTooHigh -> SendEstimateFailure.GasQuoteTooHigh
+        // Spec 083 fee: the relay's "this operation fails", as the send
+        // screen has always said that refusal.
+        FeeFailure.SimulationFailed -> SendEstimateFailure.EstimateFailed
     }
 
     // -- intents ---------------------------------------------------------------------

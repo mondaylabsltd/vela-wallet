@@ -132,6 +132,7 @@ export * from './ExtTheme';
 export * from './FeeAssetKind';
 export * from './FeeAssetQuote';
 export * from './FeeAssetView';
+export * from './FeeBalanceChange';
 export * from './FeeBundlerQuote';
 export * from './FeeCall';
 export * from './FeeEstimateView';

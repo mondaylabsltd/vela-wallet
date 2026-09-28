@@ -231,7 +231,10 @@ mod tests {
         let url = session.connect_url(&plaintext).expect("known domain");
         let tunnel_hex = hex(&session.tunnel_id());
         assert!(url.starts_with("wss://"));
-        assert!(url.contains("/cable/connect/ABCDEF/"), "upper-case, as Chromium sends it");
+        assert!(
+            url.contains("/cable/connect/ABCDEF/"),
+            "upper-case, as Chromium sends it"
+        );
         assert!(url.ends_with(&tunnel_hex));
 
         // A foreign advert (different QR secret) does not decrypt.

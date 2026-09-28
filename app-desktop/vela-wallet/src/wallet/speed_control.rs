@@ -26,7 +26,8 @@ use futures::StreamExt as _;
 use gpui::Context;
 
 use vela_core::app::fee_policy::{
-    Event as FeeEvent, FeeCall, FeeOperation, FeePolicy, FeeShellResult, FeeTier, FeeView,
+    Event as FeeEvent, FeeBalanceChange, FeeCall, FeeOperation, FeePolicy, FeeShellResult, FeeTier,
+    FeeView,
 };
 use vela_core::app::fee_speed::{
     Event as SpeedEvent, FeeSpeed, FeeSpeedView, TierPreviewQuote, TierQuote,
@@ -149,6 +150,11 @@ pub struct SpeedControl {
     /// A speed pass is running; a nested one (an answer that arrived inline)
     /// leaves the final report to it.
     syncing: bool,
+    /// Spec 083 fee: what the operation moves, per asset, as the shell's own
+    /// simulation measured it — with the calls it measured, so it is told
+    /// only to a session pricing those very calls. The fee machine forgets it
+    /// on every new question, so each session is told again after each one.
+    balance_changes: Option<(Vec<FeeCall>, Vec<FeeBalanceChange>)>,
 }
 
 impl Default for SpeedControl {
@@ -174,6 +180,7 @@ impl SpeedControl {
             view,
             last_on_form: None,
             syncing: false,
+            balance_changes: None,
         }
     }
 
@@ -238,6 +245,20 @@ impl SpeedControl {
         self.previews.iter_mut().find(|session| session.key == key)
     }
 
+    /// The measured balance changes for session `key`, when it prices the
+    /// very calls they were measured for (spec 083 fee).
+    fn balance_event(&self, key: u64) -> Option<FeeEvent> {
+        let (calls, changes) = self.balance_changes.as_ref()?;
+        let session = if self.fee.key == key {
+            &self.fee
+        } else {
+            self.previews.iter().find(|session| session.key == key)?
+        };
+        (session.ask.as_ref()?.calls == *calls).then(|| FeeEvent::BalanceChangesMeasured {
+            changes: changes.clone(),
+        })
+    }
+
     fn report_quotes(&mut self) {
         let previews = self
             .previews
@@ -276,6 +297,40 @@ fn dispatch_to<H: SpeedHost>(host: &mut H, key: u64, event: FeeEvent, cx: &mut C
     };
     let pending = session.host.dispatch(event);
     pump(host, key, pending, cx);
+}
+
+/// Ask session `key` its question, then tell it what the operation moves
+/// when that is known (spec 083 fee): the question clears it in the machine.
+fn ask_session<H: SpeedHost>(host: &mut H, key: u64, event: FeeEvent, cx: &mut Context<H>) {
+    dispatch_to(host, key, event, cx);
+    if let Some(event) = host.speed_control().balance_event(key) {
+        dispatch_to(host, key, event, cx);
+    }
+}
+
+/// Spec 083 fee: the shell's own simulation of the operation answered — what
+/// it moves, per asset. Kept for every question about those calls, and told
+/// now to each session already asked one: which fee coins can still pay is
+/// what the operation LEAVES of them (a swap of all of the USDC cannot also
+/// pay its fee in USDC).
+pub fn balance_changes<H: SpeedHost>(
+    host: &mut H,
+    calls: Vec<FeeCall>,
+    changes: Vec<FeeBalanceChange>,
+    cx: &mut Context<H>,
+) {
+    let control = host.speed_control();
+    control.balance_changes = Some((calls, changes));
+    let asked: Vec<u64> = std::iter::once(&control.fee)
+        .chain(control.previews.iter())
+        .filter(|session| !session.reading && session.deployed.is_some())
+        .map(|session| session.key)
+        .collect();
+    for key in asked {
+        if let Some(event) = host.speed_control().balance_event(key) {
+            dispatch_to(host, key, event, cx);
+        }
+    }
 }
 
 /// An answer for the session that asked — found by its key, because it may
@@ -437,7 +492,7 @@ fn ask_in_force<H: SpeedHost>(host: &mut H, ask: QuoteAsk, cx: &mut Context<H>) 
                 Ok(deployed) => {
                     control.fee.deployed = Some(deployed);
                     let key = control.fee.key;
-                    dispatch_to(host, key, ask.event(deployed), cx);
+                    ask_session(host, key, ask.event(deployed), cx);
                 }
             }
         })
@@ -684,7 +739,7 @@ fn sync_previews<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     // Installed first, asked second: an answer that arrives inline finds every
     // session already in place.
     for (key, ask) in started {
-        dispatch_to(host, key, ask.event(deployed), cx);
+        ask_session(host, key, ask.event(deployed), cx);
     }
 }
 
@@ -730,5 +785,39 @@ mod tests {
         };
         assert_eq!(tier, FeeTier::Standard);
         assert!(deployed);
+    }
+
+    /// Spec 083 fee: the simulation's balance changes are told to a session
+    /// pricing the very calls they were measured for — the one in force and
+    /// a preview alike — and to nothing else.
+    #[test]
+    fn balance_changes_reach_only_a_session_pricing_the_measured_calls() {
+        let changes = vec![FeeBalanceChange {
+            token: Some("0xusdc".to_owned()),
+            delta: "-5000000".to_owned(),
+        }];
+        let mut control = SpeedControl::new();
+        control.fee.ask = Some(ask(FeeTier::Fast, "1"));
+        let mut preview = FeeSession::new(7);
+        preview.ask = Some(ask(FeeTier::Slow, "1"));
+        control.previews.push(preview);
+        assert!(control.balance_event(0).is_none(), "nothing measured yet");
+
+        control.balance_changes = Some((ask(FeeTier::Fast, "1").calls, changes.clone()));
+        for key in [0, 7] {
+            match control.balance_event(key) {
+                Some(FeeEvent::BalanceChangesMeasured { changes: told }) => {
+                    assert_eq!(told, changes, "session {key}");
+                }
+                other => unreachable!("session {key}: {other:?}"),
+            }
+        }
+        assert!(control.balance_event(99).is_none(), "no such session");
+
+        control.fee.ask = Some(ask(FeeTier::Fast, "2"));
+        assert!(
+            control.balance_event(0).is_none(),
+            "another operation's changes are not this one's"
+        );
     }
 }

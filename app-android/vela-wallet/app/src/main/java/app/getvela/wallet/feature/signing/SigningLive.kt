@@ -834,8 +834,11 @@ object SigningLive {
             warning = when {
                 short -> ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol))
                 // Spec 079: why there is no fee, and that it will be asked again.
+                // Spec 083 fee: the relay's "this operation fails" is not the
+                // network's doing (this shell does not report it yet).
                 fee.failed != null && fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.MissingPublicKey &&
-                    fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed ->
+                    fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed &&
+                    fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.SimulationFailed ->
                     ctx.strings.t("componentsUi.funding.denialNetworkError")
                 else -> null
             },

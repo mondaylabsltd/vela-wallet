@@ -229,7 +229,9 @@ pub fn to_multi_send_call(call: &FeeCall) -> Result<MultiSendCall, String> {
 /// leg the core already appended — and return the relay's RAW limits. Every
 /// padding rule is `fee_policy`'s. `ContextUnavailable` is the shell unable
 /// to build a TRUTHFUL dummy op (a failed nonce read, an undeployed account
-/// without its keys); `SimulationFailed` is a truthful op the relay refused.
+/// without its keys); `Refused` is a truthful op the relay ANSWERED fails
+/// when it runs (spec 083 fee); `SimulationFailed` is no answer to use — the
+/// relay out of reach, or an error that says nothing about the operation.
 pub fn simulate_gas(
     chain_id: u32,
     account: &str,
@@ -281,14 +283,18 @@ pub fn simulate_gas(
         paymaster_and_data: Vec::new(),
         signature,
     };
-    match relay::estimate_user_op_gas(&op, chain_id) {
+    match relay::estimate_user_op_gas_answer(&op, chain_id) {
         Ok(estimate) => FeeGasOutcome::Estimated {
             verification_gas_limit: estimate.verification_gas_limit.to_string(),
             call_gas_limit: estimate.call_gas_limit.to_string(),
             pre_verification_gas: estimate.pre_verification_gas.to_string(),
         },
-        Err(message) => {
-            eprintln!("[vela-wallet] fee: relay estimation unavailable: {message}");
+        Err(relay::EstimateError::Refused(message)) => {
+            eprintln!("[vela-wallet] fee: the relay says the operation fails: {message}");
+            FeeGasOutcome::Refused
+        }
+        Err(error) => {
+            eprintln!("[vela-wallet] fee: relay estimation unavailable: {error}");
             FeeGasOutcome::SimulationFailed
         }
     }

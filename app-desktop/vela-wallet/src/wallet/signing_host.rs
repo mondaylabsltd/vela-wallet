@@ -94,6 +94,32 @@ fn requote_wait(
     vela_core::app::fee_policy::requote_delay_ms(failure?, attempt)
 }
 
+/// The simulation's deltas as the fee machine reads them (spec 083 fee):
+/// what the operation moves of each asset, native or by contract. The fee
+/// machine weighs only its fee coins by them, each by that coin's OWN
+/// `Transfer` logs (the contract that emitted them) or the node's trace of
+/// native value — nothing a site's contract can emit on a coin's behalf.
+fn fee_balance_changes(
+    deltas: &[vela_core::app::token_trust::TrustAssetDelta],
+) -> Vec<vela_core::app::fee_policy::FeeBalanceChange> {
+    use vela_core::app::token_trust::TrustDeltaKind;
+    deltas
+        .iter()
+        .filter_map(|delta| {
+            let token = match delta.kind {
+                TrustDeltaKind::Native => None,
+                // A token move with no contract names no coin: never read as
+                // the native one.
+                TrustDeltaKind::Erc20 => Some(delta.token.clone()?),
+            };
+            Some(vela_core::app::fee_policy::FeeBalanceChange {
+                token,
+                delta: delta.delta.clone(),
+            })
+        })
+        .collect()
+}
+
 /// Where a request stands, as far as closing its column goes (083): the
 /// core's view, where its signature is, and whether a close already waits.
 fn close_facts_of(
@@ -547,6 +573,7 @@ impl SigningHost {
         cx: &mut Context<Self>,
     ) {
         cx.spawn(async move |host, cx| {
+            let fee_calls = calls.clone();
             let judged = cx
                 .background_executor()
                 .spawn(async move {
@@ -554,14 +581,22 @@ impl SigningHost {
                     else {
                         return None;
                     };
-                    Some(crate::executor::token_trust::judge(
-                        &wallet, chain_id, deltas,
+                    let changes = fee_balance_changes(&deltas);
+                    Some((
+                        changes,
+                        crate::executor::token_trust::judge(&wallet, chain_id, deltas),
                     ))
                 })
                 .await;
             host.update(cx, |host, cx| {
                 match judged {
-                    Some(judgments) => host.sim = judgments,
+                    Some((changes, judgments)) => {
+                        host.sim = judgments;
+                        // Spec 083 fee: what the operation moves decides
+                        // which coins can still pay its fee — a swap of all
+                        // of the USDC cannot also pay in USDC.
+                        speed_control::balance_changes(host, fee_calls, changes, cx);
+                    }
                     // Could not ask. NOT "nothing moves" — the sheet has a
                     // different sentence for each, and conflating them would
                     // tell somebody a drain is a no-op.
@@ -574,17 +609,21 @@ impl SigningHost {
         .detach();
     }
 
-    /// The fee row, tapped: a failed quote is asked again; with more than one
-    /// coin to pay in, the list opens (or closes) here in the sheet — the
-    /// web's `onfee`. One coin and a quote: nothing to choose.
+    /// The fee row, tapped: with another coin to pay in, the list opens (or
+    /// closes) here in the sheet — the web's `onfee` — even over a failed
+    /// quote (spec 083 fee: the relay refused the operation with USDC paying,
+    /// and ETH could pay); a failed quote with nothing else to choose is
+    /// asked again. One coin and a quote: nothing to choose.
     pub fn fee_tapped(&mut self, cx: &mut Context<Self>) {
-        let fee = self.speed.fee_view();
-        if fee.failed.is_some() {
+        use crate::signing::live::{FeeTap, fee_tap};
+        match fee_tap(self.speed.fee_view()) {
+            FeeTap::Coins => {
+                self.fee_open = !self.fee_open;
+                cx.notify();
+            }
             // Measured again for real — the held readings dropped first.
-            speed_control::refresh(self, cx);
-        } else if fee.options.len() > 1 {
-            self.fee_open = !self.fee_open;
-            cx.notify();
+            FeeTap::Requote => speed_control::refresh(self, cx),
+            FeeTap::Nothing => {}
         }
     }
 
@@ -1493,7 +1532,56 @@ mod tests {
             requote_wait(Some(FeeFailure::CalculationFailed), 1, true, false),
             None
         );
+        // Spec 083 fee: the relay's "this operation fails" is an answer; the
+        // same operation asked again gets the same one.
+        for attempt in 1..=5 {
+            assert_eq!(
+                requote_wait(Some(FeeFailure::SimulationFailed), attempt, true, false),
+                None
+            );
+        }
         assert_eq!(requote_wait(None, 1, true, false), None);
+    }
+
+    /// Spec 083 fee: the simulation's deltas reach the fee machine as what the
+    /// operation moves of each coin — native as `None`, a token by its
+    /// contract — and a token move that names no contract is never read as
+    /// the native coin.
+    #[test]
+    fn the_simulated_deltas_are_the_fee_machines_balance_changes() {
+        use vela_core::app::fee_policy::FeeBalanceChange;
+        use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
+        let usdc = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+        let changes = fee_balance_changes(&[
+            TrustAssetDelta {
+                kind: TrustDeltaKind::Erc20,
+                token: Some(usdc.to_owned()),
+                delta: "-271741".to_owned(),
+            },
+            TrustAssetDelta {
+                kind: TrustDeltaKind::Native,
+                token: None,
+                delta: "101000000000000".to_owned(),
+            },
+            TrustAssetDelta {
+                kind: TrustDeltaKind::Erc20,
+                token: None,
+                delta: "-1".to_owned(),
+            },
+        ]);
+        assert_eq!(
+            changes,
+            vec![
+                FeeBalanceChange {
+                    token: Some(usdc.to_owned()),
+                    delta: "-271741".to_owned(),
+                },
+                FeeBalanceChange {
+                    token: None,
+                    delta: "101000000000000".to_owned(),
+                },
+            ]
+        );
     }
 
     /// A deployment read that could not answer never reached the core; it is

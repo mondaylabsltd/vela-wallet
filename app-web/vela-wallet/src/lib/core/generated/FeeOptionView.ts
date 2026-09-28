@@ -2,7 +2,10 @@
 
 /**
  * One selector row (`FeeTokenSelector`). `insufficient` is the core-owned
- * balance<fee gate (invariant ⑧, `FeeTokenSelector.tsx:74`).
+ * balance<fee gate (invariant ⑧, `FeeTokenSelector.tsx:74`) — against what
+ * the operation leaves of the coin once its balance changes were measured
+ * (spec 083 fee). After [`FeeFailure::SimulationFailed`] there is no fee to
+ * weigh against, and only a coin with nothing left is marked.
  */
 export type FeeOptionView = { symbol: string, 
 /**

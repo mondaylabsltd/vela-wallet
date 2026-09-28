@@ -513,26 +513,80 @@ pub fn tier_name(tier: FeeTier) -> &'static str {
 }
 
 /// `eth_estimateUserOperationGas` — the relay's raw limits, or its words.
+///
+/// The submit reads the words only; [`estimate_user_op_gas_answer`] is the
+/// same call for a reader that must tell an answer from an outage.
 pub fn estimate_user_op_gas(op: &UserOperation, chain_id: u32) -> Result<GasEstimate, String> {
+    estimate_user_op_gas_answer(op, chain_id).map_err(|error| error.to_string())
+}
+
+/// Why `eth_estimateUserOperationGas` gave no limits (spec 083 fee). The
+/// device pass had "UserOperation simulation failed" — the relay's ANSWER
+/// that the operation fails — said on screen as "cannot reach Vela, check
+/// your network", retried forever. The quote now tells them apart.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EstimateError {
+    /// The relay could not be reached at all.
+    Unreachable(String),
+    /// The relay answered, and said the operation fails when it runs (a
+    /// failed simulation, a revert).
+    Refused(String),
+    /// The relay answered something else: another error, or no limits.
+    Other(String),
+}
+
+impl std::fmt::Display for EstimateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unreachable(message) | Self::Refused(message) | Self::Other(message) => {
+                f.write_str(message)
+            }
+        }
+    }
+}
+
+/// The relay's error says the operation itself fails — its simulation, or a
+/// revert — rather than that the relay is busy, limited or broken. Only
+/// those words are an answer about the operation; anything else stays an
+/// unexplained failure, as it always was.
+fn is_simulation_refusal(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("simulation failed") || message.contains("revert")
+}
+
+/// [`estimate_user_op_gas`], with why there are no limits. The words are the
+/// ones it always had.
+pub fn estimate_user_op_gas_answer(
+    op: &UserOperation,
+    chain_id: u32,
+) -> Result<GasEstimate, EstimateError> {
     let body = pool::bundler_call(
         chain_id,
         "eth_estimateUserOperationGas",
         json!([user_op_to_json(op, &[]), ENTRY_POINT]),
     )
-    .map_err(|error| format!("gas estimation unreachable: {error:?}"))?;
+    .map_err(|error| {
+        EstimateError::Unreachable(format!("gas estimation unreachable: {error:?}"))
+    })?;
     if let Some(error) = body.get("error") {
-        return Err(error
+        let message = error
             .get("message")
             .and_then(Value::as_str)
             .unwrap_or("Gas estimation failed")
-            .to_owned());
+            .to_owned();
+        return Err(if is_simulation_refusal(&message) {
+            EstimateError::Refused(message)
+        } else {
+            EstimateError::Other(message)
+        });
     }
     let result = body
         .get("result")
         .filter(|value| value.is_object())
-        .ok_or_else(|| "Failed to estimate gas — empty result".to_owned())?;
+        .ok_or_else(|| EstimateError::Other("Failed to estimate gas — empty result".to_owned()))?;
     let field = |name: &str| {
-        parse_hex_quantity(result.get(name).and_then(Value::as_str)).map_err(|e| e.to_string())
+        parse_hex_quantity(result.get(name).and_then(Value::as_str))
+            .map_err(|e| EstimateError::Other(e.to_string()))
     };
     Ok(GasEstimate {
         verification_gas_limit: field("verificationGasLimit")?,
@@ -1094,6 +1148,32 @@ pub fn parse_bundler_error(error: Option<&Value>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 083 fee: the relay's "UserOperation simulation failed" (the
+    /// device log's words) and a revert are answers about the operation; a
+    /// busy or limited relay is not. The words themselves are unchanged for
+    /// the submit, which reads only them.
+    #[test]
+    fn a_failed_simulation_is_an_answer_and_a_busy_relay_is_not() {
+        assert!(is_simulation_refusal("UserOperation simulation failed"));
+        assert!(is_simulation_refusal("execution reverted: STF"));
+        assert!(is_simulation_refusal("AA23 reverted (or OOG)"));
+        assert!(!is_simulation_refusal("Retry later"));
+        assert!(!is_simulation_refusal("rate limited"));
+        assert!(!is_simulation_refusal("Gas estimation failed"));
+        for error in [
+            EstimateError::Unreachable("gas estimation unreachable: Timeout".to_owned()),
+            EstimateError::Refused("UserOperation simulation failed".to_owned()),
+            EstimateError::Other("Failed to estimate gas — empty result".to_owned()),
+        ] {
+            let words = match &error {
+                EstimateError::Unreachable(words)
+                | EstimateError::Refused(words)
+                | EstimateError::Other(words) => words.clone(),
+            };
+            assert_eq!(error.to_string(), words);
+        }
+    }
 
     /// 078 W-05, `recommendedFundingWei`: the shortfall plus half again; an
     /// account already at the threshold is asked for the buffered threshold,
