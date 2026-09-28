@@ -77,6 +77,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::clear_signing::ClearTerm;
+use super::token_trust::TrustSimJudgment;
 
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
 pub const TOAST_MS: u32 = 2_800;
@@ -167,6 +168,19 @@ pub struct FeedTxRecord {
     /// (`intent`, e.g. "Swap").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intent: Option<String>,
+    /// `dapp_tx` only (083 F1): what the wallet's own simulation said the
+    /// operation moves, as the signing sheet drew it when the person approved
+    /// (`SignRecord::balance_changes`, stored by the shell). The one account
+    /// of a dApp call's money that its page did not write. Absent on every
+    /// other kind, on older rows and from a shell that does not map it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balance_changes: Option<Vec<TrustSimJudgment>>,
+    /// `dapp_tx` only (083 F3): whether the transaction carried calldata, as
+    /// the shell read it off the stored request — `true` makes `to` the
+    /// contract it called (a router, a token), not somebody who received
+    /// anything. `None` when the shell cannot say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calldata: Option<bool>,
 }
 
 impl FeedTxRecord {
@@ -288,6 +302,50 @@ pub struct FeedDapp {
     /// `intent` as a word the shell can translate
     /// (`componentsUi.signing.<leaf>`).
     pub intent_term: Option<ClearTerm>,
+    /// What the operation moved, as the wallet's own simulation measured it
+    /// when the person approved — the signing sheet's "Balance changes"
+    /// lines, in its order (083 F1). Empty for a record that kept none (an
+    /// older row, a shell that does not record them, a simulation that could
+    /// not run): the row then draws as it did before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<FeedDappChange>,
+    /// A swap-shaped operation's one inflow — exactly one line out, which is
+    /// the row's figure, and exactly one in, both with a figure. Drawn beside
+    /// the figure as what the simulation EXPECTED: the chain may deliver
+    /// another amount (slippage). `None` otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub received: Option<FeedDappChange>,
+    /// The transaction carried calldata, so the row's counterparty is the
+    /// contract it called — never labelled a recipient (083 F3). `false` for
+    /// a plain transfer of the chain's coin and for a record that cannot say.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub contract_call: bool,
+}
+
+/// One line of what a dApp transaction moved (083 F1), from the signing
+/// sheet's own simulation — never from anything the page supplied.
+///
+/// The sheet's asymmetry holds here too, because it is the same judgment
+/// (`token_trust`, invariant ⑥): an outflow carries its figure whenever the
+/// token's metadata resolved; an inflow of a token the wallet does not trust
+/// is `verified: false` and carries NO figure — a site can emit any
+/// `Transfer` it likes from a contract it controls.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeedDappChange {
+    /// `out` leaves the account; `in` arrives. An inflow is what the
+    /// simulation expected, which the chain may not deliver to the unit.
+    pub direction: FeedDirection,
+    /// `false` for a token the sheet showed as unverified: the shell names it
+    /// "Unverified token" and draws a direction, never a number.
+    pub verified: bool,
+    /// The coin's symbol — the chain's own for a native line. Empty when
+    /// unverified, or for a native coin the record's chain does not name.
+    pub symbol: String,
+    /// The amount, unsigned, as a human decimal (`"0.1"`). `None` when there
+    /// is no figure to show: unverified, or a stored delta that will not read.
+    pub value: Option<String>,
+    pub decimals: Option<u32>,
 }
 
 /// A date header or an item — the grouped feed, in render order
@@ -946,13 +1004,46 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
 /// imported row saying four billion would take the feed down on every read
 /// (083 H2 review). Every client writes 18; past [`MAX_DAPP_DECIMALS`] the row
 /// shows no figure rather than a guess.
+///
+/// What the operation moved comes first when the record kept it (083 F1):
+/// the sheet's own simulation, recorded at approve time. Its one outflow is
+/// the row's figure — a swap of 0.1 USDC reads "−0.1 USDC", not nothing —
+/// and a swap-shaped operation's one inflow rides beside it as `received`.
+/// Anything else (no lines kept, two coins out, an outflow the sheet could
+/// not put a number on) leaves the figure to the call's own value, as before.
 fn dapp_item(t: &FeedTxRecord) -> FeedItem {
-    let value = wei(&t.value)
-        .filter(|wei| *wei > 0 && t.decimals <= MAX_DAPP_DECIMALS)
-        .map(|wei| super::fee_policy::from_base_units(wei, t.decimals));
+    let changes = recorded_changes(t);
+    let figured = |change: &&FeedDappChange| {
+        change.verified && change.value.is_some() && !change.symbol.is_empty()
+    };
+    let only = |direction: FeedDirection| {
+        let mut lines = changes.iter().filter(|c| c.direction == direction);
+        match (lines.next(), lines.next()) {
+            (Some(line), None) => Some(line),
+            _ => None,
+        }
+    };
+    let taken = only(FeedDirection::Out).filter(figured);
+    let received = taken.and(only(FeedDirection::In)).filter(figured).cloned();
+    let (value, symbol, decimals) = match taken {
+        Some(out) => (out.value.clone(), out.symbol.clone(), out.decimals),
+        None => {
+            let value = wei(&t.value)
+                .filter(|wei| *wei > 0 && t.decimals <= MAX_DAPP_DECIMALS)
+                .map(|wei| super::fee_policy::from_base_units(wei, t.decimals));
+            let symbol = if value.is_some() {
+                t.symbol.clone()
+            } else {
+                String::new()
+            };
+            let decimals = value.as_ref().map(|_| t.decimals);
+            (value, symbol, decimals)
+        }
+    };
     let usd_value = value.as_ref().map_or(0.0, |value| {
         tx_usd_value(&FeedTxRecord {
             value: value.clone(),
+            symbol: symbol.clone(),
             ..t.clone()
         })
     });
@@ -976,12 +1067,8 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
         // A stored name belongs to the address it was stored beside.
         alias: counterparty.as_ref().and(t.to_name.clone()),
         counterparty,
-        symbol: if value.is_some() {
-            t.symbol.clone()
-        } else {
-            String::new()
-        },
-        decimals: value.as_ref().map(|_| t.decimals),
+        symbol,
+        decimals,
         value,
         usd_value,
         chain_id: t.chain_id,
@@ -993,8 +1080,89 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
             site: t.dapp_url.as_deref().and_then(site_of),
             intent_term: intent.as_deref().and_then(ClearTerm::of),
             intent,
+            received,
+            changes,
+            contract_call: t.calldata == Some(true),
         }),
     }
+}
+
+/// The record's balance changes as lines a person reads (083 F1).
+///
+/// Only what the record kept from the approve, and only lines that say
+/// something: a delta that is zero moved nothing, and one that does not even
+/// read as a signed number has no direction to state. The sheet's judgment
+/// is kept as it was made — an unverified line stays figureless here, however
+/// large its delta.
+fn recorded_changes(t: &FeedTxRecord) -> Vec<FeedDappChange> {
+    let Some(judgments) = t.balance_changes.as_ref() else {
+        return Vec::new();
+    };
+    // The chain's coin: the record names it (every client stores the native
+    // symbol on a dApp row), else the built-in table.
+    let native = Some(t.symbol.trim())
+        .filter(|symbol| !symbol.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            super::network_admin::BUILTIN_CHAINS
+                .iter()
+                .find(|chain| chain.chain_id == t.chain_id)
+                .map(|chain| chain.native_symbol.to_owned())
+        })
+        .unwrap_or_default();
+    judgments
+        .iter()
+        .filter_map(|judgment| {
+            let (delta, verified, symbol, decimals) = match judgment {
+                TrustSimJudgment::Native { delta } => (delta, true, native.clone(), Some(18)),
+                TrustSimJudgment::Erc20Trusted {
+                    delta,
+                    symbol,
+                    decimals,
+                    ..
+                } => (delta, true, symbol.trim().to_owned(), Some(*decimals)),
+                TrustSimJudgment::Erc20Unverified { delta, .. } => {
+                    (delta, false, String::new(), None)
+                }
+            };
+            let (out, magnitude) = signed_delta(delta)?;
+            let value = magnitude
+                .filter(|_| verified)
+                .zip(decimals.filter(|decimals| *decimals <= MAX_DAPP_DECIMALS))
+                .map(|(magnitude, decimals)| {
+                    super::fee_policy::from_base_units(magnitude, decimals)
+                });
+            Some(FeedDappChange {
+                direction: if out {
+                    FeedDirection::Out
+                } else {
+                    FeedDirection::In
+                },
+                verified,
+                symbol,
+                decimals: value.as_ref().and(decimals),
+                value,
+            })
+        })
+        .collect()
+}
+
+/// A signed base-unit delta: whether it leaves the account, and its size
+/// when it fits a `u128`. `None` for text that is not a signed integer, and
+/// for zero — nothing moved.
+fn signed_delta(delta: &str) -> Option<(bool, Option<u128>)> {
+    let delta = delta.trim();
+    let (out, digits) = match delta.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, delta.strip_prefix('+').unwrap_or(delta)),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if digits.bytes().all(|b| b == b'0') {
+        return None;
+    }
+    Some((out, digits.parse::<u128>().ok()))
 }
 
 /// A JSON-RPC quantity — `0x` hex as a page sends it, or decimal digits.

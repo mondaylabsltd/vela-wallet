@@ -755,6 +755,12 @@ fn persist_record(record: &SignRecord) {
     if let Some(intent) = &record.intent {
         row["intent"] = json!(intent);
     }
+    // What the sheet's simulation showed when the person approved (083 F1),
+    // which Activity reads the row's figure from. The core keeps these for a
+    // transaction only, and only from the approve.
+    if let Some(changes) = record.balance_changes.as_deref().filter(|c| !c.is_empty()) {
+        row["assetChanges"] = stored_changes(changes, record.chain_id);
+    }
 
     let mut rows = match storage::read_value(TX_KEY) {
         Ok(Some(Value::Array(rows))) => rows,
@@ -808,6 +814,51 @@ fn stored_value(value: Option<&Value>) -> String {
     wei_of(value)
         .and_then(|wei| wei.parse::<u128>().ok())
         .map_or_else(|| "0x0".to_owned(), |wei| format!("{wei:#x}"))
+}
+
+/// The sheet's balance changes as the store keeps them (083 F1), in the
+/// bytes the web writes the same thing (`assetChanges`, its
+/// `StoredAssetSim`): each line an `AssetChange` — a native line named by the
+/// chain's coin at 18 decimals, a judged token with its symbol and decimals,
+/// an unverified one with neither and `unverified: true`. No `ok`: this
+/// shell's simulation gives no revert verdict, so the row claims none.
+/// `activity_feed::stored_changes` reads it back.
+fn stored_changes(
+    changes: &[vela_core::app::token_trust::TrustSimJudgment],
+    chain_id: u32,
+) -> Value {
+    use vela_core::app::token_trust::TrustSimJudgment as J;
+    let lines: Vec<Value> = changes
+        .iter()
+        .map(|change| match change {
+            J::Native { delta } => json!({
+                "kind": "native",
+                "delta": delta,
+                "symbol": native_symbol(chain_id),
+                "decimals": 18,
+            }),
+            J::Erc20Trusted {
+                token,
+                delta,
+                symbol,
+                decimals,
+            } => json!({
+                "kind": "erc20",
+                "token": token,
+                "delta": delta,
+                "symbol": symbol,
+                "decimals": decimals,
+            }),
+            J::Erc20Unverified { token, delta } => {
+                let mut line = json!({ "kind": "erc20", "delta": delta, "unverified": true });
+                if let Some(token) = token {
+                    line["token"] = json!(token);
+                }
+                line
+            }
+        })
+        .collect();
+    json!({ "engine": "rpc", "changes": lines })
 }
 
 /// The first element of a JSON-RPC params array, when it is an object.
@@ -879,6 +930,7 @@ mod tests {
             dapp_origin: "https://app.uniswap.org".to_owned(),
             dapp_url: "https://app.uniswap.org".to_owned(),
             intent: Some("Swap".to_owned()),
+            balance_changes: None,
         }
     }
 
@@ -1522,6 +1574,291 @@ mod tests {
             stored_value(Some(&json!("10000000000000000"))),
             "0x2386f26fc10000"
         );
+    }
+
+    /// The Universal Router the device pass's swaps called (0xd614…9c40).
+    const ROUTER: &str = "0xd614000000000000000000000000000000009c40";
+    const USDC_BASE: &str = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+
+    fn usdc(delta: &str) -> vela_core::app::token_trust::TrustSimJudgment {
+        vela_core::app::token_trust::TrustSimJudgment::Erc20Trusted {
+            token: USDC_BASE.to_owned(),
+            delta: delta.to_owned(),
+            symbol: "USDC".to_owned(),
+            decimals: 6,
+        }
+    }
+
+    fn eth(delta: &str) -> vela_core::app::token_trust::TrustSimJudgment {
+        vela_core::app::token_trust::TrustSimJudgment::Native {
+            delta: delta.to_owned(),
+        }
+    }
+
+    /// One Uniswap swap on Base as the column records it: the router call
+    /// with its calldata and value, no decoded intent, what the sheet's
+    /// simulation showed, landed under `hash`.
+    fn swap(
+        at_ms: f64,
+        value: &str,
+        changes: Vec<vela_core::app::token_trust::TrustSimJudgment>,
+        hash: &str,
+    ) -> SignRecord {
+        let mut record = record(
+            SignRecordKind::DappTx,
+            &format!(r#"[{{"to":"{ROUTER}","value":"{value}","data":"0x3593564c0000"}}]"#),
+        );
+        record.record_id = format!("dapp-{at_ms}-tx");
+        record.now_ms = at_ms;
+        record.chain_id = 8453;
+        record.intent = None;
+        record.balance_changes = Some(changes);
+        record.result = hash.to_owned();
+        record.status = SignRecordStatus::Confirmed;
+        record
+    }
+
+    /// 083 F1-F3, the device pass's three swaps (2026-09-29), written by
+    /// this executor and read back by the feed's own reader, in Chinese:
+    /// each row says what left — the figure the sheet showed — and what was
+    /// expected back; the detail lists the sheet's "余额变化" lines, calls the
+    /// router the contract it interacted with, and fits its hash.
+    #[test]
+    fn the_device_passs_swaps_say_what_they_moved() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        const HASH: &str = "0x9f2c4e5d6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f";
+        storage::tests::with_temp_state("sign-record-swaps", || {
+            let swaps = [
+                swap(
+                    1_759_100_000_000.0,
+                    "0x0",
+                    vec![usdc("-100000"), eth("37000000000000")],
+                    HASH,
+                ),
+                swap(
+                    1_759_100_100_000.0,
+                    "0x0",
+                    vec![usdc("-271741"), eth("100548000000000")],
+                    HASH,
+                ),
+                swap(
+                    1_759_100_200_000.0,
+                    "0x5af3107a4000",
+                    vec![eth("-100000000000000"), usdc("269487")],
+                    HASH,
+                ),
+            ];
+            for record in &swaps {
+                persist_record(record);
+            }
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            // The web's shape for the same lines.
+            assert_eq!(
+                stored[0].get("assetChanges"),
+                Some(&json!({
+                    "engine": "rpc",
+                    "changes": [
+                        { "kind": "erc20", "token": USDC_BASE, "delta": "-100000",
+                          "symbol": "USDC", "decimals": 6 },
+                        { "kind": "native", "delta": "37000000000000",
+                          "symbol": "ETH", "decimals": 18 },
+                    ],
+                }))
+            );
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: swaps[0].from.clone(),
+            });
+            settle(&mut host, asks);
+
+            let loc = crate::loc::Loc::for_language("zh");
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            let drawn: Vec<(&str, &str, &str, &str, Option<&str>)> = rows
+                .iter()
+                .map(|row| {
+                    (
+                        row.title.as_ref(),
+                        row.subtitle.as_ref(),
+                        row.amount.as_ref(),
+                        row.unit.as_ref(),
+                        row.received.as_ref().map(AsRef::as_ref),
+                    )
+                })
+                .collect();
+            assert_eq!(
+                drawn,
+                vec![
+                    (
+                        "合约交互",
+                        "app.uniswap.org",
+                        "\u{2212}0.0001",
+                        "ETH",
+                        Some("≈ +0.269487 USDC")
+                    ),
+                    (
+                        "合约交互",
+                        "app.uniswap.org",
+                        "\u{2212}0.271741",
+                        "USDC",
+                        Some("≈ +0.000101 ETH")
+                    ),
+                    (
+                        "合约交互",
+                        "app.uniswap.org",
+                        "\u{2212}0.1",
+                        "USDC",
+                        Some("≈ +0.000037 ETH")
+                    ),
+                ],
+                "newest first; the title stays what the wallet knows"
+            );
+            // Privacy masks both figures and keeps their units.
+            let masked = crate::wallet::live::activity_rows(&view, &s, &flow, true);
+            assert_eq!(masked[2].amount.as_ref(), crate::wallet::fixtures::MASK);
+            assert_eq!(
+                masked[2].received.as_ref().map(AsRef::as_ref),
+                Some("≈ +•••• ETH")
+            );
+
+            let id = view.transactions[0].id.clone();
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &swaps[0].record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists: {id}"));
+            assert_eq!(detail.title.as_ref(), "合约交互");
+            assert_eq!(detail.amount.as_ref(), "\u{2212}0.1 USDC");
+            assert!(detail.fiat.contains("0.10"), "{}", detail.fiat);
+            let facts: Vec<(&str, &str)> = detail
+                .facts
+                .iter()
+                .map(|fact| (fact.label.as_ref(), fact.value.as_ref()))
+                .collect();
+            assert_eq!(facts[0], ("应用", "app.uniswap.org"));
+            assert_eq!(facts[1], ("交互合约", "0xd614…9c40"));
+            assert_eq!(facts[2].0, "网络");
+            assert_eq!(facts[4], ("哈希", "0x9f2c…6e7f"));
+            assert_eq!(
+                detail.facts[4].copy.as_ref().map(AsRef::as_ref),
+                Some(HASH),
+                "the copy button holds the whole hash"
+            );
+            assert_eq!(
+                detail.breakdown_title.as_ref().map(AsRef::as_ref),
+                Some("余额变化")
+            );
+            let lines: Vec<(&str, &str)> = detail
+                .breakdown
+                .iter()
+                .map(|line| (line.label.as_ref(), line.value.as_ref()))
+                .collect();
+            assert_eq!(lines, vec![("USDC", "\u{2212}0.1"), ("ETH", "≈ +0.000037")]);
+        });
+    }
+
+    /// A page cannot put a figure on its row (083 F1): lines only ever come
+    /// from the approve, so a request that carries an `assetChanges` of its
+    /// own stores none, and its row draws as a call that moved no coin — and
+    /// an unverified token the sheet showed without a number has none in
+    /// Activity either.
+    #[test]
+    fn a_page_cannot_put_a_figure_on_its_row() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        storage::tests::with_temp_state("sign-record-forged-sim", || {
+            let mut forged = record(
+                SignRecordKind::DappTx,
+                &format!(
+                    r#"[{{"to":"{ROUTER}","value":"0x0","data":"0xabcdef",
+                        "assetChanges":{{"engine":"rpc","changes":[{{"kind":"native","delta":"-5000000000000000000"}}]}}}}]"#
+                ),
+            );
+            forged.chain_id = 8453;
+            forged.intent = None;
+            persist_record(&forged);
+            let mut lure = swap(
+                1_759_100_300_000.0,
+                "0x0",
+                vec![
+                    usdc("-100000"),
+                    vela_core::app::token_trust::TrustSimJudgment::Erc20Unverified {
+                        token: Some("0x00000000000000000000000000000000000bad01".to_owned()),
+                        delta: "1000000000000000000000000".to_owned(),
+                    },
+                ],
+                "",
+            );
+            lure.status = SignRecordStatus::Pending;
+            persist_record(&lure);
+
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert!(
+                stored[0].get("assetChanges").is_none(),
+                "nothing the page sent"
+            );
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: forged.from.clone(),
+            });
+            settle(&mut host, asks);
+            let loc = crate::loc::Loc::for_language("zh");
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            // Newest first: the lure, then the forged call.
+            assert_eq!(
+                (rows[0].amount.as_ref(), rows[0].unit.as_ref()),
+                ("\u{2212}0.1", "USDC")
+            );
+            assert_eq!(rows[0].received, None, "no figure the site's token wrote");
+            assert_eq!((rows[1].amount.as_ref(), rows[1].unit.as_ref()), ("", ""));
+            assert_eq!(rows[1].received, None);
+
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &lure.record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            let lines: Vec<(&str, &str)> = detail
+                .breakdown
+                .iter()
+                .map(|line| (line.label.as_ref(), line.value.as_ref()))
+                .collect();
+            assert_eq!(lines, vec![("USDC", "\u{2212}0.1"), ("未验证代币", "+")]);
+            // Still pending, and the hash row waits for a hash.
+            assert_eq!(detail.status.text, flow.status_pending);
+            assert!(
+                detail
+                    .facts
+                    .iter()
+                    .all(|fact| fact.label != flow.detail_hash)
+            );
+        });
     }
 
     /// A signature moves nothing, and its row must not claim otherwise.

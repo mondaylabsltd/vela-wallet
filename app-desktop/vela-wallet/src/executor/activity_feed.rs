@@ -23,6 +23,7 @@ use serde_json::{Value, json};
 use vela_core::app::activity_feed::{
     ActivityFeed, Event, FeedOperation, FeedShellResult, FeedTxKind, FeedTxRecord, FeedTxStatus,
 };
+use vela_core::app::token_trust::TrustSimJudgment;
 
 use crate::executor::{identity, storage};
 use crate::resident::{self, Answer, Machine};
@@ -117,7 +118,88 @@ fn to_record(row: &Value) -> Option<FeedTxRecord> {
         // there.
         dapp_url: optional("dappUrl").or_else(|| optional("dappOrigin")),
         intent: optional("intent"),
+        // What the sheet's own simulation showed when the person approved
+        // (083 F1) — the row's figure. Written by the sign executor from the
+        // approve alone; a row without it draws as it always has.
+        balance_changes: row.get("assetChanges").and_then(stored_changes),
+        calldata: calldata_of(row),
     })
+}
+
+/// The balance changes a row kept (083 F1), from its `assetChanges` — the
+/// web's `StoredAssetSim` shape, which the sign executor writes too. Each
+/// line goes back to the judgment it was drawn from: the native coin; a token
+/// with its symbol and decimals; and anything marked unverified or missing
+/// either — the safe reading — an unverified token, which carries no figure.
+/// A line of any other kind is dropped.
+fn stored_changes(stored: &Value) -> Option<Vec<TrustSimJudgment>> {
+    let lines = stored.get("changes")?.as_array()?;
+    Some(
+        lines
+            .iter()
+            .filter_map(|line| {
+                let delta = line.get("delta").and_then(Value::as_str)?.to_owned();
+                match line.get("kind").and_then(Value::as_str)? {
+                    "native" => Some(TrustSimJudgment::Native { delta }),
+                    "erc20" => {
+                        let token = line.get("token").and_then(Value::as_str).map(str::to_owned);
+                        let symbol = line
+                            .get("symbol")
+                            .and_then(Value::as_str)
+                            .filter(|symbol| !symbol.trim().is_empty());
+                        let decimals = line
+                            .get("decimals")
+                            .and_then(Value::as_u64)
+                            .and_then(|decimals| u32::try_from(decimals).ok());
+                        let unverified = line.get("unverified").and_then(Value::as_bool);
+                        Some(match (token, symbol, decimals, unverified) {
+                            (Some(token), Some(symbol), Some(decimals), None | Some(false)) => {
+                                TrustSimJudgment::Erc20Trusted {
+                                    token,
+                                    delta,
+                                    symbol: symbol.to_owned(),
+                                    decimals,
+                                }
+                            }
+                            (token, ..) => TrustSimJudgment::Erc20Unverified { token, delta },
+                        })
+                    }
+                    _ => None,
+                }
+            })
+            .collect(),
+    )
+}
+
+/// Whether a dApp's transaction carried calldata (083 F3), read off the
+/// request stored beside it (`signedRequest`: this shell keeps the params
+/// array as text, the web `{ method, params }`). `data` is the field the
+/// submit path sends, so this is what went on chain: calldata makes the row's
+/// `to` the contract it called, not a recipient. `None` when there is no
+/// request to read — none stored, clipped (`requestTruncated`), not JSON —
+/// and for every other kind of row.
+fn calldata_of(row: &Value) -> Option<bool> {
+    if row.get("type").and_then(Value::as_str) != Some("dapp_tx")
+        || row.get("requestTruncated").and_then(Value::as_bool) == Some(true)
+    {
+        return None;
+    }
+    let params = match row.get("signedRequest")? {
+        Value::String(text) => serde_json::from_str::<Value>(text).ok()?,
+        Value::Object(request) => request.get("params")?.clone(),
+        _ => return None,
+    };
+    let first = params.get(0)?;
+    let carries = |call: &Value| {
+        call.get("data")
+            .and_then(Value::as_str)
+            .is_some_and(|data| !data.is_empty() && data != "0x")
+    };
+    match first.get("calls").and_then(Value::as_array) {
+        // A batch's calls are what it submits.
+        Some(calls) => Some(calls.iter().any(carries)),
+        None => first.is_object().then(|| carries(first)),
+    }
 }
 
 /// Discover incoming transfers and persist the ones `token_trust` admitted.
@@ -592,6 +674,115 @@ mod tests {
                 Some("http://127.0.0.1:5173")
             );
             assert_eq!(records[1].intent, None);
+        });
+    }
+
+    /// 083 F1: a row's `assetChanges` — this shell's or the web's, the same
+    /// bytes — goes back to the judgments the sheet drew. A token marked
+    /// unverified, or missing its symbol or decimals, reads as unverified (no
+    /// figure), never as a trusted amount; a line of no known kind, or with
+    /// no delta, is dropped; a row without the field has none.
+    #[test]
+    fn a_rows_balance_changes_read_back_as_the_sheets_judgments() {
+        use vela_core::app::token_trust::TrustSimJudgment as J;
+        storage::tests::with_temp_state("feed-asset-changes", || {
+            seed(json!([
+                {
+                    "id": "swap", "timestamp": 1_759_100_000, "chainId": 8453,
+                    "type": "dapp_tx",
+                    "assetChanges": { "ok": true, "engine": "rpc", "changes": [
+                        { "kind": "erc20", "token": "0xusdc", "delta": "-100000",
+                          "symbol": "USDC", "decimals": 6 },
+                        { "kind": "native", "delta": "37000000000000",
+                          "symbol": "ETH", "decimals": 18 },
+                        { "kind": "erc20", "token": "0xbad", "delta": "9000",
+                          "symbol": "FREE", "decimals": 18, "unverified": true },
+                        { "kind": "erc20", "token": "0xodd", "delta": "5", "symbol": "ODD" },
+                        { "kind": "erc721", "delta": "1" },
+                        { "kind": "native" }
+                    ] }
+                },
+                { "id": "old", "timestamp": 1_759_000_000, "chainId": 8453, "type": "dapp_tx" }
+            ]));
+            let records = read_records();
+            assert_eq!(
+                records[0].balance_changes,
+                Some(vec![
+                    J::Erc20Trusted {
+                        token: "0xusdc".to_owned(),
+                        delta: "-100000".to_owned(),
+                        symbol: "USDC".to_owned(),
+                        decimals: 6,
+                    },
+                    J::Native {
+                        delta: "37000000000000".to_owned(),
+                    },
+                    J::Erc20Unverified {
+                        token: Some("0xbad".to_owned()),
+                        delta: "9000".to_owned(),
+                    },
+                    J::Erc20Unverified {
+                        token: Some("0xodd".to_owned()),
+                        delta: "5".to_owned(),
+                    },
+                ])
+            );
+            assert_eq!(records[1].balance_changes, None);
+        });
+    }
+
+    /// 083 F3: whether a dApp's transaction carried calldata, read off the
+    /// request stored beside it — this shell's text, the web's object, a
+    /// batch's calls. A clipped or missing request says nothing, and neither
+    /// does any other kind of row.
+    #[test]
+    fn a_dapp_row_says_whether_it_called_a_contract() {
+        storage::tests::with_temp_state("feed-calldata", || {
+            let row = |id: &str, kind: &str, request: Value, truncated: bool| {
+                json!({
+                    "id": id, "timestamp": 1_759_100_000, "chainId": 8453, "type": kind,
+                    "signedRequest": request, "requestTruncated": truncated
+                })
+            };
+            seed(json!([
+                row("swap", "dapp_tx", json!(r#"[{"to":"0xr","data":"0x3593564c"}]"#), false),
+                row("send", "dapp_tx", json!(r#"[{"to":"0xb","value":"0x1","data":"0x"}]"#), false),
+                row("bare", "dapp_tx", json!(r#"[{"to":"0xb","value":"0x1"}]"#), false),
+                row(
+                    "web",
+                    "dapp_tx",
+                    json!({ "method": "eth_sendTransaction", "params": [{ "to": "0xr", "data": "0xabcd" }] }),
+                    false
+                ),
+                row(
+                    "batch",
+                    "dapp_tx",
+                    json!(r#"[{"calls":[{"to":"0xb","value":"0x1"},{"to":"0xr","data":"0x095ea7b3"}]}]"#),
+                    false
+                ),
+                row("clipped", "dapp_tx", json!(r#"[{"to":"0xr","data":"0x35"#), true),
+                row("junk", "dapp_tx", json!("not json"), false),
+                row("message", "sign_message", json!(r#"[{"data":"0xabcd"}]"#), false),
+                { "id": "none", "timestamp": 1_759_100_000, "chainId": 8453, "type": "dapp_tx" }
+            ]));
+            let calldata: Vec<(String, Option<bool>)> = read_records()
+                .into_iter()
+                .map(|record| (record.id, record.calldata))
+                .collect();
+            assert_eq!(
+                calldata,
+                vec![
+                    ("swap".to_owned(), Some(true)),
+                    ("send".to_owned(), Some(false)),
+                    ("bare".to_owned(), Some(false)),
+                    ("web".to_owned(), Some(true)),
+                    ("batch".to_owned(), Some(true)),
+                    ("clipped".to_owned(), None),
+                    ("junk".to_owned(), None),
+                    ("message".to_owned(), None),
+                    ("none".to_owned(), None),
+                ]
+            );
         });
     }
 

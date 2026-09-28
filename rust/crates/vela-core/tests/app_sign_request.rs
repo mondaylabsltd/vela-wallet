@@ -22,6 +22,7 @@ use vela_core::app::sign_request::{
     CODE_UNSUPPORTED_CHAIN, CODE_USER_REJECTED, NOT_CONFIRMED_MESSAGE, PAGE_WAIT_CAP_MS,
     REVERTED_MESSAGE,
 };
+use vela_core::app::token_trust::TrustSimJudgment;
 
 type Sut = DomainDriver<SignRequest>;
 
@@ -2302,4 +2303,201 @@ fn a_reverted_detail_names_its_transaction() {
         reverted_transaction(&format!("{NOT_CONFIRMED_MESSAGE} (user operation 0xab)")),
         None
     );
+}
+
+// ===========================================================================
+// 083 F1 — the record keeps what the sheet's simulation showed
+// ===========================================================================
+
+/// What the sheet drew under "Balance changes" for a 0.1 USDC -> ETH swap.
+fn sheet_changes() -> Vec<TrustSimJudgment> {
+    vec![
+        TrustSimJudgment::Erc20Trusted {
+            token: TOKEN.to_owned(),
+            delta: "-100000".to_owned(),
+            symbol: "USDC".to_owned(),
+            decimals: 6,
+        },
+        TrustSimJudgment::Native {
+            delta: "37000000000000".to_owned(),
+        },
+    ]
+}
+
+/// Approve `params` carrying `changes` on the slide, submit, and return what
+/// the pending record keeps.
+fn recorded_changes(
+    id: &str,
+    method: &str,
+    params: &str,
+    changes: Option<Vec<TrustSimJudgment>>,
+) -> Option<Vec<TrustSimJudgment>> {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global(id, method, params).event());
+    sut.dispatch(approve(SignApproveOpts {
+        balance_changes: changes,
+        ..SignApproveOpts::default()
+    }));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]),
+        "{ops:?}"
+    );
+    let ops = sut.dispatch(Event::OpSubmitted {
+        id: id.to_owned(),
+        user_op_hash: "0xop".to_owned(),
+        now_ms: 9_000.0,
+    });
+    match ops.as_slice() {
+        [Op::PersistRecord { record }] => record.balance_changes.clone(),
+        other => panic!("the pending record first: {other:?}"),
+    }
+}
+
+/// The lines the person saw on the slide are the lines the record keeps —
+/// so Activity can say "−0.1 USDC" for a swap it could only call a contract
+/// interaction before.
+#[test]
+fn the_record_keeps_the_balance_changes_the_sheet_showed() {
+    assert_eq!(
+        recorded_changes(
+            "req-f1a",
+            "eth_sendTransaction",
+            &tx_params("0xdeadbeef"),
+            Some(sheet_changes())
+        ),
+        Some(sheet_changes())
+    );
+}
+
+/// A page cannot write them. They ride the approve and nothing else: a
+/// request that carries a `balance_changes` or an `assetChanges` of its own
+/// records none, and with the sheet's, records exactly the sheet's.
+#[test]
+fn a_page_cannot_write_the_records_balance_changes() {
+    let forged = format!(
+        r#"[{{"to":"{TOKEN}","data":"0xdeadbeef","value":"0x0",
+            "balance_changes":[{{"type":"native","delta":"999999999999999999999"}}],
+            "assetChanges":{{"ok":true,"engine":"rpc","changes":[{{"kind":"native","delta":"999"}}]}}}}]"#
+    );
+    assert_eq!(
+        recorded_changes("req-f1b", "eth_sendTransaction", &forged, None),
+        None,
+        "nothing the page sent is a balance change"
+    );
+    assert_eq!(
+        recorded_changes(
+            "req-f1c",
+            "eth_sendTransaction",
+            &forged,
+            Some(sheet_changes())
+        ),
+        Some(sheet_changes()),
+        "the sheet's, not the page's"
+    );
+}
+
+/// An empty list is nothing to keep, and a signature moves nothing — its
+/// record keeps no lines even if a shell handed some over.
+#[test]
+fn a_signature_or_an_empty_list_keeps_no_changes() {
+    assert_eq!(
+        recorded_changes(
+            "req-f1d",
+            "eth_sendTransaction",
+            &tx_params("0xdeadbeef"),
+            Some(Vec::new())
+        ),
+        None
+    );
+
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-f1e", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    let ops = sut.dispatch(approve(SignApproveOpts {
+        balance_changes: Some(sheet_changes()),
+        ..SignApproveOpts::default()
+    }));
+    assert!(matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]));
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Succeeded {
+            result: "0xsig".to_owned(),
+        },
+        now_ms: 9_000.0,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { record }]
+            if record.kind == SignRecordKind::SignMessage && record.balance_changes.is_none()),
+        "{ops:?}"
+    );
+}
+
+/// The records written without an `OpSubmitted` keep them too: a batch
+/// answered at acceptance (persisted pending under its op hash) and a batch
+/// that answered with its result.
+#[test]
+fn every_transaction_record_keeps_the_changes() {
+    let params = batch_params(
+        &format!(r#"[{{"to":"{SPENDER}","data":"0xdeadbeef","value":"0x0"}}]"#),
+        None,
+    );
+    for (id, outcome) in [
+        (
+            "req-f1f",
+            SignSubmitOutcome::ReceiptPending {
+                user_op_hash: "0xbatchid".to_owned(),
+            },
+        ),
+        (
+            "req-f1g",
+            SignSubmitOutcome::Succeeded {
+                result: "0xbatchid".to_owned(),
+            },
+        ),
+    ] {
+        let mut sut = boot();
+        sut.dispatch(Arrive::global(id, "wallet_sendCalls", &params).event());
+        sut.dispatch(approve(SignApproveOpts {
+            balance_changes: Some(sheet_changes()),
+            ..SignApproveOpts::default()
+        }));
+        sut.resolve(Res::PreCheck { funding: None });
+        let ops = sut.resolve(Res::Submit {
+            outcome,
+            now_ms: 13_000.0,
+        });
+        assert!(
+            matches!(ops.as_slice(), [Op::PersistRecord { record }]
+                if record.balance_changes.as_deref() == Some(sheet_changes().as_slice())),
+            "{id}: {ops:?}"
+        );
+    }
+}
+
+/// Optional on the wire both ways: a shell that predates the field approves
+/// as before, and a record without lines carries no key for them.
+#[test]
+fn the_balance_changes_are_optional_on_the_wire() {
+    let opts: SignApproveOpts = serde_json::from_str(
+        r#"{"max_fee_per_gas":null,"bundler_cost_wei":null,"gas_fee_token":null,
+            "quoted_fee":null,"fee_collector":null,"params_override_json":null,"intent":null}"#,
+    )
+    .expect("an older shell's approve");
+    assert_eq!(opts.balance_changes, None);
+    let out = serde_json::to_value(&opts).expect("serializes");
+    assert!(out.get("balance_changes").is_none());
+
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-f1h", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.dispatch(Event::OpSubmitted {
+        id: "req-f1h".to_owned(),
+        user_op_hash: "0xop".to_owned(),
+        now_ms: 9_000.0,
+    });
+    let [Op::PersistRecord { record }] = ops.as_slice() else {
+        panic!("the pending record first: {ops:?}");
+    };
+    let out = serde_json::to_value(record).expect("serializes");
+    assert!(out.get("balance_changes").is_none());
 }

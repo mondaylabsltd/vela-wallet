@@ -253,6 +253,14 @@ pub struct FlowStrings {
     /// "App" — the site a dApp's transaction came from (083 H2), the word the
     /// web's connection detail uses.
     pub detail_app: SharedString,
+    /// "Interacting with" — the contract a dApp's call went to (083 F3): a
+    /// router is not a recipient. The signing sheet's own word for it.
+    pub detail_contract: SharedString,
+    /// "Balance changes" over a dApp transaction's lines (083 F1), and
+    /// "Unverified token" for a line with no figure — the signing sheet's
+    /// words, so the detail reads as what was approved.
+    pub detail_changes: SharedString,
+    pub detail_unverified_token: SharedString,
     pub detail_chain: SharedString,
     pub detail_date: SharedString,
     pub detail_hash: SharedString,
@@ -588,6 +596,9 @@ impl FlowStrings {
             detail_from: s("componentsTx.detail.from"),
             detail_to: s("componentsTx.detail.to"),
             detail_app: s("connect.detail.labelApp"),
+            detail_contract: s("componentsUi.signing.interactingLabel"),
+            detail_changes: s("componentsUi.signing.balanceChangesTitle"),
+            detail_unverified_token: s("componentsUi.signing.balanceUnverifiedToken"),
             detail_chain: s("componentsTx.detail.labelChain"),
             detail_date: s("componentsTx.detail.labelDate"),
             detail_hash: s("componentsTx.detail.labelHash"),

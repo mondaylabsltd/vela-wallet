@@ -66,6 +66,7 @@ use serde_json::{json, Value};
 use super::approval_guard::enforce_no_unlimited;
 use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use super::self_call_guard::{detect_self_call, enforce_no_self_call, SelfCallBlock};
+use super::token_trust::TrustSimJudgment;
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
@@ -217,6 +218,16 @@ pub struct SignApproveOpts {
     /// approval surface) still refuses an unbounded amount.
     #[serde(default)]
     pub unlimited_approved: bool,
+    /// What the wallet's OWN simulation said this operation moves, exactly as
+    /// the sheet drew it under "Balance changes" when the slide fired
+    /// (083 F1): `token_trust`'s judgments, in the sheet's order — an
+    /// unverified token's line carries no figure here either. Kept on the
+    /// record so Activity can say what was approved. It rides the approve and
+    /// nothing else: no field of the request can reach it. `None` (a shell
+    /// that predates it, a simulation that never answered) records nothing,
+    /// and the row draws as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balance_changes: Option<Vec<TrustSimJudgment>>,
 }
 
 /// Bundler gas-account funding facts (`FundingNeeded`), amounts as decimal
@@ -337,6 +348,13 @@ pub struct SignRecord {
     #[serde(default)]
     pub dapp_url: String,
     pub intent: Option<String>,
+    /// A transaction's balance changes as the person approved them — the
+    /// sheet's simulation, [`SignApproveOpts::balance_changes`] (083 F1).
+    /// Never a signature's, never empty, and absent from the wire when there
+    /// are none, so older rows and shells that do not send them read as
+    /// before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balance_changes: Option<Vec<TrustSimJudgment>>,
 }
 
 /// The in-place patch closing a pending record — same id, never a second
@@ -904,6 +922,8 @@ struct Inflight {
     /// `request.origin` alone — the record's `dapp_url`.
     record_url: String,
     intent: Option<String>,
+    /// The approve's `balance_changes`, for a transaction only (083 F1).
+    balance_changes: Option<Vec<TrustSimJudgment>>,
     max_fee_per_gas: Option<String>,
     gas_fee_token: Option<String>,
     quoted_fee: Option<SignQuotedFee>,
@@ -1786,6 +1806,19 @@ fn approve_with(
         .clone()
         .filter(|intent| !intent.trim().is_empty())
         .or_else(|| plain_send_intent(&pending.method, &parsed));
+    // What the sheet's simulation showed, from the approve alone (083 F1). A
+    // signature moves nothing, so it keeps none; an empty list is nothing to
+    // keep.
+    let balance_changes = opts
+        .balance_changes
+        .clone()
+        .filter(|changes| !changes.is_empty())
+        .filter(|_| {
+            matches!(
+                method_kind(&pending.method),
+                SignMethodKind::Transaction | SignMethodKind::Batch
+            )
+        });
 
     model.inflight = Some(Inflight {
         id: pending.id.clone(),
@@ -1799,6 +1832,7 @@ fn approve_with(
         record_origin,
         record_url: pending.origin.clone(),
         intent,
+        balance_changes,
         max_fee_per_gas: opts.max_fee_per_gas.clone(),
         gas_fee_token: opts.gas_fee_token.clone(),
         // The tier the shell copied from the displayed estimate, filtered to
@@ -2117,6 +2151,7 @@ fn on_op_submitted(
                 dapp_origin: fl.record_origin.clone(),
                 dapp_url: fl.record_url.clone(),
                 intent: fl.intent.clone(),
+                balance_changes: fl.balance_changes.clone(),
             },
             fl.chain_id,
         )
@@ -2352,6 +2387,7 @@ fn on_submit(
                     dapp_origin: fl.record_origin.clone(),
                     dapp_url: fl.record_url.clone(),
                     intent: fl.intent.clone(),
+                    balance_changes: fl.balance_changes.clone(),
                 };
                 if let Some(inner) = model.inflight.as_mut() {
                     inner.record_id = Some(record.record_id.clone());
@@ -2494,6 +2530,7 @@ fn persist_pending_then(
         dapp_origin: fl.record_origin.clone(),
         dapp_url: fl.record_url.clone(),
         intent: fl.intent.clone(),
+        balance_changes: fl.balance_changes.clone(),
     };
     model.tracker_handoff = Some(SignTrackerHandoff {
         user_op_hash: user_op_hash.clone(),

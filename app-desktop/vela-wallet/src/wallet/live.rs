@@ -612,6 +612,8 @@ mod tests {
             usd: None,
             dapp_url: None,
             intent: None,
+            balance_changes: None,
+            calldata: None,
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -807,6 +809,9 @@ mod tests {
                 site: site.map(str::to_owned),
                 intent: intent.map(str::to_owned),
                 intent_term: intent.and_then(ClearTerm::of),
+                changes: Vec::new(),
+                received: None,
+                contract_call: false,
             });
             FeedRow::Item { item: row }
         };
@@ -855,6 +860,9 @@ mod tests {
                 site: site.map(str::to_owned),
                 intent: None,
                 intent_term: None,
+                changes: Vec::new(),
+                received: None,
+                contract_call: false,
             });
             FeedRow::Item { item: row }
         };
@@ -903,6 +911,9 @@ mod tests {
             site: Some("app.uniswap.org".to_owned()),
             intent: Some("Swap".to_owned()),
             intent_term: None,
+            changes: Vec::new(),
+            received: None,
+            contract_call: false,
         });
         let mut send = item("send", false, Some("0.01"), "xDAI");
         send.dapp = call.dapp.clone();
@@ -923,6 +934,65 @@ mod tests {
             SharedString::from(crate::wallet::fixtures::MASK)
         );
         assert_eq!(rows[1].unit.as_ref(), "xDAI");
+    }
+
+    /// 083 F1: a swap's row says what left — the figure the core took from
+    /// the sheet's simulation — and, under it, the one coin expected back,
+    /// marked "≈" because the chain may deliver another amount. Privacy masks
+    /// both digits and keeps both units; a row with nothing expected back
+    /// draws no second line.
+    #[test]
+    fn a_swap_row_says_what_left_and_what_was_expected_back() {
+        use vela_core::app::activity_feed::{FeedDapp, FeedDappChange};
+
+        let mut swap = item("swap", false, Some("0.1"), "USDC");
+        swap.decimals = Some(6);
+        swap.dapp = Some(FeedDapp {
+            site: Some("app.uniswap.org".to_owned()),
+            intent: None,
+            intent_term: None,
+            changes: Vec::new(),
+            received: Some(FeedDappChange {
+                direction: FeedDirection::In,
+                verified: true,
+                symbol: "ETH".to_owned(),
+                value: Some("0.000037".to_owned()),
+                decimals: Some(18),
+            }),
+            contract_call: true,
+        });
+        let mut call = swap.clone();
+        call.id = "call".to_owned();
+        if let Some(dapp) = call.dapp.as_mut() {
+            dapp.received = None;
+        }
+        let view = feed_with(
+            vec![FeedRow::Item { item: swap }, FeedRow::Item { item: call }],
+            Vec::new(),
+        );
+        let s = strings();
+        let flow = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
+        let rows = activity_rows(&view, &s, &flow, false);
+        assert_eq!(rows[0].title, s.intent_contract_call);
+        assert_eq!(rows[0].subtitle.as_ref(), "app.uniswap.org");
+        assert_eq!(
+            (rows[0].amount.as_ref(), rows[0].unit.as_ref()),
+            ("\u{2212}0.1", "USDC")
+        );
+        assert!(!rows[0].positive, "money out is plain ink");
+        assert_eq!(
+            rows[0].received.as_ref().map(AsRef::as_ref),
+            Some("≈ +0.000037 ETH")
+        );
+        assert_eq!(rows[1].received, None);
+
+        let masked = activity_rows(&view, &s, &flow, true);
+        assert_eq!(masked[0].amount.as_ref(), crate::wallet::fixtures::MASK);
+        assert_eq!(masked[0].unit.as_ref(), "USDC");
+        assert_eq!(
+            masked[0].received.as_ref().map(AsRef::as_ref),
+            Some("≈ +•••• ETH")
+        );
     }
 
     /// `value` is the human amount already. Scaling it by `decimals` would
@@ -2144,6 +2214,55 @@ pub(crate) fn activity_row(
         positive: incoming,
         badge: badge(item.chain_id),
         day: None,
+        // A swap's one coin back, beside what left (083 F1) — the sheet's
+        // expectation, so it says "≈", and masked like the figure.
+        received: item
+            .dapp
+            .as_ref()
+            .and_then(|dapp| dapp.received.as_ref())
+            .map(|change| {
+                SharedString::from(format!(
+                    "{} {}",
+                    change_figure(change, hidden),
+                    change.symbol
+                ))
+            }),
+    }
+}
+
+/// One of a dApp transaction's balance changes as a figure (083 F1), in the
+/// signing sheet's own form: "−0.1" for what left — the amount approved —
+/// and "≈ +0.000037" for what was expected back, which the chain may deliver
+/// to another unit (slippage). A token the sheet could not verify keeps its
+/// direction and never a number ("+"), as it did on the sheet. Privacy masks
+/// the digits and keeps the rest.
+pub(crate) fn change_figure(
+    change: &vela_core::app::activity_feed::FeedDappChange,
+    hidden: bool,
+) -> String {
+    let incoming = change.direction == FeedDirection::In;
+    let sign = if incoming { "+" } else { "\u{2212}" };
+    let figure = change
+        .value
+        .as_deref()
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|_| change.verified);
+    let Some(amount) = figure else {
+        return sign.to_owned();
+    };
+    let digits = if hidden {
+        crate::wallet::fixtures::MASK.to_owned()
+    } else {
+        format_token_amount(
+            amount,
+            crate::executor::format_prefs::current().number,
+            false,
+        )
+    };
+    if incoming {
+        format!("≈ {sign}{digits}")
+    } else {
+        format!("{sign}{digits}")
     }
 }
 

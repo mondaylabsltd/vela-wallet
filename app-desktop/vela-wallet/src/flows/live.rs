@@ -361,9 +361,15 @@ pub fn tx_detail(
     // they meant, so seeding it from the name would defeat its purpose.
     if let Some(counterparty) = item.counterparty.as_ref() {
         let named = item.alias.clone();
+        // A dApp's call with calldata went to a contract — a router, a token
+        // — which received nothing it could be called the recipient of
+        // (083 F3). A plain transfer of the coin keeps "To".
+        let called = item.dapp.as_ref().is_some_and(|dapp| dapp.contract_call);
         facts.push(FactRow {
             label: if incoming {
                 s.detail_from.clone()
+            } else if called {
+                s.detail_contract.clone()
             } else {
                 s.detail_to.clone()
             },
@@ -427,7 +433,10 @@ pub fn tx_detail(
     }
 
     let status = record.map_or(FeedTxStatus::Confirmed, |record| record.status);
-    let (breakdown_title, breakdown) = detail_parts(item, s);
+    let (breakdown_title, breakdown) = match change_parts(item, s, hidden) {
+        (None, _) => detail_parts(item, s),
+        changes => changes,
+    };
     Some(crate::flows::fixtures::TxDetail {
         breakdown_title,
         breakdown,
@@ -3198,6 +3207,39 @@ fn detail_parts(
     (title, rows)
 }
 
+/// 083 F1: a dApp transaction opens to what it moved, as the signing sheet
+/// showed it when the person approved — "Balance changes", one line per coin,
+/// in the sheet's order: what left as the figure approved, what was expected
+/// back with "≈", a token the sheet could not verify by name and direction
+/// only. Nothing for a row whose record kept no lines (it draws as before).
+fn change_parts(
+    item: &vela_core::app::activity_feed::FeedItem,
+    s: &FlowStrings,
+    hidden: bool,
+) -> (Option<SharedString>, Vec<BreakdownRow>) {
+    let Some(dapp) = item.dapp.as_ref().filter(|dapp| !dapp.changes.is_empty()) else {
+        return (None, Vec::new());
+    };
+    let rows = dapp
+        .changes
+        .iter()
+        .map(|change| BreakdownRow {
+            seed: None,
+            label: if !change.verified {
+                s.detail_unverified_token.clone()
+            } else if change.symbol.is_empty() {
+                // A native coin the chain table does not name: the sheet's
+                // own placeholder, not a guessed ticker.
+                SharedString::from("—")
+            } else {
+                SharedString::from(change.symbol.clone())
+            },
+            value: SharedString::from(crate::wallet::live::change_figure(change, hidden)),
+        })
+        .collect();
+    (Some(s.detail_changes.clone()), rows)
+}
+
 /// A decimal string as the shell prints token amounts.
 fn trimmed_str(value: &str) -> String {
     crate::wallet::live::token_amount_text(value)
@@ -4553,6 +4595,8 @@ mod tests {
                     usd: None,
                     dapp_url: None,
                     intent: None,
+                    balance_changes: None,
+                    calldata: None,
                 }],
                 ..host.view()
             };
@@ -4683,6 +4727,9 @@ mod tests {
                 site: Some("app.uniswap.org".to_owned()),
                 intent: Some("Swap".to_owned()),
                 intent_term: Some(ClearTerm::IntentSwap),
+                changes: Vec::new(),
+                received: None,
+                contract_call: true,
             }),
         };
         let view = FeedView {
@@ -4703,7 +4750,10 @@ mod tests {
         assert_eq!(Some(&detail.title), w.terms.get(&ClearTerm::IntentSwap));
         assert_eq!(detail.facts[0].label, s.detail_app);
         assert_eq!(detail.facts[0].value.as_ref(), "app.uniswap.org");
-        assert_eq!(detail.facts[1].label, s.detail_to, "then the contract");
+        assert_eq!(
+            detail.facts[1].label, s.detail_contract,
+            "then the contract it called, never a recipient (083 F3)"
+        );
         assert_eq!(detail.amount.as_ref(), "", "no coin moved, no figure");
         assert_eq!(detail.fiat.as_ref(), "");
         // The network line wears the chain's coin when the row has none.
@@ -4822,6 +4872,159 @@ mod tests {
                 "{id}"
             );
         }
+    }
+
+    /// 083 F3 + F1, one panel per kind of row:
+    /// - a plain transfer of the coin keeps "To", a call with calldata names
+    ///   the contract it interacted with, and a receipt its sender;
+    /// - a swap's detail lists the sheet's balance changes, masked with the
+    ///   figure; a row whose record kept none draws no such list;
+    /// - the hash is shortened on a dApp row as on any other (F2).
+    #[test]
+    fn a_dapp_detail_names_what_it_called_and_lists_what_it_moved() {
+        use vela_core::app::activity_feed::{
+            ActivityFeed, Event as FeedEvent, FeedDapp, FeedDappChange, FeedDirection, FeedItem,
+        };
+
+        const HASH: &str = "0x9f2c4e5d6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f";
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let _ = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        let row = |id: &str, incoming: bool, dapp: Option<FeedDapp>| FeedItem {
+            id: id.to_owned(),
+            direction: if incoming {
+                FeedDirection::In
+            } else {
+                FeedDirection::Out
+            },
+            counterparty: Some("0xd614000000000000000000000000000000009c40".to_owned()),
+            alias: None,
+            value: Some("0.1".to_owned()),
+            symbol: "USDC".to_owned(),
+            decimals: Some(6),
+            usd_value: 0.1,
+            chain_id: 8453,
+            timestamp: 1_759_100_000.0,
+            day_start_ms: 0.0,
+            tx_hash: Some(HASH.to_owned()),
+            batch: None,
+            dapp,
+        };
+        let dapp = |contract_call: bool, changes: Vec<FeedDappChange>| FeedDapp {
+            site: Some("app.uniswap.org".to_owned()),
+            intent: None,
+            intent_term: None,
+            changes,
+            received: None,
+            contract_call,
+        };
+        let line = |direction: FeedDirection, verified: bool, symbol: &str, value: Option<&str>| {
+            FeedDappChange {
+                direction,
+                verified,
+                symbol: symbol.to_owned(),
+                value: value.map(str::to_owned),
+                decimals: value.map(|_| 6),
+            }
+        };
+        let view = FeedView {
+            rows: vec![
+                FeedRow::Item {
+                    item: row("received", true, None),
+                },
+                FeedRow::Item {
+                    item: row("plain", false, Some(dapp(false, Vec::new()))),
+                },
+                FeedRow::Item {
+                    item: row(
+                        "swap",
+                        false,
+                        Some(dapp(
+                            true,
+                            vec![
+                                line(FeedDirection::Out, true, "USDC", Some("0.1")),
+                                line(FeedDirection::In, true, "ETH", Some("0.000037")),
+                                line(FeedDirection::In, false, "", None),
+                            ],
+                        )),
+                    ),
+                },
+            ],
+            ..host.view()
+        };
+        let (s, w) = (strings(), wallet_strings());
+        let open = |id: &str, hidden: bool| {
+            tx_detail(
+                &view,
+                id,
+                &s,
+                &w,
+                hidden,
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"))
+        };
+
+        for id in ["received", "plain", "swap"] {
+            let detail = open(id, false);
+            let hash = detail
+                .facts
+                .iter()
+                .find(|fact| fact.label == s.detail_hash)
+                .unwrap_or_else(|| unreachable!("{id} has a hash row"));
+            assert_eq!(hash.value.as_ref(), "0x9f2c…6e7f", "{id}");
+            assert!(hash.value.chars().count() <= 13, "{id}: fits the column");
+            assert!(hash.mono);
+            assert_eq!(hash.copy.as_ref().map(AsRef::as_ref), Some(HASH), "{id}");
+        }
+
+        let label_of = |id: &str| {
+            let detail = open(id, false);
+            detail
+                .facts
+                .iter()
+                .find(|fact| fact.value.as_ref() == "0xd614…9c40")
+                .map(|fact| fact.label.clone())
+                .unwrap_or_else(|| unreachable!("{id} names its counterparty"))
+        };
+        assert_eq!(label_of("received"), s.detail_from);
+        assert_eq!(
+            label_of("plain"),
+            s.detail_to,
+            "a plain send has a recipient"
+        );
+        assert_eq!(label_of("swap"), s.detail_contract, "a router is not one");
+
+        let lines = |hidden: bool| {
+            let detail = open("swap", hidden);
+            assert_eq!(detail.breakdown_title.as_ref(), Some(&s.detail_changes));
+            detail
+                .breakdown
+                .iter()
+                .map(|line| (line.label.to_string(), line.value.to_string()))
+                .collect::<Vec<_>>()
+        };
+        let unverified = s.detail_unverified_token.to_string();
+        assert_eq!(
+            lines(false),
+            vec![
+                ("USDC".to_owned(), "\u{2212}0.1".to_owned()),
+                ("ETH".to_owned(), "≈ +0.000037".to_owned()),
+                (unverified.clone(), "+".to_owned()),
+            ]
+        );
+        assert_eq!(
+            lines(true),
+            vec![
+                ("USDC".to_owned(), "\u{2212}••••".to_owned()),
+                ("ETH".to_owned(), "≈ +••••".to_owned()),
+                (unverified, "+".to_owned()),
+            ]
+        );
+        let plain = open("plain", false);
+        assert!(plain.breakdown.is_empty() && plain.breakdown_title.is_none());
     }
 
     /// The QR encodes what the CORE says, and a live one is never the demo

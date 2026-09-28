@@ -653,7 +653,8 @@ impl SigningHost {
         self.phone_stop = None;
         // Nothing re-prices under a slide that has gone.
         self.requote_scheduled = None;
-        let opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
+        let mut opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
+        opts.balance_changes = approved_changes(&self.sim, self.sim_unavailable);
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
     }
 
@@ -1351,7 +1352,23 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         // asked — the submit guard's only waiver, copied from the view that
         // drew it, never decided here.
         unlimited_approved: guard.unlimited_consented,
+        // The simulation is the column's, not these views': `approve` adds
+        // it (`approved_changes`).
+        balance_changes: None,
     }
+}
+
+/// What the record keeps of the sheet's "Balance changes" (083 F1): the
+/// judgments this column drew there (`sim_blocks`), exactly as they stood
+/// when the slide fired — the one account of the operation's money that no
+/// page wrote, and the one Activity shows for it. Nothing when the
+/// simulation could not answer, or had not yet: the sheet showed no lines,
+/// so the record keeps none and the row draws as it always has.
+fn approved_changes(
+    sim: &[vela_core::app::token_trust::TrustSimJudgment],
+    unavailable: bool,
+) -> Option<Vec<vela_core::app::token_trust::TrustSimJudgment>> {
+    (!unavailable && !sim.is_empty()).then(|| sim.to_vec())
 }
 
 /// The intent the record keeps, which Activity shows as the row's title in
@@ -1630,6 +1647,34 @@ mod tests {
                 },
             ]
         );
+    }
+
+    /// 083 F1: the approve carries exactly the lines the sheet drew under
+    /// "Balance changes" — the outflow with its figure, an unverified inflow
+    /// with none — and nothing when there were none to draw.
+    #[test]
+    fn the_approve_carries_the_balance_changes_the_sheet_drew() {
+        use vela_core::app::token_trust::TrustSimJudgment as J;
+        let drawn = vec![
+            J::Erc20Trusted {
+                token: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_owned(),
+                delta: "-100000".to_owned(),
+                symbol: "USDC".to_owned(),
+                decimals: 6,
+            },
+            J::Native {
+                delta: "37000000000000".to_owned(),
+            },
+            J::Erc20Unverified {
+                token: Some("0xbad".to_owned()),
+                delta: "1000000000000000000000".to_owned(),
+            },
+        ];
+        assert_eq!(approved_changes(&drawn, false), Some(drawn.clone()));
+        // "Could not check" drew a warning, not lines; nothing measured yet
+        // drew nothing.
+        assert_eq!(approved_changes(&drawn, true), None);
+        assert_eq!(approved_changes(&[], false), None);
     }
 
     /// A deployment read that could not answer never reached the core; it is
@@ -2153,6 +2198,7 @@ mod approve_tests {
             params_override_json: None,
             intent: None,
             unlimited_approved: false,
+            balance_changes: None,
         };
 
         let signed = opts

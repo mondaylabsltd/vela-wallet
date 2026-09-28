@@ -11,10 +11,12 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::activity_feed::{
-    is_stable, tx_usd_value, ActivityFeed, Event, FeedBatchKind, FeedDapp, FeedDirection,
-    FeedOperation as Op, FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus,
+    is_stable, tx_usd_value, ActivityFeed, Event, FeedBatchKind, FeedDapp, FeedDappChange,
+    FeedDirection, FeedOperation as Op, FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord,
+    FeedTxStatus,
 };
 use vela_core::app::clear_signing::ClearTerm;
+use vela_core::app::token_trust::TrustSimJudgment;
 
 type Sut = DomainDriver<ActivityFeed>;
 
@@ -52,6 +54,8 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         usd: None,
         dapp_url: None,
         intent: None,
+        balance_changes: None,
+        calldata: None,
     }
 }
 
@@ -1022,6 +1026,9 @@ fn a_dapp_native_send_is_a_row_with_its_amount_and_site() {
             site: Some("127.0.0.1".to_owned()),
             intent: Some("Send".to_owned()),
             intent_term: Some(ClearTerm::IntentSend),
+            changes: Vec::new(),
+            received: None,
+            contract_call: false,
         })
     );
     // The detail reads the status off the record, which is in the view.
@@ -1231,4 +1238,325 @@ fn the_dapp_fields_are_optional_on_the_wire() {
     );
     let out = serde_json::to_value(&record).expect("serializes");
     assert!(out.get("dapp_url").is_none() && out.get("intent").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// 083 F1 — a dApp row says what the transaction moved, from what was approved
+// ---------------------------------------------------------------------------
+
+/// Base's USDC — a coin `token_trust` judged, so its lines carry figures.
+const USDC_BASE: &str = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+/// A token a site controls: whatever it emits, the sheet showed no number.
+const SITE_TOKEN: &str = "0x00000000000000000000000000000000000bad01";
+/// The Universal Router a Uniswap swap calls — a contract, not a recipient.
+const ROUTER: &str = "0xd614000000000000000000000000000000009c40";
+
+fn usdc(delta: &str) -> TrustSimJudgment {
+    TrustSimJudgment::Erc20Trusted {
+        token: USDC_BASE.to_owned(),
+        delta: delta.to_owned(),
+        symbol: "USDC".to_owned(),
+        decimals: 6,
+    }
+}
+
+fn eth(delta: &str) -> TrustSimJudgment {
+    TrustSimJudgment::Native {
+        delta: delta.to_owned(),
+    }
+}
+
+/// A swap on Base, as the desktop stores it: the router, the call's own wei
+/// value, no decoded intent, the site, and what the sheet's simulation showed.
+fn swap(id: &str, wei_hex: &str, changes: Option<Vec<TrustSimJudgment>>, ts: f64) -> FeedTxRecord {
+    let mut r = dapp_tx(id, ROUTER, wei_hex, None, ts);
+    r.chain_id = 8453;
+    r.symbol = "ETH".to_owned();
+    r.dapp_url = Some("https://app.uniswap.org".to_owned());
+    r.calldata = Some(true);
+    r.balance_changes = changes;
+    r
+}
+
+fn line(direction: FeedDirection, symbol: &str, value: &str, decimals: u32) -> FeedDappChange {
+    FeedDappChange {
+        direction,
+        verified: true,
+        symbol: symbol.to_owned(),
+        value: Some(value.to_owned()),
+        decimals: Some(decimals),
+    }
+}
+
+/// The device pass's three swaps (2026-09-29): 0.1 USDC -> ETH, all of the
+/// USDC -> ETH, 0.0001 ETH -> USDC. Each row's figure is what left — the
+/// sheet's own line, not the page's — and the one coin that came back rides
+/// beside it as expected. The title stays the recorded intent (none here, so
+/// the shell's "Contract interaction"): one coin out and one in is also a
+/// deposit, a wrap or a vault share, and nothing the wallet holds says swap.
+#[test]
+fn a_swap_row_says_what_left_and_what_was_expected_back() {
+    let sut = boot(vec![
+        swap(
+            "dapp-1-tx",
+            "0x0",
+            Some(vec![usdc("-100000"), eth("37000000000000")]),
+            100_000.0,
+        ),
+        swap(
+            "dapp-2-tx",
+            "0x0",
+            Some(vec![usdc("-271741"), eth("100548000000000")]),
+            200_000.0,
+        ),
+        swap(
+            "dapp-3-tx",
+            "0x5af3107a4000",
+            Some(vec![eth("-100000000000000"), usdc("269487")]),
+            300_000.0,
+        ),
+    ]);
+    let rows = items(&sut);
+    assert_eq!(
+        rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+        vec!["dapp-3-tx", "dapp-2-tx", "dapp-1-tx"],
+        "newest first, as every row"
+    );
+    let figures: Vec<(FeedDirection, Option<&str>, &str, Option<u32>)> = rows
+        .iter()
+        .map(|r| {
+            (
+                r.direction,
+                r.value.as_deref(),
+                r.symbol.as_str(),
+                r.decimals,
+            )
+        })
+        .collect();
+    assert_eq!(
+        figures,
+        vec![
+            (FeedDirection::Out, Some("0.0001"), "ETH", Some(18)),
+            (FeedDirection::Out, Some("0.271741"), "USDC", Some(6)),
+            (FeedDirection::Out, Some("0.1"), "USDC", Some(6)),
+        ]
+    );
+    // A stablecoin out is worth its face; ETH has no stored price.
+    assert!((rows[2].usd_value - 0.1).abs() < 1e-9);
+    assert!(rows[0].usd_value.abs() < f64::EPSILON);
+
+    let dapp = rows[2].dapp.clone().expect("a dApp row");
+    assert_eq!(dapp.intent, None, "no title the wallet cannot know");
+    assert_eq!(dapp.intent_term, None);
+    assert_eq!(dapp.site.as_deref(), Some("app.uniswap.org"));
+    assert!(dapp.contract_call, "the router is what it called");
+    assert_eq!(
+        dapp.changes,
+        vec![
+            line(FeedDirection::Out, "USDC", "0.1", 6),
+            line(FeedDirection::In, "ETH", "0.000037", 18),
+        ],
+        "the sheet's lines, in its order"
+    );
+    assert_eq!(
+        dapp.received,
+        Some(line(FeedDirection::In, "ETH", "0.000037", 18))
+    );
+    assert_eq!(
+        rows[0].dapp.as_ref().and_then(|d| d.received.clone()),
+        Some(line(FeedDirection::In, "USDC", "0.269487", 6))
+    );
+    // The counterparty is still the router, and only because it is an
+    // address (083 H2 review).
+    assert_eq!(rows[2].counterparty.as_deref(), Some(ROUTER));
+}
+
+/// A record that kept no lines — an older row, a web or phone record, a
+/// simulation that never answered — draws EXACTLY as before, and an empty
+/// list is no lines.
+#[test]
+fn no_recorded_changes_leaves_the_row_as_it_was() {
+    let before = boot(vec![
+        swap("d-call", "0x0", None, 100_000.0),
+        swap("d-send", "0x2386f26fc10000", None, 90_000.0),
+    ]);
+    let after = boot(vec![
+        swap("d-call", "0x0", Some(Vec::new()), 100_000.0),
+        swap("d-send", "0x2386f26fc10000", Some(Vec::new()), 90_000.0),
+    ]);
+    assert_eq!(items(&before), items(&after));
+    let rows = items(&before);
+    assert_eq!(rows[0].value, None, "a call that moved no coin: no figure");
+    assert_eq!(rows[0].symbol, "");
+    assert_eq!(rows[1].value.as_deref(), Some("0.01"), "its own wei value");
+    assert_eq!(rows[1].symbol, "ETH");
+    for row in &rows {
+        let dapp = row.dapp.as_ref().expect("a dApp row");
+        assert!(dapp.changes.is_empty() && dapp.received.is_none());
+    }
+    // …and a record that says nothing about calldata is no contract call.
+    let mut plain = swap("d-plain", "0x1", None, 80_000.0);
+    plain.calldata = None;
+    let sut = boot(vec![plain]);
+    assert!(
+        !items(&sut)[0]
+            .dapp
+            .as_ref()
+            .expect("a dApp row")
+            .contract_call
+    );
+}
+
+/// A page cannot put a figure on the row. The lines come from the approve
+/// alone (the sign_request tests hold that end); here, the sheet's own
+/// judgment is kept: a token the wallet did not trust arrives as a direction
+/// with no number — whatever `Transfer` its contract emitted — and it is
+/// never the row's figure or its "expected back".
+#[test]
+fn a_page_cannot_put_a_figure_on_the_row() {
+    let unverified_in = TrustSimJudgment::Erc20Unverified {
+        token: Some(SITE_TOKEN.to_owned()),
+        delta: "1000000000000000000000000".to_owned(),
+    };
+    let unverified_out = TrustSimJudgment::Erc20Unverified {
+        token: Some(SITE_TOKEN.to_owned()),
+        delta: "-5000000".to_owned(),
+    };
+    let sut = boot(vec![
+        // USDC out, the site's token "in": the figure is the USDC.
+        swap(
+            "d-lure",
+            "0x0",
+            Some(vec![usdc("-100000"), unverified_in.clone()]),
+            100_000.0,
+        ),
+        // Only an unverified outflow: no figure it could give.
+        swap("d-blind", "0x0", Some(vec![unverified_out]), 90_000.0),
+        // Two coins out: no ONE figure, so the call's own value, as before.
+        swap(
+            "d-two",
+            "0x0",
+            Some(vec![usdc("-100000"), eth("-1000")]),
+            80_000.0,
+        ),
+    ]);
+    let rows = items(&sut);
+
+    assert_eq!(
+        (rows[0].value.as_deref(), rows[0].symbol.as_str()),
+        (Some("0.1"), "USDC")
+    );
+    let lure = rows[0].dapp.clone().expect("a dApp row");
+    assert_eq!(lure.received, None, "no figure the site wrote beside it");
+    assert_eq!(
+        lure.changes[1],
+        FeedDappChange {
+            direction: FeedDirection::In,
+            verified: false,
+            symbol: String::new(),
+            value: None,
+            decimals: None,
+        }
+    );
+
+    assert_eq!(
+        (rows[1].value.as_deref(), rows[1].symbol.as_str()),
+        (None, "")
+    );
+    let blind = rows[1].dapp.clone().expect("a dApp row");
+    assert_eq!(blind.changes.len(), 1);
+    assert_eq!(blind.changes[0].direction, FeedDirection::Out);
+    assert_eq!(blind.changes[0].value, None);
+
+    assert_eq!(
+        (rows[2].value.as_deref(), rows[2].symbol.as_str()),
+        (None, "")
+    );
+    let two = rows[2].dapp.clone().expect("a dApp row");
+    assert_eq!(two.changes.len(), 2, "the detail still lists both");
+    assert_eq!(two.received, None);
+}
+
+/// A line that does not say something is not drawn: zero moved nothing, and
+/// a delta that is not a signed integer has no direction to state. A stored
+/// decimals past the bound keeps its direction and loses its figure.
+#[test]
+fn a_line_that_does_not_read_is_not_drawn() {
+    let odd = TrustSimJudgment::Erc20Trusted {
+        token: USDC_BASE.to_owned(),
+        delta: "-1".to_owned(),
+        symbol: "ODD".to_owned(),
+        decimals: u32::MAX,
+    };
+    let sut = boot(vec![swap(
+        "d-odd",
+        "0x0",
+        Some(vec![eth("0"), eth("12abc"), eth(""), usdc("+250000"), odd]),
+        100_000.0,
+    )]);
+    let rows = items(&sut);
+    let dapp = rows[0].dapp.clone().expect("a dApp row");
+    assert_eq!(
+        dapp.changes,
+        vec![
+            line(FeedDirection::In, "USDC", "0.25", 6),
+            FeedDappChange {
+                direction: FeedDirection::Out,
+                verified: true,
+                symbol: "ODD".to_owned(),
+                value: None,
+                decimals: None,
+            },
+        ]
+    );
+    assert_eq!(
+        rows[0].value, None,
+        "an outflow with no figure is no figure"
+    );
+    assert_eq!(dapp.received, None, "nothing out, so nothing beside it");
+}
+
+/// A pending swap keeps its figure through the tracker's verdict, failed as
+/// confirmed — the status is the record's, the lines are what was approved.
+#[test]
+fn a_swap_keeps_its_figure_whatever_its_status() {
+    let pending = swap(
+        "dapp-9-tx",
+        "0x0",
+        Some(vec![usdc("-100000"), eth("37000000000000")]),
+        100_000.0,
+    );
+    let mut sut = boot(vec![pending.clone()]);
+    assert_eq!(sut.view().transactions[0].status, FeedTxStatus::Pending);
+    sut.dispatch(Event::ReconcileCompleted { resolved_count: 1 });
+    let mut failed = pending;
+    failed.status = FeedTxStatus::Failed;
+    sut.resolve(loaded(&sut, vec![failed], T0 + 1_000.0));
+    drain_aliases(&mut sut);
+    assert_eq!(sut.view().transactions[0].status, FeedTxStatus::Failed);
+    assert_eq!(items(&sut)[0].value.as_deref(), Some("0.1"));
+}
+
+/// The new fields are optional on the wire both ways: an older shell's
+/// record loads, and a row with none of them serializes as it did.
+#[test]
+fn the_balance_change_fields_are_optional_on_the_wire() {
+    let json = r#"{"id":"x","user_op_hash":"","tx_hash":"","from":"","to":"","to_name":null,
+        "value":"1","symbol":"USDC","decimals":6,"logo_urls":null,"chain_id":1,"timestamp":1,
+        "day_start_ms":0,"status":"confirmed","kind":"dapp_tx","usd":null}"#;
+    let record: FeedTxRecord = serde_json::from_str(json).expect("an older shell's record");
+    assert_eq!(
+        (record.balance_changes.clone(), record.calldata),
+        (None, None)
+    );
+    let out = serde_json::to_value(&record).expect("serializes");
+    assert!(out.get("balance_changes").is_none() && out.get("calldata").is_none());
+
+    let sut = boot(vec![swap("d-old", "0x0", None, 100_000.0)]);
+    let mut row = items(&sut).remove(0);
+    row.dapp.as_mut().expect("a dApp row").contract_call = false;
+    let dapp = serde_json::to_value(row.dapp).expect("serializes");
+    for key in ["changes", "received", "contract_call"] {
+        assert!(dapp.get(key).is_none(), "{key} is absent when empty");
+    }
 }
