@@ -4,4 +4,8 @@
  * The tx_tracker handoff: the shell feeds this to `tx_tracker::Event::Submitted`
  * the moment it appears (idempotent — the tracker merges by hash).
  */
-export type SignTrackerHandoff = { user_op_hash: string, record_ids: Array<string>, chain_id: number, };
+export type SignTrackerHandoff = { user_op_hash: string, record_ids: Array<string>, chain_id: number, 
+/**
+ * Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA3).
+ */
+maybe_sent: boolean, submit_block: number | null, };

@@ -7,4 +7,4 @@ import type { TrackRecordPatch } from "./TrackRecordPatch";
  * classification that used to live in three call sites happens exactly once,
  * in that mapping layer.
  */
-export type TrackOperation = { "type": "poll_receipt", user_op_hash: string, chain_id: number, } | { "type": "poll_status", user_op_hash: string, chain_id: number, } | { "type": "load_pending_txs" } | { "type": "update_tx_records", ids: Array<string>, patch: TrackRecordPatch, } | { "type": "notify_confirmed", user_op_hash: string, chain_id: number, tx_hash: string, } | { "type": "now" };
+export type TrackOperation = { "type": "poll_receipt", user_op_hash: string, chain_id: number, } | { "type": "poll_status", user_op_hash: string, chain_id: number, } | { "type": "load_pending_txs" } | { "type": "update_tx_records", ids: Array<string>, patch: TrackRecordPatch, } | { "type": "notify_confirmed", user_op_hash: string, chain_id: number, tx_hash: string, } | { "type": "holdings_moved", chain_id: number, } | { "type": "find_op_event", chain_id: number, entry_point: string, topic0: string, user_op_hash: string, from_block: number | null, to_block: number | null, } | { "type": "now" };

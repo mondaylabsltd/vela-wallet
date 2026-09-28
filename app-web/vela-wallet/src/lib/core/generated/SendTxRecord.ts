@@ -23,4 +23,15 @@ timestamp_s: number,
  * `'$' + usd.toFixed(2)` when > 0 — a stored-record format, not i18n
  * (ported verbatim).
  */
-usd: string | null, };
+usd: string | null, 
+/**
+ * The submit's reply was lost; `user_op_hash` is the locally computed
+ * hash (spec 082 RA4). Persisted with the record so a restart hands the
+ * tracker a may-have-been-sent op again (`TrackPendingRecord`).
+ */
+maybe_sent: boolean, 
+/**
+ * The head read before the first submit POST, persisted likewise —
+ * where the tracker's relay-independent landing check starts (ruling 8).
+ */
+submit_block: number | null, };

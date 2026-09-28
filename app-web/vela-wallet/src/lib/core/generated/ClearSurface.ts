@@ -5,9 +5,9 @@
  * (`SigningSheet.tsx:407-487`).
  *
  * The full order is `typed permit → editable approval → LOADING → CLEAR SIGN →
- * batch → ETH_SIGN → MESSAGE → BLIND TYPED → BLIND TX`; the two approval
- * surfaces and the batch list belong to `approval_guard`, so the sheet
- * interleaves exactly two verdicts and decides nothing itself. Everything
- * upper-cased above is decided here.
+ * batch → ETH_SIGN → MESSAGE → BLIND TYPED → PLAIN SEND | BLIND TX`; the two
+ * approval surfaces and the batch list belong to `approval_guard`, so the
+ * sheet interleaves exactly two verdicts and decides nothing itself.
+ * Everything upper-cased above is decided here.
  */
-export type ClearSurface = "none" | "loading" | "clear_sign" | "eth_sign" | "message_sign" | "blind_typed_data" | "blind_transaction";
+export type ClearSurface = "none" | "loading" | "clear_sign" | "eth_sign" | "message_sign" | "blind_typed_data" | "blind_transaction" | "plain_send";

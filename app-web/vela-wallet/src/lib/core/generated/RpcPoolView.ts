@@ -17,4 +17,12 @@ rate_limited_chains: Array<number>,
  * The ban map as persisted (expired entries may linger until the next
  * prune — check [`is_ban_active`] with a current timestamp).
  */
-banned: Array<RpcBanEntry>, };
+banned: Array<RpcBanEntry>, 
+/**
+ * Chains one call's first pass could not reach at all — every endpoint
+ * failed on transport, no rate-limit signal (spec 082 RF1). Sorted
+ * ascending. The chain notice is `chain ∈ failed_chains ∪
+ * unreached_chains ∧ chain ∉ rate_limited_chains`; the home "fix your
+ * RPC" banner still reads `failed_chains` only.
+ */
+unreached_chains: Array<number>, };

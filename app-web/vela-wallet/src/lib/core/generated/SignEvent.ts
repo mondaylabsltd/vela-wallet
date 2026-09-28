@@ -15,4 +15,14 @@ granted_address: string | null,
 /**
  * §12.1.6: the address the request asks to act as (popup path).
  */
-requested_address: string | null, request_ts_ms: number | null, now_ms: number, } | { "type": "chain_switch_requested", id: string | null, transport_id: string | null, chain_id_param: string | null, } | { "type": "approve_tapped", opts: SignApproveOpts, } | { "type": "reject_tapped" } | { "type": "dismiss_tapped" } | { "type": "swipe_dismissed" } | { "type": "funding_complete_tapped" } | { "type": "funding_cancelled" } | { "type": "op_submitted", id: string, user_op_hash: string, now_ms: number, } | { "type": "transport_dropped", transport_id: string, };
+requested_address: string | null, request_ts_ms: number | null, now_ms: number, } | { "type": "chain_switch_requested", id: string | null, transport_id: string | null, chain_id_param: string | null, } | { "type": "approve_tapped", opts: SignApproveOpts, } | { "type": "reject_tapped" } | { "type": "dismiss_tapped" } | { "type": "swipe_dismissed" } | { "type": "funding_complete_tapped" } | { "type": "funding_cancelled" } | { "type": "op_submitted", id: string, user_op_hash: string, now_ms: number, 
+/**
+ * The submit's reply was lost and `user_op_hash` is the local hash
+ * (spec 082 RA2/RA3): the op is recorded and tracked all the same,
+ * and the page will get one Ok answer — never 4900 or -32603.
+ */
+maybe_sent: boolean, 
+/**
+ * The head read before the first POST (ruling 8); `None` = unknown.
+ */
+submit_block: number | null, } | { "type": "ceremony_started", id: string, } | { "type": "ceremony_done", id: string, } | { "type": "transport_dropped", transport_id: string, };

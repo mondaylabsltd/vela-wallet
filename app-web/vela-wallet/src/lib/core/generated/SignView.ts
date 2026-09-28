@@ -3,12 +3,30 @@ import type { SignBlockedView } from "./SignBlockedView";
 import type { SignErrorNotice } from "./SignErrorNotice";
 import type { SignFundingView } from "./SignFundingView";
 import type { SignNotice } from "./SignNotice";
+import type { SignPhase } from "./SignPhase";
 import type { SignRequestView } from "./SignRequestView";
 import type { SignSurface } from "./SignSurface";
 import type { SignSwipeAction } from "./SignSwipeAction";
 import type { SignTrackerHandoff } from "./SignTrackerHandoff";
 
-export type SignView = { surface: SignSurface, request: SignRequestView | null, is_signing: boolean, is_submitting: boolean, pending_op_hash: string | null, error: SignErrorNotice | null, funding: SignFundingView | null, 
+export type SignView = { surface: SignSurface, request: SignRequestView | null, 
+/**
+ * Kept until every shell reads `phase` (spec 082 RA9).
+ */
+is_signing: boolean, 
+/**
+ * Kept until every shell reads `phase` (spec 082 RA9).
+ */
+is_submitting: boolean, 
+/**
+ * The sheet's words, derived from the pipeline stage and the prompt.
+ */
+phase: SignPhase, pending_op_hash: string | null, 
+/**
+ * The sheet's op may have been sent — its reply was lost (spec 082
+ * RA3): the caption says so, and there is no Retry.
+ */
+pending_op_maybe_sent: boolean, error: SignErrorNotice | null, funding: SignFundingView | null, 
 /**
  * This machine's own approval gate: a reviewable request with the
  * granted account reconciled and no pipeline in flight. The shell must

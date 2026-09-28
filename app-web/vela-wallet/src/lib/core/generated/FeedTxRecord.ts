@@ -46,4 +46,10 @@ kind: FeedTxKind | null,
 /**
  * Legacy pre-formatted USD (e.g. `"$1.00"`), as stored.
  */
-usd: string | null, };
+usd: string | null, 
+/**
+ * The origin of the site that asked, for a `dapp_tx` record (the stored
+ * `dappOrigin`, spec 082 RG1). `None` for every other kind, and for a
+ * shell that predates the field.
+ */
+dapp_origin: string | null, };

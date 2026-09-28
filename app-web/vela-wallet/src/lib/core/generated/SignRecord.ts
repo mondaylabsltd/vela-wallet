@@ -16,4 +16,15 @@ record_id: string, kind: SignRecordKind, method: string, params_json: string,
 /**
  * Result of the request — `""` while pending.
  */
-result: string, from: string, chain_id: number, now_ms: number, status: SignRecordStatus, user_op_hash: string, dapp_origin: string, intent: string | null, };
+result: string, from: string, chain_id: number, now_ms: number, status: SignRecordStatus, user_op_hash: string, dapp_origin: string, intent: string | null, 
+/**
+ * The submit's reply was lost; `user_op_hash` is the locally computed
+ * hash (spec 082 RA3). Persisted with the record, so a restart hands the
+ * tracker a may-have-been-sent op again (`TrackPendingRecord`).
+ */
+maybe_sent: boolean, 
+/**
+ * The head read before the first submit POST — where the tracker's
+ * relay-independent landing check starts (ruling 8). Persisted likewise.
+ */
+submit_block: number | null, };

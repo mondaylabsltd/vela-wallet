@@ -21,4 +21,15 @@ new_item_id: string | null,
  * `None` while balance privacy is on — invariant ④ enforced here, not
  * in the shell.
  */
-toast: FeedToast | null, };
+toast: FeedToast | null, 
+/**
+ * The corpus key of History's empty line (spec 082 RG5):
+ * [`HISTORY_EMPTY_ALL`] with no chain filter, [`HISTORY_EMPTY_FILTERED`]
+ * with one. Whether the list is loading or empty stays the shell's.
+ */
+history_empty_key: string, 
+/**
+ * The corpus key of the home Activity's empty line: [`HOME_EMPTY_ALL`] /
+ * [`HOME_EMPTY_FILTERED`], chosen the same way.
+ */
+home_empty_key: string, };

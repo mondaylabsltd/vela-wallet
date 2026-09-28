@@ -12,4 +12,8 @@ export type TrackShellResult = { "type": "clock", now_ms: number, } | { "type": 
  * Executor stage that last touched the op, e.g.
  * `in_band_settlement_hold`.
  */
-stage: string | null, now_ms: number, } | { "type": "status_unavailable", user_op_hash: string, now_ms: number, } | { "type": "records_loaded", records: Array<TrackPendingRecord>, now_ms: number, } | { "type": "records_patched" } | { "type": "notified" };
+stage: string | null, now_ms: number, 
+/**
+ * The relay's bundle tx, when it names one ([`TrackStatusAnswer`]).
+ */
+tx_hash: string | null, } | { "type": "status_unavailable", user_op_hash: string, now_ms: number, } | { "type": "records_loaded", records: Array<TrackPendingRecord>, now_ms: number, } | { "type": "op_event", user_op_hash: string, now_ms: number, logs_json: string | null, error_json: string | null, head_block: number | null, } | { "type": "records_patched" } | { "type": "notified" };

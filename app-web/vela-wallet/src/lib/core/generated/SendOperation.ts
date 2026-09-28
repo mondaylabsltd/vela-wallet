@@ -23,4 +23,8 @@ auto_fee_token: boolean, } | { "type": "probe_treasury", chain_id: number, } | {
 /**
  * Present ⇔ in-band: sign EXACTLY this (invariant ①).
  */
-quoted_fee: SendQuotedFee | null, } | { "type": "cancel_passkey_sign" } | { "type": "persist_tx_records", records: Array<SendTxRecord>, } | { "type": "track_submitted", user_op_hash: string, record_ids: Array<string>, chain_id: number, } | { "type": "resolve_identity", address: string, } | { "type": "resolve_risk", chain_id: number, address: string, } | { "type": "simulate_calls", chain_id: number, account: string, calls: Array<FeeCall>, } | { "type": "start_timer", ms: number, tag: SendTimerTag, } | { "type": "haptic", kind: SendHapticKind, } | { "type": "show_alert", kind: SendAlertKind, } | { "type": "close" };
+quoted_fee: SendQuotedFee | null, } | { "type": "cancel_passkey_sign" } | { "type": "persist_tx_records", records: Array<SendTxRecord>, } | { "type": "track_submitted", user_op_hash: string, record_ids: Array<string>, chain_id: number, 
+/**
+ * Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA4).
+ */
+maybe_sent: boolean, submit_block: number | null, } | { "type": "resolve_identity", address: string, } | { "type": "resolve_risk", chain_id: number, address: string, } | { "type": "simulate_calls", chain_id: number, account: string, calls: Array<FeeCall>, } | { "type": "start_timer", ms: number, tag: SendTimerTag, } | { "type": "haptic", kind: SendHapticKind, } | { "type": "show_alert", kind: SendAlertKind, } | { "type": "close" };

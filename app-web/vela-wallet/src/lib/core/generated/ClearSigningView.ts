@@ -2,6 +2,7 @@
 import type { ClearBlindTyped } from "./ClearBlindTyped";
 import type { ClearConfirm } from "./ClearConfirm";
 import type { ClearMessageView } from "./ClearMessageView";
+import type { ClearPlainSend } from "./ClearPlainSend";
 import type { ClearSignResult } from "./ClearSignResult";
 import type { ClearSurface } from "./ClearSurface";
 
@@ -32,4 +33,9 @@ blind_typed: ClearBlindTyped | null,
  * approval half of the same buzz is `approval_guard`'s verdict; the sheet
  * ORs the two machines' answers and decides nothing.
  */
-danger_haptic: boolean, };
+danger_haptic: boolean, 
+/**
+ * The plain send card (082 RC1). `Some` exactly when [`Self::surface`]
+ * is [`ClearSurface::PlainSend`].
+ */
+plain_send: ClearPlainSend | null, };
