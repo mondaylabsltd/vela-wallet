@@ -163,10 +163,10 @@ window.VelaCS = window.VelaCS || {};
 
   function sameCall(a, b) {
     var address = function (v) { return String(v || '').toLowerCase(); };
-    // "0x" is zero, as the wallet reads it (vela-core RC4); BigInt('0x') throws.
-    // A value it cannot read (" 0x ", "abc", 1.5) is null and matches nothing:
-    // the call is not found, and the page refuses instead of throwing. The
-    // reading is `abi.quantity`, the same in every engine.
+    // The site's value as the wallet's submit path reads it (`abi.quantity`,
+    // the same in every engine): "0x" is zero, "0X10" and " 0x10 " are 16. A
+    // value it cannot read ("abc", "-1", 1.5) is null and matches nothing: the
+    // call is not found, and the page refuses instead of throwing.
     var amount = function (v) {
       var wei = ns.abi.quantity(v);
       return wei === null ? null : wei.toString();

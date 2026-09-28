@@ -222,9 +222,9 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
 // 9. A value the page cannot read never takes the page down. Before, BigInt()
 //    threw inside resolve(): no card, no refusal, only a status line — and a
 //    page being closed cannot hand the wallet its answer over the custom
-//    scheme. The wallet's rule (RC4) prints no figure for such a value; the
-//    page draws what the operation does and refuses, since it cannot find the
-//    site's call in it.
+//    scheme. No submit path builds an operation from such a value; the page
+//    prints no figure for it and, handed an operation anyway, draws what the
+//    operation does and refuses, since it cannot find the site's call in it.
 {
   const feeLeg = { to: USDC, value: 0, data: ns.encode.call('transfer(address,uint256)', [RELAYER, 420000n]) };
   const operation = {
@@ -239,9 +239,9 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
     },
     feeLegIndex: 1,
   };
-  // "0x " and " 0x " and "\t0x\n" are JavaScriptCore's: Safari's BigInt()
-  // reads them as 0 where V8 throws. Run this file under node AND bun.
-  for (const value of [' 0x ', '0x ', '\t0x\n', '0X', '0x0x', 'abc', ' 0x10 ', '0X10', '-1', '0b1', 1.5, -1]) {
+  // "0b1" and "0o7" are BigInt()'s in every engine, and "0x0x", "0x 1" or
+  // "1 000" are nobody's. Run this file under node AND bun.
+  for (const value of ['0x0x', '0x 1', '1 000', 'abc', '-1', '-0x1', '0b1', '0o7', '1e3', '0x1g', 1.5, -1, NaN]) {
     let bare = null;
     let bound = null;
     let error = '';
@@ -263,20 +263,79 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
 }
 
 // 10. The reading itself (`abi.quantity`), the same in every engine: the
-//     page's grammar, never BigInt()'s. RC4's zeroes, hex, plain decimal
-//     digits and a non-negative safe integer are read; nothing else is.
+//     page's grammar, never BigInt()'s, and the reading the wallet's submit
+//     path gives (the desktop's `wei_of`, vela-core `to_quantity`): trimmed,
+//     "0x" or "0X" hex, plain decimal digits, a non-negative integral number.
+//     " 0x " is 0 under V8 and JavaScriptCore alike, because BigInt() never
+//     sees it.
 {
   const read = (v) => { const w = ns.abi.quantity(v); return w === null ? null : w.toString(); };
   for (const [value, want] of [
     [undefined, '0'], [null, '0'], ['', '0'], ['0x', '0'], ['0x0', '0'], ['0x1F', '31'],
     ['1000', '1000'], [1000, '1000'], [0, '0'], [10n, '10'],
-    [' 0x ', null], ['0x ', null], [' 0x', null], ['\t0x\n', null], [' ', null], ['0X', null],
-    ['0X10', null], [' 0x10 ', null], ['-1', null], ['-0x1', null], ['0b1', null], ['0o7', null],
-    ['1e3', null], [1.5, null], [-1, null], [-1n, null], [2 ** 53, null], [true, null], [{}, null],
+    [' 0x ', '0'], ['0x ', '0'], [' 0x', '0'], ['\t0x\n', '0'], [' ', '0'], ['0X', '0'],
+    ['0X10', '16'], [' 0x10 ', '16'], ['\t1000\n', '1000'], [2 ** 53, '9007199254740992'],
+    [1e18, '1000000000000000000'],
+    ['-1', null], ['-0x1', null], ['+1', null], ['0b1', null], ['0o7', null], ['0x0x', null],
+    ['0x 1', null], ['1 000', null], ['0x1g', null],
+    ['1e3', null], [1.5, null], [-1, null], [-1n, null], [NaN, null], [Infinity, null],
+    [true, null], [{}, null],
   ]) {
     const label = typeof value === 'bigint' ? value + 'n' : typeof value === 'string' ? JSON.stringify(value) : String(value);
     check(`quantity(${label}) is ${want === null ? 'unreadable' : want}`, read(value) === want, String(read(value)));
   }
+}
+
+// 11. The operation the desktop built from the site's own spelling is found in
+//     it. The desktop reads a dApp's value leniently (executor/sign_request.rs
+//     `wei_of`: trimmed, "0x" or "0X", else decimal; a JSON number as itself)
+//     and assembles exactly that figure. Before 082 the page read these with
+//     BigInt() and signed; a reading stricter than the one that built the
+//     operation refuses a transaction nobody altered, and the refusal it
+//     draws (refuse.opMismatch) tells the person the wallet tampered with it.
+//     What the card states comes from the operation either way (section 6).
+{
+  const feeLeg = { to: USDC, value: 0, data: ns.encode.call('transfer(address,uint256)', [RELAYER, 420000n]) };
+  const operationFor = (wei) => ({
+    userOp: {
+      sender: SAFE, nonce: '0x7', initCode: '0x',
+      callData: ns.encode.call('executeUserOp(address,uint256,bytes,uint8)', [
+        MULTI_SEND, 0n,
+        ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: TO, value: wei, data: '0x' }, feeLeg])]), 1,
+      ]),
+      verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+    },
+    feeLegIndex: 1,
+  });
+  for (const [asked, wei, want] of [
+    ['0X38D7EA4C68000', 1000000000000000n, '0.001'],
+    [' 0x38d7ea4c68000 ', 1000000000000000n, '0.001'],
+    ['0x38d7ea4c68000\n', 1000000000000000n, '0.001'],
+    [1e18, 10n ** 18n, '1'],
+    ['0X', 0n, '0'],
+    ['0x ', 0n, '0'],
+    [' 0x ', 0n, '0'],
+    [' ', 0n, '0'],
+    [' 1000 ', 1000n, '0.000000000000001'],
+  ]) {
+    let view = null;
+    let error = '';
+    try {
+      view = tx({ to: TO, value: asked }, { operation: operationFor(wei) });
+    } catch (e) {
+      error = String(e && e.message);
+    }
+    check(`the desktop's operation for value ${JSON.stringify(asked)} is signable, not "altered during assembly"`,
+      !!view && !view.refuse && !view.warnings.some((w) => w.key === 'refuse.opMismatch'),
+      error || JSON.stringify(view.warnings.map((w) => w.key)));
+    check(`value ${JSON.stringify(asked)}: the card states the operation's ${want} xDAI`,
+      !!view && isSend(view) && heroText(draw(view)) === want, view ? heroText(draw(view)) : error);
+  }
+  // A real difference is still a refusal: the site asked 0X10, the operation carries 17.
+  const altered = tx({ to: TO, value: '0X10' }, { operation: operationFor(17n) });
+  check('value "0X10" against an operation carrying 17 wei is still refused',
+    altered.refuse === true && altered.warnings.some((w) => w.key === 'refuse.opMismatch'));
 }
 
 process.exit(check.summary() ? 0 : 1);

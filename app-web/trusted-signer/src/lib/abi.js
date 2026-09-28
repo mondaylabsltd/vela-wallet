@@ -130,24 +130,40 @@ window.VelaCS = window.VelaCS || {};
   /**
    * A call's `value` in wei, or `null` when it cannot be read exactly.
    *
-   * Absent, null, "" and "0x" are zero (vela-core RC4); "0x" and hex digits,
-   * plain decimal digits, a non-negative safe integer and a non-negative
-   * BigInt are that number. Anything else — whitespace, "0X", a sign, "0b"
-   * or "0o", a fraction — is unreadable.
+   * The reading the wallet's own submit path gives a site's value (the
+   * desktop's `wei_of`, vela-core `to_quantity`), because the page only ever
+   * MATCHES this reading against the operation the wallet built — what the
+   * card states is the operation's own figure. Absent and null are zero. A
+   * string is trimmed; then "" is zero, "0x" or "0X" and hex digits (none:
+   * zero) are that number, and plain decimal digits are that number. A
+   * non-negative integral number and a non-negative BigInt are themselves.
+   * Anything else — a sign, "0b" or "0o", a fraction, inner spaces — is
+   * unreadable.
+   *
+   * Stricter than the submit path is not safer: a site's "0X10" or
+   * " 0x10 " is then missing from the operation the desktop built from it,
+   * and the page refuses a transaction nobody altered with
+   * `refuse.opMismatch` ("altered during assembly"). Before 082 BigInt() read
+   * all of these.
    *
    * The page's own grammar, not BigInt()'s: engines disagree at the edges.
    * JavaScriptCore (Safari, the page's engine on the iPhone and the Mac)
    * reads "0x " and " 0x " as 0 where V8 throws, so a verdict left to
-   * BigInt() would change with the browser.
+   * BigInt() would change with the browser. BigInt() here only ever sees
+   * "0x" and at least one hex digit, or decimal digits.
    */
   function quantity(value) {
-    if (value === undefined || value === null || value === '' || value === '0x') return 0n;
+    if (value === undefined || value === null) return 0n;
     if (typeof value === 'bigint') return value >= 0n ? value : null;
     if (typeof value === 'number') {
-      return Number.isSafeInteger(value) && value >= 0 ? BigInt(value) : null;
+      return Number.isInteger(value) && value >= 0 ? BigInt(value) : null;
     }
     if (typeof value !== 'string') return null;
-    if (/^0x[0-9a-fA-F]+$/.test(value) || /^[0-9]+$/.test(value)) return BigInt(value);
+    var text = value.trim();
+    if (text === '') return 0n;
+    var hex = /^0[xX]([0-9a-fA-F]*)$/.exec(text);
+    if (hex) return hex[1] ? BigInt('0x' + hex[1]) : 0n;
+    if (/^[0-9]+$/.test(text)) return BigInt(text);
     return null;
   }
 

@@ -278,11 +278,11 @@ window.VelaCS = window.VelaCS || {};
   }
 
   /**
-   * A call's value in wei (`abi.quantity`). Absent, "" and "0x" are zero
-   * (vela-core RC4). `null` when the page cannot read it (" 0x ", "0X",
-   * "abc", 1.5): no figure is printed for it, and it matches no call of the
-   * operation. BigInt() throwing here used to take the whole page down — no
-   * card, no refusal.
+   * A call's value in wei (`abi.quantity`, the wallet's submit reading).
+   * Absent, "" and "0x" are zero (vela-core RC4). `null` when the page cannot
+   * read it ("abc", "-1", 1.5): no figure is printed for it, and it matches no
+   * call of the operation. BigInt() throwing here used to take the whole page
+   * down — no card, no refusal.
    */
   function callValue(value) {
     return abi.quantity(value);
