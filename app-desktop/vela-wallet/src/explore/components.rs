@@ -250,6 +250,13 @@ pub fn tab_widths(count: usize, row_w: f32) -> TabFit {
     }
 }
 
+/// The lit tab and the tab count a strip last scrolled to.
+type Followed = std::rc::Rc<std::cell::Cell<Option<(Option<usize>, usize)>>>;
+
+/// The narrowest tab still holds its mark and its ✕ (G54): padding, mark,
+/// gap, gap, ✕, padding — the title's share is zero. Checked when built.
+const _: () = assert!(TAB_MIN_W >= 12. + 16. + 8. + 8. + 20. + 12.);
+
 /// The two handles a live strip keeps across frames (spec 082 G54): the
 /// row's measure, which sizes the tabs, and the tabs' own scroll, which keeps
 /// the lit tab in view.
@@ -259,7 +266,7 @@ pub struct TabStripScroll {
     tabs: gpui::ScrollHandle,
     /// The lit tab and the count last scrolled to — once per change, so the
     /// person's own scroll is left alone in between.
-    followed: std::rc::Rc<std::cell::Cell<Option<(Option<usize>, usize)>>>,
+    followed: Followed,
 }
 
 impl Default for TabStripScroll {
@@ -1036,14 +1043,6 @@ mod tests {
                 scrolls: true
             }
         );
-    }
-
-    /// The narrowest tab still holds its mark and its ✕ (G54): the ✕ is never
-    /// the part that goes.
-    #[test]
-    fn the_narrowest_tab_keeps_its_close() {
-        // Padding, mark, gap, gap, ✕, padding — the title's share is zero.
-        assert!(TAB_MIN_W >= 12. + 16. + 8. + 8. + 20. + 12.);
     }
 
     /// Spec 079 FR-015: the scheme is a lock and only a lock — closed and
