@@ -2561,7 +2561,8 @@ struct RootView: View {
                 names.first { $0.chainId == chainId }?.displayName
                     ?? ChainCatalog.meta(chainId)?.displayName
                     ?? "chain-\(chainId)"
-            }
+            },
+            failures: VelaLog.recentFailures
         )
     }
 
