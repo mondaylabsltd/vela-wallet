@@ -134,9 +134,62 @@ pub enum Load {
     /// renderer or browser process on Windows (spec 083). The page is blank
     /// and can never answer again.
     Crashed,
+    /// The engine's history moved, a single-page app's route included, which
+    /// is no load at all (spec 083 W15, Windows): only the arrows change.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    HistoryChanged,
 }
 
 type LoadSink = Box<dyn Fn(Load)>;
+
+/// Something a page asked for that this browser does not do in place (083).
+#[derive(Debug, PartialEq, Eq)]
+pub enum Leave {
+    /// A person's `target=_blank` / `window.open` of a web address: a new tab.
+    NewTab(String),
+    /// `mailto:` / `tel:`: the system's handler, through the wallet's opener.
+    External(String),
+}
+
+type LeaveSink = Box<dyn Fn(Leave)>;
+
+/// Where an address may go (083) — one rule for navigations, new windows and
+/// Windows' launches of other apps.
+#[derive(Debug, PartialEq, Eq)]
+enum Scheme {
+    Web,
+    Local,
+    External,
+    Refused,
+}
+
+fn scheme_of(url: &str) -> Scheme {
+    let scheme = url
+        .split_once(':')
+        .map(|(scheme, _)| scheme.to_ascii_lowercase())
+        .unwrap_or_default();
+    match scheme.as_str() {
+        "http" | "https" => Scheme::Web,
+        // Documents and frames the page builds itself: never a tab, never an app.
+        "about" | "blob" | "data" => Scheme::Local,
+        // Only these two leave: Windows' other protocol handlers (ms-msdt:,
+        // search-ms:) have been remote-code holes, and wc: is not how Vela
+        // connects.
+        "mailto" | "tel" => Scheme::External,
+        _ => Scheme::Refused,
+    }
+}
+
+/// A new-window request: only a person's gesture opens anything (083 W6).
+/// Windows only for now: wry's macOS hook carries no gesture.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn new_window_leave(url: &str, gesture: bool) -> Option<Leave> {
+    match (gesture, scheme_of(url)) {
+        (true, Scheme::Web) => Some(Leave::NewTab(url.to_owned())),
+        (true, Scheme::External) => Some(Leave::External(url.to_owned())),
+        _ => None,
+    }
+}
 
 /// What a page says it is called, read in one script from one document.
 ///
@@ -165,6 +218,39 @@ thread_local! {
     /// toolbar's host, which must not move to a site that has not loaded —
     /// WKWebView's own URL changes the moment a navigation STARTS.
     static COMMITTED_URL: RefCell<Option<String>> = const { RefCell::new(None) };
+    static LEAVES: RefCell<Option<LeaveSink>> = const { RefCell::new(None) };
+    /// Windows' LaunchingExternalUriScheme hook is in: mailto:/tel: pass on to
+    /// it, where the engine says whether a person tapped (083 W7).
+    static EXTERNAL_GUARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Hand new windows and other apps' addresses to the page (083).
+pub fn on_leave_to(sink: LeaveSink) {
+    LEAVES.with(|slot| *slot.borrow_mut() = Some(sink));
+}
+
+fn leave_to_page(leave: Leave) {
+    LEAVES.with(|slot| {
+        if let Some(sink) = slot.borrow().as_ref() {
+            sink(leave);
+        }
+    });
+}
+
+/// wry's navigation handler (083): the top document on Windows, every frame
+/// on macOS. Before it, anything went — on Windows the engine handed any
+/// app's scheme to the system with nothing from Vela.
+fn allow_navigation(url: String) -> bool {
+    match scheme_of(&url) {
+        Scheme::Web | Scheme::Local => true,
+        // Windows' launch event decides it, where a person's tap is known.
+        Scheme::External if EXTERNAL_GUARD.get() => true,
+        Scheme::External => {
+            leave_to_page(Leave::External(url));
+            false
+        }
+        Scheme::Refused => false,
+    }
 }
 
 /// Hand the page's strings to the wallet. Called once, when the page builds
@@ -397,18 +483,32 @@ pub fn navigate(url: &str) {
     }
 }
 
-/// Back and forward. wry has no native pair, so this is the page's own
-/// history — which is the same history the buttons in any browser drive.
+/// Back and forward, through the engine's own history (083 W15) — the pair
+/// wry has had since 0.56, and the one [`history`] reads.
 pub fn back() {
     with_view(|view| {
-        let _ = view.evaluate_script("history.back()");
+        let _ = view.go_back();
     });
 }
 
 pub fn forward() {
     with_view(|view| {
-        let _ = view.evaluate_script("history.forward()");
+        let _ = view.go_forward();
     });
+}
+
+/// Whether the engine can go back / forward (083 W15): the arrows' state,
+/// from the engine's own history, never the page's word.
+#[must_use]
+pub fn history() -> [bool; 2] {
+    BROWSER.with(|slot| {
+        slot.borrow().as_ref().map_or([false, false], |browser| {
+            [
+                browser.view.can_go_back().unwrap_or(false),
+                browser.view.can_go_forward().unwrap_or(false),
+            ]
+        })
+    })
 }
 
 pub fn reload() {
@@ -627,6 +727,11 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
         .with_initialization_script(provider_script(ProviderHost::Desktop))
         .with_initialization_script(META_JS)
         .with_ipc_handler(on_ipc)
+        // 083: see `allow_navigation`.
+        .with_navigation_handler(allow_navigation)
+        // 083: no download on a desktop, as on the phones — wry's default
+        // saved every one silently into Downloads, on Windows and macOS.
+        .with_download_started_handler(|_, _| false)
         .with_url(home);
     // Windows hears its loads from WebView2 directly (spec 083): wry's handler
     // turns the engine's error page into a commit.
@@ -647,6 +752,10 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             #[cfg(windows)]
             if let Err(error) = listen_to_webview2(&view) {
                 eprintln!("[vela-wallet] browser: WebView2 events: {error}");
+            }
+            #[cfg(windows)]
+            if let Err(error) = listen_for_leaves(&view) {
+                eprintln!("[vela-wallet] browser: WebView2 new windows: {error}");
             }
             // Built hidden: `place` turns it on in the same frame, and a
             // webview that flashed into the wallet before its first layout
@@ -709,8 +818,33 @@ fn listen_to_webview2(view: &wry::WebView) -> windows_core::Result<()> {
                 ENGINE_GONE.set(true);
                 Load::Crashed
             }
+            EngineLoad::HistoryChanged => Load::HistoryChanged,
         });
     })
+}
+
+/// WebView2's new windows and launches of other apps, through the one scheme
+/// rule (083 W6/W7). wry answered a new window with no window — `window.open`
+/// and `target=_blank` did nothing — and never heard the engine hand
+/// `mailto:` to Windows' app picker.
+#[cfg(windows)]
+fn listen_for_leaves(view: &wry::WebView) -> windows_core::Result<()> {
+    use crate::webview2_events::EngineLeave;
+    use wry::WebViewExtWindows as _;
+    let guarded = crate::webview2_events::subscribe_leaves(&view.webview(), |leave| {
+        let leave = match leave {
+            EngineLeave::NewWindow { uri, gesture } => new_window_leave(&uri, gesture),
+            // Already cancelled: only a person's mailto:/tel: goes on.
+            EngineLeave::OtherApp { uri, gesture } => {
+                (gesture && scheme_of(&uri) == Scheme::External).then_some(Leave::External(uri))
+            }
+        };
+        if let Some(leave) = leave {
+            leave_to_page(leave);
+        }
+    });
+    EXTERNAL_GUARD.set(guarded.as_ref().is_ok_and(|guarded| *guarded));
+    guarded.map(drop)
 }
 
 /// [`hide`], unless the view is borrowed right now (an engine event arriving
@@ -933,6 +1067,56 @@ mod tests {
         );
         assert_eq!(meta_url("", "https://app.example/"), "https://app.example/");
         assert!(META_JS.contains("location.href") && META_JS.contains("responseStatus"));
+    }
+
+    /// 083: one rule for where an address goes — pages load, only mail and
+    /// phone leave, and nothing else is opened by anything.
+    #[test]
+    fn only_pages_load_and_only_mail_and_phone_leave() {
+        for url in [
+            "https://a.example/",
+            "http://127.0.0.1:8080/",
+            "about:blank",
+            "about:srcdoc",
+            "blob:https://a.example/1",
+            "data:text/html,x",
+        ] {
+            assert!(allow_navigation(url.to_owned()), "{url}");
+        }
+        assert_eq!(scheme_of("mailto:a@b.example"), Scheme::External);
+        assert_eq!(scheme_of("TEL:+15551234"), Scheme::External);
+        for url in [
+            "wc:x@2",
+            "metamask://dapp/x",
+            "intent://x#Intent;end",
+            "file:///C:/x",
+            "javascript:alert(1)",
+            "ms-msdt:/id",
+            "search-ms:q",
+            "",
+            "no-scheme",
+        ] {
+            assert_eq!(scheme_of(url), Scheme::Refused, "{url}");
+            assert!(!allow_navigation(url.to_owned()), "{url}");
+        }
+    }
+
+    /// 083 W6: a new window opens a tab only on a person's gesture.
+    #[test]
+    fn a_new_window_is_a_tab_only_on_a_gesture() {
+        let tx = "https://etherscan.io/tx/0x1";
+        assert_eq!(
+            new_window_leave(tx, true),
+            Some(Leave::NewTab(tx.to_owned()))
+        );
+        assert_eq!(new_window_leave(tx, false), None, "a timer's popup");
+        assert_eq!(
+            new_window_leave("mailto:a@b.example", true),
+            Some(Leave::External("mailto:a@b.example".to_owned()))
+        );
+        assert_eq!(new_window_leave("mailto:a@b.example", false), None);
+        assert_eq!(new_window_leave("about:blank", true), None);
+        assert_eq!(new_window_leave("metamask://x", true), None);
     }
 
     /// The injected provider is the core's, for THIS host: it posts through

@@ -79,9 +79,16 @@ Renderer death is survived on every shell (Android `onRenderProcessGone`, iOS
 `webViewWebContentProcessDidTerminate`): the tab shows "This page stopped
 working" with Reload, its requests are settled, the app keeps running. Reads are
 bounded (8 in flight per tab, 256 queued, then -32005). JavaScript dialogs work
-while a page is on screen and are refused off screen. External schemes
-(`mailto:`, `tel:`, `intent:`, app links) leave the browser only for a main-frame
-navigation with a person's tap; `wc:` is answered with a sentence, not guessed at.
+while a page is on screen and are refused off screen. External schemes leave the
+browser only on a person's tap. Phones hand any app scheme to the system
+(`intent:` sanitised); the desktop hands on only `mailto:`/`tel:` (spec 083 —
+macOS, whose handler carries no gesture, from any frame), and
+`javascript:`/`file:` never leave. `wc:` is answered with a sentence on the
+phones, not guessed at (desktop: refused silently for now). A new window loads in
+the same tab on the phones and opens a new tab on the desktop (Windows; macOS
+still drops it), only on a person's gesture; no shell builds a second engine, so
+`window.opener` is gone and popup sign-in does not complete. Downloads are
+refused everywhere.
 
 ## Testing
 

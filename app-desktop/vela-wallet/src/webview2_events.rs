@@ -7,6 +7,10 @@
 //! a certificate error showed Edge's interstitial with its "continue anyway";
 //! a renderer that died left Edge's sad page with the chrome still green.
 //! This module listens beside wry, on the same view, and says which is which.
+//!
+//! The same goes for a page leaving itself (083 W6/W7): wry answers a new
+//! window with no window and without reading whether a person asked, and
+//! never hears the engine hand `mailto:` — or any app's scheme — to Windows.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -15,11 +19,13 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_PROCESS_FAILED_KIND, COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED,
     COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
     COREWEBVIEW2_SERVER_CERTIFICATE_ERROR_ACTION_CANCEL, COREWEBVIEW2_WEB_ERROR_STATUS,
-    ICoreWebView2, ICoreWebView2_14,
+    ICoreWebView2, ICoreWebView2_14, ICoreWebView2_18,
 };
 use webview2_com::{
-    ContentLoadingEventHandler, NavigationCompletedEventHandler, NavigationStartingEventHandler,
-    ProcessFailedEventHandler, ServerCertificateErrorDetectedEventHandler, take_pwstr,
+    ContentLoadingEventHandler, HistoryChangedEventHandler, LaunchingExternalUriSchemeEventHandler,
+    NavigationCompletedEventHandler, NavigationStartingEventHandler,
+    NewWindowRequestedEventHandler, ProcessFailedEventHandler,
+    ServerCertificateErrorDetectedEventHandler, take_pwstr,
 };
 use windows_core::{BOOL, Interface as _, PWSTR};
 
@@ -40,6 +46,21 @@ pub enum EngineLoad {
     },
     RendererGone,
     BrowserGone,
+    /// The view's history moved — a load, or a single-page app's own route
+    /// with no load at all — so back and forward may have changed (083 W15).
+    HistoryChanged,
+}
+
+/// A page asking to leave the page it is (083 W6/W7), with WebView2's word on
+/// whether a person did it (`IsUserInitiated`) — the fact that decides it,
+/// and the one wry does not pass on. WebView2 turns Edge's popup blocker off.
+pub enum EngineLeave {
+    /// `target=_blank`, `window.open`: wry has already answered it with no
+    /// window; this only hears where it was going.
+    NewWindow { uri: String, gesture: bool },
+    /// Another app's scheme (`mailto:`, `ms-settings:`), from any frame —
+    /// already cancelled here.
+    OtherApp { uri: String, gesture: bool },
 }
 
 /// The top navigation in flight, and whether the site committed for it.
@@ -171,6 +192,16 @@ pub fn subscribe(
     // SAFETY: as above.
     unsafe { webview.add_NavigationCompleted(&completed, &mut token)? };
 
+    // Most dApps move by `pushState`: no load, and no other event says the
+    // back arrow can act now (083 W15).
+    let s = sink.clone();
+    let history = HistoryChangedEventHandler::create(Box::new(move |_, _| {
+        s(EngineLoad::HistoryChanged);
+        Ok(())
+    }));
+    // SAFETY: as above.
+    unsafe { webview.add_HistoryChanged(&history, &mut token)? };
+
     let s = sink.clone();
     let failed = ProcessFailedEventHandler::create(Box::new(move |_, args| {
         let Some(args) = args else { return Ok(()) };
@@ -220,6 +251,60 @@ pub fn subscribe(
         unsafe { webview14.add_ServerCertificateErrorDetected(&certificate, &mut token)? };
     }
     Ok(())
+}
+
+/// Listen for new windows and other apps on the view wry just built.
+/// `Ok(true)` when the engine's own launches of other apps are stopped here
+/// (runtime 1.0.1823 and later); on an older runtime only the top document's
+/// navigations can be, through wry's navigation handler.
+pub fn subscribe_leaves(
+    webview: &ICoreWebView2,
+    sink: impl Fn(EngineLeave) + 'static,
+) -> windows_core::Result<bool> {
+    let sink: Rc<dyn Fn(EngineLeave)> = Rc::new(sink);
+    let mut token = 0_i64;
+
+    let s = sink.clone();
+    let new_window = NewWindowRequestedEventHandler::create(Box::new(move |_, args| {
+        let Some(args) = args else { return Ok(()) };
+        let (mut uri, mut gesture) = (PWSTR::null(), BOOL::default());
+        // SAFETY: out-params of this event's args, during the event.
+        unsafe {
+            args.Uri(&mut uri)?;
+            args.IsUserInitiated(&mut gesture)?;
+        }
+        s(EngineLeave::NewWindow {
+            uri: take_pwstr(uri),
+            gesture: gesture.as_bool(),
+        });
+        Ok(())
+    }));
+    // SAFETY: COM calls on the view wry just built, on the thread that built it.
+    unsafe { webview.add_NewWindowRequested(&new_window, &mut token)? };
+
+    let Ok(webview18) = webview.cast::<ICoreWebView2_18>() else {
+        return Ok(false);
+    };
+    let external = LaunchingExternalUriSchemeEventHandler::create(Box::new(move |_, args| {
+        let Some(args) = args else { return Ok(()) };
+        let (mut uri, mut gesture) = (PWSTR::null(), BOOL::default());
+        // SAFETY: as above. Cancel FIRST, so a read that fails still launches
+        // nothing: the engine's own launch put Windows' app picker up with
+        // nothing from Vela (083 W7).
+        unsafe {
+            args.SetCancel(true)?;
+            args.Uri(&mut uri)?;
+            args.IsUserInitiated(&mut gesture)?;
+        }
+        sink(EngineLeave::OtherApp {
+            uri: take_pwstr(uri),
+            gesture: gesture.as_bool(),
+        });
+        Ok(())
+    }));
+    // SAFETY: as above.
+    unsafe { webview18.add_LaunchingExternalUriScheme(&external, &mut token)? };
+    Ok(true)
 }
 
 #[cfg(test)]

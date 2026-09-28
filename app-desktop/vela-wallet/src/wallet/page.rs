@@ -944,6 +944,25 @@ impl Identity {
     }
 }
 
+/// 083 W14: the account a connect would hand over — the core's, which is the
+/// active one unless a switch is landing; then named by its address alone, as
+/// iOS names it.
+fn consent_account(asked_for: Option<&str>, active: &Identity) -> Identity {
+    match asked_for {
+        Some(address) if !address.eq_ignore_ascii_case(&active.address) => {
+            let bare = Identity {
+                name: SharedString::default(),
+                address: address.to_owned(),
+            };
+            Identity {
+                name: bare.display(),
+                address: address.to_owned(),
+            }
+        }
+        _ => active.clone(),
+    }
+}
+
 impl WalletPage {
     pub fn new(gallery: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut page = Self::with_section(Section::Wallet, gallery, window, cx);
@@ -12721,8 +12740,16 @@ impl WalletPage {
         });
         #[cfg(target_os = "linux")]
         let nav: Option<explore_components::NavActions> = None;
+        // 083 W15: the arrows are the engine's own history, read again on every
+        // render — a load committing or finishing repaints.
+        #[cfg(not(target_os = "linux"))]
+        let live_history = live_browser.then(crate::webview::history);
+        #[cfg(target_os = "linux")]
+        let live_history: Option<[bool; 2]> = None;
+        let history = nav_history(live_history, self.identity.is_some());
 
-        let toolbar = explore_components::toolbar(theme, &mut self.icons, address, trailing, nav);
+        let toolbar =
+            explore_components::toolbar(theme, &mut self.icons, address, trailing, nav, history);
 
         // An automatic attempt that came due while the page was elsewhere
         // runs now that it is back (never while it is out of sight).
@@ -12789,7 +12816,12 @@ impl WalletPage {
                         }
                     },
                 )
-                .size_full()
+                // 083 W15: the space the chrome leaves, as every other body
+                // takes it. At full height it overflowed the column, and the
+                // strip and toolbar shrank ~3 px to make room.
+                .flex_1()
+                .min_h(px(0.))
+                .w_full()
                 .into_any_element()
             }
             #[cfg(target_os = "linux")]
@@ -13220,6 +13252,37 @@ impl WalletPage {
         cx.notify();
     }
 
+    /// A page's new window, as a new tab on screen (083 W6) — the way the
+    /// Recent and favourite menus open one. A full strip loads it in the tab on
+    /// screen instead, the phones' rule, rather than dropping the click.
+    #[cfg(not(target_os = "linux"))]
+    fn open_in_new_tab(&mut self, url: String, cx: &mut Context<Self>) {
+        let explore = resident::resident::<ExploreSites>(cx);
+        if !explore.read(cx).view().tabs_full {
+            explore.update(cx, |resident, cx| {
+                resident.dispatch(
+                    vela_core::app::explore_sites::Event::TabOpened {
+                        url: Some(url.clone()),
+                        title: None,
+                        now_ms: crate::executor::now_ms(),
+                    },
+                    cx,
+                );
+            });
+        }
+        self.open_typed_url(url, cx);
+    }
+
+    /// Where a page's new window or other-app address goes (083 W6/W7): the
+    /// webview has already decided it may, on a person's gesture.
+    #[cfg(not(target_os = "linux"))]
+    fn browser_leave(&mut self, leave: crate::webview::Leave, cx: &mut Context<Self>) {
+        match leave {
+            crate::webview::Leave::NewTab(url) => self.open_in_new_tab(url, cx),
+            crate::webview::Leave::External(url) => crate::executor::opener::open(&url, cx),
+        }
+    }
+
     /// Point the browser's strings, loads and titles at this page.
     ///
     /// Installed once, and re-installing is harmless — each sink replaces
@@ -13328,6 +13391,20 @@ impl WalletPage {
                 })
                 .detach();
         }));
+        // 083 W6/W7: a person's new window becomes a tab; mailto:/tel: go to
+        // the system. Deferred like the others: this fires from a WebView2
+        // event, or from inside wry's navigation handler.
+        let page = cx.entity().downgrade();
+        let async_cx = cx.to_async();
+        crate::webview::on_leave_to(Box::new(move |leave| {
+            let page = page.clone();
+            async_cx
+                .spawn(async move |cx| {
+                    page.update(cx, |page, cx| page.browser_leave(leave, cx))
+                        .ok();
+                })
+                .detach();
+        }));
     }
 
     /// One string from the page, for the browser machine — which decides
@@ -13400,6 +13477,12 @@ impl WalletPage {
                 DbrEvent::LoadFinished { tab, url }
             }
             crate::webview::Load::Crashed => DbrEvent::RendererGone { tab },
+            // 083 W15: nothing for the core — the arrows are drawn again from
+            // the engine's history.
+            crate::webview::Load::HistoryChanged => {
+                cx.notify();
+                return;
+            }
         };
         let host = self.browser_host(cx);
         host.update(cx, |host, cx| host.dispatch(event, cx));
@@ -14304,6 +14387,92 @@ impl WalletPage {
         column
     }
 
+    /// The account a site sees, as the connection panel and the consent draw
+    /// it: identicon, name, short address. The panel adds its switch.
+    fn account_row(&mut self, theme: &Theme, identity: &Identity) -> Div {
+        div()
+            .flex()
+            .items_center()
+            .gap(px(12.))
+            .child(identicon_avatar(
+                &mut self.identicons,
+                &identity.address,
+                40.,
+            ))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .flex_1()
+                    .child(
+                        div()
+                            .text_size(theme::text_row_title())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.fg_base)
+                            .child(identity.name.clone()),
+                    )
+                    .child(
+                        div()
+                            .font_family("monospace")
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_muted)
+                            .child(identity.display()),
+                    ),
+            )
+    }
+
+    /// A site's network, as the connection panel and the consent draw it:
+    /// label, the chain's logo and name, and a chevron where it can be changed.
+    fn site_chain_row(&mut self, theme: &Theme, chain_id: u32, chevron: bool) -> Div {
+        div()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(self.explore.network.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    // The chain's own logo (owner: "连接时 切换网络，没有网络
+                    // logo呀") — the dot was Ethereum's colour on every chain.
+                    .child(chain_logo_mark(
+                        u64::from(chain_id),
+                        crate::settings::model::lettermark(
+                            &crate::executor::custom_tokens::network_name(chain_id),
+                        ),
+                        crate::settings::model::chain_tint(u64::from(chain_id))
+                            .unwrap_or(0x8A_8F_98),
+                        20.,
+                    ))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.fg_base)
+                            // The chain THIS SITE is on — the one its
+                            // `eth_chainId` answers and a signature from it
+                            // is quoted, routed and submitted on. Not a
+                            // column-wide chain: there is none any more.
+                            .child(SharedString::from(crate::flows::live::chain_name(chain_id))),
+                    )
+                    .when(chevron, |row| {
+                        row.child(icon_img(
+                            &mut self.icons,
+                            Icon::ChevronDown,
+                            false,
+                            theme.fg_muted,
+                            14.,
+                        ))
+                    }),
+            )
+    }
+
     /// The question a site is asking, and the two answers.
     ///
     /// The origin is drawn from the CORE's consent view, which got it from
@@ -14321,6 +14490,11 @@ impl WalletPage {
         // and this panel are asking about the same site.
         let (host, _, letter) = signing_live::dapp_identity(&consent.origin);
         let title = crate::signing::fill(&self.explore.consent_title, &[("host", &host)]);
+        // 083 W14 (owner D4): WHAT the site would get — the account and the
+        // network — as the phones name them; the site alone said neither.
+        let account = consent_account(consent.address.as_deref(), &self.identity());
+        let account_row = self.account_row(theme, &account);
+        let network_row = self.site_chain_row(theme, consent.chain_id, false);
         div()
             .flex()
             .flex_col()
@@ -14344,6 +14518,10 @@ impl WalletPage {
                             .child(SharedString::from(title)),
                     ),
             )
+            .child(row_divider(theme))
+            .child(account_row)
+            .child(row_divider(theme))
+            .child(network_row)
             .child(
                 div()
                     .text_size(theme::text_row_sub())
@@ -14449,56 +14627,13 @@ impl WalletPage {
             .map(|origin| explore_live::icons_of(origin, None))
             .unwrap_or_default();
         let identity = self.identity();
-        let e = &self.explore;
         // The site's own network, which the person can change here — the
         // site hears `chainChanged`, and every other site stays where it is.
-        let network_row = div()
-            .id("site-network")
-            .flex()
-            .items_center()
-            .justify_between()
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_muted)
-                    .child(self.explore.network.clone()),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    // The chain's own logo (owner: "连接时 切换网络，没有网络
-                    // logo呀") — the dot was Ethereum's colour on every chain.
-                    .child(chain_logo_mark(
-                        u64::from(chain_id),
-                        crate::settings::model::lettermark(
-                            &crate::executor::custom_tokens::network_name(chain_id),
-                        ),
-                        crate::settings::model::chain_tint(u64::from(chain_id))
-                            .unwrap_or(0x8A_8F_98),
-                        20.,
-                    ))
-                    .child(
-                        div()
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            // The chain THIS SITE is on — the one its
-                            // `eth_chainId` answers and a signature from it
-                            // is quoted, routed and submitted on. Not a
-                            // column-wide chain: there is none any more.
-                            .child(SharedString::from(crate::flows::live::chain_name(chain_id))),
-                    )
-                    .when(origin.is_some(), |row| {
-                        row.child(icon_img(
-                            &mut self.icons,
-                            Icon::ChevronDown,
-                            false,
-                            theme.fg_muted,
-                            14.,
-                        ))
-                    }),
-            );
+        let network_row = self
+            .site_chain_row(theme, chain_id, origin.is_some())
+            .id("site-network");
+        let account_row = self.account_row(theme, &identity);
+        let e = &self.explore;
         let network_row = match origin.clone() {
             Some(origin) => network_row.cursor_pointer().on_click(cx.listener(
                 move |this, event: &gpui::ClickEvent, _, cx| {
@@ -14551,36 +14686,7 @@ impl WalletPage {
             )
             .child(row_divider(theme))
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(12.))
-                    .child(identicon_avatar(
-                        &mut self.identicons,
-                        &identity.address,
-                        40.,
-                    ))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.))
-                            .flex_1()
-                            .child(
-                                div()
-                                    .text_size(theme::text_row_title())
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .text_color(theme.fg_base)
-                                    .child(identity.name.clone()),
-                            )
-                            .child(
-                                div()
-                                    .font_family("monospace")
-                                    .text_size(theme::text_row_sub())
-                                    .text_color(theme.fg_muted)
-                                    .child(identity.display()),
-                            ),
-                    )
+                account_row
                     // It had no listener (the audit's F9): the header's own
                     // switcher, over the browser — every connected site
                     // follows the account the person picks.
@@ -17906,6 +18012,17 @@ fn signing_clock(chain_id: u32, seen_submitted_ms: Option<f64>) -> crate::signin
     }
 }
 
+/// 083 W15: whether back and forward can act. A live page's come from the
+/// engine; a signed-in window with no page (a new tab) has no history; the
+/// gallery mock keeps the web's drawn `canBack: true, canForward: false`.
+fn nav_history(live: Option<[bool; 2]>, signed_in: bool) -> [bool; 2] {
+    live.unwrap_or(if signed_in {
+        [false, false]
+    } else {
+        [true, false]
+    })
+}
+
 fn page_host(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     rest.split(['/', '?', '#'])
@@ -17991,6 +18108,32 @@ mod tests {
             None,
             "same page"
         );
+    }
+
+    /// 083 W14: the connect names the account the site would get — the active
+    /// one by its name, another (a switch landing) by its address alone.
+    #[test]
+    fn consent_account_names_what_the_site_would_get() {
+        let active = Identity {
+            name: "Main".into(),
+            address: "0x14fB1f0000000000000000000000000000D1eA5c".to_owned(),
+        };
+        let same = consent_account(Some("0x14fb1f0000000000000000000000000000d1ea5c"), &active);
+        assert_eq!(same.name, active.name, "compared ignoring case");
+        assert_eq!(same.address, active.address);
+        assert_eq!(consent_account(None, &active).name, active.name);
+        let other = consent_account(Some("0xA9aE00000000000000000000000000000000002B"), &active);
+        assert_eq!(other.name.as_ref(), "0xA9aE00…00002B");
+        assert_eq!(other.address, "0xA9aE00000000000000000000000000000000002B");
+    }
+
+    /// 083 W15: a new tab has no history to go back to; a live page's arrows
+    /// are the engine's; the gallery keeps its drawing.
+    #[test]
+    fn the_arrows_are_the_engines_history() {
+        assert_eq!(nav_history(None, true), [false, false], "a new tab");
+        assert_eq!(nav_history(None, false), [true, false], "the gallery");
+        assert_eq!(nav_history(Some([false, true]), true), [false, true]);
     }
 
     /// **Linux has three destinations, as the web does** (owner call,
