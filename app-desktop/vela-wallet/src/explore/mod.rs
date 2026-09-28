@@ -10,6 +10,9 @@ pub mod engine;
 pub mod fixtures;
 pub mod live;
 pub mod load_watch;
+// Linux has no in-app browser: its tabs change, and no page ever lands.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+pub mod tab_history;
 
 use gpui::SharedString;
 

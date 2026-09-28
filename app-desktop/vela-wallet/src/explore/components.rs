@@ -407,8 +407,8 @@ pub fn account_chip(
 /// Back, forward and reload, in that order. `None` leaves them drawn and
 /// inert, which is what the mocks are — a live browser passes three listeners
 /// and the same three buttons start working. `history` is whether back and
-/// forward can act (083 W15): an arrow that cannot is drawn disabled and
-/// answers nothing.
+/// forward can act (083 W15): an arrow that cannot is drawn disabled, and its
+/// click asks the engine again.
 pub type NavActions = [crate::flows::panels::Click; 3];
 
 pub fn toolbar(
@@ -689,13 +689,20 @@ fn nav_controls(
         .enumerate()
         .map(|(i, (icon, enabled))| {
             let control = toolbar_control_with(theme, icons, icon, theme.fg_base, false, enabled);
-            match actions.next().filter(|_| enabled) {
-                Some(action) => crate::flows::panels::clickable(
-                    ElementId::from(("browser-nav", i)),
-                    Some(action),
-                    control,
-                )
-                .into_any_element(),
+            let id = ElementId::from(("browser-nav", i));
+            match actions.next() {
+                Some(action) if enabled => {
+                    crate::flows::panels::clickable(id, Some(action), control).into_any_element()
+                }
+                // 083 W15: a dimmed arrow keeps its action and asks again at
+                // the click. On macOS the drawing can be a moment stale after
+                // a page's own `pushState`, and before 083 Back always worked
+                // there. No pointer, since it looks like it cannot act.
+                Some(action) => div()
+                    .id(id)
+                    .child(control)
+                    .on_click(move |event, window, cx| action(event, window, cx))
+                    .into_any_element(),
                 None => control.into_any_element(),
             }
         })

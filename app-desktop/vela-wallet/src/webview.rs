@@ -88,6 +88,39 @@ const META_JS: &str = r#"
 })();
 "#;
 
+/// The entries the top document adds or moves through with no load (spec 083
+/// W15, macOS). WKWebView reports none of them, and the back arrow counts the
+/// tab's own entries (`explore::tab_history`).
+///
+/// `popstate` fires for a traversal inside the document and for a fragment
+/// link. The list's length tells them apart: a traversal keeps it, a new
+/// entry grows it. The page's own `pushState` runs first and is never held
+/// up: a report that fails is dropped. Windows does not get this script,
+/// because the engine forgets other tabs' entries there instead.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+const HISTORY_JS: &str = r#"
+(() => {
+  if (window.top !== window) return;
+  const post = (vela) => {
+    try { window.ipc.postMessage(JSON.stringify({ vela })); } catch (_) {}
+  };
+  let length = history.length;
+  // A page back from the back-forward cache kept the length it left with.
+  window.addEventListener('pageshow', () => { length = history.length; });
+  const push = History.prototype.pushState;
+  History.prototype.pushState = function pushState() {
+    const result = push.apply(this, arguments);
+    length = history.length;
+    post('pushed');
+    return result;
+  };
+  window.addEventListener('popstate', () => {
+    post(history.length === length ? 'popped' : 'pushed');
+    length = history.length;
+  });
+})();
+"#;
+
 /// One string from a page, with what the platform says about who sent it.
 pub struct PageMessage {
     /// The URL of the document that posted.
@@ -138,6 +171,19 @@ pub enum Load {
     /// is no load at all (spec 083 W15, Windows): only the arrows change.
     #[cfg_attr(not(windows), allow(dead_code))]
     HistoryChanged,
+    /// The top document added a history entry of its own with no load (a
+    /// `pushState`, a fragment link). This is the page's own report, through
+    /// [`HISTORY_JS`] (spec 083 W15, macOS).
+    Pushed,
+    /// The top document moved through its own entries with no load (spec
+    /// 083 W15, macOS).
+    Popped,
+    /// The engine answered [`forget_history_behind`] for the tab change
+    /// numbered here (083 W15, Windows). From now on its history is the
+    /// arrows': the tab's own when it forgot, and as before 083 when it
+    /// refused.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    HistoryFloor(u64),
 }
 
 type LoadSink = Box<dyn Fn(Load)>;
@@ -181,13 +227,40 @@ fn scheme_of(url: &str) -> Scheme {
 }
 
 /// A new-window request: only a person's gesture opens anything (083 W6).
-/// Windows only for now: wry's macOS hook carries no gesture.
+/// A web address is a tab, whichever frame asked, as in any browser; another
+/// app only from the page's own document (see [`other_app_leave`]). Windows
+/// only for now: wry's macOS hook carries no gesture.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn new_window_leave(url: &str, gesture: bool) -> Option<Leave> {
+fn new_window_leave(url: &str, gesture: bool, from_page: bool) -> Option<Leave> {
     match (gesture, scheme_of(url)) {
         (true, Scheme::Web) => Some(Leave::NewTab(url.to_owned())),
-        (true, Scheme::External) => Some(Leave::External(url.to_owned())),
+        (true, Scheme::External) => other_app_leave(url, gesture, from_page),
         _ => None,
+    }
+}
+
+/// WebView2 about to hand an address to another app, already cancelled (083
+/// W7): only `mailto:`/`tel:`, only on a person's tap, only from the page's
+/// own document — a tap inside a cross-origin frame (an ad) is not the page's
+/// — and only as [`crate::executor::opener::command_value`] escapes it, since
+/// Vela now launches what the engine would have escaped.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn other_app_leave(url: &str, gesture: bool, from_page: bool) -> Option<Leave> {
+    (gesture && from_page && scheme_of(url) == Scheme::External)
+        .then(|| crate::executor::opener::command_value(url))
+        .flatten()
+        .map(Leave::External)
+}
+
+/// Whether the engine's word on who asked (`from`: a frame's address, or an
+/// origin) names the top document's own origin (083 W7). Nothing said, or no
+/// web origin on either side, is not the page.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn asked_by_page(from: Option<&str>, top: &str) -> bool {
+    let origin_of = vela_core::app::dapp_permissions::origin_of;
+    match (from.and_then(origin_of), origin_of(top)) {
+        (Some(from), Some(top)) => from.eq_ignore_ascii_case(&top),
+        _ => false,
     }
 }
 
@@ -220,7 +293,8 @@ thread_local! {
     static COMMITTED_URL: RefCell<Option<String>> = const { RefCell::new(None) };
     static LEAVES: RefCell<Option<LeaveSink>> = const { RefCell::new(None) };
     /// Windows' LaunchingExternalUriScheme hook is in: mailto:/tel: pass on to
-    /// it, where the engine says whether a person tapped (083 W7).
+    /// it, where the engine says whether a person tapped and in which frame
+    /// (083 W7). Never set on macOS.
     static EXTERNAL_GUARD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
@@ -229,6 +303,7 @@ pub fn on_leave_to(sink: LeaveSink) {
     LEAVES.with(|slot| *slot.borrow_mut() = Some(sink));
 }
 
+#[cfg(windows)]
 fn leave_to_page(leave: Leave) {
     LEAVES.with(|slot| {
         if let Some(sink) = slot.borrow().as_ref() {
@@ -240,15 +315,16 @@ fn leave_to_page(leave: Leave) {
 /// wry's navigation handler (083): the top document on Windows, every frame
 /// on macOS. Before it, anything went — on Windows the engine handed any
 /// app's scheme to the system with nothing from Vela.
+///
+/// Nothing is launched from here: this handler never knows whether a person
+/// tapped, and a timer or an ad frame setting `location = 'tel:…'` would open
+/// FaceTime or Mail every time it ran. `mailto:`/`tel:` go on only where
+/// Windows' launch event decides them; elsewhere (macOS, a runtime without
+/// that event) they are refused, as they were before 083.
 fn allow_navigation(url: String) -> bool {
     match scheme_of(&url) {
         Scheme::Web | Scheme::Local => true,
-        // Windows' launch event decides it, where a person's tap is known.
-        Scheme::External if EXTERNAL_GUARD.get() => true,
-        Scheme::External => {
-            leave_to_page(Leave::External(url));
-            false
-        }
+        Scheme::External => EXTERNAL_GUARD.get(),
         Scheme::Refused => false,
     }
 }
@@ -484,17 +560,49 @@ pub fn navigate(url: &str) {
 }
 
 /// Back and forward, through the engine's own history (083 W15) — the pair
-/// wry has had since 0.56, and the one [`history`] reads.
-pub fn back() {
+/// wry has had since 0.56, and the one [`history`] reads. Asked at the click,
+/// not from the arrow's last drawing: macOS has no event for a `pushState`,
+/// so an arrow drawn a moment ago can be stale. `true` when the engine had
+/// somewhere to go and was sent there.
+pub fn back() -> bool {
+    let mut went = false;
     with_view(|view| {
-        let _ = view.go_back();
+        went = view.can_go_back().unwrap_or(false) && view.go_back().is_ok();
     });
+    went
 }
 
-pub fn forward() {
+pub fn forward() -> bool {
+    let mut went = false;
     with_view(|view| {
-        let _ = view.go_forward();
+        went = view.can_go_forward().unwrap_or(false) && view.go_forward().is_ok();
     });
+    went
+}
+
+/// Forget every entry of the engine's history but the page on screen, which
+/// is the tab's first page, numbered `floor` (083 W15). One view serves every
+/// tab, so the other entries are other tabs' pages. On Windows the engine is
+/// asked, and [`Load::HistoryFloor`] brings its answer. A refusal is only
+/// logged: the arrows then follow the engine as before 083. macOS has no such
+/// call, and the page counts the tab's entries instead.
+pub fn forget_history_behind(floor: u64) {
+    #[cfg(windows)]
+    with_view(|view| {
+        use wry::WebViewExtWindows as _;
+        let asked = crate::webview2_events::forget_history_behind(&view.webview(), move |done| {
+            if !done {
+                eprintln!("[vela-wallet] browser: WebView2 kept the history behind a tab");
+            }
+            report(Load::HistoryFloor(floor));
+        });
+        if let Err(error) = asked {
+            eprintln!("[vela-wallet] browser: WebView2 history: {error}");
+            report(Load::HistoryFloor(floor));
+        }
+    });
+    #[cfg(not(windows))]
+    let _ = floor;
 }
 
 /// Whether the engine can go back / forward (083 W15): the arrows' state,
@@ -511,7 +619,9 @@ pub fn history() -> [bool; 2] {
     })
 }
 
-pub fn reload() {
+/// Load the page on screen again. `true` when a load of it is under way, so
+/// its landing is the same page and not a new entry (083 W15).
+pub fn reload() -> bool {
     // Spec 083: after WebView2's browser process died this view can never load
     // again; dropping it lets the next frame build a new one at the page's
     // address.
@@ -519,7 +629,7 @@ pub fn reload() {
     if ENGINE_GONE.replace(false) {
         let dead = BROWSER.with(|slot| slot.borrow_mut().take());
         drop(dead);
-        return;
+        return true;
     }
     let mut asked = false;
     with_view(|view| {
@@ -528,6 +638,7 @@ pub fn reload() {
     if asked && let Some(url) = committed_url().or_else(current_url) {
         report(Load::Requested(url));
     }
+    asked
 }
 
 /// The address of the document that last committed, whole.
@@ -745,7 +856,10 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
     #[cfg(target_os = "macos")]
     let builder = {
         use wry::WebViewBuilderExtDarwin as _;
-        builder.with_on_web_content_process_terminate_handler(|| report(Load::Crashed))
+        builder
+            .with_on_web_content_process_terminate_handler(|| report(Load::Crashed))
+            // 083 W15: WKWebView has no word on a page's own entries.
+            .with_initialization_script(HISTORY_JS)
     };
     match builder.build_as_child(window) {
         Ok(view) => {
@@ -829,22 +943,38 @@ fn listen_to_webview2(view: &wry::WebView) -> windows_core::Result<()> {
 /// `mailto:` to Windows' app picker.
 #[cfg(windows)]
 fn listen_for_leaves(view: &wry::WebView) -> windows_core::Result<()> {
-    use crate::webview2_events::EngineLeave;
     use wry::WebViewExtWindows as _;
-    let guarded = crate::webview2_events::subscribe_leaves(&view.webview(), |leave| {
-        let leave = match leave {
-            EngineLeave::NewWindow { uri, gesture } => new_window_leave(&uri, gesture),
-            // Already cancelled: only a person's mailto:/tel: goes on.
-            EngineLeave::OtherApp { uri, gesture } => {
-                (gesture && scheme_of(&uri) == Scheme::External).then_some(Leave::External(uri))
-            }
-        };
-        if let Some(leave) = leave {
-            leave_to_page(leave);
-        }
-    });
+    let webview = view.webview();
+    // Other apps first: if it fails, nothing may reach one, and the guard
+    // stays off so wry's navigation handler refuses them all.
+    let guarded = crate::webview2_events::subscribe_other_apps(&webview, engine_leave);
     EXTERNAL_GUARD.set(guarded.as_ref().is_ok_and(|guarded| *guarded));
-    guarded.map(drop)
+    let new_windows = crate::webview2_events::subscribe_new_windows(&webview, engine_leave);
+    guarded.map(drop).and(new_windows)
+}
+
+/// One of WebView2's leaves, through the one rule (083 W6/W7).
+#[cfg(windows)]
+fn engine_leave(leave: crate::webview2_events::EngineLeave) {
+    use crate::webview2_events::EngineLeave;
+    let leave = match leave {
+        EngineLeave::NewWindow {
+            uri,
+            gesture,
+            from,
+            top,
+        } => new_window_leave(&uri, gesture, asked_by_page(from.as_deref(), &top)),
+        // Already cancelled: only a person's mailto:/tel:, from the page, goes on.
+        EngineLeave::OtherApp {
+            uri,
+            gesture,
+            from,
+            top,
+        } => other_app_leave(&uri, gesture, asked_by_page(from.as_deref(), &top)),
+    };
+    if let Some(leave) = leave {
+        leave_to_page(leave);
+    }
 }
 
 /// [`hide`], unless the view is borrowed right now (an engine event arriving
@@ -897,11 +1027,30 @@ fn report(load: Load) {
 /// the page installs it in the same frame that builds this webview.
 fn on_ipc(request: wry::http::Request<String>) {
     let body = request.body();
+    let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
+    let vela = parsed
+        .as_ref()
+        .and_then(|parsed| parsed.get("vela"))
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+    // Spec 083 W15: the top document added or moved through an entry of its
+    // own. Only the arrows hear it, and only the top document's counts: on
+    // macOS any frame can reach this channel.
+    let history = match vela.as_deref() {
+        Some("pushed") => Some(Load::Pushed),
+        Some("popped") => Some(Load::Popped),
+        _ => None,
+    };
+    if let Some(history) = history {
+        let sender = sender_url(&request.uri().to_string(), current_url);
+        if top_frame_sent(&sender, current_url) {
+            report(history);
+        }
+        return;
+    }
     // The meta report is the one message that is not the provider's, and it
     // is display text: it never reaches the core.
-    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(body)
-        && parsed.get("vela").and_then(|v| v.as_str()) == Some("meta")
-    {
+    if let Some(parsed) = parsed.filter(|_| vela.as_deref() == Some("meta")) {
         let text = |key: &str| {
             parsed
                 .get(key)
@@ -1073,6 +1222,7 @@ mod tests {
     /// phone leave, and nothing else is opened by anything.
     #[test]
     fn only_pages_load_and_only_mail_and_phone_leave() {
+        EXTERNAL_GUARD.set(false);
         for url in [
             "https://a.example/",
             "http://127.0.0.1:8080/",
@@ -1101,22 +1251,102 @@ mod tests {
         }
     }
 
+    /// 083 W7: the navigation handler never knows whether a person tapped,
+    /// so it never launches anything. `mailto:`/`tel:` go on to Windows'
+    /// launch event where it is in; everywhere else they are refused.
+    #[test]
+    fn the_navigation_handler_launches_nothing() {
+        let heard = std::rc::Rc::new(std::cell::Cell::new(0));
+        let count = heard.clone();
+        on_leave_to(Box::new(move |_| count.set(count.get() + 1)));
+        for url in ["mailto:a@b.example", "tel:+15551234", "TEL:1\" --x"] {
+            EXTERNAL_GUARD.set(false);
+            assert!(
+                !allow_navigation(url.to_owned()),
+                "{url}: macOS, an old runtime"
+            );
+            EXTERNAL_GUARD.set(true);
+            assert!(
+                allow_navigation(url.to_owned()),
+                "{url}: on to WebView2's launch event"
+            );
+        }
+        EXTERNAL_GUARD.set(true);
+        assert!(
+            !allow_navigation("ms-settings:".to_owned()),
+            "the guard is for mail and phone only"
+        );
+        EXTERNAL_GUARD.set(false);
+        assert_eq!(heard.get(), 0, "no sink hears anything from this handler");
+        LEAVES.with(|slot| slot.borrow_mut().take());
+    }
+
     /// 083 W6: a new window opens a tab only on a person's gesture.
     #[test]
     fn a_new_window_is_a_tab_only_on_a_gesture() {
         let tx = "https://etherscan.io/tx/0x1";
         assert_eq!(
-            new_window_leave(tx, true),
+            new_window_leave(tx, true, true),
             Some(Leave::NewTab(tx.to_owned()))
         );
-        assert_eq!(new_window_leave(tx, false), None, "a timer's popup");
         assert_eq!(
-            new_window_leave("mailto:a@b.example", true),
+            new_window_leave(tx, true, false),
+            Some(Leave::NewTab(tx.to_owned())),
+            "a frame's link opens a tab, as in any browser"
+        );
+        assert_eq!(new_window_leave(tx, false, true), None, "a timer's popup");
+        assert_eq!(
+            new_window_leave("mailto:a@b.example", true, true),
             Some(Leave::External("mailto:a@b.example".to_owned()))
         );
-        assert_eq!(new_window_leave("mailto:a@b.example", false), None);
-        assert_eq!(new_window_leave("about:blank", true), None);
-        assert_eq!(new_window_leave("metamask://x", true), None);
+        assert_eq!(new_window_leave("mailto:a@b.example", false, true), None);
+        assert_eq!(
+            new_window_leave("mailto:a@b.example", true, false),
+            None,
+            "another app only from the page itself"
+        );
+        assert_eq!(new_window_leave("about:blank", true, true), None);
+        assert_eq!(new_window_leave("metamask://x", true, true), None);
+    }
+
+    /// 083 W7: what reaches another app — a person's tap, in the page's own
+    /// document, on mail or phone, escaped as the engine would have.
+    #[test]
+    fn another_app_opens_only_on_a_tap_in_the_page_itself() {
+        let page = "https://dapp.example/swap";
+        let mail = "mailto:a@b.example";
+        let from_page = |from: &str| asked_by_page(Some(from), page);
+        assert!(from_page("https://dapp.example"), "WebView2's origin form");
+        assert!(from_page("HTTPS://DAPP.EXAMPLE/other"), "a frame's address");
+        assert!(!from_page("https://ads.example"), "a cross-origin frame");
+        assert!(
+            !from_page(""),
+            "the host's own navigation, which Vela never makes"
+        );
+        assert!(!asked_by_page(None, page), "a runtime that does not say");
+        assert!(!asked_by_page(Some("https://dapp.example"), "about:blank"));
+
+        assert_eq!(
+            other_app_leave(mail, true, true),
+            Some(Leave::External(mail.to_owned()))
+        );
+        assert_eq!(other_app_leave(mail, false, true), None, "no tap");
+        assert_eq!(other_app_leave(mail, true, false), None, "an ad frame");
+        for refused in [
+            "ms-settings:",
+            "wc:x@2",
+            "metamask://x",
+            "https://a.example/",
+        ] {
+            assert_eq!(other_app_leave(refused, true, true), None, "{refused}");
+        }
+        assert_eq!(
+            other_app_leave("tel:1\" --x", true, true),
+            Some(Leave::External("tel:1%22%20--x".to_owned())),
+            "never the page's quote on a command line"
+        );
+        let long = format!("mailto:a@b.example?body={}", "x".repeat(2048));
+        assert_eq!(other_app_leave(&long, true, true), None);
     }
 
     /// The injected provider is the core's, for THIS host: it posts through
@@ -1130,5 +1360,65 @@ mod tests {
         // The meta report is plumbing, not a second provider.
         assert!(!META_JS.contains("ethereum"));
         assert!(META_JS.contains("window.top !== window"));
+        assert!(
+            !META_JS.contains("pushState"),
+            "083: history is its own script"
+        );
+    }
+
+    /// 083 W15: a page's report of its own entries reaches the arrows, never
+    /// the core, and on macOS only from the top document's origin.
+    #[test]
+    fn a_pages_own_history_reaches_only_the_arrows() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        let heard = Rc::new(RefCell::new(Vec::new()));
+        let loads = heard.clone();
+        on_load_to(Box::new(move |load| match load {
+            Load::Pushed => loads.borrow_mut().push("pushed"),
+            Load::Popped => loads.borrow_mut().push("popped"),
+            _ => {}
+        }));
+        let messages = Rc::new(std::cell::Cell::new(0));
+        let count = messages.clone();
+        on_message_to(Box::new(move |_| count.set(count.get() + 1)));
+        report(Load::Started("https://dapp.example/app".to_owned()));
+        let ipc = |uri: &str, body: &str| {
+            on_ipc(
+                wry::http::Request::builder()
+                    .uri(uri)
+                    .body(body.to_owned())
+                    .expect("a request"),
+            );
+        };
+        ipc("https://dapp.example/app", r#"{"vela":"pushed"}"#);
+        ipc("https://dapp.example/app#faq", r#"{"vela":"popped"}"#);
+        ipc("https://ads.example/frame", r#"{"vela":"pushed"}"#);
+        let expected: &[&str] = if cfg!(target_os = "macos") {
+            &["pushed", "popped"]
+        } else {
+            &["pushed", "popped", "pushed"]
+        };
+        assert_eq!(heard.borrow().as_slice(), expected);
+        assert_eq!(messages.get(), 0, "never a provider message");
+        LOADS.with(|slot| slot.borrow_mut().take());
+        MESSAGES.with(|slot| slot.borrow_mut().take());
+    }
+
+    /// 083 W15 (macOS): the page's own entries are reported from the top
+    /// document only, after the page's `pushState` has run, and a report that
+    /// fails never breaks the page's call.
+    #[test]
+    fn the_history_script_reports_the_pages_own_entries() {
+        assert!(HISTORY_JS.contains("window.top !== window"));
+        assert!(!HISTORY_JS.contains("ethereum"));
+        let push = HISTORY_JS
+            .find("push.apply(this, arguments)")
+            .unwrap_or(usize::MAX);
+        let report = HISTORY_JS.find("post('pushed')").unwrap_or(0);
+        assert!(push < report, "the page's push first");
+        assert!(HISTORY_JS.contains("try {") && HISTORY_JS.contains("catch (_)"));
+        assert!(HISTORY_JS.contains("'popstate'") && HISTORY_JS.contains("'popped'"));
+        assert!(HISTORY_JS.contains("'pageshow'"));
     }
 }

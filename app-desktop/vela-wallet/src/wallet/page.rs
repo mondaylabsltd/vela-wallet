@@ -655,6 +655,10 @@ pub struct WalletPage {
     /// Spec 079 US3: the shell's own account of the page's load — wry reports
     /// no failures, so the watchdog, the probe and the retries live here.
     load_watch: crate::explore::load_watch::LoadWatch,
+    /// Spec 083 W15: where the tab on screen begins in the one engine
+    /// history, so Back never goes into another tab's pages.
+    #[cfg(not(target_os = "linux"))]
+    tab_history: crate::explore::tab_history::TabHistory,
     /// The browser machine (spec 070): every page's requests, the grants,
     /// each site's chain, the signing line. Born the first time anything needs
     /// it — a page's first message, or Settings listing the connected sites —
@@ -944,21 +948,25 @@ impl Identity {
     }
 }
 
-/// 083 W14: the account a connect would hand over — the core's, which is the
-/// active one unless a switch is landing; then named by its address alone, as
-/// iOS names it.
-fn consent_account(asked_for: Option<&str>, active: &Identity) -> Identity {
+/// 083 W14: the account a connect would hand over. It is the core's, which is
+/// the active one unless a switch is landing. Then it is named as the
+/// switcher names it, from the wallet's own list. An address the list does
+/// not have gets no name: the row's address line already says it, and the
+/// short address twice said nothing more.
+fn consent_account(
+    asked_for: Option<&str>,
+    active: &Identity,
+    accounts: &[vela_core::app::session::SessionAccountRow],
+) -> Identity {
     match asked_for {
-        Some(address) if !address.eq_ignore_ascii_case(&active.address) => {
-            let bare = Identity {
-                name: SharedString::default(),
-                address: address.to_owned(),
-            };
-            Identity {
-                name: bare.display(),
-                address: address.to_owned(),
-            }
-        }
+        Some(address) if !address.eq_ignore_ascii_case(&active.address) => Identity {
+            name: accounts
+                .iter()
+                .find(|row| row.account.address.eq_ignore_ascii_case(address))
+                .map(|row| SharedString::from(row.account.name.clone()))
+                .unwrap_or_default(),
+            address: address.to_owned(),
+        },
         _ => active.clone(),
     }
 }
@@ -1191,6 +1199,8 @@ impl WalletPage {
             explore_form_focus: cx.focus_handle(),
             browser_title: None,
             load_watch: crate::explore::load_watch::LoadWatch::default(),
+            #[cfg(not(target_os = "linux"))]
+            tab_history: crate::explore::tab_history::TabHistory::default(),
             cap_focus: cx.focus_handle(),
             leg_cap_focus: std::collections::HashMap::new(),
             browser_host: None,
@@ -12238,12 +12248,31 @@ impl WalletPage {
         cx.notify();
     }
 
+    /// The page about to be asked for is another tab's first page (083 W15).
+    /// The engine's entries up to it belong to the tab left behind, and Back
+    /// must not go there. Called before the navigation.
+    fn browser_tab_changes(&mut self) {
+        #[cfg(not(target_os = "linux"))]
+        self.tab_history.tab_changed();
+    }
+
+    /// Load the page on screen again (083 W15). What lands is the same page,
+    /// not one more for Back to go through.
+    #[cfg(not(target_os = "linux"))]
+    fn browser_reload(&mut self) {
+        if crate::webview::reload() {
+            self.tab_history.reloading();
+        }
+    }
+
     /// Show the tab somebody picked.
     ///
     /// One webview, so a switch is a navigation. A tab with no url is the
     /// start page — the wallet's own screen, not a blank document.
     fn select_browser_tab(&mut self, id: &str, url: Option<&str>, cx: &mut Context<Self>) {
-        resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+        let explore = resident::resident::<ExploreSites>(cx);
+        let same_tab = explore.read(cx).view().selected_tab.as_deref() == Some(id);
+        explore.update(cx, |resident, cx| {
             resident.dispatch(
                 vela_core::app::explore_sites::Event::TabSelected { id: id.to_owned() },
                 cx,
@@ -12251,6 +12280,10 @@ impl WalletPage {
         });
         match url {
             Some(url) => {
+                // The tab on screen picked again keeps its own history.
+                if !same_tab || !self.browsing {
+                    self.browser_tab_changes();
+                }
                 self.browsing = true;
                 self.browser_home = url.to_owned();
                 #[cfg(not(target_os = "linux"))]
@@ -12287,6 +12320,11 @@ impl WalletPage {
             // The neighbour's page replaces this one, and its hello is what
             // retires the closed page's document in the core.
             Some(url) => {
+                // Closing a tab behind the one on screen leaves that one's
+                // history as it was.
+                if was_shown || !self.browsing {
+                    self.browser_tab_changes();
+                }
                 self.browsing = true;
                 self.browser_home = url.clone();
                 #[cfg(not(target_os = "linux"))]
@@ -12714,15 +12752,25 @@ impl WalletPage {
         };
 
         // Drawn and inert in the mock; three real listeners in a live session.
+        // 083 W15: an arrow asks again at the click, whatever it looked like
+        // when drawn. macOS reports a page's own entries only through the
+        // page, so a dimmed arrow can be a moment stale. It never goes below
+        // the tab's first page.
         #[cfg(not(target_os = "linux"))]
         let nav: Option<explore_components::NavActions> = live_browser.then(|| {
             [
-                Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
-                    crate::webview::back();
-                }) as panels::Click,
-                Box::new(|_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| {
-                    crate::webview::forward();
-                }),
+                Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                    if this.tab_history.may_go_back() && crate::webview::back() {
+                        this.tab_history.stepped(true);
+                    }
+                    cx.notify();
+                })) as panels::Click,
+                Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                    if this.tab_history.may_go_forward() && crate::webview::forward() {
+                        this.tab_history.stepped(false);
+                    }
+                    cx.notify();
+                })),
                 // Over the failure panel, reload is its Retry: the address
                 // that failed, not the page before it.
                 Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
@@ -12733,17 +12781,18 @@ impl WalletPage {
                     } else if this.load_watch.failure.is_some() {
                         this.load_retry(cx);
                     } else {
-                        crate::webview::reload();
+                        this.browser_reload();
                     }
                 })),
             ]
         });
         #[cfg(target_os = "linux")]
         let nav: Option<explore_components::NavActions> = None;
-        // 083 W15: the arrows are the engine's own history, read again on every
-        // render — a load committing or finishing repaints.
+        // 083 W15: the arrows are the engine's own history within the tab on
+        // screen, read again on every render. A load, a page's own entry and
+        // the engine's answer all repaint.
         #[cfg(not(target_os = "linux"))]
-        let live_history = live_browser.then(crate::webview::history);
+        let live_history = live_browser.then(|| self.tab_history.arrows(crate::webview::history()));
         #[cfg(target_os = "linux")]
         let live_history: Option<[bool; 2]> = None;
         let history = nav_history(live_history, self.identity.is_some());
@@ -13025,7 +13074,8 @@ impl WalletPage {
         )
         .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
             if !this.browser_home.is_empty() {
-                crate::executor::opener::open(&this.browser_home, cx);
+                // A page's address, often: escaped like any other (083).
+                crate::executor::opener::open_from_page(&this.browser_home, cx);
             }
         }));
         let runtime_missing = failure == crate::explore::engine::EngineFailure::RuntimeMissing;
@@ -13113,9 +13163,11 @@ impl WalletPage {
                     Some(Icon::RefreshCw),
                     self.explore.reload.clone(),
                 )
-                .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                     #[cfg(not(target_os = "linux"))]
-                    crate::webview::reload();
+                    this.browser_reload();
+                    #[cfg(target_os = "linux")]
+                    let _ = this;
                     cx.notify();
                 })),
             )
@@ -13245,6 +13297,10 @@ impl WalletPage {
     /// Open what the address bar resolved to, in the page on screen — as a
     /// favourite or a history row does.
     fn open_typed_url(&mut self, url: String, cx: &mut Context<Self>) {
+        // From the start page (a new tab's), this is the tab's first page.
+        if !self.browsing {
+            self.browser_tab_changes();
+        }
         self.browsing = true;
         #[cfg(not(target_os = "linux"))]
         crate::webview::navigate(&url);
@@ -13269,6 +13325,10 @@ impl WalletPage {
                     cx,
                 );
             });
+            // 083 W15: Back in the new tab must not return to the page that
+            // opened it. In a full strip the page stays in its tab, and
+            // Back goes to the opener there, as in any browser.
+            self.browser_tab_changes();
         }
         self.open_typed_url(url, cx);
     }
@@ -13279,7 +13339,10 @@ impl WalletPage {
     fn browser_leave(&mut self, leave: crate::webview::Leave, cx: &mut Context<Self>) {
         match leave {
             crate::webview::Leave::NewTab(url) => self.open_in_new_tab(url, cx),
-            crate::webview::Leave::External(url) => crate::executor::opener::open(&url, cx),
+            // A page's address, handed to another program's command line.
+            crate::webview::Leave::External(url) => {
+                crate::executor::opener::open_from_page(&url, cx);
+            }
         }
     }
 
@@ -13435,6 +13498,7 @@ impl WalletPage {
                 return;
             }
             crate::webview::Load::Started(url) => {
+                self.browser_landed();
                 self.load_watch.committed(&url);
                 // 083 FR-006: an open bar nobody has typed in follows the page
                 // (a link clicked while the bar was open) — never a stale
@@ -13460,7 +13524,9 @@ impl WalletPage {
             crate::webview::Load::ErrorPage(url) => {
                 // Spec 083: not the site arriving — but the document before it
                 // is gone, so the core hears a load begin and the failure's
-                // LoadFinished retires it.
+                // LoadFinished retires it. It is an entry in the engine's
+                // history all the same (W15).
+                self.browser_landed();
                 self.load_watch.error_page();
                 cx.notify();
                 DbrEvent::NavigationStarted { tab, url }
@@ -13477,15 +13543,40 @@ impl WalletPage {
                 DbrEvent::LoadFinished { tab, url }
             }
             crate::webview::Load::Crashed => DbrEvent::RendererGone { tab },
-            // 083 W15: nothing for the core — the arrows are drawn again from
-            // the engine's history.
+            // 083 W15: nothing for the core. The arrows are drawn again from
+            // the engine's history, within the tab on screen.
             crate::webview::Load::HistoryChanged => {
+                cx.notify();
+                return;
+            }
+            crate::webview::Load::Pushed => {
+                self.tab_history.pushed();
+                cx.notify();
+                return;
+            }
+            crate::webview::Load::Popped => {
+                self.tab_history.popped();
+                cx.notify();
+                return;
+            }
+            crate::webview::Load::HistoryFloor(floor) => {
+                self.tab_history.engine_answered(floor);
                 cx.notify();
                 return;
             }
         };
         let host = self.browser_host(cx);
         host.update(cx, |host, cx| host.dispatch(event, cx));
+    }
+
+    /// A document of the tab on screen arrived (083 W15). When it is the
+    /// tab's first page, the engine is asked to forget the other tabs'
+    /// entries around it.
+    #[cfg(not(target_os = "linux"))]
+    fn browser_landed(&mut self) {
+        if let Some(floor) = self.tab_history.landed() {
+            crate::webview::forget_history_behind(floor);
+        }
     }
 
     /// A load the wallet asked for (spec 079 US3): progress from now, and a
@@ -14211,6 +14302,11 @@ impl WalletPage {
                             .map(|(_, url)| url.clone())
                             .unwrap_or_default();
                         cx.listener(move |this, _, _, cx| {
+                            // The start page's site is its tab's first page
+                            // (083 W15).
+                            if !this.browsing {
+                                this.browser_tab_changes();
+                            }
                             this.browsing = true;
                             this.browser_home = url.clone();
                             #[cfg(not(target_os = "linux"))]
@@ -14359,6 +14455,9 @@ impl WalletPage {
                         // whatever page was loaded last.
                         let url = site.open_url();
                         cx.listener(move |this, _, _, cx| {
+                            if !this.browsing {
+                                this.browser_tab_changes();
+                            }
                             this.browser_home = url.clone();
                             #[cfg(not(target_os = "linux"))]
                             crate::webview::navigate(&url);
@@ -14405,13 +14504,16 @@ impl WalletPage {
                     .flex_col()
                     .gap(px(2.))
                     .flex_1()
-                    .child(
-                        div()
-                            .text_size(theme::text_row_title())
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(theme.fg_base)
-                            .child(identity.name.clone()),
-                    )
+                    // An address with no name is its address line alone (083).
+                    .when(!identity.name.is_empty(), |column| {
+                        column.child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(identity.name.clone()),
+                        )
+                    })
                     .child(
                         div()
                             .font_family("monospace")
@@ -14492,7 +14594,8 @@ impl WalletPage {
         let title = crate::signing::fill(&self.explore.consent_title, &[("host", &host)]);
         // 083 W14 (owner D4): WHAT the site would get — the account and the
         // network — as the phones name them; the site alone said neither.
-        let account = consent_account(consent.address.as_deref(), &self.identity());
+        let accounts = session::view(cx).accounts;
+        let account = consent_account(consent.address.as_deref(), &self.identity(), &accounts);
         let account_row = self.account_row(theme, &account);
         let network_row = self.site_chain_row(theme, consent.chain_id, false);
         div()
@@ -17143,7 +17246,7 @@ impl WalletPage {
                     Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                         this.menu = None;
                         #[cfg(not(target_os = "linux"))]
-                        crate::webview::reload();
+                        this.browser_reload();
                         cx.notify();
                     })) as contacts_components::MenuAction),
                     copy(url.clone()),
@@ -17157,7 +17260,9 @@ impl WalletPage {
                     url.clone().map(|url| {
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             this.menu = None;
-                            cx.open_url(&url);
+                            // The page's own address, handed to another
+                            // program's command line (083).
+                            crate::executor::opener::open_from_page(&url, cx);
                             cx.notify();
                         })) as contacts_components::MenuAction
                     }),
@@ -17379,6 +17484,7 @@ impl WalletPage {
                                 cx,
                             );
                         });
+                        this.browser_tab_changes();
                         this.browsing = true;
                         this.browser_home = url.clone();
                         #[cfg(not(target_os = "linux"))]
@@ -17450,6 +17556,7 @@ impl WalletPage {
                                 cx,
                             );
                         });
+                        this.browser_tab_changes();
                         this.browsing = true;
                         this.browser_home = url.clone();
                         #[cfg(not(target_os = "linux"))]
@@ -18110,30 +18217,74 @@ mod tests {
         );
     }
 
-    /// 083 W14: the connect names the account the site would get — the active
-    /// one by its name, another (a switch landing) by its address alone.
+    /// 083 W14: the connect names the account the site would get. The active
+    /// one is named by its name. Another (a switch landing) is named as the
+    /// switcher names it, and an address the wallet has no name for is its
+    /// address line alone, never the short address twice.
     #[test]
     fn consent_account_names_what_the_site_would_get() {
         let active = Identity {
             name: "Main".into(),
             address: "0x14fB1f0000000000000000000000000000D1eA5c".to_owned(),
         };
-        let same = consent_account(Some("0x14fb1f0000000000000000000000000000d1ea5c"), &active);
+        let row =
+            |index: usize, name: &str, address: &str| vela_core::app::session::SessionAccountRow {
+                index,
+                account: vela_core::app::Account {
+                    id: format!("cred{index}"),
+                    name: name.to_owned(),
+                    address: address.to_owned(),
+                    public_key_hex: "04aa".to_owned(),
+                    created_at_iso: String::new(),
+                    keys: Vec::new(),
+                    signed_in_with: None,
+                },
+            };
+        let accounts = [
+            row(0, "Main", &active.address),
+            row(1, "Savings", "0xA9aE00000000000000000000000000000000002B"),
+        ];
+        let same = consent_account(
+            Some("0x14fb1f0000000000000000000000000000d1ea5c"),
+            &active,
+            &accounts,
+        );
         assert_eq!(same.name, active.name, "compared ignoring case");
         assert_eq!(same.address, active.address);
-        assert_eq!(consent_account(None, &active).name, active.name);
-        let other = consent_account(Some("0xA9aE00000000000000000000000000000000002B"), &active);
-        assert_eq!(other.name.as_ref(), "0xA9aE00…00002B");
-        assert_eq!(other.address, "0xA9aE00000000000000000000000000000000002B");
+        assert_eq!(consent_account(None, &active, &accounts).name, active.name);
+        let other = consent_account(
+            Some("0xa9ae00000000000000000000000000000000002b"),
+            &active,
+            &accounts,
+        );
+        assert_eq!(other.name.as_ref(), "Savings", "the switcher's name");
+        assert_eq!(other.address, "0xa9ae00000000000000000000000000000000002b");
+        let unknown = consent_account(
+            Some("0x5E1f000000000000000000000000000000000077"),
+            &active,
+            &accounts,
+        );
+        assert!(unknown.name.is_empty(), "the address line says it once");
+        assert_eq!(unknown.display().as_ref(), "0x5E1f00…000077");
     }
 
-    /// 083 W15: a new tab has no history to go back to; a live page's arrows
-    /// are the engine's; the gallery keeps its drawing.
+    /// 083 W15: a new tab has no history to go back to. A live page's arrows
+    /// are the engine's, within the tab on screen. The gallery keeps its
+    /// drawing.
     #[test]
     fn the_arrows_are_the_engines_history() {
         assert_eq!(nav_history(None, true), [false, false], "a new tab");
         assert_eq!(nav_history(None, false), [true, false], "the gallery");
         assert_eq!(nav_history(Some([false, true]), true), [false, true]);
+        // A tab a page opened: the engine can go back, to the opener's page,
+        // and the arrow the page draws cannot.
+        let mut tab = crate::explore::tab_history::TabHistory::default();
+        tab.tab_changed();
+        assert_eq!(tab.landed(), Some(1));
+        assert_eq!(
+            nav_history(Some(tab.arrows([true, false])), true),
+            [false, false]
+        );
     }
 
     /// **Linux has three destinations, as the web does** (owner call,

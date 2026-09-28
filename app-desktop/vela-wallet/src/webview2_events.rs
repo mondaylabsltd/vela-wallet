@@ -19,10 +19,11 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_PROCESS_FAILED_KIND, COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED,
     COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
     COREWEBVIEW2_SERVER_CERTIFICATE_ERROR_ACTION_CANCEL, COREWEBVIEW2_WEB_ERROR_STATUS,
-    ICoreWebView2, ICoreWebView2_14, ICoreWebView2_18,
+    ICoreWebView2, ICoreWebView2_14, ICoreWebView2_18, ICoreWebView2NewWindowRequestedEventArgs3,
 };
 use webview2_com::{
-    ContentLoadingEventHandler, HistoryChangedEventHandler, LaunchingExternalUriSchemeEventHandler,
+    CallDevToolsProtocolMethodCompletedHandler, ContentLoadingEventHandler,
+    HistoryChangedEventHandler, LaunchingExternalUriSchemeEventHandler,
     NavigationCompletedEventHandler, NavigationStartingEventHandler,
     NewWindowRequestedEventHandler, ProcessFailedEventHandler,
     ServerCertificateErrorDetectedEventHandler, take_pwstr,
@@ -54,13 +55,25 @@ pub enum EngineLoad {
 /// A page asking to leave the page it is (083 W6/W7), with WebView2's word on
 /// whether a person did it (`IsUserInitiated`) — the fact that decides it,
 /// and the one wry does not pass on. WebView2 turns Edge's popup blocker off.
+/// `top` is the top document's address; `from` is the engine's word on who
+/// asked (a frame's address or an origin), where the runtime gives it.
 pub enum EngineLeave {
     /// `target=_blank`, `window.open`: wry has already answered it with no
     /// window; this only hears where it was going.
-    NewWindow { uri: String, gesture: bool },
+    NewWindow {
+        uri: String,
+        gesture: bool,
+        from: Option<String>,
+        top: String,
+    },
     /// Another app's scheme (`mailto:`, `ms-settings:`), from any frame —
     /// already cancelled here.
-    OtherApp { uri: String, gesture: bool },
+    OtherApp {
+        uri: String,
+        gesture: bool,
+        from: Option<String>,
+        top: String,
+    },
 }
 
 /// The top navigation in flight, and whether the site committed for it.
@@ -192,16 +205,6 @@ pub fn subscribe(
     // SAFETY: as above.
     unsafe { webview.add_NavigationCompleted(&completed, &mut token)? };
 
-    // Most dApps move by `pushState`: no load, and no other event says the
-    // back arrow can act now (083 W15).
-    let s = sink.clone();
-    let history = HistoryChangedEventHandler::create(Box::new(move |_, _| {
-        s(EngineLoad::HistoryChanged);
-        Ok(())
-    }));
-    // SAFETY: as above.
-    unsafe { webview.add_HistoryChanged(&history, &mut token)? };
-
     let s = sink.clone();
     let failed = ProcessFailedEventHandler::create(Box::new(move |_, args| {
         let Some(args) = args else { return Ok(()) };
@@ -224,7 +227,7 @@ pub fn subscribe(
     // Runtime 1.0.1245 and later. On an older one the certificate error still
     // arrives as `Failed` (status 1–5) and Vela's panel covers the engine's.
     if let Ok(webview14) = webview.cast::<ICoreWebView2_14>() {
-        let (n, s) = (navigations, sink);
+        let (n, s) = (navigations, sink.clone());
         let certificate =
             ServerCertificateErrorDetectedEventHandler::create(Box::new(move |_, args| {
                 let Some(args) = args else { return Ok(()) };
@@ -250,22 +253,67 @@ pub fn subscribe(
         // SAFETY: as above.
         unsafe { webview14.add_ServerCertificateErrorDetected(&certificate, &mut token)? };
     }
+
+    // Most dApps move by `pushState`: no load, and no other event says the
+    // back arrow can act now (083 W15). Last: it only repaints, and a failure
+    // here must not cost the crash and certificate guards above.
+    let history = HistoryChangedEventHandler::create(Box::new(move |_, _| {
+        sink(EngineLoad::HistoryChanged);
+        Ok(())
+    }));
+    // SAFETY: as above.
+    unsafe { webview.add_HistoryChanged(&history, &mut token)? };
     Ok(())
 }
 
-/// Listen for new windows and other apps on the view wry just built.
-/// `Ok(true)` when the engine's own launches of other apps are stopped here
-/// (runtime 1.0.1823 and later); on an older runtime only the top document's
-/// navigations can be, through wry's navigation handler.
-pub fn subscribe_leaves(
+/// Stop the engine's own launches of other apps, on the view wry just built
+/// (083 W7). `Ok(true)` when they are stopped here (runtime 1.0.1823 and
+/// later); on an older runtime nothing is, and wry's navigation handler
+/// refuses every `mailto:`/`tel:` instead. Subscribed before new windows: of
+/// the two, it is the one that keeps something from happening.
+pub fn subscribe_other_apps(
     webview: &ICoreWebView2,
     sink: impl Fn(EngineLeave) + 'static,
 ) -> windows_core::Result<bool> {
-    let sink: Rc<dyn Fn(EngineLeave)> = Rc::new(sink);
+    let Ok(webview18) = webview.cast::<ICoreWebView2_18>() else {
+        return Ok(false);
+    };
+    let external =
+        LaunchingExternalUriSchemeEventHandler::create(Box::new(move |webview, args| {
+            let Some(args) = args else { return Ok(()) };
+            let (mut uri, mut origin, mut gesture) =
+                (PWSTR::null(), PWSTR::null(), BOOL::default());
+            // SAFETY: out-params of this event's args, during the event. Cancel
+            // FIRST, so a read that fails still launches nothing: the engine's own
+            // launch put Windows' app picker up with nothing from Vela (083 W7).
+            unsafe {
+                args.SetCancel(true)?;
+                args.Uri(&mut uri)?;
+                args.InitiatingOrigin(&mut origin)?;
+                args.IsUserInitiated(&mut gesture)?;
+            }
+            sink(EngineLeave::OtherApp {
+                uri: take_pwstr(uri),
+                gesture: gesture.as_bool(),
+                // Empty when the host navigated there itself, which Vela never does.
+                from: Some(take_pwstr(origin)),
+                top: webview.as_ref().map(source).unwrap_or_default(),
+            });
+            Ok(())
+        }));
     let mut token = 0_i64;
+    // SAFETY: COM calls on the view wry just built, on the thread that built it.
+    unsafe { webview18.add_LaunchingExternalUriScheme(&external, &mut token)? };
+    Ok(true)
+}
 
-    let s = sink.clone();
-    let new_window = NewWindowRequestedEventHandler::create(Box::new(move |_, args| {
+/// Hear where a page's new windows were going (083 W6), on the view wry just
+/// built.
+pub fn subscribe_new_windows(
+    webview: &ICoreWebView2,
+    sink: impl Fn(EngineLeave) + 'static,
+) -> windows_core::Result<()> {
+    let new_window = NewWindowRequestedEventHandler::create(Box::new(move |webview, args| {
         let Some(args) = args else { return Ok(()) };
         let (mut uri, mut gesture) = (PWSTR::null(), BOOL::default());
         // SAFETY: out-params of this event's args, during the event.
@@ -273,38 +321,65 @@ pub fn subscribe_leaves(
             args.Uri(&mut uri)?;
             args.IsUserInitiated(&mut gesture)?;
         }
-        s(EngineLeave::NewWindow {
+        // The frame that asked (runtime 1.0.2210 and later): only the page's
+        // own may hand an address to another app (083 W7).
+        let from = args
+            .cast::<ICoreWebView2NewWindowRequestedEventArgs3>()
+            .ok()
+            // SAFETY: as above.
+            .and_then(|args| unsafe { args.OriginalSourceFrameInfo() }.ok())
+            .and_then(|frame| {
+                let mut address = PWSTR::null();
+                // SAFETY: an out-param of the frame info the engine just gave.
+                unsafe { frame.Source(&mut address) }
+                    .ok()
+                    .map(|()| take_pwstr(address))
+            });
+        sink(EngineLeave::NewWindow {
             uri: take_pwstr(uri),
             gesture: gesture.as_bool(),
+            from,
+            top: webview.as_ref().map(source).unwrap_or_default(),
         });
         Ok(())
     }));
+    let mut token = 0_i64;
     // SAFETY: COM calls on the view wry just built, on the thread that built it.
     unsafe { webview.add_NewWindowRequested(&new_window, &mut token)? };
+    Ok(())
+}
 
-    let Ok(webview18) = webview.cast::<ICoreWebView2_18>() else {
-        return Ok(false);
-    };
-    let external = LaunchingExternalUriSchemeEventHandler::create(Box::new(move |_, args| {
-        let Some(args) = args else { return Ok(()) };
-        let (mut uri, mut gesture) = (PWSTR::null(), BOOL::default());
-        // SAFETY: as above. Cancel FIRST, so a read that fails still launches
-        // nothing: the engine's own launch put Windows' app picker up with
-        // nothing from Vela (083 W7).
-        unsafe {
-            args.SetCancel(true)?;
-            args.Uri(&mut uri)?;
-            args.IsUserInitiated(&mut gesture)?;
-        }
-        sink(EngineLeave::OtherApp {
-            uri: take_pwstr(uri),
-            gesture: gesture.as_bool(),
-        });
-        Ok(())
-    }));
-    // SAFETY: as above.
-    unsafe { webview18.add_LaunchingExternalUriScheme(&external, &mut token)? };
-    Ok(true)
+/// Forget every entry of the view's history but the one on screen (083 W15):
+/// one view serves every tab, so the entries behind a tab's first page were
+/// other tabs' pages, and Back went there. DevTools'
+/// `Page.resetNavigationHistory`: wry has no call for it. `done` hears whether
+/// the engine did it.
+pub fn forget_history_behind(
+    webview: &ICoreWebView2,
+    done: impl FnOnce(bool) + 'static,
+) -> windows_core::Result<()> {
+    let handler =
+        CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |result, reply| {
+            done(devtools_succeeded(result.is_ok(), &reply));
+            Ok(())
+        }));
+    // SAFETY: a COM call on the view, on its UI thread; the handler runs later,
+    // on the same thread.
+    unsafe {
+        webview.CallDevToolsProtocolMethod(
+            windows_core::w!("Page.resetNavigationHistory"),
+            windows_core::w!("{}"),
+            &handler,
+        )
+    }
+}
+
+/// A DevTools method's answer: the call went through, and the protocol did
+/// not answer with its error object (`{"code":…,"message":…}`).
+fn devtools_succeeded(call_ok: bool, reply: &str) -> bool {
+    call_ok
+        && serde_json::from_str::<serde_json::Value>(reply)
+            .is_ok_and(|reply| reply.is_object() && reply.get("code").is_none())
 }
 
 #[cfg(test)]
@@ -366,5 +441,19 @@ mod tests {
         );
         assert_eq!(navigations.certificate("https://cdn.example/x.js"), None);
         assert_eq!(Navigations::default().certificate(SITE), None);
+    }
+
+    /// 083 W15: the history counts as forgotten only when the protocol says
+    /// it was. A runtime that has no such method answers with its error
+    /// object, and the log says the engine kept it.
+    #[test]
+    fn a_history_reset_counts_only_when_the_engine_did_it() {
+        assert!(devtools_succeeded(true, "{}"));
+        assert!(!devtools_succeeded(
+            true,
+            r#"{"code":-32601,"message":"'Page.resetNavigationHistory' wasn't found"}"#
+        ));
+        assert!(!devtools_succeeded(false, "{}"));
+        assert!(!devtools_succeeded(true, ""));
     }
 }
