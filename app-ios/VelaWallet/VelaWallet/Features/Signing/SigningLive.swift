@@ -45,6 +45,9 @@ enum SigningLive {
         /// Spec 079: the chain's usual inclusion time (the core's table,
         /// `networkTypicalInclusionS`), for the receipt's ring.
         var typicalS: Int?
+        /// Spec 079: this account signs on the Trusted Signer's page — its
+        /// slide is the one consent.
+        var trustedSignerRoute = false
     }
 
     /// The fee list's id for the chain's own coin (the web's `'native'`).
@@ -249,6 +252,8 @@ enum SigningLive {
         // Spec 079: the ✕, and — once approved — the send receipt in place of
         // the form. A refused request never gets that far.
         model.closeLabel = loc.t("onboarding.common.close")
+        model.confirmAsButton = !refused && context.trustedSignerRoute
+        model.confirmButtonLabel = s(loc, "openSigner")
         model.receipt = refused ? nil : receipt(sign: sign, blocks: blocks, context: context)
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.

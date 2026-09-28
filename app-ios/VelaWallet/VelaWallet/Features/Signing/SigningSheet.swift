@@ -111,11 +111,20 @@ struct SigningSheet: View {
         // all. It is not disabled — it is absent, because the wallet
         // never offered it.
         if let confirm = model.confirm {
-            SlideToConfirmView(
-                hint: confirm.hint, action: confirm.action,
-                enabled: confirm.enabled, onConfirm: onConfirm
-            )
-            .padding(.bottom, Tokens.Space.s16)
+            if model.confirmAsButton {
+                // Spec 079: one slide per signature — the page's own. The
+                // button sends the same approve the slide would.
+                VelaButton(title: model.confirmButtonLabel, kind: .primary,
+                           enabled: confirm.enabled, action: onConfirm)
+                    .padding(.bottom, Tokens.Space.s16)
+                    .accessibilityIdentifier("signing.openSigner")
+            } else {
+                SlideToConfirmView(
+                    hint: confirm.hint, action: confirm.action,
+                    enabled: confirm.enabled, onConfirm: onConfirm
+                )
+                .padding(.bottom, Tokens.Space.s16)
+            }
         }
     }
 

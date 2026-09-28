@@ -2604,7 +2604,8 @@ struct RootView: View {
             // entry for its clock and outcome, the chain's usual time.
             explorerBase: ExplorerLinks.base(chainId: chain, store: shelf),
             track: tracker.view?.entry(userOpHash: live?.shownSign.pendingOpHash),
-            typicalS: SigningController.typicalInclusionS(chainId: chain)
+            typicalS: SigningController.typicalInclusionS(chainId: chain),
+            trustedSignerRoute: live?.trustedSignerRoute ?? false
         )
     }
 

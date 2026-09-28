@@ -60,6 +60,9 @@ final class SignExecutor {
         /// Who asked, as the Trusted Signer's page is told it (spec 071): the
         /// origin the browser observed, empty for the wallet's own request.
         var origin: () -> String = { "" }
+        /// Spec 079: whether `origin` was read from the in-app browser (a
+        /// page), never the wallet's own request.
+        var originSeenByBrowser: () -> Bool = { false }
         /// The Trusted Signer ended without a signature. The core hears a
         /// cancelled ceremony — the request stays open and may be signed
         /// another way — and the sheet says which sentence applies.
@@ -226,7 +229,10 @@ final class SignExecutor {
                 quotedFee: quoted,
                 // The FINAL params — a guard's rewrite included — are what the
                 // page decodes, as they are what is signed.
-                asked: UserOpSpine.Asked(method: method, paramsJson: paramsJson, origin: ports.origin()),
+                asked: UserOpSpine.Asked(
+                    method: method, paramsJson: paramsJson, origin: ports.origin(),
+                    seenByBrowser: ports.originSeenByBrowser()
+                ),
                 signingStarted: { [ports] in ports.signingStarted() }
             )
             ports.opSubmitted(operation["id"] as? String ?? "", hash)
@@ -272,7 +278,10 @@ final class SignExecutor {
                 chainId: chainId,
                 account: address,
                 originalHash: original,
-                asked: UserOpSpine.Asked(method: method, paramsJson: paramsJson, origin: ports.origin()),
+                asked: UserOpSpine.Asked(
+                    method: method, paramsJson: paramsJson, origin: ports.origin(),
+                    seenByBrowser: ports.originSeenByBrowser()
+                ),
                 signingStarted: { [ports] in ports.signingStarted() }
             )
             return ["type": "succeeded", "result": signature]

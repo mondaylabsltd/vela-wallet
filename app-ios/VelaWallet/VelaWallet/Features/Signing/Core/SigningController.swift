@@ -136,6 +136,13 @@ final class SigningController {
 
     private let wallet: (address: String, credentialId: String)
     private let relay: RelayClient
+    private let spine: UserOpSpine
+
+    /// Spec 079 (owner: one slide, not two): this account signs on the
+    /// Trusted Signer's page, whose own slide is the consent — so the sheet
+    /// offers a button that goes there instead of a second slide. Read once
+    /// per request, from the route the spine will sign over.
+    private(set) var trustedSignerRoute = false
     private var ports: Ports
 
     /// Record ids already on disk, and the handoff waiting for them. The
@@ -196,6 +203,7 @@ final class SigningController {
             relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool)
         )
 
+        self.spine = spine
         let signExecutor = SignExecutor(spine: spine, relay: relay, store: store)
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)
         let guardExecutor = GuardExecutor(pool: pool)
@@ -249,6 +257,12 @@ final class SigningController {
                 else { return "" }
                 return request.origin
             },
+            // A page in this app's browser — never the wallet's own requests
+            // (the key backup): the browser saw that origin (spec 079).
+            originSeenByBrowser: { [weak self] in
+                guard let request = self?.request else { return false }
+                return request.transportId != SigningLive.walletTransport
+            },
             trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice }
         )
     }
@@ -258,6 +272,12 @@ final class SigningController {
     func open(_ incoming: Incoming) {
         request = incoming
         let nowMs = Date().timeIntervalSince1970 * 1000
+        trustedSignerRoute = false
+        Task { [weak self, spine, wallet] in
+            let route = await spine.signsOnTrustedSigner(account: wallet.address)
+            guard let self, self.request == incoming else { return }
+            self.trustedSignerRoute = route
+        }
         // Each request starts at the stored defaults: a pick is one-shot.
         fees.resetSpeed()
         fees.configureSpeed(preferred: preferredTier(), number: numberPreset())
