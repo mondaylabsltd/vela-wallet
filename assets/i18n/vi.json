@@ -1137,7 +1137,7 @@
    "statusConfirmed": "Đã xác nhận",
    "statusSubmitted": "Đã gửi",
    "statusFailed": "Thất bại",
-   "failedHint": "Giao dịch bị hoàn ngược on-chain — tiền của bạn chưa được gửi đi. Có thể bạn vẫn bị tính một khoản phí mạng. Mở explorer bên dưới để xem lý do, hoặc quay lại và thử lại.",
+   "failedHint": "Giao dịch bị hoàn ngược on-chain — tiền của bạn chưa được gửi đi. Có thể bạn vẫn bị tính một khoản phí mạng.",
    "userOpHash": "Hash UserOp"
   },
   "detail": {
@@ -1405,6 +1405,7 @@
    "selfCallBlockedSafeTx": "Yêu cầu này muốn khóa của bạn phê duyệt một giao dịch Safe để thực thi sau. Vela từ chối — chữ ký như vậy có thể được dùng khi bạn không có mặt. Không có gì được ký.",
    "stillConfirming": "Chưa lên chuỗi. Vela vẫn đang theo dõi — đừng gửi lại.",
    "maybeSent": "Có thể đã được gửi. Vela vẫn đang theo dõi — đừng gửi lại.",
+   "refused": "Mạng đã từ chối — chưa có gì được gửi đi.",
    "unknownOutcome": "Sau 24 giờ vẫn chưa xác nhận.",
    "openSigner": "Xác nhận ở trang ký",
    "signerDown": "Không mở được trang ký. Hãy kiểm tra kết nối."

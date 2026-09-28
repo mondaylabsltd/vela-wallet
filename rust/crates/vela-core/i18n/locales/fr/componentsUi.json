@@ -240,6 +240,7 @@
       "selfCallBlockedSafeTx": "Cette demande veut que votre clé autorise une transaction Safe à exécuter plus tard. Vela la refuse : une telle signature peut servir sans vous. Rien n’a été signé.",
       "stillConfirming": "Pas encore sur la chaîne. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
       "maybeSent": "Elle a peut-être été envoyée. Vela continue de vérifier — ne l’envoyez pas à nouveau.",
+      "refused": "Le réseau l’a refusée — rien n’a été envoyé.",
       "unknownOutcome": "Toujours non confirmée après 24 heures.",
       "openSigner": "Confirmer sur la page de signature",
       "signerDown": "Impossible d’ouvrir la page de signature. Vérifiez votre connexion."

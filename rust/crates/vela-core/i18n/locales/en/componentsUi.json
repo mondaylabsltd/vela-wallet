@@ -282,6 +282,7 @@
       "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed.",
       "stillConfirming": "Not on-chain yet. Vela keeps checking — don't send it again.",
       "maybeSent": "It may have been sent. Vela keeps checking — don't send it again.",
+      "refused": "The network refused it — nothing was sent.",
       "unknownOutcome": "Still unconfirmed after 24 hours.",
       "openSigner": "Continue to signing page",
       "signerDown": "Couldn't open the signing page. Check your connection."

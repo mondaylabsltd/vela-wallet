@@ -1137,7 +1137,7 @@
    "statusConfirmed": "Onaylandı",
    "statusSubmitted": "Gönderildi",
    "statusFailed": "Başarısız",
-   "failedHint": "Transfer zincir üzerinde geri alındı — fonlarınız gönderilmedi. Yine de bir ağ ücreti alınmış olabilir. Nedenini görmek için aşağıdaki blok gezginini açın ya da geri dönüp tekrar deneyin.",
+   "failedHint": "Transfer zincir üzerinde geri alındı — fonlarınız gönderilmedi. Yine de bir ağ ücreti alınmış olabilir.",
    "userOpHash": "UserOp Hash'i"
   },
   "detail": {
@@ -1405,6 +1405,7 @@
    "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı.",
    "stillConfirming": "Henüz zincire yazılmadı. Vela kontrol ediyor — tekrar göndermeyin.",
    "maybeSent": "Gönderilmiş olabilir. Vela kontrol ediyor — tekrar göndermeyin.",
+   "refused": "Ağ reddetti — hiçbir şey gönderilmedi.",
    "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
    "openSigner": "İmza sayfasında onayla",
    "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin."

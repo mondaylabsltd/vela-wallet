@@ -1137,7 +1137,7 @@
    "statusConfirmed": "Bestätigt",
    "statusSubmitted": "Übermittelt",
    "statusFailed": "Fehlgeschlagen",
-   "failedHint": "Die Überweisung ist on-chain fehlgeschlagen — Ihr Geld wurde nicht gesendet. Eine Netzwerkgebühr kann dennoch angefallen sein. Öffnen Sie unten den Explorer, um den Grund zu sehen, oder gehen Sie zurück und versuchen Sie es erneut.",
+   "failedHint": "Die Überweisung ist on-chain fehlgeschlagen — Ihr Geld wurde nicht gesendet. Eine Netzwerkgebühr kann dennoch angefallen sein.",
    "userOpHash": "UserOp-Hash"
   },
   "detail": {
@@ -1405,6 +1405,7 @@
    "selfCallBlockedSafeTx": "Diese Anfrage will, dass dein Schlüssel eine Safe-Transaktion für eine spätere Ausführung freigibt. Vela lehnt ab: So eine Signatur lässt sich auch ohne dich verwenden. Es wurde nichts signiert.",
    "stillConfirming": "Noch nicht in der Chain. Vela prüft weiter – bitte nicht erneut senden.",
    "maybeSent": "Möglicherweise schon gesendet. Vela prüft weiter – bitte nicht erneut senden.",
+   "refused": "Das Netzwerk hat sie abgelehnt – es wurde nichts gesendet.",
    "unknownOutcome": "Nach 24 Stunden noch unbestätigt.",
    "openSigner": "Auf der Signaturseite bestätigen",
    "signerDown": "Die Signaturseite ließ sich nicht öffnen. Prüfe deine Verbindung."

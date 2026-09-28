@@ -458,8 +458,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   rules forbid. `componentsUi.signing.simUnavailableWarning` is reworded
 //   shorter ("couldn’t check", FR-012). Net −21 bytes of ja + en, so SC-005
 //   holds without raising its cap. Same branches: 1782 + 3 − 1 = 1784.
-if (PATHS.length !== 1784) fail(`expected 1784 paths (1695 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1695) fail(`expected 1695 leaf paths, got ${leafSet.size}`);
+// 1785 (082 round 2, 2026-09-29): + `componentsUi.signing.refused` — a
+//   transaction the relay refused says so, and that nothing was sent, with no
+//   "try again" (RJ3; G36: a refused op was answered ok and the sheet said
+//   失败 · 请重试). Paid for by trimming `componentsTx.receipt.failedHint` to
+//   its first two sentences: the explorer link sits right under it, and "go
+//   back and try again" is wrong after a revert (RJ6). The zh / zh-TW
+//   `send.txBackgroundHint` gain their comma (0 B of ja + en). Net ≈ −58 B of
+//   ja + en, SC-005 unraised. Same branches: 1784 + 1 = 1785.
+if (PATHS.length !== 1785) fail(`expected 1785 paths (1696 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1696) fail(`expected 1696 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
