@@ -233,7 +233,7 @@ final class SendExecutor {
             return CoreJSON.string(["type": "closed"])
 
         default:
-            print("[vela-wallet] send: unhandled operation \(operation["type"] ?? "?")")
+            VelaLog.failure(.sign, kind: "unhandled_operation", "send \(operation["type"] ?? "?")")
             return Self.neutralAnswer(operation)
         }
     }

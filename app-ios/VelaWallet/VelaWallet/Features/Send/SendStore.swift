@@ -248,27 +248,15 @@ final class SendStore {
     func dismissTreasurySheet() { dispatch(["type": "dismiss_treasury_sheet"]) }
     func retryAfterError() { dispatch(["type": "retry_after_error"]) }
 
-    /// The TRACKER's verdict, back to the send machine (spec 056).
-    ///
-    /// The receipt screen and the tracker are two machines watching one
-    /// operation, and only the tracker polls. Without this the receipt sat on
-    /// "submitted" while the notification said "confirmed" — two answers about
-    /// the same money, on one phone.
-    func receiptConfirmed(userOpHash: String, txHash: String) {
-        dispatch([
-            "type": "receipt_update",
-            "user_op_hash": userOpHash,
-            "outcome": ["type": "confirmed", "tx_hash": txHash],
-        ])
-    }
-
-    func receiptFailed(userOpHash: String, rejected: Bool) {
-        dispatch([
-            "type": "receipt_update",
-            "user_op_hash": userOpHash,
-            "outcome": ["type": "failed", "rejected": rejected, "not_sent": false],
-        ])
-    }
+    // MARK: - The TRACKER's verdict, back to the send machine (spec 056)
+    //
+    // The receipt screen and the tracker are two machines watching one
+    // operation, and only the tracker polls. Without this the receipt sat on
+    // "submitted" while the notification said "confirmed" — two answers about
+    // the same money, on one phone. Since 082 the mapping from the tracker's
+    // entry to the receipt's verdict is the core's alone (`trackerChanged`);
+    // the two hand-built verdicts this file kept — one of them stamping every
+    // failure "sent" — are gone with it.
 
     /// The last receipt verdict handed over, by op — so one verdict reaches
     /// the machine once however often the tracker's view is rebuilt.
