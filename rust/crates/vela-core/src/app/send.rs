@@ -4853,6 +4853,13 @@ fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOut
         SendReceiptOutcome::Confirmed { tx_hash } => {
             model.tx_hash = Some(tx_hash);
         }
+        // `NotSent` judges an op the relay never showed it holds: for one it
+        // accepted (or has since acknowledged) it can only be stale — the
+        // write-ahead hands the op to the tracker before its POST (RJ1), and
+        // a slow POST can outlast the grace. The tracker revives the entry
+        // on the admitted hand-off; the receipt waits for that verdict
+        // (082 round-2 review).
+        SendReceiptOutcome::Failed { not_sent: true, .. } if !model.receipt_maybe_sent => {}
         SendReceiptOutcome::Failed { rejected, not_sent } => {
             // A definitive failure stamps the receipt — it never turns the
             // submitted payment back into an error state (invariant ⑤).

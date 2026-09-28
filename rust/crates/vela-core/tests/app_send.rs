@@ -5347,7 +5347,10 @@ fn signed_and_cleared(sut: &mut Sut) -> Vec<SendTxRecord> {
         ]
     );
     assert!(sut
-        .resolve_matching(|op| matches!(op, Op::TrackSubmitted { .. }), Res::TrackHandedOff)
+        .resolve_matching(
+            |op| matches!(op, Op::TrackSubmitted { .. }),
+            Res::TrackHandedOff
+        )
         .is_empty());
     assert!(sut
         .resolve_matching(|op| matches!(op, Op::ClearToPost { .. }), Res::PostCleared)
@@ -5371,9 +5374,16 @@ fn a_split_send_is_written_before_it_is_cleared_to_post() {
     assert_eq!(records[0].to, RECIPIENT);
     assert_eq!(records[1].to, RECIPIENT_B);
     let view = sut.view();
-    assert_ne!(view.stage, SendStage::Receipt, "the receipt waits for the verdict");
+    assert_ne!(
+        view.stage,
+        SendStage::Receipt,
+        "the receipt waits for the verdict"
+    );
     assert_eq!(view.tx_status, SendTxStatus::Submitting);
-    assert!(sut.outstanding().iter().any(is_submit_op), "still submitting");
+    assert!(
+        sut.outstanding().iter().any(is_submit_op),
+        "still submitting"
+    );
 }
 
 /// RJ1: accepted — the records are marked admitted (no second write), the
@@ -5389,7 +5399,10 @@ fn accepted_marks_the_written_records_admitted() {
         }
         result
     });
-    assert!(!ops.iter().any(is_persist_records), "no second record: {ops:?}");
+    assert!(
+        !ops.iter().any(is_persist_records),
+        "no second record: {ops:?}"
+    );
     assert!(ops.contains(&Op::MarkAdmitted {
         record_ids: split_ids(LOCAL_HASH)
     }));
@@ -5563,10 +5576,64 @@ fn the_round_2_send_wire() {
         r#"{"type":"track_submitted","user_op_hash":"0x1","record_ids":[],"chain_id":1}"#,
     )
     .ok();
-    assert!(matches!(old, Some(Op::TrackSubmitted { admitted: false, .. })));
+    assert!(matches!(
+        old,
+        Some(Op::TrackSubmitted {
+            admitted: false,
+            ..
+        })
+    ));
     let signed: Option<Event> = serde_json::from_str(
         r#"{"type":"op_signed","user_op_hash":"0x1","submit_block":null,"now_ms":1}"#,
     )
     .ok();
     assert!(matches!(signed, Some(Event::OpSigned { .. })));
+}
+
+// ===========================================================================
+// Spec 082 round 2 — adversarial review of T189
+// ===========================================================================
+
+/// The tracker's `NotSent` judges an op the relay never showed it holds. The
+/// write-ahead hands the op over before the POST, so a slow POST can let the
+/// tracker reach it before the relay's Accepted — and a shell may forward
+/// that stale entry the moment the receipt names the hash. Stamped, the
+/// receipt of an ACCEPTED payment read "not sent" for good (the stamp is
+/// sticky): the words that make a person pay again. A may-have-been-sent
+/// send still reads "not sent" on the verdict (RA4).
+#[test]
+fn a_not_sent_verdict_never_stamps_an_accepted_send() {
+    let not_sent = || Event::ReceiptUpdate {
+        user_op_hash: LOCAL_HASH.to_owned(),
+        outcome: SendReceiptOutcome::Failed {
+            rejected: false,
+            not_sent: true,
+        },
+    };
+    let mut sut = split_submitting();
+    signed_and_cleared(&mut sut);
+    sut.resolve_matching(is_op(is_submit_op), submitted(LOCAL_HASH));
+    sut.dispatch(not_sent());
+    assert_eq!(
+        sut.view().receipt.expect("receipt").status,
+        SendReceiptStatus::Submitted,
+        "an accepted payment never reads 'not sent'"
+    );
+
+    let mut maybe = split_submitting();
+    signed_and_cleared(&mut maybe);
+    maybe.resolve_matching(
+        is_op(is_submit_op),
+        Res::Submitted {
+            user_op_hash: LOCAL_HASH.to_owned(),
+            now_ms: 1_754_000_000_500.0,
+            maybe_sent: true,
+            submit_block: Some(SIGNED_BLOCK),
+        },
+    );
+    maybe.dispatch(not_sent());
+    assert_eq!(
+        maybe.view().receipt.expect("receipt").status,
+        SendReceiptStatus::NotSent
+    );
 }
