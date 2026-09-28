@@ -6858,9 +6858,214 @@ public func FfiConverterTypeAbiValue_lower(_ value: AbiValue) -> RustBuffer {
 
 
 /**
+ * One balance a chain's read covers (spec 082 RE9).
+ */
+public struct BalanceReadSlot: Equatable, Hashable {
+    /**
+     * `native` (`eth_getBalance`, priced as the native), `stable` (a registry
+     * stablecoin: `balanceOf` + `decimals()`, worth `peg_usd`), `wrapped`
+     * (`balanceOf` + `decimals()`, priced as the native) or `custom` (the
+     * person's token: `balanceOf`, its saved decimals, priced by DEX).
+     */
+    public var kind: String
+    /**
+     * The token contract; `None` for the native coin.
+     */
+    public var contract: String?
+    /**
+     * The registry's or the person's symbol; empty for `native` and
+     * `wrapped`, which the shell names from its own chain data.
+     */
+    public var symbol: String
+    /**
+     * The person's saved name for a custom token (or one that overrode a
+     * registry entry); the symbol for a registry stablecoin; empty otherwise.
+     */
+    public var name: String
+    /**
+     * `Some`: known, no `decimals()` read. `None`: read it on chain (the
+     * native coin takes the chain data's native decimals).
+     */
+    public var knownDecimals: UInt32?
+    /**
+     * `Some(1.0)` for a registry stablecoin.
+     */
+    public var pegUsd: Double?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `native` (`eth_getBalance`, priced as the native), `stable` (a registry
+         * stablecoin: `balanceOf` + `decimals()`, worth `peg_usd`), `wrapped`
+         * (`balanceOf` + `decimals()`, priced as the native) or `custom` (the
+         * person's token: `balanceOf`, its saved decimals, priced by DEX).
+         */kind: String, 
+        /**
+         * The token contract; `None` for the native coin.
+         */contract: String?, 
+        /**
+         * The registry's or the person's symbol; empty for `native` and
+         * `wrapped`, which the shell names from its own chain data.
+         */symbol: String, 
+        /**
+         * The person's saved name for a custom token (or one that overrode a
+         * registry entry); the symbol for a registry stablecoin; empty otherwise.
+         */name: String, 
+        /**
+         * `Some`: known, no `decimals()` read. `None`: read it on chain (the
+         * native coin takes the chain data's native decimals).
+         */knownDecimals: UInt32?, 
+        /**
+         * `Some(1.0)` for a registry stablecoin.
+         */pegUsd: Double?) {
+        self.kind = kind
+        self.contract = contract
+        self.symbol = symbol
+        self.name = name
+        self.knownDecimals = knownDecimals
+        self.pegUsd = pegUsd
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BalanceReadSlot: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBalanceReadSlot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BalanceReadSlot {
+        return
+            try BalanceReadSlot(
+                kind: FfiConverterString.read(from: &buf), 
+                contract: FfiConverterOptionString.read(from: &buf), 
+                symbol: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                knownDecimals: FfiConverterOptionUInt32.read(from: &buf), 
+                pegUsd: FfiConverterOptionDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BalanceReadSlot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterOptionString.write(value.contract, into: &buf)
+        FfiConverterString.write(value.symbol, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionUInt32.write(value.knownDecimals, into: &buf)
+        FfiConverterOptionDouble.write(value.pegUsd, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBalanceReadSlot_lift(_ buf: RustBuffer) throws -> BalanceReadSlot {
+    return try FfiConverterTypeBalanceReadSlot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBalanceReadSlot_lower(_ value: BalanceReadSlot) -> RustBuffer {
+    return FfiConverterTypeBalanceReadSlot.lower(value)
+}
+
+
+/**
+ * What the address bar shows.
+ */
+public struct BrowserAddressBar: Equatable, Hashable {
+    /**
+     * The address share, copy, favourite and the edit field act on; empty
+     * when the bar names nothing.
+     */
+    public var url: String
+    /**
+     * Lower-case host, a non-default port kept; empty when nothing.
+     */
+    public var host: String
+    /**
+     * `closed` (https, or http on loopback / a private network), `open`
+     * (public http) or `none` (a failure panel, a pending load, an empty tab).
+     */
+    public var lock: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The address share, copy, favourite and the edit field act on; empty
+         * when the bar names nothing.
+         */url: String, 
+        /**
+         * Lower-case host, a non-default port kept; empty when nothing.
+         */host: String, 
+        /**
+         * `closed` (https, or http on loopback / a private network), `open`
+         * (public http) or `none` (a failure panel, a pending load, an empty tab).
+         */lock: String) {
+        self.url = url
+        self.host = host
+        self.lock = lock
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BrowserAddressBar: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBrowserAddressBar: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BrowserAddressBar {
+        return
+            try BrowserAddressBar(
+                url: FfiConverterString.read(from: &buf), 
+                host: FfiConverterString.read(from: &buf), 
+                lock: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BrowserAddressBar, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterString.write(value.host, into: &buf)
+        FfiConverterString.write(value.lock, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBrowserAddressBar_lift(_ buf: RustBuffer) throws -> BrowserAddressBar {
+    return try FfiConverterTypeBrowserAddressBar.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBrowserAddressBar_lower(_ value: BrowserAddressBar) -> RustBuffer {
+    return FfiConverterTypeBrowserAddressBar.lower(value)
+}
+
+
+/**
  * A main-frame load failure as every browser shell draws it (spec 079):
  * `class` is one of `offline | timeout | not_found | refused | certificate |
- * other`, `reason_key` the corpus key of the panel's sentence.
+ * other | proxy` (`proxy` since spec 082: the proxy itself could not be used,
+ * `explore.loadProxy`), `reason_key` the corpus key of the panel's sentence.
  */
 public struct BrowserLoadFailure: Equatable, Hashable {
     public var `class`: String
@@ -6917,6 +7122,69 @@ public func FfiConverterTypeBrowserLoadFailure_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeBrowserLoadFailure_lower(_ value: BrowserLoadFailure) -> RustBuffer {
     return FfiConverterTypeBrowserLoadFailure.lower(value)
+}
+
+
+/**
+ * A site's name and the host line under it.
+ */
+public struct BrowserSiteLabel: Equatable, Hashable {
+    public var name: String
+    /**
+     * `None`: the name already is the host — say it once.
+     */
+    public var hostLine: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, 
+        /**
+         * `None`: the name already is the host — say it once.
+         */hostLine: String?) {
+        self.name = name
+        self.hostLine = hostLine
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BrowserSiteLabel: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBrowserSiteLabel: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BrowserSiteLabel {
+        return
+            try BrowserSiteLabel(
+                name: FfiConverterString.read(from: &buf), 
+                hostLine: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BrowserSiteLabel, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.hostLine, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBrowserSiteLabel_lift(_ buf: RustBuffer) throws -> BrowserSiteLabel {
+    return try FfiConverterTypeBrowserSiteLabel.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBrowserSiteLabel_lower(_ value: BrowserSiteLabel) -> RustBuffer {
+    return FfiConverterTypeBrowserSiteLabel.lower(value)
 }
 
 
@@ -7966,6 +8234,81 @@ public func FfiConverterTypeNativeQuoteGroup_lower(_ value: NativeQuoteGroup) ->
 }
 
 
+/**
+ * One call's outcome applied to the network count.
+ */
+public struct NetHealthStep: Equatable, Hashable {
+    /**
+     * Calls in a row that never reached a server — the next state's.
+     */
+    public var misses: UInt32
+    public var online: Bool
+    /**
+     * The edge this call crossed: `went_offline` (the third miss in a row) or
+     * `came_back` (the first answer after it); `None` while the state holds.
+     */
+    public var edge: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Calls in a row that never reached a server — the next state's.
+         */misses: UInt32, online: Bool, 
+        /**
+         * The edge this call crossed: `went_offline` (the third miss in a row) or
+         * `came_back` (the first answer after it); `None` while the state holds.
+         */edge: String?) {
+        self.misses = misses
+        self.online = online
+        self.edge = edge
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NetHealthStep: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetHealthStep: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetHealthStep {
+        return
+            try NetHealthStep(
+                misses: FfiConverterUInt32.read(from: &buf), 
+                online: FfiConverterBool.read(from: &buf), 
+                edge: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetHealthStep, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.misses, into: &buf)
+        FfiConverterBool.write(value.online, into: &buf)
+        FfiConverterOptionString.write(value.edge, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetHealthStep_lift(_ buf: RustBuffer) throws -> NetHealthStep {
+    return try FfiConverterTypeNetHealthStep.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetHealthStep_lower(_ value: NetHealthStep) -> RustBuffer {
+    return FfiConverterTypeNetHealthStep.lower(value)
+}
+
+
 public struct P256PublicKey: Equatable, Hashable {
     public var x: Data
     public var y: Data
@@ -8480,6 +8823,115 @@ public func FfiConverterTypeSignerRegistryDeployment_lower(_ value: SignerRegist
 
 
 /**
+ * A simulation's outcome and the line the signing sheet draws for it.
+ */
+public struct SimOutcomeRecord: Equatable, Hashable {
+    /**
+     * `deltas | reverts | not_offered | unreachable`. Only `deltas` means
+     * the node checked the transaction.
+     */
+    public var kind: String
+    /**
+     * The user's signed per-asset moves (`TrustAssetDelta[]` JSON, the input
+     * `token_trust` takes). `[]` with `kind == "deltas"` is "checked, nothing
+     * of theirs moves"; every other kind carries `[]` too and means nothing.
+     */
+    public var deltasJson: String
+    /**
+     * The sanitised `Error(string)` of a revert, ≤ 64 characters — the
+     * `{{reason}}` of `notice_key`. Untrusted text made safe to print.
+     */
+    public var revertReason: String?
+    /**
+     * The notice's tone, a `ClearRisk` wire name (`danger` for a revert,
+     * `caution` for could-not-check); `None` for `deltas`.
+     */
+    public var noticeRisk: String?
+    /**
+     * The notice's corpus key; `None` for `deltas`.
+     */
+    public var noticeKey: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `deltas | reverts | not_offered | unreachable`. Only `deltas` means
+         * the node checked the transaction.
+         */kind: String, 
+        /**
+         * The user's signed per-asset moves (`TrustAssetDelta[]` JSON, the input
+         * `token_trust` takes). `[]` with `kind == "deltas"` is "checked, nothing
+         * of theirs moves"; every other kind carries `[]` too and means nothing.
+         */deltasJson: String, 
+        /**
+         * The sanitised `Error(string)` of a revert, ≤ 64 characters — the
+         * `{{reason}}` of `notice_key`. Untrusted text made safe to print.
+         */revertReason: String?, 
+        /**
+         * The notice's tone, a `ClearRisk` wire name (`danger` for a revert,
+         * `caution` for could-not-check); `None` for `deltas`.
+         */noticeRisk: String?, 
+        /**
+         * The notice's corpus key; `None` for `deltas`.
+         */noticeKey: String?) {
+        self.kind = kind
+        self.deltasJson = deltasJson
+        self.revertReason = revertReason
+        self.noticeRisk = noticeRisk
+        self.noticeKey = noticeKey
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SimOutcomeRecord: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSimOutcomeRecord: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SimOutcomeRecord {
+        return
+            try SimOutcomeRecord(
+                kind: FfiConverterString.read(from: &buf), 
+                deltasJson: FfiConverterString.read(from: &buf), 
+                revertReason: FfiConverterOptionString.read(from: &buf), 
+                noticeRisk: FfiConverterOptionString.read(from: &buf), 
+                noticeKey: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SimOutcomeRecord, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.kind, into: &buf)
+        FfiConverterString.write(value.deltasJson, into: &buf)
+        FfiConverterOptionString.write(value.revertReason, into: &buf)
+        FfiConverterOptionString.write(value.noticeRisk, into: &buf)
+        FfiConverterOptionString.write(value.noticeKey, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSimOutcomeRecord_lift(_ buf: RustBuffer) throws -> SimOutcomeRecord {
+    return try FfiConverterTypeSimOutcomeRecord.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSimOutcomeRecord_lower(_ value: SimOutcomeRecord) -> RustBuffer {
+    return FfiConverterTypeSimOutcomeRecord.lower(value)
+}
+
+
+/**
  * One drawn row of the storage page.
  */
 public struct StorageItemRecord: Equatable, Hashable {
@@ -8761,6 +9213,88 @@ public func FfiConverterTypeTextScaleLevel_lift(_ buf: RustBuffer) throws -> Tex
 #endif
 public func FfiConverterTypeTextScaleLevel_lower(_ value: TextScaleLevel) -> RustBuffer {
     return FfiConverterTypeTextScaleLevel.lower(value)
+}
+
+
+/**
+ * One parsed answer of [`user_op_status_method`] — the fields of the
+ * tracker's `Status` shell result.
+ */
+public struct TrackStatusAnswer: Equatable, Hashable {
+    /**
+     * The `TrackLifecycle` wire name: `not_found | queued | not_submitted |
+     * submitted | rejected | included | failed`.
+     */
+    public var status: String
+    /**
+     * The executor stage that last touched the op (`last_executor_stage`).
+     */
+    public var stage: String?
+    /**
+     * The bundle transaction the relay names, when it has one.
+     */
+    public var txHash: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The `TrackLifecycle` wire name: `not_found | queued | not_submitted |
+         * submitted | rejected | included | failed`.
+         */status: String, 
+        /**
+         * The executor stage that last touched the op (`last_executor_stage`).
+         */stage: String?, 
+        /**
+         * The bundle transaction the relay names, when it has one.
+         */txHash: String?) {
+        self.status = status
+        self.stage = stage
+        self.txHash = txHash
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension TrackStatusAnswer: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTrackStatusAnswer: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TrackStatusAnswer {
+        return
+            try TrackStatusAnswer(
+                status: FfiConverterString.read(from: &buf), 
+                stage: FfiConverterOptionString.read(from: &buf), 
+                txHash: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TrackStatusAnswer, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.status, into: &buf)
+        FfiConverterOptionString.write(value.stage, into: &buf)
+        FfiConverterOptionString.write(value.txHash, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrackStatusAnswer_lift(_ buf: RustBuffer) throws -> TrackStatusAnswer {
+    return try FfiConverterTypeTrackStatusAnswer.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTrackStatusAnswer_lower(_ value: TrackStatusAnswer) -> RustBuffer {
+    return FfiConverterTypeTrackStatusAnswer.lower(value)
 }
 
 
@@ -10883,6 +11417,206 @@ public func FfiConverterTypeUserOpFeeMode_lower(_ value: UserOpFeeMode) -> RustB
 }
 
 
+
+/**
+ * What one `eth_sendUserOperation` POST came back with, as the pool
+ * concluded it.
+ */
+
+public enum UserOpSubmitReply: Equatable, Hashable {
+    
+    /**
+     * A JSON-RPC `result` — the relay's operation hash.
+     */
+    case hash(hash: String
+    )
+    /**
+     * A JSON-RPC `error` member, as JSON text.
+     */
+    case rpcError(errorJson: String
+    )
+    /**
+     * The pool gave up: no endpoint answered with JSON.
+     */
+    case noAnswer
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension UserOpSubmitReply: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUserOpSubmitReply: FfiConverterRustBuffer {
+    typealias SwiftType = UserOpSubmitReply
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UserOpSubmitReply {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .hash(hash: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .rpcError(errorJson: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .noAnswer
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: UserOpSubmitReply, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .hash(hash):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(hash, into: &buf)
+            
+        
+        case let .rpcError(errorJson):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(errorJson, into: &buf)
+            
+        
+        case .noAnswer:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserOpSubmitReply_lift(_ buf: RustBuffer) throws -> UserOpSubmitReply {
+    return try FfiConverterTypeUserOpSubmitReply.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserOpSubmitReply_lower(_ value: UserOpSubmitReply) -> RustBuffer {
+    return FfiConverterTypeUserOpSubmitReply.lower(value)
+}
+
+
+
+/**
+ * One step of the submit loop: a verdict, or wait `delay_ms` and POST the
+ * identical operation again.
+ */
+
+public enum UserOpSubmitStep: Equatable, Hashable {
+    
+    /**
+     * The relay holds the operation; its hash wins over the local one.
+     */
+    case accepted(userOpHash: String
+    )
+    /**
+     * A request may have reached the relay and its answer never came back:
+     * followed under the LOCAL hash (`OpSubmitted{maybe_sent: true}`).
+     */
+    case maybeSent(userOpHash: String
+    )
+    /**
+     * Nothing left the device (`rejection` `None`: the relay was never
+     * reached — the dApp's detail is [`user_op_not_sent_detail`]), or the
+     * relay refused it and no earlier attempt can have delivered it.
+     */
+    case notSent(rejection: RelayRejection?
+    )
+    case retryAfter(delayMs: UInt32
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension UserOpSubmitStep: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUserOpSubmitStep: FfiConverterRustBuffer {
+    typealias SwiftType = UserOpSubmitStep
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UserOpSubmitStep {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .accepted(userOpHash: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .maybeSent(userOpHash: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 3: return .notSent(rejection: try FfiConverterOptionTypeRelayRejection.read(from: &buf)
+        )
+        
+        case 4: return .retryAfter(delayMs: try FfiConverterUInt32.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: UserOpSubmitStep, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .accepted(userOpHash):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(userOpHash, into: &buf)
+            
+        
+        case let .maybeSent(userOpHash):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(userOpHash, into: &buf)
+            
+        
+        case let .notSent(rejection):
+            writeInt(&buf, Int32(3))
+            FfiConverterOptionTypeRelayRejection.write(rejection, into: &buf)
+            
+        
+        case let .retryAfter(delayMs):
+            writeInt(&buf, Int32(4))
+            FfiConverterUInt32.write(delayMs, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserOpSubmitStep_lift(_ buf: RustBuffer) throws -> UserOpSubmitStep {
+    return try FfiConverterTypeUserOpSubmitStep.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserOpSubmitStep_lower(_ value: UserOpSubmitStep) -> RustBuffer {
+    return FfiConverterTypeUserOpSubmitStep.lower(value)
+}
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -11198,6 +11932,30 @@ fileprivate struct FfiConverterOptionTypeSignerRegistryDeployment: FfiConverterR
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeTrackStatusAnswer: FfiConverterRustBuffer {
+    typealias SwiftType = TrackStatusAnswer?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTrackStatusAnswer.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTrackStatusAnswer.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeUserOpDraft: FfiConverterRustBuffer {
     typealias SwiftType = UserOpDraft?
 
@@ -11214,6 +11972,30 @@ fileprivate struct FfiConverterOptionTypeUserOpDraft: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeUserOpDraft.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeRelayRejection: FfiConverterRustBuffer {
+    typealias SwiftType = RelayRejection?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeRelayRejection.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeRelayRejection.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -11386,6 +12168,31 @@ fileprivate struct FfiConverterSequenceTypeAbiValue: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAbiValue.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeBalanceReadSlot: FfiConverterRustBuffer {
+    typealias SwiftType = [BalanceReadSlot]
+
+    public static func write(_ value: [BalanceReadSlot], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBalanceReadSlot.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BalanceReadSlot] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BalanceReadSlot]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBalanceReadSlot.read(from: &buf))
         }
         return seq
     }
@@ -11773,6 +12580,27 @@ public func amountTextClean(raw: String, number: String, previous: String?, past
 })
 }
 /**
+ * Which balances one chain's read covers, in order: the native coin (unless
+ * the chain has none — Tempo), the registry stablecoins, the wrapped native
+ * (unless it IS the native), then the person's custom tokens; one slot per
+ * contract, custom metadata winning. `stables_json` is the chain data's
+ * `stables[]` (`[{"symbol","contract"}]`, other fields ignored);
+ * `custom_json` this chain's saved tokens (`[{"contract","symbol","name",
+ * "decimals"}]`). Blank text is an empty list; anything else that is not
+ * that shape is an error.
+ */
+public func balanceReadPlan(chainId: UInt32, stablesJson: String, wrappedNative: String?, customJson: String)throws  -> [BalanceReadSlot]  {
+    return try  FfiConverterSequenceTypeBalanceReadSlot.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_balance_read_plan(
+        FfiConverterUInt32.lower(chainId),
+        FfiConverterString.lower(stablesJson),
+        FfiConverterOptionString.lower(wrappedNative),
+        FfiConverterString.lower(customJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The deepest pool across every stable quote.
  */
 public func bestNativeDexPrice(groups: [NativeQuoteGroup]) -> Double?  {
@@ -11784,11 +12612,30 @@ public func bestNativeDexPrice(groups: [NativeQuoteGroup]) -> Double?  {
 })
 }
 /**
+ * What the bar names (RE1, G28), first match: a failure panel is up → the
+ * failed host, no lock; a committed document → its host and lock; a load
+ * pending in an EMPTY tab → the pending host, no lock; else nothing. A
+ * pending load never renames a tab that shows a document. `shown` is the
+ * committed document (the commit callback), never the engine's current URL.
+ */
+public func browserAddressBar(shown: String?, pending: String?, failed: String?) -> BrowserAddressBar  {
+    return try!  FfiConverterTypeBrowserAddressBar_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_address_bar(
+        FfiConverterOptionString.lower(shown),
+        FfiConverterOptionString.lower(pending),
+        FfiConverterOptionString.lower(failed),uniffiCallStatus
+    )
+})
+}
+/**
  * The platform's raw load error → the one failure every shell shows, or
  * `None` when it is not a failure (a cancelled navigation). `platform` is
  * `"android"`, `"apple"` or `"probe"`; `domain` is the `NSError` domain on
  * Apple; `certificate` is set when the failure came from a certificate
- * callback rather than an error code.
+ * callback rather than an error code. Apple `kCFErrorDomainCFNetwork`
+ * 306–310, Android -5 and probe code 6 are `proxy`; a proxy that answered
+ * for the host keeps the host's class.
  */
 public func browserLoadClassify(platform: String, code: Int64, domain: String?, certificate: Bool) -> BrowserLoadFailure?  {
     return try!  FfiConverterOptionTypeBrowserLoadFailure.lift(try! rustCall() {
@@ -11798,6 +12645,17 @@ public func browserLoadClassify(platform: String, code: Int64, domain: String?, 
         FfiConverterInt64.lower(code),
         FfiConverterOptionString.lower(domain),
         FfiConverterBool.lower(certificate),uniffiCallStatus
+    )
+})
+}
+/**
+ * A load that has not committed by now is given up on, on every client,
+ * unless the engine shows it getting somewhere (20 000 ms).
+ */
+public func browserLoadGiveUpMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_load_give_up_ms(uniffiCallStatus
     )
 })
 }
@@ -11815,6 +12673,48 @@ public func browserLoadRetryDelayMs(`class`: String, attempt: UInt32) -> UInt32?
 })
 }
 /**
+ * Whether a failed page of `class` is loaded again when the network comes
+ * back (`net_health_step`'s `came_back`): `offline | timeout | refused |
+ * other | proxy`. A name that does not resolve, a wrong certificate and a
+ * class this core does not know are not. A load the page itself started is
+ * retried by hand only, whatever its class.
+ */
+public func browserLoadRetryWhenNetworkReturns(`class`: String) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_load_retry_when_network_returns(
+        FfiConverterString.lower(`class`),uniffiCallStatus
+    )
+})
+}
+/**
+ * Whether a load under way for `elapsed_ms` is given up on: the give-up
+ * time or more, nothing committed, and the engine's `progress` (0.0 – 1.0:
+ * iOS `estimatedProgress`, Android `getProgress() / 100`) never past 0.15 —
+ * a slow but answering site is never cut.
+ */
+public func browserLoadShouldGiveUp(elapsedMs: UInt32, committed: Bool, progress: Double) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_load_should_give_up(
+        FfiConverterUInt32.lower(elapsedMs),
+        FfiConverterBool.lower(committed),
+        FfiConverterDouble.lower(progress),uniffiCallStatus
+    )
+})
+}
+/**
+ * What a given-up load is: `timeout`, the network sentence and the network
+ * retry schedule, whichever client timed it.
+ */
+public func browserLoadStalled() -> BrowserLoadFailure  {
+    return try!  FfiConverterTypeBrowserLoadFailure_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_load_stalled(uniffiCallStatus
+    )
+})
+}
+/**
  * The visit a finished load is, or `None` (a failed load, an error status,
  * an engine document). All fields from ONE read of the page itself.
  */
@@ -11827,6 +12727,20 @@ public func browserLoadVisit(url: String, title: String, icon: String?, mainFram
         FfiConverterOptionString.lower(icon),
         FfiConverterBool.lower(mainFrameFailed),
         FfiConverterOptionUInt16.lower(httpStatus),uniffiCallStatus
+    )
+})
+}
+/**
+ * A name that is its host is said once (RE7): an empty title, or one equal to
+ * the host ignoring ASCII case, → the host alone; otherwise the title over
+ * the host. Recents, the signing header and the consent sheet.
+ */
+public func browserSiteLabel(title: String, host: String) -> BrowserSiteLabel  {
+    return try!  FfiConverterTypeBrowserSiteLabel_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_site_label(
+        FfiConverterString.lower(title),
+        FfiConverterString.lower(host),uniffiCallStatus
     )
 })
 }
@@ -11996,6 +12910,19 @@ public func dappProviderScript(host: String) -> String  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_dapp_provider_script(
         FfiConverterString.lower(host),uniffiCallStatus
+    )
+})
+}
+/**
+ * How long to wait for the receipt when the submit answered `elapsed_ms`
+ * after the approve tap: what is left of the 120 s answer window, never less
+ * than 10 s (RA12). One number for every client's dApp wait.
+ */
+public func dappReceiptWaitMs(elapsedMs: Double) -> Double  {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_receipt_wait_ms(
+        FfiConverterDouble.lower(elapsedMs),uniffiCallStatus
     )
 })
 }
@@ -12363,12 +13290,48 @@ public func keccak256(data: Data) -> Data  {
     )
 })
 }
+/**
+ * How long a remote logo that failed to load stays failed: `None` for the
+ * session (asking again will not help), `Some(ms)` for a miss that may heal.
+ * With an HTTP `status` the miss is that status's class (404/410, 401/403,
+ * a 2xx whose bytes do not draw → the session; 429, 408, 5xx → 60 s);
+ * without one it is `kind`, a `MarkMiss` wire name (`transport`,
+ * `not_an_image`, `unknown`…), and a name this core does not know is
+ * `unknown`.
+ */
+public func markMissTtlMs(kind: String, status: UInt16?) -> UInt32?  {
+    return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_mark_miss_ttl_ms(
+        FfiConverterString.lower(kind),
+        FfiConverterOptionUInt16.lower(status),uniffiCallStatus
+    )
+})
+}
 public func matchSelector(sig: String, calldata: Data)throws  -> Bool  {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_match_selector(
         FfiConverterString.lower(sig),
         FfiConverterData.lower(calldata),uniffiCallStatus
+    )
+})
+}
+/**
+ * Feed one call: `reached` is any answer from a server, whatever its status;
+ * a miss is a call that never reached one (for a pooled read: every endpoint
+ * swept, none answered, not throttled — timeouts included). `misses` and
+ * `online` are the state so far (a fresh app: 0, true). On `came_back` a
+ * shell retries its failed page, clears transient logo misses and re-reads
+ * the balance.
+ */
+public func netHealthStep(misses: UInt32, online: Bool, reached: Bool) -> NetHealthStep  {
+    return try!  FfiConverterTypeNetHealthStep_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_net_health_step(
+        FfiConverterUInt32.lower(misses),
+        FfiConverterBool.lower(online),
+        FfiConverterBool.lower(reached),uniffiCallStatus
     )
 })
 }
@@ -12403,6 +13366,19 @@ public func parsePublicKey(hex: String)throws  -> P256PublicKey  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_parse_public_key(
         FfiConverterString.lower(hex),uniffiCallStatus
+    )
+})
+}
+/**
+ * The relay's status answer — its `result`, or the whole JSON-RPC body — or
+ * `None` when it is not one: an error body, a missing or unknown `status`.
+ * The one parser every client uses; an unknown status is never guessed at.
+ */
+public func parseUserOpStatus(json: String) -> TrackStatusAnswer?  {
+    return try!  FfiConverterOptionTypeTrackStatusAnswer.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_parse_user_op_status(
+        FfiConverterString.lower(json),uniffiCallStatus
     )
 })
 }
@@ -12734,11 +13710,65 @@ public func safeProxyRuntimeCode()throws  -> String  {
     )
 })
 }
+/**
+ * The receipt verdict a tracker entry stands for, for the send machine's
+ * `ReceiptUpdate` — a `SendReceiptOutcome` as JSON (`confirmed{tx_hash}`,
+ * `failed{rejected, not_sent}`, `fee_held`, `acknowledged`) — or `None` while
+ * there is nothing new to say: a slow, unreachable, maybe-sent or 24 h-old op
+ * sends nothing, so only a definitive drop, rejection or never-sent is a
+ * failure. `track_entry_json` is the tracker's `TrackEntryView`. The one
+ * mapping (`vela_core::app::send::receipt_outcome_of`), where each shell had
+ * its own.
+ */
+public func sendReceiptOutcomeOf(trackEntryJson: String)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_send_receipt_outcome_of(
+        FfiConverterString.lower(trackEntryJson),uniffiCallStatus
+    )
+})
+}
 public func sha256(data: Data) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_sha256(
         FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+/**
+ * What the answer that went to the page stands for — a `SignEnding` as JSON
+ * (`{"type":"signed"}`, `{"type":"landed","tx_hash",…,"user_op_hash"}`,
+ * `{"type":"still_confirming","user_op_hash"}`) — or `None` when there is
+ * nothing to show (a refusal, an empty answer). `payload_json` is the
+ * `SignResponsePayload` the core's `Respond` carried; `submitted_user_op` the
+ * op this request handed the tracker. Replaces each shell's own derivation.
+ */
+public func signEndingOf(method: String, payloadJson: String, submittedUserOp: String?)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_ending_of(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(payloadJson),
+        FfiConverterOptionString.lower(submittedUserOp),uniffiCallStatus
+    )
+})
+}
+/**
+ * What the sheet draws for an ending once the tracker has had its say — a
+ * `SignEndingState` as JSON (`signed | confirmed | reverted | not_sent |
+ * following{user_op_hash, outcome, fee_held}`). `ending_json` is what
+ * [`sign_ending_of`] returned; `track_entry_json` the tracker's
+ * `TrackEntryView` for the op, `None` (or `null`) while the tracker has not
+ * taken it — that reads `following` / `landing`. A landed or still-confirming
+ * request is never drawn confirmed until the tracker says so (W3).
+ */
+public func signEndingState(endingJson: String, trackEntryJson: String?)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sign_ending_state(
+        FfiConverterString.lower(endingJson),
+        FfiConverterOptionString.lower(trackEntryJson),uniffiCallStatus
     )
 })
 }
@@ -12784,6 +13814,24 @@ public func signRoute(deviceKeysJson: String, method: String) -> String?  {
     uniffi_vela_core_uniffi_fn_func_sign_route(
         FfiConverterString.lower(deviceKeysJson),
         FfiConverterString.lower(method),uniffiCallStatus
+    )
+})
+}
+/**
+ * What the pool's `eth_simulateV1` answer means for `user` (the signing
+ * account). `reply_json` is the JSON-RPC envelope as it came —
+ * `{"result": …}` or `{"error": {"code", "message"}}` — or
+ * `{"unreachable": true}` when the pool gave up; anything else is a node
+ * answer nobody can read ("could not check", never "nothing moves"). A
+ * revert is a danger and a node that could not check is a caution, on every
+ * client.
+ */
+public func simOutcome(user: String, replyJson: String) -> SimOutcomeRecord  {
+    return try!  FfiConverterTypeSimOutcomeRecord_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_sim_outcome(
+        FfiConverterString.lower(user),
+        FfiConverterString.lower(replyJson),uniffiCallStatus
     )
 })
 }
@@ -12888,6 +13936,33 @@ public func userOpHasContractCall(calls: [UserOpCall])throws  -> Bool  {
 })
 }
 /**
+ * The EntryPoint v0.7 `getUserOpHash` of the draft on `chain_id`, 0x-lower-case
+ * (spec 082 RA6). The signature is not part of it, so it is known before the
+ * passkey signs: a client computes it before the first submit POST and
+ * follows the operation under it when the relay's reply is lost. When the
+ * relay answers, the relay's hash wins.
+ */
+public func userOpHash(draft: UserOpDraft, chainId: UInt32)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_hash(
+        FfiConverterTypeUserOpDraft_lower(draft),
+        FfiConverterUInt32.lower(chainId),uniffiCallStatus
+    )
+})
+}
+/**
+ * The dApp's `-32603` detail when nothing was sent and the relay gave no
+ * refusal to quote (RA10): a fixed sentence, never the pool's raw text.
+ */
+public func userOpNotSentDetail() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_not_sent_detail(uniffiCallStatus
+    )
+})
+}
+/**
  * The inner calls' own gas floor (`vela_core::user_op::inner_calls_gas_floor`):
  * `measured` are the shell's `eth_estimateGas` figures for the calls
  * `user_op_calls_to_measure` named, as decimal strings; `call_count` is every
@@ -12943,6 +14018,35 @@ public func userOpSign(draft: UserOpDraft, assertion: WebAuthnAssertion, credent
         FfiConverterTypeWebAuthnAssertion_lower(assertion),
         FfiConverterString.lower(credentialId),
         FfiConverterSequenceTypeWalletKeyRecord.lower(keys),uniffiCallStatus
+    )
+})
+}
+/**
+ * The relay method the tracker's `PollStatus` asks
+ * (`pimlico_getUserOperationStatus`, RA7).
+ */
+public func userOpStatusMethod() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_status_method(uniffiCallStatus
+    )
+})
+}
+/**
+ * Decide one submit POST. `attempt` is the 0-based count of POSTs of this
+ * operation, the one just answered included; `maybe_delivered` the OR, over
+ * every POST of it so far, of the pool verdict's `maybe_delivered`;
+ * `local_hash` is [`user_op_hash`] of the operation. See
+ * `vela_core::user_op::submit_step` for the rules.
+ */
+public func userOpSubmitStep(reply: UserOpSubmitReply, attempt: UInt32, maybeDelivered: Bool, localHash: String) -> UserOpSubmitStep  {
+    return try!  FfiConverterTypeUserOpSubmitStep_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_submit_step(
+        FfiConverterTypeUserOpSubmitReply_lower(reply),
+        FfiConverterUInt32.lower(attempt),
+        FfiConverterBool.lower(maybeDelivered),
+        FfiConverterString.lower(localHash),uniffiCallStatus
     )
 })
 }
@@ -13682,16 +14786,37 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_amount_text_clean() != 980) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_balance_read_plan() != 29039) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_best_native_dex_price() != 43798) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_browser_load_classify() != 39421) {
+    if (uniffi_vela_core_uniffi_checksum_func_browser_address_bar() != 37746) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_load_classify() != 25895) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_load_give_up_ms() != 57265) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_browser_load_retry_delay_ms() != 12497) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_load_retry_when_network_returns() != 53083) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_load_should_give_up() != 16155) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_load_stalled() != 7085) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_browser_load_visit() != 23241) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_site_label() != 36058) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_browser_site_letter() != 47269) {
@@ -13740,6 +14865,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_provider_script() != 52260) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_receipt_wait_ms() != 43354) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_decode_calldata() != 44581) {
@@ -13841,7 +14969,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_keccak256() != 12343) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_mark_miss_ttl_ms() != 58714) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_match_selector() != 41973) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_net_health_step() != 22480) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_network_typical_inclusion_s() != 781) {
@@ -13851,6 +14985,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_parse_public_key() != 62646) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_parse_user_op_status() != 36970) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_passkey_directory_entry() != 2835) {
@@ -13922,7 +15059,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_safe_proxy_runtime_code() != 4363) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_send_receipt_outcome_of() != 57773) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_sha256() != 52469) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_ending_of() != 27357) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sign_ending_state() != 3741) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_in_route() != 18541) {
@@ -13932,6 +15078,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sign_route() != 22739) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_sim_outcome() != 18486) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_to_base64url() != 33334) {
@@ -13958,6 +15107,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_user_op_has_contract_call() != 47699) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_hash() != 51781) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_not_sent_detail() != 40191) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_raise_call_gas() != 29305) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13968,6 +15123,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_sign() != 20352) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_status_method() != 9391) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_submit_step() != 61303) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_with_calls() != 27911) {
