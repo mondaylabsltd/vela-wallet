@@ -272,7 +272,7 @@ final class WebSocketCableConn: NSObject, CableConn {
         let cfg = URLSessionConfiguration.default
         cfg.timeoutIntervalForRequest = TimeInterval(timeoutMs) / 1000
         // delegateQueue = .main so the delegate callbacks land on the MainActor.
-        c.session = URLSession(configuration: cfg, delegate: c, delegateQueue: .main)
+        c.session = URLSession.vela(cfg, delegate: c, delegateQueue: .main)
         c.task = c.session.webSocketTask(with: url, protocols: [subprotocol])
         print("[vela-cable] opening tunnel: \(url)")
 

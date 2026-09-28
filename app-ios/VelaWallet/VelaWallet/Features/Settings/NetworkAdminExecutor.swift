@@ -338,7 +338,7 @@ private extension NetworkAdminExecutor {
 
     static func probeWebSocket(_ url: String) async -> Int? {
         guard let parsed = URL(string: url), parsed.scheme?.lowercased() == "wss" else { return nil }
-        let task = URLSession.shared.webSocketTask(with: parsed)
+        let task = URLSession.velaShared.webSocketTask(with: parsed)
         task.resume()
         defer { task.cancel(with: .goingAway, reason: nil) }
 

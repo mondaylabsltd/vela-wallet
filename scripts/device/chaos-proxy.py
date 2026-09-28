@@ -14,11 +14,13 @@ Android: adb reverse tcp:8899 tcp:8899
          OkHttp keeps pooled connections: force-stop the app after pointing it here.
 iPhone:  Settings > Wi-Fi > (network) > Configure Proxy > Manual: <mac-lan-ip>:8899,
          with CHAOS_BIND=0.0.0.0. Turn it back to Off afterwards.
-Desktop: the embedded WebView follows the macOS system proxy; point a throwaway
-         network location at 127.0.0.1:8899 rather than editing the one in use.
+Desktop: a dev-fixtures build launched with VELA_DEV_PROXY=127.0.0.1:8899 sends
+         its page AND wallet traffic here and nothing else on the Mac (spec 082);
+         never change the macOS system proxy or network location for this.
 
 Control: curl 'http://127.0.0.1:8899/__chaos?mode=drop&match=vela-relay'
-  mode      pass | latency | throttle | drop | blackhole | reset_mid
+  mode      pass | latency | throttle | drop | blackhole | reset_mid | mute
+            (mute: the request reaches the host, its reply never comes back)
   latency   ms added before the upstream connect (latency / throttle)
   bps       bytes/second each direction (throttle)
   drop      probability 0..1 that a matching connection is refused (drop)
@@ -44,12 +46,52 @@ def applies(host):
     return CFG["mode"] != "pass" and (not CFG["match"] or re.search(CFG["match"], host))
 
 
-async def pipe(r, w, bps):
+class Mute:
+    """`mute`: the request goes through, the answer never comes back — the lost
+    reply of a relay that accepted an operation (spec 082 W1). Reads the TLS
+    records the client sends; once the client's first application-data record
+    after the handshake has gone upstream, every byte from upstream is dropped.
+    TLS 1.3 sends the client's Finished as application data (0x17) right after
+    its ChangeCipherSpec, so that one record is skipped; TLS 1.2 sends it as
+    handshake (0x16). Plain http: the request is the first client write."""
+
+    def __init__(self, tls):
+        self.tls, self.buf, self.after_ccs, self.skip_finished, self.on = tls, b"", False, False, False
+
+    def client_sent(self, chunk):
+        if self.on:
+            return
+        if not self.tls:
+            self.on = True
+            return
+        self.buf += chunk
+        while len(self.buf) >= 5:
+            kind, size = self.buf[0], int.from_bytes(self.buf[3:5], "big")
+            if len(self.buf) < 5 + size:
+                break
+            self.buf = self.buf[5 + size:]
+            if kind == 0x14:
+                self.after_ccs = True
+            elif self.after_ccs and kind == 0x17 and not self.skip_finished:
+                self.skip_finished = True  # TLS 1.3 Finished
+            elif self.after_ccs and kind == 0x16:
+                self.skip_finished = True  # TLS 1.2 Finished
+            elif self.after_ccs and kind == 0x17:
+                self.on = True
+                return
+
+
+async def pipe(r, w, bps, mute=None, upstream=False):
     try:
         while True:
             chunk = await r.read(16384 if not bps else max(1, min(16384, bps // 10)))
             if not chunk:
                 break
+            if mute is not None:
+                if upstream:
+                    mute.client_sent(chunk)
+                elif mute.on:
+                    continue
             w.write(chunk)
             await w.drain()
             if bps:
@@ -142,10 +184,13 @@ async def handle(cr, cw):
             log("RESET", f"{host}:{port}")
             cw.close(); uw.close()
         asyncio.create_task(cut())
+    mute = Mute(method == "CONNECT") if fault and CFG["mode"] == "mute" else None
+    if mute is not None and method != "CONNECT":
+        mute.on = True  # plain http: `rest` above already carried the request
     entry = (host, cw, uw)
     LIVE.add(entry)
     try:
-        await asyncio.gather(pipe(cr, uw, bps), pipe(ur, cw, bps))
+        await asyncio.gather(pipe(cr, uw, bps, mute, upstream=True), pipe(ur, cw, bps, mute))
     finally:
         LIVE.discard(entry)
 

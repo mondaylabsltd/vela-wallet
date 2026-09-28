@@ -34,7 +34,7 @@ enum LogoStore {
                                    diskPath: "vela-logos")
         config.requestCachePolicy = .returnCacheDataElseLoad
         config.timeoutIntervalForRequest = 8
-        return URLSession(configuration: config)
+        return URLSession.vela(config)
     }()
 
     static func cached(_ url: String) -> UIImage? { cache.object(forKey: url as NSString) }

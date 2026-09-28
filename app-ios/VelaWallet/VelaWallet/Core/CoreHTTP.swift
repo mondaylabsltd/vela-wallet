@@ -51,7 +51,7 @@ enum CoreHTTP {
         let config = URLSessionConfiguration.ephemeral
         config.waitsForConnectivity = false
         config.httpAdditionalHeaders = ["Accept": "application/json"]
-        return URLSession(configuration: config)
+        return URLSession.vela(config)
     }()
 
     /// `GET url` → parsed JSON, or `nil` for anything that is not a 2xx JSON

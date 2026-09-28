@@ -285,6 +285,8 @@ fn main() {
     // Spec 038: a panic on a worker thread becomes a sheet, not a vanished
     // window. Installed before anything can spawn.
     panic_report::install();
+    // Spec 082: read (and log) a dev build's fault proxy before anything dials.
+    let _ = executor::proxy::dev_proxy();
     // Windows: the in-app browser is a WebView2 CHILD window, and gpui's
     // default renderer composes the whole window through DirectComposition
     // with `CreateTargetForHwnd(hwnd, topmost = true)` — its visual sits ABOVE

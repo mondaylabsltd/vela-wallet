@@ -486,6 +486,18 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
         use wry::WebViewBuilderExtDarwin as _;
         builder.with_on_web_content_process_terminate_handler(|| report(Load::Crashed))
     };
+    // Spec 082: a dev build's fault proxy carries the page too. It is set on
+    // this webview's own data store, not the system, so nothing else on the
+    // machine is pointed at it. macOS 14+, through wry's `mac-proxy`, which
+    // only `dev-fixtures` turns on (Cargo.toml).
+    #[cfg(feature = "dev-fixtures")]
+    let builder = match crate::executor::proxy::dev_proxy() {
+        Some(proxy) => builder.with_proxy_config(wry::ProxyConfig::Http(wry::ProxyEndpoint {
+            host: proxy.host().to_owned(),
+            port: proxy.port().to_string(),
+        })),
+        None => builder,
+    };
     match builder.build_as_child(window) {
         Ok(view) => {
             // Built hidden: `place` turns it on in the same frame, and a

@@ -125,8 +125,8 @@ actor RegistryClient {
     /// error that says it never arrived.
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
-    /// The app's: `URLSession.shared`, under the request's own timeout.
-    static let urlSession: Transport = { request in try await URLSession.shared.data(for: request) }
+    /// The app's: `URLSession.velaShared`, under the request's own timeout.
+    static let urlSession: Transport = { request in try await URLSession.velaShared.data(for: request) }
 
     /// Injected, so a test answers the index from memory. It went through
     /// `URLSession` with a stub protocol before, which kept URLSession's 15 s

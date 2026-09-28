@@ -11,7 +11,13 @@ edition = "2024"
 # release build carries neither the test scalars nor any path to a software
 # signer, and `cargo test` alone does not turn it on — the seam's own tests
 # run under `cargo test --features dev-fixtures`.
-dev-fixtures = ["vela-core/dev-fixtures"]
+#
+# `wry/mac-proxy` is here for the same reason (spec 082): the in-app browser's
+# half of the `VELA_DEV_PROXY` fault-proxy switch (`executor/proxy.rs`). It
+# links Network.framework's proxy calls, which exist only from macOS 14, so a
+# release build (11+, Info.plist.in) must not carry it, and a `dev-fixtures`
+# build is for macOS 14+.
+dev-fixtures = ["vela-core/dev-fixtures", "wry/mac-proxy"]
 
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }

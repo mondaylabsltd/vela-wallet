@@ -78,6 +78,16 @@
 //! program, and running one to reach the key registry is not a trade this app
 //! makes) and KDE's `kioslaverc`. Both fall through to no proxy, which is the
 //! behaviour before this module existed.
+//!
+//! ## 4. A dev build pointed at a fault proxy
+//!
+//! Spec 082's bad-network rows aim a fault proxy at THIS app and nothing else
+//! on the machine, so no system setting is touched. [`dev_proxy`]
+//! (`VELA_DEV_PROXY=<host>:<port>`, `dev-fixtures` builds only) replaces the
+//! whole list with that one HTTP CONNECT proxy: no system setting, no
+//! environment, no direct fall-back, loopback included — a fault the proxy
+//! injects must reach the app, not be routed around. The in-app browser takes
+//! the same proxy (`webview.rs`).
 
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -136,7 +146,7 @@ enum Candidate {
     /// The desktop's own setting — what the browser next to us obeys.
     System(Proxy),
     /// `ALL_PROXY` / `HTTPS_PROXY` / `HTTP_PROXY`, rewritten to resolve at the
-    /// far end where that matters.
+    /// far end where that matters. Or `VELA_DEV_PROXY`, alone ([`dev_proxy`]).
     Env(Proxy),
     /// No proxy at all. Always last, always present.
     Direct,
@@ -194,6 +204,10 @@ fn derive_candidates() -> Vec<Candidate> {
 
 /// The candidate every request goes through right now.
 fn current() -> Candidate {
+    // Never a list under the dev proxy, so there is nothing to advance to.
+    if let Some(dev) = dev_proxy() {
+        return Candidate::Env(dev.clone());
+    }
     let Ok(mut guard) = state().lock() else {
         return Candidate::Direct;
     };
@@ -230,6 +244,52 @@ fn advance() -> bool {
         *guard = None;
         false
     }
+}
+
+/// `VELA_DEV_PROXY=<host>:<port>`: the ONE route out of a dev build (module
+/// note, section 4). Two gates, like `parallel_space::active`: without
+/// `dev-fixtures` this is a constant `None` and the variable is never read.
+/// Read once; a value that is set but not `<host>:<port>` stops the app
+/// rather than letting a fault row run over the ordinary route.
+pub fn dev_proxy() -> Option<&'static Proxy> {
+    #[cfg(feature = "dev-fixtures")]
+    {
+        static DEV: OnceLock<Option<Proxy>> = OnceLock::new();
+        DEV.get_or_init(|| {
+            let value = std::env::var("VELA_DEV_PROXY").ok()?;
+            let Some(proxy) = parse_dev_proxy(&value) else {
+                eprintln!("[vela-wallet] dev proxy: {value:?} is not <host>:<port>");
+                std::process::exit(2);
+            };
+            eprintln!(
+                "[vela-wallet] dev proxy: all traffic via {}:{}",
+                proxy.host(),
+                proxy.port()
+            );
+            Some(proxy)
+        })
+        .as_ref()
+    }
+    #[cfg(not(feature = "dev-fixtures"))]
+    {
+        None
+    }
+}
+
+/// `127.0.0.1:8899` → an HTTP CONNECT proxy that resolves at the far end and
+/// bypasses nothing (no `NO_PROXY`: the builder does not read it).
+#[cfg(feature = "dev-fixtures")]
+fn parse_dev_proxy(value: &str) -> Option<Proxy> {
+    let (host, port) = value.trim().rsplit_once(':')?;
+    let port: u16 = port.parse().ok().filter(|&port| port != 0)?;
+    if host.is_empty() || host.contains(['/', '@', ':']) {
+        return None;
+    }
+    Proxy::builder(ProxyProtocol::Http)
+        .host(host)
+        .port(port)
+        .build()
+        .ok()
 }
 
 /// The proxy to configure on an agent right now, or `None` for direct.
@@ -338,12 +398,13 @@ pub fn with_candidates<T>(
 /// [`with_candidates`] for ONE url: a loopback target never takes a proxy
 /// (the [`agent_for`] rule), so it runs direct and once; everything else
 /// walks the chain. The pool's per-endpoint calls go through here (T028).
+/// The dev proxy is the exception: it takes loopback too (module note, 4).
 pub fn with_candidates_for<T>(
     url: &str,
     timeout: Duration,
     mut call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
 ) -> Result<T, Transport> {
-    if is_local(url) {
+    if is_local(url) && dev_proxy().is_none() {
         return call(&agent_over(None, timeout)).map_err(|error| Transport {
             local: failed_inside_this_machine(&error),
             error,
@@ -683,6 +744,36 @@ mod tests {
         // SOCKS4 cannot carry a hostname at all, so it is not asked to.
         let socks4 = Proxy::new("socks4://127.0.0.1:1080").unwrap();
         assert!(resolve_at_the_proxy(&socks4).is_none());
+    }
+
+    /// `VELA_DEV_PROXY` is `<host>:<port>` and nothing else, and what it names
+    /// is a CONNECT proxy that bypasses nothing — loopback and a developer
+    /// shell's `NO_PROXY` included — or a fault row could be routed around.
+    #[cfg(feature = "dev-fixtures")]
+    #[test]
+    fn the_dev_proxy_is_host_and_port_and_bypasses_nothing() {
+        let proxy = parse_dev_proxy("127.0.0.1:8899").expect("host:port");
+        assert_eq!(proxy.protocol(), ProxyProtocol::Http);
+        assert_eq!((proxy.host(), proxy.port()), ("127.0.0.1", 8899));
+        assert!(!proxy.resolve_target(), "the proxy does the lookup");
+        let local: ureq::http::Uri = "http://127.0.0.1:8545/".parse().unwrap();
+        assert!(!proxy.is_no_proxy(&local));
+        assert_eq!(
+            parse_dev_proxy("localhost:3128").map(|p| p.port()),
+            Some(3128)
+        );
+        for bad in [
+            "",
+            "127.0.0.1",
+            "127.0.0.1:",
+            ":8899",
+            "127.0.0.1:0",
+            "127.0.0.1:65536",
+            "http://127.0.0.1:8899",
+            "user@127.0.0.1:8899",
+        ] {
+            assert!(parse_dev_proxy(bad).is_none(), "{bad:?} was accepted");
+        }
     }
 
     #[test]

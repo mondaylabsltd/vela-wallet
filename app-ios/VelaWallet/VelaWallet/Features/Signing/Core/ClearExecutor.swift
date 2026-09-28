@@ -165,7 +165,7 @@ final class ClearExecutor {
         var request = URLRequest(url: parsed)
         request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "accept")
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
+        guard let (data, response) = try? await URLSession.velaShared.data(for: request),
               let status = (response as? HTTPURLResponse)?.statusCode, status == 200
         else { return nil }
         return String(data: data, encoding: .utf8)
