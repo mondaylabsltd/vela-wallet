@@ -898,10 +898,17 @@ impl OnboardingPage {
             this.channel.cancel_qr();
             cx.notify();
         });
-        Some(
-            scrim(theme, "qr-scrim")
-                .child(hardware::qr_card(theme, &self.loc, &payload, on_cancel)),
-        )
+        // 083 W16: the sign-in sheet's own words under a sign-in's code — it
+        // creates nothing.
+        let chooser = if self.creating {
+            hardware::Chooser::Create
+        } else {
+            hardware::Chooser::SignIn
+        };
+        let line = hardware::method_line(&self.loc, vela_core::app::KeyMethod::Hybrid, chooser);
+        Some(scrim(theme, "qr-scrim").child(hardware::qr_card_with(
+            theme, &self.loc, &payload, line, on_cancel,
+        )))
     }
 
     /// The sign-in method picker — the same three methods creating a wallet

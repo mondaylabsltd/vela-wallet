@@ -950,15 +950,15 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
     let entry = |method: KeyMethod| {
         let here = crate::hardware::method_available(method);
         let available = here && fits_the_set(method);
-        let (title_key, body_key) = crate::hardware::method_words(method);
+        let (title_key, _) = crate::hardware::method_words(method);
         // A route this MACHINE cannot run says what is missing; a route this
         // SET cannot take keeps its own caption, because the sentence under the
         // list already says what the set belongs to.
-        let body = loc.t(if here {
-            body_key
+        let body = if here {
+            crate::hardware::method_line(loc, method, crate::hardware::Chooser::Create)
         } else {
-            "onboarding.create.securityKeyRequiredBody"
-        });
+            loc.t("onboarding.create.securityKeyRequiredBody")
+        };
         let sink = host.sink.clone();
         let event = if available {
             FlowEvent::AddKey(method)

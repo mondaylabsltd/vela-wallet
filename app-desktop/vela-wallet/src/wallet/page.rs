@@ -6040,7 +6040,15 @@ impl WalletPage {
                     host.update(cx, |host, cx| host.cancel_qr(cx));
                 }
             };
-            let card = hardware::qr_card(theme, &self.loc, &payload, on_cancel);
+            // What to do on the phone, as the dApp column says it (083 W19):
+            // a send creates nothing on it.
+            let card = hardware::qr_card_with(
+                theme,
+                &self.loc,
+                &payload,
+                self.loc.t("onboarding.common.touchRemoteBody"),
+                on_cancel,
+            );
             return Some(scrim("send-qr-scrim").child(card).into_any_element());
         }
         if let Some(waiting) = touch {
