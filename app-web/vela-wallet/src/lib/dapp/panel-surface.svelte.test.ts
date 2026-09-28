@@ -78,7 +78,8 @@ describe('the layout’s RB9 effect over a real surface (G55)', () => {
 					panelNeedsWallet({
 						caller: surface.caller,
 						current: surface.current,
-						routeId: '/[locale]/settings'
+						routeId: '/[locale]/settings',
+						allowedRoute: 'wallet'
 					})
 				);
 			});

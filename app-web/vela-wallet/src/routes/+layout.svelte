@@ -25,6 +25,7 @@
 	import { parallelFlagSet } from '$lib/dev/parallel-flag.svelte';
 	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { inExtension } from '$lib/dapp/transport';
+	import { session } from '$lib/session/core/session.svelte';
 
 	let { children } = $props();
 
@@ -95,7 +96,10 @@
 		const needed = panelNeedsWallet({
 			caller: panelSurface.caller,
 			current: panelSurface.current,
-			routeId: page.route.id
+			routeId: page.route.id,
+			// Only where the core lets the app be: with no wallet yet the wallet
+			// route sends the panel back to Welcome — a loop, not a request.
+			allowedRoute: session.view.allowed_route
 		});
 		if (needed) void goto(walletHref);
 	});
@@ -112,17 +116,15 @@
 		if (!inExtension()) return;
 		let stop: (() => void) | undefined;
 		let gone = false;
-		void Promise.all([import('$lib/dapp/follow'), import('$lib/session/core/session.svelte')]).then(
-			([follow, { session }]) => {
-				if (gone) return;
-				void follow.normalizeGrantSpelling();
-				stop = $effect.root(() => {
-					$effect(() => {
-						void follow.sessionFollower.note(session.view);
-					});
+		void import('$lib/dapp/follow').then((follow) => {
+			if (gone) return;
+			void follow.normalizeGrantSpelling();
+			stop = $effect.root(() => {
+				$effect(() => {
+					void follow.sessionFollower.note(session.view);
 				});
-			}
-		);
+			});
+		});
 		return () => {
 			gone = true;
 			stop?.();

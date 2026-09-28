@@ -350,18 +350,48 @@ describe('the panel owes a request while another screen shows (RB9, G55)', () =>
 	it('the wallet is where it is answered: any other route is told to go there', () => {
 		const caller = { kind: 'panel', windowId: 3 } as const;
 		const owed = request('7:a');
-		expect(panelNeedsWallet({ caller, current: owed, routeId: '/[locale]/settings' })).toBe(true);
-		expect(panelNeedsWallet({ caller, current: owed, routeId: '/[locale]/contacts' })).toBe(true);
-		expect(panelNeedsWallet({ caller, current: owed, routeId: '/[locale]/wallet' })).toBe(false);
-		expect(panelNeedsWallet({ caller, current: null, routeId: '/[locale]/settings' })).toBe(false);
+		const allowedRoute = 'wallet' as const;
+		const at = (routeId: string | null, current: typeof owed | null = owed) =>
+			panelNeedsWallet({ caller, current, routeId, allowedRoute });
+		expect(at('/[locale]/settings')).toBe(true);
+		expect(at('/[locale]/contacts')).toBe(true);
+		expect(at('/[locale]/wallet')).toBe(false);
+		expect(at('/[locale]/settings', null)).toBe(false);
 		// A request window, or a page that is not a surface at all, never moves.
 		expect(
 			panelNeedsWallet({
 				caller: { kind: 'window', rid: '7:a' },
 				current: owed,
-				routeId: '/[locale]/request'
+				routeId: '/[locale]/request',
+				allowedRoute
 			})
 		).toBe(false);
-		expect(panelNeedsWallet({ caller: null, current: owed, routeId: null })).toBe(false);
+		expect(panelNeedsWallet({ caller: null, current: owed, routeId: null, allowedRoute })).toBe(
+			false
+		);
+	});
+
+	it('only where the core lets the app be: no wallet yet, or no ruling yet, stays put', () => {
+		// The wallet route's guard sends a wallet-less panel back to Welcome:
+		// going there would loop Welcome ⇄ Wallet and pull the person out of
+		// creating the wallet the request needs.
+		const caller = { kind: 'panel', windowId: 3 } as const;
+		const owed = request('7:a');
+		for (const routeId of ['/[locale]', '/[locale]/create', '/[locale]/import']) {
+			expect(panelNeedsWallet({ caller, current: owed, routeId, allowedRoute: 'onboarding' })).toBe(
+				false
+			);
+		}
+		expect(
+			panelNeedsWallet({
+				caller,
+				current: owed,
+				routeId: '/[locale]/settings',
+				allowedRoute: 'loading'
+			})
+		).toBe(false);
+		expect(
+			panelNeedsWallet({ caller, current: owed, routeId: '/[locale]/settings', allowedRoute: null })
+		).toBe(false);
 	});
 });

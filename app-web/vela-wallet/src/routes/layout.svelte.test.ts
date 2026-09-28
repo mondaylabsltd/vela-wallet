@@ -70,8 +70,16 @@ vi.mock('$app/paths', () => ({
 import Layout from './+layout.svelte';
 import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 
+/**
+ * The surface's listeners, module-wide: `panelSurface` is the document's one
+ * surface and keeps the FIRST test's `chrome.runtime` (`??=`), so a per-test
+ * list would never hear a later test's push — and a "never goes" case would
+ * pass without anything having been pushed.
+ */
+const toSurface: ((m: unknown) => void)[] = [];
+
 function fakeChrome() {
-	const toSurface: ((m: unknown) => void)[] = [];
+	toSurface.length = 0;
 	return {
 		chrome: {
 			runtime: {
@@ -102,12 +110,15 @@ class FakeSession {
 		has_wallet: true,
 		address: '0xOne',
 		active_index: 0,
-		accounts: [] as { account: { address: string } }[]
+		accounts: [] as { account: { address: string } }[],
+		allowed_route: 'wallet' as 'loading' | 'onboarding' | 'wallet'
 	});
 }
 const sessionState = new FakeSession();
 
 afterEach(() => {
+	sessionState.view.allowed_route = 'wallet';
+	sessionState.view.has_wallet = true;
 	panelSurface.stop();
 	delete (globalThis as { chrome?: unknown }).chrome;
 	nav.goto.mockClear();
@@ -164,6 +175,63 @@ describe('RB9 from the root layout (G55)', () => {
 				at: 1
 			}
 		});
+		flushSync();
+		await tick();
+		expect(nav.goto).not.toHaveBeenCalled();
+		await screen.unmount();
+	});
+});
+
+describe('RB9 with no wallet yet (the core rules onboarding)', () => {
+	const OWED = {
+		rid: '9:b:1',
+		id: 'b:1',
+		method: 'eth_requestAccounts',
+		params: [],
+		origin: 'https://b.example',
+		tabId: 9,
+		at: 1
+	};
+
+	it('a request owed on Welcome does not pull the panel to the wallet, which sends it straight back', async () => {
+		// A stranger installs Vela and taps Connect on a dApp: the panel opens,
+		// the wallet route's guard sends it to Welcome (no wallet), and the
+		// request is owed. Going to the wallet now is a Welcome ⇄ Wallet loop
+		// that also yanks the person out of creating the wallet it needs.
+		const env = fakeChrome();
+		(globalThis as { chrome?: unknown }).chrome = env.chrome as any;
+		sessionState.view.has_wallet = false;
+		sessionState.view.allowed_route = 'onboarding';
+		nav.route = '/[locale]';
+		const screen = render(Layout, { props: { children } as any });
+		await panelSurface.start({ kind: 'panel', windowId: 3 });
+		env.push({ type: 'owed', request: OWED });
+		flushSync();
+		await tick();
+		expect(nav.goto).not.toHaveBeenCalled();
+
+		nav.route = '/[locale]/create';
+		flushSync();
+		await tick();
+		expect(nav.goto).not.toHaveBeenCalled();
+
+		// The wallet exists (the core rules the wallet route): the request rises there.
+		sessionState.view.has_wallet = true;
+		sessionState.view.allowed_route = 'wallet';
+		flushSync();
+		await tick();
+		expect(nav.goto).toHaveBeenCalledWith('/zh/wallet');
+		await screen.unmount();
+	});
+
+	it('nor while the core has not ruled yet', async () => {
+		const env = fakeChrome();
+		(globalThis as { chrome?: unknown }).chrome = env.chrome as any;
+		sessionState.view.allowed_route = 'loading';
+		nav.route = '/[locale]/settings';
+		const screen = render(Layout, { props: { children } as any });
+		await panelSurface.start({ kind: 'panel', windowId: 3 });
+		env.push({ type: 'owed', request: OWED });
 		flushSync();
 		await tick();
 		expect(nav.goto).not.toHaveBeenCalled();

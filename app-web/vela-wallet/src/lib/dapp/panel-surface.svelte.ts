@@ -40,6 +40,7 @@
  * wallet, where it is answered (G55).
  */
 import type { ExtensionRequest } from './transport';
+import type { SessionRoute } from '$lib/core/generated/SessionRoute';
 
 /**
  * The worker's names (`extension/lib/protocol.js`), declared here because the
@@ -145,13 +146,26 @@ const WALLET_ROUTE = '/[locale]/wallet';
  * Settings, Contacts, Feedback — so it goes to the wallet, where the request
  * rises. Only the panel moves; a request window, or a page that is no surface
  * at all, stays where it is.
+ *
+ * And only where the CORE lets the app be (`SessionView.allowed_route`,
+ * invariant ⑧): with no wallet yet the wallet route's own guard sends the
+ * panel straight back to Welcome, so going there would loop Welcome ⇄ Wallet
+ * and pull a stranger out of creating the wallet the request needs. The
+ * request waits and rises once the core rules `wallet`; while it has not
+ * ruled (`loading`) nothing moves either.
  */
 export function panelNeedsWallet(facts: {
 	caller: SurfaceCaller | null;
 	current: ExtensionRequest | null;
 	routeId: string | null;
+	allowedRoute: SessionRoute | null;
 }): boolean {
-	return facts.caller?.kind === 'panel' && facts.current !== null && facts.routeId !== WALLET_ROUTE;
+	return (
+		facts.caller?.kind === 'panel' &&
+		facts.current !== null &&
+		facts.allowedRoute === 'wallet' &&
+		facts.routeId !== WALLET_ROUTE
+	);
 }
 
 /** Is `value` a ledger record this surface owns (the worker's `callerOwns`)? */
