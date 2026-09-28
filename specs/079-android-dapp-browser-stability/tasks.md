@@ -35,8 +35,8 @@ or gains a test"), and each client's mapping gets a unit test. Device checks are
 - [x] T010 Export T005/T009 through UniFFI in `rust/crates/vela-core-uniffi/src/lib.rs` (`browser_load_classify`, `browser_load_retry_delay_ms`, `browser_load_visit`, `browser_site_letter`, `fee_requote_delay_ms`) and through wasm in `rust/crates/vela-core-wasm/src/lib.rs` for what the extension uses (`fee_requote_delay_ms`)
 - [x] T011 Add the corpus keys of contracts §4 to all 15 locales in `L/explore.json` and `L/componentsUi.json` (zh source text from the contract; real translations for the other 14; zh-HK in Cantonese written form)
 - [x] T012 Run the six i18n steps (memory: i18n corpus gates) — `npm run gen:i18n`, `lint:i18n`, `verify:i18n`, `dump:vectors`, the leaf-count pin, `build:wasm` — and `cd rust && cargo test -p vela-core --features i18n-all,crux`; regenerate TS types (`gen:core-types`) and `build-web --check`
-- [ ] T013 Regenerate Kotlin bindings, the arm64 `.so` and the iOS xcframework from this tree (T001's commands; `check-ios-core-fresh.sh`)
-- [ ] T014 [P] Mirror the new view field and wire types in each client's wire file: Android `A/feature/send/core/` tracker wire (`TrackEntryView.outcome`), iOS `I/Features/Send/TrackerWire.swift`, desktop (crate types, no mirror), web `W/wallet/core/` tracker types; extend Android `AT/CoreWireDriftTest.kt` for the new field
+- [x] T013 Regenerate Kotlin bindings, the arm64 `.so` and the iOS xcframework from this tree (T001's commands; `check-ios-core-fresh.sh`)
+- [x] T014 [P] Mirror the new view field and wire types in each client's wire file: Android `A/feature/send/core/` tracker wire (`TrackEntryView.outcome`), iOS `I/Features/Send/TrackerWire.swift`, desktop (crate types, no mirror), web `W/wallet/core/` tracker types; extend Android `AT/CoreWireDriftTest.kt` for the new field
 
 **Checkpoint**: core suite green; bindings current on every client.
 
@@ -48,25 +48,28 @@ or gains a test"), and each client's mapping gets a unit test. Device checks are
 **Independent test**: quickstart S1–S6.
 
 ### Android
-- [ ] T015 [US1] Add a non-dismissible mode to `A/core/designsystem/components/VelaModalSheet.kt` (sheet state refuses the hidden target, scrim taps swallowed, `BackHandler` swallows) and use it for the signing sheet (`A/feature/signing/SigningSheet.kt`) and the consent sheet (`A/feature/explore/ExploreScreen.kt`)
-- [ ] T016 [US1] Put a ✕ in the signing header (`A/feature/signing/components/SigningComponents.kt` `SigningHeader`) wired to the existing dismiss path in `A/navigation/VelaNavHost.kt` (the `SigningSheet(` call at ~682); update the "Dismissal is rejection" doc comment in `SigningSheet.kt` to ruling 1
-- [ ] T017 [US1] Replace the form with a status body once approved: in `A/feature/signing/SigningLive.kt` map `SignView` (`is_signing`, `is_submitting`, `pending_op_hash`, `error`) + the tracker entry's `outcome` to the data-model's signing status; render it in `SigningSheet.kt` with `StatusHero` from `A/feature/flows/components/FlowBlocks.kt:593`; hide fee, speed and slide after approval
-- [ ] T018 [US1] Keep the landing result after the core clears the sheet (the desktop `dapp_landing` pattern) in `A/VelaWalletApplication.kt` `openSigning`/`signing` flow: show the tick with short hash + explorer link, close after ~1.2 s; message signatures show "已签名" and close
-- [ ] T019 [US1] Still-confirming and unknown: render `componentsUi.signing.stillConfirming` / `unknownOutcome` from `outcome`; closing in any post-approval state sends no answer
-- [ ] T020 [P] [US1] Unit tests in `AT/SigningLiveTest.kt` (or the existing signing test file): status mapping for every `SignView`/`outcome` combination; the ✕ before approval answers 4001 once, after approval answers nothing
+- [x] T015 [US1] Add a non-dismissible mode to `A/core/designsystem/components/VelaModalSheet.kt` (sheet state refuses the hidden target, scrim taps swallowed, `BackHandler` swallows) and use it for the signing sheet (`A/feature/signing/SigningSheet.kt`) and the consent sheet (`A/feature/explore/ExploreScreen.kt`)
+- [x] T016 [US1] Put a ✕ in the signing header (`A/feature/signing/components/SigningComponents.kt` `SigningHeader`) wired to the existing dismiss path in `A/navigation/VelaNavHost.kt` (the `SigningSheet(` call at ~682); update the "Dismissal is rejection" doc comment in `SigningSheet.kt` to ruling 1
+- [x] T017 [US1] Replace the form with a status body once approved: in `A/feature/signing/SigningLive.kt` map `SignView` (`is_signing`, `is_submitting`, `pending_op_hash`, `error`) + the tracker entry's `outcome` to the data-model's signing status; render it in `SigningSheet.kt` with `StatusHero` from `A/feature/flows/components/FlowBlocks.kt:593`; hide fee, speed and slide after approval
+- [x] T018 [US1] Keep the landing result after the core clears the sheet (the desktop `dapp_landing` pattern) in `A/VelaWalletApplication.kt` `openSigning`/`signing` flow: show the tick with short hash + explorer link, close after ~1.2 s; message signatures show "已签名" and close
+- [x] T019 [US1] Still-confirming and unknown: render `componentsUi.signing.stillConfirming` / `unknownOutcome` from `outcome`; closing in any post-approval state sends no answer
+- [x] T020 [P] [US1] Unit tests in `AT/SigningLiveTest.kt` (or the existing signing test file): status mapping for every `SignView`/`outcome` combination; the ✕ before approval answers 4001 once, after approval answers nothing
 
 ### iOS
 - [ ] T021 [P] [US1] `.interactiveDismissDisabled()` on the signing and consent sheets in `I/Features/Explore/ExploreScreen.swift` (~300/315) and a ✕ in `I/Components/Signing/SigningAtoms.swift` header wired to `onSigningDismissed()`
 - [ ] T022 [US1] Status body in `I/Features/Signing/SigningLive.swift` + `SigningSheet.swift` using `StatusHeroView` (as `I/Features/Flows/FlowBodies.swift:1306`); keep the landing result for the tick; still-confirming/unknown words
 - [ ] T023 [P] [US1] Hermetic tests in `IT/` for the status mapping and the one-answer rule
+- [ ] T023a [US1] iOS tracker clock: tick while any entry is `polling`, not only `status == "pending"` (`I/Features/Send/TrackerWire.swift` `hasPending`, the ticker in `I/Features/Send/TrackerStore.swift`) — the Android device pass showed an op past its window never updating
+- [ ] T023b [US1] iOS receipt wait: cap each poll by what is left of the window (`I/Features/Signing/Core/SignExecutor.swift` receipt loop) — Android's page waited 268 s with the relay down
 
 ### Desktop
 - [ ] T024 [P] [US1] In `D/signing/live.rs` + `D/wallet/page.rs` (`signing_body` ~14002): switch to the status view as soon as `is_signing`/`is_submitting`/`pending_op_hash` (not only after the core closes the sheet, `page.rs:15156`); hide the dimmed slide (`page.rs:14592`); map every tracker status, not just Submitted (`page.rs:15199`), incl. still-confirming/unknown
 - [ ] T025 [P] [US1] Desktop tests beside `D/signing/live.rs` for the mapping
+- [ ] T025a [US1] Desktop tracker clock ticks while any entry is `polling`; receipt wait capped by the remaining window (`D/executor/tracker.rs`, `D/executor/sign_request.rs` `await_receipt`)
 
 ### Extension
 - [ ] T026 [P] [US1] `W/signing/SigningHost.svelte:375`: `dismissible={false}` for the signing sheet and the consent card (`W/dapp/DappRequestHost.svelte`); explicit ✕ keeps `reject_tapped`; `W/wallet/ui/BottomSheet.svelte` gains a non-dismissible mode (no scrim click, no Esc, no drag)
-- [ ] T027 [US1] Message signatures get the signed tick before closing; `W/wallet/core/tracker-resident.ts` keeps ticking past 120 s on the core's cadence and the receipt shows still-confirming/unknown (`SigningHost.svelte:129-135`)
+- [ ] T027 [US1] Message signatures get the signed tick before closing; `W/wallet/core/tracker-resident.ts` keeps ticking past 120 s while any entry is `polling` (the core paces it) and the receipt shows still-confirming/unknown (`SigningHost.svelte:129-135`)
 - [ ] T028 [P] [US1] Web unit tests for T026–T027 (BottomSheet non-dismissible, receipt status mapping)
 
 **Checkpoint**: quickstart S1–S6 pass on the Xiaomi and the iPhone; desktop screenshot of the status view.
