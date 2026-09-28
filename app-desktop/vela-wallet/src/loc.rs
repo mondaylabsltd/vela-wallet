@@ -118,7 +118,29 @@ impl Loc {
     pub fn language(&self) -> &str {
         self.engine.language()
     }
+
+    /// [`Self::from_env`] pinned to `tag`, for a test that must hold a string
+    /// to account in every language the app ships ([`LANGUAGES`]).
+    #[cfg(test)]
+    pub(crate) fn for_language(tag: &str) -> Self {
+        let mut engine = match I18n::embedded() {
+            Ok(engine) => engine,
+            Err(error) => unreachable!("the en catalog is compiled in: {error}"),
+        };
+        let state = engine.change_language(tag);
+        if let Some(resolved) = state.resolved_language.as_deref()
+            && resolved != "en"
+            && let Ok(catalog) = Catalog::embedded(resolved)
+        {
+            engine.load_catalog(catalog);
+        }
+        Self { engine }
+    }
 }
+
+/// Every language the app ships, for [`Loc::for_language`].
+#[cfg(test)]
+pub(crate) const LANGUAGES: [&str; 15] = vela_core::i18n::SUPPORTED;
 
 /// The tag the strings resolve from: the `VELA_LANG` pin, else the language
 /// the person chose in Settings (spec 072: `vela.language`), else the

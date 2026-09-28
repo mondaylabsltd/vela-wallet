@@ -820,4 +820,121 @@ mod tests {
             "another operation's changes are not this one's"
         );
     }
+
+    /// Spec 083 fee review: the desktop's whole path from the column's own
+    /// simulation to the fee machine, for the device's Max USDC -> ETH swap.
+    /// The deltas `sim::simulate` answers, handed over as `signing_host`
+    /// hands them, told to the session in force right after its question
+    /// (`ask_session`), put the fee leg the relay is asked to simulate in
+    /// ETH; without them the machine picks USDC, the coin the swap drains.
+    #[test]
+    fn the_simulations_deltas_put_a_max_swaps_fee_leg_in_the_chains_coin() {
+        use vela_core::app::fee_policy::{
+            FeeAssetKind, FeeAssetQuote, FeeBundlerQuote, FeeShellResult as Res,
+        };
+        use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
+        const USDC: &str = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+        const ETH_RECIPIENT: &str = "0x1111111111111111111111111111111111111111";
+        const USDC_RECIPIENT: &str = "0x3333333333333333333333333333333333333333";
+        let row = |native: bool, balance: &str, usd: &str| FeeAssetQuote {
+            recipient: if native {
+                ETH_RECIPIENT
+            } else {
+                USDC_RECIPIENT
+            }
+            .to_owned(),
+            asset: if native {
+                FeeAssetKind::Native
+            } else {
+                FeeAssetKind::Erc20
+            },
+            fee_token: (!native).then(|| USDC.to_owned()),
+            balance: balance.to_owned(),
+            decimals: if native { 18 } else { 6 },
+            symbol: if native { "ETH" } else { "USDC" }.to_owned(),
+            usd_balance: usd.to_owned(),
+            usd_price: Some(if native { "1868.70" } else { "1" }.to_owned()),
+            native_usd_floor_price: None,
+        };
+        let swap = QuoteAsk {
+            chain_id: 8453,
+            account: "0x88cc000000000000000000000000000000006894".to_owned(),
+            public_key_available: true,
+            tier: FeeTier::Standard,
+            calls: vec![FeeCall {
+                to: "0x6ff5693b99212da76ad316178a184ab56d299b43".to_owned(),
+                value: "0".to_owned(),
+                data: format!("0x3593564c{}", "ab".repeat(1_200)),
+            }],
+            fee_token: None,
+            auto_fee_token: true,
+        };
+        // The fee leg of the simulation the machine asks for: `None` = ETH.
+        let leg = |measured: bool| {
+            let mut control = SpeedControl::new();
+            control.fee.ask = Some(swap.clone());
+            if measured {
+                let deltas = [
+                    TrustAssetDelta {
+                        kind: TrustDeltaKind::Erc20,
+                        token: Some(USDC.to_owned()),
+                        delta: "-271741".to_owned(),
+                    },
+                    TrustAssetDelta {
+                        kind: TrustDeltaKind::Native,
+                        token: None,
+                        delta: "101000000000000".to_owned(),
+                    },
+                ];
+                control.balance_changes = Some((
+                    swap.calls.clone(),
+                    crate::wallet::signing_host::fee_balance_changes(&deltas),
+                ));
+            }
+            let key = control.fee.key;
+            let mut pending = control.fee.host.dispatch(swap.event(true));
+            if let Some(told) = control.balance_event(key) {
+                pending.extend(control.fee.host.dispatch(told));
+            }
+            let mut asked = None;
+            while let Some(effect) = pending.pop() {
+                let result = match effect.operation {
+                    FeeOperation::FetchGasPrice { .. } => Res::GasPrice {
+                        eth_gas_price: Some("10000000".to_owned()),
+                        base_fee: Some("10000000".to_owned()),
+                        priority_fee: Some("0".to_owned()),
+                    },
+                    FeeOperation::FetchBundlerQuote { .. } => Res::BundlerQuote {
+                        quote: Some(FeeBundlerQuote {
+                            max_fee_per_gas: "20000000".to_owned(),
+                            max_priority_fee_per_gas: None,
+                            network_fee_per_gas: Some("10000000".to_owned()),
+                            relayer_fee_per_gas: Some("10000000".to_owned()),
+                        }),
+                    },
+                    FeeOperation::FetchInBandQuotes { .. } => Res::InBandQuotes {
+                        quotes: Some(vec![
+                            row(true, "480000000000000", "0.90"),
+                            row(false, "271741", "0.27"),
+                        ]),
+                    },
+                    FeeOperation::EstimateUserOpGas { calls, .. } => {
+                        asked = calls.last().cloned();
+                        continue;
+                    }
+                    _ => continue,
+                };
+                pending.extend(control.fee.host.resolve(effect.id, result));
+            }
+            let leg = asked.expect("the relay is asked to simulate the operation");
+            if leg.data == "0x" {
+                assert_eq!(leg.to, ETH_RECIPIENT);
+                None
+            } else {
+                Some(leg.to.to_lowercase())
+            }
+        };
+        assert_eq!(leg(false).as_deref(), Some(USDC), "the calls alone: USDC");
+        assert_eq!(leg(true), None, "the simulation's deltas: ETH");
+    }
 }

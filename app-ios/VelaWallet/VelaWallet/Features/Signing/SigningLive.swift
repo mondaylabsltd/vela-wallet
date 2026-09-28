@@ -1059,9 +1059,12 @@ enum SigningLive {
     /// A fee failure a recovering network or relay can clear — the ones the
     /// core re-quotes (`feeRequoteDelayMs`). A missing key or a broken
     /// calculation is not the network's doing, and saying "check your
-    /// connection" about it would send somebody to fix the wrong thing.
+    /// connection" about it would send somebody to fix the wrong thing. Nor
+    /// is `would_fail` (spec 083 fee): the relay ANSWERED that the operation
+    /// fails. This shell does not report that answer yet, so the core never
+    /// says it here — but the day it does, it is not the network sentence.
     static func recoverable(_ failure: String) -> Bool {
-        failure != "missing_public_key" && failure != "calculation_failed"
+        failure != "missing_public_key" && failure != "calculation_failed" && failure != "would_fail"
     }
 
     /// Spec 079: the fee row's refresh — the send form's own control, dimmed

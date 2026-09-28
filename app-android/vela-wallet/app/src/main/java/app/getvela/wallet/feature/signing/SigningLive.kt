@@ -838,7 +838,7 @@ object SigningLive {
                 // network's doing (this shell does not report it yet).
                 fee.failed != null && fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.MissingPublicKey &&
                     fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed &&
-                    fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.SimulationFailed ->
+                    fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.WouldFail ->
                     ctx.strings.t("componentsUi.funding.denialNetworkError")
                 else -> null
             },

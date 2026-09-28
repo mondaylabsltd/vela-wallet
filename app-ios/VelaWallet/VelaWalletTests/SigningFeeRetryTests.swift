@@ -85,7 +85,7 @@ struct SigningFeeRetryTests {
             #expect(warning(SigningLive.feeModel(clear: clear(.clearSign), fee: fee(failed: failure), context: context()))
                     == loc.t("componentsUi.funding.denialNetworkError"), "\(failure)")
         }
-        for failure in ["missing_public_key", "calculation_failed"] {
+        for failure in ["missing_public_key", "calculation_failed", "would_fail"] {
             #expect(warning(SigningLive.feeModel(clear: clear(.clearSign), fee: fee(failed: failure), context: context()))
                     == nil, "no network sentence for \(failure): the network did not cause it")
         }

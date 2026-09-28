@@ -158,6 +158,15 @@ pub struct SigningStrings {
     pub warn_unlimited: SharedString,
     pub warn_expired: SharedString,
     pub warn_will_fail: SharedString,
+    /// The fee row's "this transaction would fail" (spec 083 fee review): the
+    /// relay answered that the operation fails with every coin that could
+    /// pay its fee. `simWillFail` without its "you'd still pay gas" — the
+    /// relay refuses such an operation, so nothing is charged, and saying
+    /// otherwise is the misleading feedback the owner reported. Its own first
+    /// clause ([`first_clause`]) until the corpus has room for a sentence of
+    /// its own: the i18n residency budget has 50 bytes left, and raising it
+    /// is the owner's call.
+    pub warn_would_fail: SharedString,
     pub warn_hex_message: SharedString,
     pub warn_blind_typed: SharedString,
     pub warn_eth_sign: SharedString,
@@ -391,6 +400,7 @@ impl SigningStrings {
             warn_unlimited: s("unlimitedWarning"),
             warn_expired: s("expiredWarning"),
             warn_will_fail: s("simWillFail"),
+            warn_would_fail: first_clause(&s("simWillFail")),
             warn_hex_message: s("hexMessageWarning"),
             warn_blind_typed: s("blindTypedWarning"),
             warn_eth_sign: s("ethSignWarning"),
@@ -498,6 +508,25 @@ impl SigningStrings {
     }
 }
 
+/// The first clause of a two-clause sentence, closed with the sentence's own
+/// full stop: "This transaction is expected to fail — you'd still pay gas."
+/// becomes "This transaction is expected to fail." Every language writes
+/// `simWillFail` as "<it fails> — <you pay gas><stop>" (a test holds all
+/// fifteen to it); a sentence without the dash is kept whole.
+fn first_clause(sentence: &str) -> SharedString {
+    let Some((head, _)) = sentence.split_once(" — ") else {
+        return SharedString::from(sentence.to_owned());
+    };
+    let mut clause = head.trim_end().to_owned();
+    clause.extend(
+        sentence
+            .chars()
+            .last()
+            .filter(|stop| !stop.is_alphanumeric()),
+    );
+    SharedString::from(clause)
+}
+
 /// `{{var}}` interpolation for the signing templates — the same one-line fill
 /// the wallet strings use, not a parallel i18n engine.
 pub fn fill(template: &str, vars: &[(&str, &str)]) -> String {
@@ -594,6 +623,39 @@ mod tests {
             );
         }
         assert!(s.tx_typical_time.contains("{{estSecs}}"));
+    }
+
+    /// Spec 083 fee review: the fee row's "would fail" is `simWillFail`
+    /// without its gas clause, in every language the app ships — the relay
+    /// refuses such an operation, so nothing is charged — and still a whole
+    /// sentence, ending as the full one ends.
+    #[test]
+    fn the_would_fail_sentence_drops_the_gas_clause_in_every_language() {
+        for lang in crate::loc::LANGUAGES {
+            let s = SigningStrings::resolve(&Loc::for_language(lang));
+            let full = s.warn_will_fail.to_string();
+            let short = s.warn_would_fail.to_string();
+            assert!(full.contains(" — "), "{lang}: {full}");
+            assert!(!short.contains('—'), "{lang}: {short}");
+            let clause = short.trim_end_matches(|c: char| !c.is_alphanumeric());
+            assert!(
+                !clause.is_empty() && full.starts_with(clause),
+                "{lang}: {short} / {full}"
+            );
+            assert_eq!(short.chars().last(), full.chars().last(), "{lang}");
+            let lower = short.to_lowercase();
+            for gas in ["gas", "가스", "газ"] {
+                assert!(!lower.contains(gas), "{lang}: {short}");
+            }
+        }
+        let en = SigningStrings::resolve(&Loc::for_language("en"));
+        assert_eq!(
+            en.warn_would_fail.as_ref(),
+            "This transaction is expected to fail."
+        );
+        let zh = SigningStrings::resolve(&Loc::for_language("zh"));
+        assert_eq!(zh.warn_would_fail.as_ref(), "这笔交易预计会失败。");
+        assert_eq!(first_clause("no dash here").as_ref(), "no dash here");
     }
 
     #[test]

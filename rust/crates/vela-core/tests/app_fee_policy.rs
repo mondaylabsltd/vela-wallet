@@ -3827,7 +3827,7 @@ fn a_failure_no_retry_can_fix_is_never_asked_again() {
         FeeFailure::MissingPublicKey,
         FeeFailure::CalculationFailed,
         // Spec 083 fee: the same operation gets the same answer.
-        FeeFailure::SimulationFailed,
+        FeeFailure::WouldFail,
     ] {
         assert_eq!(requote_delay_ms(failure, 1), None, "{failure:?}");
     }
@@ -4077,7 +4077,7 @@ fn when_nothing_can_pay_the_failure_is_not_the_network() {
         "nothing left to pay from, so nothing else is tried: {ops:?}"
     );
     let view = sut.view();
-    assert_eq!(view.failed, Some(FeeFailure::SimulationFailed));
+    assert_eq!(view.failed, Some(FeeFailure::WouldFail));
     assert!(view.fee.is_none());
     assert!(!view.confirm_fee_ready);
     assert!(
@@ -4132,8 +4132,8 @@ fn a_refusal_of_a_chosen_coin_fails_as_itself_and_the_picker_still_works() {
     let ops = sut.resolve_matching(is_estimate, refused());
     assert!(ops.is_empty(), "no other coin is tried: {ops:?}");
     let view = sut.view();
-    assert_eq!(view.failed, Some(FeeFailure::SimulationFailed));
-    assert_eq!(requote_delay_ms(FeeFailure::SimulationFailed, 1), None);
+    assert_eq!(view.failed, Some(FeeFailure::WouldFail));
+    assert_eq!(requote_delay_ms(FeeFailure::WouldFail, 1), None);
     assert_eq!(
         view.fee_token.as_deref(),
         Some(USDC),
@@ -4226,8 +4226,9 @@ fn a_swap_that_leaves_enough_of_the_fee_coin_is_priced_as_before() {
 
 /// The simulation lands on a quote that already failed: 0 ETH, so the relay
 /// refused the USDC-paid op and nothing was left to try. The swap brings ETH
-/// in before the fee leg runs — the chain's coin can pay now, and the
-/// operation is priced again in it, once.
+/// in before the fee leg runs — counted at half, still far above the fee —
+/// so the chain's coin can pay now, and the operation is priced again in it,
+/// once.
 #[test]
 fn balance_changes_that_land_on_a_failed_quote_price_it_again_in_a_coin_that_pays() {
     let mut sut = Sut::new();
@@ -4235,7 +4236,7 @@ fn balance_changes_that_land_on_a_failed_quote_price_it_again_in_a_coin_that_pay
     let ops = gather(&mut sut, vec![native_row("0"), usdc_row("5000000")]);
     assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
     assert!(sut.resolve_matching(is_estimate, refused()).is_empty());
-    assert_eq!(sut.view().failed, Some(FeeFailure::SimulationFailed));
+    assert_eq!(sut.view().failed, Some(FeeFailure::WouldFail));
     sut.drop_matching(is_measure);
 
     let ops = sut.dispatch(Event::BalanceChangesMeasured {
@@ -4284,4 +4285,214 @@ fn tempo_ignores_measured_balance_changes() {
     let view = sut.view();
     assert_eq!(view.fee_token.as_deref(), Some(TEMPO_DEFAULT_FEE_TOKEN));
     assert!(view.confirm_fee_ready, "{view:?}");
+}
+
+// ---------------------------------------------------------------------------
+// Spec 083 fee, review fixes: a refresh that fails keeps its quote's coin, a
+// run refused with every coin ends on one that could have paid, and what a
+// swap brings in pays a fee only at half
+// ---------------------------------------------------------------------------
+
+fn two_coins() -> Vec<FeeAssetQuote> {
+    vec![native_row("1000000000000000000"), usdc_row("5000000")]
+}
+
+/// Quoted in ETH the way the device's Max swap was without a simulation of
+/// its own: USDC was the machine's pick, the relay refused it, ETH quoted.
+fn quoted_in_eth_after_usdc_was_refused() -> Sut {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![router_call()]));
+    let ops = gather(&mut sut, two_coins());
+    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
+    let ops = sut.resolve_matching(is_estimate, refused());
+    assert_eq!(simulated_leg(&ops), None);
+    sut.resolve_matching(is_estimate, estimated());
+    sut.resolve_matching(is_measure, unmeasured());
+    let view = sut.view();
+    assert_eq!(view.fee_token, None);
+    assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    sut
+}
+
+/// The coin in force and the coin the quote is priced in are the same coin —
+/// the approve carries both, as `gas_fee_token` and the quoted amount.
+fn coin_matches_quote(view: &vela_core::app::fee_policy::FeeView) -> bool {
+    match view.fee.as_ref().map(|fee| &fee.fee_asset) {
+        Some(FeeAssetView::Native) => view.fee_token.is_none(),
+        Some(FeeAssetView::Erc20 { token, .. }) => view
+            .fee_token
+            .as_deref()
+            .is_some_and(|coin| coin.eq_ignore_ascii_case(token)),
+        None => true,
+    }
+}
+
+/// Review P1: that ETH quote, refreshed. Without the balance changes the
+/// refresh picks USDC afresh, and then the relay cannot be reached. A refresh
+/// keeps the old quote on screen — and now its coin with it: a USDC coin in
+/// force under an ETH quote had the approve sign a USDC transfer of a wei
+/// amount to the ETH row's recipient.
+#[test]
+fn a_refresh_that_fails_keeps_the_coin_of_the_quote_it_keeps() {
+    let mut sut = quoted_in_eth_after_usdc_was_refused();
+    sut.dispatch(Event::Requote);
+    let ops = gather(&mut sut, two_coins());
+    assert_eq!(
+        simulated_leg(&ops).as_deref(),
+        Some(USDC),
+        "the refresh picks USDC afresh"
+    );
+    sut.resolve_matching(
+        is_estimate,
+        Res::UserOpGas {
+            outcome: FeeGasOutcome::SimulationFailed,
+        },
+    );
+    sut.drop_matching(is_measure);
+    let view = sut.view();
+    assert_eq!(view.failed, None, "a refresh keeps the quote on screen");
+    assert!(coin_matches_quote(&view), "{view:?}");
+    assert_eq!(view.fee_token, None);
+    let fee = view.fee.clone().expect("the old quote");
+    assert_eq!(fee.fee_asset, FeeAssetView::Native);
+    assert_eq!(fee.fee_recipient.as_deref(), Some(NATIVE_RECIPIENT));
+    assert!(view.confirm_fee_ready);
+    let selected = view
+        .options
+        .iter()
+        .find(|option| option.selected)
+        .expect("a selected coin");
+    assert!(selected.contract.is_none(), "the ETH row is the one ticked");
+}
+
+/// Review P2: the same refresh, and the relay refuses the operation with
+/// every coin (a swap whose deadline passed while the sheet was open). The
+/// relay has just said the operation fails, so the old figure is not kept as
+/// one to sign: the row says the operation would fail, on ETH — the coin
+/// that had something left to pay from — and nothing asks again by itself.
+#[test]
+fn a_refresh_the_relay_refuses_with_every_coin_would_fail() {
+    use vela_core::app::fee_policy::requote_delay_ms;
+    let mut sut = quoted_in_eth_after_usdc_was_refused();
+    sut.dispatch(Event::Requote);
+    let ops = gather(&mut sut, two_coins());
+    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
+    let ops = sut.resolve_matching(is_estimate, refused());
+    assert_eq!(simulated_leg(&ops), None, "ETH is tried next");
+    assert!(sut.resolve_matching(is_estimate, refused()).is_empty());
+    sut.drop_matching(is_measure);
+    let view = sut.view();
+    assert_eq!(view.failed, Some(FeeFailure::WouldFail));
+    assert!(view.fee.is_none(), "the old quote is not one to sign");
+    assert!(!view.confirm_fee_ready);
+    assert_eq!(view.fee_token, None, "ends on ETH");
+    assert!(
+        view.options.iter().all(|option| !option.insufficient),
+        "{:?}",
+        view.options
+    );
+    assert_eq!(requote_delay_ms(FeeFailure::WouldFail, 1), None);
+}
+
+/// Review P3: with the balance changes known, the refresh picks ETH again and
+/// its failure keeps the ETH quote — the coin and the quote agree either way.
+#[test]
+fn a_measured_refresh_that_fails_keeps_the_same_coin() {
+    let mut sut = quoted_in_eth_after_usdc_was_refused();
+    assert!(sut.dispatch(max_usdc_swap()).is_empty(), "already in ETH");
+    sut.dispatch(Event::Requote);
+    let ops = gather(&mut sut, two_coins());
+    assert_eq!(simulated_leg(&ops), None, "ETH, from the balance changes");
+    sut.resolve_matching(
+        is_estimate,
+        Res::UserOpGas {
+            outcome: FeeGasOutcome::SimulationFailed,
+        },
+    );
+    sut.drop_matching(is_measure);
+    let view = sut.view();
+    assert!(coin_matches_quote(&view), "{view:?}");
+    assert_eq!(view.fee_token, None);
+    assert!(view.confirm_fee_ready);
+}
+
+/// Review P4: every coin refused, and the simulation then shows the swap
+/// drains the USDC. The run ends on ETH — the last coin tried that had
+/// something left — so the row says the operation would fail rather than
+/// that USDC cannot pay; and the balance changes, told again and again, ask
+/// nothing: the coins that could pay were all refused.
+#[test]
+fn when_every_coin_is_refused_the_run_ends_on_one_that_could_have_paid() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![router_call()]));
+    let ops = gather(&mut sut, two_coins());
+    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
+    let ops = sut.resolve_matching(is_estimate, refused());
+    assert_eq!(simulated_leg(&ops), None);
+    assert!(sut.resolve_matching(is_estimate, refused()).is_empty());
+    sut.drop_matching(is_measure);
+    for _ in 0..3 {
+        let ops = sut.dispatch(max_usdc_swap());
+        assert!(ops.is_empty(), "nothing left to try: {ops:?}");
+    }
+    let view = sut.view();
+    assert_eq!(view.failed, Some(FeeFailure::WouldFail));
+    assert_eq!(view.fee_token, None, "ETH, the coin that could have paid");
+    let eth = view
+        .options
+        .iter()
+        .find(|option| option.contract.is_none())
+        .expect("ETH is listed");
+    assert!(eth.selected && !eth.insufficient, "{eth:?}");
+    let usdc = view
+        .options
+        .iter()
+        .find(|option| option.contract.as_deref() == Some(USDC))
+        .expect("USDC is listed");
+    assert!(!usdc.selected && usdc.insufficient, "the swap drains it");
+}
+
+/// What a swap brings in counts towards its fee at half: a swap may deliver
+/// less than the simulation measured, and nothing prices the fee leg against
+/// the real output before it is signed. With no ETH held and the USDC
+/// drained, a swap bringing in exactly the fee leaves the slide shut on the
+/// Issue #262 path; one bringing in twice the fee pays.
+#[test]
+fn what_a_swap_brings_in_pays_its_fee_only_at_half() {
+    let quote = |inflow: u128| {
+        let mut sut = Sut::new();
+        sut.dispatch(auto_request(CHAIN, vec![router_call()]));
+        sut.dispatch(Event::BalanceChangesMeasured {
+            changes: vec![
+                change(Some(USDC), "-5000000"),
+                change(None, &inflow.to_string()),
+            ],
+        });
+        let ops = gather(&mut sut, vec![native_row("0"), usdc_row("5000000")]);
+        assert_eq!(simulated_leg(&ops), None, "the USDC is drained");
+        sut.resolve_matching(is_estimate, estimated());
+        sut.resolve_matching(is_measure, unmeasured());
+        sut.view()
+    };
+
+    let short = quote(NATIVE_FEE_WEI);
+    let fee = short.fee.clone().expect("quoted");
+    assert_eq!(fee.total_wei, NATIVE_FEE_WEI.to_string(), "the premise");
+    assert_eq!(fee.fee_asset, FeeAssetView::Native);
+    assert_eq!(short.failed, None, "a shortfall, not a failure");
+    assert!(!short.confirm_fee_ready, "half of the fee is not the fee");
+    assert!(
+        short
+            .options
+            .iter()
+            .find(|option| option.selected)
+            .is_some_and(|option| option.contract.is_none() && option.insufficient),
+        "{:?}",
+        short.options
+    );
+
+    let enough = quote(2 * NATIVE_FEE_WEI);
+    assert_eq!(enough.fee_token, None);
+    assert!(enough.confirm_fee_ready, "{enough:?}");
 }

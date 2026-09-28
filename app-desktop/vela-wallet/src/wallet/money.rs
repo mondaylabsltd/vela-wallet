@@ -1145,7 +1145,7 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
         // Spec 083 fee: the relay answered that the operation fails. The send
         // screen has no sentence of its own for it and says what it said for
         // this refusal before the fee machine could tell it apart.
-        FeeFailure::SimulationFailed => SendEstimateFailure::EstimateFailed,
+        FeeFailure::WouldFail => SendEstimateFailure::EstimateFailed,
     }
 }
 
@@ -1941,7 +1941,7 @@ mod tests {
         // Spec 083 fee: the relay's "this operation fails" reads on the send
         // screen as that refusal always did.
         assert_eq!(
-            map_failure(FeeFailure::SimulationFailed),
+            map_failure(FeeFailure::WouldFail),
             SendEstimateFailure::EstimateFailed
         );
         assert!(matches!(

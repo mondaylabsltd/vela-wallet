@@ -1453,20 +1453,23 @@ pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<Sha
 }
 
 /// Spec 083 fee: the relay simulated the operation with the coin in force
-/// paying its fee and ANSWERED that it fails ([`FeeFailure::SimulationFailed`]).
+/// paying its fee and ANSWERED that it fails ([`FeeFailure::WouldFail`]).
 ///
 /// The device pass drew this as "无法连接 Vela 服务 — 请检查网络" and asked
 /// again forever: a swap of all of a wallet's USDC, with its fee in USDC. Not
 /// the network, and not something asking again fixes. When the coin in force
 /// has nothing left once the operation has run (the core marks it), it is
 /// Issue #262's sentence — that coin cannot pay the fee; otherwise the
-/// operation as it stands would fail. Both existing keys: the residency
-/// budget has no room for a new sentence.
+/// operation as it stands would fail ([`SigningStrings::warn_would_fail`]:
+/// never "you'd still pay gas" — the relay refuses it, nothing is charged).
+/// The core ends a run it refused with every coin on one that had something
+/// left, so a Max sell whose other coins were refused too says "would fail",
+/// not that the coin it drained cannot pay.
 ///
-/// [`FeeFailure::SimulationFailed`]: vela_core::app::fee_policy::FeeFailure::SimulationFailed
+/// [`FeeFailure::WouldFail`]: vela_core::app::fee_policy::FeeFailure::WouldFail
 #[must_use]
 pub fn refused_fee_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedString> {
-    if fee.failed != Some(vela_core::app::fee_policy::FeeFailure::SimulationFailed) {
+    if fee.failed != Some(vela_core::app::fee_policy::FeeFailure::WouldFail) {
         return None;
     }
     Some(
@@ -1479,7 +1482,7 @@ pub fn refused_fee_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedSt
                 &s.warn_insufficient_gas,
                 &[("sym", &selected.symbol)],
             )),
-            None => s.warn_will_fail.clone(),
+            None => s.warn_would_fail.clone(),
         },
     )
 }
@@ -3040,7 +3043,7 @@ mod fee_tests {
     /// coin in force (spec 083 fee).
     fn refused(options: Vec<FeeOptionView>) -> FeeView {
         let mut fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
-        fee.failed = Some(vela_core::app::fee_policy::FeeFailure::SimulationFailed);
+        fee.failed = Some(vela_core::app::fee_policy::FeeFailure::WouldFail);
         fee.options = options;
         fee
     }
@@ -3103,7 +3106,12 @@ mod fee_tests {
             option("USDC", Some(usdc), false, false),
         ]);
         let (value, warning, _) = row(&failing);
-        assert_eq!(warning, Some(s.warn_will_fail.clone()));
+        assert_eq!(warning, Some(s.warn_would_fail.clone()));
+        assert_ne!(
+            warning,
+            Some(s.warn_will_fail.clone()),
+            "nothing is charged for an operation the relay refused"
+        );
         assert!(value.is_empty());
 
         // The network sentence is still the network's.

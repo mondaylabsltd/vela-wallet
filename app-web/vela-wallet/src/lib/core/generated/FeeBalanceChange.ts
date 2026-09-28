@@ -9,9 +9,10 @@
  * pay the fee from. The fee leg is the LAST call of the batch (every
  * shell's submit appends it after the person's calls), so what the
  * operation takes out is gone before the fee is paid, and what it brings in
- * is already there. A swap of all of a wallet's USDC is the case it exists
- * for: the calls do not say so (the router pulls the USDC through Permit2),
- * the simulation does.
+ * is already there — counted at half, since a swap may deliver less than
+ * the simulation measured. A swap of all of a wallet's USDC is the case it
+ * exists for: the calls do not say so (the router pulls the USDC through
+ * Permit2), the simulation does.
  */
 export type FeeBalanceChange = { 
 /**

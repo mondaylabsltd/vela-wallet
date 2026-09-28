@@ -99,7 +99,7 @@ fn requote_wait(
 /// machine weighs only its fee coins by them, each by that coin's OWN
 /// `Transfer` logs (the contract that emitted them) or the node's trace of
 /// native value — nothing a site's contract can emit on a coin's behalf.
-fn fee_balance_changes(
+pub(crate) fn fee_balance_changes(
     deltas: &[vela_core::app::token_trust::TrustAssetDelta],
 ) -> Vec<vela_core::app::fee_policy::FeeBalanceChange> {
     use vela_core::app::token_trust::TrustDeltaKind;
@@ -562,9 +562,12 @@ impl SigningHost {
     /// the answer may be shown as a number.
     ///
     /// Both halves are blocking — an RPC round trip and a metadata multicall —
-    /// so both happen on the background executor and the result lands back
-    /// here through the entity, the way every other slow answer in this shell
-    /// does.
+    /// so both happen on the background executor and each lands back here
+    /// through the entity, the way every other slow answer in this shell does.
+    /// The fee machine hears what the calls move as soon as the first half
+    /// answers (spec 083 fee review): which coin can pay does not wait on the
+    /// token names, and a quote priced before it arrives costs the relay one
+    /// more simulation (USDC refused, then ETH).
     fn simulate(
         &mut self,
         chain_id: u32,
@@ -574,34 +577,41 @@ impl SigningHost {
     ) {
         cx.spawn(async move |host, cx| {
             let fee_calls = calls.clone();
-            let judged = cx
+            let sim_wallet = wallet.clone();
+            let deltas = cx
                 .background_executor()
-                .spawn(async move {
-                    let Some(deltas) = crate::executor::sim::simulate(&wallet, &calls, chain_id)
-                    else {
-                        return None;
-                    };
-                    let changes = fee_balance_changes(&deltas);
-                    Some((
-                        changes,
-                        crate::executor::token_trust::judge(&wallet, chain_id, deltas),
-                    ))
-                })
+                .spawn(async move { crate::executor::sim::simulate(&sim_wallet, &calls, chain_id) })
                 .await;
-            host.update(cx, |host, cx| {
-                match judged {
-                    Some((changes, judgments)) => {
-                        host.sim = judgments;
-                        // Spec 083 fee: what the operation moves decides
-                        // which coins can still pay its fee — a swap of all
-                        // of the USDC cannot also pay in USDC.
-                        speed_control::balance_changes(host, fee_calls, changes, cx);
-                    }
+            let Some(deltas) = deltas else {
+                host.update(cx, |host, cx| {
                     // Could not ask. NOT "nothing moves" — the sheet has a
                     // different sentence for each, and conflating them would
                     // tell somebody a drain is a no-op.
-                    None => host.sim_unavailable = true,
-                }
+                    host.sim_unavailable = true;
+                    cx.notify();
+                })
+                .ok();
+                return;
+            };
+            // Spec 083 fee: what the operation moves decides which coins can
+            // still pay its fee — a swap of all of the USDC cannot also pay
+            // in USDC. Told before the tokens are judged, not after.
+            let changes = fee_balance_changes(&deltas);
+            let told = host.update(cx, |host, cx| {
+                speed_control::balance_changes(host, fee_calls, changes, cx);
+                cx.notify();
+            });
+            if told.is_err() {
+                return;
+            }
+            let judgments = cx
+                .background_executor()
+                .spawn(
+                    async move { crate::executor::token_trust::judge(&wallet, chain_id, deltas) },
+                )
+                .await;
+            host.update(cx, |host, cx| {
+                host.sim = judgments;
                 cx.notify();
             })
             .ok();
@@ -1536,7 +1546,7 @@ mod tests {
         // same operation asked again gets the same one.
         for attempt in 1..=5 {
             assert_eq!(
-                requote_wait(Some(FeeFailure::SimulationFailed), attempt, true, false),
+                requote_wait(Some(FeeFailure::WouldFail), attempt, true, false),
                 None
             );
         }

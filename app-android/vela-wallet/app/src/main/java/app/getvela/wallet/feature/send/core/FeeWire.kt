@@ -165,11 +165,12 @@ enum class FeeFailure {
     @SerialName("gas_quote_too_high") GasQuoteTooHigh,
 
     /**
-     * Spec 083 fee: the relay answered that the operation fails. The core
+     * Spec 083 fee: the relay answered that the operation fails — its answer,
+     * where [FeeGasOutcome.SimulationFailed] is no answer at all. The core
      * says it only to a shell that reports [FeeGasOutcome.Refused], which
      * this one does not yet.
      */
-    @SerialName("simulation_failed") SimulationFailed,
+    @SerialName("would_fail") WouldFail,
 }
 
 /** One row of the fee-token sheet, already judged (`insufficient`, `selected`). */
