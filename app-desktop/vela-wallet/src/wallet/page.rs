@@ -662,8 +662,10 @@ pub struct WalletPage {
     /// off on the start page.
     nav_enabled: [bool; 3],
     /// The engine poll (RD3) is running.
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     engine_polling: bool,
     /// The pool's "came back" count as last acted on (spec 082 T069).
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     came_back_seen: u64,
     /// Spec 082 RD1: a held navigation's words stand in the bar until this
     /// press is superseded (`explore.requestOpen`, 2.5 s).

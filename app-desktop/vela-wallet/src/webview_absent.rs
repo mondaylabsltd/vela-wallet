@@ -32,3 +32,10 @@ pub fn deliver(_tab: &str, _message_json: &str) {}
 pub fn clear_browsing_data() -> bool {
     true
 }
+
+/// Whether the one webview has been built — never, here (spec 082's
+/// `browser: navigate asked … view=` line reads it on every desktop).
+#[must_use]
+pub fn built() -> bool {
+    false
+}
