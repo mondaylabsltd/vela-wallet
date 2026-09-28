@@ -298,6 +298,30 @@ pub fn inline_mark(theme: &Theme, mark: &TokenMark) -> Div {
     )
 }
 
+/// The most characters a mono value is drawn with (spec 082 G50): a
+/// 66-character hash ran past the column and took its copy button with it.
+/// Longer values are shortened in the middle — the copy beside them copies
+/// the whole.
+pub const MONO_FACT_MAX: usize = 19;
+
+/// `value`, shortened in the middle to at most `max_chars` characters:
+/// `0x9f915781…c5f50850` for a hash. Shorter values are left whole.
+#[must_use]
+pub fn middle_truncate(value: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = value.chars().collect();
+    if chars.len() <= max_chars || max_chars < 3 {
+        return value.to_owned();
+    }
+    // The head keeps the `0x` and one more than the tail — the 6 + 4 of an
+    // address, the 10 + 8 of a hash.
+    let head = (max_chars - 1) / 2 + 1;
+    let tail = max_chars - 1 - head;
+    let mut shown: String = chars[..head].iter().collect();
+    shown.push('…');
+    shown.extend(&chars[chars.len() - tail..]);
+    shown
+}
+
 /// The label-value row — the single label-value primitive for the feature.
 pub fn fact_row(
     theme: &Theme,
@@ -306,7 +330,15 @@ pub fn fact_row(
     fact: &FactRow,
     copy: Option<CopyButton>,
 ) -> Div {
-    let mut value_side = div().flex().items_center().gap(px(6.)).min_w(px(0.));
+    // The value side takes what the label leaves and may shrink; its text
+    // gives way before its copy button ever does (G50).
+    let mut value_side = div()
+        .flex_1()
+        .min_w(px(0.))
+        .flex()
+        .items_center()
+        .justify_end()
+        .gap(px(6.));
 
     value_side = match &fact.lead {
         FactLead::None => value_side,
@@ -323,12 +355,20 @@ pub fn fact_row(
     } else {
         div().text_size(theme::text_row_sub())
     };
-    // `.value`: 13 medium (078 T065).
+    // `.value`: 13 medium (078 T065). A long mono value (a hash) is drawn
+    // shortened in the middle, and clipped rather than pushing past the row.
+    let text = if fact.mono {
+        SharedString::from(middle_truncate(&fact.value, MONO_FACT_MAX))
+    } else {
+        fact.value.clone()
+    };
     value_side = value_side.child(
         value
+            .min_w(px(0.))
+            .when(fact.mono, |value| value.truncate())
             .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(theme.fg_base)
-            .child(fact.value.clone()),
+            .child(text),
     );
 
     // `FactRow.svelte`: a 20 box with a 14 glyph in `fg-subtle`, a tick in
@@ -375,6 +415,7 @@ pub fn fact_row(
         .py(px(12.))
         .child(
             div()
+                .flex_none()
                 .text_size(theme::text_row_sub())
                 .text_color(theme.fg_subtle)
                 .child(fact.label.clone()),
@@ -1469,6 +1510,21 @@ fn accent_fill(button: Div, theme: &Theme) -> Div {
         .text_color(gpui::Hsla::from(gpui::rgb(0xffffff)))
 }
 
+/// A quiet text control: no fill, no outline, the muted colour — an action
+/// that is there but must not be the one a person reaches for (spec 082
+/// RJ18: a pending record's 删除记录, the "don't send it again" trace).
+pub fn quiet_button(theme: &Theme, label: SharedString) -> Div {
+    div()
+        .w_full()
+        .min_h(px(40.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(theme::text_row_sub())
+        .text_color(theme.fg_muted)
+        .child(label)
+}
+
 /// `danger`: filled with the error colour — delete a transaction, a contact,
 /// a group. Only where the web draws one.
 pub fn danger_button(theme: &Theme, label: SharedString) -> Div {
@@ -1481,6 +1537,43 @@ pub fn danger_button(theme: &Theme, label: SharedString) -> Div {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 082 G50: a mono value is drawn shortened in the middle, head and
+    /// tail kept; anything that already fits is left whole.
+    #[test]
+    fn a_long_mono_value_is_shortened_in_the_middle() {
+        let hash = "0x9f915781aa00bb11cc22dd33ee44ff5566778899aabbccddeeff0011c5f50850";
+        assert_eq!(hash.len(), 66);
+        let shown = middle_truncate(hash, MONO_FACT_MAX);
+        assert_eq!(shown, "0x9f915781…c5f50850");
+        assert_eq!(shown.chars().count(), MONO_FACT_MAX);
+        assert_eq!(middle_truncate("0x7687…D141", MONO_FACT_MAX), "0x7687…D141");
+        assert_eq!(middle_truncate("abc", 2), "abc");
+        assert_eq!(
+            middle_truncate("0x7687a1b2c3d4e5f60718293a4b5c6d7e8f90D141", 11),
+            "0x7687…D141"
+        );
+    }
+
+    /// Spec 082 G50 (DX-LD3): the hash row fits the third column at the
+    /// largest text size — its label (four characters at most in any
+    /// language, counted at a full em), the gap, the shortened value at the
+    /// mono face's advance (Menlo 0.602 em), and the copy button.
+    #[test]
+    fn a_hash_row_fits_the_column() {
+        let largest = crate::executor::appearance_prefs::TEXT_SCALES
+            .iter()
+            .map(|scale| scale.factor())
+            .fold(0., f32::max);
+        let size = (13. * largest).round();
+        #[allow(clippy::cast_precision_loss, reason = "a short string")]
+        let value = MONO_FACT_MAX as f32 * 0.61 * size;
+        let label = 4. * size;
+        let row = label + 12. + value + 6. + 20.;
+        // The third column, less its border and its 24 on each side.
+        let column = crate::theme::THIRD_PANEL_W - 1. - 48.;
+        assert!(row <= column, "{row} > {column}");
+    }
 
     /// The web's filter: trimmed, case-blind, a substring of what the row is
     /// called; nothing typed keeps everything (078 X-05).

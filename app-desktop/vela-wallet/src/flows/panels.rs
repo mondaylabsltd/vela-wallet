@@ -23,13 +23,14 @@ use super::components::{
     CopyButton, GhostPill, accent_button, address_card, danger_button, disabled_accent_button,
     fact_row, fee_refresh_icon, fee_row, fee_speed_note, fee_speed_option, fee_speed_summary,
     fee_stale_line, filter_chips, flow_search, ghost_button, ghost_pill_row, max_chip, mono_field,
-    network_pill, network_row, qr_card, recipient_card, search_empty, search_matches,
+    network_pill, network_row, qr_card, quiet_button, recipient_card, search_empty, search_matches,
     segmented_toggle, status_chip, token_header_card,
 };
 use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
     DepositEntry, FeeSpeedModel, FeeTokenPick, FlowBody, HistoryPanel, ReceiveList, ReceiveQr,
-    ScanModal, SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, TxDetail,
+    ScanModal, SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone,
+    TxDetail,
 };
 
 /// One prepared click listener. The page builds these from `cx.listener`
@@ -891,28 +892,70 @@ fn tx_detail(
             &model.breakdown,
         )));
     }
-    let mut cta = div()
-        .flex()
-        .flex_col()
-        .gap(px(8.))
-        .pt(px(16.))
-        .child(explorer_button(
+    let plan = tx_cta(model);
+    let mut cta = div().flex().flex_col().gap(px(8.)).pt(px(16.));
+    if plan.explorer {
+        cta = cta.child(explorer_button(
             "tx-explorer",
             theme,
             model.view_on_explorer.clone(),
             model.explorer_url.as_ref(),
         ));
-    // Under the explorer, filled in the danger colour (the web's
-    // `variant="danger"`).
-    // It removes the local record only; the chain keeps the transaction.
-    if let Some(label) = &model.delete_label {
-        cta = cta.child(clickable(
-            "tx-delete",
-            delete_tx,
-            danger_button(theme, label.clone()),
-        ));
+    }
+    // Under the explorer. It removes the local record only; the chain keeps
+    // the transaction.
+    if let (Some(label), Some(style)) = (&model.delete_label, plan.delete) {
+        let face = match style {
+            DeleteStyle::Quiet => quiet_button(theme, label.clone()),
+            DeleteStyle::Danger => danger_button(theme, label.clone()),
+        };
+        cta = cta.child(clickable("tx-delete", delete_tx, face));
     }
     col.child(cta)
+}
+
+/// What a transaction's detail offers under its facts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TxCta {
+    /// "View on explorer" — only with a page to open (spec 082 G52): an op
+    /// that never reached the chain has none, and a button there sent
+    /// people looking for it.
+    pub explorer: bool,
+    /// The record's delete, and how it is drawn.
+    pub delete: Option<DeleteStyle>,
+}
+
+#[must_use]
+pub fn tx_cta(model: &TxDetail) -> TxCta {
+    TxCta {
+        explorer: model.explorer_url.is_some(),
+        delete: model
+            .delete_label
+            .as_ref()
+            .map(|_| delete_style(&model.status)),
+    }
+}
+
+/// How a record's delete is drawn (spec 082 RJ18, G51).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeleteStyle {
+    /// A pending (may-have-been-sent) record: the record IS the "do not send
+    /// it again" trace, so its delete is there but quiet — a full-width red
+    /// button was the most prominent control on 处理中.
+    Quiet,
+    /// Confirmed or failed: filled in the danger colour (the web's
+    /// `variant="danger"`).
+    Danger,
+}
+
+/// The rule: pending — the one status that wears the info tone (the live
+/// builder's `FeedTxStatus::Pending`) — is quiet; the rest are danger.
+#[must_use]
+pub fn delete_style(status: &StatusChip) -> DeleteStyle {
+    match status.tone {
+        StatusTone::Info => DeleteStyle::Quiet,
+        StatusTone::Success | StatusTone::Warning | StatusTone::Error => DeleteStyle::Danger,
+    }
 }
 
 fn assets(
@@ -3681,4 +3724,73 @@ fn receive_gate(
         ));
     }
     card
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn detail(tone: StatusTone, explorer_url: Option<&str>) -> TxDetail {
+        TxDetail {
+            title: "dApp 交易".into(),
+            status: StatusChip {
+                text: "处理中".into(),
+                tone,
+            },
+            breakdown_title: None,
+            breakdown: Vec::new(),
+            amount: "−0.001 xDAI".into(),
+            fiat: "".into(),
+            positive: false,
+            facts: Vec::new(),
+            view_on_explorer: "在区块浏览器中查看".into(),
+            explorer_url: explorer_url.map(SharedString::from),
+            delete_label: Some("删除记录".into()),
+        }
+    }
+
+    /// Spec 082 RJ18, G51 (DX-LD3): on a pending record — the "don't send it
+    /// again" trace — the delete is quiet; a confirmed or failed one keeps
+    /// the danger button.
+    #[test]
+    fn a_pending_records_delete_is_quiet() {
+        assert_eq!(
+            tx_cta(&detail(
+                StatusTone::Info,
+                Some("https://gnosisscan.io/tx/0x1")
+            ))
+            .delete,
+            Some(DeleteStyle::Quiet),
+            "no danger button on 处理中"
+        );
+        assert_eq!(
+            tx_cta(&detail(
+                StatusTone::Success,
+                Some("https://gnosisscan.io/tx/0x1")
+            ))
+            .delete,
+            Some(DeleteStyle::Danger)
+        );
+        assert_eq!(
+            tx_cta(&detail(StatusTone::Error, None)).delete,
+            Some(DeleteStyle::Danger)
+        );
+        let mut picture = detail(StatusTone::Info, None);
+        picture.delete_label = None;
+        assert_eq!(tx_cta(&picture).delete, None, "a mock deletes nothing");
+    }
+
+    /// Spec 082 G52 (DX-W3): an op the relay refused never reached the chain
+    /// and has no page — no explorer button for it.
+    #[test]
+    fn no_explorer_without_a_page() {
+        assert!(!tx_cta(&detail(StatusTone::Error, None)).explorer);
+        assert!(
+            tx_cta(&detail(
+                StatusTone::Success,
+                Some("https://gnosisscan.io/tx/0x1")
+            ))
+            .explorer
+        );
+    }
 }
