@@ -51,3 +51,26 @@ npm --prefix scripts run gen:i18n                                               
 node rust/scripts/gen-core-types.mjs --check   27 / 13 / 371 current (the review changed no exported type)
 node scripts/check-event-payloads.mjs          the same 11 (iOS T236)
 bash rust/scripts/check-ios-core-fresh.sh      "no xcframework stamp" — BIND
+
+BIND step (T197's rebuilds), integration worktree vela-wallet-082 after merge 7a86cebc (082-core-h @ dab496f6), 2026-09-29:
+
+node rust/scripts/build-web.mjs        wrote rust/pkg-web + assets/wasm/vela_core_bg.3cf42392a06f.wasm (4,184,297 B), replacing 80945236660e
+node rust/scripts/build-web.mjs --check   rust/pkg-web is current
+node rust/scripts/verify-web.mjs       48,813 conformance cases green (199 skipped), 5 boundary regressions green
+app-web/vela-wallet: node scripts/sync-wasm.mjs [--check]   static/vela_core_bg.3cf42392a06f.wasm matches pkg-web
+bash rust/scripts/build-ios-xcframework.sh   ok; committed vela_core_uniffi.swift refreshed
+bash rust/scripts/build-ios-dev-fixtures.sh  ok; vela_dev_fixtures.swift unchanged
+bash rust/scripts/check-ios-core-fresh.sh    ok — 4dd8ce5c396cf6aa41f10358d112cd771db7b7e2dcd566c683cf6e2643272c50
+bash rust/scripts/build-android.sh           3 ABIs (main jniLibs) + 3 ABIs (debug dev fixtures)
+bash rust/scripts/smoke-kotlin.sh            48,768 cases green (rust/bindings/kotlin regenerated)
+bash rust/scripts/build-dev-fixtures.sh --host   bindings/kotlin-dev regenerated
+bash rust/scripts/smoke-swift.sh             48,768 cases green
+node rust/scripts/gen-core-types.mjs --check   27 / 13 / 371 current
+cd rust && cargo test -p vela-core --features i18n-all,crux   passed 2099 failed 0 ignored 0 (53 result lines)
+  --test i18n_residency: runtime JSON ja + en 138,671 of 138,800; resident ja + en 134,651
+cargo test -p vela-core-uniffi -p vela-core-wasm   25 passed
+cargo fmt --all -- --check                          clean
+cargo clippy -p vela-core --features crux -- -D warnings; -p vela-core-uniffi -p vela-core-wasm --all-targets   clean
+npm --prefix scripts run gen:i18n / lint:i18n / verify:i18n   no drift / no new defects / 75,440 comparisons, 0 divergences
+node scripts/check-event-payloads.mjs          11 mismatches (the same, expected until T236)
+Hand-off: evidence/gates/phase-9-handoff.md
