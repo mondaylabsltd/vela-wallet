@@ -263,18 +263,79 @@ pub fn navigate(url: &str) {
     }
 }
 
-/// Back and forward. wry has no native pair, so this is the page's own
-/// history — which is the same history the buttons in any browser drive.
+/// Back and forward: the engine's own (spec 082 RD6, wry's `go_back` /
+/// `go_forward`), not a script in the page — a page that overrides
+/// `history.back` cannot keep the person on it, and a page that has not
+/// loaded (a failed first load) has no script to run one.
 pub fn back() {
     with_view(|view| {
-        let _ = view.evaluate_script("history.back()");
+        let _ = view.go_back();
     });
 }
 
 pub fn forward() {
     with_view(|view| {
-        let _ = view.evaluate_script("history.forward()");
+        let _ = view.go_forward();
     });
+}
+
+/// Whether the one webview has been built yet — for a log line.
+#[must_use]
+pub fn built() -> bool {
+    BROWSER.with(|slot| slot.borrow().is_some())
+}
+
+/// What the engine says about itself (spec 082 RD3, RD6).
+pub struct Engine {
+    /// Its load state — `None` where it cannot be read (WebView2: the
+    /// Windows build stays probe-only).
+    pub sample: Option<vela_core::app::browser_load::EngineSample>,
+    pub can_back: bool,
+    pub can_forward: bool,
+}
+
+/// One poll of the engine. `None` before the webview is built.
+#[must_use]
+pub fn engine() -> Option<Engine> {
+    BROWSER.with(|slot| {
+        let slot = slot.borrow();
+        let view = &slot.as_ref()?.view;
+        Some(Engine {
+            sample: engine_sample(view),
+            can_back: view.can_go_back().unwrap_or(false),
+            can_forward: view.can_go_forward().unwrap_or(false),
+        })
+    })
+}
+
+/// WKWebView's `isLoading`, `estimatedProgress` and `URL` — the facts wry's
+/// callbacks leave out (it reports no `didFail*`). Read through the same
+/// pointer [`view_url`] uses, on the main thread, where the view lives.
+#[cfg(target_os = "macos")]
+fn engine_sample(view: &wry::WebView) -> Option<vela_core::app::browser_load::EngineSample> {
+    use wry::WebViewExtMacOS as _;
+    let webview = view.webview();
+    let raw = std::ptr::from_ref(&*webview)
+        .cast::<objc2::runtime::AnyObject>()
+        .cast_mut();
+    // SAFETY: `raw` is the live WKWebView wry owns for as long as `view`;
+    // both are property getters with no arguments.
+    let (loading, progress): (objc2::runtime::Bool, f64) = unsafe {
+        (
+            objc2::msg_send![raw, isLoading],
+            objc2::msg_send![raw, estimatedProgress],
+        )
+    };
+    Some(vela_core::app::browser_load::EngineSample {
+        loading: loading.as_bool(),
+        progress,
+        url: view_url(view),
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn engine_sample(_view: &wry::WebView) -> Option<vela_core::app::browser_load::EngineSample> {
+    None
 }
 
 pub fn reload() {
@@ -509,7 +570,7 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             Some(view)
         }
         Err(error) => {
-            eprintln!("[vela-wallet] browser: {error}");
+            crate::diag::vlog!("browser", "the webview could not be built: {error}");
             None
         }
     }

@@ -143,19 +143,36 @@ pub struct BrowserHost {
     /// says nothing.
     chains: Vec<u32>,
     wallet: Option<(Vec<String>, String)>,
-    /// Spec 079 US4: the pool's failed and rate-limited chains, as last read
-    /// — whether the chain of the page in front can be reached at all.
-    chain_health: (Vec<u32>, Vec<u32>),
+    /// Spec 079 US4 / 082 RF1: the pool's view of which chains are down, as
+    /// last read — whether the chain of the page in front can be reached.
+    chain_health: ChainHealth,
     /// A re-read is scheduled while something is down.
     health_watching: bool,
+    /// The chain whose notice Retry is out (spec 082 RF4): busy until its one
+    /// read settles.
+    retrying: Option<u32>,
 }
 
-/// Whether the page's chain gets the notice (spec 079 FR-014): its whole pool
-/// failed, and not merely because providers rate-limit — a rate limit lifts
-/// on its own, and the wallet's standing rule is to stay quiet about it.
+/// The pool's three lists the chain notice reads (spec 082 RF1).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChainHealth {
+    /// Every endpoint failed every pass of a call.
+    pub failed: Vec<u32>,
+    /// A call's FIRST pass reached no endpoint, with no rate limit in sight —
+    /// the notice's early half, a pass sooner than `failed`.
+    pub unreached: Vec<u32>,
+    pub rate_limited: Vec<u32>,
+}
+
+/// Whether the page's chain gets the notice (spec 079 FR-014, 082 RF1): its
+/// pool failed — or its first pass reached nothing — and not merely because
+/// providers rate-limit: a rate limit lifts on its own, and the wallet's
+/// standing rule is to stay quiet about it. The home RPC banner keeps reading
+/// `failed` alone.
 #[must_use]
-pub fn chain_down(chain_id: u32, failed: &[u32], rate_limited: &[u32]) -> bool {
-    failed.contains(&chain_id) && !rate_limited.contains(&chain_id)
+pub fn chain_down(chain_id: u32, health: &ChainHealth) -> bool {
+    (health.failed.contains(&chain_id) || health.unreached.contains(&chain_id))
+        && !health.rate_limited.contains(&chain_id)
 }
 
 /// How often the health is read again while a chain is down: from the view,
@@ -179,8 +196,9 @@ impl BrowserHost {
             orders: Vec::new(),
             chains: Vec::new(),
             wallet: None,
-            chain_health: (Vec::new(), Vec::new()),
+            chain_health: ChainHealth::default(),
             health_watching: false,
+            retrying: None,
         };
         host.follow_wallet(cx);
         host.follow_networks(cx);
@@ -324,10 +342,11 @@ impl BrowserHost {
             let health = cx
                 .background_executor()
                 .spawn(async move {
-                    (
-                        crate::executor::pool::failed_chains(),
-                        crate::executor::pool::rate_limited_chains(),
-                    )
+                    ChainHealth {
+                        failed: crate::executor::pool::failed_chains(),
+                        unreached: crate::executor::pool::unreached_chains(),
+                        rate_limited: crate::executor::pool::rate_limited_chains(),
+                    }
                 })
                 .await;
             host.update(cx, |host, cx| host.health_read(health, cx))
@@ -336,7 +355,7 @@ impl BrowserHost {
         .detach();
     }
 
-    fn health_read(&mut self, health: (Vec<u32>, Vec<u32>), cx: &mut Context<Self>) {
+    fn health_read(&mut self, health: ChainHealth, cx: &mut Context<Self>) {
         if health != self.chain_health {
             self.chain_health = health;
             cx.notify();
@@ -344,7 +363,8 @@ impl BrowserHost {
         // While something is down, look again: the page may have stopped
         // asking, and the notice must go by itself once the chain answers
         // anyone.
-        if !self.chain_health.0.is_empty() && !self.health_watching {
+        let down = !self.chain_health.failed.is_empty() || !self.chain_health.unreached.is_empty();
+        if down && !self.health_watching {
             self.health_watching = true;
             cx.spawn(async move |host, cx| {
                 cx.background_executor().timer(HEALTH_RECHECK).await;
@@ -361,22 +381,43 @@ impl BrowserHost {
     /// Is `chain_id` unreachable, by the pool's last word?
     #[must_use]
     pub fn chain_unreachable(&self, chain_id: u32) -> bool {
-        chain_down(chain_id, &self.chain_health.0, &self.chain_health.1)
+        chain_down(chain_id, &self.chain_health)
     }
 
-    /// The notice's Retry: one read through the pool, then its word again.
+    /// Is the notice's Retry for `chain_id` still out?
+    #[must_use]
+    pub fn retrying_chain(&self, chain_id: u32) -> bool {
+        self.retrying == Some(chain_id)
+    }
+
+    /// The notice's Retry (spec 082 RF4): one `eth_blockNumber` through the
+    /// pool — busy until it settles, a second tap ignored — then the pool's
+    /// word again: a good read clears the notice, a failed one leaves it.
     pub fn retry_chain(&mut self, chain_id: u32, cx: &mut Context<Self>) {
+        if self.retrying.is_some() {
+            return;
+        }
+        self.retrying = Some(chain_id);
+        cx.notify();
         cx.spawn(async move |host, cx| {
-            cx.background_executor()
+            let answered = cx
+                .background_executor()
                 .spawn(async move {
-                    let _ = crate::executor::pool::call(
-                        chain_id,
-                        "eth_blockNumber",
-                        serde_json::json!([]),
-                    );
+                    crate::executor::pool::call(chain_id, "eth_blockNumber", serde_json::json!([]))
+                        .is_ok_and(|body| body.get("result").is_some())
                 })
                 .await;
-            host.update(cx, |host, cx| host.refresh_health(cx)).ok();
+            crate::diag::vlog!(
+                "chain notice",
+                "retry chain={chain_id} → {}",
+                if answered { "ok" } else { "failed" }
+            );
+            host.update(cx, |host, cx| {
+                host.retrying = None;
+                host.refresh_health(cx);
+                cx.notify();
+            })
+            .ok();
         })
         .detach();
     }
@@ -390,6 +431,425 @@ impl BrowserHost {
     #[must_use]
     pub fn tab(&self) -> Option<&vela_core::app::dapp_browser::DbrTabView> {
         self.view.tabs.iter().find(|tab| tab.tab == BROWSER_TAB)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Holding navigation while a request is open (spec 082 RD1, ruling 4, W14)
+// ---------------------------------------------------------------------------
+
+/// Whether the one webview must stay on its page: a connect or a signing
+/// request of it is open, or one is waiting in line. The request's page is
+/// what would be retired by a navigation — the core answers 4900 for a
+/// document that goes — so the person's glance at another tab is held
+/// instead (ruling 4).
+#[must_use]
+pub fn holds_navigation(view: &DbrView) -> bool {
+    view.consent.is_some() || view.signing.is_some() || view.queued_signing > 0
+}
+
+/// Every way the page asks the one webview to go somewhere else — the one
+/// funnel `WalletPage::browser_go` runs them through.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Go {
+    /// Another tab of the strip, with the address it remembers (`None`: a
+    /// start-page tab).
+    Tab {
+        id: String,
+        url: Option<String>,
+    },
+    /// The strip's +.
+    NewTab,
+    /// Enter in the address bar, with what it resolved to.
+    Typed(String),
+    /// A favourite or a Recents row.
+    Open(String),
+    /// The site menu's "Open in a new tab".
+    OpenInNewTab(String),
+    Reload,
+    Back,
+    Forward,
+}
+
+impl Go {
+    fn word(&self) -> &'static str {
+        match self {
+            Self::Tab { .. } => "tab",
+            Self::NewTab => "new tab",
+            Self::Typed(_) => "enter",
+            Self::Open(_) => "open",
+            Self::OpenInNewTab(_) => "open in new tab",
+            Self::Reload => "reload",
+            Self::Back => "back",
+            Self::Forward => "forward",
+        }
+    }
+}
+
+/// What a [`Go`] does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Went {
+    /// Held: a request is open. Nothing navigates; the request's column comes
+    /// forward and the bar says why.
+    Held,
+    /// Nothing to do: the tab asked for is the one on screen (a re-click used
+    /// to reload it, which cancelled whatever it had asked).
+    AlreadyThere,
+    /// Go.
+    Go,
+}
+
+/// The one rule for every navigation the page starts (RD1): held while a
+/// request is open; a click on the tab already shown is nothing.
+#[must_use]
+pub fn went(go: &Go, holds: bool, shown_tab: Option<&str>) -> Went {
+    if let Go::Tab { id, .. } = go
+        && shown_tab == Some(id.as_str())
+    {
+        return Went::AlreadyThere;
+    }
+    if holds {
+        crate::diag::vlog!("browser", "navigation held ({})", go.word());
+        return Went::Held;
+    }
+    Went::Go
+}
+
+/// The tab the strip lights (spec 082 RD6): the one whose page is in the
+/// webview while a page shows; over the start page, the selected tab only
+/// when it IS a start-page tab. A restored tab waits unlit — the start page
+/// drawn under a lit site tab was G2's "this tab" over nothing.
+#[must_use]
+pub fn lit_tab(
+    view: &vela_core::app::explore_sites::ExploreView,
+    shown: Option<&str>,
+    browsing: bool,
+) -> Option<String> {
+    if browsing {
+        return shown.map(str::to_owned);
+    }
+    let selected = view.selected_tab.as_deref()?;
+    view.tabs
+        .iter()
+        .find(|tab| tab.id == selected && tab.url.is_none())
+        .map(|tab| tab.id.clone())
+}
+
+/// Which tab an address typed or picked opens in (RD6): the page on screen;
+/// over the start page, the selected start-page tab; otherwise `None` — a new
+/// tab, so a restored tab waiting unlit is left intact.
+#[must_use]
+pub fn open_target(
+    view: &vela_core::app::explore_sites::ExploreView,
+    shown: Option<&str>,
+    browsing: bool,
+) -> Option<String> {
+    if browsing && let Some(shown) = shown {
+        return Some(shown.to_owned());
+    }
+    lit_tab(view, None, false)
+}
+
+/// What the bar names (RE1): the committed document `shown`, a load pending,
+/// or the failure a panel is up for — the core's `address_bar` over the
+/// watch.
+#[must_use]
+pub fn bar_of(shown: Option<&str>, watch: &LoadWatch) -> browser_load::AddressBar {
+    let pending = watch.url.as_deref().filter(|_| watch.loading);
+    let failed = watch.url.as_deref().filter(|_| watch.failure.is_some());
+    browser_load::address_bar(shown, pending, failed)
+}
+
+/// Back, forward and reload (RD6): what the engine says it can do while a
+/// page is in front; all off on the start page.
+#[must_use]
+pub fn nav_enabled(browsing: bool, can_back: bool, can_forward: bool) -> [bool; 3] {
+    [browsing && can_back, browsing && can_forward, browsing]
+}
+
+// ---------------------------------------------------------------------------
+// The page's load (spec 079 US3, spec 082 RD3–RD7): the core's `LoadWatch`,
+// driven by the page's timers, the probe and WebKit's own state
+// ---------------------------------------------------------------------------
+
+use vela_core::app::browser_load::{
+    self, Asked, EngineSample, EngineVerdict, GIVE_UP_MS, LoadWatch, Probed, RetryAction,
+    WATCHDOG_MS,
+};
+
+use crate::explore::probe::{ProbeAnswer, verdict_word};
+
+/// What the page does next for its load.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LoadStep {
+    /// Tell the engine to load this address — an attempt the watch asked for.
+    Navigate(String),
+    /// Run [`LoadDriver::watchdog`] for this load after `after_ms`.
+    Watchdog { generation: u64, after_ms: u32 },
+    /// Probe `url` off the frame; hand the answer to [`LoadDriver::probed`].
+    Probe { generation: u64, url: String },
+    /// Run [`LoadDriver::give_up`] for this load after `after_ms`.
+    GiveUp { generation: u64, after_ms: u32 },
+    /// Run [`LoadDriver::retry_fired`] for this load after `after_ms`.
+    Retry { generation: u64, after_ms: u32 },
+}
+
+/// The page's load: the core's watch, and the log lines it earns (contract
+/// §15). Pure — the page turns each [`LoadStep`] into a timer, a probe or a
+/// navigation — so a stream of engine samples can be driven in a test.
+#[derive(Clone, Debug, Default)]
+pub struct LoadDriver {
+    pub watch: LoadWatch,
+}
+
+fn host(url: &str) -> String {
+    crate::diag::host_of(url)
+}
+
+fn how_word(asked: Asked) -> &'static str {
+    match asked {
+        Asked::Navigation => "navigation",
+        Asked::Retry => "retry",
+        Asked::AutoRetry => "auto",
+        Asked::Page => "page",
+    }
+}
+
+fn millis_until(at_ms: f64, now_ms: f64) -> u32 {
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped to a u32 of milliseconds"
+    )]
+    let ms = (at_ms - now_ms).clamp(0.0, f64::from(u32::MAX)) as u32;
+    ms
+}
+
+impl LoadDriver {
+    fn watched_host(&self) -> String {
+        self.watch.url.as_deref().map(host).unwrap_or_default()
+    }
+
+    /// The engine was asked to load `url` (the wallet's own request).
+    pub fn requested(&mut self, url: &str, now_ms: f64) -> Vec<LoadStep> {
+        let how = self.watch.next_asked.unwrap_or(Asked::Navigation);
+        let Some(generation) = self.watch.requested(url, now_ms) else {
+            return Vec::new();
+        };
+        crate::diag::vlog!(
+            "browser",
+            "asked host={} gen={generation} how={}",
+            host(url),
+            how_word(how)
+        );
+        vec![LoadStep::Watchdog {
+            generation,
+            after_ms: WATCHDOG_MS,
+        }]
+    }
+
+    /// A document committed at `url`.
+    pub fn committed(&mut self, url: &str) {
+        let waiting = self.watch.loading || self.watch.failure.is_some();
+        self.watch.committed(url);
+        if waiting && self.watch.committed {
+            crate::diag::vlog!(
+                "browser",
+                "committed host={} gen={}",
+                host(url),
+                self.watch.generation
+            );
+        }
+    }
+
+    /// The load of `url` finished.
+    pub fn finished(&mut self, url: &str) {
+        let committed = self.watch.committed;
+        self.watch.finished(url);
+        if committed && !self.watch.committed {
+            crate::diag::vlog!("browser", "finished host={}", host(url));
+        }
+    }
+
+    /// One poll of the engine (RD3, RD7).
+    pub fn engine(&mut self, sample: &EngineSample, now_ms: f64) -> Vec<LoadStep> {
+        match self.watch.engine(sample, now_ms) {
+            EngineVerdict::Nothing => Vec::new(),
+            EngineVerdict::PageStarted { generation, url } => {
+                crate::diag::vlog!(
+                    "browser",
+                    "asked host={} gen={generation} how=page",
+                    host(&url)
+                );
+                vec![LoadStep::Watchdog {
+                    generation,
+                    after_ms: WATCHDOG_MS,
+                }]
+            }
+            EngineVerdict::StoppedWithoutCommit { generation, url } => {
+                crate::diag::vlog!(
+                    "browser",
+                    "engine stopped without commit host={} gen={generation}",
+                    host(&url)
+                );
+                vec![LoadStep::Probe { generation, url }]
+            }
+        }
+    }
+
+    /// [`WATCHDOG_MS`] after load `generation` was asked for.
+    pub fn watchdog(&mut self, generation: u64) -> Vec<LoadStep> {
+        let Some(url) = self.watch.watchdog(generation) else {
+            return Vec::new();
+        };
+        crate::diag::vlog!(
+            "browser",
+            "watchdog host={} gen={generation} (no commit in {WATCHDOG_MS} ms)",
+            host(&url)
+        );
+        vec![LoadStep::Probe { generation, url }]
+    }
+
+    /// The probe of load `generation` answered.
+    pub fn probed(&mut self, generation: u64, answer: &ProbeAnswer, now_ms: f64) -> Vec<LoadStep> {
+        if generation == self.watch.generation {
+            crate::diag::vlog!(
+                "browser",
+                "probe host={} gen={generation} verdict={} route={}",
+                self.watched_host(),
+                verdict_word(answer.verdict),
+                answer
+                    .proxy
+                    .as_ref()
+                    .map_or_else(|| "system".to_owned(), |failure| failure.proxy.clone())
+            );
+        }
+        match self.watch.probed(generation, answer.verdict) {
+            Probed::Ignored => Vec::new(),
+            Probed::WaitUntil(at_ms) => vec![LoadStep::GiveUp {
+                generation,
+                after_ms: millis_until(at_ms, now_ms),
+            }],
+            // RD3: a certificate verdict while WebKit is still loading is not
+            // believed — and not a pass either: the 20 s give-up stays armed.
+            Probed::Deferred => vec![LoadStep::GiveUp {
+                generation,
+                after_ms: millis_until(self.watch.requested_at_ms + f64::from(GIVE_UP_MS), now_ms),
+            }],
+            Probed::Failed => self.failed(),
+        }
+    }
+
+    /// [`GIVE_UP_MS`] after the load was asked for.
+    pub fn give_up(&mut self, generation: u64) -> Vec<LoadStep> {
+        if self.watch.give_up(generation) {
+            self.failed()
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn failed(&mut self) -> Vec<LoadStep> {
+        let class = self
+            .watch
+            .failure
+            .as_ref()
+            .map_or_else(String::new, |failure| {
+                format!("{:?}", failure.class).to_lowercase()
+            });
+        crate::diag::vlog!(
+            "browser",
+            "failed host={} class={class}{}",
+            self.watched_host(),
+            if self.watch.page_initiated {
+                " (the page's own load: retried by hand only)"
+            } else {
+                ""
+            }
+        );
+        self.schedule()
+    }
+
+    fn schedule(&mut self) -> Vec<LoadStep> {
+        self.watch
+            .schedule_retry()
+            .map(|(generation, after_ms)| LoadStep::Retry {
+                generation,
+                after_ms,
+            })
+            .into_iter()
+            .collect()
+    }
+
+    fn attempt(&mut self, action: RetryAction) -> Vec<LoadStep> {
+        match action {
+            RetryAction::Load(url) => {
+                crate::diag::vlog!(
+                    "browser",
+                    "retry host={} attempt={}",
+                    host(&url),
+                    self.watch.attempt
+                );
+                vec![LoadStep::Navigate(url)]
+            }
+            // W7: WebKit is still on this load — no second request, and the
+            // attempt comes due again on the same wait.
+            RetryAction::EngineStillLoading => {
+                crate::diag::vlog!(
+                    "browser",
+                    "retry host={} skipped (engine still loading)",
+                    self.watched_host()
+                );
+                self.schedule()
+            }
+            RetryAction::NotInFront | RetryAction::Nothing => Vec::new(),
+        }
+    }
+
+    /// An automatic attempt for load `generation` came due.
+    pub fn retry_fired(&mut self, generation: u64, in_front: bool) -> Vec<LoadStep> {
+        let action = self.watch.retry_fired(generation, in_front);
+        self.attempt(action)
+    }
+
+    /// The page is in front again: an attempt that came due while it was not.
+    pub fn take_due(&mut self) -> Vec<LoadStep> {
+        let action = self.watch.take_due();
+        self.attempt(action)
+    }
+
+    /// The panel's Retry.
+    pub fn retry(&mut self) -> Vec<LoadStep> {
+        self.watch
+            .retry()
+            .map(|url| {
+                crate::diag::vlog!("browser", "retry host={} (by hand)", host(&url));
+                LoadStep::Navigate(url)
+            })
+            .into_iter()
+            .collect()
+    }
+
+    /// The network came back (spec 082 RE3, T069): a failed page whose class
+    /// a returning network can heal is loaded again, once — never a load the
+    /// page itself started (it may have been a POST; RD7).
+    pub fn network_came_back(&mut self) -> Vec<LoadStep> {
+        let eligible = self
+            .watch
+            .failure
+            .as_ref()
+            .is_some_and(|failure| browser_load::retry_when_network_returns(failure.class))
+            && !self.watch.page_initiated
+            && !self.watch.loading;
+        if !eligible {
+            return Vec::new();
+        }
+        crate::diag::vlog!(
+            "browser",
+            "network came back; loading host={} again",
+            self.watched_host()
+        );
+        self.retry()
     }
 }
 
@@ -657,6 +1117,446 @@ mod tests {
         });
     }
 
+    // -- spec 082 T060: navigation is held while a request is open ----------
+
+    #[test]
+    fn a_request_holds_navigation() {
+        storage::tests::with_temp_state("dbr-host-hold", || {
+            seed_grant(DAPP, A1, 100);
+            let mut driver = booted();
+            assert!(!holds_navigation(&driver.view()), "nothing open");
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+            ask(&mut driver, DAPP, "d1", "1", "personal_sign", json!([]));
+            assert!(holds_navigation(&driver.view()), "a signature is open");
+            // A second waits in line: still held once the first is answered.
+            ask(&mut driver, DAPP, "d1", "2", "personal_sign", json!([]));
+            signed(&mut driver, "1", "0xsig");
+            assert!(holds_navigation(&driver.view()), "one still in line");
+            signed(&mut driver, "2", "0xsig2");
+            assert!(!holds_navigation(&driver.view()), "all answered");
+        });
+        // A connect question holds too.
+        storage::tests::with_temp_state("dbr-host-hold-consent", || {
+            let mut driver = booted();
+            page(&mut driver, OTHER, json!({"t":"hello","doc":"d1"}));
+            ask(
+                &mut driver,
+                OTHER,
+                "d1",
+                "1",
+                "eth_requestAccounts",
+                json!([]),
+            );
+            assert!(driver.view().consent.is_some());
+            assert!(holds_navigation(&driver.view()));
+        });
+    }
+
+    /// Every way the page goes elsewhere is held while a request is open —
+    /// and a click on the tab already shown is nothing, held or not.
+    #[test]
+    fn every_navigation_is_held_and_the_shown_tab_is_nothing() {
+        let every = [
+            Go::Tab {
+                id: "t2".to_owned(),
+                url: Some("https://example.com/".to_owned()),
+            },
+            Go::Tab {
+                id: "t3".to_owned(),
+                url: None,
+            },
+            Go::NewTab,
+            Go::Typed("https://example.com/".to_owned()),
+            Go::Open("https://app.uniswap.org/".to_owned()),
+            Go::OpenInNewTab("https://app.uniswap.org/".to_owned()),
+            Go::Reload,
+            Go::Back,
+            Go::Forward,
+        ];
+        for go in &every {
+            assert_eq!(went(go, true, Some("t1")), Went::Held, "{go:?}");
+            assert_eq!(went(go, false, Some("t1")), Went::Go, "{go:?}");
+        }
+        let shown = Go::Tab {
+            id: "t1".to_owned(),
+            url: Some("http://127.0.0.1:8137/".to_owned()),
+        };
+        assert_eq!(went(&shown, true, Some("t1")), Went::AlreadyThere);
+        assert_eq!(
+            went(&shown, false, Some("t1")),
+            Went::AlreadyThere,
+            "a re-click used to reload the page, cancelling its request"
+        );
+    }
+
+    /// Closing the request's own tab is NOT held: its page goes, the core
+    /// settles the request (4900 — the page that asked is gone, so there is
+    /// no one left to deliver it to) and withdraws its sheet; nothing holds
+    /// after (ruling 4 holds glances, not closes).
+    #[test]
+    fn closing_the_requests_own_tab_settles_it() {
+        storage::tests::with_temp_state("dbr-host-close-own", || {
+            seed_grant(DAPP, A1, 100);
+            let mut driver = booted();
+            page(&mut driver, DAPP, json!({"t":"hello","doc":"d1"}));
+            ask(
+                &mut driver,
+                DAPP,
+                "d1",
+                "1",
+                "eth_sendTransaction",
+                json!([{}]),
+            );
+            assert!(holds_navigation(&driver.view()));
+            let out = driver.dispatch(Event::TabClosed {
+                tab: BROWSER_TAB.to_owned(),
+            });
+            assert_eq!(cancelled(&out), vec!["1".to_owned()], "the sheet goes");
+            assert!(
+                answers(&out).is_empty(),
+                "nothing is delivered into a closed page"
+            );
+            assert!(!holds_navigation(&driver.view()));
+            // The column's late answer reaches nobody.
+            assert!(answers(&signed(&mut driver, "1", "0xlate")).is_empty());
+        });
+    }
+
+    /// Spec 082 RD11 (G11, T065): the consent names the account a grant
+    /// would be made for and the site's network — and the network can be
+    /// changed before the answer, which the grant then carries.
+    #[test]
+    fn the_consent_carries_the_account_and_a_changeable_network() {
+        storage::tests::with_temp_state("dbr-host-consent-rows", || {
+            let mut driver = booted();
+            page(&mut driver, OTHER, json!({"t":"hello","doc":"d1"}));
+            ask(
+                &mut driver,
+                OTHER,
+                "d1",
+                "1",
+                "eth_requestAccounts",
+                json!([]),
+            );
+            let consent = driver
+                .view()
+                .consent
+                .unwrap_or_else(|| unreachable!("the site asked"));
+            assert_eq!(consent.address.as_deref(), Some(A1), "the active account");
+            let before = consent.chain_id;
+            driver.dispatch(Event::SiteChainPicked {
+                origin: OTHER.to_owned(),
+                chain_id: 100,
+            });
+            let consent = driver
+                .view()
+                .consent
+                .unwrap_or_else(|| unreachable!("still asking"));
+            assert_eq!(
+                consent.chain_id, 100,
+                "changed from {before} before the answer"
+            );
+        });
+    }
+
+    // -- spec 082 T062, T063: the bar, the lit tab, the nav buttons ---------
+
+    fn explore(
+        tabs: &[(&str, Option<&str>)],
+        selected: Option<&str>,
+    ) -> vela_core::app::explore_sites::ExploreView {
+        vela_core::app::explore_sites::ExploreView {
+            favorites: Vec::new(),
+            groups: Vec::new(),
+            tabs: tabs
+                .iter()
+                .map(|(id, url)| vela_core::app::explore_sites::ExploreTab {
+                    id: (*id).to_owned(),
+                    url: url.map(str::to_owned),
+                    title: String::new(),
+                    host: url.map(crate::diag::host_of).unwrap_or_default(),
+                })
+                .collect(),
+            selected_tab: selected.map(str::to_owned),
+            favorites_hidden: false,
+            recent_hidden: false,
+            favorites_full: false,
+            tabs_full: false,
+            ready: true,
+        }
+    }
+
+    /// G2 (RD6): launched with a restored Uniswap tab, the start page shows,
+    /// the tab waits unlit, and every nav button is off. Enter over the start
+    /// page opens a NEW tab and leaves the restored one intact.
+    #[test]
+    fn a_restored_tab_waits_unlit_and_enter_opens_a_new_one() {
+        let view = explore(&[("t1", Some("https://app.uniswap.org/"))], Some("t1"));
+        assert_eq!(
+            lit_tab(&view, None, false),
+            None,
+            "nothing lit over the start page"
+        );
+        assert_eq!(nav_enabled(false, true, true), [false; 3], "all nav off");
+        assert_eq!(open_target(&view, None, false), None, "a new tab");
+        // A start-page tab selected: lit, and it is where Enter goes.
+        let view = explore(
+            &[("t1", Some("https://app.uniswap.org/")), ("t2", None)],
+            Some("t2"),
+        );
+        assert_eq!(lit_tab(&view, None, false).as_deref(), Some("t2"));
+        assert_eq!(open_target(&view, None, false).as_deref(), Some("t2"));
+        // A page on screen: its tab, lit, and where Enter goes.
+        assert_eq!(lit_tab(&view, Some("t1"), true).as_deref(), Some("t1"));
+        assert_eq!(open_target(&view, Some("t1"), true).as_deref(), Some("t1"));
+        assert_eq!(nav_enabled(true, false, true), [false, true, true]);
+    }
+
+    /// G30 (RE1, RD5): a first load that failed names the failed host with NO
+    /// lock — nothing of it is on screen — and a committed page its own host
+    /// with its lock; a load pending in an empty tab names its host unlocked.
+    #[test]
+    fn the_bar_names_the_failed_host_without_a_lock() {
+        use vela_core::app::browser_load::BarLock;
+        let mut load = LoadDriver::default();
+        load.requested("https://app.uniswap.org/#/swap", 0.0);
+        let pending = bar_of(None, &load.watch);
+        assert_eq!(
+            (pending.host.as_str(), pending.lock),
+            ("app.uniswap.org", BarLock::None)
+        );
+        load.watchdog(load.watch.generation);
+        let generation_n = load.watch.generation;
+        load.probed(
+            generation_n,
+            &ProbeAnswer {
+                verdict: Err(vela_core::app::browser_load::probe_code::REFUSED),
+                proxy: None,
+            },
+            3_500.0,
+        );
+        assert!(load.watch.failure.is_some());
+        let failed = bar_of(None, &load.watch);
+        assert_eq!(failed.host, "app.uniswap.org");
+        assert_eq!(failed.lock, BarLock::None, "no lock over a failure panel");
+        assert_eq!(
+            failed.url, "https://app.uniswap.org/#/swap",
+            "what editing starts from"
+        );
+        // A committed page: its host, locked.
+        let page = bar_of(Some("https://app.uniswap.org/"), &LoadWatch::default());
+        assert_eq!(
+            (page.host.as_str(), page.lock),
+            ("app.uniswap.org", BarLock::Closed)
+        );
+    }
+
+    // -- spec 082 T059: WebKit's own load state first ------------------------
+
+    fn sample(loading: bool, progress: f64, url: &str) -> EngineSample {
+        EngineSample {
+            loading,
+            progress,
+            url: Some(url.to_owned()),
+        }
+    }
+
+    /// W7: a site whose first byte takes 9 s behind a blackholed probe. The
+    /// probe times out at 8 s and the panel goes up; the retry that falls
+    /// due at 10 s finds WebKit still on the load — or the page already
+    /// committed at 9 s — and never asks for it a second time.
+    #[test]
+    fn a_slow_first_byte_is_asked_for_once() {
+        const SITE: &str = "https://app.uniswap.org/";
+        let mut load = LoadDriver::default();
+        let mut navigations = 0;
+        let steps = load.requested(SITE, 0.0);
+        assert!(matches!(
+            steps.as_slice(),
+            [LoadStep::Watchdog {
+                after_ms: 3_000,
+                ..
+            }]
+        ));
+        let generation_n = load.watch.generation;
+        // WebKit is on it from the start, provisionally.
+        for t in [250.0, 500.0, 2_750.0] {
+            assert!(load.engine(&sample(true, 0.1, SITE), t).is_empty());
+        }
+        assert!(matches!(
+            load.watchdog(generation_n).as_slice(),
+            [LoadStep::Probe { .. }]
+        ));
+        // The probe's own 5 s run out at 8 s.
+        let steps = load.probed(
+            generation_n,
+            &ProbeAnswer {
+                verdict: Err(vela_core::app::browser_load::probe_code::TIMEOUT),
+                proxy: None,
+            },
+            8_000.0,
+        );
+        let retry = steps.iter().find_map(|step| match step {
+            LoadStep::Retry {
+                generation,
+                after_ms,
+            } => Some((*generation, *after_ms)),
+            _ => None,
+        });
+        assert!(load.watch.failure.is_some(), "the panel is up");
+        // 10 s: WebKit is still loading — no second request.
+        let (retry_gen, _) = retry.unwrap_or_else(|| unreachable!("an attempt is scheduled"));
+        for step in load.retry_fired(retry_gen, true) {
+            if let LoadStep::Navigate(_) = step {
+                navigations += 1;
+            }
+        }
+        assert_eq!(
+            navigations, 0,
+            "no second loadRequest while WebKit is on it"
+        );
+        // The page commits: the panel goes by itself.
+        load.committed(SITE);
+        assert!(load.watch.failure.is_none());
+        assert!(load.engine(&sample(false, 1.0, SITE), 12_000.0).is_empty());
+        load.finished(SITE);
+        assert!(!load.watch.busy());
+    }
+
+    /// W18 (RD7): the page started a load of its own (a script set
+    /// `location.href`) and it failed — a panel naming that host, with
+    /// Retry by hand only: the original may have been a POST.
+    #[test]
+    fn a_page_started_load_gets_a_panel_and_no_automatic_retry() {
+        const SITE: &str = "http://127.0.0.1:8137/";
+        const AWAY: &str = "https://example.org/";
+        let mut load = LoadDriver::default();
+        load.requested(SITE, 0.0);
+        load.committed(SITE);
+        load.finished(SITE);
+        assert!(load.engine(&sample(false, 1.0, SITE), 1_000.0).is_empty());
+        let steps = load.engine(&sample(true, 0.1, AWAY), 2_000.0);
+        let generation_n = match steps.as_slice() {
+            [LoadStep::Watchdog { generation, .. }] => *generation,
+            other => unreachable!("the page's load is watched: {other:?}"),
+        };
+        assert!(load.watch.page_initiated);
+        assert_eq!(
+            bar_of(Some(SITE), &load.watch).host,
+            "127.0.0.1:8137",
+            "the bar keeps the page"
+        );
+        // WebKit gives up with nothing committed: the probe says why.
+        let steps = load.engine(&sample(false, 0.1, SITE), 6_000.0);
+        assert!(matches!(steps.as_slice(), [LoadStep::Probe { .. }]));
+        let steps = load.probed(
+            generation_n,
+            &ProbeAnswer {
+                verdict: Err(vela_core::app::browser_load::probe_code::TIMEOUT),
+                proxy: None,
+            },
+            7_000.0,
+        );
+        assert!(load.watch.failure.is_some(), "the panel is up");
+        assert!(
+            !steps
+                .iter()
+                .any(|step| matches!(step, LoadStep::Retry { .. })),
+            "no automatic retry for a load the page started"
+        );
+        assert_eq!(bar_of(Some(SITE), &load.watch).host, "example.org");
+        // Retry by hand still works.
+        assert_eq!(load.retry(), vec![LoadStep::Navigate(AWAY.to_owned())]);
+    }
+
+    /// RD3: a certificate verdict from the probe while WebKit is still
+    /// loading is not believed — and the 20 s give-up stays armed.
+    #[test]
+    fn a_deferred_verdict_keeps_the_give_up_armed() {
+        const SITE: &str = "https://self-signed.example/";
+        let mut load = LoadDriver::default();
+        load.requested(SITE, 0.0);
+        load.engine(&sample(true, 0.1, SITE), 500.0);
+        let generation_n = load.watch.generation;
+        load.watchdog(generation_n);
+        let steps = load.probed(
+            generation_n,
+            &ProbeAnswer {
+                verdict: Err(vela_core::app::browser_load::probe_code::TLS),
+                proxy: None,
+            },
+            4_000.0,
+        );
+        assert_eq!(
+            steps,
+            vec![LoadStep::GiveUp {
+                generation: generation_n,
+                after_ms: 16_000
+            }]
+        );
+        assert!(load.watch.failure.is_none());
+        // Still nothing at 20 s and WebKit never got anywhere: a timeout.
+        let steps = load.give_up(generation_n);
+        assert!(load.watch.failure.is_some());
+        assert!(
+            steps
+                .iter()
+                .any(|step| matches!(step, LoadStep::Retry { .. }))
+        );
+    }
+
+    // -- spec 082 T069: network-back parity ---------------------------------
+
+    /// Three misses take the network offline; the first reach after them
+    /// brings it back, and the failed page is loaded again — once. A load
+    /// the page started, and a name that does not resolve, are not.
+    #[test]
+    fn three_misses_then_a_reach_retry_the_failed_page_once() {
+        use vela_core::app::net_health::{NetEdge, NetHealth, net_health_step};
+        const SITE: &str = "https://app.uniswap.org/";
+        let failed_load = |code: i64| {
+            let mut load = LoadDriver::default();
+            load.requested(SITE, 0.0);
+            let generation_n = load.watch.generation;
+            load.watchdog(generation_n);
+            load.probed(
+                generation_n,
+                &ProbeAnswer {
+                    verdict: Err(code),
+                    proxy: None,
+                },
+                3_500.0,
+            );
+            assert!(load.watch.failure.is_some());
+            load
+        };
+        let mut load = failed_load(vela_core::app::browser_load::probe_code::CONNECT);
+        let mut health = NetHealth {
+            misses: 0,
+            online: true,
+        };
+        let mut retries = 0;
+        for reached in [false, false, false, true, true] {
+            let (next, edge) = net_health_step(health, reached);
+            health = next;
+            if edge == Some(NetEdge::CameBack) {
+                retries += load
+                    .network_came_back()
+                    .iter()
+                    .filter(|step| matches!(step, LoadStep::Navigate(_)))
+                    .count();
+            }
+        }
+        assert_eq!(retries, 1, "one retry of the failed page");
+        // A name that does not resolve is not the network.
+        let mut typo = failed_load(vela_core::app::browser_load::probe_code::DNS);
+        assert!(typo.network_came_back().is_empty());
+        // The page's own load is retried by hand only.
+        let mut page = failed_load(vela_core::app::browser_load::probe_code::CONNECT);
+        page.watch.page_initiated = true;
+        assert!(page.network_came_back().is_empty());
+    }
+
     /// A load that finishes with no document saying hello (an error page)
     /// retires the old document too.
     #[test]
@@ -714,10 +1614,31 @@ mod tests {
     /// failed — and never when providers are only rate-limiting.
     #[test]
     fn the_chain_notice_is_for_a_chain_that_is_down_not_throttled() {
-        assert!(chain_down(100, &[100, 1], &[]));
-        assert!(!chain_down(100, &[100], &[100]), "rate-limited stays quiet");
-        assert!(!chain_down(100, &[1], &[]), "another chain's trouble");
-        assert!(!chain_down(100, &[], &[]), "answered again: gone");
+        let health = |failed: &[u32], unreached: &[u32], rate_limited: &[u32]| ChainHealth {
+            failed: failed.to_vec(),
+            unreached: unreached.to_vec(),
+            rate_limited: rate_limited.to_vec(),
+        };
+        assert!(chain_down(100, &health(&[100, 1], &[], &[])));
+        assert!(
+            !chain_down(100, &health(&[100], &[], &[100])),
+            "rate-limited stays quiet"
+        );
+        assert!(
+            !chain_down(100, &health(&[1], &[], &[])),
+            "another chain's trouble"
+        );
+        assert!(
+            !chain_down(100, &health(&[], &[], &[])),
+            "answered again: gone"
+        );
+        // Spec 082 RF1: a first pass that reached nothing is enough — the
+        // notice shows while the dApp still waits, a pass before `failed`.
+        assert!(chain_down(100, &health(&[], &[100], &[])));
+        assert!(
+            !chain_down(100, &health(&[], &[100], &[100])),
+            "unreached but throttled: still quiet"
+        );
     }
 
     /// Consent: one approval writes the grant under the shared key, the

@@ -108,16 +108,25 @@ pub fn custom_groups(view: &ExploreView) -> Vec<GroupModel> {
 /// A tab with no url is the START PAGE — every browser's first tab, drawn with
 /// the wallet's own mark rather than a favicon, and the core keeps that
 /// distinction as `url: None` rather than as an empty string.
+///
+/// `lit` is the tab the page lights (spec 082 RD6: the one on screen — a
+/// restored tab waits unlit), and `failed_host` the host a failure panel is
+/// up for, which that tab is called while it is (RD5).
 #[must_use]
-pub fn tab_models(view: &ExploreView, strings: &ExploreStrings) -> Vec<TabModel> {
+pub fn tab_models(
+    view: &ExploreView,
+    strings: &ExploreStrings,
+    lit: Option<&str>,
+    failed_host: Option<String>,
+) -> Vec<TabModel> {
     view.tabs
         .iter()
         .map(|tab| TabModel {
             id: "tab",
-            title: if tab.title.trim().is_empty() {
-                strings.start_page.clone()
-            } else {
-                SharedString::from(tab.title.clone())
+            title: match &failed_host {
+                Some(host) if lit == Some(tab.id.as_str()) => SharedString::from(host.clone()),
+                _ if tab.title.trim().is_empty() => strings.start_page.clone(),
+                _ => SharedString::from(tab.title.clone()),
             },
             site: tab.url.as_ref().map(|url| SiteModel {
                 id: "tab",
@@ -130,7 +139,7 @@ pub fn tab_models(view: &ExploreView, strings: &ExploreStrings) -> Vec<TabModel>
                 url: None,
                 icon_urls: icons_of(url, None),
             }),
-            selected: view.selected_tab.as_deref() == Some(tab.id.as_str()),
+            selected: lit == Some(tab.id.as_str()),
         })
         .collect()
 }

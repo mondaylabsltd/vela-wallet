@@ -200,6 +200,10 @@ pub struct TabActions {
     pub select: Vec<Option<crate::flows::panels::Click>>,
     pub close: Vec<Option<crate::flows::panels::Click>>,
     pub new_tab: Option<crate::flows::panels::Click>,
+    /// Spec 082 RD1: a request is open and switching is held — every tab but
+    /// the lit one, and +, are drawn at the disabled opacity. They still take
+    /// clicks: a click is what brings the request forward and says why.
+    pub held: bool,
 }
 
 pub fn tab_strip(
@@ -227,8 +231,13 @@ pub fn tab_strip_with(
     close_label: SharedString,
     mut actions: TabActions,
 ) -> Div {
+    let held = actions.held;
+    // Never shrinks (spec 082 RD8, G6): taffy's default `flex-shrink: 1`
+    // shared a live page's overflow with the strip and the toolbar, which
+    // jumped up by a few points the moment a page loaded.
     let mut strip = div()
         .h(px(TAB_STRIP_H))
+        .flex_none()
         .flex()
         .items_end()
         .gap(px(2.))
@@ -297,6 +306,7 @@ pub fn tab_strip_with(
         let mut tab_el = div()
             .id(ElementId::from(("tab", i)))
             .cursor_pointer()
+            .when(held && !tab.selected, |el| el.opacity(0.45))
             .child(face);
         if let Some(select) = select {
             tab_el = tab_el.on_click(move |event, window, cx| select(event, window, cx));
@@ -314,6 +324,7 @@ pub fn tab_strip_with(
         .items_center()
         .justify_center()
         .cursor_pointer()
+        .when(held, |el| el.opacity(0.45))
         .child(icon_img(icons, Icon::Plus, false, theme.fg_muted, 14.));
     if let Some(new_tab) = actions.new_tab.take() {
         plus = plus.on_click(move |event, window, cx| new_tab(event, window, cx));
@@ -407,15 +418,26 @@ pub fn account_chip(
 /// and the same three buttons start working.
 pub type NavActions = [crate::flows::panels::Click; 3];
 
+/// Which of the three can act — the engine's word (spec 082 RD6) — and
+/// whether a request holds them (RD1: drawn disabled, still clickable).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NavState {
+    pub enabled: [bool; 3],
+    pub held: bool,
+}
+
 pub fn toolbar(
     theme: &Theme,
     icons: &mut IconCache,
     address: AnyElement,
     trailing: Div,
     nav: Option<NavActions>,
+    state: NavState,
 ) -> Div {
     div()
         .h(px(TOOLBAR_H))
+        // Never shrinks (RD8): see `tab_strip_with`.
+        .flex_none()
         .px(px(20.))
         .flex()
         .items_center()
@@ -423,7 +445,7 @@ pub fn toolbar(
         .bg(theme.bg_base)
         .border_b_1()
         .border_color(theme.divider)
-        .children(nav_controls(theme, icons, nav))
+        .children(nav_controls(theme, icons, nav, state))
         .child(
             div()
                 .flex_1()
@@ -445,12 +467,12 @@ pub struct AddressBar {
     /// A page is open: its host and a lock. Otherwise the search box.
     pub browsing: bool,
     pub host: SharedString,
-    /// Whether the lock may be drawn. https, or an http host on this machine
-    /// or its network — the core's `secure`, the same judgement that lets a
-    /// site ask for a signature. A public http page gets a warning glyph: a
-    /// padlock beside it would be the chrome vouching for a connection
-    /// anybody on the path can read.
-    pub secure: bool,
+    /// The core's `address_bar` lock (spec 082 RE1): closed for https or a
+    /// loopback / private-network http host, open (in the warning colour) for
+    /// public http — a padlock there would vouch for a connection anybody on
+    /// the path can read — and none at all over a failure panel or a load
+    /// that has not committed: nothing from that host is on screen.
+    pub lock: vela_core::app::browser_load::BarLock,
     pub placeholder: SharedString,
     /// Somebody is typing: the text so far, drawn with a caret.
     pub draft: Option<SharedString>,
@@ -460,6 +482,9 @@ pub struct AddressBar {
     /// copied its link. The page is a native view gpui cannot draw over, so
     /// a toast over it would be under it; the bar is what stays visible.
     pub notice: Option<SharedString>,
+    /// The notice is a refusal — "finish or cancel the request first" (spec
+    /// 082 RD1, ruling 10) — drawn in the warning colour, not as a tick.
+    pub notice_warns: bool,
 }
 
 /// The address field's contents, for the page to wrap in whatever makes it
@@ -519,27 +544,37 @@ pub fn address_field(
             .child(typed);
     }
     if let Some(notice) = &bar.notice {
-        return row
-            .child(icon_img(icons, Icon::Check, false, theme.success, 12.))
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.success)
-                    .child(notice.clone()),
-            );
+        let (glyph, tint) = if bar.notice_warns {
+            (Icon::TriangleAlert, theme.warning_base)
+        } else {
+            (Icon::Check, theme.success)
+        };
+        return row.child(icon_img(icons, glyph, false, tint, 12.)).child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(tint)
+                .child(notice.clone()),
+        );
     }
     if bar.browsing {
         // Spec 079 (owner: "用一把锁代表 https 和非https 就行了，不文字标记"): a
         // closed lock, quiet, for https — it says the line is encrypted, not
         // that the site is honest — and an open one in the warning colour for
-        // plain http. No word beside either.
-        let (glyph, tint) = lock_glyph(theme, bar.secure);
-        return row.child(icon_img(icons, glyph, false, tint, 12.)).child(
-            div()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_base)
-                .child(bar.host.clone()),
-        );
+        // plain http. No word beside either, and no lock at all when nothing
+        // of the host is on screen (spec 082 RE1).
+        let lock = match bar.lock {
+            vela_core::app::browser_load::BarLock::Closed => Some(lock_glyph(theme, true)),
+            vela_core::app::browser_load::BarLock::Open => Some(lock_glyph(theme, false)),
+            vela_core::app::browser_load::BarLock::None => None,
+        };
+        return row
+            .children(lock.map(|(glyph, tint)| icon_img(icons, glyph, false, tint, 12.)))
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(bar.host.clone()),
+            );
     }
     row.child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
         .child(
@@ -662,21 +697,35 @@ pub fn load_hairline(theme: &Theme, busy: bool) -> Div {
 }
 
 /// The three navigation buttons, live or drawn.
-fn nav_controls(theme: &Theme, icons: &mut IconCache, nav: Option<NavActions>) -> Vec<AnyElement> {
-    // Back and reload act; forward is the web's drawn `canForward: false`
-    // — disabled, not merely grey (078 E-04).
-    let icons_and_tints = [
-        (Icon::ArrowLeft, true),
-        (Icon::ArrowRight, false),
-        (Icon::RefreshCw, true),
-    ];
+///
+/// Live, each is on when the engine says it can act (spec 082 RD6 — Back was
+/// always on, even with nothing to go back to). The mock draws back and
+/// reload on and forward off, the web's `canForward: false` (078 E-04).
+/// A held button (RD1) is drawn disabled and still takes its click.
+fn nav_controls(
+    theme: &Theme,
+    icons: &mut IconCache,
+    nav: Option<NavActions>,
+    state: NavState,
+) -> Vec<AnyElement> {
+    let live = nav.is_some();
+    let glyphs = [Icon::ArrowLeft, Icon::ArrowRight, Icon::RefreshCw];
+    let drawn = [true, false, true];
     let mut actions = nav.map(Vec::from).unwrap_or_default().into_iter();
-    icons_and_tints
+    glyphs
         .into_iter()
         .enumerate()
-        .map(|(i, (icon, enabled))| {
-            let control = toolbar_control_with(theme, icons, icon, theme.fg_base, false, enabled);
-            match actions.next() {
+        .map(|(i, icon)| {
+            let enabled = if live { state.enabled[i] } else { drawn[i] };
+            let control = toolbar_control_with(
+                theme,
+                icons,
+                icon,
+                theme.fg_base,
+                false,
+                enabled && !state.held,
+            );
+            match actions.next().filter(|_| enabled) {
                 Some(action) => crate::flows::panels::clickable(
                     ElementId::from(("browser-nav", i)),
                     Some(action),
@@ -779,6 +828,35 @@ pub fn demo_page(page: &DemoPage) -> Div {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 082 RD8 (G6): the strip and the toolbar never shrink, so a live
+    /// page — which asks for the rest of the column and no more — cannot
+    /// take points out of them: the toolbar sits at the same y on the start
+    /// page and over a page (0 pt; the device row DX12 measures it).
+    #[test]
+    fn the_chrome_never_shrinks() {
+        use gpui::Styled as _;
+        let theme = Theme::light();
+        let mut icons = IconCache::default();
+        let mut strip = tab_strip_with(
+            &theme,
+            &mut icons,
+            &[],
+            SharedString::default(),
+            SharedString::default(),
+            TabActions::default(),
+        );
+        assert_eq!(strip.style().flex_shrink, Some(0.));
+        let mut bar = toolbar(
+            &theme,
+            &mut icons,
+            div().into_any_element(),
+            div(),
+            None,
+            NavState::default(),
+        );
+        assert_eq!(bar.style().flex_shrink, Some(0.));
+    }
 
     /// Spec 079 FR-015: the scheme is a lock and only a lock — closed and
     /// quiet for https, open in the warning colour for http.

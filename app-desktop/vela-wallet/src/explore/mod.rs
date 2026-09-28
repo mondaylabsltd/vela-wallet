@@ -8,7 +8,7 @@
 pub mod components;
 pub mod fixtures;
 pub mod live;
-pub mod load_watch;
+pub mod probe;
 
 use gpui::SharedString;
 
@@ -90,6 +90,12 @@ pub struct ExploreStrings {
     pub load_retrying: SharedString,
     /// Spec 079 US4: the page's chain cannot be reached (`{{chain}}`).
     pub chain_down: String,
+    /// Spec 082 RD9 (ruling 3): the proxy itself could not be used — the
+    /// panel's reason for the `proxy` class ("Your proxy isn't responding.").
+    pub load_proxy: SharedString,
+    /// Spec 082 RD1 (ruling 10): a tab switch held while a request is open —
+    /// "Finish or cancel the request first", in the bar for 2.5 s.
+    pub request_open: SharedString,
 }
 
 impl ExploreStrings {
@@ -152,6 +158,8 @@ impl ExploreStrings {
             load_retry: s("connect.browser.retry"),
             load_retrying: s("explore.loadRetrying"),
             chain_down: raw("explore.chainDown"),
+            load_proxy: s("explore.loadProxy"),
+            request_open: s("explore.requestOpen"),
         }
     }
 }
@@ -181,6 +189,9 @@ mod tests {
             (s.load_failed.as_ref(), "connect.browser.loadFailed"),
             (s.load_retry.as_ref(), "connect.browser.retry"),
             (s.load_retrying.as_ref(), "explore.loadRetrying"),
+            // Spec 082 T058, T060: the two new keys this client shows.
+            (s.load_proxy.as_ref(), "explore.loadProxy"),
+            (s.request_open.as_ref(), "explore.requestOpen"),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");
         }
@@ -201,6 +212,7 @@ mod tests {
             "explore.loadOffline",
             "explore.loadNotFound",
             "explore.loadCertificate",
+            "explore.loadProxy",
             "connect.browser.loadFailed",
         ] {
             assert_ne!(loc.t(key).as_ref(), key, "`{key}` echoed the key");
