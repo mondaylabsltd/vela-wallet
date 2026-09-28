@@ -822,9 +822,16 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
     #[cfg(windows)]
     let profile = crate::executor::storage::browser_profile_dir();
     #[cfg(windows)]
-    if let Some(dir) = &profile {
-        // So a missing parent is never why WebView2 refuses.
-        let _ = std::fs::create_dir_all(dir);
+    if let Some(dir) = &profile
+        // Made if missing, so a missing parent is never why WebView2 refuses;
+        // and written once, because a folder it may not write is not refused
+        // (083 H7): the engine waited on it forever, blank, with no panel.
+        && let Err(error) = crate::executor::storage::probe_profile_dir(dir)
+    {
+        eprintln!("[vela-wallet] browser: the profile folder takes no write: {error}");
+        if let Some(failure) = EngineFailure::from_profile_probe(&error) {
+            return Err(failure);
+        }
     }
     #[cfg(windows)]
     let mut context = wry::WebContext::new(profile);

@@ -32,6 +32,14 @@ impl EngineFailure {
         }
     }
 
+    /// The profile probe's refusal, as the engine says it when it does not
+    /// wait instead (083 H7). Any other probe error is the engine's to judge.
+    #[must_use]
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub fn from_profile_probe(error: &std::io::Error) -> Option<Self> {
+        (error.kind() == std::io::ErrorKind::PermissionDenied).then_some(Self::AccessDenied)
+    }
+
     /// The code as support searches for it: `"0x80070005"`.
     #[must_use]
     pub fn code(self) -> Option<String> {
@@ -72,6 +80,27 @@ mod tests {
                 .code()
                 .as_deref(),
             Some("0x80004005")
+        );
+    }
+
+    /// 083 H7: a profile folder that refuses the probe is the panel's
+    /// "folder refused"; anything else is left to the engine.
+    #[test]
+    fn a_refused_profile_probe_is_access_denied() {
+        use std::io::{Error, ErrorKind};
+        assert_eq!(
+            EngineFailure::from_profile_probe(&Error::from(ErrorKind::PermissionDenied)),
+            Some(EngineFailure::AccessDenied)
+        );
+        assert_eq!(
+            EngineFailure::from_profile_probe(&Error::from(ErrorKind::StorageFull)),
+            None
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            // ERROR_ACCESS_DENIED, as a deny entry on the folder answers.
+            EngineFailure::from_profile_probe(&Error::from_raw_os_error(5)),
+            Some(EngineFailure::AccessDenied)
         );
     }
 }

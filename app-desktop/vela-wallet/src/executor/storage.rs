@@ -18,7 +18,7 @@
 //! `serde_json::Value` all the way to the core's own `serde` impls.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -130,6 +130,23 @@ fn profile_dir_in(state: Option<PathBuf>, local: Option<PathBuf>) -> Option<Path
         None => local.map(|base| base.join("VelaWallet").join("WebView2")),
     }
 }
+
+/// Make `dir`, the browser's profile, if it is missing, and put a file in it
+/// and take it out again (083 H7).
+///
+/// WebView2 given a folder it may not write does not refuse it: its creation
+/// never calls back, and the browser stayed blank with no panel. Asked here
+/// first, the refusal is the engine panel's, at once.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn probe_profile_dir(dir: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dir)?;
+    let probe = dir.join(PROFILE_PROBE);
+    fs::write(&probe, b"")?;
+    fs::remove_file(&probe)
+}
+
+/// The probe's file: never left behind, and no name WebView2 uses.
+const PROFILE_PROBE: &str = "vela-write-probe.tmp";
 
 /// Delete that profile, whole (spec 083; the erase of 081 FR-017 when no
 /// browser was opened this session). A folder already gone is gone.
@@ -790,6 +807,38 @@ pub(crate) mod tests {
             assert!(!dir.exists());
             assert!(remove_browser_profile().is_ok(), "already gone is gone");
         });
+    }
+
+    /// 083 H7: the profile is made if missing and leaves nothing behind; a
+    /// folder that takes no write is an error before WebView2 is asked —
+    /// the engine would have waited on it forever.
+    #[test]
+    fn a_profile_folder_is_probed_before_the_engine_waits_on_it() {
+        let root = std::env::temp_dir().join("vela-profile-probe-test");
+        let _ = fs::remove_dir_all(&root);
+        let dir = root.join("VelaWallet").join("WebView2");
+
+        assert!(probe_profile_dir(&dir).is_ok(), "a missing profile is made");
+        assert!(dir.is_dir());
+        assert_eq!(fs::read_dir(&dir).map(Iterator::count).ok(), Some(0));
+        assert!(probe_profile_dir(&dir).is_ok(), "and probed again");
+
+        // A file where the folder should be: no folder to write.
+        let blocked = root.join("a-file");
+        assert!(fs::write(&blocked, b"x").is_ok());
+        assert!(probe_profile_dir(&blocked).is_err());
+
+        // A folder where the probe's file goes: Windows refuses the write as
+        // a deny entry on the folder does (ERROR_ACCESS_DENIED).
+        #[cfg(windows)]
+        {
+            assert!(fs::create_dir_all(dir.join(PROFILE_PROBE)).is_ok());
+            assert_eq!(
+                probe_profile_dir(&dir).map_err(|error| error.kind()),
+                Err(std::io::ErrorKind::PermissionDenied)
+            );
+        }
+        let _ = fs::remove_dir_all(&root);
     }
 
     pub(crate) fn with_temp_state<T>(name: &str, body: impl FnOnce() -> T) -> T {
