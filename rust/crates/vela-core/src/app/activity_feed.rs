@@ -306,15 +306,24 @@ pub struct FeedDapp {
     /// when the person approved — the signing sheet's "Balance changes"
     /// lines, in its order (083 F1). Empty for a record that kept none (an
     /// older row, a shell that does not record them, a simulation that could
-    /// not run): the row then draws as it did before.
+    /// not run) and for an operation that FAILED, which moved nothing: the
+    /// row then draws as it did before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub changes: Vec<FeedDappChange>,
     /// A swap-shaped operation's one inflow — exactly one line out, which is
-    /// the row's figure, and exactly one in, both with a figure. Drawn beside
-    /// the figure as what the simulation EXPECTED: the chain may deliver
-    /// another amount (slippage). `None` otherwise.
+    /// the row's figure, and exactly one in, both with a figure, both of a
+    /// coin the wallet trusts. Drawn beside the figure as what the
+    /// simulation EXPECTED: the chain may deliver another amount (slippage).
+    /// `None` otherwise, and always for a failed operation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub received: Option<FeedDappChange>,
+    /// The row's figure is the simulation's expectation, not an amount the
+    /// wallet can vouch for (083 F1 review): an outflow the sheet measured,
+    /// which an exact-output swap may overspend or underspend on chain. The
+    /// shell marks it "≈". `false` for the call's own value and for a
+    /// native outflow equal to it — what the wallet itself submitted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub estimated: bool,
     /// The transaction carried calldata, so the row's counterparty is the
     /// contract it called — never labelled a recipient (083 F3). `false` for
     /// a plain transfer of the chain's coin and for a record that cannot say.
@@ -346,6 +355,13 @@ pub struct FeedDappChange {
     /// is no figure to show: unverified, or a stored delta that will not read.
     pub value: Option<String>,
     pub decimals: Option<u32>,
+    /// The wallet can vouch for this figure to the unit: a native outflow
+    /// equal to the value the wallet itself submitted. Every other line is
+    /// what the simulation expected — an inflow may arrive short (slippage)
+    /// and an exact-output swap's outflow may differ too, and the wallet
+    /// cannot tell which kind of swap it signed — so the shell marks it "≈".
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub exact: bool,
 }
 
 /// A date header or an item — the grouped feed, in render order
@@ -1007,26 +1023,52 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
 ///
 /// What the operation moved comes first when the record kept it (083 F1):
 /// the sheet's own simulation, recorded at approve time. Its one outflow is
-/// the row's figure — a swap of 0.1 USDC reads "−0.1 USDC", not nothing —
+/// the row's figure — a swap of 0.1 USDC reads "≈ −0.1 USDC", not nothing —
 /// and a swap-shaped operation's one inflow rides beside it as `received`.
 /// Anything else (no lines kept, two coins out, an outflow the sheet could
 /// not put a number on) leaves the figure to the call's own value, as before.
+///
+/// Two rules keep the page's hand off the figure (083 F1 review):
+/// - only the chain's coin or a token the wallet already trusts can be it. An
+///   outflow renders on the sheet on metadata alone, and a contract a site
+///   deployed can emit `Transfer(you, …)` and answer `symbol()` with "USDC";
+///   on the sheet that overstates a spend, but as Activity's headline — and
+///   priced by its symbol — it would be the site writing the wallet's record.
+///   Such a line stays in the detail, as the sheet drew it.
+/// - a FAILED operation moved nothing, so it keeps none of what the sheet
+///   expected: no figure from it, nothing "≈ back", no lines — the row draws
+///   as before, beside its failed status.
 fn dapp_item(t: &FeedTxRecord) -> FeedItem {
-    let changes = recorded_changes(t);
-    let figured = |change: &&FeedDappChange| {
-        change.verified && change.value.is_some() && !change.symbol.is_empty()
+    let recorded = if t.status == FeedTxStatus::Failed {
+        Vec::new()
+    } else {
+        recorded_changes(t)
+    };
+    let figured = |line: &&RecordedChange| {
+        line.known
+            && line.change.verified
+            && line.change.value.is_some()
+            && !line.change.symbol.is_empty()
     };
     let only = |direction: FeedDirection| {
-        let mut lines = changes.iter().filter(|c| c.direction == direction);
+        let mut lines = recorded.iter().filter(|l| l.change.direction == direction);
         match (lines.next(), lines.next()) {
             (Some(line), None) => Some(line),
             _ => None,
         }
     };
     let taken = only(FeedDirection::Out).filter(figured);
-    let received = taken.and(only(FeedDirection::In)).filter(figured).cloned();
+    let received = taken
+        .and(only(FeedDirection::In))
+        .filter(figured)
+        .map(|line| line.change.clone());
+    let estimated = taken.is_some_and(|line| !line.change.exact);
     let (value, symbol, decimals) = match taken {
-        Some(out) => (out.value.clone(), out.symbol.clone(), out.decimals),
+        Some(out) => (
+            out.change.value.clone(),
+            out.change.symbol.clone(),
+            out.change.decimals,
+        ),
         None => {
             let value = wei(&t.value)
                 .filter(|wei| *wei > 0 && t.decimals <= MAX_DAPP_DECIMALS)
@@ -1081,10 +1123,19 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
             intent_term: intent.as_deref().and_then(ClearTerm::of),
             intent,
             received,
-            changes,
+            estimated,
+            changes: recorded.into_iter().map(|line| line.change).collect(),
             contract_call: t.calldata == Some(true),
         }),
     }
+}
+
+/// One recorded line, with what the row needs to know of it and the wire
+/// does not carry: whether its coin is one the wallet trusts (the chain's
+/// own, or `TrustSimJudgment::Erc20Trusted::in_trusted_set`).
+struct RecordedChange {
+    change: FeedDappChange,
+    known: bool,
 }
 
 /// The record's balance changes as lines a person reads (083 F1).
@@ -1094,7 +1145,11 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
 /// read as a signed number has no direction to state. The sheet's judgment
 /// is kept as it was made — an unverified line stays figureless here, however
 /// large its delta.
-fn recorded_changes(t: &FeedTxRecord) -> Vec<FeedDappChange> {
+///
+/// A line is `exact` only when the wallet can vouch for it: the chain's coin
+/// leaving in exactly the amount the transaction itself sent (`value`, which
+/// the wallet submitted). Everything else is the simulation's expectation.
+fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
     let Some(judgments) = t.balance_changes.as_ref() else {
         return Vec::new();
     };
@@ -1110,19 +1165,27 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<FeedDappChange> {
                 .map(|chain| chain.native_symbol.to_owned())
         })
         .unwrap_or_default();
+    let sent = wei(&t.value);
     judgments
         .iter()
         .filter_map(|judgment| {
-            let (delta, verified, symbol, decimals) = match judgment {
-                TrustSimJudgment::Native { delta } => (delta, true, native.clone(), Some(18)),
+            let (delta, verified, known, symbol, decimals) = match judgment {
+                TrustSimJudgment::Native { delta } => (delta, true, true, native.clone(), Some(18)),
                 TrustSimJudgment::Erc20Trusted {
                     delta,
                     symbol,
                     decimals,
+                    in_trusted_set,
                     ..
-                } => (delta, true, symbol.trim().to_owned(), Some(*decimals)),
+                } => (
+                    delta,
+                    true,
+                    *in_trusted_set,
+                    symbol.trim().to_owned(),
+                    Some(*decimals),
+                ),
                 TrustSimJudgment::Erc20Unverified { delta, .. } => {
-                    (delta, false, String::new(), None)
+                    (delta, false, false, String::new(), None)
                 }
             };
             let (out, magnitude) = signed_delta(delta)?;
@@ -1132,16 +1195,28 @@ fn recorded_changes(t: &FeedTxRecord) -> Vec<FeedDappChange> {
                 .map(|(magnitude, decimals)| {
                     super::fee_policy::from_base_units(magnitude, decimals)
                 });
-            Some(FeedDappChange {
-                direction: if out {
-                    FeedDirection::Out
-                } else {
-                    FeedDirection::In
+            // What the wallet itself sent, leaving whole: nothing else is
+            // provable from the record (an exact-output swap's outflow is an
+            // estimate too, and nothing here says which kind was signed).
+            let exact = matches!(judgment, TrustSimJudgment::Native { .. })
+                && out
+                && value.is_some()
+                && magnitude.is_some()
+                && magnitude == sent;
+            Some(RecordedChange {
+                change: FeedDappChange {
+                    direction: if out {
+                        FeedDirection::Out
+                    } else {
+                        FeedDirection::In
+                    },
+                    verified,
+                    symbol,
+                    decimals: value.as_ref().and(decimals),
+                    value,
+                    exact,
                 },
-                verified,
-                symbol,
-                decimals: value.as_ref().and(decimals),
-                value,
+                known,
             })
         })
         .collect()

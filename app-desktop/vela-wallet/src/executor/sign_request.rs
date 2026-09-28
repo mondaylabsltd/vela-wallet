@@ -761,6 +761,19 @@ fn persist_record(record: &SignRecord) {
     if let Some(changes) = record.balance_changes.as_deref().filter(|c| !c.is_empty()) {
         row["assetChanges"] = stored_changes(changes, record.chain_id);
     }
+    // Whether it called a contract (083 F3), decided here from the WHOLE
+    // final request by the reading the submit path uses (`calls_of`) — not
+    // later from `signedRequest`, which is clipped at 8 KB (a page controls
+    // its length, so it would control the label) and which Activity cannot
+    // read by method (a page-written `calls` beside a single transaction
+    // would decide it).
+    if let Some(calldata) = (record.kind == SignRecordKind::DappTx)
+        .then(|| calls_of(&record.method, &record.params_json))
+        .flatten()
+        .map(|calls| calls.iter().any(|call| carries_calldata(&call.data)))
+    {
+        row["calldata"] = json!(calldata);
+    }
 
     let mut rows = match storage::read_value(TX_KEY) {
         Ok(Some(Value::Array(rows))) => rows,
@@ -819,8 +832,9 @@ fn stored_value(value: Option<&Value>) -> String {
 /// The sheet's balance changes as the store keeps them (083 F1), in the
 /// bytes the web writes the same thing (`assetChanges`, its
 /// `StoredAssetSim`): each line an `AssetChange` — a native line named by the
-/// chain's coin at 18 decimals, a judged token with its symbol and decimals,
-/// an unverified one with neither and `unverified: true`. No `ok`: this
+/// chain's coin at 18 decimals, a judged token with its symbol and decimals
+/// (and `trusted: true` when it is in the set the wallet trusts), an
+/// unverified one with neither and `unverified: true`. No `ok`: this
 /// shell's simulation gives no revert verdict, so the row claims none.
 /// `activity_feed::stored_changes` reads it back.
 fn stored_changes(
@@ -842,13 +856,23 @@ fn stored_changes(
                 delta,
                 symbol,
                 decimals,
-            } => json!({
-                "kind": "erc20",
-                "token": token,
-                "delta": delta,
-                "symbol": symbol,
-                "decimals": decimals,
-            }),
+                in_trusted_set,
+            } => {
+                let mut line = json!({
+                    "kind": "erc20",
+                    "token": token,
+                    "delta": delta,
+                    "symbol": symbol,
+                    "decimals": decimals,
+                });
+                // The judgment's word that the wallet already trusts this
+                // token, which only then can be the row's figure (083 F1
+                // review); absent, the line is drawn in the detail only.
+                if *in_trusted_set {
+                    line["trusted"] = json!(true);
+                }
+                line
+            }
             J::Erc20Unverified { token, delta } => {
                 let mut line = json!({ "kind": "erc20", "delta": delta, "unverified": true });
                 if let Some(token) = token {
@@ -859,6 +883,12 @@ fn stored_changes(
         })
         .collect();
     json!({ "engine": "rpc", "changes": lines })
+}
+
+/// Calldata as the submit path sends it: anything but nothing or a bare `0x`.
+pub(crate) fn carries_calldata(data: &str) -> bool {
+    let data = data.trim();
+    !data.is_empty() && data != "0x"
 }
 
 /// The first element of a JSON-RPC params array, when it is an object.
@@ -1580,12 +1610,15 @@ mod tests {
     const ROUTER: &str = "0xd614000000000000000000000000000000009c40";
     const USDC_BASE: &str = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 
+    /// Base's USDC as the sheet judged it: one of the chain's stables, so in
+    /// the set the wallet trusts.
     fn usdc(delta: &str) -> vela_core::app::token_trust::TrustSimJudgment {
         vela_core::app::token_trust::TrustSimJudgment::Erc20Trusted {
             token: USDC_BASE.to_owned(),
             delta: delta.to_owned(),
             symbol: "USDC".to_owned(),
             decimals: 6,
+            in_trusted_set: true,
         }
     }
 
@@ -1620,9 +1653,10 @@ mod tests {
 
     /// 083 F1-F3, the device pass's three swaps (2026-09-29), written by
     /// this executor and read back by the feed's own reader, in Chinese:
-    /// each row says what left — the figure the sheet showed — and what was
-    /// expected back; the detail lists the sheet's "余额变化" lines, calls the
-    /// router the contract it interacted with, and fits its hash.
+    /// each row says what left — the figure the sheet showed, "≈" unless it
+    /// is the coin the wallet itself sent — and what was expected back; the
+    /// detail lists the sheet's "余额变化" lines, names the router a contract
+    /// (合约), and fits its hash.
     #[test]
     fn the_device_passs_swaps_say_what_they_moved() {
         use crate::core_host::CoreHost;
@@ -1657,19 +1691,21 @@ mod tests {
                 Some(Value::Array(rows)) => rows,
                 _ => unreachable!("nothing written"),
             };
-            // The web's shape for the same lines.
+            // The web's shape for the same lines, and the judgment's word
+            // that the wallet trusts the token.
             assert_eq!(
                 stored[0].get("assetChanges"),
                 Some(&json!({
                     "engine": "rpc",
                     "changes": [
                         { "kind": "erc20", "token": USDC_BASE, "delta": "-100000",
-                          "symbol": "USDC", "decimals": 6 },
+                          "symbol": "USDC", "decimals": 6, "trusted": true },
                         { "kind": "native", "delta": "37000000000000",
                           "symbol": "ETH", "decimals": 18 },
                     ],
                 }))
             );
+            assert_eq!(stored[0].get("calldata"), Some(&json!(true)));
 
             let mut host = CoreHost::<ActivityFeed>::new();
             let asks = host.dispatch(FeedEvent::AccountSwitched {
@@ -1707,14 +1743,14 @@ mod tests {
                     (
                         "合约交互",
                         "app.uniswap.org",
-                        "\u{2212}0.271741",
+                        "≈ \u{2212}0.271741",
                         "USDC",
                         Some("≈ +0.000101 ETH")
                     ),
                     (
                         "合约交互",
                         "app.uniswap.org",
-                        "\u{2212}0.1",
+                        "≈ \u{2212}0.1",
                         "USDC",
                         Some("≈ +0.000037 ETH")
                     ),
@@ -1741,7 +1777,7 @@ mod tests {
             )
             .unwrap_or_else(|| unreachable!("the row exists: {id}"));
             assert_eq!(detail.title.as_ref(), "合约交互");
-            assert_eq!(detail.amount.as_ref(), "\u{2212}0.1 USDC");
+            assert_eq!(detail.amount.as_ref(), "≈ \u{2212}0.1 USDC");
             assert!(detail.fiat.contains("0.10"), "{}", detail.fiat);
             let facts: Vec<(&str, &str)> = detail
                 .facts
@@ -1749,7 +1785,7 @@ mod tests {
                 .map(|fact| (fact.label.as_ref(), fact.value.as_ref()))
                 .collect();
             assert_eq!(facts[0], ("应用", "app.uniswap.org"));
-            assert_eq!(facts[1], ("交互合约", "0xd614…9c40"));
+            assert_eq!(facts[1], ("合约", "0xd614…9c40"));
             assert_eq!(facts[2].0, "网络");
             assert_eq!(facts[4], ("哈希", "0x9f2c…6e7f"));
             assert_eq!(
@@ -1766,7 +1802,216 @@ mod tests {
                 .iter()
                 .map(|line| (line.label.as_ref(), line.value.as_ref()))
                 .collect();
-            assert_eq!(lines, vec![("USDC", "\u{2212}0.1"), ("ETH", "≈ +0.000037")]);
+            assert_eq!(
+                lines,
+                vec![("USDC", "≈ \u{2212}0.1"), ("ETH", "≈ +0.000037")]
+            );
+
+            // What the wallet sent reads bare, in the row and in its lines.
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &swaps[2].record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            assert_eq!(detail.amount.as_ref(), "\u{2212}0.0001 ETH");
+            let lines: Vec<(&str, &str)> = detail
+                .breakdown
+                .iter()
+                .map(|line| (line.label.as_ref(), line.value.as_ref()))
+                .collect();
+            assert_eq!(
+                lines,
+                vec![("ETH", "\u{2212}0.0001"), ("USDC", "≈ +0.269487")]
+            );
+        });
+    }
+
+    /// 083 F1 review: a swap that FAILED moved nothing, and Activity's rows
+    /// carry no status mark — so it keeps none of what the sheet expected.
+    /// Closed failed in place (the store keeps its `assetChanges`), its row
+    /// draws as before F1: no figure from the simulation, nothing "≈ back";
+    /// its detail wears 失败 and lists no 余额变化.
+    #[test]
+    fn a_failed_swap_says_nothing_moved() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        storage::tests::with_temp_state("sign-record-failed-swap", || {
+            let mut failed = swap(
+                1_759_100_000_000.0,
+                "0x0",
+                vec![usdc("-100000"), eth("37000000000000")],
+                "",
+            );
+            failed.status = SignRecordStatus::Pending;
+            persist_record(&failed);
+            update_record(&failed.record_id, &SignRecordClose::Failed);
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: failed.from.clone(),
+            });
+            settle(&mut host, asks);
+            let loc = crate::loc::Loc::for_language("zh");
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            assert_eq!(
+                (
+                    rows[0].title.as_ref(),
+                    rows[0].amount.as_ref(),
+                    rows[0].unit.as_ref()
+                ),
+                ("合约交互", "", "")
+            );
+            assert_eq!(rows[0].received, None, "nothing \"≈ back\" on a revert");
+
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &failed.record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            assert_eq!(detail.status.text, flow.status_failed);
+            assert_eq!(detail.amount.as_ref(), "");
+            assert_ne!(
+                detail.breakdown_title.as_ref(),
+                Some(&flow.detail_changes),
+                "no balance changes that never were"
+            );
+            assert!(
+                detail
+                    .breakdown
+                    .iter()
+                    .all(|line| line.label.as_ref() != "USDC" && line.label.as_ref() != "ETH")
+            );
+        });
+    }
+
+    /// 083 F1 review: a site's own contract that emits `Transfer(you, …)` and
+    /// answers "USDC" is on the sheet as an outflow — but it is not a token
+    /// the wallet trusts, so it is never Activity's figure or its price. The
+    /// detail still lists it, as the sheet drew it.
+    #[test]
+    fn a_site_token_does_not_write_the_rows_figure() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        storage::tests::with_temp_state("sign-record-site-token", || {
+            let fake = vela_core::app::token_trust::TrustSimJudgment::Erc20Trusted {
+                token: "0x00000000000000000000000000000000000bad01".to_owned(),
+                delta: "-100000000000".to_owned(),
+                symbol: "USDC".to_owned(),
+                decimals: 6,
+                in_trusted_set: false,
+            };
+            let lure = swap(1_759_100_000_000.0, "0x0", vec![fake], "");
+            persist_record(&lure);
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert!(
+                stored[0]["assetChanges"]["changes"][0]
+                    .get("trusted")
+                    .is_none(),
+                "no word of trust the judgment did not give"
+            );
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: lure.from.clone(),
+            });
+            settle(&mut host, asks);
+            let loc = crate::loc::Loc::for_language("zh");
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            assert_eq!((rows[0].amount.as_ref(), rows[0].unit.as_ref()), ("", ""));
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &lure.record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            assert_eq!(detail.amount.as_ref(), "");
+            assert_eq!(detail.fiat.as_ref(), "", "no dollars for a site's claim");
+            let lines: Vec<(&str, &str)> = detail
+                .breakdown
+                .iter()
+                .map(|line| (line.label.as_ref(), line.value.as_ref()))
+                .collect();
+            assert_eq!(lines, vec![("USDC", "≈ \u{2212}100,000.00")]);
+        });
+    }
+
+    /// 083 F3 review: the executor decides "called a contract" from the WHOLE
+    /// final request, by the reading the submit path uses — so a request past
+    /// the 8 KB clip still names its router a contract, and a `calls` a page
+    /// wrote beside a plain send does not turn its recipient into one.
+    #[test]
+    fn the_record_says_whether_it_called_a_contract() {
+        storage::tests::with_temp_state("sign-record-calldata", || {
+            let padding = "a".repeat(9 * 1024);
+            let mut long = record(
+                SignRecordKind::DappTx,
+                &format!(r#"[{{"to":"{ROUTER}","data":"0x3593564c","pad":"{padding}"}}]"#),
+            );
+            long.record_id = "dapp-1-tx".to_owned();
+            persist_record(&long);
+            let mut smuggled = record(
+                SignRecordKind::DappTx,
+                r#"[{"to":"0xeoa","value":"0xde0b6b3a7640000","calls":[{"data":"0x01"}]}]"#,
+            );
+            smuggled.record_id = "dapp-2-tx".to_owned();
+            persist_record(&smuggled);
+            let mut batch = record(
+                SignRecordKind::DappTx,
+                r#"[{"calls":[{"to":"0xb","value":"0x1"},{"to":"0xr","data":"0x095ea7b3"}]}]"#,
+            );
+            batch.record_id = "dapp-3-tx".to_owned();
+            batch.method = "wallet_sendCalls".to_owned();
+            persist_record(&batch);
+            let mut message = record(SignRecordKind::SignMessage, r#"["0xdeadbeef","0xme"]"#);
+            message.record_id = "dapp-4-msg".to_owned();
+            message.method = "personal_sign".to_owned();
+            persist_record(&message);
+
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert_eq!(stored[0].get("requestTruncated"), Some(&json!(true)));
+            let flags: Vec<Option<&Value>> = stored.iter().map(|row| row.get("calldata")).collect();
+            assert_eq!(
+                flags,
+                vec![
+                    Some(&json!(true)),
+                    Some(&json!(false)),
+                    Some(&json!(true)),
+                    None
+                ]
+            );
+            let read: Vec<Option<bool>> = crate::executor::activity_feed::read_records()
+                .into_iter()
+                .map(|record| record.calldata)
+                .collect();
+            assert_eq!(read, vec![Some(true), Some(false), Some(true), None]);
         });
     }
 
@@ -1828,7 +2073,7 @@ mod tests {
             // Newest first: the lure, then the forged call.
             assert_eq!(
                 (rows[0].amount.as_ref(), rows[0].unit.as_ref()),
-                ("\u{2212}0.1", "USDC")
+                ("≈ \u{2212}0.1", "USDC")
             );
             assert_eq!(rows[0].received, None, "no figure the site's token wrote");
             assert_eq!((rows[1].amount.as_ref(), rows[1].unit.as_ref()), ("", ""));
@@ -1849,7 +2094,7 @@ mod tests {
                 .iter()
                 .map(|line| (line.label.as_ref(), line.value.as_ref()))
                 .collect();
-            assert_eq!(lines, vec![("USDC", "\u{2212}0.1"), ("未验证代币", "+")]);
+            assert_eq!(lines, vec![("USDC", "≈ \u{2212}0.1"), ("未验证代币", "+")]);
             // Still pending, and the hash row waits for a hash.
             assert_eq!(detail.status.text, flow.status_pending);
             assert!(

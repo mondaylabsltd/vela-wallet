@@ -129,9 +129,11 @@ fn to_record(row: &Value) -> Option<FeedTxRecord> {
 /// The balance changes a row kept (083 F1), from its `assetChanges` — the
 /// web's `StoredAssetSim` shape, which the sign executor writes too. Each
 /// line goes back to the judgment it was drawn from: the native coin; a token
-/// with its symbol and decimals; and anything marked unverified or missing
-/// either — the safe reading — an unverified token, which carries no figure.
-/// A line of any other kind is dropped.
+/// with its symbol and decimals, in the set the wallet trusts only when the
+/// line says `trusted: true` (the web writes no such word, so its lines are
+/// drawn but never the row's figure); and anything marked unverified or
+/// missing either — the safe reading — an unverified token, which carries no
+/// figure. A line of any other kind is dropped.
 fn stored_changes(stored: &Value) -> Option<Vec<TrustSimJudgment>> {
     let lines = stored.get("changes")?.as_array()?;
     Some(
@@ -152,6 +154,7 @@ fn stored_changes(stored: &Value) -> Option<Vec<TrustSimJudgment>> {
                             .and_then(Value::as_u64)
                             .and_then(|decimals| u32::try_from(decimals).ok());
                         let unverified = line.get("unverified").and_then(Value::as_bool);
+                        let trusted = line.get("trusted").and_then(Value::as_bool) == Some(true);
                         Some(match (token, symbol, decimals, unverified) {
                             (Some(token), Some(symbol), Some(decimals), None | Some(false)) => {
                                 TrustSimJudgment::Erc20Trusted {
@@ -159,6 +162,7 @@ fn stored_changes(stored: &Value) -> Option<Vec<TrustSimJudgment>> {
                                     delta,
                                     symbol: symbol.to_owned(),
                                     decimals,
+                                    in_trusted_set: trusted,
                                 }
                             }
                             (token, ..) => TrustSimJudgment::Erc20Unverified { token, delta },
@@ -171,34 +175,54 @@ fn stored_changes(stored: &Value) -> Option<Vec<TrustSimJudgment>> {
     )
 }
 
-/// Whether a dApp's transaction carried calldata (083 F3), read off the
-/// request stored beside it (`signedRequest`: this shell keeps the params
-/// array as text, the web `{ method, params }`). `data` is the field the
-/// submit path sends, so this is what went on chain: calldata makes the row's
-/// `to` the contract it called, not a recipient. `None` when there is no
+/// Whether a dApp's transaction carried calldata (083 F3): calldata makes
+/// the row's `to` the contract it called, not a recipient.
+///
+/// The row's own `calldata`, when it has one — the sign executor decides it
+/// from the whole final request, by the reading the submit path uses. Only a
+/// row older than that field is read off the request stored beside it
+/// (`signedRequest`: this shell keeps the params array as text, the web
+/// `{ method, params }`), and then by what each METHOD submits: a single
+/// transaction its own `data`, a batch its `calls` — never a `calls` a page
+/// wrote beside a single transaction, which nothing sends (083 F3 review).
+/// This shell's text names no method; its batch rows are the ones stored
+/// with no `to`, which is all a batch writes there. `None` when there is no
 /// request to read — none stored, clipped (`requestTruncated`), not JSON —
 /// and for every other kind of row.
 fn calldata_of(row: &Value) -> Option<bool> {
-    if row.get("type").and_then(Value::as_str) != Some("dapp_tx")
-        || row.get("requestTruncated").and_then(Value::as_bool) == Some(true)
-    {
+    if row.get("type").and_then(Value::as_str) != Some("dapp_tx") {
         return None;
     }
-    let params = match row.get("signedRequest")? {
-        Value::String(text) => serde_json::from_str::<Value>(text).ok()?,
-        Value::Object(request) => request.get("params")?.clone(),
+    if let Some(recorded) = row.get("calldata").and_then(Value::as_bool) {
+        return Some(recorded);
+    }
+    if row.get("requestTruncated").and_then(Value::as_bool) == Some(true) {
+        return None;
+    }
+    let (params, batch) = match row.get("signedRequest")? {
+        Value::String(text) => (
+            serde_json::from_str::<Value>(text).ok()?,
+            row.get("to")
+                .and_then(Value::as_str)
+                .is_none_or(|to| to.trim().is_empty()),
+        ),
+        Value::Object(request) => (
+            request.get("params")?.clone(),
+            request.get("method").and_then(Value::as_str) == Some("wallet_sendCalls"),
+        ),
         _ => return None,
     };
-    let first = params.get(0)?;
+    let first = params.get(0).filter(|first| first.is_object())?;
     let carries = |call: &Value| {
         call.get("data")
             .and_then(Value::as_str)
-            .is_some_and(|data| !data.is_empty() && data != "0x")
+            .is_some_and(crate::executor::sign_request::carries_calldata)
     };
-    match first.get("calls").and_then(Value::as_array) {
+    if batch {
         // A batch's calls are what it submits.
-        Some(calls) => Some(calls.iter().any(carries)),
-        None => first.is_object().then(|| carries(first)),
+        Some(first.get("calls")?.as_array()?.iter().any(carries))
+    } else {
+        Some(carries(first))
     }
 }
 
@@ -678,10 +702,11 @@ mod tests {
     }
 
     /// 083 F1: a row's `assetChanges` — this shell's or the web's, the same
-    /// bytes — goes back to the judgments the sheet drew. A token marked
-    /// unverified, or missing its symbol or decimals, reads as unverified (no
-    /// figure), never as a trusted amount; a line of no known kind, or with
-    /// no delta, is dropped; a row without the field has none.
+    /// bytes — goes back to the judgments the sheet drew. A token is in the
+    /// trusted set only when its line says so. A token marked unverified, or
+    /// missing its symbol or decimals, reads as unverified (no figure), never
+    /// as a trusted amount; a line of no known kind, or with no delta, is
+    /// dropped; a row without the field has none.
     #[test]
     fn a_rows_balance_changes_read_back_as_the_sheets_judgments() {
         use vela_core::app::token_trust::TrustSimJudgment as J;
@@ -692,9 +717,11 @@ mod tests {
                     "type": "dapp_tx",
                     "assetChanges": { "ok": true, "engine": "rpc", "changes": [
                         { "kind": "erc20", "token": "0xusdc", "delta": "-100000",
-                          "symbol": "USDC", "decimals": 6 },
+                          "symbol": "USDC", "decimals": 6, "trusted": true },
                         { "kind": "native", "delta": "37000000000000",
                           "symbol": "ETH", "decimals": 18 },
+                        { "kind": "erc20", "token": "0xweb", "delta": "-5",
+                          "symbol": "WEB", "decimals": 6 },
                         { "kind": "erc20", "token": "0xbad", "delta": "9000",
                           "symbol": "FREE", "decimals": 18, "unverified": true },
                         { "kind": "erc20", "token": "0xodd", "delta": "5", "symbol": "ODD" },
@@ -713,9 +740,19 @@ mod tests {
                         delta: "-100000".to_owned(),
                         symbol: "USDC".to_owned(),
                         decimals: 6,
+                        in_trusted_set: true,
                     },
                     J::Native {
                         delta: "37000000000000".to_owned(),
+                    },
+                    // No `trusted` word (the web writes none): drawn, never
+                    // the row's figure.
+                    J::Erc20Trusted {
+                        token: "0xweb".to_owned(),
+                        delta: "-5".to_owned(),
+                        symbol: "WEB".to_owned(),
+                        decimals: 6,
+                        in_trusted_set: false,
                     },
                     J::Erc20Unverified {
                         token: Some("0xbad".to_owned()),
@@ -731,38 +768,98 @@ mod tests {
         });
     }
 
-    /// 083 F3: whether a dApp's transaction carried calldata, read off the
-    /// request stored beside it — this shell's text, the web's object, a
-    /// batch's calls. A clipped or missing request says nothing, and neither
-    /// does any other kind of row.
+    /// 083 F3: whether a dApp's transaction carried calldata.
+    ///
+    /// The row's own `calldata` first — the sign executor decided it from the
+    /// whole request — so a request clipped at 8 KB still says. Only an older
+    /// row is read off its stored request, and by what each method submits:
+    /// a single transaction's own `data` (this shell's text, stored beside its
+    /// `to`; the web's object, by its `method`), a batch's `calls` (this
+    /// shell's rows stored with no `to`). A `calls` a page wrote beside a
+    /// single transaction decides nothing either way (083 F3 review). A
+    /// clipped or missing request says nothing, and neither does any other
+    /// kind of row.
     #[test]
     fn a_dapp_row_says_whether_it_called_a_contract() {
         storage::tests::with_temp_state("feed-calldata", || {
-            let row = |id: &str, kind: &str, request: Value, truncated: bool| {
+            let row = |id: &str, kind: &str, to: &str, request: Value, truncated: bool| {
                 json!({
                     "id": id, "timestamp": 1_759_100_000, "chainId": 8453, "type": kind,
-                    "signedRequest": request, "requestTruncated": truncated
+                    "to": to, "signedRequest": request, "requestTruncated": truncated
                 })
             };
+            let mut recorded_call = row(
+                "recorded",
+                "dapp_tx",
+                "0xr",
+                json!(r#"[{"to":"0xr","da"#),
+                true,
+            );
+            recorded_call["calldata"] = json!(true);
+            let mut recorded_send = row(
+                "recorded-send",
+                "dapp_tx",
+                "0xb",
+                json!(r#"[{"to":"0xb","value":"0x1","data":"0xabcd"}]"#),
+                false,
+            );
+            // The executor's verdict stands over a stored request that
+            // disagrees with it (it read the whole one).
+            recorded_send["calldata"] = json!(false);
             seed(json!([
-                row("swap", "dapp_tx", json!(r#"[{"to":"0xr","data":"0x3593564c"}]"#), false),
-                row("send", "dapp_tx", json!(r#"[{"to":"0xb","value":"0x1","data":"0x"}]"#), false),
-                row("bare", "dapp_tx", json!(r#"[{"to":"0xb","value":"0x1"}]"#), false),
+                recorded_call,
+                recorded_send,
+                row("swap", "dapp_tx", "0xr", json!(r#"[{"to":"0xr","data":"0x3593564c"}]"#), false),
+                row("send", "dapp_tx", "0xb", json!(r#"[{"to":"0xb","value":"0x1","data":"0x"}]"#), false),
+                row("bare", "dapp_tx", "0xb", json!(r#"[{"to":"0xb","value":"0x1"}]"#), false),
                 row(
                     "web",
                     "dapp_tx",
+                    "0xr",
                     json!({ "method": "eth_sendTransaction", "params": [{ "to": "0xr", "data": "0xabcd" }] }),
                     false
                 ),
                 row(
                     "batch",
                     "dapp_tx",
+                    "",
                     json!(r#"[{"calls":[{"to":"0xb","value":"0x1"},{"to":"0xr","data":"0x095ea7b3"}]}]"#),
                     false
                 ),
-                row("clipped", "dapp_tx", json!(r#"[{"to":"0xr","data":"0x35"#), true),
-                row("junk", "dapp_tx", json!("not json"), false),
-                row("message", "sign_message", json!(r#"[{"data":"0xabcd"}]"#), false),
+                row(
+                    "web-batch",
+                    "dapp_tx",
+                    "",
+                    json!({ "method": "wallet_sendCalls", "params": [{ "calls": [{ "to": "0xr", "data": "0xabcd" }] }] }),
+                    false
+                ),
+                // A plain 1 ETH send with a `calls` the page added: the send
+                // is what went out, and its recipient stays one.
+                row(
+                    "smuggled",
+                    "dapp_tx",
+                    "0xeoa",
+                    json!(r#"[{"to":"0xeoa","value":"0xde0b6b3a7640000","calls":[{"data":"0x01"}]}]"#),
+                    false
+                ),
+                // …and the reverse: a router call with an empty `calls`.
+                row(
+                    "emptied",
+                    "dapp_tx",
+                    "0xr",
+                    json!(r#"[{"to":"0xr","data":"0x3593","calls":[]}]"#),
+                    false
+                ),
+                row(
+                    "web-smuggled",
+                    "dapp_tx",
+                    "0xeoa",
+                    json!({ "method": "eth_sendTransaction", "params": [{ "to": "0xeoa", "calls": [{ "data": "0x01" }] }] }),
+                    false
+                ),
+                row("clipped", "dapp_tx", "0xr", json!(r#"[{"to":"0xr","data":"0x35"#), true),
+                row("junk", "dapp_tx", "0xr", json!("not json"), false),
+                row("message", "sign_message", "", json!(r#"[{"data":"0xabcd"}]"#), false),
                 { "id": "none", "timestamp": 1_759_100_000, "chainId": 8453, "type": "dapp_tx" }
             ]));
             let calldata: Vec<(String, Option<bool>)> = read_records()
@@ -772,11 +869,17 @@ mod tests {
             assert_eq!(
                 calldata,
                 vec![
+                    ("recorded".to_owned(), Some(true)),
+                    ("recorded-send".to_owned(), Some(false)),
                     ("swap".to_owned(), Some(true)),
                     ("send".to_owned(), Some(false)),
                     ("bare".to_owned(), Some(false)),
                     ("web".to_owned(), Some(true)),
                     ("batch".to_owned(), Some(true)),
+                    ("web-batch".to_owned(), Some(true)),
+                    ("smuggled".to_owned(), Some(false)),
+                    ("emptied".to_owned(), Some(true)),
+                    ("web-smuggled".to_owned(), Some(false)),
                     ("clipped".to_owned(), None),
                     ("junk".to_owned(), None),
                     ("message".to_owned(), None),

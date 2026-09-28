@@ -4729,6 +4729,7 @@ mod tests {
                 intent_term: Some(ClearTerm::IntentSwap),
                 changes: Vec::new(),
                 received: None,
+                estimated: false,
                 contract_call: true,
             }),
         };
@@ -4915,6 +4916,7 @@ mod tests {
             site: Some("app.uniswap.org".to_owned()),
             intent: None,
             intent_term: None,
+            estimated: !changes.is_empty(),
             changes,
             received: None,
             contract_call,
@@ -4926,6 +4928,7 @@ mod tests {
                 symbol: symbol.to_owned(),
                 value: value.map(str::to_owned),
                 decimals: value.map(|_| 6),
+                exact: false,
             }
         };
         let view = FeedView {
@@ -5010,7 +5013,9 @@ mod tests {
         assert_eq!(
             lines(false),
             vec![
-                ("USDC".to_owned(), "\u{2212}0.1".to_owned()),
+                // What the simulation measured leaving is its expectation
+                // too (083 F1 review); only what the wallet sent reads bare.
+                ("USDC".to_owned(), "≈ \u{2212}0.1".to_owned()),
                 ("ETH".to_owned(), "≈ +0.000037".to_owned()),
                 (unverified.clone(), "+".to_owned()),
             ]
@@ -5018,7 +5023,7 @@ mod tests {
         assert_eq!(
             lines(true),
             vec![
-                ("USDC".to_owned(), "\u{2212}••••".to_owned()),
+                ("USDC".to_owned(), "≈ \u{2212}••••".to_owned()),
                 ("ETH".to_owned(), "≈ +••••".to_owned()),
                 (unverified, "+".to_owned()),
             ]

@@ -1661,6 +1661,7 @@ mod tests {
                 delta: "-100000".to_owned(),
                 symbol: "USDC".to_owned(),
                 decimals: 6,
+                in_trusted_set: true,
             },
             J::Native {
                 delta: "37000000000000".to_owned(),

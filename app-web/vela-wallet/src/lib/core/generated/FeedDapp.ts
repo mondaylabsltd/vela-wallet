@@ -29,16 +29,26 @@ intent_term: ClearTerm | null,
  * when the person approved — the signing sheet's "Balance changes"
  * lines, in its order (083 F1). Empty for a record that kept none (an
  * older row, a shell that does not record them, a simulation that could
- * not run): the row then draws as it did before.
+ * not run) and for an operation that FAILED, which moved nothing: the
+ * row then draws as it did before.
  */
 changes?: Array<FeedDappChange>, 
 /**
  * A swap-shaped operation's one inflow — exactly one line out, which is
- * the row's figure, and exactly one in, both with a figure. Drawn beside
- * the figure as what the simulation EXPECTED: the chain may deliver
- * another amount (slippage). `None` otherwise.
+ * the row's figure, and exactly one in, both with a figure, both of a
+ * coin the wallet trusts. Drawn beside the figure as what the
+ * simulation EXPECTED: the chain may deliver another amount (slippage).
+ * `None` otherwise, and always for a failed operation.
  */
 received?: FeedDappChange | null, 
+/**
+ * The row's figure is the simulation's expectation, not an amount the
+ * wallet can vouch for (083 F1 review): an outflow the sheet measured,
+ * which an exact-output swap may overspend or underspend on chain. The
+ * shell marks it "≈". `false` for the call's own value and for a
+ * native outflow equal to it — what the wallet itself submitted.
+ */
+estimated?: boolean, 
 /**
  * The transaction carried calldata, so the row's counterparty is the
  * contract it called — never labelled a recipient (083 F3). `false` for

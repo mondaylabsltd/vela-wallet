@@ -449,6 +449,8 @@ fn judge_delta_asymmetric_grid_is_exhaustive() {
                             delta: delta.to_owned(),
                             symbol: "TOK".to_owned(),
                             decimals: 6,
+                            // FRESH is in no table: the set is all it has.
+                            in_trusted_set: trusted,
                         },
                         "delta={delta} meta={} trusted={trusted}",
                         meta_case.is_some()
@@ -484,6 +486,7 @@ fn judge_delta_edges_fail_toward_unverified() {
             delta: "50".to_owned(),
             symbol: "USDC".to_owned(),
             decimals: 6,
+            in_trusted_set: true,
         }
     );
     // No token address → unverified even with metadata in hand.
@@ -1109,6 +1112,9 @@ fn sim_sent_is_trusted_received_needs_the_trusted_set() {
                 delta: "-50".to_owned(),
                 symbol: "OUT".to_owned(),
                 decimals: 18,
+                // Rendered on metadata alone: an outflow of a coin the
+                // wallet does not know says so (083 F1 review).
+                in_trusted_set: false,
             },
             // The attacker-shaped case: a fake gain with a resolvable symbol
             // STILL renders unverified — trust, not just availability.
@@ -1121,24 +1127,28 @@ fn sim_sent_is_trusted_received_needs_the_trusted_set() {
                 delta: "7".to_owned(),
                 symbol: "MINE".to_owned(),
                 decimals: 18,
+                in_trusted_set: true,
             },
             TrustSimJudgment::Erc20Trusted {
                 token: STABLE.to_owned(),
                 delta: "3".to_owned(),
                 symbol: "USDX".to_owned(),
                 decimals: 6,
+                in_trusted_set: true,
             },
             TrustSimJudgment::Erc20Trusted {
                 token: WRAPPED.to_owned(),
                 delta: "1".to_owned(),
                 symbol: "WETH".to_owned(),
                 decimals: 18,
+                in_trusted_set: true,
             },
             TrustSimJudgment::Erc20Trusted {
                 token: KNOWN_USDC.to_owned(),
                 delta: "9".to_owned(),
                 symbol: "USDC".to_owned(),
                 decimals: 6,
+                in_trusted_set: true,
             },
         ]
     );
@@ -1247,6 +1257,7 @@ fn sim_latest_wins() {
             delta: "-2".to_owned(),
             symbol: "B".to_owned(),
             decimals: 18,
+            in_trusted_set: false,
         }]
     );
 }

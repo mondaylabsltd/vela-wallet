@@ -3,4 +3,15 @@
 /**
  * The judgment surfaced for one simulated delta.
  */
-export type TrustSimJudgment = { "type": "native", delta: string, } | { "type": "erc20_trusted", token: string, delta: string, symbol: string, decimals: number, } | { "type": "erc20_unverified", token: string | null, delta: string, };
+export type TrustSimJudgment = { "type": "native", delta: string, } | { "type": "erc20_trusted", token: string, delta: string, symbol: string, decimals: number, 
+/**
+ * The token is one this wallet already trusts — the chain's stables
+ * or wrapped coin, a token the account holds, the curated table —
+ * and not merely one whose `symbol()` answered. Always so for an
+ * inflow (that is what earned it a figure); an OUTFLOW renders on
+ * metadata alone, so this is what tells a known coin leaving from a
+ * contract's own claim to be one (083 F1 review: a site's token that
+ * emits `Transfer(you, …)` and answers "USDC" is `false` here).
+ * Absent on the wire when `false`, so older readers are unchanged.
+ */
+in_trusted_set?: boolean, } | { "type": "erc20_unverified", token: string | null, delta: string, };

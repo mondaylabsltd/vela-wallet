@@ -811,6 +811,7 @@ mod tests {
                 intent_term: intent.and_then(ClearTerm::of),
                 changes: Vec::new(),
                 received: None,
+                estimated: false,
                 contract_call: false,
             });
             FeedRow::Item { item: row }
@@ -862,6 +863,7 @@ mod tests {
                 intent_term: None,
                 changes: Vec::new(),
                 received: None,
+                estimated: false,
                 contract_call: false,
             });
             FeedRow::Item { item: row }
@@ -913,6 +915,7 @@ mod tests {
             intent_term: None,
             changes: Vec::new(),
             received: None,
+            estimated: false,
             contract_call: false,
         });
         let mut send = item("send", false, Some("0.01"), "xDAI");
@@ -938,9 +941,11 @@ mod tests {
 
     /// 083 F1: a swap's row says what left — the figure the core took from
     /// the sheet's simulation — and, under it, the one coin expected back,
-    /// marked "≈" because the chain may deliver another amount. Privacy masks
-    /// both digits and keeps both units; a row with nothing expected back
-    /// draws no second line.
+    /// marked "≈" because the chain may deliver another amount. The figure
+    /// itself says "≈" when the core calls it the simulation's (an outflow it
+    /// measured) and reads bare when it is what the wallet sent (083 F1
+    /// review). Privacy masks both digits and keeps both units; a row with
+    /// nothing expected back draws no second line.
     #[test]
     fn a_swap_row_says_what_left_and_what_was_expected_back() {
         use vela_core::app::activity_feed::{FeedDapp, FeedDappChange};
@@ -958,13 +963,17 @@ mod tests {
                 symbol: "ETH".to_owned(),
                 value: Some("0.000037".to_owned()),
                 decimals: Some(18),
+                exact: false,
             }),
+            estimated: true,
             contract_call: true,
         });
         let mut call = swap.clone();
         call.id = "call".to_owned();
         if let Some(dapp) = call.dapp.as_mut() {
             dapp.received = None;
+            // The call's own value: what the wallet sent, not an estimate.
+            dapp.estimated = false;
         }
         let view = feed_with(
             vec![FeedRow::Item { item: swap }, FeedRow::Item { item: call }],
@@ -977,7 +986,7 @@ mod tests {
         assert_eq!(rows[0].subtitle.as_ref(), "app.uniswap.org");
         assert_eq!(
             (rows[0].amount.as_ref(), rows[0].unit.as_ref()),
-            ("\u{2212}0.1", "USDC")
+            ("≈ \u{2212}0.1", "USDC")
         );
         assert!(!rows[0].positive, "money out is plain ink");
         assert_eq!(
@@ -985,6 +994,11 @@ mod tests {
             Some("≈ +0.000037 ETH")
         );
         assert_eq!(rows[1].received, None);
+        assert_eq!(
+            rows[1].amount.as_ref(),
+            "\u{2212}0.1",
+            "what was sent reads bare"
+        );
 
         let masked = activity_rows(&view, &s, &flow, true);
         assert_eq!(masked[0].amount.as_ref(), crate::wallet::fixtures::MASK);
@@ -2231,11 +2245,13 @@ pub(crate) fn activity_row(
 }
 
 /// One of a dApp transaction's balance changes as a figure (083 F1), in the
-/// signing sheet's own form: "−0.1" for what left — the amount approved —
-/// and "≈ +0.000037" for what was expected back, which the chain may deliver
-/// to another unit (slippage). A token the sheet could not verify keeps its
-/// direction and never a number ("+"), as it did on the sheet. Privacy masks
-/// the digits and keeps the rest.
+/// signing sheet's own form with one addition: "≈" on every figure the wallet
+/// cannot vouch for — "≈ +0.000037" expected back (slippage), "≈ −0.1" for
+/// an outflow the simulation measured (an exact-output swap may spend
+/// another amount, and nothing says which kind was signed; 083 F1 review).
+/// Only the coin the transaction itself sent reads bare ("−0.0001"). A token
+/// the sheet could not verify keeps its direction and never a number ("+"),
+/// as it did on the sheet. Privacy masks the digits and keeps the rest.
 pub(crate) fn change_figure(
     change: &vela_core::app::activity_feed::FeedDappChange,
     hidden: bool,
@@ -2259,10 +2275,10 @@ pub(crate) fn change_figure(
             false,
         )
     };
-    if incoming {
-        format!("≈ {sign}{digits}")
-    } else {
+    if change.exact {
         format!("{sign}{digits}")
+    } else {
+        format!("≈ {sign}{digits}")
     }
 }
 
@@ -2392,8 +2408,15 @@ pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {
         crate::executor::format_prefs::current().number,
         false,
     );
+    // A dApp row whose figure is the simulation's, not the value the wallet
+    // sent (083 F1 review): what it expected, so it says so.
+    let about = if item.dapp.as_ref().is_some_and(|dapp| dapp.estimated) {
+        "≈ "
+    } else {
+        ""
+    };
     SharedString::from(format!(
-        "{}{formatted}",
+        "{about}{}{formatted}",
         if incoming { "+" } else { "\u{2212}" }
     ))
 }

@@ -31,4 +31,12 @@ symbol: string,
  * The amount, unsigned, as a human decimal (`"0.1"`). `None` when there
  * is no figure to show: unverified, or a stored delta that will not read.
  */
-value: string | null, decimals: number | null, };
+value: string | null, decimals: number | null, 
+/**
+ * The wallet can vouch for this figure to the unit: a native outflow
+ * equal to the value the wallet itself submitted. Every other line is
+ * what the simulation expected — an inflow may arrive short (slippage)
+ * and an exact-output swap's outflow may differ too, and the wallet
+ * cannot tell which kind of swap it signed — so the shell marks it "≈".
+ */
+exact?: boolean, };
