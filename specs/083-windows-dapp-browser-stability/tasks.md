@@ -20,7 +20,7 @@ Done is `[x]` with "— done: …"; a task not run says **NOT RUN:** and why.
 - [x] T013 [US1] Erase deletes the profile folder when no view exists — done: dbf5a48c
 - [x] T014 [US1] No demo host or demo tabs in a signed-in session (`page.rs`, `D/explore/live.rs::pending_tab`) — done: dbf5a48c
 - [x] T015 [US1] Device: E1, E2 — done: read-only folder opens the dApp; runtime missing → panel, 1 log line, 0.12 CPU-s/10 s
-- [ ] T016 [US1] Device: E3 on the installed build (owner's UAC)
+- [x] T016 [US1] Device: E3 on the installed build (owner's UAC) — done: installed 24578479 opens the dApp, profile in %LOCALAPPDATA%
 
 **Checkpoint**: E1–E3.
 
@@ -41,26 +41,27 @@ Done is `[x]` with "— done: …"; a task not run says **NOT RUN:** and why.
 
 ## Phase 4: The signing column (US5, W19, D1)
 
-- [ ] T040 [US5] W19: the phone QR / touch / timeout cards inside the signing column; a scan that ran out is not an answer; ✕/Esc/Drop stop the scan
-- [ ] T041 [US5] D1: Esc never answers a pending request
-- [ ] T042 [US5] W11: "正在准备交易…" until the authenticator is asked
-- [ ] T043 [US5] W10: a native-coin transfer reads as a transfer on the desktop (phones unchanged)
-- [ ] T044 [US5] Device: S1, S2; S3 with the owner's phone
+- [x] T040 [US5] W19: the phone QR / touch / timeout cards inside the signing column; a scan that ran out is not an answer; ✕/Esc/Drop stop the scan — done: 545621d7, 4198ec6b
+- [x] T041 [US5] D1: Esc never answers a pending request — done: 545621d7
+- [x] T042 [US5] W11: "正在准备交易…" until the authenticator is asked — done: 545621d7
+- [x] T043 [US5] W10: a native-coin transfer reads as a transfer on the desktop (phones unchanged) — done: 25ed87f6, d5661249
+- [x] T044 [US5] Device: S1, S2; S3 with the owner's phone — done: Esc ×3 no answer, ✕ one 4001; preparing → landed; iPhone signed after W20 (24578479)
 
 ## Phase 5: Links, chrome, network (US4, D2–D4)
 
-- [ ] T050 [US4] New windows → a new tab on a gesture; mailto/tel only on a tap; other schemes refused; downloads refused
-- [ ] T051 W15: the chrome never shrinks; back/forward from the engine's history
-- [ ] T052 D4: the consent shows account and network
-- [ ] T053 D3: route choice per host (`D/executor/proxy.rs`)
-- [ ] T054 D2: menus over the page cut a region hole on Windows instead of hiding the page
-- [ ] T055 Device: N1–N3
+- [x] T050 [US4] New windows → a new tab on a gesture; mailto/tel only on a tap; other schemes refused; downloads refused — done: e6285fc9, a6b1b2fb
+- [x] T051 W15: the chrome never shrinks; back/forward from the engine's history — done: e6285fc9, a6b1b2fb, 84e09838
+- [x] T052 D4: the consent shows account and network — done: e6285fc9, a6b1b2fb
+- [x] T053 D3: route choice per host (`D/executor/proxy.rs`) — done: 4bc67c85, 3cd27313, 3d22bcd1
+- [x] T054 D2: menus over the page cut a region hole on Windows instead of hiding the page — done: 5c9b42a4
+- [x] T055 Device: N1–N3 — done: see results.md
 
 ## Phase 6: Release and results
 
-- [ ] T060 Desktop + core suites; `cargo fmt`
-- [ ] T061 Rebuild the installer, install (owner's UAC), E3 + S3 on the installed build
-- [ ] T062 results.md (SC table, before/after evidence), memory note, PR
+- [x] T060 Desktop + core suites; `cargo fmt` — done: desktop 718/0, core suites green, fmt clean
+- [x] T061 Rebuild the installer, install (owner's UAC), E3 + S3 on the installed build — done: 24578479 installed
+- [x] T062 results.md (SC table, before/after evidence), memory note — done; PR: see results.md
+- [x] T063 W20 (found at T061): iPhone caBLE tunnel ids upper-case — done: 24578479
 
 ## Dependencies
 

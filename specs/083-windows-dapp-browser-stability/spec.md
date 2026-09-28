@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-28
 
-**Status**: Draft
+**Status**: Implemented and verified on the device — see [results.md](results.md)
 
 **Input**: Owner, 2026-09-28:
 
@@ -53,6 +53,8 @@ places 079's desktop design relied on, and the installed Windows app had never b
 | W15 | P3 | Chrome | The toolbar moves ~3 px between the start page and a page; Back looks enabled on a new tab (078 E-04) | — |
 | W16 | P3 | Sign-in sheet | "手机或平板 — 扫码，用附近设备**创建**" in the sign-in sheet; "Touch ID 或 Windows Hello" on Windows | `15-login-sheet-copy.jpg` |
 | W17 | P3 | Activity | A dApp send that landed is not in 活动 (079 D3, every client) | — |
+| W19 | P0 | Signing (phone key) | The dApp signing column never drew the phone QR; 90 s of "签名中…" while Bluetooth scanned, then raw `-32603` (found with the owner's account on the installed build) | `after/w19-*` |
+| W20 | P0 | Signing (iPhone) | Apple's caBLE tunnel closed with "Policy violation": the tunnel ids were lower-case | `after/w20-iphone-cable-log.txt` |
 
 What held up on Windows and must not regress: EIP-6963 announce and the legacy provider on every
 load; a framed origin gets no provider; consent → connected, with account and network in the
