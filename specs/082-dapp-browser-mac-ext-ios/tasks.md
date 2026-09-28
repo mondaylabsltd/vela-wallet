@@ -442,7 +442,7 @@ Chains:
     - `0x38d7ea4c68000` → −0.001 xDAI to 0x7687…D141 with no "Contract interaction";
     - `0x0` → 0 with no minus;
     - a JSON number → the contract card with no amount.
-- [ ] T057 [US4] Simulation severity in `D/executor/sim.rs` and `D/signing/live.rs` (RG6, L-D5); proof: in-crate sim tests; (after T056).
+- [x] T057 [US4] Simulation severity in `D/executor/sim.rs` and `D/signing/live.rs` (RG6, L-D5); proof: in-crate sim tests; (after T056).
   - `D/executor/sim.rs` normalises the reply into `SimReply` and calls `sim_outcome::classify`. Delete `derive_deltas` and its helpers (`sim.rs:98-226`) and the collapse at `:88-94`.
   - `D/signing/live.rs:264-268` draws `notice`: Caution `simUnavailableWarning`; Danger `simWillFail(Reason)` with the sanitised reason.
   - Proof: in-crate tests: an Arbitrum -32603 → caution tone; status 0x0 → danger with the reason; no copy of `derive_deltas` is left (`grep -n derive_deltas D/` finds only the core call).
@@ -518,18 +518,18 @@ Chains:
   - Feed `net_health_step` from pool outcomes in `D/executor/pool.rs`. On `CameBack`, retry the failed shown tab when `retry_when_network_returns(class)`, and invalidate balances.
   - If the desktop's logo loading (`D/marks.rs`, `D/executor/gpui_http.rs`) remembers misses, use `mark_miss_ttl_ms`; otherwise record "no such surface" for W20 in the results matrix.
   - Proof: in-crate tests: three misses then a reach → one retry of the failed tab.
-- [ ] T070 [US4] `site_label` in `D/signing/components.rs` and `D/explore/live.rs` (RE7, F14, G8 parity); proof: the spoof test in `D/explore/live.rs`; (after T057).
+- [x] T070 [US4] `site_label` in `D/signing/components.rs` and `D/explore/live.rs` (RE7, F14, G8 parity); proof: the spoof test in `D/explore/live.rs`; (after T057).
   - Replace the F14 copy in `D/signing/components.rs:130`, and draw Recents (`D/explore/live.rs`) with `site_label`.
   - Proof: the existing spoof test (`D/explore/live.rs:253-262`) still holds; a Recents row whose title is its host shows it once.
-- [ ] T071 [US1] Balance read plan in `D/executor/balances.rs` (RE9); proof: Base's slots include USDC; (after T053).
+- [x] T071 [US1] Balance read plan in `D/executor/balances.rs` (RE9); proof: Base's slots include USDC; (after T053).
   - `D/executor/balances.rs:338-400, 595` reads the slots from `balance_dashboard::read_plan`; delete the local list.
   - Proof: an in-crate test that Base's slots include USDC and the order is unchanged.
-- [ ] T072 [US3] dApp transactions in Activity, in `D/flows/live.rs`, `D/wallet/live.rs` and `D/executor/activity_feed.rs` (RG1–RG3); proof: in-crate feed tests; (after T051 and T055).
+- [x] T072 [US3] dApp transactions in Activity, in `D/flows/live.rs`, `D/wallet/live.rs` and `D/executor/activity_feed.rs` (RG1–RG3); proof: in-crate feed tests; (after T051 and T055).
   - Delete `kind_of` and the status lookup (`D/flows/live.rs:404`, `D/wallet/live.rs:1935-1950`). Draw rows from `FeedItem.kind/status/site`: title `history.txLabelDappTx`, subtitle site → recipient → chain, and `statusPending` / `statusFailed` + " · " for a row that is not confirmed.
   - The detail sheet shows "Requested by" (`componentsUi.signing.siweOrigin`). `D/executor/activity_feed.rs` maps the stored `dappOrigin`.
   - After the background persist of a `PersistRecord` / `UpdateRecord`, hand `ReconcileCompleted{resolved_count: 1}` over on the next tick (the `D/executor/tracker.rs:247-256` pattern), never from the tracker handoff.
   - Proof: in-crate tests: a pending dApp row with its site; a failed row; the poke fires once per write.
-- [ ] T073 [US6] Empty Activity and History, in `D/wallet/page.rs` and `D/flows/live.rs` (RD10, RG5, G1, L-D7); proof: three states × two filters; (after T068 and T072).
+- [x] T073 [US6] Empty Activity and History, in `D/wallet/page.rs` and `D/flows/live.rs` (RD10, RG5, G1, L-D7); proof: three states × two filters; (after T068 and T072).
   - Home Activity: rows; skeletons while `BalanceView.balance_unknown`; else `empty_state(Inbox, home.emptyNoActivity, home.emptySubtitle)`. Under a sidebar chain filter, the core's `home_empty_key` (no caption) (`D/wallet/page.rs`).
   - History: `history_empty_key`. Delete the desktop's own branch (`D/flows/live.rs:219-222`) and update the tests at `:4945-4946`.
   - Proof: in-crate tests for the three states and both filters.
