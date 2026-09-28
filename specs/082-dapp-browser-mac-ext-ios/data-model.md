@@ -134,6 +134,7 @@ Round 2 (RJ1, RJ4):
 
 ```
 Submitted{admitted: true}                  ─► acknowledged = true (outcome never MaybeSent; not_found stops counting)
+Submitted{admitted: true} on a NotSent entry ─► a fresh entry (the NotSent came while the POST was out; review)
 Withdrawn{hash, ids}                       ─► ids dropped; no id left → entry removed (no patch, no HoldingsMoved)
 Pending ──Status{tx_hash}──► relay_tx_hash ─► TxReceipt{chain, tx_hash, op} at the receipt cadence (one in flight)
   TxReceipt: the op's event, success, no ExecutionFailure in its own logs ─► Confirmed (+ NotifyConfirmed + HoldingsMoved)
@@ -171,8 +172,9 @@ Ceremony events carry the request id and are dropped unless that inflight is in 
 | `Signed` (message) | — | `Signed` | tick, "已签名", closes itself |
 | `Landed{tx, op?}` / `StillConfirming{op}` | `Confirmed` | `Confirmed{tx}` | tick + short hash + explorer |
 | same | `Dropped` | `Reverted{tx}` | cross, `statusFailed` + `failedHint` + explorer |
-| same | `NotSent` | `NotSent` | cross, `statusFailed` + `txErrorGeneric` |
-| same | `Rejected` | `Refused` (round 2) | cross, `statusFailed` + `componentsUi.signing.refused`, no Retry |
+| `StillConfirming{op}` | `NotSent` | `NotSent` | cross, `statusFailed` + `txErrorGeneric` |
+| `StillConfirming{op}` | `Rejected` | `Refused` (round 2) | cross, `statusFailed` + `componentsUi.signing.refused`, no Retry |
+| `Landed{tx, op}` | `NotSent` / `Rejected` | `Following{op, Landing, false}` (round-2 review: a tx hash is never "not sent") | ring |
 | same | pending | `Following{op, outcome, fee_held}` | outcome `MaybeSent` → `maybeSent` caption (a `Landed` answer draws `Landing` instead, DX6); `Landing` → ring; `StillConfirming` → `stillConfirming`; `Unknown` → unknown sentence |
 | same | none yet | `Following{…, Landing}` | ring |
 

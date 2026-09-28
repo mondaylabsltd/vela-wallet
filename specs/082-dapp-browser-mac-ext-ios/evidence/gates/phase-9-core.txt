@@ -32,3 +32,22 @@ Not done here (the BIND step regenerates, per the orchestrator's split):
   app-web/vela-wallet): paths.rs moved with the corpus and the exports grew, so the fingerprint moves;
   VelaCoreKit xcframework (rust/scripts/build-ios-xcframework.sh; check-ios-core-fresh.sh must print ok);
   rust/bindings/kotlin + the Android .so (the T046 recipe).
+
+Adversarial review re-run (after f5a1628a, 09309fe3, b0ea4056, 2762df54), 2026-09-29:
+
+cd rust && cargo test -p vela-core --features i18n-all,crux
+  passed 2099 failed 0 ignored 0 across 54 result lines (+5 review tests:
+  app_sign_request 82 (+3), app_tx_tracker 59 (+1), app_send 165 (+1))
+cd rust && cargo test -p vela-core --features i18n-all,crux --test i18n_residency -- --nocapture
+  runtime-JSON ja + en 138671 of 138800; resident ja + en 134651
+cargo fmt --all -- --check                                                         clean
+  (it was NOT clean at 0b0b5d57: eight round-2 files; CI's rust job runs it)
+cargo clippy -p vela-core --all-targets --features i18n-all,crux -- -D warnings    clean
+cargo clippy -p vela-core --features crux -- -D warnings                           clean
+cargo clippy -p vela-core-uniffi -p vela-core-wasm --all-targets -- -D warnings    clean
+cargo test -p vela-core-uniffi 15 passed · cargo test -p vela-core-wasm 10 passed
+cargo check -p vela-core-wasm --target wasm32-unknown-unknown                      ok
+npm --prefix scripts run gen:i18n                                                  no drift
+node rust/scripts/gen-core-types.mjs --check   27 / 13 / 371 current (the review changed no exported type)
+node scripts/check-event-payloads.mjs          the same 11 (iOS T236)
+bash rust/scripts/check-ios-core-fresh.sh      "no xcframework stamp" — BIND

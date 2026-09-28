@@ -178,6 +178,13 @@ confirmed, `NotifyConfirmed`, `HoldingsMoved`); otherwise → `Dropped` (records
 `HoldingsMoved`). Not mined, no answer, or mined without the op's event (a replaced bundle) → keep
 asking. A terminal entry ignores a late answer.
 
+**A premature `NotSent` yields to `admitted`** (review). The write-ahead hands the op over before its
+POST, so a slow POST (a 15 s relay timeout per endpoint, "currently processing" retries) can outlast
+the not-found grace. `Submitted{admitted: true}` on a `NotSent` entry starts a fresh entry (a new
+life, polled again; a later receipt patches the records confirmed over the early failed patch). An
+admitted op is never in doubt, so this never undoes a real `NotSent`; a `Rejected` after the relay
+took the op (DX-W3) stays terminal under the hand-off's echo.
+
 ## 4. `app::sign_request` — [RA2, RA3, RA8, RA9, RA12, RB2]
 
 ```rust
@@ -260,6 +267,24 @@ Shells may stop their receipt wait once answered. A submit-time `Failed{refused:
 still reads `MaybeSent` as `Following{outcome: Landing}` (DX6). `Refused` is drawn cross,
 `statusFailed` + `componentsUi.signing.refused`, no Retry words.
 
+Review additions (round 2):
+
+- A tracker `NotSent` never answers an op whose `OpSubmitted` said `maybe_sent: false` (Accepted):
+  it can only be stale (reached while the POST was still out) — it waits for the tracker's real
+  verdict. `Rejected` still answers (DX-W3). A may-have-been-sent op is answered `NotSent` (EX-S5).
+- `ending_state` never draws a `Landed` ending (it holds a tx hash) as `NotSent` or `Refused`:
+  `Following{outcome: Landing}` until the tracker's real verdict. `StillConfirming` keeps both.
+- `AccountSwitched` is accepted whatever the attempt: the switch belongs to the request that asked
+  for it, so the early answer's attempt bump can never strand a newer request `reconcile_pending`.
+- **Every shell's hand-off de-duplication must include `admitted`.** Today each shell feeds
+  `tracker_handoff` once per `(user_op_hash, record_ids)` (desktop `signing_host` `handed_off`, web
+  `sign-resident` `#lastHandoffKey`, iOS `SigningController.handoffKey`, Android
+  `SigningController.handedRecords`). The admitted hand-off names the SAME hash and ids as the
+  write-ahead one, so with today's key it is never fed: the tracker never learns the relay took the
+  op, the entry stays in doubt (`MaybeSent` over an accepted op), and two relay `not_found` answers
+  past the grace end an accepted op `NotSent` — records failed over an op that lands. Key on
+  `(user_op_hash, record_ids, maybe_sent, admitted)`. `tracker_withdraw` is fed once per value.
+
 ## 5. `app::send` — [RA4, RA10]
 
 ```rust
@@ -291,7 +316,9 @@ turns Submitting) → on its `RecordsPersisted`: `TrackSubmitted{maybe_sent: tru
 success haptic, no second write; `{maybe_sent: true}` → nothing is written; another hash →
 withdraw, then today's write. `SubmitFailed` after the write-ahead → `DeleteTxRecords` +
 `TrackWithdrawn`, then today's handling; an ack of the write-ahead still in flight is dropped. The
-receipt screen still waits for the verdict.
+receipt screen still waits for the verdict. A `ReceiptUpdate{Failed{not_sent: true}}` stamps the
+receipt only while it reads `MaybeSent`: for an accepted (or acknowledged) send it can only be stale
+(review) — the tracker revives the entry on `TrackSubmitted{admitted: true}`.
 
 ## 6. `app::clear_signing` — [RC1–RC5]
 
