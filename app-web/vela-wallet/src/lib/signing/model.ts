@@ -182,7 +182,7 @@ export interface FeeTokenOption {
 	insufficient?: boolean;
 }
 
-import type { FeeSpeedModel } from '$lib/flows/model';
+import type { FeeSpeedModel, ReceiptStage } from '$lib/flows/model';
 
 export type FeeModel =
 	| {
@@ -237,6 +237,20 @@ export type FeeModel =
 	/** Nothing at all — cs20–cs22, where there is no fee and no reassurance. */
 	| { kind: 'hidden' };
 
+/** Spec 079: where an approved request stands, drawn with the send receipt's `StatusHero`. */
+export interface SigningStatus {
+	stage: ReceiptStage;
+	title: string;
+	/** The request in one line, then what the person may do about the wait. */
+	captions: string[];
+	/**
+	 * The ✕ may close the sheet now — the operation carrying on, the page still
+	 * answered. Shut while the passkey prompt is up or has not yet produced a
+	 * signature: closed then, a cancelled prompt would leave the page unanswered.
+	 */
+	closable: boolean;
+}
+
 export interface SigningModel {
 	id: SigningStateId;
 	dapp: {
@@ -284,6 +298,12 @@ export interface SigningModel {
 	confirm: { hint: string; action: string; enabled: boolean };
 	/** Spec 079: the ✕'s accessible name — the sheet's one explicit close. Live only. */
 	closeLabel?: string;
+	/**
+	 * Spec 079 (F11): the person has approved — the sheet is a status now, not
+	 * a form. No fee controls, no slide (never a greyed one): the request's one
+	 * line and where it stands. Absent while the request is still a request.
+	 */
+	status?: SigningStatus;
 	/**
 	 * Spec 081: the request was refused outright (it would have changed who
 	 * controls the account). There is no fee to show and nothing to slide —

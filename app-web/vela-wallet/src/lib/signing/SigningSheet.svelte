@@ -2,6 +2,7 @@
 	import SigningHeader from './ui/SigningHeader.svelte';
 	import SigningBody from './ui/SigningBody.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
+	import StatusHero from '$lib/flows/ui/StatusHero.svelte';
 	import type { SigningModel } from './model';
 
 	/**
@@ -15,8 +16,13 @@
 	 * request away and the site had to ask again). No drag, no scrim tap, no
 	 * Escape. The ✕ is quiet and is not labelled "Reject", because a wallet with
 	 * a big reject button teaches people to reach for it without reading; before
-	 * the approval it is the refusal (the host answers 4001). While the
-	 * signature is in flight (`dismissible: false`) the ✕ is shut too.
+	 * the approval it is the refusal (the host answers 4001).
+	 *
+	 * After the approval the sheet is a STATUS (spec 079, F11): the header and
+	 * the send receipt's `StatusHero` — "waiting for biometric", "submitting",
+	 * or why it failed — and no form under it: no fee controls, and never a
+	 * greyed slide. The ✕ then closes without refusing, once the signature
+	 * exists (`dismissible: false` shuts it while it does not).
 	 */
 	interface Props {
 		model: SigningModel;
@@ -33,6 +39,12 @@
 		onspeedpick?: (id: string) => void;
 		/** Spec 079: the fee row's refresh control. */
 		onfeerefresh?: () => void;
+		/**
+		 * Spec 079: the ✕ was pressed — BEFORE the exit plays, so the host
+		 * decides what this close means at the moment of the tap (a refusal
+		 * before the approval, a plain close after), not 400 ms later.
+		 */
+		onclosestart?: () => void;
 	}
 
 	let {
@@ -46,7 +58,8 @@
 		onfeepick,
 		onspeed,
 		onspeedpick,
-		onfeerefresh
+		onfeerefresh,
+		onclosestart
 	}: Props = $props();
 
 	let sheet = $state<{ close: () => void }>();
@@ -67,18 +80,42 @@
 		network={model.network}
 		closeLabel={model.closeLabel}
 		closeDisabled={!dismissible}
-		onclose={onclose && !model.dismissOnly ? () => sheet?.close() : undefined}
+		onclose={onclose && !model.dismissOnly
+			? () => {
+					onclosestart?.();
+					sheet?.close();
+				}
+			: undefined}
 	/>
-	<SigningBody
-		{model}
-		{onconfirm}
-		{onclose}
-		{onchip}
-		{oncustom}
-		{onfee}
-		{onfeepick}
-		{onspeed}
-		{onspeedpick}
-		{onfeerefresh}
-	/>
+	{#if model.status}
+		<div class="status" data-testid="signing-status" aria-live="polite">
+			<StatusHero
+				stage={model.status.stage}
+				title={model.status.title}
+				captions={model.status.captions}
+			/>
+		</div>
+	{:else}
+		<SigningBody
+			{model}
+			{onconfirm}
+			{onclose}
+			{onchip}
+			{oncustom}
+			{onfee}
+			{onfeepick}
+			{onspeed}
+			{onspeedpick}
+			{onfeerefresh}
+		/>
+	{/if}
 </BottomSheet>
+
+<style>
+	/* The receipt's centrepiece, with the room the form's body had. */
+	.status {
+		display: flex;
+		justify-content: center;
+		padding-block: var(--space-3xl);
+	}
+</style>

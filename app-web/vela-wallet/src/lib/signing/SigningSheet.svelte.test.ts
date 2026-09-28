@@ -111,6 +111,67 @@ describe('the signing sheet closes only on its ✕', () => {
 	});
 });
 
+describe('after the approval the sheet is a status (spec 079, F11)', () => {
+	const submitting = {
+		stage: 'submitting' as const,
+		title: 'Submitting to network...',
+		captions: ['Send · -0.0001 xDAI', 'Closing this page keeps the transaction running'],
+		closable: true
+	};
+
+	it('the form gives way to the status: no fee, no slide — never a greyed one', async () => {
+		const SLIDE = '[role="button"][aria-label^="Slide to confirm"]';
+		// The control, before the approval: the slide is there.
+		const form = await drawn({});
+		expect(form.sheet.querySelector(SLIDE)).not.toBeNull();
+		await form.screen.unmount();
+
+		const view = await drawn({
+			model: model({
+				fee: {
+					kind: 'onchain',
+					label: 'Network fee',
+					value: '0.0001 xDAI',
+					refreshLabel: 'Refresh fee'
+				},
+				status: submitting
+			})
+		});
+		const status = view.sheet.querySelector<HTMLElement>('[data-testid="signing-status"]');
+		expect(status?.textContent).toContain('Submitting to network...');
+		expect(status?.textContent).toContain('Closing this page keeps the transaction running');
+		expect(view.sheet.querySelector(SLIDE)).toBeNull();
+		expect(view.sheet.querySelector('button.refresh')).toBeNull();
+		expect(view.sheet.textContent).not.toContain('Network fee');
+		await view.screen.unmount();
+	});
+
+	it('closable: the ✕ is live and closes (the host makes it a plain close)', async () => {
+		const view = await drawn({ model: model({ status: submitting }) });
+		expect(view.close!.disabled).toBe(false);
+		view.close!.click();
+		await vi.waitFor(() => expect(view.onclose).toHaveBeenCalledOnce(), { timeout: 1500 });
+		await view.screen.unmount();
+	});
+
+	it('waiting for the passkey: the ✕ is shut (the host passes dismissible=false)', async () => {
+		const view = await drawn({
+			model: model({
+				status: {
+					stage: 'submitting',
+					title: 'Waiting for biometric...',
+					captions: [],
+					closable: false
+				}
+			}),
+			dismissible: false
+		});
+		expect(view.sheet.textContent).toContain('Waiting for biometric...');
+		expect(view.close!.disabled).toBe(true);
+		await view.screen.unmount();
+	});
+});
+
 describe('the signing fee row (spec 079 US2)', () => {
 	const shown: FeeModel = {
 		kind: 'onchain',

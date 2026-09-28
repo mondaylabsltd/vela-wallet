@@ -952,6 +952,15 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			unknownOutcome: k('componentsUi.signing.unknownOutcome'),
 			signed: k('clearSigning.alertSignedTitle')
 		},
+		// Spec 079: after the approval — the send receipt's words, as
+		// Android's signing receipt uses them.
+		status: {
+			signing: k('send.txSigning'),
+			submitting: k('send.txSubmitting'),
+			backgroundHint: k('send.txBackgroundHint'),
+			messageSigning: k('componentsUi.signing.signing'),
+			failedHint: k('send.txErrorGeneric')
+		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),
 		safeInnerCall: k('componentsUi.signing.safeInnerCall'),

@@ -225,6 +225,23 @@ export interface SigningMessages {
 		unknownOutcome: string;
 		signed: string;
 	};
+	/**
+	 * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): what
+	 * the sheet says once the person has approved, in the SEND receipt's words,
+	 * as Android's signing receipt says them — never a greyed slide.
+	 */
+	status: {
+		/** `send.txSigning` — the passkey prompt is up. */
+		signing: string;
+		/** `send.txSubmitting` */
+		submitting: string;
+		/** `send.txBackgroundHint` — closing keeps it running. */
+		backgroundHint: string;
+		/** `componentsUi.signing.signing` — a message never "submits". */
+		messageSigning: string;
+		/** `send.txErrorGeneric` — the submission failed; funds are safe. */
+		failedHint: string;
+	};
 	viewOnExplorer: string;
 	byteSize: string;
 	safeInnerCall: string;

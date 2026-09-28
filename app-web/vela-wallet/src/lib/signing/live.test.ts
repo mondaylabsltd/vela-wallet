@@ -27,6 +27,9 @@ import {
 	calldataBytes,
 	cappedApproval,
 	localizedTerms,
+	signingCloseEvent,
+	signingStatus,
+	summaryOf,
 	type SigningLiveInputs
 } from './live';
 
@@ -451,6 +454,156 @@ describe('the header says the site once', () => {
 describe('the sheet’s one close (spec 079)', () => {
 	it('names its ✕ with the sheet’s own word', () => {
 		expect(buildSigningModel(inputs())?.closeLabel).toBe(m.close);
+	});
+});
+
+/**
+ * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): from the
+ * approval on, the sheet is a status — Android's signing receipt, word for
+ * word — and never the form with a greyed slide.
+ */
+describe('after the approval the sheet is a status', () => {
+	const SUMMARY = 'Send USDC · -100 USDC';
+	const UNSIGNED = { signed: false, ceremonyUp: false };
+	const PROMPT_UP = { signed: false, ceremonyUp: true };
+	const SIGNED = { signed: true, ceremonyUp: false };
+	const MESSAGE_REQUEST = { ...REQUEST, method: 'personal_sign', kind: 'personal_sign' as const };
+	const at = (over: Partial<SignView>): SignView => ({ ...OPEN_SIGN, ...over });
+
+	it('before the approval there is no status: the form, and the ✕ refuses (4001)', () => {
+		expect(signingStatus(OPEN_SIGN, UNSIGNED, SUMMARY, m)).toBeNull();
+		expect(buildSigningModel(inputs())?.status).toBeUndefined();
+		expect(signingCloseEvent(null)).toBe('reject_tapped');
+	});
+
+	it('approved, waiting for the passkey: "Waiting for biometric…", and the ✕ shut', () => {
+		for (const progress of [UNSIGNED, PROMPT_UP]) {
+			// The core's Precheck (is_signing alone) and its Submitting stage
+			// (both flags) before the signature exists read the same.
+			for (const flags of [
+				{ is_signing: true, is_submitting: false },
+				{ is_signing: true, is_submitting: true }
+			]) {
+				const status = signingStatus(at(flags), progress, SUMMARY, m);
+				expect(status).toEqual({
+					stage: 'submitting',
+					title: m.status.signing,
+					captions: [SUMMARY],
+					closable: false
+				});
+				expect(signingCloseEvent(status)).toBeNull();
+			}
+		}
+	});
+
+	it('signed, going to the relay: "Submitting to network…" + closing keeps it running; the ✕ closes without refusing', () => {
+		const status = signingStatus(at({ is_signing: true, is_submitting: true }), SIGNED, SUMMARY, m);
+		expect(status).toEqual({
+			stage: 'submitting',
+			title: m.status.submitting,
+			captions: [SUMMARY, m.status.backgroundHint],
+			closable: true
+		});
+		expect(signingCloseEvent(status)).toBe('dismiss_tapped');
+	});
+
+	it('the core’s reactive recovery after a submission counts as signed', () => {
+		const status = signingStatus(
+			at({ is_signing: false, is_submitting: true }),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(status).toMatchObject({ title: m.status.submitting, closable: true });
+	});
+
+	it('a second passkey prompt in the same approval shuts the ✕ again', () => {
+		const status = signingStatus(
+			at({ is_signing: true, is_submitting: true }),
+			{ signed: true, ceremonyUp: true },
+			SUMMARY,
+			m
+		);
+		expect(status).toMatchObject({ title: m.status.submitting, closable: false });
+		expect(signingCloseEvent(status)).toBeNull();
+	});
+
+	it('a message never "submits": "Signing…" throughout', () => {
+		const message = (flags: Partial<SignView>) => at({ request: MESSAGE_REQUEST, ...flags });
+		expect(signingStatus(message({ is_signing: true }), UNSIGNED, undefined, m)).toEqual({
+			stage: 'submitting',
+			title: m.status.messageSigning,
+			captions: [],
+			closable: false
+		});
+		expect(
+			signingStatus(message({ is_signing: true, is_submitting: true }), SIGNED, undefined, m)
+		).toMatchObject({ title: m.status.messageSigning, closable: true });
+	});
+
+	it('a failed submission says so, with the funds-are-safe line; the ✕ just closes', () => {
+		const failed = signingStatus(
+			at({ error: { kind: 'submit_failed', detail: 'relay said no' } }),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(failed).toEqual({
+			stage: 'failed',
+			title: m.receipt.failed,
+			captions: [SUMMARY, m.status.failedHint],
+			closable: true
+		});
+		expect(signingCloseEvent(failed)).toBe('dismiss_tapped');
+	});
+
+	it('an error before any approval is not a status (the form says it)', () => {
+		expect(
+			signingStatus(at({ error: { kind: 'user_rejected', detail: null } }), UNSIGNED, SUMMARY, m)
+		).toBeNull();
+		expect(
+			signingStatus(at({ error: { kind: 'stale_fee_quote', detail: null } }), UNSIGNED, SUMMARY, m)
+		).toBeNull();
+	});
+
+	it('the sheet carries the status, with the request in one line, and no refused request gets one', () => {
+		const model = buildSigningModel(
+			inputs({ sign: at({ is_signing: true, is_submitting: true }), progress: SIGNED })
+		);
+		expect(model?.status).toMatchObject({
+			title: m.status.submitting,
+			captions: ['Send USDC · -100 USDC', m.status.backgroundHint]
+		});
+		const blocked = buildSigningModel(
+			inputs({
+				sign: at({
+					is_signing: true,
+					blocked: {
+						function: 'enableModule',
+						selector: '0x610b5925',
+						leg_index: null,
+						nested: false
+					}
+				}),
+				progress: SIGNED
+			})
+		);
+		expect(blocked?.status).toBeUndefined();
+	});
+
+	it('summaryOf: what it is and its figure, or a swap’s two sides', () => {
+		expect(summaryOf([{ kind: 'intent', text: 'Swap', tone: 'neutral' }])).toBe('Swap');
+		expect(
+			summaryOf([
+				{ kind: 'intent', text: 'Swap', tone: 'neutral' },
+				{
+					kind: 'swap',
+					pay: { sign: '-', value: '1', symbol: 'ETH', tone: 'neutral' },
+					receive: { sign: '+', value: '3000', symbol: 'USDC', tone: 'success' }
+				}
+			])
+		).toBe('Swap · 1 ETH → 3000 USDC');
+		expect(summaryOf([])).toBeUndefined();
 	});
 });
 

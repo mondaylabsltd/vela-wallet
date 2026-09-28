@@ -35,6 +35,8 @@ import { getAllNetworksSync } from '$lib/services/networks';
 import type { AssetSimResult } from '$lib/services/sim/tx-simulation';
 import { dispatchTxTracker } from '$lib/wallet/core/tracker-resident';
 import { session } from '$lib/session/core/session.svelte';
+import { onSignCeremony } from '$lib/onboarding/core/passkey';
+import { approvalProgress, IDLE_APPROVAL, type ApprovalProgress } from '../approval-progress';
 import { createSignRequestSession, type SignRequestSession } from './sign-session';
 import type { SignResponder } from './sign-types';
 
@@ -75,6 +77,13 @@ class SignRequest {
 	 * and unconditionally, and nothing here can delay or swallow it.
 	 */
 	answered = $state<SignAnswer | null>(null);
+	/**
+	 * Spec 079: where the approved request stands — has its signature been
+	 * made, is the passkey prompt up. The sheet's status and its ✕ read it
+	 * (`approval-progress.ts` says why the core's view alone cannot).
+	 */
+	progress = $state<ApprovalProgress>(IDLE_APPROVAL);
+	#stopCeremony: (() => void) | null = null;
 
 	#loop: SignRequestSession | null = null;
 	#booting: Promise<void> | null = null;
@@ -113,9 +122,18 @@ class SignRequest {
 		if (this.#booting) return this.#booting;
 		this.#booting = (async () => {
 			await loadCore();
+			this.#stopCeremony?.();
+			this.#stopCeremony = onSignCeremony((event) => {
+				this.progress = approvalProgress(this.progress, { type: 'ceremony', event });
+			});
 			this.#loop = createSignRequestSession({
 				onView: (view) => {
 					this.view = view;
+					this.progress = approvalProgress(this.progress, {
+						type: 'view',
+						requestId: view.request?.id ?? null,
+						inFlight: view.is_signing || view.is_submitting
+					});
 					this.#drainHandoff(view);
 				},
 				onError: (error) => console.error('[sign_request] core fault:', error),
