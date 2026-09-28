@@ -9,6 +9,7 @@
 // and no "nothing else changes" line. Only calldata goes down the ladder.
 //
 //   node samples/plain-send-test.mjs
+import { readFileSync } from 'node:fs';
 import { installFakeDom, loadPageLibs, makeChecks } from './test-kit.mjs';
 
 installFakeDom();
@@ -158,6 +159,124 @@ for (const data of ['0x12', '0x00', '0xdeadbeef']) {
   const inner = nested.legs && nested.legs[1] && nested.legs[1].view;
   check('multiSend: a 0-value empty leg is a send', !!inner && isSend(inner) && noDanger(inner),
     inner ? `${inner.intentKey} ${inner.risk}` : 'no legs');
+}
+
+// 8. The figure is exact (the wallet's RC5: no rounding, trailing zeros
+//    trimmed). Now that "0" is what a zero send reads, a send that DOES move a
+//    few wei must not read "0" as well — the page used to cut every native
+//    figure at six decimals, so anything under 0.000001 xDAI drew as "0".
+{
+  for (const [value, want] of [
+    ['0x1', '0.000000000000000001'],
+    ['0xe8d4a50fff', '0.000000999999999999'],
+    ['0xde0b6b3a7640001', '1.000000000000000001'],
+    ['0x38d7ea4c68000', '0.001'],
+  ]) {
+    const view = tx({ to: TO, value });
+    const sheet = draw(view);
+    check(`value ${value}: the hero reads ${want}`, isSend(view) && heroText(sheet) === want, heroText(sheet));
+    check(`value ${value}: the tech panel's minus is the same figure`,
+      sheet.find('.tech-sim').map((n) => n.textContent).join() === t('ui.simNoOther', { delta: '-' + want + ' xDAI' }),
+      sheet.find('.tech-sim').map((n) => n.textContent).join());
+  }
+  // The same inside the operation the wallet signs: 1 wei is not "0".
+  const feeLeg = { to: USDC, value: 0, data: ns.encode.call('transfer(address,uint256)', [RELAYER, 420000n]) };
+  const operation = {
+    userOp: {
+      sender: SAFE, nonce: '0x7', initCode: '0x',
+      callData: ns.encode.call('executeUserOp(address,uint256,bytes,uint8)', [
+        MULTI_SEND, 0n,
+        ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: TO, value: 1, data: '0x' }, feeLeg])]), 1,
+      ]),
+      verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+    },
+    feeLegIndex: 1,
+  };
+  const view = tx({ to: TO, value: '0x1' }, { operation });
+  check('in the operation, 1 wei reads 0.000000000000000001, not 0',
+    isSend(view) && !view.refuse && heroText(draw(view)) === '0.000000000000000001', heroText(draw(view)));
+
+  // The exact figure fits the card: at 32px "1,000.000000000000000001" ran
+  // under the card's edge on a phone and read 1,000 — the last digit, the one
+  // that differs, was the one cut. A long figure steps down a size, and every
+  // line that can carry it wraps rather than clip. (The DOM stand-in cannot
+  // measure; the device pass looks at O-T1 on a phone.)
+  const size = (value) => draw(tx({ to: TO, value })).find('.amount')[0].classes()
+    .filter((c) => c === 'amount-long' || c === 'amount-longer').join() || '32px';
+  check('0.001 keeps the full size', size('0x38d7ea4c68000') === '32px', size('0x38d7ea4c68000'));
+  check('1,000.000000000000000001 steps down to the smallest size',
+    size('0x3635c9adc5dea00001') === 'amount-longer',
+    size('0x3635c9adc5dea00001'));
+  const css = readFileSync(new URL('../src/sheet.css', import.meta.url), 'utf8');
+  const rule = (selector) => {
+    const at = css.indexOf('\n' + selector + ' {');
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  };
+  for (const selector of ['.amount', '.sentence', '.tech-sim']) {
+    check(`${selector} wraps a figure wider than the card`, /overflow-wrap:\s*anywhere/.test(rule(selector)),
+      rule(selector).replace(/\s+/g, ' ').trim() || 'no rule');
+  }
+}
+
+// 9. A value the page cannot read never takes the page down. Before, BigInt()
+//    threw inside resolve(): no card, no refusal, only a status line — and a
+//    page being closed cannot hand the wallet its answer over the custom
+//    scheme. The wallet's rule (RC4) prints no figure for such a value; the
+//    page draws what the operation does and refuses, since it cannot find the
+//    site's call in it.
+{
+  const feeLeg = { to: USDC, value: 0, data: ns.encode.call('transfer(address,uint256)', [RELAYER, 420000n]) };
+  const operation = {
+    userOp: {
+      sender: SAFE, nonce: '0x7', initCode: '0x',
+      callData: ns.encode.call('executeUserOp(address,uint256,bytes,uint8)', [
+        MULTI_SEND, 0n,
+        ns.encode.call('multiSend(bytes)', [ns.encode.packMultiSend([{ to: TO, value: 0, data: '0x' }, feeLeg])]), 1,
+      ]),
+      verificationGasLimit: '0', callGasLimit: '0', preVerificationGas: '0',
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0', paymasterAndData: '0x',
+    },
+    feeLegIndex: 1,
+  };
+  // "0x " and " 0x " and "\t0x\n" are JavaScriptCore's: Safari's BigInt()
+  // reads them as 0 where V8 throws. Run this file under node AND bun.
+  for (const value of [' 0x ', '0x ', '\t0x\n', '0X', '0x0x', 'abc', ' 0x10 ', '0X10', '-1', '0b1', 1.5, -1]) {
+    let bare = null;
+    let bound = null;
+    let error = '';
+    try {
+      bare = tx({ to: TO, value });
+      bound = tx({ to: TO, value }, { operation });
+      draw(bare);
+      draw(bound);
+    } catch (e) {
+      error = String(e && e.message);
+    }
+    check(`value ${JSON.stringify(value)}: the page draws a card`, !error && !!bare && !!bound, error);
+    check(`value ${JSON.stringify(value)}: no figure is printed for it`, !!bare && bare.intentKey !== 'intent.send',
+      bare ? bare.intentKey : 'threw');
+    check(`value ${JSON.stringify(value)}: inside an operation it is refused`,
+      !!bound && bound.refuse === true && bound.warnings.some((w) => w.key === 'refuse.opMismatch'),
+      bound ? JSON.stringify(bound.warnings.map((w) => w.key)) : 'threw');
+  }
+}
+
+// 10. The reading itself (`abi.quantity`), the same in every engine: the
+//     page's grammar, never BigInt()'s. RC4's zeroes, hex, plain decimal
+//     digits and a non-negative safe integer are read; nothing else is.
+{
+  const read = (v) => { const w = ns.abi.quantity(v); return w === null ? null : w.toString(); };
+  for (const [value, want] of [
+    [undefined, '0'], [null, '0'], ['', '0'], ['0x', '0'], ['0x0', '0'], ['0x1F', '31'],
+    ['1000', '1000'], [1000, '1000'], [0, '0'], [10n, '10'],
+    [' 0x ', null], ['0x ', null], [' 0x', null], ['\t0x\n', null], [' ', null], ['0X', null],
+    ['0X10', null], [' 0x10 ', null], ['-1', null], ['-0x1', null], ['0b1', null], ['0o7', null],
+    ['1e3', null], [1.5, null], [-1, null], [-1n, null], [2 ** 53, null], [true, null], [{}, null],
+  ]) {
+    const label = typeof value === 'bigint' ? value + 'n' : typeof value === 'string' ? JSON.stringify(value) : String(value);
+    check(`quantity(${label}) is ${want === null ? 'unreadable' : want}`, read(value) === want, String(read(value)));
+  }
 }
 
 process.exit(check.summary() ? 0 : 1);

@@ -164,7 +164,14 @@ window.VelaCS = window.VelaCS || {};
   function sameCall(a, b) {
     var address = function (v) { return String(v || '').toLowerCase(); };
     // "0x" is zero, as the wallet reads it (vela-core RC4); BigInt('0x') throws.
-    var amount = function (v) { return (v === '0x' ? 0n : BigInt(v || 0)).toString(); };
+    // A value it cannot read (" 0x ", "abc", 1.5) is null and matches nothing:
+    // the call is not found, and the page refuses instead of throwing. The
+    // reading is `abi.quantity`, the same in every engine.
+    var amount = function (v) {
+      var wei = ns.abi.quantity(v);
+      return wei === null ? null : wei.toString();
+    };
+    var wanted = amount(b.value);
     // No calldata by the wallet's own test — absent, "", "0x" or "0X" after
     // trimming (vela-core `is_empty_calldata`) — is one and the same thing.
     var bytes = function (v) {
@@ -172,7 +179,7 @@ window.VelaCS = window.VelaCS || {};
       return String(v || '0x').toLowerCase().replace(/^0x/, '');
     };
     return address(a.to) === address(b.to) &&
-      amount(a.value) === amount(b.value) &&
+      wanted !== null && amount(a.value) === wanted &&
       bytes(a.data) === bytes(b.data);
   }
 

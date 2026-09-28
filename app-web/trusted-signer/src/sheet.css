@@ -221,7 +221,13 @@ body {
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.15;
+  /* A figure wider than the card wraps instead of running under its edge. */
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
+.amount-long { font-size: 24px; }
+.amount-longer { font-size: 20px; }
 
 .amount-danger { color: var(--danger); }
 .amount-symbol { font-size: 17px; color: var(--muted); }
@@ -265,6 +271,7 @@ body {
   margin: 12px 0 0;
   font-size: 14px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 /* rows */
@@ -370,7 +377,7 @@ body {
 .tech-label { color: var(--caution); font-size: 12px; margin: 10px 0 4px; }
 .tech-label:first-child { margin-top: 0; }
 .tech-signature { display: block; font: 12px/1.6 var(--mono); overflow-wrap: anywhere; }
-.tech-sim { font-size: 13px; }
+.tech-sim { font-size: 13px; overflow-wrap: anywhere; }
 
 .address-card {
   margin: 6px 0;

@@ -144,7 +144,12 @@ window.VelaCS = window.VelaCS || {};
     };
   }
 
-  function nativeAmount(value, ctx) {
+  /**
+   * `exact`: every one of the 18 decimals that is not a trailing zero, as the
+   * wallet's plain send card states it (vela-core `exact_native_amount`, 082
+   * RC5). Without it the figure stops at six decimals.
+   */
+  function nativeAmount(value, ctx, exact) {
     // The chain's own coin, from the chain id we sign for — the requester's
     // word only for a chain this page does not know (as with its name).
     var symbol = reg.nativeSymbol(ctx.chainId) || ctx.nativeSymbol || 'ETH';
@@ -152,7 +157,7 @@ window.VelaCS = window.VelaCS || {};
       value: value,
       token: { symbol: symbol, decimals: 18, tone: '#8a93a5' },
       symbol: symbol,
-      text: formatUnits(value, 18),
+      text: formatUnits(value, 18, exact ? 18 : undefined),
       fiat: fiat(ctx, symbol, value, 18),
       unlimited: false,
     };
@@ -272,10 +277,15 @@ window.VelaCS = window.VelaCS || {};
     return body === '' || body.toLowerCase() === '0x';
   }
 
-  /** A call's value in wei. Absent, "" and "0x" are zero (vela-core RC4). */
+  /**
+   * A call's value in wei (`abi.quantity`). Absent, "" and "0x" are zero
+   * (vela-core RC4). `null` when the page cannot read it (" 0x ", "0X",
+   * "abc", 1.5): no figure is printed for it, and it matches no call of the
+   * operation. BigInt() throwing here used to take the whole page down — no
+   * card, no refusal.
+   */
   function callValue(value) {
-    if (value === undefined || value === null || value === '' || value === '0x') return 0n;
-    return BigInt(value);
+    return abi.quantity(value);
   }
 
   function resolveCall(call, ctx, view, isLeg) {
@@ -304,10 +314,12 @@ window.VelaCS = window.VelaCS || {};
 
     // Every call with no calldata is a send, value 0 included: "Send · 0 xDAI
     // · Recipient", never the blind ladder's red "nothing decodes" (082 G14,
-    // RC8). The ladder below sees calldata — or a negative value, which no
-    // chain carries and the wallet's own rule refuses to print (RC4).
-    if (!hasCalldata && value >= 0n) {
-      var amount = nativeAmount(value, ctx);
+    // RC8). The ladder below sees calldata — or a value no chain carries
+    // (negative) or the page cannot read, which the wallet's own rule refuses
+    // to print (RC4). The figure is exact (RC5): with "0" meaning nothing
+    // moves, a few wei must not read "0" too.
+    if (!hasCalldata && value !== null && value >= 0n) {
+      var amount = nativeAmount(value, ctx, true);
       var moves = value > 0n;
       view.intentKey = 'intent.send';
       // Nothing leaves at 0, so the hero is not an outgoing amount.

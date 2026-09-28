@@ -127,6 +127,30 @@ window.VelaCS = window.VelaCS || {};
     }
   }
 
+  /**
+   * A call's `value` in wei, or `null` when it cannot be read exactly.
+   *
+   * Absent, null, "" and "0x" are zero (vela-core RC4); "0x" and hex digits,
+   * plain decimal digits, a non-negative safe integer and a non-negative
+   * BigInt are that number. Anything else — whitespace, "0X", a sign, "0b"
+   * or "0o", a fraction — is unreadable.
+   *
+   * The page's own grammar, not BigInt()'s: engines disagree at the edges.
+   * JavaScriptCore (Safari, the page's engine on the iPhone and the Mac)
+   * reads "0x " and " 0x " as 0 where V8 throws, so a verdict left to
+   * BigInt() would change with the browser.
+   */
+  function quantity(value) {
+    if (value === undefined || value === null || value === '' || value === '0x') return 0n;
+    if (typeof value === 'bigint') return value >= 0n ? value : null;
+    if (typeof value === 'number') {
+      return Number.isSafeInteger(value) && value >= 0 ? BigInt(value) : null;
+    }
+    if (typeof value !== 'string') return null;
+    if (/^0x[0-9a-fA-F]+$/.test(value) || /^[0-9]+$/.test(value)) return BigInt(value);
+    return null;
+  }
+
   /** Walk a decoded tree by index path, e.g. [1, 4]. */
   function at(values, path) {
     var node = values;
@@ -144,6 +168,7 @@ window.VelaCS = window.VelaCS || {};
     splitTypes: splitTypes,
     decode: decode,
     at: at,
+    quantity: quantity,
     byteLength: function (calldata) {
       return Math.floor(strip(calldata).length / 2);
     },
