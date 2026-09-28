@@ -257,5 +257,6 @@ describe('the relay status method is the core’s spelling (spec 082 RA7, G13)',
 		const { USER_OP_STATUS_METHOD } = await import('$lib/services/rpc-adapter');
 		expect(USER_OP_STATUS_METHOD).toBe(userOpStatusMethod());
 		expect(USER_OP_STATUS_METHOD).toBe('pimlico_getUserOperationStatus');
-	});
+		// The core's first load, inside the test: 5 s is not enough under a full parallel run.
+	}, 30_000);
 });

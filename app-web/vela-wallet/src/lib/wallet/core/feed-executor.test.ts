@@ -224,5 +224,6 @@ describe('a dApp transaction in Activity', () => {
 		} finally {
 			core.free();
 		}
-	});
+		// The core's first load, inside the test: 5 s is not enough under a full parallel run.
+	}, 30_000);
 });
