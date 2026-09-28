@@ -91,6 +91,7 @@ fn stored(record: &SignRecord) -> FeedTxRecord {
         kind: Some(rewire(&record.kind)),
         usd: None,
         dapp_origin: Some(record.dapp_origin.clone()),
+        call_data: tx["data"].as_str().map(str::to_owned),
     }
 }
 

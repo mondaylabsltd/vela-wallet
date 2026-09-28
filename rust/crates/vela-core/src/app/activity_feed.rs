@@ -179,6 +179,11 @@ pub struct FeedTxRecord {
     /// shell that predates the field.
     #[serde(default)]
     pub dapp_origin: Option<String>,
+    /// The call's `data` hex, for a `dapp_tx` record (spec 082 RJ16) — the
+    /// shells map it from the stored request (`signedRequest`). `None` for
+    /// every other kind, for a plain send, and for a shell that predates it.
+    #[serde(default)]
+    pub call_data: Option<String>,
 }
 
 impl FeedTxRecord {
@@ -193,6 +198,21 @@ impl FeedTxRecord {
 pub enum FeedDirection {
     In,
     Out,
+}
+
+/// Who a row's `counterparty` is (spec 082 RJ16, G52).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeedCounterpartyRole {
+    /// The party the money went to (or, for an incoming row, came from —
+    /// `direction` picks the words): the send's recipient, or the recipient
+    /// a dApp's token `transfer` names.
+    #[default]
+    Recipient,
+    /// The contract a dApp's call went to, which is not who got anything
+    /// (`componentsUi.signing.interactingLabel`).
+    Contract,
 }
 
 /// `split` = one token → N recipients; `multi_select` = N tokens → 1 recipient.
@@ -290,6 +310,10 @@ pub struct FeedItem {
     /// `DappTx` only: `host[:port]` of the site that asked ([`dapp_site`]).
     #[serde(default)]
     pub site: Option<String>,
+    /// Whether `counterparty` got the money or is the contract a call went
+    /// to (spec 082 RJ16). Always `Recipient` except on a `DappTx` row.
+    #[serde(default)]
+    pub counterparty_role: FeedCounterpartyRole,
 }
 
 /// The status of a [`FeedItem`] decoded from before spec 082, which carried
@@ -930,6 +954,7 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         kind: FeedTxKind::Receive,
         status: t.status,
         site: None,
+        counterparty_role: FeedCounterpartyRole::Recipient,
     }
 }
 
@@ -952,6 +977,7 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         kind: FeedTxKind::Send,
         status: t.status,
         site: None,
+        counterparty_role: FeedCounterpartyRole::Recipient,
     }
 }
 
@@ -964,16 +990,45 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
 /// contract call never reads as money moving. A pending record under a local
 /// operation hash (a submit whose reply was lost, RG4) is a `Pending` row
 /// like any other until the tracker patches it.
+///
+/// Round 2 (RJ16, G52): who the row names. A call that is exactly an ERC-20
+/// `transfer(address,uint256)` names the transfer's recipient (EIP-55) as the
+/// recipient; any other call names `to` as the contract it went to; no call
+/// data names `to` as the recipient. And an operation hash is never an
+/// explorer link: a `tx_hash` equal to the record's `user_op_hash` (a relay
+/// rejection, a batch id) is no tx hash.
 fn dapp_item(t: &FeedTxRecord) -> FeedItem {
     let value = native_amount(&t.value);
     let usd_value = value.as_deref().map_or(0.0, |amount| {
         usd_value_of(t.usd.as_deref(), &t.symbol, amount)
     });
+    let call = t
+        .call_data
+        .as_deref()
+        .map(str::trim)
+        .filter(|data| !data.is_empty() && *data != "0x" && *data != "0X");
+    let (counterparty, alias, counterparty_role) = match call {
+        None => (
+            non_empty(&t.to),
+            t.to_name.clone(),
+            FeedCounterpartyRole::Recipient,
+        ),
+        Some(data) => match transfer_recipient(data) {
+            Some(recipient) => (Some(recipient), None, FeedCounterpartyRole::Recipient),
+            None => (
+                non_empty(&t.to),
+                t.to_name.clone(),
+                FeedCounterpartyRole::Contract,
+            ),
+        },
+    };
+    let tx_hash = non_empty(&t.tx_hash)
+        .filter(|hash| t.user_op_hash.is_empty() || !hash.eq_ignore_ascii_case(&t.user_op_hash));
     FeedItem {
         id: t.id.clone(),
         direction: FeedDirection::Out,
-        counterparty: non_empty(&t.to),
-        alias: t.to_name.clone(),
+        counterparty,
+        alias,
         symbol: if value.is_some() {
             t.symbol.clone()
         } else {
@@ -985,12 +1040,35 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
         chain_id: t.chain_id,
         timestamp: t.timestamp,
         day_start_ms: t.day_start_ms,
-        tx_hash: non_empty(&t.tx_hash),
+        tx_hash,
         batch: None,
         kind: FeedTxKind::DappTx,
         status: t.status,
         site: t.dapp_origin.as_deref().and_then(dapp_site),
+        counterparty_role,
     }
+}
+
+/// The recipient of call data that is exactly `transfer(address,uint256)`:
+/// the selector, a 32-byte address word with its top 12 bytes zero, and a
+/// 32-byte amount — nothing more, nothing less. EIP-55 spelled; `None` for
+/// anything else.
+fn transfer_recipient(data: &str) -> Option<String> {
+    const TRANSFER_SELECTOR: &str = "a9059cbb";
+    let hex = data
+        .strip_prefix("0x")
+        .or_else(|| data.strip_prefix("0X"))?;
+    if hex.len() != 8 + 64 + 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    if !hex[..8].eq_ignore_ascii_case(TRANSFER_SELECTOR) {
+        return None;
+    }
+    let word = &hex[8..72];
+    if word[..24].bytes().any(|b| b != b'0') {
+        return None;
+    }
+    crate::primitives::checksum_address(&format!("0x{}", &word[24..])).ok()
 }
 
 /// `batchSendToActivity`: one row for the whole group, per-line breakdown
@@ -1041,6 +1119,7 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         // `build_batch` took the first line's.
         status: batch.status,
         site: None,
+        counterparty_role: FeedCounterpartyRole::Recipient,
         batch: Some(batch),
     })
 }
