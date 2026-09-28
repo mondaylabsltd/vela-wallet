@@ -658,6 +658,11 @@ pub struct WalletPage {
     /// Spec 082 RD6: the tab whose page is in the webview — `None` at launch,
     /// when a restored tab waits unlit for a click.
     shown_tab: Option<String>,
+    /// Spec 082 RE1: the web document committed since the shown tab last
+    /// changed — what the bar may name. The one webview still holds the
+    /// previous tab's page while a new tab's first load is pending, and that
+    /// page is not this tab's.
+    bar_committed: Option<String>,
     /// Back, forward and reload, as the engine says they can act (RD6); all
     /// off on the start page.
     nav_enabled: [bool; 3],
@@ -1191,6 +1196,7 @@ impl WalletPage {
             browser_title: None,
             load: crate::wallet::browser_host::LoadDriver::default(),
             shown_tab: None,
+            bar_committed: None,
             nav_enabled: [false; 3],
             engine_polling: false,
             came_back_seen: crate::executor::pool::came_back_count(),
@@ -12324,7 +12330,7 @@ impl WalletPage {
                     });
                     match url {
                         Some(url) => {
-                            self.shown_tab = Some(id);
+                            self.show_tab(Some(id));
                             self.navigate_to(url);
                         }
                         // A start-page tab: the wallet's own screen.
@@ -12465,7 +12471,7 @@ impl WalletPage {
         );
         match target {
             Some(id) => {
-                self.shown_tab = Some(id);
+                self.show_tab(Some(id));
                 self.navigate_to(url);
             }
             None => self.open_in_new_tab(url, None, cx),
@@ -12485,8 +12491,18 @@ impl WalletPage {
                 cx,
             );
         });
-        self.shown_tab = explore.read(cx).view().selected_tab;
+        let opened = explore.read(cx).view().selected_tab;
+        self.show_tab(opened);
         self.navigate_to(url);
+    }
+
+    /// The tab whose page the webview is (to) show. A different tab starts
+    /// with nothing committed for the bar to name.
+    fn show_tab(&mut self, id: Option<String>) {
+        if self.shown_tab != id {
+            self.bar_committed = None;
+        }
+        self.shown_tab = id;
     }
 
     /// Point the one webview at `url`: the column shows the page, and the
@@ -12530,12 +12546,12 @@ impl WalletPage {
             // The neighbour's page replaces this one, and its hello is what
             // retires the closed page's document in the core.
             Some((id, Some(url))) => {
-                self.shown_tab = Some(id);
+                self.show_tab(Some(id));
                 self.navigate_to(url);
             }
             // Nothing left, or a start-page tab: the wallet's own screen.
             _ => {
-                self.shown_tab = None;
+                self.show_tab(None);
                 self.browsing = false;
                 self.close_browser_page(cx);
             }
@@ -13331,17 +13347,8 @@ impl WalletPage {
     /// What the bar names right now — the core's `address_bar` over the
     /// committed document, the pending load and a failure (spec 082 RE1).
     fn address_bar_now(&self, live: bool) -> vela_core::app::browser_load::AddressBar {
-        #[cfg(not(target_os = "linux"))]
-        let shown = live
-            .then(crate::webview::committed_url)
-            .flatten()
-            .filter(|url| vela_core::app::dapp_permissions::origin_of(url).is_some());
-        #[cfg(target_os = "linux")]
-        let shown: Option<String> = {
-            let _ = live;
-            None
-        };
-        crate::wallet::browser_host::bar_of(shown.as_deref(), &self.load.watch)
+        let shown = self.bar_committed.as_deref().filter(|_| live);
+        crate::wallet::browser_host::bar_of(shown, &self.load.watch)
     }
 
     /// The address bar's own two keys; everything else is the editor's.
@@ -13539,6 +13546,9 @@ impl WalletPage {
             }
             crate::webview::Load::Started(url) => {
                 self.load.committed(&url);
+                self.bar_committed = vela_core::app::dapp_permissions::origin_of(&url)
+                    .is_some()
+                    .then(|| url.clone());
                 cx.notify();
                 DbrEvent::NavigationStarted { tab, url }
             }
