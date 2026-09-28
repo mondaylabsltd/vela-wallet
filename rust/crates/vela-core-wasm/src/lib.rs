@@ -1745,6 +1745,50 @@ pub fn user_op_not_sent_detail() -> String {
     vela_core::user_op::NOT_SENT_DAPP_DETAIL.to_owned()
 }
 
+/// The dApp's `-32603` detail for an operation the relay refused (spec 082
+/// RJ3) — a fixed sentence.
+#[wasm_bindgen(js_name = userOpRefusedDappDetail)]
+#[must_use]
+pub fn user_op_refused_dapp_detail() -> String {
+    vela_core::user_op::REFUSED_DAPP_DETAIL.to_owned()
+}
+
+/// How long the page waits for `ClearToPost` after `OpSigned` before it gives
+/// up without POSTing (spec 082 RJ1), in ms.
+#[wasm_bindgen(js_name = userOpWriteAheadWaitMs)]
+#[must_use]
+pub fn user_op_write_ahead_wait_ms() -> u32 {
+    vela_core::user_op::WRITE_AHEAD_WAIT_MS
+}
+
+/// A failed relay gas estimate, classified (spec 082 RJ19): `error_json` is
+/// the JSON-RPC `error` member or the whole body. Answers the core's
+/// `EstimateFailure` as JSON — `{"type":"reverts","reason":null|"…"}` or
+/// `{"type":"unavailable"}`.
+#[wasm_bindgen(js_name = userOpEstimateFailure)]
+#[must_use]
+pub fn user_op_estimate_failure(error_json: &str) -> String {
+    serde_json::to_string(&vela_core::user_op::estimate_failure(error_json))
+        .unwrap_or_else(|_| r#"{"type":"unavailable"}"#.to_owned())
+}
+
+/// A signed balance change from signed base units, or `undefined` for zero
+/// or unreadable text: the token ladder, dust written exactly (never `−0`),
+/// U+2212 / `+` (spec 082 RJ15). `preset` is the number preset's wire name;
+/// anything else is `comma_dot`.
+#[wasm_bindgen(js_name = formatSignedTokenAmount)]
+#[must_use]
+pub fn format_signed_token_amount(
+    delta_base_units: &str,
+    decimals: u32,
+    preset: &str,
+) -> Option<String> {
+    use vela_core::l10n::{format_signed_token_amount as format, NumberPreset};
+    let preset: NumberPreset =
+        serde_json::from_value(serde_json::Value::String(preset.to_owned())).unwrap_or_default();
+    format(delta_base_units, decimals, preset)
+}
+
 /// `topics[0]` of the `eth_getLogs` filter a `FindOpEvent` asks for (ruling
 /// 8): the EntryPoint's `UserOperationEvent`; `topics[1]` is the op's hash.
 #[wasm_bindgen(js_name = userOpEventTopic)]
@@ -2005,6 +2049,40 @@ pub fn balance_read_plan(
 mod core_082_exports {
     use super::*;
     use serde_json::{json, Value};
+
+    /// Round 2 (T196): the new exports answer the core's own values.
+    #[test]
+    fn the_round_2_exports_are_the_core_s() {
+        assert_eq!(
+            user_op_refused_dapp_detail(),
+            vela_core::user_op::REFUSED_DAPP_DETAIL
+        );
+        assert_eq!(user_op_write_ahead_wait_ms(), 5_000);
+        assert_eq!(
+            parse(&user_op_estimate_failure(
+                r#"{"code":-32500,"message":"UserOperation simulation failed","data":"Safe execution failed: the target call in executeUserOp reverted"}"#
+            )),
+            json!({ "type": "reverts", "reason": null })
+        );
+        assert_eq!(
+            parse(&user_op_estimate_failure("")),
+            json!({ "type": "unavailable" })
+        );
+        assert_eq!(signing::fee_requote_timeout_ms(), 6_000);
+        assert_eq!(signing::fee_requote_delay_ms("quote_unavailable", 4), Some(8_000));
+        let chain = r#"{"chain_read":{"rate_limited":true}}"#;
+        assert_eq!(signing::fee_requote_delay_ms(chain, 2), Some(6_000));
+        assert_eq!(
+            signing::fee_failure_reason_key(chain).as_deref(),
+            Some("home.balanceDetailStatusRetrying")
+        );
+        assert_eq!(signing::fee_failure_reason_key("calculation_failed"), None);
+        assert_eq!(
+            format_signed_token_amount("-1000", 18, "dot_comma").as_deref(),
+            Some("\u{2212}0,000000000000001")
+        );
+        assert_eq!(format_signed_token_amount("0", 18, "comma_dot"), None);
+    }
 
     const SAFE: &str = "0x1111111111111111111111111111111111111111";
     const OP_HASH: &str = "0x2222222222222222222222222222222222222222222222222222222222222222";

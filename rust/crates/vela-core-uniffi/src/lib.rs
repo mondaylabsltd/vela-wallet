@@ -1704,6 +1704,50 @@ pub fn user_op_not_sent_detail() -> String {
     vela_core::user_op::NOT_SENT_DAPP_DETAIL.to_owned()
 }
 
+/// The dApp's `-32603` detail when the relay refused the operation (spec 082
+/// RJ3): the tracker's `rejected`, or a submit-time not-sent with a rejection
+/// that is not "relayer unavailable". A fixed sentence.
+#[uniffi::export]
+pub fn user_op_refused_dapp_detail() -> String {
+    vela_core::user_op::REFUSED_DAPP_DETAIL.to_owned()
+}
+
+/// How long a shell waits for the core's `ClearToPost` after `OpSigned`
+/// before it gives up without POSTing (spec 082 RJ1), in ms.
+#[uniffi::export]
+pub fn user_op_write_ahead_wait_ms() -> u32 {
+    vela_core::user_op::WRITE_AHEAD_WAIT_MS
+}
+
+/// A failed relay gas estimate, as the core reads it (spec 082 RJ19).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct UserOpEstimateFailure {
+    /// `reverts` (the relay simulated the call and it reverts: warn with
+    /// `componentsUi.signing.simWillFail` / `simWillFailReason`) or
+    /// `unavailable` (nothing is known about the call).
+    pub kind: String,
+    /// The decoded, sanitised revert reason, when `reverts` carried one.
+    pub reason: Option<String>,
+}
+
+/// Classify the relay's answer to a failed gas estimate: `error_json` is the
+/// JSON-RPC `error` member (or the whole body); anything else is no answer.
+/// See `vela_core::user_op::estimate_failure`.
+#[uniffi::export]
+pub fn user_op_estimate_failure(error_json: String) -> UserOpEstimateFailure {
+    use vela_core::user_op::{estimate_failure, EstimateFailure};
+    match estimate_failure(&error_json) {
+        EstimateFailure::Reverts { reason } => UserOpEstimateFailure {
+            kind: "reverts".to_owned(),
+            reason,
+        },
+        EstimateFailure::Unavailable => UserOpEstimateFailure {
+            kind: "unavailable".to_owned(),
+            reason: None,
+        },
+    }
+}
+
 /// The relay method the tracker's `PollStatus` asks
 /// (`pimlico_getUserOperationStatus`, RA7).
 #[uniffi::export]
@@ -2110,30 +2154,84 @@ pub fn browser_site_label(title: String, host: String) -> BrowserSiteLabel {
 
 // -- network health and logo misses (spec 082 RE3, RE10, contract §11) --------
 
+/// The network count so far (spec 082 RE3, RJ14) — the shell keeps it and
+/// hands it back on every call. A fresh app: [`net_health_fresh`].
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct NetHealthState {
+    /// Calls in a row that never reached a server.
+    pub misses: u32,
+    pub online: bool,
+    /// The distinct chains the current run of misses came from.
+    pub sources: Vec<u32>,
+    /// Misses in the current run that named no chain (each its own source).
+    pub unsourced: u32,
+    /// When a call last reached a server (epoch ms).
+    pub last_reach_ms: Option<f64>,
+    /// When the current run of misses began (epoch ms).
+    pub run_started_ms: Option<f64>,
+}
+
+impl From<vela_core::app::net_health::NetHealth> for NetHealthState {
+    fn from(state: vela_core::app::net_health::NetHealth) -> Self {
+        NetHealthState {
+            misses: state.misses,
+            online: state.online,
+            sources: state.sources,
+            unsourced: state.unsourced,
+            last_reach_ms: state.last_reach_ms,
+            run_started_ms: state.run_started_ms,
+        }
+    }
+}
+
+impl From<NetHealthState> for vela_core::app::net_health::NetHealth {
+    fn from(state: NetHealthState) -> Self {
+        vela_core::app::net_health::NetHealth {
+            misses: state.misses,
+            online: state.online,
+            sources: state.sources,
+            unsourced: state.unsourced,
+            last_reach_ms: state.last_reach_ms,
+            run_started_ms: state.run_started_ms,
+        }
+    }
+}
+
 /// One call's outcome applied to the network count.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct NetHealthStep {
-    /// Calls in a row that never reached a server — the next state's.
-    pub misses: u32,
-    pub online: bool,
-    /// The edge this call crossed: `went_offline` (the third miss in a row) or
-    /// `came_back` (the first answer after it); `None` while the state holds.
+    /// The next state — hand it to the next call.
+    pub state: NetHealthState,
+    /// The edge this call crossed: `went_offline` (three misses in a row from
+    /// at least two sources, with nothing answering for 10 s) or `came_back`
+    /// (the first answer after it); `None` while the state holds.
     pub edge: Option<String>,
+}
+
+/// A fresh app's network count: online, no misses.
+#[uniffi::export]
+pub fn net_health_fresh() -> NetHealthState {
+    vela_core::app::net_health::NetHealth::default().into()
 }
 
 /// Feed one call: `reached` is any answer from a server, whatever its status;
 /// a miss is a call that never reached one (for a pooled read: every endpoint
-/// swept, none answered, not throttled — timeouts included). `misses` and
-/// `online` are the state so far (a fresh app: 0, true). On `came_back` a
-/// shell retries its failed page, clears transient logo misses and re-reads
-/// the balance.
+/// swept, none answered, not throttled — timeouts included). `source` is the
+/// chain the call read (`None` for a call with no chain); `now_ms` the clock
+/// when it ended. One failing chain is its own notice, never "offline" (spec
+/// 082 RJ14). On `came_back` a shell retries its failed page, clears
+/// transient logo misses and re-reads the balance.
 #[uniffi::export]
-pub fn net_health_step(misses: u32, online: bool, reached: bool) -> NetHealthStep {
-    use vela_core::app::net_health::{self as health, NetHealth};
-    let (next, edge) = health::net_health_step(NetHealth { misses, online }, reached);
+pub fn net_health_step(
+    state: NetHealthState,
+    reached: bool,
+    source: Option<u32>,
+    now_ms: f64,
+) -> NetHealthStep {
+    let (next, edge) =
+        vela_core::app::net_health::net_health_step(state.into(), reached, source, now_ms);
     NetHealthStep {
-        misses: next.misses,
-        online: next.online,
+        state: next.into(),
         edge: edge.map(|edge| snake_name(&edge)),
     }
 }
@@ -2164,13 +2262,53 @@ pub fn network_typical_inclusion_s(chain_id: u32) -> Option<u32> {
     vela_core::app::network_admin::typical_inclusion_s(chain_id).map(u32::from)
 }
 
+/// A `FeeFailure` from the shell: its wire name (`"quote_unavailable"`), or,
+/// for a failure that carries data, its JSON (`{"chain_read":{"rate_limited":
+/// true}}`, spec 082 RJ13).
+fn fee_failure_of(failure: &str) -> Option<vela_core::app::fee_policy::FeeFailure> {
+    snake(failure).or_else(|| serde_json::from_str(failure).ok())
+}
+
 /// The wait before automatic fee re-quote `attempt` (1-based) after
-/// `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
-/// `None` when no retry can fix it (spec 079 FR-008).
+/// `failure` (see [`fee_failure_of`]), or `None` when no retry can fix it
+/// (spec 079 FR-008): 3 s, 6 s, then every 8 s (spec 082 RJ12).
 #[uniffi::export]
 pub fn fee_requote_delay_ms(failure: String, attempt: u32) -> Option<u32> {
-    use vela_core::app::fee_policy::{requote_delay_ms, FeeFailure};
-    requote_delay_ms(snake::<FeeFailure>(&failure)?, attempt)
+    vela_core::app::fee_policy::requote_delay_ms(fee_failure_of(&failure)?, attempt)
+}
+
+/// The bound on each automatic fee re-quote, in ms (spec 082 RJ12): a re-ask
+/// not answered in this time is a failure again.
+#[uniffi::export]
+pub fn fee_requote_timeout_ms() -> u32 {
+    vela_core::app::fee_policy::REQUOTE_TIMEOUT_MS
+}
+
+/// The corpus key of the reason line under a failed fee (spec 082 RJ13), or
+/// `None` for no reason line. `explore.chainDown` takes `{{chain}}`, the
+/// chain's name. `failure` as for [`fee_requote_delay_ms`].
+#[uniffi::export]
+pub fn fee_failure_reason_key(failure: String) -> Option<String> {
+    vela_core::app::fee_policy::failure_reason_key(fee_failure_of(&failure)?).map(str::to_owned)
+}
+
+/// A signed balance change from signed base units (`"-1000"`, `"+2100…"`):
+/// the token ladder, a dust figure written exactly (never `−0`), U+2212 for
+/// a minus, `+` for a plus; `None` for zero or unreadable text (spec 082
+/// RJ15). `preset` is the number preset's wire name (`comma_dot`,
+/// `dot_comma`, `space_comma`, `indian`; anything else is `comma_dot`).
+#[uniffi::export]
+pub fn format_signed_token_amount(
+    delta_base_units: String,
+    decimals: u32,
+    preset: String,
+) -> Option<String> {
+    use vela_core::l10n::{format_signed_token_amount as format, NumberPreset};
+    format(
+        &delta_base_units,
+        decimals,
+        snake::<NumberPreset>(&preset).unwrap_or_default(),
+    )
 }
 
 /// The Safe message hash a passkey signs for EIP-1271 verification (spec
@@ -2697,18 +2835,65 @@ mod tests_082 {
     }
 
     #[test]
-    fn three_misses_go_offline_and_one_answer_comes_back() {
-        let first = net_health_step(0, true, false);
-        let second = net_health_step(first.misses, first.online, false);
-        assert_eq!((second.misses, second.online, second.edge), (2, true, None));
-        let third = net_health_step(second.misses, second.online, false);
-        assert!(!third.online);
+    fn three_misses_from_two_chains_after_ten_quiet_seconds_go_offline() {
+        let fresh = net_health_fresh();
+        assert!(fresh.online && fresh.misses == 0 && fresh.sources.is_empty());
+        let first = net_health_step(fresh, false, Some(100), 0.0);
+        let second = net_health_step(first.state, false, Some(1), 4_000.0);
+        assert_eq!(second.edge, None);
+        assert_eq!(second.state.sources, vec![100, 1]);
+        // One chain only, however long: that chain's notice.
+        let mut one = net_health_fresh();
+        for i in 0..10 {
+            let step = net_health_step(one, false, Some(100), f64::from(i) * 5_000.0);
+            assert_eq!(step.edge, None);
+            one = step.state;
+        }
+        let third = net_health_step(second.state, false, Some(100), 11_000.0);
+        assert!(!third.state.online);
         assert_eq!(third.edge.as_deref(), Some("went_offline"));
-        let fourth = net_health_step(third.misses, third.online, false);
+        let fourth = net_health_step(third.state, false, None, 12_000.0);
         assert_eq!(fourth.edge, None);
-        let back = net_health_step(fourth.misses, fourth.online, true);
-        assert_eq!((back.misses, back.online), (0, true));
+        let back = net_health_step(fourth.state, true, Some(8453), 13_000.0);
+        assert_eq!((back.state.misses, back.state.online), (0, true));
+        assert_eq!(back.state.last_reach_ms, Some(13_000.0));
         assert_eq!(back.edge.as_deref(), Some("came_back"));
+    }
+
+    #[test]
+    fn the_round_2_exports() {
+        assert_eq!(
+            user_op_refused_dapp_detail(),
+            "the network refused this transaction; nothing was sent"
+        );
+        assert_eq!(user_op_write_ahead_wait_ms(), 5_000);
+        let reverts = user_op_estimate_failure(
+            r#"{"code":-32500,"message":"UserOperation simulation failed","data":"Safe execution failed: the target call in executeUserOp reverted"}"#.into(),
+        );
+        assert_eq!((reverts.kind.as_str(), reverts.reason), ("reverts", None));
+        assert_eq!(user_op_estimate_failure("null".into()).kind, "unavailable");
+        assert_eq!(fee_requote_timeout_ms(), 6_000);
+        assert_eq!(fee_requote_delay_ms("quote_unavailable".into(), 3), Some(8_000));
+        let chain = r#"{"chain_read":{"rate_limited":false}}"#;
+        assert_eq!(fee_requote_delay_ms(chain.into(), 1), Some(3_000));
+        assert_eq!(
+            fee_failure_reason_key(chain.into()).as_deref(),
+            Some("explore.chainDown")
+        );
+        assert_eq!(
+            fee_failure_reason_key("quote_unavailable".into()).as_deref(),
+            Some("componentsUi.funding.denialNetworkError")
+        );
+        assert_eq!(fee_failure_reason_key("missing_public_key".into()), None);
+        assert_eq!(fee_failure_reason_key("bogus".into()), None);
+        assert_eq!(
+            format_signed_token_amount("-1000".into(), 18, "comma_dot".into()).as_deref(),
+            Some("\u{2212}0.000000000000001")
+        );
+        assert_eq!(
+            format_signed_token_amount("0".into(), 18, "comma_dot".into()),
+            None
+        );
     }
 
     #[test]
