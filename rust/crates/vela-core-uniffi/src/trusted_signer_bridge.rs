@@ -20,6 +20,9 @@ pub struct TrustedSignerInput {
     pub params_json: String,
     /// The requesting site's origin; empty for the wallet's own send.
     pub origin: String,
+    /// Spec 079: the origin was observed by the wallet's own browser engine.
+    #[uniffi(default = false)]
+    pub origin_seen_by_browser: bool,
     pub chain_id: u32,
     pub chain_name: Option<String>,
     pub native_symbol: Option<String>,
@@ -63,6 +66,7 @@ pub fn trusted_signer_request(
         credential_ids_hex: &input.credential_ids_hex,
         user_op: op.as_ref(),
         calls: &calls,
+        origin_seen_by_browser: input.origin_seen_by_browser,
     });
     Ok(built.to_string())
 }

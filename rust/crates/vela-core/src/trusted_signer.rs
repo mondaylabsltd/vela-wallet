@@ -306,6 +306,11 @@ pub struct RequestInput<'a> {
     /// The wallet appends the fee last on every chain, so the page is told
     /// the fee is leg `calls.len()`.
     pub calls: &'a [crate::user_op::MultiSendCall],
+    /// The origin was observed by the wallet's OWN browser engine (spec 079),
+    /// not relayed from another app or extension. The page then names the site
+    /// as Vela's browser saw it instead of calling it unknown — the claimant in
+    /// this channel is the wallet, which read the origin from the engine.
+    pub origin_seen_by_browser: bool,
 }
 
 /// The page's `{intent, context}` (PROTOCOL.md §4, §8.1).
@@ -335,6 +340,17 @@ pub fn request(input: &RequestInput<'_>) -> Value {
         .collect();
     if !allow.is_empty() {
         context.insert("allowCredentials".into(), Value::Array(allow));
+    }
+    if input.origin_seen_by_browser && !input.origin.is_empty() {
+        let host = input
+            .origin
+            .split_once("://")
+            .map_or(input.origin, |(_, rest)| rest)
+            .trim_end_matches('/');
+        context.insert(
+            "dapp".into(),
+            json!({ "name": host, "origin": input.origin, "source": "vela_browser" }),
+        );
     }
     if let Some(op) = input.user_op {
         let mut operation = Map::new();

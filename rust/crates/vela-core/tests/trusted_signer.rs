@@ -179,6 +179,7 @@ fn the_request_carries_the_operation_and_the_wallets_keys() {
             value_hex: "0x1".into(),
             data: vec![],
         }],
+        origin_seen_by_browser: false,
     });
     assert_eq!(built["intent"]["method"], "eth_sendTransaction");
     assert_eq!(built["intent"]["origin"], "https://app.uniswap.org");
@@ -622,4 +623,33 @@ fn the_wallets_own_send_is_sent_as_its_calls_with_the_fee_leg_after_them() {
     assert_eq!(batch["calls"][0]["value"], "0x38d7ea4c68000");
     assert_eq!(batch["calls"][0]["data"], "0x");
     assert_eq!(built["context"]["operation"]["feeLegIndex"], 1);
+}
+
+/// Spec 079: a request from the wallet's own browser names the site as the
+/// browser saw it; one relayed from elsewhere carries no `dapp` (the page keeps
+/// its caution).
+#[test]
+fn a_browser_seen_origin_is_named_to_the_page() {
+    use vela_core::trusted_signer::{request, RequestInput};
+    let input = |seen: bool| RequestInput {
+        method: "personal_sign",
+        params: serde_json::json!(["0x48", "0x88cCA0EeDbF2C4426110bbFc998F048689266894"]),
+        origin: "https://app.uniswap.org",
+        chain_id: 100,
+        chain_name: Some("Gnosis"),
+        native_symbol: Some("xDAI"),
+        account: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+        account_name: None,
+        credential_ids_hex: &[],
+        user_op: None,
+        calls: &[],
+        origin_seen_by_browser: seen,
+    };
+    let seen = request(&input(true));
+    assert_eq!(
+        seen["context"]["dapp"],
+        serde_json::json!({ "name": "app.uniswap.org", "origin": "https://app.uniswap.org", "source": "vela_browser" })
+    );
+    let relayed = request(&input(false));
+    assert!(relayed["context"].get("dapp").is_none());
 }
