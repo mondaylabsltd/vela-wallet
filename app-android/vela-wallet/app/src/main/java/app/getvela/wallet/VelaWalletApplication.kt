@@ -668,12 +668,18 @@ class AppContainer(private val app: Application) {
                 ports = object : SigningController.Ports {
                     override fun respond(transportId: String, id: String, payload: SignResponsePayload) {
                         answer(payload)
-                        signingAftercare.value = SigningAftercare.of(
-                            method = request.method,
-                            chainId = request.chainId,
-                            payload = payload,
-                            submittedUserOp = submittedUserOp,
-                        )
+                        // Closed by the person after approving: the answer still
+                        // goes, the ending does not reappear (spec 079).
+                        signingAftercare.value = if (controller.closedAfterApproval) {
+                            null
+                        } else {
+                            SigningAftercare.of(
+                                method = request.method,
+                                chainId = request.chainId,
+                                payload = payload,
+                                submittedUserOp = submittedUserOp,
+                            )
+                        }
                         // Answered either way: the sheet closes off this, page or no page.
                         controller.markAnswered()
                     }

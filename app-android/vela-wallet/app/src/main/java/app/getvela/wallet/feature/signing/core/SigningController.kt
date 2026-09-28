@@ -405,7 +405,20 @@ class SigningController(
     fun refreshFee() = speedControl.refresh()
     fun reject() = dispatchSign(SignEvent.RejectTapped)
     fun dismiss() = dispatchSign(SignEvent.DismissTapped)
-    fun swipeDismissed() = dispatchSign(SignEvent.SwipeDismissed)
+    fun swipeDismissed() {
+        val now = sign.value
+        if (now.is_signing || now.is_submitting || now.pending_op_hash != null) closedAfterApproval = true
+        dispatchSign(SignEvent.SwipeDismissed)
+    }
+
+    /**
+     * Spec 079: the person closed the sheet after approving. The operation goes
+     * on and the page still gets its answer, but the ending does not come back
+     * over whatever they went to (the iOS behaviour, owner-aligned 2026-09-28).
+     */
+    @Volatile
+    var closedAfterApproval = false
+        private set
     fun fundingCancelled() = dispatchSign(SignEvent.FundingCancelled)
     fun guardPreset(mode: GuardEditorMode) = guardHost.dispatch(GuardEvent.PresetSelected(mode), GuardEvent.serializer())
     fun guardCustomAmount(text: String) = guardHost.dispatch(GuardEvent.CustomAmountChanged(text), GuardEvent.serializer())
