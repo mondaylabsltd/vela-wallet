@@ -242,6 +242,21 @@ describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 		expect(landingFor(undefined, OP, false)).toEqual({ kind: 'submitted', opHash: OP });
 	});
 
+	it('once the relay has it, the lost-reply caption goes: the entry’s outcome is the word (RA10)', () => {
+		// The handoff said "maybe sent"; the tracker's entry now says the relay
+		// acknowledged it (outcome `landing`). "Don't send it again" over an op
+		// the relay holds names a doubt that is gone — RA10: "after the relay
+		// acknowledges, the existing Landing / StillConfirming words".
+		expect(landingFor(entry({ outcome: 'landing' }), OP, true)).toEqual({
+			kind: 'submitted',
+			opHash: OP
+		});
+		expect(landingFor(entry({ outcome: 'still_confirming' }), OP, true)).toEqual({
+			kind: 'still_confirming',
+			opHash: OP
+		});
+	});
+
 	it('judges the tracker entry through the core', () => {
 		expect(landingFor(entry({}), OP, false)).toEqual({ kind: 'submitted', opHash: OP });
 		expect(

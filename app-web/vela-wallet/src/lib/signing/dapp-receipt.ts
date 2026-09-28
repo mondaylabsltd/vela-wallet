@@ -238,7 +238,13 @@ export function landingFor(
 	maybeSent: boolean
 ): DappReceiptState {
 	const ending = signEndingState({ type: 'still_confirming', user_op_hash: opHash }, entry ?? null);
-	return landingFromEnding(ending, opHash, maybeSent);
+	// The handoff's flag speaks only until the tracker has an entry. From then
+	// on the entry's outcome is the core's word: `maybe_sent` while the relay
+	// has not acknowledged the op, and the Landing / StillConfirming words once
+	// it has (RA10) — a lost reply the relay turned out to hold is no longer
+	// "don't send it again".
+	const matched = entry !== undefined && entry.user_op_hash.toLowerCase() === opHash.toLowerCase();
+	return landingFromEnding(ending, opHash, maybeSent && !matched);
 }
 
 /** The tracker's entry for `opHash`, matched as the tracker keys it (lowercase). */
