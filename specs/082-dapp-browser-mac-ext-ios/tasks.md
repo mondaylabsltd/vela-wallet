@@ -204,11 +204,11 @@ group's file.
 
 Owns `C/clear_signing.rs` and `CT/app_clear_signing.rs`.
 
-- [ ] T027 [P] `C/clear_signing.rs`: `ClearSurface::PlainSend`, `ClearPlainSend{to, value_wei, amount, no_value}`, `ClearSigningView.plain_send` (Some iff PlainSend), `is_empty_calldata` (None, "", "0x", "0X", trimmed) and `plain_send_of` (RC1, RC2).
+- [x] T027 [P] `C/clear_signing.rs`: `ClearSurface::PlainSend`, `ClearPlainSend{to, value_wei, amount, no_value}`, `ClearSigningView.plain_send` (Some iff PlainSend), `is_empty_calldata` (None, "", "0x", "0X", trimmed) and `plain_send_of` (RC1, RC2).
   - `start_tx` sets `Model.plain_send` for empty calldata whatever the recipient (no `eth_getCode`), and `surface_of` (`:1497-1519`) returns PlainSend when it is set.
   - `result` stays None; plain_send is reset wherever `result` is reset.
   - Proof: `CT/app_clear_signing.rs` rewrites the two tests that pin the bug (`:337-353`, `:2236`). Empty calldata to a contract address → PlainSend (not BlindTransaction); a non-address `to` → BlindTransaction.
-- [ ] T028 `C/clear_signing.rs`: the value and amount rules (RC3, RC4, RC5, RC7); (after T027).
+- [x] T028 `C/clear_signing.rs`: the value and amount rules (RC3, RC4, RC5, RC7); (after T027).
   - Value: absent, null, "" and "0x" = 0; "0x"+hex = the exact U256; decimal text, "null", signs, non-hex or overflow → no plain send (BlindTransaction).
   - Amount: exact ÷10^18 with trailing zeros trimmed, using the `ClearLocale` separators and grouping (`:521-529, 5402-5434`).
   - `no_value` → "0" with no minus. `confirm_of`: TxPlain with `Some(p) ∧ ¬p.no_value` → `ConfirmIntent{"send", IntentSend}`, else Confirm. The first leg of `wallet_sendCalls` follows the same rule (RC7).

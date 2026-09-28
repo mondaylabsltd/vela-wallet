@@ -16,9 +16,9 @@ use vela_core::abi::compute_selector;
 use vela_core::app::approval_guard::{self, AmountBits, GuardAmount as U256};
 use vela_core::app::clear_signing::{
     is_empty_calldata, plain_send_of, ClearConfirm, ClearDangerClass, ClearFieldRole, ClearLocale,
-    ClearOperation as Op, ClearPlainSend, ClearProbe, ClearProvenance, ClearRisk,
-    ClearShellResult as Res, ClearSignMethod, ClearSignResult, ClearSignType, ClearSigning,
-    ClearSigningView, ClearSiweBinding, ClearSurface, ClearTerm, Event,
+    ClearNumberFormat, ClearOperation as Op, ClearPlainSend, ClearProbe, ClearProvenance,
+    ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignResult, ClearSignType,
+    ClearSigning, ClearSigningView, ClearSiweBinding, ClearSurface, ClearTerm, Event,
 };
 
 type Sut = DomainDriver<ClearSigning>;
@@ -477,6 +477,171 @@ fn empty_calldata_is_absent_empty_or_the_bare_prefix() {
     ] {
         assert!(!is_empty_calldata(data), "{data:?}");
     }
+}
+
+/// 082 RC4, RC5 — the amount is `value / 10^18` exactly: no rounding, no
+/// "wei" fallback, trailing zeros trimmed. `value_wei` is the same number
+/// as plain digits.
+#[test]
+fn plain_send_amount_is_the_exact_value_over_ten_to_the_eighteen() {
+    let max = format!("0x{}", "f".repeat(64));
+    let padded_one = format!("0x{}1", "0".repeat(70));
+    let cases: [(&str, &str, &str); 7] = [
+        ("0x38d7ea4c68000", "1000000000000000", "0.001"),
+        ("0x1", "1", "0.000000000000000001"),
+        ("0x14d1120d7b160000", "1500000000000000000", "1.5"),
+        ("0xDE0B6B3A7640000", "1000000000000000000", "1"),
+        ("0x00de0b6b3a7640000", "1000000000000000000", "1"),
+        (
+            &max,
+            "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+            "115,792,089,237,316,195,423,570,985,008,687,907,853,269,984,665,640,564,039,457.584007913129639935",
+        ),
+        // Leading zeros are not magnitude: 71 digits can still be one wei.
+        (&padded_one, "1", "0.000000000000000001"),
+    ];
+    for (value, wei, amount) in cases {
+        let mut sut = Sut::new();
+        sut.dispatch(plain_tx(Some(VITALIK), None, Some(value)));
+        let view = sut.view();
+        assert_eq!(view.surface, ClearSurface::PlainSend, "{value}");
+        let plain = view.plain_send.expect("the plain send card");
+        assert_eq!(plain.value_wei, wei, "{value}");
+        assert_eq!(plain.amount, amount, "{value}");
+        assert!(!plain.no_value, "{value}");
+        assert_eq!(view.confirm, confirm_send(), "{value}");
+        assert_eq!(
+            plain_send_of(Some(VITALIK), Some(value), &ClearLocale::default()),
+            Some(plain),
+            "the pure rule and the machine agree"
+        );
+    }
+}
+
+/// 082 RC3 — nothing moves: the same card with `no_value`, amount "0", and a
+/// neutral Confirm — never "Confirm send", which would promise a transfer.
+/// No "nothing leaves" claim either: that is the simulation's to make.
+#[test]
+fn a_zero_value_plain_send_has_no_value_and_a_neutral_confirm() {
+    for value in [Some("0x0"), None, Some("0x"), Some(""), Some("0x0000")] {
+        let mut sut = Sut::new();
+        sut.dispatch(plain_tx(Some(VITALIK), Some("0x"), value));
+        let view = sut.view();
+        assert_eq!(view.surface, ClearSurface::PlainSend, "{value:?}");
+        assert_eq!(
+            view.plain_send,
+            Some(ClearPlainSend {
+                to: VITALIK_EIP55.to_owned(),
+                value_wei: "0".to_owned(),
+                amount: "0".to_owned(),
+                no_value: true,
+            }),
+            "{value:?}"
+        );
+        assert_eq!(view.confirm, ClearConfirm::Confirm, "{value:?}");
+    }
+}
+
+/// 082 RC4 — a value is printed only when it reads as hex. Decimal text (the
+/// desktop's submit path would send 1000 wei where three others send
+/// 0x1000), the text of a JSON number, `"null"`, signs, whitespace, stray
+/// characters and anything above `2^256 − 1` leave the request blind.
+#[test]
+fn a_value_that_is_not_hex_readable_stays_blind() {
+    let over = format!("0x1{}", "0".repeat(64));
+    for value in [
+        "1000",
+        "1000000000000000",
+        "1e+21",
+        "0.001",
+        "null",
+        "-1",
+        "-0x1",
+        "+0x1",
+        "0x-1",
+        "0xg1",
+        "0x1.5",
+        " 0x1",
+        "0x1 ",
+        "0X1",
+        over.as_str(),
+    ] {
+        let mut sut = Sut::new();
+        let ops = sut.dispatch(plain_tx(Some(VITALIK), Some("0x"), Some(value)));
+        assert!(ops.is_empty(), "{value:?}");
+        let view = sut.view();
+        assert_eq!(view.surface, ClearSurface::BlindTransaction, "{value:?}");
+        assert_eq!(view.plain_send, None, "{value:?}");
+        assert_eq!(view.confirm, ClearConfirm::Confirm, "{value:?}");
+        assert!(view.result.is_none(), "{value:?}");
+    }
+}
+
+/// 082 RC5 — the amount is written with the person's number marks; the
+/// machine field `value_wei` never is.
+#[test]
+fn plain_send_amount_uses_the_locale_marks() {
+    // 1,234,567.891 of the native coin.
+    let value = "0x1056e0f39c37a5c9b8000";
+    for (number_format, amount) in [
+        (ClearNumberFormat::CommaDot, "1,234,567.891"),
+        (ClearNumberFormat::DotComma, "1.234.567,891"),
+        (ClearNumberFormat::SpaceComma, "1 234 567,891"),
+        (ClearNumberFormat::Indian, "12,34,567.891"),
+    ] {
+        let locale = ClearLocale {
+            number_format,
+            ..ClearLocale::default()
+        };
+        let mut sut = Sut::new();
+        sut.dispatch(Event::ResolveTransaction {
+            to: Some(VITALIK.to_owned()),
+            data: None,
+            value: Some(value.to_owned()),
+            chain_id: 100,
+            locale,
+        });
+        let plain = sut.view().plain_send.expect("the plain send card");
+        assert_eq!(plain.amount, amount, "{number_format:?}");
+        assert_eq!(plain.value_wei, "1234567891000000000000000");
+    }
+}
+
+/// 082 RC7 — `wallet_sendCalls` has no special case: the shells read
+/// `calls[0]` into the same `ResolveTransaction`, so a first leg with no
+/// data is a plain send like any other.
+#[test]
+fn a_wallet_send_calls_whose_first_leg_has_no_data_is_a_plain_send() {
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000));
+    let params = json!([{
+        "version": "2.0.0",
+        "chainId": "0x64",
+        "from": SPENDER,
+        "atomicRequired": true,
+        "calls": [
+            { "to": USDC, "value": "0x38d7ea4c68000" },
+            { "to": USDC, "data": transfer, "value": "0x0" },
+        ],
+    }]);
+    // What every shell's first-call reader does (RC6): the fields as text,
+    // an absent one as `None`.
+    let first = &params[0]["calls"][0];
+    let field = |name: &str| first.get(name).and_then(|v| v.as_str()).map(str::to_owned);
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::ResolveTransaction {
+        to: field("to"),
+        data: field("data"),
+        value: field("value"),
+        chain_id: 100,
+        locale: ClearLocale::default(),
+    });
+    assert!(ops.is_empty());
+    let view = sut.view();
+    assert_eq!(view.surface, ClearSurface::PlainSend);
+    let plain = view.plain_send.expect("the plain send card");
+    assert_eq!(plain.amount, "0.001");
+    assert_eq!(plain.to, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+    assert_eq!(view.confirm, confirm_send());
 }
 
 /// 082 RC1 — the card is reset wherever the result is: a later request of
