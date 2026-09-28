@@ -190,7 +190,12 @@ impl Signer<'_> {
     /// One signature over `digest`. `operation` is what the Trusted Signer
     /// shows and derives the digest from — the assembled operation and the
     /// calls before its fee leg; `None` for a message. `edges` hears the
-    /// prompt open and the signature come back, whichever signer it is.
+    /// prompt open and the signature come back, whichever signer it is;
+    /// `asked` says whether the page that asked is still there (RB2).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the digest, what the page is shown, who hears the edges and whether it is still wanted"
+    )]
     fn sign(
         &mut self,
         digest: &[u8],
