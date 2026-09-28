@@ -1,8 +1,8 @@
 # 079 — Results
 
-**Status: 2026-09-28.** Branch `079-android-dapp-browser-stability`, with `079-ios`,
-`079-desktop` and `079-ext` merged into it. The signing page `e3ef90a6…` is released and `LAUNCH`
-names it. Rows marked *pending* wait for the owner's fingerprint on the Xiaomi.
+**Status: 2026-09-28, done.** Branch `079-android-dapp-browser-stability`, with `079-ios`,
+`079-desktop` and `079-ext` merged into it. The signing page `ec038e11…` is released and `LAUNCH`
+names it. Every device row below was run on the Xiaomi and the iPhone 11.
 
 ## Success criteria
 
@@ -15,8 +15,8 @@ names it. Rows marked *pending* wait for the owner's fingerprint on the Xiaomi.
 | SC-005 fee back without a tap ≤ 15 s | **Pass** on Android (8 s after the relay came back). Web: re-quote schedule unit + e2e `relay-faults`. Desktop, iOS: unit-tested | `us2-fee-refresh-and-retry.jpg` |
 | SC-006 Recents only successful loads | **Pass** on Android, on the loads of this pass (failed, refused, certificate, and successful loads; the store read back held only the pages that loaded, each with its own title and icon). Fewer than the 10 + 10 the criterion names | store read in the device log |
 | SC-007 no "安全站点"/"不安全"/"已加密" text | **Pass** on Android (UI dump sweep, zh) and iOS (iPhone site menu and connection panel: a lock and "已连接" only). Desktop: lock only (screenshot). The en sweep was not run | `us5-lock-only-and-network-picker.jpg` |
-| SC-008 one slide per signature (trusted-signer route) | **Partial**: the app shows "去签名页确认" instead of its own slide on Android (device), iOS and desktop (unit). The end-to-end signature with the owner's fingerprint is *pending* | quickstart T1 |
-| SC-009 signing page opens with its host unreachable | **Released, check pending the fingerprint**: `sign.getvela.app/b/e3ef90a6…/sign` answers with `immutable` and hashes to its name; `LAUNCH` names it (6f8a2adb). The fallback is proven: with the host dropped on first use, the app says "签名页没能打开，请检查网络。" with Retry, and the request stays open (Android device; iOS unit) | `t5-back.jpg`, `t5-cancelled.jpg` |
+| SC-008 one slide per signature (trusted-signer route) | **Pass for message signatures** (5 of 5 on the Xiaomi, owner's account and fingerprint): the app shows "去签名页确认" instead of its own slide, and the only slide is the page's. iOS and desktop: unit-tested. Sends and approvals through the trusted signer were not run — they would move the owner's funds | `us7-t1-t4-signer-page-offline.jpg` |
+| SC-009 signing page opens with its host unreachable | **Pass, 3 of 3.** With `sign.getvela.app` dropped at the proxy, Chrome's attempts were refused every time (`us7-offline-chaos-log.txt`: 12 DROP, 0 PASS) and the page opened from the phone's cache each time; all three signatures verified on chain (EIP-1271 `valid`). First use with the host dropped: "签名页没能打开，请检查网络。" with Retry, the request kept (Android device; iOS unit) | `us7-t1-t4-signer-page-offline.jpg`, `t5-back.jpg` |
 | SC-010 no regression | **Pass**: 070 rows A1–A18 on the Xiaomi (A5 checked with chain 1337, since Polygon is configured on this device; A13 needs a tapped link, since Chromium skips history a script made without a gesture; A16's events reach the page when it is back on screen). Android unit suite 786/786 | `a11-crash.jpg`, `a12-alert.jpg`, `a16-connections.jpg` |
 
 ## The client matrix after the fix
@@ -48,6 +48,17 @@ names it. Rows marked *pending* wait for the owner's fingerprint on the Xiaomi.
 
 Also on the signing page: a send reads as the send (the fee leg is the fee row, not a second
 "批量" leg), and the fee's explanation folds under its row with the "自述" tag in sight.
+
+## Owner decisions taken (delegated, 2026-09-28)
+
+- **T048 — the signing page's "self-reported site" warning stays**: the page cannot tell who opened
+  it, so dropping it would let a phishing page look vouched for. Its words changed from jargon
+  ("站点身份由请求方自述，此通道无法核实") to "网站名称是它自己提供的，无法核实，请以下方内容为准。"
+  (released as `ec038e11…`).
+- **Release note**: the second deploy first went out from the `main` checkout and briefly replaced
+  the site with main's older `dist/` (`e3ef90a6…` answered 404 behind the CDN cache). The redeploy
+  from the 079 tree restored every version. Until 079 is merged, deploy the signing page only from
+  the 079 tree.
 
 ## Found by the device passes and fixed
 
@@ -91,12 +102,15 @@ Also on the signing page: a send reads as the send (the fee leg is the fee row, 
 
 ## Not done, and why
 
-- **Fingerprint end to end (quickstart T1–T4)** on the Xiaomi with the owner's account: one
-  signature on the page, a cancelled prompt, and one with the page's host dropped (SC-009).
+- **Sends and approvals through the trusted signer (rest of SC-008)**: not run on the owner's
+  account, since they move real funds; message signatures only.
+- **The signing page shows the host twice** when the site's name is its host ("127.0.0.1:8137"
+  over "127.0.0.1:8137", as the apps did before F14). Left for the next page release: every page
+  change needs a deploy and a `LAUNCH` move.
+- **SC-003 on iOS** is unit-tested, not timed on the device; **SC-006** ran on fewer loads than
+  10 + 10; the **en** UI sweep for SC-007 was not run.
 - **iOS before-probe (T004)**: never ran (UI Automation was off then); the iOS column rests on the
   code audit.
-- **T048**: how the signing page's "self-reported site" warning should read. It cannot tell who
-  opened it, so it cannot drop the warning; the recommendation is to keep it in plain, neutral words.
 - **Desktop at phone width**: the window cannot go below 1280×800.
 - **Extension side panel**: the signed tick is not e2e-tested there (the panel test helper looks
   for a page the panel no longer uses; it fails the same way on main).
