@@ -1660,6 +1660,15 @@ pub fn browser_site_letter(host: String) -> String {
     vela_core::app::browser_load::site_letter(&host)
 }
 
+/// A shipped network's usual time to include an operation, in seconds; `None`
+/// for a network Vela does not ship (the receipt then circles instead of
+/// drawing a promise). The dApp signing sheet's wait reads the same number as
+/// the send receipt (spec 079; the web's dApp receipt reads it over wasm).
+#[uniffi::export]
+pub fn network_typical_inclusion_s(chain_id: u32) -> Option<u32> {
+    vela_core::app::network_admin::typical_inclusion_s(chain_id).map(u32::from)
+}
+
 /// The wait before automatic fee re-quote `attempt` (1-based) after
 /// `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
 /// `None` when no retry can fix it (spec 079 FR-008).

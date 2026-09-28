@@ -30,6 +30,11 @@ struct TrackEntryWire: Decodable, Equatable {
     /// A poll is in flight for this entry right now.
     let polling: Bool
     let submittedAtMs: Double?
+    /// Where the operation is in its life, for the words (spec 079): `landing`
+    /// (inside the wait window), `still_confirming` (past it and still asked
+    /// about — never a failure), `unknown` (past the 24-hour line), `final`.
+    /// The status says why; this says when, the same way on every client.
+    let outcome: String?
 }
 
 struct TrackViewWire: Decodable, Equatable {

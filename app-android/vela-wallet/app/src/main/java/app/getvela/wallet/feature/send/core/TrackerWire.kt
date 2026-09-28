@@ -74,6 +74,21 @@ data class TrackPendingRecord(
     val submitted_at_ms: Double,
 )
 
+/**
+ * Where an op is in its life, for the words a person reads (spec 079): the
+ * status says WHY, this says WHEN — and every client words the four the same.
+ */
+@Serializable
+enum class TrackOutcome {
+    @SerialName("landing") Landing,
+
+    @SerialName("still_confirming") StillConfirming,
+
+    @SerialName("unknown") Unknown,
+
+    @SerialName("final") Final,
+}
+
 @Serializable
 data class TrackEntryView(
     val user_op_hash: String,
@@ -83,6 +98,7 @@ data class TrackEntryView(
     val tx_hash: String? = null,
     val polling: Boolean = false,
     val submitted_at_ms: Double? = null,
+    val outcome: TrackOutcome = TrackOutcome.Landing,
 )
 
 @Serializable
