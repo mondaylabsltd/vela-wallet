@@ -16,7 +16,14 @@ import { describe, expect, it } from 'vitest';
 import { decidePopupRequest } from './core/dperm-popup';
 import { popupCloseSettlement } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
-import { CLOSED_WITHOUT_ANSWER, resolveGrantedAccounts } from '../../../extension/lib/protocol.js';
+import {
+	CLOSED_WITHOUT_ANSWER,
+	CONTENT_GRACE_MS,
+	REQUEST_TTL_MS,
+	SETTLE,
+	resolveGrantedAccounts
+} from '../../../extension/lib/protocol.js';
+import { signRequestTtlMs } from '$lib/core/kernels';
 import type { DAppGrant } from './grants';
 
 const ALICE = `0x${'a1'.repeat(20)}`;
@@ -65,5 +72,28 @@ describe('how a torn-down window settles', () => {
 		// double-spending an operation that may already be at the bundler.
 		expect(settlement.code).not.toBe(4001);
 		expect(CLOSED_WITHOUT_ANSWER.code).toBe(settlement.code);
+	});
+});
+
+describe('the request lifecycle, pinned to the core (spec 082 RB6, RB11, contract §13)', () => {
+	it('the worker’s 5-minute limit is the core’s `EXTENSION_REQUEST_TTL_MS`', () => {
+		expect(REQUEST_TTL_MS).toBe(signRequestTtlMs());
+	});
+
+	it('the page gives up strictly AFTER the worker does', () => {
+		expect(CONTENT_GRACE_MS).toBeGreaterThan(0);
+		expect(REQUEST_TTL_MS + CONTENT_GRACE_MS).toBeGreaterThan(signRequestTtlMs());
+	});
+
+	it('every way a request ends without a decision is the core’s code, never 4001', () => {
+		const code = popupCloseSettlement().code;
+		expect(Object.keys(SETTLE).sort()).toEqual(
+			['expired', 'page_left', 'restarted', 'surface_closed', 'updated'].sort()
+		);
+		for (const [cause, settle] of Object.entries(SETTLE)) {
+			expect(settle.code, cause).toBe(code);
+			expect(settle.code, cause).not.toBe(4001);
+			expect(settle.message.length, cause).toBeGreaterThan(0);
+		}
 	});
 });
