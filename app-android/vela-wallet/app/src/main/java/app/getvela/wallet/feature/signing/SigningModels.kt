@@ -188,6 +188,11 @@ sealed interface FeeModel {
         val tappable: Boolean = false,
         /** Issue #262: why the slide is shut — the paying coin is not there. */
         val warning: String? = null,
+        /** Spec 079: the send form's refresh control, and whether a measurement is out. */
+        val refreshLabel: String? = null,
+        val refreshing: Boolean = false,
+        /** The chevron: only where a tap opens the coin list. */
+        val chevron: Boolean = true,
     ) : FeeModel
 
     /** Off-chain signature: the ✓ line, in place of a fee row. */

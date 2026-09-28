@@ -80,6 +80,8 @@ fun SigningSheet(
     onTrustedSignerCancel: () -> Unit = {},
     /** Spec 079: the receipt's "view on explorer". */
     onExplorer: () -> Unit = {},
+    /** Spec 079: the fee row's refresh. */
+    onRefreshFee: (() -> Unit)? = null,
 ) {
     VelaModalSheet(
         onDismissRequest = onDismiss,
@@ -92,6 +94,7 @@ fun SigningSheet(
             model = model,
             onClose = onDismiss,
             onExplorer = onExplorer,
+            onRefreshFee = onRefreshFee,
             onConfirm = onConfirm,
             onChip = onChip,
             onCustomAmount = onCustomAmount,
@@ -116,6 +119,7 @@ fun SigningSheetContent(
     /** Spec 079: the header's ✕ — `null` in the gallery, which has nothing to close. */
     onClose: (() -> Unit)? = null,
     onExplorer: () -> Unit = {},
+    onRefreshFee: (() -> Unit)? = null,
     onChip: (String) -> Unit = {},
     onCustomAmount: (String) -> Unit = {},
     onLegChip: (Int, String) -> Unit = { _, _ -> },
@@ -222,6 +226,7 @@ fun SigningSheetContent(
                 onPick = onFeePick,
                 onToggleSpeed = onToggleSpeed,
                 onPickSpeed = onPickSpeed,
+                onRefresh = onRefreshFee,
             )
         }
         SignerRow(model.signerLabel, model.signerName, model.signerSeed)

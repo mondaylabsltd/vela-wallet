@@ -1204,7 +1204,7 @@ fun FeeRow(
  * that do anything?" is answered on screen (the web's `.turn.spinning`).
  */
 @Composable
-private fun FeeRefreshButton(label: String, refreshing: Boolean, onRefresh: (() -> Unit)?) {
+internal fun FeeRefreshButton(label: String, refreshing: Boolean, onRefresh: (() -> Unit)?) {
     val colors = VelaTheme.colors
     val turn = rememberInfiniteTransition(label = "fee-refresh")
     val angle by turn.animateFloat(

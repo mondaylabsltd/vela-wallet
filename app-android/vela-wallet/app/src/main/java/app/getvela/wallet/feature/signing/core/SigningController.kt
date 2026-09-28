@@ -223,6 +223,10 @@ class SigningController(
      */
     val feeOpen = MutableStateFlow(false)
 
+    /** The `FeeFailure` wire name the core's schedule takes (`quote_unavailable`, …). */
+    private fun feeFailureWire(failure: app.getvela.wallet.feature.send.core.FeeFailure): String =
+        app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.send.core.FeeFailure.serializer(), failure).trim('"')
+
     /** A tap on the fee row: a failed quote is asked again; with more than one coin, the list opens or closes. */
     fun feeTapped() {
         val view = fee.value
@@ -295,6 +299,35 @@ class SigningController(
                     val view = signHost.view.value
                     if (fee.stale && !fee.busy && view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting && !answered) {
                         speedControl.requoteStale()
+                    }
+                }
+            }
+            // Spec 079: a quote that failed for a reason that can pass (the
+            // relay unreachable, a busy estimate) is asked again on the core's
+            // schedule — 3 s, 6 s, 12 s, then every 15 s — while the sheet is up
+            // and nothing is signing. On the Xiaomi the row said "点击重试" with
+            // the relay down and stayed that way after it came back.
+            scope.launch {
+                var attempt = 0
+                var pending: kotlinx.coroutines.Job? = null
+                fee.collect { fee ->
+                    val failure = fee.failed
+                    if (failure == null) {
+                        attempt = 0
+                        pending?.cancel()
+                        return@collect
+                    }
+                    if (fee.busy || pending?.isActive == true) return@collect
+                    val view = signHost.view.value
+                    if (view.surface != SignSurface.Sheet || view.is_signing || view.is_submitting || answered) return@collect
+                    attempt += 1
+                    val wait = uniffi.vela_core_uniffi.feeRequoteDelayMs(feeFailureWire(failure), attempt.toUInt()) ?: return@collect
+                    pending = scope.launch {
+                        kotlinx.coroutines.delay(wait.toLong())
+                        val now = signHost.view.value
+                        if (this@SigningController.fee.value.failed != null && !answered && !now.is_signing && !now.is_submitting) {
+                            speedControl.refresh()
+                        }
                     }
                 }
             }

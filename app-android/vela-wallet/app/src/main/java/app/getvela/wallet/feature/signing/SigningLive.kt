@@ -812,7 +812,17 @@ object SigningLive {
             selectorTitle = if (options.isEmpty()) null else ctx.strings.s("feeTokenTitle"),
             options = options,
             tappable = fee.failed != null || choosable,
-            warning = if (short) ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol)) else null,
+            warning = when {
+                short -> ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol))
+                // Spec 079: why there is no fee, and that it will be asked again.
+                fee.failed != null && fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.MissingPublicKey &&
+                    fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed ->
+                    ctx.strings.t("componentsUi.funding.denialNetworkError")
+                else -> null
+            },
+            refreshLabel = ctx.strings.t(I18nKeys.Flows.FEE_REFRESH),
+            refreshing = fee.busy,
+            chevron = choosable,
             // Each option in the words its row would use, minus the "~".
             speed = speed?.let { inputs ->
                 SendLive.speedModel(inputs, ctx.strings) { quote, view -> feeLine(quote, view ?: fee, ctx) }
