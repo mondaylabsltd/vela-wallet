@@ -116,7 +116,7 @@ class RpcPool(
         kind: RpcKind = RpcKind.Rpc,
     ): RpcResult {
         val callId = "c${nextId.incrementAndGet()}"
-        val waiting = Waiting(RpcPayload(method, params))
+        val waiting = Waiting(RpcPayload(method, params, chainId))
         calls[callId] = waiting
         val asked = System.currentTimeMillis()
         try {

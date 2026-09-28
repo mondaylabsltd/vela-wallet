@@ -82,6 +82,7 @@ class RpcPoolExecutor(
                     timeoutMs = operation.timeout_ms,
                 )
                 result.body?.let { registry.keepBody(operation.call_id, operation.url, it) }
+                health(result.outcome, payload.chainId)
                 // Debug trace (spec 043 phase 4, device-found): which host,
                 // which method, what came back. The pool's verdicts are the
                 // core's; this is the only place the raw outcome is visible.
@@ -116,6 +117,7 @@ class RpcPoolExecutor(
                 xRpcUrl = null,
                 timeoutMs = operation.timeout_ms,
             )
+            health(result.outcome, operation.chain_id)
             RpcShellResult.ChainIdProbed(
                 chain_id = operation.chain_id,
                 url = operation.url,
@@ -161,6 +163,21 @@ class RpcPoolExecutor(
         is RpcOperation.Conclude -> {
             registry.settle(operation.call_id, operation.verdict)
             RpcShellResult.Concluded
+        }
+    }
+
+    /**
+     * What one POST says about the network, per source (spec 082 RJ14): an
+     * answer of any kind reached a server; a transport failure did not; a
+     * timeout says nothing either way (a slow server is not a missing
+     * network). The chain is the source — one chain whose nodes are all down
+     * is that chain's notice, never "offline" (G53).
+     */
+    private fun health(outcome: RpcTransportOutcome, chainId: Int?) {
+        when (outcome) {
+            is RpcTransportOutcome.Response, is RpcTransportOutcome.HttpError, RpcTransportOutcome.NonJson -> NetHealth.reached(chainId)
+            RpcTransportOutcome.Timeout -> Unit
+            else -> NetHealth.unreached(chainId)
         }
     }
 
@@ -221,7 +238,8 @@ interface RpcPoolCallRegistry {
     fun settle(callId: String, verdict: RpcCallVerdict)
 }
 
-data class RpcPayload(val method: String, val params: List<Any?>)
+/** [chainId]: the chain the call reads — the source network health counts it under (spec 082 RJ14). */
+data class RpcPayload(val method: String, val params: List<Any?>, val chainId: Int? = null)
 
 /** Where a chain's candidate endpoints come from (research D4). */
 interface RpcEndpointSource {
@@ -298,7 +316,6 @@ class OkHttpTransport : RpcTransport {
 
         try {
             call.await().use { response ->
-                NetHealth.reached()
                 if (!response.isSuccessful) {
                     return@withContext RpcPostResult(RpcTransportOutcome.HttpError(response.code))
                 }
@@ -314,9 +331,7 @@ class OkHttpTransport : RpcTransport {
                 RpcPostResult(RpcTransportOutcome.Response(error), json)
             }
         } catch (failure: IOException) {
-            val outcome = outcomeOf(failure)
-            if (outcome != RpcTransportOutcome.Timeout) NetHealth.unreached()
-            RpcPostResult(outcome)
+            RpcPostResult(outcomeOf(failure))
         }
     }
 

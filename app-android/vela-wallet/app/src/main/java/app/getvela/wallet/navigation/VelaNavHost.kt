@@ -527,8 +527,11 @@ fun VelaNavHost(
                 val scope = rememberCoroutineScope()
                 // Spec 047 FR-006, under the manifest's rule (no ACCESS_NETWORK_STATE:
                 // "offline" is what the calls did, not what the radio claims): three
-                // calls in a row that never reached a server, cleared by the first
-                // answered one — the core's `netHealthStep` (spec 082 RE3). Coming
+                // calls in a row that never reached a server, from at least two
+                // chains, with nothing answered for ten seconds — cleared by the
+                // first answered one. The core's `netHealthStep` (spec 082 RE3,
+                // RJ14), fed per chain by the pool: one chain down is its own
+                // notice, and never flaps this refresh (G53). Coming
                 // back refreshes what went stale meanwhile, asks again for the
                 // logos a bad minute lost (RE10), and loads again the page the
                 // network failed (the core's `browserLoadRetryWhenNetworkReturns`).
