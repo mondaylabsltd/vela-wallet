@@ -1275,6 +1275,7 @@ struct RootView: View {
                         onSpeed: { id in signing?.speed(id) },
                         onSigningDismissed: { closeSigningSheet() },
                         onSigningExplorer: { openSigningExplorer() },
+                        onRefreshFee: { signing?.refreshFee() },
                         controller: browser,
                         camera: camera,
                         onSelectTab: selectTab,
@@ -3118,7 +3119,8 @@ struct RootView: View {
                     onFeePick: { id in signing?.pickFee(id) },
                     onSpeed: { id in signing?.speed(id) },
                     onClose: { closeSigningSheet() },
-                    onExplorer: { openSigningExplorer() }
+                    onExplorer: { openSigningExplorer() },
+                    onRefreshFee: { signing?.refreshFee() }
                 )
                     .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])

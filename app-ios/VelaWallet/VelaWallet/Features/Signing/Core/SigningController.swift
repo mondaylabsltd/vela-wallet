@@ -363,12 +363,22 @@ final class SigningController {
     private let preferredTier: () -> String
     private let numberPreset: () -> String
 
-    private func requestQuote(chainId: Int) {
+    private func requestQuote(chainId: Int, attempt: UInt32 = 1) {
         guard !feeCalls.isEmpty else { return }
         Task { [weak self] in
             guard let self else { return }
             guard let deployed = await relay.isDeployed(chainId: chainId, address: wallet.address)
-            else { return }
+            else {
+                // The chain could not say: nothing was quoted, so nothing
+                // would ever ask again. Ask on the core's schedule for a quote
+                // that could not be had (spec 079), while the sheet waits.
+                guard let wait = feeRequoteDelayMs(failure: "quote_unavailable", attempt: attempt)
+                else { return }
+                try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
+                guard fees.view == nil, requoteAllowed else { return }
+                requestQuote(chainId: chainId, attempt: attempt + 1)
+                return
+            }
             // HOW FAST is the speed core's to say: the store asks at its tier.
             // WHICH COIN is the fee machine's until the person taps one (spec
             // 078): it pays in a coin that can, and the approve carries the
@@ -396,13 +406,22 @@ final class SigningController {
         fees.pickSpeed(tier)
     }
 
-    /// The refresh control: measure again, the held readings dropped first.
-    func refreshFee() { fees.refresh() }
+    /// The refresh control (spec 079 — it had no caller until then): measure
+    /// again, the held readings dropped first. A quote that never started
+    /// (the chain could not say whether the account is deployed) is started.
+    func refreshFee() {
+        guard fees.view != nil else {
+            if let request { requestQuote(chainId: request.chainId) }
+            return
+        }
+        fees.refresh()
+    }
 
     // MARK: - What the sheet does
 
     /// The slide fired.
     func approve() {
+        cancelRequote()
         trustedSignerNotice = nil
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
             fee: fee, clear: clear, guard: guardView
@@ -529,6 +548,7 @@ final class SigningController {
     }
 
     private func commitFee(_ view: FeeViewWire) {
+        scheduleRequote(view)
         // A quote goes stale while somebody reads. While the sheet is up and
         // nothing is signing, ask again — otherwise the slide shuts with no
         // way to reopen it, which is what Android's phase 5 watched happen.
@@ -539,6 +559,59 @@ final class SigningController {
         requoting = true
         fees.requote()
         Task { @MainActor [weak self] in self?.requoting = false }
+    }
+
+    // MARK: - Asking again (spec 079)
+
+    /// Automatic re-quotes made for the failure on screen; reset by a quote.
+    private var requoteAttempt: UInt32 = 0
+    private var requoteTask: Task<Void, Never>?
+
+    /// Whether a re-quote may still go out: the sheet is up, nothing is
+    /// signing or submitting, and the page has no answer yet.
+    private var requoteAllowed: Bool {
+        !answered && sign.surface == .sheet && !sign.isSigning && !sign.isSubmitting
+    }
+
+    /// A quote that failed for a reason that can pass (the relay unreachable,
+    /// a busy estimate) is asked again on the core's schedule — 3 s, 6 s,
+    /// 12 s, then every 15 s (`feeRequoteDelayMs`) — while the sheet is up and
+    /// nothing is signing. Android's pass: the row said "点击重试" with the
+    /// relay down and stayed that way after it came back.
+    private func scheduleRequote(_ view: FeeViewWire) {
+        guard view.failed != nil else {
+            requoteAttempt = 0
+            cancelRequote()
+            return
+        }
+        guard requoteTask == nil,
+              let wait = Self.requoteDelay(view, attempt: requoteAttempt + 1, allowed: requoteAllowed)
+        else { return }
+        requoteAttempt += 1
+        requoteTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
+            guard let self, !Task.isCancelled else { return }
+            requoteTask = nil
+            guard fee?.failed != nil, requoteAllowed else { return }
+            fees.refresh()
+        }
+    }
+
+    /// The wait before automatic re-quote `attempt` of the quote on screen,
+    /// or `nil` for none: no failure, one still being measured, a failure no
+    /// retry can fix (the core's schedule says so), or a sheet that can no
+    /// longer use a fee (approved, answered, closed).
+    static func requoteDelay(_ view: FeeViewWire, attempt: UInt32, allowed: Bool) -> UInt32? {
+        guard allowed, !view.busy, let failure = view.failed else { return nil }
+        return feeRequoteDelayMs(failure: failure, attempt: attempt)
+    }
+
+    /// A re-quote is scheduled (tests read it; the sheet does not).
+    var requotePending: Bool { requoteTask != nil }
+
+    private func cancelRequote() {
+        requoteTask?.cancel()
+        requoteTask = nil
     }
 
     private func recordLanded() {
@@ -558,6 +631,7 @@ final class SigningController {
 
     private func markAnswered() {
         answered = true
+        cancelRequote()
         if sign.surface == .hidden { closed = true }
     }
 

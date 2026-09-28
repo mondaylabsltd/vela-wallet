@@ -45,6 +45,8 @@ struct ExploreScreen: View {
     var onSigningDismissed: () -> Void = {}
     /// Spec 079: the landed receipt's "view on explorer".
     var onSigningExplorer: () -> Void = {}
+    /// Spec 079: the signing fee row's refresh.
+    var onRefreshFee: (() -> Void)?
     /// The live browser. `nil` is the gallery: every E-state still renders
     /// from fixtures, and a gallery that ran somebody else's JavaScript would
     /// not be a gallery.
@@ -328,7 +330,8 @@ struct ExploreScreen: View {
                     onFeePick: onFeePick,
                     onSpeed: onSpeed,
                     onClose: onSigningDismissed,
-                    onExplorer: onSigningExplorer
+                    onExplorer: onSigningExplorer,
+                    onRefreshFee: onRefreshFee
                 )
                     .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])

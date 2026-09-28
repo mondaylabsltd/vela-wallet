@@ -189,6 +189,13 @@ enum FeeModel {
     case hidden
 }
 
+/// Spec 079: the send form's refresh control on the signing sheet's fee row.
+struct FeeRefreshModel: Equatable {
+    let label: String
+    /// A measurement is out — the control is dimmed.
+    let refreshing: Bool
+}
+
 struct SigningModel {
     let id: SigningStateId
     let dapp: (name: String, host: String, letter: String, tint: Color)
@@ -228,4 +235,10 @@ struct SigningModel {
     var dappIconUrls: [String] = []
     /// The chain's logo; the dot shows until it lands, and when there is none.
     var networkLogoUrl: String?
+    /// Spec 079: the fee row's refresh (owner: "似乎没有刷新网络费的按钮呀");
+    /// `nil` where there is no network fee.
+    var feeRefresh: FeeRefreshModel?
+    /// The fee row's chevron: only where a tap opens a coin list. A failed
+    /// quote is still asked again by a tap, but the refresh control says so.
+    var feeChevron = true
 }

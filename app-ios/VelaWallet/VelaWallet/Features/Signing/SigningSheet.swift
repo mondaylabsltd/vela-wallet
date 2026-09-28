@@ -43,6 +43,8 @@ struct SigningSheet: View {
     var onClose: (() -> Void)?
     /// Spec 079: the landed receipt's "view on explorer".
     var onExplorer: () -> Void = {}
+    /// Spec 079: the fee row's refresh — measure again.
+    var onRefreshFee: (() -> Void)?
 
     @State private var techOverride: Bool?
 
@@ -99,7 +101,9 @@ struct SigningSheet: View {
         }
         if let fee = model.fee {
             SigningFeeView(fee: fee, onToggle: onFee, onPick: onFeePick,
-                           speed: model.feeSpeed, onSpeed: onSpeed)
+                           speed: model.feeSpeed, onSpeed: onSpeed,
+                           refresh: onRefreshFee == nil ? nil : model.feeRefresh,
+                           onRefresh: onRefreshFee, chevron: model.feeChevron)
         }
         SigningSignerRow(label: model.signer.label, name: model.signer.name,
                          seed: model.signer.seed)

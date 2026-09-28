@@ -260,6 +260,10 @@ enum SigningLive {
                 SendLive.speedModel($0, view: nil, display: context.display, loc: loc)
             }
         }
+        if !refused {
+            model.feeRefresh = feeRefresh(clear: clear, fee: fee, loc: loc)
+            model.feeChevron = (fee?.options.count ?? 0) > 1
+        }
         return model
     }
 
@@ -1020,12 +1024,31 @@ enum SigningLive {
         if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
             warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
+        } else if let failed = fee?.failed, recoverable(failed) {
+            // Spec 079: why there is no fee, and that it will be asked again
+            // (the row said "点击重试" with the relay down and stayed so).
+            warning = context.loc.t("componentsUi.funding.denialNetworkError")
         }
         // The same condition `SigningController.feeTapped` acts on, decided
         // once here so the chevron and the handler cannot disagree.
         let tappable = fee?.failed != nil || options.count > 1
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
                         selector: selector, warning: warning, tappable: tappable)
+    }
+
+    /// A fee failure a recovering network or relay can clear — the ones the
+    /// core re-quotes (`feeRequoteDelayMs`). A missing key or a broken
+    /// calculation is not the network's doing, and saying "check your
+    /// connection" about it would send somebody to fix the wrong thing.
+    static func recoverable(_ failure: String) -> Bool {
+        failure != "missing_public_key" && failure != "calculation_failed"
+    }
+
+    /// Spec 079: the fee row's refresh — the send form's own control, dimmed
+    /// while a measurement is out. None where there is no network fee.
+    static func feeRefresh(clear: ClearSigningViewWire, fee: FeeViewWire?, loc: Loc) -> FeeRefreshModel? {
+        guard !isOffChain(clear) else { return nil }
+        return FeeRefreshModel(label: loc.t("send.feeRefresh"), refreshing: fee?.busy ?? false)
     }
 
     /// The slide's verb: the core's intent id, **in the corpus's words**.
