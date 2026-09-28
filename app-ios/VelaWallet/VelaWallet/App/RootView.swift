@@ -934,6 +934,9 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 wallet.homePoller.sceneActive(phase == .active)
+                // A failed page retries by itself only while the app is in
+                // front (spec 079).
+                browser.appActive(phase == .active)
                 switch phase {
                 case .active: tracker.foregrounded()
                 case .background: tracker.backgrounded()

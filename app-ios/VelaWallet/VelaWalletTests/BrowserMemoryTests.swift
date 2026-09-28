@@ -197,40 +197,43 @@ struct BrowserMemoryTests {
         #expect(secure == secureLabel)
     }
 
-    /// **A page that cannot be reached says so** (058).
-    ///
-    /// Both failure callbacks used to set `loading = false` and nothing else,
-    /// so an unreachable dApp was a white rectangle under an empty address
-    /// bar. On the founder's iPhone that was `app.uniswap.org`, silent, for
-    /// sixty seconds. The reason is the SYSTEM's, verbatim: "the host could
-    /// not be found" and "the request timed out" are different problems and a
-    /// person debugging their own network needs the difference.
-    @Test func aFailedNavigationIsDescribedInTheSystemsOwnWords() {
-        let timedOut = NSError(
-            domain: NSURLErrorDomain, code: NSURLErrorTimedOut,
-            userInfo: [NSLocalizedDescriptionKey: "The request timed out."]
+    /// **A page that cannot be reached says so** (058) — and since 079 it
+    /// says WHY in the corpus's words, chosen by the core from the failure's
+    /// class, not the system's English sentence and a code. The engine's
+    /// transitions are in `BrowserLoadTests`; this pins the table it reads.
+    @Test func aFailedNavigationIsClassifiedByTheCore() {
+        let timedOut = browserLoadClassify(
+            platform: "apple", code: Int64(NSURLErrorTimedOut), domain: NSURLErrorDomain, certificate: false
         )
-        let described = BrowserEngine.describe(timedOut)
-        #expect(described.contains("timed out"))
-        // The code is carried too: it is what turns "it did not work" into
-        // something somebody can look up.
-        #expect(described.contains("\(NSURLErrorTimedOut)"))
+        #expect(timedOut?.class == "timeout")
+        #expect(timedOut?.reasonKey == "explore.loadOffline")
+        #expect(timedOut?.autoRetry == true)
+        let notFound = browserLoadClassify(
+            platform: "apple", code: Int64(NSURLErrorCannotFindHost), domain: NSURLErrorDomain, certificate: false
+        )
+        #expect(notFound?.reasonKey == "explore.loadNotFound")
+        #expect(notFound?.autoRetry == false, "a typo does not heal")
+        let certificate = browserLoadClassify(
+            platform: "apple", code: Int64(NSURLErrorServerCertificateUntrusted), domain: NSURLErrorDomain,
+            certificate: false
+        )
+        #expect(certificate?.reasonKey == "explore.loadCertificate")
+        #expect(certificate?.autoRetry == false, "a certificate failure is never retried")
     }
 
     /// **A cancelled navigation is not a failure.**
     ///
     /// Every redirect chain and every in-flight navigation a page replaces
     /// cancels the last one. Drawing "couldn't load" there would put an error
-    /// over a page that is loading perfectly well.
+    /// over a page that is loading perfectly well. WebKit's own "frame load
+    /// interrupted" is the same fact.
     @Test func aCancelledNavigationIsNotAFailure() {
-        let cancelled = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled,
-                                userInfo: [:])
-        #expect(BrowserEngine.describe(cancelled) == BrowserEngine.cancelled)
-
-        // And a non-URL error keeps whatever the system called it.
-        let other = NSError(domain: "vela.test", code: 7,
-                            userInfo: [NSLocalizedDescriptionKey: "something else"])
-        #expect(BrowserEngine.describe(other) == "something else")
+        #expect(browserLoadClassify(
+            platform: "apple", code: Int64(NSURLErrorCancelled), domain: NSURLErrorDomain, certificate: false
+        ) == nil)
+        #expect(browserLoadClassify(
+            platform: "apple", code: 102, domain: "WebKitErrorDomain", certificate: false
+        ) == nil)
     }
 
     /// A tab with no title is drawn with its host, never blank.

@@ -299,6 +299,31 @@ final class BrowserController {
     func goForward() { current?.goForward() }
     func reload() { current?.reload() }
 
+    // MARK: - What is on screen (spec 079)
+
+    /// Whether the browsing view is showing — a failed page retries by
+    /// itself only while it is the page in front, 探索 is on screen and the
+    /// app is active (FR-012).
+    private var browsingVisible = false
+    private var appActive = true
+
+    func browsingVisible(_ visible: Bool) {
+        browsingVisible = visible
+        syncOnScreen()
+    }
+
+    func appActive(_ active: Bool) {
+        appActive = active
+        for engine in engines.values { engine.setAppActive(active) }
+    }
+
+    private func syncOnScreen() {
+        for engine in engines.values {
+            let shown = browsingVisible && engine === current
+            if engine.onScreen != shown { engine.setOnScreen(shown) }
+        }
+    }
+
     /// The core's facts about the tab in front.
     var currentTab: DbrTabViewWire? { dbr.tab(explore.selectedTab) }
 
@@ -454,6 +479,7 @@ final class BrowserController {
             dbrCore.dispatch(CoreJSON.string(["type": "tab_closed", "tab": id]))
         }
 
+        defer { syncOnScreen() }
         guard let selected = view.selected, let url = selected.url, !url.isEmpty else {
             // No tab, or the start page's own tab: a tab with no site is not
             // a page.
@@ -472,6 +498,7 @@ final class BrowserController {
             return
         }
         let engine = makeEngine(id: selected.id)
+        engine.setAppActive(appActive)
         current = engine
         engine.load(url)
     }

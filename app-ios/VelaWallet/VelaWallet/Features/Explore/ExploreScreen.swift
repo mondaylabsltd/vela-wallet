@@ -173,11 +173,32 @@ struct ExploreScreen: View {
         )
     }
 
-    /// The load's progress, while there is one.
+    /// The load's progress, while there is one — from the moment a load is
+    /// asked for (spec 079), including the core round trip before a new
+    /// tab's engine exists.
     private var loadProgress: Double? {
-        guard let engine, let controller else { return nil }
+        guard let controller else { return nil }
+        guard let engine else { return BrowserEngine.requestedProgress }
         _ = controller.engineTick
         return engine.loading ? engine.progress : nil
+    }
+
+    /// The failure panel: the corpus's heading, the core's reason for the
+    /// class (unless it IS the heading — class `other`), the host, and a
+    /// Retry that keeps the panel up and says it is retrying.
+    private func failurePanel(reasonKey: String, engine: BrowserEngine) -> some View {
+        let title = loc.t("connect.browser.loadFailed")
+        let reason = loc.t(reasonKey)
+        _ = controller?.engineTick
+        return BrowserFailureView(
+            title: title,
+            reason: reason == title || reason == reasonKey ? nil : reason,
+            detail: BrowserEngine.hostOf(origin: ProviderBridge.origin(of: engine.failedURL.isEmpty ? engine.url : engine.failedURL)),
+            retry: loc.t("connect.browser.retry"),
+            retrying: engine.retrying,
+            retryingLabel: loc.t("explore.loadRetrying"),
+            onRetry: { engine.reload() }
+        )
     }
 
     /// A tile or a row was tapped.
@@ -477,11 +498,11 @@ struct ExploreScreen: View {
                 ZStack {
                     BrowserWebView(engine: engine)
                         .accessibilityIdentifier("explore.page")
-                    // A page that could not be reached SAYS SO. Before
-                    // 058 both failure callbacks set `loading = false` and
-                    // nothing else, so an unreachable dApp was a white
-                    // rectangle under an empty address bar — silence a
-                    // person can only read as "the app is broken".
+                    // A page that could not be reached SAYS SO — and why, in
+                    // the core's words for its class, and it stays up while a
+                    // retry runs (spec 079). Before 058 both failure callbacks
+                    // set `loading = false` and nothing else, so an unreachable
+                    // dApp was a white rectangle under an empty address bar.
                     if currentTab?.crashed == true {
                         BrowserCrashedView(
                             title: loc.t("explore.pageCrashedTitle"),
@@ -489,15 +510,17 @@ struct ExploreScreen: View {
                             reload: loc.t("explore.reload"),
                             onReload: { engine.reload() }
                         )
-                    } else if let failure = engine.failure {
-                        BrowserFailureView(
-                            title: loc.t("connect.browser.loadFailed"),
-                            detail: failure,
-                            retry: loc.t("connect.browser.retry"),
-                            onRetry: { engine.reload() }
-                        )
+                    } else if let reasonKey = engine.failureReasonKey {
+                        failurePanel(reasonKey: reasonKey, engine: engine)
                     }
                 }
+                .onAppear { controller?.browsingVisible(true) }
+                .onDisappear { controller?.browsingVisible(false) }
+            } else if controller != nil {
+                // The live browser between the address and its engine (one
+                // core round trip): the page's own background under the
+                // hairline — never the gallery's drawn page (spec 079 F3).
+                theme.bgBase.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     DemoPageView(page: model.browser.page) {
