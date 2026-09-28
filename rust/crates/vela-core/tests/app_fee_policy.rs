@@ -3788,3 +3788,42 @@ fn tempo_pays_in_a_held_stablecoin_when_the_default_is_not_held() {
     }
     assert!(view.confirm_fee_ready);
 }
+
+// ---------------------------------------------------------------------------
+// Spec 079 — a fee that failed for a reason that can pass is asked again
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_recoverable_quote_failure_is_asked_again_on_a_growing_wait() {
+    use vela_core::app::fee_policy::{requote_delay_ms, FeeFailure};
+    for failure in [
+        FeeFailure::QuoteUnavailable,
+        FeeFailure::FeeTokenUnavailable,
+        FeeFailure::EstimateFailed,
+        FeeFailure::GasQuoteTooHigh,
+    ] {
+        let schedule: Vec<_> = (1..=6)
+            .map(|attempt| requote_delay_ms(failure, attempt))
+            .collect();
+        assert_eq!(
+            schedule,
+            vec![
+                Some(3_000),
+                Some(6_000),
+                Some(12_000),
+                Some(15_000),
+                Some(15_000),
+                Some(15_000)
+            ],
+            "{failure:?}"
+        );
+    }
+}
+
+#[test]
+fn a_failure_no_retry_can_fix_is_never_asked_again() {
+    use vela_core::app::fee_policy::{requote_delay_ms, FeeFailure};
+    for failure in [FeeFailure::MissingPublicKey, FeeFailure::CalculationFailed] {
+        assert_eq!(requote_delay_ms(failure, 1), None, "{failure:?}");
+    }
+}
