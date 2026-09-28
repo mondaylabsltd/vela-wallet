@@ -73,8 +73,9 @@ the phone. Nine rulings below are theirs, given during the pass. Screenshots are
 
 ### The same findings on every client (owner, 2026-09-28: "这些问题在 iOS iphone chrome ext desktop 都可能存在，你需要验证，如果可以，最好统一修复，保持一致性")
 
-Code audit of each client at a2c46438 (file:line evidence in `research.md`), confirmed on the
-iPhone 11 by the 079 probe (`DappBrowserStabilityProbeTests`). ✗ = the defect is there, ✓ = already
+Code audit of each client at a2c46438 (file:line evidence in `research.md`). The iPhone probe
+(`DappBrowserStabilityProbeTests`) could not run before the fix (UI Automation was off), so the iOS
+column rests on the audit; the probe ran after the fix (T077). ✗ = the defect is there, ✓ = already
 right, — = the client has no such surface. The extension hosts no pages, so page-load rows do not apply.
 
 | # | Finding | Android | iOS | Desktop (macOS) | Extension |

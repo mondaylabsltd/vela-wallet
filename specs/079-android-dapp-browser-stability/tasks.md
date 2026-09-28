@@ -21,7 +21,7 @@ or gains a test"), and each client's mapping gets a unit test. Device checks are
 - [x] T001 Create worktree `vela-wallet-079` on branch `079-android-dapp-browser-stability` off main a2c46438; generate Kotlin bindings, arm64 `.so`, iOS xcframework (`rust/scripts/build-ios-xcframework.sh`, `check-ios-core-fresh.sh` ok)
 - [x] T002 [P] Add the fault proxy `scripts/device/chaos-proxy.py` (env `CHAOS_UPSTREAM`, `CHAOS_BIND`; cuts matching tunnels on a fault switch)
 - [x] T003 [P] Add the iOS probe `app-ios/VelaWallet/VelaWalletUITests/DappBrowserStabilityProbeTests.swift` and skip it by name in `app-ios/VelaWallet/VelaWallet.xcodeproj/xcshareddata/xcschemes/VelaWallet.xcscheme`
-- [ ] T004 Run the iOS probe on the iPhone once UI Automation is on (quickstart setup); store screenshots in `specs/079-android-dapp-browser-stability/evidence/ios-before/` and tick the iOS column of the spec's matrix against them
+- [ ] T004 Run the iOS probe on the iPhone once UI Automation is on (quickstart setup); store screenshots in `specs/079-android-dapp-browser-stability/evidence/ios-before/` and tick the iOS column of the spec's matrix against them — NOT RUN: UI Automation was off during the before-pass; the iOS column rests on the code audit, and the after-run is T077
 
 ---
 
@@ -86,7 +86,7 @@ or gains a test"), and each client's mapping gets a unit test. Device checks are
 - [x] T031 [P] [US2] iOS: refresh control in `I/Components/Signing/SigningFooter.swift` (`SigningFeeView`) calling the uncalled `refreshFee()` (`I/Features/Signing/Core/SigningController.swift:400`); reason line; re-quote timer
 - [X] T032 [P] [US2] Desktop: refresh icon in `D/signing/components.rs:809` row; reason instead of "—" (`D/flows/live.rs:1089-1090`); honour `stale` on this sheet; re-quote timer in `D/wallet/signing_host.rs` — done on 079-desktop
 - [x] T033 [P] [US2] Extension: refresh control + stale note in the signing fee row (`W/signing/live.ts:468-478`, reuse `W/flows/ui/FeeRow.svelte`'s control); re-quote with `fee_requote_delay_ms` over wasm
-- [ ] T034 [P] [US2] (Android, iOS and web done) Tests per client for the reason mapping and the timer stopping on approve (Android `AT/`, iOS `IT/`, desktop in-crate, web unit)
+- [X] T034 [P] [US2] (Android, iOS and web done) Tests per client for the reason mapping and the timer stopping on approve (Android `AT/`, iOS `IT/`, desktop in-crate, web unit) — done: Android `SigningReceiptTest` (mayRequote) + `SigningLiveTest` (reason), iOS `SigningFeeRetryTests`, desktop `the_requote_stops_where_it_must`, web unit
 
 **Checkpoint**: S7 fee appears ≤ 15 s after the relay returns, with no tap, on the Xiaomi and the iPhone.
 
@@ -143,7 +143,7 @@ resets its slide, and opens without the network after one visit.
 - [X] T056 [US7] Android: if the Custom Tab cannot open the page (no answer and the tab reports a navigation failure, or the person returns without a result), the waiting card shows `componentsUi.signing.signerUnreachable` + Retry (`A/feature/signing/trustedsigner/TrustedSignerTab.kt`, `TrustedSignerChannel.kt`), keeping the request open — done: on return with no answer the page's address is probed (HEAD, no fragment); unreachable → `componentsUi.signing.signerDown` + `connect.browser.retry`; the "签名中…" line is not drawn under the card. Xiaomi: T5 rows pass (evidence/android-after/t5-*.jpg)
 - [X] T057 [P] [US7] iOS: the same button in `I/Features/Signing/SigningSheet.swift:67` for the trusted-signer route (`I/Core/UserOpSpine.swift:475`); unreachable handling around `I/Features/Signing/TrustedSigner/TrustedSigner.swift:357` — done on `079-ios`: primary `componentsUi.signing.openSigner` button, `originSeenByBrowser`; the tab's own signals (`safariViewControllerDidFinish` + 1.2 s, `didCompleteInitialLoad(false)`) start a HEAD to the page's address (no fragment/query); unreachable → `componentsUi.signing.signerDown` + `connect.browser.retry`, no "签名中…" under the card
 - [X] T058 [P] [US7] Desktop: the same button in `D/wallet/page.rs:14593` for the trusted-signer route (`D/executor/send.rs:113,149`) — done on 079-desktop
-- [ ] T059 [US7] Owner step (outward-facing): deploy `TS/dist/` incl. `_headers` to sign.getvela.app; then verify headers with `curl -I https://sign.getvela.app/b/<hash>/sign`; the build to release is `e3ef90a6040fe896a34c6b32fcab232417bf1dd70e62d473c88a0bed7dc97d5f` (then `LAUNCH` = that hash)
+- [X] T059 [US7] Owner step (outward-facing): deploy `TS/dist/` incl. `_headers` to sign.getvela.app; then verify headers with `curl -I https://sign.getvela.app/b/<hash>/sign`; the build to release is `e3ef90a6040fe896a34c6b32fcab232417bf1dd70e62d473c88a0bed7dc97d5f` (then `LAUNCH` = that hash) — done: owner deployed; checked live (200, `immutable`, bytes hash to e3ef90a6…, listed in index.json); `LAUNCH` = e3ef90a6… in 6f8a2adb
 
 **Checkpoint**: T1–T3 on the Xiaomi with the owner's fingerprint; T4–T5 after T059.
 
@@ -154,7 +154,7 @@ resets its slide, and opens without the network after one visit.
 - [X] T060 [US4] Android: expose `RpcPool.view` to the browser (`A/VelaWalletApplication.kt` `browser` lazy) and show a one-line notice under the address bar in `A/feature/explore/ExploreScreen.kt` when the tab's chain (`DbrTabView`) ∈ `failed_chains` ∖ `rate_limited_chains`, with Retry (one `eth_blockNumber` through the pool) — done: `BrowserController.poolView` + `askChain`; `ExploreLive.chainUnreachable`; C1/C2 pass on the Xiaomi with `drop match=gnosischain` (evidence/android-after/t060-chain-down.jpg)
 - [x] T061 [P] [US4] iOS: the same from `pool.failedChains` (today only in `I/App/RootView.swift:2415`) into `I/Features/Explore/ExploreScreen.swift`
 - [X] T062 [P] [US4] Desktop: expose `failed_chains` from `D/executor/pool.rs:358` and draw the notice in `D/wallet/page.rs` — done on 079-desktop
-- [ ] T063 [P] [US4] Tests per client: shown for failed, hidden for rate-limited, cleared on the next answer
+- [X] T063 [P] [US4] Tests per client: shown for failed, hidden for rate-limited, cleared on the next answer — done: Android `ExploreLiveTest`, iOS `theChainNoticeShowsForAFailedChainOnly`, desktop `the_chain_notice_is_for_a_chain_that_is_down_not_throttled`; "cleared on the next answer" is the pool's own rule (core rpc_pool tests)
 
 ---
 
@@ -169,7 +169,7 @@ resets its slide, and opens without the network after one visit.
 - [x] T070 [US5] iOS consent approve word → `connect.browser.connect` (today "批准")
 - [X] T071 [P] [US5] Desktop: open-lock icon for http (`D/explore/components.rs:497-498`); icon-only connection panel (`D/wallet/page.rs:13699-13703,13791`); network rows logo + balance and the per-chain dot (fix `chain_ethereum()` at `page.rs:13732`); wire "switch account" (`page.rs:13836`); header host once (`D/signing/live.rs:1328-1329`); favicon avatars + `site_letter` (`D/explore/live.rs:152-154`) — done on 079-desktop
 - [x] T072 [P] [US5] Extension: header host once (`W/signing/live.ts:705,722-723`)
-- [ ] T073 [P] [US5] Tests per client: lock state per scheme, no visible safety text (UI string sweep), picker rows carry logo/balance/identicon, header dedupe
+- [X] T073 [P] [US5] Tests per client: lock state per scheme, no visible safety text (UI string sweep), picker rows carry logo/balance/identicon, header dedupe — done: Android `ExploreLiveTest` (lock, no words, picker rows) + `SigningReceiptTest` (host once), iOS `BrowserChromeTests`, desktop `the_lock_says_the_scheme_and_nothing_else` / `each_network_shows_what_the_account_holds_there`, web header dedupe
 
 ---
 
@@ -184,8 +184,8 @@ resets its slide, and opens without the network after one visit.
 
 - [ ] T076 Device pass Android (quickstart A–F) on the Xiaomi with the fault proxy; owner fingerprint for T1–T3 and one S4; restore `http_proxy :0`; evidence in `specs/079-android-dapp-browser-stability/evidence/android-after/`
 - [ ] T077 Device pass iOS (quickstart A–F) via the probe + Wi-Fi proxy; evidence in `evidence/ios-after/`
-- [ ] T078 Desktop pass (quickstart A, C, D) with screenshots at desktop and phone width (memory: look before done)
-- [ ] T079 Extension pass (quickstart C, D rows that apply) in the packaged extension
+- [X] T078 Desktop pass (quickstart A, C, D) with screenshots at desktop and phone width (memory: look before done) — done by running the app at 1280×800 (signing states, load watchdog + panel, network picker; `desk079/` screenshots); phone width is impossible (the window's minimum is 1280×800)
+- [X] T079 Extension pass (quickstart C, D rows that apply) in the packaged extension — done: packaged-extension e2e (Escape/scrim keep the request, ✕ → 4001) and web parallel-space e2e (status, never a dimmed slide; landing closes itself); the side-panel tick is not e2e-tested (helper broken on main too)
 - [X] T080 Gates: core (`cargo test --workspace`, clippy `-D warnings`, fmt on own files), Android JVM (`JAVA_HOME` = Android Studio JBR, `-Porg.gradle.java.installations.auto-detect=false`), iOS hermetic on a simulator clone, desktop `cargo test`, web unit + extension e2e, i18n parity, `build-web --check`, the parity rulers in `scripts/check-*.mjs` — done except the iOS device run (see results.md Gates)
 - [ ] T081 `specs/079-android-dapp-browser-stability/results.md`: per SC verdict with evidence, per-client matrix after the fix, what was not done and why; D2–D7 hand-off to the owner (relay Arbitrum not mining, dApp tx absent from Activity, fee overcharge, simulation warning, address case, history empty copy)
 - [X] T082 Memory: project note for 079 (rulings, core rules, device recipe incl. chaos proxy and the iOS UI Automation switch), update the Android/iOS device references — done: memory project_079_dapp_browser_stability
