@@ -7,8 +7,6 @@ import { describe, expect, it } from 'vitest';
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
-import type { FeedTxRecord } from '$lib/core/generated/FeedTxRecord';
-import type { FeedTxStatus } from '$lib/core/generated/FeedTxStatus';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
 import { buildDesktopFlowState, buildFlowState } from '$lib/flows/fixtures';
@@ -16,7 +14,6 @@ import { buildDesktopState } from './fixtures';
 import { balanceTokenId, withLiveWalletDesktop } from './live';
 import {
 	feedItemAt,
-	feedItemStatus,
 	findFeedItem,
 	liveTxDetail,
 	shownTxDetailStateDesktop,
@@ -62,7 +59,7 @@ function item(id: string, partial: Partial<FeedItem> = {}): FeedItem {
 		day_start_ms: 0,
 		tx_hash: '0x' + 'c3'.repeat(32),
 		batch: null,
-		kind: partial.direction === 'in' ? 'receive' : 'send',
+		kind: (partial.direction ?? 'in') === 'in' ? 'receive' : 'send',
 		status: 'confirmed',
 		site: null,
 		...partial
@@ -221,98 +218,63 @@ describe('liveTxDetail', () => {
  * chip on EVERY row; the record's own lifecycle was on the wire the whole
  * time, and the desktop shell has been reading it since it was wired.
  */
-describe('the status a transaction detail reports (issue 211)', () => {
+describe('the status a transaction detail reports (issue 211, spec 082 RG1)', () => {
 	const ctx = {
 		m: fm,
 		wm: m,
 		currency: USD,
 		hidden: false,
-		status: 'confirmed' as const,
 		identicon: IDENTICON
 	};
 
-	function record(id: string, status: FeedTxStatus): FeedTxRecord {
-		return {
-			id,
-			user_op_hash: '0xop',
-			tx_hash: '',
-			from: '0x' + 'a1'.repeat(20),
-			to: '0x' + 'b1'.repeat(20),
-			to_name: null,
-			value: '1.25',
-			symbol: 'ETH',
-			decimals: 18,
-			logo_urls: null,
-			chain_id: 1,
-			timestamp: 1_700_000_000,
-			day_start_ms: 0,
-			status,
-			kind: 'send',
-			usd: null,
-			dapp_origin: null
-		};
-	}
-
 	it('a submitted send that has not landed reads Pending, not Confirmed', () => {
-		const feed: FeedView = { ...FEED, transactions: [record('a', 'pending')] };
-		const detail = liveTxDetail(item('a'), { ...ctx, status: feedItemStatus(feed, item('a')) });
+		const detail = liveTxDetail(item('a', { status: 'pending' }), ctx);
 		expect(detail.status.text).toBe(fm['componentsTx.detail.statusPending']);
 		expect(detail.status.tone).toBe('info');
 	});
 
 	it('a definite refusal reads Failed', () => {
-		const feed: FeedView = { ...FEED, transactions: [record('a', 'failed')] };
-		expect(feedItemStatus(feed, item('a'))).toBe('failed');
-		const detail = liveTxDetail(item('a'), { ...ctx, status: 'failed' });
+		const detail = liveTxDetail(item('a', { status: 'failed' }), ctx);
 		expect(detail.status.text).toBe(fm['componentsTx.detail.statusFailed']);
 		expect(detail.status.tone).toBe('error');
 	});
 
 	it('a settled one still reads Confirmed', () => {
-		const feed: FeedView = { ...FEED, transactions: [record('a', 'confirmed')] };
-		expect(feedItemStatus(feed, item('a'))).toBe('confirmed');
 		expect(liveTxDetail(item('a'), ctx).status.text).toBe(
 			fm['componentsTx.receipt.statusConfirmed']
 		);
 	});
 
-	it("a folded batch row answers with the group's status, not a record id", () => {
-		// The repro was a split to two recipients: the row's id is the shared
-		// user_op_hash, so no record matches it and the lookup alone would
-		// report the settled reading forever.
+	it('the status is the core’s, not a lookup: a folded batch carries its own', () => {
+		// The row's id is the shared user_op_hash, which matches no record id;
+		// the core puts the group's status on the item itself.
 		const split = item('0xop', {
 			direction: 'out',
-			counterparty: null,
-			batch: {
-				kind: 'split',
-				count: 2,
-				total_usd: 0,
-				transfers: [],
-				ids: ['s1', 's2'],
-				from: '0x' + 'a1'.repeat(20),
-				chain_id: 137,
-				timestamp: 1_700_000_000,
-				status: 'pending',
-				tx_hash: '',
-				user_op_hash: '0xop',
-				symbol: 'pUSD',
-				logo_urls: null,
-				to: null,
-				to_name: null
-			}
+			kind: 'send',
+			status: 'pending',
+			counterparty: null
 		});
-		const feed: FeedView = {
-			...FEED,
-			transactions: [record('s1', 'pending'), record('s2', 'pending')]
-		};
-		expect(feedItemStatus(feed, split)).toBe('pending');
+		expect(liveTxDetail(split, ctx).status.text).toBe(fm['componentsTx.detail.statusPending']);
 	});
 
-	it('a row with no local record keeps the settled reading', () => {
-		// An incoming transfer the chain already carries has no lifecycle of
-		// its own to report.
-		expect(feedItemStatus(FEED, item('a'))).toBe('confirmed');
-		expect(feedItemStatus(FEED, undefined)).toBe('confirmed');
+	it('a dApp transaction is titled as one and names the site that asked (RG2)', () => {
+		const dapp = item('d', {
+			direction: 'out',
+			kind: 'dapp_tx',
+			status: 'pending',
+			site: '127.0.0.1:8137',
+			value: null,
+			symbol: '',
+			tx_hash: null
+		});
+		const detail = liveTxDetail(dapp, ctx);
+		expect(detail.title).toBe(fm['history.txLabelDappTx']);
+		expect(detail.facts).toContainEqual({
+			label: fm['componentsUi.signing.siweOrigin'],
+			value: '127.0.0.1:8137'
+		});
+		expect(detail.status.text).toBe(fm['componentsTx.detail.statusPending']);
+		expect(detail.explorerUrl).toBeUndefined();
 	});
 });
 

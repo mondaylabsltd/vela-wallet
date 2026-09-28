@@ -35,6 +35,14 @@ export interface WalletMessages {
 		fromName: string;
 		emptyTitle: string;
 		emptyCaption: string;
+		/**
+		 * Spec 082 RG2: a row the tracker has not closed says so first —
+		 * "Pending · <site>" / "Failed · <site>".
+		 */
+		pending: string;
+		failed: string;
+		/** Spec 082 RG5: the home's empty line under a chain filter (`home_empty_key`). */
+		emptyTitleNetwork: string;
 	};
 	assets: {
 		emptyTitle: string;
@@ -135,7 +143,10 @@ export const WALLET_KEYS = [
 	'history.toName',
 	'history.fromName',
 	'home.emptyNoActivity',
+	'home.emptyNoActivityNetwork',
 	'home.emptySubtitle',
+	'componentsTx.detail.statusPending',
+	'componentsTx.detail.statusFailed',
 	'assets.emptyTitle',
 	'assets.emptySubtext',
 	'assets.rpcUnavailableSingle',

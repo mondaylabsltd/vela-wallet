@@ -44,31 +44,6 @@ export function findFeedItem(
 }
 
 /**
- * What actually happened to the record behind a feed row (issue 211).
- *
- * The feed is NOT settled history: a send is written the moment it is
- * submitted and stays `pending` until the tracker resolves it, and a definite
- * refusal or revert makes it `failed`. This screen used to stamp every row
- * `Confirmed`, so a send that never landed — one paying its gas in a coin the
- * account did not hold — was reported as money that had moved.
- *
- * A folded batch row carries the group's own status (its `id` is the shared
- * `user_op_hash`, which matches no record id); every other row is one record.
- * An id that resolves to nothing keeps the settled reading: rows that are not
- * local records at all (an incoming transfer the chain already carries) have
- * no lifecycle to report.
- */
-export function feedItemStatus(
-	feed: FeedView | null | undefined,
-	item: FeedItem | undefined
-): FeedTxStatus {
-	if (item === undefined) return 'confirmed';
-	if (item.batch !== null) return item.batch.status;
-	const record = feed?.transactions.find((tx) => tx.id === item.id);
-	return record?.status ?? 'confirmed';
-}
-
-/**
  * The item at a (group, row) position — the history screen's own way of
  * naming a tap. The feed is walked exactly as `liveActivityGroups` groups it:
  * a header opens a group, an item before any header opens an unlabelled one.
@@ -124,11 +99,6 @@ export interface TxDetailContext {
 	wm: WalletMessages;
 	currency: CurrencyView;
 	hidden: boolean;
-	/**
-	 * The record's lifecycle, from `feedItemStatus`. Required, not defaulted:
-	 * the chip that lies is the one nobody had to think about (issue 211).
-	 */
-	status: FeedTxStatus;
 	identicon: (seed: string) => string;
 	now?: number;
 }
@@ -157,8 +127,12 @@ function whenMs(item: FeedItem): number {
 
 /** One feed item as the A2 / DA2 detail. */
 export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailModel {
-	const { m, wm, currency, hidden, status } = ctx;
-	const received = item.direction === 'in';
+	const { m, wm, currency, hidden } = ctx;
+	// Spec 082 RG1: the record's lifecycle and what it is are the core's
+	// (`FeedItem.status`, `.kind`); a folded batch carries its first line's.
+	const status = item.status;
+	const received = item.kind === 'receive';
+	const dappTx = item.kind === 'dapp_tx';
 	const chain = chainMeta(item.chain_id);
 	const facts: FactRowModel[] = [];
 
@@ -175,6 +149,11 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 			copy: m['componentsUi.identiconViewer.copyAddress'],
 			copyValue: item.counterparty
 		});
+	}
+
+	// RG2: who asked for a dApp's transaction — the site, as the browser named it.
+	if (dappTx && item.site !== null) {
+		facts.push({ label: m['componentsUi.signing.siweOrigin'], value: item.site });
 	}
 
 	facts.push(
@@ -242,15 +221,22 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 	return {
 		breakdownTitle,
 		breakdown: parts.length > 0 ? parts : undefined,
-		title: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
-			symbol: item.symbol
-		}),
+		title: dappTx
+			? m['history.txLabelDappTx']
+			: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
+					symbol: item.symbol
+				}),
 		// The record's own lifecycle — never the confirmed chip by default
 		// (issue 211). The desktop shell has read this since it was wired;
 		// this one stamped "Confirmed" on a send that never left the wallet.
 		status: statusChip(status, m),
 		closeLabel: m['componentsUi.identiconViewer.close'],
-		amount: hidden ? MASK : `${received ? '+' : '−'}${amount}${item.symbol}`,
+		// A dApp call that moved no coin has no amount to state (RG2).
+		amount: hidden
+			? MASK
+			: item.value === null && dappTx
+				? ''
+				: `${received ? '+' : '−'}${amount}${item.symbol}`,
 		fiat: hidden ? MASK : `≈ ${moneyText(item.usd_value, currency)}`,
 		positive: received,
 		facts,

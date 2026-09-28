@@ -26,7 +26,7 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		day_start_ms: 0,
 		tx_hash: '0xabc',
 		batch: null,
-		kind: partial.direction === 'in' ? 'receive' : 'send',
+		kind: (partial.direction ?? 'in') === 'in' ? 'receive' : 'send',
 		status: 'confirmed',
 		site: null,
 		...partial
@@ -104,6 +104,63 @@ describe('liveActivityRow', () => {
 			false
 		);
 		expect(row.amount).toBe('3');
+	});
+
+	/** Spec 082 RG1–RG4: what the row is and where it stands are the core's. */
+	it('a dApp transaction is titled as one and names its site — never guessed from a direction', () => {
+		const row = liveActivityRow(
+			item({
+				id: 'e',
+				direction: 'out',
+				kind: 'dapp_tx',
+				status: 'confirmed',
+				site: 'app.uniswap.org',
+				value: null,
+				symbol: ''
+			}),
+			m,
+			false
+		);
+		expect(row).toMatchObject({
+			kind: 'dapp',
+			title: m.activity.dapp,
+			subtitle: 'app.uniswap.org'
+		});
+		expect(row.amount).toBe('');
+	});
+
+	it('a row the tracker has not closed says so first: Pending · <site>, Failed · <site>', () => {
+		const pending = liveActivityRow(
+			item({
+				id: 'f',
+				direction: 'out',
+				kind: 'dapp_tx',
+				status: 'pending',
+				site: '127.0.0.1:8137'
+			}),
+			m,
+			false
+		);
+		expect(pending.subtitle).toBe(`${m.activity.pending} · 127.0.0.1:8137`);
+		const failed = liveActivityRow(
+			item({ id: 'g', direction: 'out', kind: 'send', status: 'failed', alias: 'Bob' }),
+			m,
+			false
+		);
+		expect(failed.subtitle).toBe(
+			`${m.activity.failed} · ${m.activity.toName.replace('{{name}}', 'Bob')}`
+		);
+	});
+
+	it('a may-have-been-sent op is a Pending dApp row under its local hash (RG4)', () => {
+		const LOCAL = '0x' + 'ab'.repeat(32);
+		const row = liveActivityRow(
+			item({ id: LOCAL, direction: 'out', kind: 'dapp_tx', status: 'pending', site: 'a.example' }),
+			m,
+			false
+		);
+		expect(row.id).toBe(LOCAL);
+		expect(row.subtitle.startsWith(m.activity.pending)).toBe(true);
 	});
 });
 

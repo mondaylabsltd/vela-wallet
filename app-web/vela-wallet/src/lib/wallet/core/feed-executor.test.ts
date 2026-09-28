@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import type { FeedEffect } from './feed-types';
+import type { FeedView } from '$lib/core/generated/FeedView';
 
 const kv = new Map<string, string>();
 vi.mock('$lib/services/storage', () => ({
@@ -146,5 +147,82 @@ describe('the failure twin', () => {
 		expect(
 			executor.toFailure(effect({ type: 'timer', ms: 1, generation: 4 }), new Error('x'))
 		).toEqual({ type: 'toast_expired', generation: 4 });
+	});
+});
+
+/**
+ * Spec 082 RG1–RG4: a dApp's transaction is a row of its own, from the stored
+ * record — its site from `dappOrigin`, its status the record's — and a write
+ * shows within one poke (`reconcile_completed`), not the next 10–30 s tick.
+ */
+describe('a dApp transaction in Activity', () => {
+	const LOCAL_HASH = '0x' + 'ab'.repeat(32);
+	const DAPP: LocalTransaction = {
+		id: `dapp-${LOCAL_HASH}`,
+		userOpHash: LOCAL_HASH,
+		txHash: '',
+		from: ME,
+		to: OTHER,
+		value: '0x0',
+		symbol: 'xDAI',
+		decimals: 18,
+		chainId: 100,
+		timestamp: 1_700_000_000,
+		status: 'pending',
+		type: 'dapp_tx',
+		dappOrigin: 'http://127.0.0.1:8137',
+		maybeSent: true
+	};
+
+	it('maps the stored site for the core', () => {
+		expect(toFeedRecord(DAPP)).toMatchObject({
+			kind: 'dapp_tx',
+			status: 'pending',
+			dapp_origin: 'http://127.0.0.1:8137'
+		});
+		expect(toFeedRecord(RECEIVED)?.dapp_origin).toBeNull();
+	});
+
+	it('a may-have-been-sent op is a Pending row under its local hash, one poke after the write', async () => {
+		await import('$lib/i18n/wasm-init.server');
+		const { ActivityFeedCore } = await import('$lib/core/client');
+		const core = new ActivityFeedCore();
+		type Result = {
+			view: FeedView;
+			effects: { id: number; operation: { type: string; read_id?: number } }[];
+		};
+		const dispatch = (event: unknown) => JSON.parse(core.dispatch(JSON.stringify(event))) as Result;
+		const resolve = (id: number, result: unknown) =>
+			JSON.parse(core.resolve_effect(BigInt(id), JSON.stringify(result))) as Result;
+		const readOf = (result: Result) =>
+			result.effects.find((e) => e.operation.type === 'read_tx_store');
+		const answer = (effect: NonNullable<ReturnType<typeof readOf>>, rows: LocalTransaction[]) =>
+			resolve(effect.id, {
+				type: 'store_loaded',
+				records: rows.map(toFeedRecord).filter((r) => r !== null),
+				now_ms: 1_700_000_100_000,
+				read_id: effect.operation.read_id
+			});
+		try {
+			const first = readOf(dispatch({ type: 'account_switched', address: ME }));
+			expect(first).toBeDefined();
+			const empty = answer(first!, []);
+			expect(empty.view.rows.filter((r) => r.type === 'item')).toHaveLength(0);
+
+			// The record is written; the executor pokes the feed once.
+			const poke = readOf(dispatch({ type: 'reconcile_completed', resolved_count: 1 }));
+			expect(poke).toBeDefined();
+			const after = answer(poke!, [DAPP]);
+			const items = after.view.rows.flatMap((r) => (r.type === 'item' ? [r.item] : []));
+			expect(items).toHaveLength(1);
+			expect(items[0]).toMatchObject({
+				id: DAPP.id,
+				kind: 'dapp_tx',
+				status: 'pending',
+				site: '127.0.0.1:8137'
+			});
+		} finally {
+			core.free();
+		}
 	});
 });

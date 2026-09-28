@@ -427,17 +427,29 @@ export function liveActivityRow(
 	m: WalletMessages,
 	hidden: boolean
 ): ActivityRowModel {
-	const received = item.direction === 'in';
-	const kind: ActivityRowModel['kind'] = received
-		? 'received'
-		: item.direction === 'out'
-			? 'sent'
-			: 'dapp';
+	// Spec 082 RG1: what the row IS, and where it stands, are the core's
+	// (`FeedItem.kind`, `.status`) — never guessed from a direction or looked up
+	// in the store here.
+	const kind: ActivityRowModel['kind'] =
+		item.kind === 'receive' ? 'received' : item.kind === 'dapp_tx' ? 'dapp' : 'sent';
+	const received = kind === 'received';
 	const who = item.alias ?? (item.counterparty !== null ? shortenAddress(item.counterparty) : null);
+	// RG2: a dApp row names the site that asked, verbatim; else who it went
+	// to; else the chain.
+	const base =
+		kind === 'dapp'
+			? (item.site ?? who ?? chainName(item.chain_id))
+			: who === null
+				? chainName(item.chain_id)
+				: fill(received ? m.activity.fromName : m.activity.toName, { name: who });
+	// A row the tracker has not closed says so first (RG2, RG4): a may-have-
+	// been-sent op reads "Pending · <site>" until the tracker patches it.
 	const subtitle =
-		who === null
-			? chainName(item.chain_id)
-			: fill(received ? m.activity.fromName : m.activity.toName, { name: who });
+		item.status === 'pending'
+			? `${m.activity.pending} · ${base}`
+			: item.status === 'failed'
+				? `${m.activity.failed} · ${base}`
+				: base;
 	const amount =
 		item.value === null
 			? String(item.batch?.count ?? '')
@@ -600,7 +612,16 @@ function liveSections(inputs: WalletLiveInputs) {
 				: assetsMode(view),
 		assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
 		activityMode: activityMode(view, feed),
-		activityGroups: feed ? liveActivityGroups(feed, m, view.hidden) : []
+		activityGroups: feed ? liveActivityGroups(feed, m, view.hidden) : [],
+		// Spec 082 RG5: which empty line the home says is the core's
+		// (`FeedView.home_empty_key`) — "no activity" or "none on this network".
+		activityEmpty: {
+			title:
+				inputs.feed?.home_empty_key === 'home.emptyNoActivityNetwork'
+					? m.activity.emptyTitleNetwork
+					: m.activity.emptyTitle,
+			caption: m.activity.emptyCaption
+		}
 	};
 }
 
@@ -612,7 +633,11 @@ export function withLiveWallet(model: WalletHomeModel, inputs: WalletLiveInputs)
 		balance: live.balance,
 		assetsSection: { ...model.assetsSection, mode: live.assetsMode },
 		assetRows: live.assetRows,
-		activitySection: { ...model.activitySection, mode: live.activityMode },
+		activitySection: {
+			...model.activitySection,
+			mode: live.activityMode,
+			empty: live.activityEmpty
+		},
 		activityGroups: live.activityGroups
 	};
 }
@@ -637,7 +662,11 @@ export function withLiveWalletDesktop(
 		balance: live.balance,
 		assetsSection: { ...model.assetsSection, mode: live.assetsMode },
 		assetRows: live.assetRows,
-		activitySection: { ...model.activitySection, mode: live.activityMode },
+		activitySection: {
+			...model.activitySection,
+			mode: live.activityMode,
+			empty: live.activityEmpty
+		},
 		activityGroups: live.activityGroups,
 		// The third column is the model's to open on a live page: a tapped row
 		// puts its token here, and closing the column takes it away again.

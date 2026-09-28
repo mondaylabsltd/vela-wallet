@@ -55,11 +55,15 @@ export const WALLET_FLOW_KEYS = [
 	// -------------------------------------------------------------- activity
 	'history.navTitle',
 	'history.loadingText',
+	'history.emptyTitle',
 	'history.emptyFilter',
 	'history.labelSent',
 	'history.labelReceived',
 	'history.txLabelSent',
 	'history.txLabelReceived',
+	// Spec 082 RG2: a dApp's transaction, and the site that asked for it.
+	'history.txLabelDappTx',
+	'componentsUi.signing.siweOrigin',
 	'history.deleteRecord',
 	'history.toName',
 	'history.fromName',

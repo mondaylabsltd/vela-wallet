@@ -141,7 +141,10 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			toName: k('history.toName'),
 			fromName: k('history.fromName'),
 			emptyTitle: k('home.emptyNoActivity'),
-			emptyCaption: k('home.emptySubtitle')
+			emptyCaption: k('home.emptySubtitle'),
+			pending: k('componentsTx.detail.statusPending'),
+			failed: k('componentsTx.detail.statusFailed'),
+			emptyTitleNetwork: k('home.emptyNoActivityNetwork')
 		},
 		assets: {
 			emptyTitle: k('assets.emptyTitle'),

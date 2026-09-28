@@ -6,6 +6,9 @@
 	import AssetDetailPanel from './ui/AssetDetailPanel.svelte';
 	import AssetRow from './ui/AssetRow.svelte';
 	import BalanceDisplay from './ui/BalanceDisplay.svelte';
+	import EmptyState from './ui/EmptyState.svelte';
+	import SkeletonRow from './ui/SkeletonRow.svelte';
+	import { UTILITY_ICONS } from './icons';
 	import ReceivePanel from './ui/ReceivePanel.svelte';
 	import SectionHeader from './ui/SectionHeader.svelte';
 	import Sidebar from './ui/Sidebar.svelte';
@@ -111,22 +114,36 @@
 					action={model.activitySection.action}
 					onaction={() => onflow?.('activity')}
 				/>
-				{#each model.activityGroups as group (group.label)}
-					<p class="day">{group.label}</p>
-					<ul>
-						{#each group.rows as row, i (i)}
-							<li>
-								<ActivityRow
-									{row}
-									onclick={() => {
-										onactivity?.(row);
-										onflow?.('tx-detail');
-									}}
-								/>
-							</li>
-						{/each}
-					</ul>
-				{/each}
+				<!-- Spec 082 RB13 (G1): the section's mode, drawn as the narrow home
+				     draws it — a skeleton while the first read is out, the empty
+				     state once the core has looked. -->
+				{#if model.activitySection.mode === 'loading'}
+					<SkeletonRow />
+					<SkeletonRow />
+				{:else if model.activitySection.mode === 'empty' && model.activitySection.empty !== undefined}
+					<EmptyState
+						icon={UTILITY_ICONS.inbox}
+						title={model.activitySection.empty.title}
+						caption={model.activitySection.empty.caption}
+					/>
+				{:else}
+					{#each model.activityGroups as group (group.label)}
+						<p class="day">{group.label}</p>
+						<ul>
+							{#each group.rows as row, i (i)}
+								<li>
+									<ActivityRow
+										{row}
+										onclick={() => {
+											onactivity?.(row);
+											onflow?.('tx-detail');
+										}}
+									/>
+								</li>
+							{/each}
+						</ul>
+					{/each}
+				{/if}
 
 				<!-- The desktop's assets action reads 添加, so it opens the add-token
 			     panel stacked on the assets one — which is what makes the back
@@ -136,16 +153,28 @@
 					action={model.assetsSection.action}
 					onaction={() => onflow?.('add-token')}
 				/>
-				<ul>
-					{#each model.assetRows as row, i (i)}
-						<li>
-							<AssetRow
-								{row}
-								onclick={() => (onasset === undefined ? (panel = 'asset-detail') : onasset(row))}
-							/>
-						</li>
-					{/each}
-				</ul>
+				{#if model.assetsSection.mode === 'loading'}
+					<SkeletonRow />
+					<SkeletonRow />
+					<SkeletonRow />
+				{:else if model.assetsSection.mode === 'empty' && model.assetsSection.empty !== undefined}
+					<EmptyState
+						icon={UTILITY_ICONS.wallet}
+						title={model.assetsSection.empty.title}
+						caption={model.assetsSection.empty.caption}
+					/>
+				{:else}
+					<ul>
+						{#each model.assetRows as row, i (i)}
+							<li>
+								<AssetRow
+									{row}
+									onclick={() => (onasset === undefined ? (panel = 'asset-detail') : onasset(row))}
+								/>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			</div>
 		</div>
 	</main>
