@@ -4,6 +4,11 @@
 `24578479`, installed with the real installer into `C:\Program Files\Vela Wallet` and exercised with the
 owner's own account and iPhone. Before/after images: `evidence/` and `evidence/after/`.
 
+**Second pass, 2026-09-29** — the owner's question "does a Uniswap swap really work on Windows?" (ETH → USDC
+had worked, USDC → ETH had not, and the feedback was slow and poor), then the hand-off items H1–H9. All of
+it merged as `ffc9ac9f` and re-run on Base with the parallel-space build: max USDC → ETH, ETH → USDC and
+0.1 USDC → ETH all landed. See "Uniswap on Base" below.
+
 ## Success criteria
 
 | SC | Verdict | Evidence |
@@ -15,7 +20,7 @@ owner's own account and iPhone. Before/after images: `evidence/` and `evidence/a
 | SC-005 renderer crash → Vela panel, Reload restores | **Pass.** Killed renderer process → "此页面已停止运行"; 重新加载 restored the page | `after/us3-renderer-crash-panel.jpg` |
 | SC-006 `target=_blank` / `window.open` → new tab | **Pass** for a person's tap (new selected tab, Back disabled on it); script-initiated popups and `location='mailto:'` refused; a tapped `mailto:` handed to Windows once, escaped, no "选取应用" | `after/w6-new-window-is-a-tab.jpg` |
 | SC-007 a native-coin send reads as a transfer | **Desktop pass** ("发送 0.001 xDAI · 接收方"). Web still draws its blind branch — hand-off H3 | `after/w10-plain-transfer-reads-as-send.jpg` |
-| SC-008 no regression | **Pass.** Desktop suite 718 passed / 0 failed; core `app_browser_load` 15, `app_sign_request` 58, `app_dapp_browser` 62, `app_self_call_guard` 14, `app_clear_signing` 74, `cable::` 38; rustfmt clean. Happy path on Windows: connect, sign, EIP-1271 verify, switch chain, a dust send landed (`0xe2e2527a…`) | — |
+| SC-008 no regression | **Pass.** 2026-09-29 on `ffc9ac9f`: desktop 779 passed / 0 failed, core (`crux,bindings,i18n-all`) 1896 / 0, web unit 1647 passed (4 fail on this Windows checkout only: CRLF line endings and an unbuilt extension — they fail the same way on the E2 branch). 2026-09-28: desktop suite 718 passed / 0 failed; core `app_browser_load` 15, `app_sign_request` 58, `app_dapp_browser` 62, `app_self_call_guard` 14, `app_clear_signing` 74, `cable::` 38; rustfmt clean. Happy path on Windows: connect, sign, EIP-1271 verify, switch chain, a dust send landed (`0xe2e2527a…`) | — |
 
 ## What was found and fixed
 
@@ -38,66 +43,89 @@ Every group was implemented, adversarially reviewed and fixed until a verifier r
 The reviewer's risk that `Page.resetNavigationHistory` could crash WebView2 during a pending reload
 was tested: 5/5 races answered "History cannot be pruned" (-32000), no crash.
 
+## Uniswap on Base (2026-09-28/29)
+
+Traced with the parallel-space account (MultiTest `0x88cC…6894`) on Base, where Uniswap runs the classic
+path on the desktop: `wallet_getCapabilities` answers 4200, so it is Permit2 approve, a `PermitSingle`
+typed-data signature, then Universal Router `execute`.
+
+| # | What the person saw | Cause | Fix |
+|---|---|---|---|
+| U1 | **Max** USDC → ETH: 无法连接 Vela 服务 — 请检查网络, retried forever, slide shut, the fee row's ">" dead | the fee coin was auto-picked as USDC; the fee leg runs after the swap, which had taken every USDC; the relay's "simulation failed" was drawn as an outage | the fee pays from what the operation LEAVES (the column's simulation feeds the fee machine); a relay refusal is "would fail", not the network; the coin list opens over a failed quote — 380d9014, 5825e443 |
+| U2 | (S2) a swap that reverted inside the op was answered as done | the receipt's `success` was dropped; the bundle tx's status is 0x1 either way | one error to the page, the record failed, the send receipt's failure in the column — ddb52da8 |
+| U3 | (S3) after 90 s Uniswap got the userOpHash and waited on "pending" forever | no node knows an op hash | the page waits on an outcome (up to 10 min, the tracker's slow line), then gets "not confirmed yet", never the op hash — ddb52da8 |
+| U4 | (S3b) Uniswap called a swap done when only its approval had landed | a relay "already pending" answer handed back the OTHER op's hash | wait for that op, then send this one; never another op's hash — ddb52da8 |
+| U5 | (review) another account's Safe failure in the same bundle would have failed our swap | the receipt's logs are the whole bundle's | only the op's own execution logs count, in the core, for the tracker and the page alike — 2448738a |
+| U6 | (review) a reverted swap first read "couldn't be submitted — your funds are safe" | the generic sentence until the tracker caught up | the send receipt's revert at once: sentence, hash, explorer — 2448738a |
+| U7 | the swap was nowhere in 活动 | the feed kept only sends and receives | H2 — 43fd67a4, ff660c2d |
+| U8 | fee ≈ $0.08–0.10 on a sub-dollar swap | measured 14.2× the chain cost: ×3 markup (`INBAND_MARKUP`), ×3.02 priced on padded limits not gas used, ×1.57 the default *fast* tier; conversion and L1 fee are fine | README corrected (ffc9ac9f); pricing is the owner's decision (below) |
+
+Device re-run on `ffc9ac9f` (2026-09-29, Base):
+
+| Swap | Vela | On chain |
+|---|---|---|
+| **Max** 0.271741 USDC → ETH | fee auto-picked in **ETH** (0.000031 ETH ≈ $0.08), no network sentence, slide live at 9 s; a manual refresh kept ETH; 准备 2 s → 已提交 10 s → **已确认 16 s** with the tx hash | `0x01a5b41f…79d831bd`: status 1, `UserOperationEvent.success` 1, 0.271741 USDC out, ETH in |
+| 0.0001 ETH → USDC | Uniswap's own "low native balance" caution first; sheet ready 8 s; **已确认 18 s** | `0xfdc8a557…19a1dd20`, +0.269487 USDC |
+| 0.1 USDC → ETH | fee stays **USDC** (0.084558) — 0.17 USDC is left after the swap, so the usual order stands; landed at ~15 s, Uniswap's toast 已兑换 0.100 USDC | `0xbba4aa9f…01e96b1`: status 1, success 1, 0.1 USDC to the pool, 0.084558 USDC fee |
+
+Uniswap listed each as confirmed on its own node — the hash Vela answered is the transaction's. In 活动 all
+three are rows under app.uniswap.org; see F1 below for what those rows still did not say.
+
+Found on this run and fixed (F1–F3, see below): a dApp row said 合约交互 with no amount although the sheet
+had shown 余额变化; the detail's hash ran off the panel; the Universal Router was labelled 接收方.
+Not fixed: the sheet's headline for `execute` is the English function name ("Execute") from the selector
+database — the Universal Router has no clear-signing descriptor yet (it would read "兑换 0.1 USDC → ETH").
+
 ## Owner decisions (2026-09-28)
 
 D1 Esc never answers a pending request — done. D2 region hole — experiment passed, done. D3 per-host
 route — done. D4 consent shows account + network — done. D5 (per-user installer) — not asked;
 "Install for me only" is offered (H9); moving existing per-machine installs is still open.
 
+**Open for the owner (2026-09-29):**
+
+1. **Fee pricing** (U8). Price on simulated gas instead of the padded limits (≈30% lower, still funds
+   the relay: 3 × R / (1.4 × cap) ≈ 1.39× the priced gas); default speed *standard* on chains whose
+   base fee sits at its floor, e.g. Base (34–45% lower); the ×3 markup itself (also the only buffer
+   against gas drift). A 0.1 USDC swap paid a 0.085 USDC fee.
+2. **H4, what a dApp sees**: a phone that never connected now leaves the request open under 重试 / 关闭
+   (before: an immediate -32603).
+3. **H6 desktop-first**: hedged reads ship in the desktop pool (macOS and Linux too); web, iOS and
+   Android still wait one endpoint's 8 s.
+4. **i18n budget**: "would fail" reuses the first clause of an existing sentence; a sentence of its own
+   needs the residency budget raised.
+5. **D5**: move the per-machine install to per-user (one administrator uninstall, then `/CURRENTUSER`).
+6. **H4 remainder**: retrying a relay failure after the transaction was signed could sign the same
+   nonce twice — decide before it is offered.
+
 ## Where the clients differ after 083
 
 - Core change reaching every client: a request whose sheet was dismissed and whose passkey was then
   cancelled now gets one 4001 (before: no answer). Android, iOS and web (`assets/wasm` next build).
+- Core changes every client gets with its next core build: an op fails only on its OWN execution logs
+  (U5); dApp transactions are Activity rows (H2); the fee machine weighs what an operation leaves (U1)
+  — but only shells that report balance changes and relay refusals get U1 (the desktop today).
+- **Follow-up for web, iOS and Android**: they still answer a reverted op as success, the op hash after
+  120 s, and a pending op's hash (S2/S3/S3b) — adopt `Reverted` / `NotConfirmed` / `existing_op`; hedge
+  reads in their pool drivers (H6); Android and iOS map `dappOrigin` / `intent` into their feed rows (H2;
+  the web does).
 - macOS gets: the address-bar fix, the signing-column close rule and QR card, Esc, preparing label,
   consent rows, back/forward state, no downloads, `mailto:`/`tel:` refused (no gesture flag there).
   macOS keeps hiding the page under menus, and has no WebView2 events.
 
-## Not done, and why — hand-off
+## Hand-off items H1–H9 (2026-09-29)
 
-- **H1** W16 sign-in sheet copy ("扫码，用附近设备创建"; "Touch ID 或 Windows Hello" on Windows).
-- **H2** W17 / 079 D3: a landed dApp transaction is not in 活动 (every client).
-- **H3** SC-007 on the web: the web still draws a plain transfer on its blind branch; its signing
-  status also says "waiting for biometric" while preparing.
-- **H4** — **done on desktop** (a4ecf408 and its review fixes; no device run yet). A failed message
-  signature says 链下签名 — 未向链上发送任何内容。, not the transaction's sentence. A phone that
-  scanned but never connected (tunnel or handshake), or whose connection dropped once it was asked, no
-  longer answers the page -32603 in transport English: the request stays open under 网络连接不稳定
-  with 重试 / 关闭 (the body: the request never arrived; or, once asked, the transaction was not
-  submitted / nothing went on chain), and 关闭 is the person's 4001. **Owner to confirm this change in
-  what a dApp sees** — it follows W19's scan timeout; before, an immediate -32603. A tunnel the phone
-  closes while connecting is the phone's cancel: back to the form, as mid-prompt (spec 038 finding
-  18) — but not a relay's policy close (1008, W20's refusal): that one never came up, and gets 重试.
-  macOS: a BLE channel that will not open falls through to the tunnel, as on Linux. Not done: a
-  relay failure after a transaction was signed (a retry could sign the same nonce twice — owner
-  decision); vi `networkBody` says "máy chủ" (server) — right where the line is shared (balance,
-  onboarding), loose on the phone card; a phone-only line needs a new key and the translation pass.
-- **H5** — **done on desktop**: the QR comes down the moment the phone's advert decrypts, and
-  "查看你的手机" — with a Cancel, since the phone has been asked nothing yet — stands over the
-  connection. The tunnel upgrade and the handshake's two frames wait 15 s each, not 130 s: the phone
-  answers them with nobody touching it (confirm in the `[vela-cable]` log on the device).
-- **H6** D3b hedged reads (a dApp read still waits one endpoint's 8 s before the next).
-- **H4** Failure wording for a message signature says "交易未能提交…请重试" with only 完成; the page
-  gets the transport's English detail (`dapp_rpc.rs` passes it through by design).
-- **H5** While the phone's tunnel connects the QR stays up; a "phone connected — confirm on the
-  phone" state would bridge the seconds between scan and prompt.
-- **H6** D3b hedged reads — **done on desktop only** (d712d1f1 and its review fixes; `executor/pool.rs`
-  is shared, so macOS and Linux get it too — **owner to confirm desktop-first**). A read silent for
-  1.5 s also asks the endpoint the core asks next (its own queue: a node cooling after a timeout or a
-  429 is not asked early); the caller takes that answer early only if it is a result or a revert — a
-  range cap or a missing method waits for the core's order. Writes, filter methods and bundler calls
-  are never hedged; hedges have their own 8-thread budget and stop while the core's own workers are
-  down to their last 8. The policy is the core's (`HEDGE_AFTER_MS`, `is_hedged_read`, `early_verdict`,
-  `RpcPoolView.pending_urls`); **web, iOS and Android still wait one endpoint's 8 s** — follow-up:
-  hedge in their pool drivers too (`pending_urls` is not on the wire yet). A user RPC slower than
-  1.5 s now sends those reads to the next node, public ones included. No Windows device run yet.
-- **H7** A profile folder WebView2 accepts but cannot use makes the engine wait forever (only an
-  artificial ACL produced it; research R1).
-- **H8** After a certificate failure the tab keeps the previous page's title.
-- **H9** D5 — **partly done.** The installer now offers **Install for me only** (`/CURRENTUSER`: no
-  administrator, handler in HKCU, the VC++ runtime never run silently) beside the per-machine default
-  (1a187cda and its review fixes). An existing install keeps its mode on upgrade, so the owner's
-  per-machine install still upgrades per-machine and an unattended upgrade of it still waits on UAC.
-  Moving it — uninstall once as an administrator, then install `/CURRENTUSER` — waits on the owner's
-  D5 decision; device check `quickstart.md` F4.
-- Relay faults could not be held on the app's own traffic on this machine (its route falls back to
-  Direct around the fault proxy, and TUN makes Direct work) — S5/S7 were not re-run.
+| # | What | State | Device |
+|---|---|---|---|
+| H1 | sign-in sheet copy | **done** — the phone row says 扫码; "this device" names Windows Hello on Windows, Touch ID on a Mac (d9ab6e80, 5c79c6b3) | **pass**: 手机或平板 · 扫码, 这台设备 · Windows Hello |
+| H2 | a dApp transaction in 活动 | **done** in the core + desktop + web (43fd67a4, ff660c2d): pending until it lands, under the site, a page cannot put a counterparty or a figure there | **pass**: the three swaps are rows under app.uniswap.org; detail 已确认 with the real tx hash. What they moved: F1 |
+| H3 | web: a plain coin send reads as a send; "preparing" until the passkey is asked | **done** on the web (3707e196, 1618a9f6, 4d4c76c4) | web unit + e2e by the agent; not run in a browser here |
+| H4 | phone stops told apart; a failed message is not a failed transaction | **done on desktop** (a22e1b30, 95b8e573, 1063909f) — owner items 2 and 6 above | needs the owner's iPhone |
+| H5 | "check your phone" once scanned, with Cancel; handshake waits seconds | **done on desktop** (a22e1b30, 95b8e573) | needs the owner's iPhone |
+| H6 | hedged reads | **done on desktop** (8872b915, e6b7469e) — owner item 3 | **not reproduced**: the pool ranks endpoints by speed, so a slow or silent user node (a local node that holds every request) was never asked once faster public nodes answered — reads stayed at ~220–330 ms. The 1.5 s hedge only matters when the fastest node falls silent, which this network could not stage without faking chain data; covered by unit tests |
+| H7 | a profile folder Windows will not let Vela write | **done** (672d1dbb, 5c79c6b3): per-process write probe → engine panel | **pass**: write-denied folder → 无法加载此页面 · WebView2 0x80070005 with 重试 / 在系统浏览器中打开 at 2 s, one log line (was: blank forever) |
+| H8 | after a failed load the tab keeps the previous title | **done** (0ff7fbed) | **pass**: expired.badssl.com after Uniswap → tab "expired.badssl.com", warning lock, 网站证书有问题，Vela 已阻止打开。 |
+| H9 | D5 per-user install | **partly done**: "Install for me only" (`/CURRENTUSER`) beside per-machine (d344d847, 5adf0c17); moving an existing per-machine install waits on owner item 5 | the installer compiles from the merged tree (Inno Setup, 2026-09-29); running it over the owner's per-machine install (quickstart F4) needs the owner's UAC — not run |
+
+Relay faults still cannot be held on the app's own traffic on this machine (its route falls back to
+Direct around the fault proxy, and the TUN makes Direct work) — S5/S7 were not re-run.
