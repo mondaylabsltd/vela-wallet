@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+	autoCloseAfterMs,
 	dappReceiptModel,
 	endsOnSignedTick,
 	landingFromEntry,
@@ -123,6 +124,25 @@ describe('a message signature (spec 079)', () => {
 		expect(model.title).toBe(copy.signed);
 		expect(model.hash).toBeUndefined();
 		expect(model.explorer).toBeUndefined();
+	});
+});
+
+describe('which landings go by themselves (spec 079)', () => {
+	it('a success does: the signed tick after a beat, a landed transaction after ~2.6 s', () => {
+		expect(autoCloseAfterMs({ kind: 'signed' })).toBe(1_400);
+		expect(autoCloseAfterMs({ kind: 'confirmed', opHash: OP, txHash: TX })).toBe(2_600);
+	});
+
+	it('anything the person must still read waits for Done — never still-confirming or unknown', () => {
+		for (const state of [
+			{ kind: 'submitting' as const },
+			{ kind: 'submitted' as const, opHash: OP },
+			{ kind: 'still_confirming' as const, opHash: OP },
+			{ kind: 'unknown' as const, opHash: OP },
+			{ kind: 'failed' as const, opHash: OP }
+		]) {
+			expect(autoCloseAfterMs(state), state.kind).toBeNull();
+		}
 	});
 });
 

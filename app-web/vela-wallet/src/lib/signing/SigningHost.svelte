@@ -35,7 +35,7 @@
 		landingFromEntry,
 		landingToRaise,
 		receiptProgress,
-		SIGNED_TICK_MS,
+		autoCloseAfterMs,
 		trackEntryFor,
 		type DappReceiptCopy,
 		type DappReceiptState
@@ -179,7 +179,7 @@
 	});
 	$effect(() => {
 		if (!signedTick) return;
-		const timer = setTimeout(() => (signedTick = false), SIGNED_TICK_MS);
+		const timer = setTimeout(() => (signedTick = false), autoCloseAfterMs({ kind: 'signed' }) ?? 0);
 		return () => clearTimeout(timer);
 	});
 
@@ -255,6 +255,29 @@
 		// Closed after approving: tracked, answered — and not raised again.
 		if (closedInFlight !== null) return;
 		watchLanding(op, handoff.chain_id);
+	});
+
+	/** The landing goes: Done, or a landed transaction's own beat. */
+	function closeLanding(): void {
+		landing = null;
+		unsubscribeTracker?.();
+		unsubscribeTracker = undefined;
+		onreceiptdone?.();
+	}
+
+	/**
+	 * Spec 079: a landed transaction closes by itself after a beat (~2.6 s, as
+	 * on Android and iOS) — nobody should have to close a success. Done still
+	 * closes it sooner. "Still confirming" and "unknown" never close on their
+	 * own: the person is being told something they need to read.
+	 */
+	$effect(() => {
+		const state = landing;
+		if (!state) return;
+		const after = autoCloseAfterMs(state);
+		if (after === null) return;
+		const timer = setTimeout(closeLanding, after);
+		return () => clearTimeout(timer);
 	});
 
 	const view = $derived(session.view);
@@ -500,18 +523,13 @@
 			progress={landing.kind === 'submitted'
 				? receiptProgress(landedAtMs, landingTypicalS, nowMs)
 				: undefined}
-			ondone={() => {
-				landing = null;
-				unsubscribeTracker?.();
-				unsubscribeTracker = undefined;
-				onreceiptdone?.();
-			}}
+			ondone={closeLanding}
 		/>
 	</div>
 {:else if signedTick && receipt && !model}
 	<!--
 		Spec 079: the message is signed — the tick, the same landing layer and
-		disc, gone by itself (`SIGNED_TICK_MS`). A new request's sheet wins
+		disc, gone by itself (`autoCloseAfterMs`). A new request's sheet wins
 		over it (`!model`); the page already has its signature.
 	-->
 	<div class="landing-over">

@@ -199,6 +199,30 @@ export function trackEntryFor(
  */
 export const SIGNED_TICK_MS = 1_400;
 
+/** …and a landed transaction's beat, the Android and iOS figure (spec 079). */
+export const LANDED_CLOSE_MS = 2_600;
+
+/**
+ * Whether the landing goes by itself, and when: a success does (the signed
+ * tick, a confirmed transaction); everything the person must still READ does
+ * not — submitting, waiting, still confirming, unknown, failed. `null` = only
+ * Done closes it.
+ */
+export function autoCloseAfterMs(state: DappReceiptState): number | null {
+	switch (state.kind) {
+		case 'signed':
+			return SIGNED_TICK_MS;
+		case 'confirmed':
+			return LANDED_CLOSE_MS;
+		case 'submitting':
+		case 'submitted':
+		case 'still_confirming':
+		case 'unknown':
+		case 'failed':
+			return null;
+	}
+}
+
 /**
  * Whether an answer ends on the signed tick: a RESULT went out, for the
  * message request the sheet was showing. A transaction lands on the receipt
