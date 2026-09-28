@@ -15,6 +15,7 @@
  * should see the account the wallet is on, not the one it was on last week.
  */
 import { loadCore } from '$lib/core/client';
+import { checksumAddress } from '$lib/core/kernels';
 import { listGrants } from './connections';
 import { revokeGrant, setGrant } from './grants';
 import { planAccountSwitch } from './core/dperm-connect';
@@ -69,4 +70,37 @@ export async function followActiveAccount(facts: FollowFacts): Promise<FollowOut
 		}
 	}
 	return outcome;
+}
+
+/**
+ * One spelling of an address toward every site (spec 082 RG10, L-D6).
+ *
+ * The core now writes a grant's address EIP-55 (its `write_grant`), and the
+ * provider hands a page exactly what the worker reads from the grant. Grants
+ * written before 082 are lower-case, so a site saw `0xabc…` on `eth_accounts`
+ * and `0xAbC…` after an account switch — the same account in two spellings,
+ * which some dApps read as two accounts. This rewrites the old ones once, at
+ * wallet boot. A rewrite changes only the case, so the worker (which compares
+ * case-insensitively) announces nothing to the site's tabs.
+ *
+ * Idempotent: a grant already in the core's spelling is left alone. Returns
+ * the origins it rewrote.
+ */
+export async function normalizeGrantSpelling(): Promise<string[]> {
+	const grants = await listGrants();
+	if (grants.length === 0) return [];
+	await loadCore();
+	const rewritten: string[] = [];
+	for (const grant of grants) {
+		let spelled: string;
+		try {
+			spelled = checksumAddress(grant.address);
+		} catch {
+			continue; // not an address the core can spell — leave it for the core's own read
+		}
+		if (spelled === grant.address) continue;
+		await setGrant({ ...grant, address: spelled });
+		rewritten.push(grant.origin);
+	}
+	return rewritten;
 }

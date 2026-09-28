@@ -46,7 +46,7 @@
 	import { preferences } from '$lib/services/preferences.svelte';
 	import { publishExtSnapshot } from '$lib/dapp/core/ext-cache';
 	import { publishExtChains } from '$lib/dapp/core/ext-chains';
-	import { followActiveAccount } from '$lib/dapp/follow';
+	import { followActiveAccount, normalizeGrantSpelling } from '$lib/dapp/follow';
 	import { subscribeNetworks } from '$lib/services/networks';
 	import { inExtension } from '$lib/dapp/transport';
 	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
@@ -1302,6 +1302,12 @@
 	 * site's tabs as `accountsChanged`.
 	 */
 	let followedAddress: string | null = null;
+	// Spec 082 RG10 (L-D6): grants written before 082 are lower-case; the core
+	// spells an address EIP-55. Rewritten once per wallet boot, so a site never
+	// sees one account in two spellings.
+	onMount(() => {
+		if (inExtension()) void normalizeGrantSpelling();
+	});
 	$effect(() => {
 		const view = session.view;
 		if (view.loading || !inExtension() || !view.address) return;

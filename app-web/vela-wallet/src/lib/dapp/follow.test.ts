@@ -13,7 +13,8 @@ import '$lib/i18n/wasm-init.server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { planAccountSwitch } from './core/dperm-connect';
 import { toWireGrant } from './core/dperm-types';
-import { followActiveAccount } from './follow';
+import { followActiveAccount, normalizeGrantSpelling } from './follow';
+import { checksumAddress } from '$lib/core/kernels';
 import { PERM_PREFIX } from './keys';
 import type { DAppGrant } from './grants';
 
@@ -41,7 +42,8 @@ describe('what the core says an account switch tells a site', () => {
 		expect(plan.kind).toBe('repin');
 		if (plan.kind !== 'repin') return;
 		expect(plan.grant.origin).toBe('https://app.example');
-		expect(plan.grant.address).toBe(BOB);
+		// The core spells the re-pinned address EIP-55 (spec 082 RG10).
+		expect(plan.grant.address).toBe(checksumAddress(BOB));
 		expect(plan.grant.chain_id).toBe(8453);
 		expect(plan.grant.granted_at_ms).toBe(NOW);
 	});
@@ -111,7 +113,7 @@ describe('followActiveAccount writes what the core authored', () => {
 		expect(outcome.removed).toEqual(['https://b.example']);
 		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual({
 			origin: 'https://a.example',
-			address: BOB,
+			address: checksumAddress(BOB),
 			chainId: 100,
 			grantedAt: NOW
 		});
@@ -125,5 +127,28 @@ describe('followActiveAccount writes what the core authored', () => {
 	it('is a no-op off the extension', async () => {
 		const outcome = await followActiveAccount({ activeAddress: BOB, addresses: [BOB] });
 		expect(outcome).toEqual({ repinned: [], removed: [] });
+	});
+
+	/** Spec 082 RG10 (L-D6): one spelling of an address toward every site. */
+	it('rewrites lower-case grants to the core’s EIP-55 spelling, once', async () => {
+		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
+		const SPELLED = checksumAddress(ALICE);
+		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
+		store.set(PERM_PREFIX + 'https://b.example', grantFor('https://b.example', SPELLED));
+
+		expect(await normalizeGrantSpelling()).toEqual(['https://a.example']);
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual({
+			...grantFor('https://a.example', ALICE),
+			address: SPELLED
+		});
+		// Idempotent: the second boot finds nothing to do.
+		expect(await normalizeGrantSpelling()).toEqual([]);
+		expect(store.get(PERM_PREFIX + 'https://b.example')).toEqual(
+			grantFor('https://b.example', SPELLED)
+		);
+	});
+
+	it('normalises nothing off the extension', async () => {
+		expect(await normalizeGrantSpelling()).toEqual([]);
 	});
 });

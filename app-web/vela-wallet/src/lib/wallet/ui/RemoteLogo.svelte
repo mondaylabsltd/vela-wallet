@@ -6,10 +6,13 @@
 	 * when they never do (the endpoint has no logo for this chain, the person
 	 * pointed 服务端点 at a mirror without one, the network is down).
 	 *
-	 * Candidates are tried in order; a failure is remembered for the session
-	 * (`logo-cache`), so the second row that asks for the same missing logo
-	 * falls back without a request. The parent must be `position: relative`.
+	 * Candidates are tried in order; a failure is remembered for as long as the
+	 * core says a miss lasts (`logo-cache`, 60 s for an image that gives no
+	 * status — spec 082 RE10), so the second row that asks for the same missing
+	 * logo falls back without a request, and the logo is tried again after it.
+	 * The parent must be `position: relative`.
 	 */
+	import { onDestroy } from 'svelte';
 	import { hasFailed, markFailed } from '$lib/services/logo-cache';
 
 	interface Props {
@@ -26,10 +29,18 @@
 		return (urls ?? []).find((url) => !hasFailed(url));
 	});
 
+	let retry: ReturnType<typeof setTimeout> | undefined;
 	function fail(url: string) {
-		markFailed(url);
+		const ttl = markFailed(url);
 		failures += 1;
+		// Try it again once its miss has run out (a network blip is not a
+		// missing logo). `null`: the miss lasts the session.
+		if (ttl !== null) {
+			clearTimeout(retry);
+			retry = setTimeout(() => (failures += 1), ttl + 1);
+		}
 	}
+	onDestroy(() => clearTimeout(retry));
 
 	// Invisible until its bytes are in. The element has an opaque background (a
 	// transparent PNG must not show the letter through it), so a logo that is

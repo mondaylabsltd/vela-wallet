@@ -13,6 +13,8 @@
  * seams are mocked: the orchestration under test — per-chain outcomes, the
  * carry-over and the failed-chain report — is the real code.
  */
+// The balance read plan is the core's (spec 082 RE9): the wasm module is up.
+import '$lib/i18n/wasm-init.server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const NATIVE_DECIMALS = 18;
