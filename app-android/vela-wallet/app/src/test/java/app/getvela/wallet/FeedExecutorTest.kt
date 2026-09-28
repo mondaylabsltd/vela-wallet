@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.FeedOperation
@@ -8,6 +9,8 @@ import app.getvela.wallet.feature.wallet.core.FeedTxKind
 import app.getvela.wallet.feature.wallet.core.FeedTxStatus
 import java.util.Calendar
 import java.util.TimeZone
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -334,5 +337,71 @@ class FeedExecutorTest {
     fun `a refused write says so`() = runBlocking {
         store.refuseWrites = true
         assertTrue(!executor().writeRecords(listOf(pendingRow("s1"))))
+    }
+
+    /**
+     * Spec 082 RG1-RG3 on the real `activity_feed`: a dApp's record written
+     * by the sign machine's row builder is one row after ONE write and one
+     * `ReconcileCompleted{1}` — pending, a dApp transaction, with its site —
+     * and the tracker's patch turns it failed (a failed dApp row was
+     * impossible while the shell guessed from its hash).
+     */
+    @Test
+    fun `a dApp's record is a row after one write, and it can fail`() = runBlocking {
+        val me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+        try {
+            val feed = FeedExecutor(store = store, ownAccounts = { emptyList() }, now = { System.currentTimeMillis().toDouble() })
+            val host = app.getvela.wallet.core.crux.CoreHost(
+                bridge = uniffi.vela_core_uniffi.ActivityFeedCore().asBridge(),
+                scope = scope,
+                initial = app.getvela.wallet.feature.wallet.core.FeedView(),
+                serializer = app.getvela.wallet.feature.wallet.core.FeedView.serializer(),
+                perform = app.getvela.wallet.core.crux.JsonShell.perform(FeedOperation.serializer(), FeedShellResult.serializer(), feed::perform),
+                escapedFailure = app.getvela.wallet.core.crux.JsonShell.escapedFailure(
+                    FeedOperation.serializer(), FeedShellResult.serializer(), fallback = FeedShellResult.HapticPlayed, answer = feed::neutralAnswer,
+                ),
+                onFault = { error -> throw AssertionError("shell fault: $error", error) },
+            )
+            host.dispatch(app.getvela.wallet.feature.wallet.core.FeedEvent.AccountSwitched(me), app.getvela.wallet.feature.wallet.core.FeedEvent.serializer())
+            kotlinx.coroutines.delay(500)
+
+            val op = "0x" + "7a".repeat(32)
+            val record = app.getvela.wallet.feature.signing.core.SignRecord(
+                record_id = "dapp-1", kind = app.getvela.wallet.feature.signing.core.SignRecordKind.DappTx, method = "eth_sendTransaction",
+                params_json = """[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x38d7ea4c68000"}]""",
+                result = "", from = me, chain_id = 100, now_ms = System.currentTimeMillis().toDouble(),
+                status = app.getvela.wallet.feature.signing.core.SignRecordStatus.Pending, user_op_hash = op,
+                dapp_origin = "https://app.uniswap.org", maybe_sent = true,
+            )
+            assertTrue(feed.writeRecords(listOf(app.getvela.wallet.feature.signing.core.SignExecutor.recordRow(record, "XDAI"))))
+            host.dispatch(app.getvela.wallet.feature.wallet.core.FeedEvent.ReconcileCompleted(1), app.getvela.wallet.feature.wallet.core.FeedEvent.serializer())
+            val item = kotlinx.coroutines.withTimeout(10_000) {
+                host.view.first { view -> view.rows.any { it is app.getvela.wallet.feature.wallet.core.FeedRow.Item } }
+            }.rows.filterIsInstance<app.getvela.wallet.feature.wallet.core.FeedRow.Item>().single().item
+            assertEquals(FeedTxKind.DappTx, item.kind)
+            assertEquals(FeedTxStatus.Pending, item.status)
+            assertEquals("app.uniswap.org", item.site)
+            assertEquals("0.001", item.value)
+
+            assertTrue(feed.patchRecords(listOf("dapp-1"), "failed", null))
+            host.dispatch(app.getvela.wallet.feature.wallet.core.FeedEvent.ReconcileCompleted(1), app.getvela.wallet.feature.wallet.core.FeedEvent.serializer())
+            val failed = kotlinx.coroutines.withTimeout(10_000) {
+                host.view.first { view -> view.rows.filterIsInstance<app.getvela.wallet.feature.wallet.core.FeedRow.Item>().any { it.item.status == FeedTxStatus.Failed } }
+            }
+            assertEquals("app.uniswap.org", failed.rows.filterIsInstance<app.getvela.wallet.feature.wallet.core.FeedRow.Item>().single().item.site)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a dApp record's origin crosses to the core`() = runBlocking {
+        write(storedRow(type = "dapp_tx").put("dappOrigin", "https://app.uniswap.org"))
+        val record = (executor().perform(FeedOperation.ReadTxStore("0x1111", 1)) as FeedShellResult.StoreLoaded).records.single()
+        assertEquals(FeedTxKind.DappTx, record.kind)
+        assertEquals("https://app.uniswap.org", record.dapp_origin)
+        write(storedRow(type = "send"))
+        assertNull((executor().perform(FeedOperation.ReadTxStore("0x1111", 2)) as FeedShellResult.StoreLoaded).records.single().dapp_origin)
     }
 }

@@ -432,7 +432,9 @@ class AppContainer(private val app: Application) {
             // `clear_token_cache`: the token list must be read again, not
             // throttled away; the new round reaches Send as HoldingsUpdated.
             refreshBalances = { wallet.refresh(force = true) },
-            feedChanged = { wallet.feedReconciled() },
+            // Spec 082 RG3: a written row is one resolved — the feed re-reads
+            // now, so the pending row shows at submit, not at the next tick.
+            feedChanged = { wallet.feedReconciled(1) },
             identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
             currencyCode = { settings.currency.value.code },
             fiatRate = { code -> settings.fiatRate(code) },

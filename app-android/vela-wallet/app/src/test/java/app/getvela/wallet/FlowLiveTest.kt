@@ -286,14 +286,18 @@ class FlowLiveTest {
     private fun feedItem(
         id: String,
         received: Boolean,
-        value: String,
+        value: String?,
         symbol: String = "POL",
         chainId: Int = 137,
         usd: Double = 0.0,
+        kind: app.getvela.wallet.feature.wallet.core.FeedTxKind = if (received) app.getvela.wallet.feature.wallet.core.FeedTxKind.Receive else app.getvela.wallet.feature.wallet.core.FeedTxKind.Send,
+        status: app.getvela.wallet.feature.wallet.core.FeedTxStatus = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Pending,
+        site: String? = null,
+        counterparty: String? = "0x9F3c000000000000000000000000000000021aE0",
     ) = FeedItem(
         id = id,
         direction = if (received) FeedDirection.In else FeedDirection.Out,
-        counterparty = "0x9F3c000000000000000000000000000000021aE0",
+        counterparty = counterparty,
         value = value,
         symbol = symbol,
         decimals = 18,
@@ -301,6 +305,9 @@ class FlowLiveTest {
         chain_id = chainId,
         timestamp = System.currentTimeMillis() / 1000.0,
         day_start_ms = midnightToday(),
+        kind = kind,
+        status = status,
+        site = site,
     )
 
     private fun midnightToday(): Double = java.util.Calendar.getInstance().apply {
@@ -358,6 +365,49 @@ class FlowLiveTest {
 
         assertEquals(emptyList<Any>(), live.groups)
         assertEquals(HistoryMode.Empty, live.mode)
+        // Spec 082 RG5: the line is the core's key, never the drawn state's
+        // "none on this network" for a wallet with no filter at all.
+        assertEquals(strings.t("history.emptyTitle"), live.emptyText)
+        assertEquals(
+            strings.t("history.emptyFilter"),
+            FlowLive.history(historyFixture(), FeedView(history_empty_key = "history.emptyFilter"), strings).emptyText,
+        )
+    }
+
+    /**
+     * Spec 082 RG1/RG2 (L-D3): a dApp's transaction is the core's row — its
+     * kind, status and site — never a guess from its hash: "dApp
+     * transaction", "Failed · app.uniswap.org", and on the detail a Failed
+     * chip, the site that asked, and no amount when no coin of ours moved.
+     */
+    @Test
+    fun `a dApp transaction is drawn from the core's kind, status and site, and can fail`() {
+        val dapp = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx
+        val failed = feedItem(
+            "d1", received = false, value = null, chainId = 100, kind = dapp,
+            status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Failed, site = "app.uniswap.org",
+        )
+        val pendingNoSite = feedItem("d2", received = false, value = "0.001", chainId = 100, kind = dapp)
+        val nobody = feedItem("d3", received = false, value = null, chainId = 100, kind = dapp, counterparty = null)
+        val confirmedSend = feedItem("s1", received = false, value = "2", status = app.getvela.wallet.feature.wallet.core.FeedTxStatus.Confirmed)
+        val rows = FlowLive.history(historyFixture(), feedOf(failed, pendingNoSite, nobody, confirmedSend), strings, chainNames = mapOf(100 to "Gnosis"))
+            .groups.flatMap { it.rows }
+        val failedRow = rows.first { it.id == "d1" }
+        assertEquals(app.getvela.wallet.feature.wallet.ActivityKind.Dapp, failedRow.kind)
+        assertEquals(strings.t("history.txLabelDappTx"), failedRow.title)
+        assertEquals(strings.t("componentsTx.detail.statusFailed") + " · app.uniswap.org", failedRow.subtitle)
+        assertEquals("no coin of ours moved: no amount", "", failedRow.amount)
+        assertEquals(strings.t("componentsTx.detail.statusPending") + " · 0x9F3c…1aE0", rows.first { it.id == "d2" }.subtitle)
+        assertEquals(strings.t("componentsTx.detail.statusPending") + " · Gnosis", rows.first { it.id == "d3" }.subtitle)
+        assertFalse("a confirmed row says nothing first", rows.first { it.id == "s1" }.subtitle.contains(" · "))
+
+        val detail = FlowLive.txDetail(txFixture(), feedOf(failed), id = "d1", strings = strings, chainNames = mapOf(100 to "Gnosis"))!!
+        assertEquals(strings.t("history.txLabelDappTx"), detail.title)
+        assertEquals(strings.t("componentsTx.detail.statusFailed"), detail.status.text)
+        assertEquals(app.getvela.wallet.feature.flows.StatusTone.Error, detail.status.tone)
+        assertEquals("", detail.amount)
+        val requested = detail.facts.single { it.label == strings.t("componentsUi.signing.siweOrigin") }
+        assertEquals("app.uniswap.org", requested.value)
     }
 
     /**

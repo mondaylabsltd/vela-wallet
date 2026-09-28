@@ -14,6 +14,8 @@ import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedDirection
 import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
+import app.getvela.wallet.feature.wallet.core.FeedTxKind
+import app.getvela.wallet.feature.wallet.core.FeedTxStatus
 import app.getvela.wallet.feature.wallet.core.PaymentRequestView
 
 /**
@@ -183,10 +185,13 @@ object FlowLive {
         chainNames: Map<Int, String> = emptyMap(),
     ): HistoryModel {
         // The feed machine narrows the rows itself (`chain_filter_changed`); the pill says which chain.
-        val groups = WalletLive.activity(feed, strings, now)
+        val groups = WalletLive.activity(feed, strings, now, chainNames)
         return fallback.copy(
             header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
             mode = if (groups.isEmpty()) HistoryMode.Empty else HistoryMode.Rows,
+            // Spec 082 RG5: the empty line is the core's key, chosen by the
+            // chain filter — never the drawn state's "none on this network".
+            emptyText = strings.t(feed.history_empty_key),
             groups = groups,
         )
     }
@@ -225,6 +230,7 @@ object FlowLive {
         )
         val counterparty = item.counterparty.orEmpty()
         val hash = item.tx_hash?.takeIf { it.isNotBlank() } ?: item.id
+        val dapp = item.kind == FeedTxKind.DappTx
         // Spec 043 phase 4 (device-found): the notification's deep link opened
         // this sheet with the fixture's title, status, counterparty, network,
         // date and hash around a live amount. Every line is the item's now.
@@ -246,6 +252,10 @@ object FlowLive {
                     lead = FactLead.Token(WalletLive.mark(item.chain_id, item.symbol, null)),
                 ),
             )
+            // Spec 082 RG2: a dApp's transaction says which site asked for it.
+            item.site?.takeIf { dapp && it.isNotBlank() }?.let { site ->
+                add(FactRowModel(label = strings.t(I18nKeys.Flows.REQUESTED_BY), value = site))
+            }
             add(FactRowModel(label = strings.t(I18nKeys.Flows.DETAIL_DATE), value = detailDate(item.timestamp, strings)))
             add(
                 FactRowModel(
@@ -259,15 +269,21 @@ object FlowLive {
         }
         return fallback.copy(
             explorerUrl = explorers[item.chain_id]?.let { "${it.trimEnd('/')}/tx/$hash" },
-            title = strings.t(if (received) I18nKeys.Flows.TX_LABEL_RECEIVED else I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to item.symbol)),
-            // A hash the chain named means the transfer landed; a send still
-            // waiting carries only its operation hash.
-            status = if (item.tx_hash.isNullOrBlank() && !received) {
-                StatusChipModel(strings.t(I18nKeys.Flows.STATUS_PENDING), StatusTone.Warning)
+            title = if (dapp) {
+                strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
             } else {
-                StatusChipModel(strings.t(I18nKeys.Flows.STATUS_CONFIRMED), StatusTone.Success)
+                strings.t(if (received) I18nKeys.Flows.TX_LABEL_RECEIVED else I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to item.symbol))
             },
-            amount = "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim(),
+            // Spec 082 RG1: where the record stands is the core's `status` —
+            // the tracker alone moves it — never a guess from whether a hash
+            // looks like a transaction's. A failed dApp row can say so now.
+            status = when (item.status) {
+                FeedTxStatus.Pending -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_PENDING), StatusTone.Warning)
+                FeedTxStatus.Failed -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_FAILED_DETAIL), StatusTone.Error)
+                FeedTxStatus.Confirmed -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_CONFIRMED), StatusTone.Success)
+            },
+            // A dApp's call that moved no coin of ours has no amount (RG2).
+            amount = if (amount.isBlank()) "" else "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim(),
             positive = received,
             // The fiat line is the core's own `usd_value`, which is 0 when
             // nothing could price it — and a confident "$0.00" on a detail

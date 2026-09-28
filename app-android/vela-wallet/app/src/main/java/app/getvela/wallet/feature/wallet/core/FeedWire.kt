@@ -147,8 +147,12 @@ data class FeedItem(
      * guesses from a hash. A folded batch is a send.
      */
     val kind: FeedTxKind = FeedTxKind.Send,
-    /** The record's status (a batch's first line's). */
-    val status: FeedTxStatus = FeedTxStatus.Confirmed,
+    /**
+     * The record's status (a batch's first line's). Absent reads `Pending`,
+     * as the core's own default: it claims nothing — only the tracker closes
+     * a record, and a default must never say money landed or failed.
+     */
+    val status: FeedTxStatus = FeedTxStatus.Pending,
     /** `DappTx` only: `host[:port]` of the asking site. */
     val site: String? = null,
 )

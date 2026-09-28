@@ -320,6 +320,9 @@ object I18nKeys {
         const val LABEL_DAPP_TX = "history.txLabelDappTx"
         const val TO_NAME = "history.toName"
         const val FROM_NAME = "history.fromName"
+        /** Spec 082 RG2: a row not yet confirmed says so first — "Pending · …" / "Failed · …". */
+        const val ROW_PENDING = "componentsTx.detail.statusPending"
+        const val ROW_FAILED = "componentsTx.detail.statusFailed"
         const val DAY_TODAY = "componentsUi.dayGroup.today"
         const val DAY_YESTERDAY = "componentsUi.dayGroup.yesterday"
 
@@ -725,6 +728,10 @@ object I18nKeys {
         const val CANCEL = "home.cancel"
         const val STATUS_PENDING = "componentsTx.detail.statusPending"
         const val STATUS_SUCCEEDED = "componentsTx.detail.statusSucceeded"
+        /** Spec 082 RG2: a dApp's transaction that failed, on its detail sheet. */
+        const val STATUS_FAILED_DETAIL = "componentsTx.detail.statusFailed"
+        /** Spec 082 RG2: the detail's "Requested by" fact — the site that asked. */
+        const val REQUESTED_BY = "componentsUi.signing.siweOrigin"
     }
 
     /**
