@@ -12577,10 +12577,15 @@ impl WalletPage {
             .filter(|_| live_browser && !crashed)
             .map(str::to_owned)
             .or(unbuilt);
+        // A certificate the engine refused is the one https that is not safe:
+        // no closed lock beside it (083).
+        let certificate_failed = self.load_watch.failure.as_ref().is_some_and(|failure| {
+            failure.class == vela_core::app::browser_load::LoadFailureClass::Certificate
+        });
         let (host, secure) = match named.as_ref() {
             Some(url) => (
                 Some(SharedString::from(crate::explore::load_watch::host_of(url))),
-                url.to_ascii_lowercase().starts_with("https://"),
+                url.to_ascii_lowercase().starts_with("https://") && !certificate_failed,
             ),
             None => (host, secure),
         };
@@ -12747,6 +12752,12 @@ impl WalletPage {
             crate::webview::hide();
             self.load_failed_panel(theme, &failure, &url, cx)
                 .into_any_element()
+        } else if live_browser && self.load_watch.engine_page {
+            // Spec 083 W3: WebView2's own error page is up and its reason is a
+            // moment away. Never on screen: nothing, then Vela's panel.
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::hide();
+            div().flex_1().into_any_element()
         } else if let Some(failure) = engine_failed {
             // Spec 083 W1b: the engine itself did not start. Said once, with the
             // two ways on — never a blank page retried sixty times a second.
@@ -13018,7 +13029,8 @@ impl WalletPage {
             .child(buttons)
     }
 
-    /// The renderer behind the page died (spec 070 FR-013; macOS reports it).
+    /// The renderer behind the page died (spec 070 FR-013; macOS and, since
+    /// 083, Windows report it).
     ///
     /// Said, with the way back. The browser machine has already settled what
     /// the page had asked (4900) and closed any sheet it raised; Reload starts
@@ -13358,6 +13370,25 @@ impl WalletPage {
             }
             crate::webview::Load::Finished(url) => {
                 self.load_watch.finished(&url);
+                cx.notify();
+                DbrEvent::LoadFinished { tab, url }
+            }
+            crate::webview::Load::ErrorPage(url) => {
+                // Spec 083: not the site arriving — but the document before it
+                // is gone, so the core hears a load begin and the failure's
+                // LoadFinished retires it.
+                self.load_watch.error_page();
+                cx.notify();
+                DbrEvent::NavigationStarted { tab, url }
+            }
+            crate::webview::Load::Failed {
+                url,
+                status,
+                certificate,
+            } => {
+                if self.load_watch.engine_failed(&url, status, certificate) {
+                    self.load_failed(cx);
+                }
                 cx.notify();
                 DbrEvent::LoadFinished { tab, url }
             }

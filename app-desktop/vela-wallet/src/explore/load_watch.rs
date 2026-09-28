@@ -73,6 +73,9 @@ pub struct LoadWatch {
     /// How the next reported request was asked for (set by the page just
     /// before it tells the engine to load).
     pub next_asked: Option<Asked>,
+    /// WebView2 is showing its own error page, and its `NavigationCompleted`
+    /// — which says why — is a moment away (spec 083). The page stays hidden.
+    pub engine_page: bool,
 }
 
 /// What a probe's answer means for the load.
@@ -98,6 +101,7 @@ impl LoadWatch {
     pub fn requested(&mut self, url: &str, now_ms: f64) -> Option<u64> {
         let asked = self.next_asked.take().unwrap_or(Asked::Navigation);
         self.generation += 1;
+        self.engine_page = false;
         self.probing = false;
         self.committed = false;
         self.retry_due = false;
@@ -136,6 +140,7 @@ impl LoadWatch {
         if self.ignores(url) {
             return;
         }
+        self.engine_page = false;
         self.loading = false;
         self.committed = true;
         self.probing = false;
@@ -151,6 +156,7 @@ impl LoadWatch {
         if self.ignores(url) {
             return;
         }
+        self.engine_page = false;
         self.committed = false;
         self.loading = false;
         self.probing = false;
@@ -205,6 +211,39 @@ impl LoadWatch {
             None,
             false,
         ));
+        true
+    }
+
+    /// The engine put its own error page up (spec 083): not a commit — Vela's
+    /// panel never gives way to it.
+    pub fn error_page(&mut self) {
+        self.engine_page = true;
+    }
+
+    /// WebView2 said the top navigation failed (spec 083): the panel at once,
+    /// with the engine's reason, instead of after the 3 s watchdog and probe.
+    /// Returns whether to book a retry — not for a navigation a newer one
+    /// replaced, nor for a failure already on the panel (the probe got there
+    /// first and booked it; WebView2's own timeout comes ~40 s later). A
+    /// failure the wallet did not ask for (a link) names its own address, so
+    /// Retry loads that.
+    pub fn engine_failed(&mut self, url: &str, status: i64, certificate: bool) -> bool {
+        self.engine_page = false;
+        let Some(failure) =
+            browser_load::classify(LoadPlatform::WebView2, status, None, certificate)
+        else {
+            return false;
+        };
+        if !is_web(url) || (!self.loading && self.failure.is_some()) {
+            return false;
+        }
+        if !self.loading {
+            self.generation += 1;
+            self.url = Some(url.to_owned());
+            self.attempt = 0;
+        }
+        self.committed = false;
+        self.fail(Some(failure));
         true
     }
 
@@ -379,6 +418,70 @@ mod tests {
     fn asked(watch: &mut LoadWatch, how: Asked, url: &str, now: f64) -> Option<u64> {
         watch.next_asked = Some(how);
         watch.requested(url, now)
+    }
+
+    /// Spec 083 W3: WebView2's own error page is not the site arriving; the
+    /// navigation's failure puts Vela's panel up at once, with its reason.
+    #[test]
+    fn an_engine_error_page_is_not_a_commit() {
+        let mut watch = LoadWatch::default();
+        watch.requested(SITE, 0.);
+        watch.error_page();
+        assert!(watch.engine_page && watch.loading && watch.failure.is_none());
+        assert!(watch.engine_failed(SITE, 8, false), "a retry is booked");
+        assert!(!watch.engine_page && !watch.loading);
+        assert_eq!(
+            watch.failure.as_ref().map(|f| f.class),
+            Some(LoadFailureClass::Offline)
+        );
+        assert!(watch.schedule_retry().is_some());
+    }
+
+    /// The probe failed first; WebView2's own timeout ~40 s later keeps the
+    /// panel and books nothing twice.
+    #[test]
+    fn the_engines_late_timeout_keeps_the_panel() {
+        let mut watch = LoadWatch::default();
+        let generation = watch.requested(SITE, 0.).unwrap_or_default();
+        watch.watchdog(generation);
+        assert_eq!(
+            watch.probed(generation, Err(probe_code::TIMEOUT)),
+            Probed::Failed
+        );
+        let before = watch.clone();
+        assert!(!watch.engine_failed(SITE, 7, false));
+        assert_eq!(watch.failure, before.failure);
+    }
+
+    /// A replaced navigation is not a failure; a bad certificate is final.
+    #[test]
+    fn a_replaced_navigation_changes_nothing_and_a_bad_certificate_is_final() {
+        let mut watch = LoadWatch::default();
+        watch.requested(SITE, 0.);
+        assert!(!watch.engine_failed(SITE, 14, false));
+        assert!(watch.loading && watch.failure.is_none());
+        assert!(watch.engine_failed(SITE, 2, true));
+        assert_eq!(
+            watch.failure.as_ref().map(|f| f.class),
+            Some(LoadFailureClass::Certificate)
+        );
+        assert_eq!(watch.schedule_retry(), None, "never retried by itself");
+    }
+
+    /// A link to a dead host (not a load the wallet asked for) names its own
+    /// address, so Retry loads that.
+    #[test]
+    fn a_failed_link_names_its_own_address() {
+        let mut watch = LoadWatch::default();
+        watch.requested(SITE, 0.);
+        watch.committed(SITE);
+        watch.finished(SITE);
+        assert!(watch.engine_failed("https://dead.example/", 13, false));
+        assert_eq!(watch.url.as_deref(), Some("https://dead.example/"));
+        assert_eq!(
+            watch.failure.as_ref().map(|f| f.class),
+            Some(LoadFailureClass::NotFound)
+        );
     }
 
     /// Spec 083 FR-005: the bar names the load asked for until a page commits,

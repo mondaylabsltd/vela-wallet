@@ -110,15 +110,29 @@ pub enum Load {
     /// favourite, reload, Retry (spec 079: progress from the request, not from
     /// the engine's commit, which on a slow network is seconds later).
     Requested(String),
-    /// A new document committed (`didCommitNavigation` on macOS,
-    /// `NavigationStarting` on Windows). Settles nothing by itself — the new
-    /// document's hello is what retires the old one.
+    /// A document of the SITE committed (`didCommitNavigation` on macOS;
+    /// WebView2's `ContentLoading` on Windows when it is not the engine's own
+    /// error page — `webview2_events`, spec 083). Settles nothing by itself —
+    /// the new document's hello is what retires the old one.
     Started(String),
+    /// WebView2 put its own error page where the document was (spec 083): the
+    /// old document is gone, and nothing of the site arrived — not a commit.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    ErrorPage(String),
     /// The load finished. If no document said hello since it started (an
     /// error page, a PDF), the old one is gone and its requests are settled.
     Finished(String),
-    /// The web content process died (macOS only — wry reports no such thing
-    /// for WebView2). The page is blank and can never answer again.
+    /// The navigation failed in the engine's own words (spec 083, Windows);
+    /// `status` is a `COREWEBVIEW2_WEB_ERROR_STATUS`.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Failed {
+        url: String,
+        status: i64,
+        certificate: bool,
+    },
+    /// The renderer died: WKWebView's content process on macOS, WebView2's
+    /// renderer or browser process on Windows (spec 083). The page is blank
+    /// and can never answer again.
     Crashed,
 }
 
@@ -327,6 +341,15 @@ pub fn forward() {
 }
 
 pub fn reload() {
+    // Spec 083: after WebView2's browser process died this view can never load
+    // again; dropping it lets the next frame build a new one at the page's
+    // address.
+    #[cfg(windows)]
+    if ENGINE_GONE.replace(false) {
+        let dead = BROWSER.with(|slot| slot.borrow_mut().take());
+        drop(dead);
+        return;
+    }
     let mut asked = false;
     with_view(|view| {
         asked = view.reload().is_ok();
@@ -451,6 +474,10 @@ thread_local! {
     /// A WebView2 is being created (Windows): do not start a second.
     #[cfg(windows)]
     static BUILDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// WebView2's browser process exited (spec 083): this view can never load
+    /// again, and Reload builds a new one.
+    #[cfg(windows)]
+    static ENGINE_GONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Build the browser OUTSIDE gpui's update (Windows).
@@ -529,13 +556,16 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
         .with_initialization_script(provider_script(ProviderHost::Desktop))
         .with_initialization_script(META_JS)
         .with_ipc_handler(on_ipc)
-        .with_on_page_load_handler(|event, url| {
-            report(match event {
-                wry::PageLoadEvent::Started => Load::Started(url),
-                wry::PageLoadEvent::Finished => Load::Finished(url),
-            });
-        })
         .with_url(home);
+    // Windows hears its loads from WebView2 directly (spec 083): wry's handler
+    // turns the engine's error page into a commit.
+    #[cfg(not(windows))]
+    let builder = builder.with_on_page_load_handler(|event, url| {
+        report(match event {
+            wry::PageLoadEvent::Started => Load::Started(url),
+            wry::PageLoadEvent::Finished => Load::Finished(url),
+        });
+    });
     #[cfg(target_os = "macos")]
     let builder = {
         use wry::WebViewBuilderExtDarwin as _;
@@ -543,6 +573,10 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
     };
     match builder.build_as_child(window) {
         Ok(view) => {
+            #[cfg(windows)]
+            if let Err(error) = listen_to_webview2(&view) {
+                eprintln!("[vela-wallet] browser: WebView2 events: {error}");
+            }
             // Built hidden: `place` turns it on in the same frame, and a
             // webview that flashed into the wallet before its first layout
             // would be visible for exactly one frame in the wrong place.
@@ -564,6 +598,61 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             Err(failure)
         }
     }
+}
+
+/// WebView2's load, crash and certificate events, into the wallet's `Load`
+/// (spec 083).
+#[cfg(windows)]
+fn listen_to_webview2(view: &wry::WebView) -> windows_core::Result<()> {
+    use crate::webview2_events::EngineLoad;
+    use wry::WebViewExtWindows as _;
+    crate::webview2_events::subscribe(&view.webview(), |event| {
+        report(match event {
+            EngineLoad::Committed(url) => Load::Started(url),
+            EngineLoad::ErrorPage(url) => {
+                // Off the screen this turn, before Edge's page paints a frame;
+                // the render that follows keeps it there (083 W3).
+                hide_if_free();
+                Load::ErrorPage(url)
+            }
+            EngineLoad::Finished(url) => Load::Finished(url),
+            EngineLoad::Failed {
+                url,
+                status,
+                certificate,
+            } => {
+                eprintln!(
+                    "[vela-wallet] browser: load failed, WebView2 status {status}{}",
+                    if certificate { " (certificate)" } else { "" }
+                );
+                Load::Failed {
+                    url,
+                    status,
+                    certificate,
+                }
+            }
+            EngineLoad::RendererGone => Load::Crashed,
+            EngineLoad::BrowserGone => {
+                ENGINE_GONE.set(true);
+                Load::Crashed
+            }
+        });
+    })
+}
+
+/// [`hide`], unless the view is borrowed right now (an engine event arriving
+/// inside a call on it): the next render hides it then.
+#[cfg(windows)]
+fn hide_if_free() {
+    BROWSER.with(|slot| {
+        if let Ok(mut slot) = slot.try_borrow_mut()
+            && let Some(browser) = slot.as_mut()
+            && browser.visible
+        {
+            let _ = browser.view.set_visible(false);
+            browser.visible = false;
+        }
+    });
 }
 
 /// The platform's code inside a failed build: tells a missing runtime from a

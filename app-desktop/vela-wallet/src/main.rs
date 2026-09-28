@@ -43,6 +43,9 @@ mod webview;
 #[cfg(target_os = "linux")]
 #[path = "webview_absent.rs"]
 mod webview;
+// WebView2's own load, crash and certificate events, which wry drops (spec 083).
+#[cfg(target_os = "windows")]
+mod webview2_events;
 mod window_frame;
 
 use gallery::GalleryView;
