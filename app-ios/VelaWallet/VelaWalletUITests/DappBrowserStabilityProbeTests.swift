@@ -49,13 +49,17 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         shot.name = name
         shot.lifetime = .keepAlways
         add(shot)
-        let labels = (app.staticTexts.allElementsBoundByIndex + app.buttons.allElementsBoundByIndex)
-            .prefix(120)
-            .compactMap { el -> String? in
-                let label = el.label
-                return label.isEmpty ? nil : "\(el.elementType == .button ? "B" : "T") \(label)"
+        // One snapshot of the whole tree: reading elements one by one raced the
+        // screen (an element counted, then gone before its label was read).
+        var found: [String] = []
+        func walk(_ node: XCUIElementSnapshot) {
+            if !node.label.isEmpty, node.elementType == .staticText || node.elementType == .button {
+                found.append("\(node.elementType == .button ? "B" : "T") \(node.label)")
             }
-            .joined(separator: "\n")
+            node.children.forEach(walk)
+        }
+        if let root = try? app.snapshot() { walk(root) }
+        let labels = found.prefix(160).joined(separator: "\n")
         let text = XCTAttachment(string: labels)
         text.name = name + ".txt"
         text.lifetime = .keepAlways
@@ -135,9 +139,12 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
         record(app, "08-send-sheet")
         slide(app)
         frames(app, "09-after-send", count: 24, every: 1.5)
-        if sheetOpen(app) {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
+        // Spec 079: the ✕ is the one way out; the scrim no longer closes it.
+        let close = app.buttons["关闭"].firstMatch
+        if close.exists, close.isHittable {
+            close.tap()
             Thread.sleep(forTimeInterval: 1)
+            record(app, "09z-closed-by-x")
         }
 
         // Chrome: site menu, connection panel, pickers, tabs.
