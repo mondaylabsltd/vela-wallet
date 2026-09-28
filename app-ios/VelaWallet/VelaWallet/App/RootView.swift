@@ -1569,6 +1569,13 @@ struct RootView: View {
             chain = ending.aftercare.chainId
             let track = tracker.view?.entry(userOpHash: ending.aftercare.userOpHash)
             hash = ending.aftercare.state(track: track).txHash ?? track?.txHash
+        } else if let live = liveSigning, let op = live.shownSign.pendingOpHash,
+                  let request = live.shownSign.request {
+            // The live sheet draws the tracker's settled verdict before the
+            // page is answered (082 review): its explorer link opens the same
+            // transaction the tracker names.
+            chain = request.chainId
+            hash = tracker.view?.entry(userOpHash: op)?.txHash
         } else {
             return
         }

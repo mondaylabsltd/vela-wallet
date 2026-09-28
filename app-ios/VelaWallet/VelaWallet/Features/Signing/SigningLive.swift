@@ -454,6 +454,22 @@ enum SigningLive {
             let track = context.track.flatMap {
                 $0.userOpHash.caseInsensitiveCompare(op) == .orderedSame ? $0 : nil
             }
+            // The tracker has its verdict while the page's answer is still
+            // waiting out its window — the relay said twice it never had the
+            // op, or the chain's own event was found while the relay stayed
+            // mute. The sheet says that verdict, in the core's words for the
+            // ending the page is about to get (`signEndingOf` of the op hash,
+            // `signEndingState` with the entry): a tick, a revert with its
+            // hash, or "not sent" — never "submitted, waiting" with a clock
+            // over an op that is settled (082 review).
+            if let track, track.outcome == "final",
+               let settled = SigningAftercare.of(
+                   method: sign.request?.method ?? "eth_sendTransaction",
+                   chainId: sign.request?.chainId ?? track.chainId,
+                   payload: ["type": "ok", "result": op], submittedUserOp: op
+               ) {
+                return aftercareReceipt(settled, summary: summary, context: context)
+            }
             if sign.pendingOpMaybeSent, track == nil || track?.outcome == "maybe_sent" {
                 return maybeSentReceipt(op: op, summary: summary, header: header, loc: loc)
             }

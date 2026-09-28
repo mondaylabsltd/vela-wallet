@@ -206,6 +206,37 @@ struct SigningReceiptTests {
         #expect(acknowledged?.title == loc.t("send.txSubmittedTitle"))
     }
 
+    /// The tracker settled a may-have-been-sent op while the page's answer is
+    /// still waiting out its window (the relay said twice it never had it, or
+    /// the chain's own event was found while the relay stayed mute). The live
+    /// sheet says the tracker's verdict — the core's `signEndingState` — and
+    /// never "submitted, waiting to confirm" with a clock (082 review).
+    @Test func aVerdictTheTrackerHasIsTheSheetsWordsBeforeThePageIsAnswered() {
+        let notSent = SigningLive.receipt(
+            sign: sign(op: op, phase: .submitting, maybeSent: true), blocks: blocks,
+            context: context(track: entry("not_sent", "final"))
+        )
+        #expect(notSent?.stage == .failed)
+        #expect(notSent?.title == loc.t("componentsTx.receipt.statusFailed"))
+        #expect(notSent?.captions.contains(loc.t("send.txErrorGeneric")) == true)
+        #expect(notSent?.eta == nil)
+
+        let found = SigningLive.receipt(
+            sign: sign(op: op, phase: .submitting, maybeSent: true), blocks: blocks,
+            context: context(track: entry("confirmed", "final", txHash: tx), explorer: "https://gnosisscan.io")
+        )
+        #expect(found?.stage == .confirmed)
+        #expect(found?.hash?.copyValue == tx)
+
+        let reverted = SigningLive.receipt(
+            sign: sign(op: op, phase: .submitting), blocks: blocks,
+            context: context(track: entry("dropped", "final", txHash: tx), explorer: "https://gnosisscan.io")
+        )
+        #expect(reverted?.stage == .failed)
+        #expect(reverted?.captions.contains(loc.t("componentsTx.receipt.failedHint")) == true)
+        #expect(reverted?.title != loc.t("componentsTx.receipt.statusConfirmed"))
+    }
+
     /// RI3's reader test: the new sentence resolves in zh and en and never
     /// echoes its own key.
     @Test func theMaybeSentSentenceResolvesInZhAndEn() {
