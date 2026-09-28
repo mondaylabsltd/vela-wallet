@@ -1165,6 +1165,7 @@ gone; a record exists before the bytes leave (RJ1).
   - The close control's `on_click` calls `cx.stop_propagation()` before `close(…)` (`:286-292`, inside the tab's `on_click` at `:309-313`); the comment's promise becomes true.
   - Tabs shrink from `TAB_W` to a minimum width (icon + ✕), then the strip scrolls horizontally; the lit tab and + always stay in view.
   - Tests: a pure `tab_widths(count, strip_w)`; the strip's actions table fires close only (no select) for a ✕ click, if the gpui test harness allows it — otherwise the device row CLOSE-TAB (§8) is the proof.
+  - DESK_A review (the close path): 0b111e48 — closing the page on screen no longer sends `TabClosed` for the one tab id (the core then dropped every later page's hello and requests for the session); 7a202174 — the ✕ on the tab on screen settles its page at the close (4900 once, column stopped), not at the neighbour's hello. Device check: close the last tab, open a dApp, connect; ✕ the tab on screen during a send with a neighbour that fails to load → the column goes at once.
 - [x] T200 [P] [US1] `D/explore/probe.rs`: an expired certificate is TLS (RJ10, G45); proof: in-file tests.
   - `io_code` downcasts `io.get_ref()` to `rustls::Error`: `InvalidCertificate(_)`, `NoCertificatesPresented` → `probe_code::TLS`; other rustls errors keep today's class.
   - Test: an `io::Error::new(InvalidData, rustls::Error::InvalidCertificate(CertificateError::Expired))` → TLS; the L5 class is Certificate with no auto-retry (`browser_load::classify`).
