@@ -3,9 +3,10 @@
 //  VelaWallet
 //
 //  A site or token's mark (spec 022): its first letter on a wash of its own
-//  brand colour. Deliberately NOT a fetched favicon — a wallet that
-//  downloads an icon from the site it is about to warn you about has handed
-//  that site a tracking pixel and a way to impersonate a brand.
+//  brand colour. Since spec 079 (and the 2026-09 site-icons ruling: https
+//  only, no referrer) a site is drawn with its own icon when one loads —
+//  `SiteAvatarView` — and this letter is the fallback until then and when
+//  none does.
 //
 
 import SwiftUI
@@ -27,5 +28,19 @@ struct LetterAvatarView: View {
             .background(muted ? AnyShapeStyle(theme.bgSunken) : AnyShapeStyle(tint.opacity(0.16)),
                         in: Circle())
             .accessibilityHidden(true)
+    }
+}
+
+/// A site's avatar (spec 079): its own icon when one loads — https only — and
+/// its letter until then, and when none does.
+struct SiteAvatarView: View {
+    let site: SiteModel
+    var size: CGFloat = ExploreGeometry.rowAvatar
+
+    var body: some View {
+        RemoteLogoView(urls: site.iconUrls, size: size) {
+            LetterAvatarView(letter: site.letter, tint: site.tint, size: size)
+        }
+        .accessibilityHidden(true)
     }
 }

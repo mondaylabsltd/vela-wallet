@@ -15,6 +15,8 @@ struct ConnectionPanelView: View {
 
     let connection: ConnectionModel
     let closeLabel: String
+    /// The http lock's screen-reader words (`connect.browser.a11yInsecure`).
+    var insecureLabel = ""
     var onClose: (() -> Void)?
     var onSwitch: () -> Void = {}
     var onDisconnect: () -> Void = {}
@@ -27,24 +29,41 @@ struct ConnectionPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
+            // Spec 079: a site ASKING says what it asks — "连接到 {host}" —
+            // the title the model always carried and the panel never drew.
+            if connection.consent != nil, !connection.title.isEmpty {
+                Text(verbatim: connection.title)
+                    .typeRole(Typography.title.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("explore.connection.title")
+            }
             HStack(spacing: Tokens.Space.s12) {
-                LetterAvatarView(letter: connection.site.letter, tint: connection.site.tint)
+                SiteAvatarView(site: connection.site)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: connection.site.host)
                         .typeRole(Typography.title.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .lineLimit(1)
                     HStack(spacing: Tokens.Space.s4) {
-                        // The padlock follows the SCHEME, not the layout. A
-                        // consent sheet that drew a lock over an http origin
-                        // would be the most dangerous pixel in this cut.
-                        if connection.secure {
-                            LucideIcon(.lock, size: LucideIconSize.addressLock)
+                        // The lock follows the SCHEME, not the layout, and
+                        // says nothing more (spec 079, owner: "你标记的安全站点
+                        // 只是https 而已，并不代表这个站点真的安全"): closed and
+                        // quiet for https, open in the warning colour for http,
+                        // and no word either way. "已连接" stays — a fact about
+                        // the connection, not a claim about the site.
+                        LucideIcon(connection.secure ? .lock : .lockOpen, size: LucideIconSize.addressLock)
+                            .foregroundStyle(connection.secure ? theme.fgMuted : theme.warningBase)
+                            .accessibilityLabel(connection.secure ? "" : insecureLabel)
+                            .accessibilityHidden(connection.secure)
+                            .accessibilityIdentifier(connection.secure ? "explore.connection.lock" : "explore.connection.insecure")
+                        if !connection.statusLine.isEmpty {
+                            Text(verbatim: connection.statusLine)
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                                .foregroundStyle(theme.fgMuted)
                         }
-                        Text(verbatim: connection.statusLine)
-                            .typeRole(Typography.rowSub.scaled(textScale))
                     }
-                    .foregroundStyle(connection.secure ? theme.successBase : theme.fgMuted)
                 }
                 Spacer(minLength: Tokens.Space.s12)
                 if let onClose {
@@ -99,8 +118,13 @@ struct ConnectionPanelView: View {
                         .foregroundStyle(theme.fgMuted)
                     Spacer()
                     HStack(spacing: Tokens.Space.s8) {
-                        Circle().fill(connection.network.dot)
-                            .frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
+                        // The chain's logo; the drawn dot until it lands.
+                        RemoteLogoView(urls: [connection.networkLogoUrl].compactMap { $0 },
+                                       size: Tokens.Space.s20) {
+                            Circle().fill(connection.network.dot)
+                                .frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
+                                .frame(width: Tokens.Space.s20, height: Tokens.Space.s20)
+                        }
                         Text(verbatim: connection.network.name)
                             .typeRole(Typography.body.scaled(textScale))
                             .foregroundStyle(theme.fgBase)
@@ -123,13 +147,26 @@ struct ConnectionPanelView: View {
                             pickingNetwork = false
                             onPickNetwork(network.id)
                         } label: {
-                            HStack(spacing: Tokens.Space.s8) {
-                                Circle().fill(network.dot)
-                                    .frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
+                            HStack(spacing: Tokens.Space.s12) {
+                                // Spec 079: each network's logo, as elsewhere
+                                // in the wallet, and what the account holds
+                                // there — nothing where it is not known.
+                                RemoteLogoView(urls: [network.logoUrl].compactMap { $0 },
+                                               size: Tokens.Space.s24) {
+                                    Circle().fill(network.dot)
+                                        .frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
+                                        .frame(width: Tokens.Space.s24, height: Tokens.Space.s24)
+                                }
                                 Text(verbatim: network.name)
                                     .typeRole(Typography.body.scaled(textScale))
                                     .foregroundStyle(theme.fgBase)
                                 Spacer()
+                                if let amount = network.amount {
+                                    Text(verbatim: amount)
+                                        .typeRole(Typography.rowSub.scaled(textScale))
+                                        .foregroundStyle(theme.fgMuted)
+                                        .accessibilityIdentifier("explore.connection.network.amount")
+                                }
                                 if network.id == connection.chainId {
                                     LucideIcon(.check, size: LucideIconSize.smallChevron)
                                         .foregroundStyle(theme.successBase)

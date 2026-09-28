@@ -47,6 +47,9 @@ enum LucideGlyph: String {
     case arrowLeft, arrowRight, arrowDown
     case eye
     case lock, star, share2, power, externalLink, gripVertical
+    /// lucide `lock-open` — a page NOT on https (spec 079: the lock alone
+    /// says it, in the warning colour, with no words beside it).
+    case lockOpen
     /// The same five-point path, filled. A favourite that is ON and one that
     /// is off must differ by more than a tint: colour alone is invisible to
     /// somebody who cannot see it, and the nav bar's outline/solid pairs
@@ -170,6 +173,8 @@ enum LucideGlyph: String {
             return ##"<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>"##
         case .lock:
             return ##"<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>"##
+        case .lockOpen:
+            return ##"<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>"##
         case .star:
             return ##"<path d="M12.00 2.70 L14.35 8.76 L20.84 9.13 L15.80 13.24 L17.47 19.52 L12.00 16.00 L6.53 19.52 L8.20 13.24 L3.16 9.13 L9.65 8.76 Z"/>"##
         case .starSolid:

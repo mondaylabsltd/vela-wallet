@@ -22,12 +22,16 @@ struct SiteModel: Identifiable, Hashable {
     let id: String
     let name: String
     let host: String
-    /// Single grapheme drawn in the avatar — never a fetched favicon.
+    /// Single grapheme drawn in the avatar until the site's own icon lands,
+    /// and when none does — the core's rule (`browserSiteLetter`).
     let letter: String
     let tint: Color
     var subtitle: String?
     /// "刚刚" / "昨天" — fixture content.
     var meta: String?
+    /// Spec 079: the site's own icon, best first (https only) — the one the
+    /// page named when visited, then the usual places. Empty draws the letter.
+    var iconUrls: [String] = []
 }
 
 enum TileModel: Identifiable {
@@ -137,6 +141,8 @@ struct ConnectionModel {
     var chainId: Int = 0
     /// The chains the network row offers. Empty draws the row as a label.
     var networks: [NetworkChoiceModel] = []
+    /// Spec 079: the site's network's logo; the dot shows until it lands.
+    var networkLogoUrl: String?
 }
 
 /// One network the connection panel's picker offers.
@@ -144,6 +150,12 @@ struct NetworkChoiceModel: Identifiable, Equatable {
     let id: Int
     let name: String
     let dot: Color
+    /// Spec 079 (owner: "切换网络，没有网络logo呀"): the chain's logo.
+    var logoUrl: String?
+    /// Spec 079 (owner: "需要能看到这个网络上的余额吧"): what the account holds
+    /// on this network, in the display currency, from the home screen's own
+    /// figures — `nil` when not known or empty, never a made-up zero.
+    var amount: String?
 }
 
 /// Which of the three sheets is open.

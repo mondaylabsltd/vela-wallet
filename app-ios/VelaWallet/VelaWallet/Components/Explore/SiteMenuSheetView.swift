@@ -17,29 +17,36 @@ struct SiteMenuSheetView: View {
     let statusLine: String
     let items: [SiteMenuItem]
     let closeLabel: String
-    /// The padlock and the green are for a secure origin only (spec 070):
-    /// an http page's menu names its host in plain text.
+    /// The lock follows the scheme (spec 070) and says nothing more (spec
+    /// 079, owner: https is not "safe"): closed and quiet for https, open in
+    /// the warning colour for plain http, no words either way.
     var secure: Bool = true
+    /// The http lock's screen-reader words (`connect.browser.a11yInsecure`).
+    var insecureLabel = ""
     var onClose: () -> Void = {}
     var onPick: (String) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s0) {
             HStack(spacing: Tokens.Space.s12) {
-                LetterAvatarView(letter: site.letter, tint: site.tint)
+                SiteAvatarView(site: site)
                 VStack(alignment: .leading, spacing: Tokens.Space.s2) {
                     Text(verbatim: site.host)
                         .typeRole(Typography.title.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                         .lineLimit(1)
                     HStack(spacing: Tokens.Space.s4) {
-                        if secure {
-                            LucideIcon(.lock, size: LucideIconSize.addressLock)
+                        LucideIcon(secure ? .lock : .lockOpen, size: LucideIconSize.addressLock)
+                            .foregroundStyle(secure ? theme.fgMuted : theme.warningBase)
+                            .accessibilityLabel(secure ? "" : insecureLabel)
+                            .accessibilityHidden(secure)
+                            .accessibilityIdentifier(secure ? "explore.menu.lock" : "explore.menu.insecure")
+                        if !statusLine.isEmpty {
+                            Text(verbatim: statusLine)
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                                .foregroundStyle(theme.fgMuted)
                         }
-                        Text(verbatim: statusLine)
-                            .typeRole(Typography.rowSub.scaled(textScale))
                     }
-                    .foregroundStyle(secure ? theme.successBase : theme.fgMuted)
                 }
                 Spacer(minLength: Tokens.Space.s12)
                 Button(action: onClose) {

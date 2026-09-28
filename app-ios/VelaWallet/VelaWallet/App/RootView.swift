@@ -1251,6 +1251,9 @@ struct RootView: View {
                             identity: (name: session.view.activeName,
                                        address: session.view.address),
                             chainIds: browser.chainIds,
+                            holdings: WalletLive.networkHoldings(
+                                wallet.balance, display: WalletLive.Display.from(settings.currency)
+                            ),
                             loc: loc
                         ),
                         loc: loc,

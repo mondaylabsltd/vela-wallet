@@ -480,7 +480,6 @@ struct ExploreScreen: View {
         case .browsing:
             AddressBarView(
                 host: browserHost, secure: browserSecure,
-                secureLabel: loc.t("explore.secureSite"),
                 closeLabel: loc.t("explore.closePage"),
                 menuLabel: loc.t("explore.siteMenu"),
                 insecureLabel: loc.t("connect.browser.a11yInsecure"),
@@ -772,6 +771,7 @@ struct ExploreScreen: View {
                     site: site, statusLine: statusLine, items: items,
                     closeLabel: loc.t("explore.close"),
                     secure: controller == nil || browserSecure,
+                    insecureLabel: loc.t("connect.browser.a11yInsecure"),
                     onClose: { self.sheet = nil },
                     onPick: { id in
                         self.sheet = nil
@@ -783,6 +783,7 @@ struct ExploreScreen: View {
             ScrollView {
                 ConnectionPanelView(
                     connection: connection, closeLabel: loc.t("explore.close"),
+                    insecureLabel: loc.t("connect.browser.a11yInsecure"),
                     onClose: { self.sheet = nil },
                     onSwitch: {
                         guard controller != nil else { return }

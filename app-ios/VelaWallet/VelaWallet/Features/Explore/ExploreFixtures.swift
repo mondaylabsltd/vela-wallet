@@ -108,7 +108,9 @@ enum ExploreFixtures {
         ConnectionModel(
             title: loc.t("explore.connectionTitle"),
             site: uniswap,
-            statusLine: "\(loc.t("explore.secureSite")) · \(loc.t("explore.connectedTag"))",
+            // Spec 079 (owner): the lock alone says https; "已连接" is a fact
+            // about the connection, not a claim about the site.
+            statusLine: loc.t("explore.connectedTag"),
             account: (name: WalletFixtures.identity.name,
                       address: WalletFixtures.identity.addressDisplay,
                       seed: WalletFixtures.identity.addressFull),
@@ -148,8 +150,8 @@ enum ExploreFixtures {
         let view: ExploreView = browsing ? .browsing : (state == .e5 ? .tabs : .start)
 
         let tiles: [TileModel] = favorites.map { .site($0) } + [.add(loc.t("explore.add"))]
-        let siteMenu = ExploreSheet.siteMenu(site: uniswap,
-                                             statusLine: loc.t("explore.secureSite"),
+        // Spec 079 (owner): no "安全站点" — the lock alone.
+        let siteMenu = ExploreSheet.siteMenu(site: uniswap, statusLine: "",
                                              items: siteMenuItems(loc))
         let connectionModel = connection(loc)
 
