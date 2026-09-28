@@ -60,7 +60,7 @@ re-grep the function name before editing.
   - `data-model.md` §2: the find-event transitions and `submit_block`; §1: that the shells persist `maybe_sent` / `submit_block` with the record (T181–T184).
   - `plan.md` "Out of scope → Deferred" still lists "A relay-independent landing check (Q1)" and the High risk "Residual double pay" says it needs Q1: both are stale since ruling 8 (answered Q1) — strike the deferral and say the risk is closed by T019.
   - `device-pass-plan.md` §1 step 4 and §2's "Switch the Mac to chaos" / DX3 / IX3–IX5: one line each, "superseded by quickstart.md (ruling 6, RH1)".
-- [ ] T008 [P] `scripts/device/chaos-proxy.py` (RH1, RH2); proof: `python3 -m py_compile scripts/device/chaos-proxy.py`.
+- [x] T008 [P] `scripts/device/chaos-proxy.py` (RH1, RH2); proof: `python3 -m py_compile scripts/device/chaos-proxy.py`.
   - Header (required): the Android `adb shell settings put global http_proxy` lines and the iPhone "Settings > Wi-Fi > Configure Proxy" lines change every app's traffic, which ruling 6 forbids; RH1 marks them superseded. Replace them with the per-app switches (iPhone Debug build `VELA_DEV_PROXY`, extension Chrome for Testing `--proxy-server`, Android: no fault rows, RH3) and a pointer to quickstart.md §0. Proof: `rg -n 'http_proxy|Configure Proxy' scripts/device/chaos-proxy.py` finds only the "never" note.
   - Optional `stall` mode (W24): CONNECT is answered `200` and the upstream is never opened; list it in the header's mode line. Proof: one `curl -x` against the mode hangs after the 200.
 

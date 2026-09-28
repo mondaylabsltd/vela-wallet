@@ -1,26 +1,31 @@
 #!/usr/bin/env python3
-"""A fault-injecting HTTP/CONNECT proxy for device passes (spec 079).
+"""A fault-injecting HTTP/CONNECT proxy for device passes (specs 079, 082).
 
-Every client's traffic — the page, the wallet's RPC pool, the relay, the signing
-page — goes through it, so a fault can be aimed at one host and repeated.
+Only the app under test is pointed at it (owner ruling 6): that app's page, its
+RPC pool, the relay and the signing page go through it, so a fault can be aimed
+at one host and repeated while nothing else on the device notices. The rules
+and every row: specs/082-dapp-browser-mac-ext-ios/quickstart.md §0.
 
 Run:   CHAOS_UPSTREAM=127.0.0.1:1088 python3 scripts/device/chaos-proxy.py chaos.log
        (CHAOS_UPSTREAM: an HTTP proxy the Mac itself needs to reach the internet;
         unset = connect directly.  CHAOS_BIND=0.0.0.0 to serve a phone on the LAN.)
 
-Android: adb reverse tcp:8899 tcp:8899
-         adb shell settings put global http_proxy 127.0.0.1:8899
-         (restore: adb shell settings put global http_proxy :0)
-         OkHttp keeps pooled connections: force-stop the app after pointing it here.
-iPhone:  Settings > Wi-Fi > (network) > Configure Proxy > Manual: <mac-lan-ip>:8899,
-         with CHAOS_BIND=0.0.0.0. Turn it back to Off afterwards.
-Desktop: a dev-fixtures build launched with VELA_DEV_PROXY=127.0.0.1:8899 sends
-         its page AND wallet traffic here and nothing else on the Mac (spec 082);
-         never change the macOS system proxy or network location for this.
+Point ONE app at it, never a device:
+Desktop:   a dev-fixtures build launched with VELA_DEV_PROXY=127.0.0.1:8899 sends
+           its page AND wallet traffic here and nothing else on the Mac.
+iPhone:    a Debug build launched with "VELA_DEV_PROXY":"<mac-lan-ip>:8899" in the
+           devicectl -e JSON (per-app ProxyConfiguration), with CHAOS_BIND=0.0.0.0.
+Extension: Chrome for Testing in its own --user-data-dir, started with
+           --proxy-server=http://127.0.0.1:8899 (never the owner's Chrome profile).
+Android:   no fault rows; the only switch that exists is device-wide (082 RH3).
+Never (each one moves every app's traffic, ruling 6): the macOS system proxy or
+network location, the iPhone's Settings > Wi-Fi > Configure Proxy, Shadowrocket
+toggles, airplane mode, or `adb shell settings put global http_proxy`.
 
 Control: curl 'http://127.0.0.1:8899/__chaos?mode=drop&match=vela-relay'
-  mode      pass | latency | throttle | drop | blackhole | reset_mid | mute
-            (mute: the request reaches the host, its reply never comes back)
+  mode      pass | latency | throttle | drop | blackhole | reset_mid | mute | stall
+            (mute: the request reaches the host, its reply never comes back;
+             stall: CONNECT is answered 200 and the upstream is never opened)
   latency   ms added before the upstream connect (latency / throttle)
   bps       bytes/second each direction (throttle)
   drop      probability 0..1 that a matching connection is refused (drop)
@@ -105,6 +110,12 @@ async def pipe(r, w, bps, mute=None, upstream=False):
             pass
 
 
+async def swallow(r):
+    """Read and drop whatever the client sends until it gives up."""
+    while await r.read(16384):
+        pass
+
+
 async def handle(cr, cw):
     try:
         head = await cr.readuntil(b"\r\n\r\n")
@@ -149,6 +160,24 @@ async def handle(cr, cw):
         log("HOLE", f"{host}:{port}")
         await asyncio.sleep(600)
         cw.close()
+        return
+    if fault and CFG["mode"] == "stall":
+        # The tunnel is "established" and nothing ever comes through it: what a
+        # TUN-mode proxy client with a dead node does (spec 082 W24). Unlike
+        # blackhole, the client sees its CONNECT succeed.
+        log("STALL", f"{host}:{port}")
+        if method == "CONNECT":
+            cw.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            await cw.drain()
+        entry = (host, cw, cw)
+        LIVE.add(entry)
+        try:
+            await asyncio.wait_for(swallow(cr), 600)
+        except Exception:
+            pass
+        finally:
+            LIVE.discard(entry)
+            cw.close()
         return
     if fault and CFG["latency"]:
         await asyncio.sleep(CFG["latency"] / 1000)
