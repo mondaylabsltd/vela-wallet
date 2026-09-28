@@ -12,14 +12,17 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::fee_policy::{tempo_reimbursement, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use vela_core::app::sign_request::{
-    extract_request_chain_id, is_signing_method, method_kind, required_capabilities,
-    sign_account_index, Event, SignAccountRef, SignApproveOpts, SignDappIdentity, SignErrorKind,
-    SignFundingNeeded, SignFundingPresentation, SignMethodKind, SignNotice, SignOperation as Op,
-    SignQuotedFee, SignRecordClose, SignRecordKind, SignRecordStatus, SignRequest,
+    dapp_receipt_wait_ms, ending_of, ending_state, extract_request_chain_id, is_signing_method,
+    method_kind, required_capabilities, sign_account_index, Event, SignAccountRef, SignApproveOpts,
+    SignDappIdentity, SignEnding, SignEndingState, SignErrorKind, SignFundingNeeded,
+    SignFundingPresentation, SignMethodKind, SignNotice, SignOperation as Op, SignPhase,
+    SignQuotedFee, SignRecord, SignRecordClose, SignRecordKind, SignRecordStatus, SignRequest,
     SignResponsePayload, SignSettledOutcome, SignShellResult as Res, SignSponsorship,
-    SignSubmitOutcome, SignSurface, SignSwipeAction, CODE_INTERNAL, CODE_INVALID_PARAMS,
-    CODE_UNAUTHORIZED, CODE_UNSUPPORTED_CAPABILITY, CODE_UNSUPPORTED_CHAIN, CODE_USER_REJECTED,
+    SignSubmitOutcome, SignSurface, SignSwipeAction, SignTrackerHandoff, CODE_INTERNAL,
+    CODE_INVALID_PARAMS, CODE_UNAUTHORIZED, CODE_UNSUPPORTED_CAPABILITY, CODE_UNSUPPORTED_CHAIN,
+    CODE_USER_REJECTED, DAPP_TX_ANSWER_WINDOW_MS, EXTENSION_REQUEST_TTL_MS,
 };
+use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
 type Sut = DomainDriver<SignRequest>;
 
@@ -537,8 +540,11 @@ fn signature_record_lands_before_the_response() {
     assert_eq!(sut.view().surface, SignSurface::Hidden);
 }
 
+/// The pending record lands at submission; the final answer goes to the page
+/// and the record is left to the tracker (spec 082 T023, RA8 3 — before 082
+/// this machine flipped it confirmed itself, racing the tracker's verdict).
 #[test]
-fn tx_pending_record_persists_at_submission_then_flips_confirmed_in_place() {
+fn tx_pending_record_persists_at_submission_and_only_the_tracker_closes_it() {
     let capped = capped_approve_params();
     let mut sut = boot();
     sut.dispatch(
@@ -552,6 +558,8 @@ fn tx_pending_record_persists_at_submission_then_flips_confirmed_in_place() {
         id: "req-7".to_owned(),
         user_op_hash: "0xophash".to_owned(),
         now_ms: 5_000.0,
+        maybe_sent: false,
+        submit_block: None,
     });
     assert!(
         matches!(ops.as_slice(), [Op::PersistRecord { record }]
@@ -569,16 +577,18 @@ fn tx_pending_record_persists_at_submission_then_flips_confirmed_in_place() {
     assert_eq!(handoff.record_ids, vec!["dapp-5000-tx".to_owned()]);
     assert_eq!(handoff.chain_id, 1);
 
-    // Final result: respond, then flip the SAME record confirmed.
+    // Final result: the page is answered; the record is the tracker's to close.
+    let ops = sut.resolve(Res::RecordPersisted);
+    assert!(ops.is_empty(), "the pending record's ack moves nothing");
     let ops = sut.resolve(submit_ok("0xtxhash"));
+    assert_eq!(ops.len(), 1, "the answer only: {ops:?}");
     assert_eq!(
         response_ok(&ops[0]),
         Some((WP.to_owned(), Some("0xtxhash".to_owned())))
     );
     assert!(
-        matches!(&ops[1], Op::UpdateRecord { record_id, close: SignRecordClose::Confirmed { tx_hash } }
-            if record_id == "dapp-5000-tx" && tx_hash == "0xtxhash"),
-        "same id, in place, never a second record: {ops:?}"
+        !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
+        "no Confirmed patch from sign_request: {ops:?}"
     );
     assert_eq!(sut.view().surface, SignSurface::Hidden);
 }
@@ -596,6 +606,8 @@ fn receipt_timeout_answers_the_op_hash_and_leaves_the_record_pending() {
         id: "req-7t".to_owned(),
         user_op_hash: "0xophash".to_owned(),
         now_ms: 5_000.0,
+        maybe_sent: false,
+        submit_block: None,
     });
     sut.resolve(Res::RecordPersisted);
 
@@ -681,6 +693,8 @@ fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
         id: "req-7v".to_owned(),
         user_op_hash: op_hash.to_owned(),
         now_ms: NOW,
+        maybe_sent: false,
+        submit_block: None,
     });
     sign.resolve(Res::RecordPersisted);
     let handoff = sign.view().tracker_handoff.expect("handoff");
@@ -691,6 +705,8 @@ fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
         user_op_hash: handoff.user_op_hash.clone(),
         record_ids: handoff.record_ids.clone(),
         chain_id: handoff.chain_id,
+        maybe_sent: handoff.maybe_sent,
+        submit_block: handoff.submit_block,
     });
     tracker.resolve(TRes::Clock { now_ms: NOW });
     tracker.resolve(TRes::ReceiptPending {
@@ -748,6 +764,8 @@ fn failed_submit_patches_the_pending_record_failed() {
         id: "req-8".to_owned(),
         user_op_hash: "0xop".to_owned(),
         now_ms: 6_000.0,
+        maybe_sent: false,
+        submit_block: None,
     });
     let ops = sut.resolve(Res::Submit {
         outcome: SignSubmitOutcome::Failed {
@@ -811,6 +829,8 @@ fn f3_f4_request_uses_its_own_chain_and_dapp_identity() {
         id: "rid-2".to_owned(),
         user_op_hash: "0xop".to_owned(),
         now_ms: 8_000.0,
+        maybe_sent: false,
+        submit_block: None,
     });
     assert!(
         matches!(ops.as_slice(), [Op::PersistRecord { record }]
@@ -1591,4 +1611,608 @@ fn malformed_params_fail_closed_at_approve() {
             .any(|op| matches!(op, Op::SignAndSubmit { .. })),
         "nothing unparseable is ever signed"
     );
+}
+
+// ===========================================================================
+// Spec 082 — a lost reply (RA3), the sheet's phase (RA9), the ending (RA8),
+// the answer window (RA12) and a vanished asker (RB2)
+// ===========================================================================
+
+const LOCAL_OP: &str = "0x5538ce6978ab8924cce04d68c11cded19c36a8773e94656be6ada6315477ba1f";
+const LANDED_TX: &str = "0xa6180e26c628e4ca1c3e474f5aa5d991ca9cba0fe4c28af9de40fc88a08b44f9";
+const SUBMIT_BLOCK: u64 = 48_479_100;
+
+/// Take a transaction request through approve and pre-check into the submit
+/// stage, returning the machine.
+fn submitting(id: &str) -> Sut {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global(id, "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]),
+        "{ops:?}"
+    );
+    sut
+}
+
+fn op_submitted_maybe(id: &str) -> Event {
+    Event::OpSubmitted {
+        id: id.to_owned(),
+        user_op_hash: LOCAL_OP.to_owned(),
+        now_ms: 5_000.0,
+        maybe_sent: true,
+        submit_block: Some(SUBMIT_BLOCK),
+    }
+}
+
+/// T020: a submit whose reply was lost is recorded pending under the LOCAL
+/// hash and handed to the tracker with the flag and the head — the same path
+/// as an accepted op (RA3: no new outcome).
+#[test]
+fn a_maybe_sent_op_is_recorded_and_handed_over_under_the_local_hash() {
+    let mut sut = submitting("req-m1");
+    let ops = sut.dispatch(op_submitted_maybe("req-m1"));
+    let [Op::PersistRecord { record }] = ops.as_slice() else {
+        unreachable!("one pending record: {ops:?}")
+    };
+    assert_eq!(record.status, SignRecordStatus::Pending);
+    assert_eq!(record.user_op_hash, LOCAL_OP);
+    assert!(record.maybe_sent);
+    assert_eq!(record.submit_block, Some(SUBMIT_BLOCK));
+
+    let view = sut.view();
+    assert_eq!(view.pending_op_hash.as_deref(), Some(LOCAL_OP));
+    assert!(view.pending_op_maybe_sent);
+    let handoff = view.tracker_handoff.expect("handoff");
+    assert_eq!(handoff.user_op_hash, LOCAL_OP);
+    assert!(handoff.maybe_sent);
+    assert_eq!(handoff.submit_block, Some(SUBMIT_BLOCK));
+    assert_eq!(handoff.record_ids, vec![record.record_id.clone()]);
+
+    // The one answer the page gets: the op hash, Ok — never 4900 or -32603.
+    assert!(sut.resolve(Res::RecordPersisted).is_empty());
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::ReceiptPending {
+            user_op_hash: LOCAL_OP.to_owned(),
+        },
+        now_ms: 125_000.0,
+    });
+    assert_eq!(ops.len(), 1, "{ops:?}");
+    assert_eq!(
+        response_ok(&ops[0]),
+        Some((WP.to_owned(), Some(LOCAL_OP.to_owned())))
+    );
+
+    // The rid settled Submitted: a replay never signs twice.
+    sut.dispatch(Arrive::global("req-m1", "eth_sendTransaction", &plain_send_params()).event());
+    assert_eq!(
+        sut.view().notice,
+        Some(SignNotice::AlreadySettled {
+            outcome: SignSettledOutcome::Submitted
+        })
+    );
+}
+
+/// T020: past the commitment point a swipe is a dismiss — no 4001 over an op
+/// that may be on chain.
+#[test]
+fn a_swipe_after_a_maybe_sent_commit_is_a_dismiss() {
+    let mut sut = submitting("req-m2");
+    sut.dispatch(op_submitted_maybe("req-m2"));
+    assert_eq!(sut.view().swipe_action, SignSwipeAction::Dismiss);
+    let ops = sut.dispatch(Event::SwipeDismissed);
+    assert!(ops.is_empty(), "no answer on a dismiss: {ops:?}");
+    assert!(sut.dispatch(Event::RejectTapped).is_empty(), "no 4001");
+}
+
+/// T020: shells that predate 082 send none of the new fields.
+#[test]
+fn old_sign_json_without_the_new_fields_still_decodes() {
+    let event: Option<Event> =
+        serde_json::from_str(r#"{"type":"op_submitted","id":"r","user_op_hash":"0x1","now_ms":1}"#)
+            .ok();
+    assert!(matches!(
+        event,
+        Some(Event::OpSubmitted {
+            maybe_sent: false,
+            submit_block: None,
+            ..
+        })
+    ));
+    let record: Option<SignRecord> = serde_json::from_str(
+        r#"{"record_id":"dapp-1-tx","kind":"dapp_tx","method":"eth_sendTransaction","params_json":"[]","result":"","from":"0x","chain_id":1,"now_ms":1,"status":"pending","user_op_hash":"0x1","dapp_origin":"o","intent":null}"#,
+    )
+    .ok();
+    assert_eq!(
+        record.map(|r| (r.maybe_sent, r.submit_block)),
+        Some((false, None))
+    );
+    let handoff: Option<SignTrackerHandoff> =
+        serde_json::from_str(r#"{"user_op_hash":"0x1","record_ids":[],"chain_id":1}"#).ok();
+    assert_eq!(
+        handoff.map(|h| (h.maybe_sent, h.submit_block)),
+        Some((false, None))
+    );
+    let outcome: Option<SignSubmitOutcome> = serde_json::from_str(r#"{"type":"asker_gone"}"#).ok();
+    assert_eq!(outcome, Some(SignSubmitOutcome::AskerGone));
+}
+
+/// T021 (RA9, G22): every row of the phase table. The network wait before the
+/// passkey is Preparing — never AwaitingSignature.
+#[test]
+fn the_phase_follows_the_stage_and_the_prompt() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-p", "eth_sendTransaction", &plain_send_params()).event());
+    assert_eq!(sut.view().phase, SignPhase::Idle, "the form");
+
+    sut.dispatch(approve(SignApproveOpts::default()));
+    assert_eq!(sut.view().phase, SignPhase::Preparing, "pre-check");
+    // A prompt event during the pre-check is not accepted.
+    assert!(sut
+        .dispatch(Event::CeremonyStarted {
+            id: "req-p".to_owned()
+        })
+        .is_empty());
+    assert_eq!(sut.view().phase, SignPhase::Preparing);
+
+    let ops = sut.resolve(Res::PreCheck {
+        funding: Some(funding_fixture()),
+    });
+    assert!(matches!(ops.as_slice(), [Op::AttemptSponsorship { .. }]));
+    assert_eq!(sut.view().phase, SignPhase::Preparing, "sponsoring");
+
+    let ops = sut.resolve(Res::Sponsorship {
+        outcome: SignSponsorship::Funded,
+    });
+    assert!(matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]));
+    assert_eq!(
+        sut.view().phase,
+        SignPhase::Preparing,
+        "submit stage, prompt not up yet"
+    );
+
+    // A stale id is dropped.
+    assert!(sut
+        .dispatch(Event::CeremonyStarted {
+            id: "req-other".to_owned()
+        })
+        .is_empty());
+    assert_eq!(sut.view().phase, SignPhase::Preparing);
+
+    sut.dispatch(Event::CeremonyStarted {
+        id: "req-p".to_owned(),
+    });
+    assert_eq!(sut.view().phase, SignPhase::AwaitingSignature);
+    sut.dispatch(Event::CeremonyDone {
+        id: "req-p".to_owned(),
+    });
+    assert_eq!(sut.view().phase, SignPhase::Submitting);
+    // Forward only: a late "started" never re-opens the prompt.
+    assert!(sut
+        .dispatch(Event::CeremonyStarted {
+            id: "req-p".to_owned()
+        })
+        .is_empty());
+    assert_eq!(sut.view().phase, SignPhase::Submitting);
+
+    // Reactive sponsorship after an underfunded submit: still Submitting.
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Underfunded {
+            message: "AA21".to_owned(),
+            funding: Some(funding_fixture()),
+        },
+        now_ms: 12_000.0,
+    });
+    assert!(matches!(
+        ops.as_slice(),
+        [Op::AttemptSponsorship { force: true, .. }]
+    ));
+    assert_eq!(sut.view().phase, SignPhase::Submitting);
+}
+
+/// T021: a message goes straight to the prompt; persisting its record is
+/// Submitting; an accepted op implies the prompt is done.
+#[test]
+fn the_phase_of_a_message_and_of_an_accepted_op() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-q", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    assert_eq!(sut.view().phase, SignPhase::Preparing);
+    sut.dispatch(Event::CeremonyStarted {
+        id: "req-q".to_owned(),
+    });
+    assert_eq!(sut.view().phase, SignPhase::AwaitingSignature);
+    let ops = sut.resolve(submit_ok("0xsig"));
+    assert!(matches!(ops.as_slice(), [Op::PersistRecord { .. }]));
+    assert_eq!(sut.view().phase, SignPhase::Submitting, "persisting");
+
+    // A shell that never reports the prompt still reads Submitting once the
+    // relay has the op.
+    let mut sut = submitting("req-r");
+    assert_eq!(sut.view().phase, SignPhase::Preparing);
+    sut.dispatch(op_submitted_maybe("req-r"));
+    assert_eq!(sut.view().phase, SignPhase::Submitting);
+}
+
+fn entry(status: TrackStatus, outcome: TrackOutcome, tx_hash: Option<&str>) -> TrackEntryView {
+    TrackEntryView {
+        user_op_hash: LOCAL_OP.to_owned(),
+        chain_id: 100,
+        record_ids: vec!["dapp-5000-tx".to_owned()],
+        status,
+        tx_hash: tx_hash.map(str::to_owned),
+        polling: true,
+        submitted_at_ms: Some(5_000.0),
+        outcome,
+        relay_tx_hash: None,
+    }
+}
+
+fn ok_answer(result: &str) -> SignResponsePayload {
+    SignResponsePayload::Ok {
+        result: Some(result.to_owned()),
+    }
+}
+
+/// T022 (RA8 1): the ending an answer stands for.
+#[test]
+fn the_ending_of_an_answer() {
+    assert_eq!(
+        ending_of("personal_sign", &ok_answer("0xsig"), None),
+        Some(SignEnding::Signed)
+    );
+    assert_eq!(
+        ending_of("eth_signTypedData_v4", &ok_answer("0xsig"), Some(LOCAL_OP)),
+        Some(SignEnding::Signed)
+    );
+    assert_eq!(
+        ending_of("eth_sendTransaction", &ok_answer(LANDED_TX), Some(LOCAL_OP)),
+        Some(SignEnding::Landed {
+            tx_hash: LANDED_TX.to_owned(),
+            user_op_hash: Some(LOCAL_OP.to_owned())
+        })
+    );
+    assert_eq!(
+        ending_of(
+            "eth_sendTransaction",
+            &ok_answer(&LOCAL_OP.to_uppercase().replace("0X", "0x")),
+            Some(LOCAL_OP)
+        ),
+        Some(SignEnding::StillConfirming {
+            user_op_hash: LOCAL_OP.to_owned()
+        }),
+        "the answer IS the op: the wait ran out"
+    );
+    assert_eq!(
+        ending_of("wallet_sendCalls", &ok_answer(LOCAL_OP), Some(LOCAL_OP)),
+        Some(SignEnding::StillConfirming {
+            user_op_hash: LOCAL_OP.to_owned()
+        })
+    );
+    assert_eq!(
+        ending_of("eth_sendTransaction", &ok_answer(LANDED_TX), None),
+        Some(SignEnding::Landed {
+            tx_hash: LANDED_TX.to_owned(),
+            user_op_hash: None
+        })
+    );
+    let refused = SignResponsePayload::Err {
+        code: CODE_USER_REJECTED,
+        kind: SignErrorKind::UserRejected,
+        message: None,
+    };
+    assert_eq!(ending_of("eth_sendTransaction", &refused, None), None);
+    assert_eq!(
+        ending_of(
+            "eth_sendTransaction",
+            &SignResponsePayload::Ok { result: None },
+            None
+        ),
+        None
+    );
+    assert_eq!(
+        ending_of("eth_sendTransaction", &ok_answer("  "), None),
+        None
+    );
+}
+
+/// T022 (RA8 2): every row of the data-model ending table — the tracker, not
+/// the answer, decides "confirmed".
+#[test]
+fn the_ending_state_is_the_tracker_s() {
+    let landed = SignEnding::Landed {
+        tx_hash: LANDED_TX.to_owned(),
+        user_op_hash: Some(LOCAL_OP.to_owned()),
+    };
+    let waiting = SignEnding::StillConfirming {
+        user_op_hash: LOCAL_OP.to_owned(),
+    };
+    assert_eq!(
+        ending_state(&SignEnding::Signed, None),
+        SignEndingState::Signed
+    );
+    for ending in [&landed, &waiting] {
+        assert_eq!(
+            ending_state(
+                ending,
+                Some(&entry(
+                    TrackStatus::Confirmed,
+                    TrackOutcome::Final,
+                    Some(LANDED_TX)
+                ))
+            ),
+            SignEndingState::Confirmed {
+                tx_hash: LANDED_TX.to_owned()
+            }
+        );
+        assert_eq!(
+            ending_state(
+                ending,
+                Some(&entry(
+                    TrackStatus::Dropped,
+                    TrackOutcome::Final,
+                    Some(LANDED_TX)
+                ))
+            ),
+            SignEndingState::Reverted {
+                tx_hash: LANDED_TX.to_owned()
+            }
+        );
+        for gone in [TrackStatus::NotSent, TrackStatus::Rejected] {
+            assert_eq!(
+                ending_state(ending, Some(&entry(gone, TrackOutcome::Final, None))),
+                SignEndingState::NotSent
+            );
+        }
+        for (status, outcome) in [
+            (TrackStatus::Pending, TrackOutcome::MaybeSent),
+            (TrackStatus::Pending, TrackOutcome::Landing),
+            (
+                TrackStatus::AcceptedNotLanded,
+                TrackOutcome::StillConfirming,
+            ),
+            (TrackStatus::Unreachable, TrackOutcome::Unknown),
+        ] {
+            assert_eq!(
+                ending_state(ending, Some(&entry(status, outcome, None))),
+                SignEndingState::Following {
+                    user_op_hash: LOCAL_OP.to_owned(),
+                    outcome,
+                    fee_held: false
+                },
+                "{status:?}"
+            );
+        }
+        assert_eq!(
+            ending_state(
+                ending,
+                Some(&entry(
+                    TrackStatus::FeeHeld,
+                    TrackOutcome::StillConfirming,
+                    None
+                ))
+            ),
+            SignEndingState::Following {
+                user_op_hash: LOCAL_OP.to_owned(),
+                outcome: TrackOutcome::StillConfirming,
+                fee_held: true
+            }
+        );
+        // No entry yet — or another op's — is the ring, never "confirmed".
+        assert_eq!(
+            ending_state(ending, None),
+            SignEndingState::Following {
+                user_op_hash: LOCAL_OP.to_owned(),
+                outcome: TrackOutcome::Landing,
+                fee_held: false
+            }
+        );
+        let mut other = entry(TrackStatus::Confirmed, TrackOutcome::Final, Some(LANDED_TX));
+        other.user_op_hash = "0x01".to_owned();
+        assert!(matches!(
+            ending_state(ending, Some(&other)),
+            SignEndingState::Following {
+                outcome: TrackOutcome::Landing,
+                ..
+            }
+        ));
+    }
+    // A reverted op whose tracker entry has no tx yet still links the answer's.
+    assert_eq!(
+        ending_state(
+            &landed,
+            Some(&entry(TrackStatus::Dropped, TrackOutcome::Final, None))
+        ),
+        SignEndingState::Reverted {
+            tx_hash: LANDED_TX.to_owned()
+        }
+    );
+}
+
+/// T023 (ruling 9, W3): a receipt that reverted inside the wait is answered
+/// its tx hash, sign_request writes no patch, and the tracker marks the SAME
+/// record failed — which is what the sheet then draws.
+#[test]
+fn a_revert_inside_the_wait_answers_the_tx_hash_and_the_tracker_fails_the_record() {
+    use vela_core::app::tx_tracker::{
+        Event as TrackEvent, TrackOperation as TOp, TrackRecordPatch, TrackRecordStatus,
+        TrackShellResult as TRes, TxTracker,
+    };
+    let mut sign = submitting("req-rv");
+    sign.dispatch(Event::OpSubmitted {
+        id: "req-rv".to_owned(),
+        user_op_hash: LOCAL_OP.to_owned(),
+        now_ms: 5_000.0,
+        maybe_sent: false,
+        submit_block: Some(SUBMIT_BLOCK),
+    });
+    sign.resolve(Res::RecordPersisted);
+    let handoff = sign.view().tracker_handoff.expect("handoff");
+
+    let ops = sign.resolve(submit_ok(LANDED_TX));
+    assert_eq!(ops.len(), 1, "{ops:?}");
+    let Op::SendResponse { payload, .. } = &ops[0] else {
+        unreachable!("{ops:?}")
+    };
+    assert_eq!(payload, &ok_answer(LANDED_TX));
+
+    let mut tracker = support::DomainDriver::<TxTracker>::new();
+    tracker.dispatch(TrackEvent::Submitted {
+        user_op_hash: handoff.user_op_hash.clone(),
+        record_ids: handoff.record_ids.clone(),
+        chain_id: handoff.chain_id,
+        maybe_sent: handoff.maybe_sent,
+        submit_block: handoff.submit_block,
+    });
+    tracker.resolve(TRes::Clock { now_ms: NOW });
+    let ops = tracker.resolve(TRes::ReceiptFailed {
+        user_op_hash: LOCAL_OP.to_owned(),
+        tx_hash: LANDED_TX.to_owned(),
+        now_ms: NOW + 3_000.0,
+    });
+    assert_eq!(
+        ops[0],
+        TOp::UpdateTxRecords {
+            ids: handoff.record_ids.clone(),
+            patch: TrackRecordPatch {
+                status: TrackRecordStatus::Failed,
+                tx_hash: None,
+            },
+        }
+    );
+    let view = tracker.view();
+    let ending = ending_of("eth_sendTransaction", payload, Some(LOCAL_OP)).expect("ending");
+    assert_eq!(
+        ending_state(&ending, view.entries.first()),
+        SignEndingState::Reverted {
+            tx_hash: LANDED_TX.to_owned()
+        }
+    );
+}
+
+/// T024 (RA12): one 120 s answer window from the approve tap, never less
+/// than 10 s of receipt wait.
+#[test]
+fn the_receipt_wait_is_what_is_left_of_the_answer_window() {
+    assert_eq!(DAPP_TX_ANSWER_WINDOW_MS, 120_000.0);
+    assert_eq!(dapp_receipt_wait_ms(0.0), 120_000.0);
+    assert_eq!(dapp_receipt_wait_ms(46_000.0), 74_000.0);
+    assert_eq!(dapp_receipt_wait_ms(115_000.0), 10_000.0);
+    assert_eq!(dapp_receipt_wait_ms(200_000.0), 10_000.0);
+    assert_eq!(dapp_receipt_wait_ms(-5.0), 120_000.0, "a clock step back");
+    assert_eq!(EXTENSION_REQUEST_TTL_MS, 300_000.0, "unchanged");
+}
+
+/// T025 (RB2): the page left while the pre-check ran — the late pre-check
+/// answer must not lead to a signature (the hole at `on_precheck`).
+#[test]
+fn a_transport_drop_during_the_precheck_stops_the_pipeline() {
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::extension("rid-d1", "eth_sendTransaction", &plain_send_params(), 1).event(),
+    );
+    let ops = sut.dispatch(approve(SignApproveOpts::default()));
+    assert!(matches!(ops.as_slice(), [Op::CheckBundlerFunding { .. }]));
+    sut.dispatch(Event::TransportDropped {
+        transport_id: EXT.to_owned(),
+    });
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    assert!(
+        ops.is_empty(),
+        "nothing signs for a page that is gone: {ops:?}"
+    );
+
+    // During sponsoring too.
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::extension("rid-d2", "eth_sendTransaction", &plain_send_params(), 1).event(),
+    );
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck {
+        funding: Some(funding_fixture()),
+    });
+    sut.dispatch(Event::TransportDropped {
+        transport_id: EXT.to_owned(),
+    });
+    let ops = sut.resolve(Res::Sponsorship {
+        outcome: SignSponsorship::Funded,
+    });
+    assert!(ops.is_empty(), "{ops:?}");
+
+    // Another transport's drop leaves a dedicated request's pipeline alone.
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::extension("rid-d3", "eth_sendTransaction", &plain_send_params(), 1).event(),
+    );
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.dispatch(Event::TransportDropped {
+        transport_id: WP.to_owned(),
+    });
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]),
+        "{ops:?}"
+    );
+}
+
+/// T025: past the passkey, a dropped transport changes nothing — the op may
+/// be on its way, and its result is still recorded and delivered.
+#[test]
+fn a_transport_drop_after_the_passkey_lets_the_pipeline_finish() {
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::extension("rid-d4", "eth_sendTransaction", &plain_send_params(), 1).event(),
+    );
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    sut.dispatch(Event::CeremonyStarted {
+        id: "rid-d4".to_owned(),
+    });
+    sut.dispatch(Event::TransportDropped {
+        transport_id: EXT.to_owned(),
+    });
+    let ops = sut.dispatch(Event::OpSubmitted {
+        id: "rid-d4".to_owned(),
+        user_op_hash: LOCAL_OP.to_owned(),
+        now_ms: 5_000.0,
+        maybe_sent: false,
+        submit_block: None,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { .. }]),
+        "{ops:?}"
+    );
+    sut.resolve(Res::RecordPersisted);
+    let ops = sut.resolve(submit_ok(LANDED_TX));
+    assert_eq!(
+        response_ok(&ops[0]),
+        Some((EXT.to_owned(), Some(LANDED_TX.to_owned())))
+    );
+}
+
+/// T025: `AskerGone` — nothing sent, no answer, no record; the sheet clears
+/// and the rid is not settled (it never signed).
+#[test]
+fn asker_gone_answers_nothing_and_records_nothing() {
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::extension("rid-g", "eth_sendTransaction", &plain_send_params(), 1).event(),
+    );
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::AskerGone,
+        now_ms: 6_000.0,
+    });
+    assert!(ops.is_empty(), "no Respond, no PersistRecord: {ops:?}");
+    let view = sut.view();
+    assert_eq!(view.surface, SignSurface::Hidden);
+    assert!(view.tracker_handoff.is_none());
+    assert!(sut.outstanding().is_empty());
+    sut.dispatch(
+        Arrive::extension("rid-g", "eth_sendTransaction", &plain_send_params(), 1).event(),
+    );
+    assert_eq!(sut.view().notice, None, "not settled");
 }

@@ -53,6 +53,19 @@
 //! this view's `confirm_gate_open` with `GuardView.confirm_allowed` and
 //! `FeeView.confirm_fee_ready` (the single fee confirmation gate).
 //!
+//! Spec 082 (money safety on a bad network):
+//!
+//! - A submit whose reply was lost is recorded and tracked like an accepted
+//!   one, under the locally computed hash (`OpSubmitted{maybe_sent}`, RA3),
+//!   and the page gets one Ok answer inside [`DAPP_TX_ANSWER_WINDOW_MS`].
+//! - The tracker alone closes on-chain records (RA8): `on_submit` answers the
+//!   page and patches nothing; [`ending_of`] + [`ending_state`] give the sheet
+//!   its ending from the tracker, never from the answer alone.
+//! - [`SignPhase`] words the sheet from the stage and the passkey prompt
+//!   (`CeremonyStarted` / `CeremonyDone`, RA9).
+//! - A dropped transport stops a pipeline still before the passkey, and
+//!   `AskerGone` ends one whose page vanished (RB2).
+//!
 //! Ported quirks and fail-closed divergences are doc-commented inline.
 
 use crux_core::capability::Operation;
@@ -66,6 +79,7 @@ use serde_json::{json, Value};
 use super::approval_guard::enforce_no_unlimited;
 use super::fee_policy::{is_tempo_chain, tempo_quote_is_stale, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use super::self_call_guard::{detect_self_call, enforce_no_self_call, SelfCallBlock};
+use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
@@ -93,6 +107,27 @@ pub const CODE_INVALID_PARAMS: i32 = -32602;
 /// JSON-RPC internal error — the generic failure code every non-classified
 /// error takes (`dapp-connection.tsx:886, 943`).
 pub const CODE_INTERNAL: i32 = -32603;
+
+/// How long a dApp waits for the answer to an on-chain request, measured from
+/// the approve tap (spec 082 RA12): after it the page gets the op hash and the
+/// tracker keeps following. One number for every client (the desktop waited
+/// 90 s, the others 120 s) — and the whole budget, so a slow submit is not
+/// followed by a second full wait.
+pub const DAPP_TX_ANSWER_WINDOW_MS: f64 = 120_000.0;
+/// The shortest receipt wait after a slow submit: the relay still gets a
+/// moment to land an op it has only just accepted.
+pub const DAPP_RECEIPT_MIN_WAIT_MS: f64 = 10_000.0;
+
+/// How long to wait for the receipt when the submit answered `elapsed_ms`
+/// after the approve tap (RA12): what is left of
+/// [`DAPP_TX_ANSWER_WINDOW_MS`], never less than
+/// [`DAPP_RECEIPT_MIN_WAIT_MS`]. A lost reply decided after ~46 s of relay
+/// timeouts therefore answers the page by ~120 s, not ~210 s — well inside
+/// the extension page's own 300 s limit.
+pub fn dapp_receipt_wait_ms(elapsed_ms: f64) -> f64 {
+    let left = DAPP_TX_ANSWER_WINDOW_MS - elapsed_ms.max(0.0);
+    left.max(DAPP_RECEIPT_MIN_WAIT_MS)
+}
 
 /// Bound on the settled-rid registry, mirroring the bounded-map discipline of
 /// `MAX_TRACKED_USEROPS` (`use-dapp-signing.ts:41`).
@@ -278,6 +313,16 @@ pub struct SignRecord {
     pub user_op_hash: String,
     pub dapp_origin: String,
     pub intent: Option<String>,
+    /// The submit's reply was lost; `user_op_hash` is the locally computed
+    /// hash (spec 082 RA3). Persisted with the record, so a restart hands the
+    /// tracker a may-have-been-sent op again (`TrackPendingRecord`).
+    #[serde(default)]
+    pub maybe_sent: bool,
+    /// The head read before the first submit POST — where the tracker's
+    /// relay-independent landing check starts (ruling 8). Persisted likewise.
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+    pub submit_block: Option<u64>,
 }
 
 /// The in-place patch closing a pending record — same id, never a second
@@ -321,6 +366,12 @@ pub struct SignTrackerHandoff {
     pub user_op_hash: String,
     pub record_ids: Vec<String>,
     pub chain_id: u32,
+    /// Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA3).
+    #[serde(default)]
+    pub maybe_sent: bool,
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+    pub submit_block: Option<u64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -407,8 +458,10 @@ pub enum SignSponsorship {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum SignSubmitOutcome {
-    /// tx: the real tx hash after the receipt wait; batch: the userOpHash;
-    /// signatures: the EIP-1271 signature hex.
+    /// tx: the real tx hash after the receipt wait — also when that receipt
+    /// reverted (owner ruling 9: the page gets its tx hash, the sheet and
+    /// Activity say it failed); batch: the userOpHash; signatures: the
+    /// EIP-1271 signature hex.
     Succeeded {
         result: String,
     },
@@ -438,6 +491,11 @@ pub enum SignSubmitOutcome {
     Failed {
         message: String,
     },
+    /// The shell proved, before the passkey or between the passkey and the
+    /// relay POST, that the asking page no longer exists (spec 082 RB2):
+    /// nothing was sent, nobody is left to answer, nothing is recorded, and
+    /// the sheet clears if it still shows this request.
+    AskerGone,
 }
 
 /// What the shell observed. Every clock-bearing variant carries `now_ms`.
@@ -542,9 +600,27 @@ pub enum Event {
         id: String,
         user_op_hash: String,
         now_ms: f64,
+        /// The submit's reply was lost and `user_op_hash` is the local hash
+        /// (spec 082 RA2/RA3): the op is recorded and tracked all the same,
+        /// and the page will get one Ok answer — never 4900 or -32603.
+        #[serde(default)]
+        maybe_sent: bool,
+        /// The head read before the first POST (ruling 8); `None` = unknown.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        submit_block: Option<u64>,
     },
+    /// The passkey (or Trusted Signer) prompt for request `id` opened
+    /// (spec 082 RA9). Accepted only while that request's pipeline is in its
+    /// submit stage; any other id is stale and dropped.
+    CeremonyStarted { id: String },
+    /// That prompt returned a signature (RA9); same guard.
+    CeremonyDone { id: String },
     /// A durable transport disconnected. Owner-aware clear
-    /// (`dapp-connection.tsx:420-431`).
+    /// (`dapp-connection.tsx:420-431`). Since spec 082 (RB2) it also stops a
+    /// pipeline of that transport still before the passkey (pre-check,
+    /// sponsoring, reactive sponsoring); past the commitment point nothing
+    /// changes.
     TransportDropped { transport_id: String },
     /// Internal: an effect resolved. `attempt` is captured by the core when
     /// the request is made; a result carrying an older attempt belongs to a
@@ -704,6 +780,135 @@ pub fn required_capabilities(payload: &Value) -> Vec<String> {
     required.into_iter().collect()
 }
 
+// ---------------------------------------------------------------------------
+// The ending of a request (spec 082 RA8) — one rule for the four sheets
+// ---------------------------------------------------------------------------
+
+/// What the answer to a request stands for, before the tracker is asked.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SignEnding {
+    /// A message or typed-data signature: signed, nothing goes on chain.
+    Signed,
+    /// The receipt arrived inside the wait: the page got the tx hash.
+    /// `user_op_hash` is the op the tracker follows, when the shell knows it.
+    Landed {
+        tx_hash: String,
+        user_op_hash: Option<String>,
+    },
+    /// The wait ran out: the page got the op hash, the tracker keeps
+    /// following it.
+    StillConfirming { user_op_hash: String },
+}
+
+/// The ending of `payload` — the answer that went to the page — or `None`
+/// when there is nothing to show (a refusal, or an empty answer).
+/// `submitted_user_op` is the op this request handed the tracker: an answer
+/// that IS that hash means the wait ran out before a receipt. Replaces the
+/// desktop's, iOS's and Android's copies (RA8 1).
+pub fn ending_of(
+    method: &str,
+    payload: &SignResponsePayload,
+    submitted_user_op: Option<&str>,
+) -> Option<SignEnding> {
+    let SignResponsePayload::Ok {
+        result: Some(result),
+    } = payload
+    else {
+        return None;
+    };
+    if result.trim().is_empty() {
+        return None;
+    }
+    if !matches!(
+        method_kind(method),
+        SignMethodKind::Transaction | SignMethodKind::Batch
+    ) {
+        return Some(SignEnding::Signed);
+    }
+    let op = submitted_user_op.filter(|op| !op.trim().is_empty());
+    Some(match op {
+        Some(op) if op.eq_ignore_ascii_case(result) => SignEnding::StillConfirming {
+            user_op_hash: op.to_owned(),
+        },
+        _ => SignEnding::Landed {
+            tx_hash: result.clone(),
+            user_op_hash: op.map(str::to_owned),
+        },
+    })
+}
+
+/// What the sheet draws for an ending, once the tracker has had its say.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SignEndingState {
+    /// Tick, "signed", closes by itself.
+    Signed,
+    /// Tick, the short hash, the explorer.
+    Confirmed { tx_hash: String },
+    /// Cross, `statusFailed` + `failedHint`, the explorer: it landed and
+    /// reverted (including a Safe `ExecutionFailure`).
+    Reverted { tx_hash: String },
+    /// Cross, `statusFailed` + `txErrorGeneric`: the relay refused it, or
+    /// never had it.
+    NotSent,
+    /// Still on its way: the words come from `outcome` (`MaybeSent` →
+    /// `maybeSent`, `Landing` → the ring, `StillConfirming`, `Unknown`);
+    /// `fee_held` swaps in the fee-hold line.
+    Following {
+        user_op_hash: String,
+        outcome: TrackOutcome,
+        fee_held: bool,
+    },
+}
+
+/// The ending as the tracker knows it (RA8 2): a landed or still-confirming
+/// on-chain request is never drawn "confirmed" until the tracker says so —
+/// the W3 fault, where a reverted op read as done. `track` is the tracker's
+/// entry for the op (an entry for another op is ignored); `None` = the
+/// tracker has not taken it yet, which is `Following(Landing)`.
+pub fn ending_state(ending: &SignEnding, track: Option<&TrackEntryView>) -> SignEndingState {
+    let (op, answered_tx) = match ending {
+        SignEnding::Signed => return SignEndingState::Signed,
+        SignEnding::Landed {
+            tx_hash,
+            user_op_hash,
+        } => (user_op_hash.clone().unwrap_or_default(), Some(tx_hash)),
+        SignEnding::StillConfirming { user_op_hash } => (user_op_hash.clone(), None),
+    };
+    let entry =
+        track.filter(|entry| !op.is_empty() && entry.user_op_hash.eq_ignore_ascii_case(&op));
+    let Some(entry) = entry else {
+        return SignEndingState::Following {
+            user_op_hash: op,
+            outcome: TrackOutcome::Landing,
+            fee_held: false,
+        };
+    };
+    let tx_hash = || {
+        entry
+            .tx_hash
+            .clone()
+            .or_else(|| answered_tx.cloned())
+            .unwrap_or_default()
+    };
+    match entry.status {
+        TrackStatus::Confirmed => SignEndingState::Confirmed { tx_hash: tx_hash() },
+        TrackStatus::Dropped => SignEndingState::Reverted { tx_hash: tx_hash() },
+        TrackStatus::NotSent | TrackStatus::Rejected => SignEndingState::NotSent,
+        TrackStatus::Pending
+        | TrackStatus::FeeHeld
+        | TrackStatus::Unreachable
+        | TrackStatus::AcceptedNotLanded => SignEndingState::Following {
+            user_op_hash: op,
+            outcome: entry.outcome,
+            fee_held: entry.status == TrackStatus::FeeHeld,
+        },
+    }
+}
+
 /// `buildSigningRecord`'s shape split (`dapp-history.ts:162-174`).
 fn record_shape(method: &str) -> (SignRecordKind, &'static str) {
     if method == "eth_sendTransaction" || method == "wallet_sendCalls" {
@@ -786,6 +991,16 @@ struct Inflight {
     stage: Stage,
     record_id: Option<String>,
     op_hash: Option<String>,
+    /// Where the passkey prompt is, within `Stage::Submitting` (RA9).
+    ceremony: Ceremony,
+}
+
+/// The passkey / Trusted Signer prompt of one submit (spec 082 RA9).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ceremony {
+    NotYet,
+    Up,
+    Done,
 }
 
 /// Funding view state (`fundingNeeded` + `fundingRidRef`).
@@ -812,6 +1027,8 @@ pub struct Model {
     last_opts: Option<SignApproveOpts>,
     sign_error: Option<SignErrorNotice>,
     pending_op_hash: Option<String>,
+    /// The sheet's op was submitted "may have been sent" (spec 082 RA3).
+    pending_op_maybe_sent: bool,
     tracker_handoff: Option<SignTrackerHandoff>,
     notice: Option<SignNotice>,
     /// Set with `pending` when the self-call guard refuses a request.
@@ -867,6 +1084,7 @@ impl Model {
         self.funding_pinned_rid = None;
         self.sign_error = None;
         self.pending_op_hash = None;
+        self.pending_op_maybe_sent = false;
     }
 }
 
@@ -948,14 +1166,44 @@ pub struct SignBlockedView {
     pub nested: bool,
 }
 
+/// What the signing sheet is doing, in the words a person reads (spec 082
+/// RA9, G22): the network work before the passkey is "preparing", never
+/// "waiting for your signature".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum SignPhase {
+    /// No pipeline for the request on the sheet: the form.
+    #[default]
+    Idle,
+    /// Pre-check, sponsoring, or the submit stage before its prompt opened
+    /// (`send.txPreparing`).
+    Preparing,
+    /// The passkey / Trusted Signer prompt is up (`send.txSigning`, or
+    /// `componentsUi.signing.signing` for a message).
+    AwaitingSignature,
+    /// Signed; going to the relay, or recovering after it
+    /// (`send.txSubmitting` + the background hint).
+    Submitting,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SignView {
     pub surface: SignSurface,
     pub request: Option<SignRequestView>,
+    /// Kept until every shell reads `phase` (spec 082 RA9).
     pub is_signing: bool,
+    /// Kept until every shell reads `phase` (spec 082 RA9).
     pub is_submitting: bool,
+    /// The sheet's words, derived from the pipeline stage and the prompt.
+    #[serde(default)]
+    pub phase: SignPhase,
     pub pending_op_hash: Option<String>,
+    /// The sheet's op may have been sent — its reply was lost (spec 082
+    /// RA3): the caption says so, and there is no Retry.
+    #[serde(default)]
+    pub pending_op_maybe_sent: bool,
     pub error: Option<SignErrorNotice>,
     pub funding: Option<SignFundingView>,
     /// This machine's own approval gate: a reviewable request with the
@@ -1053,16 +1301,33 @@ impl App for SignRequest {
                 id,
                 user_op_hash,
                 now_ms,
-            } => on_op_submitted(model, &id, user_op_hash, now_ms),
+                maybe_sent,
+                submit_block,
+            } => on_op_submitted(model, &id, user_op_hash, now_ms, (maybe_sent, submit_block)),
+            Event::CeremonyStarted { id } => on_ceremony(model, &id, Ceremony::Up),
+            Event::CeremonyDone { id } => on_ceremony(model, &id, Ceremony::Done),
             Event::TransportDropped { transport_id } => {
+                let mut cleared_inflight_request = false;
                 if let Some(p) = &model.pending {
                     // Owner-aware (`dapp-connection.tsx:429`): keep the request
                     // only when it is stamped onto a DIFFERENT transport than
                     // the one that dropped.
                     let keep = p.dedicated_transport && p.transport_id != transport_id;
                     if !keep {
+                        cleared_inflight_request = model.inflight_matches_pending();
                         model.clear_sheet();
                     }
+                }
+                // RB2: nobody is left to answer, so a pipeline of that
+                // transport (or the one whose sheet just went) that has not
+                // reached the passkey stops here — its late pre-check or
+                // sponsorship answer can no longer lead to a signature.
+                let asker_gone = model
+                    .inflight
+                    .as_ref()
+                    .is_some_and(|fl| fl.transport_id == transport_id || cleared_inflight_request);
+                if asker_gone {
+                    stop_presubmit_inflight(model);
                 }
                 render()
             }
@@ -1102,6 +1367,23 @@ impl App for SignRequest {
                 )
             );
 
+        let phase = if !matching {
+            SignPhase::Idle
+        } else {
+            match model.inflight.as_ref().map(|f| (&f.stage, f.ceremony)) {
+                None => SignPhase::Idle,
+                Some((Stage::Precheck | Stage::Sponsoring { .. }, _)) => SignPhase::Preparing,
+                Some((Stage::Submitting, Ceremony::NotYet)) => SignPhase::Preparing,
+                Some((Stage::Submitting, Ceremony::Up)) => SignPhase::AwaitingSignature,
+                Some((
+                    Stage::Submitting
+                    | Stage::ReactiveSponsoring { .. }
+                    | Stage::PersistingResult { .. },
+                    _,
+                )) => SignPhase::Submitting,
+            }
+        };
+
         let request = model.pending.as_ref().map(|p| SignRequestView {
             id: p.id.clone(),
             method: p.method.clone(),
@@ -1139,7 +1421,9 @@ impl App for SignRequest {
             request,
             is_signing,
             is_submitting,
+            phase,
             pending_op_hash: model.pending_op_hash.clone(),
+            pending_op_maybe_sent: model.pending_op_maybe_sent,
             error: model.sign_error.clone(),
             funding: model.funding.as_ref().map(|f| SignFundingView {
                 data: f.data.clone(),
@@ -1515,6 +1799,24 @@ fn on_chain_switch(
     ops_and_render(model, ops)
 }
 
+/// Stop the in-flight pipeline if it has not reached the passkey (spec 082
+/// RB2) — whatever request the sheet shows. Same mechanics as a reject:
+/// cleared, attempt bumped (late answers dropped), effect aborted.
+fn stop_presubmit_inflight(model: &mut Model) {
+    let before_passkey = matches!(
+        model.inflight.as_ref().map(|f| &f.stage),
+        Some(Stage::Precheck | Stage::Sponsoring { .. } | Stage::ReactiveSponsoring { .. })
+    );
+    if !before_passkey {
+        return;
+    }
+    model.inflight = None;
+    model.attempt += 1;
+    if let Some(handle) = model.abort.take() {
+        handle.abort();
+    }
+}
+
 /// Kill a pre-submit pipeline: late results are identified by the stale
 /// attempt, and the outstanding operation is truly aborted.
 fn kill_presubmit_pipeline(model: &mut Model) {
@@ -1568,6 +1870,7 @@ fn approve_with(
     // Immediate feedback + fresh error state (`dapp-connection.tsx:656-658`).
     model.sign_error = None;
     model.pending_op_hash = None;
+    model.pending_op_maybe_sent = false;
 
     // ⑨: sign/submit/record the CAPPED params when the sheet provided them.
     let final_params = opts
@@ -1667,6 +1970,7 @@ fn approve_with(
         stage: Stage::Precheck,
         record_id: None,
         op_hash: None,
+        ceremony: Ceremony::NotYet,
     });
 
     if matches!(
@@ -1942,6 +2246,7 @@ fn on_op_submitted(
     id: &str,
     user_op_hash: String,
     now_ms: f64,
+    (maybe_sent, submit_block): (bool, Option<u64>),
 ) -> Command<SignEffect, Event> {
     let matches_pipeline = model
         .inflight
@@ -1957,6 +2262,9 @@ fn on_op_submitted(
         };
         fl.op_hash = Some(user_op_hash.clone());
         fl.record_id = Some(record_id.clone());
+        // Whatever the shell said about the prompt, an op on its way to the
+        // relay has been signed (RA9).
+        fl.ceremony = Ceremony::Done;
         (
             SignRecord {
                 record_id: record_id.clone(),
@@ -1971,12 +2279,15 @@ fn on_op_submitted(
                 user_op_hash: user_op_hash.clone(),
                 dapp_origin: fl.record_origin.clone(),
                 intent: fl.intent.clone(),
+                maybe_sent,
+                submit_block,
             },
             fl.chain_id,
         )
     };
     if model.inflight_matches_pending() {
         model.pending_op_hash = Some(user_op_hash.clone());
+        model.pending_op_maybe_sent = maybe_sent;
     }
     // §4: the durable record precedes anything the dApp can poll — persisted
     // the moment the bundler accepts, before the receipt wait
@@ -1986,9 +2297,34 @@ fn on_op_submitted(
         user_op_hash,
         record_ids: vec![record_id],
         chain_id,
+        maybe_sent,
+        submit_block,
     });
     let command = request_op(model, SignOperation::PersistRecord { record }, false);
     Command::all([command, render()])
+}
+
+/// The passkey prompt of the pipeline for `id` opened or returned (RA9).
+/// Id-guarded, and only inside the submit stage: a stale or early event
+/// changes nothing, so the network wait before the prompt can never read
+/// "waiting for your signature" (G22).
+fn on_ceremony(model: &mut Model, id: &str, next: Ceremony) -> Command<SignEffect, Event> {
+    let Some(fl) = model.inflight.as_mut() else {
+        return Command::done();
+    };
+    if fl.id != id || !matches!(fl.stage, Stage::Submitting) {
+        return Command::done();
+    }
+    // Forward only: a late "started" never re-opens a finished prompt.
+    let forward = matches!(
+        (fl.ceremony, next),
+        (Ceremony::NotYet, Ceremony::Up | Ceremony::Done) | (Ceremony::Up, Ceremony::Done)
+    );
+    if !forward {
+        return Command::done();
+    }
+    fl.ceremony = next;
+    render()
 }
 
 // ---------------------------------------------------------------------------
@@ -2136,25 +2472,34 @@ fn on_submit(
             model.inflight = None;
             render()
         }
+        SignSubmitOutcome::AskerGone => {
+            // Spec 082 RB2: the page that asked is gone and nothing was sent.
+            // No answer (nobody to take it), no record (nothing to track),
+            // and no settle — the rid never signed.
+            model.inflight = None;
+            if model.pending.as_ref().is_some_and(|p| p.id == fl.id) {
+                model.clear_sheet();
+            }
+            render()
+        }
         SignSubmitOutcome::Succeeded { result } => {
             model.settle(&fl.id, SignSettledOutcome::Submitted);
-            if let Some(record_id) = fl.record_id.clone() {
-                // tx path: the pending record already exists (§4) — respond,
-                // then flip it confirmed in place, same id
-                // (`dapp-connection.tsx:775-784`).
-                let ops = vec![
-                    respond_op(
-                        &fl.transport_id,
-                        &fl.id,
-                        SignResponsePayload::Ok {
-                            result: Some(result.clone()),
-                        },
-                    ),
-                    SignOperation::UpdateRecord {
-                        record_id,
-                        close: SignRecordClose::Confirmed { tx_hash: result },
+            if fl.record_id.is_some() {
+                // tx path: the pending record already exists (§4) and the
+                // tracker holds its op (`tracker_handoff`). Answer the page
+                // only: the tracker alone closes on-chain records (spec 082
+                // RA8, W3) — it is the one place a revert (including a Safe
+                // `ExecutionFailure` inside a "successful" op) is judged, and
+                // two writers of one record race. A receipt that reverted
+                // inside the wait is answered its tx hash all the same
+                // (ruling 9); the tracker marks the record failed.
+                let ops = vec![respond_op(
+                    &fl.transport_id,
+                    &fl.id,
+                    SignResponsePayload::Ok {
+                        result: Some(result),
                     },
-                ];
+                )];
                 let clears_sheet = model.pending.as_ref().is_some_and(|p| p.id == fl.id);
                 model.inflight = None;
                 if clears_sheet {
@@ -2179,6 +2524,8 @@ fn on_submit(
                     user_op_hash: fl.op_hash.clone().unwrap_or_default(),
                     dapp_origin: fl.record_origin.clone(),
                     intent: fl.intent.clone(),
+                    maybe_sent: false,
+                    submit_block: None,
                 };
                 if let Some(inner) = model.inflight.as_mut() {
                     inner.record_id = Some(record.record_id.clone());
@@ -2225,11 +2572,15 @@ fn on_submit(
                     user_op_hash: user_op_hash.clone(),
                     dapp_origin: fl.record_origin.clone(),
                     intent: fl.intent.clone(),
+                    maybe_sent: false,
+                    submit_block: None,
                 };
                 model.tracker_handoff = Some(SignTrackerHandoff {
                     user_op_hash: user_op_hash.clone(),
                     record_ids: vec![record.record_id.clone()],
                     chain_id: fl.chain_id,
+                    maybe_sent: false,
+                    submit_block: None,
                 });
                 if let Some(inner) = model.inflight.as_mut() {
                     inner.op_hash = Some(user_op_hash.clone());
