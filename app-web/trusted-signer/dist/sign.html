@@ -2,7 +2,7 @@
 <html lang="zh">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iFS2ThRrKbhRiPQcCZHNGkOg22ZQzNKomWtef1K2VgE='; style-src 'sha256-hjFJ1nFo3rxeZT9hfbtT0EgoxbDCPlNmE/28y08MOrw='; img-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0ux2K+O+uG7apujuFeNu7CptXV7pfb8P8av9scHA8nE='; style-src 'sha256-9q4sbzTCVJGOD+jjHoXJVP0Omm0mzbcoyFxl7DNpv7s='; img-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela · 签名</title>
     <style>
@@ -416,6 +416,12 @@ body {
 .fee-label { color: var(--muted); }
 .fee-value { margin-left: auto; }
 .fee-chevron { color: var(--faint); }
+/* Spec 079: the fee row is the summary of its own explanation. */
+summary.fee { list-style: none; cursor: pointer; }
+summary.fee::-webkit-details-marker { display: none; }
+summary.fee .fee-chevron { transition: transform 0.15s ease; }
+details.fee-wrap[open] summary.fee .fee-chevron { transform: rotate(90deg); }
+.fee-sponsored { margin-top: 6px; padding: 0 4px; color: var(--muted); font-size: 12px; }
 .fee-off .fee-value { color: var(--muted); }
 
 .fee-note {
@@ -3664,9 +3670,17 @@ window.VelaCS = window.VelaCS || {};
       view.refuse = true;
       view.warnings.push({ tone: 'danger', key: 'refuse.opMismatch' });
     }
-    return decoded.calls.length === 1
-      ? { method: 'eth_sendTransaction', origin: intent.origin, params: [decoded.calls[0]] }
-      : { method: 'wallet_sendCalls', origin: intent.origin, params: [{ calls: decoded.calls }] };
+    // Spec 079: the fee leg is the fee row, not a second leg of a "batch" — a
+    // plain send read as 批量 of two. Only a leg the fee row shows in full
+    // leaves the list: `inBandLeg` decoded it as a plain payment, and the row
+    // draws its amount and its recipient from the calldata. Anything else the
+    // requester calls the fee stays a leg, drawn like every other.
+    var feeIndex = view.fee && view.fee.leg ? view.fee.leg.index : -1;
+    var shown = decoded.calls.filter(function (_, i) { return i !== feeIndex; });
+    if (!shown.length) shown = decoded.calls;
+    return shown.length === 1
+      ? { method: 'eth_sendTransaction', origin: intent.origin, params: [shown[0]] }
+      : { method: 'wallet_sendCalls', origin: intent.origin, params: [{ calls: shown }] };
   }
 
   function resolve(requested, ctx) {
@@ -4093,11 +4107,20 @@ window.VelaCS = window.VelaCS || {};
       return wrap;
     }
 
+    // Spec 079: the explanation folds under the row — the row itself is the
+    // summary a person taps. What must stay in sight stays on the row: the
+    // amount read from the calldata and, for a leg, that "this is the fee" is
+    // the requester's word (the same 自述 tag the chain pill uses).
+    wrap = el('details', 'fee-wrap');
+    row = el('summary', 'fee');
+    row.appendChild(el('span', 'fee-label', t('ui.fee')));
+    if (view.fee.leg) row.appendChild(el('span', 'tag', t('tag.claimed')));
     var headline = view.fee.leg
       ? t('ui.feeLegAmount', { amount: view.fee.leg.amount, symbol: view.fee.leg.symbol })
       : t('ui.feeCeiling', { amount: view.fee.gas.max, symbol: view.fee.gas.symbol });
     var fiat = (view.fee.leg && view.fee.leg.fiat) || (view.fee.gas && view.fee.gas.fiat);
     row.appendChild(el('span', 'fee-value', headline + (fiat ? ' ' + fiat : '')));
+    row.appendChild(el('span', 'fee-chevron', '›'));
     wrap.appendChild(row);
 
     var note = el('div', 'fee-note');
@@ -4119,8 +4142,9 @@ window.VelaCS = window.VelaCS || {};
         symbol: rateSymbol, currency: view.fee.currency, rate: rate.toLocaleString('en-US'),
       })
       : t('ui.feeNoRate')));
-    if (view.fee.sponsored) note.appendChild(el('div', 'fee-sponsored', t('ui.feeSponsored')));
     wrap.appendChild(note);
+    // Who pays changes the number's meaning: said on the row's level, never folded.
+    if (view.fee.sponsored) wrap.appendChild(el('div', 'fee-sponsored', t('ui.feeSponsored')));
     return wrap;
   }
 
