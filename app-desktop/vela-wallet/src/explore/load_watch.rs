@@ -271,6 +271,18 @@ impl LoadWatch {
     pub fn busy(&self) -> bool {
         self.loading || self.committed
     }
+
+    /// The address the bar names while no page stands for it (spec 083
+    /// FR-005/FR-006): a load the wallet asked for that has not committed, or
+    /// one that failed, under its panel. `None` once a page commits. Only the
+    /// wallet sets it (`webview::navigate` / `reload`), so a page can never use
+    /// it to name itself.
+    #[must_use]
+    pub fn named_url(&self) -> Option<&str> {
+        self.url
+            .as_deref()
+            .filter(|_| self.loading || self.failure.is_some())
+    }
 }
 
 /// The host of an address, for the panel's small line.
@@ -367,6 +379,31 @@ mod tests {
     fn asked(watch: &mut LoadWatch, how: Asked, url: &str, now: f64) -> Option<u64> {
         watch.next_asked = Some(how);
         watch.requested(url, now)
+    }
+
+    /// Spec 083 FR-005: the bar names the load asked for until a page commits,
+    /// and keeps naming it under a failure; never the wallet's blank page.
+    #[test]
+    fn the_bar_names_the_load_asked_for_until_a_page_commits() {
+        let mut watch = LoadWatch::default();
+        assert_eq!(watch.named_url(), None);
+        let generation = watch.requested(SITE, 0.).unwrap_or_default();
+        assert_eq!(watch.named_url(), Some(SITE));
+        watch.committed(SITE);
+        assert_eq!(watch.named_url(), None, "a page stands for itself now");
+        let generation2 = watch.requested(SITE, 1_000.).unwrap_or_default();
+        assert_ne!(generation, generation2);
+        assert_eq!(watch.watchdog(generation2).as_deref(), Some(SITE));
+        assert_eq!(
+            watch.probed(generation2, Err(probe_code::DNS)),
+            Probed::Failed
+        );
+        assert_eq!(
+            watch.named_url(),
+            Some(SITE),
+            "the failed address stays named"
+        );
+        assert_eq!(watch.requested("about:blank", 2_000.), None);
     }
 
     /// Progress from the request, not from the commit; and the wallet's own

@@ -673,6 +673,10 @@ pub struct WalletPage {
     /// The whole draft is selected (a click into the bar, or ⌘A / Ctrl+A):
     /// what is typed or pasted next replaces it.
     address_selected: bool,
+    /// What `edit_address` took into the bar. While the draft is still exactly
+    /// this, nobody has typed, and the bar follows the page (083 FR-006).
+    #[cfg(not(target_os = "linux"))]
+    address_opened: Option<String>,
     address_focus: gpui::FocusHandle,
     /// The Wallet column's scroll position, for the bar drawn beside it.
     /// These columns glide (`ui::smooth_scroll`); `render` steps each of them
@@ -1175,6 +1179,8 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             dapp_requests_armed: false,
             address_draft: None,
+            #[cfg(not(target_os = "linux"))]
+            address_opened: None,
             address_selected: false,
             address_focus: cx.focus_handle(),
             content_scroll: crate::ui::SmoothScroll::new(),
@@ -12559,11 +12565,19 @@ impl WalletPage {
             .filter(|url| !url.is_empty());
         #[cfg(target_os = "linux")]
         let unbuilt: Option<String> = None;
-        let (host, secure) = match failed_load
-            .as_ref()
-            .map(|(_, url)| url)
-            .or(unbuilt.as_ref())
-        {
+        // Spec 083 FR-005: a load the wallet asked for (typed, a favourite,
+        // Retry) is named from the moment it is asked. WebView2 keeps the
+        // previous document until the new one commits, and a bar that named it
+        // after Enter named the site the person had just left. A failed load
+        // stays named (079 US3). Nothing of it has loaded to judge, so its
+        // scheme is the only lock there is.
+        let named = self
+            .load_watch
+            .named_url()
+            .filter(|_| live_browser && !crashed)
+            .map(str::to_owned)
+            .or(unbuilt);
+        let (host, secure) = match named.as_ref() {
             Some(url) => (
                 Some(SharedString::from(crate::explore::load_watch::host_of(url))),
                 url.to_ascii_lowercase().starts_with("https://"),
@@ -12647,11 +12661,19 @@ impl WalletPage {
                 .when(self.address_draft.is_some(), |el| {
                     el.on_mouse_down(MouseButton::Left, editor_click)
                 })
-                .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
+                .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
+                    // A click is the mouse's. gpui also makes one from Enter or
+                    // Space released on the focused bar — the Enter that just
+                    // navigated, which reopened the bar on the previous page's
+                    // URL (083 W2). Neither opens the bar; it is not a tab stop,
+                    // so no keyboard route to it is lost.
+                    if event.is_keyboard() {
+                        return;
+                    }
                     this.edit_address(window, cx);
                 }))
                 .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
-                    if !this.address_key(event, cx) {
+                    if !this.address_key(event, window, cx) {
                         editor_keys(event, window, cx);
                     }
                 }))
@@ -13083,7 +13105,15 @@ impl WalletPage {
         if self.address_draft.is_none() {
             #[cfg(not(target_os = "linux"))]
             let current = if self.browsing {
-                crate::webview::current_url().filter(|url| url != "about:blank")
+                // 083 FR-006: the address the bar NAMES — a load asked for and
+                // not committed yet, or the one failed under the panel. WebView2's
+                // own URL is the previous page's until the new one commits;
+                // starting from it turned "example.com" typed on PancakeSwap
+                // into pancakeswap.finance/example.com.
+                self.load_watch
+                    .named_url()
+                    .map(str::to_owned)
+                    .or_else(|| crate::webview::current_url().filter(|url| url != "about:blank"))
             } else {
                 None
             };
@@ -13097,6 +13127,10 @@ impl WalletPage {
                 crate::ui::editor::select_all(&self.address_focus);
             }
             self.address_selected = false;
+            #[cfg(not(target_os = "linux"))]
+            {
+                self.address_opened = Some(current.clone());
+            }
             self.address_draft = Some(current);
         }
         window.focus(&self.address_focus, cx);
@@ -13108,7 +13142,12 @@ impl WalletPage {
     /// as typed, a bare host with a scheme, anything else a search — the same
     /// rule on every client. Escape stops typing and leaves the column.
     /// `true` when the key was one of the two.
-    fn address_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
+    fn address_key(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
         // While the IME composes, Enter commits and Esc cancels ITS text —
         // never "go" or "stop typing".
         if self.address_draft.is_none() || crate::ui::editor::is_composing(&self.address_focus) {
@@ -13117,26 +13156,39 @@ impl WalletPage {
         match event.keystroke.key.as_str() {
             "enter" => {
                 cx.stop_propagation();
-                self.address_selected = false;
-                let typed = self.address_draft.take().unwrap_or_default();
+                let typed = self.address_draft.clone().unwrap_or_default();
+                // Spec 083 FR-005: Enter is done with the bar, so the keyboard
+                // goes back to the page, as Enter in a settings field does.
+                // Left on the bar, gpui turned Enter's key-UP into a click on
+                // it, which reopened the bar on the previous page's URL; a
+                // focus change between the key's down and up cancels that.
+                self.leave_address(window, cx);
                 // A pasted URL is one line, and so is what is sent.
-                let typed = typed.trim().to_owned();
-                if let Some(url) = vela_core::app::dapp_rpc::browser_input(&typed) {
+                if let Some(url) = vela_core::app::dapp_rpc::browser_input(typed.trim()) {
                     self.open_typed_url(url, cx);
                 }
-                cx.notify();
                 true
             }
             "escape" => {
                 // One layer only: the typing stops, the column stays.
                 cx.stop_propagation();
-                self.address_selected = false;
-                self.address_draft = None;
-                cx.notify();
+                self.leave_address(window, cx);
                 true
             }
             _ => false,
         }
+    }
+
+    /// The bar stops being typed in, and the keyboard goes back to the page.
+    fn leave_address(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.address_selected = false;
+        self.address_draft = None;
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.address_opened = None;
+        }
+        window.focus(&self.focus_handle, cx);
+        cx.notify();
     }
 
     /// Open what the address bar resolved to, in the page on screen — as a
@@ -13288,6 +13340,19 @@ impl WalletPage {
             }
             crate::webview::Load::Started(url) => {
                 self.load_watch.committed(&url);
+                // 083 FR-006: an open bar nobody has typed in follows the page
+                // (a link clicked while the bar was open) — never a stale
+                // address a click would drop a caret into.
+                if let Some(next) = address_follows(
+                    self.address_draft.as_deref(),
+                    self.address_opened.as_deref(),
+                    &url,
+                ) {
+                    crate::ui::editor::sync(&self.address_focus, &next);
+                    crate::ui::editor::select_all(&self.address_focus);
+                    self.address_opened = Some(next.clone());
+                    self.address_draft = Some(next);
+                }
                 cx.notify();
                 DbrEvent::NavigationStarted { tab, url }
             }
@@ -17606,6 +17671,19 @@ const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis
 /// core's five routes, the Trusted Signer among them (spec 075). A backup with a
 /// sheet of its own would be the one signature a person could not route.
 #[cfg(not(target_os = "linux"))]
+
+/// Spec 083 FR-006: an open bar nobody has typed in follows the page — the
+/// address that committed replaces the one it was opened with. Typed text is
+/// the person's, and an engine page is not a place.
+#[cfg(not(target_os = "linux"))]
+fn address_follows(draft: Option<&str>, opened: Option<&str>, committed: &str) -> Option<String> {
+    (draft.is_some()
+        && draft == opened
+        && draft != Some(committed)
+        && vela_core::app::dapp_permissions::origin_of(committed).is_some())
+    .then(|| committed.to_owned())
+}
+
 fn backup_request(
     address: &str,
     call: &vela_core::registry_backup::BackupCall,
@@ -17701,6 +17779,31 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 083 FR-006: an open bar nobody typed in follows the page; typed
+    /// text, a closed bar and the engine's blank page do not move it.
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn an_untouched_address_bar_follows_the_page() {
+        let old = "https://pancakeswap.finance/";
+        let next = "https://example.com/";
+        assert_eq!(
+            address_follows(Some(old), Some(old), next).as_deref(),
+            Some(next)
+        );
+        assert_eq!(
+            address_follows(Some("exam"), Some(old), next),
+            None,
+            "typed"
+        );
+        assert_eq!(address_follows(None, None, next), None, "closed");
+        assert_eq!(address_follows(Some(old), Some(old), "about:blank"), None);
+        assert_eq!(
+            address_follows(Some(next), Some(next), next),
+            None,
+            "same page"
+        );
+    }
 
     /// **Linux has three destinations, as the web does** (owner call,
     /// 2026-09-24): no in-app browser, so no Explore — not in the sidebar, and
