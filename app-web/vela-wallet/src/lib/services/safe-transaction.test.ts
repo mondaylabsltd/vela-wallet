@@ -39,6 +39,7 @@ import {
 import type { GasTier, TransactionFeeEstimate, UserOperation } from './safe-transaction';
 import {
 	functionSelector,
+	rpcReadTimeoutMs,
 	userOpHash as localUserOpHash,
 	userOpNotSentDetail
 } from '$lib/core/kernels';
@@ -625,5 +626,55 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 		const result = await submitSigned(op(), CHAIN, SAFE);
 		expect(result).toMatchObject({ userOpHash: hash, maybeSent: false, submitBlock: 16 });
 		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x6');
+	});
+
+	/*
+	 * The relay ANSWERED — a 200 with JSON — but with no error member and no
+	 * readable hash. That is the core's `SubmitReply::Hash` with something
+	 * that is not a hash, which `submit_step` calls "may have been sent" (the
+	 * desktop and Android map it so). Read as an empty error it became
+	 * NotSent — "failed, try again" over an op the relay may hold (G21).
+	 */
+	test.each([
+		['a null result', { jsonrpc: '2.0', id: 1, result: null }],
+		['no result and no error', { jsonrpc: '2.0', id: 1 }],
+		['an empty result', { jsonrpc: '2.0', id: 1, result: '' }],
+		['a non-string result', { jsonrpc: '2.0', id: 1, result: { hash: 'x' } }]
+	])('%s is may-have-been-sent, never not sent; the nonce stays', async (_label, body) => {
+		_seedNonceForTest(SAFE, CHAIN, '0x5');
+		relay(() => body);
+		const result = await submitSigned(op(), CHAIN, SAFE);
+		expect(result.maybeSent).toBe(true);
+		expect(result.userOpHash).toBe(localUserOpHash(op(), CHAIN));
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
+	});
+
+	/*
+	 * Ruling 8's head is best effort. A chain whose nodes do not answer must
+	 * not hold the POST for the pool's every pass (tens of seconds after the
+	 * passkey, and after the page's last claim): one read's budget at most,
+	 * then the op goes with `submit_block` unknown.
+	 */
+	test('a head that never answers holds the POST one read budget at most', async () => {
+		vi.useFakeTimers();
+		try {
+			const hash = '0x' + 'cd'.repeat(32);
+			let posted = false;
+			rpcMock.impl = (method: string) => {
+				if (method === 'eth_blockNumber') return new Promise(() => {});
+				posted = true;
+				return Promise.resolve({ jsonrpc: '2.0', id: 1, result: hash });
+			};
+			const pending = submitSigned(op(), CHAIN, SAFE);
+			await vi.advanceTimersByTimeAsync(rpcReadTimeoutMs());
+			expect(posted).toBe(true);
+			await expect(pending).resolves.toMatchObject({
+				userOpHash: hash,
+				maybeSent: false,
+				submitBlock: null
+			});
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

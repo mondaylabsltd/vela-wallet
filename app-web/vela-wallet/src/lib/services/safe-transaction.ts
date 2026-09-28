@@ -38,6 +38,7 @@ import {
 	keccak256,
 	minGasPriceWei,
 	parsePublicKey,
+	rpcReadTimeoutMs,
 	stripHexPrefix,
 	toHex,
 	userOpHash as localUserOpHash,
@@ -3250,6 +3251,11 @@ async function submitUserOp(
 		})
 	);
 
+	// Where the find-event starts if the relay stays silent (ruling 8), read
+	// while the deploy guard below runs: best effort, bounded, never a reason
+	// not to send (`readSubmitBlock`).
+	const head = readSubmitBlock(chainId);
+
 	// Structural AA20 guard. An undeployed sender + empty initCode is a GUARANTEED
 	// "AA20 account not deployed" on-chain — and worse, it strands funds silently. Rather
 	// than submit a doomed op, verify against the chain and refuse with a clear, retryable
@@ -3272,9 +3278,7 @@ async function submitUserOp(
 	// The op's own name before anything leaves (RA6): if the reply is lost it is
 	// followed under this hash, and the relay's hash, when it answers, wins.
 	const localHash = localUserOpHash(userOp, chainId);
-	// Where the find-event starts if the relay stays silent (ruling 8). Best
-	// effort: a head that cannot be read is unknown, never a reason not to send.
-	const submitBlock = await readSubmitBlock(chainId);
+	const submitBlock = await head;
 
 	// One loop, the core's (RA1): every reply goes through `submit_step`, which
 	// alone decides accepted / retry / may-have-been-sent / not sent. The busy
@@ -3305,12 +3309,19 @@ async function submitUserOp(
 		try {
 			const response = await rpcCall('eth_sendUserOperation', params, chainId);
 			maybeDelivered ||= maybeDeliveredOf(response);
-			const result = response.result;
-			if (typeof result === 'string' && result) {
-				reply = { hash: result };
-			} else {
-				reply = { error: response.error ?? {} };
+			// The core's `SubmitReply`, read as the desktop and Android read it:
+			// an `error` member is the relay's refusal for the core to judge;
+			// ANY other answer is the relay's result, a hash or not — and one
+			// that is not a hash the core calls "may have been sent". A 200 with
+			// no readable hash is never "not sent".
+			if (response.error != null) {
+				reply = { error: response.error };
 				relayMessage = parseBundlerError(response.error);
+			} else {
+				const result = response.result;
+				reply = {
+					hash: typeof result === 'string' ? result : result == null ? '' : JSON.stringify(result)
+				};
 			}
 		} catch (error) {
 			// The pool reached nobody. Whether a POST of it may still have
@@ -3403,14 +3414,30 @@ function submitResultOf(submitted: SubmittedOp, chainId: number): SubmitResult {
 	};
 }
 
-/** The chain head through the pool, or `null` — never a reason not to send. */
+/**
+ * The chain head through the pool, or `null` — never a reason not to send,
+ * and never a reason to wait: it is bounded by one read's budget (the core's
+ * `RPC_READ_TIMEOUT_MS`), because a chain whose nodes do not answer would
+ * otherwise hold the POST for the pool's every pass — after the passkey, and
+ * after the page's last claim (spec 082 ruling 8: best effort).
+ */
 async function readSubmitBlock(chainId: number): Promise<number | null> {
+	const read = rpcCall('eth_blockNumber', [], chainId).then(
+		(response) => {
+			const head =
+				typeof response.result === 'string' ? Number.parseInt(response.result, 16) : NaN;
+			return Number.isSafeInteger(head) && head >= 0 ? head : null;
+		},
+		() => null
+	);
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const budget = new Promise<null>((resolve) => {
+		timer = setTimeout(() => resolve(null), rpcReadTimeoutMs());
+	});
 	try {
-		const response = await rpcCall('eth_blockNumber', [], chainId);
-		const head = typeof response.result === 'string' ? Number.parseInt(response.result, 16) : NaN;
-		return Number.isSafeInteger(head) && head >= 0 ? head : null;
-	} catch {
-		return null;
+		return await Promise.race([read, budget]);
+	} finally {
+		clearTimeout(timer);
 	}
 }
 
