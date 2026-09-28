@@ -107,9 +107,9 @@ fn rest_get(chain_id: u32, path: &str) -> Rest {
     let url = format!("{}{path}", base_url(chain_id));
     // Spec 081 FR-007: the wallet no longer tells the relay which RPC endpoint it prefers. That header carried the user's first-choice URL, which can contain a provider API key — and the relay never read this name anyway (it reads `x-vela-rpc-url`), so nothing depended on it.
     //
-    // Over the candidate chain (spec 038): a refused proxy is retried on the
-    // next route, not reported as the relay being down.
-    let mut response = match proxy::with_candidates(REST_TIMEOUT, |agent| {
+    // Over the system's routes (spec 082 RD2): a proxy that cannot be
+    // reached moves on to the next route, and says so in the log.
+    let mut response = match proxy::with_routes(&url, REST_TIMEOUT, |agent| {
         agent.get(&url).header("accept", "application/json").call()
     }) {
         Ok(response) => response,
@@ -584,6 +584,45 @@ pub fn submit_in_flight() -> bool {
     SUBMITS_IN_FLIGHT.load(std::sync::atomic::Ordering::SeqCst) > 0
 }
 
+/// How long a held close stays held: a second close inside it goes through.
+pub const CLOSE_AGAIN_WITHIN: Duration = Duration::from_secs(5);
+
+/// When the last close was held, while a submit ran.
+static CLOSE_HELD_AT: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+/// Whether a close (the window's, or Quit) goes through now (spec 082 RD14,
+/// W17): refused ONCE while a submit POST is in flight — an operation that
+/// may land needs its record and its tracker, and quitting mid-POST is how it
+/// ends up on chain with neither — and let through by a second close within
+/// [`CLOSE_AGAIN_WITHIN`]: the person always gets the last word.
+#[must_use]
+pub fn may_close(now: std::time::Instant) -> bool {
+    let mut held = CLOSE_HELD_AT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let (allow, next) = close_verdict(submit_in_flight(), *held, now);
+    *held = next;
+    if !allow {
+        vlog!("window", "close held (submit in flight)");
+    }
+    allow
+}
+
+/// The rule, with its state passed in: `(may close, the held stamp to keep)`.
+fn close_verdict(
+    in_flight: bool,
+    held_at: Option<std::time::Instant>,
+    now: std::time::Instant,
+) -> (bool, Option<std::time::Instant>) {
+    if !in_flight {
+        return (true, None);
+    }
+    match held_at {
+        Some(at) if now.saturating_duration_since(at) <= CLOSE_AGAIN_WITHIN => (true, None),
+        _ => (false, Some(now)),
+    }
+}
+
 /// One routed reply as the core's `SubmitReply`: the result hash, the
 /// JSON-RPC `error` member as JSON text, or no answer at all.
 fn reply_of(answer: &Result<Value, pool::PoolError>) -> SubmitReply {
@@ -987,7 +1026,7 @@ fn request_sponsorship(chain_id: u32, safe: &str, required_wei: u128) -> (bool, 
     // pay twice, and a relay that honours the key collapses the two.
     let idempotency = format!("sponsor:{chain_id}:{safe}:{required}");
     let body = json!({ "requiredWei": required });
-    let answer = proxy::with_candidates(SPONSOR_TIMEOUT, |agent| {
+    let answer = proxy::with_routes(&url, SPONSOR_TIMEOUT, |agent| {
         let mut response = agent
             .post(&url)
             .config()
@@ -1267,6 +1306,28 @@ mod tests {
     fn an_unreadable_result_is_may_have_been_sent() {
         let (verdict, ..) = run(vec![answered(json!({ "result": null }))]);
         assert!(matches!(verdict, SubmitVerdict::MaybeSent { .. }));
+    }
+
+    /// RD14 (W17): the first close during a submit is held; a second within
+    /// 5 s goes through, a close after 5 s is held again, and with nothing in
+    /// flight every close goes.
+    #[test]
+    fn a_close_during_a_submit_is_held_once() {
+        let start = std::time::Instant::now();
+        let later = |ms: u64| start + Duration::from_millis(ms);
+        assert_eq!(close_verdict(false, None, start), (true, None));
+        let (allow, held) = close_verdict(true, None, start);
+        assert!(!allow, "the first close is held");
+        assert_eq!(held, Some(start));
+        assert_eq!(
+            close_verdict(true, held, later(4_000)),
+            (true, None),
+            "a second within 5 s"
+        );
+        let (allow, held_again) = close_verdict(true, held, later(6_000));
+        assert!(!allow, "too late to count as the second: held again");
+        assert_eq!(held_again, Some(later(6_000)));
+        assert_eq!(close_verdict(false, held, later(1_000)), (true, None));
     }
 
     #[test]

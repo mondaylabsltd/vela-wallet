@@ -246,6 +246,20 @@ fn open_window_with<V: gpui::Render + 'static>(
     build: impl FnOnce(&mut gpui::Window, &mut App) -> gpui::Entity<V>,
 ) {
     let bounds = Bounds::centered(None, size(px(WINDOW_W), px(WINDOW_H)), cx);
+    // Spec 082 RD14 (W17): closing the window quits the app
+    // (`LastWindowClosed`), so a close during a submit POST is held once —
+    // the window comes forward and says nothing new (no string); a second
+    // close within 5 s goes through.
+    let build = move |window: &mut gpui::Window, cx: &mut App| {
+        window.on_window_should_close(cx, |window, _cx| {
+            let allow = executor::relay::may_close(std::time::Instant::now());
+            if !allow {
+                window.activate_window();
+            }
+            allow
+        });
+        build(window, cx)
+    };
 
     cx.open_window(
         WindowOptions {
@@ -399,7 +413,15 @@ fn main() {
         }
         session::boot(cx);
 
-        cx.on_action(|_: &Quit, cx| cx.quit());
+        // Spec 082 RD14 (W17): not while a submit POST is out — once; a
+        // second Quit within 5 s goes through.
+        cx.on_action(|_: &Quit, cx| {
+            if executor::relay::may_close(std::time::Instant::now()) {
+                cx.quit();
+            } else {
+                cx.activate(true);
+            }
+        });
         cx.on_action(|_: &HideApp, cx| cx.hide());
         cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
         cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
