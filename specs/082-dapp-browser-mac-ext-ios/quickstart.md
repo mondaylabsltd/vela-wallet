@@ -31,7 +31,14 @@ flows fixed keys cannot cover are gathered in one short owner batch at the end (
 - **Before and after.** Record `scutil --proxy > $S/proxy-before.txt` before the first row, and
   diff it in §7. The owner confirms once that the iPhone's Wi-Fi proxy setting was never touched.
 - **Money.** Only dust (0.001 xDAI on Gnosis). Fault rows use the parallel space's fixture Safe.
-  Before re-sending anything after a fault, check the explorer or the Safe nonce first.
+  Before re-sending anything after a fault, check the explorer or the Safe nonce first. The nonce
+  is `EntryPoint.getNonce(address,uint192)`: calldata `0x35567e1a` + the Safe address left-padded
+  to 32 bytes + a 32-byte zero key (64 hex zeros; a 24-byte key reverts):
+
+  ```sh
+  SAFE=88cca0eedbf2c4426110bbfc998f048689266894   # desktop fixture Safe (extension: d400866e00b055b20752a826cd5c89b811de130b), lower-case, no 0x
+  curl -s https://rpc.gnosischain.com -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":"0x0000000071727De22E5E9d8BAf0edAc6f37da032","data":"0x35567e1a000000000000000000000000'$SAFE'0000000000000000000000000000000000000000000000000000000000000000"},"latest"]}'
+  ```
 - **Evidence.** Put screenshots and log excerpts in `evidence/<client>/post-<row>.jpg` / `.txt`.
   Every failure row names the log line it must produce (FR-018). §7 runs one secret scan over
   all logs (FR-019).
@@ -47,6 +54,7 @@ cd /Volumes/data/production/vela-wallet-082
 bash rust/scripts/check-ios-core-fresh.sh                 # must print "ok …"
 grep WASM_URL rust/pkg-web/vela_core_wasm_url.js; ls app-web/vela-wallet/extension/dist/*.wasm   # same hash
 git log -1 --format=%h                                    # the commit every build below is made from
+git status --porcelain rust/pkg-web app-web/vela-wallet   # must be empty: build from a committed tree (G72)
 ```
 
 ### 1.2 Shared: test dApp, fault proxy, logs
@@ -155,7 +163,7 @@ Unless a row says otherwise: the §1.3 build, the parallel space, `zh`, and
 | DX4 · W18 | Test dApp loaded; `blackhole example` → dApp console `location.href='https://example.org/'`; afterwards Back to that entry | Hairline within 0.5 s while the bar keeps `127.0.0.1:8137`. The panel names `example.org`, with manual Retry only [RD7]. Back/Forward to a faulted entry behaves the same. | |
 | DX5 | `blackhole 'googleapis\|gstatic\|googletagmanager'` → `app.uniswap.org` | Usable, no panel: progress passed the live threshold, so give-up never fires. | |
 | DX3′ · W6 W8 | Relaunch with `VELA_DEV_PROXY=127.0.0.1:9` (a dead proxy) → open a dApp | Within ~3 s the panel says 代理没有响应。 (`explore.loadProxy`). Balances and fees do **not** load: no direct bypass. `.err` has `proxy: 127.0.0.1:9 unreachable …` [RD2, RD9]. System PAC and exception lists are unit-tested only, because testing them on a device means touching system settings. | |
-| C1 · G33 | Test dApp on Gnosis; `blackhole 'gnosis\|xdai\|1rpc'` → Block number; tap the notice's Retry | Within ≈ endpoints × 8 s (~25 s) a one-line notice names Gnosis; the chip is unchanged [RF1]. Retry is busy until its read settles [RF4]. chaos.log keeps showing `HOLE` for those hosts (no direct bypass). `.err`: `rpc: chain=100 … outcome=timeout`, `chain notice: shown chain=100`. | |
+| C1 · G33 | Test dApp on Gnosis; `blackhole 'gnosis\|xdai\|1rpc'` → Block number; tap the notice's Retry | Within the first pass (≈ live endpoints × 8 s, ~15–25 s), while the call is still pending, a one-line notice names Gnosis; the chip is unchanged [RF1, RJ11]. Retry is busy until its read settles [RF4]. chaos.log keeps showing `HOLE` for those hosts (no direct bypass). `.err`: `rpc: chain=100 … outcome=not connected` (a black-holed CONNECT never connects), then `chain notice: shown chain=100` **before** the call's `gave up` line. | |
 | C2 | `pass` → Block number | The notice clears within 5 s of a good read, with no tap; `chain notice: cleared chain=100`. | |
 | S7 / S8 | `drop vela-relay` → Send dust (do not approve) → `pass` without touching; then tap refresh | The fee row names the cause and the slide is shut. The fee is back within 15 s with no tap. `.err`: `fee: quote failed … re-quote #n`, then `fee: quote back`. Refresh → spinner → fee. | |
 | U1 / U2 · **G11** | Test dApp → Connect | The title names the site once. An account row (identicon, name, short address) and a network row with its logo [RD11]. Change the network to Gnosis → Connect → the dApp's `eth_chainId` is `0x64`. No 安全站点 / 不安全 / 已加密 text anywhere. | |
@@ -313,3 +321,71 @@ rg -n '0x[0-9a-fA-F]{130,}|/v3/[0-9a-f]{20,}|#[A-Za-z0-9_-]{40,}|signature=0x|pr
 | L-D3 live | DX-LD3, EX-W1, O-E2 |
 | L-D6 live | DX-LD6, O-D3 |
 | G4 | not in 082 (research RD15) |
+
+## 8. Round 2: re-verification after Phase 9 (post2-*)
+
+Run after the Phase 9 gates (T226, T235, T243, T251) on builds from a clean, committed tree
+(§1.1). Same set-up as §1; evidence goes in `evidence/<client>/post2-<row>.jpg` / `.txt`. These
+rows re-run every refuted and unproven row of the post-fix pass and check each new finding
+(G34–G73). Where a row here and a §2–§4 row disagree, this row's expectation wins. Pass
+`latency=0` with every chaos mode (G73) unless the row sets a latency.
+
+### Desktop (T252)
+
+| id | re-runs | do | expect |
+|---|---|---|---|
+| post2-D1 | DX9 · **G34** | `mute vela-relay` → slide dust → ⌘W during 提交至网络… → ⌘W again within 5 s → relaunch with the relay still muted | The first ⌘W is held: the bar's notice slot reads 提交至网络… and the column comes forward; `.err` `window: close held`. The second quits. `.err` of the first run shows the write-ahead record (`OpSigned`/persist) **before** `relay: submitting`. After the relaunch Activity lists `dApp 交易 · 处理中 · 127.0.0.1:8137` at once; after `pass` it turns 已确认 (or 失败 if the tracker proves not sent) with no tap. The Safe nonce moved by at most 1 [RJ1]. |
+| post2-D1s | DX9 for the wallet's Send · G34 | 钱包 → Send dust with `mute vela-relay`; quit during 提交至网络…; relaunch | The pending send row is there after the relaunch and resolves after `pass` [RJ1]. |
+| post2-D2 | S5 | Fee shown → `drop vela-relay` → slide | 失败 · 交易未能提交…; after the verdict no Activity row (a row may flash for < 1 s during the POST); one -32603 `relay unreachable; nothing was sent`; nonce unchanged. |
+| post2-D3 | DX-W3 / S6 · **G36 G52** | Gnosis USDC `transfer(0x7687…, 10^30)` from the dApp → slide | The relay rejects it: the dApp gets exactly one `{ok:false, code:-32603, message:"the network refused this transaction; nothing was sent"}` within ~15 s of `status=Rejected`, never ok. The sheet: 失败 + 网络拒绝了这笔交易，什么都没有发出。, no 请重试. Activity detail: 接收方 0x7687…D141 (EIP-55), no explorer button. Nonce unchanged [RJ3, RJ16]. |
+| post2-D4 | DX-W1, DX6 · **G37** | `mute vela-relay` → slide dust; keep muted | When the chain check finds the op, the dApp gets the tx hash at that moment (not at ~120 s) and the sheet reads 已确认; it never shows 提交至网络… or the may-have-been-sent caption after that [RJ4]. |
+| post2-D5 | CLOSE-TAB · **G40** | Three tabs, A shown; close B and C with ✕; then open a Sign request in A and close a background tab | No `asked host=<closed tab>` line; A's page is not reloaded (the dApp log keeps its results); no 请先完成或取消这个请求 flash for a close. |
+| post2-D6 | KEY-FOCUS · **G41** | Uniswap (autofocused) → click the bar → type `a` → Enter; then paste two URLs one after the other with Enter between | Nothing reaches Uniswap's field; Enter gives `browser: navigate asked`; the second paste replaces the first (no `…comhttps://…`) [T201]. |
+| post2-D7 | DX14, DX11 · **G42** | Connected test dApp → + → type `app.uniswap.org`; frames at 0.5/1/2/3 s. Then relaunch with a Uniswap tab, click it, press Back | No frame shows the test dApp or its connected dot under `app.uniswap.org`. On Uniswap's first page Back is disabled (never 127.0.0.1:8137); after an in-app route change Back is enabled and stays inside Uniswap [RJ5]. |
+| post2-D8 | DX14 · **G43** | `drop uniswap` → new tab → `https://app.uniswap.org` | Exactly three automatic attempts at ~+2/+5/+10 s; no `how=page` after a `retry attempt=`; the panel stays up between attempts [RJ8]. |
+| post2-D9 | L2–L4, DX2 · **G44** | `blackhole uniswap` → open; `pass` before the third attempt | The first attempt runs by ~20–22 s (the hung load is replaced), 正在重试… busy; at most one `skipped (engine still loading)` line per load; after `pass` the page loads within ~12 s [RJ9]. |
+| post2-D10 | L5 · **G45** | `https://expired.badssl.com/` | The certificate sentence; no automatic retry; `.err` `class=certificate` [RJ10]. |
+| post2-D11 | C1 · **G46** | As §2 C1 (fixed wording) | The notice while the call is still pending, ~15–25 s; `chain notice: shown chain=100` before `gave up` [RJ11]. |
+| post2-D12 | S7/S8 · **G47** | `drop vela-relay` → Send dust → `pass` (note its chaos-log time) | The fee is back ≤ 15 s after `pass`, by the chaos log and the `.err` stamps; `.err` has `fee: quote failed chain=100 cause=… re-quote #n` and `fee: quote back chain=100 …` [RJ12]. |
+| post2-D13 | DX-G14 Ethereum · **G48** | No fault: the DX-G14 request after `wallet_switchEthereumChain 0x1` | If the public node rate-limits the deployment read, the fee row reads 被限流 · 正在自动重试 (unreachable: 暂时连不上 Ethereum…), never 无法连接 Vela 服务 [RJ13]. |
+| post2-D14 | G14-num · **G49** | `value:1000` (a JSON number) | The simulation box reads `−0.000000000000001 xDAI` or shows no row; never `−0` [RJ15]. |
+| post2-D15 | DX-LD3, T181 · **G50 G51** | A confirmed dApp record's detail; a pending one; switch to 钱包 while the may-have-been-sent column shows, then back to 探索 | The 哈希 fits with its copy button visible; on the pending record 删除记录 is a quiet control under the explorer; the maybe-sent column is back when 探索 returns [RJ18]. |
+| post2-D16 | T181 notes, DX3′ · **G53** | `blackhole 'gnosis\|xdai\|1rpc'` for 3 min with the wallet home open; relaunch with the fault on | No `net: offline` / `came back` lines; after the relaunch the home lists the other chains' assets, and any RPC banner names Gnosis only [RJ14]. |
+| post2-D17 | DX3′, SC-006b · **G54** | Open 8 tabs | The lit tab and + stay visible (tabs shrink, then the strip scrolls). |
+| post2-D18 | **G67 G68 G70** | ⌘W with nothing submitting; `rg -n '^\[vela-wallet\] [^0-9]' .err`; bfcache Back to the test dApp; look at the badge | The window closes; every `.err` line is timestamped; the tab is renamed after the bfcache Back; the badge covers no ✕ or +. |
+| post2-D19 | DX4 (unproven) | `blackhole iana` → example.org's own link; then load a fresh entry, fault it, go Back to it | The DX4 expectation, including the Back/Forward-to-a-faulted-entry leg (not from the bfcache). |
+| post2-D20 | DX5 (unproven) | Read the Uniswap build's third-party hosts from chaos.log first; blackhole those that it requests | Usable, no panel (the live-progress path is exercised: chaos.log shows `HOLE` lines). |
+| post2-D21 | DX-LD7, DX-LD6 (unproven) | Needs a second parallel-space account with no history (the extension's Parallel Two/Three kind). If the desktop fixture has one account, record "not run" with that reason | The DX-LD7 unfiltered wording, and the account-switch leg of DX-LD6 (EIP-55 `accountsChanged`). |
+
+### Chrome extension (T253)
+
+| id | re-runs | do | expect |
+|---|---|---|---|
+| post2-E1 | P0 probe, T182 · **G35** | No fault: dust send → after the slide, when 提交至网络… or 已提交 shows, `chrome.sidePanel.close`; repeat once with a panel reload during the may-have-been-sent caption (`drop vela-relay`) | The dApp gets exactly one ok = the op hash, never 4900; worker log `req.answered cause=surface_closed maybe_sent=1`. The op lands once (nonce +1). Reopened panel: the row 处理中 → 已确认 (or 失败 for the drop variant after `pass`) [RJ2]. |
+| post2-E2 | EX6 | Sign (or a tx before the slide) → close the panel | 4900 "The browser closed before the request finished" once (unchanged). |
+| post2-E3 | EX4b · **G55** | Panel on Settings (and once on Contacts) → tab B Connect; then a tx from tab A | The card shows within 1 s with no tap. |
+| post2-E4 | EX-S5 · **G36** | Fee shown → `drop vela-relay` → slide → `pass` at +30 s | 失败 at ~90 s; the dApp gets one -32603 `relay unreachable; nothing was sent` (the tracker's NotSent fell inside the window), never ok; nonce unchanged [RJ3]. |
+| post2-E5 | EX-W3 probe · **G36 G57 G60** | USDC `transfer(0x1111…, 10^30)` on Gnosis | Before the slide: the danger line 这笔交易预计会失败…; the amount fits the 360 px panel and the fiat is formatted (no `1e+24`). Slide → relay rejects → one -32603 refused; 失败 + 网络拒绝了这笔交易，什么都没有发出。, no 请重试 [RJ3, RJ19]. |
+| post2-E6 | EX-W1 · **G37 G39 G56** | `mute vela-relay` → slide dust | The title reads 提交至网络… with the may-have-been-sent caption. When the chain check finds the op, the dApp gets the tx hash at once and the sheet ends 已确认, never 提交至网络… again. If nothing finds it, the op hash arrives ≤ 121 s after the slide [RJ4]. |
+| post2-E7 | EX13 · **G38** | `vela.silentReceipt(100)` → dust | 已确认 within ~15 s of the op landing (the relay's `included` + tx hash is confirmed through the chain), not 还没上链 [RJ4]. |
+| post2-E8 | EX-LD6 · **G58** | Settings → 切换账户 → Parallel Two; then plant a lower-case grant and boot the panel on Settings | The site gets `accountsChanged` [Two] (EIP-55) and `eth_accounts` = Two; the grant is rewritten without visiting 钱包 [RJ20]. |
+| post2-E9 | EX7, SC-007-en · **G59** | Pin 简体中文 → close and reopen the panel | zh sheets; the picker ticks 简体中文. |
+| post2-E10 | EX-LOG · **G61** | After E4, E5 and a fee failure: the panel console; Settings → 反馈 preview | Lines `submit verdict=…`, `tracker: …`, `fee: quote failed … / quote back …`; no "ACCEPTED but NOT landed" for E4; the preview lists `panel:submit.not_sent ×1`, `panel:submit.refused ×1` with no hash, address or URL. |
+| post2-E11 | EX-G1 · **G62** | Parallel Three, sidebar filter Gnosis | 该网络暂无交易记录 / 此网络暂无交易. |
+| post2-E12 | EX8b · **G63** | Leave the panel idle 3 min with DevTools closed, then Connect | At most one `sw.start` after the first idle stop (no 30 s cycle); the card still shows within 1 s. |
+| post2-E13 | EX10/EX11 · **G64** | `blackhole 'gnosis\|xdai\|1rpc'` → Block number twice | Call 1 ≤ ~3 × 8 s with `read.fail kind=timeout`; call 2 ≤ ~8 s (one cooled endpoint tried). |
+| post2-E14 | EX4 · **G65** | A signs while B's Connect is queued | B's card shows at once; no tick over it. |
+| post2-E15 | S7/S8 · **G47** | As post2-D12 in the panel | Fee back ≤ 15 s after `pass`; the cause line hides during 估算中…, sits under 网络费, and the sheet does not jump; `fee:` lines. |
+| post2-E16 | S3 · **G66** | The isolated e2e run (with the two new lifecycle cases) while CfT has the extension open | Green on 4174; `extension/dist` is untouched by the run (mtime and hash unchanged); open pages keep working. |
+| post2-E17 | EX0 · G72 | Bug-report label | Equals `git rev-parse --short HEAD` of the clean tree the build came from. |
+
+### iPhone and Android parity (T254)
+
+| id | re-runs | do | expect |
+|---|---|---|---|
+| post2-I1 | **G34** parity | `mute vela-relay` → slide dust → force-quit during 提交至网络… → relaunch (same `-e` JSON) | The pending dApp row is there at once and resolves after `pass`; log `sign: write-ahead …` before the POST [RJ1]. |
+| post2-I2 | **G36** parity | The USDC 10^30 transfer from the test dApp | One -32603 refused; 失败 + the refused words, no 请重试 [RJ3]. |
+| post2-I3 | **G37** parity | `mute vela-relay` → slide; the chain check finds it | The tx hash reaches the dApp at once; the sheet 已确认 [RJ4]. |
+| post2-I4 | IX6 · **G48** parity | A rate-limited or black-holed deployment read on the fee row | The chain's words (被限流 · 正在自动重试 / 暂时连不上 …), never 无法连接 Vela 服务 [RJ13]. |
+| post2-I5 | **G53** parity | `blackhole 'gnosis\|xdai\|1rpc'` 3 min | No `net: offline` in the `log collect` archive [RJ14]. |
+| post2-A1 | Android smoke | A-LD3; and, if cheap, the 10^30 transfer | The row within 5 s; a refused op answers -32603 refused. The JVM suite (T251) is the gate. |

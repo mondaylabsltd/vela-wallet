@@ -731,3 +731,330 @@ Reused, not new (0 B): `send.txPreparing`, `send.txSigning`, `send.txSubmitting`
 ## RI3 — How the corpus change lands
 
 - **Decision**: all corpus edits in **one commit** (adding `maybeSent` alone would reach 138,935 and fail). The path pins in `scripts/gen-i18n.mjs:452-454` move from 1782 paths / 1693 leaves to **1784 / 1695** (89 branches unchanged: every key lands in an existing namespace), with a history comment in the `:436-451` style. Order: `npm --prefix scripts run gen:i18n` → `lint:i18n` → `verify:i18n` → `dump:vectors` → `build:wasm` + `sync:wasm` (fingerprint moves) → `cargo test -p vela-core --features i18n-all,crux` (residency printed) → `check-ios-core-fresh.sh`. The CI `git diff --exit-code` over `paths.rs`, `i18n_catalogs`, `assets/i18n` means the generated files ship with the corpus change. Every new key gets a reader on every client that shows it (desktop `SigningStrings`/`ExploreStrings`; web `engine.server.ts` + `signing/messages.ts`; iOS/Android key constants) and a resolve-without-echo test (the desktop `signing/mod.rs:560-590` pattern).
+
+---
+
+# J — Round 2: the post-fix device pass (2026-09-29)
+
+The desktop and extension were re-run at `fb8c7026` (`evidence/desktop/post-results.md`,
+`evidence/extension/post-results.md`) and audited adversarially (`post-audit.md` in both
+folders). Findings G34–G73 are in spec.md "Post-fix device pass (2026-09-29)"; the tasks are
+tasks.md Phase 9 (T185–T254). RJ1–RJ7 are the orchestrator's decisions, recorded verbatim in
+substance; RJ8 onward are the planner's. Every suspected-code line the auditors named was
+re-read at `47a20343`; corrections are noted where the auditor was wrong. Nothing here was built.
+
+## RJ1 — Write-ahead: a record exists before the bytes leave (G34, P0; every client)
+
+- **Decision** (orchestrator): before the submit effect is issued, the core persists the dApp-tx
+  record (and the wallet Send records) under the locally computed userOpHash with
+  `maybe_sent = true` and `submit_block`, and hands it to the tracker. A NotSent verdict then
+  withdraws it (S5 still shows no Activity row once the verdict is in); Accepted and MaybeSent
+  keep it. A quit, crash or window close at any point after that leaves an in-doubt record the
+  tracker resolves on the next launch (FindOpEvent). The wallet's own Send machine gets the same.
+- **Why**: DX9 (nonce 50, block 48487627) landed 6 s after the second window close; the only
+  writer of the record is `Event::OpSubmitted`, sent after `user_op::submit` returns
+  (`desktop:executor/sign_request.rs:392-403`), and `send.rs` persists only on
+  `SendShellResult::Submitted` (`core:send.rs:4847-4852` → `accept_submitted`). RD14's rationale
+  ("RA3/RG3 cover what happens after a quit") and RG4's rejection of write-ahead are superseded.
+- **Mechanics (planner)**:
+  - sign_request: new `Event::OpSigned{id, user_op_hash, submit_block, now_ms}` — the shell sends it
+    after the passkey, after the local hash and the head read, before any POST. The core builds the
+    `SignRecord` (Pending, `maybe_sent: true`, `submit_block`), sets `tracker_handoff`
+    (`maybe_sent: true`) and emits `PersistRecord`; on its `RecordPersisted` (stage Submitting,
+    write-ahead awaiting) it emits new `SignOperation::ClearToPost{id, user_op_hash}`. The shell
+    POSTs only after `ClearToPost` for that id; if none comes within
+    `user_op::WRITE_AHEAD_WAIT_MS` (5 000) it does not POST and reports `Failed` (nothing sent).
+    The asker check (RB2) runs after the clearance, immediately before the POST.
+  - Verdicts: `OpSubmitted{maybe_sent: false}` with the write-ahead hash → no second record;
+    `UpdateRecord{close: SignRecordClose::Admitted}` (record's `maybeSent` → false, stays pending)
+    and a second handoff with the new `admitted: true` (tracker `acknowledged = true`), so an
+    accepted op never reads "may have been sent". `OpSubmitted{maybe_sent: true}` → nothing new.
+    A relay hash ≠ the local hash → withdraw the write-ahead record and persist a fresh one under
+    the relay's hash (today's path; logged `userop.hash_mismatch`). `Failed` / `Underfunded` /
+    `AskerGone` after `OpSigned` and before `OpSubmitted` = proven not sent → new
+    `SignOperation::DeleteRecord{record_id}` plus `SignView.tracker_withdraw` (the shell feeds
+    tracker `Event::Withdrawn{user_op_hash, record_ids}`), then today's answer. After
+    `OpSubmitted` the G21 guard stays (any failure = ReceiptPending).
+  - send: the same shape — `Event::OpSigned{user_op_hash, submit_block, now_ms}` during
+    `SubmitUserOp`; records (`maybe_sent: true`) → `PersistTxRecords` → on `RecordsPersisted`
+    `TrackSubmitted` and new `SendOperation::ClearToPost`; `Submitted{maybe_sent:false}` → new
+    `SendOperation::MarkAdmitted{record_ids}` + `TrackSubmitted{admitted: true}`;
+    `SubmitFailed` after the write-ahead → new `SendOperation::DeleteTxRecords{ids}` +
+    `SendOperation::TrackWithdrawn{user_op_hash, record_ids}`. The receipt screen still waits
+    for the verdict.
+  - tracker: `admitted` on `Event::Submitted` (serde default) sets `acknowledged`; new
+    `Event::Withdrawn{user_op_hash, record_ids}` drops those ids and removes the entry when none
+    is left, never patching a record. The existing `new_life` rule (`tx_tracker.rs:896-909`)
+    already lets a re-submit of the same hash (S5, DX9 runs 1–2 share `0x7df211ed…`) start fresh.
+  - The local nonce still moves only on Accepted (RA5); nothing else changes in `submit_step`.
+- **Alternatives**: refuse every quit while a POST is in flight (a crash or force-quit still
+  loses the record); write the record from the shell (a second writer of a core rule, FR-020).
+
+## RJ2 — A claimed submit is never settled 4900 on surface loss (G35, P0; extension)
+
+- **Decision** (orchestrator): once the panel's claim for submit carries the op hash, the worker
+  answers `ok(op hash)` on `surface_closed`, panel reload, `window_removed` and in
+  `recoveryPlan` — may-have-been-sent, ruling 1 + RA2 — never 4900. Before the op hash exists
+  (nothing signed or sent) 4900 stays right. This supersedes RB10 for claimed-submit records only.
+  The caption 关闭此页交易会在后台继续 then tells the truth.
+- **Mechanics (planner)**: the op hash rides the existing `submit` claim (RB5), sent after the
+  write-ahead's `ClearToPost` and immediately before the POST, so every record the worker answers
+  `ok(op hash)` for has a durable wallet record the tracker resumes on the next boot (T182). The
+  worker stores `opHash` and `chainId` on the record (`phase: 'submit'`); `affectedBy` /
+  `recoveryPlan` return `{rid, cause, answer: {ok: opHash}}` for such records, and the worker
+  also writes `vela.ext.op.<hash>` (RF3) so the page's receipt reads resolve. Verified: today
+  `request-life.js:184-193` and `:137-153` ignore `state`, and `background.js:541-553` settles
+  every owed record.
+
+## RJ3 — A refused or proven-not-sent op answers an error (G36, P1; every client)
+
+- **Decision** (orchestrator): a relay-Rejected op, or a NotSent the core has proven inside the
+  answer window, answers the dApp with an error, not ok + op hash: `-32603` with a fixed
+  plain-English message saying the network refused it and nothing was sent. A revert on chain
+  stays ruling 9 (tx hash). One answer only. The sheet's 失败 ending for a deterministic reject
+  must not say 请重试.
+- **Mechanics (planner)**: `user_op::REFUSED_DAPP_DETAIL = "the network refused this
+  transaction; nothing was sent"` for a relay rejection (tracker `Rejected`, or a submit-time
+  `NotSent{Some(rejection)}` that is not `RelayerUnavailable`); the existing
+  `NOT_SENT_DAPP_DETAIL` ("relay unreachable; nothing was sent") for a relay that never had it
+  (tracker `NotSent`, submit-time `NotSent{None}`). Kind stays `SignErrorKind::SubmitFailed` (no
+  wire change). `SignSubmitOutcome::Failed` gains `#[serde(default)] refused: bool`; the sheet
+  reads `SignView.failure_refused`. New `SignEndingState::Refused`: cross, `statusFailed` + the
+  new `componentsUi.signing.refused` (RJ6), no Retry words. The auditor's code note (D2) is right:
+  `after_receipt_wait` (`desktop:executor/sign_request.rs:512-517`) and the core's G21 guard
+  (`core:sign_request.rs:2472-2484`) turn every late verdict into ReceiptPending.
+
+## RJ4 — The answer and the sheet follow what the tracker knows (G37–G39, P1/P2)
+
+- **Decision** (orchestrator): when the tracker has the tx hash (relay status included/failed
+  with a tx hash, or the chain lookup found the event), the waiting dApp request is answered at
+  once and the sheet shows 已确认; no fall-back to 提交至网络… afterwards; the relay's tx hash is
+  used to confirm (receipt by tx hash) instead of waiting for a relay receipt; the 120 s window
+  is enforced inside long polls, not only at the loop top.
+- **Mechanics (planner)**:
+  - sign_request: new `Event::OpTracked{user_op_hash, status: TrackStatus, tx_hash, now_ms}`;
+    each shell forwards the tracker's entry for the in-flight op whenever it changes. While the
+    inflight is past `OpSubmitted` and unanswered: `Confirmed` / `Dropped` with a tx hash →
+    `Ok(tx hash)` (ruling 9 for Dropped); `Rejected` → `Err(-32603, REFUSED_DAPP_DETAIL)`;
+    `NotSent` → `Err(-32603, NOT_SENT_DAPP_DETAIL)`; anything else waits. The inflight clears, so
+    the shell's later `Submit` result is dropped by the existing guard; shells may stop their
+    receipt wait early. The contract is otherwise unchanged (op hash at the window's end).
+    Answers follow terminal tracker states only: a relay's `submitted` tx hash can still be
+    replaced by a fee bump, and `included` becomes `Confirmed` within one poll through `TxReceipt`.
+  - `ending_state`: a `Landed{tx_hash}` ending whose entry still reads `MaybeSent` is drawn
+    `Following(Landing)`, not "may have been sent" (DX6: the page had its tx hash while the sheet
+    still said "may have been sent").
+  - tx_tracker: when a status names a tx hash for a non-terminal entry, new
+    `TrackOperation::TxReceipt{chain_id, tx_hash, user_op_hash}` (the chain pool's
+    `eth_getTransactionReceipt`), answered `TrackShellResult::TxReceipt{user_op_hash, now_ms,
+    receipt_json}`; the core finds the op's own `UserOperationEvent` in the receipt's logs (the
+    find-event reader) and runs `safe_execution_failed` over the same logs → Confirmed / Failed,
+    `NotifyConfirmed` / `HoldingsMoved` as for a relay receipt. A null receipt keeps polling at
+    the receipt cadence. Verified: `tx_tracker.rs:1110-1116` only sets `acknowledged`, and
+    FindOpEvent is gated to `in_doubt()` (`:1291-1305`), so EX13's landed op read 还没上链 for
+    5 min 49 s.
+  - The window inside polls: desktop (`wait_within`), iOS (`SignExecutor.swift:363-387`) and
+    Android (`SignExecutor.kt:266-276`) already give each poll only what is left; the web does
+    not (`safe-transaction.ts:3525`, `dapp-submit.ts:558`) — it gets an abort at the deadline.
+    The web's own status branch in `waitForReceipt` (`:3567-3583`) is a client copy of the
+    tracker's rule and goes (the core answers through `OpTracked`).
+
+## RJ5 — Desktop tabs: the minimum, not one WKWebView per tab (G42, P1)
+
+- **Decision** (orchestrator's rule): the address bar never names a host the visible page is not,
+  and Back/Forward never cross tabs.
+- **Planner's choice: the minimum.** (1) **Veil**: the page keeps `doc_tab`, the tab whose
+  document the webview holds (set when a navigation this page asked for the shown tab commits,
+  `Load::Started`). While `browsing ∧ shown_tab ≠ doc_tab` the webview is hidden
+  (`webview::hide()`), the column draws the page background with the hairline, the failure panel
+  when one is up, and no connection chip; the bar shows the pending host with no lock (RE1,
+  unchanged). (2) **Per-tab back floor**: `webview::engine()` also reads the WKWebView
+  back-list length (`backForwardList.backList.count`, the same `msg_send` technique as
+  `engine_sample`); at the shown tab's first commit the page stores `floor = back_len`; Back is
+  enabled only while `back_len > floor`. Forward needs no floor: a new load truncates WebKit's
+  forward list, so its entries are always this tab's. Same-document (SPA) entries count, which a
+  commit counter would miss. A tab shown again starts a new floor; its older history is not
+  reachable (confined, not crossed).
+- **Why not per-tab views in 082**: `webview.rs` is one thread-local view (`BROWSER`,
+  `COMMITTED`, `COMMITTED_URL`, one message sink and one load sink without a tab id,
+  `webview.rs:140-186`); `page.rs` calls it from ~40 sites; `browser_host`'s `LoadWatch`, the
+  chain notice and the RD1 hold are single-document; and a hidden tab's live page can still send
+  provider requests, which the core's routing and the hold would have to learn. Rewriting that
+  while RJ1–RJ4 land in the same files is the larger risk. Per-tab views stay a follow-up
+  (results.md).
+- **Alternatives**: clear WebKit's back list on a switch (no public API); count commits (misses
+  SPA history).
+
+## RJ6 — i18n: one new sentence, paid for by a trim (all clients)
+
+- **Decision** (orchestrator): every new user-facing string needs a corpus key; the ja+en budget
+  had ~71 B left (138,729 / 138,800). Reuse first; a new sentence is paid for by trimming an
+  existing long string in the same change. No key for dApp-facing error text.
+- **Ledger (planner)**:
+
+| Change | Key | en / zh | en+ja bytes |
+|---|---|---|---|
+| add | `componentsUi.signing.refused` | "The network refused it — nothing was sent." / "网络拒绝了这笔交易，什么都没有发出。" (ja ネットワークに拒否されました。何も送信されていません。) | +44 +81 +8 offsets +4 bitmap (N 1784 → 1785) = **+137** |
+| trim | `componentsTx.receipt.failedHint` | drop the last sentence ("Open the explorer below for the reason, or go back and try again." / 可点下方「浏览器」查看失败原因,或返回重试。): the explorer link sits right under it, and "try again" is wrong after a revert — the RJ3 point | **−195** (en −66, ja −129) |
+| zh-only | `send.txBackgroundHint` | 关闭此页，交易会在后台继续 (zh, zh-TW, zh-HK; the comma D22 asked for) | 0 |
+| **net** | | | **≈ −58 B → ≈138,671, ≈129 B headroom** (the residency test prints the figure) |
+
+- Reused, 0 B: `send.txSubmitting` (the close-hold words, RJ17), `home.balanceDetailStatusRetrying`
+  and `explore.chainDown` (the fee row's chain words, RJ13), `componentsUi.signing.interactingLabel`
+  (a contract counterparty, RJ16), `componentsUi.signing.simWillFail` (the web's revert estimate,
+  RJ19), `componentsUi.signing.maybeSent`, `componentsTx.receipt.statusFailed`,
+  `send.txErrorGeneric`, `history.deleteRecord`, `connect.browser.clearAllBody`.
+- The corpus change is one commit (RI3 order); the pins move to 1785 paths / 1696 leaves.
+
+## RJ7 — Deferral rule
+
+- **Decision** (orchestrator): P3 cosmetic items may be deferred only with a one-line reason in
+  results.md; P0/P1/P2 are fixed in 082 unless shown not to be a defect (with evidence). The
+  deferred P3s and the not-defects are listed in spec.md's round-2 section.
+
+## RJ8 — The auto-retry race and URL normalisation (G43)
+
+- **Decision**: `browser_load` treats its own retry as its own until the engine commits or fails
+  it. `retry_now` records the address it handed out (`own_request`); `engine_started` for that
+  address (or while `next_asked` is `AutoRetry` / `Retry`) is never a page-started load, never
+  overwrites `next_asked`, and never calls `requested()` (which resets `attempt` and `failure`).
+  One pure `same_address(a, b)` compares addresses everywhere the watch compares them: scheme and
+  host case-insensitive, default port dropped, an empty path equals `/`, one trailing slash
+  ignored, fragment ignored. Verified: `browser_load.rs:619-644` compares `self.url ==
+  Some(url)` literally, and the engine reports `https://app.uniswap.org/` for a typed
+  `https://app.uniswap.org`.
+- **Test vector**: DX14 — fail → attempt 1 → the engine poll sees the trailing-slash URL before
+  `Load::Requested` → attempt stays 1, the next is attempt 2 at +5 s, three attempts in all.
+
+## RJ9 — Retry starvation while WebKit's provisional load hangs (G44)
+
+- **Decision**: an attempt that falls due while the engine is still on the same address is given
+  back (W7's protection) only while that load is younger than `GIVE_UP_MS` (20 s) or has shown
+  live progress (`ENGINE_LIVE_PROGRESS`). Past 20 s with no live progress the attempt is
+  `RetryAction::Load(url)`: the new `loadRequest` cancels WebKit's hung provisional load — the
+  phones' `should_give_up` rule (RE2), now on the desktop too. The desktop logs the skip once per
+  load, not every 2–5 s.
+- **Why**: L2 had no attempt for 60 s and waited 49.6 s after `pass` for WebKit's second 60 s
+  timeout (`browser_load.rs:780-788`, `browser_host.rs:795-806`). A 6–10 s proxy (DX1) stays
+  protected: it commits before 20 s.
+- **Alternatives**: `stopLoading` at the first due attempt (re-creates W7 for slow proxies).
+
+## RJ10 — The certificate class in the desktop probe (G45)
+
+- **Decision**: `probe.rs` `io_code` first downcasts the `io::Error`'s inner error to
+  `rustls::Error` (as `executor/pool.rs:973-976` does): `InvalidCertificate(_)` and
+  `NoCertificatesPresented` → `probe_code::TLS`; any other rustls error keeps its class. Verified:
+  ureq surfaces the handshake failure as `ureq::Error::Io` with kind `InvalidData`, which
+  `io_code` maps to 0 (`probe.rs:55-83`).
+
+## RJ11 — The desktop chain notice after the first pass (G46)
+
+- **Decision**: while any page read is in flight, the browser host re-reads the pool's health
+  every second (`failed_chains`, `unreached_chains`, `rate_limited_chains`), not only after a read
+  settles or once something is already down. Verified: `browser_host.rs:239-244` refreshes only
+  when a `Work` resolves, and the recheck loop (`:360-375`) starts only once a chain is down. The
+  core half (RF1, `rpc_pool.rs:1749`) is right. The quickstart's `outcome=timeout` was wrong: a
+  black-holed CONNECT never connects and the desktop logs `outcome=not connected` (fixed there).
+
+## RJ12 — Fee re-quote cadence and `fee:` log lines (G47)
+
+- **Decision**: `fee_policy::requote_delay_ms` becomes 3 s, 6 s, then every 8 s (no 12/15 s
+  steps), and new `REQUOTE_TIMEOUT_MS = 6 000` bounds each automatic re-quote, so the fee is back
+  within 8 + 6 = 14 s of the relay returning (SC-003). Every client logs `fee: quote failed
+  chain=<id> cause=<FeeFailure> re-quote #<n> in <ms> ms` and `fee: quote back chain=<id> after
+  <n> re-quotes`. Verified: no `fee:` line exists on the desktop outside `user_op.rs:377`, and the
+  panel writes only `[InBand] quote failed … All bundler endpoints failed`.
+
+## RJ13 — The fee row names the chain node, not Vela (G48)
+
+- **Decision**: new `FeeFailure::ChainRead{rate_limited}` for a fee blocked by a chain read (the
+  deployment read today), on the re-quote schedule, and `fee_policy::failure_reason_key(failure)`
+  so no shell picks the words: rate-limited → `home.balanceDetailStatusRetrying` ("Rate-limited ·
+  retrying automatically"); unreachable → `explore.chainDown` with the chain name; relay failures
+  keep `componentsUi.funding.denialNetworkError`. Verified: the desktop maps an unanswered
+  deployment read to `QuoteUnavailable` (`signing_host.rs:75-78`), and iOS does the same by RF5.
+
+## RJ14 — Network health counts sources, not calls (G53)
+
+- **Decision**: `net_health_step(state, reached, source: Option<u32>, now_ms)`: "went offline"
+  needs `MISSES_BEFORE_OFFLINE` misses in a row from at least two distinct sources (chain ids; a
+  miss with no chain counts as its own source) **and** no reach from anything for
+  `OFFLINE_QUIET_MS` (10 000); any reach resets. Faulted chains while others answer are those
+  chains' notices, never "offline". Verified: `executor/pool.rs:872-908` feeds one global counter
+  from any chain, and each "came back" invalidates the dashboard. `desk-post-T181.err` has ten
+  `net:` lines in two minutes, each "came back" 0.2–0.9 s after "offline" (chains 1, 100 and 480
+  were giving up — `1rpc` serves Ethereum too — while the rest answered), so a source count alone
+  would still flap; the quiet window is what stops it.
+- **Not a defect** (with it): the hero total above the listed assets while 部分余额仍在更新 shows
+  is `balance_dashboard::display_total`'s `max(live, cached)` rule (#188,
+  `balance_dashboard.rs:1419-1440`). What made it last minutes, and the "24 个网络" banner on
+  relaunch, is the flap restarting read rounds (DESK_B's investigation task proves it with a test).
+
+## RJ15 — A signed amount never reads −0 (G49)
+
+- **Decision**: new core `l10n::number::format_signed_token_amount(delta_base_units, decimals,
+  preset) -> Option<String>`: `None` for a zero delta (never drawn, RC4/RC6); a non-zero delta
+  whose ladder rendering is "0" is written exactly (RC5's scaling, trailing zeros trimmed); the
+  minus is U+2212. Desktop `signing/live.rs:387-404` and the phones' delta rows use it.
+
+## RJ16 — What a dApp record's detail says (G52)
+
+- **Decision**: `FeedTxRecord` gains `#[serde(default)] call_data: Option<String>` (the shells
+  map it from the stored request); `FeedItem` gains `counterparty_role: Recipient | Contract`.
+  `dapp_item`: calldata that is exactly `transfer(address,uint256)` → the decoded recipient,
+  Recipient; any other calldata → `to`, Contract (label `componentsUi.signing.interactingLabel`);
+  no calldata → `to`, Recipient. `tx_hash` is `None` when it equals the record's `user_op_hash`
+  (an op hash is never an explorer link). Clients draw no explorer control without a URL
+  (the desktop draws the button always, `flows/panels.rs:893-903`).
+- **Not a defect**: the empty amount block for a token transfer is RG2's rule (amount only for a
+  native value > 0).
+
+## RJ17 — ⌘W and the close hold's words (G68)
+
+- **Decision**: ⌘W is Close Window (macOS convention for a non-document app; a menu item is
+  added) and goes through `on_window_should_close`, so the RD14 hold applies. A held close shows
+  `send.txSubmitting` (提交至网络…) in the bar's notice slot for 2.5 s in Explore and brings the
+  submitting column or the Send screen forward. The second close within 5 s still quits; with
+  RJ1 the record is already on disk.
+
+## RJ18 — The "don't send it again" trace stays in view (G51)
+
+- **Decision**: on a pending record the desktop detail's 删除记录 is a quiet secondary control
+  below the explorer, not the full-width danger button (confirmed and failed records keep it).
+  The dApp ending (`dapp_landing`) survives a section switch and is shown again in Explore until
+  it ends or the person closes it (`page.rs:14102-14130` keeps it only while `panel == Signing`).
+  Web, iOS and Android check their pending-record detail for the same prominence.
+
+## RJ19 — A relay estimate that says "reverts" (G57)
+
+- **Decision**: new core `user_op::estimate_failure(error_json) -> EstimateFailure{Reverts{reason},
+  Unavailable}` (reason through `sim_outcome::revert_reason`). The web, which runs no simulation
+  (RG6), shows `simWillFail` / `simWillFailReason` in the danger tone when the quote's estimate
+  says Reverts. The slide stays live (L-D5: a warning informs, never blocks); a submit then ends
+  in a relay rejection that RJ3 answers `-32603` refused, with the Refused ending. Verified:
+  `isPlainTransferCall` (`safe-transaction.ts:1938`) counts an ERC-20 `transfer` as plain, so the
+  catch at `:2284-2294` falls back to defaults silently.
+
+## RJ20 — Extension panel hygiene (G55, G58, G59, G63, G64, G65)
+
+- **Decision**:
+  - RB9: `PanelSurface.caller` is `$state`, so the layout effect re-runs when a request is owed.
+  - The panel keeps its port only while it owes a request or holds a claimed submit; when idle it
+    does not reconnect after Chrome's idle stop, and it reconnects when the worker writes a record
+    for its window (`chrome.storage.onChanged`), which RB8 already does.
+  - Cooled endpoints are skipped while an un-cooled one is left; with all cooled, only the one
+    whose cooldown ends first is tried (one 8 s attempt). An abort by the 8 s timer is logged
+    `kind=timeout`.
+  - The full-panel 已签名 tick is skipped when another request is already owed; the next card
+    shows at once.
+  - `panel.js` reads the wallet's pinned language before Chrome's UI language.
+  - The account follow and the lower-case-grant rewrite run from the root layout on every route,
+    and `followedAddress` lives outside the wallet page, so a remount is not read as a boot.
+
+## RJ21 — Evidence and harness fixes
+
+- The chaos proxy resets `latency` on every mode switch unless the switch names one (the W1b
+  artefact). The quickstart gets the desktop's real C1 log words and a correct nonce template
+  (`getNonce(address,uint192)` = `0x35567e1a` + the 32-byte padded address + a 32-byte zero
+  key). The isolated e2e builds into its own output directory and never rewrites the live
+  `extension/dist`.

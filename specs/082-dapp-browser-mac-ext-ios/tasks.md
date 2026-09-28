@@ -2,7 +2,8 @@
 
 **Input**: [spec.md](spec.md) (US1–US9, FR-001–FR-020, findings G1–G33, rulings 1–10),
 [plan.md](plan.md) (workstreams A–H + I18N, phases 0–7, gates), [research.md](research.md)
-(RA1–RA12, RB1–RB15, RC1–RC8, RD1–RD15, RE1–RE14, RF1–RF6, RG1–RG15, RH1–RH7, RI1–RI3, R0, RX),
+(RA1–RA12, RB1–RB15, RC1–RC8, RD1–RD15, RE1–RE14, RF1–RF6, RG1–RG15, RH1–RH7, RI1–RI3, R0, RX;
+round 2: RJ1–RJ21 and findings G34–G73, Phase 9),
 [data-model.md](data-model.md), [contracts/core-rules.md](contracts/core-rules.md),
 [quickstart.md](quickstart.md).
 
@@ -1074,7 +1075,270 @@ ok before any device row).
 
 ---
 
-## Phase 9: Results, hand-offs, delivery
+## Phase 9: Post-fix device pass defects (round 2, 2026-09-29)
+
+**Input**: spec.md "Post-fix device pass (2026-09-29)" (G34–G73, and the owner-review list),
+research.md RJ1–RJ21, the two `post-audit.md` files. Every suspected-code line was re-read at
+`47a20343`; the tasks cite the lines as they are there (re-grep the function name before
+editing, other agents work in the same tree).
+
+Seven groups own disjoint files and run in parallel, except where a task says "(after …)":
+
+| Group | Owns (exclusively, in this phase) | Waits for |
+|---|---|---|
+| CORE (T185–T198) | `rust/crates/vela-core/**`, `rust/crates/vela-core-uniffi/src/lib.rs`, `rust/crates/vela-core-wasm/src/lib.rs`, `scripts/gen-i18n.mjs`, `assets/i18n/`, the generated binding dirs (`rust/pkg-web/`, `W/core/generated/`, the VelaCoreKit xcframework, the Android `.so` and `rust/bindings/kotlin`), `specs/082-…/contracts/core-rules.md`, `specs/082-…/data-model.md` | — |
+| DESK_A (T199–T208) | `D/explore/components.rs`, `D/explore/probe.rs`, `D/webview.rs`, `D/wallet/page.rs`, `D/wallet/browser_host.rs`, `D/flows/components.rs`, `D/flows/panels.rs`, `D/main.rs`, `D/resident.rs`, `D/executor/signer_integrity.rs`, `D/parallel_space.rs`, `scripts/device/chaos-proxy.py` | — |
+| WEB_A (T209–T216) | `X/background.js`, `X/lib/request-life.js`, `X/lib/protocol.js`, `X/lib/locales.js`, `X/panel.js`, `W/dapp/panel-surface.svelte.ts`, `W/dapp/follow.ts`, `WR/+layout.svelte`, `WR/[locale]/wallet/+page.svelte`, `W/signing/SigningHost.svelte`, `W/signing/ui/AmountHero.svelte`, `E2E/extension-lifecycle.e2e.ts`, `app-web/vela-wallet/playwright.isolated.config.ts` (and their tests) | T216 waits for T228 |
+| DESK_B (T217–T226) | `D/contacts/live.rs` and `D/wallet/live.rs` (T217's compile fixes only), `D/executor/user_op.rs`, `D/executor/relay.rs`, `D/executor/sign_request.rs`, `D/executor/send.rs`, `D/wallet/money.rs`, `D/executor/tracker.rs`, `D/wallet/signing_host.rs`, `D/signing/live.rs`, `D/signing/status.rs`, `D/signing/mod.rs`, `D/executor/pool.rs`, `D/executor/balance_dashboard.rs`, `D/executor/activity_feed.rs`, `D/flows/live.rs` | T185–T194 (the crate, not the bindings) |
+| WEB_B (T227–T235) | `W/core/kernels.ts`, `W/signing/core/sign-types.ts`, `W/signing/core/sign-executor.ts`, `W/signing/core/sign-resident.svelte.ts`, new `W/signing/core/track-forward.ts`, `W/wallet/core/tracker-types.ts`, `W/wallet/core/tracker-executor.ts`, `W/wallet/core/feed-types.ts`, `W/wallet/core/feed-executor.ts`, `W/flows/core/send-types.ts`, `W/flows/core/send-executor.ts`, `W/flows/live-send.ts`, `W/services/safe-transaction.ts`, `W/services/dapp-submit.ts`, `W/signing/live.ts`, `W/signing/dapp-receipt.ts`, `W/signing/fee-requote.ts`, `W/signing/ui/FeeRow.svelte`, `W/wallet/live.ts`, `W/wallet/live-detail.ts`, `W/services/bug-report.ts`, `W/i18n/engine.server.ts`, `W/signing/messages.ts` (and their tests) | T197 |
+| IOS (T236–T243) | `app-ios/**` except the xcframework CORE regenerates | T197 |
+| AND (T244–T251) | `app-android/**` except the `.so` and Kotlin bindings CORE regenerates | T197 |
+
+DESK_A and WEB_A need no new core export; they start at once. DESK_B starts after T185–T194: the
+desktop builds against the core crate, not the bindings. WEB_B, IOS and AND start after T197
+(bindings current). Between CORE's first changed type and T217 the desktop crate does not
+compile; DESK_A writes its code meanwhile and runs `cargo test` after T217 (T203 also waits for
+T192, whose new signature its test calls). Likewise `pnpm check` is expected red from T197 until
+T227 adopts the new generated types (the Phase 4 pattern), and the iOS and Android builds from
+T197 until T236 / T244. A new enum variant is not additive for the hand-written Swift and Kotlin
+wires, so T236 and T244 ship in the same PR as CORE. The device re-run (T252–T254) waits
+for every group's gate. Money rules for every task: a may-have-been-sent op is never "failed —
+try again"; the dApp gets exactly one answer; the local nonce advances only on Accepted; the
+tracker alone closes on-chain records; nothing is signed or sent for a request whose asker is
+gone; a record exists before the bytes leave (RJ1).
+
+### CORE — `rust/crates/vela-core/**` (Rust unit tests)
+
+- [ ] T185 [P] `rust/crates/vela-core/src/user_op.rs`: `REFUSED_DAPP_DETAIL`, `WRITE_AHEAD_WAIT_MS`, `EstimateFailure` and `estimate_failure(error_json)` (RJ3, RJ1, RJ19); proof: `CT/user_op_submit.rs`.
+  - `REFUSED_DAPP_DETAIL = "the network refused this transaction; nothing was sent"` beside `NOT_SENT_DAPP_DETAIL`; `WRITE_AHEAD_WAIT_MS = 5_000`.
+  - `estimate_failure`: a JSON-RPC error whose code or text is a revert (the relay's `-32500` "… reverted", `AA23`, "execution reverted") → `Reverts{reason}` with the reason through `sim_outcome::revert_reason`; anything else, or no answer → `Unavailable`.
+  - Tests: the EX-W3 relay text (`post-EX-W3.txt`) → Reverts; a timeout / pool exhaustion → Unavailable; a reason with markup is cleaned (RG8).
+- [ ] T186 [P] `C/tx_tracker.rs`: `admitted`, `Event::Withdrawn`, `TrackOperation::TxReceipt` / `TrackShellResult::TxReceipt` (RJ1, RJ4); proof: `CT/app_tx_tracker.rs`.
+  - `Event::Submitted` gains `#[serde(default)] admitted: bool`; merged with `acknowledged |= admitted` (an accepted op never reads MaybeSent).
+  - `Event::Withdrawn{user_op_hash, record_ids}` drops those ids; an entry with no id left is removed; no `UpdateTxRecords`, no `HoldingsMoved`.
+  - A `Status` that names a tx hash for a non-terminal entry issues `TxReceipt{chain_id, tx_hash, user_op_hash}` at the receipt cadence (one in flight per hash). The answer's `receipt_json` (null = not mined; `None` = no answer) is read for the op's own `UserOperationEvent` with the find-event reader; `safe_execution_failed` runs over the same logs → Confirmed / Failed with `NotifyConfirmed` / `HoldingsMoved` as for a relay receipt; a receipt without the op's event is logged and ignored.
+  - Tests: EX13 — relay receipt null forever, status `included` + tx hash → one `TxReceipt` → Confirmed; `ExecutionFailure` in those logs → Failed; `Withdrawn` then a re-submit of the same hash starts fresh; `admitted` on the write-ahead handoff → outcome is not MaybeSent.
+- [ ] T187 `C/sign_request.rs`: the write-ahead record (RJ1); proof: `CT/app_sign_request.rs`; (after T185).
+  - `Event::OpSigned{id, user_op_hash, submit_block, now_ms}` (guard: inflight id, stage Submitting, no write-ahead yet) → Pending `SignRecord` with `maybe_sent: true`, `tracker_handoff` with `maybe_sent: true`, `PersistRecord`; `Inflight.write_ahead` records it.
+  - On that record's `RecordPersisted` → `SignOperation::ClearToPost{id, user_op_hash}` (answered `Responded`).
+  - `OpSubmitted` with the write-ahead hash: `maybe_sent: false` → `UpdateRecord{close: SignRecordClose::Admitted}` and a handoff with `admitted: true`; `maybe_sent: true` → nothing new. A different hash → `DeleteRecord` + withdraw for the write-ahead one, then today's persist under the relay's hash.
+  - `Failed` / `Underfunded` / `AskerGone` after `OpSigned` and before `OpSubmitted` → `SignOperation::DeleteRecord{record_id}` + `SignView.tracker_withdraw = Some(SignTrackerWithdraw{user_op_hash, record_ids})`, then today's handling of that outcome (reactive sponsoring, 4001-free AskerGone, -32603). After `OpSubmitted` the G21 guard is unchanged.
+  - Tests: the record precedes `ClearToPost`, which precedes nothing else; NotSent withdraws and answers `NOT_SENT_DAPP_DETAIL` once; Accepted patches Admitted; a quit after `OpSigned` (no further events) leaves one pending `maybe_sent` record; stale / wrong-id `OpSigned` is dropped.
+- [ ] T188 `C/sign_request.rs`: the answer follows the tracker, and refusals are errors (RJ3, RJ4); proof: `CT/app_sign_request.rs`; (after T187 and T186).
+  - `Event::OpTracked{user_op_hash, status, tx_hash, now_ms}`: while the inflight is past `OpSubmitted`, unanswered and its op matches — Confirmed / Dropped with a tx hash → `Ok(tx hash)`; Rejected → `Err(-32603, SubmitFailed, REFUSED_DAPP_DETAIL)`; NotSent → `Err(-32603, SubmitFailed, NOT_SENT_DAPP_DETAIL)`; settle the rid Submitted; clear the inflight (a late `Submit` result is dropped); anything else waits.
+  - `SignSubmitOutcome::Failed` gains `#[serde(default)] refused: bool`; `SignView.failure_refused`.
+  - New `SignEndingState::Refused` from tracker Rejected; `ending_state` draws a `Landed{tx_hash}` whose entry still reads MaybeSent as `Following(Landing)` (DX6).
+  - Tests: DX-W3 (Accepted, then Rejected at 15 s → one -32603 refused, no later Ok); EX-S5 (MaybeSent, tracker NotSent at 87 s → one -32603 not-sent); DX-W1 (find-event Confirmed at 72 s → Ok(tx hash) at once, the window-end `ReceiptPending` dropped); Confirmed after the window answer changes nothing.
+- [ ] T189 `C/send.rs`: the wallet's own Send writes ahead too (RJ1); proof: `CT/app_send.rs`; (after T185 and T186).
+  - `Event::OpSigned{user_op_hash, submit_block, now_ms}` during `SubmitUserOp` → records with `maybe_sent: true` → `PersistTxRecords` → on `RecordsPersisted`: `TrackSubmitted{maybe_sent: true}` and new `SendOperation::ClearToPost`.
+  - `Submitted{maybe_sent: false}` for the write-ahead hash → new `SendOperation::MarkAdmitted{record_ids}` + `TrackSubmitted{admitted: true}`; `SubmitFailed` after the write-ahead → new `SendOperation::DeleteTxRecords{ids}` + `SendOperation::TrackWithdrawn{user_op_hash, record_ids}`; a different hash → withdraw, then today's persist.
+  - Tests: split send (two records `<hash>-0/1`) written before clearance; NotSent deletes both; the receipt screen still waits for the verdict; the success haptic only on Accepted.
+- [ ] T190 [P] `C/browser_load.rs`: the retry race and hung loads (RJ8, RJ9, G43, G44); proof: `CT/app_browser_load.rs`.
+  - `retry_now` records `own_request`; `engine_started` for it (by `same_address`) or while `next_asked` is `AutoRetry`/`Retry` is the wallet's own load: no `Asked::Page`, no `requested()`, no reset of `attempt`/`failure`.
+  - Pure `same_address(a, b)` (scheme/host case, default port, empty path = `/`, one trailing slash, fragment) replaces the literal compares (`:621-631` and the other `self.url == Some(..)` sites).
+  - `retry_now` while the engine loads the same address: `EngineStillLoading` only while that load is younger than `GIVE_UP_MS` or live; past it and not live → `RetryAction::Load(url)`.
+  - Tests: the DX14 sequence (three attempts at +2/+5/+10, no restart); the L2 sequence (hung provisional load at progress 0.1: the attempt due after 20 s is `Load`); DX1 (a 9 s load at 0.1 is never restarted before commit).
+- [ ] T191 [P] `C/fee_policy.rs`: re-quote cadence, re-quote timeout, and `FeeFailure::ChainRead` (RJ12, RJ13, G47, G48); proof: `CT/app_fee_policy.rs`.
+  - `requote_delay_ms`: 3 000, 6 000, then 8 000; new `REQUOTE_TIMEOUT_MS = 6_000`.
+  - `FeeFailure::ChainRead{rate_limited}` on the same schedule; `failure_reason_key(failure) -> &'static str`: relay failures `componentsUi.funding.denialNetworkError`, `ChainRead{rate_limited: true}` `home.balanceDetailStatusRetrying`, `ChainRead{rate_limited: false}` `explore.chainDown` (the shell fills `{{chain}}`), the rest as each shell words them today (move those choices here).
+  - Tests: the schedule for attempts 1..6; delay + timeout ≤ 15 000 for every attempt; the key for each variant.
+- [ ] T192 [P] `C/net_health.rs`: offline needs two sources (RJ14, G53); proof: `CT/app_net_health.rs`.
+  - `net_health_step(state, reached, source: Option<u32>, now_ms)`; `NetHealth` keeps the distinct sources of the current run of misses and the last reach time (serde default); `WentOffline` at `MISSES_BEFORE_OFFLINE` misses from ≥ 2 sources with no reach for `OFFLINE_QUIET_MS = 10_000`; a miss with no source counts as its own; any reach resets.
+  - Tests: ten Gnosis misses in a row → no edge; misses over chains 100 and 1 interleaved with reaches from chain 8453 (the T181 shape) → no edge; three misses over two chains and nothing answering for 10 s → WentOffline; a reach → CameBack once.
+- [ ] T193 [P] `rust/crates/vela-core/src/l10n/number.rs`: `format_signed_token_amount(delta_base_units, decimals, preset) -> Option<String>` (RJ15, G49); proof: in-file tests and `CT/l10n_parity.rs`.
+  - `None` for zero; U+2212 for negatives; a non-zero delta the ladder would print as "0" is written exactly (RC5 scaling, trailing zeros trimmed) in the preset's marks.
+  - Tests: `-1000` wei at 18 → `−0.000000000000001`; `-1000000000000000` → `−0.001`; `0` → None; `+2.1e18` → `+2.1`.
+- [ ] T194 [P] `C/activity_feed.rs`: what a dApp record's detail says (RJ16, G52); proof: `CT/app_activity_feed.rs`.
+  - `FeedTxRecord.call_data: Option<String>` (serde default); `FeedItem.counterparty_role: FeedCounterpartyRole {Recipient, Contract}` (serde default Recipient).
+  - `dapp_item`: exact `transfer(address,uint256)` calldata → the decoded recipient (EIP-55), Recipient; other calldata → `to`, Contract; none → `to`, Recipient. `tx_hash` is `None` when it equals `user_op_hash` (case-insensitive).
+  - Tests: the DX-W3 record (USDC transfer to `0x7687…`) → counterparty `0x7687…D141`, Recipient, no tx hash; a swap call → Contract; a plain send unchanged.
+- [ ] T195 [P] One commit for the corpus change (RJ6): `L/componentsUi.json` (add `signing.refused`), `L/componentsTx.json` (trim `receipt.failedHint`), `L/send.json` (zh, zh-TW, zh-HK: the comma in `txBackgroundHint`) in 15 locales, the pins in `scripts/gen-i18n.mjs` (1785 paths / 1696 leaves, with a history comment), and the generated `rust/crates/vela-core/src/i18n/paths.rs`, `rust/crates/vela-core/src/i18n_catalogs/`, `assets/i18n/`; proof: `cd rust && cargo test -p vela-core --features i18n-all,crux --test i18n_residency -- --nocapture` (prints ≈138,671 of 138,800).
+  - The RI3 order (`gen:i18n` → `lint:i18n` → `verify:i18n` → `dump:vectors`); en/zh/ja drafts in RJ6; the other 12 locales are written with the same meaning (refused = "the network refused it — nothing was sent"; failedHint = its first two sentences).
+- [ ] T196 Exports (after T185–T195): `rust/crates/vela-core-uniffi/src/lib.rs` and `rust/crates/vela-core-wasm/src/lib.rs`; proof: `cargo check` of both crates and the wasm export test.
+  - `userOpEstimateFailure`, `userOpRefusedDappDetail`, `userOpWriteAheadWaitMs`, `feeRequoteTimeoutMs`, `feeFailureReasonKey`, `formatSignedTokenAmount`, the new `netHealthStep` signature; the new sign / send / tracker / feed types ride the existing session wires (ts-rs derives).
+- [ ] T197 Regenerate every binding and run the core gates (after T196): `W/core/generated/`, `rust/pkg-web/` (+ `sync:wasm`), the VelaCoreKit xcframework, `rust/bindings/kotlin` and the Android `.so` (the T046 recipe); proof: `cargo test -p vela-core --features i18n-all,crux`, `cargo clippy -p vela-core --features crux -- -D warnings`, `bash rust/scripts/check-ios-core-fresh.sh` → ok. Record the output in `EV/gates/phase-9-core.txt`.
+- [ ] T198 [P] Docs for the new core surface (after T188, T189, T186): `specs/082-…/contracts/core-rules.md` (§3 tracker: `admitted`, `Withdrawn`, `TxReceipt`; §4 sign: `OpSigned`, `ClearToPost`, `DeleteRecord`, `Admitted`, `OpTracked`, `Refused`, `failure_refused`; §5 send; §1 constants) and `data-model.md` (the write-ahead transitions and the withdraw); proof: the sections are reviewed against T186–T189.
+
+### DESK_A — desktop fixes with no new core export (`app-desktop/vela-wallet/**`, listed files)
+
+- [ ] T199 [P] [US1] `D/explore/components.rs`: the tab ✕ closes without selecting, and the strip never overflows (G40, G54); proof: in-file tests.
+  - The close control's `on_click` calls `cx.stop_propagation()` before `close(…)` (`:286-292`, inside the tab's `on_click` at `:309-313`); the comment's promise becomes true.
+  - Tabs shrink from `TAB_W` to a minimum width (icon + ✕), then the strip scrolls horizontally; the lit tab and + always stay in view.
+  - Tests: a pure `tab_widths(count, strip_w)`; the strip's actions table fires close only (no select) for a ✕ click, if the gpui test harness allows it — otherwise the device row CLOSE-TAB (§8) is the proof.
+- [ ] T200 [P] [US1] `D/explore/probe.rs`: an expired certificate is TLS (RJ10, G45); proof: in-file tests.
+  - `io_code` downcasts `io.get_ref()` to `rustls::Error`: `InvalidCertificate(_)`, `NoCertificatesPresented` → `probe_code::TLS`; other rustls errors keep today's class.
+  - Test: an `io::Error::new(InvalidData, rustls::Error::InvalidCertificate(CertificateError::Expired))` → TLS; the L5 class is Certificate with no auto-retry (`browser_load::classify`).
+- [ ] T201 [P] [US1] `D/webview.rs` and `D/wallet/page.rs`: the address bar owns the keyboard, and a bfcache Back renames the tab (G41, G70 part); proof: in-crate tests of the pure helpers.
+  - New `webview::focus_parent()` (wry `focus_parent`: gpui's NSView becomes first responder); `edit_address` (`page.rs:13352-13373`) and every focus of the bar call it; a click into the page gives focus back to WebKit by itself.
+  - `META_JS` also reports on `pageshow` with `persisted`, so a bfcache restore sends its own title.
+  - Tests: `edit_address` asks for `focus_parent` (a call counter behind the non-Linux cfg); META_JS contains the `pageshow` listener. Device rows KEY-FOCUS and DX4-title (§8).
+- [ ] T202 [US1] RJ5, in `D/wallet/page.rs`, `D/wallet/browser_host.rs` and `D/webview.rs`: a tab's page is hidden until that tab's own load commits, and Back stops at the tab's first page (G42); proof: `browser_host.rs` tests; (after T201).
+  - `webview::engine()` adds `back_len` (`backForwardList.backList.count` via `msg_send`, as `engine_sample` does).
+  - `page.rs`: `doc_tab` is set when a navigation asked while `shown_tab = X` commits (`Load::Started`); while `browsing ∧ shown_tab ≠ doc_tab` the frame calls `webview::hide()` and draws the page background, the hairline, the failure panel if up, and no connection chip. At the shown tab's first commit `back_floor = back_len`.
+  - `browser_host::nav_enabled(browsing, can_back, can_forward, back_len, back_floor)`; `veiled(shown_tab, doc_tab, browsing)` pure.
+  - Tests: DX14 (new tab typed while another tab's page is up → veiled until commit); DX11 (restored tab clicked → veiled; after commit Back disabled at the floor); an SPA pushState raises `back_len` above the floor → Back enabled.
+- [ ] T203 [US1] `D/wallet/browser_host.rs`: the chain notice during a read, the skip logged once, the probe's route (RJ11, RJ9, G46, G44, G67 part); proof: in-file tests; (after T202 and T192).
+  - The network-back test (`browser_host.rs:1515-1557`) calls the new `net_health_step(state, reached, source, now_ms)`.
+  - While any page `Work` is in flight, `refresh_health` runs every 1 s (a watch started with the first in-flight read, stopped when none is left and nothing is down); `chain notice: shown chain=<id>` when it appears.
+  - `retry … skipped (engine still loading)` is logged once per load generation (`:795-806`).
+  - The probe's route is logged as `route=dev-proxy <host:port>` when `VELA_DEV_PROXY` is in force (`:716-724`).
+  - Tests: a fake pool whose `unreached_chains` gains 100 at 14 s while a read is pending → the notice at ≤ 15 s; ten skips → one line.
+- [ ] T204 [P] [US3] `D/flows/components.rs` and `D/flows/panels.rs`: the hash fits, the trace is not a red button, no explorer without a page (G50, G51, G52 part); proof: in-crate tests.
+  - A mono fact value truncates in the middle (`0x1234…abcd`, the copy button copies the whole) and never pushes its copy button out (`components.rs:319-330`: `min_w(0)`, `flex_1`, truncate).
+  - A pending record's 删除记录 is a quiet secondary control under the explorer (`panels.rs:907-913`); confirmed and failed keep the danger button.
+  - No explorer button when `explorer_url` is `None` (`panels.rs:893-903`).
+  - Tests: a 66-char hash row's measured width ≤ the column; `detail_panel` for a pending model has no danger button; no explorer element for a `None` URL.
+- [ ] T205 [US1] `D/main.rs` and `D/wallet/page.rs`: ⌘W, a Close Window menu item, and words for the held close (RJ17, G68); proof: in-crate tests; (after T202).
+  - `cmd-w` → close the window through `on_window_should_close` (the RD14 hold and `window: close held` apply); a Close Window item in the menu (`main.rs:443-460`).
+  - A held close shows `send.txSubmitting` in the bar's notice slot for 2.5 s when Explore is in front and brings the submitting column (or the Send screen) forward.
+  - Tests: the key binding table has `cmd-w`; a pure `close_held_notice(section)` picks the words and the surface.
+- [ ] T206 [US3] `D/wallet/page.rs`: the dApp ending survives a section switch (RJ18, G51); proof: a page-level helper test; (after T205).
+  - `dapp_landing` is kept when `panel` leaves `Signing` (`:14102-14130`) and shown again when Explore returns, until it ends by itself or the person closes it.
+  - Test: may-have-been-sent ending → section 钱包 → back to 探索 → the ending is there.
+- [ ] T207 [P] [US8] `D/resident.rs`, `D/executor/signer_integrity.rs` and `D/parallel_space.rs`: log hygiene and the dev badge (G67, G70 part); proof: in-file tests.
+  - `core: <machine> booting` through `vlog!` (timestamped, `resident.rs:312`).
+  - A signer-page fetch that failed on transport is logged as `signer page: could not fetch <host> (<kind>)`, never "publishes no version … update the wallet" (`signer_integrity.rs:81-88`, `:285-290`).
+  - The PARALLEL SPACE badge moves off the tab strip (bottom-left of the window, or the sidebar foot) so it covers no ✕ or +.
+  - Tests: a transport failure yields the fetch line; an empty version list yields the version line.
+- [ ] T208 [P] `scripts/device/chaos-proxy.py`: a mode switch resets `latency` to 0 unless the same request sets it (G73); proof: `python3 -m py_compile scripts/device/chaos-proxy.py` and `curl '…/__chaos?mode=latency&latency=9000'` then `'…?mode=mute'` → the status line reads `latency=0`.
+
+### WEB_A — web and extension fixes with no new core export
+
+- [ ] T209 [P] [US1] RJ2, the worker half: `X/lib/request-life.js` and `X/background.js` (G35); proof: `W/dapp/request-life.test.ts`, `W/dapp/background.test.ts`.
+  - The `submit` claim may carry `{opHash, chainId}`; the worker stores them on the record (`phase: 'submit'`).
+  - `affectedBy` (`surface_closed`, `window_removed`) and `recoveryPlan` return `{rid, cause, answer: {ok: opHash}}` for a claimed-submit record with an op hash; `background.js` then answers `ok(opHash)` once (`:541-553`), writes `vela.ext.op.<hash>` (RF3) and logs `req.answered cause=surface_closed maybe_sent=1`. Without an op hash → 4900 as today.
+  - Tests: claimed submit + panel port closed → one ok(op hash), no 4900; claimed (sign phase, no op hash) → 4900; worker restart with the panel gone → the same split.
+- [ ] T210 [P] [US1] `W/dapp/panel-surface.svelte.ts`: a reactive caller and a quiet idle panel (G55, G63, RJ20); proof: `W/dapp/panel-surface.test.ts`.
+  - `caller` is `$state` (`:130`).
+  - After a disconnect, reconnect only while a request is owed or a submit is claimed (`:353-358`); otherwise reconnect when `chrome.storage.session` changes a `vela.req.*` for this window.
+  - Tests: a request owed after start → `current` set and the layout effect sees it; idle disconnect → no reconnect until a record appears.
+- [ ] T211 [US1] `WR/+layout.svelte`, `WR/[locale]/wallet/+page.svelte` and `W/dapp/follow.ts`: requests on any screen, the account follow and the grant rewrite from any route, the filtered empty state (G55, G58, G62); proof: `W/dapp/follow.test.ts` and a layout test; (after T210).
+  - The RB9 effect (`+layout.svelte:88-91`) reads `panelSurface.caller` and `current` reactively and goes to the wallet when a request is owed.
+  - `followActiveAccount` and `normalizeGrantSpelling` move from the wallet page (`:1300-1321`) to the layout; `followedAddress` lives in `follow.ts` (module state), so a remount is not a boot.
+  - The sidebar's chain filter also calls `feed.chainFilter(chainId)` (`+page.svelte:1866, 1973`).
+  - Tests: an account switch from Settings → `accountsChanged` once with EIP-55; a boot on Settings rewrites a lower-case grant; filter Gnosis → `history.emptyFilter` / `home.emptyNoActivityNetwork` keys.
+- [ ] T212 [P] [US2] `X/panel.js` and `X/lib/locales.js`: the panel opens in the pinned language (G59); proof: new `W/dapp/panel-locale.test.ts`.
+  - A pure `panelLocale(pinned, uiLanguage)` in `locales.js`; `panel.js` reads the wallet's pinned `vela.language` (the key the wallet writes) before `chrome.i18n.getUILanguage()` (`:19`).
+- [ ] T213 [US1] `X/lib/protocol.js` and `X/background.js`: timeouts are named, cooled endpoints are skipped (G64, RJ20); proof: `W/dapp/protocol.test.ts`; (after T209).
+  - `readFailureKind` reports `timeout` for the 8 s timer's abort (`:206-210`).
+  - `orderEndpoints` (`:155-165`) returns only un-cooled endpoints while any is left; with all cooled, only the one whose cooldown ends first.
+  - Tests: an abort by the timer → `timeout`; three cooled + none live → one endpoint tried.
+- [ ] T214 [P] [US2] `W/signing/SigningHost.svelte`: no fall-back after an ending, no tick over a waiting card (G37 part, G65); proof: new `W/signing/SigningHost.svelte.test.ts` (the `SigningSheet.svelte.test.ts` pattern).
+  - After a landing for op X was raised and closed, the sheet for the same request is never shown again as submitting (`:245-278`); it waits hidden for the answer.
+  - When another request is already owed, the full-panel 已签名！ tick is skipped and the next card shows at once.
+  - Tests: confirmed landing auto-closes → no Submitting sheet for that rid; tick skipped with a queued request, shown with none (L-PANEL unchanged).
+- [ ] T215 [P] [US2] `W/signing/ui/AmountHero.svelte`: a long amount fits at 360 px (G60); proof: new `W/signing/ui/AmountHero.svelte.test.ts` at 360 px.
+  - The amount wraps at digit groups or scales down to a floor; it never runs off the edge (`:60-73`).
+- [ ] T216 [US1] `E2E/extension-lifecycle.e2e.ts` and `app-web/vela-wallet/playwright.isolated.config.ts` (+ its build script): the missing lifecycle cases, and an isolated build (G66, RJ21); proof: the suite on port 4174; (after T209, T211 and T228).
+  - New: a dust send in the panel, the panel closed after the submit claim → the page gets one ok(op hash), never 4900; the case at `:220` (close before any claim → 4900) stays.
+  - New: the panel on Settings, then Connect from tab B → the card shows without a tap.
+  - The isolated config builds the extension into its own output directory and loads it from there; it never rewrites `extension/dist`.
+
+### DESK_B — desktop adoption of the core changes (after T185–T194)
+
+- [ ] T217 [US1] Compile against the round-2 core (the Phase 3 T049 pattern): every DESK_B file plus `D/contacts/live.rs` and `D/wallet/live.rs` (test fixtures); proof: `cargo check --all-targets` and `cargo test` in `app-desktop/vela-wallet`; (after T185–T194).
+  - New match arms keep today's behaviour until the task that owns them: `ClearToPost` answered at once, `DeleteRecord` / `DeleteTxRecords` delete the row, `Admitted` / `MarkAdmitted` clear `maybeSent`, `TxReceipt` answered with no receipt, `FeeFailure::ChainRead` worded as today's relay failure, `SignEndingState::Refused` drawn as today's NotSent, `Failed{refused: false}`, `FeedItem` literals with `counterparty_role`, `net_health_step(…, None, now)`.
+  - This is the first DESK_B commit; it lets DESK_A run its tests again.
+- [ ] T218 [US1] `D/executor/user_op.rs` and `D/executor/relay.rs`: the before-POST write-ahead hook (RJ1, G34); proof: in-crate tests with a fake relay; (after T217).
+  - `sign_and_submit` (`user_op.rs:830-905`): after the local hash and the head read, `tail.before_post(local_hash, submit_block) -> bool` (the caller sends `OpSigned` and waits ≤ `WRITE_AHEAD_WAIT_MS` for `ClearToPost`); `false` → `SubmitFailure::NotSent` with no POST; the asker check then runs, then the POST.
+  - The estimate failure is classified with `estimate_failure` and logged (`fee: relay estimate reverts …` / `unavailable`); `fee:` and `in-band:` lines go through `vlog!` (`:377`); `relay: submitting` is logged once (`relay.rs:701`).
+  - Tests: no POST before clearance; no clearance → NotSent and zero POSTs; the Accepted nonce bump unchanged.
+- [ ] T219 [US1] `D/executor/sign_request.rs`: the dApp pipeline writes ahead, withdraws, and stops waiting once answered (RJ1, RJ3, RJ4, G34, G36); proof: in-crate answer tests; (after T218).
+  - `before_post` sends `Event::OpSigned` and waits on a per-id channel filled by the `ClearToPost` effect; `DeleteRecord` removes the row from `TX_KEY`; `UpdateRecord{Admitted}` sets `maybeSent: false`.
+  - `submit_failure` sets `Failed{refused: true}` for a relay rejection that is not RelayerUnavailable/BundlerUnderfunded.
+  - `await_receipt` also ends when the core has answered the request (a flag on `SignContext`, set by `signing_host` in T222), so the worker thread does not poll on.
+  - Tests: DX9 — `OpSigned` then the process "quits" (no more events) → `wallet.json` holds one pending `maybeSent` dApp row that `tracker::pending_records` hands back; S5 — NotSent → no row after the verdict, one -32603.
+- [ ] T220 [US7] `D/executor/send.rs` and `D/wallet/money.rs`: the wallet's Send writes ahead (RJ1); proof: in-crate tests; (after T218).
+  - `OpSigned` / `ClearToPost` around the POST; `DeleteTxRecords`, `MarkAdmitted`, `TrackWithdrawn` mapped onto the store and the tracker.
+  - Tests: records on disk before the POST; NotSent deletes them; Accepted clears `maybeSent`.
+- [ ] T221 [US7] `D/executor/tracker.rs`: `TxReceipt`, `Withdrawn`, `admitted` (RJ4, G38); proof: fake-pool tests; (after T217).
+  - `TxReceipt` → `pool::call(chain, "eth_getTransactionReceipt", [tx])`, the body's `result` as `receipt_json`; `Withdrawn` and `admitted` forwarded from the sign and send handoffs.
+  - `tracker:` lines for the receipt-by-tx path and the withdraw.
+  - Test: EX13 shape (relay receipt null, status included + tx) → Confirmed within one poll.
+- [ ] T222 [US1] `D/wallet/signing_host.rs`: the tracker drives the answer; fee re-quotes and their log lines; the chain-read fee failure (RJ4, RJ12, RJ13, G37, G47, G48); proof: in-file tests; (after T219, whose `SignContext` flag it sets).
+  - When the tracker's entry for the in-flight op changes, dispatch sign `Event::OpTracked` (next to the handoff at `:787-860`); forward `tracker_withdraw`.
+  - `schedule_requote` (`:596-640`) bounds each automatic re-quote by `REQUOTE_TIMEOUT_MS` and logs `fee: quote failed chain=… cause=… re-quote #n in N ms` / `fee: quote back chain=… after n re-quotes`.
+  - `requote_failure` (`:75-78`): an unanswered deployment read is `FeeFailure::ChainRead{rate_limited}` (from the pool's rate-limit signal), never `QuoteUnavailable`.
+  - Tests: the relay returns at t → the fee within 14 s in a fake clock; a rate-limited `eth_getCode` → ChainRead{true}.
+- [ ] T223 [US2] `D/signing/live.rs`, `D/signing/status.rs` and `D/signing/mod.rs`: refused words, the core's reason keys, signed deltas without −0 (RJ3, RJ13, RJ15, G36, G48, G49); proof: `live.rs` / `status.rs` mapping tests; (after T217).
+  - `SignEndingState::Refused` and `failure_refused` → `statusFailed` + `componentsUi.signing.refused` (new reader in `mod.rs` with a resolve-without-echo test); no 请重试.
+  - `fee_row_state` (`live.rs:1421-1440`) takes its words from `fee_policy::failure_reason_key`; delete the shell's own mapping.
+  - `signed_amount` (`live.rs:387-404`) is deleted; deltas use `format_signed_token_amount` and a `None` delta is not drawn.
+  - Tests: G14-num's 1000-wei delta → `−0.000000000000001 xDAI`; a rate-limited Ethereum read → 被限流 · 正在自动重试.
+- [ ] T224 [US1] `D/executor/pool.rs` (and `D/executor/balance_dashboard.rs` if the test shows it): network health per source, no read storm (RJ14, G53); proof: in-file tests; (after T217).
+  - `feed_health` passes the chain id to `net_health_step` (`:872-908`).
+  - Investigate with a fake pool (one chain black-holed, 23 answering, relaunch): `failed_chains` must be `{100}` and the asset list non-empty; if a came-back invalidation restarts a read round that is still in flight, join the round instead.
+  - Tests: ten Gnosis misses → no `net: offline`; the relaunch scenario above.
+- [ ] T225 [US3] `D/executor/activity_feed.rs` and `D/flows/live.rs`: the record's calldata reaches the feed; the counterparty label follows its role (RJ16, G52); proof: in-crate feed tests; (after T217).
+  - The stored row's `signedRequest` → `FeedTxRecord.call_data` (the first call's `data`).
+  - `counterparty_role: Contract` → label `componentsUi.signing.interactingLabel`; Recipient → today's `detail_to`.
+  - Test: the DX-W3 record → 接收方 0x7687…D141 and no explorer URL.
+- [ ] T226 [US1] Desktop gates (after T199–T208 and T217–T225): `cargo test` and `cargo test --features dev-fixtures` in `app-desktop/vela-wallet`, `cargo clippy --all-targets -- -D warnings`, the live relay test, the release build; output in `EV/gates/phase-9-desktop.txt`.
+
+### WEB_B — web and extension adoption of the core changes (after T197)
+
+- [ ] T227 [US1] Wires and readers: `W/core/kernels.ts`, `W/signing/core/sign-types.ts`, `W/wallet/core/tracker-types.ts`, `W/wallet/core/feed-types.ts`, `W/flows/core/send-types.ts`, `W/i18n/engine.server.ts` and `W/signing/messages.ts` (T185–T196 surface); proof: `pnpm check`, the event-payload ruler, the `refused` resolve test; (after T197).
+- [ ] T228 [US1] `W/signing/core/sign-executor.ts`, `W/services/dapp-submit.ts` and `W/services/safe-transaction.ts`: write-ahead, the submit claim's op hash, the window inside each poll, the estimate verdict (RJ1, RJ2, RJ4, RJ19, G34, G35, G39, G57, G61 part); proof: `W/signing/core/sign-executor.test.ts`, `W/services/dapp-submit.test.ts`; (after T227).
+  - Before the POST (after the local hash): `OpSigned` → wait for `ClearToPost` ≤ `userOpWriteAheadWaitMs()` → the RB5 `submit` claim now carries `{opHash, chainId}` → the POST. `DeleteRecord` / `Admitted` map onto the transaction store.
+  - `waitForReceipt` (`:3505-3586`): each `requestUserOpReceipt` gets an `AbortSignal` at the window's deadline (`dapp-submit.ts:558` passes it); the status branch (`:3567-3583`) goes for the dApp path — the core answers through `OpTracked`.
+  - The in-band estimate catch (`:2284-2294`) classifies with `userOpEstimateFailure`: Reverts is carried to the sheet (T231) and logged `[InBand] estimate says it reverts: <reason>`; `isPlainTransferCall` no longer decides for a revert.
+  - The "ACCEPTED but NOT landed" line (`:3627-3638`) is written only for an op the relay accepted.
+  - Tests: no POST before clearance; the claim carries the op hash; a muted relay → the answer at ≤ 121 s; the EX-W3 estimate → Reverts.
+- [ ] T229 [US7] `W/flows/core/send-executor.ts` and `W/flows/live-send.ts`: the wallet's Send writes ahead (RJ1); proof: `W/flows/core/send-executor.test.ts`, `W/flows/live-send.test.ts`; (after T228).
+- [ ] T230 [US7] `W/wallet/core/tracker-executor.ts`, new `W/signing/core/track-forward.ts` and `W/signing/core/sign-resident.svelte.ts`: `TxReceipt`, `Withdrawn`, `admitted`, `OpTracked`, tracker log lines (RJ4, G37, G38, G61 part); proof: `W/wallet/core/tracker-executor.test.ts`, new `W/signing/core/track-forward.test.ts`; (after T227).
+  - `TxReceipt` through the RPC pool's `eth_getTransactionReceipt`; `track-forward` subscribes to the tracker and dispatches `OpTracked` for the in-flight op.
+  - `tracker: <hash10> <status> [tx <hash10>]` console lines for every terminal change and every not-found streak step.
+- [ ] T231 [US2] `W/signing/live.ts` and `W/signing/dapp-receipt.ts`: the endings' words, the amount's fiat, the estimate's warning, the fee row's cause (RA10, RJ3, RJ19, G36, G56, G57, G60 part, G47 part); proof: `W/signing/live.test.ts`, `W/signing/dapp-receipt.test.ts`; (after T227).
+  - `maybe_sent` title → `copy.submitting` (提交至网络…) (`dapp-receipt.ts:146-153`); new `refused` state → statusFailed + `refused`, no Retry words.
+  - The fiat line through the shared currency formatter (no `toFixed`, no exponent, no hard-coded `$`, `live.ts:152`); the minus is U+2212 (`:431`).
+  - A Reverts estimate → the danger line `simWillFail` / `simWillFailReason`.
+  - The fee row's cause line is hidden while a re-quote runs and sits under 网络费.
+- [ ] T232 [US7] `W/signing/fee-requote.ts` and `W/signing/ui/FeeRow.svelte`: cadence, timeout, log lines, no jump (RJ12, G47); proof: `W/signing/fee-requote.test.ts`; (after T231).
+  - Each automatic re-quote is aborted at `feeRequoteTimeoutMs()`; `fee: quote failed …` / `fee: quote back …` console lines; the cause line's height is reserved.
+- [ ] T233 [US3] `W/wallet/live-detail.ts`, `W/wallet/core/feed-executor.ts` and `W/wallet/live.ts`: calldata into the feed, the counterparty label, no explorer without a tx hash, a quiet delete on pending rows (RJ16, RJ18); proof: `W/wallet/live-detail.test.ts`, `W/wallet/core/feed-executor.test.ts`; (after T227).
+- [ ] T234 [US8] `W/services/bug-report.ts`: panel-side failures reach the report (G61); proof: `W/services/bug-report.test.ts`; (after T230 and T232).
+  - Counters `panel:submit.maybe_sent`, `panel:submit.not_sent`, `panel:submit.refused`, `panel:fee.quote_failed.<cause>` beside the worker's `sw:` counters; no hash, address or URL.
+- [ ] T235 [US1] Web and extension gates (after T209–T216 and T227–T234): unit, `pnpm check`, both builds, the isolated e2e suites on 4174 (T216), the event-payload ruler; output in `EV/gates/phase-9-web.txt`.
+
+### IOS — iOS adoption and parity (after T197)
+
+- [ ] T236 [US1] Wire mirrors: `I/Features/Signing/Core/SignWire.swift`, `I/Features/Send/TrackerWire.swift`, `I/Features/Send/SendWire.swift`, `I/Features/Send/FeeWire.swift`, `I/Features/Wallet/ActivityWire.swift` (every new variant and field of T185–T194); proof: `IT/CoreWireDriftTests.swift` and `scripts/check-event-payloads.mjs`; (after T197).
+- [ ] T237 [US1] Write-ahead: `I/Features/Signing/Core/SignExecutor.swift`, `I/Core/UserOpSpine.swift` and `I/Features/Send/SendExecutor.swift` (RJ1, RJ3); proof: `IT/SigningReceiptTests.swift` and `IT/SplitVerdictTests.swift`; (after T236).
+  - `OpSigned` before the POST, wait for `ClearToPost` ≤ `userOpWriteAheadWaitMs()`, then the asker check, then the POST; `DeleteRecord` / `Admitted` / `DeleteTxRecords` / `MarkAdmitted` on the store; `Failed{refused}` for a relay rejection.
+  - `awaitReceipt` (`SignExecutor.swift:363-387`) already gives each poll only what is left of the window: keep it, and end it once the core has answered the request.
+  - Tests: no POST before clearance; a force-quit after `OpSigned` leaves a pending `maybeSent` record (the T183 reload path finds it).
+- [ ] T238 [US7] `I/Features/Send/TrackerExecutor.swift` and `I/App/RootView.swift`: `TxReceipt`, `Withdrawn`, `admitted`, and `OpTracked` to the sign session (RJ4); proof: `IT/TrackerFindOpEventTests.swift`; (after T236).
+- [ ] T239 [US2] `I/Features/Signing/SigningLive.swift`, `I/Features/Signing/SigningAftercare.swift` and `I/Features/Signing/Core/SimDeltas.swift`: the Refused ending, `failure_refused`, deltas through `formatSignedTokenAmount`, fee words through `feeFailureReasonKey` (RJ3, RJ13, RJ15); proof: `IT/SigningReceiptTests.swift`, `IT/DappSigningTests.swift`; (after T236).
+- [ ] T240 [US7] `I/Features/Signing/Core/SigningController.swift` and `I/Core/VelaLog.swift`: the deployment read's failure is `ChainRead{rate_limited}` (RF5's path), re-quotes bounded by `feeRequoteTimeoutMs()`, `fee` category log lines (RJ12, RJ13, G48 parity); proof: `IT/SigningFeeRetryTests.swift`; (after T239).
+- [ ] T241 [US1] `I/Core/NetWatch.swift`, `I/Core/RpcPool.swift` and the `netHealthStep` call in `I/App/RootView.swift`: health per source (RJ14); proof: `IT/NetWatchTests.swift`; (after T238, which also edits `RootView.swift`).
+- [ ] T242 [US3] `I/Features/Flows/FlowsLive.swift` (and the activity detail view it feeds): calldata into the feed, the counterparty label, no explorer without a tx hash, a quiet delete on pending records (RJ16, RJ18); proof: `IT/ActivityLiveTests.swift`; (after T236).
+- [ ] T243 [US1] iOS gates (after T236–T242): the hermetic `VelaWalletTests` suite on a cloned simulator, `app-ios/scripts/check-ios-*.mjs`, `scripts/check-event-payloads.mjs`, `rust/scripts/check-ios-core-fresh.sh`; output in `EV/gates/phase-9-ios.txt`.
+
+### AND — Android adoption and parity (after T197)
+
+- [ ] T244 [US1] Wire mirrors: `A/feature/signing/core/SignWire.kt`, `A/feature/send/core/TrackerWire.kt`, `A/feature/send/core/SendWire.kt`, `A/feature/send/core/FeeWire.kt`, `A/feature/wallet/core/FeedWire.kt`, plus the `componentsUi.signing.refused` constant in `A/core/i18n/I18nKeys.kt`; proof: `AT/CoreWireDriftTest.kt` and `scripts/check-event-payloads.mjs`; (after T197).
+- [ ] T245 [US1] Write-ahead: `A/feature/signing/core/SignExecutor.kt`, `A/feature/send/core/UserOpSpine.kt` and `A/feature/send/core/SendExecutor.kt` (RJ1, RJ3); proof: `AT/SigningReceiptTest.kt`, `AT/SendControllerTest.kt`; (after T244).
+  - As T237: `OpSigned` before the POST, the clearance wait, the asker check, the POST; the store ops; `Failed{refused}`.
+  - `awaitReceipt` (`SignExecutor.kt:266-276`) already bounds each poll: keep it, and end it once the core has answered.
+- [ ] T246 [US7] `A/feature/send/core/TrackerExecutor.kt`, `A/feature/wallet/core/TrackerWork.kt` and `A/VelaWalletApplication.kt`: `TxReceipt`, `Withdrawn`, `admitted`, `OpTracked` (RJ4); proof: `AT/TrackerMachineTest.kt`; (after T244).
+- [ ] T247 [US2] `A/feature/signing/SigningLive.kt`, `A/feature/signing/SigningAftercare.kt` and `A/feature/signing/core/SimDeltas.kt`: Refused, `failure_refused`, signed deltas, fee words from the core (RJ3, RJ13, RJ15); proof: `AT/SigningLiveTest.kt`; (after T244).
+- [ ] T248 [US7] `A/feature/signing/core/SigningController.kt`: `ChainRead`, the re-quote timeout, `fee:` log lines (RJ12, RJ13); proof: new `AT/SigningFeeRetryTest.kt`; (after T247).
+- [ ] T249 [US1] `A/core/net/NetHealth.kt`, `A/navigation/VelaNavHost.kt` and `A/feature/browser/core/BrowserController.kt`: health per source (RJ14); proof: `AT/NetHealthTest.kt`; (after T244).
+- [ ] T250 [US3] `A/feature/flows/FlowLive.kt` and `A/feature/wallet/core/FeedExecutor.kt`: calldata into the feed, the counterparty label, no explorer without a tx hash, a quiet delete on pending records (RJ16, RJ18); proof: `AT/FlowLiveTest.kt`, `AT/FeedExecutorTest.kt`; (after T244).
+- [ ] T251 [US1] Android gates (after T244–T250): `./gradlew testDebugUnitTest` in `app-android/vela-wallet`, `scripts/check-android-*.mjs`, `scripts/check-event-payloads.mjs`; output in `EV/gates/phase-9-android.txt`.
+
+### Device re-run (quickstart §8; after the gates T226, T235, T243, T251)
+
+- [ ] T252 [US1] Desktop rows of quickstart §8 (`post2-D*`); evidence in `EV/desktop/post2-*`.
+- [ ] T253 [US1] Extension rows of quickstart §8 (`post2-E*`); evidence in `EV/extension/post2-*`.
+- [ ] T254 [US1] iPhone rows of quickstart §8 (`post2-I*`) and the optional Android smoke (`post2-A*`); evidence in `EV/ios/post2-*`, `EV/android/post2-*`.
+
+**Checkpoint**: G34–G61 fixed or shown not to be defects; the P3s fixed or deferred with a reason in
+results.md (spec.md round-2 list); every client gate green; the §8 rows pass.
+
+---
+
+## Phase 10: Results, hand-offs, delivery
 
 - [ ] T175 Write `specs/082-dapp-browser-mac-ext-ios/results.md`.
   - A verdict per SC-001–SC-010, with evidence links.
@@ -1123,7 +1387,8 @@ ok before any device row).
   - `pnpm check` is expected red between T046 and T075; `check-event-payloads.mjs` is expected red from T047 until the last client gate (T101, T123, T137) passes.
 - **Signer page (Phase 7)**: T138–T140 any time; T141 after T047 and T140, then T046 again; T142 is the owner's, after T141.
 - **Device (Phase 8)** per client after that client's phase and a fresh T046. The money rows (T145, T153, T161) are the MVP proof. T173 needs T142. T174 comes after all device rows.
-- **Phase 9** after Phase 8. T177 needs Phases 3–6.
+- **Phase 9** (round 2, T185–T254) after Phase 8's post-fix pass: CORE, DESK_A and WEB_A start at once; DESK_B after T185–T194 (its T217 first, which lets DESK_A test again); WEB_B, IOS and AND after T197; T203 after T192; T216 after T228; T222 after T219; the device re-run T252–T254 after the gates T226, T235, T243 and T251. Its group table (files owned) is at the top of Phase 9.
+- **Phase 10** after Phase 9. T177 needs Phases 3–6.
 
 ## Parallel groups
 
@@ -1244,3 +1509,22 @@ ok before any device row).
 | RH6 | T143–T173 |
 | RH7 | T174 |
 | RI1–RI3 | T043 |
+| RJ1 | T185, T186, T187, T189, T218–T220, T228, T229, T237, T245 |
+| RJ2 | T209, T216, T228 |
+| RJ3 | T185, T188, T195, T219, T223, T231, T237, T239, T245, T247 |
+| RJ4 | T186, T188, T221, T222, T228, T230, T238, T246 |
+| RJ5 | T202 |
+| RJ6 | T195, T223, T227, T239, T244, T247 |
+| RJ7 | T175 (deferrals in results.md) |
+| RJ8, RJ9 | T190, T203 |
+| RJ10 | T200 |
+| RJ11 | T203 |
+| RJ12, RJ13 | T191, T222, T223, T232, T240, T248 |
+| RJ14 | T192, T224, T241, T249 |
+| RJ15 | T193, T223, T239, T247 |
+| RJ16 | T194, T204, T225, T233, T242, T250 |
+| RJ17 | T205 |
+| RJ18 | T204, T206, T233, T242, T250 |
+| RJ19 | T185, T218, T228, T231 |
+| RJ20 | T210–T214 |
+| RJ21 | T208, T216, quickstart §0 and C1 |

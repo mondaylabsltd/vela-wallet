@@ -125,6 +125,112 @@ Checked and by design: the closed lock on `http://127.0.0.1` / `http://192.168.x
 loopback and private-network http as secure (`DbrTabView.secure`); the open lock needs a public
 http host.
 
+## Post-fix device pass (2026-09-29)
+
+The desktop (dev-fixtures, parallel space) and the extension (Chrome for Testing 151) were run
+again at `fb8c7026` against quickstart §2–§3, then audited row by row against the evidence and the
+chain. Results: `evidence/desktop/post-results.md`, `evidence/extension/post-results.md`; audits:
+`evidence/desktop/post-audit.md` (25 confirmed, 9 refuted, 5 unproven) and
+`evidence/extension/post-audit.md` (19 confirmed, 7 refuted, 2 unproven). The money was recomputed
+from Gnosis logs: every op landed at most once, and no op the UI called "not sent" landed from
+that attempt — but two landed ops were reported wrongly (G34, G35). Regressions confirmed fixed
+on the device: G3, G7, G6, G2, G11, G16, G17, G18, G19, G21 (on the relay-mute path), G22, G23,
+G29/G30, W6, W7, W8, W14 (inside a request), G13, G14 (plain send), L-D3, L-D5.
+
+The same root cause on two clients is one finding. "(code)" marks a client with the same design
+that the pass did not run. Evidence paths are under `evidence/`.
+
+| Id | Sev | Client | Finding | Evidence |
+|---|---|---|---|---|
+| G34 | **P0** | Desktop; web, iPhone, Android (code) | **A payment that lands after the app quits mid-submit leaves no record, no tracker entry and no dApp answer.** DX9 run 2: close held, second close quit, the op landed 6 s later (nonce 50, block 48487627); after relaunch no Activity row, 16 min later still none. The record is written only after the POST returns (RJ1) | `desktop/post-DX9.txt`, `post-DX9-relaunch-activity-missing-row.jpg`, `post-DX9-relaunch-60s-balance-moved-no-row.jpg` |
+| G35 | **P0** | Extension | **Closing or reloading the side panel after the submit claim answers the dApp 4900 while the op lands** (nonce 26, block 48487286, 13 s after the 4900). The worker settles every owed record on surface loss, claimed or not (RJ2) | `extension/post-EX-W1-T182.txt`, `post-EX-W1-T182-04-P0-sent-then-panel-closed.jpg` |
+| G36 | **P1** | Desktop, Extension; iPhone, Android (code) | **A relay-rejected or proven-not-sent op is answered `ok` + op hash** while the sheet says 失败 · 请重试 (DX-W3/S6: 100 s after `status=Rejected`; EX-S5: 35 s after 失败; EX-W3 probe: 1 ms after the rejection). 请重试 is also wrong for a deterministic reject (RJ3) | `desktop/post-DX-W3-dapp-answer-ok-ophash.jpg`, `extension/post-EX-S5.txt`, `extension/post-EX-W3.txt` |
+| G37 | **P1** | Desktop, Extension | **The answer and the sheet lag what the tracker already knows**: the op hash was answered 34 s (desktop) / 51 s (extension) after the chain check had the tx hash; the extension sheet fell back to 提交至网络… for 49 s after 已确认; the desktop sheet said "may have been sent" after the page had its tx hash (RJ4) | `extension/post-EX-W1.txt`, `post-EX-W1-03-submitting-again-after-confirmed.jpg`, `desktop/post-DX-W1.txt`, `desktop/post-DX6.txt` |
+| G38 | P2 | Extension; all clients (core) | A landed op reads 还没上链 for 5 min 49 s while the relay's status said `included` + tx hash: the tracker records the relay's tx hash and never uses it (RJ4) | `extension/post-EX13.txt`, `post-EX13-02-still-confirming-5min.jpg` |
+| G39 | P2 | Extension | The dApp answer after a lost reply overshoots the 120 s window (136.9 s): the deadline is checked only between 15 s polls (RJ4) | `extension/post-EX-W1.txt` |
+| G40 | **P1** | Desktop | **The tab ✕ also selects the closed tab**: the one webview loads a page no remaining tab owns, no tab is lit, and during a request the hold hint flashes although the close went through (CLOSE-TAB, L1, DX8) | `desktop/post-DX8-close-background-loads-closed-tab.jpg`, `post-DX8.txt` |
+| G41 | **P1** | Desktop | **Address-bar keys go to the page** when the page holds focus: a typed URL lands in a dApp's field; two pastes concatenated into `https://app.aave.comhttps://curve.fi` (KEY-FOCUS, SC-006b) | `desktop/post-KEYFOCUS-bar-keys-go-to-page.jpg`, `post-SC-006b-first5-and-concatenated-url.jpg` |
+| G42 | **P1** | Desktop | **One shared webview**: until commit a new or restored tab shows the previous tab's live, connected page under the new host; Back walks another tab's history (G28 class) (RJ5) | `desktop/post-DX14-newtab-shows-other-tab.jpg`, `post-DX11-click-uniswap-tab.jpg`, `post-DX11-back-crosses-tabs.jpg` |
+| G43 | P2 | Desktop | The auto-retry schedule restarts: the wallet's own retry is taken for a page-started load, so 7 attempts ran in 42 s and the panel vanished twice (RJ8) | `desktop/post-DX14.txt` |
+| G44 | P2 | Desktop | Retries are starved while WebKit's provisional load hangs: no attempt for ~60 s, recovery waits for WebKit's own 60 s timeout (49.6 s after `pass`), a skip line every 2–5 s (RJ9) | `desktop/post-L2-L4.txt`, `post-DX2.txt`, `post-SC-006.txt` |
+| G45 | P2 | Desktop | An expired certificate is classed `other`: no certificate sentence and an automatic retry, against FR-003 (L5) (RJ10) | `desktop/post-L5.txt`, `post-L5.jpg` |
+| G46 | P2 | Desktop | G33 is not fixed on the desktop: the chain notice shows only when the call gives up (43.7 s), not after the first pass (~14 s) (C1) (RJ11) | `desktop/post-C1.txt`, `post-C1-notice.jpg` |
+| G47 | P2 | Desktop, Extension | The fee comes back 15.8–19 s after the relay returns (extension: can exceed 15 s by phase), and no client logs `fee:` failure or recovery lines; the extension sheet keeps a stale cause line under 估算中…, under 速度 instead of 网络费, and jumps ~32 px (S7/S8) (RJ12) | `desktop/post-S7-S8.txt`, `extension/post-S7.txt` |
+| G48 | P2 | Desktop; iPhone (code, RF5) | With no fault, the Ethereum fee row says 无法连接 Vela 服务 — 请检查网络 and shuts the slide for a public node's `eth_getCode` rate limit (RJ13) | `desktop/post-DX-G14.txt`, `post-DX-G14-ethereum.jpg` |
+| G49 | P2 | Desktop; iPhone, Android (code) | A numeric `value` shows `余额变化 xDAI −0`: a 1000-wei delta rounds to 0 and keeps its minus (G14-num) (RJ15) | `desktop/post-G14-num-minus-zero.jpg` |
+| G50 | P2 | Desktop | The transaction detail's 66-character 哈希 overflows the column; its copy button is off-screen (DX-LD3) | `desktop/post-DX-LD3-detail-confirmed.jpg` |
+| G51 | P2 | Desktop | The "don't send it again" trace is easy to lose: a full-width red 删除记录 is the most prominent control on a 处理中 record, and switching to 钱包 drops the maybe-sent column for good (DX-LD3, T181) (RJ18) | `desktop/post-DX-LD3-detail-pending.jpg`, `post-T181-column-gone-before-quit.jpg` |
+| G52 | P2 | Desktop; all clients (core feed) | A relay-rejected dApp record misleads: 接收方 is the token contract, not the transfer's recipient; 在区块浏览器中查看 is offered for an op that never reached the chain; the caption says 请重试 (RJ16, RJ3) | `desktop/post-DX-W3-activity-failed-detail.jpg` |
+| G53 | P2 | Desktop; iPhone, Android (core) | Network health flaps (`net: offline` / `came back` every ~20 s with one chain faulted); after a relaunch with only Gnosis faulted the home read 24 个网络 RPC 不可用 over an empty asset list (RJ14) | `desktop/post-results.md` (T181 row), the desktop log `desk-post-T181.err` in the pass's scratchpad |
+| G54 | P2 | Desktop | The tab strip overflows at 6+ tabs: the lit new tab and + are off the right edge | `desktop/post-DX3p-panel.jpg`, `post-SC-006b-recents.jpg` |
+| G55 | **P1** | Extension | RB9 is missing: a request arriving while the panel shows Settings, Contacts or Feedback is never shown (58 s and 33 s until a manual tap); the dApp would wait 5 min. The layout effect reads a non-reactive field (RJ20) | `extension/post-EX4b-settings-no-card.jpg`, `post-EX4b.txt`, `post-EX-W3.txt` |
+| G56 | P2 | Extension | The may-have-been-sent title reads 已提交 ("Submitted") instead of RA10's 提交至网络… | `extension/post-EX-S5-02-maybe-sent.jpg` |
+| G57 | P2 | Extension | An ERC-20 transfer the relay's estimate says will revert is shown with a normal fee and no warning, signed and submitted with default gas (RJ19) | `extension/post-EX-W3.txt`, `post-EX-W3-01-sheet-amount-cut.jpg` |
+| G58 | P2 | Extension | An account switch made in Settings never reaches connected sites (`eth_accounts` stayed One); lower-case grants are rewritten only when the wallet route mounts (RJ20) | `extension/post-EX-LD6.txt`, `post-EX-LD6-settings-switched-to-two.jpg` |
+| G59 | P2 | Extension | The side panel ignores the pinned wallet language (English sheets with 简体中文 pinned) (RJ20) | `extension/post-EX7.txt`, `post-SC-007-en-language-picker.jpg` |
+| G60 | P2 | Extension | The signing amount is clipped at 360 px and the fiat reads `≈ $1e+24` (SC-008) | `extension/post-EX-W3-01-sheet-amount-cut.jpg` |
+| G61 | P2 | Extension | Panel-side failures leave no usable log line (maybe-sent and 失败 verdicts, fee failures, the tracker), never reach the bug report, and one log line says "ACCEPTED but NOT landed" for an op the relay never accepted | `extension/post-EX-LOG.txt`, `post-EX-S5.txt` |
+| G62 | P3 | Extension | Filtered empty states are never shown (the feed's chain filter is never dispatched) | `extension/post-EX-G1-filtered-gnosis.jpg` |
+| G63 | P3 | Extension | An idle open panel restarts the worker every ~30 s; the 200-line log ring floods (RJ20) | `extension/post-EX8b.txt` |
+| G64 | P3 | Extension | The worker logs 8 s aborts as `kind=network` and re-pays every cooled endpoint on each call (RJ20) | `extension/post-EX10.txt` |
+| G65 | P3 | Extension | The full-panel 已签名！ tick hides the next queued card for ≥ 1.4 s (RJ20) | `extension/post-results.md` (EX4) |
+| G66 | P3 | Extension | No e2e covers a panel close during a claimed submit or a request arriving on Settings; the isolated e2e rebuilt the live `extension/dist` under the running browser | `extension/post-S3-e2e.txt` |
+| G67 | P3 | Desktop | Log hygiene: `probe … route=system` while the dev proxy is in force; untimestamped `fee:`, `in-band:`, `signer page:` and `core: … booting` lines; `relay: submitting` twice; a dead proxy logged as "update the wallet" | `desktop/post-DX3p.txt`, `post-DX7.txt` |
+| G68 | P3 | Desktop | ⌘W is unbound, and the RD14 close hold refuses the first close with no words (RJ17) | `desktop/post-DX9-cmdW-does-nothing.jpg`, `post-DX9-close-held.jpg` |
+| G69 | P3 | Desktop | Any popup (network picker, ⋯ menu) blanks the whole dApp page | `desktop/post-U1-network-picker-zh.jpg`, `post-SC-007-en-site-menu.jpg` |
+| G70 | P3 | Desktop | Small browser defects: a tab whose first load failed is restored as 新标签页; a stale title after a bfcache Back; Recents 清空 with no confirmation; the PARALLEL SPACE badge covers a tab's ✕ and + | `desktop/post-DX11-failed-tab-restored-as-newtab.jpg`, `post-DX4-forward-bfcache.jpg` |
+| G71 | P3 | Desktop, Extension | Copy and consistency nits (list in `desktop/post-audit.md` D22 and `extension/post-audit.md` D19) | as listed there |
+| G72 | P3 | Extension | Version label drift: `dist` was built from an uncommitted tree 38 s before the commit that carries the same wasm | `extension/post-EX0.txt` |
+| G73 | P3 | Harness | The chaos proxy applies a leftover `latency` to every mode; quickstart C1 expected `outcome=timeout` (the desktop logs `not connected`); the nonce template's key was 24 bytes | `desktop/post-results.md` (harness notes) |
+
+**Not defects** (with evidence; the auditors or testers raised them):
+
+- The hero total above the listed assets while 部分余额仍在更新 shows: `balance_dashboard::display_total`'s `max(live, cached)` rule (#188, `balance_dashboard.rs:1419-1440`). What made it last for minutes is G53.
+- An empty amount block on a token-transfer dApp record: RG2 draws an amount only for a native value > 0.
+- The revert sheet's slide stays live after the estimate said it will fail: L-D5 (a warning informs, never blocks); the relay's rejection is answered by RJ3.
+- The watchdog panel shown for ~2.5 s while a 9 s-latency page still loads (DX1): RD3's fast panel after the probe timed out; it cleared by itself at commit and there was exactly one `loadRequest` (W7 fixed).
+- 正在准备交易… for ~40 s under `mute`: the truthful stage (RA9) for the relay's estimate timeouts.
+- The 已确认 ending on the desktop closes after ~2 s: the 079 beat (~2.6 s), and the tx hash stays in Activity.
+- The failed dApp row still showing −0.001 xDAI: the record keeps what was asked; the 失败 prefix says it did not move (RG2).
+- EX-S5 showing may-have-been-sent for a refused CONNECT: the expected web difference (RA1, RA4).
+
+**P3 deferred from 082** (RJ7; each goes into results.md with this reason):
+
+- G69, popups blank the page: the native WKWebView composites above everything gpui draws (`webview.rs` module note); a popup over a live page needs a snapshot layer, which belongs with per-tab views (RJ5 follow-up).
+- G70, a tab whose first load failed is restored as 新标签页: the core records a tab's address only at commit (`explore_sites`); keeping an uncommitted address across a restart is a model change for a P3.
+- G70, Recents 清空 without confirmation: the desktop has no inline-confirm pattern yet (no bottom sheets); the words exist (`connect.browser.clearAllBody`) for the design pass.
+- G71, the consent title's verb twice, the consent vs connected-panel sentences, 未验证 twice, the decoded recipient in 6+6 lower case, the extension's consent card without account/network rows (G11 parity), the IP avatar "1", 滑动以确认 · 确认, "Raw call data" on `personal_sign`, the device-storage count, the account-sheet total, the dev badge over the account name, a mid-animation arc: copy and layout polish on surfaces that already read correctly; one design pass after 082.
+- G71, 请重试 beside a lone 完成 on S5: for a proven-not-sent op the advice is true (send it again); no control is implied.
+- The chain notice pushes the page down ~37 pt when it appears (C1): a layout shift, not a wrong state; reserved space comes with the design pass.
+- G72: a process fix, not code — quickstart §1.1 now requires a clean committed tree before any build.
+
+Fixed in 082 although P3 (cheap, in files already touched): G62–G68, the bfcache title and the badge of G70, the zh comma and the U+2212 minus of G71, G73.
+
+**Refuted and unproven rows re-run after the fixes** are quickstart §8 (`post2-*` evidence).
+
+### Claude's decisions, pending the owner's review
+
+These round-2 decisions were taken without the owner and are recorded as research RJ1–RJ7
+(the planner's further choices are RJ8–RJ21). The owner may reverse any of them.
+
+1. **Write-ahead (RJ1).** The dApp-tx record and the wallet Send records are persisted under the
+   locally computed op hash, "may have been sent", before the first byte goes to the relay; a
+   proven "not sent" withdraws it. Supersedes RD14's and RG4's reasoning.
+2. **A claimed submit is never answered 4900 (RJ2).** Once the panel's submit claim carries the op
+   hash, closing or reloading the panel answers the dApp `ok(op hash)`; before that, 4900 stays.
+   Supersedes RB10 for claimed-submit requests.
+3. **A refusal is an error (RJ3).** A relay-rejected op, or a not-sent op proven inside the answer
+   window, answers `-32603` with a fixed "nothing was sent" sentence; an on-chain revert still
+   answers the tx hash (ruling 9). The sheet never says 请重试 for a deterministic refusal.
+4. **The tracker drives the answer (RJ4).** The page is answered as soon as the tracker has the
+   outcome, the relay's tx hash is confirmed through the chain, and the window is enforced inside
+   each poll.
+5. **Desktop tabs (RJ5).** 082 takes the minimum: a tab's page is hidden until that tab's own load
+   commits, and Back stops at the tab's first page. One WKWebView per tab is a follow-up.
+6. **i18n (RJ6).** One new sentence, `componentsUi.signing.refused`, paid for by shortening
+   `componentsTx.receipt.failedHint` (its "try again" tail); net ≈ −58 B, no cap raise.
+7. **P3 deferrals (RJ7).** P3 items may be deferred with a one-line reason; P0–P2 are fixed in 082.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — On a bad network, a dApp in any Vela client never looks frozen or broken (Priority: P1)
