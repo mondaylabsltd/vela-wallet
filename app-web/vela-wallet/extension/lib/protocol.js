@@ -147,10 +147,12 @@ export function cooldownMs(failures) {
 }
 
 /**
- * The order to try `endpoints` in: those not cooling down first, in their own
- * order; the cooled ones last (still tried — a node that recovered must be
- * reachable), soonest-back first. `health` is the stored
- * `{<url>: {failures, until}}`.
+ * The endpoints to try, in order (RF2, RJ20): while any endpoint is not
+ * cooling down, ONLY those, in their own order — a cooled node is skipped, not
+ * re-paid 8 s on every call (G64: each faulted read cost 3 × 8 s again). With
+ * every endpoint cooled, only the one whose cool-down ends first, so a read is
+ * still asked once (a node that recovered must be reachable) and costs one
+ * budget, not all of them. `health` is the stored `{<url>: {failures, until}}`.
  */
 export function orderEndpoints(endpoints, health, now) {
 	const cooling = (url) => {
@@ -158,10 +160,9 @@ export function orderEndpoints(endpoints, health, now) {
 		return entry && typeof entry.until === 'number' && entry.until > now ? entry.until : 0;
 	};
 	const live = endpoints.filter((url) => cooling(url) === 0);
-	const cooled = endpoints
-		.filter((url) => cooling(url) > 0)
-		.sort((a, b) => cooling(a) - cooling(b));
-	return [...live, ...cooled];
+	if (live.length > 0) return live;
+	const soonest = [...endpoints].sort((a, b) => cooling(a) - cooling(b))[0];
+	return soonest === undefined ? [] : [soonest];
 }
 
 /** `health` after one endpoint failed: one more failure, the next cool-down. */
@@ -200,11 +201,16 @@ export function chainNameOf(catalog, chainId) {
 }
 
 /**
- * How a failed endpoint read is named in the log: `timeout` (the 8 s budget
- * ran out), `http_<status>`, or `network` (anything the engine threw).
+ * How a failed endpoint read is named in the log: `http_<status>` (the node
+ * answered with one), `timeout` (the 8 s budget ran out — `timedOut` is the
+ * read's own timer having fired, which is the fact; Chrome's worker rejected
+ * some of those aborts with a plain "Failed to fetch", and the log said
+ * `network` for an 8 s wait, G64), or `network` (anything else the engine
+ * threw).
  */
-export function readFailureKind(error, status) {
+export function readFailureKind(error, status, timedOut = false) {
 	if (typeof status === 'number') return `http_${status}`;
+	if (timedOut) return 'timeout';
 	const name = error && typeof error === 'object' ? error.name : '';
 	return name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'network';
 }

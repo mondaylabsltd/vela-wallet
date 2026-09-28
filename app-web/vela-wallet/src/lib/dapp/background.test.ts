@@ -865,6 +865,80 @@ describe('chain reads (RF2, G20, G33)', () => {
 		expect(log).not.toMatch(/\/rpc/);
 	});
 
+	it('logs an abort by the 8 s timer as a timeout, even when the engine says "Failed to fetch" (G64)', async () => {
+		const env = makeEnv();
+		env.local.data['vela.ext.chains'] = catalog;
+		env.local.data['vela.chain.https://a.example'] = 100;
+		// The read's own timer, fired early so the case does not wait 8 s.
+		vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => {
+			const controller = new AbortController();
+			setTimeout(() => controller.abort(new DOMException('timed out', 'TimeoutError')), 1);
+			return controller.signal;
+		});
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				(_url: string, init: { signal: AbortSignal }) =>
+					new Promise((_resolve, reject) => {
+						// What Chrome's worker did on the device: a held tunnel, then a
+						// plain network error when the timer aborted it.
+						init.signal.addEventListener('abort', () => reject(new TypeError('Failed to fetch')));
+					})
+			)
+		);
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		await env.sendFromPage(page, { type: 'rpc', id: 'r1', method: 'eth_blockNumber', params: [] });
+		await settleAll();
+		const log = String(env.session.data['vela.sw.log']);
+		expect(log).toMatch(/read\.fail chain=100 host=dead\.example kind=timeout/);
+		expect(log).not.toMatch(/kind=network/);
+	});
+
+	it('with every endpoint cooled, one read asks only the one back soonest (G64)', async () => {
+		const env = makeEnv();
+		const now = Date.now();
+		env.local.data['vela.ext.chains'] = {
+			version: 1,
+			chains: {
+				'100': {
+					chainId: 100,
+					name: 'Gnosis',
+					rpc: ['https://a.example/rpc', 'https://b.example/rpc', 'https://c.example/rpc'],
+					bundler: 'https://relay.example/100'
+				}
+			}
+		};
+		env.local.data['vela.chain.https://a.example'] = 100;
+		env.session.data['vela.ext.endpoints'] = {
+			'https://a.example/rpc': { failures: 2, until: now + 60_000 },
+			'https://b.example/rpc': { failures: 1, until: now + 30_000 },
+			'https://c.example/rpc': { failures: 3, until: now + 120_000 }
+		};
+		const calls: string[] = [];
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (url: string) => {
+				calls.push(new URL(url).host);
+				throw new TypeError('Failed to fetch');
+			})
+		);
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const reply = await env.sendFromPage(page, {
+			type: 'rpc',
+			id: 'r1',
+			method: 'eth_blockNumber',
+			params: []
+		});
+		expect(calls).toEqual(['b.example']);
+		expect(reply).toEqual({
+			error: { code: -32603, message: 'Vela could not reach a node for chain Gnosis (100)' }
+		});
+		await settleAll();
+		expect(String(env.session.data['vela.sw.log'])).toMatch(/read\.exhausted chain=100 tried=1/);
+	});
+
 	it('answers plain words, with the chain’s name, when no node answered', async () => {
 		const env = makeEnv();
 		env.local.data['vela.ext.chains'] = catalog;

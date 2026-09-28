@@ -187,18 +187,17 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
 		expect(cooldownMs(9)).toBe(300_000);
 	});
 
-	it('tries cooled endpoints last, soonest-back first, and a success forgets the failure', () => {
+	it('skips cooled endpoints while one is live, and a success forgets the failure', () => {
 		const now = 1_000_000;
 		let health = endpointFailed({}, 'https://a', now);
 		health = endpointFailed(health, 'https://a', now);
 		health = endpointFailed(health, 'https://b', now);
 		expect(health['https://a']).toEqual({ failures: 2, until: now + 60_000 });
 		expect(health['https://b']).toEqual({ failures: 1, until: now + 30_000 });
-		// The second call skips straight to the node that did not fail.
+		// The second call goes straight to the node that did not fail — and ONLY
+		// to it: re-paying 8 s on each dead node every call was G64.
 		expect(orderEndpoints(['https://a', 'https://b', 'https://c'], health, now + 1)).toEqual([
-			'https://c',
-			'https://b',
-			'https://a'
+			'https://c'
 		]);
 		// A cool-down that has run out puts the endpoint back in its place.
 		expect(orderEndpoints(['https://a', 'https://b'], health, now + 60_001)).toEqual([
@@ -207,6 +206,21 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
 		]);
 		expect(endpointAnswered(health, 'https://a')).toEqual({ 'https://b': health['https://b'] });
 		expect(ENDPOINTS_KEY).toBe('vela.ext.endpoints');
+	});
+
+	it('with every endpoint cooled, tries only the one that comes back first (RJ20, G64)', () => {
+		const now = 1_000_000;
+		const health = {
+			'https://a': { failures: 3, until: now + 120_000 },
+			'https://b': { failures: 1, until: now + 30_000 },
+			'https://c': { failures: 2, until: now + 60_000 }
+		};
+		expect(orderEndpoints(['https://a', 'https://b', 'https://c'], health, now + 1)).toEqual([
+			'https://b'
+		]);
+		// One endpoint and it is cooled: it is still asked — a read is never refused unasked.
+		expect(orderEndpoints(['https://a'], health, now + 1)).toEqual(['https://a']);
+		expect(orderEndpoints([], health, now)).toEqual([]);
 	});
 
 	it('names the chain in plain words, with no engine text', () => {
@@ -226,5 +240,17 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
 		);
 		expect(readFailureKind(new TypeError('Failed to fetch'))).toBe('network');
 		expect(readFailureKind(new Error('http'), 502)).toBe('http_502');
+	});
+
+	it('an abort by the 8 s timer is a timeout, whatever the engine threw (G64)', () => {
+		// Chrome's worker rejected some timer aborts with a plain "Failed to
+		// fetch": the device log said kind=network for four 8 s waits.
+		expect(readFailureKind(new TypeError('Failed to fetch'), undefined, true)).toBe('timeout');
+		expect(
+			readFailureKind(Object.assign(new Error('x'), { name: 'AbortError' }), undefined, true)
+		).toBe('timeout');
+		// A status is an answer, however long it took.
+		expect(readFailureKind(new Error('http'), 504, true)).toBe('http_504');
+		expect(readFailureKind(new TypeError('Failed to fetch'), undefined, false)).toBe('network');
 	});
 });

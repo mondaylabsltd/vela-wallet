@@ -825,11 +825,13 @@ function saveHealth(next) {
 }
 
 /**
- * One read on `chainId`'s endpoints, cooled ones last. A transport failure
- * moves to the next endpoint and cools the failed one (`30 s · 2^(n−1)`, at
- * most 300 s); a JSON-RPC error IS an answer (a revert is what the page asked
- * to learn) and goes back as is. When nothing answered, the page gets the
- * chain by name and no engine text (G33).
+ * One read on `chainId`'s endpoints: the live ones only, or — when every one
+ * is cooling down — the one back soonest (`orderEndpoints`, RJ20). A transport
+ * failure moves to the next endpoint and cools the failed one
+ * (`30 s · 2^(n−1)`, at most 300 s), logged by its kind (an 8 s timer abort
+ * is `timeout`, G64); a JSON-RPC error IS an answer (a revert is what the page
+ * asked to learn) and goes back as is. When nothing answered, the page gets
+ * the chain by name and no engine text (G33).
  */
 async function readChain(method, params, catalog, chainId) {
 	const endpoints = chainEndpoints(catalog, chainId, BUNDLER_METHODS.has(method));
@@ -841,13 +843,14 @@ async function readChain(method, params, catalog, chainId) {
 	for (const url of order) {
 		tried += 1;
 		const started = Date.now();
+		const timer = AbortSignal.timeout(READ_TIMEOUT_MS);
 		let status;
 		try {
 			const response = await fetch(url, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-				signal: AbortSignal.timeout(READ_TIMEOUT_MS)
+				signal: timer
 			});
 			if (!response.ok) {
 				status = response.status;
@@ -871,7 +874,7 @@ async function readChain(method, params, catalog, chainId) {
 			}
 			return { result: body && 'result' in body ? body.result : null };
 		} catch (error) {
-			const kind = readFailureKind(error, status);
+			const kind = readFailureKind(error, status, timer.aborted);
 			saveHealth(endpointFailed(await health(), url, Date.now()));
 			void swlog.log('read.fail', { chain: chainId, host: url, kind });
 		}
