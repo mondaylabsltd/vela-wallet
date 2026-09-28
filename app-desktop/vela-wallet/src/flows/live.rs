@@ -414,7 +414,11 @@ pub fn tx_detail(
     if let Some(hash) = item.tx_hash.as_ref().filter(|hash| !hash.is_empty()) {
         facts.push(FactRow {
             label: s.detail_hash.clone(),
-            value: SharedString::from(hash.clone()),
+            // Shortened like every address on this panel, the whole of it on
+            // the copy button (083 F2): 66 characters on one line ran off the
+            // column's right edge. The web's `shortenAddress(tx_hash)`, and
+            // the receipt's own.
+            value: SharedString::from(crate::wallet::live::shorten_address(hash)),
             lead: FactLead::None,
             mono: true,
             copy: Some(SharedString::from(hash.clone())),
@@ -4747,6 +4751,77 @@ mod tests {
         )
         .unwrap_or_else(|| unreachable!("the row exists"));
         assert_eq!(detail.facts[1].value.as_ref(), "日本語日本語…語日本語");
+    }
+
+    /// 083 F2: every transaction's hash fits the panel — shortened like the
+    /// addresses around it, the whole of it on the copy button. Drawn whole,
+    /// its 66 characters ran off the column's right edge on one line.
+    #[test]
+    fn every_transaction_detail_fits_its_hash() {
+        use vela_core::app::activity_feed::{
+            ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem,
+        };
+
+        const HASH: &str = "0x9f2c4e5d6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f";
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let _ = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        let row = |id: &str, incoming: bool| FeedRow::Item {
+            item: FeedItem {
+                id: id.to_owned(),
+                direction: if incoming {
+                    FeedDirection::In
+                } else {
+                    FeedDirection::Out
+                },
+                counterparty: Some("0xAbCdEf0000000000000000000000000000000001".to_owned()),
+                alias: None,
+                value: Some("1.5".to_owned()),
+                symbol: "USDC".to_owned(),
+                decimals: Some(6),
+                usd_value: 1.5,
+                chain_id: 8453,
+                timestamp: 1_759_100_000.0,
+                day_start_ms: 0.0,
+                tx_hash: Some(HASH.to_owned()),
+                batch: None,
+                dapp: None,
+            },
+        };
+        let view = FeedView {
+            rows: vec![row("received", true), row("sent", false)],
+            ..host.view()
+        };
+        let (s, w) = (strings(), wallet_strings());
+        for id in ["received", "sent"] {
+            let detail = tx_detail(
+                &view,
+                id,
+                &s,
+                &w,
+                false,
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            let hash = detail
+                .facts
+                .iter()
+                .find(|fact| fact.label == s.detail_hash)
+                .unwrap_or_else(|| unreachable!("{id} has a hash row"));
+            assert_eq!(hash.value.as_ref(), "0x9f2c…6e7f", "{id}");
+            assert!(hash.mono, "still compared character by character");
+            assert_eq!(hash.copy.as_ref().map(AsRef::as_ref), Some(HASH), "{id}");
+            // The explorer still opens the whole of it.
+            assert!(
+                detail
+                    .explorer_url
+                    .as_ref()
+                    .is_some_and(|url| url.ends_with(HASH)),
+                "{id}"
+            );
+        }
     }
 
     /// The QR encodes what the CORE says, and a live one is never the demo
