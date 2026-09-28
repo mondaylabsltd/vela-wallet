@@ -15,9 +15,10 @@ use support::DomainDriver;
 use vela_core::abi::compute_selector;
 use vela_core::app::approval_guard::{self, AmountBits, GuardAmount as U256};
 use vela_core::app::clear_signing::{
-    ClearConfirm, ClearDangerClass, ClearFieldRole, ClearLocale, ClearOperation as Op, ClearProbe,
-    ClearProvenance, ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignResult,
-    ClearSignType, ClearSigning, ClearSiweBinding, ClearSurface, ClearTerm, Event,
+    is_empty_calldata, plain_send_of, ClearConfirm, ClearDangerClass, ClearFieldRole, ClearLocale,
+    ClearNumberFormat, ClearOperation as Op, ClearPlainSend, ClearProbe, ClearProvenance,
+    ClearRisk, ClearShellResult as Res, ClearSignMethod, ClearSignResult, ClearSignType,
+    ClearSigning, ClearSigningView, ClearSiweBinding, ClearSurface, ClearTerm, Event,
 };
 
 type Sut = DomainDriver<ClearSigning>;
@@ -60,6 +61,29 @@ fn timer_token(ops: &[Op]) -> u32 {
             _ => None,
         })
         .expect("a timer op")
+}
+
+/// `VITALIK`, EIP-55.
+const VITALIK_EIP55: &str = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+
+/// A `ResolveTransaction` built from the three fields a first-call reader
+/// hands the core as text (082 RC6).
+fn plain_tx(to: Option<&str>, data: Option<&str>, value: Option<&str>) -> Event {
+    Event::ResolveTransaction {
+        to: to.map(str::to_owned),
+        data: data.map(str::to_owned),
+        value: value.map(str::to_owned),
+        chain_id: 100,
+        locale: ClearLocale::default(),
+    }
+}
+
+/// "Confirm Send" — the verb of a plain send that moves coin.
+fn confirm_send() -> ClearConfirm {
+    ClearConfirm::ConfirmIntent {
+        intent: "send".to_owned(),
+        intent_term: Some(ClearTerm::IntentSend),
+    }
 }
 
 /// Start a transaction resolution and hand the core its clock.
@@ -333,23 +357,399 @@ fn eth_sign_is_always_the_danger_class() {
 // resolveTransaction — trivial ends
 // ---------------------------------------------------------------------------
 
+/// 082 RC1 — a transaction with no calldata is a plain send, drawn from the
+/// core's own card. This test used to pin the bug: it asserted the request
+/// resolved with no result, which every shell then drew as a blind call.
 #[test]
-fn plain_native_transfer_resolves_blind_with_no_shell_work() {
-    for data in [None, Some(String::new()), Some("0x".to_owned())] {
+fn plain_native_transfer_is_a_plain_send_with_no_shell_work() {
+    for data in [
+        None,
+        Some(""),
+        Some("0x"),
+        Some("0X"),
+        Some("  0x \n"),
+        Some(" "),
+    ] {
         let mut sut = Sut::new();
-        let ops = sut.dispatch(Event::ResolveTransaction {
-            to: Some(VITALIK.to_owned()),
-            data,
-            value: Some("0xde0b6b3a7640000".to_owned()),
-            chain_id: 1,
-            locale: ClearLocale::default(),
-        });
-        assert!(ops.is_empty());
+        let ops = sut.dispatch(plain_tx(Some(VITALIK), data, Some("0xde0b6b3a7640000")));
+        assert!(
+            ops.is_empty(),
+            "{data:?}: nothing to fetch, nothing to probe"
+        );
         let view = sut.view();
         assert!(!view.resolving);
         assert!(view.resolved);
-        assert!(view.result.is_none(), "native transfer UI, not clear-sign");
+        assert!(view.result.is_none(), "{data:?}: no ClearSignResult (RC1)");
+        assert_eq!(view.surface, ClearSurface::PlainSend, "{data:?}");
+        assert_eq!(
+            view.plain_send,
+            Some(ClearPlainSend {
+                to: VITALIK_EIP55.to_owned(),
+                value_wei: "1000000000000000000".to_owned(),
+                amount: "1".to_owned(),
+                no_value: false,
+            }),
+            "{data:?}"
+        );
+        assert_eq!(view.confirm, confirm_send(), "{data:?}");
     }
+}
+
+/// 082 G14 / RC2 — code at `to` does not matter. The owner's case: 0.001 of
+/// the native coin to another Safe was drawn "Contract interaction · Unable
+/// to decode" on the desktop and a red "Blind signature" in the extension,
+/// with no amount and no recipient. The core never asks whether `to` has
+/// code: no op at all, so no `eth_getCode` and no descriptor fetch.
+#[test]
+fn empty_calldata_to_a_contract_is_a_plain_send_not_a_blind_call() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(plain_tx(Some(USDC), Some("0x"), Some("0x38d7ea4c68000")));
+    assert!(
+        ops.is_empty(),
+        "no eth_getCode, no descriptor, no selector lookup"
+    );
+    let view = sut.view();
+    assert_eq!(view.surface, ClearSurface::PlainSend);
+    assert_ne!(view.surface, ClearSurface::BlindTransaction);
+    let plain = view.plain_send.expect("the plain send card");
+    assert_eq!(plain.to, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+    assert_eq!(plain.amount, "0.001");
+    assert!(!plain.no_value);
+    assert_eq!(view.confirm, confirm_send());
+}
+
+/// 082 RC1 — a no-calldata request whose `to` is not an address has no
+/// recipient to draw. It stays blind, with a neutral Confirm, never
+/// "Confirm send".
+#[test]
+fn a_plain_transfer_whose_to_is_not_an_address_stays_blind() {
+    let spaced = format!(" {VITALIK}");
+    let short = &VITALIK[..41];
+    let bare = &VITALIK[2..];
+    let not_hex = format!("0x{}", "g".repeat(40));
+    for to in [
+        None,
+        Some(""),
+        Some("0x1234"),
+        Some("vitalik.eth"),
+        Some(short),
+        Some(bare),
+        Some(spaced.as_str()),
+        Some(not_hex.as_str()),
+    ] {
+        let mut sut = Sut::new();
+        let ops = sut.dispatch(plain_tx(to, Some("0x"), Some("0x38d7ea4c68000")));
+        assert!(ops.is_empty(), "{to:?}");
+        let view = sut.view();
+        assert!(view.resolved && !view.resolving, "{to:?}");
+        assert!(view.result.is_none(), "{to:?}");
+        assert_eq!(view.surface, ClearSurface::BlindTransaction, "{to:?}");
+        assert_eq!(view.plain_send, None, "{to:?}");
+        assert_eq!(view.confirm, ClearConfirm::Confirm, "{to:?}");
+        assert_eq!(
+            plain_send_of(to, Some("0x38d7ea4c68000"), &ClearLocale::default()),
+            None,
+            "{to:?}"
+        );
+    }
+}
+
+/// 082 RC1 — the calldata predicate: absent, empty and the bare prefix in
+/// either case, after trimming. One zero byte is calldata.
+#[test]
+fn empty_calldata_is_absent_empty_or_the_bare_prefix() {
+    for data in [
+        None,
+        Some(""),
+        Some("0x"),
+        Some("0X"),
+        Some(" 0x "),
+        Some("\t\n"),
+    ] {
+        assert!(is_empty_calldata(data), "{data:?}");
+    }
+    for data in [
+        Some("0x00"),
+        Some("0xa9059cbb"),
+        Some("00"),
+        Some("x"),
+        Some("0x 0"),
+    ] {
+        assert!(!is_empty_calldata(data), "{data:?}");
+    }
+}
+
+/// 082 RC4, RC5 — the amount is `value / 10^18` exactly: no rounding, no
+/// "wei" fallback, trailing zeros trimmed. `value_wei` is the same number
+/// as plain digits.
+#[test]
+fn plain_send_amount_is_the_exact_value_over_ten_to_the_eighteen() {
+    let max = format!("0x{}", "f".repeat(64));
+    let padded_one = format!("0x{}1", "0".repeat(70));
+    let cases: [(&str, &str, &str); 7] = [
+        ("0x38d7ea4c68000", "1000000000000000", "0.001"),
+        ("0x1", "1", "0.000000000000000001"),
+        ("0x14d1120d7b160000", "1500000000000000000", "1.5"),
+        ("0xDE0B6B3A7640000", "1000000000000000000", "1"),
+        ("0x00de0b6b3a7640000", "1000000000000000000", "1"),
+        (
+            &max,
+            "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+            "115,792,089,237,316,195,423,570,985,008,687,907,853,269,984,665,640,564,039,457.584007913129639935",
+        ),
+        // Leading zeros are not magnitude: 71 digits can still be one wei.
+        (&padded_one, "1", "0.000000000000000001"),
+    ];
+    for (value, wei, amount) in cases {
+        let mut sut = Sut::new();
+        sut.dispatch(plain_tx(Some(VITALIK), None, Some(value)));
+        let view = sut.view();
+        assert_eq!(view.surface, ClearSurface::PlainSend, "{value}");
+        let plain = view.plain_send.expect("the plain send card");
+        assert_eq!(plain.value_wei, wei, "{value}");
+        assert_eq!(plain.amount, amount, "{value}");
+        assert!(!plain.no_value, "{value}");
+        assert_eq!(view.confirm, confirm_send(), "{value}");
+        assert_eq!(
+            plain_send_of(Some(VITALIK), Some(value), &ClearLocale::default()),
+            Some(plain),
+            "the pure rule and the machine agree"
+        );
+    }
+}
+
+/// 082 RC3 — nothing moves: the same card with `no_value`, amount "0", and a
+/// neutral Confirm — never "Confirm send", which would promise a transfer.
+/// No "nothing leaves" claim either: that is the simulation's to make.
+#[test]
+fn a_zero_value_plain_send_has_no_value_and_a_neutral_confirm() {
+    for value in [Some("0x0"), None, Some("0x"), Some(""), Some("0x0000")] {
+        let mut sut = Sut::new();
+        sut.dispatch(plain_tx(Some(VITALIK), Some("0x"), value));
+        let view = sut.view();
+        assert_eq!(view.surface, ClearSurface::PlainSend, "{value:?}");
+        assert_eq!(
+            view.plain_send,
+            Some(ClearPlainSend {
+                to: VITALIK_EIP55.to_owned(),
+                value_wei: "0".to_owned(),
+                amount: "0".to_owned(),
+                no_value: true,
+            }),
+            "{value:?}"
+        );
+        assert_eq!(view.confirm, ClearConfirm::Confirm, "{value:?}");
+    }
+}
+
+/// 082 RC4 — a value is printed only when it reads as hex. Decimal text (the
+/// desktop's submit path would send 1000 wei where three others send
+/// 0x1000), the text of a JSON number, `"null"`, signs, whitespace, stray
+/// characters and anything above `2^256 − 1` leave the request blind.
+#[test]
+fn a_value_that_is_not_hex_readable_stays_blind() {
+    let over = format!("0x1{}", "0".repeat(64));
+    for value in [
+        "1000",
+        "1000000000000000",
+        "1e+21",
+        "0.001",
+        "null",
+        "-1",
+        "-0x1",
+        "+0x1",
+        "0x-1",
+        "0xg1",
+        "0x1.5",
+        " 0x1",
+        "0x1 ",
+        "0X1",
+        over.as_str(),
+    ] {
+        let mut sut = Sut::new();
+        let ops = sut.dispatch(plain_tx(Some(VITALIK), Some("0x"), Some(value)));
+        assert!(ops.is_empty(), "{value:?}");
+        let view = sut.view();
+        assert_eq!(view.surface, ClearSurface::BlindTransaction, "{value:?}");
+        assert_eq!(view.plain_send, None, "{value:?}");
+        assert_eq!(view.confirm, ClearConfirm::Confirm, "{value:?}");
+        assert!(view.result.is_none(), "{value:?}");
+    }
+}
+
+/// 082 RC5 — the amount is written with the person's number marks; the
+/// machine field `value_wei` never is.
+#[test]
+fn plain_send_amount_uses_the_locale_marks() {
+    // 1,234,567.891 of the native coin.
+    let value = "0x1056e0f39c37a5c9b8000";
+    for (number_format, amount) in [
+        (ClearNumberFormat::CommaDot, "1,234,567.891"),
+        (ClearNumberFormat::DotComma, "1.234.567,891"),
+        (ClearNumberFormat::SpaceComma, "1 234 567,891"),
+        (ClearNumberFormat::Indian, "12,34,567.891"),
+    ] {
+        let locale = ClearLocale {
+            number_format,
+            ..ClearLocale::default()
+        };
+        let mut sut = Sut::new();
+        sut.dispatch(Event::ResolveTransaction {
+            to: Some(VITALIK.to_owned()),
+            data: None,
+            value: Some(value.to_owned()),
+            chain_id: 100,
+            locale,
+        });
+        let plain = sut.view().plain_send.expect("the plain send card");
+        assert_eq!(plain.amount, amount, "{number_format:?}");
+        assert_eq!(plain.value_wei, "1234567891000000000000000");
+    }
+}
+
+/// 082 RC7 — `wallet_sendCalls` has no special case: the shells read
+/// `calls[0]` into the same `ResolveTransaction`, so a first leg with no
+/// data is a plain send like any other.
+#[test]
+fn a_wallet_send_calls_whose_first_leg_has_no_data_is_a_plain_send() {
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000));
+    let params = json!([{
+        "version": "2.0.0",
+        "chainId": "0x64",
+        "from": SPENDER,
+        "atomicRequired": true,
+        "calls": [
+            { "to": USDC, "value": "0x38d7ea4c68000" },
+            { "to": USDC, "data": transfer, "value": "0x0" },
+        ],
+    }]);
+    // What every shell's first-call reader does (RC6): the fields as text,
+    // an absent one as `None`.
+    let first = &params[0]["calls"][0];
+    let field = |name: &str| first.get(name).and_then(|v| v.as_str()).map(str::to_owned);
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::ResolveTransaction {
+        to: field("to"),
+        data: field("data"),
+        value: field("value"),
+        chain_id: 100,
+        locale: ClearLocale::default(),
+    });
+    assert!(ops.is_empty());
+    let view = sut.view();
+    assert_eq!(view.surface, ClearSurface::PlainSend);
+    let plain = view.plain_send.expect("the plain send card");
+    assert_eq!(plain.amount, "0.001");
+    assert_eq!(plain.to, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+    assert_eq!(view.confirm, confirm_send());
+}
+
+/// 082 RC1 — the card is reset wherever the result is: a later request of
+/// any kind never inherits the previous plain send.
+#[test]
+fn the_plain_send_is_reset_by_every_later_request() {
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    let later: Vec<Event> = vec![
+        Event::ResolveTransaction {
+            to: Some(USDC.to_owned()),
+            data: Some(transfer),
+            value: Some("0x0".to_owned()),
+            chain_id: 1,
+            locale: ClearLocale::default(),
+        },
+        // A plain transfer that can no longer be read: blind, no stale card.
+        plain_tx(Some(VITALIK), None, Some("1000")),
+        Event::ResolveTypedData {
+            typed_data_json: r#"{"primaryType":"X","domain":{},"message":{}}"#.to_owned(),
+            chain_id: 1,
+            locale: ClearLocale::default(),
+        },
+        Event::MessagePresented {
+            method: ClearSignMethod::PersonalSign,
+            params: vec![text_hex("hello")],
+            request_origin: None,
+        },
+        Event::Cleared,
+    ];
+    for event in later {
+        let mut sut = Sut::new();
+        sut.dispatch(plain_tx(Some(VITALIK), Some("0x"), Some("0x1")));
+        assert!(sut.view().plain_send.is_some());
+        let label = format!("{event:?}");
+        sut.dispatch(event);
+        let view = sut.view();
+        assert_eq!(view.plain_send, None, "{label}");
+        assert_ne!(view.surface, ClearSurface::PlainSend, "{label}");
+    }
+}
+
+/// 082 RC1 — one request, one answer. A contract call that is still
+/// resolving when a plain send replaces it must not land its late
+/// descriptor answer on the plain send: `confirm_of` reads `result` first,
+/// so a stray USDC transfer result would put "Confirm Send" for 1,000 USDC
+/// under a card that says 1 wei of the native coin.
+#[test]
+fn a_superseded_call_never_answers_onto_a_plain_send() {
+    let mut sut = Sut::new();
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    let ops = resolve_tx(&mut sut, USDC, &transfer, "0x0");
+    assert_eq!(
+        ops,
+        vec![Op::HttpGet {
+            path: format!("/erc7730/calldata/eip155-1/{USDC}.json"),
+        }]
+    );
+    assert!(sut.view().resolving);
+
+    let ops = sut.dispatch(plain_tx(Some(VITALIK), None, Some("0x1")));
+    assert!(ops.is_empty(), "a plain send asks the shell for nothing");
+
+    // The superseded run's descriptor answer arrives late.
+    let late = sut.resolve(Res::DescriptorFetched {
+        path: format!("/erc7730/calldata/eip155-1/{USDC}.json"),
+        json: None,
+    });
+    assert!(late.is_empty(), "a stale answer starts nothing: {late:?}");
+
+    let view = sut.view();
+    assert!(!view.resolving && view.resolved);
+    assert!(view.result.is_none(), "no stale USDC result");
+    assert_eq!(view.surface, ClearSurface::PlainSend);
+    assert_eq!(
+        view.plain_send,
+        Some(ClearPlainSend {
+            to: VITALIK_EIP55.to_owned(),
+            value_wei: "1".to_owned(),
+            amount: "0.000000000000000001".to_owned(),
+            no_value: false,
+        })
+    );
+    assert_eq!(view.confirm, confirm_send());
+}
+
+/// 082 house rule — serde-additive: a view written before `plain_send`
+/// existed still decodes, and the new surface travels as `plain_send`.
+#[test]
+fn plain_send_is_serde_additive() {
+    let mut sut = Sut::new();
+    sut.dispatch(plain_tx(Some(VITALIK), None, Some("0x38d7ea4c68000")));
+    let view = sut.view();
+    let mut wire = serde_json::to_value(&view).expect("serialize");
+    assert_eq!(wire["surface"], "plain_send");
+    assert_eq!(
+        wire["plain_send"],
+        json!({
+            "to": VITALIK_EIP55,
+            "value_wei": "1000000000000000",
+            "amount": "0.001",
+            "no_value": false,
+        })
+    );
+    wire.as_object_mut().expect("object").remove("plain_send");
+    wire["surface"] = json!("blind_transaction");
+    let old: ClearSigningView = serde_json::from_value(wire).expect("old view JSON decodes");
+    assert_eq!(old.plain_send, None);
+    assert_eq!(old.surface, ClearSurface::BlindTransaction);
 }
 
 #[test]
@@ -2222,25 +2622,25 @@ fn confirm_semantics_follow_the_resolved_request() {
         }
     );
 
-    // A plain native send — no calldata, nothing to resolve.
+    // A plain native send — no calldata, nothing to resolve. Drawn as the
+    // plain send card, never the blind rung (082 RC1; this used to assert
+    // BlindTransaction, which was the bug).
     let mut sut = Sut::new();
-    sut.dispatch(Event::ResolveTransaction {
-        to: Some(VITALIK.to_owned()),
-        data: Some("0x".to_owned()),
-        value: Some("0xde0b6b3a7640000".to_owned()),
-        chain_id: 1,
-        locale: ClearLocale::default(),
-    });
+    sut.dispatch(plain_tx(
+        Some(VITALIK),
+        Some("0x"),
+        Some("0xde0b6b3a7640000"),
+    ));
     let view = sut.view();
     assert!(view.resolved && !view.resolving);
-    assert_eq!(view.surface, ClearSurface::BlindTransaction);
-    assert_eq!(
-        view.confirm,
-        ClearConfirm::ConfirmIntent {
-            intent: "send".to_owned(),
-            intent_term: Some(ClearTerm::IntentSend)
-        }
-    );
+    assert_eq!(view.surface, ClearSurface::PlainSend);
+    assert_eq!(view.confirm, confirm_send());
+
+    // One that moves nothing reads the neutral verb (082 RC3).
+    let mut sut = Sut::new();
+    sut.dispatch(plain_tx(Some(VITALIK), Some("0x"), Some("0x0")));
+    assert_eq!(sut.view().surface, ClearSurface::PlainSend);
+    assert_eq!(sut.view().confirm, ClearConfirm::Confirm);
 
     // A message is always "Sign"; eth_sign falls back to the neutral verb.
     let mut sut = Sut::new();
