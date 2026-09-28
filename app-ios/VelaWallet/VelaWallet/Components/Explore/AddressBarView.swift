@@ -20,7 +20,6 @@ struct AddressBarView: View {
 
     let host: String
     let secure: Bool
-    let secureLabel: String
     let closeLabel: String
     let menuLabel: String
     /// What the page is said to be when it is NOT secure. The padlock is
@@ -103,13 +102,17 @@ struct AddressBarView: View {
 
     private var pill: some View {
         HStack(spacing: Tokens.Space.s8) {
+            // Spec 079 (owner): a lock, and only a lock. Closed and quiet for
+            // https — which says the line is encrypted, not that the site is
+            // honest, so it is decorative to a screen reader too (the host is
+            // read out); open and in the warning colour for plain http.
             if secure {
                 LucideIcon(.lock, size: LucideIconSize.addressLock)
                     .foregroundStyle(theme.fgMuted)
-                    .accessibilityLabel(secureLabel)
+                    .accessibilityHidden(true)
                     .accessibilityIdentifier("explore.lock")
             } else if !host.isEmpty, !insecureLabel.isEmpty {
-                LucideIcon(.triangleAlert, size: LucideIconSize.addressLock)
+                LucideIcon(.lockOpen, size: LucideIconSize.addressLock)
                     .foregroundStyle(theme.warningBase)
                     .accessibilityLabel(insecureLabel)
                     .accessibilityIdentifier("explore.insecure")

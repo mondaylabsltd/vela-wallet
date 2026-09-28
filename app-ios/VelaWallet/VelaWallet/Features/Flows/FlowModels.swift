@@ -760,6 +760,9 @@ struct ReceiptHashModel {
     let label: String
     let value: String
     let copyLabel: String
+    /// What the copy button copies when `value` is a short form (spec 079:
+    /// the dApp receipt shows `0x1234…abcd`); `nil` copies `value`.
+    var copyValue: String? = nil
 }
 
 /// SD4 — the receipt, in whichever of its states the transaction is in.

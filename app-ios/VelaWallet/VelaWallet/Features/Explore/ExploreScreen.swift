@@ -39,10 +39,19 @@ struct ExploreScreen: View {
     var onFeePick: (String) -> Void = { _ in }
     /// The live sheet's speed control (spec 069): `nil` folds, an id picks.
     var onSpeed: (String?) -> Void = { _ in }
-    /// The sheet went away without a tap. The core routes what that means by
-    /// phase — a refusal before the commitment, a dismissal after it — so the
-    /// shell reports the gesture and decides nothing.
+    /// The signing sheet's ✕ (spec 079: its ONLY close — no swipe). The core
+    /// routes what that means by phase — a refusal before the commitment, a
+    /// dismissal after it — so the shell reports the tap and decides nothing.
     var onSigningDismissed: () -> Void = {}
+    /// Spec 079: the landed receipt's "view on explorer".
+    var onSigningExplorer: () -> Void = {}
+    /// Spec 079: the signing fee row's refresh.
+    var onRefreshFee: (() -> Void)?
+    /// Spec 079 US4: "暂时连不上 {chain}…" when the page's chain cannot be
+    /// reached (`ExploreLive.chainNotice`), and its Retry — one read through
+    /// the pool; an answer clears it.
+    var chainNotice: String?
+    var onChainRetry: () -> Void = {}
     /// The live browser. `nil` is the gallery: every E-state still renders
     /// from fixtures, and a gallery that ran somebody else's JavaScript would
     /// not be a gallery.
@@ -81,6 +90,11 @@ struct ExploreScreen: View {
     /// showing neither.
     @State private var switchAfterDismiss = false
     @State private var signingUp = false
+    /// A page's signing request arrived while one of the browser's own sheets
+    /// was up (spec 079). That sheet gives way first; the signing sheet opens
+    /// once it is really gone — presenting one sheet in the same breath as
+    /// dismissing another is how iOS ends up showing neither.
+    @State private var signingHeld = false
     /// Groups hidden here rather than in the fixture: hiding is something a
     /// person does, and the sheet has to show it happening.
     @State private var hidden: Set<String> = []
@@ -164,11 +178,60 @@ struct ExploreScreen: View {
         )
     }
 
-    /// The load's progress, while there is one.
+    /// The load's progress, while there is one — from the moment a load is
+    /// asked for (spec 079), including the core round trip before a new
+    /// tab's engine exists.
     private var loadProgress: Double? {
-        guard let engine, let controller else { return nil }
+        guard let controller else { return nil }
+        guard let engine else { return BrowserEngine.requestedProgress }
         _ = controller.engineTick
         return engine.loading ? engine.progress : nil
+    }
+
+    /// Spec 079 US4: one quiet line under the address bar — the connection
+    /// chip stays as it is, because the connection is fine; the chain is not.
+    private func chainNoticeView(_ text: String) -> some View {
+        HStack(spacing: Tokens.Space.s8) {
+            LucideIcon(.triangleAlert, size: LucideIconSize.addressLock)
+                .foregroundStyle(theme.warningBase)
+                .accessibilityHidden(true)
+            Text(verbatim: text)
+                .typeRole(Typography.rowSub)
+                .foregroundStyle(theme.fgMuted)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: onChainRetry) {
+                Text(verbatim: loc.t("connect.browser.retry"))
+                    .typeRole(Typography.label)
+                    .foregroundStyle(theme.accentBase)
+                    .frame(minHeight: Tokens.Layout.hitTarget)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("explore.chainDown.retry")
+        }
+        .padding(.horizontal, Tokens.Space.s16)
+        .background(theme.bgSunken)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("explore.chainDown")
+    }
+
+    /// The failure panel: the corpus's heading, the core's reason for the
+    /// class (unless it IS the heading — class `other`), the host, and a
+    /// Retry that keeps the panel up and says it is retrying.
+    private func failurePanel(reasonKey: String, engine: BrowserEngine) -> some View {
+        let title = loc.t("connect.browser.loadFailed")
+        let reason = loc.t(reasonKey)
+        _ = controller?.engineTick
+        return BrowserFailureView(
+            title: title,
+            reason: reason == title || reason == reasonKey ? nil : reason,
+            detail: BrowserEngine.hostOf(origin: ProviderBridge.origin(of: engine.failedURL.isEmpty ? engine.url : engine.failedURL)),
+            retry: loc.t("connect.browser.retry"),
+            retrying: engine.retrying,
+            retryingLabel: loc.t("explore.loadRetrying"),
+            onRetry: { engine.reload() }
+        )
     }
 
     /// A tile or a row was tapped.
@@ -279,12 +342,17 @@ struct ExploreScreen: View {
                 switchAfterDismiss = false
                 onSwitchAccount()
             }
+            signingHeld = false
         }) { sheet in
             sheetContent(sheet)
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(consentOpen ? .hidden : .visible)
                 .presentationDetents([.medium, .large])
                 .presentationCornerRadius(Tokens.Radius.r20)
                 .presentationBackground(theme.bgBase)
+                // Spec 079: like the signing sheet, the consent closes only on
+                // its ✕ or 拒绝 — a stray swipe must not refuse a connection the
+                // person was reading.
+                .interactiveDismissDisabled(consentOpen)
         }
         .sheet(isPresented: $signingUp) {
             if let signing {
@@ -295,9 +363,14 @@ struct ExploreScreen: View {
                     .presentationBackground(theme.bgRaised)
             }
         }
+        // Spec 079: up while there is a request OR its ending (the caller
+        // swaps the live model for the aftercare one without closing), and it
+        // closes only through its ✕ or the request's own end — never a swipe
+        // (owner ruling). The binding's setter is deliberately inert: the only
+        // dismissals left are programmatic, and those are the core's.
         .sheet(isPresented: Binding(
-            get: { signingLive != nil },
-            set: { open in if !open { onSigningDismissed() } }
+            get: { signingLive != nil && !signingHeld && !accountSwitcherOpen },
+            set: { _ in }
         )) {
             if let signingLive {
                 SigningSheet(
@@ -309,13 +382,27 @@ struct ExploreScreen: View {
                     onAllowanceLegAmount: onAllowanceLegAmount,
                     onFee: onFee,
                     onFeePick: onFeePick,
-                    onSpeed: onSpeed
+                    onSpeed: onSpeed,
+                    onClose: onSigningDismissed,
+                    onExplorer: onSigningExplorer,
+                    onRefreshFee: onRefreshFee
                 )
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
                     .presentationDetents([.large])
                     .presentationCornerRadius(Tokens.Radius.r20)
                     .presentationBackground(theme.bgRaised)
+                    .interactiveDismissDisabled()
             }
+        }
+        // A page's signing request closes the browser's own sheets (site
+        // menu, connection panel) instead of stacking behind them — Android
+        // found the connection panel sitting under the signing sheet after an
+        // account switch (spec 079). A site still ASKING to connect keeps its
+        // consent: that answer is the person's to give.
+        .onChange(of: signingLive != nil) { _, up in
+            guard up, sheet != nil, !consentOpen else { return }
+            signingHeld = true
+            sheet = nil
         }
         .alert(loc.t("explore.newGroup"), isPresented: $namingGroup) {
             TextField(loc.t("explore.newGroup"), text: $groupName)
@@ -426,7 +513,6 @@ struct ExploreScreen: View {
         case .browsing:
             AddressBarView(
                 host: browserHost, secure: browserSecure,
-                secureLabel: loc.t("explore.secureSite"),
                 closeLabel: loc.t("explore.closePage"),
                 menuLabel: loc.t("explore.siteMenu"),
                 insecureLabel: loc.t("connect.browser.a11yInsecure"),
@@ -440,15 +526,18 @@ struct ExploreScreen: View {
                 onMenu: { sheet = .siteMenu },
                 onSubmit: controller == nil ? nil : { text in controller?.open(text) }
             )
+            if engine != nil, let chainNotice {
+                chainNoticeView(chainNotice)
+            }
             if let engine {
                 ZStack {
                     BrowserWebView(engine: engine)
                         .accessibilityIdentifier("explore.page")
-                    // A page that could not be reached SAYS SO. Before
-                    // 058 both failure callbacks set `loading = false` and
-                    // nothing else, so an unreachable dApp was a white
-                    // rectangle under an empty address bar — silence a
-                    // person can only read as "the app is broken".
+                    // A page that could not be reached SAYS SO — and why, in
+                    // the core's words for its class, and it stays up while a
+                    // retry runs (spec 079). Before 058 both failure callbacks
+                    // set `loading = false` and nothing else, so an unreachable
+                    // dApp was a white rectangle under an empty address bar.
                     if currentTab?.crashed == true {
                         BrowserCrashedView(
                             title: loc.t("explore.pageCrashedTitle"),
@@ -456,15 +545,17 @@ struct ExploreScreen: View {
                             reload: loc.t("explore.reload"),
                             onReload: { engine.reload() }
                         )
-                    } else if let failure = engine.failure {
-                        BrowserFailureView(
-                            title: loc.t("connect.browser.loadFailed"),
-                            detail: failure,
-                            retry: loc.t("connect.browser.retry"),
-                            onRetry: { engine.reload() }
-                        )
+                    } else if let reasonKey = engine.failureReasonKey {
+                        failurePanel(reasonKey: reasonKey, engine: engine)
                     }
                 }
+                .onAppear { controller?.browsingVisible(true) }
+                .onDisappear { controller?.browsingVisible(false) }
+            } else if controller != nil {
+                // The live browser between the address and its engine (one
+                // core round trip): the page's own background under the
+                // hairline — never the gallery's drawn page (spec 079 F3).
+                theme.bgBase.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     DemoPageView(page: model.browser.page) {
@@ -485,7 +576,12 @@ struct ExploreScreen: View {
                 onForward: { controller?.goForward() },
                 onAccount: { sheet = .connection },
                 onBookmark: { controller?.toggleFavorite() },
-                onTabs: { viewOverride = .tabs }
+                // The page in front is photographed first, so its card in
+                // the switcher shows it as it is (spec 079).
+                onTabs: {
+                    guard let controller else { viewOverride = .tabs; return }
+                    controller.snapshotCurrent { viewOverride = .tabs }
+                }
             )
         case .start:
             startPage
@@ -716,6 +812,7 @@ struct ExploreScreen: View {
                     site: site, statusLine: statusLine, items: items,
                     closeLabel: loc.t("explore.close"),
                     secure: controller == nil || browserSecure,
+                    insecureLabel: loc.t("connect.browser.a11yInsecure"),
                     onClose: { self.sheet = nil },
                     onPick: { id in
                         self.sheet = nil
@@ -727,6 +824,7 @@ struct ExploreScreen: View {
             ScrollView {
                 ConnectionPanelView(
                     connection: connection, closeLabel: loc.t("explore.close"),
+                    insecureLabel: loc.t("connect.browser.a11yInsecure"),
                     onClose: { self.sheet = nil },
                     onSwitch: {
                         guard controller != nil else { return }

@@ -323,6 +323,25 @@ enum WalletLive {
         ))
     }
 
+    /// What the account holds on each network, in the display currency, from
+    /// the home screen's own figures (spec 079 — the browser's network picker:
+    /// "需要能看到这个网络上的余额吧"). Never fetched: a chain whose read
+    /// failed, an unpriced or spam token, a total under half a cent, or a
+    /// hidden balance shows NOTHING rather than a made-up zero.
+    static func networkHoldings(_ balance: BalanceViewWire?, display: Display) -> [Int: String] {
+        guard let balance, !balance.hidden else { return [:] }
+        var usd: [Int: Double] = [:]
+        for token in balance.tokens where !token.spam && !balance.failedChainIds.contains(token.chainId) {
+            guard let price = token.priceUsd, let amount = Double(token.balance) else { continue }
+            usd[token.chainId, default: 0] += amount * price
+        }
+        return usd.filter { $0.value >= 0.005 }.mapValues { value in
+            display.glyph + Formats.number(
+                value * display.rate, minimumFractionDigits: 2, maximumFractionDigits: 2
+            )
+        }
+    }
+
     /// The same brand colours the settings list uses, and the same neutral for a
     /// chain nobody drew.
     private static func chainColor(_ chainId: Int) -> Color {

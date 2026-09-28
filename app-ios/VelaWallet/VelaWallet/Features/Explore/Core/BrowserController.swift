@@ -299,6 +299,52 @@ final class BrowserController {
     func goForward() { current?.goForward() }
     func reload() { current?.reload() }
 
+    // MARK: - What is on screen (spec 079)
+
+    /// Whether the browsing view is showing — a failed page retries by
+    /// itself only while it is the page in front, 探索 is on screen and the
+    /// app is active (FR-012).
+    private var browsingVisible = false
+    private var appActive = true
+
+    func browsingVisible(_ visible: Bool) {
+        browsingVisible = visible
+        syncOnScreen()
+    }
+
+    func appActive(_ active: Bool) {
+        appActive = active
+        for engine in engines.values { engine.setAppActive(active) }
+    }
+
+    /// A tab's page as it was last seen (spec 079), for the switcher.
+    func snapshot(of tab: String) -> UIImage? { engines[tab]?.snapshot }
+
+    /// Photograph the page in front, then `done` — the tab switcher opens on
+    /// a card that shows it. Never waits long: a snapshot that does not come
+    /// back within a moment is not worth a stuck button.
+    func snapshotCurrent(then done: @escaping () -> Void) {
+        guard let current else { return done() }
+        var finished = false
+        let finish = {
+            guard !finished else { return }
+            finished = true
+            done()
+        }
+        current.captureSnapshot(finish)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            finish()
+        }
+    }
+
+    private func syncOnScreen() {
+        for engine in engines.values {
+            let shown = browsingVisible && engine === current
+            if engine.onScreen != shown { engine.setOnScreen(shown) }
+        }
+    }
+
     /// The core's facts about the tab in front.
     var currentTab: DbrTabViewWire? { dbr.tab(explore.selectedTab) }
 
@@ -454,6 +500,7 @@ final class BrowserController {
             dbrCore.dispatch(CoreJSON.string(["type": "tab_closed", "tab": id]))
         }
 
+        defer { syncOnScreen() }
         guard let selected = view.selected, let url = selected.url, !url.isEmpty else {
             // No tab, or the start page's own tab: a tab with no site is not
             // a page.
@@ -472,6 +519,7 @@ final class BrowserController {
             return
         }
         let engine = makeEngine(id: selected.id)
+        engine.setAppActive(appActive)
         current = engine
         engine.load(url)
     }

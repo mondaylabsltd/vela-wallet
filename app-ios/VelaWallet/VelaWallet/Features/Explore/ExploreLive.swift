@@ -12,16 +12,19 @@
 //  they are: E1–E7 are gallery states, and a gallery that ran somebody else's
 //  JavaScript would not be a gallery.
 //
-//  ## A site's mark is drawn, never fetched
+//  ## A site's mark: its own icon, its letter until then
 //
-//  `LetterAvatarView` takes a grapheme and a tint, and spec 022 chose that
-//  deliberately: a favicon is a request to a third party for every tile on the
-//  start page, which tells that party which dApps a person keeps. So the
-//  letter is the host's first character and the tint is a function of the
-//  host — the same host always the same colour, without asking anybody.
+//  Spec 022 drew a letter only, so as not to ask a third party for every tile.
+//  The owner ruled otherwise in 2026-09 (https only, no referrer) and spec 079
+//  applied it here: a site shows the icon it named when visited, then the
+//  usual https places (`SigningLive.siteIconUrls`), and its letter — the
+//  core's rule, `browserSiteLetter`, so `app.uniswap.org` is "U" — until one
+//  lands and when none does. The tint is still a function of the host: the
+//  same host always the same colour, without asking anybody.
 //
 
 import SwiftUI
+import VelaCore
 
 enum ExploreLive {
 
@@ -33,6 +36,11 @@ enum ExploreLive {
         engine: BrowserEngine?,
         identity: (name: String, address: String),
         chainIds: [Int] = [],
+        /// Spec 079: what the account holds per network, in the display
+        /// currency (`WalletLive.networkHoldings`) — never fetched here.
+        holdings: [Int: String] = [:],
+        /// Spec 079: each tab's last snapshot, by tab id.
+        snapshot: (String) -> UIImage? = { _ in nil },
         loc: Loc
     ) -> ExploreHomeModel {
         let populated = !explore.favorites.isEmpty || !history.entries.isEmpty
@@ -47,20 +55,15 @@ enum ExploreLive {
 
         let connection = connectionModel(
             dbr: dbr, tab: tab, engine: engine, identity: identity,
-            chainIds: chainIds, loc: loc
+            chainIds: chainIds, holdings: holdings, loc: loc
         )
         let bookmarked = engine.map { current in
             explore.favorites.contains { $0.origin == current.origin }
         } ?? false
         let siteMenu = ExploreSheet.siteMenu(
             site: engine.map(currentSite) ?? ExploreFixtures.uniswap,
-            // The site MENU names the page; the connection sheet judges it.
-            // Android splits them the same way: a menu that shouted "insecure"
-            // at every http page would be a warning nobody reads, and the
-            // warning belongs where a person is about to grant something.
-            statusLine: (tab?.secure ?? false)
-                ? loc.t("explore.secureSite")
-                : (engine?.host ?? ""),
+            // Spec 079 (owner): the lock alone — no "安全站点", no words.
+            statusLine: "",
             items: siteMenuItems(
                 bookmarked: bookmarked, connected: tab?.connectedAddress != nil, loc: loc
             )
@@ -89,7 +92,7 @@ enum ExploreLive {
                 explore: explore, tab: tab, engine: engine,
                 identity: identity
             ),
-            tabs: tabs(explore: explore, loc: loc),
+            tabs: tabs(explore: explore, snapshot: snapshot, loc: loc),
             tabsScreen: TabsScreenCopy(
                 title: loc.t("explore.tabs"), done: loc.t("explore.done"),
                 newTab: loc.t("explore.newTab"), closeAll: loc.t("explore.closeAllTabs"),
@@ -148,6 +151,9 @@ enum ExploreLive {
                 sites: history.entries.map { entry in
                     var site = self.site(host: entry.host, name: entry.title, origin: entry.origin)
                     site.subtitle = entry.host
+                    // The icon the page named when it was visited, then the
+                    // usual places (spec 079). Https only.
+                    site.iconUrls = iconUrls(recorded: entry.favicon, origin: entry.origin)
                     return site
                 },
                 hidden: false
@@ -199,16 +205,24 @@ enum ExploreLive {
 
     // MARK: - Tabs
 
-    static func tabs(explore: ExploreViewWire, loc: Loc) -> [TabModel] {
+    static func tabs(
+        explore: ExploreViewWire, snapshot: (String) -> UIImage? = { _ in nil }, loc: Loc
+    ) -> [TabModel] {
         explore.tabs.map { tab in
             let isStart = (tab.url ?? "").isEmpty
-            return TabModel(
+            var model = TabModel(
                 id: tab.id,
                 title: isStart ? loc.t("explore.startPage") : displayTitle(tab),
-                site: isStart ? nil : site(host: tab.host, name: displayTitle(tab), origin: tab.host),
+                site: isStart ? nil : site(
+                    host: tab.host, name: displayTitle(tab),
+                    origin: tab.url.map { ProviderBridge.origin(of: $0) } ?? tab.host
+                ),
                 selected: explore.selectedTab == tab.id,
                 startPage: isStart
             )
+            // A start page keeps its drawing; a page shows itself.
+            if !isStart { model.snapshot = snapshot(tab.id) }
+            return model
         }
     }
 
@@ -253,6 +267,7 @@ enum ExploreLive {
         engine: BrowserEngine?,
         identity: (name: String, address: String),
         chainIds: [Int] = [],
+        holdings: [Int: String] = [:],
         loc: Loc
     ) -> ConnectionModel {
         // The origin that is ASKING outranks the one in front. They are
@@ -320,17 +335,34 @@ enum ExploreLive {
                 ? loc.t("explore.autoRequestHint")
                 : loc.t("connect.browser.body"),
             secure: secure,
+            // The approve word every client uses (spec 079): "连接" — it was
+            // "批准" here alone.
             consent: consent == nil ? nil : (
-                approve: loc.t("connect.dapp.approve"),
+                approve: loc.t("connect.browser.connect"),
                 reject: loc.t("connect.dapp.reject")
             ),
             origin: origin,
             chainId: chainId,
-            // The wallet's own networks, and nothing a page named.
+            // The wallet's own networks, and nothing a page named — each with
+            // its logo and what the account holds there (spec 079).
             networks: origin.isEmpty ? [] : chainIds.map { id in
-                NetworkChoiceModel(id: id, name: chainName(id), dot: SettingsLive.chainColor(id))
-            }
+                NetworkChoiceModel(
+                    id: id, name: chainName(id), dot: SettingsLive.chainColor(id),
+                    logoUrl: Marks.chainLogoURL(id), amount: holdings[id]
+                )
+            },
+            networkLogoUrl: Marks.chainLogoURL(chainId)
         )
+    }
+
+    /// Spec 079 US4: the one-line notice when the page's chain cannot be
+    /// reached — its chain is in the pool's failed set and not merely rate
+    /// limited (a 429 is transient and stays quiet, the wallet's standing
+    /// rule). `nil` when there is nothing to say; it goes by itself when the
+    /// chain answers again, because the pool drops it from the set.
+    static func chainNotice(chainId: Int?, failed: [Int], rateLimited: [Int], loc: Loc) -> String? {
+        guard let chainId, failed.contains(chainId), !rateLimited.contains(chainId) else { return nil }
+        return loc.t("explore.chainDown", vars: ["chain": chainName(chainId)])
     }
 
     private static func chainName(_ chainId: Int) -> String {
@@ -347,12 +379,14 @@ enum ExploreLive {
     ///
     /// The host is still shown when there is no sentence to show (an empty
     /// origin), because naming what you are looking at beats saying nothing.
+    ///
+    /// Spec 079 (owner: "用一把锁代表 https 和非https 就行了，不文字标记"): the
+    /// lock beside it says the scheme, and this line says only what is a
+    /// fact about the connection — "已连接" — or nothing. Neither "安全站点"
+    /// nor "不安全站点" is drawn; the http lock carries
+    /// `connect.browser.a11yInsecure` for a screen reader.
     static func statusLine(secure: Bool, connected: Bool, host: String, loc: Loc) -> String {
-        let pieces = [
-            secure ? loc.t("explore.secureSite") : loc.t("connect.browser.a11yInsecure"),
-            connected ? loc.t("explore.connectedTag") : nil,
-        ].compactMap { $0 }
-        return pieces.joined(separator: " · ")
+        connected ? loc.t("explore.connectedTag") : ""
     }
 
     // MARK: - Marks
@@ -364,6 +398,8 @@ enum ExploreLive {
             origin: engine.origin
         )
         model.subtitle = engine.host
+        // The icon this page named, when it named one (spec 079).
+        model.iconUrls = iconUrls(recorded: engine.favicon, origin: engine.origin)
         return model
     }
 
@@ -372,21 +408,34 @@ enum ExploreLive {
              origin: pinned.origin)
     }
 
-    /// One site's drawn mark.
+    /// One site's mark: its own icon (spec 079), and its letter until then.
     ///
-    /// The letter is the first grapheme of the host with `www.` dropped —
-    /// every site under one domain would otherwise be a W. Upper-cased,
-    /// because a tile of lower-case letters reads as a typo.
+    /// The letter is the core's rule (`browserSiteLetter`): the first letter
+    /// or digit after a leading `www.`, `app.` or `m.` — every site under one
+    /// domain would otherwise be a W, and `app.uniswap.org` an A. The tint
+    /// keeps its own rule (`www.` dropped) so a known brand keeps its colour.
     static func site(host: String, name: String, origin: String) -> SiteModel {
         let bare = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-        let letter = bare.first.map { String($0).uppercased() } ?? "?"
         return SiteModel(
             id: origin.isEmpty ? host : origin,
             name: name.isEmpty ? host : name,
             host: host,
-            letter: letter,
-            tint: tint(for: bare)
+            letter: browserSiteLetter(host: host),
+            tint: tint(for: bare),
+            iconUrls: SigningLive.siteIconUrls(origin: origin)
         )
+    }
+
+    /// Where a site's icon is, best first: the one the page named when it
+    /// was visited (https only), then the usual https places. Nothing over
+    /// plain http, where anybody on the path could answer with a brand.
+    static func iconUrls(recorded: String?, origin: String) -> [String] {
+        let named = recorded.flatMap { $0.hasPrefix("https://") ? $0 : nil }
+        var urls: [String] = named.map { [$0] } ?? []
+        for url in SigningLive.siteIconUrls(origin: origin) where !urls.contains(url) {
+            urls.append(url)
+        }
+        return urls
     }
 
     /// A stable colour for a host, from the palette the fixtures already use.

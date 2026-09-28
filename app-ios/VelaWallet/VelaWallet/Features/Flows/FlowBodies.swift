@@ -1324,7 +1324,7 @@ struct SendReceiptBody: View {
                         .monoRole(Typography.monoAddress.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
                     // The tick alone copied nothing until 074.
-                    Button { velaCopy(hash.value); copied = true } label: {
+                    Button { velaCopy(hash.copyValue ?? hash.value); copied = true } label: {
                         LucideIcon(copied ? .check : .copy, size: LucideIconSize.checkmark)
                             .foregroundStyle(copied ? theme.successBase : theme.fgSubtle)
                             .contentShape(Rectangle())

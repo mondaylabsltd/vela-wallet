@@ -33,20 +33,29 @@ struct BrowserWebView: UIViewRepresentable {
 ///
 /// Opaque, over the web view: `WKWebView` keeps whatever it was showing (a
 /// white frame, or the previous page on a failed second navigation), and a
-/// message half-visible over a blank rectangle reads as a rendering bug.
+/// message half-visible over a blank rectangle reads as a rendering bug. It
+/// stays up through a retry (spec 079), saying so, and gives way only to a
+/// page that got through — the blank or previous page is never shown in
+/// between.
 ///
-/// The two sentences are the corpus's own — `connect.browser.loadFailed` and
-/// `connect.browser.retry` — which **no client had ever resolved**. Under them
-/// is the SYSTEM's reason, verbatim and untranslated: "the host could not be
-/// found" is a different problem from "the request timed out", and a person
-/// debugging their own network needs the difference. Wrapping it in prose of
-/// our own would be a fifth sentence to translate and a fact lost.
+/// The sentences are the corpus's own: `connect.browser.loadFailed`, then the
+/// REASON the core chose for the failure's class (`explore.loadOffline`,
+/// `loadNotFound`, `loadCertificate` — no connection, a wrong name and a bad
+/// certificate need different things done), the host, and the button, which
+/// reads `explore.loadRetrying` while an attempt runs. Until 079 the reason
+/// was the system's own English sentence and an error code.
 struct BrowserFailureView: View {
     @Environment(\.theme) private var theme
 
     let title: String
+    /// The core's sentence for the class; `nil` when it would repeat the title.
+    var reason: String?
+    /// The host that would not load.
     let detail: String
     let retry: String
+    /// An attempt is running: the button says `retryingLabel` and takes no tap.
+    var retrying = false
+    var retryingLabel = ""
     var onRetry: () -> Void = {}
 
     var body: some View {
@@ -54,14 +63,27 @@ struct BrowserFailureView: View {
             Text(verbatim: title)
                 .typeRole(Typography.title)
                 .foregroundStyle(theme.fgBase)
-            Text(verbatim: detail)
-                .typeRole(Typography.flowCaption)
-                .foregroundStyle(theme.fgSubtle)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, Tokens.Space.s24)
-            VelaButton(title: retry, kind: .secondary, action: onRetry)
+            if let reason {
+                Text(verbatim: reason)
+                    .typeRole(Typography.body)
+                    .foregroundStyle(theme.fgMuted)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Tokens.Space.s24)
+                    .accessibilityIdentifier("explore.loadFailed.reason")
+            }
+            if !detail.isEmpty {
+                Text(verbatim: detail)
+                    .typeRole(Typography.flowCaption)
+                    .foregroundStyle(theme.fgSubtle)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Tokens.Space.s24)
+            }
+            VelaButton(title: retrying && !retryingLabel.isEmpty ? retryingLabel : retry,
+                       kind: .secondary, enabled: !retrying, action: onRetry)
                 .padding(.horizontal, Tokens.Space.s24)
                 .padding(.top, Tokens.Space.s8)
+                .accessibilityIdentifier("explore.loadFailed.retry")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.bgBase)

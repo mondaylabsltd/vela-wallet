@@ -136,6 +136,13 @@ final class SigningController {
 
     private let wallet: (address: String, credentialId: String)
     private let relay: RelayClient
+    private let spine: UserOpSpine
+
+    /// Spec 079 (owner: one slide, not two): this account signs on the
+    /// Trusted Signer's page, whose own slide is the consent — so the sheet
+    /// offers a button that goes there instead of a second slide. Read once
+    /// per request, from the route the spine will sign over.
+    private(set) var trustedSignerRoute = false
     private var ports: Ports
 
     /// Record ids already on disk, and the handoff waiting for them. The
@@ -196,6 +203,7 @@ final class SigningController {
             relay: relay, accounts: accounts, measureCall: FeeExecutor.measuring(with: pool)
         )
 
+        self.spine = spine
         let signExecutor = SignExecutor(spine: spine, relay: relay, store: store)
         let clearExecutor = ClearExecutor(dataBase: ports.dataBase, pool: pool)
         let guardExecutor = GuardExecutor(pool: pool)
@@ -249,6 +257,12 @@ final class SigningController {
                 else { return "" }
                 return request.origin
             },
+            // A page in this app's browser — never the wallet's own requests
+            // (the key backup): the browser saw that origin (spec 079).
+            originSeenByBrowser: { [weak self] in
+                guard let request = self?.request else { return false }
+                return request.transportId != SigningLive.walletTransport
+            },
             trustedSignerEnded: { [weak self] notice in self?.trustedSignerNotice = notice }
         )
     }
@@ -258,6 +272,12 @@ final class SigningController {
     func open(_ incoming: Incoming) {
         request = incoming
         let nowMs = Date().timeIntervalSince1970 * 1000
+        trustedSignerRoute = false
+        Task { [weak self, spine, wallet] in
+            let route = await spine.signsOnTrustedSigner(account: wallet.address)
+            guard let self, self.request == incoming else { return }
+            self.trustedSignerRoute = route
+        }
         // Each request starts at the stored defaults: a pick is one-shot.
         fees.resetSpeed()
         fees.configureSpeed(preferred: preferredTier(), number: numberPreset())
@@ -363,12 +383,22 @@ final class SigningController {
     private let preferredTier: () -> String
     private let numberPreset: () -> String
 
-    private func requestQuote(chainId: Int) {
+    private func requestQuote(chainId: Int, attempt: UInt32 = 1) {
         guard !feeCalls.isEmpty else { return }
         Task { [weak self] in
             guard let self else { return }
             guard let deployed = await relay.isDeployed(chainId: chainId, address: wallet.address)
-            else { return }
+            else {
+                // The chain could not say: nothing was quoted, so nothing
+                // would ever ask again. Ask on the core's schedule for a quote
+                // that could not be had (spec 079), while the sheet waits.
+                guard let wait = feeRequoteDelayMs(failure: "quote_unavailable", attempt: attempt)
+                else { return }
+                try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
+                guard fees.view == nil, requoteAllowed else { return }
+                requestQuote(chainId: chainId, attempt: attempt + 1)
+                return
+            }
             // HOW FAST is the speed core's to say: the store asks at its tier.
             // WHICH COIN is the fee machine's until the person taps one (spec
             // 078): it pays in a coin that can, and the approve carries the
@@ -396,13 +426,22 @@ final class SigningController {
         fees.pickSpeed(tier)
     }
 
-    /// The refresh control: measure again, the held readings dropped first.
-    func refreshFee() { fees.refresh() }
+    /// The refresh control (spec 079 — it had no caller until then): measure
+    /// again, the held readings dropped first. A quote that never started
+    /// (the chain could not say whether the account is deployed) is started.
+    func refreshFee() {
+        guard fees.view != nil else {
+            if let request { requestQuote(chainId: request.chainId) }
+            return
+        }
+        fees.refresh()
+    }
 
     // MARK: - What the sheet does
 
     /// The slide fired.
     func approve() {
+        cancelRequote()
         trustedSignerNotice = nil
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
             fee: fee, clear: clear, guard: guardView
@@ -412,13 +451,36 @@ final class SigningController {
     func reject() { dispatchSign(["type": "reject_tapped"]) }
     func dismiss() { dispatchSign(["type": "dismiss_tapped"]) }
 
-    /// The sheet was swiped away.
+    /// The sheet's ✕ — since spec 079 its only close (no swipe, owner ruling).
     ///
     /// **Always this, never `reject`.** The core routes by phase: the funding
     /// view means cancel the funding; an error, a submitted or a submitting
     /// state means dismiss; anything earlier means refuse. A shell that picked
     /// one itself would answer a page 4001 for a transaction already on chain.
-    func swipeDismissed() { dispatchSign(["type": "swipe_dismissed"]) }
+    func swipeDismissed() {
+        closedByPerson = true
+        dispatchSign(["type": "swipe_dismissed"])
+    }
+
+    /// The last view the core showed a sheet for.
+    private var lastShown: SignViewWire?
+
+    /// What the sheet draws: the core's view, or — in the one turn between
+    /// the core clearing the sheet to answer the page and that answer being
+    /// sent (the answer is an effect, run a turn later) — the view it last
+    /// showed. Spec 079: the sheet stays up across that gap and turns into
+    /// the ending, instead of closing and reopening; presenting a sheet while
+    /// the same one is still leaving is how iOS ends up showing neither.
+    var shownSign: SignViewWire {
+        if sign.isVisible || answered || closedByPerson { return sign }
+        return lastShown ?? sign
+    }
+
+    /// The person closed this request's sheet themselves. After the approval
+    /// that refuses nothing — the operation goes on and the page still gets
+    /// its answer — but the ending is not brought back on screen: a sheet
+    /// somebody closed does not reopen by itself (spec 079).
+    private(set) var closedByPerson = false
 
     /// The page behind this request is gone and has already been answered
     /// (4900, by the browser core). The core clears the sheet; a pipeline
@@ -486,6 +548,7 @@ final class SigningController {
 
     private func commitSign(_ view: SignViewWire) {
         sign = view
+        if view.isVisible { lastShown = view }
         // A free upgrade is decided only while the person can still choose —
         // never under a slide that has already gone.
         let onForm = view.surface == .sheet && !view.isSigning && !view.isSubmitting
@@ -505,6 +568,7 @@ final class SigningController {
     }
 
     private func commitFee(_ view: FeeViewWire) {
+        scheduleRequote(view)
         // A quote goes stale while somebody reads. While the sheet is up and
         // nothing is signing, ask again — otherwise the slide shuts with no
         // way to reopen it, which is what Android's phase 5 watched happen.
@@ -515,6 +579,59 @@ final class SigningController {
         requoting = true
         fees.requote()
         Task { @MainActor [weak self] in self?.requoting = false }
+    }
+
+    // MARK: - Asking again (spec 079)
+
+    /// Automatic re-quotes made for the failure on screen; reset by a quote.
+    private var requoteAttempt: UInt32 = 0
+    private var requoteTask: Task<Void, Never>?
+
+    /// Whether a re-quote may still go out: the sheet is up, nothing is
+    /// signing or submitting, and the page has no answer yet.
+    private var requoteAllowed: Bool {
+        !answered && sign.surface == .sheet && !sign.isSigning && !sign.isSubmitting
+    }
+
+    /// A quote that failed for a reason that can pass (the relay unreachable,
+    /// a busy estimate) is asked again on the core's schedule — 3 s, 6 s,
+    /// 12 s, then every 15 s (`feeRequoteDelayMs`) — while the sheet is up and
+    /// nothing is signing. Android's pass: the row said "点击重试" with the
+    /// relay down and stayed that way after it came back.
+    private func scheduleRequote(_ view: FeeViewWire) {
+        guard view.failed != nil else {
+            requoteAttempt = 0
+            cancelRequote()
+            return
+        }
+        guard requoteTask == nil,
+              let wait = Self.requoteDelay(view, attempt: requoteAttempt + 1, allowed: requoteAllowed)
+        else { return }
+        requoteAttempt += 1
+        requoteTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
+            guard let self, !Task.isCancelled else { return }
+            requoteTask = nil
+            guard fee?.failed != nil, requoteAllowed else { return }
+            fees.refresh()
+        }
+    }
+
+    /// The wait before automatic re-quote `attempt` of the quote on screen,
+    /// or `nil` for none: no failure, one still being measured, a failure no
+    /// retry can fix (the core's schedule says so), or a sheet that can no
+    /// longer use a fee (approved, answered, closed).
+    static func requoteDelay(_ view: FeeViewWire, attempt: UInt32, allowed: Bool) -> UInt32? {
+        guard allowed, !view.busy, let failure = view.failed else { return nil }
+        return feeRequoteDelayMs(failure: failure, attempt: attempt)
+    }
+
+    /// A re-quote is scheduled (tests read it; the sheet does not).
+    var requotePending: Bool { requoteTask != nil }
+
+    private func cancelRequote() {
+        requoteTask?.cancel()
+        requoteTask = nil
     }
 
     private func recordLanded() {
@@ -534,10 +651,18 @@ final class SigningController {
 
     private func markAnswered() {
         answered = true
+        cancelRequote()
         if sign.surface == .hidden { closed = true }
     }
 
     // MARK: - The pure parts
+
+    /// The chain's usual time to include an operation, in seconds — the core's
+    /// table, the same number the send receipt counts against (spec 079);
+    /// `nil` for a network Vela does not ship.
+    static func typicalInclusionS(chainId: Int) -> Int? {
+        networkTypicalInclusionS(chainId: UInt32(clamping: chainId)).map { Int($0) }
+    }
 
     /// The user-operation hash when it is what the page is being answered
     /// with — `receipt_pending` answers `ok` with the op hash; a landed one

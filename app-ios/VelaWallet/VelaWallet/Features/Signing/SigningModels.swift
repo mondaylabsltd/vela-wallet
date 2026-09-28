@@ -189,6 +189,13 @@ enum FeeModel {
     case hidden
 }
 
+/// Spec 079: the send form's refresh control on the signing sheet's fee row.
+struct FeeRefreshModel: Equatable {
+    let label: String
+    /// A measurement is out — the control is dimmed.
+    let refreshing: Bool
+}
+
 struct SigningModel {
     let id: SigningStateId
     let dapp: (name: String, host: String, letter: String, tint: Color)
@@ -201,14 +208,28 @@ struct SigningModel {
     /// send is a number about nothing.
     let fee: FeeModel?
     var signer: (label: String, name: String, seed: String)
-    /// The slide. There is no reject button anywhere in this vocabulary:
-    /// closing the sheet is the rejection (product contract, SPEC 签名).
+    /// The slide. There is no reject BUTTON anywhere in this vocabulary; the
+    /// header's ✕ is the explicit refusal, and since spec 079 nothing else
+    /// closes the sheet (owner ruling: no swipe rejection).
     ///
     /// `nil` under a refusal: a dead slide reads as an option somebody merely
     /// failed to use, rather than one the wallet never offered.
     let confirm: (hint: String, action: String, enabled: Bool)?
     /// Desktop third-column heading; the phone sheet uses it as its a11y name.
     let panelTitle: String
+    /// Spec 079: the ✕'s label — the sheet's one explicit close. Empty in the
+    /// gallery, which draws no ✕.
+    var closeLabel = ""
+    /// Spec 079 (owner: one slide): the account signs on the Trusted Signer's
+    /// page, whose slide is the consent — the sheet's action is a button that
+    /// goes there (`confirmButtonLabel`, "去签名页确认"), not a second slide.
+    var confirmAsButton = false
+    var confirmButtonLabel = ""
+    /// Spec 079: once the person has approved, the sheet stops being a form
+    /// and shows this — the send receipt's own model and words, so a dApp
+    /// transaction and a send look the same while they land. Also the ending
+    /// the sheet keeps after the core has closed it (`SigningAftercare`).
+    var receipt: SendReceiptModel?
     /// The wallet asking ITSELF (the key backup): its own mark and name, and
     /// no host — it is not a site.
     var dappOwn = false
@@ -219,4 +240,10 @@ struct SigningModel {
     var dappIconUrls: [String] = []
     /// The chain's logo; the dot shows until it lands, and when there is none.
     var networkLogoUrl: String?
+    /// Spec 079: the fee row's refresh (owner: "似乎没有刷新网络费的按钮呀");
+    /// `nil` where there is no network fee.
+    var feeRefresh: FeeRefreshModel?
+    /// The fee row's chevron: only where a tap opens a coin list. A failed
+    /// quote is still asked again by a tap, but the refresh control says so.
+    var feeChevron = true
 }

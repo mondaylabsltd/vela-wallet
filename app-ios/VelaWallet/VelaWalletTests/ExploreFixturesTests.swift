@@ -34,8 +34,10 @@ struct ExploreFixturesTests {
         if let empty = m.empty { out += [empty.title, empty.caption, empty.cta] }
         if let favorites = m.favorites { out += [favorites.title, favorites.action] }
         out += m.groups.map(\.title)
+        // The site menu's status line is empty by ruling (spec 079: the lock
+        // alone says https), so only its items are words to check.
         if case .siteMenu(_, let statusLine, let items) = m.menus.siteMenu {
-            out += [statusLine] + items.map(\.label)
+            out += (statusLine.isEmpty ? [] : [statusLine]) + items.map(\.label)
         }
         if case .groupManage(let title, let rows, let newGroup) = m.menus.groupManage {
             out += [title, newGroup] + rows.map(\.title) + rows.compactMap(\.meta)
