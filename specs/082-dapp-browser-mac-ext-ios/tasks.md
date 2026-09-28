@@ -331,7 +331,7 @@ Owns `L/*.json` in 15 locales, `scripts/gen-i18n.mjs` and the generated
 
 ### Exports and bindings (sub-phase; entry = T010–T043 and T180 done; shared binding files, so sequential after T044 ∥ T045)
 
-- [ ] T044 [P] UniFFI exports in `rust/crates/vela-core-uniffi/src/lib.rs` (contract §12, plus T007's additions); (after T010–T043 and T180).
+- [x] T044 [P] UniFFI exports in `rust/crates/vela-core-uniffi/src/lib.rs` (contract §12, plus T007's additions); (after T010–T043 and T180).
   - New functions:
     - `userOpHash(draft, chainId)`, `userOpSubmitStep(reply, attempt, maybeDelivered, localHash)`, `userOpNotSentDetail()`, `userOpStatusMethod()`, `parseUserOpStatus(json)`;
     - `signEndingOf(method, payloadJson, submittedUserOp?)`, `signEndingState(endingJson, trackEntryJson?)`, `dappReceiptWaitMs(elapsedMs)`;
@@ -340,17 +340,17 @@ Owns `L/*.json` in 15 locales, `scripts/gen-i18n.mjs` and the generated
     - `netHealthStep(misses, online, reached)`, `markMissTtlMs(kind, status?)`, `balanceReadPlan(chainId, stablesJson, wrappedNative?, customJson)`.
   - `browserLoadClassify` gains the class `"proxy"`.
   - Proof: `cargo test -p vela-core-uniffi`, and the smoke scripts in T046.
-- [ ] T045 [P] wasm exports in `rust/crates/vela-core-wasm/src/lib.rs`; (after T010–T043 and T180).
+- [x] T045 [P] wasm exports in `rust/crates/vela-core-wasm/src/lib.rs`; (after T010–T043 and T180).
   - New functions:
     - `userOpHash(opJson, chainId)` (AttestOp shape), `userOpSubmitStep(replyJson, attempt, maybeDelivered, localHash)`, `userOpNotSentDetail()`, `userOpStatusMethod()`, `parseUserOpStatus(json)`;
     - `signEndingState(endingJson, entryJson)`, `dappReceiptWaitMs(elapsedMs)`, `signRequestTtlMs()`;
     - `rpcReadTimeoutMs()`, `rpcCooldownMs(n)`;
     - `browserSiteLabel(title, host)`, `markMissTtlMs(kind, status?)`, `balanceReadPlan(...)`.
   - Proof: `cargo test -p vela-core-wasm`, and `verify:wasm` in T046.
-- [ ] T046 Regenerate every binding from this tree: `W/core/generated/`, `rust/pkg-web/`, the VelaCoreKit xcframework, `rust/bindings/kotlin` and the Android `.so`; proof: `bash rust/scripts/check-ios-core-fresh.sh` prints ok; (after T043, T044, T045).
+- [x] T046 Regenerate every binding from this tree: `W/core/generated/`, `rust/pkg-web/`, the VelaCoreKit xcframework, `rust/bindings/kotlin` and the Android `.so`; proof: `bash rust/scripts/check-ios-core-fresh.sh` prints ok; (after T043, T044, T045).
   - Run: `npm --prefix scripts run gen:core-types` (writes `W/core/generated/`; touch `rust/crates/vela-core/src/bin/generate_wallet_state_bindings.rs` only if a new root type is needed) · `npm --prefix scripts run build:wasm && npm --prefix scripts run verify:wasm` (`rust/pkg-web`, the fingerprint moves) · `cd app-web/vela-wallet && pnpm sync:wasm` · `bash rust/scripts/build-ios-xcframework.sh` · `bash rust/scripts/build-android.sh` (the `.so`) · `bash rust/scripts/smoke-kotlin.sh` (regenerates `rust/bindings/kotlin`) · `bash rust/scripts/build-dev-fixtures.sh --host`.
   - Proof: `bash rust/scripts/check-ios-core-fresh.sh` prints ok · `bash rust/scripts/smoke-swift.sh` · `bash rust/scripts/smoke-kotlin.sh` pass.
-- [ ] T047 Run the phase-0/1 gates from `specs/082-dapp-browser-mac-ext-ios/plan.md` and record the output in `EV/gates/phase-0-1.txt`; (after T046).
+- [x] T047 Run the phase-0/1 gates from `specs/082-dapp-browser-mac-ext-ios/plan.md` and record the output in `EV/gates/phase-0-1.txt`; (after T046).
   - `cd rust && cargo test -p vela-core --features i18n-all,crux` (residency printed)
   - `cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings`
   - `cargo fmt --all --check`
@@ -959,7 +959,7 @@ therefore waits for the Phase 2 checkpoint, and T046 re-runs after it before any
   - Proof: new `TS/samples/plain-send-test.mjs`.
 - [x] T140 [US4] Rebuild `TS/dist` (`bun TS/samples/build-single.mjs`, `_headers` included) and record the new hash; (after T139). Built `82fae7f245cd053f8cf0404262c224e0d123bf6c3812b741cb1e7fe5e8da4f1e` (cba76a97); it replaces `58556162…` (b8e74266) and `9df169ea…` (e1cc53a8), which are never to be allowed and are no longer in `dist/b/`.
   - Proof: every sample suite passes: `hostile-test.mjs`, `takeover-test.mjs`, `fee-leg-test.mjs`, `unlimited-line-test.mjs`, `single-file-test.mjs`, `slider-test.mjs`, `ceremony-test.mjs`, `channels-test.mjs`, `origin-line-test.mjs` and `plain-send-test.mjs`.
-- [ ] T141 [US4] Put the new hash at the front of `BUILD_ALLOWED` in `rust/crates/vela-core/src/trusted_signer/integrity.rs`; `LAUNCH` is unchanged; (after T140 and T047).
+- [x] T141 [US4] Put the new hash at the front of `BUILD_ALLOWED` in `rust/crates/vela-core/src/trusted_signer/integrity.rs`; `LAUNCH` is unchanged; (after T140 and T047).
   - Then re-run T046 (pkg-web, xcframework, `.so`).
   - Proof: `cd rust && cargo test -p vela-core --test trusted_signer`, the integrity `--check`, and `check-ios-core-fresh.sh` ok.
 - [ ] T142 [US4] Owner step (outward-facing): deploy `TS/dist/` from the 082 tree to sign.getvela.app; (after T141).
