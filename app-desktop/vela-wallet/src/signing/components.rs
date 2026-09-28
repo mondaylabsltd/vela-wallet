@@ -1223,6 +1223,23 @@ pub fn slide_to_confirm(
         })
 }
 
+/// The confirm when the account signs on the Trusted Signer's page (spec 079
+/// US7): a primary button that goes there — the page's own slide is the one
+/// consent, so a slide here would be a second. Armed on the same terms as the
+/// slide: `action` is only ever passed when the three machines agreed.
+pub fn open_signer_button(
+    theme: &Theme,
+    label: SharedString,
+    enabled: bool,
+    action: Option<crate::flows::panels::Click>,
+) -> Div {
+    let armed = enabled && action.is_some();
+    let button = crate::flows::components::accent_button(theme, label)
+        .rounded_full()
+        .when(!armed, |el| el.opacity(0.45));
+    crate::flows::panels::clickable("signing-open-signer", action.filter(|_| armed), button)
+}
+
 /// The slide's state. One confirm is on screen at a time, and a new request
 /// starts it over ([`reset_slide`]).
 #[derive(Default)]

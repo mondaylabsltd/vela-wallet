@@ -14098,12 +14098,19 @@ impl WalletPage {
         let mut refused = false;
         // The speed control under the fee (spec 069) — the send form's own,
         // and the tiers its options pick, in order.
+        // Spec 079 US7: this account signs on the Trusted Signer's page, whose
+        // own slide is the consent — the column offers a button that goes
+        // there, not a second slide.
+        let mut signs_on_page = false;
         let mut signing_speed: Option<flow_fixtures::FeeSpeedModel> = None;
         let mut speed_tiers: Vec<vela_core::app::fee_policy::FeeTier> = Vec::new();
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.as_ref() {
             let host = host.read(cx);
             let fee = host.fee_view();
+            // The route the executor will sign over, read from the same
+            // channel it reads (`SignContext::follow_sign_in`).
+            signs_on_page = host.trusted_signer().chosen().is_some();
             // WHO signs, as the core has it — the account the site was shown
             // (078 W-07). The mock's own wallet stood here, so every sheet
             // named "大表哥" whichever wallet was about to sign.
@@ -14714,13 +14721,27 @@ impl WalletPage {
                 &model.signer_seed,
             ))
             .children((!model.confirm_label.is_empty()).then(|| {
-                signing_components::slide_to_confirm(
-                    theme,
-                    &mut self.icons,
-                    model.confirm_label.clone(),
-                    model.confirm_enabled,
-                    confirm_action,
-                )
+                if signs_on_page && !funding {
+                    // One slide per signature (owner, spec 079 ruling 9): the
+                    // page's. This button sends the same approval the slide
+                    // did, and the page asks for the consent.
+                    signing_components::open_signer_button(
+                        theme,
+                        self.signing.open_signer.clone(),
+                        model.confirm_enabled,
+                        confirm_action,
+                    )
+                    .into_any_element()
+                } else {
+                    signing_components::slide_to_confirm(
+                        theme,
+                        &mut self.icons,
+                        model.confirm_label.clone(),
+                        model.confirm_enabled,
+                        confirm_action,
+                    )
+                    .into_any_element()
+                }
             }));
         // A refused request's one way out (the web's `dismissOnly`): Close,
         // full width, the same dismissal as the ✕. It had none — the confirm

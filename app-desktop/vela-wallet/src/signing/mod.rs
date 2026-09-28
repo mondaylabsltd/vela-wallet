@@ -228,6 +228,8 @@ pub struct SigningStrings {
     pub fee_refresh: SharedString,
     pub fee_stale: SharedString,
     pub fee_unreachable: SharedString,
+    /// Spec 079 US7: the Trusted Signer route's confirm ("去签名页确认").
+    pub open_signer: SharedString,
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
     /// under the fee row when the coin it was quoted in cannot pay it.
     pub warn_insufficient_gas: SharedString,
@@ -454,6 +456,7 @@ impl SigningStrings {
             fee_refresh: loc.t("send.feeRefresh"),
             fee_stale: loc.t("send.feeStale"),
             fee_unreachable: loc.t("componentsUi.funding.denialNetworkError"),
+            open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             tech_function: s("techFunction"),
             tech_raw_data: s("techRawData"),
@@ -576,6 +579,7 @@ mod tests {
             s.fee_refresh.as_ref(),
             s.fee_stale.as_ref(),
             s.fee_unreachable.as_ref(),
+            s.open_signer.as_ref(),
         ] {
             assert!(
                 !text.starts_with("send.")
