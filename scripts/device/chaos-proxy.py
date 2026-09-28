@@ -27,7 +27,8 @@ Control: curl 'http://127.0.0.1:8899/__chaos?mode=drop&match=vela-relay'
   mode      pass | latency | throttle | drop | blackhole | reset_mid | mute | stall
             (mute: the request reaches the host, its reply never comes back;
              stall: CONNECT is answered 200 and the upstream is never opened)
-  latency   ms added before the upstream connect (latency / throttle)
+  latency   ms added before the upstream connect (latency / throttle); a request
+            that sets `mode` without `latency` puts it back to 0
   bps       bytes/second each direction (throttle)
   drop      probability 0..1 that a matching connection is refused (drop)
   match     regex on host; only matching hosts get the fault ('' = all)
@@ -129,6 +130,11 @@ async def handle(cr, cw):
     method, target, _ = (line.split(" ") + ["", ""])[:3]
     if target.startswith("/__chaos"):
         q = urllib.parse.parse_qs(urllib.parse.urlparse(target).query)
+        # A mode switch starts from no added latency unless the same request
+        # names one: a `latency=20000` left from an earlier row delayed every
+        # later mode, mute included (082 G73, the W1b artefact).
+        if "mode" in q and "latency" not in q:
+            CFG["latency"] = 0
         for k, v in q.items():
             CFG[k] = type(CFG.get(k, ""))(v[0]) if k in CFG else v[0]
         log("CONFIG", json.dumps(CFG))
