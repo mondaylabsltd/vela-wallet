@@ -959,6 +959,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		// Spec 079: after the approval — the send receipt's words, as
 		// Android's signing receipt uses them.
 		status: {
+			preparing: k('send.txPreparing'),
 			signing: k('send.txSigning'),
 			submitting: k('send.txSubmitting'),
 			backgroundHint: k('send.txBackgroundHint'),

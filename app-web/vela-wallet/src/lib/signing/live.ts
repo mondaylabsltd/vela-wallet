@@ -38,7 +38,10 @@ import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
 import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
-import { chainLogoURL } from '$lib/services/tokens-model';
+import type { SignRequestView } from '$lib/core/generated/SignRequestView';
+import { chainLogoURL, isAddress } from '$lib/services/tokens-model';
+import { chainMeta } from '$lib/services/chains';
+import { isTempoChain } from '$lib/services/tempo';
 import { feeRequoteDelayMs } from '$lib/core/kernels';
 import { exactAmount, trimBalance } from '$lib/wallet/live';
 import { fromBaseUnits } from '$lib/services/eip681';
@@ -306,6 +309,89 @@ export function calldataBytes(paramsJson: string): number {
 	}
 }
 
+/** A request that only moves the chain's own coin (083 H3). */
+export interface NativeSend {
+	to: string;
+	wei: bigint;
+	/** The chain's own coin, as the built-in chain table names it. */
+	symbol: string;
+}
+
+/**
+ * The plain native send a request is, or `null` (083 H3 — the desktop's W10
+ * rule, so the two shells draw the same request the same way).
+ *
+ * The core resolves an empty-calldata request with no result and leaves the
+ * transfer to the shell; the web drew it on the blind rung, and a 0.001 xDAI
+ * send read "contract interaction, unable to decode (0 bytes)" in red.
+ *
+ * Read the way `dapp-submit` reads the call it submits, so the figure and the
+ * recipient drawn are the ones signed. `null` keeps the blind rung, which says
+ * nothing false: more than one call (a batch whose first leg is a plain send
+ * is more than that send), any calldata, a recipient that is not an address,
+ * a value the executor would read differently from the site (it takes every
+ * value as hex — a bare "1000" is 0x1000 there), or a chain whose coin the
+ * wallet cannot name — Tempo has none, and "ETH" on a custom network would be
+ * a guess.
+ */
+export function nativeSendOf(
+	request: Pick<SignRequestView, 'kind' | 'params_json' | 'chain_id'>
+): NativeSend | null {
+	let params: unknown;
+	try {
+		params = JSON.parse(request.params_json);
+	} catch {
+		return null;
+	}
+	if (!Array.isArray(params)) return null;
+	const first = params[0] as { calls?: unknown } | null | undefined;
+	let call: unknown = null;
+	if (request.kind === 'transaction') call = first;
+	// Counted as the site sent it: every leg, readable or not, is a leg.
+	else if (request.kind === 'batch' && Array.isArray(first?.calls) && first.calls.length === 1)
+		call = first.calls[0];
+	if (typeof call !== 'object' || call === null) return null;
+	const { to, value, data } = call as { to?: unknown; value?: unknown; data?: unknown };
+	if (data !== undefined && data !== null && data !== '' && data !== '0x') return null;
+	if (typeof to !== 'string' || !isAddress(to)) return null;
+	let wei: bigint;
+	if (value === undefined || value === null || value === '') wei = 0n;
+	else if (typeof value === 'string' && /^0x[0-9a-fA-F]*$/.test(value))
+		wei = BigInt(value === '0x' ? '0' : value);
+	else return null;
+	const symbol = isTempoChain(request.chain_id)
+		? undefined
+		: chainMeta(request.chain_id)?.nativeSymbol;
+	return symbol === undefined ? null : { to, wei, symbol };
+}
+
+/**
+ * A send of the chain's own coin, in the decoded send's layout: what it does,
+ * how much, to whom — and no decode warning, because there was no calldata to
+ * decode. Exact, never rounded: every wei that will be signed (a chain's own
+ * coin has 18 decimals).
+ */
+function nativeSendBlocks(send: NativeSend, m: SigningMessages): Block[] {
+	return [
+		{ kind: 'intent', text: m.intentSend, tone: 'neutral' },
+		{
+			kind: 'amount',
+			line: {
+				sign: '-',
+				value: exactAmount(fromBaseUnits(send.wei, 18)),
+				symbol: send.symbol,
+				tone: 'neutral'
+			}
+		},
+		{
+			kind: 'party',
+			label: m.labelRecipient,
+			name: shortenAddress(send.to),
+			address: send.to
+		}
+	];
+}
+
 /** The sentence under a refused request (spec 081). */
 function selfCallBlockedText(
 	blocked: NonNullable<SignView['blocked']>,
@@ -413,6 +499,12 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		if (rest.length > 0) blocks.push({ kind: 'rows', rows: rest.map(fieldRow) });
 		return blocks;
 	}
+
+	// 083 H3: nothing to decode is not the same as undecodable — a request
+	// that only moves the chain's own coin is a send.
+	const nativeSend =
+		clear.surface === 'blind_transaction' && sign.request ? nativeSendOf(sign.request) : null;
+	if (nativeSend) return nativeSendBlocks(nativeSend, m);
 
 	// No decode at all — the deepest rung. The core said so; the sheet says so.
 	if (clear.surface === 'blind_transaction' || clear.surface === 'blind_typed_data') {
@@ -777,6 +869,8 @@ export function summaryOf(blocks: Block[]): string | undefined {
  * the form with a greyed slide (the owner: "可信签名器签完后，回到签名提示框，
  * 似乎没有任何提示"). Android's signing receipt, word for word:
  *
+ * - approved, the passkey not asked yet: "Preparing transaction…"
+ *   (`send.txPreparing`, 083 H3);
  * - waiting for the signature: "Waiting for biometric…" (`send.txSigning`);
  * - signed, going to the relay: "Submitting to network…" + "closing keeps it
  *   running" (`send.txSubmitting`, `send.txBackgroundHint`);
@@ -831,7 +925,11 @@ export function signingStatus(
 	if (!signed) {
 		return {
 			stage: 'submitting',
-			title: m.status.signing,
+			// "Waiting for biometric" only while the passkey prompt is up. Before
+			// it, the funding check, the nonce and the estimate are the wallet
+			// preparing — the owner read the biometric line for seconds with no
+			// prompt anywhere (083 W11 on the desktop; H3 is the same line here).
+			title: progress?.ceremonyUp === true ? m.status.signing : m.status.preparing,
 			captions: lines(summary),
 			closable: false
 		};

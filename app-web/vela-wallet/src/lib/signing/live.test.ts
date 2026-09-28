@@ -19,7 +19,7 @@ import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import { CLEAR_TERMS } from './terms';
-import type { WalletIdentity } from '$lib/wallet/identity';
+import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
 import {
@@ -27,6 +27,7 @@ import {
 	calldataBytes,
 	cappedApproval,
 	localizedTerms,
+	nativeSendOf,
 	signingCloseEvent,
 	signingStatus,
 	summaryOf,
@@ -476,8 +477,17 @@ describe('after the approval the sheet is a status', () => {
 		expect(signingCloseEvent(null)).toBe('reject_tapped');
 	});
 
-	it('approved, waiting for the passkey: "Waiting for biometric…", and the ✕ shut', () => {
-		for (const progress of [UNSIGNED, PROMPT_UP]) {
+	/**
+	 * 083 H3: "Waiting for biometric…" only while the passkey prompt is up.
+	 * Before it — the funding check, the nonce, the estimate — the wallet is
+	 * preparing, and says so; the ✕ is shut through both.
+	 */
+	it('approved, preparing and then waiting for the passkey, with the ✕ shut', () => {
+		for (const [progress, title] of [
+			[UNSIGNED, m.status.preparing],
+			[undefined, m.status.preparing],
+			[PROMPT_UP, m.status.signing]
+		] as const) {
 			// The core's Precheck (is_signing alone) and its Submitting stage
 			// (both flags) before the signature exists read the same.
 			for (const flags of [
@@ -487,13 +497,15 @@ describe('after the approval the sheet is a status', () => {
 				const status = signingStatus(at(flags), progress, SUMMARY, m);
 				expect(status).toEqual({
 					stage: 'submitting',
-					title: m.status.signing,
+					title,
 					captions: [SUMMARY],
 					closable: false
 				});
 				expect(signingCloseEvent(status)).toBeNull();
 			}
 		}
+		expect(m.status.preparing).toBe('Preparing transaction...');
+		expect(m.status.preparing).not.toBe(m.status.signing);
 	});
 
 	it('signed, going to the relay: "Submitting to network…" + closing keeps it running; the ✕ closes without refusing', () => {
@@ -1235,6 +1247,99 @@ describe('the blind line names the real length', () => {
 		expect(calldataBytes(JSON.stringify([call]))).toBe(68);
 		expect(calldataBytes(JSON.stringify([{ version: '2.0.0', calls: [call, call] }]))).toBe(68);
 		expect(calldataBytes('not json')).toBe(0);
+	});
+});
+
+/**
+ * 083 H3 (the desktop's W10): a request that only moves the chain's own coin
+ * reads as a send — not "contract interaction, unable to decode (0 bytes)" in
+ * red — and only such a request, read as `dapp-submit` will submit it.
+ */
+describe('a plain native send reads as a send', () => {
+	const TO = '0x76875eb2c6d2ea8d6b7fc7e0ce6d2c1e6ac0d141';
+	const BLIND: ClearSigningView = {
+		...INITIAL_CLEAR_VIEW,
+		resolved: true,
+		surface: 'blind_transaction'
+	};
+	const tx = (call: Record<string, unknown>, chain_id = 100) => ({
+		kind: 'transaction' as const,
+		params_json: JSON.stringify([call]),
+		chain_id
+	});
+	const batch = (calls: Record<string, unknown>[]) => ({
+		kind: 'batch' as const,
+		params_json: JSON.stringify([{ version: '2.0.0', calls }]),
+		chain_id: 100
+	});
+	const sheet = (params_json: string, chain_id = 100) =>
+		buildSigningModel(
+			inputs({
+				sign: { ...OPEN_SIGN, request: { ...REQUEST, params_json, chain_id } },
+				clear: BLIND
+			})
+		)!;
+
+	it('reads the call the executor submits', () => {
+		expect(nativeSendOf(tx({ to: TO, value: '0x38d7ea4c68000' }))).toEqual({
+			to: TO,
+			wei: 1_000_000_000_000_000n,
+			symbol: 'xDAI'
+		});
+		expect(nativeSendOf(tx({ to: TO, value: '0x1', data: '0x' }, 1))).toEqual({
+			to: TO,
+			wei: 1n,
+			symbol: 'ETH'
+		});
+		// Absent is zero, as `dapp-submit` reads it (`value ?? '0x0'`).
+		expect(nativeSendOf(tx({ to: TO }))?.wei).toBe(0n);
+		expect(nativeSendOf(batch([{ to: TO, value: '0x1' }]))?.wei).toBe(1n);
+	});
+
+	it('keeps everything else on the blind rung', () => {
+		const blind = [
+			tx({ to: TO, value: '0x1', data: '0xdeadbeef' }),
+			tx({ to: TO, value: '0xzz' }),
+			// The executor reads every value as hex: a bare "1000" is 0x1000 there.
+			tx({ to: TO, value: '1000' }),
+			tx({ to: TO, value: 1000 }),
+			tx({ to: '0xbbb', value: '0x1' }),
+			tx({ value: '0x1', data: '0x' }),
+			// Tempo has no coin of its own; a custom network's would be a guess.
+			tx({ to: TO, value: '0x1' }, 4217),
+			tx({ to: TO, value: '0x1' }, 999_999),
+			// A batch is more than its first leg — even a leg with no `to`.
+			batch([
+				{ to: TO, value: '0x1' },
+				{ to: TO, data: '0xdead' }
+			]),
+			batch([{ to: TO, value: '0xde0b6b3a7640000' }, { data: '0x6080' }]),
+			batch([]),
+			{ kind: 'personal_sign' as const, params_json: '["0xdead","0xabc"]', chain_id: 1 },
+			{ kind: 'transaction' as const, params_json: 'not json', chain_id: 1 }
+		];
+		for (const request of blind) {
+			expect(nativeSendOf(request), `${request.params_json} on ${request.chain_id}`).toBeNull();
+		}
+	});
+
+	it('draws what it does, how much and to whom, with no decode warning', () => {
+		const model = sheet(JSON.stringify([{ to: TO, value: '0x38d7ea4c68000' }]));
+		expect(model.blocks).toEqual([
+			{ kind: 'intent', text: m.intentSend, tone: 'neutral' },
+			{
+				kind: 'amount',
+				line: { sign: '-', value: '0.001', symbol: 'xDAI', tone: 'neutral' }
+			},
+			{ kind: 'party', label: m.labelRecipient, name: shortenAddress(TO), address: TO }
+		]);
+		expect(summaryOf(model.blocks)).toBe(`${m.intentSend} · -0.001 xDAI`);
+	});
+
+	it('the same request with calldata still says it could not be decoded', () => {
+		const model = sheet(JSON.stringify([{ to: TO, value: '0x1', data: '0xdeadbeef' }]));
+		expect(model.blocks[0]).toEqual({ kind: 'intent', text: m.intentBlind, tone: 'danger' });
+		expect(model.blocks[1]).toMatchObject({ kind: 'warning', tone: 'danger' });
 	});
 });
 
