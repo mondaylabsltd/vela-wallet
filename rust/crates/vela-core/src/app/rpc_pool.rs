@@ -1894,10 +1894,22 @@ fn handle_outcome(
             // (`rpc-pool.ts:768-772`). RPC calls only, as in TS. Rate-limit
             // wording goes first (spec 082 T180): a throttled node is not a
             // range limit, and the caller must not shrink its window for it.
+            // Nor is it a ban (contract §2): the find-event reads `eth_getLogs`
+            // every tick while an op may have been sent, and "exceeded" would
+            // otherwise ban a throttled node for an hour for every method.
             if kind == RpcKind::Rpc && method == "eth_getLogs" {
-                match get_logs_range_cap(&error) {
-                    Some(cap) if !has_rate_limit_wording(&error) => Route::RangeCap(cap),
-                    _ => classify_response_error(&error),
+                if has_rate_limit_wording(&error) {
+                    Route::Transient {
+                        rate_limit_signal: true,
+                    }
+                } else if let Some(cap) = get_logs_range_cap(&error) {
+                    Route::RangeCap(cap)
+                } else if is_rate_limit_signal(&error) {
+                    Route::Transient {
+                        rate_limit_signal: true,
+                    }
+                } else {
+                    classify_response_error(&error)
                 }
             } else if kind == RpcKind::Rpc && is_optional_method(&method) {
                 // Spec 082 RG7: plan words or `-32603 "method handler

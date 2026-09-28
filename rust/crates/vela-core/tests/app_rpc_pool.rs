@@ -2758,3 +2758,56 @@ fn gnosis_s_live_range_answers_are_range_errors() {
     ));
     assert_eq!(ops, vec![rpc_post("g1", PUB1, "eth_getLogs")]);
 }
+
+/// Review of T180 (contract §2: on `eth_getLogs` a rate-limit signal is
+/// checked before the ban rules and only fails over). The find-event reads
+/// `eth_getLogs` on every tick while an op may have been sent, so a throttled
+/// public node answers it often: "exceeded" used to ban that endpoint for an
+/// hour for EVERY method — the relay's gas reads and the balance included —
+/// and a chain of throttled nodes emptied itself. Throttling on `eth_getLogs`
+/// fails over with no ban, the chain is classified rate-limited (never the
+/// banner).
+#[test]
+fn a_throttled_get_logs_fails_over_without_a_ban() {
+    for error in [
+        err(None, "rate limit exceeded"),
+        err(None, "rate limit exceeded for block range queries"),
+        err(Some(-32005), "limit exceeded"),
+        err(
+            Some(-32029),
+            "daily request count exceeded, request rate limited",
+        ),
+    ] {
+        let mut sut = loaded(T0);
+        sut.dispatch(rpc_call("g1", "eth_getLogs", T0 + 1_000.0));
+        let ops = sut.resolve(outcome(
+            "g1",
+            USER,
+            Out::Response {
+                error: Some(error.clone()),
+            },
+            10.0,
+            T0 + 1_010.0,
+        ));
+        assert_eq!(
+            ops,
+            vec![rpc_post("g1", PUB1, "eth_getLogs")],
+            "{error:?}: fail over, no PersistBans"
+        );
+        assert!(sut.view().banned.is_empty(), "{error:?}");
+        // Every endpoint throttled: a rate-limited chain, never the banner's
+        // "fix your RPC", and still no ban.
+        sut.resolve(outcome(
+            "g1",
+            PUB1,
+            Out::Response {
+                error: Some(error.clone()),
+            },
+            10.0,
+            T0 + 1_020.0,
+        ));
+        let view = sut.view();
+        assert!(view.banned.is_empty(), "{error:?}");
+        assert!(view.unreached_chains.is_empty(), "{error:?}");
+    }
+}
