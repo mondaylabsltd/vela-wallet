@@ -582,17 +582,22 @@ final class RelayClient {
         }
     }
 
-    /// One POST's answer as the core's `SubmitReply`: the relay's hash, its
+    /// One POST's answer as the core's `SubmitReply`: the relay's result, its
     /// error member as it came, or no answer at all.
+    ///
+    /// A 200 with no error member is the relay's RESULT whatever it holds — a
+    /// null, a word, an object — and whether that is a hash is the core's to
+    /// say: `submit_step` reads one that is not as "may have been sent" (the
+    /// relay spoke without refusing, so it may hold the op). Turning it into
+    /// a made-up refusal here read NotSent — "failed, try again" over an op
+    /// the relay may have queued (G21's double payment). The desktop and
+    /// Android hand it over the same way.
     static func submitReply(_ result: RpcCallResult) -> UserOpSubmitReply {
         switch result.outcome {
         case .ok(let value):
-            guard let hash = value as? String, hash.hasPrefix("0x") else {
-                // A JSON answer with no hash in it: the relay spoke and held
-                // nothing it would name.
-                return .rpcError(errorJson: errorEnvelope("the relay accepted nothing"))
-            }
-            return .hash(hash: hash)
+            if let hash = value as? String { return .hash(hash: hash) }
+            guard let value, !(value is NSNull) else { return .hash(hash: "") }
+            return .hash(hash: jsonText(value) ?? "")
         case .rpcError(let code, let message):
             if let held = result.heldErrorJson { return .rpcError(errorJson: held) }
             var member: [String: Any] = ["message": message]
@@ -927,9 +932,5 @@ final class RelayClient {
     static func object(fromJSON text: String) -> [String: Any]? {
         guard let data = text.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    }
-
-    static func errorEnvelope(_ message: String) -> String {
-        CoreJSON.string(["message": message])
     }
 }

@@ -127,9 +127,24 @@ struct SubmitVerdictTests {
         #expect(RelayClient.submitReply(answer(
             .rpcError(code: 1, message: "x"), delivered: false, held: #"{"code":1,"message":"x"}"#
         )) == .rpcError(errorJson: #"{"code":1,"message":"x"}"#))
-        guard case .rpcError = RelayClient.submitReply(answer(.ok(NSNull()), delivered: false)) else {
-            Issue.record("a JSON answer with no hash is the relay speaking, not silence")
-            return
+        // A 200 with no error member is the relay's RESULT, whatever it holds:
+        // whether it is a hash is the core's to say (`submit_step`), never a
+        // refusal made up here (082 review; the desktop and Android agree).
+        #expect(RelayClient.submitReply(answer(.ok(NSNull()), delivered: false)) == .hash(hash: ""))
+        #expect(RelayClient.submitReply(answer(.ok(nil), delivered: false)) == .hash(hash: ""))
+        #expect(RelayClient.submitReply(answer(.ok("pending"), delivered: false)) == .hash(hash: "pending"))
+    }
+
+    /// The relay answered 200 with no error and no readable hash (a null, a
+    /// word, an object): it spoke without refusing, so it may hold the op.
+    /// "Failed — try again" here is G21's double payment; the core's rule is
+    /// "may have been sent" under the local hash (082 review).
+    @Test func anAnswerWithNoReadableHashIsMaybeSentNeverNotSent() async {
+        for result in [NSNull() as Any, "", "pending", ["userOpHash": "0x12"] as [String: Any]] {
+            let port = ScriptedRelayPort()
+            port.detailed["eth_sendUserOperation"] = [answer(.ok(result), delivered: false)]
+            let verdict = await client(port).sendUserOp(chainId: 100, opJson: "{}", localHash: local)
+            #expect(verdict == .maybeSent(userOpHash: local), "result \(result) read as \(verdict)")
         }
     }
 
