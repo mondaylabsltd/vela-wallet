@@ -61,31 +61,30 @@ pub fn overlay(root: Div, _window: &Window) -> Div {
     if !active() {
         return root;
     }
-    root.relative().child(
-        div()
-            .absolute()
-            .top_0()
-            .left_0()
-            .right_0()
-            .flex()
-            .justify_center()
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .px(px(12.))
-                    .pt(px(4.))
-                    .pb(px(5.))
-                    .rounded_b(px(8.))
-                    // Not a token, on purpose — see the module note.
-                    .bg(rgb(0x7c3aed))
-                    .text_color(rgb(0xffffff))
-                    .text_size(px(10.))
-                    .child(div().font_weight(FontWeight::BOLD).child("PARALLEL SPACE"))
-                    .child(div().child("fixture passkey · test wallet")),
-            ),
-    )
+    root.relative().child(badge())
+}
+
+/// The badge itself, in the window's bottom-left corner — the sidebar's
+/// foot, where nothing is pressed. It sat top-centre, over the browser's tab
+/// strip, and covered a tab's ✕ and the + (spec 082 G70) and the account
+/// name (G71).
+fn badge() -> Div {
+    div()
+        .absolute()
+        .left(px(8.))
+        .bottom(px(8.))
+        .flex()
+        .flex_col()
+        .items_center()
+        .px(px(10.))
+        .py(px(4.))
+        .rounded(px(8.))
+        // Not a token, on purpose — see the module note.
+        .bg(rgb(0x7c3aed))
+        .text_color(rgb(0xffffff))
+        .text_size(px(10.))
+        .child(div().font_weight(FontWeight::BOLD).child("PARALLEL SPACE"))
+        .child(div().child("fixture passkey · test wallet"))
 }
 
 /// The software signer, behind the compile-time gate.
@@ -171,6 +170,22 @@ pub mod signer {
             authenticator_attachment: fixtures::AUTHENTICATOR_ATTACHMENT.to_owned(),
             signer_origin: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod badge_tests {
+    use gpui::Styled as _;
+
+    /// Spec 082 G70: the badge sits in the bottom-left corner, clear of the
+    /// tab strip's ✕ and + along the top and of the columns on the right.
+    #[test]
+    fn the_badge_sits_in_the_bottom_left_corner() {
+        let mut badge = super::badge();
+        let inset = &badge.style().inset;
+        assert!(inset.top.is_none(), "along the top, over the tab strip");
+        assert!(inset.right.is_none());
+        assert!(inset.bottom.is_some() && inset.left.is_some());
     }
 }
 
