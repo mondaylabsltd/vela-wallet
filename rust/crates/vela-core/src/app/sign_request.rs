@@ -119,6 +119,27 @@ pub const PAGE_WAIT_CAP_MS: f64 = super::tx_tracker::SLOW_POLL_AFTER_MS;
 /// transaction's hash follows it in parentheses.
 pub const REVERTED_MESSAGE: &str = "The transaction was included but reverted";
 
+/// The page's error for a reverted operation: [`REVERTED_MESSAGE`], then the
+/// bundle transaction's hash in parentheses.
+#[must_use]
+pub fn reverted_detail(tx_hash: &str) -> String {
+    format!("{REVERTED_MESSAGE} ({tx_hash})")
+}
+
+/// The transaction a [`reverted_detail`] names — `None` for any other
+/// error. A shell reads it to draw the revert at once — its sentence ("a
+/// network fee may still have been charged"), the hash and the explorer —
+/// rather than "couldn't be submitted, your funds are safe", which is false
+/// for an operation that was included, until its tracker catches up (083).
+#[must_use]
+pub fn reverted_transaction(detail: &str) -> Option<&str> {
+    detail
+        .strip_prefix(REVERTED_MESSAGE)?
+        .strip_prefix(" (")?
+        .strip_suffix(')')
+        .filter(|hash| !hash.is_empty())
+}
+
 /// What a page is told when its operation had not landed by
 /// [`PAGE_WAIT_CAP_MS`]; the operation's hash follows it, named as what it is.
 pub const NOT_CONFIRMED_MESSAGE: &str =
@@ -2378,7 +2399,7 @@ fn on_submit(
             tx_hash,
         } => {
             model.settle(&fl.id, SignSettledOutcome::Submitted);
-            let detail = format!("{REVERTED_MESSAGE} ({tx_hash})");
+            let detail = reverted_detail(&tx_hash);
             if fl.record_id.is_none() {
                 return persist_pending_then(
                     model,

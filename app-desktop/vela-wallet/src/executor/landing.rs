@@ -17,7 +17,8 @@
 //! answer is the core's to choose from it.
 //!
 //! "Executed" is the tracker's rule, not a looser one: `success: true` AND no
-//! Safe `ExecutionFailure` in the operation's logs (spec 038 #D1).
+//! Safe `ExecutionFailure` in the operation's OWN execution logs (spec 038
+//! #D1) — a bundle neighbour's failure is not this operation's.
 //!
 //! What is asked, in order of cost:
 //!
@@ -34,8 +35,8 @@
 use std::time::{Duration, Instant};
 
 use vela_core::app::tx_tracker::{
-    STATUS_POLL_INTERVAL_MS, TrackLifecycle, WAIT_WINDOW_MS, receipt_interval_ms,
-    safe_execution_failed,
+    STATUS_POLL_INTERVAL_MS, TrackLifecycle, WAIT_WINDOW_MS, op_execution_failed,
+    receipt_interval_ms,
 };
 
 use crate::executor::{chain, relay};
@@ -117,7 +118,7 @@ fn look(user_op_hash: &str, chain_id: u32, budget: Duration, deep: bool) -> Opti
             receipt: || {
                 relay::user_op_receipt_within(user_op_hash, chain_id, budget)
                     .resolution
-                    .map(|resolution| (executed(&resolution), resolution.tx_hash))
+                    .map(|resolution| (executed(&resolution, user_op_hash), resolution.tx_hash))
             },
             by_hash: || relay::user_op_transaction_within(user_op_hash, chain_id, left()),
             in_transaction: |tx_hash: &str| {
@@ -133,11 +134,13 @@ fn look(user_op_hash: &str, chain_id: u32, budget: Duration, deep: bool) -> Opti
 }
 
 /// Did the operation a receipt describes EXECUTE? The EntryPoint's `success`
-/// — and no Safe `ExecutionFailure` in its logs, the success the EntryPoint
-/// counts while nothing happened (spec 038 #D1, the tracker's rule, applied
-/// to the page's answer too).
-pub fn executed(resolution: &relay::Resolution) -> bool {
-    resolution.confirmed && !safe_execution_failed(&resolution.logs)
+/// — and no Safe `ExecutionFailure` in its own execution, the success the
+/// EntryPoint counts while nothing happened (spec 038 #D1, the tracker's
+/// rule, applied to the page's answer too). The receipt's logs are the whole
+/// bundle's: another account's failure in it must not fail this op, or the
+/// page hears "reverted" for a swap that happened and the user sends it again.
+pub fn executed(resolution: &relay::Resolution, user_op_hash: &str) -> bool {
+    resolution.confirmed && !op_execution_failed(&resolution.logs, user_op_hash)
 }
 
 /// How long to wait before the next look, `elapsed` into the wait: the
@@ -247,25 +250,54 @@ mod tests {
     }
 
     /// #D1 on the page's answer too: the EntryPoint's `success: true` over a
-    /// Safe that logged `ExecutionFailure` moved nothing, and is no success.
+    /// Safe that logged `ExecutionFailure` moved nothing, and is no success —
+    /// when the failure is in THIS op's execution. A bundle neighbour's is
+    /// not (083 receipts review).
     #[test]
     fn a_success_the_safe_did_not_execute_is_not_one() {
         use vela_core::app::token_trust::TrustReceiptLog;
         use vela_core::app::tx_tracker::SAFE_EXECUTION_FAILURE_TOPIC;
+        use vela_core::primitives::{keccak256, to_hex};
+        use vela_core::safe::ENTRY_POINT;
+        let ours = format!("0x{}", "ab".repeat(32));
+        let theirs = format!("0x{}", "ef".repeat(32));
         let resolution = |confirmed: bool, logs: Vec<TrustReceiptLog>| relay::Resolution {
             confirmed,
             tx_hash: TX.to_owned(),
             sender: None,
             logs,
         };
-        assert!(executed(&resolution(true, Vec::new())));
-        assert!(!executed(&resolution(false, Vec::new())));
+        assert!(executed(&resolution(true, Vec::new()), &ours));
+        assert!(!executed(&resolution(false, Vec::new()), &ours));
         let failure = TrustReceiptLog {
             address: "0x88cca0eedbf2c4426110bbfc998f048689266894".to_owned(),
             topics: vec![SAFE_EXECUTION_FAILURE_TOPIC.to_owned()],
             data: "0x".to_owned(),
         };
-        assert!(!executed(&resolution(true, vec![failure])));
+        assert!(!executed(&resolution(true, vec![failure.clone()]), &ours));
+
+        let word = |value: u8| format!("{value:064x}");
+        let event = |op: &str| TrustReceiptLog {
+            address: ENTRY_POINT.to_owned(),
+            topics: vec![
+                to_hex(
+                    &keccak256(
+                        b"UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)",
+                    ),
+                    true,
+                ),
+                op.to_owned(),
+                word(1),
+                word(0),
+            ],
+            data: format!("0x{}{}{}{}", word(7), word(1), word(9), word(9)),
+        };
+        let bundle = vec![failure, event(&theirs), event(&ours)];
+        assert!(
+            executed(&resolution(true, bundle.clone()), &ours),
+            "a neighbour's failure in the bundle is not ours"
+        );
+        assert!(!executed(&resolution(true, bundle), &theirs));
     }
 
     /// S3: the by-hash lookup names the transaction; the node's receipt of it

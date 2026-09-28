@@ -33,6 +33,7 @@ use gpui::SharedString;
 
 use vela_core::app::sign_request::{
     SignErrorKind, SignMethodKind, SignResponsePayload, SignSwipeAction, SignView, method_kind,
+    reverted_transaction,
 };
 use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
@@ -309,6 +310,29 @@ pub fn approved(
             })
         {
             return Some(following(op, Some(entry), lead(), clock, s));
+        }
+        // The core's own word that it reverted, before the tracker has it:
+        // the same receipt at once. "Couldn't be submitted — your funds are
+        // safe" was false here: it was included, and a fee may have gone.
+        if on_chain
+            && let Some(tx) = sign
+                .error
+                .as_ref()
+                .and_then(|error| error.detail.as_deref())
+                .and_then(reverted_transaction)
+        {
+            let mut captions = lead();
+            captions.push(s.receipt_failed_hint.clone());
+            let mut out = receipt(
+                ReceiptStage::Failed,
+                s.receipt_failed.clone(),
+                captions,
+                s.receipt_done.clone(),
+                true,
+            );
+            out.hash = Some((s.receipt_tx_hash.clone(), tx.to_owned()));
+            out.explorer_tx = Some(tx.to_owned());
+            return Some(out);
         }
         let mut captions = lead();
         // A message goes nowhere: "the transaction couldn't be submitted" is
@@ -953,10 +977,11 @@ mod tests {
     }
 
     /// 083 S2: an operation that REVERTED on chain. The core answered the
-    /// page an error and failed the record; the column shows a failure —
-    /// the generic one at once, then, as soon as the tracker has the
-    /// transaction, the send receipt's own failure with its hash and the
-    /// explorer. Never the tick, never 已确认.
+    /// page an error and failed the record; the column shows the send
+    /// receipt's own failure for it — its sentence, the hash and the
+    /// explorer — at once, from the core's error, and the same once the
+    /// tracker has the transaction. Never the tick, never 已确认, and never
+    /// "couldn't be submitted, your funds are safe" (receipts review).
     #[test]
     fn a_reverted_operation_is_a_failure_receipt_with_its_transaction() {
         let s = strings();
@@ -986,6 +1011,13 @@ mod tests {
         let at_once = at(None);
         assert_eq!(at_once.stage, ReceiptStage::Failed);
         assert_eq!(at_once.title, s.receipt_failed);
+        assert!(at_once.captions.contains(&s.receipt_failed_hint));
+        assert!(!at_once.captions.contains(&s.error_generic));
+        assert_eq!(
+            at_once.hash,
+            Some((s.receipt_tx_hash.clone(), TX.to_owned()))
+        );
+        assert_eq!(at_once.explorer_tx.as_deref(), Some(TX));
         assert!(
             !at_once
                 .captions
@@ -1013,6 +1045,27 @@ mod tests {
         // the core's failure stands.
         let pending = entry(TrackStatus::Pending, TrackOutcome::Landing, None);
         assert_eq!(at(Some(&pending)).stage, ReceiptStage::Failed);
+        assert_eq!(at(Some(&pending)).explorer_tx.as_deref(), Some(TX));
+
+        // Any other submit failure is still the generic one.
+        let refused = view(|v| {
+            v.error = Some(SignErrorNotice {
+                kind: SignErrorKind::SubmitFailed,
+                detail: Some("relay said no".to_owned()),
+            });
+        });
+        let generic = approved(
+            &refused,
+            true,
+            Some(&summary()),
+            None,
+            &clock(0.),
+            Signature::Given,
+            &s,
+        )
+        .unwrap_or_else(|| unreachable!("approved"));
+        assert!(generic.captions.contains(&s.error_generic));
+        assert_eq!(generic.explorer_tx, None);
     }
 
     /// 083 S3: at the core's cap the page was told "not confirmed yet" — but

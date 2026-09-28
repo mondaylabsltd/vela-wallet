@@ -31,12 +31,12 @@ use serde_json::{Value, json};
 use vela_core::app::fee_policy::{
     ChainGasPrice, GasSignals, derive_chain_gas_price, is_tempo_chain, min_gas_price_wei,
 };
-use vela_core::app::tx_tracker::SAFE_EXECUTION_FAILURE_TOPIC;
-use vela_core::primitives::{abi_encode_address, function_selector, keccak256, to_hex};
+use vela_core::app::tx_tracker::user_op_outcome_in_logs;
+use vela_core::primitives::{abi_encode_address, function_selector, to_hex};
 use vela_core::safe::ENTRY_POINT;
 use vela_core::user_op::parse_hex_quantity;
 
-use crate::executor::pool;
+use crate::executor::{pool, relay};
 
 /// `NONCE_CACHE_TTL` (`safe-transaction.ts:2375`).
 const NONCE_TTL: Duration = Duration::from_secs(10);
@@ -131,6 +131,7 @@ pub fn nonce(safe: &str, chain_id: u32) -> Result<String, String> {
 /// `UserOperationEvent(bytes32 indexed userOpHash, address indexed sender,
 /// address indexed paymaster, uint256 nonce, bool success, uint256
 /// actualGasCost, uint256 actualGasUsed)`.
+#[cfg(test)]
 const USER_OPERATION_EVENT: &str =
     "UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)";
 
@@ -166,39 +167,17 @@ pub fn user_op_outcome_in(
 /// count: the EntryPoint (v0.7) validates every op, emits `BeforeExecution`,
 /// then runs each op and closes it with its `UserOperationEvent` — the logs
 /// since the previous boundary are that op's.
+///
+/// The rule is the core's (`tx_tracker::user_op_outcome_in_logs`), the one
+/// the tracker and the relay receipt's answer read too.
 pub fn user_op_outcome(receipt: &Value, user_op_hash: &str) -> Option<bool> {
-    let event = to_hex(&keccak256(USER_OPERATION_EVENT.as_bytes()), true);
-    let before_execution = to_hex(&keccak256(b"BeforeExecution()"), true);
-    let mut execution_failed = false;
-    for log in receipt.get("logs")?.as_array()? {
-        let Some(topics) = log.get("topics").and_then(Value::as_array) else {
-            continue;
-        };
-        let names = |index: usize, want: &str| {
-            topics
-                .get(index)
-                .and_then(Value::as_str)
-                .is_some_and(|value| value.eq_ignore_ascii_case(want))
-        };
-        let from_entry_point = log
-            .get("address")
-            .and_then(Value::as_str)
-            .is_some_and(|address| address.eq_ignore_ascii_case(ENTRY_POINT));
-        if from_entry_point && names(0, &before_execution) {
-            execution_failed = false;
-        } else if from_entry_point && names(0, &event) {
-            if names(1, user_op_hash) {
-                // Unindexed: nonce, success, actualGasCost, actualGasUsed.
-                let data = log.get("data")?.as_str()?.strip_prefix("0x")?;
-                let success = data.get(64..128)?.bytes().any(|digit| digit != b'0');
-                return Some(success && !execution_failed);
-            }
-            execution_failed = false;
-        } else if names(0, SAFE_EXECUTION_FAILURE_TOPIC) {
-            execution_failed = true;
-        }
-    }
-    None
+    let logs: Vec<_> = receipt
+        .get("logs")?
+        .as_array()?
+        .iter()
+        .filter_map(relay::to_trust_log)
+        .collect();
+    user_op_outcome_in_logs(&logs, user_op_hash)
 }
 
 /// `incrementNonceCache`: after a submit, so a concurrent send does not
@@ -355,6 +334,8 @@ pub fn verify_chain_ready(chain_id: u32) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vela_core::app::tx_tracker::SAFE_EXECUTION_FAILURE_TOPIC;
+    use vela_core::primitives::keccak256;
 
     /// 083: how an operation ended, from the bundle transaction's receipt —
     /// the EntryPoint's `UserOperationEvent` for THAT op, and no Safe

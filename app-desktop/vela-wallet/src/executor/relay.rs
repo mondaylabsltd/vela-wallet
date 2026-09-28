@@ -737,7 +737,7 @@ pub struct ReceiptPoll {
     pub resolution: Option<Resolution>,
 }
 
-fn to_trust_log(log: &Value) -> Option<TrustReceiptLog> {
+pub(crate) fn to_trust_log(log: &Value) -> Option<TrustReceiptLog> {
     let address = log.get("address")?.as_str()?;
     let topics = log.get("topics")?.as_array()?;
     Some(TrustReceiptLog {

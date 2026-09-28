@@ -13,13 +13,14 @@ use support::DomainDriver;
 use vela_core::app::fee_policy::{tempo_reimbursement, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use vela_core::app::sign_request::{
     extract_request_chain_id, is_signing_method, method_kind, required_capabilities,
-    sign_account_index, Event, SignAccountRef, SignApproveOpts, SignDappIdentity, SignErrorKind,
-    SignFundingNeeded, SignFundingPresentation, SignMethodKind, SignNotice, SignOperation as Op,
-    SignQuotedFee, SignRecordClose, SignRecordKind, SignRecordStatus, SignRequest,
-    SignResponsePayload, SignSettledOutcome, SignShellResult as Res, SignSponsorship,
-    SignSubmitOutcome, SignSurface, SignSwipeAction, CODE_INTERNAL, CODE_INVALID_PARAMS,
-    CODE_UNAUTHORIZED, CODE_UNSUPPORTED_CAPABILITY, CODE_UNSUPPORTED_CHAIN, CODE_USER_REJECTED,
-    NOT_CONFIRMED_MESSAGE, PAGE_WAIT_CAP_MS, REVERTED_MESSAGE,
+    reverted_detail, reverted_transaction, sign_account_index, Event, SignAccountRef,
+    SignApproveOpts, SignDappIdentity, SignErrorKind, SignFundingNeeded, SignFundingPresentation,
+    SignMethodKind, SignNotice, SignOperation as Op, SignQuotedFee, SignRecordClose,
+    SignRecordKind, SignRecordStatus, SignRequest, SignResponsePayload, SignSettledOutcome,
+    SignShellResult as Res, SignSponsorship, SignSubmitOutcome, SignSurface, SignSwipeAction,
+    CODE_INTERNAL, CODE_INVALID_PARAMS, CODE_UNAUTHORIZED, CODE_UNSUPPORTED_CAPABILITY,
+    CODE_UNSUPPORTED_CHAIN, CODE_USER_REJECTED, NOT_CONFIRMED_MESSAGE, PAGE_WAIT_CAP_MS,
+    REVERTED_MESSAGE,
 };
 
 type Sut = DomainDriver<SignRequest>;
@@ -2282,5 +2283,23 @@ fn a_contract_call_records_only_the_sheets_intent() {
             Some("Transfer")
         ),
         Some("Transfer".to_owned())
+    );
+}
+
+/// 083: the revert's error names its transaction in a form a shell can read
+/// back — and nothing else reads as one.
+#[test]
+fn a_reverted_detail_names_its_transaction() {
+    let detail = reverted_detail(TX_HASH);
+    assert_eq!(detail, format!("{REVERTED_MESSAGE} ({TX_HASH})"));
+    assert_eq!(reverted_transaction(&detail), Some(TX_HASH));
+    assert_eq!(reverted_transaction(REVERTED_MESSAGE), None);
+    assert_eq!(
+        reverted_transaction(&format!("{REVERTED_MESSAGE} ()")),
+        None
+    );
+    assert_eq!(
+        reverted_transaction(&format!("{NOT_CONFIRMED_MESSAGE} (user operation 0xab)")),
+        None
     );
 }
