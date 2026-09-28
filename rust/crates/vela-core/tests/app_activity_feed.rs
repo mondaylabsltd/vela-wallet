@@ -1,5 +1,7 @@
 //! Rules of the Activity feed, one test per invariant (inventory
-//! `activity_feed` ① – ⑧ plus the celebration lifecycle and staleness).
+//! `activity_feed` ① – ⑧ plus the celebration lifecycle and staleness), and
+//! spec 082's rows the core decides: dApp transactions with their status and
+//! site (RG1–RG4) and the empty-line keys (RG5).
 //!
 //! The fake clock is `now_ms` on each `StoreLoaded`; day keys are
 //! shell-supplied `day_start_ms` values — the core never owns time or
@@ -11,8 +13,10 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::activity_feed::{
-    is_stable, tx_usd_value, ActivityFeed, Event, FeedBatchKind, FeedDirection,
-    FeedOperation as Op, FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus,
+    dapp_site, history_empty_key, home_empty_key, is_stable, native_amount, tx_usd_value,
+    ActivityFeed, Event, FeedBatchKind, FeedDirection, FeedItem, FeedOperation as Op, FeedRow,
+    FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus, FeedView, HISTORY_EMPTY_ALL,
+    HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED,
 };
 
 type Sut = DomainDriver<ActivityFeed>;
@@ -49,6 +53,7 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         status: FeedTxStatus::Confirmed,
         kind: None,
         usd: None,
+        dapp_origin: None,
     }
 }
 
@@ -73,6 +78,24 @@ fn recv(id: &str, from: &str, value: &str, symbol: &str, ts: f64) -> FeedTxRecor
     r.to = ADDR.to_owned();
     r.value = value.to_owned();
     r.symbol = symbol.to_owned();
+    r
+}
+
+/// A transaction a dApp asked for, as the shells store it
+/// (`buildSigningRecord`): wei `value`, the native symbol, 18 decimals, the
+/// asking site's origin.
+fn dapp_tx(id: &str, origin: &str, to: &str, value: &str, ts: f64) -> FeedTxRecord {
+    let mut r = base(id, ts);
+    r.kind = Some(FeedTxKind::DappTx);
+    r.from = ADDR.to_owned();
+    r.to = to.to_owned();
+    r.to_name = Some(format!("name-of-{to}"));
+    r.value = value.to_owned();
+    r.symbol = "xDAI".to_owned();
+    r.decimals = 18;
+    r.chain_id = 100;
+    r.user_op_hash = format!("0xop{id}");
+    r.dapp_origin = Some(origin.to_owned());
     r
 }
 
@@ -262,8 +285,10 @@ fn resubmitted_line_in_a_real_batch_counts_once() {
     assert_eq!(rows[0].value.as_deref(), Some("30"));
 }
 
-/// Feed scoping: only this account's transfers, connection events excluded —
-/// and the raw `transactions` view is scoped the same way.
+/// Feed scoping: only this account's transfers and the transactions its
+/// dApps asked for — signatures and connects excluded — and the raw
+/// `transactions` view is scoped the same way (spec 082 RG1 rewrote this
+/// test, which used to pin the dApp transaction's exclusion).
 #[test]
 fn feed_and_transactions_are_account_scoped() {
     let ours_send = send("s1", "0xU1", "0xCafe", "1", 300_000.0);
@@ -272,29 +297,353 @@ fn feed_and_transactions_are_account_scoped() {
     let ours_recv = recv("r1", "0xBob", "2", "USDT", 280_000.0);
     let mut foreign_recv = recv("r2", "0xBob", "2", "USDT", 270_000.0);
     foreign_recv.to = OTHER.to_owned();
-    let mut dapp = base("d1", 260_000.0);
-    dapp.kind = Some(FeedTxKind::DappTx);
-    dapp.from = ADDR.to_owned();
+    let dapp = dapp_tx("d1", "https://app.test", "0xRouter", "0x0", 260_000.0);
+    let mut foreign_dapp = dapp_tx("d2", "https://app.test", "0xRouter", "0x0", 255_000.0);
+    foreign_dapp.from = OTHER.to_owned();
     // Legacy untyped record ⇒ send (`t.type ?? 'send'`), matched case-insensitively.
     let mut legacy = base("l1", 250_000.0);
     legacy.from = ADDR.to_uppercase();
     legacy.to = "0xCafe".to_owned();
     legacy.to_name = Some("Ann".to_owned());
+    let signed: Vec<FeedTxRecord> = [
+        FeedTxKind::SignMessage,
+        FeedTxKind::SignTypedData,
+        FeedTxKind::Connect,
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(n, kind)| {
+        let mut r = base(&format!("x{n}"), 240_000.0);
+        r.kind = Some(kind);
+        r.from = ADDR.to_owned();
+        r.dapp_origin = Some("https://app.test".to_owned());
+        r
+    })
+    .collect();
 
-    let mut sut = boot(vec![
+    let mut records = vec![
         ours_send,
         foreign_send,
         ours_recv,
         foreign_recv,
         dapp,
+        foreign_dapp,
         legacy,
-    ]);
+    ];
+    records.extend(signed);
+    let mut sut = boot(records);
     drain_aliases(&mut sut);
 
     let ids: Vec<String> = items(&sut).into_iter().map(|i| i.id).collect();
-    assert_eq!(ids, vec!["s1", "r1", "l1"]);
+    assert_eq!(ids, vec!["s1", "r1", "d1", "l1"]);
     let tx_ids: Vec<String> = sut.view().transactions.into_iter().map(|t| t.id).collect();
-    assert_eq!(tx_ids, vec!["s1", "r1", "l1"]);
+    assert_eq!(tx_ids, vec!["s1", "r1", "d1", "l1"]);
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 — rows the core decides (RG1–RG4)
+// ---------------------------------------------------------------------------
+
+/// A dApp transaction just submitted is a pending `DappTx` row, out from this
+/// account, naming the site that asked (`host[:port]`, nothing else of the
+/// origin) and the contract it called.
+#[test]
+fn a_pending_dapp_transaction_is_a_row_with_its_site() {
+    let mut pending = dapp_tx(
+        "dapp-1-tx",
+        "http://127.0.0.1:8137",
+        "0xRouter",
+        "0x2386f26fc10000",
+        100_000.0,
+    );
+    pending.status = FeedTxStatus::Pending;
+    pending.tx_hash = String::new();
+    let sut = boot(vec![pending]);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.id, "dapp-1-tx");
+    assert_eq!(row.kind, FeedTxKind::DappTx);
+    assert_eq!(row.status, FeedTxStatus::Pending);
+    assert_eq!(row.site.as_deref(), Some("127.0.0.1:8137"));
+    assert_eq!(row.direction, FeedDirection::Out);
+    assert_eq!(row.counterparty.as_deref(), Some("0xRouter"));
+    assert_eq!(row.chain_id, 100);
+    assert_eq!(row.tx_hash, None, "no on-chain hash yet");
+    // 0x2386f26fc10000 wei = 0.01 of the native coin.
+    assert_eq!(row.value.as_deref(), Some("0.01"));
+    assert_eq!(row.symbol, "xDAI");
+    assert_eq!(row.decimals, Some(18));
+    assert!(row.batch.is_none());
+}
+
+/// The row carries the record's status as the tracker left it: confirmed with
+/// its hash, or failed.
+#[test]
+fn a_dapp_row_carries_confirmed_and_failed() {
+    let confirmed = dapp_tx("c", "https://app.uniswap.org", "0xR", "0", 200_000.0);
+    let mut failed = dapp_tx("f", "https://app.uniswap.org", "0xR", "0", 100_000.0);
+    failed.status = FeedTxStatus::Failed;
+    let sut = boot(vec![confirmed, failed]);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].status, FeedTxStatus::Confirmed);
+    assert_eq!(rows[0].tx_hash.as_deref(), Some("0xtxc"));
+    assert_eq!(rows[1].status, FeedTxStatus::Failed);
+    assert!(rows
+        .iter()
+        .all(|r| r.site.as_deref() == Some("app.uniswap.org")));
+}
+
+/// A submit whose reply was lost (MaybeSent) is persisted pending under the
+/// LOCAL operation hash with no tx hash; it is a pending `DappTx` row like any
+/// other until the tracker patches the record (RG4) — never failed on time,
+/// never hidden.
+#[test]
+fn a_maybe_sent_op_under_its_local_hash_is_a_pending_row() {
+    let local_hash = "0xc6f3544fc4e3ac769e92c92ab4804cd3f38ffb8d607ba07b5103a59710094dc4";
+    let mut maybe_sent = dapp_tx(
+        "dapp-9-tx",
+        "https://app.test",
+        "0xRouter",
+        "0x0",
+        100_000.0,
+    );
+    maybe_sent.user_op_hash = local_hash.to_owned();
+    maybe_sent.tx_hash = String::new();
+    maybe_sent.status = FeedTxStatus::Pending;
+    let sut = boot(vec![maybe_sent]);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].kind, FeedTxKind::DappTx);
+    assert_eq!(rows[0].status, FeedTxStatus::Pending);
+    assert_eq!(rows[0].site.as_deref(), Some("app.test"));
+    assert_eq!(rows[0].tx_hash, None);
+    let tx = &sut.view().transactions[0];
+    assert_eq!(
+        tx.user_op_hash, local_hash,
+        "the detail sheet keeps the hash"
+    );
+}
+
+/// `personal_sign` (and every other signature) moves nothing: its record is
+/// never a row, even with the dApp's origin on it.
+#[test]
+fn a_personal_sign_is_never_a_row() {
+    let mut msg = base("dapp-5-msg", 100_000.0);
+    msg.kind = Some(FeedTxKind::SignMessage);
+    msg.from = ADDR.to_owned();
+    msg.value = "0".to_owned();
+    msg.symbol = String::new();
+    msg.dapp_origin = Some("https://app.test".to_owned());
+    let sut = boot(vec![msg]);
+    assert!(items(&sut).is_empty());
+    assert!(sut.view().transactions.is_empty());
+}
+
+/// A zero value is no amount (a contract call does not read as money), and
+/// wei arrives as hex or decimal.
+#[test]
+fn a_dapp_row_shows_an_amount_only_for_native_value() {
+    let zero = dapp_tx("z", "https://a.test", "0xR", "0x0", 300_000.0);
+    let hex = dapp_tx("h", "https://a.test", "0xR", "0xde0b6b3a7640000", 200_000.0);
+    let dec = dapp_tx(
+        "d",
+        "https://a.test",
+        "0xR",
+        "1500000000000000000",
+        100_000.0,
+    );
+    let sut = boot(vec![zero, hex, dec]);
+    let rows = items(&sut);
+    assert_eq!(rows[0].value, None);
+    assert_eq!(rows[0].symbol, "", "no amount, no symbol");
+    assert_eq!(rows[0].decimals, None);
+    assert_eq!(rows[0].usd_value, 0.0);
+    assert_eq!(rows[1].value.as_deref(), Some("1"));
+    assert_eq!(rows[1].symbol, "xDAI");
+    assert_eq!(rows[2].value.as_deref(), Some("1.5"));
+}
+
+/// The wei parser: hex and decimal, zero and nonsense are no amount.
+#[test]
+fn native_amounts_from_wei() {
+    assert_eq!(
+        native_amount("0x1").as_deref(),
+        Some("0.000000000000000001")
+    );
+    assert_eq!(native_amount("0X0DE0B6B3A7640000").as_deref(), Some("1"));
+    assert_eq!(
+        native_amount(" 250000000000000000 ").as_deref(),
+        Some("0.25")
+    );
+    assert_eq!(native_amount("0x"), None);
+    assert_eq!(native_amount("0x0"), None);
+    assert_eq!(native_amount("0"), None);
+    assert_eq!(native_amount(""), None);
+    assert_eq!(native_amount("1.5"), None, "not wei");
+    assert_eq!(native_amount("-1"), None);
+    assert_eq!(native_amount("+1"), None);
+    assert_eq!(native_amount("0xzz"), None);
+}
+
+/// The site is the origin's `host[:port]`: default ports dropped, the host
+/// lower-cased, and nothing for an origin that is not http(s).
+#[test]
+fn the_site_is_host_and_port() {
+    assert_eq!(
+        dapp_site("https://App.Uniswap.org").as_deref(),
+        Some("app.uniswap.org")
+    );
+    assert_eq!(
+        dapp_site("http://127.0.0.1:8137").as_deref(),
+        Some("127.0.0.1:8137")
+    );
+    assert_eq!(
+        dapp_site("https://example.com:443").as_deref(),
+        Some("example.com")
+    );
+    assert_eq!(
+        dapp_site("https://example.com/path?q=1").as_deref(),
+        Some("example.com")
+    );
+    assert_eq!(dapp_site(""), None);
+    assert_eq!(dapp_site("chrome-extension://abc"), None);
+    assert_eq!(dapp_site("not a url"), None);
+}
+
+/// Sends and receives say what they are, with their record's status; a folded
+/// batch is a `Send` carrying its FIRST line's status.
+#[test]
+fn every_row_says_its_kind_and_status_and_a_batch_uses_its_first_line() {
+    let mut a = send("h-0", "0xH", "0xAaa", "10", 300_000.0);
+    let mut b = send("h-1", "0xH", "0xBbb", "20", 300_000.0);
+    a.status = FeedTxStatus::Failed;
+    b.status = FeedTxStatus::Confirmed;
+    let mut single = send("s", "0xS", "0xCcc", "1", 200_000.0);
+    single.status = FeedTxStatus::Pending;
+    let incoming = recv("r", "0xBob", "5", "USDT", 100_000.0);
+    let mut sut = boot(vec![a, b, single, incoming]);
+    drain_aliases(&mut sut);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 3);
+    assert!(rows[0].batch.is_some());
+    assert_eq!(rows[0].kind, FeedTxKind::Send);
+    assert_eq!(rows[0].status, FeedTxStatus::Failed, "the first line's");
+    assert_eq!(rows[1].kind, FeedTxKind::Send);
+    assert_eq!(rows[1].status, FeedTxStatus::Pending);
+    assert_eq!(rows[2].kind, FeedTxKind::Receive);
+    assert_eq!(rows[2].status, FeedTxStatus::Confirmed);
+    assert!(
+        rows.iter().all(|r| r.site.is_none()),
+        "only a DappTx has a site"
+    );
+
+    // The other order: the first line decides either way.
+    let mut a = send("g-0", "0xG", "0xAaa", "10", 300_000.0);
+    let mut b = send("g-1", "0xG", "0xBbb", "20", 300_000.0);
+    a.status = FeedTxStatus::Confirmed;
+    b.status = FeedTxStatus::Failed;
+    let sut = boot(vec![a, b]);
+    assert_eq!(items(&sut)[0].status, FeedTxStatus::Confirmed);
+}
+
+/// Old shell JSON still decodes: a record without `dapp_origin`, and an item
+/// or view from before 082 (a missing status claims nothing — `Pending` —
+/// and a missing kind is the legacy `send`).
+#[test]
+fn json_from_before_082_still_decodes() {
+    let record: FeedTxRecord = serde_json::from_value(serde_json::json!({
+        "id": "a", "user_op_hash": "", "tx_hash": "", "from": ADDR, "to": "0xB",
+        "to_name": null, "value": "1", "symbol": "USDC", "decimals": 6,
+        "logo_urls": null, "chain_id": 8453, "timestamp": 1.0, "day_start_ms": 0.0,
+        "status": "confirmed", "kind": "dapp_tx", "usd": null
+    }))
+    .expect("a record without dapp_origin");
+    assert_eq!(record.dapp_origin, None);
+
+    let item: FeedItem = serde_json::from_value(serde_json::json!({
+        "id": "a", "direction": "out", "counterparty": "0xB", "alias": null,
+        "value": "1", "symbol": "USDC", "decimals": 6, "usd_value": 1.0,
+        "chain_id": 8453, "timestamp": 1.0, "day_start_ms": 0.0,
+        "tx_hash": null, "batch": null
+    }))
+    .expect("an item without kind/status/site");
+    assert_eq!(item.kind, FeedTxKind::Send);
+    assert_eq!(item.status, FeedTxStatus::Pending);
+    assert_eq!(item.site, None);
+
+    let view: FeedView = serde_json::from_value(serde_json::json!({
+        "rows": [], "transactions": [], "new_item_id": null, "toast": null
+    }))
+    .expect("a view without the empty keys");
+    assert_eq!(view.history_empty_key, "");
+
+    let wire = serde_json::to_value(
+        &items(&boot(vec![dapp_tx(
+            "w",
+            "https://a.test",
+            "0xR",
+            "0x0",
+            1.0,
+        )]))[0],
+    )
+    .expect("serialises");
+    assert_eq!(wire["kind"], "dapp_tx");
+    assert_eq!(wire["status"], "confirmed");
+    assert_eq!(wire["site"], "a.test");
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 — the empty lines (RG5, L-D7)
+// ---------------------------------------------------------------------------
+
+/// All networks: "No transactions yet" / "No activity yet"; one network: the
+/// "on this network" lines. The core chooses, from the chain filter.
+#[test]
+fn the_empty_keys_follow_the_chain_filter() {
+    let mut sut = boot(Vec::new());
+    let view = sut.view();
+    assert_eq!(view.history_empty_key, "history.emptyTitle");
+    assert_eq!(view.home_empty_key, "home.emptyNoActivity");
+
+    sut.dispatch(Event::ChainFilterChanged {
+        chain_id: Some(100),
+    });
+    let view = sut.view();
+    assert_eq!(view.history_empty_key, "history.emptyFilter");
+    assert_eq!(view.home_empty_key, "home.emptyNoActivityNetwork");
+
+    sut.dispatch(Event::ChainFilterChanged { chain_id: None });
+    assert_eq!(sut.view().history_empty_key, HISTORY_EMPTY_ALL);
+    assert_eq!(sut.view().home_empty_key, HOME_EMPTY_ALL);
+
+    // A core that was never given an account says the same.
+    let fresh = Sut::new();
+    assert_eq!(fresh.view().history_empty_key, HISTORY_EMPTY_ALL);
+
+    assert_eq!(history_empty_key(Some(1)), HISTORY_EMPTY_FILTERED);
+    assert_eq!(home_empty_key(Some(1)), HOME_EMPTY_FILTERED);
+}
+
+/// Every key the feed hands a shell is in the corpus.
+#[cfg(feature = "i18n-en")]
+#[test]
+fn the_empty_keys_are_in_the_corpus() {
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [
+        HISTORY_EMPTY_ALL,
+        HISTORY_EMPTY_FILTERED,
+        HOME_EMPTY_ALL,
+        HOME_EMPTY_FILTERED,
+    ] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
 }
 
 // ---------------------------------------------------------------------------
