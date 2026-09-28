@@ -100,13 +100,12 @@ impl Machine for ClearSigning {
 /// one answer to the core: no descriptor, take the next rung.
 fn descriptor(path: &str) -> Option<String> {
     let url = format!("{}{path}", chain_tokens::data_base());
-    proxy::agent(DESCRIPTOR_TIMEOUT)
-        .get(&url)
-        .header("accept", "application/json")
-        .call()
-        .ok()
-        .filter(|response| response.status().as_u16() == 200)
-        .and_then(|mut response| response.body_mut().read_to_string().ok())
+    proxy::with_routes(&url, DESCRIPTOR_TIMEOUT, |agent| {
+        agent.get(&url).header("accept", "application/json").call()
+    })
+    .ok()
+    .filter(|response| response.status().as_u16() == 200)
+    .and_then(|mut response| response.body_mut().read_to_string().ok())
 }
 
 /// A routed `eth_call`, with the one distinction the core cannot re-derive.
@@ -233,13 +232,12 @@ fn from_4byte(selector: &str) -> Vec<String> {
 }
 
 fn get_json(url: &str) -> Option<Value> {
-    proxy::agent(SELECTOR_TIMEOUT)
-        .get(url)
-        .header("accept", "application/json")
-        .call()
-        .ok()
-        .filter(|response| response.status().as_u16() == 200)
-        .and_then(|mut response| response.body_mut().read_json::<Value>().ok())
+    proxy::with_routes(url, SELECTOR_TIMEOUT, |agent| {
+        agent.get(url).header("accept", "application/json").call()
+    })
+    .ok()
+    .filter(|response| response.status().as_u16() == 200)
+    .and_then(|mut response| response.body_mut().read_json::<Value>().ok())
 }
 
 /// Selector → candidates, for this process.

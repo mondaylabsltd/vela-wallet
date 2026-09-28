@@ -80,7 +80,9 @@ fn hashes_at(key: &str) -> Vec<String> {
 /// for a version directly.
 fn published(base: &str) -> Vec<String> {
     let url = format!("{}{INDEX_PATH}", with_trailing_slash(base));
-    let Ok(mut response) = crate::executor::proxy::agent(TIMEOUT).get(&url).call() else {
+    let Ok(mut response) =
+        crate::executor::proxy::with_routes(&url, TIMEOUT, |agent| agent.get(&url).call())
+    else {
         return Vec::new();
     };
     if response.status() != 200 {
@@ -118,10 +120,9 @@ fn with_trailing_slash(base: &str) -> String {
 /// refused connection, a 404 and a body too large are not different verdicts;
 /// they are all "this wallet could not see the page".
 fn fetch_and_hash(url: &str) -> Result<String, CheckFailure> {
-    let mut response = crate::executor::proxy::agent(TIMEOUT)
-        .get(url)
-        .call()
-        .map_err(|_| CheckFailure::Unreachable)?;
+    let mut response =
+        crate::executor::proxy::with_routes(url, TIMEOUT, |agent| agent.get(url).call())
+            .map_err(|_| CheckFailure::Unreachable)?;
     if response.status() != 200 {
         return Err(CheckFailure::Unreachable);
     }

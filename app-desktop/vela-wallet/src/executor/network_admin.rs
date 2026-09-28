@@ -371,7 +371,7 @@ fn data_base() -> String {
 }
 
 fn get_json(url: &str, timeout: Duration) -> Option<Value> {
-    let mut response = proxy::agent(timeout).get(url).call().ok()?;
+    let mut response = proxy::with_routes(url, timeout, |agent| agent.get(url).call()).ok()?;
     let mut body = String::new();
     response
         .body_mut()
@@ -385,11 +385,13 @@ fn get_json(url: &str, timeout: Duration) -> Option<Value> {
 /// unreachable, timed out, HTTP error, unparseable, or an RPC `error` member.
 fn json_rpc(url: &str, method: &str, params: Value) -> Option<Value> {
     let payload = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
-    let mut response = proxy::agent(PROBE_TIMEOUT)
-        .post(url)
-        .header("content-type", "application/json")
-        .send_json(&payload)
-        .ok()?;
+    let mut response = proxy::with_routes(url, PROBE_TIMEOUT, |agent| {
+        agent
+            .post(url)
+            .header("content-type", "application/json")
+            .send_json(&payload)
+    })
+    .ok()?;
     let mut body = String::new();
     response
         .body_mut()
@@ -429,7 +431,9 @@ fn service_health(base_url: &str) -> (NetHealthBody, f64) {
         base_url.trim_end_matches('/'),
         started.elapsed().as_nanos()
     );
-    let body = match proxy::agent(PROBE_TIMEOUT).get(&url).call() {
+    let body = match proxy::with_routes(&url, PROBE_TIMEOUT, |agent| agent.get(&url).call())
+        .map_err(|failure| failure.error)
+    {
         Ok(mut response) => {
             let mut text = String::new();
             match response.body_mut().as_reader().read_to_string(&mut text) {
@@ -460,7 +464,9 @@ fn service_health(base_url: &str) -> (NetHealthBody, f64) {
 /// observation; whether that is enough is the core's ruling.
 fn fiat_rates(url: &str) -> (NetHealthBody, f64) {
     let started = Instant::now();
-    let body = match proxy::agent(PROBE_TIMEOUT).get(url).call() {
+    let body = match proxy::with_routes(url, PROBE_TIMEOUT, |agent| agent.get(url).call())
+        .map_err(|failure| failure.error)
+    {
         Ok(mut response) => {
             let mut text = String::new();
             match response.body_mut().as_reader().read_to_string(&mut text) {
@@ -600,13 +606,12 @@ impl Machine for NetworkAdmin {
                     // deliberate divergence — the desktop's answer is strictly
                     // better information, and the core already accepts a bool.
                     let started = Instant::now();
-                    let ok = proxy::agent(PROBE_TIMEOUT)
-                        .get(&url)
-                        .call()
-                        .is_ok_and(|response| {
-                            let status = response.status().as_u16();
-                            (200..400).contains(&status)
-                        });
+                    let ok =
+                        proxy::with_routes(&url, PROBE_TIMEOUT, |agent| agent.get(&url).call())
+                            .is_ok_and(|response| {
+                                let status = response.status().as_u16();
+                                (200..400).contains(&status)
+                            });
                     NetShellResult::Reachable {
                         url,
                         ok,

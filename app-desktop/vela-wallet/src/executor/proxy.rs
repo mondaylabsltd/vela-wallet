@@ -1,113 +1,177 @@
-//! The app's one HTTP agent, and how it gets out of the machine.
+//! The app's one HTTP agent, and how each request gets out of the machine.
 //!
-//! **Everything that talks to the network goes through [`agent`].** Not by
+//! **Everything that talks to the network goes through this module.** Not by
 //! convention — there is exactly one place an agent is constructed, and it is
 //! this one, so a caller cannot get a client that skipped the proxy by
-//! forgetting a line. That mattered less when the registry was the only network
-//! consumer and it was true by accident; it stops being an accident here,
-//! before feature 020's tunnel client and the bug reporter arrive.
+//! forgetting a line.
 //!
-//! Two things go wrong on a desktop that `ureq`'s own proxy handling does not
-//! cover, and both of them present identically: every registry call sits until
-//! its budget elapses and the flow ends on a timeout sheet blaming the index
-//! service, while the person's browser loads the same host fine.
+//! ## The rule (spec 082 ruling 3, RD2, RD9)
 //!
-//! ## 1. A SOCKS5 proxy is asked to connect to an address we cannot look up
+//! The wallet's own traffic follows the system proxy — PAC included — the way
+//! WebKit does, **per request**, and never falls back to a direct connection
+//! the system did not name:
 //!
-//! `ureq` maps `socks://` and `socks5://` to [`ProxyProtocol::Socks5`], whose
-//! `resolve_target` default is `true` — the target hostname is resolved
-//! LOCALLY and only the resulting address is handed to the proxy. That is a
-//! fine default for a proxy that exists to change the route. It is exactly
-//! wrong for the proxy this application actually meets, which exists because
-//! name resolution on the machine does not work: the local lookup is precisely
-//! the step that cannot succeed, so the request never even reaches the SOCKS
-//! handshake. `curl` spells the working variant `socks5h`, browsers do it by
-//! default, and there is no case where this app wants the other one — so a
-//! SOCKS5 proxy is switched to resolving at the far end. It also stops the
-//! lookup leaking around a proxy that was configured to carry it.
+//! 1. [`routes_for`] asks the platform for the ordered routes of ONE URL. On
+//!    macOS that is CFNetwork's own resolver (`proxy_macos.rs`): the exception
+//!    list, simple hostnames, per-scheme proxies and PAC, the answer WebKit
+//!    gets. DIRECT is a route only when that list says DIRECT.
+//! 2. [`with_routes`] walks them, and moves to the next route **only when the
+//!    TCP connect to the proxy itself failed** (refused, unreachable, its name
+//!    did not resolve, the connect timed out). A timeout after connecting, a
+//!    TLS failure, a CONNECT answered 5xx or closed with no reply all mean the
+//!    proxy answered for that host — the request stops there, with that
+//!    error.
+//! 3. Nothing survives between two requests: no "current route", no global
+//!    switch to direct after one timeout (W8's doubled timeouts), so a proxy
+//!    that comes back is used by the very next request.
 //!
-//! Note the environment does not have to name `socks` for this to bite:
-//! `ureq` reads `ALL_PROXY` BEFORE `HTTPS_PROXY`, so a session exporting both
-//! — which is what every proxy tool's setup snippet emits — gets the SOCKS one.
+//! A failure that is the proxy's own carries a [`ProxyFailure`] and is
+//! logged — `proxy: 127.0.0.1:9 unreachable`, `proxy: PAC … failed` — because
+//! "when the proxy fails, say so" (ruling 3).
 //!
-//! ## 2. A desktop launch has no proxy environment at all
+//! ## Per platform
 //!
-//! `ureq` finds a proxy in `ALL_PROXY` / `HTTPS_PROXY` / `HTTP_PROXY`. That is
-//! right for a CLI, which is started from a shell that has them, and wrong for
-//! a desktop application: `Exec=vela-wallet` in the .desktop file inherits the
-//! systemd user environment, and a proxy exported from `~/.bashrc` is not in
-//! it. So when the environment says nothing, the desktop's own setting is read
-//! — the one the browser obeys.
+//! * **macOS** — `proxy_macos.rs`. No environment proxies: a GUI app's
+//!   environment is whatever launched it, and a dead `all_proxy` exported in a
+//!   developer's shell is how "the index is unreachable" appeared under a
+//!   healthy index (spec 038 finding 11).
+//! * **Linux** — GNOME's `org.gnome.system.proxy` when it is manual, else the
+//!   environment. PAC (`mode = 'auto'`) is not supported; that is logged once
+//!   and the request goes direct, as before this module knew about PAC.
+//! * **Windows** — `ureq`'s `win-system-proxy` reads the WinINET registry keys
+//!   inside `Proxy::try_from_env()`; the environment otherwise. PAC is not
+//!   supported there either, and is logged once.
 //!
-//! ### Per platform
+//! Loopback is always direct (a local node behind a system proxy is not
+//! "outside"). A SOCKS5 proxy from the environment resolves at the far end
+//! (`socks5h`): on the machines that need a proxy, the local lookup is the
+//! broken step.
 //!
-//! * **Linux** — GNOME's `org.gnome.system.proxy`, through `gsettings`. It is
-//!   the setting the GNOME/GTK network stack itself uses, so honouring it makes
-//!   this app agree with the rest of the session. Read once per process: the
-//!   value cannot change mid-flight in any way worth a subprocess per request.
-//! * **Windows** — `ureq`'s own `win-system-proxy` feature reads the WinINET
-//!   registry keys inside `Proxy::try_from_env()`. Nothing to do here.
-//! * **macOS** — `scutil --proxy`, the same dictionary System Settings →
-//!   Network → Proxies writes. An earlier version of this module read
-//!   nothing here on the premise that a macOS system proxy is "installed
-//!   into the network stack" — true of a TUN-mode tool, false of the
-//!   ordinary HTTP/SOCKS proxy in that pane, which only CFNetwork clients
-//!   honour and a Rust socket walks straight past (spec 038 finding 10).
-//!
-//! ## 3. The environment is not the most trustworthy source, and no answer
-//!      is good forever
-//!
-//! A GUI app's environment is whatever launched it — Finder gives one, a
-//! terminal another — so a proxy exported in a shell is the LEAST stable
-//! statement about how this machine gets out, and it was being trusted first
-//! and cached for the life of the process (spec 038 finding 11). The dead
-//! `all_proxy=socks5://127.0.0.1:1080` in a developer's shell is how "the
-//! Passkey Index service is unreachable" appeared under a healthy index.
-//!
-//! So this module now holds a short list of CANDIDATES, in order of trust —
-//! the system setting, the environment, direct — and [`with_candidates`]
-//! walks it: a request whose failure is a transport failure is retried once
-//! on the next candidate, and only when the last one refuses is the failure
-//! reported, with the one bit the screen needs: did it fail to get out of
-//! THIS MACHINE (`local`), or did a route exist and the far end not answer?
-//! The list is re-derived after any failure and every [`REDERIVE_AFTER`], so
-//! a proxy that comes back or a setting that changes is honoured without a
-//! restart. Contract: `specs/038-first-run-parity/contracts/proxy-candidates.md`.
-//!
-//! What is deliberately NOT handled: `mode = 'auto'` (a PAC URL is a JavaScript
-//! program, and running one to reach the key registry is not a trade this app
-//! makes) and KDE's `kioslaverc`. Both fall through to no proxy, which is the
-//! behaviour before this module existed.
-//!
-//! ## 4. A dev build pointed at a fault proxy
+//! ## A dev build pointed at a fault proxy
 //!
 //! Spec 082's bad-network rows aim a fault proxy at THIS app and nothing else
-//! on the machine, so no system setting is touched. [`dev_proxy`]
-//! (`VELA_DEV_PROXY=<host>:<port>`, `dev-fixtures` builds only) replaces the
-//! whole list with that one HTTP CONNECT proxy: no system setting, no
-//! environment, no direct fall-back, loopback included — a fault the proxy
-//! injects must reach the app, not be routed around. The in-app browser takes
-//! the same proxy (`webview.rs`).
+//! on the machine. [`dev_proxy`] (`VELA_DEV_PROXY=<host>:<port>`,
+//! `dev-fixtures` builds only) is then the one route of every request,
+//! loopback included — a fault the proxy injects must reach the app, not be
+//! routed around. The in-app browser takes the same proxy (`webview.rs`).
 
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use ureq::{Agent, Proxy, ProxyProtocol};
 
-/// The app's HTTP agent.
-///
-/// Connection reuse matters: the publish path makes a challenge call, a
-/// register call and then polls a task every two seconds, and a fresh TLS
-/// handshake for each of those is most of the wall clock.
-pub fn agent(timeout: Duration) -> Agent {
-    // The current candidate, not `ureq`'s own pick: a SOCKS5 proxy from the
-    // environment is asked to resolve the target LOCALLY, which is the one
-    // step that cannot work on the machines that need a proxy most, and a
-    // dead proxy in the environment must not be the last word (module note).
-    agent_over(current().proxy(), timeout)
+use crate::diag::vlog;
+
+/// How long a connection may take to be set up — TCP, a proxy's CONNECT, TLS —
+/// within a request's own budget. Shorter than that budget on purpose: ureq
+/// names a timeout by the phase that ran out, and only a connect-phase
+/// timeout proves the request was never written (spec 082 RA1), so the phase
+/// must be able to run out first.
+const CONNECT_BUDGET: Duration = Duration::from_secs(5);
+
+/// One way out of the machine for one request.
+#[derive(Clone, Debug)]
+pub enum Route {
+    /// No proxy — only where the system (or loopback) says so.
+    Direct,
+    /// An HTTP proxy, reached with CONNECT; the target resolves at the proxy.
+    HttpConnect { host: String, port: u16 },
+    /// A SOCKS5 proxy that resolves the target at the far end.
+    Socks5h { host: String, port: u16 },
+    /// A proxy from the environment (Linux, Windows), carried whole — its
+    /// credentials and bypass list included.
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    Env(Proxy),
 }
 
-/// Is this url on this machine (or its own network's name for it)?
+impl Route {
+    /// `host:port` of the proxy, or `direct` — what a log line names.
+    #[must_use]
+    pub fn label(&self) -> String {
+        match self {
+            Self::Direct => "direct".to_owned(),
+            Self::HttpConnect { host, port } | Self::Socks5h { host, port } => {
+                format!("{host}:{port}")
+            }
+            Self::Env(proxy) => format!("{}:{}", proxy.host(), proxy.port()),
+        }
+    }
+
+    fn proxy(&self) -> Option<Proxy> {
+        let build = |protocol, host: &str, port: u16| {
+            Proxy::builder(protocol)
+                .host(host)
+                .port(port)
+                .resolve_target(false)
+                .build()
+                .ok()
+        };
+        match self {
+            Self::Direct => None,
+            Self::HttpConnect { host, port } => build(ProxyProtocol::Http, host, *port),
+            Self::Socks5h { host, port } => build(ProxyProtocol::Socks5h, host, *port),
+            Self::Env(proxy) => Some(proxy.clone()),
+        }
+    }
+}
+
+/// How a proxy failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProxyFailureKind {
+    /// The TCP connect to the proxy was refused, or its name or its network
+    /// could not be reached.
+    Unreachable,
+    /// The TCP connect to the proxy timed out.
+    Timeout,
+    /// The PAC file could not be fetched or run.
+    PacFailed,
+    /// The proxy answered and would not open the tunnel (a 5xx, or a close
+    /// with no reply). It spoke for the host, so this is the SITE's failure
+    /// class, never "your proxy isn't responding" (research RX).
+    RefusedTunnel,
+}
+
+impl ProxyFailureKind {
+    fn words(self) -> &'static str {
+        match self {
+            Self::Unreachable => "unreachable",
+            Self::Timeout => "timed out",
+            Self::PacFailed => "PAC failed",
+            Self::RefusedTunnel => "refused tunnel",
+        }
+    }
+
+    /// The proxy itself could not be used — the browser's `proxy` class
+    /// (`probe_code::PROXY`, spec 082 RD9).
+    #[must_use]
+    pub fn is_the_proxys(self) -> bool {
+        !matches!(self, Self::RefusedTunnel)
+    }
+}
+
+/// A failure that was the proxy's own.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProxyFailure {
+    /// `host:port`, or the PAC file's host.
+    pub proxy: String,
+    pub kind: ProxyFailureKind,
+}
+
+/// A request that did not get an answer from the server.
+#[derive(Debug)]
+pub struct Transport {
+    /// The last route's error, verbatim. For a PAC that could not run, no
+    /// route was tried and this is `ConnectionFailed`.
+    pub error: ureq::Error,
+    /// It never got out of this machine: the proxy (or PAC) could not be
+    /// used, or a direct attempt could not resolve or route to the host.
+    /// `false` means a route existed and the far end did not answer.
+    pub local: bool,
+    /// The proxy's own failure, when it was one.
+    pub proxy: Option<ProxyFailure>,
+}
+
+/// Is this url on this machine?
 fn is_local(url: &str) -> bool {
     let host = url
         .split_once("://")
@@ -134,123 +198,99 @@ fn is_local(url: &str) -> bool {
     }
 }
 
-/// How long a derived candidate list is trusted before `scutil` / the
-/// environment are consulted again. Short enough that a proxy toggled in
-/// System Settings is noticed; long enough that a burst of requests does not
-/// spawn a subprocess each.
-const REDERIVE_AFTER: Duration = Duration::from_secs(60);
-
-/// One way out of the machine, in order of trust.
-#[derive(Clone, Debug)]
-enum Candidate {
-    /// The desktop's own setting — what the browser next to us obeys.
-    System(Proxy),
-    /// `ALL_PROXY` / `HTTPS_PROXY` / `HTTP_PROXY`, rewritten to resolve at the
-    /// far end where that matters. Or `VELA_DEV_PROXY`, alone ([`dev_proxy`]).
-    Env(Proxy),
-    /// No proxy at all. Always last, always present.
-    Direct,
+/// The routes one request to `url` may take, in order — or the proxy failure
+/// that leaves it none (a PAC that could not run: never a silent DIRECT).
+pub fn routes_for(url: &str) -> Result<Vec<Route>, ProxyFailure> {
+    if let Some(dev) = dev_proxy() {
+        return Ok(vec![Route::HttpConnect {
+            host: dev.host().to_owned(),
+            port: dev.port(),
+        }]);
+    }
+    if is_local(url) {
+        return Ok(vec![Route::Direct]);
+    }
+    platform_routes(url)
 }
 
-impl Candidate {
-    fn proxy(&self) -> Option<&Proxy> {
-        match self {
-            Candidate::System(proxy) | Candidate::Env(proxy) => Some(proxy),
-            Candidate::Direct => None,
+#[cfg(target_os = "macos")]
+fn platform_routes(url: &str) -> Result<Vec<Route>, ProxyFailure> {
+    use crate::executor::proxy_macos::{self, Entry};
+    match proxy_macos::routes_for(url) {
+        Ok(entries) => {
+            let routes: Vec<Route> = entries
+                .into_iter()
+                .map(|entry| match entry {
+                    Entry::Direct => Route::Direct,
+                    Entry::Http { host, port } => Route::HttpConnect { host, port },
+                    Entry::Socks { host, port } => Route::Socks5h { host, port },
+                })
+                .collect();
+            // An empty list names no proxy at all.
+            Ok(if routes.is_empty() {
+                vec![Route::Direct]
+            } else {
+                routes
+            })
+        }
+        Err(failed) => {
+            vlog!(
+                "proxy",
+                "PAC {} failed: {} (no direct fall-back)",
+                failed.pac,
+                failed.reason
+            );
+            Err(ProxyFailure {
+                proxy: failed.pac,
+                kind: ProxyFailureKind::PacFailed,
+            })
         }
     }
+}
 
-    fn same_route(&self, other: &Self) -> bool {
-        match (self.proxy(), other.proxy()) {
-            (Some(a), Some(b)) => {
-                a.host() == b.host() && a.port() == b.port() && a.protocol() == b.protocol()
-            }
-            (None, None) => true,
-            _ => false,
-        }
+#[cfg(not(target_os = "macos"))]
+fn platform_routes(_url: &str) -> Result<Vec<Route>, ProxyFailure> {
+    static PAC_NOTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if pac_configured() && !PAC_NOTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        vlog!(
+            "proxy",
+            "the system names a PAC file, which this platform cannot run; going direct"
+        );
     }
-}
-
-struct Candidates {
-    list: Vec<Candidate>,
-    current: usize,
-    derived_at: Instant,
-}
-
-fn state() -> &'static Mutex<Option<Candidates>> {
-    static STATE: OnceLock<Mutex<Option<Candidates>>> = OnceLock::new();
-    STATE.get_or_init(|| Mutex::new(None))
-}
-
-/// System → environment → direct, duplicates collapsed, direct always last.
-fn derive_candidates() -> Vec<Candidate> {
-    let mut list = Vec::with_capacity(3);
     if let Some(system) = desktop_proxy() {
-        list.push(Candidate::System(system));
+        return Ok(vec![Route::Env(system)]);
     }
     if let Some(from_env) = Proxy::try_from_env() {
-        // The environment is the more specific statement about the ROUTE and
-        // is left to stand — except for the one detail it cannot express
-        // (see `resolve_at_the_proxy`). On Windows this call also consults
-        // the registry (the `win-system-proxy` feature).
-        let env = Candidate::Env(resolve_at_the_proxy(&from_env).unwrap_or(from_env));
-        if !list.iter().any(|known| known.same_route(&env)) {
-            list.push(env);
-        }
+        // On Windows this also reads the registry (`win-system-proxy`).
+        return Ok(vec![Route::Env(
+            resolve_at_the_proxy(&from_env).unwrap_or(from_env),
+        )]);
     }
-    list.push(Candidate::Direct);
-    list
+    Ok(vec![Route::Direct])
 }
 
-/// The candidate every request goes through right now.
-fn current() -> Candidate {
-    // Never a list under the dev proxy, so there is nothing to advance to.
-    if let Some(dev) = dev_proxy() {
-        return Candidate::Env(dev.clone());
-    }
-    let Ok(mut guard) = state().lock() else {
-        return Candidate::Direct;
-    };
-    let stale = guard
-        .as_ref()
-        .is_none_or(|c| c.derived_at.elapsed() >= REDERIVE_AFTER);
-    if stale {
-        *guard = Some(Candidates {
-            list: derive_candidates(),
-            current: 0,
-            derived_at: Instant::now(),
-        });
-    }
-    guard
-        .as_ref()
-        .and_then(|c| c.list.get(c.current).cloned())
-        .unwrap_or(Candidate::Direct)
+#[cfg(target_os = "linux")]
+fn pac_configured() -> bool {
+    gsettings("org.gnome.system.proxy", "mode").as_deref() == Some("auto")
 }
 
-/// A request through the current candidate could not get through. Move to
-/// the next one; `false` when there is none left — the list is then dropped
-/// so the next request derives it afresh rather than sitting on a dead end.
-fn advance() -> bool {
-    let Ok(mut guard) = state().lock() else {
-        return false;
-    };
-    let Some(candidates) = guard.as_mut() else {
-        return false;
-    };
-    if candidates.current + 1 < candidates.list.len() {
-        candidates.current += 1;
-        true
-    } else {
-        *guard = None;
-        false
-    }
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn pac_configured() -> bool {
+    false
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn desktop_proxy() -> Option<Proxy> {
+    // Windows: `ureq`'s `win-system-proxy` feature reads WinINET inside
+    // `Proxy::try_from_env()`, so the system setting arrives there.
+    None
 }
 
 /// `VELA_DEV_PROXY=<host>:<port>`: the ONE route out of a dev build (module
-/// note, section 4). Two gates, like `parallel_space::active`: without
-/// `dev-fixtures` this is a constant `None` and the variable is never read.
-/// Read once; a value that is set but not `<host>:<port>` stops the app
-/// rather than letting a fault row run over the ordinary route.
+/// note). Two gates, like `parallel_space::active`: without `dev-fixtures`
+/// this is a constant `None` and the variable is never read. Read once; a
+/// value that is set but not `<host>:<port>` stops the app rather than
+/// letting a fault row run over the ordinary route.
 pub fn dev_proxy() -> Option<&'static Proxy> {
     #[cfg(feature = "dev-fixtures")]
     {
@@ -292,42 +332,10 @@ fn parse_dev_proxy(value: &str) -> Option<Proxy> {
         .ok()
 }
 
-/// The proxy to configure on an agent right now, or `None` for direct.
-///
-/// Kept as the module's one public read of the decision (the caBLE tunnel
-/// dial logs it); everything else should go through [`with_candidates`] so a
-/// refused route is retried rather than reported.
-pub fn system_proxy() -> Option<Proxy> {
-    current().proxy().cloned()
-}
-
-/// A transport failure, after every candidate was tried.
-#[derive(Debug)]
-pub struct Transport {
-    /// The last candidate's error, verbatim.
-    pub error: ureq::Error,
-    /// Every route refused inside this machine: the proxies would not take
-    /// the connection and a direct attempt could not even resolve or route
-    /// to the host. `false` means a route existed and the far end did not
-    /// answer — which may still be the person's network, but is not
-    /// something a different proxy fixes.
-    pub local: bool,
-}
-
-/// Is this the kind of error that a different route might cure?
-///
-/// Everything that is not "the server answered" (`StatusCode`) or "the body
-/// the server sent was unusable" is a transport failure for this purpose —
-/// including a TLS failure, which is what a proxy that intercepts looks like.
-fn is_transport(error: &ureq::Error) -> bool {
-    !matches!(
-        error,
-        ureq::Error::StatusCode(_)
-            | ureq::Error::Json(_)
-            | ureq::Error::BodyExceedsLimit(_)
-            | ureq::Error::Decompress(..)
-            | ureq::Error::BodyStalled
-    )
+/// The first route of a request to `url` — for the one caller that dials a
+/// socket of its own (the caBLE tunnel) and so cannot walk the list.
+pub fn first_route(url: &str) -> Result<Route, ProxyFailure> {
+    routes_for(url).map(|routes| routes.into_iter().next().unwrap_or(Route::Direct))
 }
 
 /// A direct attempt that failed before any packet could have reached the
@@ -359,87 +367,164 @@ fn resolver_said_no(message: &str) -> bool {
         || message.contains("No address associated with hostname")
 }
 
-/// Run one request over the candidate chain.
+/// Did the TCP connect to `route`'s PROXY fail — the one failure that moves a
+/// request to the next route? `None` for a direct route, and for every
+/// failure after the proxy took the connection.
 ///
-/// `call` is invoked with an agent for the current candidate; a transport
-/// failure advances to the next candidate and calls it again, once per
-/// candidate. The first `Ok` — or the first non-transport `Err`, which is the
-/// server talking — is returned as-is. Loopback targets never take a proxy
-/// (see [`agent_for`]); callers with such a url should use that instead.
-pub fn with_candidates<T>(
-    timeout: Duration,
-    mut call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
+/// A connect-phase timeout is ambiguous — ureq's connect phase covers the
+/// TCP connect, the CONNECT exchange and TLS — so it counts as the proxy's
+/// only when a fresh TCP connect to the proxy fails too.
+fn proxy_connect_failed(route: &Route, error: &ureq::Error) -> Option<ProxyFailureKind> {
+    use std::io::ErrorKind;
+    if matches!(route, Route::Direct) {
+        return None;
+    }
+    match error {
+        ureq::Error::HostNotFound
+        | ureq::Error::ConnectionFailed
+        | ureq::Error::Timeout(ureq::Timeout::Resolve) => Some(ProxyFailureKind::Unreachable),
+        ureq::Error::Io(io)
+            if matches!(
+                io.kind(),
+                ErrorKind::ConnectionRefused
+                    | ErrorKind::AddrNotAvailable
+                    | ErrorKind::HostUnreachable
+                    | ErrorKind::NetworkUnreachable
+                    | ErrorKind::NetworkDown
+            ) || resolver_said_no(&io.to_string()) =>
+        {
+            Some(ProxyFailureKind::Unreachable)
+        }
+        ureq::Error::Timeout(ureq::Timeout::Connect) if !proxy_answers(route) => {
+            Some(ProxyFailureKind::Timeout)
+        }
+        _ => None,
+    }
+}
+
+/// Does the proxy take a TCP connection right now? One short attempt.
+fn proxy_answers(route: &Route) -> bool {
+    use std::net::ToSocketAddrs as _;
+    let Some(proxy) = route.proxy() else {
+        return true;
+    };
+    let Ok(addrs) = (proxy.host(), proxy.port()).to_socket_addrs() else {
+        return false;
+    };
+    addrs
+        .into_iter()
+        .any(|addr| std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(1)).is_ok())
+}
+
+/// Walk `routes` for one request: the first answer, or the first failure
+/// that is not the proxy's own TCP connect — which moves on to the next
+/// route. `attempt` performs the request over one route.
+fn walk<T>(
+    routes: &[Route],
+    mut attempt: impl FnMut(&Route) -> Result<T, ureq::Error>,
 ) -> Result<T, Transport> {
-    loop {
-        let candidate = current();
-        let agent = agent_over(candidate.proxy(), timeout);
-        match call(&agent) {
+    let mut last: Option<(ureq::Error, ProxyFailure)> = None;
+    for route in routes {
+        match attempt(route) {
             Ok(value) => return Ok(value),
-            Err(error) if is_transport(&error) => {
-                let was_direct = candidate.proxy().is_none();
-                if advance() {
+            Err(error) => {
+                if let Some(kind) = proxy_connect_failed(route, &error) {
+                    let failure = ProxyFailure {
+                        proxy: route.label(),
+                        kind,
+                    };
+                    vlog!("proxy", "{} {}", failure.proxy, kind.words());
+                    last = Some((error, failure));
                     continue;
                 }
-                return Err(Transport {
-                    local: was_direct && failed_inside_this_machine(&error),
-                    error,
+                let refused = matches!(error, ureq::Error::ConnectProxyFailed(_)).then(|| {
+                    let failure = ProxyFailure {
+                        proxy: route.label(),
+                        kind: ProxyFailureKind::RefusedTunnel,
+                    };
+                    vlog!("proxy", "{} {}", failure.proxy, failure.kind.words());
+                    failure
                 });
-            }
-            Err(error) => {
                 return Err(Transport {
+                    local: matches!(route, Route::Direct) && failed_inside_this_machine(&error),
                     error,
-                    local: false,
+                    proxy: refused,
                 });
             }
         }
     }
+    Err(match last {
+        Some((error, failure)) => Transport {
+            error,
+            local: true,
+            proxy: Some(failure),
+        },
+        None => Transport {
+            error: ureq::Error::ConnectionFailed,
+            local: true,
+            proxy: None,
+        },
+    })
 }
 
-/// [`with_candidates`] for ONE url: a loopback target never takes a proxy
-/// (the [`agent_for`] rule), so it runs direct and once; everything else
-/// walks the chain. The pool's per-endpoint calls go through here (T028).
-/// The dev proxy is the exception: it takes loopback too (module note, 4).
-pub fn with_candidates_for<T>(
+/// Run one request to `url` over its routes (module note). `call` is
+/// invoked with an agent for each route it tries; the first `Ok` — or the
+/// first error that is not the proxy's own TCP connect, which is the far end
+/// (or the proxy speaking for it) — is returned as-is.
+pub fn with_routes<T>(
     url: &str,
+    timeout: Duration,
+    call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
+) -> Result<T, Transport> {
+    over_routes(routes_for(url), timeout, call)
+}
+
+/// [`with_routes`] over routes already resolved — the seam the tests use.
+fn over_routes<T>(
+    routes: Result<Vec<Route>, ProxyFailure>,
     timeout: Duration,
     mut call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
 ) -> Result<T, Transport> {
-    if is_local(url) && dev_proxy().is_none() {
-        return call(&agent_over(None, timeout)).map_err(|error| Transport {
-            local: failed_inside_this_machine(&error),
-            error,
-        });
-    }
-    with_candidates(timeout, call)
+    let routes = match routes {
+        Ok(routes) => routes,
+        // No route at all (a PAC that could not run): nothing is tried, and
+        // above all not a direct connection the system did not name.
+        Err(failure) => {
+            return Err(Transport {
+                error: ureq::Error::ConnectionFailed,
+                local: true,
+                proxy: Some(failure),
+            });
+        }
+    };
+    walk(&routes, |route| call(&agent_over(route, timeout)))
 }
 
-/// One agent per way out and timeout, kept for the life of the process.
+/// One agent per route and timeout, kept for the life of the process.
 ///
-/// A `ureq` agent IS its connection pool. This built a fresh one for every
-/// request, so nothing was ever reused: each RPC call, index fetch and rate
-/// read paid DNS, TCP and a TLS handshake of its own — three of them per
-/// chain on a balance read, where the browser beside it keeps its sockets
-/// alive (the 078 loading audit). Agents are cheap handles over a shared
-/// pool, so the cache hands out clones.
-fn agent_over(proxy: Option<&Proxy>, timeout: Duration) -> Agent {
+/// A `ureq` agent IS its connection pool. Building a fresh one for every
+/// request reused nothing: each RPC call, index fetch and rate read paid DNS,
+/// TCP and a TLS handshake of its own (the 078 loading audit). Agents are
+/// cheap handles over a shared pool, so the cache hands out clones. This is a
+/// cache of connections, not a memory of which route worked.
+fn agent_over(route: &Route, timeout: Duration) -> Agent {
     static AGENTS: OnceLock<Mutex<std::collections::HashMap<String, Agent>>> = OnceLock::new();
-    let key = format!("{proxy:?}|{}", timeout.as_millis());
+    let key = format!("{route:?}|{}", timeout.as_millis());
     let agents = AGENTS.get_or_init(Mutex::default);
     if let Ok(agents) = agents.lock()
         && let Some(agent) = agents.get(&key)
     {
         return agent.clone();
     }
-    let mut config = Agent::config_builder()
+    let config = Agent::config_builder()
         .timeout_global(Some(timeout))
+        .timeout_connect(Some((timeout * 4 / 5).min(CONNECT_BUDGET)))
         // A balance read talks to two dozen chains' endpoints at once; the
         // default ten idle sockets would drop most of them between calls.
         .max_idle_connections(128)
-        .max_idle_connections_per_host(8);
-    // `None` here means `ureq`'s own answer stands, which for a `Direct`
-    // candidate must be "no proxy" even if the environment names one — that
-    // is the whole point of the candidate.
-    config = config.proxy(proxy.cloned());
+        .max_idle_connections_per_host(8)
+        // `None` is "no proxy" — never ureq's own pick from the environment.
+        .proxy(route.proxy());
     let agent = config.build().new_agent();
     if let Ok(mut agents) = agents.lock() {
         agents.insert(key, agent.clone());
@@ -455,6 +540,7 @@ fn agent_over(proxy: Option<&Proxy>, timeout: Duration) -> Agent {
 /// way to carry a hostname, so "resolve remotely" is not a thing a SOCKS4
 /// server can be asked for, and forcing it would trade a slow failure for an
 /// immediate one.
+#[cfg_attr(all(target_os = "macos", not(test)), allow(dead_code))]
 fn resolve_at_the_proxy(proxy: &Proxy) -> Option<Proxy> {
     if proxy.protocol() != ProxyProtocol::Socks5 || !proxy.resolve_target() {
         return None;
@@ -485,6 +571,7 @@ fn resolve_at_the_proxy(proxy: &Proxy) -> Option<Proxy> {
 }
 
 /// `NO_PROXY` / `no_proxy`, split the way `ureq` splits it.
+#[cfg_attr(all(target_os = "macos", not(test)), allow(dead_code))]
 fn no_proxy_from_env() -> Vec<String> {
     ["NO_PROXY", "no_proxy"]
         .into_iter()
@@ -497,81 +584,6 @@ fn no_proxy_from_env() -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn desktop_proxy() -> Option<Proxy> {
-    // Windows: `ureq`'s `win-system-proxy` feature reads WinINET inside
-    // `Proxy::try_from_env()`, so the system setting arrives as the `Env`
-    // candidate there.
-    None
-}
-
-/// The macOS system proxy, from the dictionary `scutil --proxy` prints — the
-/// one System Settings → Network → Proxies writes and the browser obeys.
-#[cfg(target_os = "macos")]
-fn desktop_proxy() -> Option<Proxy> {
-    let output = std::process::Command::new("scutil")
-        .arg("--proxy")
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8(output.stdout).ok()?;
-    proxy_from_scutil(&text)
-}
-
-/// Parse `scutil --proxy` output. Separate from the subprocess so the
-/// captured dictionary in `research.md` is a unit test.
-///
-/// HTTPS first: every URL this client builds is https. `SOCKS` last and as
-/// `socks5h`, for the reason in the module note. An entry is only an entry
-/// when its `*Enable` is 1 and its port is non-zero — a host left over from
-/// a disabled setting is not a route.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn proxy_from_scutil(text: &str) -> Option<Proxy> {
-    let mut scalars = std::collections::HashMap::new();
-    let mut exceptions = Vec::new();
-    let mut in_exceptions = false;
-    for line in text.lines() {
-        let line = line.trim();
-        if in_exceptions {
-            if line.starts_with('}') {
-                in_exceptions = false;
-            } else if let Some((_, value)) = line.split_once(" : ") {
-                exceptions.push(value.trim().to_owned());
-            }
-            continue;
-        }
-        if let Some((key, value)) = line.split_once(" : ") {
-            if key == "ExceptionsList" {
-                in_exceptions = true;
-            } else {
-                scalars.insert(key.to_owned(), value.trim().to_owned());
-            }
-        }
-    }
-    let enabled = |name: &str| scalars.get(name).map(String::as_str) == Some("1");
-    let (scheme, host, port) = ["HTTPS", "HTTP", "SOCKS"].into_iter().find_map(|scheme| {
-        if !enabled(&format!("{scheme}Enable")) {
-            return None;
-        }
-        let host = scalars.get(&format!("{scheme}Proxy"))?;
-        let port: u16 = scalars.get(&format!("{scheme}Port"))?.parse().ok()?;
-        (!host.is_empty() && port != 0).then(|| (scheme, host.clone(), port))
-    })?;
-    let mut builder = Proxy::builder(match scheme {
-        "SOCKS" => ProxyProtocol::Socks5h,
-        _ => ProxyProtocol::Http,
-    })
-    .host(&host)
-    .port(port)
-    .resolve_target(false);
-    for entry in exceptions {
-        builder = builder.no_proxy(&entry);
-    }
-    builder.build().ok()
 }
 
 /// GNOME's proxy setting, as a `ureq::Proxy`.
@@ -807,143 +819,199 @@ mod tests {
         assert!(parse_gvariant_list("@as []").is_empty());
         assert!(parse_gvariant_list("[]").is_empty());
     }
-}
 
-#[cfg(test)]
-mod candidates {
-    use super::*;
+    // -- the walk (spec 082 T061) ---------------------------------------------
 
-    /// The candidate list is process-global, and the two tests below install
-    /// their own — serialised, or one test's chain answers the other's
-    /// request.
-    fn install(list: Vec<Candidate>) -> std::sync::MutexGuard<'static, ()> {
-        static SERIAL: Mutex<()> = Mutex::new(());
-        let guard = SERIAL
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Ok(mut state) = state().lock() {
-            *state = Some(Candidates {
-                list,
-                current: 0,
-                derived_at: Instant::now(),
-            });
+    fn dead_proxy() -> Route {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .map(|addr| addr.port())
+            .unwrap_or(1);
+        Route::HttpConnect {
+            host: "127.0.0.1".to_owned(),
+            port: closed,
         }
-        guard
     }
 
-    /// The dictionary captured on the founder's Mac on 2026-09-11 — the one
-    /// whose SOCKS entry named a port nothing listened on.
-    const CAPTURED: &str = "<dictionary> {
-  ExcludeSimpleHostnames : 1
-  HTTPEnable : 1
-  HTTPPort : 1088
-  HTTPProxy : 127.0.0.1
-  HTTPSEnable : 1
-  HTTPSPort : 1088
-  HTTPSProxy : 127.0.0.1
-  SOCKSEnable : 1
-  SOCKSPort : 1080
-  SOCKSProxy : 127.0.0.1
-  ExceptionsList : <array> {
-    0 : *.local
-    1 : 169.254/16
-  }
-}";
-
-    #[test]
-    fn scutil_prefers_https_and_carries_the_exceptions() {
-        let proxy = proxy_from_scutil(CAPTURED).expect("a proxy");
-        assert_eq!(proxy.protocol(), ProxyProtocol::Http);
-        assert_eq!(proxy.host(), "127.0.0.1");
-        assert_eq!(proxy.port(), 1088, "HTTPS wins over the dead SOCKS entry");
-        let local: ureq::http::Uri = "http://something.local/".parse().unwrap();
-        assert!(proxy.is_no_proxy(&local));
+    /// Walk `routes`, each route answering with `answer(route)`; which routes
+    /// were tried, in order, and the result.
+    fn walked(
+        routes: &[Route],
+        mut answer: impl FnMut(&Route) -> Result<&'static str, ureq::Error>,
+    ) -> (Vec<String>, Result<&'static str, Transport>) {
+        let mut tried = Vec::new();
+        let result = walk(routes, |route| {
+            tried.push(route.label());
+            answer(route)
+        });
+        (tried, result)
     }
 
+    /// The one failure that moves a request on: the TCP connect to the proxy
+    /// itself failed. The next route is tried and its answer stands.
     #[test]
-    fn scutil_skips_disabled_and_half_configured_entries() {
-        let socks_only = "<dictionary> {
-  HTTPSEnable : 0
-  HTTPSPort : 1088
-  HTTPSProxy : 127.0.0.1
-  HTTPEnable : 1
-  HTTPPort : 0
-  HTTPProxy : 127.0.0.1
-  SOCKSEnable : 1
-  SOCKSPort : 1080
-  SOCKSProxy : 127.0.0.1
-}";
-        let proxy = proxy_from_scutil(socks_only).expect("the SOCKS entry");
+    fn a_proxy_connect_failure_moves_on() {
+        let dead = dead_proxy();
+        let routes = [dead.clone(), Route::Direct];
+        let (tried, result) = walked(&routes, |route| match route {
+            Route::Direct => Ok("answered"),
+            _ => Err(ureq::Error::Io(std::io::Error::from(
+                std::io::ErrorKind::ConnectionRefused,
+            ))),
+        });
+        assert_eq!(tried, vec![dead.label(), "direct".to_owned()]);
+        assert_eq!(result.ok(), Some("answered"));
+
+        // Every route's proxy down: the proxy's own failure, named.
+        let (_, result) = walked(std::slice::from_ref(&dead), |_| {
+            Err(ureq::Error::HostNotFound)
+        });
+        let failure = result
+            .err()
+            .unwrap_or_else(|| unreachable!("nothing answered"));
+        assert!(failure.local);
         assert_eq!(
-            proxy.protocol(),
-            ProxyProtocol::Socks5h,
-            "resolved at the far end"
+            failure.proxy,
+            Some(ProxyFailure {
+                proxy: dead.label(),
+                kind: ProxyFailureKind::Unreachable,
+            })
         );
-        assert_eq!(proxy.port(), 1080);
-        assert!(proxy_from_scutil("<dictionary> {\n  HTTPEnable : 0\n}").is_none());
+        // A connect that timed out on a proxy that takes no connection is
+        // that proxy timing out.
+        let (tried, result) = walked(&routes, |route| match route {
+            Route::Direct => Ok("answered"),
+            _ => Err(ureq::Error::Timeout(ureq::Timeout::Connect)),
+        });
+        assert_eq!(tried.len(), 2);
+        assert_eq!(result.ok(), Some("answered"));
     }
 
+    /// A timeout after connecting, TLS, a CONNECT answered 5xx or closed with
+    /// no reply: the proxy took the connection and spoke for the host. The
+    /// request stops there — never a second route, never direct.
     #[test]
-    fn a_route_named_by_both_sources_is_one_candidate() {
-        let a = Candidate::System(Proxy::new("http://127.0.0.1:1088").unwrap());
-        let b = Candidate::Env(Proxy::new("http://127.0.0.1:1088").unwrap());
-        let c = Candidate::Env(Proxy::new("socks5h://127.0.0.1:1080").unwrap());
-        assert!(a.same_route(&b));
-        assert!(!a.same_route(&c));
-        assert!(!a.same_route(&Candidate::Direct));
+    fn a_failure_after_the_proxy_answered_does_not_move_on() {
+        let dead = dead_proxy();
+        let routes = [dead, Route::Direct];
+        for (error, refused) in [
+            (ureq::Error::Timeout(ureq::Timeout::Global), false),
+            (ureq::Error::Timeout(ureq::Timeout::RecvResponse), false),
+            (ureq::Error::Tls("handshake"), false),
+            (
+                ureq::Error::ConnectProxyFailed(
+                    "proxy server responded 502/Bad Gateway".to_owned(),
+                ),
+                true,
+            ),
+            (
+                ureq::Error::ConnectProxyFailed("proxy server did not respond".to_owned()),
+                true,
+            ),
+        ] {
+            let label = format!("{error:?}");
+            let mut once = Some(error);
+            let (tried, result) = walked(&routes, |_| {
+                Err(once.take().unwrap_or(ureq::Error::ConnectionFailed))
+            });
+            assert_eq!(tried.len(), 1, "{label} moved on");
+            let failure = result.err().unwrap_or_else(|| unreachable!("{label}"));
+            assert_eq!(
+                failure.proxy.map(|p| p.kind),
+                refused.then_some(ProxyFailureKind::RefusedTunnel),
+                "{label}"
+            );
+        }
+        // A connect timeout on a proxy that DOES take connections is later
+        // than the TCP connect (the CONNECT, TLS): not the proxy's.
+        let live = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|e| unreachable!("loopback: {e}"));
+        let port = live.local_addr().map(|addr| addr.port()).unwrap_or(0);
+        let answering = Route::HttpConnect {
+            host: "127.0.0.1".to_owned(),
+            port,
+        };
+        let (tried, _) = walked(&[answering, Route::Direct], |_| {
+            Err(ureq::Error::Timeout(ureq::Timeout::Connect))
+        });
+        assert_eq!(tried.len(), 1);
     }
 
-    /// The failure that started spec 038 Part B: a proxy in the environment
-    /// that refuses every connection, on a machine that can reach the host
-    /// directly. The chain must end on a success, not on a sentence about
-    /// our service.
+    /// A PAC file that cannot run leaves no route: nothing is tried — above
+    /// all not DIRECT — and the failure is the proxy's.
     #[test]
-    fn a_refusing_proxy_falls_through_to_direct() {
-        let server = std::net::TcpListener::bind("127.0.0.1:0").expect("loopback");
-        let port = server.local_addr().unwrap().port();
+    fn a_pac_failure_is_a_proxy_failure_with_no_direct_fall_back() {
+        let mut calls = 0;
+        let result: Result<(), Transport> = over_routes(
+            Err(ProxyFailure {
+                proxy: "wpad.corp".to_owned(),
+                kind: ProxyFailureKind::PacFailed,
+            }),
+            Duration::from_secs(1),
+            |_| {
+                calls += 1;
+                Ok(())
+            },
+        );
+        assert_eq!(calls, 0, "nothing went out");
+        let failure = result.err().unwrap_or_else(|| unreachable!("no route"));
+        assert!(failure.local);
+        assert_eq!(
+            failure.proxy.map(|p| p.kind),
+            Some(ProxyFailureKind::PacFailed)
+        );
+        assert!(ProxyFailureKind::PacFailed.is_the_proxys());
+        assert!(!ProxyFailureKind::RefusedTunnel.is_the_proxys());
+    }
+
+    /// No state survives between two requests: the second starts at the
+    /// first route again, however the first one ended.
+    #[test]
+    fn no_state_survives_between_two_requests() {
+        let dead = dead_proxy();
+        let routes = [dead.clone(), Route::Direct];
+        let refused = |route: &Route| match route {
+            Route::Direct => Ok("answered"),
+            _ => Err(ureq::Error::Io(std::io::Error::from(
+                std::io::ErrorKind::ConnectionRefused,
+            ))),
+        };
+        let (first, _) = walked(&routes, &refused);
+        let (second, _) = walked(&routes, &refused);
+        assert_eq!(first, second);
+        assert_eq!(second[0], dead.label());
+    }
+
+    /// The real thing: a proxy nobody listens on, then direct, over real
+    /// agents — the request ends on the local server's answer.
+    #[test]
+    fn a_dead_proxy_then_direct_reaches_the_server() {
+        let server = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|e| unreachable!("loopback: {e}"));
+        let port = server.local_addr().map(|addr| addr.port()).unwrap_or(0);
         std::thread::spawn(move || {
-            for stream in server.incoming().take(1) {
-                use std::io::{Read as _, Write as _};
-                let mut stream = stream.unwrap();
+            use std::io::{Read as _, Write as _};
+            if let Some(Ok(mut stream)) = server.incoming().next() {
                 let mut buf = [0u8; 1024];
                 let _ = stream.read(&mut buf);
                 let _ = stream.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok");
             }
         });
-        // A proxy nobody listens on, then direct.
-        let dead = Proxy::new("http://127.0.0.1:1").unwrap();
-        let _serial = install(vec![Candidate::Env(dead), Candidate::Direct]);
         let url = format!("http://127.0.0.1:{port}/");
-        let body = with_candidates(Duration::from_secs(5), |agent| {
-            agent.get(&url).call()?.body_mut().read_to_string()
-        })
-        .expect("direct must succeed after the proxy refused");
+        let body = over_routes(
+            Ok(vec![dead_proxy(), Route::Direct]),
+            Duration::from_secs(5),
+            |agent| agent.get(&url).call()?.body_mut().read_to_string(),
+        )
+        .unwrap_or_else(|failure| unreachable!("{:?}", failure.error));
         assert_eq!(body, "ok");
-        // Leave no test-shaped state behind for the next test.
-        if let Ok(mut guard) = state().lock() {
-            *guard = None;
-        }
     }
 
+    /// Loopback never takes a proxy; everything else asks the platform.
+    #[cfg(not(feature = "dev-fixtures"))]
     #[test]
-    fn exhausting_every_candidate_names_where_it_failed() {
-        let dead = Proxy::new("http://127.0.0.1:1").unwrap();
-        let _serial = install(vec![Candidate::Env(dead), Candidate::Direct]);
-        // A name no resolver answers: the direct attempt fails INSIDE the
-        // machine, so the verdict is local.
-        let failure = with_candidates(Duration::from_secs(5), |agent| {
-            agent
-                .get("http://vela-038-no-such-host.invalid/")
-                .call()
-                .map(|_| ())
-        })
-        .expect_err("nothing can answer");
-        assert!(
-            failure.local,
-            "unresolvable host = this machine could not get out: {:?}",
-            failure.error
-        );
-        // The dead-end list was dropped, so the next request re-derives.
-        assert!(state().lock().map(|g| g.is_none()).unwrap_or(false));
+    fn loopback_is_direct() {
+        let routes = routes_for("http://127.0.0.1:8545/").unwrap_or_default();
+        assert!(matches!(routes.as_slice(), [Route::Direct]));
     }
 }

@@ -130,7 +130,7 @@ hidapi = { version = "2.6", default-features = false, features = [
 # environment variables this crate otherwise relies on are a shell convention,
 # and a GUI process started from the Start menu has none of them. The Linux
 # half of the same problem is `executor/proxy.rs`, which reads GNOME's setting;
-# macOS needs neither, because a system proxy there sits in the network stack.
+# macOS asks CFNetwork (`executor/proxy_macos.rs`, spec 082).
 ureq = { version = "3.4", features = [
     "json",
     "socks-proxy",
@@ -271,6 +271,12 @@ nokhwa = { version = "0.10", default-features = false, features = [
     "input-avfoundation",
 ] }
 objc2 = "0.5"
+# The system proxy, as WebKit resolves it (spec 082 RD2, `executor/
+# proxy_macos.rs`): CFNetwork's per-URL lookup and its PAC runner, called
+# through a small `extern "C"` block over these two. Both already in the lock
+# through gpui, so nothing new is fetched.
+core-foundation = "0.10"
+core-foundation-sys = "0.8"
 objc2-foundation = { version = "0.2", features = [
     "NSStream",
     "NSData",

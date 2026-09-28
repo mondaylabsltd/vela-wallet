@@ -1039,11 +1039,11 @@ fn post(
     timeout_ms: u32,
 ) -> (RpcTransportOutcome, Option<Value>) {
     let payload = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
-    // Per URL: an endpoint on this machine is never reached through a proxy;
-    // everything else walks the candidate chain (spec 038 Part B, T028), so a
-    // dead proxy in the environment does not get every RPC endpoint banned.
+    // Per URL, over the system's routes for it (spec 082 RD2): loopback is
+    // direct, the next route is tried only when a proxy itself could not be
+    // reached, and a dead proxy is named in the log rather than routed around.
     let timeout = Duration::from_millis(u64::from(timeout_ms));
-    let mut response = match proxy::with_candidates_for(url, timeout, |agent| {
+    let mut response = match proxy::with_routes(url, timeout, |agent| {
         // Spec 081 FR-007: the wallet no longer tells the relay which RPC endpoint it prefers. That header carried the user's first-choice URL, which can contain a provider API key — and the relay never read this name anyway (it reads `x-vela-rpc-url`), so nothing depended on it.
         let _ = x_rpc_url;
         agent

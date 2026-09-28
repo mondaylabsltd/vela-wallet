@@ -78,10 +78,10 @@ fn remember(rows: &[(String, f64)]) {
 /// `[{quote, rate}, …]` from the configured endpoint, sorted by code.
 fn fetch_rate_table() -> Option<Vec<(String, f64)>> {
     let url = fiat_rates_url();
-    let mut response = proxy::agent(std::time::Duration::from_secs(8))
-        .get(&url)
-        .call()
-        .ok()?;
+    let mut response = proxy::with_routes(&url, std::time::Duration::from_secs(8), |agent| {
+        agent.get(&url).call()
+    })
+    .ok()?;
     let mut body = String::new();
     std::io::Read::read_to_string(&mut response.body_mut().as_reader(), &mut body).ok()?;
     let parsed: serde_json::Value = serde_json::from_str(&body).ok()?;
