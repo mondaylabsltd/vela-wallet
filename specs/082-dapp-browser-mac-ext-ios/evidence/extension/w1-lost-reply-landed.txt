@@ -1,0 +1,23 @@
+# 082 G21 — lost relay reply: the op landed while the extension said Failed
+Chrome for Testing 151, extension 0.9.5 @ de93634f, parallel space (Parallel One 0xD400866e…130b), Gnosis, test dApp 'Send dust' (0.001 xDAI).
+Fault: chaos-proxy mode=mute match=vela-relay (request delivered, every reply dropped), switched on after the fee was shown, before the slide (slide at 15:22:02).
+
+## Wallet side panel (polled)
++3..40 s  'Waiting for biometric...' (parallel space signs instantly — this is the network wait)
++60 s     'Submitting to network...'
++90 s     'Failed — The transaction couldn't be submitted. Your funds are safe — please try again.'
+dApp got  {ok:false, code:-32603, message:'All bundler endpoints failed for chain 100'}
+
+## Chain
+UserOperationEvent nonce 22 success=1, block 48478729 (15:22:50), tx 0xc6f3544fc4e3ac769e92c92ab4804cd3f38ffb8d607ba07b5103a59710094dc4
+Parallel One xDAI: 0.814 before -> 0.803 after (0.001 sent + 0.01 fee)
+
+## chaos.log
+15:21:45 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+15:21:58 PASS vela-relay-cf.getvela.app:443 1ms
+15:21:58 PASS vela-relay-cf.getvela.app:443 1ms
+15:22:02 CONFIG {"mode": "mute", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+15:22:02 CUT 1 live tunnels: vela-relay-cf.getvela.app
+15:22:02 MUTE vela-relay-cf.getvela.app:443 1ms
+15:22:39 MUTE vela-relay-cf.getvela.app:443 0ms
+15:23:09 MUTE vela-relay-cf.getvela.app:443 0ms

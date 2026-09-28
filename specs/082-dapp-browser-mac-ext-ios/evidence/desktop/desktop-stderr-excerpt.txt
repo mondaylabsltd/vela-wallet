@@ -1,0 +1,38 @@
+[vela-wallet] wallet: locale `zh`, gallery false, section Wallet
+[vela-wallet] signer page: matches a version this build accepts
+2026-09-28 14:10:44.724 vela-wallet[95570:2533814] error messaging the mach port for IMKCFRunLoopWakeUpReliable
+[vela-wallet] panic: cannot update vela_wallet::wallet::page::WalletPage while it is already being updated
+    at /Users/shelchin/.cargo/git/checkouts/zed-a70e2ad075855582/c97b7c0/crates/gpui/src/app/entity_map.rs:142
+[vela-wallet] panic: panic in a function that cannot unwind
+    at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/panicking.rs:225
+thread caused non-unwinding panic. aborting.
+[vela-wallet] onboarding: locale resolved to `en`
+[vela-wallet] signer page: matches a version this build accepts
+[vela-wallet] launch animation: Completed
+[vela-wallet] wallet: locale `en`, gallery false, section Wallet
+[vela-wallet] panic: cannot update vela_wallet::wallet::page::WalletPage while it is already being updated
+    at /Users/shelchin/.cargo/git/checkouts/zed-a70e2ad075855582/c97b7c0/crates/gpui/src/app/entity_map.rs:142
+[vela-wallet] panic: panic in a function that cannot unwind
+    at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/panicking.rs:225
+thread caused non-unwinding panic. aborting.
+[vela-wallet] wallet: locale `en`, gallery false, section Wallet
+[vela-wallet] signer page: matches a version this build accepts
+2026-09-28 14:18:28.168 vela-wallet[50929:2683876] TSM AdjustCapsLockLEDForKeyTransitionHandling - _ISSetPhysicalKeyboardCapsLockLED Inhibit
+[vela-wallet] editor: key "v" -> Paste
+[vela-wallet] editor: key "backspace" -> Edited
+[vela-wallet] dev proxy: all traffic via 127.0.0.1:8899
+[vela-wallet] wallet: locale `zh`, gallery false, section Explore
+[vela-wallet] signer page: matches a version this build accepts
+[vela-wallet] panic: called `Option::unwrap()` on a `None` value
+    at /Users/shelchin/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wry-0.56.1/src/wkwebview/mod.rs:1370
+fatal runtime error: failed to initiate panic, error 3, aborting
+[vela-wallet] wallet: locale `zh`, gallery false, section Explore
+[vela-wallet] signer page: matches a version this build accepts
+[vela-wallet] dev proxy: all traffic via 127.0.0.1:8899
+[vela-wallet] wallet: locale `zh`, gallery false, section Explore
+[vela-wallet] signer page: matches a version this build accepts
+2026-09-28 15:55:10.974 vela-wallet[54866:3328751] error messaging the mach port for IMKCFRunLoopWakeUpReliable
+[vela-wallet] in-band: estimation failed, using defaults: gas estimation unreachable: Failed { rate_limited: false }
+[vela-wallet] in-band: signing DISPLAYED quote token=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c
+[vela-wallet] relay: submitting sender=0x88cCA0EeDbF2C4426110bbFc998F048689266894 nonce=0x0000000000000000000000000000000000000000000000000000000000000029 initCode=no callData=452B signature=429B
+[vela-wallet] submit failed: Other("The gas relayer could not be reached. Please try again.")
