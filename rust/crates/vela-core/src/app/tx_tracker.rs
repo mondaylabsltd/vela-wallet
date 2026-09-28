@@ -558,7 +558,7 @@ struct FindScan {
     /// head, or the first head read minus [`FIND_OP_LOOKBACK_BLOCKS`]).
     from: Option<u64>,
     /// The current window width, ≤ [`FIND_OP_MAX_RANGE`], halved on a range
-    /// error down to one block.
+    /// error down to one block, doubled again after a clean full-width read.
     width: u64,
     /// The highest head the shell has reported.
     head: Option<u64>,
@@ -1468,6 +1468,16 @@ fn on_op_event(
                 };
             }
             Found::Nothing => {
+                // A clean read of the full width shows the node takes it:
+                // grow back toward the widest window. At the head the ask
+                // is only the new blocks, so one range error there (often a
+                // load-balanced node a block behind) would otherwise pin the
+                // scan to a sliver for good — and on a fast chain a catch-up
+                // of one block per read never reaches the head.
+                let asked = to.saturating_sub(from).saturating_add(1);
+                if asked >= entry.find.width {
+                    entry.find.width = entry.find.width.saturating_mul(2).min(FIND_OP_MAX_RANGE);
+                }
                 entry.find.scanned_through = Some(to);
                 entry.find.from = Some(to.saturating_add(1));
                 return continue_scan(attempt, &key, entry, now_ms);

@@ -1610,3 +1610,47 @@ fn a_reloaded_op_is_found_by_its_event() {
     );
     assert_eq!(ops, event_confirmed());
 }
+
+/// Review of T019: a range error halves the window, but the window must not
+/// stay small for the op's whole life. At the head the ask is only the new
+/// blocks, so ONE range error there — a load-balanced node a block behind
+/// the head answering "block range extends beyond current head block" —
+/// used to cut the width to a block or two for good; on a fast chain
+/// (Arbitrum, four blocks a second) a catch-up of one block per read never
+/// reaches the head, and a may-have-been-sent op then never gets its
+/// chain-backed verdict. Clean reads of the full width grow it back, up to
+/// `FIND_OP_MAX_RANGE`.
+#[test]
+fn the_window_grows_back_after_a_range_error() {
+    let mut sut = Sut::new();
+    submitted_maybe(&mut sut, Some(SUBMIT_BLOCK));
+    // The first read is at the head: three new blocks.
+    let ops = first_window(&mut sut, SUBMIT_BLOCK + 2);
+    assert_eq!(ops, vec![window(SUBMIT_BLOCK, SUBMIT_BLOCK + 2)]);
+    let lagging = r#"{"code":-32000,"message":"block range extends beyond current head block"}"#;
+    let ops = sut.resolve_matching(
+        is_find,
+        op_event(T0 + 12_600.0, None, Some(lagging), Some(SUBMIT_BLOCK + 2)),
+    );
+    assert_eq!(ops, vec![window(SUBMIT_BLOCK, SUBMIT_BLOCK)]);
+    // The chain runs far ahead (a phone asleep, a fast chain): the catch-up
+    // takes a bounded number of reads and the window is back at its widest.
+    let head = SUBMIT_BLOCK + 20_000;
+    let mut reads = 0_u32;
+    let mut widest = 0_u64;
+    let mut now = T0 + 12_700.0;
+    while let Some(Op::FindOpEvent {
+        from_block: Some(from),
+        to_block: Some(to),
+        ..
+    }) = sut.outstanding().into_iter().find(is_find)
+    {
+        reads += 1;
+        widest = widest.max(to - from + 1);
+        assert!(reads <= 25, "{reads} reads and still at block {from}");
+        now += 100.0;
+        sut.resolve_matching(is_find, op_event(now, Some("[]"), None, Some(head)));
+    }
+    assert_eq!(widest, FIND_OP_MAX_RANGE);
+    assert!(!sut.outstanding().iter().any(is_find), "caught up");
+}
