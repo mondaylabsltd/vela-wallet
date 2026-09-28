@@ -55,6 +55,13 @@
 //! - `src/services/webview-transport.ts:49-133` — the settle vocabulary: 4900
 //!   on a window going away, never 4001 (invariant ⑤).
 //!
+//! **One spelling toward dApps (spec 082 RG10, L-D6).** Every address this
+//! machine writes into a grant or answers a site with goes through
+//! [`dapp_spelling`] (EIP-55), so the connect answer and a later
+//! `accountsChanged` name the same account the same way. Comparisons stay
+//! case-insensitive ([`resolve_granted`] is unchanged: its JavaScript twin in
+//! the extension's worker cannot checksum).
+//!
 //! Quirks kept verbatim: `grantedAt` never participates in any decision (grants
 //! have no TTL — open question in the inventory); an account switch re-pins a
 //! grant's ADDRESS but never rewrites its chain, which records the chain the
@@ -446,7 +453,13 @@ fn popup_request(
     current_addresses: Option<&[String]>,
     pinned_address: Option<&str>,
 ) -> Command<DpermEffect, Event> {
-    let granted = resolve_granted(grant, current_addresses);
+    // The window answers in the one spelling too, whatever case the stored
+    // grant was written in before 082 (RG10). Only the case changes: the match
+    // above is case-insensitive and stays so.
+    let granted: Vec<String> = resolve_granted(grant, current_addresses)
+        .iter()
+        .map(|address| dapp_spelling(address))
+        .collect();
     let outcome = match decide_popup_request(method, &granted, pinned_address) {
         DpermPopupDecision::Respond(payload) => DpermPopupOutcome::Respond { payload },
         DpermPopupDecision::Consent => DpermPopupOutcome::Consent,
@@ -486,6 +499,10 @@ fn popup_approved(
     if origin.is_empty() || address.is_empty() {
         return Command::done();
     }
+    // The grant, the audit row and the answer all carry the one spelling a
+    // dApp will see from here on (RG10).
+    let address = dapp_spelling(address);
+    let address = address.as_str();
     let grant = DpermGrant {
         origin: origin.to_owned(),
         address: address.to_owned(),
@@ -547,13 +564,29 @@ fn popup_account_switch(
     finish(vec![DpermOperation::WriteGrant {
         grant: DpermGrant {
             origin: origin.to_owned(),
-            address: active_address.to_owned(),
+            address: dapp_spelling(active_address),
             // The chain the site CONNECTED on: an audit fact a switch of
             // account must not rewrite.
             chain_id: grant.chain_id,
             granted_at_ms: now_ms,
         },
     }])
+}
+
+// ---------------------------------------------------------------------------
+// Pure policy — the address spelling a dApp sees (spec 082 RG10)
+// ---------------------------------------------------------------------------
+
+/// The spelling of `address` every dApp is given: EIP-55
+/// ([`crate::primitives::checksum_address`], `0x`-prefixed). Input that is
+/// not an address is returned unchanged: this changes how an account is
+/// spelled, never which account is named, and it must not invent one.
+///
+/// Before 082 the connect answer was checksummed while the page's
+/// `accountsChanged` arrived lower-cased, so a strict dApp saw one account as
+/// two (L-D6).
+pub fn dapp_spelling(address: &str) -> String {
+    crate::primitives::checksum_address(address).unwrap_or_else(|_| address.to_owned())
 }
 
 // ---------------------------------------------------------------------------
