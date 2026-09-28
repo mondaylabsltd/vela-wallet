@@ -129,6 +129,10 @@ final class BrowserEngine: NSObject {
     /// WebKit's own progress (`estimatedProgress`) — never this engine's
     /// `progress`, which starts the hairline before WebKit does. A seam.
     var reportedProgress: () -> Double
+    /// Whether WebKit has a load of a new document running (`isLoading`). A
+    /// navigation inside the document — a fragment, Back or Forward across a
+    /// single-page app's own entries — never sets it. A seam.
+    var reportedLoading: () -> Bool
     /// How a load in flight is stopped. A seam, so tests stop nothing real.
     var stopper: () -> Void
 
@@ -210,6 +214,7 @@ final class BrowserEngine: NSObject {
         self.loader = { [weak webView] request in webView?.load(request) }
         self.reportedURL = { [weak webView] in webView?.url }
         self.reportedProgress = { [weak webView] in webView?.estimatedProgress ?? 0 }
+        self.reportedLoading = { [weak webView] in webView?.isLoading ?? false }
         self.stopper = { [weak webView] in webView?.stopLoading() }
         super.init()
 
@@ -505,6 +510,14 @@ final class BrowserEngine: NSObject {
             webView.observe(\.title, options: [.new]) { [weak self] _, _ in
                 MainActor.assumeIsolated { self?.metaChanged() }
             },
+            // A navigation inside the document (a fragment, Back or Forward
+            // across a single-page app's entries) ends with WebKit's loading
+            // flag going down and no commit or finish at all: that is where
+            // its arrival is read (082 review, `metaChanged`).
+            webView.observe(\.isLoading, options: [.new]) { [weak self] webView, _ in
+                let busy = webView.isLoading
+                MainActor.assumeIsolated { if !busy { self?.metaChanged() } }
+            },
         ]
     }
 
@@ -517,13 +530,35 @@ final class BrowserEngine: NSObject {
     /// The URL or the title changed. A same-origin change while nothing is
     /// pending is the page moving itself — the committed address follows it.
     /// A provisional URL (a load not yet committed) never does (G28).
+    ///
+    /// A navigation that never leaves the document — a fragment, or Back and
+    /// Forward across a single-page app's own history entries — is asked for
+    /// like any load (`requested`), but WebKit sends it no commit and no
+    /// finish: only the new URL, with no document loading. Arriving at the
+    /// very address that was pending, on the committed page's origin, while
+    /// WebKit loads nothing, IS its arrival: the load ends there (082 review).
+    /// Without it the Stop row, the watchdog and the pending page stayed up
+    /// for good after one tap on Back, and the bar stopped following the page.
+    /// A load of a new document always has `isLoading` set when its URL shows,
+    /// and another origin is never taken for this — the bar still never names
+    /// a page that has not arrived.
     func metaChanged() {
         guard !tornDown, let live = liveURL else { return }
-        if pendingURL == nil, let committed = committedURL,
-           ProviderBridge.origin(of: committed) == ProviderBridge.origin(of: live.absoluteString) {
-            committedURL = live.absoluteString
+        let here = live.absoluteString
+        var arrived = false
+        if let pending = pendingURL, pending == here, let committed = committedURL,
+           ProviderBridge.origin(of: committed) == ProviderBridge.origin(of: here),
+           !reportedLoading() {
+            committedURL = here
+            committedGeneration = loadGeneration
+            pendingURL = nil
+            disarmWatchdog()
+            arrived = true
+        } else if pendingURL == nil, let committed = committedURL,
+                  ProviderBridge.origin(of: committed) == ProviderBridge.origin(of: here) {
+            committedURL = here
         }
-        update(loading: loading)
+        update(loading: arrived ? false : loading)
         guard !url.isEmpty, !origin.isEmpty else { return }
         onMeta(url, title)
     }

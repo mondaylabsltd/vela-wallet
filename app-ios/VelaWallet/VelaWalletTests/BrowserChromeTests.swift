@@ -12,6 +12,7 @@ import SwiftUI
 import Testing
 import UIKit
 import VelaCore
+import WebKit
 @testable import VelaWallet
 
 @MainActor
@@ -246,6 +247,77 @@ struct BrowserChromeTests {
         engine.reportedURL = { URL(string: "https://app.uniswap.org/pool") }
         engine.metaChanged()
         #expect(engine.bar.url == "https://app.uniswap.org/pool")
+    }
+
+    /// A navigation that never leaves the document — a fragment, or Back /
+    /// Forward across a single-page app's own history entries — gets no
+    /// commit and no finish from WebKit, only the new URL while nothing
+    /// loads. It is the page moving: the load it started ends there, or the
+    /// Stop row, the watchdog and the pending page stay up for good and the
+    /// bar stops following the page (082 review). Real WebKit, no network.
+    @Test func aSameDocumentArrivalEndsItsLoad() async {
+        let engine = BrowserEngine(id: "tab-\(UUID().uuidString)")
+        defer { engine.tearDown() }
+        engine.webView.loadHTMLString("<html><body>page</body></html>", baseURL: URL(string: "https://app.test/")!)
+        let loaded = Date().addingTimeInterval(5)
+        while Date() < loaded, engine.committedURL == nil || engine.loading {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(engine.committedURL == "https://app.test/")
+
+        engine.load("https://app.test/#pool")
+        let moved = Date().addingTimeInterval(3)
+        while Date() < moved, engine.loading { try? await Task.sleep(nanoseconds: 20_000_000) }
+        #expect(!engine.loading, "a fragment is not a load that never ends")
+        #expect(engine.pendingURL == nil)
+        #expect(!engine.watchdogArmed)
+        #expect(engine.bar.url == "https://app.test/#pool")
+        #expect(!ExploreLive.siteMenuItems(
+            bookmarked: false, connected: false, loading: engine.loading, loc: loc
+        ).contains { $0.id == "stop" })
+    }
+
+    /// Back across a single-page app's own entry (`goBack` names the entry it
+    /// goes to as pending): WebKit only moves the URL, nothing loads — the
+    /// back ends there. The same move while WebKit IS loading a new document
+    /// is a load in flight and waits for its commit, and another origin is
+    /// never taken for an arrival.
+    @Test func backWithinTheDocumentArrivesAndALoadStillWaitsForItsCommit() {
+        let engine = engine()
+        defer { engine.tearDown() }
+        var webKitLoading = false
+        engine.reportedLoading = { webKitLoading }
+        engine.reportedURL = { URL(string: "https://app.uniswap.org/pool") }
+        engine.committed()
+
+        // Back to /swap, a pushState entry: no commit will come.
+        engine.requested("https://app.uniswap.org/swap")
+        #expect(engine.loading)
+        engine.reportedURL = { URL(string: "https://app.uniswap.org/swap") }
+        engine.metaChanged()
+        #expect(!engine.loading)
+        #expect(engine.pendingURL == nil)
+        #expect(!engine.watchdogArmed)
+        #expect(engine.bar.url == "https://app.uniswap.org/swap")
+
+        // A same-origin load of a new document: its URL shows while WebKit
+        // loads — still pending, the bar on the page on screen.
+        engine.requested("https://app.uniswap.org/explore")
+        webKitLoading = true
+        engine.reportedURL = { URL(string: "https://app.uniswap.org/explore") }
+        engine.metaChanged()
+        #expect(engine.loading)
+        #expect(engine.bar.url == "https://app.uniswap.org/swap")
+        engine.committed()
+        webKitLoading = false
+        #expect(engine.bar.url == "https://app.uniswap.org/explore")
+
+        // Another origin is never an arrival, loading or not.
+        engine.requested("https://evil.example/")
+        engine.reportedURL = { URL(string: "https://evil.example/") }
+        engine.metaChanged()
+        #expect(engine.bar.host == "app.uniswap.org")
+        #expect(engine.loading)
     }
 
     /// RE5: while a page loads, the site menu's refresh row is Stop.
