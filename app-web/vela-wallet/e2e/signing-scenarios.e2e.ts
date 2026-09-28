@@ -187,8 +187,12 @@ test('a signed message ends on the tick, and the tick goes by itself', async ({ 
 		localStorage.setItem('vela.dev.console', '1');
 	});
 	await page.goto('/en/parallel');
-	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
-	await page.waitForURL(/\/en\/wallet$/);
+	// A click that lands before the page has hydrated does nothing (seen under
+	// a loaded runner): ask again until the entry navigates.
+	await expect(async () => {
+		await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+		await page.waitForURL(/\/en\/wallet$/, { timeout: 3_000 });
+	}).toPass({ timeout: 30_000 });
 	await page.waitForFunction(
 		() => (window as unknown as { vela?: { requester?: unknown } }).vela?.requester !== undefined,
 		null,
