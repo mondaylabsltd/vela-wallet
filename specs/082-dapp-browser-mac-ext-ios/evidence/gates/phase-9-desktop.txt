@@ -83,3 +83,26 @@ mirror/src worktree/src: only src/wallet/browser_host.rs differs).
       send::tests::a_send_is_on_disk_before_its_post_and_gone_when_never_sent (T220's missing proof; red at its
       first assertion), send::tests::a_write_ahead_replaces_an_earlier_attempt_but_never_a_landed_payment
       (red: the relaunch sweep found 0 of 1), activity_feed::tests::a_clipped_request_still_names_its_contract (red)
+
+T226 CLOSE-OUT (T203 landed), 2026-09-29 — IN THE WORKTREE, no mirror. HEAD 11d8906f (T203: 0c305f7f the network-back
+test on the four-argument net_health_step; 11d8906f LoadDriver::retry_fired/take_due pass the moment's clock to the
+core's retry_fired_at/take_due_at, RJ9). CARGO_TARGET_DIR = /Volumes/data/production/vela-wallet/app-desktop/vela-wallet/target.
+cd app-desktop/vela-wallet
+  cargo test --release                                758 passed, 0 failed, 49 ignored   (757 + 1: the RJ9 hung-load test)
+  cargo test --release --features dev-fixtures        762 passed, 0 failed, 50 ignored
+  cargo clippy --all-targets --features dev-fixtures -- -D warnings
+      red crate-wide as before: 52 findings in the bin, 54 in the bin's tests; by file and message against DESK_B's
+      list: 0 new (three of DESK_B's own gone). browser_host.rs: 0 findings; page.rs: its six pre-existing ones
+      (:850, :4208, :4227, :6586, :11275, :11370), none on a line T203 touched (:13199, :13869).
+  cargo clippy --all-targets -- -D warnings           the same 52 / 54; touched files the same
+  cargo build --release --features dev-fixtures       Finished release; the same 10 dead-code warnings, none in the
+                                                      touched files beyond page.rs:850/:11275 (pre-existing)
+  live (real relay, read-only; no VELA_DEV_PROXY, no chaos proxy):
+    cargo test --release executor::relay::tests::live -- --ignored        3 passed
+    cargo test --release executor::user_op::tests::live -- --ignored      1 passed
+  rustfmt --edition 2024 --check src/wallet/browser_host.rs src/wallet/page.rs   ok
+  T203 tests: three_misses_then_a_reach_retry_the_failed_page_once (chains 1 + 100 → offline → back → one reload;
+      Gnosis alone ×10 → no edge, no reload), a_hung_load_is_replaced_by_the_attempt_due_after_twenty_seconds
+      (red with the clockless calls), the_chain_notice_comes_after_the_first_pass_while_the_read_waits,
+      a_skipped_attempt_is_logged_once_per_load, the_probe_names_its_route.
+Not run: device rows (C1, L2–L4, DX3′) — the device re-run T252; no device, app, Chrome or chaos proxy was touched.
