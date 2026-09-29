@@ -279,7 +279,9 @@ struct SigningFeeRetryTests {
         let unreachable = FeeFailureText.chainRead(rateLimited: false).text
         await Wait.until { controller.quoteStartFailure == unreachable }
         #expect(controller.quoteStartFailure == unreachable)
-        #expect(Date().timeIntervalSince(opened) < 5, "said within the bound, not after the pool gave up")
+        // The silent port holds eth_getCode 120 s: well under that is the
+        // bound at work (a loaded parallel run took 5.1 s for a 0.3 s bound).
+        #expect(Date().timeIntervalSince(opened) < 30, "said within the bound, not after the pool gave up")
         #expect(SigningController.firstDeploymentReadMs == 15_000)
         controller.swipeDismissed()
     }
