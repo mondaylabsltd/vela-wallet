@@ -184,7 +184,11 @@ struct FeeViewWire: Decodable, Equatable {
     /// is true (the core's invariant ⑦).
     let busy: Bool
     /// `missing_public_key` / `fee_token_unavailable` / `quote_unavailable` /
-    /// `calculation_failed` / `estimate_failed` / `gas_quote_too_high`.
+    /// `calculation_failed` / `estimate_failed` / `gas_quote_too_high` — or,
+    /// since spec 082 (RJ13), the object form `{"chain_read":{"rate_limited":…}}`
+    /// kept as its JSON text. Either way it is what the core's
+    /// `feeRequoteDelayMs` and `feeFailureReasonKey` take back, so this shell
+    /// never reads it apart (`FeeFailureText`).
     let failed: String?
     /// Present only when valid for the form's CURRENT chain. A quote for the
     /// chain somebody just left is withheld rather than shown.
@@ -196,6 +200,125 @@ struct FeeViewWire: Decodable, Equatable {
     /// The single gate. Consumers AND this into their confirm button rather
     /// than assembling their own conjunction of `busy`, `failed` and `fee`.
     let confirmFeeReady: Bool
+}
+
+extension FeeViewWire {
+    private enum CodingKeys: String, CodingKey {
+        case busy, failed, fee, stale, feeToken, options, confirmFeeReady
+    }
+
+    /// Written out for `failed` alone: a `FeeFailure` is a string for every
+    /// variant but `chain_read`, which is an object (spec 082 RJ13). Decoding
+    /// it as a `String` failed the whole fee view the day the core grew it.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        busy = try c.decode(Bool.self, forKey: .busy)
+        failed = try c.decodeIfPresent(FeeFailureText.self, forKey: .failed)?.text
+        fee = try c.decodeIfPresent(FeeEstimateWire.self, forKey: .fee)
+        stale = try c.decode(Bool.self, forKey: .stale)
+        feeToken = try c.decodeIfPresent(String.self, forKey: .feeToken)
+        options = try c.decode([FeeOptionWire].self, forKey: .options)
+        confirmFeeReady = try c.decode(Bool.self, forKey: .confirmFeeReady)
+    }
+}
+
+/// `fee_policy::FeeFailure` as the text the core's own functions take back:
+/// the wire name for a string variant, the compact JSON for the object one
+/// (`{"chain_read":{"rate_limited":true}}`). Nothing here reads it apart.
+struct FeeFailureText: Decodable, Equatable {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    /// The failure a shell produces itself (spec 082 RJ13): a chain read the
+    /// fee is blocked on — the account's deployment — got no answer, or a
+    /// rate limit. The fee machine never emits it.
+    static func chainRead(rateLimited: Bool) -> FeeFailureText {
+        FeeFailureText(#"{"chain_read":{"rate_limited":\#(rateLimited)}}"#)
+    }
+
+    init(from decoder: Decoder) throws {
+        let single = try decoder.singleValueContainer()
+        if let name = try? single.decode(String.self) {
+            text = name
+            return
+        }
+        let object = try single.decode(JSONValue.self)
+        text = object.compactJSON
+    }
+
+    /// For a log line: the wire name, or `chain_read` with its one flag —
+    /// never the braces.
+    var cause: String {
+        guard text.hasPrefix("{") else { return text }
+        if text.contains("\"chain_read\"") {
+            return text.contains("true") ? "chain_read(rate_limited)" : "chain_read"
+        }
+        return "other"
+    }
+}
+
+/// Just enough JSON to re-encode an object this shell does not read apart.
+private indirect enum JSONValue: Decodable {
+    case string(String), number(Double), bool(Bool), null
+    case array([JSONValue]), object([(String, JSONValue)])
+
+    private struct Key: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
+    init(from decoder: Decoder) throws {
+        if let keyed = try? decoder.container(keyedBy: Key.self) {
+            // `convertFromSnakeCase` rewrote the keys on the way in; the core
+            // wants its own spelling back.
+            self = .object(try keyed.allKeys.sorted { $0.stringValue < $1.stringValue }.map {
+                (JSONValue.snake($0.stringValue), try keyed.decode(JSONValue.self, forKey: $0))
+            })
+            return
+        }
+        if var list = try? decoder.unkeyedContainer() {
+            var items: [JSONValue] = []
+            while !list.isAtEnd { items.append(try list.decode(JSONValue.self)) }
+            self = .array(items)
+            return
+        }
+        let single = try decoder.singleValueContainer()
+        if single.decodeNil() { self = .null }
+        else if let flag = try? single.decode(Bool.self) { self = .bool(flag) }
+        else if let number = try? single.decode(Double.self) { self = .number(number) }
+        else { self = .string(try single.decode(String.self)) }
+    }
+
+    private static func snake(_ camel: String) -> String {
+        var out = ""
+        for character in camel {
+            if character.isUppercase {
+                out += "_" + character.lowercased()
+            } else {
+                out.append(character)
+            }
+        }
+        return out
+    }
+
+    var compactJSON: String {
+        switch self {
+        case .string(let text):
+            let data = (try? JSONSerialization.data(withJSONObject: text, options: [.fragmentsAllowed])) ?? Data()
+            return String(decoding: data, as: UTF8.self)
+        case .number(let number):
+            return number == number.rounded() && abs(number) < 1e15 ? String(Int64(number)) : String(number)
+        case .bool(let flag): return flag ? "true" : "false"
+        case .null: return "null"
+        case .array(let items): return "[" + items.map(\.compactJSON).joined(separator: ",") + "]"
+        case .object(let pairs):
+            return "{" + pairs.map { "\(JSONValue.string($0.0).compactJSON):\($0.1.compactJSON)" }
+                .joined(separator: ",") + "}"
+        }
+    }
 }
 
 // MARK: - The speed control (spec 069)

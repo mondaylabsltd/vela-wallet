@@ -52,6 +52,20 @@ enum FeedTxKindWire: String, Decodable {
     }
 }
 
+/// Who a row's `counterparty` is (spec 082 RJ16, G52): the person the money
+/// went to, or the contract a dApp's call went to — which the detail labels
+/// `componentsUi.signing.interactingLabel`, never "To". The core decides.
+enum FeedCounterpartyRoleWire: String, Decodable {
+    case recipient, contract
+
+    /// A role this build has never heard of reads as the recipient, the
+    /// core's own default — the row still shows, with its address.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = FeedCounterpartyRoleWire(rawValue: raw) ?? .recipient
+    }
+}
+
 enum FeedBatchKindWire: String, Decodable {
     /// One token → N recipients.
     case split
@@ -82,6 +96,9 @@ struct FeedTxRecordWire: Decodable, Equatable {
     /// The origin of the site that asked, for a `dapp_tx` record (spec 082
     /// RG1); `nil` for every other kind.
     var dappOrigin: String? = nil
+    /// The call's `data`, for a `dapp_tx` record (spec 082 RJ16) — what the
+    /// core reads the counterparty from.
+    var callData: String? = nil
 }
 
 struct FeedBatchTransferWire: Decodable, Equatable {
@@ -142,6 +159,9 @@ struct FeedItemWire: Decodable, Equatable {
     var status: FeedTxStatusWire = .confirmed
     /// `dappTx` only: `host[:port]` of the site that asked.
     var site: String? = nil
+    /// Whether `counterparty` got the money or is the contract a call went
+    /// to (spec 082 RJ16). Always `recipient` except on a `dappTx` row.
+    var counterpartyRole: FeedCounterpartyRoleWire = .recipient
 }
 
 /// A date header or an item, in render order.

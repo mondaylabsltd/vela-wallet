@@ -274,6 +274,8 @@ struct ParityTests {
             "kind": direction == "in" ? "receive" : "send",
             "status": "confirmed",
             "site": NSNull(),
+            // Spec 082 RJ16: who the counterparty is, the core's to say.
+            "counterparty_role": "recipient",
         ])
     }
 

@@ -146,6 +146,18 @@ struct SignTrackerHandoffWire: Decodable, Equatable {
     /// The chain head read before the first submit POST — where the tracker's
     /// relay-independent landing check starts (ruling 8). `nil` = unknown.
     var submitBlock: Int? = nil
+    /// The relay took the op the write-ahead hand-off announced (spec 082
+    /// RJ1): forwarded to the tracker's `submitted`, so an accepted op never
+    /// reads "may have been sent". Same hash and ids as the write-ahead
+    /// hand-off — which is why the shell's de-duplication key carries it.
+    var admitted: Bool = false
+}
+
+/// A write-ahead record proven never sent (spec 082 RJ1): fed to the
+/// tracker's `withdrawn` the moment it appears, once per value.
+struct SignTrackerWithdrawWire: Decodable, Equatable {
+    let userOpHash: String
+    let recordIds: [String]
 }
 
 /// What the signing sheet is doing, in the words a person reads (spec 082
@@ -235,6 +247,12 @@ struct SignViewWire: Decodable, Equatable {
     /// The sheet's op may have been sent: its submit reply was lost (spec 082
     /// RA3). The caption says so, and there is no Retry.
     var pendingOpMaybeSent: Bool = false
+    /// A write-ahead record the core proved never sent (spec 082 RJ1): the
+    /// tracker is told to drop it, once.
+    var trackerWithdraw: SignTrackerWithdrawWire? = nil
+    /// `error` is the relay refusing the op (spec 082 RJ3): the sheet says
+    /// `componentsUi.signing.refused` under `statusFailed`, never "try again".
+    var failureRefused: Bool = false
 
     static let empty = SignViewWire(
         surface: .hidden, request: nil, isSigning: false, isSubmitting: false,
