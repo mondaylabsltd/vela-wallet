@@ -118,19 +118,39 @@ pub(crate) fn to_record(row: &Value) -> Option<FeedTxRecord> {
 /// The first call's `data` in a stored dApp request (`signedRequest`, the
 /// params array as `sign_request::persist_record` kept it): the call of
 /// `eth_sendTransaction`, or the first of a `wallet_sendCalls` batch. `None`
-/// for any other row, and for a request clipped too short to read.
+/// for any other row.
 fn first_call_data(row: &Value) -> Option<String> {
     if row.get("type").and_then(Value::as_str) != Some("dapp_tx") {
         return None;
     }
     let request = row.get("signedRequest").and_then(Value::as_str)?;
-    let params: Value = serde_json::from_str(request).ok()?;
+    let Ok(params) = serde_json::from_str::<Value>(request) else {
+        return clipped_call_data(request);
+    };
     let first = params.get(0)?;
     let call = first
         .get("calls")
         .and_then(|calls| calls.get(0))
         .unwrap_or(first);
     call.get("data").and_then(Value::as_str).map(str::to_owned)
+}
+
+/// A request over the 8 KB the store keeps is clipped and no longer parses
+/// (`requestTruncated`): its first `data` is read off the text — the hex that
+/// survived the clip. A prefix is enough for the core to tell a contract call
+/// from a token transfer, whose whole calldata is 68 bytes.
+fn clipped_call_data(request: &str) -> Option<String> {
+    let after = &request[request.find("\"data\"")? + "\"data\"".len()..];
+    let value = after
+        .trim_start()
+        .strip_prefix(':')?
+        .trim_start()
+        .strip_prefix('"')?;
+    let hex: String = value
+        .chars()
+        .take_while(char::is_ascii_alphanumeric)
+        .collect();
+    (hex.len() > 2 && hex.starts_with("0x")).then_some(hex)
 }
 
 /// Discover incoming transfers and persist the ones `token_trust` admitted.
@@ -472,6 +492,48 @@ mod tests {
         if storage::write_value(TX_KEY, rows).is_err() {
             unreachable!("could not seed the tx store");
         }
+    }
+
+    /// Spec 082 RJ16 (G52): a request over the 8 KB the store keeps is
+    /// clipped (`requestTruncated`) and no longer parses — a big multicall,
+    /// a marketplace order. Its first call's `data` is still read off the
+    /// text, so the contract is named as the contract, not as 接收方 (who got
+    /// the money); a clip with no `data` in it says nothing.
+    #[test]
+    fn a_clipped_request_still_names_its_contract() {
+        let call = format!("0x5ae401dc{}", "ab".repeat(6_000));
+        let whole = json!([{ "to": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83", "data": call }])
+            .to_string();
+        let clipped = &whole[..8 * 1024];
+        assert!(serde_json::from_str::<Value>(clipped).is_err());
+        let row = |request: &str, truncated: bool| {
+            json!({
+                "id": "dapp-1-tx", "userOpHash": "0xop", "txHash": "", "from": "0xme",
+                "to": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83", "value": "0x0",
+                "symbol": "xDAI", "decimals": 18, "chainId": 100, "timestamp": 1,
+                "status": "pending", "type": "dapp_tx", "signedRequest": request,
+                "requestTruncated": truncated,
+            })
+        };
+        let data = to_record(&row(clipped, true))
+            .and_then(|record| record.call_data)
+            .unwrap_or_default();
+        assert!(
+            data.starts_with("0x5ae401dc"),
+            "{}",
+            &data[..data.len().min(20)]
+        );
+        assert!(call.starts_with(&data));
+        let spaced = r#"[{"to":"0xDD", "data" :  "0xa9059cbb00"#;
+        assert_eq!(
+            to_record(&row(spaced, true)).and_then(|record| record.call_data),
+            Some("0xa9059cbb00".to_owned())
+        );
+        assert_eq!(
+            to_record(&row(r#"[{"to":"0xDD","value":"0x"#, true))
+                .and_then(|record| record.call_data),
+            None
+        );
     }
 
     /// A discovered receipt becomes a stored row, and the same one twice does
