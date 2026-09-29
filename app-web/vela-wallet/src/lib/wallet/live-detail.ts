@@ -138,7 +138,14 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 
 	if (item.counterparty !== null) {
 		facts.push({
-			label: received ? m['componentsTx.detail.from'] : m['componentsTx.detail.to'],
+			// Spec 082 RJ16: the core says who the counterparty IS — the one who
+			// got the money, or the contract a dApp's call went to (a swap's
+			// router is not its "recipient").
+			label: received
+				? m['componentsTx.detail.from']
+				: item.counterparty_role === 'contract'
+					? m['componentsUi.signing.interactingLabel']
+					: m['componentsTx.detail.to'],
 			value: item.alias ?? shortenAddress(item.counterparty),
 			lead: {
 				kind: 'identicon',
@@ -241,10 +248,13 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		positive: received,
 		facts,
 		viewOnExplorer: m['history.viewOnExplorer'],
-		// The hash is the only honest target; a record without one (a pending
-		// send the tracker has not yet resolved) draws the control inert.
+		// The transaction hash is the only honest target (spec 082 RJ16: the
+		// core never names an op hash as one); without it no control is drawn.
 		explorerUrl: item.tx_hash === null ? undefined : explorerTxURL(item.chain_id, item.tx_hash),
-		deleteLabel: m['history.deleteRecord']
+		deleteLabel: m['history.deleteRecord'],
+		// RJ18: on a pending record the delete is quiet — the record is the
+		// trace that stops the same payment being sent twice.
+		deleteQuiet: status === 'pending'
 	};
 }
 

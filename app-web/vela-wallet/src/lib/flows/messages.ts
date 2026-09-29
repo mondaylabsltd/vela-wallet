@@ -64,6 +64,8 @@ export const WALLET_FLOW_KEYS = [
 	// Spec 082 RG2: a dApp's transaction, and the site that asked for it.
 	'history.txLabelDappTx',
 	'componentsUi.signing.siweOrigin',
+	// Spec 082 RJ16: a dApp call's counterparty that is the contract it went to.
+	'componentsUi.signing.interactingLabel',
 	'history.deleteRecord',
 	'history.toName',
 	'history.fromName',

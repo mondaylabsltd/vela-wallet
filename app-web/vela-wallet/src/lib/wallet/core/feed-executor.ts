@@ -95,8 +95,31 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 		usd: typeof tx.usd === 'string' ? tx.usd : null,
 		// The site that asked, for a dApp transaction (spec 082 RG1): the core
 		// names the row's site from it; every other kind carries none.
-		dapp_origin: typeof tx.dappOrigin === 'string' && tx.dappOrigin ? tx.dappOrigin : null
+		dapp_origin: typeof tx.dappOrigin === 'string' && tx.dappOrigin ? tx.dappOrigin : null,
+		// The call's data, for a dApp transaction (spec 082 RJ16): the core
+		// decodes a plain token transfer's real recipient from it, and names
+		// any other call's `to` as the contract it went to.
+		call_data: rawKind === 'dapp_tx' ? firstCallData(tx.signedRequest) : null
 	};
+}
+
+/**
+ * The first call's `data` of the stored request (spec 082 RJ16): an
+ * `eth_sendTransaction`'s own, or a `wallet_sendCalls` batch's first leg.
+ * `null` when there is none, or it is not hex — the stored request is an
+ * unvalidated parse, and the core is handed only what it can read.
+ */
+export function firstCallData(request: LocalTransaction['signedRequest']): string | null {
+	const params = request?.params;
+	if (!Array.isArray(params) || params.length === 0) return null;
+	const first = params[0] as { data?: unknown; calls?: unknown } | null;
+	if (!first || typeof first !== 'object') return null;
+	const call =
+		request?.method === 'wallet_sendCalls' && Array.isArray(first.calls)
+			? (first.calls[0] as { data?: unknown } | undefined)
+			: first;
+	const data = call?.data;
+	return typeof data === 'string' && /^0x[0-9a-fA-F]*$/.test(data) && data.length > 2 ? data : null;
 }
 
 /**

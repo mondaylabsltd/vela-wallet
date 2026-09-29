@@ -53,20 +53,21 @@
 	{/if}
 
 	<div class="cta">
+		<!-- No transaction hash, no explorer control (spec 082 RJ16): an op the
+		     relay refused never reached the chain, and a greyed link offered it
+		     anyway (G52). A pending send's control appears once its hash lands. -->
 		{#if model.explorerUrl !== undefined}
 			<Button variant="secondary" href={model.explorerUrl} external>{model.viewOnExplorer}</Button>
-		{:else}
-			<!-- No hash yet — a send the tracker has not resolved. The record's
-			     own builder calls this "inert" and nothing made it LOOK inert: it
-			     was drawn exactly like the working link, with a handler no caller
-			     ever passed (spec 081, dead-controls #18). Kept on screen rather
-			     than hidden, because it comes back the moment the hash lands and
-			     a button that appears under a thumb is its own hazard. -->
-			<Button variant="secondary" disabled>{model.viewOnExplorer}</Button>
 		{/if}
 		{#if model.deleteLabel !== undefined}
-			<!-- Removes the local record only; the chain keeps the transaction. -->
-			<Button variant="danger" onclick={ondelete}>{model.deleteLabel}</Button>
+			<!-- Removes the local record only; the chain keeps the transaction. On
+			     a pending record it is a quiet control (RJ18): the record is the
+			     "don't send it again" trace, not something to clear first. -->
+			{#if model.deleteQuiet}
+				<button type="button" class="quiet" onclick={ondelete}>{model.deleteLabel}</button>
+			{:else}
+				<Button variant="danger" onclick={ondelete}>{model.deleteLabel}</Button>
+			{/if}
 		{/if}
 	</div>
 </div>
@@ -110,5 +111,21 @@
 		flex-direction: column;
 		gap: var(--space-md);
 		padding-top: var(--space-xl);
+	}
+
+	.quiet {
+		align-self: center;
+		min-height: var(--size-control-md);
+		padding-inline: var(--space-lg);
+		border: none;
+		background: none;
+		font-family: var(--font-ui);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
+		cursor: pointer;
+	}
+
+	.quiet:hover {
+		color: var(--color-fg-base);
 	}
 </style>

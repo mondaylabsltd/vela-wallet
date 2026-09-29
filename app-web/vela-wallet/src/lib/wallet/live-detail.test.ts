@@ -62,6 +62,7 @@ function item(id: string, partial: Partial<FeedItem> = {}): FeedItem {
 		kind: (partial.direction ?? 'in') === 'in' ? 'receive' : 'send',
 		status: 'confirmed',
 		site: null,
+		counterparty_role: 'recipient',
 		...partial
 	};
 }
@@ -275,6 +276,38 @@ describe('the status a transaction detail reports (issue 211, spec 082 RG1)', ()
 		});
 		expect(detail.status.text).toBe(fm['componentsTx.detail.statusPending']);
 		expect(detail.explorerUrl).toBeUndefined();
+	});
+
+	it('a swap’s router is the contract it went to, not its recipient (RJ16, G52)', () => {
+		const router = '0x' + '3f'.repeat(20);
+		const swap = item('w', {
+			direction: 'out',
+			kind: 'dapp_tx',
+			counterparty: router,
+			counterparty_role: 'contract',
+			tx_hash: '0x' + 'ab'.repeat(32)
+		});
+		const facts = liveTxDetail(swap, ctx).facts;
+		expect(facts[0].label).toBe(fm['componentsUi.signing.interactingLabel']);
+		expect(facts[0].label).not.toBe(fm['componentsTx.detail.to']);
+		// A plain transfer's decoded recipient keeps "To".
+		const transfer = item('t', {
+			direction: 'out',
+			kind: 'dapp_tx',
+			counterparty: router,
+			counterparty_role: 'recipient'
+		});
+		expect(liveTxDetail(transfer, ctx).facts[0].label).toBe(fm['componentsTx.detail.to']);
+	});
+
+	it('no transaction hash: no explorer control; a pending record’s delete is quiet (RJ16, RJ18)', () => {
+		const pending = liveTxDetail(item('p', { status: 'pending', tx_hash: null }), ctx);
+		expect(pending.explorerUrl).toBeUndefined();
+		expect(pending.deleteQuiet).toBe(true);
+		const failed = liveTxDetail(item('f', { status: 'failed', tx_hash: null }), ctx);
+		expect(failed.explorerUrl).toBeUndefined();
+		expect(failed.deleteQuiet).toBe(false);
+		expect(liveTxDetail(item('c'), ctx).deleteQuiet).toBe(false);
 	});
 });
 

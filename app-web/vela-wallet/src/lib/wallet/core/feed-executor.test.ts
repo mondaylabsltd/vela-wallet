@@ -26,7 +26,7 @@ vi.mock('$lib/services/recipient-identity', () => ({
 	resolveRecipientIdentity: (addr: string) => waterfall(addr)
 }));
 
-import { createFeedExecutor, toFeedRecord } from './feed-executor';
+import { createFeedExecutor, firstCallData, toFeedRecord } from './feed-executor';
 
 const effect = (operation: FeedEffect['operation']): FeedEffect => ({ id: 1, operation });
 const ME = '0x14fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d1e';
@@ -225,5 +225,102 @@ describe('a dApp transaction in Activity', () => {
 			core.free();
 		}
 		// The core's first load, inside the test: 5 s is not enough under a full parallel run.
+	}, 30_000);
+});
+
+/**
+ * Spec 082 RJ16 (T233, G52): a dApp record's detail names who got the money.
+ * The stored request's call data reaches the core, which decodes a plain token
+ * transfer's real recipient and calls any other call's `to` the contract.
+ */
+describe('the call data behind a dApp record (RJ16)', () => {
+	const ME_ = '0x' + '11'.repeat(20);
+	const USDC = '0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83';
+	const RECIPIENT = '76875e38fc6bc2dedcaed807ce00782db5c0d141';
+	const TRANSFER =
+		'0xa9059cbb' + RECIPIENT.padStart(64, '0') + (10n ** 30n).toString(16).padStart(64, '0');
+	const record = (signedRequest: LocalTransaction['signedRequest']): LocalTransaction => ({
+		id: 'dapp-1-tx',
+		userOpHash: '0x' + 'ab'.repeat(32),
+		txHash: '',
+		from: ME_,
+		to: USDC,
+		value: '0',
+		symbol: 'xDAI',
+		decimals: 18,
+		chainId: 100,
+		timestamp: 1_700_000_000,
+		status: 'failed',
+		type: 'dapp_tx',
+		dappOrigin: 'http://127.0.0.1:8137',
+		signedRequest
+	});
+
+	it('eth_sendTransaction: its own data; wallet_sendCalls: the first leg’s', () => {
+		expect(
+			toFeedRecord(
+				record({ method: 'eth_sendTransaction', params: [{ to: USDC, data: TRANSFER }] })
+			)?.call_data
+		).toBe(TRANSFER);
+		expect(
+			firstCallData({
+				method: 'wallet_sendCalls',
+				params: [
+					{
+						calls: [
+							{ to: USDC, data: TRANSFER },
+							{ to: USDC, data: '0x01' }
+						]
+					}
+				]
+			})
+		).toBe(TRANSFER);
+	});
+
+	it('none for a plain send, an unreadable request, or any other kind', () => {
+		expect(
+			firstCallData({ method: 'eth_sendTransaction', params: [{ to: USDC, value: '0x1' }] })
+		).toBeNull();
+		expect(firstCallData({ method: 'eth_sendTransaction', params: [{ data: '0x' }] })).toBeNull();
+		expect(
+			firstCallData({ method: 'eth_sendTransaction', params: [{ data: 'nothex' }] })
+		).toBeNull();
+		expect(firstCallData(undefined)).toBeNull();
+		expect(toFeedRecord({ ...record(undefined), type: 'send' })?.call_data).toBeNull();
+	});
+
+	it('through the core: the DX-W3 record names the transfer’s recipient, and no explorer', async () => {
+		await import('$lib/i18n/wasm-init.server');
+		const { ActivityFeedCore } = await import('$lib/core/client');
+		const core = new ActivityFeedCore();
+		type Result = {
+			view: FeedView;
+			effects: { id: number; operation: { type: string; read_id?: number } }[];
+		};
+		const dispatch = (event: unknown) => JSON.parse(core.dispatch(JSON.stringify(event))) as Result;
+		const resolve = (id: number, result: unknown) =>
+			JSON.parse(core.resolve_effect(BigInt(id), JSON.stringify(result))) as Result;
+		try {
+			const first = dispatch({ type: 'account_switched', address: ME_ }).effects.find(
+				(e) => e.operation.type === 'read_tx_store'
+			)!;
+			const stored = record({
+				method: 'eth_sendTransaction',
+				params: [{ to: USDC, data: TRANSFER }]
+			});
+			const after = resolve(first.id, {
+				type: 'store_loaded',
+				records: [toFeedRecord(stored)],
+				now_ms: 1_700_000_100_000,
+				read_id: first.operation.read_id
+			});
+			const items = after.view.rows.flatMap((r) => (r.type === 'item' ? [r.item] : []));
+			expect(items).toHaveLength(1);
+			expect(items[0].counterparty?.toLowerCase()).toBe(`0x${RECIPIENT}`);
+			expect(items[0].counterparty_role).toBe('recipient');
+			expect(items[0].tx_hash).toBeNull();
+		} finally {
+			core.free();
+		}
 	}, 30_000);
 });
