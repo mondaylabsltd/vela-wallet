@@ -23,6 +23,8 @@ const seams = vi.hoisted(() => ({
 	accountInfo: vi.fn(),
 	trackSubmitted: vi.fn(),
 	withdrawTracked: vi.fn(),
+	trackerView: vi.fn(() => ({ entries: [] as unknown[] })),
+	outcomeOf: vi.fn(() => null as unknown),
 	updateTransactions: vi.fn(),
 	deleteTransactions: vi.fn()
 }));
@@ -35,7 +37,9 @@ vi.mock('$lib/core/kernels', () => ({
 }));
 vi.mock('$lib/wallet/core/tracker-resident', () => ({
 	trackSubmitted: seams.trackSubmitted,
-	withdrawTracked: seams.withdrawTracked
+	withdrawTracked: seams.withdrawTracked,
+	txTrackerView: seams.trackerView,
+	outcomeOf: seams.outcomeOf
 }));
 vi.mock('$lib/services/networks', () => ({
 	getAllNetworksSync: () => [],
@@ -268,6 +272,8 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 	beforeEach(() => {
 		seams.updateTransactions.mockResolvedValue(undefined);
 		seams.deleteTransactions.mockResolvedValue(undefined);
+		seams.trackerView.mockReturnValue({ entries: [] });
+		seams.outcomeOf.mockReturnValue(null);
 	});
 
 	/** The submit as `submitUserOp` runs it: the gate before the first POST, then the POST. */
@@ -363,6 +369,92 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 				9,
 				true
 			);
+		} finally {
+			setSendTrackerSink(null);
+		}
+	});
+
+	/**
+	 * The write-ahead hands the op to the tracker BEFORE its POST, and the
+	 * send core names the op only when the relay's reply (or its loss) comes
+	 * back: a `ReceiptUpdate` before that is a stale hash to it, and dropped.
+	 * The chain check can find the landed op while that reply is being lost
+	 * (EX-W1 on the Send screen) — the watcher that carried the verdict is
+	 * spent, a terminal entry never changes again, and the receipt read "may
+	 * have been sent" over money the tracker saw land (the iOS twin: 8772d5dc).
+	 */
+	it('a verdict the tracker reached while the reply was out reaches the receipt once the op is named', async () => {
+		const TX = '0x' + 'fc'.repeat(32);
+		vi.mocked(sendBatchCalls).mockImplementation(async (...args: unknown[]) => {
+			const signFn = args[4] as SignFn;
+			await signFn.beforePost?.({ userOpHash: OP, submitBlock: 9, chainId: 100 });
+			return {
+				userOpHash: OP,
+				maybeSent: true,
+				submitBlock: 9,
+				waitForTxHash: async () => '0x'
+			} as SubmitResult;
+		});
+		const entry = { user_op_hash: OP, status: 'confirmed', tx_hash: TX };
+		seams.trackerView.mockReturnValue({ entries: [entry] });
+		seams.outcomeOf.mockImplementation((e: unknown) =>
+			e === entry ? { type: 'confirmed', tx_hash: TX } : null
+		);
+		const dispatched: SendEvent[] = [];
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: (event) => dispatched.push(event)
+		});
+		const submitting = executor.execute(submit);
+		await vi.waitFor(() => expect(dispatched).toHaveLength(1));
+		await executor.execute({ id: 2, operation: { type: 'clear_to_post', user_op_hash: OP } });
+		await expect(submitting).resolves.toMatchObject({ type: 'submitted', maybe_sent: true });
+		// Only after the core has the result — it names the op then.
+		expect(dispatched.filter((e) => e.type === 'receipt_update')).toEqual([]);
+		await vi.waitFor(() =>
+			expect(dispatched.filter((e) => e.type === 'receipt_update')).toEqual([
+				{
+					type: 'receipt_update',
+					user_op_hash: OP,
+					outcome: { type: 'confirmed', tx_hash: TX }
+				}
+			])
+		);
+	});
+
+	it('the admitted hand-off keeps the receipt listening, though an early verdict spent its watcher', async () => {
+		// A premature "not sent" (the POST outlasted the grace) was delivered
+		// before the op was named — dropped, and the watcher gone with it. The
+		// tracker revives the entry on `admitted`; its later landing must still
+		// reach the receipt, so the admitted hand-off watches again.
+		setSendTrackerSink(vi.fn());
+		try {
+			const dispatched: SendEvent[] = [];
+			const executor = createSendExecutor(ports(), {
+				dispatch: (event) => dispatched.push(event)
+			});
+			await executor.execute({
+				id: 1,
+				operation: {
+					type: 'track_submitted',
+					user_op_hash: OP,
+					record_ids: [`${OP}-0`],
+					chain_id: 100,
+					maybe_sent: false,
+					submit_block: 9,
+					admitted: true
+				}
+			});
+			const watch = seams.trackSubmitted.mock.calls[0]?.[3] as
+				((outcome: unknown) => void) | undefined;
+			expect(typeof watch).toBe('function');
+			watch?.({ type: 'confirmed', tx_hash: '0x01' });
+			expect(dispatched).toEqual([
+				{
+					type: 'receipt_update',
+					user_op_hash: OP,
+					outcome: { type: 'confirmed', tx_hash: '0x01' }
+				}
+			]);
 		} finally {
 			setSendTrackerSink(null);
 		}

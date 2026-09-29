@@ -65,7 +65,12 @@ import {
 } from '$lib/services/safe-transaction';
 import { findAccountByAddress, findAccountByCredentialId } from '$lib/services/accounts';
 import { deleteTransactions, saveTransactions, updateTransactions } from '$lib/services/records';
-import { trackSubmitted, withdrawTracked } from '$lib/wallet/core/tracker-resident';
+import {
+	outcomeOf,
+	trackSubmitted,
+	txTrackerView,
+	withdrawTracked
+} from '$lib/wallet/core/tracker-resident';
 import { WriteAheadTimeoutError } from '$lib/signing/core/sign-types';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { resolveTokenMetadata } from '$lib/services/token-metadata';
@@ -225,6 +230,26 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				now_ms: Date.now()
 			});
 		});
+	}
+
+	/**
+	 * The receipt hears the tracker's verdict on `userOpHash` (spec 082 RJ1,
+	 * RJ4). The write-ahead hands the op to the tracker BEFORE its POST, and
+	 * the send core names the op only when the relay's reply (or its loss)
+	 * comes back: a `ReceiptUpdate` before that is a stale hash to it, and is
+	 * dropped. The chain check can find the landed op while that reply is being
+	 * lost (EX-W1); the watcher that carried the verdict is spent by then and a
+	 * terminal entry never changes again — so the receipt said "may have been
+	 * sent" over money the tracker saw land. Run once the core holds the
+	 * `Submitted` result, which the effect loop resolves in this same task.
+	 */
+	function catchUpReceipt(dispatch: SendExecutorSelf['dispatch'], userOpHash: string): void {
+		setTimeout(() => {
+			const key = userOpHash.toLowerCase();
+			const entry = txTrackerView().entries.find((row) => row.user_op_hash.toLowerCase() === key);
+			const outcome = entry ? outcomeOf(entry) : null;
+			if (outcome) dispatch({ type: 'receipt_update', user_op_hash: userOpHash, outcome });
+		}, 0);
 	}
 
 	/**
@@ -493,6 +518,8 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 							: undefined
 					);
 					submitted.set(result.userOpHash, result);
+					// What the tracker learned while the reply was out (RJ1, RJ4).
+					if (dispatch) catchUpReceipt(dispatch, result.userOpHash);
 					// A lost reply is not a failure (spec 082 RA4): the payment may be
 					// on its way, so it is recorded and followed under the local hash.
 					return {
@@ -523,14 +550,22 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				if (operation.admitted) {
 					// The relay took the op the write-ahead announced (RJ1): the
 					// tracker hears it straight away — never "may have been sent"
-					// again. Its watcher, set by the write-ahead's hand-off, stays.
-					// The sink is the page's and forwards no `admitted`.
+					// again. The sink is the page's and forwards no `admitted`.
+					// The receipt watches again: an early verdict (a "not sent" the
+					// slow POST outlasted, delivered before the core named the op
+					// and dropped as a stale hash) spent the write-ahead's watcher,
+					// and the tracker revives the entry on this hand-off.
 					if (trackerSink) {
+						const dispatch = self?.dispatch;
+						const userOpHash = operation.user_op_hash;
 						trackSubmitted(
-							operation.user_op_hash,
+							userOpHash,
 							operation.record_ids,
 							operation.chain_id,
-							undefined,
+							dispatch
+								? (outcome) =>
+										dispatch({ type: 'receipt_update', user_op_hash: userOpHash, outcome })
+								: undefined,
 							false,
 							operation.submit_block,
 							true
