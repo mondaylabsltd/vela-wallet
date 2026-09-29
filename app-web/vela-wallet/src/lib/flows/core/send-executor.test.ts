@@ -24,7 +24,7 @@ const seams = vi.hoisted(() => ({
 	trackSubmitted: vi.fn(),
 	withdrawTracked: vi.fn(),
 	trackerView: vi.fn(() => ({ entries: [] as unknown[] })),
-	outcomeOf: vi.fn(() => null as unknown),
+	outcomeOf: vi.fn<(entry: unknown) => unknown>(() => null),
 	updateTransactions: vi.fn(),
 	deleteTransactions: vi.fn()
 }));
