@@ -317,7 +317,7 @@ class SignExecutor(
      * (RB2, immediately before the POST). Neither: nothing is posted.
      */
     private suspend fun writtenAhead(op: SignOperation.SignAndSubmit, localHash: String, submitBlock: Long?) {
-        val clearance = writeAhead.expect(clearanceKey(op.id, localHash))
+        val clearance = writeAhead.expect(clearanceKey(op.id, localHash), localHash)
         ports.opSigned(op.id, localHash, submitBlock)
         if (!clearance.await()) throw UserOpSpine.Refused(UserOpSpine.Failure.NotCleared)
         stillAsked(op)

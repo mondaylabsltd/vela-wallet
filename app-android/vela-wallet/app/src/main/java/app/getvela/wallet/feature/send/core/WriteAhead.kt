@@ -41,8 +41,15 @@ class WriteAhead(
     /**
      * Register [key] BEFORE telling the core the op is signed — the clearance
      * can come back before the caller starts waiting.
+     *
+     * [userOpHash]: the op about to be written ahead. Only a write that comes
+     * after this call counts for it (082 review of T245): the same op signed
+     * again — same nonce, calls and fee, so the same hash (DX9's runs shared
+     * one) — must not be cleared by the mark an earlier attempt's write left,
+     * when the store refuses this attempt's.
      */
-    fun expect(key: String): Clearance {
+    fun expect(key: String, userOpHash: String? = null): Clearance {
+        userOpHash?.let { onDisk.remove(it.lowercase()) }
         val deferred = CompletableDeferred<Boolean>()
         waiting[key] = deferred
         return Clearance(key, deferred)
@@ -54,11 +61,13 @@ class WriteAhead(
      * waiting (a submit that already gave up): nothing is posted for it.
      */
     fun clear(key: String, userOpHash: String): Boolean {
+        // One write stands behind one clearance: the mark is used up here,
+        // whether or not anybody is still waiting for it.
+        val stored = onDisk.remove(userOpHash.lowercase())
         val deferred = waiting[key] ?: run {
             VelaLog.event("userop.write_ahead", "clearance for nobody: nothing posted", "op" to userOpHash.take(12))
             return false
         }
-        val stored = userOpHash.lowercase() in onDisk
         if (!stored) VelaLog.event("userop.write_ahead", "cleared, but the store never took the record: not posting", "op" to userOpHash.take(12))
         deferred.complete(stored)
         return stored

@@ -348,4 +348,48 @@ class SigningReceiptTest {
 
         assertTrue("a clearance nobody waits for posts nothing", !gate.clear("r2|abc", hash))
     }
+
+    /**
+     * Spec 082 RJ1 (review): "on disk" means THIS attempt's write. The same op
+     * signed again — the same nonce, calls and fee give the same hash (DX9's
+     * runs 1–2 shared `0x7df211ed…`) — after the first attempt's row was
+     * withdrawn: a store that refuses the new write must not be cleared by the
+     * mark the first write left. The Send path's gate lives as long as the app.
+     */
+    @Test
+    fun `an earlier write of the same op never clears a later attempt the store refused`() = kotlinx.coroutines.runBlocking {
+        val gate = app.getvela.wallet.feature.send.core.WriteAhead(waitMs = 200L)
+        val hash = "0xAbC"
+
+        // Attempt 1: written, cleared, posted — then not sent, its row withdrawn.
+        val first = gate.expect("abc", hash)
+        gate.written(hash)
+        assertTrue(gate.clear("abc", hash))
+        assertTrue(first.await())
+
+        // Attempt 2, the same op: the store refuses the write.
+        val second = gate.expect("abc", hash)
+        assertTrue("no record this time: no POST", !gate.clear("abc", hash))
+        assertTrue(!second.await())
+
+        // Attempt 3: written, but its clearance came after the wait ran out
+        // (nobody posted). Attempt 4 — the store refuses again — is not
+        // cleared by attempt 3's mark either.
+        val late = gate.expect("abc", hash)
+        gate.written(hash)
+        assertTrue("the wait ran out", !late.await())
+        assertTrue("a late clearance posts nothing", !gate.clear("abc", hash))
+        val fourth = gate.expect("abc", hash)
+        assertTrue("attempt 3's write is not attempt 4's", !gate.clear("abc", hash))
+        assertTrue(!fourth.await())
+
+        // Attempt 5: written, and no clearance ever came (its pipeline went
+        // away). Attempt 6 — the store refuses — starts from nothing.
+        val fifth = gate.expect("abc", hash)
+        gate.written(hash)
+        assertTrue(!fifth.await())
+        val sixth = gate.expect("abc", hash)
+        assertTrue("attempt 5's write is not attempt 6's", !gate.clear("abc", hash))
+        assertTrue(!sixth.await())
+    }
 }

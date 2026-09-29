@@ -489,7 +489,7 @@ class SendExecutor(
             ceremonyDone = ceremonyDone,
             // RJ1: every recipient's row is written ahead of the POST.
             beforePost = { localHash, submitBlock ->
-                val clearance = writeAhead.expect(localHash.lowercase())
+                val clearance = writeAhead.expect(localHash.lowercase(), localHash)
                 ports.opSigned(localHash, submitBlock)
                 if (!clearance.await()) throw UserOpSpine.Refused(UserOpSpine.Failure.NotCleared)
             },
