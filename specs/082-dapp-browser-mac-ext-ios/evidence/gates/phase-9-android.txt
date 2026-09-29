@@ -54,3 +54,25 @@ Not changed, with the reason:
     they are counted per source by the pool executor; networkCameBack() is unchanged.
 
 Not run here: no device (T254 is the Android smoke); no assembleDebug APK (the compile is in the gate).
+
+Review (AND adversarial reviewer), 2026-09-29, after 25962ca4 and cff1084e:
+  Two defects fixed red-first (both tests failed before the fix, pass after):
+    25962ca4 WriteAhead kept every op hash the store ever took. The same op signed again (same hash)
+             after its first row was withdrawn was cleared by the old mark when the store refused the
+             new write, and POSTed with no record. Pin: SigningReceiptTest "an earlier write of the
+             same op never clears a later attempt the store refused".
+    cff1084e A landing the tracker saw while the POST was out was forwarded before the core held the op,
+             dropped, and never sent again (a final entry does not change): the page waited its whole
+             window for the op hash (EX13 + a slow relay). Pin: DappSignMachineTest "a verdict the
+             tracker reached while the POST was out answers the page once the relay's answer lands".
+  ./gradlew :app:testDebugUnitTest -PvelaSkipRustBuild --no-daemon --no-configuration-cache --rerun, three runs:
+    before the fixes  861 tests, 1 failed (SendMachineTest "a lost reply is may-have-been-sent…")
+    after the fixes   863 tests, 1 failed (SendMachineTest "dust leaves the fixture Safe…")
+    after the fixes   863 tests, 0 failed, 98 classes
+    SendMachineTest alone: 9/9 three times. The known flake from T137 (a66f0627), not round 2: its DIAG
+    now names it — alert=EstimateFailed(kind=Other) on EnterDetails with a settled fee, i.e. the
+    Continue's quote came back SpeedControl.Quoted.Superseded (a concurrent askInForce moved askSeq),
+    which SendController maps to SendEstimateFailure.Other.
+  node scripts/check-android-dropped-judgement.mjs  exit 0 — 21 fields across 57 views (unchanged)
+  node scripts/check-android-event-parity.mjs       exit 0 — 6 strong diffs across 27 machines (unchanged)
+  node scripts/check-event-payloads.mjs             exit 0 — 0 mismatches · 527 sites · 2 skipped
