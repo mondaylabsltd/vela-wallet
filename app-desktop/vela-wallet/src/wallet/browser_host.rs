@@ -1118,10 +1118,15 @@ impl LoadDriver {
 
     /// The page is in front again at `now_ms`: an attempt that came due
     /// while it was not. The engine is not polled while the page is out of
-    /// sight, so its last poll is as old as the absence.
-    pub fn take_due(&mut self, now_ms: f64) -> Vec<LoadStep> {
+    /// sight, so its last poll is as old as the absence — `engine` is WebKit
+    /// read at this moment, and it is heard before the attempt is judged
+    /// (RJ9): a load that went live meanwhile is given the attempt back (W7),
+    /// and one WebKit dropped meanwhile is loaded again at once.
+    pub fn take_due(&mut self, engine: Option<&EngineSample>, now_ms: f64) -> Vec<LoadStep> {
+        let mut steps = engine.map_or_else(Vec::new, |sample| self.engine(sample, now_ms));
         let action = self.watch.take_due_at(now_ms);
-        self.attempt(action)
+        steps.extend(self.attempt(action));
+        steps
     }
 
     /// The panel's Retry.
@@ -2112,6 +2117,42 @@ mod tests {
         assert!(watch.started(), "a later read starts the beat again");
     }
 
+    /// C1 (G46, RJ11): the beat is the host's, not only [`ReadWatch`]'s. A
+    /// page read going out starts it, the read settling is counted, and each
+    /// beat reads the pool. Without these three lines the notice waited for
+    /// the call to give up (43.7 s) and every other test here stayed green;
+    /// the host needs gpui, so its wiring is read from its source.
+    #[test]
+    fn a_page_read_going_out_starts_the_health_beat() {
+        // The needles are assembled, so this test's own text never matches.
+        let source = include_str!("browser_host.rs");
+        let body = |name: &str| {
+            let start = source
+                .find(&["fn ", name, "("].concat())
+                .unwrap_or_else(|| unreachable!("{name} is gone"));
+            let rest = &source[start..];
+            &rest[..rest.find("\n    }\n").unwrap_or(rest.len())]
+        };
+        let at = |text: &str, needle: &[&str]| {
+            text.find(&needle.concat())
+                .unwrap_or_else(|| unreachable!("{} is gone", needle.concat()))
+        };
+        let act = body("act");
+        let work = &act[at(act, &["Outbound::", "Work {"])..];
+        let started = at(work, &["self.read_watch", ".started()"]);
+        let beat = at(work, &["self.watch_", "reads(cx)"]);
+        let spawned = at(work, &["cx.", "spawn("]);
+        let settled = at(work, &["host.read_watch", ".settled()"]);
+        assert!(
+            started < beat && beat < spawned,
+            "the beat starts as the read goes out"
+        );
+        assert!(spawned < settled, "the read is counted when it settles");
+        let watch = body("watch_reads");
+        let tick = at(watch, &["host.read_watch", ".tick()"]);
+        assert!(tick < at(watch, &["host.refresh_", "health(cx)"]));
+    }
+
     /// L2 (G44, RJ9): WebKit's provisional load hangs; every attempt that
     /// falls due is given back — and says so once for the load, not every
     /// 2–5 s (35 lines in L2).
@@ -2160,6 +2201,40 @@ mod tests {
         assert_eq!(load.skip_lines, 2);
     }
 
+    /// The site WebKit holds at its first step in the RJ9 tests.
+    const HUNG_SITE: &str = "https://app.uniswap.org/";
+
+    /// A load of [`HUNG_SITE`] WebKit holds provisionally at 0.1 (last polled
+    /// at 2.75 s), and the probe's timeout at 8 s that put the panel up: the
+    /// driver, the load's number, and the steps that scheduled the attempt.
+    fn hung_load() -> (LoadDriver, u64, Vec<LoadStep>) {
+        let mut load = LoadDriver::default();
+        load.requested(HUNG_SITE, 0.0);
+        for t in [250.0, 500.0, 2_750.0] {
+            assert!(load.engine(&sample(true, 0.1, HUNG_SITE), t).is_empty());
+        }
+        let generation_n = load.watch.generation;
+        load.watchdog(generation_n);
+        let timeout = ProbeAnswer {
+            verdict: Err(vela_core::app::browser_load::probe_code::TIMEOUT),
+            proxy: None,
+        };
+        let steps = load.probed(generation_n, &timeout, 8_000.0);
+        assert!(load.watch.failure.is_some(), "the panel is up");
+        (load, generation_n, steps)
+    }
+
+    /// The wait of the attempt `steps` scheduled.
+    fn due_after(steps: &[LoadStep]) -> f64 {
+        steps
+            .iter()
+            .find_map(|step| match step {
+                LoadStep::Retry { after_ms, .. } => Some(f64::from(*after_ms)),
+                _ => None,
+            })
+            .unwrap_or_else(|| unreachable!("an attempt is scheduled: {steps:?}"))
+    }
+
     /// L2 (G44, RJ9): WebKit holds a provisional load at 0.1 for its own
     /// minute. The attempts that fall due in the load's first 20 s are given
     /// back (W7); the first one due after that is a real load, which cancels
@@ -2169,34 +2244,8 @@ mod tests {
     /// on the clock of that moment.
     #[test]
     fn a_hung_load_is_replaced_by_the_attempt_due_after_twenty_seconds() {
-        const SITE: &str = "https://app.uniswap.org/";
-        let timeout = ProbeAnswer {
-            verdict: Err(vela_core::app::browser_load::probe_code::TIMEOUT),
-            proxy: None,
-        };
-        let hung = || {
-            let mut load = LoadDriver::default();
-            load.requested(SITE, 0.0);
-            // WebKit is on it, provisionally, and never gets further; its
-            // last poll is at 2.75 s.
-            for t in [250.0, 500.0, 2_750.0] {
-                assert!(load.engine(&sample(true, 0.1, SITE), t).is_empty());
-            }
-            let generation_n = load.watch.generation;
-            load.watchdog(generation_n);
-            let steps = load.probed(generation_n, &timeout, 8_000.0);
-            assert!(load.watch.failure.is_some(), "the panel is up");
-            (load, generation_n, steps)
-        };
-        let due_after = |steps: &[LoadStep]| {
-            steps
-                .iter()
-                .find_map(|step| match step {
-                    LoadStep::Retry { after_ms, .. } => Some(f64::from(*after_ms)),
-                    _ => None,
-                })
-                .unwrap_or_else(|| unreachable!("an attempt is scheduled: {steps:?}"))
-        };
+        const SITE: &str = HUNG_SITE;
+        let hung = hung_load;
 
         // In front: attempts at 10, 12, … s are given back; the one due at
         // 20 s loads the address again.
@@ -2222,10 +2271,49 @@ mod tests {
         let due_at = 8_000.0 + due_after(&steps);
         assert!(load.retry_fired(generation_n, false, due_at).is_empty());
         assert_eq!(
-            load.take_due(45_000.0),
+            load.take_due(Some(&sample(true, 0.1, SITE)), 45_000.0),
             vec![LoadStep::Navigate(SITE.to_owned())],
             "taken at 45 s, the hung load is replaced"
         );
+    }
+
+    /// RJ9 on the way back (G44, W7): the engine is not polled while the
+    /// page is out of sight, so what WebKit did meanwhile is read before the
+    /// attempt that came due is judged. A load that went live while the page
+    /// was away is arriving: the attempt is given back, never a second
+    /// request that restarts it. A load WebKit dropped while the page was
+    /// away is replaced at once, however young.
+    #[test]
+    fn the_attempt_taken_on_return_reads_the_engine_first() {
+        let navigate = LoadStep::Navigate(HUNG_SITE.to_owned());
+        // Away before the attempt due at 10 s; back at 25 s with the page
+        // arriving (0.5). It was taken at 25 s and the engine polled after
+        // it: a Navigate that restarted the arriving load.
+        let (mut load, generation_n, steps) = hung_load();
+        let due_at = 8_000.0 + due_after(&steps);
+        assert!(load.retry_fired(generation_n, false, due_at).is_empty());
+        let steps = load.take_due(Some(&sample(true, 0.5, HUNG_SITE)), 25_000.0);
+        assert!(
+            !steps.contains(&navigate),
+            "a live load restarted: {steps:?}"
+        );
+        assert!(
+            steps
+                .iter()
+                .any(|step| matches!(step, LoadStep::Retry { .. })),
+            "the attempt comes due again"
+        );
+        // Away before 10 s; back at 15 s, WebKit having dropped the load.
+        let (mut load, generation_n, steps) = hung_load();
+        let due_at = 8_000.0 + due_after(&steps);
+        assert!(load.retry_fired(generation_n, false, due_at).is_empty());
+        let dropped = EngineSample {
+            loading: false,
+            progress: 1.0,
+            url: None,
+        };
+        let steps = load.take_due(Some(&dropped), 15_000.0);
+        assert_eq!(steps, vec![navigate], "nothing to wait for");
     }
 
     /// G67: with `VELA_DEV_PROXY` in force the probe's route is the dev

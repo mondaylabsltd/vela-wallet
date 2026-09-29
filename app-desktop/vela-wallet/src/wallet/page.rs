@@ -13196,7 +13196,13 @@ impl WalletPage {
                 cx.spawn(async move |page, cx| {
                     page.update(cx, |this, cx| {
                         if this.load_in_front() {
-                            let steps = this.load.take_due(crate::executor::now_ms());
+                            // WebKit went on while the page was away and was
+                            // not polled: read it before the attempt is
+                            // judged (RJ9, W7).
+                            let engine = crate::webview::engine().and_then(|engine| engine.sample);
+                            let steps = this
+                                .load
+                                .take_due(engine.as_ref(), crate::executor::now_ms());
                             this.run_load_steps(steps, cx);
                         }
                         cx.notify();
