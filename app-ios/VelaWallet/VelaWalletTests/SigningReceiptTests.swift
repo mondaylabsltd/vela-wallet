@@ -630,7 +630,10 @@ struct SigningWriteAheadTests {
         await Wait.until { views.last?.trackerHandoff?.admitted == true }
         let admitted = try #require(views.last?.trackerHandoff)
         #expect(!admitted.maybeSent)
-        #expect(admitted.recordIds == handoff.recordIds, "the same records, handed over again")
+        // The write-ahead's hand-off names no record; the relay's verdict names
+        // the one on disk (082 second review).
+        #expect(handoff.recordIds.isEmpty, "the write-ahead names no record")
+        #expect(admitted.recordIds == [row["id"] as? String ?? ""], "the verdict names the record on disk")
         #expect(SigningController.handoffKey(admitted) != SigningController.handoffKey(handoff),
                 "the acceptance is a second hand-off, fed once")
         await Wait.until { TxRecords.pending(store: store).first?["maybeSent"] == nil }

@@ -249,7 +249,10 @@ struct SigningFollowsTrackerTests {
         #expect(ahead.maybeSent && !ahead.admitted)
         #expect(run.port.posts == 0, "a POST for a page that had gone")
         #expect(run.seen.withdrawn.first?.hash.lowercased() == ahead.userOpHash.lowercased())
-        #expect(run.seen.withdrawn.first?.ids == ahead.recordIds)
+        // The write-ahead's hand-off names no record; the withdrawal names the
+        // written-ahead record it takes back (082 second review).
+        #expect(ahead.recordIds.isEmpty)
+        #expect(run.seen.withdrawn.first?.ids.isEmpty == false)
         await Wait.until { TxRecords.load(store: run.store).isEmpty }
         #expect(TxRecords.load(store: run.store).isEmpty, "a record for an op never sent")
         try await Task.sleep(nanoseconds: 300_000_000)

@@ -446,8 +446,10 @@ struct TrackerRoundTwoTests {
         ))
         tracker.boot()
         await Wait.until({ tracker.view != nil }, orIdle: { tracker.isIdle })
+        // The write-ahead's hand-off names no record (082 second review): only
+        // such an entry is forgotten on `withdrawn`.
         let ahead = TrackSubmission(
-            userOpHash: op, recordIds: ["dapp-7-tx"], chainId: 100, maybeSent: true, submitBlock: 48_000_000
+            userOpHash: op, recordIds: [], chainId: 100, maybeSent: true, submitBlock: 48_000_000
         )
         tracker.submitted(ahead)
         await Wait.until { tracker.view?.entry(userOpHash: op) != nil }
@@ -495,7 +497,9 @@ struct TrackerRoundTwoTests {
         var heard = 0
         tracker.follow(owner!) { _ in heard += 1 }
         #expect(heard == 1, "the view it has, at once")
-        tracker.submitted(TrackSubmission(userOpHash: op, recordIds: ["r"], chainId: 100))
+        // A write-ahead hand-off (no record named), so `withdrawn` forgets it
+        // and the view changes once more (082 second review).
+        tracker.submitted(TrackSubmission(userOpHash: op, recordIds: [], chainId: 100, maybeSent: true))
         await Wait.until { heard > 1 }
         owner = nil
         let before = heard
