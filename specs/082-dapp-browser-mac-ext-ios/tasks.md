@@ -1319,16 +1319,16 @@ gone; a record exists before the bytes leave (RJ1).
 
 ### AND — Android adoption and parity (after T197)
 
-- [ ] T244 [US1] Wire mirrors: `A/feature/signing/core/SignWire.kt`, `A/feature/send/core/TrackerWire.kt`, `A/feature/send/core/SendWire.kt`, `A/feature/send/core/FeeWire.kt`, `A/feature/wallet/core/FeedWire.kt`, plus the `componentsUi.signing.refused` constant in `A/core/i18n/I18nKeys.kt`; proof: `AT/CoreWireDriftTest.kt` and `scripts/check-event-payloads.mjs`; (after T197).
-- [ ] T245 [US1] Write-ahead: `A/feature/signing/core/SignExecutor.kt`, `A/feature/send/core/UserOpSpine.kt` and `A/feature/send/core/SendExecutor.kt` (RJ1, RJ3); proof: `AT/SigningReceiptTest.kt`, `AT/SendControllerTest.kt`; (after T244).
+- [x] T244 [US1] Wire mirrors: `A/feature/signing/core/SignWire.kt`, `A/feature/send/core/TrackerWire.kt`, `A/feature/send/core/SendWire.kt`, `A/feature/send/core/FeeWire.kt`, `A/feature/wallet/core/FeedWire.kt`, plus the `componentsUi.signing.refused` constant in `A/core/i18n/I18nKeys.kt`; proof: `AT/CoreWireDriftTest.kt` and `scripts/check-event-payloads.mjs`; (after T197).
+- [x] T245 [US1] Write-ahead: `A/feature/signing/core/SignExecutor.kt`, `A/feature/send/core/UserOpSpine.kt` and `A/feature/send/core/SendExecutor.kt` (RJ1, RJ3); proof: `AT/SigningReceiptTest.kt`, `AT/SendControllerTest.kt`; (after T244).
   - As T237: `OpSigned` before the POST, the clearance wait, the asker check, the POST; the store ops; `Failed{refused}`.
   - `awaitReceipt` (`SignExecutor.kt:266-276`) already bounds each poll: keep it, and end it once the core has answered.
-- [ ] T246 [US7] `A/feature/send/core/TrackerExecutor.kt`, `A/feature/wallet/core/TrackerWork.kt` and `A/VelaWalletApplication.kt`: `TxReceipt`, `Withdrawn`, `admitted`, `OpTracked` (RJ4); proof: `AT/TrackerMachineTest.kt`; (after T244).
-- [ ] T247 [US2] `A/feature/signing/SigningLive.kt`, `A/feature/signing/SigningAftercare.kt` and `A/feature/signing/core/SimDeltas.kt`: Refused, `failure_refused`, signed deltas, fee words from the core (RJ3, RJ13, RJ15); proof: `AT/SigningLiveTest.kt`; (after T244).
-- [ ] T248 [US7] `A/feature/signing/core/SigningController.kt`: `ChainRead`, the re-quote timeout, `fee:` log lines (RJ12, RJ13); proof: new `AT/SigningFeeRetryTest.kt`; (after T247).
-- [ ] T249 [US1] `A/core/net/NetHealth.kt`, `A/navigation/VelaNavHost.kt` and `A/feature/browser/core/BrowserController.kt`: health per source (RJ14); proof: `AT/NetHealthTest.kt`; (after T244).
-- [ ] T250 [US3] `A/feature/flows/FlowLive.kt` and `A/feature/wallet/core/FeedExecutor.kt`: calldata into the feed, the counterparty label, no explorer without a tx hash, a quiet delete on pending records (RJ16, RJ18); proof: `AT/FlowLiveTest.kt`, `AT/FeedExecutorTest.kt`; (after T244).
-- [ ] T251 [US1] Android gates (after T244–T250): `./gradlew testDebugUnitTest` in `app-android/vela-wallet`, `scripts/check-android-*.mjs`, `scripts/check-event-payloads.mjs`; output in `EV/gates/phase-9-android.txt`.
+- [x] T246 [US7] `A/feature/send/core/TrackerExecutor.kt`, `A/feature/wallet/core/TrackerWork.kt` and `A/VelaWalletApplication.kt`: `TxReceipt`, `Withdrawn`, `admitted`, `OpTracked` (RJ4); proof: `AT/TrackerMachineTest.kt`; (after T244).
+- [x] T247 [US2] `A/feature/signing/SigningLive.kt`, `A/feature/signing/SigningAftercare.kt` and `A/feature/signing/core/SimDeltas.kt`: Refused, `failure_refused`, signed deltas, fee words from the core (RJ3, RJ13, RJ15); proof: `AT/SigningLiveTest.kt`; (after T244).
+- [x] T248 [US7] `A/feature/signing/core/SigningController.kt`: `ChainRead`, the re-quote timeout, `fee:` log lines (RJ12, RJ13); proof: new `AT/SigningFeeRetryTest.kt`; (after T247).
+- [x] T249 [US1] `A/core/net/NetHealth.kt`, `A/navigation/VelaNavHost.kt` and `A/feature/browser/core/BrowserController.kt`: health per source (RJ14); proof: `AT/NetHealthTest.kt`; (after T244).
+- [x] T250 [US3] `A/feature/flows/FlowLive.kt` and `A/feature/wallet/core/FeedExecutor.kt`: calldata into the feed, the counterparty label, no explorer without a tx hash, a quiet delete on pending records (RJ16, RJ18); proof: `AT/FlowLiveTest.kt`, `AT/FeedExecutorTest.kt`; (after T244).
+- [x] T251 [US1] Android gates (after T244–T250): `./gradlew testDebugUnitTest` in `app-android/vela-wallet`, `scripts/check-android-*.mjs`, `scripts/check-event-payloads.mjs`; output in `EV/gates/phase-9-android.txt`.
 
 ### Device re-run (quickstart §8; after the gates T226, T235, T243, T251)
 

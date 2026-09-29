@@ -1,0 +1,56 @@
+Phase 9 AND gates (T244–T251), branch 082-dapp-browser-mac-ext-ios, worktree vela-wallet-082, 2026-09-29.
+Measured at ff49b3b8 (T249 a48b386d, T250 50342182, the zh comma test ed822368, T244–T248 ff49b3b8).
+
+Bindings: not rebuilt. The .so (3 ABIs) and rust/bindings/kotlin(-dev) are CORE's from b27819d0; the JVM
+tests load rust/target/release/libvela_core_uniffi.dylib built 07:12 from the merged core 7a86cebc
+(it exports netHealthFresh / userOpWriteAheadWaitMs / feeRequoteTimeoutMs). The core-h fix still
+uncommitted there (RecordPersisted naming its record, hand-off §3.1) needs no Android code change.
+
+cd app-android/vela-wallet && JAVA_HOME=…/jdk-17.jdk ./gradlew :app:testDebugUnitTest -PvelaSkipRustBuild \
+    --no-daemon --no-configuration-cache --rerun
+  BUILD SUCCESSFUL — 861 tests, 0 failures, 0 errors, 0 skipped, 98 classes (compileDebugKotlin included)
+  before T244 the build did not compile (NetHealth.kt:35, the three-argument netHealthStep); with the
+  compile fixed and the old wires, 6 of 834 failed (strict decoders / write-ahead order / the zh comma).
+  round-2 suites:
+    CoreWireDriftTest 71    (every new variant and field decodes and round-trips; FeeFailure's plain
+                             words and its chain_read object arm held against the mirror)
+    DappSignMachineTest 18  (record on disk at the POST, admitted in place with both hand-offs fed;
+                             DX9 quit leaves one pending maybeSent row; a record the store refused is
+                             never posted; relay refusal → one -32603 refused, sheet failure_refused;
+                             the answer from the tracker's Confirmed (receipt wait ends) and Rejected)
+    SendMachineTest 9       (the same for the wallet's Send, a split Send's two rows included)
+    SendRefusalsTest 6      (a cancel after the passkey: the sheet is already "submitting", the POST
+                             still runs to its verdict)
+    TrackerMachineTest 9    (EX13: relay status included + tx hash → TxReceipt → Confirmed; "null" and
+                             no answer cross as they came; Withdrawn forgets without a patch; an
+                             admitted re-submit starts a fresh life, never MaybeSent)
+    SigningReceiptTest 16   (Refused / failure_refused → statusFailed + componentsUi.signing.refused, no
+                             txErrorGeneric; a landed answer is never drawn refused; the write-ahead gate)
+    SigningLiveTest 19      (−1000 wei → −0.000000000000001, a zero not drawn; the fee reason line from
+                             feeFailureReasonKey: rate-limited, chainDown with "Gnosis", relay, none)
+    SigningFeeRetryTest 3   (new: a rate-limited deployment read is ChainRead{true}, no relay asked;
+                             an unreachable node is named and the fee is back on the 3 s step; a relay
+                             that was down is asked again and the fee comes back)
+    NetHealthTest 4         (ten Gnosis misses never offline; two chains + 10 s quiet → offline; reset)
+    FeedExecutorTest 24     (call_data from signedRequest; delete / admitted in one write; the DX-W3
+                             shape through the real activity_feed core: recipient decoded, contract role,
+                             no op hash as tx hash)
+    FlowLiveTest 32         (interactingLabel for a contract; no explorer without a tx hash; a pending
+                             record's delete is quiet)
+
+node scripts/check-android-dropped-judgement.mjs   exit 0 — "carried but never read: 21 fields across 57
+                                                   views" (none of them a round-2 field)
+node scripts/check-android-event-parity.mjs        exit 0 — "strong diffs: 6 across 27 machines", all
+                                                   web-only and outside 082 round 2 (dperm popup_request /
+                                                   popup_approved / popup_account_switch, fee leave_confirm /
+                                                   chain_changed, contact history_changed)
+node scripts/check-event-payloads.mjs              exit 0 — 0 mismatches · 527 literal dispatch sites
+                                                   checked · 2 skipped (payload not a literal)
+
+Not changed, with the reason:
+  A/feature/wallet/core/TrackerWork.kt — the worker only supplies the clock; TxReceipt, Withdrawn and
+    admitted all run through the tracker host it ticks (WalletController), which carries them.
+  A/feature/browser/core/BrowserController.kt — its reads go through RpcPool.call with their chain, so
+    they are counted per source by the pool executor; networkCameBack() is unchanged.
+
+Not run here: no device (T254 is the Android smoke); no assembleDebug APK (the compile is in the gate).
