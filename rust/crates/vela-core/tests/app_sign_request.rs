@@ -798,8 +798,11 @@ fn submitted(id: &str) -> Sut {
     sut
 }
 
+/// One answer the page got: `Ok(result)` or `Err((code, message))`.
+type PageAnswer = Result<Option<String>, (i32, Option<String>)>;
+
 /// Every answer the page got in `ops`: `Ok(result)` or `Err(code, message)`.
-fn answers(ops: &[Op]) -> Vec<Result<Option<String>, (i32, Option<String>)>> {
+fn answers(ops: &[Op]) -> Vec<PageAnswer> {
     ops.iter()
         .filter_map(|op| match op {
             Op::SendResponse {
