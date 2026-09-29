@@ -365,7 +365,11 @@ export function createSignExecutor(ports: SignShellPorts) {
 					// Accepted (or may have been sent), receipt late (issue 262, spec 082
 					// RA2): the page gets the op hash, and the tracker alone closes it.
 					if (error instanceof DAppReceiptPendingError) {
-						answeredOps.set(error.userOpHash.toLowerCase(), operation.chain_id);
+						// Already answered by the core through the tracker (RJ4): this
+						// result is dropped, and no answer will consume the entry.
+						if (!answered.signal.aborted) {
+							answeredOps.set(error.userOpHash.toLowerCase(), operation.chain_id);
+						}
 						return {
 							type: 'submit',
 							outcome: { type: 'receipt_pending', user_op_hash: error.userOpHash },
