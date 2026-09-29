@@ -666,8 +666,24 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 	 *
 	 * Signed for real by the parallel space's fixture key; the relay and the
 	 * chain are the stand-ins above, so nothing leaves the machine.
+	 *
+	 * The device met G35 twice (`evidence/extension/post-EX-W1-T182.txt`): a
+	 * RELOAD of the panel while the relay's reply was lost (19:27:13 —
+	 * `panel.down`, 4900, `panel.up` 55 ms later), and a close (19:29:02).
+	 * Both run here. The reloaded panel comes back owing nothing: no sheet for
+	 * the answered request, no second answer.
 	 */
-	test('G35 (RJ2): a dust send slid in the panel, the panel closed after its submit claim → one ok(op hash)', async () => {
+	for (const how of ['close', 'reload'] as const) {
+		const title =
+			how === 'close'
+				? 'G35 (RJ2): a dust send slid in the panel, the panel closed after its submit claim → one ok(op hash)'
+				: 'G35 (RJ2): a dust send slid in the panel, the panel reloaded after its submit claim → one ok(op hash), and the new panel owes nothing';
+		test(title, async () => {
+			await dustSendThenLosePanel(how);
+		});
+	}
+
+	async function dustSendThenLosePanel(how: 'close' | 'reload'): Promise<void> {
 		const net = await serveStubNet();
 		const context = await loadExtension({ surface: 'panel' });
 		try {
@@ -730,8 +746,11 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			expect(ahead).toHaveLength(1);
 			expect(ahead[0]).toMatchObject({ status: 'pending', chainId: claimed[0].chainId });
 
-			// Chrome's ✕, while the op's fate is unknown.
-			await inSidePanel(wallet, 'panel.close();').catch(() => {});
+			// Chrome's ✕, or a reload of the panel, while the op's fate is unknown.
+			await inSidePanel(
+				wallet,
+				how === 'close' ? 'panel.close();' : 'panel.location.reload();'
+			).catch(() => {});
 			expect(await asked).toEqual({ ok: true, result: opHash });
 			await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
 
@@ -742,6 +761,23 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			await expect
 				.poll(() => workerLog(wallet), { timeout: 5_000 })
 				.toMatch(/req\.answered cause=surface_(closed|settled) maybe_sent=1/);
+			if (how === 'reload') {
+				// The reloaded panel says hello again — and is handed nothing: the
+				// answered request is not owed, so no sheet rises for it.
+				await expect
+					.poll(
+						async () =>
+							/req\.answered[^\n]*maybe_sent=1[\s\S]*panel\.up/.test(await workerLog(wallet)),
+						{
+							timeout: 15_000
+						}
+					)
+					.toBe(true);
+				await page.waitForTimeout(1_000);
+				expect(await sidePanelUp(wallet)).toBe(true);
+				expect(await sidePanelShowsRequest(wallet)).toBe(false);
+				expect((await ledger(wallet)).session).toEqual([]);
+			}
 			const log = await workerLog(wallet);
 			expect(log.match(/maybe_sent=1/g)).toHaveLength(1);
 			expect(log).not.toMatch(/req\.settled/);
@@ -770,7 +806,7 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			await context.close();
 			await closeServer(net.server);
 		}
-	});
+	}
 
 	test('EX8 (G19): a worker stopped mid-request resumes; the answer arrives once, with no Chrome text', async () => {
 		const context = await loadExtension({ surface: 'panel' });
