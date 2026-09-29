@@ -3034,3 +3034,104 @@ fn a_landed_ending_never_reads_not_sent_or_refused() {
         SignEndingState::Refused
     );
 }
+
+/// `RecordPersisted` names no record. A write-ahead withdrawn before its
+/// persist was acked (the shell's `WRITE_AHEAD_WAIT_MS` ran out on a stalled
+/// disk) leaves that ack in flight; arriving while a NEWER request's own
+/// write-ahead waits, it cleared that request to POST before its record was
+/// on disk — the RJ1 promise broken for the newer op. The late ack is the
+/// withdrawn pipeline's and is dropped.
+#[test]
+fn a_withdrawn_write_ahead_s_late_ack_never_clears_a_newer_post() {
+    let mut sut = submitting("req-old");
+    let ops = sut.dispatch(op_signed("req-old"));
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { .. }]),
+        "{ops:?}"
+    );
+    // No clearance in time: the shell gives up without POSTing.
+    let ops = sut.resolve_matching(
+        is_submit,
+        Res::Submit {
+            outcome: SignSubmitOutcome::Failed {
+                message: NOT_SENT_DAPP_DETAIL.to_owned(),
+                refused: false,
+            },
+            now_ms: 9_500.0,
+        },
+    );
+    assert!(
+        ops.iter().any(|op| matches!(op, Op::DeleteRecord { .. })),
+        "{ops:?}"
+    );
+    // A newer request reaches its own write-ahead.
+    sut.dispatch(Arrive::global("req-new", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::CheckBundlerFunding { .. }),
+        Res::PreCheck { funding: None },
+    );
+    assert!(matches!(ops.as_slice(), [Op::SignAndSubmit { id, .. }] if id == "req-new"));
+    let ops = sut.dispatch(op_signed("req-new"));
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { .. }]),
+        "{ops:?}"
+    );
+    // The OLD record's ack lands first: nothing is cleared.
+    let late = sut.resolve_matching(is_persist, Res::RecordPersisted);
+    assert!(
+        late.is_empty(),
+        "the old ack cleared the new POST: {late:?}"
+    );
+    // The new record's own ack clears it.
+    let ops = sut.resolve_matching(is_persist, Res::RecordPersisted);
+    assert_eq!(
+        ops,
+        vec![Op::ClearToPost {
+            id: "req-new".to_owned(),
+            user_op_hash: LOCAL_OP.to_owned(),
+        }]
+    );
+}
+
+/// Moving the attempt on for the withdrawn write-ahead's late ack drops that
+/// ack only: the reactive sponsorship an underfunded verdict starts is issued
+/// under the new attempt, and its answer still opens the funding view.
+#[test]
+fn a_withdrawn_write_ahead_s_bump_keeps_the_reactive_sponsorship() {
+    let mut sut = submitting("req-u");
+    sut.dispatch(op_signed("req-u"));
+    // The wait ran out before the ack: nothing was POSTed.
+    let ops = sut.resolve_matching(
+        is_submit,
+        Res::Submit {
+            outcome: SignSubmitOutcome::Underfunded {
+                message: "AA21 didn't pay prefund".to_owned(),
+                funding: Some(funding_fixture()),
+            },
+            now_ms: 9_500.0,
+        },
+    );
+    assert!(
+        ops.iter().any(|op| matches!(op, Op::DeleteRecord { .. })),
+        "{ops:?}"
+    );
+    assert!(
+        ops.iter()
+            .any(|op| matches!(op, Op::AttemptSponsorship { force: true, .. })),
+        "{ops:?}"
+    );
+    // The withdrawn record's ack is dropped...
+    assert!(sut
+        .resolve_matching(is_persist, Res::RecordPersisted)
+        .is_empty());
+    // ...and the sponsorship's answer is not.
+    sut.resolve_matching(
+        |op| matches!(op, Op::AttemptSponsorship { .. }),
+        Res::Sponsorship {
+            outcome: SignSponsorship::Denied { reason: None },
+        },
+    );
+    let funding = sut.view().funding.expect("the funding view");
+    assert_eq!(funding.presentation, SignFundingPresentation::Topup);
+}

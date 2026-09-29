@@ -2879,7 +2879,16 @@ fn on_submit(
         if same_op {
             adopt_write_ahead(model);
         } else {
+            let ack_in_flight = !wa.cleared;
             withdrawn = withdraw_write_ahead(model);
+            if ack_in_flight {
+                // `RecordPersisted` names no record: the withdrawn record's
+                // ack, still out (the shell's wait ran out on a stalled
+                // disk), must never clear a NEWER request's POST before its
+                // own record is on disk. This is the pipeline's last result,
+                // so moving the attempt on drops only that ack (082 review).
+                model.attempt += 1;
+            }
         }
     }
     let Some(fl) = model.inflight.clone() else {
