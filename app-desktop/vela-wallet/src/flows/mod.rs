@@ -254,6 +254,9 @@ pub struct FlowStrings {
     pub status_failed: SharedString,
     pub detail_from: SharedString,
     pub detail_to: SharedString,
+    /// The contract a dApp's call went to, which is not who got anything
+    /// (spec 082 RJ16, the core's `FeedCounterpartyRole::Contract`).
+    pub detail_interacting: SharedString,
     pub detail_chain: SharedString,
     pub detail_date: SharedString,
     pub detail_hash: SharedString,
@@ -604,6 +607,7 @@ impl FlowStrings {
             status_failed: s("componentsTx.detail.statusFailed"),
             detail_from: s("componentsTx.detail.from"),
             detail_to: s("componentsTx.detail.to"),
+            detail_interacting: s("componentsUi.signing.interactingLabel"),
             detail_chain: s("componentsTx.detail.labelChain"),
             detail_date: s("componentsTx.detail.labelDate"),
             detail_hash: s("componentsTx.detail.labelHash"),

@@ -346,7 +346,14 @@ pub fn tx_detail(
     if let Some(counterparty) = item.counterparty.as_ref() {
         let named = item.alias.clone();
         facts.push(FactRow {
-            label: if incoming {
+            // Who the address is, as the core read the call (spec 082 RJ16,
+            // G52): the one the money went to, or the contract a dApp's call
+            // went to — which is not who got anything.
+            label: if item.counterparty_role
+                == vela_core::app::activity_feed::FeedCounterpartyRole::Contract
+            {
+                s.detail_interacting.clone()
+            } else if incoming {
                 s.detail_from.clone()
             } else {
                 s.detail_to.clone()
@@ -4593,6 +4600,127 @@ mod tests {
                 .unwrap_or_else(|| unreachable!("a Requested by fact"));
             assert_eq!(asked.value.as_ref(), "127.0.0.1:8137");
         });
+    }
+
+    /// Spec 082 RJ16 (G52, DX-W3): a relay-refused dApp record for a USDC
+    /// `transfer(0x7687…D141, 10^30)` named the token contract 0xDDAf…7A83
+    /// as 接收方 and offered the explorer for an op that never reached the
+    /// chain (its stored "tx hash" was the op hash). Stored exactly as
+    /// `sign_request::persist_record` writes it and read the executor's way:
+    /// the recipient is the transfer's, and there is nothing to open. A call
+    /// that is not a transfer names its contract, as the contract.
+    #[test]
+    fn a_dapp_record_names_who_got_it_and_offers_no_explorer_without_a_tx() {
+        use vela_core::app::activity_feed::{
+            ActivityFeed, Event as FeedEvent, FeedOperation, FeedShellResult,
+        };
+        const OP: &str = "0xa974c5dd0a00000000000000000000000000000000000000000000000000beef";
+        const USDC: &str = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83";
+        let transfer = format!(
+            "0xa9059cbb{:0>64}{:064x}",
+            "76875e38fc6bc2dedcaed807ce00782db5c0d141",
+            10u128.pow(30)
+        );
+        let row = |id: &str, data: &str| {
+            serde_json::json!({
+                "id": id,
+                "userOpHash": OP,
+                "txHash": OP,
+                "from": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                "to": USDC,
+                "value": "0x0",
+                "symbol": "xDAI",
+                "decimals": 18,
+                "chainId": 100,
+                "timestamp": 1_756_000_000,
+                "status": "failed",
+                "type": "dapp_tx",
+                "dappOrigin": "http://127.0.0.1:8141",
+                "signedRequest": serde_json::json!([{ "to": USDC, "data": data }]).to_string(),
+                "requestTruncated": false,
+                "maybeSent": false,
+            })
+        };
+        let records: Vec<_> = [
+            row("dapp-transfer", &transfer),
+            row(
+                "dapp-swap",
+                "0x38ed173900000000000000000000000000000000000000000000000000000000000000ff",
+            ),
+        ]
+        .iter()
+        .filter_map(crate::executor::activity_feed::to_record)
+        .collect();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].call_data.as_deref(), Some(transfer.as_str()));
+
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let mut pending = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+        });
+        for _ in 0..16 {
+            let Some(next) = pending.pop() else {
+                break;
+            };
+            let result = match &next.operation {
+                FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
+                    records: records.clone(),
+                    now_ms: 1_756_000_000_000.0,
+                    read_id: *read_id,
+                },
+                FeedOperation::ScanIncomingTransfers { .. } => {
+                    FeedShellResult::SyncCompleted { new_count: 0 }
+                }
+                FeedOperation::ResolveRecipientIdentity { addr } => {
+                    FeedShellResult::AliasResolved {
+                        addr: addr.clone(),
+                        name: None,
+                    }
+                }
+                _ => continue,
+            };
+            pending.extend(host.resolve(next.id, result));
+        }
+        let view = host.view();
+        let s = strings();
+        let detail = |id: &str| {
+            tx_detail(
+                &view,
+                id,
+                &s,
+                false,
+                "zh",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("{id} is in the feed"))
+        };
+
+        let refused = detail("dapp-transfer");
+        assert_eq!(refused.status.text, s.status_failed);
+        assert_eq!(
+            refused.facts[0].label, s.detail_to,
+            "the recipient, not the contract"
+        );
+        assert_eq!(refused.facts[0].value.as_ref(), "0x7687…D141");
+        assert!(
+            refused.explorer_url.is_none(),
+            "an op hash is not a transaction"
+        );
+        assert!(
+            !refused.facts.iter().any(|fact| fact.label == s.detail_hash),
+            "no hash row for a transaction that never was"
+        );
+
+        let swap = detail("dapp-swap");
+        assert_eq!(
+            swap.facts[0].label, s.detail_interacting,
+            "the contract, as the contract"
+        );
+        assert_eq!(
+            swap.facts[0].copy.as_deref(),
+            Some(USDC),
+            "the address it went to"
+        );
     }
 
     #[test]

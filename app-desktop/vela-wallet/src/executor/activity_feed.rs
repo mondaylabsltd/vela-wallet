@@ -37,7 +37,7 @@ const TX_KEY: &str = "vela.transactionHistory";
 /// failing the load, exactly as the contacts and network ledgers do. A feed that
 /// refuses to render because one legacy row is odd is worse than a feed missing
 /// that row.
-fn to_record(row: &Value) -> Option<FeedTxRecord> {
+pub(crate) fn to_record(row: &Value) -> Option<FeedTxRecord> {
     let text = |key: &str| {
         row.get(key)
             .and_then(Value::as_str)
@@ -107,8 +107,30 @@ fn to_record(row: &Value) -> Option<FeedTxRecord> {
         // The site that asked, for a dApp transaction (spec 082 RG1) — the
         // stored `dappOrigin`, as `sign_request::persist_record` writes it.
         dapp_origin: optional("dappOrigin"),
-        call_data: None,
+        // What the call does, for a dApp's record (spec 082 RJ16, G52): the
+        // first call's `data` from the request as it was stored. Who the
+        // row names — a token transfer's recipient or the contract — is the
+        // core's reading of it.
+        call_data: first_call_data(row),
     })
+}
+
+/// The first call's `data` in a stored dApp request (`signedRequest`, the
+/// params array as `sign_request::persist_record` kept it): the call of
+/// `eth_sendTransaction`, or the first of a `wallet_sendCalls` batch. `None`
+/// for any other row, and for a request clipped too short to read.
+fn first_call_data(row: &Value) -> Option<String> {
+    if row.get("type").and_then(Value::as_str) != Some("dapp_tx") {
+        return None;
+    }
+    let request = row.get("signedRequest").and_then(Value::as_str)?;
+    let params: Value = serde_json::from_str(request).ok()?;
+    let first = params.get(0)?;
+    let call = first
+        .get("calls")
+        .and_then(|calls| calls.get(0))
+        .unwrap_or(first);
+    call.get("data").and_then(Value::as_str).map(str::to_owned)
 }
 
 /// Discover incoming transfers and persist the ones `token_trust` admitted.
