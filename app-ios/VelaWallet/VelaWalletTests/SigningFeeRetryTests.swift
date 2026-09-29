@@ -253,6 +253,37 @@ struct SigningFeeRetryTests {
         controller.swipeDismissed()
     }
 
+    /// 082 iPhone pass (IX6): a chain that never answers the deployment read
+    /// — every node black-holed — is said within the first read's bound, not
+    /// after the pool's every pass (估算中… for 4 min 35 s with no reason).
+    @Test func aDeploymentReadThatNeverAnswersIsSaidInTime() async {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let port = SilentCodePort()
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accounts = ScriptedAccounts()
+        let controller = SigningController(
+            wallet: (address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894", credentialId: "cred-1"),
+            relay: relay, accounts: accounts,
+            spine: UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() }),
+            store: store, pool: RpcPool(store: store, accounts: AccountStore(defaults: defaults)),
+            ports: SigningController.Ports(knownChains: { [100] }),
+            firstDeploymentReadMs: 300
+        )
+        let opened = Date()
+        controller.open(SigningController.Incoming(
+            id: "r1", method: "eth_sendTransaction",
+            paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x1"}]"#,
+            origin: "https://x.test", transportId: "tab-1", chainId: 100
+        ))
+        let unreachable = FeeFailureText.chainRead(rateLimited: false).text
+        await Wait.until { controller.quoteStartFailure == unreachable }
+        #expect(controller.quoteStartFailure == unreachable)
+        #expect(Date().timeIntervalSince(opened) < 5, "said within the bound, not after the pool gave up")
+        #expect(SigningController.firstDeploymentReadMs == 15_000)
+        controller.swipeDismissed()
+    }
+
     /// G48: a public node's rate limit on the deployment read is a
     /// rate-limited chain read — "retrying automatically" — never "can't
     /// reach Vela" and never a shut slide for ever.
@@ -282,5 +313,25 @@ struct SigningFeeRetryTests {
         #expect(warning(SigningLive.feeModel(clear: clear(.clearSign), fee: nil, context: ctx))
                 == loc.t("home.balanceDetailStatusRetrying"))
         controller.swipeDismissed()
+    }
+}
+
+
+/// A relay port whose chain never answers `eth_getCode` — every node of the
+/// chain black-holed (IX6). Everything else is the scripted port's.
+@MainActor
+final class SilentCodePort: RelayPort {
+    let inner = ScriptedRelayPort()
+    func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome {
+        if method == "eth_getCode" {
+            try? await Task.sleep(nanoseconds: 120_000_000_000)
+            return .failed(rateLimited: false)
+        }
+        return await inner.call(chainId: chainId, method: method, params: params, kind: kind)
+    }
+    func bundlerBase(chainId: Int) async -> String? { await inner.bundlerBase(chainId: chainId) }
+    func bestRpcUrl(chainId: Int) async -> String? { await inner.bestRpcUrl(chainId: chainId) }
+    func restGet(url: String, xRpcUrl: String?) async -> CoreHTTP.RestAnswer {
+        await inner.restGet(url: url, xRpcUrl: xRpcUrl)
     }
 }

@@ -232,8 +232,10 @@ final class SigningController {
         pool: RpcPool,
         preferredTier: @escaping () -> String = { "fast" },
         numberPreset: @escaping () -> String = { "comma_dot" },
-        ports: Ports
+        ports: Ports,
+        firstDeploymentReadMs: UInt32 = SigningController.firstDeploymentReadMs
     ) {
+        self.firstReadMs = firstDeploymentReadMs
         self.wallet = wallet
         self.relay = relay
         self.pool = pool
@@ -482,6 +484,15 @@ final class SigningController {
     /// test seam for that).
     private(set) var startLoopsAlive = 0
 
+    /// The bound on the FIRST deployment read (082 iPhone pass, IX6). It was
+    /// unbounded: with every node of the chain black-holed the pool walked
+    /// ~20 endpoints × 8 s, three passes, and the fee row said 估算中… for
+    /// 4 min 35 s with no reason. Bounded like a wait and its re-ask (RJ12's
+    /// 15 s), the row names the chain read, and the core's schedule asks
+    /// again with each re-ask bounded by `feeRequoteTimeoutMs`.
+    static let firstDeploymentReadMs: UInt32 = 15_000
+    private let firstReadMs: UInt32
+
     private func requestQuote(chainId: Int, attempt: UInt32 = 1) {
         guard !feeCalls.isEmpty else { return }
         // One loop: whatever was waiting to ask again is superseded.
@@ -495,14 +506,12 @@ final class SigningController {
             // An automatic re-ask is bounded (RJ12): a read not answered in
             // `feeRequoteTimeoutMs` is a failure again, and the schedule goes
             // on — the fee is back within 8 + 6 s of the chain answering.
-            let read: RelayClient.DeploymentRead
-            if attempt > 1 {
-                read = await SignExecutor.within(seconds: Double(feeRequoteTimeoutMs()) / 1000) {
-                    await relay.deploymentRead(chainId: chainId, address: address)
-                } ?? .unread(rateLimited: false)
-            } else {
-                read = await relay.deploymentRead(chainId: chainId, address: address)
-            }
+            // The first read is bounded too (IX6): a chain that never answers
+            // is said within `firstReadMs`, not after the pool's every pass.
+            let boundMs = attempt > 1 ? feeRequoteTimeoutMs() : firstReadMs
+            let read: RelayClient.DeploymentRead = await SignExecutor.within(seconds: Double(boundMs) / 1000) {
+                await relay.deploymentRead(chainId: chainId, address: address)
+            } ?? .unread(rateLimited: false)
             guard !Task.isCancelled else { return }
             guard case .deployed(let deployed) = read else {
                 // The chain could not say: nothing was quoted. Say why — the
