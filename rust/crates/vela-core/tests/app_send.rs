@@ -5318,7 +5318,9 @@ fn split_ids(hash: &str) -> Vec<String> {
 }
 
 /// Signed, and the records written ahead — the tracker told and the POST
-/// cleared, in that order, only once the records are on disk.
+/// cleared, in that order, only once the records are on disk. The tracker is
+/// told of the op with NO record (082 second review): a POST is about to
+/// leave, and it is held off "not sent" until the POST's verdict names them.
 fn signed_and_cleared(sut: &mut Sut) -> Vec<SendTxRecord> {
     let ops = sut.dispatch(Event::OpSigned {
         user_op_hash: LOCAL_HASH.to_owned(),
@@ -5335,7 +5337,7 @@ fn signed_and_cleared(sut: &mut Sut) -> Vec<SendTxRecord> {
         vec![
             Op::TrackSubmitted {
                 user_op_hash: LOCAL_HASH.to_owned(),
-                record_ids: split_ids(LOCAL_HASH),
+                record_ids: vec![],
                 chain_id: 1,
                 maybe_sent: true,
                 submit_block: Some(SIGNED_BLOCK),
@@ -5426,7 +5428,10 @@ fn accepted_marks_the_written_records_admitted() {
 }
 
 /// A lost reply after the write-ahead: nothing new is written, no success
-/// haptic (it has not earned it), the receipt says "may have been sent".
+/// haptic (it has not earned it), the receipt says "may have been sent" —
+/// and the tracker is handed the records now, "may have been sent": the POST
+/// is over, and the relay's not-found grace counts from here (082 second
+/// review).
 #[test]
 fn a_lost_reply_after_the_write_ahead_writes_nothing_new() {
     let mut sut = split_submitting();
@@ -5443,12 +5448,24 @@ fn a_lost_reply_after_the_write_ahead_writes_nothing_new() {
     assert!(
         !ops.iter().any(|op| matches!(
             op,
-            Op::PersistTxRecords { .. }
-                | Op::MarkAdmitted { .. }
-                | Op::TrackSubmitted { .. }
-                | Op::Haptic { .. }
+            Op::PersistTxRecords { .. } | Op::MarkAdmitted { .. } | Op::Haptic { .. }
         )),
         "{ops:?}"
+    );
+    let handoffs: Vec<&Op> = ops
+        .iter()
+        .filter(|op| matches!(op, Op::TrackSubmitted { .. }))
+        .collect();
+    assert_eq!(
+        handoffs,
+        vec![&Op::TrackSubmitted {
+            user_op_hash: LOCAL_HASH.to_owned(),
+            record_ids: split_ids(LOCAL_HASH),
+            chain_id: 1,
+            maybe_sent: true,
+            submit_block: Some(SIGNED_BLOCK),
+            admitted: false,
+        }]
     );
     assert_eq!(
         sut.view().receipt.expect("receipt").status,
@@ -5636,4 +5653,120 @@ fn a_not_sent_verdict_never_stamps_an_accepted_send() {
         maybe.view().receipt.expect("receipt").status,
         SendReceiptStatus::NotSent
     );
+}
+
+// ===========================================================================
+// Spec 082 round 2 — second adversarial review: a cancelled submit's
+// write-ahead
+// ===========================================================================
+
+/// The op a cancelled run signed: its hash differs from the retry's (a fresh
+/// fee quote, an edited amount).
+const CANCELLED_HASH: &str = "0x1e0b3c5a7f8e9d0c1b2a39485766f5e4d3c2b1a0f9e8d7c6b5a4938271605f4e";
+
+/// The ✕ during "signing" can land after the passkey returned but before
+/// `OpSigned`: the shell still joins the head read and the deployment check
+/// (seconds on a bad network), and the sheet still says "signing". With the
+/// write-ahead the core decides whether those bytes leave (RJ1), and the
+/// person withdrew them — the payment they cancelled must not go out. Before,
+/// the late `OpSigned` wrote the records and cleared the POST: a cancelled
+/// payment sent, the form back on screen, then a jump to the receipt.
+#[test]
+fn a_cancelled_submit_is_never_cleared_to_post() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.dispatch(Event::SigningStarted);
+    sut.dispatch(Event::CancelSigning);
+    assert_eq!(sut.view().tx_status, SendTxStatus::Idle);
+    let ops = sut.dispatch(Event::OpSigned {
+        user_op_hash: CANCELLED_HASH.to_owned(),
+        submit_block: Some(SIGNED_BLOCK),
+        now_ms: 1_754_000_000_200.0,
+    });
+    assert!(ops.is_empty(), "nothing written, nothing cleared: {ops:?}");
+    // The shell's wait runs out and it reports "not sent": the person
+    // cancelled, so no error, no haptic — the form, as they left it.
+    let ops = sut.resolve_matching(
+        is_op(is_submit_op),
+        Res::SubmitFailed {
+            failure: SendSubmitFailure::Other { message: None },
+        },
+    );
+    assert!(ops.is_empty(), "{ops:?}");
+    let view = sut.view();
+    assert_eq!(view.tx_status, SendTxStatus::Idle);
+    assert!(!view.sending);
+    // And the next slide sends normally.
+    let ops = sut.dispatch(Event::SlideConfirm);
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    let ops = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    assert!(
+        matches!(ops.as_slice(), [Op::SubmitUserOp { .. }]),
+        "{ops:?}"
+    );
+    let records = signed_and_cleared(&mut sut);
+    assert_eq!(records[0].user_op_hash, LOCAL_HASH);
+}
+
+/// The worse race: after the ✕ the person slides again, the retry reaches its
+/// own submit (its passkey still up), and only then the CANCELLED run's
+/// `OpSigned` arrives. `OpSigned` names no pipeline, so it was taken for the
+/// retry's: the retry's lines written under the cancelled op's hash and that
+/// op cleared to POST, while the retry's own `OpSigned` was dropped ("once per
+/// submit"). The retry's wait then ran out ("not sent", try again), and that
+/// proven "not sent" deleted the records and made the tracker forget — the
+/// cancelled op landed with no record and nothing following it, and the
+/// person was told to pay again. While a cancelled submit's result is still
+/// owed, no `OpSigned` is cleared: both runs end "not sent", nothing left.
+#[test]
+fn a_cancelled_run_s_late_op_signed_never_rides_the_retry() {
+    let mut sut = boot(vec![eth("2")]);
+    to_confirm_native(&mut sut, "1", native_fee(1, 1_000));
+    slide_to_submit(&mut sut);
+    sut.dispatch(Event::SigningStarted);
+    sut.dispatch(Event::CancelSigning);
+    let ops = sut.dispatch(Event::SlideConfirm);
+    assert!(
+        matches!(ops.as_slice(), [Op::ProbeTreasury { .. }]),
+        "{ops:?}"
+    );
+    let ops = sut.resolve_matching(|op| matches!(op, Op::ProbeTreasury { .. }), covered());
+    assert!(
+        matches!(ops.as_slice(), [Op::SubmitUserOp { .. }]),
+        "{ops:?}"
+    );
+    sut.dispatch(Event::SigningStarted);
+    // The cancelled run's late `OpSigned`.
+    let ops = sut.dispatch(Event::OpSigned {
+        user_op_hash: CANCELLED_HASH.to_owned(),
+        submit_block: Some(SIGNED_BLOCK),
+        now_ms: 1_754_000_000_200.0,
+    });
+    assert!(
+        !ops.iter().any(is_persist_records),
+        "never written or cleared as the retry's: {ops:?}"
+    );
+    assert!(
+        !sut.outstanding()
+            .iter()
+            .any(|op| matches!(op, Op::ClearToPost { .. })),
+        "{:?}",
+        sut.outstanding()
+    );
+    // The cancelled run's wait runs out ("not sent"): silent. The retry's
+    // own `OpSigned` is then written and cleared as usual.
+    let ops = sut.resolve_matching(
+        is_op(is_submit_op),
+        Res::SubmitFailed {
+            failure: SendSubmitFailure::Other { message: None },
+        },
+    );
+    assert!(ops.is_empty(), "{ops:?}");
+    assert_eq!(sut.view().tx_status, SendTxStatus::Signing, "the retry's");
+    let records = signed_and_cleared(&mut sut);
+    assert_eq!(records[0].user_op_hash, LOCAL_HASH);
 }

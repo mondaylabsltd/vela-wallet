@@ -33,10 +33,15 @@
 //!
 //! Spec 082 round 2 (RJ1) — the records exist before the bytes leave: the
 //! shell reports [`Event::OpSigned`] (signed, hashed, nothing POSTed), the
-//! core writes the records "may have been sent" and hands them to the tracker,
-//! and only then [`SendOperation::ClearToPost`] lets the shell POST. The
-//! relay's verdict then marks them admitted, or a proven "not sent" deletes
-//! and withdraws them; the receipt screen still waits for that verdict.
+//! core writes the records "may have been sent" and hands the op to the
+//! tracker with no record (a POST is about to leave: no "not sent" until its
+//! verdict), and only then [`SendOperation::ClearToPost`] lets the shell POST.
+//! The relay's verdict hands the records over (marking them admitted when the
+//! relay took the op), or a proven "not sent" deletes and withdraws them; the
+//! receipt screen still waits for that verdict. A submit the person cancels
+//! (✕ while "signing") before its records are written is never cleared to
+//! POST — and, as `OpSigned` names no submit, no `OpSigned` is cleared while
+//! that submit's result is still owed (082 second review).
 //!
 //! Faithful port — behavior aligned line by line with the TS sources named per
 //! item; quirks kept and marked "ported verbatim". Deliberate deviations, all
@@ -949,6 +954,10 @@ pub enum SendOperation {
     /// find their records (invariant ⑥'s ordering half).
     TrackSubmitted {
         user_op_hash: String,
+        /// EMPTY on the write-ahead's hand-off (spec 082 RJ1, second review):
+        /// a POST is about to leave and the tracker holds the op off "not
+        /// sent" until the POST's verdict, whose hand-off names the records.
+        /// Forwarded as they are, empty or not.
         record_ids: Vec<String>,
         chain_id: u32,
         /// Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA4).
@@ -1600,6 +1609,12 @@ pub struct Model {
     pipeline: Pipeline,
     /// The write-ahead of the submit in flight (RJ1), until its verdict.
     write_ahead: Option<WriteAhead>,
+    /// A `SubmitUserOp` the person cancelled (✕ while "signing") before its
+    /// records were written — its result still owed. `OpSigned` names no
+    /// submit, so while one is owed none is cleared to POST: the cancelled
+    /// payment never goes out, and its late `OpSigned` can never ride a
+    /// retry's submit (082 second review).
+    withdrawn_submit: Option<u64>,
     flights: Flights,
     /// Monotonic per-request id source (every request gets a fresh one).
     attempt: u64,
@@ -4751,6 +4766,17 @@ fn cancel_signing(model: &mut Model) -> Cmd {
     if !matches!(model.tx, SendTxStatus::Preparing | SendTxStatus::Signing) {
         return Command::done();
     }
+    // Spec 082 RJ1: once the records are written ahead the POST is cleared —
+    // on its way; a cancel must not pretend to stop it.
+    if let Pipeline::Submitting { id, .. } = model.pipeline {
+        if model
+            .write_ahead
+            .as_ref()
+            .is_some_and(|wa| wa.pipeline_id == id)
+        {
+            return Command::done();
+        }
+    }
     model.cancelled = true;
     // Release the lock so a retry starts, and invalidate the cancelled run's
     // pending `end()` (issue #91).
@@ -4759,12 +4785,17 @@ fn cancel_signing(model: &mut Model) -> Cmd {
     // a funding sheet may resurrect (invariant ③ — the intent behind TS's
     // never-read `sendCancelledRef`, made real here). An in-flight
     // sign/submit (`Submitting`) is left to its shell outcome, exactly as
-    // `Passkey.cancelSign()` behaves today.
+    // `Passkey.cancelSign()` behaves today — except that its POST is never
+    // cleared (spec 082 RJ1, second review): the passkey may already have
+    // returned while the shell reads the head, and the person withdrew it.
     if matches!(
         model.pipeline,
         Pipeline::SubmitCredential { .. } | Pipeline::SubmitTreasury { .. }
     ) {
         model.pipeline = Pipeline::Idle;
+    }
+    if let Pipeline::Submitting { id, .. } = model.pipeline {
+        model.withdrawn_submit = Some(id);
     }
     model.tx = SendTxStatus::Idle;
     fire(model, SendOperation::CancelPasskeySign)
@@ -4924,8 +4955,27 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             now_ms,
             maybe_sent,
             submit_block,
-        } => accept_submitted(model, id, user_op_hash, now_ms, (maybe_sent, submit_block)),
-        R::SubmitFailed { failure } => accept_submit_failed(model, id, failure),
+        } => {
+            if model.withdrawn_submit == Some(id) {
+                // Never cleared, yet it went out (a shell that POSTs without
+                // the write-ahead): sent is sent — recorded as any other.
+                model.withdrawn_submit = None;
+            }
+            accept_submitted(model, id, user_op_hash, now_ms, (maybe_sent, submit_block))
+        }
+        R::SubmitFailed { failure } => {
+            if model.withdrawn_submit == Some(id) {
+                // The submit the person cancelled ended, and nothing was
+                // sent: no error, no haptic — the form, as they left it.
+                model.withdrawn_submit = None;
+                if matches!(model.pipeline, Pipeline::Submitting { id: expect, .. } if expect == id)
+                {
+                    model.pipeline = Pipeline::Idle;
+                }
+                return render();
+            }
+            accept_submit_failed(model, id, failure)
+        }
         R::RecordsPersisted => {
             let Some((expect, ctx)) = model.flights.persist.clone() else {
                 return Command::done();
@@ -4939,11 +4989,22 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             let track_id = next(model);
             model.flights.track = Some(track_id);
             let clear = ctx.write_ahead.then(|| ctx.user_op_hash.clone());
+            // The write-ahead's hand-off names NO record (RJ1, 082 second
+            // review): a POST of the op is about to leave, and the tracker
+            // holds it off "not sent" until the POST's verdict — whose
+            // hand-off names the records. Named here, the not-found grace ran
+            // from before the bytes left, and a POST slower than it ended the
+            // op NotSent (the receipt "not sent") while it was delivering it.
+            let record_ids = if ctx.write_ahead {
+                Vec::new()
+            } else {
+                ctx.record_ids
+            };
             let track = issue(
                 track_id,
                 SendOperation::TrackSubmitted {
                     user_op_hash: ctx.user_op_hash,
-                    record_ids: ctx.record_ids,
+                    record_ids,
                     chain_id: ctx.chain_id,
                     maybe_sent: ctx.maybe_sent,
                     submit_block: ctx.submit_block,
@@ -5380,6 +5441,13 @@ fn op_signed(
     {
         return Command::done(); // once per submit
     }
+    if model.withdrawn_submit.is_some() {
+        // A cancelled submit's result is still owed, and `OpSigned` names no
+        // submit: this may be the cancelled one's. Nothing is written or
+        // cleared — the shell's wait runs out and nothing is sent (a retry
+        // caught in this window ends "not sent", and can be slid again).
+        return Command::done();
+    }
     let records = tx_records(
         model,
         &lines,
@@ -5533,30 +5601,31 @@ fn accept_submitted(
 
     if let Some(wa) = written {
         // Accepted: the records stop saying "may have been sent" and the
-        // tracker learns the relay has it. A lost reply adds nothing — the
-        // records and the tracker already say so.
+        // tracker learns the relay has it. A lost reply writes nothing — the
+        // records already say so. Either way the tracker is handed the
+        // records now: the POST is over (082 second review).
         if !maybe_sent {
             let mark_id = next(model);
-            let track_id = next(model);
-            model.flights.track = Some(track_id);
             commands.push(issue(
                 mark_id,
                 SendOperation::MarkAdmitted {
                     record_ids: wa.record_ids.clone(),
                 },
             ));
-            commands.push(issue(
-                track_id,
-                SendOperation::TrackSubmitted {
-                    user_op_hash: wa.user_op_hash,
-                    record_ids: wa.record_ids,
-                    chain_id,
-                    maybe_sent: false,
-                    submit_block: wa.submit_block.or(submit_block),
-                    admitted: true,
-                },
-            ));
         }
+        let track_id = next(model);
+        model.flights.track = Some(track_id);
+        commands.push(issue(
+            track_id,
+            SendOperation::TrackSubmitted {
+                user_op_hash: wa.user_op_hash,
+                record_ids: wa.record_ids,
+                chain_id,
+                maybe_sent,
+                submit_block: wa.submit_block.or(submit_block),
+                admitted: !maybe_sent,
+            },
+        ));
         commands.push(render());
         return Command::all(commands);
     }

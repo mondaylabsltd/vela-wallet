@@ -15,9 +15,9 @@ use vela_core::app::tx_tracker::{
     parse_user_op_status, receipt_interval_ms, Event, TrackLifecycle, TrackOperation as Op,
     TrackOutcome, TrackPendingRecord, TrackRecordPatch, TrackRecordStatus, TrackShellResult as Res,
     TrackStatus, TrackStatusAnswer, TxTracker, ABANDON_AGE_MS, FEE_HOLD_STAGE,
-    FIND_OP_LOOKBACK_BLOCKS, FIND_OP_MAX_RANGE, NOT_FOUND_CONFIRMATIONS, NOT_FOUND_GRACE_MS,
-    RECONCILE_MIN_INTERVAL_MS, SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS,
-    USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
+    FIND_OP_LOOKBACK_BLOCKS, FIND_OP_LOOKBACK_COVERS_MS, FIND_OP_MAX_RANGE,
+    NOT_FOUND_CONFIRMATIONS, NOT_FOUND_GRACE_MS, RECONCILE_MIN_INTERVAL_MS,
+    SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS, USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
 };
 use vela_core::safe::ENTRY_POINT;
 use vela_core::user_op::USER_OPERATION_EVENT_TOPIC;
@@ -1347,6 +1347,8 @@ fn first_window(sut: &mut Sut, head: u64) -> Vec<Op> {
 fn the_find_constants_are_pinned() {
     assert_eq!(FIND_OP_MAX_RANGE, 2_000);
     assert_eq!(FIND_OP_LOOKBACK_BLOCKS, 5_000);
+    // The lookback reaches the submit of an op this young on Arbitrum (0.25 s).
+    assert!(FIND_OP_LOOKBACK_COVERS_MS <= FIND_OP_LOOKBACK_BLOCKS as f64 * 250.0);
 }
 
 /// The op's own event with success: confirmed with the event's tx hash —
@@ -2011,13 +2013,14 @@ fn an_admitted_hand_off_is_never_maybe_sent() {
     ));
 }
 
-/// RJ1: a proven "not sent" withdraws the write-ahead record — the entry
-/// drops those ids and goes when none is left, with no patch and no balance
-/// read. The same hash submitted again afterwards starts fresh.
+/// RJ1: a proven "not sent" withdraws the write-ahead — the entry its
+/// hand-off made goes, with no patch and no balance read. The same hash
+/// submitted again afterwards starts fresh. (Since the second review the
+/// write-ahead's hand-off names no record: the POST's verdict does.)
 #[test]
 fn a_withdrawn_op_is_forgotten_and_a_resubmit_starts_fresh() {
     let mut sut = Sut::new();
-    submitted_maybe(&mut sut, Some(SUBMIT_BLOCK));
+    posting(&mut sut);
     let ops = sut.dispatch(Event::Withdrawn {
         user_op_hash: HASH.to_uppercase().replace("0X", "0x"),
         record_ids: vec!["rec-1".to_owned()],
@@ -2026,35 +2029,39 @@ fn a_withdrawn_op_is_forgotten_and_a_resubmit_starts_fresh() {
     assert!(sut.view().entries.is_empty());
     assert!(tick_ops(&mut sut).is_empty(), "nothing left to poll");
 
-    let ops = sut.dispatch(Event::Submitted {
-        user_op_hash: HASH.to_owned(),
-        record_ids: vec!["rec-1".to_owned()],
-        chain_id: CHAIN,
-        maybe_sent: true,
-        submit_block: Some(SUBMIT_BLOCK),
-        admitted: false,
-    });
+    let ops = sut.dispatch(posting_hand_off());
     assert_eq!(ops, vec![Op::Now, poll_receipt()], "tracked from the start");
     assert_eq!(sut.view().entries.len(), 1);
 
-    // Withdrawing one sibling of a split keeps the entry for the other.
+    // A split's write-ahead, its records swept in from the store while the
+    // POST is out: withdrawn together, the entry goes.
     let mut split = Sut::new();
-    split.dispatch(Event::Submitted {
-        user_op_hash: HASH.to_owned(),
-        record_ids: vec![format!("{HASH}-0"), format!("{HASH}-1")],
-        chain_id: CHAIN,
-        maybe_sent: true,
-        submit_block: None,
-        admitted: false,
-    });
+    split.dispatch(posting_hand_off());
+    split.resolve_matching(|op| matches!(op, Op::Now), Res::Clock { now_ms: T0 });
+    split.dispatch(Event::HomeFocused);
+    split.resolve_matching(|op| matches!(op, Op::Now), Res::Clock { now_ms: T0 + 1.0 });
+    split.resolve_matching(
+        |op| matches!(op, Op::LoadPendingTxs),
+        Res::RecordsLoaded {
+            records: [0, 1]
+                .map(|i| TrackPendingRecord {
+                    record_id: format!("{HASH}-{i}"),
+                    user_op_hash: HASH.to_owned(),
+                    chain_id: CHAIN,
+                    submitted_at_ms: T0,
+                    maybe_sent: true,
+                    submit_block: Some(SUBMIT_BLOCK),
+                })
+                .to_vec(),
+            now_ms: T0 + 2.0,
+        },
+    );
+    assert_eq!(split.view().entries[0].record_ids.len(), 2);
     split.dispatch(Event::Withdrawn {
         user_op_hash: HASH.to_owned(),
-        record_ids: vec![format!("{HASH}-0")],
+        record_ids: vec![format!("{HASH}-0"), format!("{HASH}-1")],
     });
-    assert_eq!(
-        split.view().entries[0].record_ids,
-        vec![format!("{HASH}-1")]
-    );
+    assert!(split.view().entries.is_empty());
     // An unknown hash is nothing.
     assert!(split
         .dispatch(Event::Withdrawn {
@@ -2150,4 +2157,379 @@ fn a_not_sent_reached_while_the_post_was_out_yields_to_the_relay_taking_it() {
     });
     assert!(!ops.contains(&poll_receipt()), "{ops:?}");
     assert_eq!(entry_status(&refused), TrackStatus::Rejected);
+}
+
+// ===========================================================================
+// Spec 082 round 2 — second review: the grace counts from the POST's end
+// ===========================================================================
+
+/// The write-ahead's hand-off (RJ1): the op, before its POST, with no record
+/// attached yet — its records come with the POST's verdict.
+fn posting_hand_off() -> Event {
+    Event::Submitted {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec![],
+        chain_id: CHAIN,
+        maybe_sent: true,
+        submit_block: Some(SUBMIT_BLOCK),
+        admitted: false,
+    }
+}
+
+/// The POST's verdict "may have been sent", naming the op's record.
+fn maybe_sent_verdict() -> Event {
+    Event::Submitted {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+        chain_id: CHAIN,
+        maybe_sent: true,
+        submit_block: Some(SUBMIT_BLOCK),
+        admitted: false,
+    }
+}
+
+/// Hand the op over before its POST, at `T0`.
+fn posting(sut: &mut Sut) {
+    let ops = sut.dispatch(posting_hand_off());
+    assert_eq!(ops, vec![Op::Now, poll_receipt()]);
+    assert!(sut.resolve(Res::Clock { now_ms: T0 }).is_empty());
+    assert!(sut.resolve(receipt_pending(T0 + 300.0)).is_empty());
+}
+
+/// The not-found grace (RA4) is there because a relay may not have written a
+/// just-POSTed op down yet. The write-ahead hands the op over BEFORE its
+/// POST, so counted from that hand-off the grace ran while nothing had been
+/// sent: a POST longer than a minute (15 s per relay endpoint, "currently
+/// processing" retries) ended the op NotSent before its bytes were even
+/// out — and a POST that then came back "may have been sent" was never told
+/// to the tracker. The op, possibly landing, stayed "not sent" for good.
+#[test]
+fn an_op_whose_post_is_out_is_never_not_sent() {
+    let mut sut = Sut::new();
+    posting(&mut sut);
+    assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
+    for (at, head) in [(61_000.0, 12), (73_000.0, 14), (85_000.0, 16)] {
+        let ops = not_found_at(&mut sut, T0 + at, SUBMIT_BLOCK + head);
+        assert!(ops.is_empty(), "at {at}: {ops:?}");
+        assert_eq!(entry_status(&sut), TrackStatus::Pending, "at {at}");
+    }
+    assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
+}
+
+/// The grace of a may-have-been-sent op counts from its POST's verdict: two
+/// `not_found` past a minute AFTER it, the chain read to its head, and only
+/// then "not sent" — the op's record failed.
+#[test]
+fn the_grace_counts_from_the_post_s_verdict() {
+    let mut sut = Sut::new();
+    posting(&mut sut);
+    assert!(not_found_at(&mut sut, T0 + 61_000.0, SUBMIT_BLOCK + 12).is_empty());
+    assert!(not_found_at(&mut sut, T0 + 73_000.0, SUBMIT_BLOCK + 14).is_empty());
+    // The POST comes back at 80 s: may have been sent.
+    let ops = sut.dispatch(maybe_sent_verdict());
+    assert!(ops.contains(&Op::Now), "{ops:?}");
+    let _ = sut.resolve_matching(
+        |op| matches!(op, Op::Now),
+        Res::Clock {
+            now_ms: T0 + 80_000.0,
+        },
+    );
+    assert_eq!(sut.view().entries[0].record_ids, vec!["rec-1".to_owned()]);
+    for (at, head) in [(92_000.0, 18), (104_000.0, 20), (128_000.0, 24)] {
+        let ops = not_found_at(&mut sut, T0 + at, SUBMIT_BLOCK + head);
+        assert!(
+            ops.is_empty(),
+            "inside the verdict's grace at {at}: {ops:?}"
+        );
+    }
+    assert!(not_found_at(&mut sut, T0 + 141_000.0, SUBMIT_BLOCK + 26).is_empty());
+    let ops = not_found_at(&mut sut, T0 + 153_000.0, SUBMIT_BLOCK + 28);
+    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(entry_status(&sut), TrackStatus::NotSent);
+}
+
+/// Proven never sent while the POST was out: the withdrawal forgets the op —
+/// no patch, no balance read, nothing left to poll.
+#[test]
+fn a_withdrawn_post_is_forgotten() {
+    let mut sut = Sut::new();
+    posting(&mut sut);
+    let ops = sut.dispatch(Event::Withdrawn {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+    });
+    assert!(ops.is_empty(), "{ops:?}");
+    assert!(sut.view().entries.is_empty());
+    assert!(tick_ops(&mut sut).is_empty());
+}
+
+/// The chain shows the op landed while its POST was still out: confirmed at
+/// once; the records the verdict then names are patched confirmed with the
+/// event's tx hash.
+#[test]
+fn records_named_after_a_landing_take_its_patch() {
+    let mut sut = Sut::new();
+    posting(&mut sut);
+    let ops = tick(&mut sut, T0 + 12_400.0);
+    assert!(ops.iter().any(is_find), "{ops:?}");
+    sut.resolve_matching(
+        is_find,
+        op_event(T0 + 12_500.0, None, None, Some(SUBMIT_BLOCK + 5)),
+    );
+    let ops = sut.resolve_matching(
+        is_find,
+        op_event(
+            T0 + 12_600.0,
+            Some(&event_logs(true)),
+            None,
+            Some(SUBMIT_BLOCK + 5),
+        ),
+    );
+    assert!(
+        ops.contains(&Op::HoldingsMoved { chain_id: CHAIN }),
+        "{ops:?}"
+    );
+    assert_eq!(entry_status(&sut), TrackStatus::Confirmed);
+    let ops = sut.dispatch(maybe_sent_verdict());
+    assert!(
+        ops.contains(&Op::UpdateTxRecords {
+            ids: vec!["rec-1".to_owned()],
+            patch: TrackRecordPatch {
+                status: TrackRecordStatus::Confirmed,
+                tx_hash: Some(EVENT_TX.to_owned()),
+            },
+        }),
+        "{ops:?}"
+    );
+    assert_eq!(entry_status(&sut), TrackStatus::Confirmed);
+}
+
+/// The identical op POSTed again while an earlier POST of it may still land
+/// (the Send's ids are its hash; a may-have-been-sent op keeps its nonce, so
+/// the hash repeats). The second POST changes nothing for the first, and its
+/// proven "not sent" takes nothing away from it: the earlier op is still
+/// followed, its record still named.
+#[test]
+fn a_second_post_of_the_same_op_never_withdraws_the_first() {
+    let mut sut = Sut::new();
+    submitted_maybe(&mut sut, Some(SUBMIT_BLOCK));
+    let ops = sut.dispatch(posting_hand_off());
+    assert!(!ops.contains(&poll_receipt()), "{ops:?}");
+    let _ = sut.resolve_matching(
+        |op| matches!(op, Op::Now),
+        Res::Clock {
+            now_ms: T0 + 20_000.0,
+        },
+    );
+    let ops = sut.dispatch(Event::Withdrawn {
+        user_op_hash: HASH.to_owned(),
+        record_ids: vec!["rec-1".to_owned()],
+    });
+    assert!(ops.is_empty(), "{ops:?}");
+    let view = sut.view();
+    assert_eq!(view.entries.len(), 1, "the earlier op is still followed");
+    assert_eq!(view.entries[0].record_ids, vec!["rec-1".to_owned()]);
+    assert_eq!(view.entries[0].outcome, TrackOutcome::MaybeSent);
+}
+
+/// The identical op POSTed again after a verdict that it was never sent is a
+/// new submission: tracked from the start, with the new POST's grace.
+#[test]
+fn a_post_after_not_sent_is_tracked_again() {
+    let mut sut = Sut::new();
+    submitted_maybe(&mut sut, Some(SUBMIT_BLOCK));
+    assert!(not_found_at(&mut sut, T0 + 61_000.0, SUBMIT_BLOCK + 12).is_empty());
+    assert_eq!(
+        not_found_at(&mut sut, T0 + 73_000.0, SUBMIT_BLOCK + 14),
+        vec![fail_patch()]
+    );
+    let ops = sut.dispatch(posting_hand_off());
+    assert_eq!(ops, vec![Op::Now, poll_receipt()], "tracked again");
+    let _ = sut.resolve_matching(
+        |op| matches!(op, Op::Now),
+        Res::Clock {
+            now_ms: T0 + 90_000.0,
+        },
+    );
+    assert_eq!(entry_status(&sut), TrackStatus::Pending);
+    assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
+}
+
+// ===========================================================================
+// Spec 082 round 2 — second adversarial review (paths: a Safe inner revert,
+// the NotSent proof on a reload)
+// ===========================================================================
+
+/// The relay's status for an op in a mined bundle whose own event says it
+/// failed — an on-chain revert, gas spent (a swap's slippage between the
+/// relay's simulation and the block; a Safe call reverting inside the op,
+/// which module v0.3.0 turns into `success = false`). The relay marks every
+/// member of a mined bundle `rejected` unless its event succeeded
+/// (`mark_bundle_confirmed`, both relay shells), and names the bundle tx.
+fn rejected_on_chain(now_ms: f64) -> Res {
+    Res::Status {
+        user_op_hash: HASH.to_owned(),
+        status: TrackLifecycle::Rejected,
+        stage: None,
+        now_ms,
+        tx_hash: Some(EVENT_TX.to_owned()),
+    }
+}
+
+/// A `rejected` that names the bundle tx is not "refused before any block":
+/// the op reached a block. Read as a refusal it was terminal at once — the
+/// records failed with no balance re-read (gas was spent, RE8), the dApp
+/// answered "the network refused this transaction; nothing was sent" (RJ3)
+/// for an op that is on chain (ruling 9 answers its tx hash), and the Send
+/// receipt said the fee was rejected. The chain decides: the op's own event
+/// in that tx fails it — Dropped, with the tx hash and the balance read.
+#[test]
+fn a_rejected_status_naming_the_bundle_tx_is_read_from_the_chain() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let ops = tick(&mut sut, T0 + 12_400.0);
+    assert_eq!(ops, vec![poll_receipt(), poll_status()]);
+    // The status answers first (the relay's receipt read raced its store).
+    let ops = sut.resolve_matching(is_status, rejected_on_chain(T0 + 12_600.0));
+    assert_eq!(ops, vec![tx_receipt_op()], "no verdict yet: ask the chain");
+    let view = sut.view();
+    assert_eq!(view.entries[0].status, TrackStatus::Pending);
+    assert!(view.entries[0].polling);
+    assert!(sut
+        .resolve_matching(is_receipt, receipt_pending(T0 + 12_700.0))
+        .is_empty());
+    let ops = sut.resolve_matching(
+        is_tx_receipt,
+        tx_receipt(T0 + 12_900.0, Some(&bundle_receipt(vec![our_event(false)]))),
+    );
+    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    let view = sut.view();
+    assert_eq!(view.entries[0].status, TrackStatus::Dropped);
+    assert_eq!(view.entries[0].tx_hash.as_deref(), Some(EVENT_TX));
+    assert_eq!(view.entries[0].outcome, TrackOutcome::Final);
+
+    // The relay's own receipt (success = false) settles it the same way.
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let _ = tick(&mut sut, T0 + 12_400.0);
+    let _ = sut.resolve_matching(is_status, rejected_on_chain(T0 + 12_600.0));
+    let ops = sut.resolve_matching(
+        is_receipt,
+        Res::ReceiptFailed {
+            user_op_hash: HASH.to_owned(),
+            tx_hash: EVENT_TX.to_owned(),
+            now_ms: T0 + 12_700.0,
+        },
+    );
+    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    assert_eq!(entry_status(&sut), TrackStatus::Dropped);
+}
+
+/// The chain shows that bundle tx mined without the op: it never reached a
+/// block, and the relay's refusal stands — Rejected, no balance read. Not
+/// mined yet (`null`) is no verdict: asked again.
+#[test]
+fn a_rejected_op_absent_from_its_mined_bundle_is_refused() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let _ = tick(&mut sut, T0 + 12_400.0);
+    let _ = sut.resolve_matching(is_status, rejected_on_chain(T0 + 12_600.0));
+    let _ = sut.resolve_matching(is_receipt, receipt_pending(T0 + 12_700.0));
+    let ops = sut.resolve_matching(is_tx_receipt, tx_receipt(T0 + 12_900.0, Some("null")));
+    assert!(ops.is_empty(), "{ops:?}");
+    assert_eq!(entry_status(&sut), TrackStatus::Pending);
+    let ops = tick(&mut sut, T0 + 16_000.0);
+    assert!(ops.contains(&tx_receipt_op()), "{ops:?}");
+    let ops = sut.resolve_matching(
+        is_tx_receipt,
+        tx_receipt(T0 + 16_200.0, Some(&bundle_receipt(vec![]))),
+    );
+    assert_eq!(ops, vec![fail_patch()], "nothing landed: no balance read");
+    assert_eq!(entry_status(&sut), TrackStatus::Rejected);
+
+    // A refusal that names no bundle tx is terminal at once, as before.
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let _ = tick(&mut sut, T0 + 12_400.0);
+    let ops = sut.resolve_matching(is_status, status(TrackLifecycle::Rejected, T0 + 12_600.0));
+    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(entry_status(&sut), TrackStatus::Rejected);
+}
+
+/// Resume a may-have-been-sent record stored `age_ms` before `T0` with no
+/// head read before its POST, and read the chain from below the first head
+/// up to `head`: returns once the scan has caught up.
+fn resumed_without_a_submit_block(sut: &mut Sut, age_ms: f64, head: u64) {
+    assert_eq!(sut.dispatch(Event::AppResumed), vec![Op::Now]);
+    assert_eq!(
+        sut.resolve(Res::Clock { now_ms: T0 }),
+        vec![Op::LoadPendingTxs]
+    );
+    let ops = sut.resolve(Res::RecordsLoaded {
+        records: vec![TrackPendingRecord {
+            record_id: "rec-1".to_owned(),
+            user_op_hash: HASH.to_owned(),
+            chain_id: CHAIN,
+            submitted_at_ms: T0 - age_ms,
+            maybe_sent: true,
+            submit_block: None,
+        }],
+        now_ms: T0 + 100.0,
+    });
+    assert_eq!(ops, vec![poll_receipt(), poll_status(), head_only()]);
+    let ops = sut.resolve_matching(is_find, op_event(T0 + 200.0, None, None, Some(head)));
+    let from = head - FIND_OP_LOOKBACK_BLOCKS;
+    assert_eq!(ops, vec![window(from, from + FIND_OP_MAX_RANGE - 1)]);
+}
+
+/// A write-ahead record left by a quit during its POST — its head read
+/// failed on the same bad network, so no submit block — resumed three hours
+/// later. The relay forgets an op an hour after admitting it (its status
+/// records' TTL) and answers `not_found` for one that landed long ago. The
+/// chain read starts `FIND_OP_LOOKBACK_BLOCKS` below the head read NOW —
+/// 21 minutes on Arbitrum, under three hours on Base — above the landing:
+/// caught up with no event, it proved nothing, yet two `not_found` ended a
+/// landed op "not sent", its record failed. A lookback anchored when the op
+/// was older than the lookback covers may find the event, never prove it
+/// absent: the op stays "may have been sent" (then "unknown" at 24 h).
+#[test]
+fn a_lookback_that_cannot_reach_the_submit_never_proves_not_sent() {
+    let head = 48_480_000;
+    let mut sut = Sut::new();
+    resumed_without_a_submit_block(&mut sut, 3.0 * 3_600_000.0, head);
+    scan_to_head(&mut sut, T0 + 300.0, head);
+    assert!(settle_polls(&mut sut, T0 + 400.0, TrackLifecycle::NotFound).is_empty());
+    let ops = not_found_at(
+        &mut sut,
+        T0 + 400.0 + SLOWEST_RECEIPT_INTERVAL_MS,
+        head + 1_200,
+    );
+    assert!(ops.is_empty(), "no proof the op never landed: {ops:?}");
+    let ops = not_found_at(
+        &mut sut,
+        T0 + 800.0 + 2.0 * SLOWEST_RECEIPT_INTERVAL_MS,
+        head + 2_400,
+    );
+    assert!(ops.is_empty(), "{ops:?}");
+    assert_eq!(entry_status(&sut), TrackStatus::AcceptedNotLanded);
+    assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
+
+    // The same scan still finds an event inside the lookback.
+    let mut sut = Sut::new();
+    resumed_without_a_submit_block(&mut sut, 3.0 * 3_600_000.0, head);
+    let ops = sut.resolve_matching(
+        is_find,
+        op_event(T0 + 300.0, Some(&event_logs(true)), None, Some(head)),
+    );
+    assert_eq!(ops, event_confirmed());
+
+    // Resumed soon enough that the lookback reaches the submit: the chain
+    // read joins the relay's word, as before.
+    let mut sut = Sut::new();
+    resumed_without_a_submit_block(&mut sut, 5.0 * 60_000.0, head);
+    scan_to_head(&mut sut, T0 + 300.0, head);
+    assert!(settle_polls(&mut sut, T0 + 400.0, TrackLifecycle::NotFound).is_empty());
+    let ops = not_found_at(&mut sut, T0 + 400.0 + RECONCILE_MIN_INTERVAL_MS, head + 50);
+    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(entry_status(&sut), TrackStatus::NotSent);
 }

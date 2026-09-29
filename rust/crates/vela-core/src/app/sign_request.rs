@@ -71,11 +71,13 @@
 //! - **Write-ahead (RJ1)**: the record exists before the bytes leave.
 //!   [`Event::OpSigned`] (after the passkey, the local hash and the head read,
 //!   before any POST) persists the pending record "may have been sent" and
-//!   hands it to the tracker; only on its `RecordPersisted` does
-//!   [`SignOperation::ClearToPost`] let the shell POST. The relay accepting it
-//!   patches the record [`SignRecordClose::Admitted`]; a proven "not sent"
-//!   before `OpSubmitted` deletes it ([`SignOperation::DeleteRecord`]) and
-//!   tells the tracker to forget it ([`SignView::tracker_withdraw`]).
+//!   hands the op to the tracker with no record (a POST is about to leave:
+//!   no "not sent" until its verdict); only on its `RecordPersisted` does
+//!   [`SignOperation::ClearToPost`] let the shell POST. The POST's verdict
+//!   hands the record over — the relay accepting it also patches the record
+//!   [`SignRecordClose::Admitted`]; a proven "not sent" before `OpSubmitted`
+//!   deletes it ([`SignOperation::DeleteRecord`]) and tells the tracker to
+//!   forget it ([`SignView::tracker_withdraw`]).
 //! - **Refusals are errors (RJ3)**: a relay-refused op answers `-32603` with
 //!   [`crate::user_op::REFUSED_DAPP_DETAIL`], a proven-never-sent one with
 //!   [`crate::user_op::NOT_SENT_DAPP_DETAIL`] — never Ok + op hash, and the
@@ -388,6 +390,10 @@ pub enum SignNotice {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct SignTrackerHandoff {
     pub user_op_hash: String,
+    /// The records the tracker patches. EMPTY on the write-ahead hand-off
+    /// (spec 082 RJ1, second review): a POST of the op is about to leave and
+    /// the tracker holds it off "not sent" until the POST's verdict, whose
+    /// hand-off names the record. Forwarded as they are, empty or not.
     pub record_ids: Vec<String>,
     pub chain_id: u32,
     /// Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA3).
@@ -2401,7 +2407,15 @@ fn funding_complete(model: &mut Model) -> Command<SignEffect, Event> {
 
 /// The write-ahead (spec 082 RJ1): the op for `id` is signed and hashed, and
 /// nothing has been POSTed. The record is written pending, "may have been
-/// sent", and handed to the tracker; `ClearToPost` follows its ack.
+/// sent", and the op handed to the tracker; `ClearToPost` follows its ack.
+///
+/// The hand-off names NO record (082 second review): it tells the tracker a
+/// POST of the op is about to leave, and the tracker holds the op off "not
+/// sent" until the POST's verdict — which names the record ([`handoff_of`]).
+/// Named here, the not-found grace ran from before the bytes left, and a POST
+/// slower than it (15 s per relay endpoint, "currently processing" retries)
+/// could end the op NotSent — answered "nothing was sent", its record failed —
+/// while the POST was still delivering it.
 fn on_op_signed(
     model: &mut Model,
     id: &str,
@@ -2438,7 +2452,7 @@ fn on_op_signed(
     };
     model.tracker_handoff = Some(SignTrackerHandoff {
         user_op_hash,
-        record_ids: vec![record_id],
+        record_ids: Vec::new(),
         chain_id,
         maybe_sent: true,
         submit_block,
@@ -2446,6 +2460,21 @@ fn on_op_signed(
     });
     let command = request_op(model, SignOperation::PersistRecord { record }, false);
     Command::all([command, render()])
+}
+
+/// The hand-off of a write-ahead record once the POST's verdict is in (RJ1):
+/// the relay took the op (`admitted`), or its reply was lost (`maybe_sent`).
+/// It names the record — the tracker's patches find it on disk — and ends
+/// the tracker's hold on the op (its not-found grace counts from here).
+fn handoff_of(wa: &WriteAhead, chain_id: u32, admitted: bool) -> SignTrackerHandoff {
+    SignTrackerHandoff {
+        user_op_hash: wa.user_op_hash.clone(),
+        record_ids: vec![wa.record_id.clone()],
+        chain_id,
+        maybe_sent: !admitted,
+        submit_block: wa.submit_block,
+        admitted,
+    }
 }
 
 /// The pending dApp-tx record of `fl` under `user_op_hash`.
@@ -2528,8 +2557,9 @@ fn on_op_submitted(
         .and_then(|fl| fl.write_ahead.clone());
     // RJ1: the write-ahead record already names this op — no second record.
     // The relay taking it patches the record Admitted and tells the tracker
-    // (an accepted op never reads "may have been sent"); a lost reply adds
-    // nothing, the record already says so.
+    // (an accepted op never reads "may have been sent"); a lost reply writes
+    // nothing, the record already says so. Either way the tracker is handed
+    // the record now: the POST is over (082 second review).
     if let Some(wa) = write_ahead
         .as_ref()
         .filter(|wa| wa.user_op_hash.eq_ignore_ascii_case(&user_op_hash))
@@ -2547,17 +2577,15 @@ fn on_op_submitted(
             model.pending_op_hash = Some(wa.user_op_hash.clone());
             model.pending_op_maybe_sent = maybe_sent;
         }
+        let submit_block = wa.submit_block.or(submit_block);
+        let wa = WriteAhead {
+            submit_block,
+            ..wa.clone()
+        };
+        model.tracker_handoff = Some(handoff_of(&wa, chain_id, !maybe_sent));
         if maybe_sent {
             return render();
         }
-        model.tracker_handoff = Some(SignTrackerHandoff {
-            user_op_hash: wa.user_op_hash.clone(),
-            record_ids: vec![wa.record_id.clone()],
-            chain_id,
-            maybe_sent: false,
-            submit_block: wa.submit_block.or(submit_block),
-            admitted: true,
-        });
         return ops_and_render(
             model,
             vec![SignOperation::UpdateRecord {
@@ -2866,8 +2894,10 @@ fn on_submit(
     // now is proven "not sent" — nothing was POSTed without `ClearToPost`,
     // and a POST whose reply was lost is reported `OpSubmitted{maybe_sent}`,
     // not a failure — so the record is withdrawn, then the outcome is handled
-    // as today. A result that stands for the same op adopts the record.
-    let mut withdrawn = Vec::new();
+    // as today. A result that stands for the same op adopts the record, and
+    // the tracker is handed it: the POST is over (a receipt: the relay took
+    // it; the window's end with the local hash: it may have been sent).
+    let mut record_ops = Vec::new();
     if let Some(wa) = fl.write_ahead.as_ref().filter(|_| fl.record_id.is_none()) {
         let same_op = match &outcome {
             SignSubmitOutcome::Succeeded { .. } => true,
@@ -2878,18 +2908,35 @@ fn on_submit(
         };
         if same_op {
             adopt_write_ahead(model);
+            let admitted = matches!(outcome, SignSubmitOutcome::Succeeded { .. });
+            model.tracker_handoff = Some(handoff_of(wa, fl.chain_id, admitted));
+            if admitted {
+                record_ops.push(SignOperation::UpdateRecord {
+                    record_id: wa.record_id.clone(),
+                    close: SignRecordClose::Admitted,
+                });
+            }
         } else {
-            withdrawn = withdraw_write_ahead(model);
+            let ack_in_flight = !wa.cleared;
+            record_ops = withdraw_write_ahead(model);
+            if ack_in_flight {
+                // `RecordPersisted` names no record: the withdrawn record's
+                // ack, still out (the shell's wait ran out on a stalled
+                // disk), must never clear a NEWER request's POST before its
+                // own record is on disk. This is the pipeline's last result,
+                // so moving the attempt on drops only that ack (082 review).
+                model.attempt += 1;
+            }
         }
     }
     let Some(fl) = model.inflight.clone() else {
         return Command::done();
     };
     let command = on_submit_outcome(model, &fl, outcome, now_ms);
-    if withdrawn.is_empty() {
+    if record_ops.is_empty() {
         command
     } else {
-        Command::all([ops_and_render(model, withdrawn), command])
+        Command::all([ops_and_render(model, record_ops), command])
     }
 }
 

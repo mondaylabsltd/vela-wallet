@@ -55,15 +55,29 @@
 //! Spec 082 round 2 (RJ1, RJ4):
 //!
 //! - The write-ahead: the sign and send machines hand an op over "may have
-//!   been sent" BEFORE its POST, then again `admitted` once the relay took it
-//!   (an accepted op never reads MaybeSent), or `Withdrawn` once it is proven
-//!   never sent (the entry forgets those records; no patch, no balance read).
+//!   been sent" BEFORE its POST, naming no record — held off "not sent" while
+//!   the POST is out — then again with its records once the POST's verdict
+//!   is in: `admitted` when the relay took it (an accepted op never reads
+//!   MaybeSent), may-have-been-sent when its reply was lost (the not-found
+//!   grace counts from then), or `Withdrawn` once it is proven never sent
+//!   (the entry forgets those records; no patch, no balance read).
 //! - The relay's tx hash is used, not only shown: a status that names one for
 //!   a live entry asks the chain for that transaction's receipt
 //!   ([`TrackOperation::TxReceipt`], at the receipt cadence, one in flight per
 //!   hash); the op's own `UserOperationEvent` in its logs confirms or fails
 //!   the op exactly as a relay receipt does. EX13's landed op read "not on
 //!   chain yet" for 5 min 49 s with the tx hash in hand.
+//! - A relay `rejected` that names a bundle tx is not a refusal before any
+//!   block: the relay marks every op of a mined bundle `rejected` unless its
+//!   own event succeeded. That tx's receipt decides — the op's event fails
+//!   it (Dropped, gas spent) or confirms it; the tx mined without the op
+//!   upholds the refusal (082 second review).
+//! - The chain read proves an op absent only from at or below its submit:
+//!   the head read before the POST, or a lookback anchored while the op was
+//!   young enough ([`FIND_OP_LOOKBACK_COVERS_MS`]). A write-ahead record
+//!   resumed hours after a quit, with no head read, is past the relay's
+//!   memory of it (its status records live an hour) and past the lookback:
+//!   it stays "may have been sent" unless its event is found.
 //!
 //! The shell owns the regex wording layer that used to *be* the classification
 //! (`/dropped from the network/`, `UserOpRejectedError` instanceof checks):
@@ -149,6 +163,12 @@ pub const FIND_OP_MAX_RANGE: u64 = 2_000;
 /// submit POST is unknown (ruling 8): ≥ 20 minutes on the fastest chain Vela
 /// serves (Arbitrum, 0.25 s blocks), hours elsewhere.
 pub const FIND_OP_LOOKBACK_BLOCKS: u64 = 5_000;
+/// How old an op may be when that lookback is anchored and still reach its
+/// submit on every chain Vela serves (5 000 Arbitrum blocks ≈ 20 min 50 s).
+/// A lookback anchored later — a record resumed hours after a quit, with no
+/// head read before its POST — may find the op's event but can never prove
+/// it absent: it may start above the landing (082 second review).
+pub const FIND_OP_LOOKBACK_COVERS_MS: f64 = 20.0 * 60.0 * 1000.0;
 
 /// The relay's lifecycle-status method (spec 082 RA7, G13). The relay serves
 /// only this name; the `eth_`-prefixed spelling every client had been asking
@@ -457,6 +477,14 @@ pub enum Event {
     /// one per batch recipient (`<hash>-<i>`), all patched together later.
     /// A resubmitted op shares its hash and merges into the same entry, the
     /// core-side twin of storage's de-dupe by id (`storage.ts:445-448`).
+    ///
+    /// Spec 082 RJ1 (second review): `record_ids` EMPTY and not `admitted`
+    /// is the write-ahead's hand-off — a POST of the op is about to leave.
+    /// Until a hand-off that names records (the POST's verdict) or a
+    /// [`Event::Withdrawn`] ends that POST, a relay `not_found` counts for
+    /// nothing and the op is never `NotSent`; the not-found grace then counts
+    /// from that verdict. The chain check runs meanwhile, and records named
+    /// after the op landed take the landing's patch.
     Submitted {
         user_op_hash: String,
         record_ids: Vec<String>,
@@ -480,9 +508,11 @@ pub enum Event {
     },
     /// The op was proven never sent after its write-ahead hand-off (spec 082
     /// RJ1): the submit failed before any POST, or the relay answered with
-    /// another hash. Drops `record_ids` from the entry and removes an entry
-    /// left with none; patches nothing, reads no balance. A later submit of
-    /// the same hash is tracked from the start.
+    /// another hash. Ends that POST. An entry the write-ahead made drops
+    /// `record_ids` and goes when none is left; patches nothing, reads no
+    /// balance. An entry an earlier POST of the identical op named is kept
+    /// whole — that op may still land. A later submit of the same hash is
+    /// tracked from the start.
     Withdrawn {
         user_op_hash: String,
         record_ids: Vec<String>,
@@ -602,6 +632,23 @@ struct Entry {
     tx_receipt_in_flight: bool,
     /// Completion time of the last one — the receipt cadence counts from it.
     last_tx_receipt_ms: Option<f64>,
+    /// A POST of this op is out (spec 082 RJ1, second review): the write-
+    /// ahead handed the op over with no record, before its bytes left, and
+    /// the POST's verdict has not come. A relay `not_found` says nothing
+    /// then, and the op is never "not sent".
+    posting: bool,
+    /// This entry exists only because of that hand-off (no earlier verdict
+    /// or reload named the op): a withdrawal forgets it. An earlier POST of
+    /// the identical op keeps its entry whatever a later one proves.
+    from_posting: bool,
+    /// Where the not-found grace counts from, when not the submission: the
+    /// POST's verdict. `Some(None)` = the verdict came, its clock is next.
+    grace_from_ms: Option<Option<f64>>,
+    /// The relay said `rejected` while naming a bundle tx (082 second
+    /// review): the op may be on chain, reverted. Only that tx's receipt
+    /// settles it — the op's event (landed), or the tx mined without it
+    /// (the refusal stands).
+    relay_rejected: bool,
 }
 
 /// Where the relay-independent landing check stands for one entry.
@@ -621,6 +668,10 @@ struct FindScan {
     last_ms: Option<f64>,
     /// Every block from the start up to here has been read, with no event.
     scanned_through: Option<u64>,
+    /// The start is known to be at or below the submit: the head read before
+    /// the POST, or a lookback anchored while the op was young enough for
+    /// it to reach the submit ([`FIND_OP_LOOKBACK_COVERS_MS`]).
+    anchored: bool,
 }
 
 impl FindScan {
@@ -632,13 +683,17 @@ impl FindScan {
             in_flight: None,
             last_ms: submitted_at_ms,
             scanned_through: None,
+            anchored: submit_block.is_some(),
         }
     }
 
-    /// The chain has been read, with no event, up to the latest head seen —
-    /// what a relay's `not_found` must be joined by before "not sent".
+    /// The chain has been read, with no event, from at or below the submit up
+    /// to the latest head seen — what a relay's `not_found` must be joined by
+    /// before "not sent". A scan that may have started above the submit
+    /// proves nothing absent.
     fn caught_up(&self) -> bool {
-        matches!((self.scanned_through, self.head), (Some(through), Some(head)) if through >= head)
+        self.anchored
+            && matches!((self.scanned_through, self.head), (Some(through), Some(head)) if through >= head)
     }
 
     /// The next window, or `None` (head only) when there is nothing to read
@@ -679,7 +734,25 @@ impl Entry {
             find: FindScan::new(None, submitted_at_ms),
             tx_receipt_in_flight: false,
             last_tx_receipt_ms: None,
+            posting: false,
+            from_posting: false,
+            grace_from_ms: None,
+            relay_rejected: false,
         }
+    }
+
+    /// How long the relay has had to write the op down, for its `not_found`
+    /// (RA4): since the POST's verdict when the write-ahead preceded it, else
+    /// since the submission. `None` while no POST of it has ended.
+    fn grace_age(&self, now_ms: f64) -> Option<f64> {
+        if self.posting {
+            return None;
+        }
+        let from = match self.grace_from_ms {
+            Some(stamped) => stamped?,
+            None => self.submitted_at_ms.unwrap_or(now_ms),
+        };
+        Some(now_ms - from)
     }
 
     /// Spec 082 RA4: still in the dark about whether the relay ever had it.
@@ -695,6 +768,7 @@ impl Entry {
             self.submit_block = submit_block;
             if self.find.from.is_none() && self.find.scanned_through.is_none() {
                 self.find.from = submit_block;
+                self.find.anchored = submit_block.is_some();
             }
         }
     }
@@ -851,6 +925,16 @@ impl App for TxTracker {
             } => {
                 let key = normalize(&user_op_hash);
                 let emptied = model.entries.get_mut(&key).is_some_and(|entry| {
+                    // That POST is over: nothing of it left.
+                    entry.posting = false;
+                    if !entry.from_posting {
+                        // An earlier POST of the identical op named this
+                        // entry (the Send's ids are its hash, and a may-have-
+                        // been-sent op keeps its nonce): it may still land,
+                        // and a later POST's "not sent" takes nothing from
+                        // it (082 second review).
+                        return false;
+                    }
                     entry.record_ids.retain(|id| !record_ids.contains(id));
                     entry.record_ids.is_empty()
                 });
@@ -974,19 +1058,50 @@ fn submitted(
     // (`admitted`) proves that verdict came too early — and an admitted op is
     // never in doubt again, so this can never undo a real `NotSent`. The
     // entry lives again (a `Rejected` after the relay took it stays: DX-W3).
+    //
+    // Spec 082 round 2 (second review): the write-ahead's hand-off names no
+    // record — the op before its POST (`posting`). Its records come with the
+    // POST's verdict, and the not-found grace counts from that verdict: a
+    // relay cannot have written down bytes that have not left. A POST of the
+    // identical op after a `NotSent` / `Rejected` is a new submission too.
+    let posting = record_ids.is_empty() && !admitted;
     let new_life = model.entries.get(&key).is_some_and(|entry| {
         let refused_or_unsent =
             matches!(entry.status, EntryStatus::NotSent | EntryStatus::Rejected);
-        (refused_or_unsent && record_ids.iter().any(|id| !entry.record_ids.contains(id)))
+        (refused_or_unsent
+            && (posting || record_ids.iter().any(|id| !entry.record_ids.contains(id))))
             || (admitted && entry.status == EntryStatus::NotSent)
     });
     if new_life {
         model.entries.remove(&key);
     }
+    let fresh = !model.entries.contains_key(&key);
     let entry = model
         .entries
         .entry(key.clone())
         .or_insert_with(|| Entry::new(chain_id, None));
+    if posting {
+        // A POST of this op is about to leave: held off from "not sent"
+        // until its verdict. An earlier POST's entry of the identical op
+        // stays what it is otherwise — this one only ever adds to it.
+        if !entry.status.is_terminal() {
+            entry.posting = true;
+            entry.not_found_streak = 0;
+        }
+        entry.from_posting |= fresh;
+    } else if entry.posting || entry.from_posting {
+        // The POST's verdict: the op is out, or may be. The relay's grace
+        // starts now (stamped with the next clock).
+        entry.posting = false;
+        entry.from_posting = false;
+        entry.not_found_streak = 0;
+        entry.grace_from_ms = Some(None);
+    }
+    let named: Vec<String> = record_ids
+        .iter()
+        .filter(|id| !entry.record_ids.contains(id))
+        .cloned()
+        .collect();
     for id in record_ids {
         entry.merge_record_id(id);
     }
@@ -996,6 +1111,20 @@ fn submitted(
         entry.acknowledged = true;
         entry.not_found_streak = 0;
     }
+    // Records named after the op already landed (the chain showed it while
+    // the POST was out) take the landing's patch — the one they missed.
+    let late_patch = match &entry.status {
+        _ if named.is_empty() => None,
+        EntryStatus::Confirmed { tx_hash } => Some(TrackRecordPatch {
+            status: TrackRecordStatus::Confirmed,
+            tx_hash: Some(tx_hash.clone()),
+        }),
+        EntryStatus::Failed { .. } => Some(TrackRecordPatch {
+            status: TrackRecordStatus::Failed,
+            tx_hash: None,
+        }),
+        _ => None,
+    };
 
     // First receipt poll goes out immediately, like `waitForReceipt`'s first
     // loop iteration. A second consumer of an already-tracked hash joins the
@@ -1016,6 +1145,12 @@ fn submitted(
                 user_op_hash: key,
                 chain_id,
             },
+        ));
+    }
+    if let Some(patch) = late_patch {
+        commands.push(shell_request(
+            attempt,
+            TrackOperation::UpdateTxRecords { ids: named, patch },
         ));
     }
     commands.push(render());
@@ -1162,7 +1297,21 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                     entry.relay_tx_hash = Some(tx_hash);
                 }
                 entry.last_status = Some((status, stage));
-                if status == TrackLifecycle::Rejected {
+                if status == TrackLifecycle::Rejected && entry.relay_tx_hash.is_some() {
+                    // The relay marks every op of a MINED bundle `rejected`
+                    // unless the op's own event succeeded (both relay
+                    // shells' `mark_bundle_confirmed`), and names that
+                    // bundle tx: an on-chain revert, gas spent — never
+                    // "refused, nothing was sent" (RJ3's words, ruling 9's
+                    // tx-hash answer, RE8's balance read). The chain decides
+                    // through the tx's receipt: the op's own event fails (or
+                    // confirms) it; the tx mined without it upholds the
+                    // refusal (082 second review).
+                    entry.acknowledged = true;
+                    entry.not_found_streak = 0;
+                    entry.relay_rejected = true;
+                    None
+                } else if status == TrackLifecycle::Rejected {
                     // The relay refused it before any block: nothing was
                     // sent, nothing will land. Terminal, immediately (③).
                     entry.acknowledged = true;
@@ -1173,8 +1322,13 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                     // never shown it holds is ended by `not_found` — a plain
                     // op's stays inert (079), and so does one the relay has
                     // already acknowledged. Inside the grace it is ignored.
-                    let age = now_ms - entry.submitted_at_ms.unwrap_or(now_ms);
-                    if entry.in_doubt() && age >= NOT_FOUND_GRACE_MS {
+                    // The grace counts from the POST's verdict when the
+                    // write-ahead handed the op over before it; while a POST
+                    // is out, `not_found` says nothing (082 second review).
+                    let past_grace = entry
+                        .grace_age(now_ms)
+                        .is_some_and(|age| age >= NOT_FOUND_GRACE_MS);
+                    if entry.in_doubt() && past_grace {
                         entry.not_found_streak = entry.not_found_streak.saturating_add(1);
                     }
                     // Ruling 8: the relay's word alone is not enough — the chain
@@ -1182,6 +1336,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                     // op, or a relay that lost track of a landed op would say
                     // "not sent" over money that moved.
                     if entry.in_doubt()
+                        && !entry.posting
                         && entry.not_found_streak >= NOT_FOUND_CONFIRMATIONS
                         && entry.find.caught_up()
                     {
@@ -1588,6 +1743,19 @@ fn on_tx_receipt(
         return render();
     };
     let Some(event) = find_in_log_array(logs, &key) else {
+        let the_named_tx = receipt
+            .and_then(|receipt| receipt.get("transactionHash"))
+            .and_then(serde_json::Value::as_str)
+            .zip(entry.relay_tx_hash.as_deref())
+            .is_some_and(|(mined, named)| mined.eq_ignore_ascii_case(named));
+        if entry.relay_rejected && the_named_tx {
+            // The relay said `rejected` and named this tx, and the tx is
+            // mined without the op: it never reached a block. The refusal
+            // stands — nothing landed, so no balance read.
+            entry.status = EntryStatus::Rejected;
+            let ids = entry.record_ids.clone();
+            return fail_records(attempt, ids, None);
+        }
         // Mined without this op's event (a replaced bundle): proves nothing.
         return render();
     };
@@ -1660,6 +1828,11 @@ fn on_op_event(
         if entry.find.from.is_none() {
             if let Some(head) = entry.find.head {
                 entry.find.from = Some(head.saturating_sub(FIND_OP_LOOKBACK_BLOCKS));
+                // Reaches the submit only while the op is young enough (or
+                // the lookback reaches the genesis).
+                let age = entry.submitted_at_ms.map(|at| now_ms - at);
+                entry.find.anchored = head <= FIND_OP_LOOKBACK_BLOCKS
+                    || age.is_some_and(|age| age <= FIND_OP_LOOKBACK_COVERS_MS);
             }
         }
         return continue_scan(attempt, &key, entry, now_ms);
@@ -1788,6 +1961,10 @@ fn stamp_unstamped(model: &mut Model, now_ms: f64) {
             entry.submitted_at_ms = Some(now_ms);
             entry.last_status_poll_ms = Some(now_ms);
             entry.find.last_ms = Some(now_ms);
+        }
+        // The POST's verdict came: the not-found grace counts from here.
+        if entry.grace_from_ms == Some(None) {
+            entry.grace_from_ms = Some(Some(now_ms));
         }
     }
 }

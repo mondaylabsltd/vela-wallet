@@ -278,6 +278,12 @@ pub fn format_token_amount(value: f64, preset: NumberPreset, compact: bool) -> S
     }
 }
 
+/// ERC-20 `decimals` is a `uint8`: a wider claim is no amount.
+pub const MAX_TOKEN_DECIMALS: u32 = 255;
+
+/// Integer digits an `f64` always holds exactly (2^53 ≈ 9.007 × 10^15).
+const EXACT_FLOAT_DIGITS: usize = 15;
+
 /// A signed balance change, from a signed base-unit **string**: `−8,450.00`,
 /// `+2.1`, `−0.000000000000001` (spec 082 RJ15, G49).
 ///
@@ -292,13 +298,21 @@ pub fn format_token_amount(value: f64, preset: NumberPreset, compact: bool) -> S
 ///   plus is written.
 ///
 /// The exact form never routes through a float; the ladder's rounding does,
-/// as it does for every other token figure.
+/// as it does for every other token figure — but only while an f64 holds
+/// the integer part exactly ([`EXACT_FLOAT_DIGITS`]). Past that the whole
+/// part is written from its digits with the ladder's two places cut from the
+/// exact fraction: the float invented digits (082 review). `decimals` past
+/// [`MAX_TOKEN_DECIMALS`] is no amount (`None`): ERC-20 `decimals` is a uint8,
+/// and padding to a lying token's width allocated gigabytes.
 #[must_use]
 pub fn format_signed_token_amount(
     delta_base_units: &str,
     decimals: u32,
     preset: NumberPreset,
 ) -> Option<String> {
+    if decimals > MAX_TOKEN_DECIMALS {
+        return None;
+    }
     let text = delta_base_units.trim();
     let (negative, digits) = if let Some(rest) = text.strip_prefix('-') {
         (true, rest)
@@ -329,6 +343,17 @@ pub fn format_signed_token_amount(
     } else {
         format!("{whole}.{frac}")
     };
+    if whole.len() > EXACT_FLOAT_DIGITS {
+        // ≥ 10^15: the ladder's `≥ 1000` rule — two places — from the digits.
+        let places = &frac[..frac.len().min(2)];
+        let body = format!(
+            "{}{}{places:0<2}",
+            group_digits(&whole, preset),
+            preset.separators().decimal
+        );
+        let sign = if negative { '\u{2212}' } else { '+' };
+        return Some(format!("{sign}{body}"));
+    }
     let value = plain.parse::<f64>().ok()?;
     let ladder = format_token_amount(value, preset, false);
     let body = if ladder == "0" {
@@ -433,6 +458,54 @@ mod signed_amount_tests {
         let huge = format!("-{}", "9".repeat(80));
         let out = format_signed_token_amount(&huge, 18, CD).unwrap_or_default();
         assert!(out.starts_with('\u{2212}'), "{out}");
+    }
+
+    /// An integer part past what an f64 holds exactly (15 digits) went
+    /// through the ladder's float and came out with invented digits:
+    /// uint256 max at 18 decimals read `−115,792,089,237,316,203,707,617,…`
+    /// for `…316,195,423,570,…` — a wrong number, which is worse than none.
+    /// The whole part is written from the digits, with the ladder's two
+    /// places cut from the exact fraction.
+    #[test]
+    fn a_huge_delta_is_written_from_its_digits() {
+        let max = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
+        assert_eq!(
+            format_signed_token_amount(&format!("-{max}"), 18, CD).as_deref(),
+            Some(
+                "\u{2212}115,792,089,237,316,195,423,570,985,008,687,907,853,269,984,665,640,564,039,457.58"
+            )
+        );
+        assert_eq!(
+            format_signed_token_amount(max, 0, NumberPreset::DotComma).as_deref(),
+            Some(
+                "+115.792.089.237.316.195.423.570.985.008.687.907.853.269.984.665.640.564.039.457.584.007.913.129.639.935,00"
+            )
+        );
+        assert_eq!(
+            format_signed_token_amount("1234567890123456789", 2, CD).as_deref(),
+            Some("+12,345,678,901,234,567.89")
+        );
+        assert_eq!(
+            format_signed_token_amount("-12345678901234567809", 3, NumberPreset::Indian).as_deref(),
+            Some("\u{2212}12,34,56,78,90,12,34,567.80")
+        );
+        // Fifteen digits still take the ladder (an f64 holds them exactly).
+        assert_eq!(
+            format_signed_token_amount("-123456789012345", 0, CD).as_deref(),
+            Some("\u{2212}123,456,789,012,345.00")
+        );
+    }
+
+    /// ERC-20 `decimals` is a uint8. A width past it comes from a token that
+    /// lies (a shell passes what the contract returned): padding the digits
+    /// to it allocated gigabytes and aborted the sheet. Not a readable
+    /// amount — `None`, at once.
+    #[test]
+    fn decimals_past_a_uint8_are_no_amount() {
+        assert_eq!(format_signed_token_amount("-1000", 256, CD), None);
+        assert_eq!(format_signed_token_amount("-1000", u32::MAX, CD), None);
+        let at_the_limit = format_signed_token_amount("-1", 255, CD).unwrap_or_default();
+        assert_eq!(at_the_limit, format!("\u{2212}0.{}1", "0".repeat(254)));
     }
 
     #[test]
