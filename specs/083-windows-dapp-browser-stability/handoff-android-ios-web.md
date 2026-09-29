@@ -55,8 +55,8 @@ Line ranges in this version (after any edit, `grep -n '^##' <this file>` gives t
 
 - The branch `083-windows-dapp-browser-stability` sits on `main` = `origin/main` = `de93634f` (the merge of PR #327). The code reviewed is 47 commits, `c2a137c0` through `c0694047`. This file is committed on the branch on top of them on the Windows PC before the branch leaves it, so it travels with the branch (in any push or bundle). The branch head is therefore the commit that added this file (or a later one), not `c0694047`, and `git log main..083-windows-dapp-browser-stability` lists 48 commits or more.
   - Many of the cited commits come before `c97e0b89`: dbf5a48c, 885867f4, 9e0fe081, 5c9b42a4, 25ed87f6, d5661249, 9fb9d5ce, 4bc67c85, 3cd27313, 3d22bcd1, 545621d7, 4198ec6b, e6285fc9, a6b1b2fb, 84e09838, 24578479. Review with `git log main..083-windows-dapp-browser-stability`, never with `c97e0b89..c0694047`.
-- **Getting it onto this machine.** Whether the branch is pushed is the owner's decision (not made when this was written). Do not push it yourself.
-  - **Preferred:** the owner pushes the branch (or approves pushing it). Here: `git fetch origin && git checkout 083-windows-dapp-browser-stability`.
+- **Getting it onto this machine.** The owner published the branch to `origin` on 2026-09-29. Do not push to it yourself.
+  - **Normal:** `git fetch origin && git checkout 083-windows-dapp-browser-stability` (it tracks `origin/083-windows-dapp-browser-stability`).
   - **Alternative, offline:** a git bundle made on the Windows PC (after this file is committed there). Its base is `de93634f` (= origin/main), so this machine must have that commit first.
     - On the Windows PC: `git bundle create 083.bundle origin/main..083-windows-dapp-browser-stability`
     - Here: `git fetch origin`, then `git bundle verify 083.bundle` (it must say the bundle is okay), then `git fetch 083.bundle 083-windows-dapp-browser-stability:083-windows-dapp-browser-stability && git checkout 083-windows-dapp-browser-stability`.
