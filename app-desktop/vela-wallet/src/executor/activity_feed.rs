@@ -167,46 +167,44 @@ fn scan(address: &str) -> u32 {
         return 0;
     }
 
-    let mut rows = match storage::read_value(TX_KEY) {
-        Ok(Some(Value::Array(rows))) => rows,
-        _ => Vec::new(),
-    };
-    let mut known: std::collections::BTreeSet<String> = rows
-        .iter()
-        .filter_map(|row| row.get("id").and_then(Value::as_str).map(str::to_owned))
-        .collect();
-
+    // One read-modify-write under the store's lock (spec 082 RJ1 review):
+    // this runs on a worker while a dApp's record, the Send and the tracker
+    // write the same list, and a stale copy written back loses their rows.
     let mut added = 0u32;
-    for transfer in &incoming {
-        if known.contains(&transfer.id) {
-            continue;
+    let written = storage::update_list(TX_KEY, |rows| {
+        let mut known: std::collections::BTreeSet<String> = rows
+            .iter()
+            .filter_map(|row| row.get("id").and_then(Value::as_str).map(str::to_owned))
+            .collect();
+        for transfer in &incoming {
+            if known.contains(&transfer.id) {
+                continue;
+            }
+            // A non-native token whose metadata would not resolve is SKIPPED,
+            // not stored at a guessed scale. The web says why: an 18-decimal
+            // fallback on a 6-decimal token stores a misleading "+0 tokens",
+            // and the transfer stays in the scan window to be retried once
+            // metadata resolves. Genuine spam with no readable symbol never
+            // reaches the feed.
+            let (Some(symbol), Some(decimals)) = (
+                transfer
+                    .symbol
+                    .clone()
+                    .or_else(|| transfer.is_native.then(|| native_symbol(transfer.chain_id))),
+                transfer.decimals.or(transfer.is_native.then_some(18)),
+            ) else {
+                continue;
+            };
+            let Some(row) = incoming_row(transfer, address, &symbol, decimals) else {
+                continue;
+            };
+            known.insert(transfer.id.clone());
+            rows.push(row);
+            added += 1;
         }
-        // A non-native token whose metadata would not resolve is SKIPPED, not
-        // stored at a guessed scale. The web says why: an 18-decimal fallback
-        // on a 6-decimal token stores a misleading "+0 tokens", and the
-        // transfer stays in the scan window to be retried once metadata
-        // resolves. Genuine spam with no readable symbol never reaches the feed.
-        let (Some(symbol), Some(decimals)) = (
-            transfer
-                .symbol
-                .clone()
-                .or_else(|| transfer.is_native.then(|| native_symbol(transfer.chain_id))),
-            transfer.decimals.or(transfer.is_native.then_some(18)),
-        ) else {
-            continue;
-        };
-        let Some(row) = incoming_row(transfer, address, &symbol, decimals) else {
-            continue;
-        };
-        known.insert(transfer.id.clone());
-        rows.push(row);
-        added += 1;
-    }
-
-    if added == 0 {
-        return 0;
-    }
-    if storage::write_value(TX_KEY, Value::Array(rows)).is_err() {
+        added > 0
+    });
+    if written.is_err() {
         // The store refused. Reporting new records that are not on disk would
         // celebrate a payment the next launch has never heard of.
         return 0;
@@ -297,18 +295,12 @@ impl Machine for ActivityFeed {
 
             FeedOperation::DeleteTxRecord { id } => {
                 let id = id.clone();
-                let removed = match storage::read_value(TX_KEY) {
-                    Ok(Some(Value::Array(rows))) => {
-                        let before = rows.len();
-                        let kept: Vec<Value> = rows
-                            .into_iter()
-                            .filter(|row| row.get("id").and_then(Value::as_str) != Some(&id))
-                            .collect();
-                        let removed = kept.len() != before;
-                        storage::write_value(TX_KEY, Value::Array(kept)).is_ok() && removed
-                    }
-                    _ => false,
-                };
+                let removed = storage::update_list(TX_KEY, |rows| {
+                    let before = rows.len();
+                    rows.retain(|row| row.get("id").and_then(Value::as_str) != Some(&id));
+                    rows.len() != before
+                })
+                .unwrap_or(false);
                 Answer::Now(if removed {
                     FeedShellResult::DeleteCommitted { id }
                 } else {

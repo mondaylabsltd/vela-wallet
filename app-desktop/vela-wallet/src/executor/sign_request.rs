@@ -862,61 +862,61 @@ pub(crate) fn persist_record(record: &SignRecord) {
         row["intent"] = json!(intent);
     }
 
-    let mut rows = match storage::read_value(TX_KEY) {
-        Ok(Some(Value::Array(rows))) => rows,
-        _ => Vec::new(),
-    };
-    // Same id, never a second row — a resubmit of the same request closes the
-    // record it opened (the core's note on `SignRecordClose`).
-    if let Some(existing) = rows
-        .iter_mut()
-        .find(|row| row.get("id").and_then(Value::as_str) == Some(record.record_id.as_str()))
-    {
-        *existing = row;
-    } else {
-        rows.push(row);
+    // One read-modify-write under the store's lock (spec 082 RJ1 review):
+    // this runs on a worker while the tracker and the Send write the same
+    // list, and the write-ahead's record must be the row that survives.
+    let written = storage::update_list(TX_KEY, |rows| {
+        // Same id, never a second row — a resubmit of the same request closes
+        // the record it opened (the core's note on `SignRecordClose`).
+        if let Some(existing) = rows
+            .iter_mut()
+            .find(|row| row.get("id").and_then(Value::as_str) == Some(record.record_id.as_str()))
+        {
+            *existing = row;
+        } else {
+            rows.push(row);
+        }
+        true
+    });
+    if let Err(error) = written {
+        vlog!("dapp", "record {} not written: {error}", record.record_id);
     }
-    let _ = storage::write_value(TX_KEY, Value::Array(rows));
 }
 
 /// Close a pending record IN PLACE.
 fn update_record(record_id: &str, close: &vela_core::app::sign_request::SignRecordClose) {
     use vela_core::app::sign_request::SignRecordClose;
 
-    let Ok(Some(Value::Array(mut rows))) = storage::read_value(TX_KEY) else {
-        return;
-    };
-    let Some(row) = rows
-        .iter_mut()
-        .find(|row| row.get("id").and_then(Value::as_str) == Some(record_id))
-    else {
-        return;
-    };
-    match close {
-        SignRecordClose::Confirmed { tx_hash } => {
-            row["status"] = json!("confirmed");
-            row["txHash"] = json!(tx_hash);
+    let _ = storage::update_list(TX_KEY, |rows| {
+        let Some(row) = rows
+            .iter_mut()
+            .find(|row| row.get("id").and_then(Value::as_str) == Some(record_id))
+        else {
+            return false;
+        };
+        match close {
+            SignRecordClose::Confirmed { tx_hash } => {
+                row["status"] = json!("confirmed");
+                row["txHash"] = json!(tx_hash);
+            }
+            SignRecordClose::Failed => row["status"] = json!("failed"),
+            // Spec 082 RJ1: the relay took the written-ahead op. It stays
+            // pending — only the tracker closes it — and no longer "may have
+            // been sent".
+            SignRecordClose::Admitted => row["maybeSent"] = json!(false),
         }
-        SignRecordClose::Failed => row["status"] = json!("failed"),
-        // Spec 082 RJ1: the relay took the written-ahead op. It stays
-        // pending — only the tracker closes it — and no longer "may have
-        // been sent".
-        SignRecordClose::Admitted => row["maybeSent"] = json!(false),
-    }
-    let _ = storage::write_value(TX_KEY, Value::Array(rows));
+        true
+    });
 }
 
 /// Remove a record whose op is proven never sent (spec 082 RJ1): the
 /// write-ahead wrote it before the POST, and nothing left the device.
 fn delete_record(record_id: &str) {
-    let Ok(Some(Value::Array(mut rows))) = storage::read_value(TX_KEY) else {
-        return;
-    };
-    let before = rows.len();
-    rows.retain(|row| row.get("id").and_then(Value::as_str) != Some(record_id));
-    if rows.len() != before {
-        let _ = storage::write_value(TX_KEY, Value::Array(rows));
-    }
+    let _ = storage::update_list(TX_KEY, |rows| {
+        let before = rows.len();
+        rows.retain(|row| row.get("id").and_then(Value::as_str) != Some(record_id));
+        rows.len() != before
+    });
 }
 
 /// The first element of a JSON-RPC params array, when it is an object.
@@ -1627,6 +1627,63 @@ mod tests {
                 "the tracker forgets it"
             );
             assert!(!host.view().failure_refused);
+        });
+    }
+
+    /// Spec 082 RJ1 (review): the dApp's record is written on a worker thread
+    /// while the tracker patches, the Send writes and the incoming scan adds
+    /// rows to the same document from others. Each was a read, a change and
+    /// a whole-key write with nothing held between the read and the write,
+    /// so one writer's stale copy could land over another's row — a
+    /// written-ahead record gone after its POST was cleared, the DX9 payment
+    /// with no Activity row by another road. Every row written at once is
+    /// still there.
+    #[test]
+    fn records_written_at_once_all_stay() {
+        storage::tests::with_temp_state("tx-history-at-once", || {
+            let start = Arc::new(std::sync::Barrier::new(9));
+            let writers: Vec<_> = (0..8)
+                .map(|writer| {
+                    let start = Arc::clone(&start);
+                    std::thread::spawn(move || {
+                        start.wait();
+                        for n in 0..6 {
+                            let mut row = record(SignRecordKind::DappTx, "[]");
+                            row.record_id = format!("dapp-{writer}-{n}-tx");
+                            row.user_op_hash = format!("0x{writer}{n}");
+                            persist_record(&row);
+                        }
+                    })
+                })
+                .collect();
+            start.wait();
+            for n in 0..6 {
+                let hash = format!("0xsend{n}");
+                let _ =
+                    crate::executor::send::persist_records(&[vela_core::app::send::SendTxRecord {
+                        id: hash.clone(),
+                        user_op_hash: hash,
+                        tx_hash: String::new(),
+                        from: ME.to_owned(),
+                        to: ME.to_owned(),
+                        to_name: None,
+                        value: "0.001".to_owned(),
+                        symbol: "xDAI".to_owned(),
+                        decimals: 18,
+                        logo_urls: Vec::new(),
+                        chain_id: 100,
+                        timestamp_s: 1_757_000_000.0,
+                        usd: None,
+                        maybe_sent: true,
+                        submit_block: None,
+                    }]);
+            }
+            for writer in writers {
+                writer
+                    .join()
+                    .unwrap_or_else(|_| unreachable!("a writer panicked"));
+            }
+            assert_eq!(stored_rows().len(), 8 * 6 + 6, "no row lost");
         });
     }
 

@@ -130,9 +130,20 @@ fn read_rows() -> Vec<Value> {
 /// Patch the named records in place — same ids, never a second record — in
 /// ONE write (`updateTransactions`).
 fn patch_records(ids: &[String], status: TrackRecordStatus, tx_hash: Option<&str>) {
-    let mut rows = read_rows();
+    // Under the store's lock (spec 082 RJ1 review): a dApp's record is
+    // written on a worker meanwhile, and a stale copy written back here
+    // would take it away.
+    let _ = storage::update_list(TX_KEY, |rows| patch_rows(rows, ids, status, tx_hash));
+}
+
+fn patch_rows(
+    rows: &mut [Value],
+    ids: &[String],
+    status: TrackRecordStatus,
+    tx_hash: Option<&str>,
+) -> bool {
     let mut touched = false;
-    for row in &mut rows {
+    for row in rows.iter_mut() {
         let Some(id) = row.get("id").and_then(Value::as_str) else {
             continue;
         };
@@ -156,9 +167,7 @@ fn patch_records(ids: &[String], status: TrackRecordStatus, tx_hash: Option<&str
             touched = true;
         }
     }
-    if touched {
-        let _ = storage::write_value(TX_KEY, Value::Array(rows));
-    }
+    touched
 }
 
 /// The sender of a submission, from its own stored row — the fallback when

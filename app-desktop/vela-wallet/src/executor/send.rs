@@ -380,55 +380,59 @@ fn to_row(record: &SendTxRecord) -> Value {
     row
 }
 
-/// ONE atomic write for every sibling record (invariant ⑥). A record whose
-/// id the store already holds is left as it is — a resubmit shares its hash.
+/// ONE atomic write for every sibling record (invariant ⑥), under the
+/// store's lock (spec 082 RJ1 review: other threads write the same list). A
+/// record whose id the store already holds is left as it is — a resubmit
+/// shares its hash.
 pub fn persist_records(records: &[SendTxRecord]) -> bool {
-    let mut rows = match storage::read_value(TX_KEY) {
-        Ok(Some(Value::Array(rows))) => rows,
-        _ => Vec::new(),
-    };
-    let known: std::collections::BTreeSet<String> = rows
-        .iter()
-        .filter_map(|row| row.get("id").and_then(Value::as_str).map(str::to_owned))
-        .collect();
-    for record in records {
-        if !known.contains(&record.id) {
-            rows.push(to_row(record));
+    storage::update_list(TX_KEY, |rows| {
+        let known: std::collections::BTreeSet<String> = rows
+            .iter()
+            .filter_map(|row| row.get("id").and_then(Value::as_str).map(str::to_owned))
+            .collect();
+        for record in records {
+            if !known.contains(&record.id) {
+                rows.push(to_row(record));
+            }
         }
-    }
-    storage::write_value(TX_KEY, Value::Array(rows)).is_ok()
+        true
+    })
+    .is_ok()
 }
 
 /// The relay took these written-ahead records' payment (spec 082 RJ1): each
 /// row's `maybeSent` becomes false, in ONE write. They stay pending.
 pub fn mark_admitted(ids: &[String]) -> bool {
-    let Ok(Some(Value::Array(mut rows))) = storage::read_value(TX_KEY) else {
-        return false;
-    };
-    for row in &mut rows {
-        let named = row
-            .get("id")
-            .and_then(Value::as_str)
-            .is_some_and(|id| ids.iter().any(|wanted| wanted == id));
-        if named {
-            row["maybeSent"] = json!(false);
+    storage::update_list(TX_KEY, |rows| {
+        let mut named = false;
+        for row in rows.iter_mut() {
+            if row
+                .get("id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| ids.iter().any(|wanted| wanted == id))
+            {
+                row["maybeSent"] = json!(false);
+                named = true;
+            }
         }
-    }
-    storage::write_value(TX_KEY, Value::Array(rows)).is_ok()
+        named
+    })
+    .is_ok()
 }
 
 /// Remove written-ahead records whose payment is proven never sent (spec 082
 /// RJ1), in ONE write.
 pub fn delete_records(ids: &[String]) -> bool {
-    let Ok(Some(Value::Array(mut rows))) = storage::read_value(TX_KEY) else {
-        return true;
-    };
-    rows.retain(|row| {
-        row.get("id")
-            .and_then(Value::as_str)
-            .is_none_or(|id| !ids.iter().any(|gone| gone == id))
-    });
-    storage::write_value(TX_KEY, Value::Array(rows)).is_ok()
+    storage::update_list(TX_KEY, |rows| {
+        let before = rows.len();
+        rows.retain(|row| {
+            row.get("id")
+                .and_then(Value::as_str)
+                .is_none_or(|id| !ids.iter().any(|gone| gone == id))
+        });
+        rows.len() != before
+    })
+    .is_ok()
 }
 
 // ---------------------------------------------------------------------------
