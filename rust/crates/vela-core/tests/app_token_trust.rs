@@ -511,6 +511,19 @@ fn judge_delta_edges_fail_toward_unverified() {
         judge_delta(&erc20_delta(FRESH, "-1"), Some(&meta("", 6)), true),
         TrustSimJudgment::Erc20Unverified { .. }
     ));
+    // ERC-20 `decimals` is a uint8: a token claiming more has no readable
+    // amount — caution and direction, never a figure at a lying width (the
+    // sheet's formatter has none to give, 082 review) and never a hidden row.
+    for lying in [256, u32::MAX] {
+        assert!(matches!(
+            judge_delta(&erc20_delta(FRESH, "-1"), Some(&meta("TOK", lying)), true),
+            TrustSimJudgment::Erc20Unverified { .. }
+        ));
+    }
+    assert!(matches!(
+        judge_delta(&erc20_delta(FRESH, "-1"), Some(&meta("TOK", 255)), true),
+        TrustSimJudgment::Erc20Trusted { decimals: 255, .. }
+    ));
     // Native always passes through — naming is the shell's.
     assert_eq!(
         judge_delta(&native_delta("-42"), None, false),
