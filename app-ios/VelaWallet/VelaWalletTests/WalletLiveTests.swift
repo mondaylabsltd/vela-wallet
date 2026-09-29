@@ -42,6 +42,27 @@ struct WalletLiveTests {
 
     // MARK: - The hero
 
+    /// 082 X-DEADPROXY: with chains failing, the line under the figure says
+    /// so in words — never a ⚠ › with nothing beside it (the drawn fixture's
+    /// status was nil on the live home).
+    @Test func aPartialTotalSaysSoInWords() {
+        let partial = BalanceViewWire(
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+            displayTotalUsd: 1_000, balanceUnknown: false, balancePartial: true,
+            notice: nil, hidden: false, refreshing: false, lastRefreshedAtMs: nil,
+            tokens: [], unpricedTokens: [], failedChainIds: [137],
+            rateLimitedChainIds: [], bannerChainIds: [], holdingsLoading: false,
+            cachedTotalUsd: nil,
+            switcher: BalanceSwitcherViewWire(open: false, loading: false, balances: [])
+        )
+        var silent = base
+        silent.status = nil
+        let model = WalletLive.balance(partial, fallback: silent, loc: loc)
+        #expect(model.status?.kind == .warning)
+        #expect(model.status?.text == loc.t("home.balanceStale"))
+        #expect(model.status?.text.isEmpty == false)
+    }
+
     @Test func aPricedCurrencyConvertsTheHeroAndWearsItsCode() {
         let model = WalletLive.balance(
             view(total: 1_000),

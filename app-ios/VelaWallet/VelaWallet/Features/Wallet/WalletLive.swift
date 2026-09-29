@@ -75,7 +75,7 @@ enum WalletLive {
     ) -> WalletHomeModel {
         var copy = model
         let display = Display.from(currency)
-        copy.balance = balance(view, display: display, fallback: model.balance)
+        copy.balance = balance(view, display: display, fallback: model.balance, loc: loc)
         copy.assetRows = assetRows(view, display: display)
         if let feed {
             copy.activityGroups = activityGroups(feed, loc: loc, hidden: view.hidden)
@@ -120,7 +120,8 @@ enum WalletLive {
     static func balance(
         _ view: BalanceViewWire,
         display: Display = .usd,
-        fallback: BalanceModel
+        fallback: BalanceModel,
+        loc: Loc? = nil
     ) -> BalanceModel {
         var model = BalanceModel(
             label: fallback.label,
@@ -129,7 +130,7 @@ enum WalletLive {
             integer: nil,
             decimals: nil,
             liveText: nil,
-            status: status(view, fallback: fallback),
+            status: status(view, fallback: fallback, loc: loc),
             a11yHide: fallback.a11yHide,
             a11yShow: fallback.a11yShow
         )
@@ -158,18 +159,20 @@ enum WalletLive {
     }
 
     /// The line under the figure. A partial total says so; a refresh over a
-    /// cached figure says that instead.
+    /// cached figure says that instead — in `home.balanceStale`, as the other
+    /// three clients say it. The drawn fixture's own status was nil on the
+    /// live home, which left a ⚠ › line with no words (082 X-DEADPROXY).
     private static func status(
         _ view: BalanceViewWire,
-        fallback: BalanceModel
+        fallback: BalanceModel,
+        loc: Loc?
     ) -> BalanceStatusModel? {
+        let text = loc?.t("home.balanceStale") ?? fallback.status?.text ?? ""
         if view.balancePartial || !view.failedChainIds.isEmpty {
-            return BalanceStatusModel(kind: .warning,
-                                      text: fallback.status?.text ?? "")
+            return BalanceStatusModel(kind: .warning, text: text)
         }
         if view.refreshing || view.notice == .stillUpdating {
-            return BalanceStatusModel(kind: .refreshing,
-                                      text: fallback.status?.text ?? "")
+            return BalanceStatusModel(kind: .refreshing, text: text)
         }
         return nil
     }
