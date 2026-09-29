@@ -124,10 +124,12 @@ final class RpcPool {
         var resume: ((RpcCallResult) -> Void)?
     }
 
-    /// Every routed call's outcome, once concluded — the network's health
-    /// is read from these (`NetWatch`, spec 082 RE3): the calls are the only
-    /// witness of a proxy node that hangs while the system path stays up.
-    var onOutcome: ((RpcOutcome) -> Void)?
+    /// Every routed call's outcome, once concluded, with the chain it read —
+    /// the network's health is read from these (`NetWatch`, spec 082 RE3):
+    /// the calls are the only witness of a proxy node that hangs while the
+    /// system path stays up, and the chain is what tells one faulted chain
+    /// from a network that is gone (RJ14).
+    var onOutcome: ((_ outcome: RpcOutcome, _ chainId: Int) -> Void)?
 
     private let store: VelaStore
     private let accounts: AccountStore
@@ -231,7 +233,7 @@ final class RpcPool {
                 "chain=\(chainId) method=\(method) kind=\(kind)"
             )
         }
-        onOutcome?(result.outcome)
+        onOutcome?(result.outcome, chainId)
         return result
     }
 

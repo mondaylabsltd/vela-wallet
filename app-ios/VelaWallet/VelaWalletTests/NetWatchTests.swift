@@ -8,6 +8,10 @@
 //  edge — and the system path's unsatisfied → satisfied edge counts too,
 //  through a seam. Hermetic.
 //
+//  Spec 082 T241 (RJ14, G53): health counts SOURCES, not calls. Offline
+//  needs the misses from at least two chains and nothing reached for 10 s;
+//  one faulted chain while the others answer never flaps "offline".
+//
 
 import Foundation
 import Testing
@@ -50,32 +54,72 @@ struct NetWatchTests {
         let before = asked.count
 
         watch.onCameBack = { engine.networkCameBack() }
-        watch.observe(.failed(rateLimited: false))
-        watch.observe(.failed(rateLimited: false))
+        // Three misses from two chains, the last past the 10 s quiet window.
+        let t0 = 1_757_000_000_000.0
+        watch.observe(.failed(rateLimited: false), chainId: 1, nowMs: t0)
+        watch.observe(.failed(rateLimited: false), chainId: 100, nowMs: t0 + 4_000)
         #expect(watch.online, "two misses are not offline yet")
-        watch.observe(.failed(rateLimited: false))
+        watch.observe(.failed(rateLimited: false), chainId: 1, nowMs: t0 + 11_000)
         #expect(!watch.online)
         #expect(watch.cameBackCount == 0)
 
-        watch.observe(.ok("0x1"))
+        watch.observe(.ok("0x1"), chainId: 100, nowMs: t0 + 12_000)
         #expect(watch.online)
         #expect(watch.cameBackCount == 1)
         #expect(asked.count == before + 1, "the page in front is asked for again, once")
         #expect(engine.retrying)
 
         // Another answer is no second edge.
-        watch.observe(.ok("0x2"))
+        watch.observe(.ok("0x2"), chainId: 1, nowMs: t0 + 13_000)
         #expect(watch.cameBackCount == 1)
+    }
+
+    /// G53: one chain giving up over and over while another answers is that
+    /// chain's own notice — never "offline", never a "came back" flap.
+    @Test func oneFaultedChainWhileOthersAnswerNeverFlaps() {
+        let watch = NetWatch(debounceMs: 0)
+        let t0 = 1_757_000_000_000.0
+        for step in 0..<12 {
+            let at = t0 + Double(step) * 5_000
+            watch.observe(.failed(rateLimited: false), chainId: 100, nowMs: at)
+            watch.observe(.failed(rateLimited: false), chainId: 100, nowMs: at + 1_000)
+            watch.observe(.failed(rateLimited: false), chainId: 100, nowMs: at + 2_000)
+            watch.observe(.ok("0x1"), chainId: 1, nowMs: at + 2_500)
+        }
+        #expect(watch.online, "one faulted chain is not the network")
+        #expect(watch.cameBackCount == 0, "and nothing flapped")
+
+        // Many misses from ONE chain, nothing else answering, long past the
+        // quiet window: still one source — not "offline".
+        let alone = NetWatch(debounceMs: 0)
+        for step in 0..<6 {
+            alone.observe(.failed(rateLimited: false), chainId: 100, nowMs: t0 + Double(step) * 5_000)
+        }
+        #expect(alone.online)
+    }
+
+    /// Two chains missing, but something answered inside the 10 s window: the
+    /// quiet rule holds "offline" back until nothing has answered for 10 s.
+    @Test func offlineWaitsForTenQuietSeconds() {
+        let watch = NetWatch(debounceMs: 0)
+        let t0 = 1_757_000_000_000.0
+        watch.observe(.ok("0x1"), chainId: 1, nowMs: t0)
+        watch.observe(.failed(rateLimited: false), chainId: 1, nowMs: t0 + 1_000)
+        watch.observe(.failed(rateLimited: false), chainId: 100, nowMs: t0 + 2_000)
+        watch.observe(.failed(rateLimited: false), chainId: 1, nowMs: t0 + 3_000)
+        #expect(watch.online, "something answered 3 s ago")
+        watch.observe(.failed(rateLimited: false), chainId: 100, nowMs: t0 + 10_500)
+        #expect(!watch.online, "three-plus misses from two chains, nothing for 10 s")
     }
 
     /// A 429 is the server answering: never a miss. A refusal is an answer.
     @Test func aRateLimitOrARefusalIsAReach() {
         let watch = NetWatch(debounceMs: 0)
-        for _ in 0..<5 { watch.observe(.failed(rateLimited: true)) }
+        for _ in 0..<5 { watch.observe(.failed(rateLimited: true), chainId: 1) }
         #expect(watch.online)
         #expect(watch.misses == 0)
-        watch.observe(.failed(rateLimited: false))
-        watch.observe(.rpcError(code: -32000, message: "no"))
+        watch.observe(.failed(rateLimited: false), chainId: 1)
+        watch.observe(.rpcError(code: -32000, message: "no"), chainId: 1)
         #expect(watch.misses == 0)
     }
 
