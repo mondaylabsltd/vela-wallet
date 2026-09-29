@@ -380,19 +380,33 @@ fn to_row(record: &SendTxRecord) -> Value {
     row
 }
 
+/// Has the tracker closed this row as landed? Such a row is a payment's only
+/// record — a Send's id is its op hash — and no later write-ahead or
+/// withdrawal under the same id may touch it.
+fn landed(row: &Value) -> bool {
+    row.get("status").and_then(Value::as_str) == Some("confirmed")
+}
+
 /// ONE atomic write for every sibling record (invariant ⑥), under the
-/// store's lock (spec 082 RJ1 review: other threads write the same list). A
-/// record whose id the store already holds is left as it is — a resubmit
-/// shares its hash.
+/// store's lock (spec 082 RJ1 review: other threads write the same list).
+///
+/// A record whose id the store already holds REPLACES it, as the web's
+/// `saveTransactions` does — the id is the op hash, which repeats for an
+/// identical op (S5 and both DX9 runs shared one), so the row there is an
+/// earlier attempt's: "failed" after a lost reply the relay never had, say.
+/// Kept as it was, the op about to be POSTed had no pending record, and a
+/// quit mid-POST left a landed payment the relaunch never followed. A landed
+/// payment's row is the exception: it is never reopened.
 pub fn persist_records(records: &[SendTxRecord]) -> bool {
     storage::update_list(TX_KEY, |rows| {
-        let known: std::collections::BTreeSet<String> = rows
-            .iter()
-            .filter_map(|row| row.get("id").and_then(Value::as_str).map(str::to_owned))
-            .collect();
         for record in records {
-            if !known.contains(&record.id) {
-                rows.push(to_row(record));
+            match rows
+                .iter_mut()
+                .find(|row| row.get("id").and_then(Value::as_str) == Some(record.id.as_str()))
+            {
+                Some(row) if landed(row) => {}
+                Some(row) => *row = to_row(record),
+                None => rows.push(to_row(record)),
             }
         }
         true
@@ -421,14 +435,16 @@ pub fn mark_admitted(ids: &[String]) -> bool {
 }
 
 /// Remove written-ahead records whose payment is proven never sent (spec 082
-/// RJ1), in ONE write.
+/// RJ1), in ONE write — never a landed payment's row under the same id.
 pub fn delete_records(ids: &[String]) -> bool {
     storage::update_list(TX_KEY, |rows| {
         let before = rows.len();
         rows.retain(|row| {
-            row.get("id")
-                .and_then(Value::as_str)
-                .is_none_or(|id| !ids.iter().any(|gone| gone == id))
+            landed(row)
+                || row
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .is_none_or(|id| !ids.iter().any(|gone| gone == id))
         });
         rows.len() != before
     })
@@ -704,9 +720,20 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
         SendOperation::TrackSubmitted { .. } => SendAnswer::Screen,
 
         // Spec 082 RJ1: the records are on disk and tracked — the submit
-        // waiting in `SubmitUserOp` may POST, and only now.
+        // waiting in `SubmitUserOp` may POST, and only now. Given only for
+        // records the store really holds (review): the write answers
+        // "persisted" either way, and a refused write must send nothing — the
+        // wait then ends in "not sent".
         SendOperation::ClearToPost { user_op_hash } => {
-            ctx.clearance.clear(user_op_hash);
+            if crate::executor::tracker::resumable(user_op_hash) {
+                ctx.clearance.clear(user_op_hash);
+            } else {
+                vlog!(
+                    "relay",
+                    "op={} not cleared: its records are not on disk",
+                    crate::diag::short(user_op_hash)
+                );
+            }
             SendAnswer::Now(SendShellResult::PostCleared)
         }
 
@@ -969,6 +996,138 @@ mod tests {
             // The address book's first-time tell reads the same rows.
             assert!(has_prior_interaction("0xYOU"));
             assert!(!has_prior_interaction("0xnobody"));
+        });
+    }
+
+    fn stored() -> Vec<Value> {
+        match storage::read_value(TX_KEY) {
+            Ok(Some(Value::Array(rows))) => rows,
+            _ => Vec::new(),
+        }
+    }
+
+    fn written_ahead(id: &str, hash: &str) -> SendTxRecord {
+        SendTxRecord {
+            id: id.to_owned(),
+            user_op_hash: hash.to_owned(),
+            tx_hash: String::new(),
+            from: "0xme".to_owned(),
+            to: "0xyou".to_owned(),
+            to_name: None,
+            value: "0.001".to_owned(),
+            symbol: "xDAI".to_owned(),
+            decimals: 18,
+            logo_urls: Vec::new(),
+            chain_id: 100,
+            timestamp_s: 1_757_000_000.0,
+            usd: None,
+            maybe_sent: true,
+            submit_block: Some(48_487_620),
+        }
+    }
+
+    /// Spec 082 RJ1 (T220), the wallet's own Send: its records are on disk,
+    /// pending and "may have been sent", before the POST is cleared; the
+    /// relay taking the op clears `maybeSent` (still pending, only the
+    /// tracker closes it); a proven "not sent" leaves no row. The clearance
+    /// is given only for an op the relaunch sweep would resume.
+    #[test]
+    fn a_send_is_on_disk_before_its_post_and_gone_when_never_sent() {
+        const OP: &str = "0x7df211eddc00000000000000000000000000000000000000000000000000aaaa";
+        crate::executor::storage::tests::with_temp_state("send-write-ahead", || {
+            let ctx = SendContext::new(&account("internal", 1), ceremony());
+            let cleared = |ctx: &SendContext| {
+                ctx.clearance.arm(OP);
+                let answer = perform(
+                    &SendOperation::ClearToPost {
+                        user_op_hash: OP.to_owned(),
+                    },
+                    ctx,
+                );
+                assert!(matches!(
+                    answer,
+                    SendAnswer::Now(SendShellResult::PostCleared)
+                ));
+                ctx.clearance.wait(Duration::ZERO)
+            };
+            // The store refused the write-ahead (a full disk): nothing is on
+            // disk, so nothing may leave.
+            assert!(!cleared(&ctx), "no record on disk, no POST");
+
+            let ids = [format!("{OP}-0"), format!("{OP}-1")];
+            let records = [written_ahead(&ids[0], OP), written_ahead(&ids[1], OP)];
+            assert!(matches!(
+                perform(
+                    &SendOperation::PersistTxRecords {
+                        records: records.to_vec()
+                    },
+                    &ctx
+                ),
+                SendAnswer::Now(SendShellResult::RecordsPersisted)
+            ));
+            let resumed = crate::executor::tracker::pending_records(&stored());
+            assert_eq!(resumed.len(), 2, "both legs of the split, pending");
+            assert!(resumed.iter().all(|r| r.maybe_sent && r.user_op_hash == OP));
+            assert!(cleared(&ctx), "on disk: the POST may go");
+
+            let _ = perform(
+                &SendOperation::MarkAdmitted {
+                    record_ids: ids.to_vec(),
+                },
+                &ctx,
+            );
+            let rows = stored();
+            assert!(rows.iter().all(|row| row["status"] == "pending"));
+            assert!(rows.iter().all(|row| row["maybeSent"] == false));
+
+            let _ = perform(&SendOperation::DeleteTxRecords { ids: ids.to_vec() }, &ctx);
+            assert!(stored().is_empty(), "never sent: no Activity row");
+        });
+    }
+
+    /// Spec 082 RJ1 (review): a Send's hash is deterministic — S5 and both
+    /// DX9 runs shared 0x7df211ed… — so a write-ahead can land on the row an
+    /// earlier attempt at the SAME op left: "failed" after the tracker's
+    /// NotSent for a lost reply. Kept as it was, the op about to be POSTed
+    /// had no pending record — a quit mid-POST and the relaunch sweep never
+    /// saw the payment land (DX9's P0, on the wallet's own Send). The
+    /// write-ahead row replaces it, as the web's `saveTransactions` does. A
+    /// landed payment's row is never replaced, and never deleted by a later
+    /// attempt's "not sent".
+    #[test]
+    fn a_write_ahead_replaces_an_earlier_attempt_but_never_a_landed_payment() {
+        const OP: &str = "0x7df211eddc00000000000000000000000000000000000000000000000000bbbb";
+        crate::executor::storage::tests::with_temp_state("send-write-ahead-same-hash", || {
+            let earlier = |status: &str, tx_hash: &str| {
+                json!({
+                    "id": OP, "userOpHash": OP, "txHash": tx_hash, "from": "0xme",
+                    "to": "0xyou", "value": "0.001", "symbol": "xDAI", "decimals": 18,
+                    "chainId": 100, "timestamp": 1_756_000_000, "status": status,
+                    "type": "send", "maybeSent": false,
+                })
+            };
+            if storage::write_value(TX_KEY, json!([earlier("failed", "")])).is_err() {
+                unreachable!("seed");
+            }
+            assert!(persist_records(&[written_ahead(OP, OP)]));
+            let rows = stored();
+            assert_eq!(rows.len(), 1, "one row per id");
+            let resumed = crate::executor::tracker::pending_records(&rows);
+            assert_eq!(resumed.len(), 1, "the relaunch resumes the op about to go");
+            assert!(resumed[0].maybe_sent);
+            assert_eq!(resumed[0].submit_block, Some(48_487_620));
+
+            // A landed payment under the same id (a stale nonce read would
+            // rebuild its op): kept whole, and not withdrawn by a refusal.
+            if storage::write_value(TX_KEY, json!([earlier("confirmed", "0xtx")])).is_err() {
+                unreachable!("seed");
+            }
+            assert!(persist_records(&[written_ahead(OP, OP)]));
+            assert!(delete_records(&[OP.to_owned()]));
+            let rows = stored();
+            assert_eq!(rows.len(), 1, "a landed payment's row stays");
+            assert_eq!(rows[0]["status"], "confirmed");
+            assert_eq!(rows[0]["txHash"], "0xtx");
         });
     }
 

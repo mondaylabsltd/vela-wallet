@@ -127,6 +127,17 @@ fn read_rows() -> Vec<Value> {
     }
 }
 
+/// Is a record for `user_op_hash` on disk the way the relaunch sweep hands
+/// it back — pending, under this hash (spec 082 RJ1)? What a write-ahead must
+/// have left before its POST may go, so a quit at any moment after finds the
+/// payment: `ClearToPost` follows the write's acknowledgement, which is given
+/// whether or not the store took the row.
+pub(crate) fn resumable(user_op_hash: &str) -> bool {
+    pending_records(&read_rows())
+        .iter()
+        .any(|record| record.user_op_hash.eq_ignore_ascii_case(user_op_hash))
+}
+
 /// Patch the named records in place — same ids, never a second record — in
 /// ONE write (`updateTransactions`).
 fn patch_records(ids: &[String], status: TrackRecordStatus, tx_hash: Option<&str>) {

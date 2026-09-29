@@ -236,9 +236,19 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
         }
 
         // Spec 082 RJ1: the write-ahead record is on disk — the submit
-        // waiting in `sign_and_submit` may POST, and only now.
+        // waiting in `sign_and_submit` may POST, and only now. Given only for
+        // a record the store really holds (review): a refused write sends
+        // nothing, and the wait ends in "not sent".
         SignOperation::ClearToPost { user_op_hash, .. } => {
-            ctx.clearance.clear(user_op_hash);
+            if crate::executor::tracker::resumable(user_op_hash) {
+                ctx.clearance.clear(user_op_hash);
+            } else {
+                vlog!(
+                    "relay",
+                    "op={} not cleared: its record is not on disk",
+                    short(user_op_hash)
+                );
+            }
             SignAnswer::Now(SignShellResult::Responded)
         }
 
@@ -1627,6 +1637,43 @@ mod tests {
                 "the tracker forgets it"
             );
             assert!(!host.view().failure_refused);
+        });
+    }
+
+    /// Spec 082 RJ1 (review): the POST is cleared only for an op whose
+    /// record is on disk the way the relaunch sweep reads it. `ClearToPost`
+    /// follows `RecordPersisted`, which the write answers whether or not the
+    /// store took the row — a full disk, or another writer's read-modify-write
+    /// landing over it — and a payment with no record behind it is the one
+    /// thing the write-ahead exists to prevent.
+    #[test]
+    fn the_post_is_cleared_only_with_its_record_on_disk() {
+        storage::tests::with_temp_state("sign-clear-on-disk", || {
+            let ctx = context(Some("http://127.0.0.1:8137"));
+            let clear = SignOperation::ClearToPost {
+                id: "rid-disk".to_owned(),
+                user_op_hash: LOCAL_OP.to_owned(),
+            };
+            ctx.clearance.arm(LOCAL_OP);
+            assert_eq!(run(&clear, &ctx), SignShellResult::Responded);
+            assert!(
+                !ctx.clearance.wait(Duration::ZERO),
+                "nothing on disk: nothing may leave"
+            );
+
+            let mut written = record(
+                SignRecordKind::DappTx,
+                r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x1"}]"#,
+            );
+            written.user_op_hash = LOCAL_OP.to_owned();
+            written.maybe_sent = true;
+            persist_record(&written);
+            ctx.clearance.arm(LOCAL_OP);
+            assert_eq!(run(&clear, &ctx), SignShellResult::Responded);
+            assert!(
+                ctx.clearance.wait(Duration::ZERO),
+                "on disk: the POST may go"
+            );
         });
     }
 
