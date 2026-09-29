@@ -2430,7 +2430,10 @@ fn the_record_precedes_clear_to_post_which_precedes_nothing_else() {
         .tracker_handoff
         .expect("the tracker holds it before the POST");
     assert_eq!(handoff.user_op_hash, LOCAL_OP);
-    assert_eq!(handoff.record_ids, vec![record.record_id.clone()]);
+    assert!(
+        handoff.record_ids.is_empty(),
+        "a POST is about to leave; its verdict names the record"
+    );
     assert!(handoff.maybe_sent && !handoff.admitted);
     assert_eq!(
         view.phase,
@@ -2510,12 +2513,14 @@ fn accepted_patches_the_record_admitted() {
     assert!(!view.pending_op_maybe_sent);
 
     let mut lost = submitting("req-w7");
-    written_ahead(&mut lost, "req-w7");
+    let record = written_ahead(&mut lost, "req-w7");
     let ops = lost.dispatch(op_submitted("req-w7", LOCAL_OP, true));
     assert!(ops.is_empty(), "the record already says so: {ops:?}");
     let view = lost.view();
     assert!(view.pending_op_maybe_sent);
-    assert!(!view.tracker_handoff.expect("handoff").admitted);
+    let handoff = view.tracker_handoff.expect("handoff");
+    assert!(!handoff.admitted && handoff.maybe_sent);
+    assert_eq!(handoff.record_ids, vec![record.record_id]);
 }
 
 /// RJ1: the relay answering with another hash withdraws the write-ahead
@@ -3134,4 +3139,79 @@ fn a_withdrawn_write_ahead_s_bump_keeps_the_reactive_sponsorship() {
     );
     let funding = sut.view().funding.expect("the funding view");
     assert_eq!(funding.presentation, SignFundingPresentation::Topup);
+}
+
+// ===========================================================================
+// Spec 082 round 2 — second review: the tracker's grace counts from the
+// POST's verdict
+// ===========================================================================
+
+fn handoff_of(sut: &Sut) -> SignTrackerHandoff {
+    sut.view().tracker_handoff.expect("a hand-off")
+}
+
+/// The write-ahead hands the tracker the op before its POST with NO record:
+/// the tracker holds a may-have-been-sent op whose bytes have not left, and
+/// must not judge "not sent" from a relay that cannot have seen it yet. The
+/// POST's verdict names the record.
+#[test]
+fn the_write_ahead_hands_the_op_over_with_no_record() {
+    let mut sut = submitting("req-g1");
+    sut.dispatch(op_signed("req-g1"));
+    let handoff = handoff_of(&sut);
+    assert_eq!(handoff.user_op_hash, LOCAL_OP);
+    assert!(handoff.record_ids.is_empty(), "{handoff:?}");
+    assert!(handoff.maybe_sent && !handoff.admitted);
+    assert_eq!(handoff.submit_block, Some(SUBMIT_BLOCK));
+}
+
+/// A "may have been sent" verdict hands the record over — a hand-off every
+/// shell feeds (its de-duplication key differs from the write-ahead's).
+#[test]
+fn a_maybe_sent_verdict_hands_the_record_over() {
+    let mut sut = submitting("req-g2");
+    let record = written_ahead(&mut sut, "req-g2");
+    let ops = sut.dispatch(op_submitted("req-g2", LOCAL_OP, true));
+    assert!(ops.is_empty(), "no second record: {ops:?}");
+    assert_eq!(
+        handoff_of(&sut),
+        SignTrackerHandoff {
+            user_op_hash: LOCAL_OP.to_owned(),
+            record_ids: vec![record.record_id],
+            chain_id: 1,
+            maybe_sent: true,
+            submit_block: Some(SUBMIT_BLOCK),
+            admitted: false,
+        }
+    );
+}
+
+/// A result standing for the written-ahead op, with no `OpSubmitted` before
+/// it, adopts the record — and hands it over: taken with a receipt
+/// (admitted), or the window's end with the local hash (may have been sent).
+#[test]
+fn an_adopted_write_ahead_hands_its_record_over() {
+    let mut landed = submitting("req-g3");
+    let record = written_ahead(&mut landed, "req-g3");
+    let ops = landed.resolve_matching(is_submit, submit_ok(LANDED_TX));
+    assert_eq!(responses(&ops), 1, "{ops:?}");
+    let handoff = handoff_of(&landed);
+    assert_eq!(handoff.record_ids, vec![record.record_id]);
+    assert!(handoff.admitted && !handoff.maybe_sent, "{handoff:?}");
+
+    let mut pending = submitting("req-g4");
+    let record = written_ahead(&mut pending, "req-g4");
+    let ops = pending.resolve_matching(
+        is_submit,
+        Res::Submit {
+            outcome: SignSubmitOutcome::ReceiptPending {
+                user_op_hash: LOCAL_OP.to_owned(),
+            },
+            now_ms: 120_000.0,
+        },
+    );
+    assert_eq!(responses(&ops), 1, "{ops:?}");
+    let handoff = handoff_of(&pending);
+    assert_eq!(handoff.record_ids, vec![record.record_id]);
+    assert!(handoff.maybe_sent && !handoff.admitted, "{handoff:?}");
 }

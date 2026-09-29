@@ -5318,7 +5318,9 @@ fn split_ids(hash: &str) -> Vec<String> {
 }
 
 /// Signed, and the records written ahead — the tracker told and the POST
-/// cleared, in that order, only once the records are on disk.
+/// cleared, in that order, only once the records are on disk. The tracker is
+/// told of the op with NO record (082 second review): a POST is about to
+/// leave, and it is held off "not sent" until the POST's verdict names them.
 fn signed_and_cleared(sut: &mut Sut) -> Vec<SendTxRecord> {
     let ops = sut.dispatch(Event::OpSigned {
         user_op_hash: LOCAL_HASH.to_owned(),
@@ -5335,7 +5337,7 @@ fn signed_and_cleared(sut: &mut Sut) -> Vec<SendTxRecord> {
         vec![
             Op::TrackSubmitted {
                 user_op_hash: LOCAL_HASH.to_owned(),
-                record_ids: split_ids(LOCAL_HASH),
+                record_ids: vec![],
                 chain_id: 1,
                 maybe_sent: true,
                 submit_block: Some(SIGNED_BLOCK),
@@ -5426,7 +5428,10 @@ fn accepted_marks_the_written_records_admitted() {
 }
 
 /// A lost reply after the write-ahead: nothing new is written, no success
-/// haptic (it has not earned it), the receipt says "may have been sent".
+/// haptic (it has not earned it), the receipt says "may have been sent" —
+/// and the tracker is handed the records now, "may have been sent": the POST
+/// is over, and the relay's not-found grace counts from here (082 second
+/// review).
 #[test]
 fn a_lost_reply_after_the_write_ahead_writes_nothing_new() {
     let mut sut = split_submitting();
@@ -5443,12 +5448,24 @@ fn a_lost_reply_after_the_write_ahead_writes_nothing_new() {
     assert!(
         !ops.iter().any(|op| matches!(
             op,
-            Op::PersistTxRecords { .. }
-                | Op::MarkAdmitted { .. }
-                | Op::TrackSubmitted { .. }
-                | Op::Haptic { .. }
+            Op::PersistTxRecords { .. } | Op::MarkAdmitted { .. } | Op::Haptic { .. }
         )),
         "{ops:?}"
+    );
+    let handoffs: Vec<&Op> = ops
+        .iter()
+        .filter(|op| matches!(op, Op::TrackSubmitted { .. }))
+        .collect();
+    assert_eq!(
+        handoffs,
+        vec![&Op::TrackSubmitted {
+            user_op_hash: LOCAL_HASH.to_owned(),
+            record_ids: split_ids(LOCAL_HASH),
+            chain_id: 1,
+            maybe_sent: true,
+            submit_block: Some(SIGNED_BLOCK),
+            admitted: false,
+        }]
     );
     assert_eq!(
         sut.view().receipt.expect("receipt").status,

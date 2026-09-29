@@ -33,10 +33,12 @@
 //!
 //! Spec 082 round 2 (RJ1) — the records exist before the bytes leave: the
 //! shell reports [`Event::OpSigned`] (signed, hashed, nothing POSTed), the
-//! core writes the records "may have been sent" and hands them to the tracker,
-//! and only then [`SendOperation::ClearToPost`] lets the shell POST. The
-//! relay's verdict then marks them admitted, or a proven "not sent" deletes
-//! and withdraws them; the receipt screen still waits for that verdict.
+//! core writes the records "may have been sent" and hands the op to the
+//! tracker with no record (a POST is about to leave: no "not sent" until its
+//! verdict), and only then [`SendOperation::ClearToPost`] lets the shell POST.
+//! The relay's verdict hands the records over (marking them admitted when the
+//! relay took the op), or a proven "not sent" deletes and withdraws them; the
+//! receipt screen still waits for that verdict.
 //!
 //! Faithful port — behavior aligned line by line with the TS sources named per
 //! item; quirks kept and marked "ported verbatim". Deliberate deviations, all
@@ -949,6 +951,10 @@ pub enum SendOperation {
     /// find their records (invariant ⑥'s ordering half).
     TrackSubmitted {
         user_op_hash: String,
+        /// EMPTY on the write-ahead's hand-off (spec 082 RJ1, second review):
+        /// a POST is about to leave and the tracker holds the op off "not
+        /// sent" until the POST's verdict, whose hand-off names the records.
+        /// Forwarded as they are, empty or not.
         record_ids: Vec<String>,
         chain_id: u32,
         /// Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA4).
@@ -4939,11 +4945,22 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             let track_id = next(model);
             model.flights.track = Some(track_id);
             let clear = ctx.write_ahead.then(|| ctx.user_op_hash.clone());
+            // The write-ahead's hand-off names NO record (RJ1, 082 second
+            // review): a POST of the op is about to leave, and the tracker
+            // holds it off "not sent" until the POST's verdict — whose
+            // hand-off names the records. Named here, the not-found grace ran
+            // from before the bytes left, and a POST slower than it ended the
+            // op NotSent (the receipt "not sent") while it was delivering it.
+            let record_ids = if ctx.write_ahead {
+                Vec::new()
+            } else {
+                ctx.record_ids
+            };
             let track = issue(
                 track_id,
                 SendOperation::TrackSubmitted {
                     user_op_hash: ctx.user_op_hash,
-                    record_ids: ctx.record_ids,
+                    record_ids,
                     chain_id: ctx.chain_id,
                     maybe_sent: ctx.maybe_sent,
                     submit_block: ctx.submit_block,
@@ -5533,30 +5550,31 @@ fn accept_submitted(
 
     if let Some(wa) = written {
         // Accepted: the records stop saying "may have been sent" and the
-        // tracker learns the relay has it. A lost reply adds nothing — the
-        // records and the tracker already say so.
+        // tracker learns the relay has it. A lost reply writes nothing — the
+        // records already say so. Either way the tracker is handed the
+        // records now: the POST is over (082 second review).
         if !maybe_sent {
             let mark_id = next(model);
-            let track_id = next(model);
-            model.flights.track = Some(track_id);
             commands.push(issue(
                 mark_id,
                 SendOperation::MarkAdmitted {
                     record_ids: wa.record_ids.clone(),
                 },
             ));
-            commands.push(issue(
-                track_id,
-                SendOperation::TrackSubmitted {
-                    user_op_hash: wa.user_op_hash,
-                    record_ids: wa.record_ids,
-                    chain_id,
-                    maybe_sent: false,
-                    submit_block: wa.submit_block.or(submit_block),
-                    admitted: true,
-                },
-            ));
         }
+        let track_id = next(model);
+        model.flights.track = Some(track_id);
+        commands.push(issue(
+            track_id,
+            SendOperation::TrackSubmitted {
+                user_op_hash: wa.user_op_hash,
+                record_ids: wa.record_ids,
+                chain_id,
+                maybe_sent,
+                submit_block: wa.submit_block.or(submit_block),
+                admitted: !maybe_sent,
+            },
+        ));
         commands.push(render());
         return Command::all(commands);
     }
