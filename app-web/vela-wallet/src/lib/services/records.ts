@@ -117,6 +117,21 @@ export async function deleteTransaction(id: string): Promise<void> {
 }
 
 /**
+ * Remove several records in ONE atomic read-modify-write — a write-ahead
+ * send's siblings, proven never sent (spec 082 RJ1). A no-op for ids not there.
+ */
+export async function deleteTransactions(ids: string[]): Promise<void> {
+	if (ids.length === 0) return;
+	const idSet = new Set(ids);
+	return withTxLock(async () => {
+		const txs = await loadTransactions();
+		const next = txs.filter((t) => !idSet.has(t.id));
+		if (next.length === txs.length) return;
+		await setItem(TX_KEY, JSON.stringify(next));
+	});
+}
+
+/**
  * Persist ONE record: de-duped by id (a resubmitted UserOp shares its hash =
  * the record id), newest first, capped at 200. Ported from storage.ts:453.
  */

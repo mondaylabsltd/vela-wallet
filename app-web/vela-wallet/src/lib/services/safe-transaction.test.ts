@@ -31,15 +31,19 @@ import {
 	isPlainTransferCall,
 	deriveChainGasPrice,
 	sameAssetFeeLimit,
+	simulateUserOpGas,
 	submitSigned,
 	UserOpNotSentError,
+	waitForReceipt,
 	_cachedNonceForTest,
 	_seedNonceForTest
 } from './safe-transaction';
+import { estimateRevertsFor } from './estimate-verdict';
 import type { GasTier, TransactionFeeEstimate, UserOperation } from './safe-transaction';
 import {
 	functionSelector,
 	rpcReadTimeoutMs,
+	userOpEstimateFailure,
 	userOpHash as localUserOpHash,
 	userOpNotSentDetail
 } from '$lib/core/kernels';
@@ -676,5 +680,167 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 		} finally {
 			vi.useRealTimers();
 		}
+	});
+});
+
+/**
+ * Spec 082 RJ1/RJ2 (T228): the caller's gate runs once the op is signed and
+ * hashed and the head is read — before any POST. A gate that refuses (no
+ * clearance, the asker gone) means zero POSTs.
+ */
+describe('the gate before the first POST (spec 082 RJ1)', () => {
+	const SAFE = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
+	const CHAIN = 100;
+	const op = (): UserOperation => ({
+		sender: SAFE,
+		nonce: '0x6',
+		initCode: new Uint8Array(24).fill(0x11),
+		callData: new Uint8Array([0xde, 0xad]),
+		verificationGasLimit: 300_000n,
+		callGasLimit: 200_000n,
+		preVerificationGas: 100_000n,
+		maxFeePerGas: 0n,
+		maxPriorityFeePerGas: 0n,
+		paymasterAndData: new Uint8Array(0),
+		signature: new Uint8Array(65)
+	});
+
+	test('runs with the local hash and the head, before the POST', async () => {
+		const order: string[] = [];
+		rpcMock.impl = async (method: string) => {
+			order.push(method);
+			if (method === 'eth_blockNumber') return { jsonrpc: '2.0', id: 1, result: '0x20' };
+			return { jsonrpc: '2.0', id: 1, result: '0x' + 'ab'.repeat(32) };
+		};
+		const gate = vi.fn(async () => {
+			order.push('gate');
+		});
+		await submitSigned(op(), CHAIN, SAFE, undefined, undefined, gate);
+		expect(gate).toHaveBeenCalledWith({
+			userOpHash: localUserOpHash(op(), CHAIN),
+			submitBlock: 32,
+			chainId: CHAIN
+		});
+		expect(order).toEqual(['eth_blockNumber', 'gate', 'eth_sendUserOperation']);
+	});
+
+	test('a gate that refuses: zero POSTs, and the nonce stays', async () => {
+		_seedNonceForTest(SAFE, CHAIN, '0x6');
+		const posted: string[] = [];
+		rpcMock.impl = async (method: string) => {
+			if (method === 'eth_sendUserOperation') posted.push(method);
+			return { jsonrpc: '2.0', id: 1, result: '0x20' };
+		};
+		const error = await submitSigned(op(), CHAIN, SAFE, undefined, undefined, async () => {
+			throw new Error('no clearance');
+		}).catch((e: unknown) => e);
+		expect((error as Error).message).toBe('no clearance');
+		expect(posted).toEqual([]);
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x6');
+	});
+});
+
+/**
+ * Spec 082 RJ4 (T228, G39): the dApp's window holds inside each receipt poll.
+ * A muted relay held one poll ~15 s, and the page was answered at 136.9 s.
+ */
+describe('the receipt wait keeps its window (spec 082 RJ4)', () => {
+	const OP = '0x' + 'e7'.repeat(32);
+
+	test('a muted relay: the wait ends at the window, not a poll later', async () => {
+		vi.useFakeTimers();
+		try {
+			rpcMock.impl = () => new Promise(() => {});
+			const started = Date.now();
+			let settledAt = 0;
+			const waiting = waitForReceipt(OP, 100, 120_000).catch((e: unknown) => {
+				settledAt = Date.now();
+				return e;
+			});
+			await vi.advanceTimersByTimeAsync(121_000);
+			const error = await waiting;
+			expect((error as Error).message).toMatch(/not confirmed within 120s/);
+			expect(settledAt - started).toBeLessThanOrEqual(121_000);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test('the core answered: the wait stops at once', async () => {
+		vi.useFakeTimers();
+		try {
+			rpcMock.impl = () => new Promise(() => {});
+			const answered = new AbortController();
+			const waiting = waitForReceipt(OP, 100, 120_000, answered.signal).catch((e: unknown) => e);
+			await vi.advanceTimersByTimeAsync(4_000);
+			answered.abort();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(await waiting).toBeInstanceOf(Error);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test('the "ACCEPTED" line is only for an op the relay accepted (G61)', async () => {
+		vi.useFakeTimers();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			rpcMock.impl = async () => ({ jsonrpc: '2.0', id: 1, result: null });
+			const maybe = waitForReceipt(OP, 100, 10_000, undefined, false).catch((e: unknown) => e);
+			await vi.advanceTimersByTimeAsync(11_000);
+			await maybe;
+			const lines = warn.mock.calls.map((call) => String(call[0]));
+			expect(lines.some((line) => line.includes('ACCEPTED'))).toBe(false);
+			expect(lines.some((line) => line.includes('may-have-been-sent'))).toBe(true);
+		} finally {
+			warn.mockRestore();
+			vi.useRealTimers();
+		}
+	});
+});
+
+/** Spec 082 RJ19 (T228, G57): the relay's estimate says it reverts. */
+describe('a relay estimate that reverts reaches the sheet (spec 082 RJ19)', () => {
+	const ACCOUNT = '0x' + '5e'.repeat(20);
+	const KEY = '04' + '11'.repeat(64);
+	const calls = [{ to: '0x' + '76'.repeat(20), value: '0x0', data: '0xa9059cbb' }];
+
+	test('the EX-W3 answer is recorded as a revert; a clean estimate clears it', async () => {
+		rpcMock.impl = async (method: string) =>
+			method === 'eth_estimateUserOperationGas'
+				? {
+						jsonrpc: '2.0',
+						id: 1,
+						error: {
+							code: -32500,
+							message: 'UserOperation simulation failed',
+							data: 'Safe execution failed: the target call in executeUserOp reverted'
+						}
+					}
+				: { jsonrpc: '2.0', id: 1, result: '0x1' };
+		const failed = await simulateUserOpGas({
+			chainId: 100,
+			account: ACCOUNT,
+			deployed: false,
+			calls,
+			publicKeyHex: KEY
+		});
+		expect(failed.kind).toBe('simulation_failed');
+		expect(estimateRevertsFor(100, ACCOUNT)).toEqual({ reason: null });
+		expect(userOpEstimateFailure('')).toEqual({ type: 'unavailable' });
+
+		rpcMock.impl = async () => ({
+			jsonrpc: '2.0',
+			id: 1,
+			result: { verificationGasLimit: '0x1', callGasLimit: '0x1', preVerificationGas: '0x1' }
+		});
+		await simulateUserOpGas({
+			chainId: 100,
+			account: ACCOUNT,
+			deployed: false,
+			calls: [{ ...calls[0], data: '0xa9059cbb00' }],
+			publicKeyHex: KEY
+		});
+		expect(estimateRevertsFor(100, ACCOUNT)).toBeNull();
 	});
 });

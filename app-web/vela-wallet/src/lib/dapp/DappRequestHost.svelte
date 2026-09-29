@@ -34,7 +34,7 @@
 	import { getOriginChain } from '$lib/dapp/grants';
 	import { approve, evaluate, type RequestStage } from '$lib/dapp/request';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
-	import { AskerGoneError, type ClaimPhase } from '$lib/signing/core/sign-types';
+	import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import type { RequestMessages } from '$lib/dapp/messages';
@@ -114,9 +114,14 @@
 			: ''
 	);
 
-	/** Is `rid` still live enough to act on (RB5)? A surface with no port cannot ask: yes. */
-	function claimFor(rid: string, phase: ClaimPhase): Promise<boolean> {
-		return panelSurface.caller ? panelSurface.claim(rid, phase) : Promise.resolve(true);
+	/**
+	 * Is `rid` still live enough to act on (RB5)? A surface with no port cannot
+	 * ask: yes. The `submit` claim carries the op's hash and chain (spec 082
+	 * RJ2), sent after the write-ahead and right before the POST, so the worker
+	 * answers the page by that hash — never 4900 — if this surface goes first.
+	 */
+	function claimFor(rid: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean> {
+		return panelSurface.caller ? panelSurface.claim(rid, phase, submit) : Promise.resolve(true);
 	}
 
 	/**
@@ -269,7 +274,7 @@
 			},
 			// RB5: asked before the passkey and before the relay POST. A page
 			// that is gone gets nothing signed, nothing sent, and no answer.
-			claim: (_id, phase) => claimFor(incoming.rid, phase)
+			claim: (_id, phase, submit) => claimFor(incoming.rid, phase, submit)
 		});
 		signingTransport = transportId;
 		signRequest.dispatch({

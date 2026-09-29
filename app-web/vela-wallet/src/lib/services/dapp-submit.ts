@@ -30,7 +30,7 @@ export interface SigningAccount {
 
 import type { Assertion } from '$lib/onboarding/core/passkey';
 import { signChallenge, type ChallengeSigner } from '$lib/signing/sign-challenge';
-import { AskerGoneError, type ClaimPhase } from '$lib/signing/core/sign-types';
+import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
 import { rpcCall } from './rpc-adapter';
 import {
 	sendBatchCalls,
@@ -41,6 +41,7 @@ import {
 	computeSafeMessageHash,
 	keySetOf,
 	signerAddressFor,
+	type BeforePost,
 	type QuotedInBandFee,
 	type SubmitResult,
 	type WalletKeySet,
@@ -89,34 +90,66 @@ export interface DAppRequest {
 export interface DAppSubmitHooks {
 	/**
 	 * Is the asker still there (RB5)? `sign` is asked before the passkey,
-	 * `submit` after it and before the relay POST. `false` → nothing is signed
-	 * or sent, and the core hears `asker_gone`.
+	 * `submit` after the write-ahead's clearance and right before the relay
+	 * POST, carrying the op's hash and chain (RJ2). `false` → nothing is sent,
+	 * and the core hears `asker_gone`.
 	 */
-	claim(phase: ClaimPhase): Promise<boolean>;
+	claim(phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean>;
 	/** The passkey (or Trusted Signer) prompt opened / returned (RA9). */
 	ceremony(stage: 'started' | 'done'): void;
 	/** How long the page may still wait for a receipt (`dappReceiptWaitMs`, RA12). */
 	receiptWaitMs(): number;
+	/**
+	 * The write-ahead (spec 082 RJ1): the op is signed and hashed, nothing has
+	 * been POSTed. Resolves once its record is on disk (the core's
+	 * `ClearToPost`); throws when that does not come in time — then nothing is
+	 * sent. Absent: no record to wait for (a caller outside the core).
+	 */
+	writeAhead?(userOpHash: string, submitBlock: number | null): Promise<void>;
+	/**
+	 * Aborted once the core has answered the page by what the tracker knows
+	 * (`OpTracked`, spec 082 RJ4): the receipt wait stops there.
+	 */
+	answered?: AbortSignal;
 }
 
 /**
  * `sign`, with the claims and the ceremony around it: claimed before the
- * prompt opens, and — for an operation that goes to the relay next — claimed
- * again once the signature exists and before a byte of it is sent (RB5).
+ * prompt opens. For an operation that goes to the relay next, the signer also
+ * carries the gate its submit runs before the first POST
+ * ({@link writeAheadGate}): the write-ahead, then the second claim — with the
+ * op's hash, once the signature exists and before a byte of it is sent (RB5,
+ * RJ1, RJ2).
  */
 export function guardedSign<A extends unknown[], T>(
 	sign: (...args: A) => Promise<T>,
 	hooks: DAppSubmitHooks | undefined,
 	submits: boolean
-): (...args: A) => Promise<T> {
+): ((...args: A) => Promise<T>) & { beforePost?: BeforePost } {
 	if (!hooks) return sign;
-	return async (...args: A) => {
+	const guarded = async (...args: A) => {
 		if (!(await hooks.claim('sign'))) throw new AskerGoneError('sign');
 		hooks.ceremony('started');
 		const signed = await sign(...args);
 		hooks.ceremony('done');
-		if (submits && !(await hooks.claim('submit'))) throw new AskerGoneError('submit');
 		return signed;
+	};
+	return submits ? Object.assign(guarded, { beforePost: writeAheadGate(hooks) }) : guarded;
+}
+
+/**
+ * What a dApp op does after its local hash and head read and before its first
+ * POST (spec 082 RJ1, RJ2): the record is written and the core clears the
+ * POST, then the asker is asked once more — with the hash, so a surface that
+ * goes from here on has its page answered by it, never 4900. Either refusal
+ * throws, and nothing is sent.
+ */
+export function writeAheadGate(hooks: DAppSubmitHooks): BeforePost {
+	return async ({ userOpHash, submitBlock, chainId }) => {
+		if (hooks.writeAhead) await hooks.writeAhead(userOpHash, submitBlock);
+		if (!(await hooks.claim('submit', { opHash: userOpHash, chainId }))) {
+			throw new AskerGoneError('submit');
+		}
 	};
 }
 
@@ -555,7 +588,9 @@ async function answerFor(
 	// answered — accepted, or may have been sent.
 	onSubmitted?.(txResult.userOpHash, txResult.maybeSent, txResult.submitBlock);
 	try {
-		return await txResult.waitForTxHash(hooks?.receiptWaitMs());
+		// Inside what is left of the page's window, each poll included (RJ4,
+		// G39), and no longer than the core's own answer (`answered`).
+		return await txResult.waitForTxHash(hooks?.receiptWaitMs(), hooks?.answered);
 	} catch (error) {
 		if (error instanceof UserOpRevertedError) return error.txHash;
 		if (receiptStillOutstanding(error)) throw new DAppReceiptPendingError(txResult.userOpHash);

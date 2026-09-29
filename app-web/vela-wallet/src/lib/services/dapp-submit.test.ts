@@ -60,8 +60,13 @@ import {
 	storedWalletFor,
 	type DAppSubmitHooks
 } from './dapp-submit';
-import { sendNative, UserOpRevertedError, type SubmitResult } from './safe-transaction';
-import { AskerGoneError } from '$lib/signing/core/sign-types';
+import {
+	sendNative,
+	UserOpRevertedError,
+	type SignFn,
+	type SubmitResult
+} from './safe-transaction';
+import { AskerGoneError, WriteAheadTimeoutError } from '$lib/signing/core/sign-types';
 
 describe('storedWalletFor', () => {
 	it('two wallets founded by one passkey: the request names which by ADDRESS', () => {
@@ -94,22 +99,32 @@ describe('one answer for an on-chain request (spec 082 RA2, RA8, RA9)', () => {
 		origin: 'http://127.0.0.1:8137'
 	};
 
-	function hooks(order: string[], live: (phase: string) => boolean = () => true): DAppSubmitHooks {
+	function hooks(
+		order: string[],
+		live: (phase: string) => boolean = () => true,
+		over: Partial<DAppSubmitHooks> = {}
+	): DAppSubmitHooks {
 		return {
-			claim: async (phase) => {
-				order.push(`claim:${phase}`);
+			claim: async (phase, submit) => {
+				order.push(submit ? `claim:${phase}:${submit.opHash}:${submit.chainId}` : `claim:${phase}`);
 				return live(phase);
 			},
 			ceremony: (stage) => order.push(`ceremony:${stage}`),
-			receiptWaitMs: () => 108_000
+			receiptWaitMs: () => 108_000,
+			...over
 		};
 	}
 
-	/** The submit builder: sign, then POST, then hand back the op. */
+	/**
+	 * The submit builder, as `submitUserOp` runs it: sign, hash, the gate before
+	 * the first POST (the write-ahead, then the last claim), then POST, then
+	 * hand back the op.
+	 */
 	function submitsWith(result: Partial<SubmitResult>, post: () => void = () => {}) {
 		vi.mocked(sendNative).mockImplementation(async (...args: unknown[]) => {
-			const signFn = args[5] as (challenge: Uint8Array) => Promise<unknown>;
+			const signFn = args[5] as SignFn;
 			await signFn(new Uint8Array(32));
+			await signFn.beforePost?.({ userOpHash: LOCAL, submitBlock: 7, chainId: 100 });
 			post();
 			return {
 				userOpHash: LOCAL,
@@ -149,7 +164,7 @@ describe('one answer for an on-chain request (spec 082 RA2, RA8, RA9)', () => {
 		expect(onSubmitted).toHaveBeenCalledTimes(1);
 		expect(onSubmitted).toHaveBeenCalledWith(LOCAL, true, 48_478_700);
 		// The wait is what is left of the window, never a fresh 120 s.
-		expect(waitFor).toHaveBeenCalledWith(108_000);
+		expect(waitFor).toHaveBeenCalledWith(108_000, undefined);
 	});
 
 	it('revert inside the wait: Ok(tx hash), not -32603', async () => {
@@ -169,9 +184,71 @@ describe('one answer for an on-chain request (spec 082 RA2, RA8, RA9)', () => {
 			'claim:sign',
 			'ceremony:started',
 			'ceremony:done',
-			'claim:submit',
+			// RJ2: the last claim carries the op hash and chain.
+			`claim:submit:${LOCAL}:100`,
 			'post'
 		]);
+	});
+
+	it('write-ahead: nothing is POSTed before the record is on disk (RJ1)', async () => {
+		const order: string[] = [];
+		let clear!: () => void;
+		const cleared = new Promise<void>((resolve) => (clear = resolve));
+		submitsWith({}, () => order.push('post'));
+		const writeAhead = vi.fn(async (hash: string, block: number | null) => {
+			order.push(`write-ahead:${hash}:${block}`);
+			await cleared;
+		});
+		const running = run(
+			vi.fn(),
+			hooks(order, () => true, { writeAhead })
+		);
+		await vi.waitFor(() => expect(writeAhead).toHaveBeenCalledTimes(1));
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(order).not.toContain('post');
+		clear();
+		await expect(running).resolves.toBe(TX);
+		expect(order).toEqual([
+			'claim:sign',
+			'ceremony:started',
+			'ceremony:done',
+			`write-ahead:${LOCAL}:7`,
+			`claim:submit:${LOCAL}:100`,
+			'post'
+		]);
+	});
+
+	it('write-ahead: no clearance → zero POSTs, nothing reported sent', async () => {
+		const order: string[] = [];
+		submitsWith({}, () => order.push('post'));
+		const onSubmitted = vi.fn();
+		const error = await run(
+			onSubmitted,
+			hooks(order, () => true, {
+				writeAhead: async () => {
+					throw new WriteAheadTimeoutError(LOCAL);
+				}
+			})
+		).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(WriteAheadTimeoutError);
+		expect(order).not.toContain('post');
+		expect(order.some((line) => line.startsWith('claim:submit'))).toBe(false);
+		expect(onSubmitted).not.toHaveBeenCalled();
+	});
+
+	it('the receipt wait stops when the core answered through the tracker (RJ4)', async () => {
+		const answered = new AbortController();
+		const waitFor = vi.fn(async (_ms?: number, signal?: AbortSignal) => {
+			expect(signal).toBe(answered.signal);
+			throw new Error('aborted');
+		});
+		submitsWith({ waitForTxHash: waitFor });
+		const error = await run(
+			vi.fn(),
+			hooks([], () => true, { answered: answered.signal })
+		).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(DAppReceiptPendingError);
+		expect(waitFor).toHaveBeenCalledWith(108_000, answered.signal);
 	});
 
 	it('not live at sign: no passkey, no POST, asker gone', async () => {

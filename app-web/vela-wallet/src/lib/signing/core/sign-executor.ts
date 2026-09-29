@@ -45,7 +45,7 @@ import {
 } from '$lib/services/bundler-service';
 import { buildSigningRecord } from '$lib/services/dapp-history';
 import { nativeSymbol } from '$lib/services/networks';
-import { saveTransaction, updateTransaction } from '$lib/services/records';
+import { deleteTransaction, saveTransaction, updateTransaction } from '$lib/services/records';
 import { serializeAssetSim } from '$lib/services/sim/tx-simulation';
 import {
 	DAppReceiptPendingError,
@@ -54,12 +54,12 @@ import {
 	type SigningAccount
 } from '$lib/services/dapp-submit';
 import { UserOpNotSentError } from '$lib/services/safe-transaction';
-import { dappReceiptWaitMs } from '$lib/core/kernels';
+import { dappReceiptWaitMs, userOpNotSentDetail, userOpWriteAheadWaitMs } from '$lib/core/kernels';
 
 import type { SignFundingNeeded } from '$lib/core/generated/SignFundingNeeded';
 import type { SignShellResult } from '$lib/core/generated/SignShellResult';
 import type { SignEffect, SignShellPorts } from './sign-types';
-import { AskerGoneError, signErrorMessage } from './sign-types';
+import { AskerGoneError, signErrorMessage, WriteAheadTimeoutError } from './sign-types';
 import { wireTier } from '$lib/flows/core/wire-tier';
 
 export { signErrorMessage } from './sign-types';
@@ -122,6 +122,19 @@ function parseParams(json: string): unknown[] {
 // Executor
 // ---------------------------------------------------------------------------
 
+/**
+ * The relay refused the op (spec 082 RJ3): a submit-time `NotSent` with a
+ * rejection other than "relayer unavailable" — the relay being away is not a
+ * refusal, and a person may try again after it.
+ */
+export function isRelayRefusal(error: unknown): boolean {
+	return (
+		error instanceof UserOpNotSentError &&
+		error.rejection !== null &&
+		error.rejection !== 'relayer_unavailable'
+	);
+}
+
 export function createSignExecutor(ports: SignShellPorts) {
 	/**
 	 * op hash → chain, for the ops this executor answered BY their op hash, so
@@ -138,6 +151,50 @@ export function createSignExecutor(ports: SignShellPorts) {
 	 */
 	const writes = new Map<string, Promise<void>>();
 
+	/**
+	 * The write-ahead waiting for its clearance (spec 082 RJ1), by request id:
+	 * the op's hash and the release. The core answers `ClearToPost` once the
+	 * record of the op is on disk; nothing is POSTed before it.
+	 */
+	const clearances = new Map<string, { userOpHash: string; clear: () => void }>();
+
+	/**
+	 * The receipt wait of each request in flight, by request id — aborted when
+	 * the core answers that request itself (`OpTracked`, spec 082 RJ4), so the
+	 * wait stops rather than run on to a result the core will drop.
+	 */
+	const receiptWaits = new Map<string, AbortController>();
+
+	/**
+	 * Write the op down before any byte of it leaves (spec 082 RJ1): announce it
+	 * (`OpSigned`), then wait for the core's `ClearToPost` — at most
+	 * `userOpWriteAheadWaitMs()`. No clearance in time → no POST; the caller's
+	 * submit fails as "not sent", which it provably is.
+	 */
+	function writeAhead(id: string, userOpHash: string, submitBlock: number | null): Promise<void> {
+		return new Promise<void>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				if (clearances.get(id)?.userOpHash !== userOpHash) return;
+				clearances.delete(id);
+				console.warn(
+					`[sign_request] write-ahead: no clearance for ${userOpHash.slice(0, 10)}… in ` +
+						`${userOpWriteAheadWaitMs()} ms — not posting`
+				);
+				reject(new WriteAheadTimeoutError(userOpHash));
+			}, userOpWriteAheadWaitMs());
+			// Registered BEFORE the announcement: the clearance can come back
+			// within the same turn of the effect loop.
+			clearances.set(id, {
+				userOpHash,
+				clear: () => {
+					clearTimeout(timer);
+					resolve();
+				}
+			});
+			ports.opSigned(id, userOpHash, submitBlock);
+		});
+	}
+
 	function serialised(recordId: string, task: () => Promise<void>): Promise<void> {
 		const previous = writes.get(recordId) ?? Promise.resolve();
 		const next = previous.then(task, task);
@@ -152,6 +209,10 @@ export function createSignExecutor(ports: SignShellPorts) {
 		const operation = effect.operation;
 		switch (operation.type) {
 			case 'send_response': {
+				// The core answered this request: a receipt wait still running for it
+				// (the core answered through the tracker, RJ4) stops here.
+				receiptWaits.get(operation.id)?.abort();
+				receiptWaits.delete(operation.id);
 				// F2: the transport that OWNS the request, resolved from the id the
 				// core carried — never a shared ref.
 				const transport = ports.transportFor(operation.transport_id);
@@ -233,15 +294,22 @@ export function createSignExecutor(ports: SignShellPorts) {
 
 			case 'sign_and_submit': {
 				const account: SigningAccount = { id: operation.credential_id };
+				const answered = new AbortController();
+				receiptWaits.get(operation.id)?.abort();
+				receiptWaits.set(operation.id, answered);
 				const hooks: DAppSubmitHooks = {
-					claim: (phase) => ports.askerLive(operation.id, phase),
+					claim: (phase, submit) => ports.askerLive(operation.id, phase, submit),
 					ceremony: (stage) => ports.ceremony(operation.id, stage),
 					// What is LEFT of the page's answer window since the approval
 					// (spec 082 RA12) — never a fresh full wait after a slow submit.
 					receiptWaitMs: () => {
 						const approvedAt = ports.approvedAtMs(operation.id);
 						return dappReceiptWaitMs(approvedAt === null ? 0 : Date.now() - approvedAt);
-					}
+					},
+					// RJ1: the record before the bytes.
+					writeAhead: (userOpHash, submitBlock) =>
+						writeAhead(operation.id, userOpHash, submitBlock),
+					answered: answered.signal
 				};
 				try {
 					const result = await handleDAppRequest(
@@ -309,7 +377,33 @@ export function createSignExecutor(ports: SignShellPorts) {
 						outcome: await submitOutcomeOf(operation, error),
 						now_ms: Date.now()
 					};
+				} finally {
+					clearances.delete(operation.id);
+					if (receiptWaits.get(operation.id) === answered) receiptWaits.delete(operation.id);
 				}
+			}
+
+			case 'clear_to_post': {
+				// The write-ahead record is on disk (spec 082 RJ1): the POST may go.
+				// Only for the op it names — a clearance for another is dropped.
+				const waiting = clearances.get(operation.id);
+				if (waiting && waiting.userOpHash.toLowerCase() === operation.user_op_hash.toLowerCase()) {
+					clearances.delete(operation.id);
+					waiting.clear();
+				}
+				return { type: 'responded' };
+			}
+
+			case 'delete_record': {
+				// A write-ahead record whose op was proven never sent (spec 082 RJ1):
+				// it goes, the Activity row with it. Serialised with its own write.
+				await serialised(operation.record_id, () =>
+					deleteTransaction(operation.record_id).catch((e) => {
+						console.warn('[sign_request] Failed to delete record:', e);
+					})
+				);
+				ports.recordsWritten();
+				return { type: 'record_updated' };
 			}
 
 			case 'persist_record': {
@@ -347,10 +441,14 @@ export function createSignExecutor(ports: SignShellPorts) {
 
 			case 'update_record': {
 				const close = operation.close;
+				// `admitted`: the relay took the write-ahead op (spec 082 RJ1) — it is
+				// no longer "may have been sent", and stays pending for the tracker.
 				const patch =
 					close.type === 'confirmed'
 						? ({ status: 'confirmed', txHash: close.tx_hash } as const)
-						: ({ status: 'failed' } as const);
+						: close.type === 'admitted'
+							? ({ maybeSent: false } as const)
+							: ({ status: 'failed' } as const);
 				await serialised(operation.record_id, () =>
 					updateTransaction(operation.record_id, patch).catch((e) => {
 						console.warn('[sign_request] Failed to patch record:', e);
@@ -386,6 +484,11 @@ export function createSignExecutor(ports: SignShellPorts) {
 	): Promise<Extract<SignShellResult, { type: 'submit' }>['outcome']> {
 		// Nothing was signed or sent, and nobody is there to answer (RB5).
 		if (error instanceof AskerGoneError) return { type: 'asker_gone' };
+		// The record was not written in time, so nothing was POSTed (RJ1): not
+		// sent, in the core's fixed words — never a refusal.
+		if (error instanceof WriteAheadTimeoutError) {
+			return { type: 'failed', message: userOpNotSentDetail(), refused: false };
+		}
 		if (error instanceof PasskeyError && error.kind === 'cancelled') {
 			// Never an error, never a response, never a durable 'rejected' (⑧).
 			return { type: 'passkey_cancelled' };
@@ -433,8 +536,11 @@ export function createSignExecutor(ports: SignShellPorts) {
 			}
 		}
 		// A NotSent op's words are the relay's refusal, or the core's fixed
-		// "relay unreachable; nothing was sent" — never the pool's raw text.
-		return { type: 'failed', message };
+		// "relay unreachable; nothing was sent" — never the pool's raw text. A
+		// refusal by the relay (anything but "relayer unavailable") is said as
+		// one (spec 082 RJ3): the page is told the network refused it, and the
+		// sheet offers no Retry — trying again sends the same refused op.
+		return { type: 'failed', message, refused: isRelayRefusal(error) };
 	}
 
 	function toFailure(effect: SignEffect, error: unknown): SignShellResult {
@@ -463,10 +569,15 @@ export function createSignExecutor(ports: SignShellPorts) {
 					type: 'submit',
 					outcome: {
 						type: 'failed',
-						message: (error as { message?: string } | null)?.message ?? 'Signing failed'
+						message: (error as { message?: string } | null)?.message ?? 'Signing failed',
+						refused: isRelayRefusal(error)
 					},
 					now_ms: Date.now()
 				};
+			case 'clear_to_post':
+				return { type: 'responded' };
+			case 'delete_record':
+				return { type: 'record_updated' };
 			case 'persist_record':
 				// Best effort, exactly like the TS inner `.catch(console.warn)` — and
 				// the core must still be told, or §4's respond step never fires.

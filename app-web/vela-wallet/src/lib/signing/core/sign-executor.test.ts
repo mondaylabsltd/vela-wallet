@@ -32,6 +32,17 @@ vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
 	};
 });
 
+const store = vi.hoisted(() => ({
+	deleteTransaction: vi.fn(async () => {}),
+	updateTransaction: vi.fn(async () => {})
+}));
+vi.mock('$lib/services/records', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/services/records')>()),
+	deleteTransaction: store.deleteTransaction,
+	updateTransaction: store.updateTransaction
+}));
+
+import { userOpNotSentDetail, userOpWriteAheadWaitMs } from '$lib/core/kernels';
 import {
 	DAppReceiptPendingError,
 	guardedSign,
@@ -47,16 +58,20 @@ import {
 import { createSignExecutor } from './sign-executor';
 import {
 	AskerGoneError,
+	WriteAheadTimeoutError,
 	claimThrough,
 	type SignEffect,
 	type SignResponder,
 	type SignShellPorts
 } from './sign-types';
 
+const OP = '0x' + '5a'.repeat(32);
+
 function makePorts(over: Partial<SignShellPorts> = {}): SignShellPorts {
 	return {
 		transportFor: () => null,
 		opSubmitted: () => {},
+		opSigned: () => {},
 		ceremony: () => {},
 		askerLive: async () => true,
 		approvedAtMs: () => null,
@@ -167,7 +182,7 @@ describe('a page that is gone (spec 082 RB5)', () => {
 		await createSignExecutor(makePorts({ askerLive, ceremony })).execute(signAndSubmit);
 		const hooks = submit.args[9] as DAppSubmitHooks;
 		await expect(hooks.claim('sign')).resolves.toBe(false);
-		expect(askerLive).toHaveBeenCalledWith('req-1', 'sign');
+		expect(askerLive).toHaveBeenCalledWith('req-1', 'sign', undefined);
 		hooks.ceremony('started');
 		expect(ceremony).toHaveBeenCalledWith('req-1', 'started');
 	});
@@ -207,7 +222,10 @@ describe('a page that is gone (spec 082 RB5)', () => {
 				return phase !== 'submit';
 			},
 			ceremony: (stage) => order.push(`ceremony:${stage}`),
-			receiptWaitMs: () => 0
+			receiptWaitMs: () => 0,
+			writeAhead: async () => {
+				order.push('write-ahead');
+			}
 		};
 		const signFn = guardedSign(
 			async () => {
@@ -217,20 +235,43 @@ describe('a page that is gone (spec 082 RB5)', () => {
 			hooks,
 			true
 		);
-		// The submit builder: sign, then POST — the POST is never reached.
+		// The submit builder: sign, hash, the gate before the POST — the POST is
+		// never reached.
 		const submitting = (async () => {
 			await signFn();
+			await signFn.beforePost?.({ userOpHash: OP, submitBlock: 7, chainId: 100 });
 			post();
 		})();
 		await expect(submitting).rejects.toMatchObject({ name: 'AskerGoneError', phase: 'submit' });
 		expect(post).not.toHaveBeenCalled();
-		// The ceremony order the sheet's words follow (RA9).
+		// The ceremony order the sheet's words follow (RA9); the record is written
+		// before the last claim (RJ1).
 		expect(order).toEqual([
 			'claim:sign',
 			'ceremony:started',
 			'passkey',
 			'ceremony:done',
+			'write-ahead',
 			'claim:submit'
+		]);
+	});
+
+	it('the submit claim carries the op hash and chain (RJ2), after the write-ahead', async () => {
+		const claims: unknown[] = [];
+		const hooks: DAppSubmitHooks = {
+			claim: async (phase, submit) => {
+				claims.push({ phase, submit });
+				return true;
+			},
+			ceremony: () => {},
+			receiptWaitMs: () => 0
+		};
+		const signFn = guardedSign(async () => 'sig', hooks, true);
+		await signFn();
+		await signFn.beforePost?.({ userOpHash: OP, submitBlock: null, chainId: 100 });
+		expect(claims).toEqual([
+			{ phase: 'sign', submit: undefined },
+			{ phase: 'submit', submit: { opHash: OP, chainId: 100 } }
 		]);
 	});
 
@@ -294,5 +335,129 @@ describe('the Activity row follows every record write (RG3)', () => {
 			operation: { type: 'update_record', record_id: 'dapp-1-tx', close: { type: 'failed' } }
 		});
 		expect(recordsWritten).toHaveBeenCalledTimes(1);
+	});
+});
+
+/**
+ * Spec 082 RJ1 (T228): a record exists before the bytes leave. The executor
+ * announces the signed op (`OpSigned`) and lets the POST go only on the core's
+ * `ClearToPost` for that op — none in time, and nothing is sent.
+ */
+describe('the write-ahead (spec 082 RJ1)', () => {
+	const OP_B = '0x' + '6b'.repeat(32);
+
+	it('announces the op, and the POST waits for its clearance', async () => {
+		const opSigned = vi.fn();
+		let hooks!: DAppSubmitHooks;
+		let cleared = false;
+		submit.impl = async (...args: unknown[]) => {
+			hooks = args[9] as DAppSubmitHooks;
+			await hooks.writeAhead!(OP, 7);
+			cleared = true;
+			return '0xtx';
+		};
+		const executor = createSignExecutor(makePorts({ opSigned }));
+		const running = executor.execute(signAndSubmit);
+		await vi.waitFor(() => expect(opSigned).toHaveBeenCalledWith('req-1', OP, 7));
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(cleared).toBe(false);
+		// A clearance for another op clears nothing.
+		await executor.execute({
+			id: 2,
+			operation: { type: 'clear_to_post', id: 'req-1', user_op_hash: OP_B }
+		});
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(cleared).toBe(false);
+		expect(
+			await executor.execute({
+				id: 3,
+				operation: {
+					type: 'clear_to_post',
+					id: 'req-1',
+					user_op_hash: OP.toUpperCase().replace('0X', '0x')
+				}
+			})
+		).toEqual({ type: 'responded' });
+		await expect(running).resolves.toMatchObject({ outcome: { type: 'succeeded' } });
+		expect(cleared).toBe(true);
+	});
+
+	it('no clearance in time → no POST, and the core hears "not sent", never a refusal', async () => {
+		vi.useFakeTimers();
+		try {
+			const post = vi.fn();
+			submit.impl = async (...args: unknown[]) => {
+				await (args[9] as DAppSubmitHooks).writeAhead!(OP, null);
+				post();
+				return '0xtx';
+			};
+			const running = createSignExecutor(makePorts()).execute(signAndSubmit);
+			await vi.advanceTimersByTimeAsync(userOpWriteAheadWaitMs());
+			await expect(running).resolves.toMatchObject({
+				type: 'submit',
+				outcome: { type: 'failed', message: userOpNotSentDetail(), refused: false }
+			});
+			expect(post).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
+		expect(new WriteAheadTimeoutError(OP).name).toBe('WriteAheadTimeoutError');
+	});
+
+	it('a withdrawn record is deleted; an admitted one drops "may have been sent" and stays pending', async () => {
+		const recordsWritten = vi.fn();
+		const executor = createSignExecutor(makePorts({ recordsWritten }));
+		expect(
+			await executor.execute({
+				id: 1,
+				operation: { type: 'delete_record', record_id: 'dapp-1-tx' }
+			})
+		).toEqual({ type: 'record_updated' });
+		expect(store.deleteTransaction).toHaveBeenCalledWith('dapp-1-tx');
+		await executor.execute({
+			id: 2,
+			operation: { type: 'update_record', record_id: 'dapp-2-tx', close: { type: 'admitted' } }
+		});
+		expect(store.updateTransaction).toHaveBeenCalledWith('dapp-2-tx', { maybeSent: false });
+		expect(recordsWritten).toHaveBeenCalledTimes(2);
+	});
+
+	it('the receipt wait stops once the core answered the request itself (RJ4)', async () => {
+		let hooks!: DAppSubmitHooks;
+		submit.impl = (...args: unknown[]) => {
+			hooks = args[9] as DAppSubmitHooks;
+			return new Promise(() => {});
+		};
+		const executor = createSignExecutor(makePorts());
+		void executor.execute(signAndSubmit);
+		await vi.waitFor(() => expect(hooks).toBeDefined());
+		expect(hooks.answered?.aborted).toBe(false);
+		await executor.execute({
+			id: 2,
+			operation: {
+				type: 'send_response',
+				transport_id: 't1',
+				id: 'req-1',
+				payload: { type: 'ok', result: '0xtx' }
+			}
+		});
+		expect(hooks.answered?.aborted).toBe(true);
+	});
+});
+
+describe('a relay refusal is said as one (spec 082 RJ3)', () => {
+	it('any rejection but "relayer unavailable" → refused', async () => {
+		for (const [rejection, refused] of [
+			[{ other: 'AA25 invalid nonce' }, true],
+			['bundler_underfunded', true],
+			['relayer_unavailable', false],
+			[null, false]
+		] as const) {
+			submit.impl = () => Promise.reject(new UserOpNotSentError(rejection, 'words'));
+			const result = await createSignExecutor(makePorts()).execute(signAndSubmit);
+			expect(result, JSON.stringify(rejection)).toMatchObject({
+				outcome: { type: 'failed', refused }
+			});
+		}
 	});
 });
