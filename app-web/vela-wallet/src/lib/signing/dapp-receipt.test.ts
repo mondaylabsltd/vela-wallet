@@ -8,6 +8,7 @@
 import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
 import {
+	handoffLands,
 	autoCloseAfterMs,
 	dappReceiptModel,
 	endsOnSignedTick,
@@ -37,7 +38,9 @@ const copy: DappReceiptCopy = {
 	signed: 'Signed!',
 	maybeSent: "It may have been sent. Vela keeps checking — don't send it again.",
 	closeBackground: 'Close · keep running',
-	notSentHint: 'Your funds are safe.'
+	notSentHint: 'Your funds are safe.',
+	submitting: 'Submitting to network...',
+	refused: 'The network refused it — nothing was sent.'
 };
 
 const OP = '0x' + 'a1'.repeat(32);
@@ -93,10 +96,27 @@ describe('the receipt a dApp transaction lands on', () => {
 	it('may have been sent: the clock, the caption, the op hash and no Retry (RA10, G21)', () => {
 		const model = dappReceiptModel({ kind: 'maybe_sent', opHash: OP }, copy, explorer);
 		expect(model.stage).toBe('submitted');
+		// Spec 082 G56: "提交至网络…", never "Submitted" — nobody knows that it was.
+		expect(model.title).toBe(copy.submitting);
 		expect(model.captions).toEqual([copy.maybeSent]);
 		expect(model.hash).toEqual({ label: copy.opHashLabel, value: OP });
 		expect(model.cta).toBe(copy.closeBackground);
 		expect(model.explorer).toBeUndefined();
+	});
+
+	it('refused: failed, the network refused it, no Retry words and nothing to look up (RJ3)', () => {
+		const model = dappReceiptModel({ kind: 'refused', opHash: OP }, copy, explorer);
+		expect(model.stage).toBe('failed');
+		expect(model.title).toBe(copy.failed);
+		expect(model.captions).toEqual([copy.refused]);
+		expect(model.captions).not.toContain(copy.notSentHint);
+		expect(model.explorer).toBeUndefined();
+		expect(model.cta).toBe(copy.done);
+		expect(autoCloseAfterMs({ kind: 'refused', opHash: OP })).toBeNull();
+		expect(landingFromEnding({ type: 'refused' }, OP, false)).toEqual({
+			kind: 'refused',
+			opHash: OP
+		});
 	});
 
 	it('not sent: failed, "your funds are safe", nothing to look up', () => {
@@ -265,12 +285,15 @@ describe("the receipt draws the core's ending (spec 082 RA8)", () => {
 		expect(
 			landingFor(entry({ status: 'dropped', tx_hash: TX, outcome: 'final' }), OP, false)
 		).toEqual({ kind: 'reverted', opHash: OP, txHash: TX });
-		for (const status of ['not_sent', 'rejected'] as const) {
-			expect(landingFor(entry({ status, outcome: 'final' }), OP, true)).toEqual({
-				kind: 'not_sent',
-				opHash: OP
-			});
-		}
+		expect(landingFor(entry({ status: 'not_sent', outcome: 'final' }), OP, true)).toEqual({
+			kind: 'not_sent',
+			opHash: OP
+		});
+		// Spec 082 RJ3: a relay refusal is its own ending, not "not sent".
+		expect(landingFor(entry({ status: 'rejected', outcome: 'final' }), OP, true)).toEqual({
+			kind: 'refused',
+			opHash: OP
+		});
 		expect(landingFor(entry({ outcome: 'maybe_sent' }), OP, true)).toEqual({
 			kind: 'maybe_sent',
 			opHash: OP
@@ -356,5 +379,24 @@ describe('the ring that fills while it waits', () => {
 
 	it('a clock that went backwards does not draw a negative ring', () => {
 		expect(receiptProgress(10_000, 20, 1_000)).toBe(0);
+	});
+});
+
+describe('the write-ahead hand-off raises no landing while its POST is out (spec 082 RJ1)', () => {
+	const handoff = (maybe_sent: boolean, admitted: boolean) => ({
+		user_op_hash: OP,
+		maybe_sent,
+		admitted
+	});
+
+	it('before the relay answers: no landing', () => {
+		expect(handoffLands(handoff(true, false), null)).toBe(false);
+		expect(handoffLands(handoff(true, false), '0x' + 'ff'.repeat(32))).toBe(false);
+	});
+
+	it('the relay took it, or the submit ended "may have been sent", or the relay’s own hash', () => {
+		expect(handoffLands(handoff(false, true), null)).toBe(true);
+		expect(handoffLands(handoff(true, false), OP.toUpperCase().replace('0X', '0x'))).toBe(true);
+		expect(handoffLands(handoff(false, false), null)).toBe(true);
 	});
 });

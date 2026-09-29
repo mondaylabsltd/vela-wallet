@@ -135,6 +135,26 @@ export function narrowedFeed(feed: FeedView, filter: number | null): FeedView {
 // ---------------------------------------------------------------------------
 
 /**
+ * `value` to two decimals as plain digits, never exponent notation (spec 082
+ * G60): `toFixed` switches to "1e+24" from 10^21 up, and a dApp transfer of
+ * 10^30 token units was shown as "≈ $1e+24". Past 10^15 a double has no cents
+ * left to show, so the figure is its 15 significant digits and zeros.
+ * `[whole, fraction]`; anything that is not a finite number reads 0.
+ */
+export function fixedTwo(value: number): [string, string] {
+	if (!Number.isFinite(value)) return ['0', '00'];
+	if (Math.abs(value) < 1e15) {
+		const [whole, frac] = value.toFixed(2).split('.');
+		return [whole, frac ?? '00'];
+	}
+	const [mantissa, exponent] = Math.abs(value).toExponential(14).split('e');
+	const digits = mantissa.replace('.', '');
+	const places = Number.parseInt(exponent, 10) + 1;
+	const whole = digits.length >= places ? digits.slice(0, places) : digits.padEnd(places, '0');
+	return [value < 0 ? `-${whole}` : whole, '00'];
+}
+
+/**
  * A USD amount in the display currency: converted at the committed rate, or
  * the USD figure itself when the shell could not price the currency —
  * `rate: null` is NOT 1 (024's rule; a defaulted 1 under a ¥ is a lie).
@@ -146,8 +166,7 @@ export function moneyParts(
 	const convertible = currency.rate !== null;
 	const code = convertible ? currency.code : 'USD';
 	const amount = convertible ? usd * (currency.rate as number) : usd;
-	const fixed = Math.abs(amount).toFixed(2);
-	const [whole, frac] = fixed.split('.');
+	const [whole, frac] = fixedTwo(Math.abs(amount));
 	// The person's own number preset, not the platform's idea of one (spec 028
 	// D47). Money is where this stops being cosmetic: a wallet that groups one
 	// way here and another way on the next machine is a wallet whose totals a
@@ -453,7 +472,7 @@ export function liveActivityRow(
 	const amount =
 		item.value === null
 			? String(item.batch?.count ?? '')
-			: `${received ? '+' : '-'}${trimBalance(item.value)}`;
+			: `${received ? '+' : '\u2212'}${trimBalance(item.value)}`;
 	return {
 		id: item.id,
 		kind,

@@ -65,6 +65,16 @@ export interface DappReceiptCopy {
 	closeBackground: string;
 	/** `send.txErrorGeneric` — provably not sent; nothing left, funds are safe. */
 	notSentHint: string;
+	/**
+	 * Spec 082 RA10 / G56: `send.txSubmitting` — "提交至网络…", the title while
+	 * the op may have been sent. "Submitted" said more than anyone knew.
+	 */
+	submitting: string;
+	/**
+	 * Spec 082 RJ3: `componentsUi.signing.refused` — the network refused it and
+	 * nothing was sent. No "try again": the same op is refused the same way.
+	 */
+	refused: string;
 }
 
 /** Where the transaction stands, as the tracker reports it. */
@@ -81,6 +91,8 @@ export type DappReceiptState =
 	| { kind: 'reverted'; opHash: string; txHash: string }
 	/** Spec 082 RA4: the relay never admitted it (two `not_found` past 60 s) — nothing left. */
 	| { kind: 'not_sent'; opHash: string }
+	/** Spec 082 RJ3: the relay refused it — nothing was sent, and retrying sends the same refusal. */
+	| { kind: 'refused'; opHash: string }
 	/** Spec 082 RA2: the reply was lost; followed under the local hash. */
 	| { kind: 'maybe_sent'; opHash: string }
 	/** Spec 079: a message signature — nothing went to the chain; the tick, then gone. */
@@ -146,9 +158,10 @@ export function dappReceiptModel(
 		case 'maybe_sent':
 			// The clock, the op hash, and the one way out — no Retry: a second
 			// send of an op that may already be queued is the double payment.
+			// Titled "提交至网络…" (RA10, G56): nobody knows it was submitted.
 			return {
 				stage: 'submitted',
-				title: copy.submitted,
+				title: copy.submitting,
 				captions: [copy.maybeSent],
 				hash: { label: copy.opHashLabel, value: state.opHash },
 				cta: copy.closeBackground
@@ -158,6 +171,16 @@ export function dappReceiptModel(
 				stage: 'failed',
 				title: copy.failed,
 				captions: [copy.notSentHint],
+				hash: { label: copy.opHashLabel, value: state.opHash },
+				cta: copy.done
+			};
+		case 'refused':
+			// A cross, "failed", and why — the network said no and nothing left.
+			// No explorer (there is no transaction) and no Retry words (RJ3).
+			return {
+				stage: 'failed',
+				title: copy.failed,
+				captions: [copy.refused],
 				hash: { label: copy.opHashLabel, value: state.opHash },
 				cta: copy.done
 			};
@@ -212,6 +235,8 @@ export function landingFromEnding(
 			return { kind: 'reverted', opHash, txHash: ending.tx_hash };
 		case 'not_sent':
 			return { kind: 'not_sent', opHash };
+		case 'refused':
+			return { kind: 'refused', opHash };
 		case 'following':
 			switch (ending.outcome) {
 				case 'maybe_sent':
@@ -284,6 +309,7 @@ export function autoCloseAfterMs(state: DappReceiptState): number | null {
 		case 'unknown':
 		case 'maybe_sent':
 		case 'not_sent':
+		case 'refused':
 		case 'reverted':
 			return null;
 	}
@@ -300,6 +326,26 @@ export function endsOnSignedTick(
 ): boolean {
 	if (!answer.ok || shown === null || shown.id !== answer.id) return false;
 	return shown.kind === 'personal_sign' || shown.kind === 'typed_data' || shown.kind === 'eth_sign';
+}
+
+/**
+ * Whether a tracker hand-off is one a landing rises for (spec 082 RJ1).
+ *
+ * The write-ahead hands the op to the tracker BEFORE its POST, as "may have
+ * been sent" — the record must exist before the bytes leave. While it is
+ * being posted the sheet itself says 提交至网络…; a landing raised then would
+ * draw "don't send it again" over every payment for the second its POST
+ * takes. So a landing rises once the relay took the op (`admitted`), once the
+ * core names it the sheet's pending op (`pending_op_hash`, set when the
+ * submit ended — a lost reply included), or for a hand-off that is not a
+ * write-ahead's (`maybe_sent: false`: the relay's own hash).
+ */
+export function handoffLands(
+	handoff: { user_op_hash: string; maybe_sent: boolean; admitted: boolean },
+	pendingOp: string | null | undefined
+): boolean {
+	if (handoff.admitted || !handoff.maybe_sent) return true;
+	return !!pendingOp && pendingOp.toLowerCase() === handoff.user_op_hash.toLowerCase();
 }
 
 /**

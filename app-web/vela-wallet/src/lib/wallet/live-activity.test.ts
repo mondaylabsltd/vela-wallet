@@ -29,6 +29,7 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		kind: (partial.direction ?? 'in') === 'in' ? 'receive' : 'send',
 		status: 'confirmed',
 		site: null,
+		counterparty_role: 'recipient',
 		...partial
 	};
 }
@@ -65,7 +66,8 @@ describe('liveActivityRow', () => {
 	it('a send is negative and names the recipient by short address when unaliased', () => {
 		const row = liveActivityRow(item({ id: 'b', direction: 'out' }), m, false);
 		expect(row.kind).toBe('sent');
-		expect(row.amount).toBe('-1.5');
+		// U+2212, as the detail and the signing sheet write it (spec 082 G19).
+		expect(row.amount).toBe('\u22121.5');
 		expect(row.subtitle).toMatch(/0xb1b1/i);
 	});
 	it('privacy masks the amount', () => {

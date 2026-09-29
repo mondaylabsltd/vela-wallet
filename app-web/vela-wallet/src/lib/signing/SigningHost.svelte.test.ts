@@ -204,7 +204,9 @@ const RECEIPT = {
 	signed: 'Signed!',
 	maybeSent: 'May have been sent',
 	closeBackground: 'Close · keep running',
-	notSentHint: 'Nothing was sent'
+	notSentHint: 'Nothing was sent',
+	submitting: 'Submitting to network...',
+	refused: 'The network refused it'
 };
 const FEE = { view: null, requote: () => {}, requestQuote: async () => {}, lastRequest: null };
 const OP = `0x${'ab'.repeat(32)}`;
@@ -263,6 +265,44 @@ afterEach(() => {
 	fake = new Fake();
 });
 
+describe('the write-ahead hand-off (spec 082 RJ1)', () => {
+	it('raises no landing while its POST is out; the relay taking it does', async () => {
+		const view = mount();
+		// Signed and hashed, the record written, the POST not answered yet: the
+		// hand-off is out ("may have been sent") and the sheet says 提交至网络….
+		const writeAhead = {
+			...INITIAL_SIGN_VIEW,
+			surface: 'sheet' as const,
+			request: request('tx:1', 'transaction'),
+			is_submitting: true,
+			tracker_handoff: {
+				user_op_hash: OP,
+				record_ids: ['dapp-1-tx'],
+				chain_id: 100,
+				maybe_sent: true,
+				submit_block: null,
+				admitted: false
+			}
+		};
+		fake.sign.view = writeAhead;
+		flushSync();
+		await tick();
+		expect(view.landing()).toBeNull();
+
+		// The relay took it: the admitted hand-off lands.
+		fake.sign.view = {
+			...writeAhead,
+			pending_op_hash: OP,
+			tracker_handoff: { ...writeAhead.tracker_handoff, maybe_sent: false, admitted: true }
+		};
+		flushSync();
+		await tick();
+		expect(view.landing()).not.toBeNull();
+		expect(view.text()).not.toContain('May have been sent');
+		await view.screen.unmount();
+	});
+});
+
 describe('after the landing closes, the sheet does not fall back to submitting (G37)', () => {
 	it('a confirmed landing closes itself and its still-unanswered request stays hidden', async () => {
 		const view = mount();
@@ -273,12 +313,16 @@ describe('after the landing closes, the sheet does not fall back to submitting (
 			surface: 'sheet',
 			request: request('tx:1', 'transaction'),
 			is_submitting: true,
+			// The submit ended "may have been sent": the core names the op.
+			pending_op_hash: OP,
+			pending_op_maybe_sent: true,
 			tracker_handoff: {
 				user_op_hash: OP,
 				record_ids: [],
 				chain_id: 100,
 				maybe_sent: true,
-				submit_block: null
+				submit_block: null,
+				admitted: false
 			}
 		};
 		flushSync();
@@ -325,12 +369,16 @@ describe('after the landing closes, the sheet does not fall back to submitting (
 			surface: 'sheet',
 			request: request('tx:1', 'transaction'),
 			is_submitting: true,
+			// The submit ended "may have been sent": the core names the op.
+			pending_op_hash: OP,
+			pending_op_maybe_sent: true,
 			tracker_handoff: {
 				user_op_hash: OP,
 				record_ids: [],
 				chain_id: 100,
 				maybe_sent: true,
-				submit_block: null
+				submit_block: null,
+				admitted: false
 			}
 		};
 		flushSync();

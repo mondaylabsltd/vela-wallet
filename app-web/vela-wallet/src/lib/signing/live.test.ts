@@ -24,6 +24,8 @@ import { CLEAR_TERMS } from './terms';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
+import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
+import { fill } from '$lib/wallet/messages';
 import {
 	buildSigningModel,
 	calldataBytes,
@@ -356,11 +358,13 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		expect(fee).toMatchObject({ value: m.feeEstimating, refreshing: true });
 	});
 
+	const NET = m.feeReasons['componentsUi.funding.denialNetworkError'];
+
 	it('a relay out of reach says so, and that the sheet asks again — the row is still a retry', () => {
 		const fee = buildSigningModel(inputs({ fee: failedWith('quote_unavailable') }))?.fee;
 		expect(fee).toMatchObject({
 			value: m.feeRetry,
-			warning: m.feeNetworkError,
+			warning: NET,
 			tappable: true,
 			// One coin: a tap asks again but opens no list, so no chevron.
 			chevron: false,
@@ -378,7 +382,7 @@ describe('the fee can be refreshed, and says why it failed', () => {
 			'gas_quote_too_high'
 		] as const) {
 			expect(buildSigningModel(inputs({ fee: failedWith(failed) }))?.fee, failed).toMatchObject({
-				warning: m.feeNetworkError
+				warning: NET
 			});
 		}
 		for (const failed of ['missing_public_key', 'calculation_failed'] as const) {
@@ -388,17 +392,34 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		}
 	});
 
-	it('the reason stays said while the sheet asks again, and goes with an answer', () => {
+	it('while the sheet asks again the reason is not said, but its line keeps its height (G47)', () => {
 		const asking: FeeView = { ...QUOTED_FEE, fee: null, busy: true, confirm_fee_ready: false };
-		expect(
-			buildSigningModel(inputs({ fee: asking, feeFailing: 'quote_unavailable' }))?.fee
-		).toMatchObject({ value: m.feeEstimating, warning: m.feeNetworkError });
+		const again = buildSigningModel(inputs({ fee: asking, feeFailing: 'quote_unavailable' }))?.fee;
+		expect(again).toMatchObject({ value: m.feeEstimating, warningReserved: NET });
+		expect(again && 'warning' in again ? again.warning : undefined).toBeUndefined();
 		// A first measurement, with no failure behind it, says nothing yet.
 		const first = buildSigningModel(inputs({ fee: asking, feeFailing: null }))?.fee;
-		expect(first && 'warning' in first ? first.warning : 'x').toBeUndefined();
+		expect((first as { warning?: string } | undefined)?.warning).toBeUndefined();
+		expect((first as { warningReserved?: string } | undefined)?.warningReserved).toBeUndefined();
 		// The answer: a quote, and no sentence.
 		const answered = buildSigningModel(inputs({ feeFailing: null }))?.fee;
 		expect(answered && 'warning' in answered ? answered.warning : 'x').toBeUndefined();
+	});
+
+	it('a chain node, not Vela, is named when the chain read failed (RJ13, G48)', () => {
+		const limited = buildSigningModel(
+			inputs({ fee: failedWith({ chain_read: { rate_limited: true } }) })
+		)?.fee;
+		expect(limited).toMatchObject({
+			warning: m.feeReasons['home.balanceDetailStatusRetrying']
+		});
+		const down = buildSigningModel(
+			inputs({ fee: failedWith({ chain_read: { rate_limited: false } }) })
+		)?.fee;
+		const words = down && 'warning' in down ? (down.warning ?? '') : '';
+		expect(words).toContain('Ethereum');
+		expect(words).not.toContain('{{chain}}');
+		expect(words).not.toBe(NET);
 	});
 
 	it('an old quote gets the send form’s calm note — not while a fresh one is out', () => {
@@ -599,7 +620,7 @@ describe('after the approval the sheet is a status', () => {
 		);
 		expect(model?.status).toMatchObject({
 			title: m.status.submitting,
-			captions: ['Send USDC · -100 USDC', m.status.backgroundHint]
+			captions: ['Send USDC · \u2212100 USDC', m.status.backgroundHint]
 		});
 		const blocked = buildSigningModel(
 			inputs({
@@ -1363,7 +1384,8 @@ describe('a plain send is a send (G14)', () => {
 			{ kind: 'intent', text: m.intentSend, tone: 'neutral' },
 			{
 				kind: 'amount',
-				line: { sign: '-', value: '0.001', symbol: 'xDAI', tone: 'neutral' }
+				// U+2212, never an ASCII hyphen (spec 082 G19/RJ15).
+				line: { sign: '\u2212', value: '0.001', symbol: 'xDAI', tone: 'neutral' }
 			},
 			{
 				kind: 'party',
@@ -1404,5 +1426,86 @@ describe('the site is named by the core’s label (spec 082 RE7)', () => {
 		};
 		const model = buildSigningModel(inputs({ sign: named }));
 		expect(model?.dapp.host).toBe('');
+	});
+});
+
+/**
+ * Spec 082 round 2 (T231): the endings' words, the amount's fiat, the
+ * estimate's warning.
+ */
+describe('the words after a refusal, the fiat, and the estimate’s warning (spec 082)', () => {
+	const failedSign = (refused: boolean): SignView => ({
+		...OPEN_SIGN,
+		phase: 'idle',
+		error: {
+			kind: 'submit_failed',
+			detail: 'the network refused this transaction; nothing was sent'
+		},
+		failure_refused: refused
+	});
+
+	it('a refusal says the network refused it — no "try again" (RJ3, G36)', () => {
+		const refused = signingStatus(failedSign(true), undefined, 'Send · −1 USDC', m);
+		expect(refused).toMatchObject({ stage: 'failed', title: m.receipt.failed });
+		expect(refused?.captions).toEqual(['Send · −1 USDC', m.receipt.refused]);
+		expect(refused?.captions).not.toContain(m.status.failedHint);
+		// Not sent for any other reason: the calm "funds are safe" line, as before.
+		const notSent = signingStatus(failedSign(false), undefined, undefined, m);
+		expect(notSent?.captions).toEqual([m.status.failedHint]);
+	});
+
+	it('the fiat is the wallet’s money line — no exponent, no hard-coded $ (G60)', () => {
+		const huge: ClearSigningView = {
+			...DECODED,
+			result: { ...DECODED.result!, fields: [field({ value: '1e30 USDC', usd_value: 1e24 })] }
+		};
+		const line = buildSigningModel(inputs({ clear: huge }))!.blocks.find(
+			(b) => b.kind === 'amount'
+		);
+		const fiat = line?.kind === 'amount' ? (line.line.fiat ?? '') : '';
+		expect(fiat).not.toMatch(/e\+/);
+		expect(fiat).toContain('1,000,000,000,000,000,000,000,000');
+		// The display currency, converted — not "$" over a euro figure.
+		const eur = buildSigningModel(
+			inputs({ currency: { code: 'EUR', rate: 0.5, committed: true } })
+		)!.blocks.find((b) => b.kind === 'amount');
+		const euros = eur?.kind === 'amount' ? (eur.line.fiat ?? '') : '';
+		expect(euros).not.toContain('$');
+		expect(euros).toContain('50');
+	});
+
+	it('an outgoing amount wears U+2212', () => {
+		const line = buildSigningModel(inputs())!.blocks.find((b) => b.kind === 'amount');
+		expect(line?.kind === 'amount' ? line.line.sign : '').toBe('−');
+	});
+
+	it('the relay’s estimate says it reverts → the danger line under the intent; the slide stays live (RJ19, G57)', () => {
+		recordEstimateReverts(
+			REQUEST.chain_id,
+			identity.address,
+			'ERC20: transfer amount exceeds balance'
+		);
+		try {
+			const model = buildSigningModel(inputs())!;
+			expect(model.blocks[0]).toMatchObject({ kind: 'intent' });
+			expect(model.blocks[1]).toEqual({
+				kind: 'warning',
+				tone: 'danger',
+				text: fill(m.warnWillFailReason, { reason: 'ERC20: transfer amount exceeds balance' })
+			});
+			// A warning informs, never blocks (L-D5).
+			expect(model.confirm.enabled).toBe(true);
+			// No reason given: the plain sentence.
+			recordEstimateReverts(REQUEST.chain_id, identity.address, null);
+			expect(buildSigningModel(inputs())!.blocks[1]).toMatchObject({ text: m.warnWillFail });
+		} finally {
+			clearEstimateReverts(REQUEST.chain_id, identity.address);
+		}
+		// Another question about the same account: no stale warning.
+		expect(
+			buildSigningModel(inputs())!.blocks.some(
+				(b) => b.kind === 'warning' && b.text === m.warnWillFail
+			)
+		).toBe(false);
 	});
 });

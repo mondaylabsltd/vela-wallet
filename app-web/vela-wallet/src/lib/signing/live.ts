@@ -39,8 +39,9 @@ import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { chainLogoURL } from '$lib/services/tokens-model';
-import { browserSiteLabel, feeRequoteDelayMs } from '$lib/core/kernels';
-import { exactAmount, trimBalance } from '$lib/wallet/live';
+import { browserSiteLabel, feeFailureReasonKey } from '$lib/core/kernels';
+import { estimateRevertsFor } from '$lib/services/estimate-verdict';
+import { exactAmount, moneyText, trimBalance } from '$lib/wallet/live';
 import { fromBaseUnits } from '$lib/services/eip681';
 import { chainName, nativeSymbol } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
@@ -143,13 +144,28 @@ function fieldRow(field: ClearSignField): KeyValueRow {
 	};
 }
 
-/** The amount a decoded field carries, when it is the one the eye should land on. */
-function amountLine(field: ClearSignField, outgoing: boolean): AmountLine {
+/**
+ * The sign an outgoing amount wears: U+2212, the minus the core's signed
+ * amounts use (spec 082 RJ15) — never ASCII `-`, which reads as a hyphen.
+ */
+export const MINUS = '\u2212';
+
+/**
+ * The amount a decoded field carries, when it is the one the eye should land
+ * on. Its fiat goes through the wallet's own money formatter (spec 082 G60):
+ * the display currency, the person's number preset, and never exponent
+ * notation — `toFixed` wrote a 10^30-unit transfer as "≈ $1e+24".
+ */
+function amountLine(
+	field: ClearSignField,
+	outgoing: boolean,
+	currency: SigningLiveInputs['currency']
+): AmountLine {
 	return {
-		sign: outgoing ? '-' : '+',
+		sign: outgoing ? MINUS : '+',
 		value: field.value,
 		symbol: '',
-		fiat: field.usd_value === null ? undefined : `≈ $${field.usd_value.toFixed(2)}`,
+		fiat: field.usd_value === null ? undefined : `≈ ${moneyText(field.usd_value, currency)}`,
 		tone: field.warning ? 'danger' : outgoing ? 'neutral' : 'success'
 	};
 }
@@ -350,16 +366,17 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 
 		const send = result.fields.find((f) => f.role === 'send_amount');
 		const receive = result.fields.find((f) => f.role === 'receive_amount');
+		const currency = inputs.currency;
 		if (send && receive) {
 			blocks.push({
 				kind: 'swap',
-				pay: amountLine(send, true),
-				receive: amountLine(receive, false)
+				pay: amountLine(send, true, currency),
+				receive: amountLine(receive, false, currency)
 			});
 		} else if (send) {
-			blocks.push({ kind: 'amount', line: amountLine(send, true) });
+			blocks.push({ kind: 'amount', line: amountLine(send, true, currency) });
 		} else if (receive) {
-			blocks.push({ kind: 'amount', line: amountLine(receive, false) });
+			blocks.push({ kind: 'amount', line: amountLine(receive, false, currency) });
 		}
 
 		for (const field of result.fields) {
@@ -428,7 +445,7 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		blocks.push({
 			kind: 'amount',
 			line: {
-				sign: plain.no_value ? '' : '-',
+				sign: plain.no_value ? '' : MINUS,
 				value: plain.amount,
 				symbol: nativeSymbol(sign.request.chain_id),
 				tone: 'neutral'
@@ -518,14 +535,21 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// busy flag the "estimating" value reads, so the row can never claim to be
 	// both settled and measuring. The chevron only where a tap opens a list.
 	const refresh = { refreshLabel: m.feeRefresh, refreshing: fee.busy, chevron: choosable };
-	// Spec 079: WHY there is no fee, when it is something a retry can clear —
-	// the relay out of reach, a busy estimate — and that the sheet will ask
-	// again by itself (it does: `FeeRequoteTimer`, on the core's schedule). The
-	// core's schedule decides which failures those are, so the sentence and
-	// the timer cannot disagree. A missing key or a calculation that cannot
-	// come out gets no network sentence: the network did not cause it.
-	const reason = (failure: FeeFailure | null | undefined): string | undefined =>
-		failure != null && feeRequoteDelayMs(failure, 1) !== null ? m.feeNetworkError : undefined;
+	// Spec 079: WHY there is no fee, when it is something a retry can clear,
+	// and that the sheet will ask again by itself (`FeeRequoteTimer`, on the
+	// core's schedule). Spec 082 RJ13: the CORE picks the words
+	// (`feeFailureReasonKey`) — the relay out of reach, a rate-limited chain
+	// node, a chain node out of reach — so a public node's rate limit is never
+	// "can't reach Vela" (G48). A missing key or a calculation that cannot
+	// come out gets no line: the network did not cause it.
+	const reason = (failure: FeeFailure | null | undefined): string | undefined => {
+		if (failure == null) return undefined;
+		const key = feeFailureReasonKey(failure);
+		const words = key === null ? undefined : m.feeReasons[key];
+		if (words === undefined) return undefined;
+		const chain = sign.request ? chainName(sign.request.chain_id) : '';
+		return fill(words, { chain });
+	};
 	if (!fee.fee || ofAnotherTier) {
 		// Asked and not answered yet, or asked and refused: say so in the fee's
 		// own row. A sheet that drew nothing here let a person slide on a
@@ -538,8 +562,10 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 				value: m.feeEstimating,
 				speed,
 				tappable,
-				// Asking again after a failure: the reason stays said.
-				warning: fee.busy ? reason(inputs.feeFailing) : undefined,
+				// Asking again after a failure (spec 082 G47): the last ask's
+				// reason is not this one's, so it is not said under
+				// "estimating" — but its line keeps its height, so nothing jumps.
+				warningReserved: fee.busy ? reason(inputs.feeFailing) : undefined,
 				...refresh
 			};
 		}
@@ -841,7 +867,9 @@ export function signingStatus(
 		return {
 			stage: 'failed',
 			title: m.receipt.failed,
-			captions: lines(summary, m.status.failedHint),
+			// Spec 082 RJ3: the relay refused it — say so, with no "try
+			// again": the same op is refused the same way.
+			captions: lines(summary, sign.failure_refused ? m.receipt.refused : m.status.failedHint),
 			closable: true
 		};
 	}
@@ -897,6 +925,29 @@ export function signingCloseEvent(
 	return status.closable ? 'dismiss_tapped' : null;
 }
 
+/**
+ * Spec 082 RJ19 (G57): the relay's own estimate of this operation says it
+ * will revert. The web runs no simulation (RG6), so this is the one voice
+ * that can say it before the slide — in the danger tone, under the intent.
+ * The slide stays live: a warning informs, it never blocks (L-D5); a submit
+ * then meets the relay's refusal, answered as one (RJ3).
+ */
+function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[] {
+	const { sign, m, identity } = inputs;
+	const request = sign.request;
+	if (!request || sign.blocked) return blocks;
+	if (request.kind !== 'transaction' && request.kind !== 'batch') return blocks;
+	const reverts = estimateRevertsFor(request.chain_id, request.signer_address ?? identity.address);
+	if (!reverts) return blocks;
+	const text = reverts.reason
+		? fill(m.warnWillFailReason, { reason: reverts.reason })
+		: m.warnWillFail;
+	const at = blocks.findIndex((block) => block.kind === 'intent');
+	const next = [...blocks];
+	next.splice(at + 1, 0, { kind: 'warning', tone: 'danger', text });
+	return next;
+}
+
 export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	if (raw.sign.surface === 'hidden' || !raw.sign.request) return null;
 	const ownRequest =
@@ -926,7 +977,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		feeModel(inputs).kind !== 'onchain' || (fee.confirm_fee_ready && !feeOfAnotherTier(inputs));
 	const enabled = sign.confirm_gate_open && guard.confirm_allowed && feeReady && !sign.is_signing;
 
-	const blocks = blocksFor(inputs);
+	const blocks = withEstimateVerdict(blocksFor(inputs), inputs);
 	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(blocks), m);
 
 	return {

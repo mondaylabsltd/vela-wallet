@@ -33,6 +33,7 @@
 		dappReceiptModel,
 		endsOnSignedTick,
 		landingFor,
+		handoffLands,
 		landingToRaise,
 		receiptProgress,
 		autoCloseAfterMs,
@@ -42,7 +43,11 @@
 	} from '$lib/signing/dapp-receipt';
 	import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
 	import { explorerBaseURL } from '$lib/services/networks';
-	import { feeRequoteDelayMs, typicalInclusionSeconds } from '$lib/core/kernels';
+	import {
+		feeRequoteDelayMs,
+		feeRequoteTimeoutMs,
+		typicalInclusionSeconds
+	} from '$lib/core/kernels';
 	import { FeeRequoteTimer, heldFeeFailure, withLostContext } from '$lib/signing/fee-requote';
 	import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
@@ -290,7 +295,10 @@
 	 */
 	$effect(() => {
 		if (!receipt) return;
-		const handoff = signRequest.view.tracker_handoff;
+		// Spec 082 RJ1: not the write-ahead's hand-off while its POST is out.
+		const offered = signRequest.view.tracker_handoff;
+		const handoff =
+			offered && handoffLands(offered, signRequest.view.pending_op_hash) ? offered : null;
 		const op = landingToRaise(handoff?.user_op_hash, landedOp);
 		if (!op || !handoff) return;
 		landedOp = op;
@@ -428,11 +436,18 @@
 	 * and retried, never an idle row over an open slide (`withLostContext`).
 	 */
 	const feeShown = $derived(
-		withLostContext(speedControl.feeInForce, speedControl.feeQuote.contextLost)
+		withLostContext(
+			speedControl.feeInForce,
+			speedControl.feeQuote.contextLost,
+			speedControl.feeQuote.contextRateLimited
+		)
 	);
 	const requoter = new FeeRequoteTimer({
 		delayMs: feeRequoteDelayMs,
-		requote: () => speedControl.refresh()
+		requote: () => speedControl.refresh(),
+		// Spec 082 RJ12: each automatic re-ask is bounded, and logged per chain.
+		timeoutMs: feeRequoteTimeoutMs,
+		chainId: () => untrack(() => signView.request?.chain_id ?? null)
 	});
 	$effect(() => {
 		const view = feeShown;
