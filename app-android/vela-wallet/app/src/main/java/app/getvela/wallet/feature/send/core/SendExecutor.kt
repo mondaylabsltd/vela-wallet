@@ -15,6 +15,7 @@ import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.settings.core.NetView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -437,7 +438,26 @@ class SendExecutor(
 
     // -- the submit spine ---------------------------------------------------------
 
+    /**
+     * The ceremony runs as a child job: a cancel stops IT, and this submit
+     * still answers the core. The core clears no `OpSigned` while a cancelled
+     * submit's result is owed (082 second review), so an unanswered cancel —
+     * a cancelled `coroutineScope` rethrows instead of returning — held every
+     * later attempt to "not sent" for the life of the screen.
+     */
     private suspend fun submit(op: SendOperation.SubmitUserOp): SendShellResult = coroutineScope {
+        val attempt = async { submitAttempt(op) }
+        try {
+            attempt.await()
+        } catch (cancelled: CancellationException) {
+            // The screen itself going away cancels this scope too: pass that on.
+            ensureActive()
+            VelaLog.event("send.submit", "cancelled")
+            SendShellResult.SubmitFailed(SendSubmitFailure.PasskeyCancelled)
+        }
+    }
+
+    private suspend fun submitAttempt(op: SendOperation.SubmitUserOp): SendShellResult = coroutineScope {
         val job = currentCoroutineContext().job
         synchronized(cancelLock) { signing = job }
         // Only this submit's own hold is let go: a later attempt's must stay.

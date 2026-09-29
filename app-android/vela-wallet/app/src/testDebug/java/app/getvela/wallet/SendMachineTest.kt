@@ -147,9 +147,9 @@ class SendMachineTest {
                 val stored = store.values[KeyValueStore.Keys.TRANSACTIONS].orEmpty()
                 events += if (stored.contains(hash)) "track:$hash:persisted" else "track:$hash:NOT-PERSISTED"
                 assertEquals(100, handoff.chainId)
-                assertTrue(handoff.recordIds.isNotEmpty())
                 // Spec 082 RJ1: the write-ahead hands the op over "may have
-                // been sent" before its POST; the relay's verdict follows.
+                // been sent" before its POST, naming no record; the relay's
+                // verdict follows and names the rows (082 second review).
                 handoffs += handoff
             }
             controller.onTrackWithdrawn = { hash, ids -> withdraws += hash to ids }
@@ -248,12 +248,17 @@ class SendMachineTest {
         assertEquals(local, row.optString("userOpHash"))
         assertTrue("kept with the row for a restart", row.getBoolean("maybeSent"))
         assertEquals(1000L, row.getLong("submitBlock"))
-        // Written ahead and handed over "may have been sent" before the POST;
-        // the lost reply adds nothing — the row already says so.
-        val handoff = handoffs.single()
-        assertEquals(local, handoff.userOpHash)
-        assertTrue(handoff.maybeSent)
-        assertEquals(1000L, handoff.submitBlock)
+        // Written ahead and handed over "may have been sent" before the POST,
+        // naming no row; the lost reply's verdict names the row (082 second
+        // review) — the same op, still "may have been sent".
+        withTimeout(10_000) { while (handoffs.size < 2) kotlinx.coroutines.delay(20) }
+        val (ahead, verdict) = handoffs.toList()
+        assertEquals(listOf(local, local), listOf(ahead.userOpHash, verdict.userOpHash))
+        assertTrue(ahead.recordIds.isEmpty())
+        assertEquals(listOf(local), verdict.recordIds)
+        assertTrue(ahead.maybeSent && verdict.maybeSent)
+        assertEquals(1000L, verdict.submitBlock)
+        assertEquals(2, handoffs.size)
         assertEquals("posted once: nobody pays twice", 1, events.count { it == "relay.send" })
     }
 
@@ -423,10 +428,15 @@ class SendMachineTest {
         val hashes = (0 until rows.length()).map { rows.getJSONObject(it).getString("userOpHash") }.toSet()
         assertEquals("one op", 1, hashes.size)
         assertTrue((0 until rows.length()).all { rows.getJSONObject(it).getBoolean("maybeSent") })
+        // The write-ahead's hand-off names no row; the rows on disk carry the
+        // op, "may have been sent", for the next launch's tracker.
         val handoff = handoffs.single()
         assertEquals(hashes.single(), handoff.userOpHash)
-        assertEquals(2, handoff.recordIds.size)
+        assertTrue(handoff.recordIds.isEmpty())
         assertTrue(handoff.maybeSent)
+        val pending = (0 until rows.length()).mapNotNull { app.getvela.wallet.feature.send.core.TrackerExecutor.pendingRecord(rows.getJSONObject(it)) }
+        assertEquals(2, pending.size)
+        assertTrue(pending.all { it.maybe_sent && it.user_op_hash == hashes.single() })
     }
 
     /** Spec 082 RJ1: rows the store would not take are never posted — "not sent", nothing to follow. */

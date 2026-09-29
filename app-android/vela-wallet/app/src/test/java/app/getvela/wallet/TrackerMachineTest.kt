@@ -329,8 +329,10 @@ class TrackerMachineTest {
         store.values[KeyValueStore.Keys.TRANSACTIONS] = JSONArray().put(maybeSentRow(op, 1000)).toString()
         port.always("eth_getUserOperationReceipt") { FakeRelayPort.body(JSONObject.NULL) }
         val host = host()
+        // The write-ahead's hand-off names no record (082 second review): the
+        // op before its POST. Only such an entry is forgotten on `Withdrawn`.
         host.dispatch(
-            app.getvela.wallet.feature.send.core.TrackHandoff(op, listOf(op), 100, maybeSent = true, submitBlock = 1000).event(),
+            app.getvela.wallet.feature.send.core.TrackHandoff(op, emptyList(), 100, maybeSent = true, submitBlock = 1000).event(),
             TrackEvent.serializer(),
         )
         withTimeout(10_000) { host.view.first { it.entries.any { e -> e.user_op_hash == op } } }

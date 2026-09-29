@@ -243,7 +243,11 @@ class DappSignMachineTest {
         // the local one was withdrawn and the relay's recorded and handed over.
         val local = signedOp!!
         assertTrue("the write-ahead came first: $events", events.indexOf("op-signed:$local") in 0 until events.indexOf("relay.send"))
-        assertEquals(local to handed.first().recordIds, withdraws.single())
+        // The write-ahead's hand-off names no record (082 second review); the
+        // withdrawal names the written-ahead row it takes back.
+        assertTrue(handed.first().recordIds.isEmpty())
+        assertEquals(local, withdraws.single().first)
+        assertTrue(withdraws.single().second.isNotEmpty())
         assertEquals(listOf(row.getString("id")), handoffs.last().second)
         assertEquals("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", handoffs.last().first)
         assertEquals("the relay answered: sent", false, stored.optBoolean("maybeSent", true))
@@ -299,7 +303,12 @@ class DappSignMachineTest {
         assertEquals(local, row.getString("userOpHash"))
         assertEquals("pending", row.getString("status"))
         assertTrue("kept with the row for a restart (T184)", row.getBoolean("maybeSent"))
-        assertEquals(local, handoffs.single().first)
+        // Written ahead (no record named), then the lost reply's verdict names
+        // the row: one op, both "may have been sent" (082 second review).
+        withTimeout(10_000) { while (handed.size < 2) delay(20) }
+        assertEquals(listOf(local, local), handoffs.map { it.first })
+        assertEquals(listOf(emptyList(), listOf(row.getString("id"))), handoffs.map { it.second })
+        assertTrue(handed.all { it.maybeSent })
         assertEquals("posted once: nobody pays twice", 1, events.count { it == "relay.send" })
     }
 
@@ -422,7 +431,8 @@ class DappSignMachineTest {
         assertEquals("the relay took it: no longer may-have-been-sent", false, row.getBoolean("maybeSent"))
         // The hand-off key includes the flags (the review of RJ1): both are fed.
         assertEquals(listOf(true to false, false to true), handed.map { it.maybeSent to it.admitted })
-        assertTrue(handed.all { it.userOpHash == local && it.recordIds == listOf(row.getString("id")) })
+        assertTrue(handed.all { it.userOpHash == local })
+        assertEquals("the write-ahead names no record; the relay's verdict names the row", listOf(emptyList(), listOf(row.getString("id"))), handed.map { it.recordIds })
         assertTrue(withdraws.isEmpty())
         assertEquals("posted once", 1, events.count { it == "relay.send" })
     }
