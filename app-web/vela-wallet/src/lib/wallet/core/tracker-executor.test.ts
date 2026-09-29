@@ -37,7 +37,9 @@ vi.mock('$lib/services/rpc-adapter', () => ({
 	})
 }));
 
-import { createTxTrackerExecutor } from './tracker-executor';
+import { createTxTrackerExecutor, trackerLogLines } from './tracker-executor';
+import { pollUserOpStatus } from '$lib/services/tx-reconciler';
+import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
 
 const OP = '0x' + 'c1'.repeat(32);
 const ENTRY_POINT = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
@@ -203,5 +205,97 @@ describe('a may-have-been-sent op survives a reload (T182)', () => {
 				{ record_id: 'send-2', maybe_sent: false, submit_block: null }
 			]
 		});
+	});
+});
+
+/**
+ * Spec 082 RJ4 (T230, G38): the relay named the bundle tx — the chain is
+ * asked for its receipt, and the answer goes to the core as it came.
+ */
+describe('tx_receipt reads the relay’s tx from the chain (RJ4)', () => {
+	const TX = '0x' + 'd4'.repeat(32);
+	const txReceipt: TrackEffect = {
+		id: 1,
+		operation: { type: 'tx_receipt', chain_id: 100, tx_hash: TX, user_op_hash: OP }
+	};
+
+	it('a mined receipt goes back verbatim, through the chain pool', async () => {
+		const receipt = { transactionHash: TX, status: '0x1', logs: [{ address: ENTRY_POINT }] };
+		rpc.impl = async () => ({ jsonrpc: '2.0', id: 1, result: receipt });
+		const answer = await createTxTrackerExecutor(ports()).execute(txReceipt);
+		expect(answer).toMatchObject({
+			type: 'tx_receipt',
+			user_op_hash: OP,
+			receipt_json: JSON.stringify(receipt)
+		});
+		expect(rpc.calls).toEqual([
+			{ method: 'eth_getTransactionReceipt', params: [TX], chainId: 100 }
+		]);
+	});
+
+	it('not mined is "null"; an error or no node is no answer', async () => {
+		rpc.impl = async () => ({ jsonrpc: '2.0', id: 1, result: null });
+		expect(await createTxTrackerExecutor(ports()).execute(txReceipt)).toMatchObject({
+			receipt_json: 'null'
+		});
+		rpc.impl = async () => ({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'x' } });
+		expect(await createTxTrackerExecutor(ports()).execute(txReceipt)).toMatchObject({
+			receipt_json: null
+		});
+		rpc.impl = async () => {
+			throw new Error('All RPC endpoints failed for chain 100');
+		};
+		expect(await createTxTrackerExecutor(ports()).execute(txReceipt)).toMatchObject({
+			receipt_json: null
+		});
+		const executor = createTxTrackerExecutor(ports());
+		expect(executor.toFailure(txReceipt)).toMatchObject({ type: 'tx_receipt', receipt_json: null });
+	});
+});
+
+describe('tracker log lines (spec 082 G61)', () => {
+	const entry = (over: Partial<TrackEntryView>): TrackEntryView => ({
+		user_op_hash: OP,
+		chain_id: 100,
+		record_ids: ['r'],
+		status: 'pending',
+		tx_hash: null,
+		polling: true,
+		submitted_at_ms: 1,
+		outcome: 'landing',
+		relay_tx_hash: null,
+		...over
+	});
+
+	it('one line per status change, with the tx hash cut short; none for an unchanged view', () => {
+		const pending = { entries: [entry({})] };
+		expect(trackerLogLines({ entries: [] }, pending)).toEqual([]);
+		expect(trackerLogLines(pending, pending)).toEqual([]);
+		const confirmed = {
+			entries: [entry({ status: 'confirmed', tx_hash: '0x' + 'ee'.repeat(32), outcome: 'final' })]
+		};
+		expect(trackerLogLines(pending, confirmed)).toEqual([
+			`tracker: ${OP.slice(0, 10)} confirmed tx 0xeeeeeeee`
+		]);
+		expect(trackerLogLines(pending, { entries: [entry({ status: 'not_sent' })] })).toEqual([
+			`tracker: ${OP.slice(0, 10)} not_sent`
+		]);
+	});
+
+	it('each not-found step of the relay is a line', async () => {
+		const lines: string[] = [];
+		const log = vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+			lines.push(String(line));
+		});
+		try {
+			vi.mocked(pollUserOpStatus).mockResolvedValueOnce({ status: 'not_found' });
+			await createTxTrackerExecutor(ports()).execute({
+				id: 1,
+				operation: { type: 'poll_status', user_op_hash: OP, chain_id: 100 }
+			});
+		} finally {
+			log.mockRestore();
+		}
+		expect(lines).toContain(`tracker: ${OP.slice(0, 10)} not_found`);
 	});
 });

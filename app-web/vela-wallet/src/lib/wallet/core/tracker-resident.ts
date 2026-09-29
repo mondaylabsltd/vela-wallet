@@ -51,6 +51,7 @@ import { feed } from '$lib/wallet/core/feed.svelte';
 import { notifyReceiptLogsConfirmed } from './token-trust-resident';
 import { loadCore } from '$lib/core/client';
 import { createTxTrackerSession } from './tracker-session';
+import { trackerLogLines } from './tracker-executor';
 
 import type { SendReceiptOutcome } from '$lib/core/generated/SendReceiptOutcome';
 import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
@@ -189,6 +190,8 @@ export function ensureTxTracker(): Promise<void> {
 		await loadCore();
 		session = createTxTrackerSession({
 			onView: (view: TrackView) => {
+				// Every status change is a console line (spec 082 G61).
+				for (const line of trackerLogLines(current, view)) console.log(line);
 				current = view;
 				deliver(view);
 				syncTicker(view);
@@ -260,7 +263,12 @@ export function trackSubmitted(
 	/** The submit's reply was lost; the hash is the local one (spec 082 RA4). */
 	maybeSent = false,
 	/** The head read before the first POST — the find-event's start (ruling 8). */
-	submitBlock: number | null = null
+	submitBlock: number | null = null,
+	/**
+	 * The relay took the op a write-ahead hand-off announced (spec 082 RJ1): it
+	 * is never "may have been sent" again. Its watcher, if any, is kept.
+	 */
+	admitted = false
 ): void {
 	if (!userOpHash) return;
 	const key = normalize(userOpHash);
@@ -271,8 +279,21 @@ export function trackSubmitted(
 		record_ids: recordIds,
 		chain_id: chainId,
 		maybe_sent: maybeSent,
-		submit_block: submitBlock
+		submit_block: submitBlock,
+		admitted
 	});
+}
+
+/**
+ * A write-ahead op proven never sent (spec 082 RJ1): the tracker drops those
+ * records (and the entry, when none is left) without patching anything, and
+ * whoever watched it stops hearing about it.
+ */
+export function withdrawTracked(userOpHash: string, recordIds: string[]): void {
+	if (!userOpHash) return;
+	const key = normalize(userOpHash);
+	watchers.delete(key);
+	dispatchTxTracker({ type: 'withdrawn', user_op_hash: key, record_ids: recordIds });
 }
 
 /** Stop watching a hash — the surface went away, the tracking continues. */

@@ -25,24 +25,38 @@
  * - **The networks snapshot first.** Until it arrives every chain is
  *   unsupported (fail-closed), so a shell that forgot it would refuse
  *   everything with 4902.
- * - **The tracker hand-off, deduped by record.** A dApp transaction that
- *   reached the relay (or may have — spec 082 RA3) is handed to `tx_tracker`
- *   the moment the view publishes it. Deduped by the records it closes, not by
- *   its hash: a second submit of an op that was never sent can carry the very
- *   same hash, and it is a new record the tracker must follow.
+ * - **The tracker hand-off, deduped by record and by what it says.** A dApp
+ *   transaction is handed to `tx_tracker` the moment the view publishes it —
+ *   first by the write-ahead, before its POST (spec 082 RJ1), then again when
+ *   the relay takes it (`admitted`). Deduped by the records it closes and by
+ *   `maybe_sent` / `admitted`, not by its hash alone: a second submit of an op
+ *   that was never sent can carry the very same hash, and the admitted
+ *   hand-off names the same hash and records as the write-ahead one — keyed
+ *   on those alone it was never fed, and an accepted op could end "not sent".
+ *   A withdrawal (`tracker_withdraw`) is fed once per value.
+ * - **The answer follows the tracker** (spec 082 RJ4): `track-forward` hands
+ *   the machine every change of its in-flight op's tracker entry
+ *   (`OpTracked`), so a refusal, a "never sent" or a landing is answered at
+ *   once rather than when the receipt wait runs out.
  */
 import { loadCore } from '$lib/core/client';
 import type { SignEvent } from '$lib/core/generated/SignEvent';
 import type { SignView } from '$lib/core/generated/SignView';
 import { getAllNetworksSync } from '$lib/services/networks';
 import type { AssetSimResult } from '$lib/services/sim/tx-simulation';
-import { dispatchTxTracker } from '$lib/wallet/core/tracker-resident';
+import {
+	dispatchTxTracker,
+	subscribeTxTracker,
+	txTrackerView
+} from '$lib/wallet/core/tracker-resident';
 import { feed } from '$lib/wallet/core/feed.svelte';
 import { session } from '$lib/session/core/session.svelte';
 import { onSignCeremony } from '$lib/onboarding/core/passkey';
 import { approvalProgress, IDLE_APPROVAL, type ApprovalProgress } from '../approval-progress';
 import { createSignRequestSession, type SignRequestSession } from './sign-session';
-import { claimThrough, type ClaimPhase, type SignResponder } from './sign-types';
+import { claimThrough, type ClaimPhase, type SignResponder, type SubmitClaim } from './sign-types';
+import { handoffKey, withdrawKey, createTrackForward, type TrackForward } from './track-forward';
+import { countPanelFailure } from '$lib/services/bug-report';
 
 /** The machine's own initial projection — mirrored until the first view lands. */
 export const INITIAL_SIGN_VIEW: SignView = {
@@ -59,6 +73,8 @@ export const INITIAL_SIGN_VIEW: SignView = {
 	reconcile_pending: false,
 	swipe_action: 'none',
 	tracker_handoff: null,
+	tracker_withdraw: null,
+	failure_refused: false,
 	notice: null,
 	blocked: null,
 	global_chain_id: 1
@@ -100,6 +116,10 @@ class SignRequest {
 	#accountsKey: string | null = null;
 	#stopAccountsMirror: (() => void) | null = null;
 	#lastHandoffKey = '';
+	#lastWithdrawKey = '';
+	#forward: TrackForward | null = null;
+	/** The last failure the sheet showed, so a view repeated is not counted again (G61). */
+	#lastFailure = '';
 	/** request id → the transport that delivered it (for the claim port). */
 	#transportOfRequest = new Map<string, string>();
 	/** request id → when the person approved it (the dApp's answer window). */
@@ -145,6 +165,8 @@ class SignRequest {
 						inFlight: view.is_signing || view.is_submitting
 					});
 					this.#drainHandoff(view);
+					this.#drainWithdraw(view);
+					this.#countFailure(view);
 				},
 				onError: (error) => console.error('[sign_request] core fault:', error),
 				ports: {
@@ -166,7 +188,10 @@ class SignRequest {
 							}
 						};
 					},
-					opSubmitted: (id, userOpHash, maybeSent, submitBlock) =>
+					opSubmitted: (id, userOpHash, maybeSent, submitBlock) => {
+						// The panel's own count of a lost reply (spec 082 G61): it
+						// reaches the bug report beside the worker's counters.
+						if (maybeSent) countPanelFailure('submit.maybe_sent');
 						this.dispatch({
 							type: 'op_submitted',
 							id,
@@ -174,13 +199,22 @@ class SignRequest {
 							now_ms: Date.now(),
 							maybe_sent: maybeSent,
 							submit_block: submitBlock
+						});
+					},
+					opSigned: (id, userOpHash, submitBlock) =>
+						this.dispatch({
+							type: 'op_signed',
+							id,
+							user_op_hash: userOpHash,
+							submit_block: submitBlock,
+							now_ms: Date.now()
 						}),
 					ceremony: (id, stage) =>
 						this.dispatch({
 							type: stage === 'started' ? 'ceremony_started' : 'ceremony_done',
 							id
 						}),
-					askerLive: (id, phase) => this.askerLive(id, phase),
+					askerLive: (id, phase, submit) => this.askerLive(id, phase, submit),
 					approvedAtMs: (id) => this.#approvedAt.get(id) ?? null,
 					recordsWritten: () => feed.reconciled(1),
 					assetSim: () => this.#assetSim,
@@ -213,6 +247,14 @@ class SignRequest {
 				}
 			});
 			this.#loop.start(this.#networksEvent());
+			// RJ4: the in-flight op's tracker entry, forwarded as `OpTracked`.
+			this.#forward?.stop();
+			this.#forward = createTrackForward({
+				subscribe: subscribeTxTracker,
+				current: txTrackerView,
+				dispatch: (event) => this.#loop?.dispatch(event)
+			});
+			this.#forward.watch(this.view.tracker_handoff?.user_op_hash ?? null);
 			// The session's rows are the machine's signers (§12.1.6): mirrored on
 			// boot and on every change — a sign-in, a switch, a sign-out. Expo's
 			// resident had `setSignAccounts` called from the wallet provider on
@@ -253,9 +295,14 @@ class SignRequest {
 	 * transport's claim, when it has one; a transport that cannot lose its
 	 * asker (the wallet's own page) is always live.
 	 */
-	askerLive(id: string, phase: ClaimPhase): Promise<boolean> {
+	askerLive(id: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean> {
 		const transportId = this.#transportOfRequest.get(id);
-		return claimThrough(transportId ? this.#transports.get(transportId) : undefined, id, phase);
+		return claimThrough(
+			transportId ? this.#transports.get(transportId) : undefined,
+			id,
+			phase,
+			submit
+		);
 	}
 
 	/**
@@ -310,18 +357,55 @@ class SignRequest {
 	#drainHandoff(view: SignView): void {
 		const handoff = view.tracker_handoff;
 		if (!handoff) return;
-		// By the records it closes, never by hash alone (see the header).
-		const key = `${handoff.user_op_hash}|${handoff.record_ids.join(',')}`;
+		// By the records it closes AND what it says (see the header): the
+		// admitted hand-off names the write-ahead's hash and records again.
+		const key = handoffKey(handoff);
 		if (key === this.#lastHandoffKey) return;
 		this.#lastHandoffKey = key;
+		// The tracker entry this op gets is the one forwarded back (RJ4).
+		this.#forward?.watch(handoff.user_op_hash);
 		dispatchTxTracker({
 			type: 'submitted',
 			user_op_hash: handoff.user_op_hash,
 			record_ids: handoff.record_ids,
 			chain_id: handoff.chain_id,
 			maybe_sent: handoff.maybe_sent,
-			submit_block: handoff.submit_block
+			submit_block: handoff.submit_block,
+			admitted: handoff.admitted
 		});
+	}
+
+	/**
+	 * A write-ahead record proven never sent (spec 082 RJ1): the tracker
+	 * forgets it — once per value, like the hand-off.
+	 */
+	#drainWithdraw(view: SignView): void {
+		const withdraw = view.tracker_withdraw;
+		if (!withdraw) return;
+		const key = withdrawKey(withdraw);
+		if (key === this.#lastWithdrawKey) return;
+		this.#lastWithdrawKey = key;
+		dispatchTxTracker({
+			type: 'withdrawn',
+			user_op_hash: withdraw.user_op_hash,
+			record_ids: withdraw.record_ids
+		});
+	}
+
+	/**
+	 * The panel's own failure counts (spec 082 G61): a submit that ended "not
+	 * sent" or refused. Counters and classes only — never a hash or an address.
+	 */
+	#countFailure(view: SignView): void {
+		const error = view.error;
+		// Every view is a fresh object: the failure is told apart by value.
+		const key = error
+			? `${view.request?.id ?? ''}|${error.kind}|${error.detail ?? ''}|${view.failure_refused}`
+			: '';
+		if (key === this.#lastFailure) return;
+		this.#lastFailure = key;
+		if (!error || error.kind !== 'submit_failed') return;
+		countPanelFailure(view.failure_refused ? 'submit.refused' : 'submit.not_sent');
 	}
 }
 

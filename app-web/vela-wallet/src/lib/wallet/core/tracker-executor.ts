@@ -2,7 +2,7 @@
 /**
  * The only place the `tx_tracker` core touches the outside world.
  *
- * Six operations, each one existing service call. No branching on business
+ * Nine operations, each one existing service call. No branching on business
  * meaning: every throttle (3 s receipt, 12 s status, 12 s single-flight
  * reconcile), the 120 s window, the 24 h abandon line and every verdict live in
  * Rust. What lives HERE is exactly what the core's module doc assigns to the
@@ -43,7 +43,9 @@ import type { LocalTransaction } from '$lib/services/transactions-model';
 import { pollUserOpStatus, requestUserOpReceipt } from '$lib/services/tx-reconciler';
 import { rpcCall } from '$lib/services/rpc-adapter';
 
+import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
 import type { TrackLifecycle } from '$lib/core/generated/TrackLifecycle';
+import type { TrackView } from '$lib/core/generated/TrackView';
 import type { TrackPendingRecord } from '$lib/core/generated/TrackPendingRecord';
 import type { TrackShellResult } from '$lib/core/generated/TrackShellResult';
 import type { TrustReceiptLog } from '$lib/core/generated/TrustReceiptLog';
@@ -179,6 +181,48 @@ async function findOpEvent(
 	return { ...found, head_block };
 }
 
+/**
+ * The relay's bundle tx, read from the CHAIN (spec 082 RJ4, G38): the
+ * `eth_getTransactionReceipt` answer through the chain pool, passed on as it
+ * came — `"null"` when the tx is not mined, `null` (no answer) when no node
+ * answered or it answered an error. Which of its logs are the op's own, and
+ * whether the Safe inside executed, is the core's reading, never this file's.
+ */
+async function readTxReceipt(chainId: number, txHash: string): Promise<string | null> {
+	try {
+		const response = await rpcCall('eth_getTransactionReceipt', [txHash], chainId);
+		return response.error ? null : JSON.stringify(response.result ?? null);
+	} catch {
+		return null;
+	}
+}
+
+/** A hash as a log line names it: its first ten characters, never the whole. */
+function short(hash: string | null | undefined): string {
+	return hash ? hash.slice(0, 10) : '';
+}
+
+/**
+ * The tracker's own log lines (spec 082 G61, FR-018): one per change of an
+ * op's status — `tracker: 0x1234abcd not_sent`, `tracker: 0x1234abcd confirmed
+ * tx 0xfeed1234` — so a verdict the panel reached is in the console, not only
+ * on the sheet. `previous` is the view before; an op new to the view is
+ * logged when it is already past pending.
+ */
+export function trackerLogLines(previous: TrackView, next: TrackView): string[] {
+	const before = new Map<string, TrackEntryView>();
+	for (const entry of previous.entries) before.set(entry.user_op_hash, entry);
+	const lines: string[] = [];
+	for (const entry of next.entries) {
+		const was = before.get(entry.user_op_hash);
+		if (was?.status === entry.status && was?.tx_hash === entry.tx_hash) continue;
+		if (!was && (entry.status === 'pending' || entry.status === 'unreachable')) continue;
+		const tx = entry.tx_hash ? ` tx ${short(entry.tx_hash)}` : '';
+		lines.push(`tracker: ${short(entry.user_op_hash)} ${entry.status}${tx}`);
+	}
+	return lines;
+}
+
 export function createTxTrackerExecutor(ports: TrackShellPorts) {
 	/** hash → the authentic logs of the receipt that confirmed it. */
 	const logsByHash = new Map<string, TrustReceiptLog[]>();
@@ -256,6 +300,9 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 				const status = await pollUserOpStatus(operation.user_op_hash, operation.chain_id);
 				const now_ms = Date.now();
 				if (!status) return { type: 'status_unavailable', user_op_hash: hash, now_ms };
+				// Each step of a not-found streak is a line (G61): two of them past
+				// the grace are what ends a may-have-been-sent op "not sent".
+				if (status.status === 'not_found') console.log(`tracker: ${short(hash)} not_found`);
 				return {
 					type: 'status',
 					user_op_hash: hash,
@@ -327,6 +374,18 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 					...found
 				};
 			}
+
+			case 'tx_receipt': {
+				// No auto-add from these logs: a bundle's receipt carries every op
+				// in it, and token_trust is only ever handed an op's own receipt.
+				const receipt_json = await readTxReceipt(operation.chain_id, operation.tx_hash);
+				return {
+					type: 'tx_receipt',
+					user_op_hash: normalize(operation.user_op_hash),
+					now_ms: Date.now(),
+					receipt_json
+				};
+			}
 		}
 	}
 
@@ -372,6 +431,14 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 					logs_json: null,
 					error_json: null,
 					head_block: null
+				};
+			case 'tx_receipt':
+				// No answer: the core asks again at the receipt cadence.
+				return {
+					type: 'tx_receipt',
+					user_op_hash: normalize(operation.user_op_hash),
+					now_ms,
+					receipt_json: null
 				};
 		}
 	}
