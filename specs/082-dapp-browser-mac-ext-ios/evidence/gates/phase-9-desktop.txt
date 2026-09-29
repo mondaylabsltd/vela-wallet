@@ -63,3 +63,23 @@ round-2 tests (all in the counts above)
 
 Not run here: the device rows (DX9, DX-W3, EX13-shape on desktop, S7/S8, DX-G14, G14-num, T181 relaunch) —
 the device re-run T252; no device, app, Chrome or chaos proxy was touched.
+
+REVIEW (DESK_B adversarial reviewer), 2026-09-29, after b600ad18, 0315ca71, fe2a239c — same mirror recipe
+(worktree HEAD fe2a239c + the browser_host.rs:2201-2207 test moved to the four-argument net_health_step; `diff -rq`
+mirror/src worktree/src: only src/wallet/browser_host.rs differs).
+  cargo test --release                                757 passed, 0 failed, 49 ignored   (752 + 5 review tests)
+  cargo test --release --features dev-fixtures        761 passed, 0 failed, 50 ignored
+  cargo clippy --all-targets --features dev-fixtures -- -D warnings   57 findings = the 57 before (48 distinct lines);
+      touched files carry only their pre-existing five (activity_feed.rs:441 redundant closure, sign_request.rs complex
+      type, tracker.rs:525/534 + complex type)
+  cargo clippy --all-targets -- -D warnings           57 = 57, the same
+  live: relay::tests::live 3 passed; user_op::tests::live 1 passed
+  worktree: cargo build --release --features dev-fixtures   Finished release in 2m 20s
+  worktree: cargo test --release --no-run              only the two browser_host.rs:2201/2207 errors (T203)
+  rustfmt --edition 2024 --check on storage.rs, sign_request.rs, send.rs, tracker.rs, activity_feed.rs,
+      dapp_browser.rs   ok
+  review tests: sign_request::tests::records_written_at_once_all_stay (red: 6 of 54 rows),
+      sign_request::tests::the_post_is_cleared_only_with_its_record_on_disk (red),
+      send::tests::a_send_is_on_disk_before_its_post_and_gone_when_never_sent (T220's missing proof; red at its
+      first assertion), send::tests::a_write_ahead_replaces_an_earlier_attempt_but_never_a_landed_payment
+      (red: the relaunch sweep found 0 of 1), activity_feed::tests::a_clipped_request_still_names_its_contract (red)
