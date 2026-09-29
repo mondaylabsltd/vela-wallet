@@ -136,6 +136,19 @@ enum TxRecords {
         store.writeList(VelaStore.Key.transactionHistory, next)
     }
 
+    /// Remove every record of one operation in ONE write (spec 082 RJ1: a
+    /// write-ahead split proven never sent) — never one write per sibling,
+    /// for the reason `writeRecords` gives.
+    @MainActor
+    static func delete(ids: [String], store: VelaStore) {
+        let wanted = Set(ids)
+        guard !wanted.isEmpty else { return }
+        let existing = load(store: store)
+        let next = existing.filter { !wanted.contains($0["id"] as? String ?? "") }
+        guard next.count != existing.count else { return }
+        store.writeList(VelaStore.Key.transactionHistory, next)
+    }
+
     static func timestamp(_ record: [String: Any]) -> Double {
         (record["timestamp"] as? NSNumber)?.doubleValue ?? 0
     }
@@ -184,7 +197,29 @@ enum TxRecords {
             // the core names the row by it. Absent for every other kind.
             "dapp_origin": (record["dappOrigin"] as? String).flatMap { $0.isEmpty ? nil : $0 }
                 .map { $0 as Any } ?? NSNull(),
+            // The call's `data`, for a dApp's transaction (spec 082 RJ16):
+            // the core reads from it who the counterparty is — the transfer's
+            // recipient, or the contract a call went to.
+            "call_data": (rawKind == "dapp_tx" ? callData(record) : nil).map { $0 as Any } ?? NSNull(),
         ]
+    }
+
+    /// The first call's `data` of the request a `dapp_tx` row stored
+    /// (`signedRequest`, the params as signed): `params[0].data`, or the
+    /// first leg's for a `wallet_sendCalls` (`params[0].calls[0].data`).
+    /// `nil` for no calldata, and for a request that was clipped to fit —
+    /// half a call is not a call, and the core must not read one.
+    static func callData(_ record: [String: Any]) -> String? {
+        guard record["requestTruncated"] as? Bool != true,
+              let text = record["signedRequest"] as? String,
+              let params = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [Any],
+              let first = params.first as? [String: Any]
+        else { return nil }
+        let call = (first["calls"] as? [[String: Any]])?.first ?? first
+        guard let data = (call["data"] as? String)?.trimmingCharacters(in: .whitespaces),
+              !data.isEmpty, data.lowercased() != "0x"
+        else { return nil }
+        return data
     }
 
     /// Local midnight for a unix-seconds timestamp, in epoch ms.
