@@ -232,11 +232,17 @@ pub struct SigningStrings {
     pub fee_estimating: SharedString,
     pub fee_token_title: SharedString,
     pub fee_balance: SharedString,
-    /// Spec 079: the send form's own refresh control, its stale line, and
-    /// why a quote failed when the service could not be reached.
+    /// Spec 079: the send form's own refresh control and its stale line.
     pub fee_refresh: SharedString,
     pub fee_stale: SharedString,
-    pub fee_unreachable: SharedString,
+    /// Why a fee failed, per corpus key the core can name
+    /// (`fee_policy::failure_reason_key`, spec 082 RJ13) — resolved here so
+    /// the row never picks the words itself: the relay, a rate-limited chain
+    /// node, a chain node out of reach (`{{chain}}` left for the row).
+    pub fee_reasons: Vec<(&'static str, String)>,
+    /// Spec 082 RJ3: the relay refused the operation — nothing was sent, and
+    /// sending it again meets the same refusal, so no "try again".
+    pub refused: SharedString,
     /// Spec 079 US7: the Trusted Signer route's confirm ("去签名页确认").
     pub open_signer: SharedString,
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
@@ -467,7 +473,19 @@ impl SigningStrings {
             fee_balance: loc.t("componentsUi.gas.rowBalance"),
             fee_refresh: loc.t("send.feeRefresh"),
             fee_stale: loc.t("send.feeStale"),
-            fee_unreachable: loc.t("componentsUi.funding.denialNetworkError"),
+            fee_reasons: FEE_FAILURES
+                .iter()
+                .filter_map(|failure| {
+                    vela_core::app::fee_policy::failure_reason_key(*failure)
+                        .map(|key| (key, loc.t(key).to_string()))
+                })
+                .fold(Vec::new(), |mut keys, (key, text)| {
+                    if !keys.iter().any(|(known, _)| *known == key) {
+                        keys.push((key, text));
+                    }
+                    keys
+                }),
+            refused: s("refused"),
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             tech_function: s("techFunction"),
@@ -503,6 +521,40 @@ impl SigningStrings {
             tech_raw_units: raw("techRawUnits"),
             sent_to_token_contract: s("sendingToTokenContract"),
         }
+    }
+}
+
+/// Every way a fee can fail, so the sheet resolves the words for whichever
+/// the core names — the core picks the key, this only reads it once.
+const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 8] = {
+    use vela_core::app::fee_policy::FeeFailure as F;
+    [
+        F::MissingPublicKey,
+        F::FeeTokenUnavailable,
+        F::QuoteUnavailable,
+        F::CalculationFailed,
+        F::EstimateFailed,
+        F::GasQuoteTooHigh,
+        F::ChainRead { rate_limited: true },
+        F::ChainRead {
+            rate_limited: false,
+        },
+    ]
+};
+
+impl SigningStrings {
+    /// The line under a failed fee, in the core's words for it (spec 082
+    /// RJ13): `None` when the core names none (the row keeps its dash).
+    /// `chain` fills the chain-down sentence's `{{chain}}`.
+    #[must_use]
+    pub fn fee_reason(
+        &self,
+        failure: vela_core::app::fee_policy::FeeFailure,
+        chain: &str,
+    ) -> Option<SharedString> {
+        let key = vela_core::app::fee_policy::failure_reason_key(failure)?;
+        let (_, text) = self.fee_reasons.iter().find(|(known, _)| *known == key)?;
+        Some(SharedString::from(fill(text, &[("chain", chain)])))
     }
 }
 
@@ -594,7 +646,7 @@ mod tests {
             s.signed.as_ref(),
             s.fee_refresh.as_ref(),
             s.fee_stale.as_ref(),
-            s.fee_unreachable.as_ref(),
+            s.refused.as_ref(),
             s.open_signer.as_ref(),
         ] {
             assert!(
@@ -605,6 +657,41 @@ mod tests {
             );
         }
         assert!(s.tx_typical_time.contains("{{estSecs}}"));
+    }
+
+    /// Spec 082 RJ3 / RJ13: the refusal and every reason the core can name
+    /// under a failed fee resolve — none comes back as its key or with a
+    /// placeholder left in — and the chain-down one names the chain.
+    #[test]
+    fn the_refusal_and_the_fee_reasons_resolve() {
+        use vela_core::app::fee_policy::{FeeFailure, failure_reason_key};
+        let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
+        assert!(
+            !s.refused.starts_with("componentsUi."),
+            "echoed a key: {}",
+            s.refused
+        );
+        for failure in FEE_FAILURES {
+            match failure_reason_key(failure) {
+                Some(key) => {
+                    let line = s
+                        .fee_reason(failure, "Gnosis")
+                        .unwrap_or_else(|| unreachable!("{failure:?} names {key}"));
+                    assert!(!line.contains(key), "echoed a key: {line}");
+                    assert!(!line.contains("{{"), "a placeholder left: {line}");
+                }
+                None => assert!(s.fee_reason(failure, "Gnosis").is_none(), "{failure:?}"),
+            }
+        }
+        let down = s
+            .fee_reason(
+                FeeFailure::ChainRead {
+                    rate_limited: false,
+                },
+                "Gnosis",
+            )
+            .unwrap_or_default();
+        assert!(down.contains("Gnosis"), "{down}");
     }
 
     #[test]

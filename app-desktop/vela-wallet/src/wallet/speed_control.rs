@@ -109,6 +109,9 @@ struct FeeSession {
     /// A deployment read is out before the dispatch — as much "measuring" as
     /// the core's own `busy`.
     reading: bool,
+    /// The last deployment read got no answer and the chain's nodes had only
+    /// rate limits to give (the pool's own signal, spec 082 RJ13).
+    read_rate_limited: bool,
     generation: u64,
 }
 
@@ -123,6 +126,7 @@ impl FeeSession {
             ask: None,
             deployed: None,
             reading: false,
+            read_rate_limited: false,
             generation: 0,
         }
     }
@@ -224,6 +228,16 @@ impl SpeedControl {
     /// yet nothing is priced — to a person, the same as an unreachable relay.
     pub fn unanswered(&self) -> bool {
         self.fee.ask.is_some() && !self.fee.reading && self.fee.deployed.is_none()
+    }
+
+    /// [`Self::unanswered`] as the failure it is (spec 082 RJ13, G48): a
+    /// chain read — the chain's node, rate-limited or out of reach — never
+    /// the relay, and never the person's network.
+    pub fn chain_read(&self) -> Option<vela_core::app::fee_policy::FeeFailure> {
+        self.unanswered()
+            .then_some(vela_core::app::fee_policy::FeeFailure::ChainRead {
+                rate_limited: self.fee.read_rate_limited,
+            })
     }
 
     /// No session has an effect out.
@@ -414,9 +428,16 @@ fn ask_in_force<H: SpeedHost>(host: &mut H, ask: QuoteAsk, cx: &mut Context<H>) 
     let account = ask.account.clone();
     let chain_id = ask.chain_id;
     cx.spawn(async move |host, cx| {
-        let deployed = cx
+        let (deployed, rate_limited) = cx
             .background_executor()
-            .spawn(async move { chain::is_deployed(&account, chain_id) })
+            .spawn(async move {
+                let deployed = chain::is_deployed(&account, chain_id);
+                // Why it got no answer, from the pool's own signal — asked
+                // here, off the window's thread, and only when it failed.
+                let rate_limited = deployed.is_err()
+                    && crate::executor::pool::rate_limited_chains().contains(&chain_id);
+                (deployed, rate_limited)
+            })
             .await;
         host.update(cx, |host, cx| {
             let control = host.speed_control();
@@ -424,6 +445,7 @@ fn ask_in_force<H: SpeedHost>(host: &mut H, ask: QuoteAsk, cx: &mut Context<H>) 
                 return;
             }
             control.fee.reading = false;
+            control.fee.read_rate_limited = rate_limited;
             match deployed {
                 // An indeterminate read never reaches the core: guessing
                 // "deployed" ships an op without initCode, guessing

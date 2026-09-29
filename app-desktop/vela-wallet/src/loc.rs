@@ -18,7 +18,13 @@ impl Loc {
     /// → `LANG` → `en` (spec 007 FR-007) — resolved through the same ladder
     /// i18next uses (`resolve_language`).
     pub fn from_env() -> Self {
-        let requested = requested_tag();
+        Self::for_tag(&requested_tag())
+    }
+
+    /// The engine for one requested tag, whatever the environment says —
+    /// what a test that asserts a language's own words builds.
+    pub fn for_tag(requested: &str) -> Self {
+        let requested = requested.to_owned();
 
         let mut engine = match I18n::embedded() {
             Ok(engine) => engine,

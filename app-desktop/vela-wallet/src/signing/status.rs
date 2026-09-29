@@ -135,15 +135,21 @@ pub fn approved(
         ));
     }
     // A refusal AFTER the approval — the submission failed. The page already
-    // has its error; this is the send flow's sentence for it. A refusal
-    // before (a 4902, the unlimited gate) stays on the form, where the reason
-    // is drawn beside what was asked.
+    // has its error; this is the send flow's sentence for it — or, when the
+    // relay refused the operation (spec 082 RJ3, `failure_refused`), that
+    // sentence: nothing was sent and sending again meets the same refusal, so
+    // no "try again". A refusal before (a 4902, the unlimited gate) stays on
+    // the form, where the reason is drawn beside what was asked.
     if let Some(error) = sign.error.as_ref()
         && error.kind != SignErrorKind::UserRejected
         && (sign.pending_op_hash.is_some() || error.kind == SignErrorKind::SubmitFailed)
     {
         let mut captions = lead();
-        captions.push(s.error_generic.clone());
+        captions.push(if sign.failure_refused {
+            s.refused.clone()
+        } else {
+            s.error_generic.clone()
+        });
         return Some(receipt(
             ReceiptStage::Failed,
             s.receipt_failed.clone(),
@@ -280,9 +286,16 @@ fn drawn(
             out.explorer_tx = tx;
             out
         }
-        // The relay refused it or never had it: nothing was sent.
+        // The relay never had it: nothing was sent, and a retry may reach it.
+        // Or it refused it (spec 082 RJ3): nothing was sent either, and a
+        // retry meets the same refusal — the refusal's own sentence, no
+        // "try again".
         SignEndingState::NotSent | SignEndingState::Refused => {
-            captions.push(s.error_generic.clone());
+            captions.push(if *state == SignEndingState::Refused {
+                s.refused.clone()
+            } else {
+                s.error_generic.clone()
+            });
             let mut out = receipt(
                 ReceiptStage::Failed,
                 s.receipt_failed.clone(),
@@ -659,6 +672,27 @@ mod tests {
             !failed.captions.iter().any(|line| line.contains("relay")),
             "no raw relay text on a screen"
         );
+
+        // Spec 082 RJ3 (G36, DX-W3): the relay refused it at submit — the
+        // refusal's words, with no "try again" beside a lone Done.
+        let refused = approved(
+            &view(|v| {
+                v.error = Some(SignErrorNotice {
+                    kind: SignErrorKind::SubmitFailed,
+                    detail: Some(vela_core::user_op::REFUSED_DAPP_DETAIL.to_owned()),
+                });
+                v.failure_refused = true;
+            }),
+            true,
+            Some(&summary()),
+            None,
+            &clock(0.),
+            &s,
+        )
+        .unwrap_or_else(|| unreachable!("approved"));
+        assert_eq!(refused.stage, ReceiptStage::Failed);
+        assert_eq!(refused.title, s.receipt_failed);
+        assert_eq!(refused.captions, vec![summary(), s.refused.clone()]);
         for kind in [
             SignErrorKind::UserRejected,
             SignErrorKind::UnsupportedChain,
@@ -707,9 +741,12 @@ mod tests {
             "the explorer says why"
         );
 
+        // Spec 082 RJ3 (G36): refused — nothing sent, and no "try again".
         let rejected = at(TrackStatus::Rejected, TrackOutcome::Final, None);
         assert_eq!(rejected.stage, ReceiptStage::Failed);
-        assert!(rejected.captions.contains(&s.error_generic));
+        assert_eq!(rejected.title, s.receipt_failed);
+        assert!(rejected.captions.contains(&s.refused));
+        assert!(!rejected.captions.contains(&s.error_generic));
 
         // Spec 082 RA4: never had it — nothing was sent, not "failed" on time.
         let not_sent = at(TrackStatus::NotSent, TrackOutcome::Final, None);
@@ -899,6 +936,14 @@ mod tests {
         assert_eq!(not_sent.title, s.receipt_failed);
         assert_eq!(not_sent.captions, vec![s.error_generic.clone()]);
         assert!(not_sent.explorer_tx.is_none());
+
+        // Spec 082 RJ3: the cross, "failed", and the refusal's sentence —
+        // never the "please try again" one, and nothing to open.
+        let refused = draw(SignEndingState::Refused);
+        assert_eq!(refused.stage, ReceiptStage::Failed);
+        assert_eq!(refused.title, s.receipt_failed);
+        assert_eq!(refused.captions, vec![s.refused.clone()]);
+        assert!(refused.explorer_tx.is_none());
 
         let following = |outcome, fee_held| {
             draw(SignEndingState::Following {

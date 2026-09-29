@@ -572,10 +572,16 @@ impl SigningHost {
         self.speed.measuring()
     }
 
-    /// The fee in force was never asked of the core: its deployment read
-    /// could not answer.
-    pub fn fee_unanswered(&self) -> bool {
-        self.speed.unanswered()
+    /// The fee in force was never asked of the core: its deployment read got
+    /// no answer (spec 082 RJ13) — the chain read's failure, and the chain it
+    /// names, for the fee row's words.
+    pub fn fee_unanswered(&self) -> Option<crate::signing::live::ChainReadFailure> {
+        self.speed
+            .chain_read()
+            .map(|failure| crate::signing::live::ChainReadFailure {
+                failure,
+                chain_id: self.chain_id,
+            })
     }
 
     /// The person can still decide: the sheet is up, nothing is signing,

@@ -345,64 +345,53 @@ pub fn sim_blocks(
         .iter()
         .find(|chain| chain.chain_id == chain_id)
         .map_or_else(|| "—".to_owned(), |chain| chain.native_symbol.to_owned());
+    // `−8,450` / `+2.1` / `−0.000000000000001`: the core's rule (spec 082
+    // RJ15, G49) — a zero or unreadable delta is `None` and not drawn, and a
+    // delta the ladder would round to `0` is written exactly, never `−0`.
+    let preset = crate::executor::format_prefs::current().number;
+    let signed_amount = |delta: &str, decimals: u32| {
+        vela_core::l10n::number::format_signed_token_amount(delta, decimals, preset)
+            .map(SharedString::from)
+    };
     let rows: Vec<(SharedString, SharedString, Tone)> = judgments
         .iter()
-        .map(|judgment| match judgment {
-            J::Native { delta } => (
+        .filter_map(|judgment| match judgment {
+            J::Native { delta } => Some((
                 SharedString::from(native.clone()),
-                signed_amount(delta, 18),
+                signed_amount(delta, 18)?,
                 delta_tone(delta),
-            ),
+            )),
             J::Erc20Trusted {
                 delta,
                 symbol,
                 decimals,
                 ..
-            } => (
+            } => Some((
                 SharedString::from(symbol.clone()),
-                signed_amount(delta, *decimals),
+                signed_amount(delta, *decimals)?,
                 delta_tone(delta),
-            ),
+            )),
             // No attacker-controlled amount on screen. The direction is the
             // core's and it is safe to state; the figure is not.
-            J::Erc20Unverified { delta, .. } => (
+            J::Erc20Unverified { delta, .. } => Some((
                 s.balance_unverified_token.clone(),
                 SharedString::from(if delta.starts_with('-') { "−" } else { "+" }),
                 Tone::Caution,
-            ),
+            )),
         })
         .collect();
 
+    // A zero delta changes nothing and is never drawn (RC4/RC6); a block of
+    // nothing would read as "nothing moves", which the simulation did not say.
+    if rows.is_empty() {
+        return Vec::new();
+    }
     vec![Block::Balances {
         title: s.balances_title.clone(),
         rows,
         note: None,
         note_tone: Tone::Neutral,
     }]
-}
-
-/// `−8,450` / `+2.1`, from a signed base-unit string.
-///
-/// The minus is U+2212, as everywhere else money is negative in this app.
-fn signed_amount(delta: &str, decimals: u32) -> SharedString {
-    let negative = delta.starts_with('-');
-    let digits = delta.trim_start_matches(['-', '+']);
-    let Ok(raw) = digits.parse::<f64>() else {
-        // Unparseable: the direction is still true, and a wrong number is
-        // worse than no number.
-        return SharedString::from(if negative { "−" } else { "+" });
-    };
-    #[allow(clippy::cast_possible_wrap, reason = "token decimals are small")]
-    let amount = raw / 10f64.powi(decimals as i32);
-    SharedString::from(format!(
-        "{}{}",
-        if negative { "\u{2212}" } else { "+" },
-        vela_core::l10n::number::format_token_amount(
-            amount,
-            crate::executor::format_prefs::current().number,
-            false,
-        )
-    ))
 }
 
 fn delta_tone(delta: &str) -> Tone {
@@ -563,6 +552,68 @@ mod sim_block_tests {
         };
         assert_eq!(rows[0].0, "xDAI", "Gnosis' own coin");
         assert_eq!(rows[0].1, "−0.01");
+    }
+
+    /// Spec 082 RJ15 (G49, G14-num): a numeric `value` of 1000 wei read
+    /// `余额变化 xDAI −0` — the ladder rounded it to 0 and kept its minus. The
+    /// core writes a dust delta exactly; a zero delta, or one that is not a
+    /// number, is not drawn at all, and a block with nothing left in it is
+    /// not drawn either.
+    #[test]
+    fn a_dust_delta_is_written_exactly_and_a_zero_one_not_at_all() {
+        let s = strings();
+        let blocks = sim_blocks(
+            &[J::Native {
+                delta: "-1000".to_owned(),
+            }],
+            None,
+            100,
+            &s,
+        );
+        let Some(Block::Balances { rows, .. }) = blocks.first() else {
+            unreachable!("a balances block");
+        };
+        assert_eq!(rows[0].1, "\u{2212}0.000000000000001");
+        assert_eq!(
+            format!("{}{} {}", "", rows[0].1, rows[0].0),
+            "−0.000000000000001 xDAI"
+        );
+        for nothing in ["0", "-0", "soon"] {
+            assert!(
+                sim_blocks(
+                    &[J::Native {
+                        delta: nothing.to_owned()
+                    }],
+                    None,
+                    100,
+                    &s
+                )
+                .is_empty(),
+                "{nothing}"
+            );
+        }
+        // A zero row beside a real one: only the real one is drawn.
+        let blocks = sim_blocks(
+            &[
+                J::Native {
+                    delta: "0".to_owned(),
+                },
+                J::Erc20Trusted {
+                    token: "0xdd".to_owned(),
+                    delta: "-1000000".to_owned(),
+                    symbol: "USDC".to_owned(),
+                    decimals: 6,
+                },
+            ],
+            None,
+            100,
+            &s,
+        );
+        let Some(Block::Balances { rows, .. }) = blocks.first() else {
+            unreachable!("a balances block");
+        };
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "USDC");
     }
 }
 
@@ -1330,13 +1381,15 @@ pub fn fee_model(
     // the fee in hand is the previous speed's: "estimating", never its money.
     // Only the figure gives way — the coin list and its warning stay.
     let another_tier = fee_of_another_tier(fee, speed_tier);
-    // Spec 079: a quote the service could not give — the relay unreachable,
-    // an estimate that timed out — is asked again by itself, and the row says
-    // so in words instead of a bare "—". One that no retry fixes (no public
-    // key, a calculation that cannot be done) keeps the dash.
-    let unreachable = fee
+    // Spec 079 / 082 RJ13: a quote that failed for a reason that can pass is
+    // asked again by itself, and the row says why in the core's words
+    // (`fee_policy::failure_reason_key`) instead of a bare "—". One the core
+    // names no reason for (no public key, a calculation that cannot be done)
+    // keeps the dash.
+    let reason = fee
         .failed
-        .is_some_and(|failure| vela_core::app::fee_policy::requote_delay_ms(failure, 1).is_some());
+        .and_then(|failure| s.fee_reason(failure, &crate::flows::live::chain_name(chain_id)));
+    let unreachable = reason.is_some();
     // The send screen's formatter, not a second one: two answers about what a
     // transaction costs, on two screens pricing the same operation, is how
     // they start disagreeing. An unpriced fee renders as its "—" rather than
@@ -1402,8 +1455,7 @@ pub fn fee_model(
                     .collect(),
             )
         }),
-        warning: insufficient_gas_warning(fee, s)
-            .or_else(|| unreachable.then(|| s.fee_unreachable.clone())),
+        warning: insufficient_gas_warning(fee, s).or(reason),
         refresh: Some(s.fee_refresh.clone()),
         refreshing: fee.busy,
         // "From a while ago" is a fact about a number: not over a row with no
@@ -1413,12 +1465,28 @@ pub fn fee_model(
     }
 }
 
+/// The speed control's deployment read got no answer (spec 082 RJ13): the
+/// failure the shell gives it — `FeeFailure::ChainRead`, rate-limited or
+/// not — and the chain whose node it was.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChainReadFailure {
+    pub failure: vela_core::app::fee_policy::FeeFailure,
+    pub chain_id: u32,
+}
+
 /// Spec 079: what the fee row knows that the fee machine does not — the
 /// speed control's own deployment read. A read that could not answer never
 /// reaches the core (guessing would price a different operation), so the
-/// core's view shows no failure; the row says the same thing it says for an
-/// unreachable relay, and the control turns while a read is out.
-pub fn fee_row_state(model: &mut FeeModel, measuring: bool, unanswered: bool, s: &SigningStrings) {
+/// core's view shows no failure; the row says why in the core's words for a
+/// chain read (082 RJ13, G48: "rate-limited · retrying", or the chain out of
+/// reach — never "can't reach Vela"), and the control turns while a read is
+/// out.
+pub fn fee_row_state(
+    model: &mut FeeModel,
+    measuring: bool,
+    unanswered: Option<ChainReadFailure>,
+    s: &SigningStrings,
+) {
     if let FeeModel::OnChain {
         value,
         warning,
@@ -1431,10 +1499,13 @@ pub fn fee_row_state(model: &mut FeeModel, measuring: bool, unanswered: bool, s:
         if measuring {
             *stale_note = None;
         }
-        if unanswered && !measuring {
+        if let Some(read) = unanswered
+            && !measuring
+        {
             *value = SharedString::default();
             if warning.is_none() {
-                *warning = Some(s.fee_unreachable.clone());
+                *warning =
+                    s.fee_reason(read.failure, &crate::flows::live::chain_name(read.chain_id));
             }
         }
     }
@@ -2860,7 +2931,12 @@ mod fee_tests {
         let mut unreachable = crate::core_host::CoreHost::<FeePolicy>::new().view();
         unreachable.failed = Some(FeeFailure::QuoteUnavailable);
         let (value, warning, ..) = parts(row(&unreachable));
-        assert_eq!(warning, Some(s.fee_unreachable.clone()));
+        assert_eq!(
+            warning,
+            s.fee_reason(FeeFailure::QuoteUnavailable, "Ethereum"),
+            "the core's words for a relay failure"
+        );
+        assert!(warning.is_some());
         assert!(value.is_empty(), "the sentence, not a dash: {value}");
 
         let mut unfixable = unreachable.clone();
@@ -2879,15 +2955,81 @@ mod fee_tests {
         assert!(stale.is_none(), "not old while a fresh one is coming");
 
         // The speed control's own deployment read, which the core never saw.
+        let unanswered = |rate_limited| ChainReadFailure {
+            failure: FeeFailure::ChainRead { rate_limited },
+            chain_id: 1,
+        };
         let mut model = row(&crate::core_host::CoreHost::<FeePolicy>::new().view());
-        fee_row_state(&mut model, false, true, &s);
+        fee_row_state(&mut model, false, Some(unanswered(false)), &s);
         let (value, warning, ..) = parts(model);
-        assert_eq!(warning, Some(s.fee_unreachable.clone()));
+        assert_eq!(
+            warning,
+            s.fee_reason(
+                unanswered(false).failure,
+                &crate::flows::live::chain_name(1)
+            )
+        );
         assert!(value.is_empty());
         let mut model = row(&crate::core_host::CoreHost::<FeePolicy>::new().view());
-        fee_row_state(&mut model, true, false, &s);
+        fee_row_state(&mut model, true, None, &s);
         let (_, _, _, refreshing, _) = parts(model);
         assert!(refreshing);
+    }
+
+    /// Spec 082 RJ13 (G48, DX-G14): with no fault set, Ethereum's public
+    /// node rate-limited the deployment read and the row said "can't reach
+    /// Vela — check your network" over a shut slide. It is the chain's node,
+    /// rate-limited, and the row says so ("被限流 · 正在自动重试"); a node out
+    /// of reach names its chain; neither blames Vela.
+    #[test]
+    fn a_rate_limited_chain_read_names_the_node_not_vela() {
+        use vela_core::app::fee_policy::FeeFailure;
+        let zh = SigningStrings::resolve(&crate::loc::Loc::for_tag("zh"));
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let warning_of = |read: ChainReadFailure, s: &SigningStrings| {
+            let mut model = fee_model(
+                &clear,
+                &crate::core_host::CoreHost::<FeePolicy>::new().view(),
+                read.chain_id,
+                false,
+                s,
+                "zh",
+                None,
+                crate::wallet::live::Money::usd(),
+            );
+            fee_row_state(&mut model, false, Some(read), s);
+            match model {
+                FeeModel::OnChain { warning, value, .. } => {
+                    assert!(value.is_empty());
+                    warning
+                }
+                _ => unreachable!("a transaction has a fee row"),
+            }
+        };
+        let limited = ChainReadFailure {
+            failure: FeeFailure::ChainRead { rate_limited: true },
+            chain_id: 1,
+        };
+        assert_eq!(
+            warning_of(limited, &zh).as_deref(),
+            Some("被限流 · 正在自动重试")
+        );
+        let relay = s.fee_reason(FeeFailure::QuoteUnavailable, "Ethereum");
+        assert_ne!(warning_of(limited, &s), relay, "never the relay's words");
+        let down = warning_of(
+            ChainReadFailure {
+                failure: FeeFailure::ChainRead {
+                    rate_limited: false,
+                },
+                chain_id: 1,
+            },
+            &s,
+        )
+        .unwrap_or_default();
+        assert!(down.contains(&crate::flows::live::chain_name(1)), "{down}");
+        assert_ne!(Some(down), relay);
     }
 
     /// The coin list opens in the sheet with every coin the relay takes —
