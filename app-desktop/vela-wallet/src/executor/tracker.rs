@@ -967,14 +967,15 @@ mod tests {
     }
 
     /// Spec 082 RJ1: a written-ahead op proven never sent is withdrawn — the
-    /// tracker forgets it and patches nothing.
+    /// tracker forgets it and patches nothing. The write-ahead's hand-off
+    /// names no record (the POST's verdict names them, 082 second review).
     #[test]
     fn a_withdrawn_op_is_forgotten() {
         use crate::core_host::CoreHost;
         let mut host = CoreHost::<TxTracker>::new();
         let _ = host.dispatch(Event::Submitted {
             user_op_hash: "0xop".to_owned(),
-            record_ids: vec!["r1".to_owned()],
+            record_ids: Vec::new(),
             chain_id: 100,
             maybe_sent: true,
             submit_block: None,
