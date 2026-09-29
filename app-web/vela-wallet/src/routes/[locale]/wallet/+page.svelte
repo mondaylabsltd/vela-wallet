@@ -1931,6 +1931,9 @@
 						}
 						if (sendView?.show_contact_picker)
 							sendSession?.dispatch({ type: 'close_contact_picker' });
+						// The fee-coin sheet closed without a pick: it is closed, not
+						// merely hidden until the next re-render raises it again.
+						if (feeSheetOpen) feeSheetOpen = false;
 					}}
 					send={sendActions}
 					batch={batchActions}
