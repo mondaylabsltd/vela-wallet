@@ -45,3 +45,23 @@ Proof tests added per task (red before the change, green at 9b16c602):
   T234 services/bug-report.test.ts (+3)
 
 Not run here (device verification is a later step): no device, no running Chrome for Testing, no chaos proxy was touched.
+
+WEB_B adversarial review re-run (2026-09-29), at 38423928 (four fixes on top of 91aba157: 4a0d8b4c, fc39e209 + f63b25b5,
+35fab379, 38423928 — see tasks.md, the review note under T235):
+  pnpm test:unit -- --run          155 files, 2225 passed, 5 skipped, 0 failed (was 2220: +6 red-first tests, −1 test of a deleted helper)
+                                   (an earlier full run under load average ~89 timed out rpc-pool-executor "USER_OP_STATUS_METHOD" at
+                                   31.8 s and passkey-fixture at 8.9 s; both pass alone and in the full run above)
+  pnpm check                       svelte-check 1587 files, 0 errors, 0 warnings
+  prettier --check + eslint        clean on every file the review touched
+  pnpm build                       ok
+  node extension/build.mjs         ok — extension/dist 37.6 MB, 120 pages, loads vela_core_bg.3cf42392a06f.wasm
+  node scripts/check-event-payloads.mjs
+                                   0 mismatches · 527 literal dispatch sites checked · 2 skipped
+  Isolated e2e (4174)              full run: 298 passed, 25 failed (323). 17 of the 25 are webkit settings/preferences tests after the
+                                   wrangler server on 4174 stopped answering at test 307 ("Could not connect to the server");
+                                   rerun alone (webkit: preferences, settings-desktop, settings-persistence): 18/18 passed.
+                                   The other 8 are the pre-existing classes above: accounts.e2e.ts:174, welcome-layout.e2e.ts:130 (390px,
+                                   1440px) and :190, firefox NS_BINDING_ABORTED on reload (home-truth :91 :107 :124, parallel-entry :61).
+                                   Every money suite passed: relay-faults, reopen-pending (3 engines), send-lands, signing-scenarios,
+                                   extension-lifecycle (G35), extension-signing, extension-live-provider, activity-delete,
+                                   tx-detail-account-switch, fee-coin-unheld, desktop-send, sweep, batch.
