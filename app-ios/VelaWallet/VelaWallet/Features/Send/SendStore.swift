@@ -48,7 +48,7 @@ final class SendStore {
         self.core = CoreStore(
             bridge: SendCore(),
             perform: { [executor] operation in await executor.perform(operation) },
-            onView: { [weak self] view in self?.view = view },
+            onView: { [weak self] view in self?.commit(view) },
             onFault: { VelaLog.failure(.sign, kind: "send_fault", VelaLog.error($0)) }
         )
         // Two ports close over this store, so they are installed after it
@@ -272,6 +272,31 @@ final class SendStore {
     /// the machine once however often the tracker's view is rebuilt.
     private var heardOutcome: [String: String] = [:]
 
+    /// The tracker's last view, whatever op it was about.
+    ///
+    /// Since the write-ahead (spec 082 RJ1) the tracker has the op BEFORE its
+    /// POST, so it can reach its verdict while the relay's reply is still out
+    /// — the chain check finds the landed op while that reply is being lost.
+    /// This journey learns which op is its own only when the reply (or its
+    /// loss) comes back, and by then the tracker may never change again: a
+    /// terminal entry stops its clock, and a may-have-been-sent verdict hands
+    /// it nothing new. So the verdict it already has is read at that moment
+    /// (`commit`), not waited for — or the receipt says "may have been sent"
+    /// over money the tracker saw land (RJ4, G37 on the Send screen).
+    private var lastTracker: TrackViewWire?
+
+    /// The core's view. When it first names this journey's op, the tracker's
+    /// verdict so far is handed over at once.
+    private func commit(_ next: SendViewWire) {
+        let before = view?.userOpHash
+        view = next
+        guard let op = next.userOpHash, !op.isEmpty,
+              op.caseInsensitiveCompare(before ?? "") != .orderedSame,
+              let lastTracker
+        else { return }
+        trackerChanged(lastTracker)
+    }
+
     /// The TRACKER's view, as the receipt's verdict (spec 082): the core's
     /// one mapping (`sendReceiptOutcomeOf`) — confirmed, failed (a revert, a
     /// fee rejection, or a may-have-been-sent op the relay never had), held
@@ -279,6 +304,7 @@ final class SendStore {
     /// on the verdict itself, not on the status alone: a fee hold and an
     /// acknowledgement are both "pending" to the tracker.
     func trackerChanged(_ view: TrackViewWire) {
+        lastTracker = view
         guard let op = self.view?.userOpHash, !op.isEmpty,
               let entry = view.entry(userOpHash: op),
               let json = try? sendReceiptOutcomeOf(trackEntryJson: entry.coreJSON),
