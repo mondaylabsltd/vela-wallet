@@ -111,6 +111,39 @@ const workerLog = (wallet: Page) =>
 		return ((all['vela.sw.log'] as string[] | undefined) ?? []).join('\n');
 	});
 
+interface HistoryRow {
+	userOpHash?: string;
+	status?: string;
+	chainId?: number;
+}
+
+/**
+ * The wallet's own records of an op hash (`vela.transactionHistory`, IndexedDB
+ * — the store the panel writes and the tracker resumes from). Every extension
+ * page shares it with the panel.
+ */
+const historyOf = (wallet: Page, opHash: string) =>
+	wallet.evaluate(
+		(hash) =>
+			new Promise<HistoryRow[]>((resolve, reject) => {
+				const open = indexedDB.open('vela', 1);
+				open.onerror = () => reject(open.error);
+				open.onsuccess = () => {
+					const read = open.result
+						.transaction('kv', 'readonly')
+						.objectStore('kv')
+						.get('vela.transactionHistory');
+					read.onerror = () => reject(read.error);
+					read.onsuccess = () => {
+						const rows: HistoryRow[] =
+							typeof read.result === 'string' ? JSON.parse(read.result) : [];
+						resolve(rows.filter((r) => r.userOpHash?.toLowerCase() === hash.toLowerCase()));
+					};
+				};
+			}),
+		opHash
+	);
+
 /** What the page's provider answered, per method (the test dApp's own record). */
 const results = (page: Page) =>
 	page.evaluate(
@@ -610,9 +643,11 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 
 		expect(await asked).toEqual({ ok: true, result: OP });
 		await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
-		const log = await workerLog(wallet);
-		expect(log).toMatch(/req\.answered cause=surface_closed maybe_sent=1/);
-		expect(log).not.toMatch(/req\.settled cause=surface_closed/);
+		// Logged after the page took the answer: waited for, not read once.
+		await expect
+			.poll(() => workerLog(wallet), { timeout: 5_000 })
+			.toMatch(/req\.answered cause=surface_closed maybe_sent=1/);
+		expect(await workerLog(wallet)).not.toMatch(/req\.settled cause=surface_closed/);
 		// The page's receipt reads for that hash are translated from now on (RF3).
 		const remembered = await wallet.evaluate(
 			(op) => (window as unknown as ChromeStorage).chrome.storage.local.get(`vela.ext.op.${op}`),
@@ -687,6 +722,13 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 			const claimLine = /(\S+) req\.claim phase=submit live=true/.exec(await workerLog(wallet));
 			expect(claimLine).not.toBeNull();
 			expect(Date.parse(claimLine![1])).toBeLessThanOrEqual(sent.at);
+			// RJ1, which the hash rests on: the wallet wrote the op down under that
+			// hash before the bytes left — pending, for the tracker to follow. A
+			// page told a hash the wallet holds no record of would wait on an op
+			// nothing ever closes.
+			const ahead = await historyOf(wallet, opHash);
+			expect(ahead).toHaveLength(1);
+			expect(ahead[0]).toMatchObject({ status: 'pending', chainId: claimed[0].chainId });
 
 			// Chrome's ✕, while the op's fate is unknown.
 			await inSidePanel(wallet, 'panel.close();').catch(() => {});
@@ -695,9 +737,12 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 
 			// One answer: no settlement and no second answer, however it was
 			// reached — the port going (`surface_closed`) or the panel's own
-			// teardown (`surface_settled`).
+			// teardown (`surface_settled`). The worker logs it after the page took
+			// it, so the line is waited for, not read once.
+			await expect
+				.poll(() => workerLog(wallet), { timeout: 5_000 })
+				.toMatch(/req\.answered cause=surface_(closed|settled) maybe_sent=1/);
 			const log = await workerLog(wallet);
-			expect(log).toMatch(/req\.answered cause=surface_(closed|settled) maybe_sent=1/);
 			expect(log.match(/maybe_sent=1/g)).toHaveLength(1);
 			expect(log).not.toMatch(/req\.settled/);
 			await page.waitForTimeout(1_000);
@@ -709,6 +754,11 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 				opHash
 			);
 			expect(remembered[`vela.ext.op.${opHash}`]).toMatchObject({ chainId: claimed[0].chainId });
+			// The record outlives the panel as it was: still pending, neither failed
+			// nor dropped as "never sent" — the tracker alone closes it.
+			expect(await historyOf(wallet, opHash)).toEqual([
+				expect.objectContaining({ status: 'pending' })
+			]);
 			// The panel's teardown aborts the POST in flight, and the pool may
 			// fail it over — the SAME signed op again, which the relay knows by
 			// its hash. Never a second op: that would be a second payment.
