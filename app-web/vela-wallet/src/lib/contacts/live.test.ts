@@ -257,6 +257,7 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		kind: partial.direction === 'in' ? 'receive' : 'send',
 		status: 'confirmed',
 		site: null,
+		counterparty_role: 'recipient',
 		...partial
 	};
 }

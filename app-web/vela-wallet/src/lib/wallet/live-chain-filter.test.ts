@@ -72,7 +72,8 @@ function item(id: string, chain_id: number): FeedItem {
 		batch: null,
 		kind: 'receive',
 		status: 'confirmed',
-		site: null
+		site: null,
+		counterparty_role: 'recipient'
 	};
 }
 

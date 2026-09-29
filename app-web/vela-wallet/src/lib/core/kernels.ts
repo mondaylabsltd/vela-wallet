@@ -761,14 +761,43 @@ export function typicalInclusionSeconds(chainId: number): number {
 }
 
 /**
+ * A `FeeFailure` as the wasm exports take it: the wire name for the plain
+ * variants, the JSON for `ChainRead` (spec 082 RJ13), which is an object.
+ */
+function feeFailureWire(failure: FeeFailure): string {
+	return typeof failure === 'string' ? failure : JSON.stringify(failure);
+}
+
+/**
  * The wait before automatic fee re-quote `attempt` (1-based) after `failure`,
- * or `null` when no retry can fix it (`fee_policy::requote_delay_ms`, spec 079:
- * 3 s, 6 s, 12 s, then every 15 s for a relay out of reach or a busy estimate;
- * never for a missing public key or a calculation that cannot come out). The
- * signing sheet re-asks on the schedule every other client uses.
+ * or `null` when no retry can fix it (`fee_policy::requote_delay_ms`: 3 s,
+ * 6 s, then every 8 s for a relay out of reach, a busy estimate or a chain
+ * read that got no answer — spec 082 RJ12; never for a missing public key or
+ * a calculation that cannot come out). The signing sheet re-asks on the
+ * schedule every other client uses.
  */
 export function feeRequoteDelayMs(failure: FeeFailure, attempt: number): number | null {
-	return wasm.feeRequoteDelayMs(failure, attempt) ?? null;
+	return wasm.feeRequoteDelayMs(feeFailureWire(failure), attempt) ?? null;
+}
+
+/**
+ * The bound on each automatic fee re-quote, in ms (`fee_policy::REQUOTE_TIMEOUT_MS`,
+ * spec 082 RJ12): a re-ask that has not settled by then is given up and the
+ * next one is scheduled, so the fee is back within wait + bound of the relay
+ * returning.
+ */
+export function feeRequoteTimeoutMs(): number {
+	return wasm.feeRequoteTimeoutMs();
+}
+
+/**
+ * The corpus key of the reason line under a failed fee, or `null` for none
+ * (`fee_policy::failure_reason_key`, spec 082 RJ13): the relay out of reach,
+ * a rate-limited chain node, or a chain node out of reach (`explore.chainDown`,
+ * whose `{{chain}}` the shell fills). The shell never picks these words itself.
+ */
+export function feeFailureReasonKey(failure: FeeFailure): string | null {
+	return wasm.feeFailureReasonKey(feeFailureWire(failure)) ?? null;
 }
 
 /**
@@ -895,6 +924,61 @@ export function userOpSubmitStep(
 /** The dApp's `-32603` detail for an op that was not sent and has no refusal to quote (RA10). */
 export function userOpNotSentDetail(): string {
 	return wasm.userOpNotSentDetail();
+}
+
+/**
+ * The dApp's `-32603` detail for an op the relay refused (spec 082 RJ3,
+ * `user_op::REFUSED_DAPP_DETAIL`): "the network refused this transaction;
+ * nothing was sent".
+ */
+export function userOpRefusedDappDetail(): string {
+	return wasm.userOpRefusedDappDetail();
+}
+
+/**
+ * How long a shell waits for the write-ahead's clearance after `OpSigned`
+ * (`user_op::WRITE_AHEAD_WAIT_MS`, spec 082 RJ1). None in time → no POST,
+ * and the submit is reported as not sent.
+ */
+export function userOpWriteAheadWaitMs(): number {
+	return wasm.userOpWriteAheadWaitMs();
+}
+
+/**
+ * What a failed relay estimate says (`user_op::EstimateFailure`, spec 082
+ * RJ19). Hand-written: the core type carries no ts-rs derive. `reason` is
+ * the revert's own words, already cleaned by the core (RG8), or `null`.
+ */
+export type EstimateFailure = { type: 'reverts'; reason: string | null } | { type: 'unavailable' };
+
+/**
+ * Classify a failed `eth_estimateUserOperationGas` (`user_op::estimate_failure`):
+ * `errorJson` is the JSON-RPC `error` member, or the whole body, or `''` for
+ * no answer. A revert ("reverted", AA23, -32521) → `reverts`; a timeout, an
+ * exhausted pool, a rate limit, a signature (AA21) → `unavailable`.
+ */
+export function userOpEstimateFailure(errorJson: string): EstimateFailure {
+	try {
+		const parsed = JSON.parse(wasm.userOpEstimateFailure(errorJson)) as EstimateFailure;
+		if (parsed.type === 'reverts') return { type: 'reverts', reason: parsed.reason ?? null };
+		return { type: 'unavailable' };
+	} catch {
+		return { type: 'unavailable' };
+	}
+}
+
+/**
+ * A signed balance change, as the sheet writes it (`l10n::format_signed_token_amount`,
+ * spec 082 RJ15): `null` for zero (never drawn), U+2212 for a minus, `+` for a
+ * gain, and a dust amount written exactly instead of `−0`. `preset` is the
+ * number preset's wire name (`comma_dot` when unknown).
+ */
+export function formatSignedTokenAmount(
+	deltaBaseUnits: string | bigint,
+	decimals: number,
+	preset: string
+): string | null {
+	return wasm.formatSignedTokenAmount(String(deltaBaseUnits), decimals, preset) ?? null;
 }
 
 /** The relay's lifecycle-status method (RA7) — the only spelling it serves. */

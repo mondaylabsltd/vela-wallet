@@ -59,15 +59,26 @@ export interface SignResponder {
 	/**
 	 * Is the asker still there to be answered (spec 082 RB5)? Asked at the three
 	 * points a request becomes harder to take back — approve, before the passkey
-	 * (`sign`), and between the passkey and the relay POST (`submit`). Absent on a
-	 * transport that cannot lose its asker (the wallet's own page): then the
-	 * answer is always yes.
+	 * (`sign`), and between the write-ahead's clearance and the relay POST
+	 * (`submit`). Absent on a transport that cannot lose its asker (the wallet's
+	 * own page): then the answer is always yes.
+	 *
+	 * The `submit` claim carries the operation's hash and chain (spec 082 RJ2):
+	 * from then on a surface that goes before answering gets its page told that
+	 * hash — it may have been sent — never 4900.
 	 */
-	claim?(id: string, phase: ClaimPhase): Promise<boolean>;
+	claim?(id: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean>;
 }
 
 /** The three claim points of a request (spec 082 RB5, contract §14). */
 export type ClaimPhase = 'approve' | 'sign' | 'submit';
+
+/**
+ * What a `submit` claim carries (spec 082 RJ2): the operation's hash and
+ * chain, sent after the write-ahead's clearance and right before the POST, so
+ * every request the worker answers by that hash has a durable record behind it.
+ */
+export type SubmitClaim = { opHash: string; chainId: number };
 
 /**
  * The asker of request `id` was gone when the wallet checked (spec 082 RB5):
@@ -91,13 +102,26 @@ export class AskerGoneError extends Error {
 export async function claimThrough(
 	transport: SignResponder | undefined,
 	id: string,
-	phase: ClaimPhase
+	phase: ClaimPhase,
+	submit?: SubmitClaim
 ): Promise<boolean> {
 	if (!transport?.claim) return true;
 	try {
-		return await transport.claim(id, phase);
+		return await transport.claim(id, phase, submit);
 	} catch {
 		return false;
+	}
+}
+
+/**
+ * The write-ahead's clearance did not come in time (spec 082 RJ1): the
+ * record of the op is not known to be on disk, so nothing was POSTed. The
+ * op was provably not sent; the executor reports it as such.
+ */
+export class WriteAheadTimeoutError extends Error {
+	constructor(readonly userOpHash: string) {
+		super(`The record of ${userOpHash.slice(0, 10)}… was not written in time; nothing was sent`);
+		this.name = 'WriteAheadTimeoutError';
 	}
 }
 
@@ -111,16 +135,23 @@ export interface SignShellPorts {
 	 */
 	opSubmitted(id: string, userOpHash: string, maybeSent: boolean, submitBlock: number | null): void;
 	/**
+	 * The write-ahead (spec 082 RJ1): the op for request `id` is signed and
+	 * hashed and nothing has been POSTed — dispatches `Event::OpSigned`. The
+	 * core writes the record and answers `ClearToPost` once it is on disk.
+	 */
+	opSigned(id: string, userOpHash: string, submitBlock: number | null): void;
+	/**
+	 * `true` while the asker of request `id` is still there (spec 082 RB5):
+	 * the owning transport's `claim`, or `true` when that transport has none.
+	 * A `submit` claim carries the op's hash and chain (RJ2).
+	 */
+	askerLive(id: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean>;
+	/**
 	 * The passkey (or Trusted Signer) prompt opened / returned a signature for
 	 * request `id` — `CeremonyStarted` / `CeremonyDone` (spec 082 RA9), so the
 	 * sheet's words follow the real stage instead of guessing it.
 	 */
 	ceremony(id: string, stage: 'started' | 'done'): void;
-	/**
-	 * `true` while the asker of request `id` is still there (spec 082 RB5):
-	 * the owning transport's `claim`, or `true` when that transport has none.
-	 */
-	askerLive(id: string, phase: ClaimPhase): Promise<boolean>;
 	/**
 	 * When the person approved request `id` (epoch ms) — the start of the dApp's
 	 * answer window (`dappReceiptWaitMs`, spec 082 RA12). `null` if unknown.
