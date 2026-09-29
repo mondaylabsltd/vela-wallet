@@ -2174,9 +2174,12 @@ mod tests {
 
     // -- spec 082 T069: network-back parity ---------------------------------
 
-    /// Three misses take the network offline; the first reach after them
-    /// brings it back, and the failed page is loaded again — once. A load
-    /// the page started, and a name that does not resolve, are not.
+    /// Three misses from two chains, with nothing answering for the quiet
+    /// window, take the network offline (RJ14); the first reach after them
+    /// brings it back, and the failed page is loaded again — once. One
+    /// chain whose nodes all fail is that chain's notice: the network never
+    /// goes, so nothing comes back and the page is not reloaded. A load the
+    /// page started, and a name that does not resolve, are not retried.
     #[test]
     fn three_misses_then_a_reach_retry_the_failed_page_once() {
         use vela_core::app::net_health::{NetEdge, NetHealth, net_health_step};
@@ -2197,24 +2200,42 @@ mod tests {
             assert!(load.watch.failure.is_some());
             load
         };
-        let mut load = failed_load(vela_core::app::browser_load::probe_code::CONNECT);
-        let mut health = NetHealth {
-            misses: 0,
-            online: true,
-        };
-        let mut retries = 0;
-        for reached in [false, false, false, true, true] {
-            let (next, edge) = net_health_step(health, reached);
-            health = next;
-            if edge == Some(NetEdge::CameBack) {
-                retries += load
-                    .network_came_back()
-                    .iter()
-                    .filter(|step| matches!(step, LoadStep::Navigate(_)))
-                    .count();
+        // Each call's outcome, 6 s apart, and the page's retries on "came
+        // back" — what `engine_tick` does with the pool's edge count.
+        let run = |load: &mut LoadDriver, calls: &[(bool, u32)]| {
+            let mut health = NetHealth::default();
+            let mut now_ms = 1_000_000.0;
+            let mut edges = Vec::new();
+            let mut retries = 0;
+            for &(reached, chain) in calls {
+                now_ms += 6_000.0;
+                let (next, edge) = net_health_step(health, reached, Some(chain), now_ms);
+                health = next;
+                edges.extend(edge);
+                if edge == Some(NetEdge::CameBack) {
+                    retries += load
+                        .network_came_back()
+                        .iter()
+                        .filter(|step| matches!(step, LoadStep::Navigate(_)))
+                        .count();
+                }
             }
-        }
+            (edges, retries)
+        };
+        let mut load = failed_load(vela_core::app::browser_load::probe_code::CONNECT);
+        let (edges, retries) = run(
+            &mut load,
+            &[(false, 1), (false, 100), (false, 1), (true, 1), (true, 100)],
+        );
+        assert_eq!(edges, vec![NetEdge::WentOffline, NetEdge::CameBack]);
         assert_eq!(retries, 1, "one retry of the failed page");
+        // Gnosis alone failing, ten times over a minute: the network stays.
+        let mut load = failed_load(vela_core::app::browser_load::probe_code::CONNECT);
+        let mut calls = vec![(false, 100); 10];
+        calls.push((true, 100));
+        let (edges, retries) = run(&mut load, &calls);
+        assert!(edges.is_empty(), "one chain is not the network: {edges:?}");
+        assert_eq!(retries, 0);
         // A name that does not resolve is not the network.
         let mut typo = failed_load(vela_core::app::browser_load::probe_code::DNS);
         assert!(typo.network_came_back().is_empty());
