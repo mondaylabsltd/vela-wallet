@@ -106,3 +106,29 @@ cd app-desktop/vela-wallet
       (red with the clockless calls), the_chain_notice_comes_after_the_first_pass_while_the_read_waits,
       a_skipped_attempt_is_logged_once_per_load, the_probe_names_its_route.
 Not run: device rows (C1, L2–L4, DX3′) — the device re-run T252; no device, app, Chrome or chaos proxy was touched.
+
+REVIEW (T203 + T226 adversarial reviewer), 2026-09-29, after 30906a09 — IN THE WORKTREE; reverts proven in a
+scratch copy (symlinked tree, a copy of app-desktop/vela-wallet), never with git stash.
+CARGO_TARGET_DIR = /Volumes/data/production/vela-wallet/app-desktop/vela-wallet/target.
+cd app-desktop/vela-wallet
+  cargo test --release                                760 passed, 0 failed, 49 ignored   (758 + 2 review tests)
+  cargo test --release --features dev-fixtures        764 passed, 0 failed, 50 ignored
+  cargo clippy --all-targets --features dev-fixtures -- -D warnings
+      red crate-wide as before: 57 distinct findings (52 bin / 54 bin-test) = 57 before; browser_host.rs 0;
+      page.rs its six pre-existing (:850, :4208, :4227, :6586, :11275, :11370), none on a touched line (:13199-13205)
+  cargo clippy --all-targets -- -D warnings           the same 57 / 52 / 54; touched files the same
+  cargo build --release --features dev-fixtures       Finished release; the same 10 dead-code warnings
+  rustfmt --edition 2024 (stdin) on src/wallet/browser_host.rs, src/wallet/page.rs   clean
+  live relay / live estimate                          not re-run: no executor file touched since the close-out
+  review tests
+    the_attempt_taken_on_return_reads_the_engine_first   red before, both legs: a load at 0.5 taken at 25 s on
+        return → Navigate (restarted an arriving load, W7); a load WebKit dropped by 15 s → Retry, not Navigate
+    a_page_read_going_out_starts_the_health_beat          red in the scratch copy with the beat's start
+        (act: read_watch.started → watch_reads) or the read's settle removed; green otherwise
+  scratch-copy reverts of the implementer's product lines
+    LoadDriver → clockless retry_fired/take_due          a_hung_load_is_replaced_… FAILED (as 11d8906f says)
+    skip guard removed                                   a_skipped_attempt_is_logged_once_per_load and the
+                                                         hung-load test FAILED
+    beat wiring removed (before the review test)         30 of 30 green: the proof gap the review test closes
+Not run: device rows C1, L2–L4 (+ leave Explore during a hung load, return after 20 s), DX3′ — the device
+re-run T252; no device, app, Chrome, WDA or chaos proxy was touched.
