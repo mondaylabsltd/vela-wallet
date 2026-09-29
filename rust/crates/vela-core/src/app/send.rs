@@ -38,7 +38,10 @@
 //! verdict), and only then [`SendOperation::ClearToPost`] lets the shell POST.
 //! The relay's verdict hands the records over (marking them admitted when the
 //! relay took the op), or a proven "not sent" deletes and withdraws them; the
-//! receipt screen still waits for that verdict.
+//! receipt screen still waits for that verdict. A submit the person cancels
+//! (✕ while "signing") before its records are written is never cleared to
+//! POST — and, as `OpSigned` names no submit, no `OpSigned` is cleared while
+//! that submit's result is still owed (082 second review).
 //!
 //! Faithful port — behavior aligned line by line with the TS sources named per
 //! item; quirks kept and marked "ported verbatim". Deliberate deviations, all
@@ -1606,6 +1609,12 @@ pub struct Model {
     pipeline: Pipeline,
     /// The write-ahead of the submit in flight (RJ1), until its verdict.
     write_ahead: Option<WriteAhead>,
+    /// A `SubmitUserOp` the person cancelled (✕ while "signing") before its
+    /// records were written — its result still owed. `OpSigned` names no
+    /// submit, so while one is owed none is cleared to POST: the cancelled
+    /// payment never goes out, and its late `OpSigned` can never ride a
+    /// retry's submit (082 second review).
+    withdrawn_submit: Option<u64>,
     flights: Flights,
     /// Monotonic per-request id source (every request gets a fresh one).
     attempt: u64,
@@ -4757,6 +4766,17 @@ fn cancel_signing(model: &mut Model) -> Cmd {
     if !matches!(model.tx, SendTxStatus::Preparing | SendTxStatus::Signing) {
         return Command::done();
     }
+    // Spec 082 RJ1: once the records are written ahead the POST is cleared —
+    // on its way; a cancel must not pretend to stop it.
+    if let Pipeline::Submitting { id, .. } = model.pipeline {
+        if model
+            .write_ahead
+            .as_ref()
+            .is_some_and(|wa| wa.pipeline_id == id)
+        {
+            return Command::done();
+        }
+    }
     model.cancelled = true;
     // Release the lock so a retry starts, and invalidate the cancelled run's
     // pending `end()` (issue #91).
@@ -4765,12 +4785,17 @@ fn cancel_signing(model: &mut Model) -> Cmd {
     // a funding sheet may resurrect (invariant ③ — the intent behind TS's
     // never-read `sendCancelledRef`, made real here). An in-flight
     // sign/submit (`Submitting`) is left to its shell outcome, exactly as
-    // `Passkey.cancelSign()` behaves today.
+    // `Passkey.cancelSign()` behaves today — except that its POST is never
+    // cleared (spec 082 RJ1, second review): the passkey may already have
+    // returned while the shell reads the head, and the person withdrew it.
     if matches!(
         model.pipeline,
         Pipeline::SubmitCredential { .. } | Pipeline::SubmitTreasury { .. }
     ) {
         model.pipeline = Pipeline::Idle;
+    }
+    if let Pipeline::Submitting { id, .. } = model.pipeline {
+        model.withdrawn_submit = Some(id);
     }
     model.tx = SendTxStatus::Idle;
     fire(model, SendOperation::CancelPasskeySign)
@@ -4930,8 +4955,27 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             now_ms,
             maybe_sent,
             submit_block,
-        } => accept_submitted(model, id, user_op_hash, now_ms, (maybe_sent, submit_block)),
-        R::SubmitFailed { failure } => accept_submit_failed(model, id, failure),
+        } => {
+            if model.withdrawn_submit == Some(id) {
+                // Never cleared, yet it went out (a shell that POSTs without
+                // the write-ahead): sent is sent — recorded as any other.
+                model.withdrawn_submit = None;
+            }
+            accept_submitted(model, id, user_op_hash, now_ms, (maybe_sent, submit_block))
+        }
+        R::SubmitFailed { failure } => {
+            if model.withdrawn_submit == Some(id) {
+                // The submit the person cancelled ended, and nothing was
+                // sent: no error, no haptic — the form, as they left it.
+                model.withdrawn_submit = None;
+                if matches!(model.pipeline, Pipeline::Submitting { id: expect, .. } if expect == id)
+                {
+                    model.pipeline = Pipeline::Idle;
+                }
+                return render();
+            }
+            accept_submit_failed(model, id, failure)
+        }
         R::RecordsPersisted => {
             let Some((expect, ctx)) = model.flights.persist.clone() else {
                 return Command::done();
@@ -5396,6 +5440,13 @@ fn op_signed(
         .is_some_and(|wa| wa.pipeline_id == pipeline_id)
     {
         return Command::done(); // once per submit
+    }
+    if model.withdrawn_submit.is_some() {
+        // A cancelled submit's result is still owed, and `OpSigned` names no
+        // submit: this may be the cancelled one's. Nothing is written or
+        // cleared — the shell's wait runs out and nothing is sent (a retry
+        // caught in this window ends "not sent", and can be slid again).
+        return Command::done();
     }
     let records = tx_records(
         model,
