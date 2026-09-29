@@ -4,7 +4,7 @@
 `084-mobile-web-083-parity` (from `083-windows-dapp-browser-stability`; code under test `c0694047` + the hand-off
 commits, `git diff c0694047 HEAD -- rust` is empty). Source plan: `specs/083-windows-dapp-browser-stability/handoff-android-ios-web.md`.
 Per-platform detail (verbatim on-screen text, steps, evidence names): `results-android.md`, `results-ios.md`,
-`results-web.md`. Evidence: `evidence/{android,ios,web}/`.
+`results-web.md`. Evidence: `evidence/{android,ios,web}/` (git-ignored, local to the checking machine).
 
 **The short answer**: the hand-off's predictions held. Every P0/P1 finding that could be tested without a chain
 send reproduces on all three clients. The 083 core fixes reach a client only once its core is rebuilt and its shell
@@ -178,7 +178,9 @@ Anyone sending from this account in parallel changes the nonce and balances unde
 
 - Regenerated artifacts: `app-ios/VelaCoreKit/Sources/VelaCore/vela_core_uniffi.swift` (a doc comment and a checksum) is modified in the tree; the web
   `rust/pkg-web` and `assets/wasm` were restored. Commit them only as a deliberate part of a fix.
-- `evidence/` (≈ 20 MB, 290 files, one 3.6 MB video) — the size is the owner's call.
+- `evidence/` (≈ 20 MB, 290 files, one 3.6 MB video) is **git-ignored** (`.gitignore`), by the owner's decision: it exists only on the machine that ran the pass, at
+  `specs/084-mobile-web-083-parity/evidence/{android,ios,web}/`. The `results*.md` files quote the verbatim on-screen text and name each evidence file; back the
+  folder up separately if the screenshots are wanted later.
 
 ## Next (waits for the owner)
 
