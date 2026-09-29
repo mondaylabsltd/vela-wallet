@@ -78,6 +78,8 @@ object SigningLive {
         val typicalS: Int? = null,
         /** Spec 079: this account signs on the Trusted Signer's page — its slide is the one consent. */
         val trustedSignerRoute: Boolean = false,
+        /** The number preset's wire name the signed deltas are written in (spec 082 RJ15). */
+        val numberPreset: String = app.getvela.wallet.core.format.Formats.current.resolvedNumber().wire,
     )
 
     /** The transport of a request the WALLET made of itself (`VelaWalletApplication`). */
@@ -448,7 +450,9 @@ object SigningLive {
                     header = header,
                     stage = ReceiptStage.Failed,
                     title = s.t(I18nKeys.Flows.STATUS_FAILED),
-                    captions = listOfNotNull(summary, s.t("send.txErrorGeneric")),
+                    // Spec 082 RJ3: a relay refusal is "refused, nothing was
+                    // sent" — never "try again": it would be refused again.
+                    captions = listOfNotNull(summary, failureWords(sign, s)),
                     cta = s.t(I18nKeys.Flows.DONE),
                     ctaAccent = true,
                 )
@@ -614,6 +618,16 @@ object SigningLive {
                 cta = s.t(I18nKeys.Flows.DONE),
                 ctaAccent = true,
             )
+            // Spec 082 RJ3: the relay refused it — nothing was sent, and the
+            // same request would be refused again: no Retry words.
+            SignEndingState.Refused -> SendReceiptModel(
+                header = header,
+                stage = ReceiptStage.Failed,
+                title = s.t(I18nKeys.Flows.STATUS_FAILED),
+                captions = listOfNotNull(summary, s.t(I18nKeys.Flows.SIGN_REFUSED)),
+                cta = s.t(I18nKeys.Flows.DONE),
+                ctaAccent = true,
+            )
             // The relay never had it: nothing was sent, and "try again" is true.
             SignEndingState.NotSent -> SendReceiptModel(
                 header = header,
@@ -717,7 +731,7 @@ object SigningLive {
                 // unlimited approval — a wallet fault, not "unlimited is disabled".
                 SignErrorKind.UnsupportedChain -> s.t("send.lock.netNotFound")
                 SignErrorKind.UserRejected, SignErrorKind.WalletSwitchedChains -> ""
-                else -> s.t("send.txErrorGeneric")
+                else -> failureWords(sign, s)
             }
             if (text.isNotEmpty()) add(SigningBlock.Warning(SigningTone.Danger, text))
         }
@@ -730,6 +744,14 @@ object SigningLive {
             sign.phase != SignPhase.Idle -> add(SigningBlock.Sentence(s.s("signing"), SigningTone.Neutral))
         }
     }
+
+    /**
+     * The failure's sentence: the core's `failure_refused` (spec 082 RJ3) is
+     * `componentsUi.signing.refused` — nothing was sent, and no Retry words;
+     * anything else is the plain "not submitted, try again".
+     */
+    private fun failureWords(sign: SignView, s: VelaStrings): String =
+        if (sign.failure_refused) s.t(I18nKeys.Flows.SIGN_REFUSED) else s.t("send.txErrorGeneric")
 
     fun blocks(clear: ClearSigningView, to: String?, dataBytes: Int, ctx: Context): List<SigningBlock> =
         blocksBySurface(clear, to, dataBytes, ctx.strings, ctx)
@@ -861,15 +883,21 @@ object SigningLive {
                     return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")))
                 }
                 var unverified = false
-                val rows = sim.judgments.map { judgment ->
+                // A delta the core writes as nothing (a zero) is not drawn
+                // (spec 082 RJ15, RC4/RC6).
+                val rows = sim.judgments.mapNotNull { judgment ->
                     when (judgment) {
-                        is TrustSimJudgment.Native -> deltaRow(ctx.nativeSymbol, judgment.delta, 18)
-                        is TrustSimJudgment.Erc20Trusted -> deltaRow(judgment.symbol, judgment.delta, judgment.decimals)
-                        is TrustSimJudgment.Erc20Unverified -> {
+                        is TrustSimJudgment.Native -> deltaRow(ctx.nativeSymbol, judgment.delta, 18, ctx.numberPreset)
+                        is TrustSimJudgment.Erc20Trusted -> deltaRow(judgment.symbol, judgment.delta, judgment.decimals, ctx.numberPreset)
+                        is TrustSimJudgment.Erc20Unverified -> signedRaw(judgment.delta, ctx.numberPreset)?.let { raw ->
                             unverified = true
-                            BalanceDeltaRow(s.s("balanceUnverifiedToken"), signedRaw(judgment.delta), SigningTone.Caution)
+                            BalanceDeltaRow(s.s("balanceUnverifiedToken"), raw, SigningTone.Caution)
                         }
                     }
+                }
+                // Every move was a zero: nothing of theirs moves.
+                if (rows.isEmpty()) {
+                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")))
                 }
                 listOf(
                     SigningBlock.Balances(
@@ -883,13 +911,24 @@ object SigningLive {
         }
     }
 
-    private fun deltaRow(symbol: String, delta: String, decimals: Int): BalanceDeltaRow {
-        val negative = delta.startsWith("-")
-        val magnitude = SendLive.fromBase(delta.removePrefix("-"), decimals)
-        return BalanceDeltaRow(symbol, (if (negative) "−" else "+") + magnitude, if (negative) SigningTone.Neutral else SigningTone.Success)
+    /**
+     * One signed balance change, written by the core (`formatSignedTokenAmount`,
+     * spec 082 RJ15): the token ladder, a dust amount written exactly — never
+     * `−0` — and U+2212 for a minus. `null` for a zero: not drawn.
+     */
+    private fun deltaRow(symbol: String, delta: String, decimals: Int, preset: String): BalanceDeltaRow? {
+        val text = uniffi.vela_core_uniffi.formatSignedTokenAmount(delta, decimals.coerceAtLeast(0).toUInt(), preset) ?: return null
+        val negative = text.startsWith("\u2212")
+        return BalanceDeltaRow(symbol, text, if (negative) SigningTone.Neutral else SigningTone.Success)
     }
 
-    private fun signedRaw(delta: String): String = if (delta.startsWith("-")) "−" + delta.drop(1) else "+$delta"
+    /**
+     * An unverified token's change in its raw units — its decimals are not
+     * known, so no decimal point is guessed. The core writes the sign and
+     * drops a zero; the units stay whole (decimals 0).
+     */
+    private fun signedRaw(delta: String, preset: String): String? =
+        uniffi.vela_core_uniffi.formatSignedTokenAmount(delta, 0u, preset)
 
     fun feeModel(clear: ClearSigningView, fee: FeeView, ctx: Context, speed: SendLive.SpeedInputs? = null): FeeModel {
         if (offChain(clear)) return FeeModel.OffChain(ctx.strings.s("noNetworkFee"))
@@ -934,11 +973,11 @@ object SigningLive {
             tappable = fee.failed != null || choosable,
             warning = when {
                 short -> ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol))
-                // Spec 079: why there is no fee, and that it will be asked again.
-                fee.failed != null && fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.MissingPublicKey &&
-                    fee.failed != app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed ->
-                    ctx.strings.t("componentsUi.funding.denialNetworkError")
-                else -> null
+                // Spec 079: why there is no fee, and that it will be asked
+                // again — in the core's words (spec 082 RJ13): the relay's
+                // failure, or the chain's node (rate-limited, or out of reach,
+                // named), or no reason line at all.
+                else -> fee.failed?.let { failed -> feeReason(failed, ctx) }
             },
             refreshLabel = ctx.strings.t(I18nKeys.Flows.FEE_REFRESH),
             refreshing = fee.busy,
@@ -949,6 +988,10 @@ object SigningLive {
             },
         )
     }
+
+    /** The reason line under a failed fee: the core's key (`feeFailureReasonKey`), `{{chain}}` the chain's name; `null` = none. */
+    fun feeReason(failed: app.getvela.wallet.feature.send.core.FeeFailure, ctx: Context): String? =
+        uniffi.vela_core_uniffi.feeFailureReasonKey(failed.wire)?.let { key -> ctx.strings.t(key, mapOf("chain" to ctx.chainName)) }
 
     private fun feeLine(estimate: FeeEstimateView, fee: FeeView, ctx: Context): String {
         val parts = SendLive.feeParts(estimate, ctx.nativeSymbol)

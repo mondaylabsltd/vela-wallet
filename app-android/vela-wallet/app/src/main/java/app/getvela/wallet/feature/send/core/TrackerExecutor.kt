@@ -101,6 +101,21 @@ class TrackerExecutor(
             TrackShellResult.Notified
         }
         TrackOperation.Now -> TrackShellResult.Clock(now())
+        // Spec 082 RJ4: the relay named the bundle tx — its receipt through
+        // the chain pool, as it came; the core finds the op's own event in it.
+        is TrackOperation.TxReceipt -> {
+            val receipt = relay.txReceipt(operation.chain_id, operation.tx_hash)
+            VelaLog.event(
+                "tracker.receipt", "by tx",
+                "op" to operation.user_op_hash.take(12), "tx" to operation.tx_hash.take(12), "chain" to operation.chain_id,
+                "answer" to when (receipt) {
+                    null -> "no answer"
+                    "null" -> "not mined"
+                    else -> "mined"
+                },
+            )
+            TrackShellResult.TxReceipt(operation.user_op_hash, now(), receipt)
+        }
     }
 
     private suspend fun pollReceipt(hash: String, chainId: Int): TrackShellResult = when (val answer = relay.userOpReceipt(chainId, hash)) {
@@ -132,6 +147,8 @@ class TrackerExecutor(
         // No answer: the core asks the same window again next tick.
         is TrackOperation.FindOpEvent -> TrackShellResult.OpEvent(operation.user_op_hash, now())
         TrackOperation.Now -> TrackShellResult.Clock(now())
+        // No answer: the core asks again at the receipt cadence.
+        is TrackOperation.TxReceipt -> TrackShellResult.TxReceipt(operation.user_op_hash, now(), null)
     }
 
     companion object {

@@ -120,6 +120,19 @@ class DappSignMachineTest {
 
     private val handoffs = java.util.Collections.synchronizedList(ArrayList<Pair<String, List<String>>>())
 
+    /** Every hand-off whole, in order: spec 082's flags ride along (the write-ahead's, then the relay's). */
+    private val handed = java.util.concurrent.CopyOnWriteArrayList<app.getvela.wallet.feature.send.core.TrackHandoff>()
+
+    /** Spec 082 RJ1: every op the tracker was told to forget — proven never sent. */
+    private val withdraws = java.util.concurrent.CopyOnWriteArrayList<Pair<String, List<String>>>()
+
+    /** The hash the executor computed before any POST (`OpSigned`). */
+    @Volatile
+    private var signedOp: String? = null
+
+    /** The tracker's view, as the app's tracker would publish it (spec 082 RJ4: the answer follows it). */
+    private val tracker = kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.send.core.TrackView())
+
     private fun controller(receiptWaitMs: Long = 10_000L, signer: UserOpSigner = fixtureSigner): SigningController {
         val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
         val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
@@ -141,6 +154,8 @@ class DappSignMachineTest {
                     answers += "$transportId/$id" to json
                 }
                 override fun opSubmitted(id: String, submitted: app.getvela.wallet.feature.send.core.UserOpSpine.Submitted) { events += "op:${submitted.userOpHash}" }
+                override fun opSigned(id: String, userOpHash: String, submitBlock: Long?) { signedOp = userOpHash; events += "op-signed:$userOpHash" }
+                override fun trackWithdrawn(userOpHash: String, recordIds: List<String>) { withdraws += userOpHash to recordIds }
                 override fun ceremonyStarted(id: String) { events += "signing" }
                 override fun ceremonyDone(id: String) { events += "signed" }
                 override fun recordsPersisted() {
@@ -153,12 +168,34 @@ class DappSignMachineTest {
                 override fun trackSubmitted(handoff: app.getvela.wallet.feature.send.core.TrackHandoff) {
                     val userOpHash = handoff.userOpHash
                     handoffs += userOpHash to handoff.recordIds
+                    handed += handoff
                     val stored = store.values[KeyValueStore.Keys.TRANSACTIONS].orEmpty()
                     events += if (stored.contains(userOpHash)) "track:persisted" else "track:NOT-PERSISTED"
                 }
                 override fun dataBase() = ""
                 override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> = null to false
+                override fun trackerView() = tracker
             },
+        )
+    }
+
+    /** The relay accepts the op under the hash the wallet computed — the written-ahead row's. */
+    private fun relayTakesTheLocalHash() {
+        port.always("eth_sendUserOperation") {
+            events += "relay.send"
+            val rows = JSONArray(store.values[KeyValueStore.Keys.TRANSACTIONS] ?: "[]")
+            FakeRelayPort.body(if (rows.length() > 0) rows.getJSONObject(0).getString("userOpHash") else signedOp)
+        }
+    }
+
+    private fun trackerSays(status: app.getvela.wallet.feature.send.core.TrackStatus, txHash: String?) {
+        tracker.value = app.getvela.wallet.feature.send.core.TrackView(
+            listOf(
+                app.getvela.wallet.feature.send.core.TrackEntryView(
+                    user_op_hash = signedOp!!, chain_id = 100, status = status, tx_hash = txHash, submitted_at_ms = 1.0,
+                    outcome = app.getvela.wallet.feature.send.core.TrackOutcome.Final,
+                ),
+            ),
         )
     }
 
@@ -200,7 +237,15 @@ class DappSignMachineTest {
         delay(300)
         val stored = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0)
         assertEquals("never confirmed by the sheet", "pending", stored.getString("status"))
-        assertEquals(listOf(row.getString("id")), handoffs.single().second)
+        assertEquals("the written-ahead row gave way to the relay's: one row", 1, rows.length())
+        // Spec 082 RJ1: the record was written ahead under the LOCAL hash before
+        // the POST; the relay answered another hash (`userop.hash_mismatch`), so
+        // the local one was withdrawn and the relay's recorded and handed over.
+        val local = signedOp!!
+        assertTrue("the write-ahead came first: $events", events.indexOf("op-signed:$local") in 0 until events.indexOf("relay.send"))
+        assertEquals(local to handed.first().recordIds, withdraws.single())
+        assertEquals(listOf(row.getString("id")), handoffs.last().second)
+        assertEquals("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", handoffs.last().first)
         assertEquals("the relay answered: sent", false, stored.optBoolean("maybeSent", true))
         assertTrue("the ceremony's two edges reached the core: $events", events.indexOf("signing") in 0 until events.indexOf("signed"))
         assertEquals(origin, row.getString("dappOrigin"))
@@ -301,8 +346,13 @@ class DappSignMachineTest {
         val error = answers.single { it.first == "tab-1/r1" }.second.getJSONObject("error")
         assertEquals(-32603, error.getInt("code"))
         assertTrue("never the pool's text: $error", error.getString("message").contains(uniffi.vela_core_uniffi.userOpNotSentDetail()))
+        // Spec 082 RJ1: the record was written ahead, then withdrawn — the
+        // op is proven never sent, so nothing is left to follow.
+        withTimeout(10_000) { while (withdraws.isEmpty()) delay(20) }
+        delay(200)
         assertTrue("no record for an op nobody has", store.values[KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty() || JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).length() == 0)
-        assertTrue(handoffs.isEmpty())
+        assertEquals("every hand-off taken back", handoffs.map { it.first }.distinct(), withdraws.map { it.first })
+        assertTrue("handed over only as may-have-been-sent, before the POST", handed.all { it.maybeSent && !it.admitted })
     }
 
     /**
@@ -329,9 +379,180 @@ class DappSignMachineTest {
         assertEquals("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", row.getString("userOpHash"))
         assertEquals("nothing is known to have landed", "pending", row.getString("status"))
         assertEquals("the op hash is never recorded as a tx hash", "", row.optString("txHash"))
-        val handoff = handoffs.singleOrNull()
+        val handoff = handoffs.lastOrNull()
         assertEquals("the tracker holds the op", "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", handoff?.first)
         assertEquals("…and the very record it must settle", listOf(row.getString("id")), handoff?.second)
+    }
+
+    /**
+     * Spec 082 RJ1 (G34, P0): the record exists before the bytes leave. The
+     * relay's handler looks at the store at the moment of the POST: one
+     * pending "may have been sent" row under the op's own hash is already
+     * there. The relay taking that op marks the row sent — still pending, the
+     * tracker's to close — and hands the tracker the same op again, admitted.
+     */
+    @Test
+    fun `the record is on disk before the POST, and the relay taking the op marks it sent`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay(receiptLands = false)
+        port.always("eth_sendUserOperation") {
+            events += "relay.send"
+            val rows = JSONArray(store.values[KeyValueStore.Keys.TRANSACTIONS] ?: "[]")
+            val ahead = (0 until rows.length()).map { rows.getJSONObject(it) }.singleOrNull { it.optBoolean("maybeSent") && it.optString("status") == "pending" }
+            events += if (ahead != null) "relay.saw-record" else "relay.NO-RECORD"
+            // The relay accepts it under the hash the wallet computed.
+            FakeRelayPort.body(ahead?.getString("userOpHash") ?: signedOp)
+        }
+        val c = controller(receiptWaitMs = 600L)
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        assertTrue("the row was on disk when the POST left: $events", "relay.saw-record" in events)
+        val local = signedOp!!
+        assertEquals("one answer: the op hash (the receipt is late)", local, answers.single { it.first == "tab-1/r1" }.second.getString("result"))
+        withTimeout(10_000) { c.closed.first { it } }
+        withTimeout(10_000) { while (handed.size < 2) delay(20) }
+        delay(200)
+        val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
+        assertEquals("one row, never a second for the same op", 1, rows.length())
+        val row = rows.getJSONObject(0)
+        assertEquals(local, row.getString("userOpHash"))
+        assertEquals("pending", row.getString("status"))
+        assertEquals("the relay took it: no longer may-have-been-sent", false, row.getBoolean("maybeSent"))
+        // The hand-off key includes the flags (the review of RJ1): both are fed.
+        assertEquals(listOf(true to false, false to true), handed.map { it.maybeSent to it.admitted })
+        assertTrue(handed.all { it.userOpHash == local && it.recordIds == listOf(row.getString("id")) })
+        assertTrue(withdraws.isEmpty())
+        assertEquals("posted once", 1, events.count { it == "relay.send" })
+    }
+
+    /**
+     * Spec 082 RJ1 (DX9): the app is gone — quit, crashed, the window closed —
+     * after the record was written and while the POST is out. What is left on
+     * disk is one pending "may have been sent" row under the op's hash, which
+     * the tracker's next launch reads back as exactly that and resolves.
+     */
+    @Test
+    fun `a quit while the POST is out leaves one pending may-have-been-sent row for the next launch`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay(receiptLands = false)
+        val posting = kotlinx.coroutines.CompletableDeferred<Unit>()
+        port.before = { method -> if (method == "eth_sendUserOperation") { posting.complete(Unit); kotlinx.coroutines.awaitCancellation() } }
+        val c = controller()
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { posting.await() }
+        // The process ends here: nothing more runs.
+        scope.cancel()
+        val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
+        assertEquals(1, rows.length())
+        val row = rows.getJSONObject(0)
+        assertEquals(signedOp, row.getString("userOpHash"))
+        assertEquals("pending", row.getString("status"))
+        assertTrue("may have been sent", row.getBoolean("maybeSent"))
+        assertEquals("dapp_tx", row.getString("type"))
+        assertTrue("nobody was answered", answers.isEmpty())
+        // The next launch: the tracker's pending records read it back as one.
+        val pending = app.getvela.wallet.feature.send.core.TrackerExecutor.pendingRecord(row)!!
+        assertEquals(signedOp, pending.user_op_hash)
+        assertTrue(pending.maybe_sent)
+        assertEquals(handed.single().userOpHash, signedOp)
+        assertTrue(handed.single().maybeSent)
+    }
+
+    /**
+     * Spec 082 RJ1: no clearance, no POST. The store would not take the record,
+     * so the core's clearance is not one this shell can stand behind: nothing
+     * is posted, and the page is told "not sent" in the core's words.
+     */
+    @Test
+    fun `a record the store would not take is never posted`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        store.refuseWrites = true
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        assertEquals("zero POSTs", 0, events.count { it == "relay.send" })
+        val error = answers.single { it.first == "tab-1/r1" }.second.getJSONObject("error")
+        assertEquals(-32603, error.getInt("code"))
+        assertTrue(error.getString("message").contains(uniffi.vela_core_uniffi.userOpNotSentDetail()))
+    }
+
+    /**
+     * Spec 082 RJ3: the relay refused the op. The page gets one -32603 in the
+     * core's "refused" words — never the relay's text, never "try again" — and
+     * the sheet says it was refused.
+     */
+    @Test
+    fun `a relay refusal answers refused once and the sheet never says try again`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        port.always("eth_sendUserOperation") { events += "relay.send"; FakeRelayPort.error("UserOperation reverted during simulation with reason: AA23 reverted") }
+        val c = controller()
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        val answered = answers.filter { it.first == "tab-1/r1" }
+        assertEquals("exactly one answer", 1, answered.size)
+        val error = answered.single().second.getJSONObject("error")
+        assertEquals(-32603, error.getInt("code"))
+        assertTrue("the core's words: $error", error.getString("message").contains(uniffi.vela_core_uniffi.userOpRefusedDappDetail()))
+        val sheet = withTimeout(10_000) { c.sign.first { it.error != null } }
+        assertTrue("the sheet knows it was refused", sheet.failure_refused)
+        assertEquals("posted once", 1, events.count { it == "relay.send" })
+    }
+
+    /**
+     * Spec 082 RJ4 (EX13, DX-W1): the page gets its tx hash as soon as the
+     * tracker knows it — here the relay's receipt never comes, and the tracker
+     * confirms the op through the chain. The core answers from `OpTracked`,
+     * once, and the receipt wait ends there instead of polling on.
+     */
+    @Test
+    fun `the page is answered from the tracker's verdict and the receipt wait ends`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay(receiptLands = false); relayTakesTheLocalHash()
+        val c = controller(receiptWaitMs = 60_000L)
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (events.none { it.startsWith("op:") }) delay(20) }
+        delay(300)
+        val landed = "0x" + "c4".repeat(32)
+        trackerSays(app.getvela.wallet.feature.send.core.TrackStatus.Confirmed, landed)
+        withTimeout(10_000) { while (answers.none { it.first == "tab-1/r1" }) delay(20) }
+        assertEquals("the tracker's tx hash, long before the 60 s wait", landed, answers.single { it.first == "tab-1/r1" }.second.getString("result"))
+        delay(400)
+        val polls = port.calls.count { it.endsWith("eth_getUserOperationReceipt") }
+        delay(600)
+        assertEquals("the receipt wait ended with the answer", polls, port.calls.count { it.endsWith("eth_getUserOperationReceipt") })
+        assertEquals("exactly one answer", 1, answers.count { it.first == "tab-1/r1" })
+    }
+
+    /** Spec 082 RJ3 (DX-W3): the tracker's `rejected` answers the page -32603 "refused", once. */
+    @Test
+    fun `the tracker's rejection answers refused once`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay(receiptLands = false); relayTakesTheLocalHash()
+        val c = controller(receiptWaitMs = 60_000L)
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (events.none { it.startsWith("op:") }) delay(20) }
+        delay(300)
+        trackerSays(app.getvela.wallet.feature.send.core.TrackStatus.Rejected, null)
+        withTimeout(10_000) { while (answers.none { it.first == "tab-1/r1" }) delay(20) }
+        val error = answers.single { it.first == "tab-1/r1" }.second.getJSONObject("error")
+        assertEquals(-32603, error.getInt("code"))
+        assertTrue(error.getString("message").contains(uniffi.vela_core_uniffi.userOpRefusedDappDetail()))
+        delay(500)
+        assertEquals("exactly one answer", 1, answers.count { it.first == "tab-1/r1" })
     }
 
     @Test

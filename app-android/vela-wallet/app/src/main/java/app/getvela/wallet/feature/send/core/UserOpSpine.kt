@@ -162,6 +162,21 @@ class UserOpSpine(
         data class Other(val message: String?) : Failure()
 
         /**
+         * Spec 082 RJ3: the relay refused the op — a rejection that is not
+         * "relayer unavailable" and not an underfunded bundler. Nothing was
+         * sent, and the same op would be refused again: a page is told the
+         * core's fixed "refused" sentence, and nobody is told to retry.
+         */
+        data class Rejected(val message: String?) : Failure()
+
+        /**
+         * Spec 082 RJ1: the record was not written ahead in time — no
+         * `ClearToPost` within `userOpWriteAheadWaitMs()` — so the op was not
+         * POSTed. Nothing left the device.
+         */
+        data object NotCleared : Failure()
+
+        /**
          * Spec 082 RA1: the relay was never reached and nothing left the device
          * — the one failure after the passkey where "not sent, try again" is
          * true. A page is told the core's fixed sentence, never the pool's.
@@ -273,6 +288,12 @@ class UserOpSpine(
      * Assembles, signs once and submits; returns what the relay was handed —
      * accepted (or the op already pending for this nonce), or may-have-been-
      * sent under the local hash. Throws [Refused] only when it was NOT sent.
+     *
+     * [beforePost] (spec 082 RJ1) runs after the signature, the local hash and
+     * the head read, and before the first POST: the write-ahead — the caller
+     * reports the op signed, waits for the core's `ClearToPost` and checks the
+     * asker. It throws [Refused] (nothing is POSTed) when the record is not on
+     * disk in time, or the asker is gone.
      */
     suspend fun submit(
         chainId: Int,
@@ -285,12 +306,13 @@ class UserOpSpine(
         intent: TrustedSignerIntent? = null,
         /** Spec 082 RA9: the ceremony returned a signature (`CeremonyDone`). */
         ceremonyDone: () -> Unit = {},
+        beforePost: suspend (localHash: String, submitBlock: Long?) -> Unit = { _, _ -> },
     ): Submitted = coroutineScope {
         // The head before the first POST (ruling 8): read beside the assembly
         // and the ceremony, taken only if it came back before the POST.
         val head = async { runCatching { relay.headBlock(chainId) }.getOrNull() }
         try {
-            submitSigned(chainId, account, calls, gasFeeToken, quotedFee, signingStarted, intent, ceremonyDone) {
+            submitSigned(chainId, account, calls, gasFeeToken, quotedFee, signingStarted, intent, ceremonyDone, beforePost) {
                 withTimeoutOrNull(HEAD_WAIT_MS) { head.await() }
             }
         } finally {
@@ -307,6 +329,7 @@ class UserOpSpine(
         signingStarted: () -> Unit,
         intent: TrustedSignerIntent?,
         ceremonyDone: () -> Unit,
+        beforePost: suspend (localHash: String, submitBlock: Long?) -> Unit,
         headBeforePost: suspend () -> Long?,
     ): Submitted {
         val keys = accounts.keysOf(account)
@@ -406,6 +429,8 @@ class UserOpSpine(
         val localHash = runCatching { userOpHash(signed, chainId.toUInt()) }
             .getOrElse { other(it.message ?: "The operation could not be hashed") }
         val submitBlock = headBeforePost()
+        // The write-ahead (RJ1): the record is on disk before any byte leaves.
+        beforePost(localHash, submitBlock)
         // The speed the displayed fee was priced at, named beside it (spec 069).
         // The verdict is the core's (`userOpSubmitStep`): only "not sent" is a
         // failure; a lost reply is followed under the local hash, never retried
@@ -419,7 +444,8 @@ class UserOpSpine(
                     null -> Failure.NotSent
                     RelayRejection.RelayerUnavailable -> Failure.RelayerUnavailable
                     RelayRejection.BundlerUnderfunded -> Failure.BundlerUnderfunded
-                    is RelayRejection.Other -> Failure.Other(rejection.message.ifBlank { null })
+                    // The relay refused it (RJ3): never "try again".
+                    is RelayRejection.Other -> Failure.Rejected(rejection.message.ifBlank { null })
                 },
             )
         }

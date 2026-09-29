@@ -278,4 +278,74 @@ class SigningReceiptTest {
         assertEquals(strings.t("send.txSubmittedTitle"), acknowledged.title)
         assertTrue(!acknowledged.captions.contains(strings.t("componentsUi.signing.maybeSent")))
     }
+    /**
+     * Spec 082 RJ3: a relay refusal is "refused, nothing was sent" — on the
+     * live sheet (`failure_refused`) and in the ending (`Refused`) — and never
+     * the "please try again" of a failure a retry could fix.
+     */
+    @Test
+    fun `a refusal says refused and never try again`() {
+        val retry = strings.t("send.txErrorGeneric")
+        val refusedWords = strings.t(I18nKeys.Flows.SIGN_REFUSED)
+        val sheet = SignView(
+            surface = SignSurface.Sheet,
+            error = SignErrorNotice(SignErrorKind.SubmitFailed, "the network refused this transaction; nothing was sent"),
+            failure_refused = true,
+        )
+        val live = SigningLive.receipt(sheet, blocks, ctx)!!
+        assertEquals(ReceiptStage.Failed, live.stage)
+        assertEquals(strings.t(I18nKeys.Flows.STATUS_FAILED), live.title)
+        assertTrue(live.captions.contains(refusedWords))
+        assertTrue("no Retry words: ${live.captions}", !live.captions.contains(retry))
+        val warning = SigningLive.statusBlocks(sheet, strings).filterIsInstance<SigningBlock.Warning>().single()
+        assertEquals(refusedWords, warning.text)
+
+        // Not refused: the plain failure a retry can fix keeps its words.
+        val plain = SigningLive.receipt(sheet.copy(failure_refused = false), blocks, ctx)!!
+        assertTrue(plain.captions.contains(retry))
+
+        val ending = SigningLive.aftercareReceipt(app.getvela.wallet.feature.signing.core.SignEndingState.Refused, "Send", ctx)
+        assertEquals(ReceiptStage.Failed, ending.stage)
+        assertEquals(strings.t(I18nKeys.Flows.STATUS_FAILED), ending.title)
+        assertEquals(listOf("Send", refusedWords), ending.captions)
+    }
+
+    /**
+     * Spec 082 RJ3/RJ4: the ending follows the tracker — its `rejected` is the
+     * Refused ending; but an answer that already holds a tx hash is never drawn
+     * "refused" or "not sent" (the review's rule): it follows to the real verdict.
+     */
+    @Test
+    fun `the tracker's rejection is the refused ending, never over a landed answer`() {
+        val still = SigningAftercare(100, SignEnding.StillConfirming(op))
+        assertEquals(app.getvela.wallet.feature.signing.core.SignEndingState.Refused, still.state(entry(TrackStatus.Rejected, TrackOutcome.Final)))
+        val landed = SigningAftercare(100, SignEnding.Landed(tx, op))
+        val state = landed.state(entry(TrackStatus.Rejected, TrackOutcome.Final))
+        assertTrue("a landed answer follows on: $state", state is app.getvela.wallet.feature.signing.core.SignEndingState.Following)
+    }
+
+    /**
+     * Spec 082 RJ1: the write-ahead gate. A submit POSTs only on the core's
+     * clearance for a record the store really took; no clearance in time, or
+     * one for a record the store refused, is no POST.
+     */
+    @Test
+    fun `the write-ahead gate lets a POST go only for a record on disk`() = kotlinx.coroutines.runBlocking {
+        val gate = app.getvela.wallet.feature.send.core.WriteAhead(waitMs = 200L)
+        val hash = "0xAbC"
+
+        val silent = gate.expect("r1|abc")
+        assertTrue("no clearance in time: no POST", !silent.await())
+
+        val refused = gate.expect("r1|abc")
+        assertTrue("the store never took it", !gate.clear("r1|abc", hash))
+        assertTrue(!refused.await())
+
+        gate.written(hash)
+        val cleared = gate.expect("r1|abc")
+        assertTrue(gate.clear("r1|abc", hash))
+        assertTrue(cleared.await())
+
+        assertTrue("a clearance nobody waits for posts nothing", !gate.clear("r2|abc", hash))
+    }
 }

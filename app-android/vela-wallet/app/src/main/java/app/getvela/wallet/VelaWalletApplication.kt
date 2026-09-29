@@ -460,6 +460,8 @@ class AppContainer(private val app: Application) {
             // The two halves of the handoff: the send hands the tracker a
             // hash; the tracker hands the send its verdict.
             controller.onTrackSubmitted = { handoff -> wallet.trackSubmitted(handoff) }
+            // Spec 082 RJ1: rows written ahead of a POST that never went.
+            controller.onTrackWithdrawn = { hash, ids -> wallet.trackWithdrawn(hash, ids) }
             // What a tracker entry means for the receipt on screen is the
             // core's one mapping (`sendReceiptOutcomeOf`, spec 082): a slow,
             // unreachable or may-have-been-sent op says nothing; a relay that
@@ -705,6 +707,10 @@ class AppContainer(private val app: Application) {
                     override fun nativeSymbol(chainId: Int): String =
                         settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }?.native_symbol ?: "ETH"
                     override fun trackSubmitted(handoff: app.getvela.wallet.feature.send.core.TrackHandoff) = wallet.trackSubmitted(handoff)
+                    // Spec 082 RJ1: a written-ahead op proven never sent.
+                    override fun trackWithdrawn(userOpHash: String, recordIds: List<String>) = wallet.trackWithdrawn(userOpHash, recordIds)
+                    // Spec 082 RJ4: the answer follows the tracker (`OpTracked`).
+                    override fun trackerView() = wallet.tracker
                     override fun dataBase(): String = settings.endpointUrl(NetEndpointField.EthereumData)
                     // The pool's answer as it came; the core reads it (`simOutcome`, RG6).
                     override suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult =

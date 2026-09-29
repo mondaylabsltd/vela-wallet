@@ -108,19 +108,29 @@ class SigningController(
 
     /**
      * The tracker is handed the hash only once every record it names is on
-     * disk (043's ordering invariant), and each record only once — by record
-     * id, not by hash: a lost reply's local hash and a later relay hash name
-     * the same record (spec 082).
+     * disk (043's ordering invariant), and each hand-off only once.
+     *
+     * Spec 082 (review of RJ1): once per `(hash, ids, maybe_sent, admitted)`,
+     * never per record. The write-ahead hands the op over "may have been
+     * sent" before its POST; the relay taking it hands over the SAME hash and
+     * ids again, `admitted`. Keyed by record alone, that second hand-off was
+     * never fed — the tracker kept an accepted op in doubt, and two relay
+     * `not_found` answers past the grace ended it "not sent" with its record
+     * failed over money that landed.
      */
     private fun tryHandoff() {
         val handoff = synchronized(handoffLock) {
             val handoff = pendingHandoff ?: return
             if (!handoff.record_ids.all { it in persistedRecords }) return
             pendingHandoff = null
-            if (handedRecords.containsAll(handoff.record_ids)) return
-            handedRecords += handoff.record_ids
+            if (!handedKeys.add(handoffKey(handoff))) return
+            handedOps += handoff.user_op_hash.lowercase()
             handoff
         }
+        VelaLog.event(
+            "sign.tracker", "handed",
+            "op" to handoff.user_op_hash.take(12), "maybeSent" to handoff.maybe_sent, "admitted" to handoff.admitted,
+        )
         ports.trackSubmitted(
             TrackHandoff(
                 userOpHash = handoff.user_op_hash,
@@ -128,16 +138,76 @@ class SigningController(
                 chainId = handoff.chain_id,
                 maybeSent = handoff.maybe_sent,
                 submitBlock = handoff.submit_block,
+                admitted = handoff.admitted,
             ),
         )
+        followTracker()
     }
 
-    /** The records this request has handed the tracker (guarded by [handoffLock]). */
-    private val handedRecords = HashSet<String>()
+    /** One hand-off, as fed: the op, its records, and the two flags. */
+    private data class HandoffKey(val op: String, val ids: List<String>, val maybeSent: Boolean, val admitted: Boolean)
+
+    private fun handoffKey(handoff: SignTrackerHandoff) =
+        HandoffKey(handoff.user_op_hash.lowercase(), handoff.record_ids.sorted(), handoff.maybe_sent, handoff.admitted)
+
+    /** The hand-offs this request has fed the tracker (guarded by [handoffLock]). */
+    private val handedKeys = HashSet<HandoffKey>()
+
+    /** The ops this request handed the tracker — whose entries it forwards as `OpTracked` (guarded by [handoffLock]). */
+    private val handedOps = HashSet<String>()
+
+    /** The withdrawals already fed to the tracker, once per value (guarded by [handoffLock]). */
+    private val withdrawn = HashSet<SignTrackerWithdraw>()
+
+    /** The last `(status, tx hash)` forwarded per op (guarded by [handoffLock]). */
+    private val forwarded = HashMap<String, Pair<app.getvela.wallet.feature.send.core.TrackStatus, String?>>()
+
+    @Volatile
+    private var following: kotlinx.coroutines.Job? = null
+
+    /**
+     * Spec 082 RJ4: the answer follows the tracker. Every change of the
+     * tracker's entry for an op this request handed over reaches the core as
+     * `OpTracked`; the core decides whether it answers the page (a terminal
+     * verdict past `OpSubmitted`) or waits — never this file.
+     */
+    private fun followTracker() {
+        val tracker = ports.trackerView() ?: return
+        synchronized(handoffLock) {
+            if (following != null) return
+            following = scope.launch {
+                tracker.collect { view ->
+                    val changed = synchronized(handoffLock) {
+                        view.entries.filter { entry ->
+                            val op = entry.user_op_hash.lowercase()
+                            op in handedOps && forwarded.put(op, entry.status to entry.tx_hash) != (entry.status to entry.tx_hash)
+                        }
+                    }
+                    changed.forEach { entry ->
+                        dispatchSign(SignEvent.OpTracked(entry.user_op_hash, entry.status, entry.tx_hash, now()))
+                    }
+                }
+            }
+        }
+    }
+
+    /** Spec 082 RJ1: a write-ahead op proven never sent — the tracker forgets it, once per value. */
+    private fun feedWithdraw(withdraw: SignTrackerWithdraw) {
+        val fresh = synchronized(handoffLock) { withdrawn.add(withdraw) }
+        if (!fresh) return
+        VelaLog.event("sign.tracker", "withdrawn: never sent", "op" to withdraw.user_op_hash.take(12))
+        ports.trackWithdrawn(withdraw.user_op_hash, withdraw.record_ids)
+    }
 
     interface Ports : SignExecutor.Ports {
-        /** The tracker follows the operation to its verdict (043's `trackSubmitted`; 082's two flags ride along). */
+        /** The tracker follows the operation to its verdict (043's `trackSubmitted`; 082's flags ride along). */
         fun trackSubmitted(handoff: TrackHandoff)
+
+        /** Spec 082 RJ1: the tracker's `Withdrawn` — a written-ahead op proven never sent. */
+        fun trackWithdrawn(userOpHash: String, recordIds: List<String>) {}
+
+        /** Spec 082 RJ4: the tracker's entries, which this request forwards to the core as `OpTracked`; `null` = none. */
+        fun trackerView(): StateFlow<app.getvela.wallet.feature.send.core.TrackView>? = null
 
         /** The descriptor endpoint base. */
         fun dataBase(): String
@@ -197,6 +267,13 @@ class SigningController(
                         submit_block = submitted.submitBlock,
                     ),
                 )
+            }
+
+            // Spec 082 RJ1: signed and hashed, nothing posted — the core writes
+            // the record ahead and clears the POST once it is on disk.
+            override fun opSigned(id: String, userOpHash: String, submitBlock: Long?) {
+                ports.opSigned(id, userOpHash, submitBlock)
+                dispatchSign(SignEvent.OpSigned(id = id, user_op_hash = userOpHash, submit_block = submitBlock, now_ms = now()))
             }
 
             // Spec 082 RA9: the sheet's words follow the ceremony — "preparing"
@@ -293,9 +370,62 @@ class SigningController(
      */
     val feeOpen = MutableStateFlow(false)
 
-    /** The `FeeFailure` wire name the core's schedule takes (`quote_unavailable`, …). */
-    private fun feeFailureWire(failure: app.getvela.wallet.feature.send.core.FeeFailure): String =
-        app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.send.core.FeeFailure.serializer(), failure).trim('"')
+    @Volatile
+    private var requoting: kotlinx.coroutines.Job? = null
+
+    /**
+     * The automatic re-quotes after [first] (spec 079 FR-008, spec 082 RJ12):
+     * the core's wait before each (`feeRequoteDelayMs`), each re-ask bounded
+     * by `feeRequoteTimeoutMs()` — one that has not answered by then is a
+     * failure again, and the schedule goes on (the next ask abandons it).
+     * Ends when the fee is back, when a failure no retry fixes is reached, or
+     * once the sheet is approved or closed. Every step is a `fee:` line.
+     */
+    private suspend fun requoteLoop(chainId: Int, first: app.getvela.wallet.feature.send.core.FeeFailure) {
+        val timeoutMs = uniffi.vela_core_uniffi.feeRequoteTimeoutMs().toLong()
+        var failure = first
+        var cause = causeOf(first)
+        var attempt = 0
+        while (true) {
+            attempt += 1
+            val wait = uniffi.vela_core_uniffi.feeRequoteDelayMs(failure.wire, attempt.toUInt())?.toLong()
+            if (wait == null) {
+                VelaLog.event("fee", "quote failed chain=$chainId cause=$cause: no re-quote fixes it")
+                return
+            }
+            VelaLog.event("fee", "quote failed chain=$chainId cause=$cause re-quote #$attempt in $wait ms")
+            kotlinx.coroutines.delay(wait)
+            if (!mayRequote(signHost.view.value, answered)) return
+            // A tap on the row (or a coin picked) asked meanwhile, and it came back.
+            if (fee.value.failed == null && fee.value.fee != null) {
+                VelaLog.event("fee", "quote back chain=$chainId after ${attempt - 1} re-quotes")
+                return
+            }
+            val started = System.currentTimeMillis()
+            when (val quoted = speedControl.requote(timeoutMs)) {
+                is SpeedControl.Quoted.Settled -> {
+                    val next = quoted.view.failed
+                    if (next == null) {
+                        VelaLog.event("fee", "quote back chain=$chainId after $attempt re-quotes", "ms" to (System.currentTimeMillis() - started))
+                        return
+                    }
+                    failure = next
+                    cause = causeOf(next)
+                }
+                // Not answered in time: a failure again, of the same kind the
+                // schedule was following.
+                SpeedControl.Quoted.TimedOut -> cause = "timeout"
+                // Somebody asked another question (a speed, a coin): its own answer drives the row.
+                SpeedControl.Quoted.Superseded -> return
+            }
+        }
+    }
+
+    /** A failure as the `fee:` lines name it: the core's word, and whether a chain read was rate-limited. */
+    private fun causeOf(failure: app.getvela.wallet.feature.send.core.FeeFailure): String = when (failure) {
+        is app.getvela.wallet.feature.send.core.FeeFailure.ChainRead -> if (failure.rate_limited) "chain_read(rate_limited)" else "chain_read"
+        else -> failure.name
+    }
 
     /** A tap on the fee row: a failed quote is asked again; with more than one coin, the list opens or closes. */
     fun feeTapped() {
@@ -373,30 +503,22 @@ class SigningController(
                 }
             }
             // Spec 079: a quote that failed for a reason that can pass (the
-            // relay unreachable, a busy estimate) is asked again on the core's
-            // schedule — 3 s, 6 s, 12 s, then every 15 s — while the sheet is up
-            // and nothing is signing. On the Xiaomi the row said "点击重试" with
-            // the relay down and stayed that way after it came back.
+            // relay unreachable, a busy estimate, the chain's node) is asked
+            // again on the core's schedule while the sheet is up and nothing
+            // is signing. On the Xiaomi the row said "点击重试" with the relay
+            // down and stayed that way after it came back. Spec 082 RJ12: 3 s,
+            // 6 s, then every 8 s, each re-ask bounded by the core's
+            // `feeRequoteTimeoutMs()` — the fee is back within 14 s of the
+            // relay returning — and every step on the log.
             scope.launch {
-                var attempt = 0
-                var pending: kotlinx.coroutines.Job? = null
-                fee.collect { fee ->
-                    val failure = fee.failed
-                    if (failure == null) {
-                        attempt = 0
-                        pending?.cancel()
-                        return@collect
-                    }
-                    if (fee.busy || pending?.isActive == true) return@collect
-                    if (!mayRequote(signHost.view.value, answered)) return@collect
-                    attempt += 1
-                    val wait = uniffi.vela_core_uniffi.feeRequoteDelayMs(feeFailureWire(failure), attempt.toUInt()) ?: return@collect
-                    pending = scope.launch {
-                        kotlinx.coroutines.delay(wait.toLong())
-                        if (this@SigningController.fee.value.failed != null && mayRequote(signHost.view.value, answered)) {
-                            speedControl.refresh()
-                        }
-                    }
+                // The sheet's own state too: a failure that landed before the
+                // sheet was up is asked about once it is.
+                kotlinx.coroutines.flow.combine(fee, signHost.view) { fee, view -> fee to view }.collect { (fee, view) ->
+                    if (fee.failed == null || fee.busy || requoting?.isActive == true) return@collect
+                    if (!mayRequote(view, answered)) return@collect
+                    // A failure no retry fixes (a missing key, a calculation): the row says so once.
+                    if (uniffi.vela_core_uniffi.feeRequoteDelayMs(fee.failed.wire, 1u) == null) return@collect
+                    requoting = scope.launch { requoteLoop(request.chainId, fee.failed) }
                 }
             }
         }
@@ -409,10 +531,11 @@ class SigningController(
                 speedControl.stage(view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting)
                 view.tracker_handoff?.let { handoff ->
                     val fresh = synchronized(handoffLock) {
-                        (!handedRecords.containsAll(handoff.record_ids)).also { if (it) pendingHandoff = handoff }
+                        (handoffKey(handoff) !in handedKeys).also { if (it) pendingHandoff = handoff }
                     }
                     if (fresh) tryHandoff()
                 }
+                view.tracker_withdraw?.let(::feedWithdraw)
                 if (view.surface == SignSurface.Hidden && view.request == null && _request.value != null && answered) _closed.value = true
             }
         }
@@ -471,8 +594,9 @@ class SigningController(
     }
 
     init {
-        // One request, one controller: its fee sessions end with it.
-        scope.launch { closed.first { it }; speedControl.dispose() }
+        // One request, one controller: its fee sessions end with it, and so
+        // do its ear on the tracker and its re-quotes.
+        scope.launch { closed.first { it }; requoting?.cancel(); speedControl.dispose(); following?.cancel() }
     }
 
     fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value)))

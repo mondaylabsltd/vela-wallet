@@ -202,6 +202,15 @@ sealed class SignRecordClose {
     @Serializable
     @SerialName("failed")
     data object Failed : SignRecordClose()
+
+    /**
+     * Spec 082 RJ1: the relay accepted the write-ahead record's op — the
+     * record's `maybeSent` becomes false and it stays pending; only the
+     * tracker closes it.
+     */
+    @Serializable
+    @SerialName("admitted")
+    data object Admitted : SignRecordClose()
 }
 
 @Serializable
@@ -260,9 +269,15 @@ sealed class SignSubmitOutcome {
     @SerialName("underfunded")
     data class Underfunded(val message: String, val funding: SignFundingNeeded? = null) : SignSubmitOutcome()
 
+    /**
+     * [refused] (spec 082 RJ3): the relay refused the op — a rejection that is
+     * not "relayer unavailable". The page is answered the core's fixed
+     * "refused" sentence whatever [message] says, and the sheet never says
+     * "try again".
+     */
     @Serializable
     @SerialName("failed")
-    data class Failed(val message: String) : SignSubmitOutcome()
+    data class Failed(val message: String, val refused: Boolean = false) : SignSubmitOutcome()
 
     /** Spec 082 RB2: the asker is gone — nothing was sent, nobody is answered, nothing is recorded. */
     @Serializable
@@ -278,6 +293,18 @@ data class SignTrackerHandoff(
     /** Spec 082: carried into the tracker's `Submitted`, so a lost reply is followed as one. */
     val maybe_sent: Boolean = false,
     val submit_block: Long? = null,
+    /** Spec 082 RJ1: the relay accepted the op the write-ahead hand-off announced. */
+    val admitted: Boolean = false,
+)
+
+/**
+ * Spec 082 RJ1: a write-ahead record proven never sent — fed to the tracker's
+ * `Withdrawn` the moment it appears (idempotent).
+ */
+@Serializable
+data class SignTrackerWithdraw(
+    val user_op_hash: String,
+    val record_ids: List<String> = emptyList(),
 )
 
 /**
@@ -322,6 +349,15 @@ sealed class SignEndingState {
     @SerialName("not_sent")
     data object NotSent : SignEndingState()
 
+    /**
+     * Spec 082 RJ3: the relay refused it (the tracker's `Rejected`) — cross,
+     * `statusFailed` + `componentsUi.signing.refused`, and no Retry words:
+     * the same request would be refused again.
+     */
+    @Serializable
+    @SerialName("refused")
+    data object Refused : SignEndingState()
+
     @Serializable
     @SerialName("following")
     data class Following(
@@ -360,6 +396,10 @@ data class SignView(
     val reconcile_pending: Boolean = false,
     val swipe_action: SignSwipeAction = SignSwipeAction.None,
     val tracker_handoff: SignTrackerHandoff? = null,
+    /** Spec 082 RJ1: fed to the tracker's `Withdrawn` the moment it appears. */
+    val tracker_withdraw: SignTrackerWithdraw? = null,
+    /** Spec 082 RJ3: [error] is the relay refusing the op — `refused` under `statusFailed`, never "try again". */
+    val failure_refused: Boolean = false,
     val notice: SignNotice? = null,
     val global_chain_id: Int = 0,
     val blocked: SignBlockedView? = null,
@@ -405,6 +445,20 @@ sealed class SignOperation {
     @Serializable
     @SerialName("update_record")
     data class UpdateRecord(val record_id: String, val close: SignRecordClose) : SignOperation()
+
+    /**
+     * Spec 082 RJ1: the write-ahead record for request [id] is on disk — the
+     * shell may POST [user_op_hash] now, and only now (after the asker check,
+     * immediately before the POST). Answered `responded`.
+     */
+    @Serializable
+    @SerialName("clear_to_post")
+    data class ClearToPost(val id: String, val user_op_hash: String) : SignOperation()
+
+    /** Spec 082 RJ1: a write-ahead record whose op is proven never sent. Answered `record_updated`. */
+    @Serializable
+    @SerialName("delete_record")
+    data class DeleteRecord(val record_id: String) : SignOperation()
 
     @Serializable
     @SerialName("switch_active_account")
@@ -511,6 +565,36 @@ sealed class SignEvent {
         val maybe_sent: Boolean = false,
         /** The head read before the first submit POST; `null` = unknown. */
         val submit_block: Long? = null,
+    ) : SignEvent()
+
+    /**
+     * Spec 082 RJ1: the op for request [id] is signed and its hash computed —
+     * after the passkey, the local hash and the head read, BEFORE any POST.
+     * The core writes the record ahead and answers `ClearToPost` once it is on
+     * disk.
+     */
+    @Serializable
+    @SerialName("op_signed")
+    data class OpSigned(
+        val id: String,
+        val user_op_hash: String,
+        val submit_block: Long? = null,
+        val now_ms: Double,
+    ) : SignEvent()
+
+    /**
+     * Spec 082 RJ4: the tracker's entry for the in-flight op changed. Past
+     * `OpSubmitted` and still unanswered, the core answers the page from it
+     * (Confirmed / Dropped with a tx hash → the tx hash; Rejected → refused;
+     * NotSent → not sent); anything else waits.
+     */
+    @Serializable
+    @SerialName("op_tracked")
+    data class OpTracked(
+        val user_op_hash: String,
+        val status: app.getvela.wallet.feature.send.core.TrackStatus,
+        val tx_hash: String? = null,
+        val now_ms: Double,
     ) : SignEvent()
 
     /** Spec 082 RA9: the passkey (or the Trusted Signer's page) is up for request [id]. */

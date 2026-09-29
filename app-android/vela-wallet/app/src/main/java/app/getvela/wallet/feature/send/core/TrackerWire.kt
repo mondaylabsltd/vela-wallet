@@ -177,6 +177,15 @@ sealed class TrackOperation {
     @Serializable
     @SerialName("now")
     data object Now : TrackOperation()
+
+    /**
+     * Spec 082 RJ4: `eth_getTransactionReceipt(tx_hash)` through the chain
+     * pool — the bundle transaction the relay's status named for this op.
+     * Answered [TrackShellResult.TxReceipt] with the result as it came.
+     */
+    @Serializable
+    @SerialName("tx_receipt")
+    data class TxReceipt(val chain_id: Int, val tx_hash: String, val user_op_hash: String) : TrackOperation()
 }
 
 // -- what the shell observed -------------------------------------------------
@@ -267,6 +276,20 @@ sealed class TrackShellResult {
     @Serializable
     @SerialName("notified")
     data object Notified : TrackShellResult()
+
+    /**
+     * The answer to [TrackOperation.TxReceipt] (spec 082 RJ4): [receipt_json]
+     * is the JSON-RPC `result` exactly as it came — `"null"` while the
+     * transaction is not mined; `null` when the pool got no answer. The core
+     * reads the op's own event out of it; the shell judges nothing.
+     */
+    @Serializable
+    @SerialName("tx_receipt")
+    data class TxReceipt(
+        val user_op_hash: String,
+        val now_ms: Double,
+        val receipt_json: String? = null,
+    ) : TrackShellResult()
 }
 
 // -- what the shell tells it -------------------------------------------------
@@ -284,6 +307,8 @@ data class TrackHandoff(
     val chainId: Int,
     val maybeSent: Boolean = false,
     val submitBlock: Long? = null,
+    /** Spec 082 RJ1: the relay accepted the op a write-ahead hand-off announced. */
+    val admitted: Boolean = false,
 ) {
     fun event(): TrackEvent.Submitted = TrackEvent.Submitted(
         user_op_hash = userOpHash,
@@ -291,6 +316,7 @@ data class TrackHandoff(
         chain_id = chainId,
         maybe_sent = maybeSent,
         submit_block = submitBlock,
+        admitted = admitted,
     )
 }
 
@@ -307,7 +333,22 @@ sealed class TrackEvent {
         val maybe_sent: Boolean = false,
         /** The head read before the first submit POST; `null` = unknown. */
         val submit_block: Long? = null,
+        /**
+         * Spec 082 RJ1: the relay accepted this op (the hand-off after a
+         * write-ahead one) — never "may have been sent", and a relay
+         * `not_found` no longer counts against it.
+         */
+        val admitted: Boolean = false,
     ) : TrackEvent()
+
+    /**
+     * Spec 082 RJ1: the op was proven never sent after its write-ahead
+     * hand-off. Drops [record_ids] from the entry and removes an entry left
+     * with none; patches nothing, reads no balance.
+     */
+    @Serializable
+    @SerialName("withdrawn")
+    data class Withdrawn(val user_op_hash: String, val record_ids: List<String>) : TrackEvent()
 
     @Serializable
     @SerialName("tick")

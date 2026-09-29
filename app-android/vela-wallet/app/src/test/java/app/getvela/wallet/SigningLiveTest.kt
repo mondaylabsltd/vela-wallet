@@ -407,6 +407,45 @@ class SigningLiveTest {
         assertTrue(SigningLive.simBlocks(null, ctx).isEmpty())
     }
 
+    /**
+     * Spec 082 RJ15 (G49): a signed amount is the core's (`formatSignedTokenAmount`)
+     * — a dust delta is written exactly, never `−0`, the minus is U+2212, and a
+     * zero is not drawn at all.
+     */
+    @Test
+    fun `a signed amount never reads minus zero and a zero is not drawn`() {
+        val dust = SigningLive.simBlocks(
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000"), TrustSimJudgment.Erc20Trusted(token = "0xddaf", delta = "0", symbol = "USDC", decimals = 6))),
+            ctx,
+        ).single() as SigningBlock.Balances
+        assertEquals("the zero USDC move is not a row", listOf("XDAI"), dust.rows.map { it.symbol })
+        assertEquals("\u22120.000000000000001", dust.rows.single().delta)
+        assertTrue("never −0", dust.rows.none { it.delta == "\u22120" || it.delta == "-0" })
+
+        val zeros = SigningLive.simBlocks(SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("0"))), ctx).single() as SigningBlock.Balances
+        assertTrue(zeros.rows.isEmpty())
+        assertEquals("nothing of theirs moves", strings.t("componentsUi.signing.simResultNoChange"), zeros.note)
+    }
+
+    /**
+     * Spec 082 RJ13 (G48): the reason under a failed fee is the core's
+     * (`feeFailureReasonKey`) — the relay's failure, or the chain's node,
+     * rate-limited or out of reach and named — never Vela's words for a node
+     * that did not answer, and nothing at all for a failure no network caused.
+     */
+    @Test
+    fun `the fee row's reason is the core's, naming the chain's node when that is what failed`() {
+        fun warning(failure: app.getvela.wallet.feature.send.core.FeeFailure) =
+            (SigningLive.feeModel(ClearSigningView(), FeeView(failed = failure), ctx) as FeeModel.OnChain).warning
+        assertEquals(strings.t("home.balanceDetailStatusRetrying"), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = true)))
+        assertEquals(strings.t("explore.chainDown", mapOf("chain" to "Gnosis")), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false)))
+        assertTrue("the chain is named", warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false))!!.contains("Gnosis"))
+        assertEquals(strings.t("componentsUi.funding.denialNetworkError"), warning(app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable))
+        assertNull(warning(app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed))
+        val down = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(true)), ctx) as FeeModel.OnChain
+        assertTrue("a chain read that failed is tapped to ask again", down.tappable)
+    }
+
     // -- Issue #262: the coin that pays --------------------------------------
 
     private fun estimate(asset: FeeAssetView, totalWei: String) = FeeEstimateView(

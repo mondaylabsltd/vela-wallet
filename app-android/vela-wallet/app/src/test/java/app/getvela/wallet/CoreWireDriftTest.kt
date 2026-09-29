@@ -433,6 +433,7 @@ class CoreWireDriftTest {
         assertStringUnion<FeedTxStatus>("FeedTxStatus")
         assertStringUnion<FeedDirection>("FeedDirection")
         assertStringUnion<FeedBatchKind>("FeedBatchKind")
+        assertStringUnion<app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole>("FeedCounterpartyRole")
     }
 
     @Test
@@ -769,7 +770,7 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<FeeAssetView>("FeeAssetView")
         assertVariantsExist<FeeEvent>("FeeEvent")
         assertStringUnion<FeeTier>("FeeTier")
-        assertStringUnion<FeeFailure>("FeeFailure")
+        assertFeeFailureMatchesTheMirror()
         assertStringUnion<FeeAssetKind>("FeeAssetKind")
     }
 
@@ -934,6 +935,120 @@ class CoreWireDriftTest {
         assertEquals("history.emptyFilter", view.history_empty_key)
     }
 
+    // -- spec 082 round 2: every new variant decodes (T244) --------------------
+    //
+    // The same rule as above: one unknown value fails the whole view, so each
+    // new variant and field is decoded from the core's own shape and survives
+    // the trip back.
+
+    @Test
+    fun theWriteAheadAndTheTrackersAnswerOfRound2Decode() {
+        assertEquals(
+            SignOperation.ClearToPost("1", "0xop"),
+            roundTrip<SignOperation>("""{"type":"clear_to_post","id":"1","user_op_hash":"0xop"}"""),
+        )
+        assertEquals(SignOperation.DeleteRecord("0xop"), roundTrip<SignOperation>("""{"type":"delete_record","record_id":"0xop"}"""))
+        assertEquals(
+            SignOperation.UpdateRecord("0xop", SignRecordClose.Admitted),
+            roundTrip<SignOperation>("""{"type":"update_record","record_id":"0xop","close":{"type":"admitted"}}"""),
+        )
+        assertEquals(
+            SignSubmitOutcome.Failed("AA23 reverted", refused = true),
+            roundTrip<SignSubmitOutcome>("""{"type":"failed","message":"AA23 reverted","refused":true}"""),
+        )
+        // A pre-082 shape still reads: not refused.
+        assertEquals(SignSubmitOutcome.Failed("x"), roundTrip<SignSubmitOutcome>("""{"type":"failed","message":"x"}"""))
+        val signed = roundTrip<SignEvent>("""{"type":"op_signed","id":"1","user_op_hash":"0xop","submit_block":42,"now_ms":1.0}""")
+        assertEquals(42L, (signed as SignEvent.OpSigned).submit_block)
+        val tracked = roundTrip<SignEvent>("""{"type":"op_tracked","user_op_hash":"0xop","status":"rejected","tx_hash":null,"now_ms":1.0}""")
+        assertEquals(TrackStatus.Rejected, (tracked as SignEvent.OpTracked).status)
+        assertEquals(SignEndingState.Refused, roundTrip<SignEndingState>("""{"type":"refused"}"""))
+        val view = roundTrip<SignView>(
+            """{"surface":"sheet","error":{"kind":"submit_failed","detail":"x"},"failure_refused":true,
+               "tracker_handoff":{"user_op_hash":"0xop","record_ids":["0xop"],"chain_id":100,"maybe_sent":false,"submit_block":null,"admitted":true},
+               "tracker_withdraw":{"user_op_hash":"0xop","record_ids":["0xop"]}}""",
+        )
+        assertTrue(view.failure_refused)
+        assertTrue(view.tracker_handoff!!.admitted)
+        assertEquals(SignTrackerWithdraw("0xop", listOf("0xop")), view.tracker_withdraw)
+
+        assertEquals(
+            TrackOperation.TxReceipt(100, "0xtx", "0xop"),
+            roundTrip<TrackOperation>("""{"type":"tx_receipt","chain_id":100,"tx_hash":"0xtx","user_op_hash":"0xop"}"""),
+        )
+        assertEquals(
+            TrackShellResult.TxReceipt("0xop", 1.0, "null"),
+            roundTrip<TrackShellResult>("""{"type":"tx_receipt","user_op_hash":"0xop","now_ms":1.0,"receipt_json":"null"}"""),
+        )
+        val submitted = roundTrip<TrackEvent>("""{"type":"submitted","user_op_hash":"0xop","record_ids":["0xop"],"chain_id":100,"admitted":true}""")
+        assertTrue((submitted as TrackEvent.Submitted).admitted)
+        assertEquals(
+            TrackEvent.Withdrawn("0xop", listOf("0xop")),
+            roundTrip<TrackEvent>("""{"type":"withdrawn","user_op_hash":"0xop","record_ids":["0xop"]}"""),
+        )
+    }
+
+    @Test
+    fun theSendWriteAheadOfRound2Decodes() {
+        assertEquals(SendOperation.ClearToPost("0xop"), roundTrip<SendOperation>("""{"type":"clear_to_post","user_op_hash":"0xop"}"""))
+        assertEquals(
+            SendOperation.MarkAdmitted(listOf("0xop-0", "0xop-1")),
+            roundTrip<SendOperation>("""{"type":"mark_admitted","record_ids":["0xop-0","0xop-1"]}"""),
+        )
+        assertEquals(SendOperation.DeleteTxRecords(listOf("0xop")), roundTrip<SendOperation>("""{"type":"delete_tx_records","ids":["0xop"]}"""))
+        assertEquals(
+            SendOperation.TrackWithdrawn("0xop", listOf("0xop")),
+            roundTrip<SendOperation>("""{"type":"track_withdrawn","user_op_hash":"0xop","record_ids":["0xop"]}"""),
+        )
+        val track = roundTrip<SendOperation>(
+            """{"type":"track_submitted","user_op_hash":"0xop","record_ids":["0xop"],"chain_id":100,"maybe_sent":false,"submit_block":null,"admitted":true}""",
+        )
+        assertTrue((track as SendOperation.TrackSubmitted).admitted)
+        assertEquals(SendShellResult.PostCleared, roundTrip<SendShellResult>("""{"type":"post_cleared"}"""))
+        val signed = roundTrip<SendEvent>("""{"type":"op_signed","user_op_hash":"0xop","submit_block":7,"now_ms":1.0}""")
+        assertEquals(7L, (signed as SendEvent.OpSigned).submit_block)
+    }
+
+    @Test
+    fun aChainReadFeeFailureAndAFeedRowsRoleDecode() {
+        val view = roundTrip<FeeView>("""{"busy":false,"failed":{"chain_read":{"rate_limited":true}}}""")
+        assertEquals(FeeFailure.ChainRead(rate_limited = true), view.failed)
+        assertEquals(FeeFailure.QuoteUnavailable, roundTrip<FeeView>("""{"failed":"quote_unavailable"}""").failed)
+        assertEquals("""{"chain_read":{"rate_limited":false}}""", FeeFailure.ChainRead(false).wire)
+        assertEquals("quote_unavailable", FeeFailure.QuoteUnavailable.wire)
+        val refused = runCatching { Wire.json.decodeFromString(FeeView.serializer(), """{"failed":"no_such_word"}""") }
+        assertTrue("an unknown fee failure fails the view, never reads as a default", refused.isFailure)
+
+        val record = roundTrip<FeedTxRecord>(
+            """{"id":"0xop","from":"0xa","to":"0xb","value":"0","symbol":"","decimals":18,"chain_id":100,"timestamp":1.0,"day_start_ms":0.0,"status":"pending","call_data":"0xa9059cbb"}""",
+        )
+        assertEquals("0xa9059cbb", record.call_data)
+        val item = roundTrip<FeedItem>(
+            """{"id":"0xaa","direction":"out","counterparty":"0xc","usd_value":0.0,"chain_id":100,"timestamp":1.0,"day_start_ms":0.0,"counterparty_role":"contract"}""",
+        )
+        assertEquals(app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole.Contract, item.counterparty_role)
+    }
+
+    /**
+     * `FeeFailure` since spec 082 (RJ13): the plain words are a string union,
+     * and `chain_read` is the one arm that carries a field. Kotlin's plain words
+     * must be the mirror's, and its object arm must be the mirror's object arm.
+     */
+    private fun assertFeeFailureMatchesTheMirror() {
+        val arms = splitTopLevel(
+            mirror("FeeFailure")
+                .replace(Regex("/\\*\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), " ")
+                .substringAfter("export type FeeFailure =")
+                .substringBeforeLast(";"),
+            '|',
+        ).map { it.trim() }
+        val plain = arms.filter { it.startsWith("\"") }.map { it.trim('"') }
+        assertEquals("FeeFailure's plain words must match the generated mirror", plain.sorted(), FeeFailure.PLAIN.map { it.name }.sorted())
+        val objects = arms.filter { it.startsWith("{") }
+        assertEquals("FeeFailure has exactly one object arm, chain_read: $objects", 1, objects.size)
+        assertTrue(objects.single(), objects.single().contains("\"chain_read\"") && objects.single().contains("rate_limited: boolean"))
+    }
+
     // -- assertions ----------------------------------------------------------
 
 
@@ -1005,6 +1120,7 @@ class CoreWireDriftTest {
         assertFieldsExist<SignQuotedFee>("SignQuotedFee")
         assertFieldsExist<SignErrorNotice>("SignErrorNotice")
         assertFieldsExist<SignTrackerHandoff>("SignTrackerHandoff")
+        assertFieldsExist<SignTrackerWithdraw>("SignTrackerWithdraw")
         assertVariantsExhaustive<SignOperation>("SignOperation")
         assertVariantsExhaustive<SignShellResult>("SignShellResult")
         assertVariantsExhaustive<SignResponsePayload>("SignResponsePayload")

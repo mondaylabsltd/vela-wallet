@@ -87,6 +87,8 @@ class SendExecutor(
      * background, into the relay client's caches. Fire-and-forget.
      */
     private val prewarm: (account: String, chainIds: List<Int>) -> Unit = { _, _ -> },
+    /** Spec 082 RJ1: the write-ahead gate; tests pin its wait. */
+    private val writeAhead: WriteAhead = WriteAhead(),
 ) {
 
     /** The account store, as the send path reads it. */
@@ -140,6 +142,16 @@ class SendExecutor(
          * followed as one and its landing check starts where the submit did.
          */
         fun trackSubmitted(handoff: TrackHandoff)
+
+        /**
+         * Spec 082 RJ1: the op is signed and hashed and nothing has been
+         * POSTed — the core writes every recipient's row ahead (`OpSigned`) and
+         * answers `ClearToPost` once they are on disk and tracked.
+         */
+        fun opSigned(userOpHash: String, submitBlock: Long?) {}
+
+        /** Spec 082 RJ1: the tracker's `Withdrawn` — written-ahead rows whose op is proven never sent. */
+        fun trackWithdrawn(userOpHash: String, recordIds: List<String>) {}
 
         fun haptic(kind: SendHapticKind)
 
@@ -221,13 +233,48 @@ class SendExecutor(
         }
         is SendOperation.PersistTxRecords -> {
             val ok = feed.writeRecords(operation.records.map(::feedRow))
-            if (ok) ports.recordsPersisted() else VelaLog.event("send.persist", "refused", "rows" to operation.records.size)
+            if (ok) {
+                // RJ1: the POST these rows were written ahead of may go.
+                operation.records.map { it.user_op_hash }.distinct().forEach(writeAhead::written)
+                ports.recordsPersisted()
+            } else {
+                VelaLog.event("send.persist", "refused", "rows" to operation.records.size)
+            }
             SendShellResult.RecordsPersisted
         }
         is SendOperation.TrackSubmitted -> {
             ports.trackSubmitted(
-                TrackHandoff(operation.user_op_hash, operation.record_ids, operation.chain_id, operation.maybe_sent, operation.submit_block),
+                TrackHandoff(
+                    userOpHash = operation.user_op_hash,
+                    recordIds = operation.record_ids,
+                    chainId = operation.chain_id,
+                    maybeSent = operation.maybe_sent,
+                    submitBlock = operation.submit_block,
+                    admitted = operation.admitted,
+                ),
             )
+            SendShellResult.TrackHandedOff
+        }
+        // RJ1: the rows are on disk and tracked — the waiting submit may POST.
+        is SendOperation.ClearToPost -> {
+            writeAhead.clear(operation.user_op_hash.lowercase(), operation.user_op_hash)
+            SendShellResult.PostCleared
+        }
+        // RJ1: the relay took it — the rows are no longer "may have been sent".
+        is SendOperation.MarkAdmitted -> {
+            feed.markAdmitted(operation.record_ids)
+            ports.recordsPersisted()
+            SendShellResult.RecordsPersisted
+        }
+        // RJ1: the op is proven never sent — its rows go, in one write.
+        is SendOperation.DeleteTxRecords -> {
+            feed.deleteRecords(operation.ids)
+            VelaLog.event("send.persist", "write-ahead rows withdrawn: never sent", "rows" to operation.ids.size)
+            ports.recordsPersisted()
+            SendShellResult.RecordsPersisted
+        }
+        is SendOperation.TrackWithdrawn -> {
+            ports.trackWithdrawn(operation.user_op_hash, operation.record_ids)
             SendShellResult.TrackHandedOff
         }
         is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(identity(operation.address))
@@ -440,6 +487,12 @@ class SendExecutor(
             signingStarted = { ports.signingStarted() },
             // The passkey returned: past here nothing a cancel can stop.
             ceremonyDone = ceremonyDone,
+            // RJ1: every recipient's row is written ahead of the POST.
+            beforePost = { localHash, submitBlock ->
+                val clearance = writeAhead.expect(localHash.lowercase())
+                ports.opSigned(localHash, submitBlock)
+                if (!clearance.await()) throw UserOpSpine.Refused(UserOpSpine.Failure.NotCleared)
+            },
         )
     } catch (refused: UserOpSpine.Refused) {
         throw SubmitRefused(
@@ -449,6 +502,9 @@ class SendExecutor(
                 // be reached — try again" is true of exactly this.
                 UserOpSpine.Failure.RelayerUnavailable, UserOpSpine.Failure.NotSent -> SendSubmitFailure.RelayerUnavailable
                 UserOpSpine.Failure.BundlerUnderfunded -> SendSubmitFailure.BundlerUnderfunded
+                // RJ1: the rows were not on disk in time, so nothing was posted.
+                UserOpSpine.Failure.NotCleared -> SendSubmitFailure.Other("the records were not written ahead in time; nothing was sent")
+                is UserOpSpine.Failure.Rejected -> SendSubmitFailure.Other(failure.message)
                 is UserOpSpine.Failure.Other -> SendSubmitFailure.Other(failure.message)
             },
         )
@@ -489,6 +545,11 @@ class SendExecutor(
         SendOperation.CancelPasskeySign -> SendShellResult.PasskeyCancelAcknowledged
         is SendOperation.PersistTxRecords -> SendShellResult.RecordsPersisted
         is SendOperation.TrackSubmitted -> SendShellResult.TrackHandedOff
+        // No go for the submit: it waits out its clearance and posts nothing.
+        is SendOperation.ClearToPost -> SendShellResult.PostCleared
+        is SendOperation.MarkAdmitted -> SendShellResult.RecordsPersisted
+        is SendOperation.DeleteTxRecords -> SendShellResult.RecordsPersisted
+        is SendOperation.TrackWithdrawn -> SendShellResult.TrackHandedOff
         is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(null)
         is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(null)
         is SendOperation.SimulateCalls -> SendShellResult.SimResolved(null)

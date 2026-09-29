@@ -144,6 +144,8 @@ class BridgeSmokeTest {
                 is SignOperation.SignAndSubmit -> SignShellResult.Submit(app.getvela.wallet.feature.signing.core.SignSubmitOutcome.Failed("stub"), 0.0)
                 is SignOperation.PersistRecord -> SignShellResult.RecordPersisted
                 is SignOperation.UpdateRecord -> SignShellResult.RecordUpdated
+                is SignOperation.ClearToPost -> SignShellResult.Responded
+                is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
                 is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
             }
         }

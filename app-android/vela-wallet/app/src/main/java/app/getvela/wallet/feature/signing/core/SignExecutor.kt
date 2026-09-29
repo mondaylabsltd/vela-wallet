@@ -4,7 +4,11 @@ import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.send.core.SendExecutor
 import app.getvela.wallet.feature.send.core.TrustedSignerIntent
 import app.getvela.wallet.feature.send.core.UserOpSpine
+import app.getvela.wallet.feature.send.core.WriteAhead
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +20,7 @@ import org.json.JSONObject
 import uniffi.vela_core_uniffi.UserOpCall
 import uniffi.vela_core_uniffi.dappReceiptWaitMs
 import uniffi.vela_core_uniffi.userOpNotSentDetail
+import uniffi.vela_core_uniffi.userOpRefusedDappDetail
 
 /**
  * The `sign_request` machine's seven arms (spec 044 T029; the desktop's
@@ -26,9 +31,10 @@ import uniffi.vela_core_uniffi.userOpNotSentDetail
  * the ceremony — through [UserOpSpine], the SAME pipeline a person's own
  * transfer runs, deliberately.
  *
- * It reports twice: the accepted user-op hash mid-flight (`OpSubmitted`, so
- * the durable record precedes anything the dApp could poll) and the final
- * outcome. The page is answered with the user-op hash at once (the web's
+ * It reports three times: the signed op before any POST (`OpSigned`, spec
+ * 082 RJ1 — the core writes the record ahead, and the POST waits for its
+ * `ClearToPost`), the accepted user-op hash mid-flight (`OpSubmitted`), and
+ * the final outcome. The page is answered with the user-op hash at once (the web's
  * non-blocking rule after spec 028's finding: blocking on the receipt made
  * `eth_sendTransaction` time out); `eth_getTransactionReceipt` for that
  * hash is translated by the router once the receipt exists.
@@ -51,9 +57,18 @@ class SignExecutor(
     private val origin: () -> String = { "" },
     /** Spec 079: whether [origin] was read from the in-app browser (a page), not the wallet's own request. */
     private val originSeenByBrowser: () -> Boolean = { false },
+    /** Spec 082 RJ1: the write-ahead gate; tests pin its wait. */
+    private val writeAhead: WriteAhead = WriteAhead(),
 ) {
     /** User-op hashes whose pending record has been written — the response never precedes the record. */
     private val persisted = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * The requests the core has answered (spec 082 RJ4): once it has — from
+     * the tracker's verdict, `OpTracked` — the receipt wait for that request
+     * ends; the page has its one answer and the tracker keeps following.
+     */
+    private val answeredIds = MutableStateFlow<Set<String>>(emptySet())
 
     interface Ports {
         /**
@@ -70,6 +85,13 @@ class SignExecutor(
          * first POST; both go into `OpSubmitted` and on with the record.
          */
         fun opSubmitted(id: String, submitted: UserOpSpine.Submitted)
+
+        /**
+         * Spec 082 RJ1: the op for request [id] is signed and hashed, and
+         * nothing has been POSTed — the core writes the record ahead
+         * (`OpSigned`) and answers `ClearToPost` once it is on disk.
+         */
+        fun opSigned(id: String, userOpHash: String, submitBlock: Long?) {}
 
         /** Spec 082 RA9: the passkey (or the Trusted Signer's page) is up for request [id]. */
         fun ceremonyStarted(id: String) {}
@@ -114,7 +136,20 @@ class SignExecutor(
     suspend fun perform(operation: SignOperation): SignShellResult = when (operation) {
         is SignOperation.SendResponse -> {
             ports.respond(operation.transport_id, operation.id, operation.payload)
+            answeredIds.value = answeredIds.value + operation.id
             SignShellResult.Responded
+        }
+        // RJ1: the record is on disk — the waiting submit may POST.
+        is SignOperation.ClearToPost -> {
+            writeAhead.clear(clearanceKey(operation.id, operation.user_op_hash), operation.user_op_hash)
+            SignShellResult.Responded
+        }
+        // RJ1: the written-ahead op is proven never sent — its row goes.
+        is SignOperation.DeleteRecord -> {
+            feed.deleteRecords(listOf(operation.record_id))
+            VelaLog.event("sign.record", "write-ahead record withdrawn: never sent")
+            ports.recordsPersisted()
+            SignShellResult.RecordUpdated
         }
         // `null` means "proceed to submit" — including when a check itself
         // fails: the core's doc is explicit that a timed-out or errored
@@ -127,7 +162,8 @@ class SignExecutor(
         is SignOperation.AttemptSponsorship -> SignShellResult.Sponsorship(SignSponsorship.Denied(null))
         is SignOperation.SignAndSubmit -> SignShellResult.Submit(signAndSubmit(operation), now())
         is SignOperation.PersistRecord -> {
-            feed.writeRecords(listOf(recordRow(operation.record, ports.nativeSymbol(operation.record.chain_id))))
+            val stored = feed.writeRecords(listOf(recordRow(operation.record, ports.nativeSymbol(operation.record.chain_id))))
+            if (stored) writeAhead.written(operation.record.user_op_hash)
             persisted.value = persisted.value + operation.record.user_op_hash.lowercase()
             ports.recordsPersisted()
             ports.recordPersisted(operation.record.record_id)
@@ -137,6 +173,8 @@ class SignExecutor(
             when (val close = operation.close) {
                 is SignRecordClose.Confirmed -> feed.patchRecords(listOf(operation.record_id), "confirmed", close.tx_hash)
                 SignRecordClose.Failed -> feed.patchRecords(listOf(operation.record_id), "failed", null)
+                // RJ1: the relay took it — no longer "may have been sent"; still pending.
+                SignRecordClose.Admitted -> feed.markAdmitted(listOf(operation.record_id))
             }
             ports.recordsPersisted()
             SignShellResult.RecordUpdated
@@ -166,6 +204,9 @@ class SignExecutor(
         is SignOperation.SignAndSubmit -> SignShellResult.Submit(SignSubmitOutcome.Failed("Signing failed"), now())
         is SignOperation.PersistRecord -> SignShellResult.RecordPersisted
         is SignOperation.UpdateRecord -> SignShellResult.RecordUpdated
+        // No go for the submit: it waits out its clearance and posts nothing.
+        is SignOperation.ClearToPost -> SignShellResult.Responded
+        is SignOperation.DeleteRecord -> SignShellResult.RecordUpdated
         is SignOperation.SwitchActiveAccount -> SignShellResult.AccountSwitched
     }
 
@@ -209,6 +250,9 @@ class SignExecutor(
                 intent = TrustedSignerIntent(op.method, op.params_json, origin(), originSeenByBrowser()),
                 // Between the passkey and the relay POST (RB2).
                 ceremonyDone = { stillAsked(op); ports.ceremonyDone(op.id) },
+                // RJ1: the record is written ahead, then the asker is asked
+                // once more, immediately before the POST.
+                beforePost = { localHash, submitBlock -> writtenAhead(op, localHash, submitBlock) },
             )
             val hash = submitted.userOpHash
             ports.opSubmitted(op.id, submitted)
@@ -222,7 +266,7 @@ class SignExecutor(
             // the tracker (issue 262). A lost reply (RA2) waits the same way,
             // polling the local hash: one answer, never "not sent".
             val wait = receiptWaitMs ?: dappReceiptWaitMs((System.currentTimeMillis() - approvedAt).toDouble()).toLong()
-            afterReceiptWait(hash, awaitReceipt(op.chain_id, hash, wait))
+            afterReceiptWait(hash, awaitReceipt(op.id, op.chain_id, hash, wait))
         } catch (_: AskerGone) {
             SignSubmitOutcome.AskerGone
         } catch (refused: UserOpSpine.Refused) {
@@ -231,9 +275,13 @@ class SignExecutor(
                 UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
                 UserOpSpine.Failure.BundlerUnderfunded -> SignSubmitOutcome.Underfunded("The relay's gas account is underfunded", null)
                 UserOpSpine.Failure.RelayerUnavailable -> SignSubmitOutcome.Failed("The gas relayer is unavailable right now")
-                // Nothing left the device (RA10): the core's fixed sentence,
-                // never the pool's text.
-                UserOpSpine.Failure.NotSent -> SignSubmitOutcome.Failed(userOpNotSentDetail())
+                // Nothing left the device (RA10, and RJ1's write-ahead that was
+                // not cleared in time): the core's fixed sentence, never the
+                // pool's text.
+                UserOpSpine.Failure.NotSent, UserOpSpine.Failure.NotCleared -> SignSubmitOutcome.Failed(userOpNotSentDetail())
+                // RJ3: the relay refused it — the page is told the core's
+                // "refused" sentence, the sheet never says "try again".
+                is UserOpSpine.Failure.Rejected -> SignSubmitOutcome.Failed(failure.message ?: userOpRefusedDappDetail(), refused = true)
                 is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
             }
         }
@@ -263,7 +311,40 @@ class SignExecutor(
         }
     }
 
-    private suspend fun awaitReceipt(chainId: Int, userOpHash: String, waitMs: Long): String? {
+    /**
+     * RJ1: the op is signed and hashed. The core writes its record ahead; the
+     * POST goes only on its `ClearToPost`, and only while the page still asks
+     * (RB2, immediately before the POST). Neither: nothing is posted.
+     */
+    private suspend fun writtenAhead(op: SignOperation.SignAndSubmit, localHash: String, submitBlock: Long?) {
+        val clearance = writeAhead.expect(clearanceKey(op.id, localHash))
+        ports.opSigned(op.id, localHash, submitBlock)
+        if (!clearance.await()) throw UserOpSpine.Refused(UserOpSpine.Failure.NotCleared)
+        stillAsked(op)
+    }
+
+    /**
+     * The receipt wait (the desktop's `await_receipt`), which also ends the
+     * moment the core has answered request [id] from the tracker's verdict
+     * (spec 082 RJ4): the page has its one answer, and polling on would only
+     * produce a result the core drops.
+     */
+    private suspend fun awaitReceipt(id: String, chainId: Int, userOpHash: String, waitMs: Long): String? = coroutineScope {
+        val polled = async { pollReceipt(chainId, userOpHash, waitMs) }
+        val answered = async { answeredIds.first { id in it } }
+        val receipt = select<String?> {
+            polled.onAwait { it }
+            answered.onAwait {
+                VelaLog.event("sign.receipt", "the core answered from the tracker: wait ended", "op" to userOpHash.take(12))
+                null
+            }
+        }
+        polled.cancel()
+        answered.cancel()
+        receipt
+    }
+
+    private suspend fun pollReceipt(chainId: Int, userOpHash: String, waitMs: Long): String? {
         val deadline = System.currentTimeMillis() + waitMs
         while (true) {
             val remaining = deadline - System.currentTimeMillis()
@@ -283,6 +364,9 @@ class SignExecutor(
     }
 
     companion object {
+        /** The write-ahead gate's key on the dApp path: the request and its op. */
+        private fun clearanceKey(id: String, userOpHash: String) = "$id|${userOpHash.lowercase()}"
+
         /**
          * What the receipt wait means for the core: in time, `Succeeded` with
          * the TX hash; late, `ReceiptPending` with the op hash — never a

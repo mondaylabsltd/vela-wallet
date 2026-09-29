@@ -495,7 +495,7 @@ class WalletController(
         VelaLog.event(
             "tracker", "handed",
             "op" to handoff.userOpHash.take(12), "chain" to handoff.chainId,
-            "maybeSent" to handoff.maybeSent, "submitBlock" to handoff.submitBlock,
+            "maybeSent" to handoff.maybeSent, "admitted" to handoff.admitted, "submitBlock" to handoff.submitBlock,
         )
         host.dispatch(handoff.event(), TrackEvent.serializer())
         // Device-found (spec 043 phase 4): a person taps confirm and leaves
@@ -504,6 +504,17 @@ class WalletController(
         // resume. The handoff itself hands the worker the clock when nobody is
         // in front.
         if (!foreground()) backgroundPollPort()
+    }
+
+    /**
+     * Spec 082 RJ1: a written-ahead op proven never sent (the sign machine's
+     * `tracker_withdraw`, the send machine's `track_withdrawn`) — the tracker
+     * drops those rows, patches nothing, reads no balance.
+     */
+    fun trackWithdrawn(userOpHash: String, recordIds: List<String>) {
+        val host = trackerHost ?: return
+        VelaLog.event("tracker", "withdrawn: never sent", "op" to userOpHash.take(12), "rows" to recordIds.size)
+        host.dispatch(TrackEvent.Withdrawn(user_op_hash = userOpHash, record_ids = recordIds), TrackEvent.serializer())
     }
 
     /** The clock the core owns the cadence of; the shell only says "now". */

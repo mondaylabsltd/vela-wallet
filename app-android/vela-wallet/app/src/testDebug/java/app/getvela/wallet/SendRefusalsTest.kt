@@ -273,11 +273,11 @@ class SendRefusalsTest {
         c.slideConfirm()
         withTimeout(30_000) { posting.await() }
         assertEquals(1, signs)
-        // The POST is out and the core still reads "signing": the button under
-        // the notice says Cancel, and the person taps it.
-        assertEquals(SendTxStatus.Signing, withTimeout(10_000) { c.send.first { it.tx_status == SendTxStatus.Signing } }.tx_status)
+        // The POST is out. Since spec 082 RJ1 the op was written ahead first,
+        // and the core moved the sheet to "submitting" then — but a Cancel that
+        // still arrives (a tap in flight) must not stop the POST either.
+        assertEquals(SendTxStatus.Submitting, withTimeout(10_000) { c.send.first { it.tx_status == SendTxStatus.Submitting } }.tx_status)
         c.cancelSigning()
-        withTimeout(10_000) { c.send.first { it.tx_status != SendTxStatus.Signing } }
         delay(200)
         release.complete(Unit)
         val receipt = withTimeout(30_000) { c.send.first { it.receipt != null } }
@@ -286,7 +286,7 @@ class SendRefusalsTest {
         assertEquals("the POST ran to its answer", 1, relaySends)
         // …and the row is on disk for the tracker to follow.
         withTimeout(10_000) {
-            while (store.values[app.getvela.wallet.core.data.KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty()) delay(20)
+            while (store.values[app.getvela.wallet.core.data.KeyValueStore.Keys.TRANSACTIONS].orEmpty().contains(receipt.user_op_hash!!).not()) delay(20)
         }
         assertTrue(store.values.getValue(app.getvela.wallet.core.data.KeyValueStore.Keys.TRANSACTIONS).contains(receipt.user_op_hash!!))
     }

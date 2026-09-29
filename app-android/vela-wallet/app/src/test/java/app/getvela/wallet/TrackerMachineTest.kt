@@ -254,4 +254,98 @@ class TrackerMachineTest {
         assertEquals(null, old.submit_block)
         assertEquals(null, TrackerExecutor.pendingRecord(pendingRow(op).put("userOpHash", "")))
     }
+    // -- spec 082 round 2: the relay's tx hash, confirmed through the chain (RJ4) --
+
+    private val bundle = "0x" + "b0".repeat(32)
+    private val eventTopic = "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f"
+
+    /** The bundle transaction's receipt as the chain returns it, holding the op's own event. */
+    private fun bundleReceipt(success: Boolean): JSONObject {
+        val word = { n: Int -> n.toString(16).padStart(64, '0') }
+        return JSONObject()
+            .put("transactionHash", bundle)
+            .put("status", "0x1")
+            .put(
+                "logs",
+                JSONArray().put(
+                    JSONObject()
+                        .put("address", uniffi.vela_core_uniffi.entryPointAddress())
+                        .put("topics", JSONArray().put(eventTopic).put(op).put("0x" + "0".repeat(24) + "88cca0eedbf2c4426110bbfc998f048689266894").put("0x" + "0".repeat(64)))
+                        .put("data", "0x" + word(0) + word(if (success) 1 else 0) + word(21_000) + word(21_000))
+                        .put("transactionHash", bundle),
+                ),
+            )
+    }
+
+    /**
+     * EX13: the relay's receipt stays null for minutes while its status already
+     * says `included` with the bundle's tx hash. The core asks for that
+     * transaction's receipt through the chain pool (`TxReceipt`); the shell
+     * passes the result through untouched, and the op's own event confirms it
+     * within a poll — never 还没上链 for five minutes.
+     */
+    @Test
+    fun `the relay's included tx hash is confirmed through the chain's receipt`() = runBlocking {
+        store.values[KeyValueStore.Keys.TRANSACTIONS] = JSONArray().put(pendingRow(op)).toString()
+        port.always("eth_getUserOperationReceipt") { FakeRelayPort.body(JSONObject.NULL) }
+        port.always("pimlico_getUserOperationStatus") { FakeRelayPort.body(JSONObject().put("status", "included").put("transactionHash", bundle)) }
+        val asked = java.util.concurrent.CopyOnWriteArrayList<List<Any?>>()
+        port.always("eth_getTransactionReceipt") { params -> asked += params; FakeRelayPort.body(bundleReceipt(success = true)) }
+        val host = host()
+        host.dispatch(
+            app.getvela.wallet.feature.send.core.TrackHandoff(op, listOf(op), 100, admitted = true).event(),
+            TrackEvent.serializer(),
+        )
+        withTimeout(10_000) { host.view.first { it.entries.any { e -> e.user_op_hash == op } } }
+        repeat(8) { tick(host, 12_500.0) }
+        val settled = withTimeout(15_000) { host.view.first { it.entries.any { e -> e.status == TrackStatus.Confirmed } } }
+        assertEquals(bundle, settled.entries.single().tx_hash)
+        assertEquals("the relay's tx hash, asked of the chain", listOf<Any?>(bundle), asked.first())
+        withTimeout(5_000) { while (patched.isEmpty() || moved.isEmpty()) delay(50) }
+        assertEquals(listOf("1:Confirmed:$bundle"), patched)
+        assertEquals("confirmed", JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0).optString("status"))
+    }
+
+    /** A receipt not mined yet crosses as the text `null` — the core keeps asking; nothing is decided here. */
+    @Test
+    fun `a receipt not mined yet crosses as null and no answer as nothing`() = runBlocking {
+        val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
+        port.answer("eth_getTransactionReceipt", FakeRelayPort.body(JSONObject.NULL), FakeRelayPort.error("header not found"))
+        assertEquals("null", relay.txReceipt(100, bundle))
+        assertEquals("an error member is no answer", null, relay.txReceipt(100, bundle))
+        assertEquals("nobody answered", null, relay.txReceipt(100, bundle))
+        port.answer("eth_getTransactionReceipt", FakeRelayPort.body(bundleReceipt(success = true)))
+        val mined = JSONObject(relay.txReceipt(100, bundle)!!)
+        assertEquals(bundle, mined.getString("transactionHash"))
+    }
+
+    /**
+     * Spec 082 RJ1: a written-ahead op proven never sent is withdrawn — the
+     * tracker forgets it without patching its row or reading a balance, and
+     * a later submit of the same hash is followed from the start.
+     */
+    @Test
+    fun `a withdrawn op is forgotten without a patch, and a later submit starts fresh`() = runBlocking {
+        store.values[KeyValueStore.Keys.TRANSACTIONS] = JSONArray().put(maybeSentRow(op, 1000)).toString()
+        port.always("eth_getUserOperationReceipt") { FakeRelayPort.body(JSONObject.NULL) }
+        val host = host()
+        host.dispatch(
+            app.getvela.wallet.feature.send.core.TrackHandoff(op, listOf(op), 100, maybeSent = true, submitBlock = 1000).event(),
+            TrackEvent.serializer(),
+        )
+        withTimeout(10_000) { host.view.first { it.entries.any { e -> e.user_op_hash == op } } }
+        host.dispatch(TrackEvent.Withdrawn(user_op_hash = op, record_ids = listOf(op)), TrackEvent.serializer())
+        withTimeout(10_000) { host.view.first { it.entries.none { e -> e.user_op_hash == op } } }
+        delay(200)
+        assertTrue("nothing patched", patched.isEmpty())
+        assertTrue("no balance read", moved.isEmpty())
+
+        host.dispatch(
+            app.getvela.wallet.feature.send.core.TrackHandoff(op, listOf(op), 100, admitted = true).event(),
+            TrackEvent.serializer(),
+        )
+        val again = withTimeout(10_000) { host.view.first { it.entries.any { e -> e.user_op_hash == op } } }.entries.single()
+        assertEquals(TrackStatus.Pending, again.status)
+        assertTrue("admitted: never may-have-been-sent", again.outcome != app.getvela.wallet.feature.send.core.TrackOutcome.MaybeSent)
+    }
 }

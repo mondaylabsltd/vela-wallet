@@ -122,7 +122,10 @@ class SendMachineTest {
     /** Every tracker handoff, in order (spec 082: the two submit facts ride along). */
     private val handoffs = java.util.concurrent.CopyOnWriteArrayList<app.getvela.wallet.feature.send.core.TrackHandoff>()
 
-    private fun controller(expectMaybeSent: Boolean = false): SendController {
+    /** Spec 082 RJ1: every op the tracker was told to forget — proven never sent. */
+    private val withdraws = java.util.concurrent.CopyOnWriteArrayList<Pair<String, List<String>>>()
+
+    private fun controller(): SendController {
         val pool = RpcPool(store = FakeStore(), endpoints = FakeEndpointSource(listOf("https://rpc.test")), scope = scope, transport = FakeRpcTransport { _, _ -> FakeRpcTransport.network() })
         val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
         val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
@@ -145,11 +148,11 @@ class SendMachineTest {
                 events += if (stored.contains(hash)) "track:$hash:persisted" else "track:$hash:NOT-PERSISTED"
                 assertEquals(100, handoff.chainId)
                 assertTrue(handoff.recordIds.isNotEmpty())
-                // The relay answered: sent, not "may have been sent" — unless
-                // the test lost its reply (spec 082).
-                assertEquals(expectMaybeSent, handoff.maybeSent)
+                // Spec 082 RJ1: the write-ahead hands the op over "may have
+                // been sent" before its POST; the relay's verdict follows.
                 handoffs += handoff
             }
+            controller.onTrackWithdrawn = { hash, ids -> withdraws += hash to ids }
         }
     }
 
@@ -187,7 +190,12 @@ class SendMachineTest {
 
         // The pending row, in the feed's own shape, and the handoff after it.
         // The handoff happens after the last view emission, so poll rather than wait on the flow.
-        withTimeout(10_000) { while (events.none { it.startsWith("track:") }) kotlinx.coroutines.delay(50) }
+        // Spec 082 RJ1: the rows were written ahead under the LOCAL hash; this
+        // relay answers another one (`userop.hash_mismatch`), so they were
+        // withdrawn and the relay's written and handed over.
+        withTimeout(10_000) { while (events.none { it.startsWith("track:0xa1a1") }) kotlinx.coroutines.delay(50) }
+        assertTrue("the write-ahead was handed over first, before the POST: $events", events.indexOf(events.first { it.startsWith("track:") }) < events.indexOf("relay.send"))
+        assertEquals(listOf(handoffs.first().userOpHash), withdraws.map { it.first })
         val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
         assertEquals(1, rows.length())
         val row = rows.getJSONObject(0)
@@ -229,7 +237,7 @@ class SendMachineTest {
         seedAccount(); scriptRelay()
         port.always("eth_blockNumber") { FakeRelayPort.body("0x3e8") }
         port.always("eth_sendUserOperation") { events += "relay.send"; app.getvela.wallet.feature.wallet.core.RpcResult.Failed(rateLimited = false, maybeDelivered = true) }
-        val c = controller(expectMaybeSent = true)
+        val c = controller()
         toTheSlide(c)
         val receipt = withTimeout(30_000) { c.send.first { it.stage == SendStage.Receipt && it.receipt != null } }
         assertEquals(SendReceiptStatus.MaybeSent, receipt.receipt!!.status)
@@ -240,8 +248,11 @@ class SendMachineTest {
         assertEquals(local, row.optString("userOpHash"))
         assertTrue("kept with the row for a restart", row.getBoolean("maybeSent"))
         assertEquals(1000L, row.getLong("submitBlock"))
+        // Written ahead and handed over "may have been sent" before the POST;
+        // the lost reply adds nothing — the row already says so.
         val handoff = handoffs.single()
         assertEquals(local, handoff.userOpHash)
+        assertTrue(handoff.maybeSent)
         assertEquals(1000L, handoff.submitBlock)
         assertEquals("posted once: nobody pays twice", 1, events.count { it == "relay.send" })
     }
@@ -257,7 +268,8 @@ class SendMachineTest {
         assertTrue("not a receipt: ${refused.receipt}", refused.receipt?.status != SendReceiptStatus.MaybeSent)
         kotlinx.coroutines.delay(300)
         assertTrue(store.values[KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty() || JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).length() == 0)
-        assertTrue(handoffs.isEmpty())
+        // Spec 082 RJ1: written ahead, then withdrawn — nothing is left to follow.
+        assertEquals(handoffs.map { it.userOpHash }, withdraws.map { it.first })
     }
 
     /**
@@ -309,6 +321,131 @@ class SendMachineTest {
         val failed = withTimeout(30_000) { c.send.first { it.tx_error != null || it.receipt != null } }
         assertNotNull("the relay refused; the core must say so", failed.tx_error)
         assertEquals(1, signs)
-        assertTrue(store.values[KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty())
+        kotlinx.coroutines.delay(300)
+        // Spec 082 RJ1: the rows written ahead of the POST were withdrawn.
+        assertTrue(store.values[KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty() || JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).length() == 0)
+        assertEquals(handoffs.map { it.userOpHash }, withdraws.map { it.first })
+    }
+
+    /**
+     * Spec 082 RJ1 (G34, P0): the wallet's own Send writes ahead too. At the
+     * moment of the POST the row is already on disk, pending, "may have been
+     * sent", and the tracker holds it; the relay taking the op (under the
+     * hash the wallet computed) marks it sent, in place, and hands the same op
+     * over again, admitted.
+     */
+    @Test
+    fun `the rows are on disk before the POST, and the relay taking the op marks them sent`() = runBlocking {
+        seedAccount(); scriptRelay()
+        port.always("eth_sendUserOperation") {
+            events += "relay.send"
+            val rows = JSONArray(store.values[KeyValueStore.Keys.TRANSACTIONS] ?: "[]")
+            val ahead = (0 until rows.length()).map { rows.getJSONObject(it) }.singleOrNull { it.optBoolean("maybeSent") }
+            events += if (ahead != null && handoffs.isNotEmpty()) "relay.saw-record-and-tracker" else "relay.NOT-WRITTEN-AHEAD"
+            FakeRelayPort.body(ahead?.getString("userOpHash"))
+        }
+        val c = controller()
+        toTheSlide(c)
+        val receipt = withTimeout(30_000) { c.send.first { it.stage == SendStage.Receipt && it.receipt != null } }
+        assertEquals(SendReceiptStatus.Submitted, receipt.receipt!!.status)
+        assertTrue("written ahead and tracked when the POST left: $events", "relay.saw-record-and-tracker" in events)
+        withTimeout(10_000) { while (handoffs.size < 2) kotlinx.coroutines.delay(20) }
+        kotlinx.coroutines.delay(200)
+        val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
+        assertEquals("one row, never a second for the same op", 1, rows.length())
+        val row = rows.getJSONObject(0)
+        assertEquals(receipt.user_op_hash, row.getString("userOpHash"))
+        assertEquals("the relay took it", false, row.getBoolean("maybeSent"))
+        assertEquals(listOf(true to false, false to true), handoffs.map { it.maybeSent to it.admitted })
+        assertTrue(withdraws.isEmpty())
+        assertEquals(1, events.count { it == "relay.send" })
+    }
+
+    /**
+     * Spec 082 RJ1 (DX9): the app is gone while the POST is out. One pending
+     * "may have been sent" row is on disk under the op's hash, and the next
+     * launch's tracker reads it back as exactly that.
+     */
+    @Test
+    fun `a quit while the POST is out leaves one pending may-have-been-sent row`() = runBlocking {
+        seedAccount(); scriptRelay()
+        val posting = kotlinx.coroutines.CompletableDeferred<Unit>()
+        port.before = { method -> if (method == "eth_sendUserOperation") { posting.complete(Unit); kotlinx.coroutines.awaitCancellation() } }
+        val c = controller()
+        toTheSlide(c)
+        withTimeout(30_000) { posting.await() }
+        scope.cancel()
+        val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
+        assertEquals(1, rows.length())
+        val row = rows.getJSONObject(0)
+        assertEquals("send", row.getString("type"))
+        assertTrue(row.getBoolean("maybeSent"))
+        val pending = app.getvela.wallet.feature.send.core.TrackerExecutor.pendingRecord(row)!!
+        assertTrue(pending.maybe_sent)
+        assertEquals(handoffs.single().userOpHash, pending.user_op_hash)
+    }
+
+    /**
+     * Spec 082 RJ1 (DX9) for a split Send: every recipient's row is written
+     * ahead, in one write, under the one op's hash, before its POST — a quit
+     * while it is out leaves them all pending "may have been sent", handed to
+     * the tracker together.
+     */
+    @Test
+    fun `a split send's rows are all written ahead, and a quit leaves them all may-have-been-sent`() = runBlocking {
+        seedAccount(); scriptRelay()
+        val posting = kotlinx.coroutines.CompletableDeferred<Unit>()
+        port.before = { method -> if (method == "eth_sendUserOperation") { posting.complete(Unit); kotlinx.coroutines.awaitCancellation() } }
+        val c = controller()
+        c.open(SendAccountRef(id = safe, address = safe, name = "Parallel space"), SendDisplayContext(code = "USD", rate = null, fiat_decimals = 2))
+        val picked = withTimeout(10_000) { c.send.first { it.tokens.isNotEmpty() } }
+        c.selectToken(SendLive.tokenId(picked.tokens.single()))
+        withTimeout(10_000) { c.send.first { it.stage == SendStage.EnterDetails } }
+        c.enterSplit()
+        c.seedSplit(
+            listOf(
+                app.getvela.wallet.feature.send.core.SendRecipientDraft(id = "a", address = recipient, amount = "0.001"),
+                app.getvela.wallet.feature.send.core.SendRecipientDraft(id = "b", address = "0x9F3c000000000000000000000000000000021aE0", amount = "0.002"),
+            ),
+        )
+        withTimeout(10_000) { c.send.first { it.can_continue } }
+        c.continueTapped()
+        try {
+            withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.fee != null && it.can_confirm } }
+        } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+            throw AssertionError("DIAG never reached confirm: alert=${c.alert.value} || send=${c.send.value} || fee=${c.fee.value}", timeout)
+        }
+        c.slideConfirm()
+        withTimeout(30_000) { posting.await() }
+        scope.cancel()
+        val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
+        assertEquals("one row per recipient", 2, rows.length())
+        val hashes = (0 until rows.length()).map { rows.getJSONObject(it).getString("userOpHash") }.toSet()
+        assertEquals("one op", 1, hashes.size)
+        assertTrue((0 until rows.length()).all { rows.getJSONObject(it).getBoolean("maybeSent") })
+        val handoff = handoffs.single()
+        assertEquals(hashes.single(), handoff.userOpHash)
+        assertEquals(2, handoff.recordIds.size)
+        assertTrue(handoff.maybeSent)
+    }
+
+    /** Spec 082 RJ1: rows the store would not take are never posted — "not sent", nothing to follow. */
+    @Test
+    fun `rows the store would not take are never posted`() = runBlocking {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        c.open(SendAccountRef(id = safe, address = safe, name = "Parallel space"), SendDisplayContext(code = "USD", rate = null, fiat_decimals = 2))
+        val picked = withTimeout(10_000) { c.send.first { it.tokens.isNotEmpty() } }
+        c.selectToken(SendLive.tokenId(picked.tokens.single()))
+        withTimeout(10_000) { c.send.first { it.stage == SendStage.EnterDetails } }
+        c.setRecipient(recipient); c.setAmount("0.001")
+        withTimeout(10_000) { c.send.first { it.can_continue } }
+        c.continueTapped()
+        withTimeout(30_000) { c.send.first { it.stage == SendStage.Confirm && it.fee != null && it.can_confirm } }
+        store.refuseWrites = true
+        c.slideConfirm()
+        val failed = withTimeout(30_000) { c.send.first { it.tx_error != null || it.receipt != null } }
+        assertNotNull("not sent: ${failed.receipt}", failed.tx_error)
+        assertEquals("zero POSTs", 0, events.count { it == "relay.send" })
     }
 }

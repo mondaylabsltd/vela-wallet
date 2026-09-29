@@ -498,6 +498,22 @@ class RelayClient(
     suspend fun headBlock(chainId: Int): Long? =
         chainCall(chainId, "eth_blockNumber", emptyList())?.let { quantity(it.opt("result")) }
 
+    /**
+     * Spec 082 RJ4: `eth_getTransactionReceipt(txHash)` through the chain pool
+     * — the bundle transaction a relay status named. Its `result` exactly as
+     * it came: `"null"` while it is not mined; `null` when nobody answered (an
+     * error member is no answer). What the receipt means — the op's own
+     * event, a Safe `ExecutionFailure` — is the core's, never this file's.
+     */
+    suspend fun txReceipt(chainId: Int, txHash: String): String? {
+        if (txHash.isBlank()) return null
+        val body = chainCall(chainId, "eth_getTransactionReceipt", listOf(txHash)) ?: return null
+        if (body.has("error") && !body.isNull("error")) return null
+        if (!body.has("result")) return null
+        val result = body.opt("result")
+        return if (result == null || result == JSONObject.NULL) "null" else result.toString()
+    }
+
     sealed class ReceiptAnswer {
         data object Unreachable : ReceiptAnswer()
 
@@ -682,21 +698,39 @@ class RelayClient(
      * held for good; "not deployed" and "unknown" never are (the first send
      * deploys it).
      */
-    suspend fun isDeployed(chainId: Int, address: String): Boolean? {
+    suspend fun isDeployed(chainId: Int, address: String): Boolean? =
+        (deployedRead(chainId, address) as? DeployedRead.Known)?.deployed
+
+    /** The deployment read's answer: known, or — spec 082 RJ13 — no answer from the chain's nodes, and whether they only rate-limited. */
+    sealed class DeployedRead {
+        data class Known(val deployed: Boolean) : DeployedRead()
+        data class Unanswered(val rateLimited: Boolean) : DeployedRead()
+    }
+
+    /**
+     * [isDeployed] with the reason there is no answer: a fee that needs this
+     * read and cannot have it is the chain node's failure (`ChainRead`,
+     * rate-limited or out of reach) — never the relay's.
+     */
+    suspend fun deployedRead(chainId: Int, address: String): DeployedRead {
         val key = "$chainId:${address.lowercase()}"
-        synchronized(deployedSafes) { if (key in deployedSafes) return true }
+        synchronized(deployedSafes) { if (key in deployedSafes) return DeployedRead.Known(true) }
         return deployFlights.run(key) { readDeployed(chainId, address, key) }
     }
 
     private val deployedSafes = HashSet<String>()
-    private val deployFlights = SingleFlight<String, Boolean?>()
+    private val deployFlights = SingleFlight<String, DeployedRead>()
 
-    private suspend fun readDeployed(chainId: Int, address: String, key: String): Boolean? {
-        val body = chainCall(chainId, "eth_getCode", listOf(address, "latest")) ?: return null
-        val code = body.optString("result").takeIf { it.startsWith("0x") } ?: return null
+    private suspend fun readDeployed(chainId: Int, address: String, key: String): DeployedRead {
+        val body = when (val answer = port.call(chainId, "eth_getCode", listOf(address, "latest"), RpcKind.Rpc)) {
+            is RpcResult.Body -> answer.json
+            is RpcResult.Failed -> return DeployedRead.Unanswered(rateLimited = answer.rateLimited)
+            is RpcResult.RangeCapped -> return DeployedRead.Unanswered(rateLimited = false)
+        }
+        val code = body.optString("result").takeIf { it.startsWith("0x") } ?: return DeployedRead.Unanswered(rateLimited = false)
         val deployed = code.length > 2
         if (deployed) synchronized(deployedSafes) { deployedSafes.add(key) }
-        return deployed
+        return DeployedRead.Known(deployed)
     }
 
     /**
