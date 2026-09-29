@@ -200,6 +200,10 @@ class SignRequest {
 							maybe_sent: maybeSent,
 							submit_block: submitBlock
 						});
+						// RJ4: what the tracker already knows of this op, now that the
+						// core takes it — a verdict reached while the POST was out was
+						// dropped, and a terminal entry never changes again.
+						this.#forward?.taken(userOpHash);
 					},
 					opSigned: (id, userOpHash, submitBlock) =>
 						this.dispatch({

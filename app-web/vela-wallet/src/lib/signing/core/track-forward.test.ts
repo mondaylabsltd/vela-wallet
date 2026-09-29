@@ -92,6 +92,39 @@ describe('the answer follows the tracker (RJ4)', () => {
 		expect(t.sent).toHaveLength(1);
 	});
 
+	it('a verdict the tracker reached while the POST was out reaches the core once it takes the op', () => {
+		// The write-ahead hands the op to the tracker BEFORE its POST (RJ1),
+		// and the core takes `OpTracked` only past `OpSubmitted` (contract §4).
+		// The chain check can find the landed op while the relay's reply is
+		// still being lost (EX-W1): forwarded then, the verdict was dropped,
+		// and — the entry being terminal — never changed again, so the page
+		// waited out its window for the op hash and the sheet fell back to
+		// 提交至网络… (D3). A fake core that drops what it cannot take yet:
+		let taken = false;
+		const heard: SignEvent[] = [];
+		const t = tracker();
+		const forward = createTrackForward({
+			subscribe: (listener) => {
+				t.listeners.add(listener);
+				return () => t.listeners.delete(listener);
+			},
+			current: () => ({ entries: [entry({ status: 'confirmed', tx_hash: TX, outcome: 'final' })] }),
+			dispatch: (event) => {
+				if (taken) heard.push(event);
+			},
+			now: () => 42
+		});
+		forward.watch(OP);
+		t.push(entry({ status: 'confirmed', tx_hash: TX, outcome: 'final' }));
+		expect(heard).toEqual([]);
+		// OpSubmitted: the core takes the op now.
+		taken = true;
+		forward.taken(OP);
+		expect(heard).toEqual([
+			{ type: 'op_tracked', user_op_hash: OP, status: 'confirmed', tx_hash: TX, now_ms: 42 }
+		]);
+	});
+
 	it('stop: no more forwarding, and the tracker listener is gone', () => {
 		const t = tracker();
 		t.forward.watch(OP);

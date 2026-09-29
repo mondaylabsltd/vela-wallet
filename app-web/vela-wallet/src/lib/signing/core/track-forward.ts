@@ -59,6 +59,15 @@ export interface TrackForwardDeps {
 export interface TrackForward {
 	/** Forward this op's entry from now on (`null`: none). The last one watched is dropped. */
 	watch(opHash: string | null): void;
+	/**
+	 * The core took this op (`OpSubmitted`): its entry is forwarded again as it
+	 * stands, whatever was forwarded before. The write-ahead hands the op to
+	 * the tracker BEFORE its POST, and the core drops `OpTracked` until
+	 * `OpSubmitted` — a verdict reached while the reply was out (the chain
+	 * check finding a landed op, EX-W1) was dropped then, and a terminal entry
+	 * never changes again (G37, D3).
+	 */
+	taken(opHash: string): void;
 	/** Stop listening to the tracker. */
 	stop(): void;
 }
@@ -91,6 +100,11 @@ export function createTrackForward(deps: TrackForwardDeps): TrackForward {
 			const next = opHash ? opHash.toLowerCase() : null;
 			if (next === watched) return;
 			watched = next;
+			lastKey = '';
+			forward(deps.current());
+		},
+		taken(opHash) {
+			watched = opHash.toLowerCase();
 			lastKey = '';
 			forward(deps.current());
 		},
