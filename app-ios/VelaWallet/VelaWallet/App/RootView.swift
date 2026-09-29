@@ -2717,7 +2717,11 @@ struct RootView: View {
                 FlowHost(
                     model: flowModel(state),
                     onBack: { flows.back() },
-                    onSheetClosed: { closed in flows.sheetClosed(closed) },
+                    // The STACK's state this screen was built for — a detail
+                    // pushed as A2 is drawn as A3 when it names a contract,
+                    // and the model's state then never matched the top, so
+                    // nothing popped (082 X-HISTORY, device).
+                    onSheetClosed: { _ in flows.sheetClosed(state) },
                     onNavigate: { step in
                         // 导入表格 is the CORE's flag, not a push: the live
                         // router derives the send journey's state from the

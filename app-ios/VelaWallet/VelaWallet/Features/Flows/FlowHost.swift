@@ -188,6 +188,16 @@ struct FlowHost: View {
     var body: some View {
         base
             .walletTextScale(model.textScale)
+            // A closed sheet's flag is for THAT showing only. The flow leaves
+            // the sheet's state when it closes (`onSheetClosed`), and coming
+            // back to it — the next row tapped — is a new sheet: kept, the
+            // flag suppressed it and the tap opened nothing (082 X-HISTORY,
+            // found on the device after the stack fix alone). Cleared on any
+            // change: SwiftUI calls the binding's setter a second time, late,
+            // from the closed showing, and that stale call set the flag again.
+            .onChange(of: model.state) { _, _ in
+                sheetDismissed = nil
+            }
             // The refusal surface belongs to the SCREEN, not only to the sheet.
             //
             // Spec 051 put it inside `FlowSheetHost` because the thing that
@@ -226,13 +236,11 @@ struct FlowHost: View {
             .sheet(
                 isPresented: Binding(
                     get: { sheetShown },
-                    set: { presented in
-                        guard !presented else { return }
-                        let closing = model.state
-                        sheetDismissed = closing
-                        onSheetClosed(closing)
-                    }
-                )
+                    set: { if !$0 { sheetDismissed = model.state } }
+                ),
+                // Once per showing, after the sheet has gone — never from the
+                // setter, which SwiftUI calls twice (082 X-HISTORY, device).
+                onDismiss: { onSheetClosed(model.state) }
             ) {
                 if let sheet = model.sheet {
                     FlowSheetHost(
