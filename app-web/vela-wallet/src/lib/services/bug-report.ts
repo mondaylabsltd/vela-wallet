@@ -206,21 +206,102 @@ export function workerFailureLines(counts: unknown): string[] {
 }
 
 /**
- * {@link workerFailureLines} for this extension, or `[]` off the extension
- * (the hosted wallet has no worker) and when the session store cannot be read.
+ * The failures the wallet PAGE saw itself (spec 082 G61) — a submit that may
+ * have been sent, one that was not sent, one the relay refused, a fee quote
+ * that failed, by cause. The worker's counters only cover what the worker
+ * does; a panel whose payment ended "not sent" left no trace a report could
+ * carry. Closed names, like the worker's: `<area>.<event>[.<cause>]`.
+ */
+export type PanelFailure =
+	'submit.maybe_sent' | 'submit.not_sent' | 'submit.refused' | `fee.quote_failed.${string}`;
+
+/** Where the page's counts live for the tab's life (a panel reload keeps them). */
+export const PANEL_COUNTS_KEY = 'vela.panel.counts';
+
+const panelCounts = new Map<string, number>();
+
+/** The counts this tab kept, once per load — `sessionStorage` may be absent or refuse. */
+function panelStore(): Storage | null {
+	try {
+		return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+	} catch {
+		return null;
+	}
+}
+
+let panelCountsLoaded = false;
+function loadPanelCounts(): void {
+	if (panelCountsLoaded) return;
+	panelCountsLoaded = true;
+	try {
+		const raw = panelStore()?.getItem(PANEL_COUNTS_KEY);
+		const parsed: unknown = raw ? JSON.parse(raw) : null;
+		if (!parsed || typeof parsed !== 'object') return;
+		for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+			if (SW_COUNTER.test(key) && typeof value === 'number' && Number.isInteger(value)) {
+				panelCounts.set(key, Math.max(value, panelCounts.get(key) ?? 0));
+			}
+		}
+	} catch {
+		/* nothing kept: the counts start from this load */
+	}
+}
+
+/**
+ * Count one failure the page saw. A name outside the closed shape is dropped:
+ * a counter is a class, never a value (no hash, address or URL can ride on it).
+ */
+export function countPanelFailure(event: PanelFailure): void {
+	if (!SW_COUNTER.test(event)) return;
+	loadPanelCounts();
+	panelCounts.set(event, (panelCounts.get(event) ?? 0) + 1);
+	try {
+		panelStore()?.setItem(PANEL_COUNTS_KEY, JSON.stringify(Object.fromEntries(panelCounts)));
+	} catch {
+		/* kept in memory for this load */
+	}
+}
+
+/** The page's failure counts as report lines — `panel:submit.not_sent ×1`. */
+export function panelFailureLines(): string[] {
+	loadPanelCounts();
+	const lines: string[] = [];
+	for (const [key, value] of panelCounts) {
+		if (value > 0) lines.push(`panel:${key} ×${value}`);
+	}
+	return lines.sort();
+}
+
+/** Tests only: forget every count. */
+export function _resetPanelFailuresForTest(): void {
+	panelCounts.clear();
+	panelCountsLoaded = false;
+	try {
+		panelStore()?.removeItem(PANEL_COUNTS_KEY);
+	} catch {
+		/* nothing to forget */
+	}
+}
+
+/**
+ * The failure lines a report carries beside the net counters: the page's own
+ * ({@link panelFailureLines}, spec 082 G61) and — in the extension — the
+ * worker's ({@link workerFailureLines}; `[]` on the hosted wallet, which has no
+ * worker, and when the session store cannot be read).
  */
 export async function readWorkerFailureLines(): Promise<string[]> {
+	const panel = panelFailureLines();
 	const session = (
 		globalThis as {
 			chrome?: { storage?: { session?: { get(key: string): Promise<Record<string, unknown>> } } };
 		}
 	).chrome?.storage?.session;
-	if (!isExtensionPage() || typeof session?.get !== 'function') return [];
+	if (!isExtensionPage() || typeof session?.get !== 'function') return panel;
 	try {
 		const all = await session.get(SW_COUNTS_KEY);
-		return workerFailureLines(all?.[SW_COUNTS_KEY]);
+		return [...panel, ...workerFailureLines(all?.[SW_COUNTS_KEY])];
 	} catch {
-		return [];
+		return panel;
 	}
 }
 

@@ -15,6 +15,9 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	_resetPanelFailuresForTest,
+	countPanelFailure,
+	panelFailureLines,
 	workerFailureLines,
 	readWorkerFailureLines,
 	SW_COUNTS_KEY,
@@ -609,5 +612,61 @@ describe('the extension worker’s counters (spec 082 RB14)', () => {
 		});
 		expect(await readWorkerFailureLines()).toEqual(['sw:req.settled.surface_closed ×2']);
 		expect(SW_COUNTS_KEY).toBe('vela.sw.counts');
+	});
+});
+
+/**
+ * Spec 082 G61 (T234): what the page saw itself reaches the report beside the
+ * worker's counters — a submit that may have been sent, one not sent, one the
+ * relay refused, a fee quote that failed by cause. Classes, never values.
+ */
+describe('the page’s own failure counters (spec 082 G61)', () => {
+	afterEach(() => _resetPanelFailuresForTest());
+
+	it('counts each class, and the report reads them as `panel:` lines', async () => {
+		countPanelFailure('submit.maybe_sent');
+		countPanelFailure('submit.not_sent');
+		countPanelFailure('submit.not_sent');
+		countPanelFailure('submit.refused');
+		countPanelFailure('fee.quote_failed.chain_read_rate_limited');
+		expect(panelFailureLines()).toEqual([
+			'panel:fee.quote_failed.chain_read_rate_limited ×1',
+			'panel:submit.maybe_sent ×1',
+			'panel:submit.not_sent ×2',
+			'panel:submit.refused ×1'
+		]);
+		// Off the extension there is no worker; the page's lines still go.
+		await expect(readWorkerFailureLines()).resolves.toEqual(panelFailureLines());
+	});
+
+	it('a name that could carry a value is dropped — no hash, address or URL', () => {
+		countPanelFailure(`fee.quote_failed.0x${'ab'.repeat(20)}` as `fee.quote_failed.${string}`);
+		countPanelFailure('fee.quote_failed.https://rpc.example/key' as `fee.quote_failed.${string}`);
+		expect(panelFailureLines()).toEqual([]);
+	});
+
+	it('the lines ride the preview and the payload like the worker’s', () => {
+		countPanelFailure('submit.refused');
+		const lines = environmentLines(
+			{
+				version: 'Version',
+				platform: 'Platform',
+				language: 'Language',
+				rpc: 'RPC',
+				failures: 'Failures',
+				none: 'none'
+			},
+			{
+				version: '1.0.0',
+				client: 'extension',
+				os: 'macOS',
+				commit: 'abc',
+				platform: 'Extension',
+				language: 'en',
+				unreachable: [],
+				failures: panelFailureLines()
+			}
+		);
+		expect(lines.at(-1)).toBe('Failures: panel:submit.refused ×1');
 	});
 });
