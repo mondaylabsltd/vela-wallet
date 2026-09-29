@@ -87,6 +87,16 @@ final class FlowNav {
         _ = stack.popLast()
     }
 
+    /// A sheet the person closed (× or a drag) takes its own level with it —
+    /// only when that level is the top, so a sheet the send machine derives
+    /// (not pushed) never pops the form under it. Left on the stack, the
+    /// closed sheet's state stayed on top: the next row tapped resolved to the
+    /// same state and was suppressed, `push` ignored the same step, and the
+    /// first ‹ only closed the invisible sheet (082 iPhone pass, X-HISTORY).
+    func sheetClosed(_ state: FlowStateId) {
+        if top == state { _ = stack.popLast() }
+    }
+
     func close() {
         stack.removeAll()
     }

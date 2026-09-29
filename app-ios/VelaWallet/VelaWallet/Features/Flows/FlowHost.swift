@@ -55,6 +55,9 @@ struct FlowHost: View {
 
     let model: FlowScreenModel
     var onBack: () -> Void = {}
+    /// The person closed the sheet of this state (× or a drag). The live host
+    /// takes that state off its stack; the gallery ignores it.
+    var onSheetClosed: (FlowStateId) -> Void = { _ in }
     var onNavigate: (FlowStep) -> Void = { _ in }
     /// The live add-token sheet's field and CTA. Absent everywhere the sheet is
     /// a fixture, which is the gallery and the screenshot sweep.
@@ -221,7 +224,12 @@ struct FlowHost: View {
             .sheet(
                 isPresented: Binding(
                     get: { sheetShown },
-                    set: { if !$0 { sheetDismissed = model.state } }
+                    set: { presented in
+                        guard !presented else { return }
+                        let closing = model.state
+                        sheetDismissed = closing
+                        onSheetClosed(closing)
+                    }
                 )
             ) {
                 if let sheet = model.sheet {
