@@ -1239,44 +1239,46 @@ gone; a record exists before the bytes leave (RJ1).
 
 ### DESK_B — desktop adoption of the core changes (after T185–T194)
 
-- [ ] T217 [US1] Compile against the round-2 core (the Phase 3 T049 pattern): every DESK_B file plus `D/contacts/live.rs` and `D/wallet/live.rs` (test fixtures); proof: `cargo check --all-targets` and `cargo test` in `app-desktop/vela-wallet`; (after T185–T194).
+- [x] T217 [US1] Compile against the round-2 core (the Phase 3 T049 pattern): every DESK_B file plus `D/contacts/live.rs` and `D/wallet/live.rs` (test fixtures); proof: `cargo check --all-targets` and `cargo test` in `app-desktop/vela-wallet`; (after T185–T194).
   - New match arms keep today's behaviour until the task that owns them: `ClearToPost` answered at once, `DeleteRecord` / `DeleteTxRecords` delete the row, `Admitted` / `MarkAdmitted` clear `maybeSent`, `TxReceipt` answered with no receipt, `FeeFailure::ChainRead` worded as today's relay failure, `SignEndingState::Refused` drawn as today's NotSent, `Failed{refused: false}`, `FeedItem` literals with `counterparty_role`, `net_health_step(…, None, now)`.
   - This is the first DESK_B commit; it lets DESK_A run its tests again.
-- [ ] T218 [US1] `D/executor/user_op.rs` and `D/executor/relay.rs`: the before-POST write-ahead hook (RJ1, G34); proof: in-crate tests with a fake relay; (after T217).
+  - Status (DESK_B, c85676b2): the crate compiles against 7a86cebc; the test target's only errors are DESK_A's browser_host.rs network-back test (T203).
+- [x] T218 [US1] `D/executor/user_op.rs` and `D/executor/relay.rs`: the before-POST write-ahead hook (RJ1, G34); proof: in-crate tests with a fake relay; (after T217).
   - `sign_and_submit` (`user_op.rs:830-905`): after the local hash and the head read, `tail.before_post(local_hash, submit_block) -> bool` (the caller sends `OpSigned` and waits ≤ `WRITE_AHEAD_WAIT_MS` for `ClearToPost`); `false` → `SubmitFailure::NotSent` with no POST; the asker check then runs, then the POST.
   - The estimate failure is classified with `estimate_failure` and logged (`fee: relay estimate reverts …` / `unavailable`); `fee:` and `in-band:` lines go through `vlog!` (`:377`); `relay: submitting` is logged once (`relay.rs:701`).
   - Tests: no POST before clearance; no clearance → NotSent and zero POSTs; the Accepted nonce bump unchanged.
-- [ ] T219 [US1] `D/executor/sign_request.rs`: the dApp pipeline writes ahead, withdraws, and stops waiting once answered (RJ1, RJ3, RJ4, G34, G36); proof: in-crate answer tests; (after T218).
+- [x] T219 [US1] `D/executor/sign_request.rs`: the dApp pipeline writes ahead, withdraws, and stops waiting once answered (RJ1, RJ3, RJ4, G34, G36); proof: in-crate answer tests; (after T218).
   - `before_post` sends `Event::OpSigned` and waits on a per-id channel filled by the `ClearToPost` effect; `DeleteRecord` removes the row from `TX_KEY`; `UpdateRecord{Admitted}` sets `maybeSent: false`.
   - `submit_failure` sets `Failed{refused: true}` for a relay rejection that is not RelayerUnavailable/BundlerUnderfunded.
   - `await_receipt` also ends when the core has answered the request (a flag on `SignContext`, set by `signing_host` in T222), so the worker thread does not poll on.
   - Tests: DX9 — `OpSigned` then the process "quits" (no more events) → `wallet.json` holds one pending `maybeSent` dApp row that `tracker::pending_records` hands back; S5 — NotSent → no row after the verdict, one -32603.
-- [ ] T220 [US7] `D/executor/send.rs` and `D/wallet/money.rs`: the wallet's Send writes ahead (RJ1); proof: in-crate tests; (after T218).
+- [x] T220 [US7] `D/executor/send.rs` and `D/wallet/money.rs`: the wallet's Send writes ahead (RJ1); proof: in-crate tests; (after T218).
   - `OpSigned` / `ClearToPost` around the POST; `DeleteTxRecords`, `MarkAdmitted`, `TrackWithdrawn` mapped onto the store and the tracker.
   - Tests: records on disk before the POST; NotSent deletes them; Accepted clears `maybeSent`.
-- [ ] T221 [US7] `D/executor/tracker.rs`: `TxReceipt`, `Withdrawn`, `admitted` (RJ4, G38); proof: fake-pool tests; (after T217).
+- [x] T221 [US7] `D/executor/tracker.rs`: `TxReceipt`, `Withdrawn`, `admitted` (RJ4, G38); proof: fake-pool tests; (after T217).
   - `TxReceipt` → `pool::call(chain, "eth_getTransactionReceipt", [tx])`, the body's `result` as `receipt_json`; `Withdrawn` and `admitted` forwarded from the sign and send handoffs.
   - `tracker:` lines for the receipt-by-tx path and the withdraw.
   - Test: EX13 shape (relay receipt null, status included + tx) → Confirmed within one poll.
-- [ ] T222 [US1] `D/wallet/signing_host.rs`: the tracker drives the answer; fee re-quotes and their log lines; the chain-read fee failure (RJ4, RJ12, RJ13, G37, G47, G48); proof: in-file tests; (after T219, whose `SignContext` flag it sets).
+- [x] T222 [US1] `D/wallet/signing_host.rs`: the tracker drives the answer; fee re-quotes and their log lines; the chain-read fee failure (RJ4, RJ12, RJ13, G37, G47, G48); proof: in-file tests; (after T219, whose `SignContext` flag it sets).
   - When the tracker's entry for the in-flight op changes, dispatch sign `Event::OpTracked` (next to the handoff at `:787-860`); forward `tracker_withdraw`.
   - `schedule_requote` (`:596-640`) bounds each automatic re-quote by `REQUOTE_TIMEOUT_MS` and logs `fee: quote failed chain=… cause=… re-quote #n in N ms` / `fee: quote back chain=… after n re-quotes`.
   - `requote_failure` (`:75-78`): an unanswered deployment read is `FeeFailure::ChainRead{rate_limited}` (from the pool's rate-limit signal), never `QuoteUnavailable`.
   - Tests: the relay returns at t → the fee within 14 s in a fake clock; a rate-limited `eth_getCode` → ChainRead{true}.
-- [ ] T223 [US2] `D/signing/live.rs`, `D/signing/status.rs` and `D/signing/mod.rs`: refused words, the core's reason keys, signed deltas without −0 (RJ3, RJ13, RJ15, G36, G48, G49); proof: `live.rs` / `status.rs` mapping tests; (after T217).
+- [x] T223 [US2] `D/signing/live.rs`, `D/signing/status.rs` and `D/signing/mod.rs`: refused words, the core's reason keys, signed deltas without −0 (RJ3, RJ13, RJ15, G36, G48, G49); proof: `live.rs` / `status.rs` mapping tests; (after T217).
   - `SignEndingState::Refused` and `failure_refused` → `statusFailed` + `componentsUi.signing.refused` (new reader in `mod.rs` with a resolve-without-echo test); no 请重试.
   - `fee_row_state` (`live.rs:1421-1440`) takes its words from `fee_policy::failure_reason_key`; delete the shell's own mapping.
   - `signed_amount` (`live.rs:387-404`) is deleted; deltas use `format_signed_token_amount` and a `None` delta is not drawn.
   - Tests: G14-num's 1000-wei delta → `−0.000000000000001 xDAI`; a rate-limited Ethereum read → 被限流 · 正在自动重试.
-- [ ] T224 [US1] `D/executor/pool.rs` (and `D/executor/balance_dashboard.rs` if the test shows it): network health per source, no read storm (RJ14, G53); proof: in-file tests; (after T217).
+- [x] T224 [US1] `D/executor/pool.rs` (and `D/executor/balance_dashboard.rs` if the test shows it): network health per source, no read storm (RJ14, G53); proof: in-file tests; (after T217).
   - `feed_health` passes the chain id to `net_health_step` (`:872-908`).
   - Investigate with a fake pool (one chain black-holed, 23 answering, relaunch): `failed_chains` must be `{100}` and the asset list non-empty; if a came-back invalidation restarts a read round that is still in flight, join the round instead.
   - Tests: ten Gnosis misses → no `net: offline`; the relaunch scenario above.
-- [ ] T225 [US3] `D/executor/activity_feed.rs` and `D/flows/live.rs`: the record's calldata reaches the feed; the counterparty label follows its role (RJ16, G52); proof: in-crate feed tests; (after T217).
+- [x] T225 [US3] `D/executor/activity_feed.rs` and `D/flows/live.rs`: the record's calldata reaches the feed; the counterparty label follows its role (RJ16, G52); proof: in-crate feed tests; (after T217).
   - The stored row's `signedRequest` → `FeedTxRecord.call_data` (the first call's `data`).
   - `counterparty_role: Contract` → label `componentsUi.signing.interactingLabel`; Recipient → today's `detail_to`.
   - Test: the DX-W3 record → 接收方 0x7687…D141 and no explorer URL.
 - [ ] T226 [US1] Desktop gates (after T199–T208 and T217–T225): `cargo test` and `cargo test --features dev-fixtures` in `app-desktop/vela-wallet`, `cargo clippy --all-targets -- -D warnings`, the live relay test, the release build; output in `EV/gates/phase-9-desktop.txt`.
+  - Status (DESK_B, 5e770a8d): open until T203 lands — the worktree's test target still fails on DESK_A's browser_host.rs:2201-2207 test (two-argument `net_health_step`). On a mirror differing only in that test: `cargo test --release` 752 passed, `--features dev-fixtures` 756 passed, clippy 0 new findings in either config (48 pre-existing), live relay 3 + live estimate 1 passed; `cargo build --release --features dev-fixtures` in the worktree. Details in `EV/gates/phase-9-desktop.txt`; re-run `cargo test` in the worktree once T203 is in.
 
 ### WEB_B — web and extension adoption of the core changes (after T197)
 
