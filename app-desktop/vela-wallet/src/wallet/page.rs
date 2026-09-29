@@ -13196,7 +13196,7 @@ impl WalletPage {
                 cx.spawn(async move |page, cx| {
                     page.update(cx, |this, cx| {
                         if this.load_in_front() {
-                            let steps = this.load.take_due();
+                            let steps = this.load.take_due(crate::executor::now_ms());
                             this.run_load_steps(steps, cx);
                         }
                         cx.notify();
@@ -13866,7 +13866,9 @@ impl WalletPage {
                     after_ms,
                 } => self.after_load(after_ms, cx, move |this, cx| {
                     let in_front = this.load_in_front();
-                    let steps = this.load.retry_fired(generation, in_front);
+                    let steps =
+                        this.load
+                            .retry_fired(generation, in_front, crate::executor::now_ms());
                     this.run_load_steps(steps, cx);
                 }),
             }

@@ -1086,8 +1086,10 @@ impl LoadDriver {
                 );
                 vec![LoadStep::Navigate(url)]
             }
-            // W7: WebKit is still on this load — no second request, and the
-            // attempt comes due again on the same wait.
+            // W7: WebKit is still on this load, and it is young or getting
+            // somewhere — no second request, and the attempt comes due again
+            // on the same wait. Past GIVE_UP_MS with nothing arriving the core
+            // answers `Load` instead (RJ9), which cancels the hung load.
             RetryAction::EngineStillLoading => {
                 if self.skip_logged != Some(self.watch.generation) {
                     self.skip_logged = Some(self.watch.generation);
@@ -1104,15 +1106,21 @@ impl LoadDriver {
         }
     }
 
-    /// An automatic attempt for load `generation` came due.
-    pub fn retry_fired(&mut self, generation: u64, in_front: bool) -> Vec<LoadStep> {
-        let action = self.watch.retry_fired(generation, in_front);
+    /// An automatic attempt for load `generation` came due at `now_ms`.
+    ///
+    /// The clock goes to the core (RJ9): whether a hung load is still given
+    /// the attempt back is judged by its age at this moment, not at the
+    /// engine's last poll.
+    pub fn retry_fired(&mut self, generation: u64, in_front: bool, now_ms: f64) -> Vec<LoadStep> {
+        let action = self.watch.retry_fired_at(generation, in_front, now_ms);
         self.attempt(action)
     }
 
-    /// The page is in front again: an attempt that came due while it was not.
-    pub fn take_due(&mut self) -> Vec<LoadStep> {
-        let action = self.watch.take_due();
+    /// The page is in front again at `now_ms`: an attempt that came due
+    /// while it was not. The engine is not polled while the page is out of
+    /// sight, so its last poll is as old as the absence.
+    pub fn take_due(&mut self, now_ms: f64) -> Vec<LoadStep> {
+        let action = self.watch.take_due_at(now_ms);
         self.attempt(action)
     }
 
@@ -1964,7 +1972,7 @@ mod tests {
         assert!(load.watch.failure.is_some(), "the panel is up");
         // 10 s: WebKit is still loading — no second request.
         let (retry_gen, _) = retry.unwrap_or_else(|| unreachable!("an attempt is scheduled"));
-        for step in load.retry_fired(retry_gen, true) {
+        for step in load.retry_fired(retry_gen, true, 10_000.0) {
             if let LoadStep::Navigate(_) = step {
                 navigations += 1;
             }
@@ -2123,8 +2131,9 @@ mod tests {
         );
         assert!(load.watch.failure.is_some());
         load.watch.engine_loading = true;
-        for _ in 0..10 {
-            let steps = load.retry_fired(generation_n, true);
+        // Every attempt falls due inside the load's first 20 s (RJ9).
+        for i in 0..10_u32 {
+            let steps = load.retry_fired(generation_n, true, 5_500.0 + f64::from(i) * 1_000.0);
             assert!(
                 steps
                     .iter()
@@ -2146,9 +2155,77 @@ mod tests {
             63_500.0,
         );
         load.watch.engine_loading = true;
-        load.retry_fired(next, true);
-        load.retry_fired(next, true);
+        load.retry_fired(next, true, 65_500.0);
+        load.retry_fired(next, true, 67_500.0);
         assert_eq!(load.skip_lines, 2);
+    }
+
+    /// L2 (G44, RJ9): WebKit holds a provisional load at 0.1 for its own
+    /// minute. The attempts that fall due in the load's first 20 s are given
+    /// back (W7); the first one due after that is a real load, which cancels
+    /// the hung one — no attempt for ~60 s in L2. The age is the moment's,
+    /// not the engine's last poll: the engine is not polled while the page is
+    /// out of sight, and an attempt taken when the page comes back is judged
+    /// on the clock of that moment.
+    #[test]
+    fn a_hung_load_is_replaced_by_the_attempt_due_after_twenty_seconds() {
+        const SITE: &str = "https://app.uniswap.org/";
+        let timeout = ProbeAnswer {
+            verdict: Err(vela_core::app::browser_load::probe_code::TIMEOUT),
+            proxy: None,
+        };
+        let hung = || {
+            let mut load = LoadDriver::default();
+            load.requested(SITE, 0.0);
+            // WebKit is on it, provisionally, and never gets further; its
+            // last poll is at 2.75 s.
+            for t in [250.0, 500.0, 2_750.0] {
+                assert!(load.engine(&sample(true, 0.1, SITE), t).is_empty());
+            }
+            let generation_n = load.watch.generation;
+            load.watchdog(generation_n);
+            let steps = load.probed(generation_n, &timeout, 8_000.0);
+            assert!(load.watch.failure.is_some(), "the panel is up");
+            (load, generation_n, steps)
+        };
+        let due_after = |steps: &[LoadStep]| {
+            steps
+                .iter()
+                .find_map(|step| match step {
+                    LoadStep::Retry { after_ms, .. } => Some(f64::from(*after_ms)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| unreachable!("an attempt is scheduled: {steps:?}"))
+        };
+
+        // In front: attempts at 10, 12, … s are given back; the one due at
+        // 20 s loads the address again.
+        let (mut load, generation_n, mut steps) = hung();
+        let mut now_ms = 8_000.0;
+        let navigated_at = loop {
+            now_ms += due_after(&steps);
+            assert!(now_ms < 60_000.0, "no attempt before WebKit's own minute");
+            steps = load.retry_fired(generation_n, true, now_ms);
+            if steps.contains(&LoadStep::Navigate(SITE.to_owned())) {
+                break now_ms;
+            }
+        };
+        assert!(
+            (20_000.0..22_000.0).contains(&navigated_at),
+            "the attempt past 20 s is a load, at {navigated_at} ms"
+        );
+        assert_eq!(load.skip_lines, 1, "the given-back attempts, one line");
+
+        // Out of sight: the attempt due at 10 s waits for the page, which
+        // comes back at 45 s — 42 s after the engine's last poll.
+        let (mut load, generation_n, steps) = hung();
+        let due_at = 8_000.0 + due_after(&steps);
+        assert!(load.retry_fired(generation_n, false, due_at).is_empty());
+        assert_eq!(
+            load.take_due(45_000.0),
+            vec![LoadStep::Navigate(SITE.to_owned())],
+            "taken at 45 s, the hung load is replaced"
+        );
     }
 
     /// G67: with `VELA_DEV_PROXY` in force the probe's route is the dev
