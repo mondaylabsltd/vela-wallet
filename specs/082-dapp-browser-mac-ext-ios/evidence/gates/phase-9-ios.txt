@@ -51,3 +51,17 @@ on the integration worktree. No device was installed on or driven.
 
 7. app-ios/scripts/check-generic-class-deinit.mjs
    OK: every generic class in the app target declares `nonisolated deinit`.
+
+Review re-run (IOS reviewer, 2026-09-29, after 103c4471 and 8772d5dc)
+---------------------------------------------------------------------
+Clone: xcrun simctl clone BD3C6C43-… (iPhone 17 Pro, iOS 26.0) vela-082-ios2r
+       → 93262E73-F5FF-4AE1-BD37-9FB6004170F1; deleted after.
+Baseline at bda40243: ✔ Test run with 1041 tests in 133 suites passed.
+Red first: SendReceiptFollowsTrackerTests.aVerdictTheTrackerAlreadyHasReachesTheReceipt
+   ✘ (send.view?.receipt?.status → "maybe_sent") == "confirmed"; txHash nil — before 8772d5dc.
+After:  ✔ Test run with 1050 tests in 135 suites passed after 11.833 seconds.
+        (+ SigningFollowsTrackerTests 8, SendReceiptFollowsTrackerTests 1)
+Debug device build (generic/platform=iOS, -derivedDataPath <scratchpad>/build/ios-dd-082): ** BUILD SUCCEEDED **
+check-ios-core-fresh: ok (4dd8ce5c…) · check-event-payloads: 0 mismatches (527 sites)
+check-ios-dropped-judgement: 8 / 14 across 57 views (unchanged) · check-ios-event-parity: 4 strong diffs (unchanged)
+check-generic-class-deinit: OK
