@@ -24,8 +24,22 @@
 //
 
 import Foundation
+import VelaCore
 
 enum SimDeltas {
+
+    /// A simulated balance change as the sheet writes it — the core's
+    /// `formatSignedTokenAmount` (spec 082 RJ15, G49): the token ladder in
+    /// the person's number preset, U+2212 for a minus, a dust amount written
+    /// exactly (1000 wei is never "−0"), and `nil` for a zero change, which is
+    /// not drawn at all. `delta` is the core's signed base units ("-1000").
+    static func deltaText(_ delta: String, decimals: Int, preset: String? = nil) -> String? {
+        formatSignedTokenAmount(
+            deltaBaseUnits: delta,
+            decimals: UInt32(clamping: max(0, decimals)),
+            preset: preset ?? Formats.resolve(Formats.current.number).rawValue
+        )
+    }
 
     /// One leg of the operation being simulated.
     struct Call {

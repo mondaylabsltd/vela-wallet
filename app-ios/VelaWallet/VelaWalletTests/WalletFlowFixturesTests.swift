@@ -235,7 +235,9 @@ struct WalletFlowFixturesTests {
         // A transaction still in flight offers no hash and no explorer link.
         #expect(stages[0].hash == nil)
         #expect(stages[2].hash?.value == "0x8f3a…c21d")
-        #expect(stages[0].captions.contains("关闭此页交易会在后台继续"))
+        // The corpus's own words (082 round 2 gave the zh sentence its comma).
+        #expect(stages[0].captions.contains(loc.t("send.txBackgroundHint")))
+        #expect(stages[0].captions.contains("关闭此页，交易会在后台继续"))
     }
 
     @Test func pinsTheChainIdsTheAddNetworkCardPrints() {

@@ -14,6 +14,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum SigningLive {
 
@@ -372,7 +373,9 @@ enum SigningLive {
             // Neither of these is an error a person needs to read: one is
             // their own decision and the other is the wallet's.
             case .userRejected, .walletSwitchedChains: ""
-            default: loc.t("send.txErrorGeneric")
+            // The relay refused it (spec 082 RJ3): nothing was sent, and
+            // "try again" would send the same refusal.
+            default: sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric")
             }
             if !text.isEmpty { blocks.append(.warning(tone: .danger, text: text)) }
         }
@@ -436,13 +439,16 @@ enum SigningLive {
         }
         // A refusal after the approval (the submission failed): the core's
         // reason, the sheet's own sentence for it. After spec 082 this is a
-        // TRUE "not sent": a lost reply never reaches here (RA1).
+        // TRUE "not sent": a lost reply never reaches here (RA1). A relay's
+        // refusal says so and never "try again" (RJ3, `failure_refused`).
         if let error = sign.error, error.kind != .userRejected,
            sign.pendingOpHash != nil || error.kind == .submitFailed {
             return SendReceiptModel(
                 header: header, stage: .failed,
                 title: loc.t("componentsTx.receipt.statusFailed"),
-                captions: [summary, loc.t("send.txErrorGeneric")].compactMap { $0 },
+                captions: [
+                    summary, sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"),
+                ].compactMap { $0 },
                 cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
             )
         }
@@ -601,6 +607,15 @@ enum SigningLive {
                 captions: [summary, loc.t("send.txErrorGeneric")].compactMap { $0 },
                 cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
             )
+        // The relay refused it (spec 082 RJ3): nothing was sent, and the
+        // same op would be refused again — no "try again", no explorer.
+        case .refused:
+            return SendReceiptModel(
+                header: header, stage: .failed,
+                title: loc.t("componentsTx.receipt.statusFailed"),
+                captions: [summary, s(loc, "refused")].compactMap { $0 },
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+            )
         case .following(let op, let outcome, let feeHeld):
             if outcome == "maybe_sent" {
                 return maybeSentReceipt(op: op, summary: summary, header: header, loc: loc)
@@ -712,7 +727,9 @@ enum SigningLive {
                 noteTone: .neutral
             )]
         }
-        let rows = sim.judgments.map { balanceRow($0, context: context) }
+        // A zero change is not a change: the core writes none (RJ15), and
+        // the row is not drawn.
+        let rows = sim.judgments.compactMap { balanceRow($0, context: context) }
         // One warning for the whole block, not one per row: the caution is
         // about the same thing each time, and repeating it is how people stop
         // reading it.
@@ -728,7 +745,11 @@ enum SigningLive {
         )]
     }
 
-    /// One judgment, as a row.
+    /// One judgment, as a row — `nil` for a change of zero.
+    ///
+    /// The figure is the core's (`formatSignedTokenAmount`, spec 082 RJ15):
+    /// the shell's own formatter rounded a 1000-wei outflow to "0" and kept
+    /// its minus — "xDAI −0" (G49).
     ///
     /// An unverified INFLOW shows its direction and the word "unverified
     /// token" and **no number**: the amount in a simulated log is whatever the
@@ -736,38 +757,25 @@ enum SigningLive {
     /// credibility to a stranger's arithmetic.
     private static func balanceRow(
         _ judgment: TrustSimJudgmentWire, context: Context
-    ) -> BalanceDeltaRow {
+    ) -> BalanceDeltaRow? {
         let loc = context.loc
         let incoming = judgment.incoming
-        let sign = incoming ? "+" : "−"
         let tone: SigningTone = incoming ? .success : .neutral
         switch judgment {
         case .native(let delta):
-            return BalanceDeltaRow(
-                symbol: context.nativeSymbol,
-                delta: "\(sign)\(SendLive.trim(SendLive.fromBase(magnitude(delta), decimals: 18)))",
-                tone: tone
-            )
+            guard let text = SimDeltas.deltaText(delta, decimals: 18) else { return nil }
+            return BalanceDeltaRow(symbol: context.nativeSymbol, delta: text, tone: tone)
         case .erc20Trusted(_, let delta, let symbol, let decimals):
-            return BalanceDeltaRow(
-                symbol: symbol,
-                delta: "\(sign)\(SendLive.trim(SendLive.fromBase(magnitude(delta), decimals: decimals)))",
-                tone: tone
-            )
+            guard let text = SimDeltas.deltaText(delta, decimals: decimals) else { return nil }
+            return BalanceDeltaRow(symbol: symbol, delta: text, tone: tone)
         case .erc20Unverified:
             return BalanceDeltaRow(
                 symbol: s(loc, "balanceUnverifiedToken"),
                 // Direction only. Never the site's own number.
-                delta: sign,
+                delta: incoming ? "+" : "\u{2212}",
                 tone: .caution
             )
         }
-    }
-
-    /// The magnitude of a signed decimal string — the sign is already carried
-    /// by the row's own glyph.
-    private static func magnitude(_ delta: String) -> String {
-        delta.hasPrefix("-") ? String(delta.dropFirst()) : delta
     }
 
     private static func blocksBySurface(
@@ -1141,11 +1149,15 @@ enum SigningLive {
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
             warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
         } else if let failed = fee?.failed ?? (fee == nil ? context.feeStartFailure : nil),
-                  recoverable(failed) {
+                  let key = feeFailureReasonKey(failure: failed) {
             // Spec 079: why there is no fee, and that it will be asked again
             // (the row said "点击重试" with the relay down and stayed so).
-            // Spec 082: also when the quote could not even start.
-            warning = context.loc.t("componentsUi.funding.denialNetworkError")
+            // Which words is the core's (spec 082 RJ13): the relay for a
+            // relay's failure, the chain's node — rate-limited, or named
+            // unreachable — for a chain read, and none for a failure that is
+            // not the network's (G48: a public node's rate limit read "Can't
+            // reach Vela").
+            warning = context.loc.t(key, vars: ["chain": context.chainName])
         }
         // The same condition `SigningController.feeTapped` acts on, decided
         // once here so the chevron and the handler cannot disagree.
@@ -1153,14 +1165,6 @@ enum SigningLive {
             || options.count > 1
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
                         selector: selector, warning: warning, tappable: tappable)
-    }
-
-    /// A fee failure a recovering network or relay can clear — the ones the
-    /// core re-quotes (`feeRequoteDelayMs`). A missing key or a broken
-    /// calculation is not the network's doing, and saying "check your
-    /// connection" about it would send somebody to fix the wrong thing.
-    static func recoverable(_ failure: String) -> Bool {
-        failure != "missing_public_key" && failure != "calculation_failed"
     }
 
     /// Spec 079: the fee row's refresh — the send form's own control, dimmed

@@ -14,6 +14,11 @@
 //  reads 已确认, and a lost reply reads "may have been sent", never "try
 //  again".
 //
+//  Spec 082 round 2 (T237, T239): a relay's refusal is its own ending —
+//  失败 + "the network refused it", never "try again" (RJ3) — and a quit
+//  after the op is signed leaves one pending "may have been sent" record the
+//  tracker picks up on the next launch (RJ1, G34).
+//
 
 import Foundation
 import SwiftUI
@@ -47,7 +52,7 @@ struct SigningReceiptTests {
     private func sign(
         signing: Bool = false, submitting: Bool = false, op: String? = nil,
         error: SignErrorKind? = nil, kind: SignMethodKind? = nil,
-        phase: SignPhaseWire = .idle, maybeSent: Bool = false
+        phase: SignPhaseWire = .idle, maybeSent: Bool = false, refused: Bool = false
     ) -> SignViewWire {
         SignViewWire(
             surface: .sheet,
@@ -62,7 +67,7 @@ struct SigningReceiptTests {
             error: error.map { SignErrorNoticeWire(kind: $0, detail: nil) },
             funding: nil, confirmGateOpen: true, reconcilePending: false, swipeAction: .reject,
             trackerHandoff: nil, notice: nil, globalChainId: 100, blocked: nil,
-            phase: phase, pendingOpMaybeSent: maybeSent
+            phase: phase, pendingOpMaybeSent: maybeSent, failureRefused: refused
         )
     }
 
@@ -164,6 +169,50 @@ struct SigningReceiptTests {
         #expect(failed?.captions.contains(loc.t("send.txErrorGeneric")) == true)
         // The person's own no is not a failure to show.
         #expect(SigningLive.receipt(sign: sign(error: .userRejected), blocks: blocks, context: context()) == nil)
+    }
+
+    /// RJ3 (G36): the relay refused the op. 失败, and the core's sentence
+    /// that the network refused it — never the generic "please try again",
+    /// which would send the same refusal. In both languages.
+    @Test func aRefusalIsFailedWithoutTryAgain() {
+        let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+        for language in [loc, zh] {
+            let ctx = SigningLive.Context(
+                loc: language, chainName: "Gnosis", chainDot: .green, nativeSymbol: "XDAI",
+                walletName: "Me", walletAddress: "0x88cca0eedbf2c4426110bbfc998f048689266894"
+            )
+            let refused = SigningLive.receipt(
+                sign: sign(error: .submitFailed, refused: true), blocks: blocks, context: ctx
+            )
+            #expect(refused?.stage == .failed)
+            #expect(refused?.title == language.t("componentsTx.receipt.statusFailed"))
+            #expect(refused?.captions.contains(language.t("componentsUi.signing.refused")) == true)
+            #expect(refused?.captions.contains(language.t("send.txErrorGeneric")) == false,
+                    "never 请重试 for a refusal")
+            // The sheet's own warning line says the same.
+            let warnings = SigningLive.statusBlocks(sign: sign(error: .submitFailed, refused: true), loc: language)
+                .compactMap { block -> String? in
+                    if case .warning(_, let text) = block { return text }
+                    return nil
+                }
+            #expect(warnings.contains(language.t("componentsUi.signing.refused")))
+            #expect(!warnings.contains(language.t("send.txErrorGeneric")))
+        }
+        // A true "not sent" (the relay was never reached) keeps its words.
+        let notSent = SigningLive.receipt(sign: sign(error: .submitFailed), blocks: blocks, context: context())
+        #expect(notSent?.captions.contains(loc.t("send.txErrorGeneric")) == true)
+    }
+
+    /// RI3's reader test for the round-2 sentence: it resolves in zh and en,
+    /// differs between them, and never echoes its key.
+    @Test func theRefusedSentenceResolvesInZhAndEn() {
+        let key = "componentsUi.signing.refused"
+        for tag in ["zh", "en"] {
+            let text = Loc(overrideTag: tag, preferredLanguages: []).t(key)
+            #expect(!text.isEmpty)
+            #expect(text != key, "\(tag) echoed the key")
+        }
+        #expect(Loc(overrideTag: "zh", preferredLanguages: []).t(key) != loc.t(key))
     }
 
     /// The sheet's model carries the ✕'s label, and a live approval's
@@ -298,7 +347,12 @@ struct SigningReceiptTests {
         #expect(landed().state(track: entry("confirmed", "final", txHash: tx)) == .confirmed(txHash: tx))
         #expect(landed().state(track: entry("dropped", "final", txHash: tx)) == .reverted(txHash: tx))
         #expect(stillConfirming().state(track: entry("not_sent", "final")) == .notSent)
-        #expect(stillConfirming().state(track: entry("rejected", "final")) == .notSent)
+        // The relay refused it (RJ3): its own ending, never "not sent".
+        #expect(stillConfirming().state(track: entry("rejected", "final")) == .refused)
+        // A landed ending holds a tx hash: never drawn "not sent" or refused
+        // (the review), whatever the tracker's stale verdict.
+        #expect(landed().state(track: entry("rejected", "final")) != .refused)
+        #expect(landed().state(track: entry("not_sent", "final")) != .notSent)
         #expect(stillConfirming().state(track: entry("pending", "maybe_sent"))
             == .following(userOpHash: op, outcome: "maybe_sent", feeHeld: false))
         #expect(stillConfirming().state(track: entry("fee_held", "landing"))
@@ -379,6 +433,19 @@ struct SigningReceiptTests {
         #expect(notSent.stage == .failed)
         #expect(notSent.captions.contains(loc.t("send.txErrorGeneric")))
 
+        // The relay refused it after the page had its op hash: 失败, refused,
+        // no "try again", no hash, no explorer.
+        let refused = SigningLive.aftercareReceipt(
+            stillConfirming(), summary: nil,
+            context: context(track: entry("rejected", "final"), explorer: "https://gnosisscan.io")
+        )
+        #expect(refused.stage == .failed)
+        #expect(refused.title == loc.t("componentsTx.receipt.statusFailed"))
+        #expect(refused.captions.contains(loc.t("componentsUi.signing.refused")))
+        #expect(!refused.captions.contains(loc.t("send.txErrorGeneric")))
+        #expect(refused.hash == nil)
+        #expect(refused.viewOnExplorer == nil)
+
         let held = SigningLive.aftercareReceipt(
             stillConfirming(), summary: nil, context: context(track: entry("fee_held", "landing"))
         )
@@ -436,6 +503,161 @@ struct SigningReceiptTests {
         #expect(answer == nil)
         await Wait.until { cancelled.isSet }
         #expect(cancelled.isSet, "the hanging poll was cancelled, not left running")
+    }
+}
+
+// MARK: - The record before the bytes (spec 082 T237, RJ1)
+
+@MainActor
+@Suite(.timeLimit(.minutes(2)))
+struct SigningWriteAheadTests {
+
+    private let fixture = TrustedSignerFixture()
+    private let head = "0x2e3b9d9"
+
+    /// A spine that signs on the fixture's Trusted Signer page — a real P-256
+    /// signature over the real digest, no device.
+    private func spine(_ relay: RelayClient) -> UserOpSpine {
+        let accounts = ScriptedAccounts()
+        accounts.keyList = fixture.keys
+        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
+        let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
+        let fixture = self.fixture
+        spine.trustedSigner = ScriptedTrustedSigner { digest in
+            let data = try! JSONSerialization.data(withJSONObject: fixture.result(for: digest))
+            return .outcome(trustedSignerVerify(
+                resultJson: String(decoding: data, as: UTF8.self), digest: digest, keys: fixture.keys
+            ))
+        }
+        return spine
+    }
+
+    /// DX9 (G34): the relay holds the POST — the moment a quit, a crash or a
+    /// closed window leaves money in doubt. The real `sign_request` core and
+    /// this executor have by then written ONE pending "may have been sent"
+    /// record under the op's own hash, with the head read before the POST,
+    /// and handed it to the tracker; the relaunch path (T183) reads it back
+    /// as may-have-been-sent. When the relay then takes it, the record says
+    /// so (Admitted) and the tracker is handed the acceptance — a second
+    /// hand-off of the SAME op, which the old key never fed.
+    @Test func aQuitAfterTheOpIsSignedLeavesOnePendingMaybeSentRecord() async throws {
+        let scripted = ScriptedRelayPort()
+        scripted.rpc["eth_getCode"] = .ok("0x")
+        scripted.rpc["eth_blockNumber"] = .ok(head)
+        scripted.rpc["eth_estimateUserOperationGas"] = .ok([
+            "verificationGasLimit": "0x30d40", "callGasLimit": "0x30d40", "preVerificationGas": "0xc350",
+        ] as [String: Any])
+        let port = HeldPostPort(scripted)
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        let executor = SignExecutor(
+            spine: spine(relay), relay: relay, store: store,
+            receiptWaitMs: { _ in 0 }, clearanceWaitMs: 600_000
+        )
+        var views: [SignViewWire] = []
+        let core = CoreStore<SignViewWire>(
+            bridge: SignRequestCore(),
+            perform: { await executor.perform($0) },
+            onView: { views.append($0) }
+        )
+        func send(_ event: [String: Any]) {
+            let json = CoreJSON.string(event)
+            if !core.boot(json) { core.dispatch(json) }
+        }
+        let signed = Recorded()
+        executor.ports.opSigned = { id, hash, block in
+            signed.signed.append((hash, block, port.holding))
+            send([
+                "type": "op_signed", "id": id, "user_op_hash": hash,
+                "submit_block": block.map { $0 as Any } ?? NSNull(), "now_ms": 1_757_000_000_000.0,
+            ])
+        }
+        executor.ports.opSubmitted = { id, hash, maybeSent, block in
+            send([
+                "type": "op_submitted", "id": id, "user_op_hash": hash, "now_ms": 1_757_000_001_000.0,
+                "maybe_sent": maybeSent, "submit_block": block.map { $0 as Any } ?? NSNull(),
+            ])
+        }
+
+        send(["type": "networks_changed", "chain_ids": [100]])
+        send([
+            "type": "accounts_changed",
+            "accounts": [["address": fixture.account, "credential_id": fixture.credentialHex]],
+            "active_index": 0,
+        ])
+        send([
+            "type": "request_arrived", "id": "req-1", "method": "eth_sendTransaction",
+            "params_json": #"[{"to":"\#(fixture.account)","value":"0x3e8"}]"#,
+            "origin": "http://192.168.50.9:8137", "transport_id": "tab-1",
+            "dedicated_transport": true, "per_request_chain": 100, "dapp": NSNull(),
+            "granted_address": fixture.account, "requested_address": NSNull(),
+            "request_ts_ms": NSNull(), "now_ms": 1_757_000_000_000.0,
+        ])
+        send([
+            "type": "approve_tapped",
+            "opts": [
+                "max_fee_per_gas": NSNull(), "bundler_cost_wei": NSNull(), "gas_fee_token": NSNull(),
+                "quoted_fee": ["amount": "1000", "recipient": fixture.account, "tier": "fast"],
+                "fee_collector": NSNull(), "params_override_json": NSNull(), "intent": NSNull(),
+                "unlimited_approved": false,
+            ] as [String: Any],
+        ])
+
+        // The relay has the POST; nothing has come back. This is the quit.
+        await Wait.until { port.holding }
+        let ahead = try #require(signed.signed.first, "op_signed went to the core")
+        #expect(signed.signed.count == 1)
+        #expect(!ahead.postedBefore, "the op was handed to the core before any POST")
+        let pending = TxRecords.pending(store: store)
+        #expect(pending.count == 1, "exactly one record, written ahead: \(pending)")
+        let row = try #require(pending.first)
+        #expect((row["userOpHash"] as? String)?.lowercased() == ahead.hash.lowercased())
+        #expect(row["maybeSent"] as? Bool == true)
+        #expect((row["submitBlock"] as? NSNumber)?.uint64Value == UInt64(head.dropFirst(2), radix: 16))
+        #expect(row["type"] as? String == "dapp_tx")
+        // The relaunch path reads it back as may-have-been-sent (T183).
+        let wire = try #require(TrackerExecutor.pendingWire(row))
+        #expect(wire["maybe_sent"] as? Bool == true)
+        // And the tracker was handed it, may-have-been-sent, not admitted.
+        let handoff = try #require(views.last?.trackerHandoff)
+        #expect(handoff.maybeSent && !handoff.admitted)
+
+        // The relay takes it, under the op's own hash.
+        scripted.detailed["eth_sendUserOperation"] = [
+            RpcCallResult(outcome: .ok(ahead.hash), maybeDelivered: false, heldErrorJson: nil),
+        ]
+        port.release()
+        await Wait.until { views.last?.trackerHandoff?.admitted == true }
+        let admitted = try #require(views.last?.trackerHandoff)
+        #expect(!admitted.maybeSent)
+        #expect(admitted.recordIds == handoff.recordIds, "the same records, handed over again")
+        #expect(SigningController.handoffKey(admitted) != SigningController.handoffKey(handoff),
+                "the acceptance is a second hand-off, fed once")
+        await Wait.until { TxRecords.pending(store: store).first?["maybeSent"] == nil }
+        let after = TxRecords.pending(store: store)
+        #expect(after.count == 1, "no second record")
+        #expect(after.first?["maybeSent"] == nil, "no longer 'may have been sent'")
+        #expect(after.first?["status"] as? String == "pending", "the tracker alone closes it")
+    }
+
+    /// The hand-off key carries the op, its records and both facts (RJ1):
+    /// the write-ahead and the acceptance of one op are two keys; the same
+    /// hand-off drawn twice is one.
+    @Test func theHandOffKeyCarriesMaybeSentAndAdmitted() throws {
+        func handoff(_ maybeSent: Bool, _ admitted: Bool) throws -> SignTrackerHandoffWire {
+            try CoreJSON.decode(SignTrackerHandoffWire.self, from: [
+                "user_op_hash": "0xAB", "record_ids": ["dapp-1-tx"], "chain_id": 100,
+                "maybe_sent": maybeSent, "submit_block": 48_000_000, "admitted": admitted,
+            ])
+        }
+        let ahead = try handoff(true, false)
+        let accepted = try handoff(false, true)
+        #expect(SigningController.handoffKey(ahead) != SigningController.handoffKey(accepted))
+        #expect(SigningController.handoffKey(ahead) == SigningController.handoffKey(try handoff(true, false)))
+        let withdraw = try CoreJSON.decode(SignTrackerWithdrawWire.self, from: [
+            "user_op_hash": "0xab", "record_ids": ["dapp-1-tx"],
+        ])
+        #expect(SigningController.withdrawKey(withdraw) == "0xab|dapp-1-tx")
     }
 }
 

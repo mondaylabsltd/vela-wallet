@@ -303,7 +303,8 @@ struct DisplayedIsSignedTests {
             // A USABLE quote: `quoted_fee_usable` refuses a zero amount with
             // no recipient, and the spine then stops before the ceremony —
             // which is correct, and would make this test measure nothing.
-            gasFeeToken: nil, quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: golden)
+            gasFeeToken: nil, quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: golden),
+            writeAhead: { _, _ in true }
         )
         return signer.challenge
     }
@@ -452,6 +453,39 @@ struct SigningControllerTests {
 struct SigningLiveTests {
 
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])
+
+    /// G49 (RJ15): a 1000-wei outflow is written exactly — never "xDAI −0" —
+    /// with U+2212; a zero change is not drawn at all. The figure is the
+    /// core's `formatSignedTokenAmount`, in the person's number preset.
+    @Test func aSignedAmountNeverReadsMinusZero() throws {
+        let before = Formats.current
+        defer { Formats.current = before }
+        Formats.current = Formats.Current(number: .commaDot, date: .iso, time: .h24)
+        let sim = try CoreJSON.decode(TrustSimViewWire.self, from: [
+            "ready": true,
+            "judgments": [
+                ["type": "native", "delta": "-1000"],
+                ["type": "erc20_trusted", "token": "0xusdc", "delta": "0", "symbol": "USDC", "decimals": 6],
+                ["type": "erc20_trusted", "token": "0xusdc", "delta": "2500000", "symbol": "USDC", "decimals": 6],
+            ] as [[String: Any]],
+        ])
+        var ctx = context()
+        ctx.sim = sim
+        ctx.simulation = .answered
+        guard case .balances(_, let rows, _, _)? = SigningLive.balanceBlocks(isTransaction: true, context: ctx).first
+        else {
+            Issue.record("no balance block")
+            return
+        }
+        #expect(rows.count == 2, "the zero change is not drawn: \(rows.map(\.delta))")
+        let dust = try #require(rows.first)
+        #expect(dust.symbol == "xDAI")
+        #expect(dust.delta != "\u{2212}0" && dust.delta != "-0")
+        #expect(dust.delta.hasPrefix("\u{2212}"), "U+2212, not a hyphen: \(dust.delta)")
+        #expect(dust.delta == formatSignedTokenAmount(deltaBaseUnits: "-1000", decimals: 18, preset: "comma_dot"))
+        #expect(rows.last?.delta == "+2.5")
+        #expect(SimDeltas.deltaText("0", decimals: 18) == nil)
+    }
 
     private func context() -> SigningLive.Context {
         SigningLive.Context(

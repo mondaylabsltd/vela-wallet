@@ -115,8 +115,11 @@ enum SignEndingStateWire: Equatable {
     case confirmed(txHash: String)
     /// Cross: it landed and reverted (a Safe `ExecutionFailure` included).
     case reverted(txHash: String)
-    /// Cross: the relay refused it, or never had it.
+    /// Cross: the relay never had it — nothing was sent.
     case notSent
+    /// Cross: the relay refused it — nothing was sent, and sending the same
+    /// thing again will not help (spec 082 RJ3). Never "try again".
+    case refused
     /// Still on its way. `outcome` is the tracker's `TrackOutcome` wire name
     /// (`maybe_sent`, `landing`, `still_confirming`, `unknown`).
     case following(userOpHash: String, outcome: String, feeHeld: Bool)
@@ -127,6 +130,7 @@ enum SignEndingStateWire: Equatable {
         case "confirmed": self = .confirmed(txHash: object["tx_hash"] as? String ?? "")
         case "reverted": self = .reverted(txHash: object["tx_hash"] as? String ?? "")
         case "not_sent": self = .notSent
+        case "refused": self = .refused
         case "following":
             self = .following(
                 userOpHash: object["user_op_hash"] as? String ?? "",
