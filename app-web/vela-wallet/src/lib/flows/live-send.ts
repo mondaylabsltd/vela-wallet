@@ -1246,9 +1246,13 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 			title: m['send.txSubmittedTitle'],
 			captions: [m['send.txWaitingConfirm']],
 			eta,
+			// Spec 082 RJ16: an operation hash is named as one — never as the
+			// transaction hash it is not (there is no transaction until it lands).
 			hash: send.user_op_hash
 				? {
-						label: m['componentsTx.receipt.txHash'],
+						label: send.tx_hash
+							? m['componentsTx.receipt.txHash']
+							: m['componentsTx.receipt.userOpHash'],
 						value: send.tx_hash ?? send.user_op_hash,
 						copyLabel: m['componentsUi.identiconViewer.copyAddress']
 					}
@@ -1258,7 +1262,10 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 		};
 	}
 
-	// Signing or submitting: nothing has been accepted yet.
+	// Signing or submitting: nothing has been accepted yet. Spec 082 RJ1: this
+	// includes the write-ahead — the records are written, the op is being
+	// posted — and the screen waits for the relay's verdict before it says more.
+	// No hash yet: the one the relay answers with may differ from ours.
 	return {
 		...model,
 		header,

@@ -17,11 +17,18 @@ import type { SendEffect, SendSessionOptions } from './send-types';
 export type SendSession = EffectLoop<SendEvent>;
 
 export function createSendSession(options: SendSessionOptions): SendSession {
-	const executor = createSendExecutor(options.ports);
-	return createJsonWasmShell<SendView, SendEvent, SendEffect, SendShellResult>(new SendCore(), {
+	// The executor dispatches one fact into its own session mid-submit: the
+	// op is signed and hashed and nothing has been POSTed (`OpSigned`, spec
+	// 082 RJ1) — the core then writes the records and clears the POST.
+	let session: SendSession | null = null;
+	const executor = createSendExecutor(options.ports, {
+		dispatch: (event) => session?.dispatch(event)
+	});
+	session = createJsonWasmShell<SendView, SendEvent, SendEffect, SendShellResult>(new SendCore(), {
 		onView: options.onView,
 		execute: executor.execute,
 		toFailure: executor.toFailure,
 		onError: options.onError
 	});
+	return session;
 }

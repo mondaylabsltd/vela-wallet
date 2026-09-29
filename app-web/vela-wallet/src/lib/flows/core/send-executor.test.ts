@@ -20,10 +20,23 @@ const seams = vi.hoisted(() => ({
 	gasSignals: vi.fn(),
 	bundlerQuote: vi.fn(),
 	inBand: vi.fn(),
-	accountInfo: vi.fn()
+	accountInfo: vi.fn(),
+	trackSubmitted: vi.fn(),
+	withdrawTracked: vi.fn(),
+	updateTransactions: vi.fn(),
+	deleteTransactions: vi.fn()
 }));
 
-vi.mock('$lib/core/kernels', () => ({ fromHex: vi.fn(), verifySafeWebAuthn: vi.fn() }));
+vi.mock('$lib/core/kernels', () => ({
+	fromHex: vi.fn(),
+	verifySafeWebAuthn: vi.fn(),
+	userOpWriteAheadWaitMs: () => 5_000,
+	userOpNotSentDetail: () => 'relay unreachable; nothing was sent'
+}));
+vi.mock('$lib/wallet/core/tracker-resident', () => ({
+	trackSubmitted: seams.trackSubmitted,
+	withdrawTracked: seams.withdrawTracked
+}));
 vi.mock('$lib/services/networks', () => ({
 	getAllNetworksSync: () => [],
 	networkId: (id: number) => `chain-${id}`,
@@ -62,7 +75,8 @@ vi.mock('$lib/services/accounts', () => ({
 }));
 vi.mock('$lib/services/records', () => ({
 	saveTransactions: vi.fn(),
-	updateTransactions: vi.fn()
+	updateTransactions: seams.updateTransactions,
+	deleteTransactions: seams.deleteTransactions
 }));
 vi.mock('$lib/services/token-metadata', () => ({ resolveTokenMetadata: vi.fn() }));
 vi.mock('$lib/services/sim/tx-simulation', () => ({
@@ -74,8 +88,10 @@ vi.mock('$lib/services/wallet-api', () => ({
 	fetchTokens: seams.fetchTokens
 }));
 
-import { createSendExecutor } from './send-executor';
+import { createSendExecutor, setSendTrackerSink } from './send-executor';
 import type { SendShellPorts } from './send-types';
+import type { SendEvent } from '$lib/core/generated/SendEvent';
+import { sendBatchCalls, type SignFn, type SubmitResult } from '$lib/services/safe-transaction';
 
 const ACCOUNT = '0x' + 'aa'.repeat(20);
 const HELD: SendToken = {
@@ -225,5 +241,146 @@ describe('EstimateFee — the fee coin nobody chose', () => {
 			}
 		});
 		expect(feeQuote).toHaveBeenCalledWith(expect.objectContaining({ autoFeeToken: auto }));
+	});
+});
+
+/**
+ * Spec 082 RJ1 (T229): the wallet's own Send writes ahead too — every
+ * recipient's record is on disk before a byte of the op leaves, so a quit
+ * mid-submit leaves a pending "may have been sent" row the tracker resolves.
+ */
+describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
+	const OP = '0x' + '7d'.repeat(32);
+	const submit = {
+		id: 1,
+		operation: {
+			type: 'submit_user_op' as const,
+			chain_id: 100,
+			account: ACCOUNT,
+			public_key_hex: '04' + '11'.repeat(64),
+			calls: [],
+			max_fee_per_gas: null,
+			gas_fee_token: null,
+			quoted_fee: null
+		}
+	};
+
+	beforeEach(() => {
+		seams.updateTransactions.mockResolvedValue(undefined);
+		seams.deleteTransactions.mockResolvedValue(undefined);
+	});
+
+	/** The submit as `submitUserOp` runs it: the gate before the first POST, then the POST. */
+	function relayPosts(posted: () => void) {
+		vi.mocked(sendBatchCalls).mockImplementation(async (...args: unknown[]) => {
+			const signFn = args[4] as SignFn;
+			await signFn.beforePost?.({ userOpHash: OP, submitBlock: 9, chainId: 100 });
+			posted();
+			return {
+				userOpHash: OP,
+				maybeSent: false,
+				submitBlock: 9,
+				waitForTxHash: async () => '0x'
+			} as SubmitResult;
+		});
+	}
+
+	it('nothing is POSTed before the records are on disk; ClearToPost lets it go', async () => {
+		const dispatched: SendEvent[] = [];
+		const posted = vi.fn();
+		relayPosts(posted);
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: (event) => dispatched.push(event)
+		});
+		const submitting = executor.execute(submit);
+		await vi.waitFor(() => expect(dispatched).toHaveLength(1));
+		expect(dispatched[0]).toMatchObject({ type: 'op_signed', user_op_hash: OP, submit_block: 9 });
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		expect(posted).not.toHaveBeenCalled();
+		expect(
+			await executor.execute({ id: 2, operation: { type: 'clear_to_post', user_op_hash: OP } })
+		).toEqual({ type: 'post_cleared' });
+		await expect(submitting).resolves.toMatchObject({
+			type: 'submitted',
+			user_op_hash: OP,
+			maybe_sent: false
+		});
+		expect(posted).toHaveBeenCalledTimes(1);
+	});
+
+	it('no clearance in time → zero POSTs, and the send fails as not sent', async () => {
+		vi.useFakeTimers();
+		try {
+			const posted = vi.fn();
+			relayPosts(posted);
+			const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+				dispatch: () => {}
+			});
+			const submitting = executor.execute(submit);
+			await vi.advanceTimersByTimeAsync(5_000);
+			await expect(submitting).resolves.toEqual({
+				type: 'submit_failed',
+				failure: { type: 'other', message: 'relay unreachable; nothing was sent' }
+			});
+			expect(posted).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('the relay took it: its records drop "may have been sent", and the tracker hears `admitted`', async () => {
+		setSendTrackerSink(vi.fn());
+		try {
+			const executor = createSendExecutor(ports());
+			expect(
+				await executor.execute({
+					id: 1,
+					operation: { type: 'mark_admitted', record_ids: [`${OP}-0`, `${OP}-1`] }
+				})
+			).toEqual({ type: 'records_persisted' });
+			expect(seams.updateTransactions).toHaveBeenCalledWith([`${OP}-0`, `${OP}-1`], {
+				maybeSent: false
+			});
+			await executor.execute({
+				id: 2,
+				operation: {
+					type: 'track_submitted',
+					user_op_hash: OP,
+					record_ids: [`${OP}-0`, `${OP}-1`],
+					chain_id: 100,
+					maybe_sent: false,
+					submit_block: 9,
+					admitted: true
+				}
+			});
+			// Straight to the tracker, with `admitted` — the page's sink forwards none.
+			expect(seams.trackSubmitted).toHaveBeenCalledWith(
+				OP,
+				[`${OP}-0`, `${OP}-1`],
+				100,
+				undefined,
+				false,
+				9,
+				true
+			);
+		} finally {
+			setSendTrackerSink(null);
+		}
+	});
+
+	it('proven never sent: the records go in one write, and the tracker forgets them', async () => {
+		const executor = createSendExecutor(ports());
+		await executor.execute({
+			id: 1,
+			operation: { type: 'delete_tx_records', ids: [`${OP}-0`, `${OP}-1`] }
+		});
+		expect(seams.deleteTransactions).toHaveBeenCalledWith([`${OP}-0`, `${OP}-1`]);
+		expect(
+			await executor.execute({
+				id: 2,
+				operation: { type: 'track_withdrawn', user_op_hash: OP, record_ids: [`${OP}-0`] }
+			})
+		).toEqual({ type: 'track_handed_off' });
+		expect(seams.withdrawTracked).toHaveBeenCalledWith(OP, [`${OP}-0`]);
 	});
 });

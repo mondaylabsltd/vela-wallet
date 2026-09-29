@@ -929,6 +929,33 @@ describe('the receipt', () => {
 		expect(model.hash).toBeUndefined();
 	});
 
+	it('write-ahead: records written, the POST out — the screen still waits for the verdict (RJ1)', () => {
+		// After `OpSigned` the core moves the sheet to submitting and writes the
+		// records; it sets no receipt until the relay answers. "May have been
+		// sent" is not said for the second a POST takes.
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({ tx_status: 'submitting', receipt: null, selected_token: ETH })
+		);
+		expect(model.stage).toBe('submitting');
+		expect(model.title).toBe(m['send.txSubmitting']);
+		expect(model.captions).not.toContain(m['componentsUi.signing.maybeSent']);
+		expect(model.hash).toBeUndefined();
+	});
+
+	it('an operation hash is labelled as one until a transaction hash lands (RJ16)', () => {
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				user_op_hash: '0xop',
+				receipt: receipt('submitted'),
+				selected_token: ETH
+			})
+		);
+		expect(model.hash?.label).toBe(m['componentsTx.receipt.userOpHash']);
+	});
+
 	it('accepted but unlanded is SUBMITTED, even though the core calls the send confirmed', () => {
 		// The core flips `tx_status` to confirmed the moment the signature is a
 		// fact. The receipt's own status is what tracks the chain — reading the

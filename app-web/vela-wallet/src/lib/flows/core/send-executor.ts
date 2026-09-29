@@ -39,7 +39,12 @@
  * converted into the result variant that operation answers with.
  */
 
-import { fromHex, verifySafeWebAuthn } from '$lib/core/kernels';
+import {
+	fromHex,
+	userOpNotSentDetail,
+	userOpWriteAheadWaitMs,
+	verifySafeWebAuthn
+} from '$lib/core/kernels';
 import { getAllNetworksSync, networkId, nativeSymbol } from '$lib/services/networks';
 import { PasskeyError } from '$lib/onboarding/core/passkey';
 import { cancelChallenge, signChallenge } from '$lib/signing/sign-challenge';
@@ -51,6 +56,7 @@ import { resolveRecipientRisk } from '$lib/services/recipient-risk';
 import {
 	keySetOf,
 	sendBatchCalls,
+	type SignFn,
 	UserOpFeeHoldError,
 	UserOpNotSentError,
 	UserOpRejectedError,
@@ -58,13 +64,16 @@ import {
 	type SubmitResult
 } from '$lib/services/safe-transaction';
 import { findAccountByAddress, findAccountByCredentialId } from '$lib/services/accounts';
-import { saveTransactions, updateTransactions } from '$lib/services/records';
+import { deleteTransactions, saveTransactions, updateTransactions } from '$lib/services/records';
+import { trackSubmitted, withdrawTracked } from '$lib/wallet/core/tracker-resident';
+import { WriteAheadTimeoutError } from '$lib/signing/core/sign-types';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import { resolveTokenMetadata } from '$lib/services/token-metadata';
 import { serializeAssetSim, simulateAssetChanges } from '$lib/services/sim/tx-simulation';
 import { clearTokenCache, fetchTokens } from '$lib/services/wallet-api';
 
 import type { SendChainInfo } from '$lib/core/generated/SendChainInfo';
+import type { SendEvent } from '$lib/core/generated/SendEvent';
 import type { SendShellResult } from '$lib/core/generated/SendShellResult';
 import type { SendTxRecord } from '$lib/core/generated/SendTxRecord';
 import { prewarmFees } from './fee-prewarm';
@@ -72,6 +81,7 @@ import { wireTier } from './wire-tier';
 import {
 	fromWireAmount,
 	toSendToken,
+	toSendFeeOutcome,
 	toShellCall,
 	type SendEffect,
 	type SendShellPorts
@@ -118,6 +128,15 @@ export interface SendTrackerHandoff {
 	submitted: SubmitResult | null;
 }
 
+/**
+ * The session the executor belongs to, for the one fact it must dispatch
+ * mid-submit (`OpSigned`, spec 082 RJ1). Absent: a harness with no session —
+ * then there is no write-ahead to wait for, and the submit posts as before.
+ */
+export interface SendExecutorSelf {
+	dispatch(event: SendEvent): void;
+}
+
 let trackerSink: ((handoff: SendTrackerHandoff) => void) | null = null;
 
 export function setSendTrackerSink(sink: ((handoff: SendTrackerHandoff) => void) | null): void {
@@ -161,12 +180,52 @@ function toLocalTransaction(record: SendTxRecord): LocalTransaction {
 	};
 }
 
-export function createSendExecutor(ports: SendShellPorts) {
+export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSelf) {
 	/**
 	 * Accepted ops awaiting their receipt, by hash. Populated by `SubmitUserOp`
 	 * and consumed by the `TrackSubmitted` that always follows it.
 	 */
 	const submitted = new Map<string, SubmitResult>();
+
+	/** The write-ahead waiting for the core's `ClearToPost` (spec 082 RJ1), by op hash. */
+	const clearances = new Map<string, () => void>();
+
+	/**
+	 * The wallet's own Send writes ahead too (spec 082 RJ1): the op is signed
+	 * and hashed, nothing has left. The core writes every recipient's record
+	 * ("may have been sent"), hands the op to the tracker and answers
+	 * `ClearToPost`; only then is it POSTed. No clearance within
+	 * `userOpWriteAheadWaitMs()` → no POST, and the send fails as not sent —
+	 * a quit from here on leaves a pending record the tracker resolves.
+	 */
+	function writeAhead(
+		dispatch: SendExecutorSelf['dispatch'],
+		userOpHash: string,
+		submitBlock: number | null
+	): Promise<void> {
+		const key = userOpHash.toLowerCase();
+		return new Promise<void>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				if (!clearances.has(key)) return;
+				clearances.delete(key);
+				console.warn(
+					`[send] write-ahead: no clearance for ${userOpHash.slice(0, 10)}… in ` +
+						`${userOpWriteAheadWaitMs()} ms — not posting`
+				);
+				reject(new WriteAheadTimeoutError(userOpHash));
+			}, userOpWriteAheadWaitMs());
+			clearances.set(key, () => {
+				clearTimeout(timer);
+				resolve();
+			});
+			dispatch({
+				type: 'op_signed',
+				user_op_hash: userOpHash,
+				submit_block: submitBlock,
+				now_ms: Date.now()
+			});
+		});
+	}
 
 	/**
 	 * The next `FetchTokens` must really walk the chains: the send flow asked
@@ -287,27 +346,25 @@ export function createSendExecutor(ports: SendShellPorts) {
 				// The fee leg is deliberately not built here — `fee_policy` appends its
 				// own, to the recipient its own quote named, so the simulated operation
 				// is the submitted one.
-				return {
-					type: 'fee_estimated',
-					outcome: await ports.feeQuote({
-						chainId: operation.chain_id,
-						account: operation.account,
-						// A batch takes precedence only when it HAS legs — `estimateTransactionFee`
-						// required `batchCalls.length > 0` for the same reason, and an
-						// empty one would otherwise silence the single call beside it.
-						calls:
-							operation.batch && operation.batch.length > 0
-								? operation.batch
-								: operation.tx
-									? [operation.tx]
-									: [],
-						feeToken: operation.gas_fee_token,
-						// Nobody chose the coin: the fee machine picks one that can pay,
-						// and the estimate's `fee_asset` says which (spec 078).
-						autoFeeToken: operation.auto_fee_token,
-						publicKeyHex: operation.public_key_hex ?? undefined
-					})
-				};
+				const answer = await ports.feeQuote({
+					chainId: operation.chain_id,
+					account: operation.account,
+					// A batch takes precedence only when it HAS legs — `estimateTransactionFee`
+					// required `batchCalls.length > 0` for the same reason, and an
+					// empty one would otherwise silence the single call beside it.
+					calls:
+						operation.batch && operation.batch.length > 0
+							? operation.batch
+							: operation.tx
+								? [operation.tx]
+								: [],
+					feeToken: operation.gas_fee_token,
+					// Nobody chose the coin: the fee machine picks one that can pay,
+					// and the estimate's `fee_asset` says which (spec 078).
+					autoFeeToken: operation.auto_fee_token,
+					publicKeyHex: operation.public_key_hex ?? undefined
+				});
+				return { type: 'fee_estimated', outcome: toSendFeeOutcome(answer) };
 			}
 
 			case 'prewarm_fees': {
@@ -382,7 +439,7 @@ export function createSendExecutor(ports: SendShellPorts) {
 						// The wallet's own send: no method, no site (contract §1).
 						request: { method: '', params: [], origin: '', chainId: operation.chain_id }
 					};
-					const signFn = async (challenge: Uint8Array) => {
+					const signFn: SignFn = async (challenge: Uint8Array) => {
 						// The passkey sheet is opening — the core moves to 'signing' here,
 						// exactly where `setTxStatus('signing')` sat.
 						ports.signingStarted();
@@ -402,6 +459,13 @@ export function createSendExecutor(ports: SendShellPorts) {
 							credentialId: assertion.credentialId
 						};
 					};
+					// RJ1: the records before the bytes. The wallet's own page has no
+					// asker to lose, so the write-ahead is the whole gate.
+					const dispatch = self?.dispatch;
+					if (dispatch) {
+						signFn.beforePost = ({ userOpHash, submitBlock }) =>
+							writeAhead(dispatch, userOpHash, submitBlock);
+					}
 					// One call stays a single `executeUserOp` and N stay a MultiSend
 					// (`buildNativeCallData`), so this is byte-for-byte the calldata
 					// `sendNative`/`sendERC20` produced for a single transfer.
@@ -456,6 +520,25 @@ export function createSendExecutor(ports: SendShellPorts) {
 			}
 
 			case 'track_submitted': {
+				if (operation.admitted) {
+					// The relay took the op the write-ahead announced (RJ1): the
+					// tracker hears it straight away — never "may have been sent"
+					// again. Its watcher, set by the write-ahead's hand-off, stays.
+					// The sink is the page's and forwards no `admitted`.
+					if (trackerSink) {
+						trackSubmitted(
+							operation.user_op_hash,
+							operation.record_ids,
+							operation.chain_id,
+							undefined,
+							false,
+							operation.submit_block,
+							true
+						);
+						submitted.delete(operation.user_op_hash);
+						return { type: 'track_handed_off' };
+					}
+				}
 				const handoff: SendTrackerHandoff = {
 					userOpHash: operation.user_op_hash,
 					recordIds: operation.record_ids,
@@ -467,6 +550,34 @@ export function createSendExecutor(ports: SendShellPorts) {
 				submitted.delete(operation.user_op_hash);
 				if (trackerSink) trackerSink(handoff);
 				else waitForReceipt(handoff);
+				return { type: 'track_handed_off' };
+			}
+
+			case 'clear_to_post': {
+				// Every record of the op is on disk (RJ1): the POST may go.
+				const clear = clearances.get(operation.user_op_hash.toLowerCase());
+				clearances.delete(operation.user_op_hash.toLowerCase());
+				clear?.();
+				return { type: 'post_cleared' };
+			}
+
+			case 'mark_admitted': {
+				// The relay took it: no longer "may have been sent"; still pending
+				// for the tracker. One write for every sibling.
+				await updateTransactions(operation.record_ids, { maybeSent: false }).catch(() => {});
+				return { type: 'records_persisted' };
+			}
+
+			case 'delete_tx_records': {
+				// Proven never sent (RJ1): the write-ahead's records go, in one write.
+				await deleteTransactions(operation.ids).catch(() => {});
+				return { type: 'records_persisted' };
+			}
+
+			case 'track_withdrawn': {
+				// …and the tracker forgets them, patching nothing.
+				submitted.delete(operation.user_op_hash);
+				withdrawTracked(operation.user_op_hash, operation.record_ids);
 				return { type: 'track_handed_off' };
 			}
 
@@ -549,6 +660,10 @@ export function createSendExecutor(ports: SendShellPorts) {
 		if (error instanceof PasskeyError && error.kind === 'cancelled') {
 			return { type: 'passkey_cancelled' };
 		}
+		// The records were not written in time, so nothing was POSTed (RJ1).
+		if (error instanceof WriteAheadTimeoutError) {
+			return { type: 'other', message: userOpNotSentDetail() };
+		}
 		const message = err?.message ?? String(error ?? '');
 		if (error instanceof UserOpNotSentError) {
 			if (error.rejection === 'relayer_unavailable') return { type: 'relayer_unavailable' };
@@ -603,6 +718,14 @@ export function createSendExecutor(ports: SendShellPorts) {
 				// must still be told, or `TrackSubmitted` never fires (invariant ⑥).
 				return { type: 'records_persisted' };
 			case 'track_submitted':
+				return { type: 'track_handed_off' };
+			case 'clear_to_post':
+				return { type: 'post_cleared' };
+			case 'mark_admitted':
+			case 'delete_tx_records':
+				// The core must still be told, or the send never moves on.
+				return { type: 'records_persisted' };
+			case 'track_withdrawn':
 				return { type: 'track_handed_off' };
 			case 'resolve_identity':
 				return { type: 'identity_resolved', identity: null };
