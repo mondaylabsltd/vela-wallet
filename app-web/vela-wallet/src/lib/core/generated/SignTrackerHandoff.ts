@@ -4,7 +4,14 @@
  * The tx_tracker handoff: the shell feeds this to `tx_tracker::Event::Submitted`
  * the moment it appears (idempotent — the tracker merges by hash).
  */
-export type SignTrackerHandoff = { user_op_hash: string, record_ids: Array<string>, chain_id: number, 
+export type SignTrackerHandoff = { user_op_hash: string, 
+/**
+ * The records the tracker patches. EMPTY on the write-ahead hand-off
+ * (spec 082 RJ1, second review): a POST of the op is about to leave and
+ * the tracker holds it off "not sent" until the POST's verdict, whose
+ * hand-off names the record. Forwarded as they are, empty or not.
+ */
+record_ids: Array<string>, chain_id: number, 
 /**
  * Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA3).
  */

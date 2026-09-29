@@ -23,7 +23,14 @@ auto_fee_token: boolean, } | { "type": "probe_treasury", chain_id: number, } | {
 /**
  * Present ⇔ in-band: sign EXACTLY this (invariant ①).
  */
-quoted_fee: SendQuotedFee | null, } | { "type": "cancel_passkey_sign" } | { "type": "persist_tx_records", records: Array<SendTxRecord>, } | { "type": "track_submitted", user_op_hash: string, record_ids: Array<string>, chain_id: number, 
+quoted_fee: SendQuotedFee | null, } | { "type": "cancel_passkey_sign" } | { "type": "persist_tx_records", records: Array<SendTxRecord>, } | { "type": "track_submitted", user_op_hash: string, 
+/**
+ * EMPTY on the write-ahead's hand-off (spec 082 RJ1, second review):
+ * a POST is about to leave and the tracker holds the op off "not
+ * sent" until the POST's verdict, whose hand-off names the records.
+ * Forwarded as they are, empty or not.
+ */
+record_ids: Array<string>, chain_id: number, 
 /**
  * Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA4).
  */
