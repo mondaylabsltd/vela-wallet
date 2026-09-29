@@ -156,7 +156,17 @@ export function createSignExecutor(ports: SignShellPorts) {
 	 * the op's hash and the release. The core answers `ClearToPost` once the
 	 * record of the op is on disk; nothing is POSTed before it.
 	 */
-	const clearances = new Map<string, { userOpHash: string; clear: () => void }>();
+	const clearances = new Map<string, { userOpHash: string; clear: (onDisk: boolean) => void }>();
+
+	/**
+	 * Whether each op's write-ahead record is really on disk (RJ1), by op hash:
+	 * set by its `PersistRecord`, used up by its `ClearToPost`. The core clears
+	 * the POST on the store's acknowledgement, and a write the store refused is
+	 * acknowledged all the same (logged, or the machine would wait forever) —
+	 * so the clearance is only as good as this mark. Set by each write, so a
+	 * second attempt of the same op is judged by its own record.
+	 */
+	const aheadOnDisk = new Map<string, boolean>();
 
 	/**
 	 * The receipt wait of each request in flight, by request id — aborted when
@@ -186,9 +196,17 @@ export function createSignExecutor(ports: SignShellPorts) {
 			// within the same turn of the effect loop.
 			clearances.set(id, {
 				userOpHash,
-				clear: () => {
+				clear: (onDisk) => {
 					clearTimeout(timer);
-					resolve();
+					if (onDisk) {
+						resolve();
+						return;
+					}
+					console.warn(
+						`[sign_request] write-ahead: the store refused the record of ` +
+							`${userOpHash.slice(0, 10)}… — not posting`
+					);
+					reject(new WriteAheadTimeoutError(userOpHash));
 				}
 			});
 			ports.opSigned(id, userOpHash, submitBlock);
@@ -391,9 +409,14 @@ export function createSignExecutor(ports: SignShellPorts) {
 				// The write-ahead record is on disk (spec 082 RJ1): the POST may go.
 				// Only for the op it names — a clearance for another is dropped.
 				const waiting = clearances.get(operation.id);
-				if (waiting && waiting.userOpHash.toLowerCase() === operation.user_op_hash.toLowerCase()) {
+				const key = operation.user_op_hash.toLowerCase();
+				if (waiting && waiting.userOpHash.toLowerCase() === key) {
 					clearances.delete(operation.id);
-					waiting.clear();
+					// Only if the store really took the record, whatever it
+					// acknowledged: no POST leaves with no record behind it.
+					const onDisk = aheadOnDisk.get(key) === true;
+					aheadOnDisk.delete(key);
+					waiting.clear(onDisk);
 				}
 				return { type: 'responded' };
 			}
@@ -433,11 +456,18 @@ export function createSignExecutor(ports: SignShellPorts) {
 				// The core owns the id (`dapp-<ms>-tx|typed|msg`); the builder derives
 				// the same one from the same clock, but the core's is authoritative
 				// because the patch below is keyed on it.
+				let onDisk = true;
 				await serialised(record.record_id, () =>
 					saveTransaction({ ...row, id: record.record_id }).catch((e) => {
+						onDisk = false;
 						console.warn('[sign_request] Failed to save record:', e);
 					})
 				);
+				// The write-ahead's record (pending, may have been sent): whether it
+				// is really there is what its clearance turns on (RJ1).
+				if (record.maybe_sent && record.status === 'pending') {
+					aheadOnDisk.set(record.user_op_hash.toLowerCase(), onDisk);
+				}
 				// The row shows within one poke, not the next 10–30 s tick (RG3).
 				ports.recordsWritten();
 				return { type: 'record_persisted' };

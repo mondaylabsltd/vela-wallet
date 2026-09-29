@@ -33,11 +33,13 @@ vi.mock('$lib/services/dapp-submit', async (importOriginal) => {
 });
 
 const store = vi.hoisted(() => ({
+	saveTransaction: vi.fn<(tx: unknown) => Promise<void>>(async () => {}),
 	deleteTransaction: vi.fn(async () => {}),
 	updateTransaction: vi.fn(async () => {})
 }));
 vi.mock('$lib/services/records', async (importOriginal) => ({
 	...(await importOriginal<typeof import('$lib/services/records')>()),
+	saveTransaction: store.saveTransaction,
 	deleteTransaction: store.deleteTransaction,
 	updateTransaction: store.updateTransaction
 }));
@@ -325,6 +327,89 @@ describe('the Activity row follows every record write (RG3)', () => {
 describe('the write-ahead (spec 082 RJ1)', () => {
 	const OP_B = '0x' + '6b'.repeat(32);
 
+	/** The core's `PersistRecord` for the write-ahead of `hash` (pending, may have been sent). */
+	function persistAhead(hash: string, recordId = 'dapp-1-tx'): SignEffect {
+		return {
+			id: 90,
+			operation: {
+				type: 'persist_record',
+				record: {
+					record_id: recordId,
+					kind: 'dapp_tx',
+					method: 'eth_sendTransaction',
+					params_json: '[{"to":"0x0000000000000000000000000000000000000001","value":"0x1"}]',
+					result: '',
+					from: '0x88cCA0EeDbF2C4426110bbFc998F048689266894',
+					chain_id: 100,
+					now_ms: 1,
+					status: 'pending',
+					user_op_hash: hash,
+					dapp_origin: 'https://app.example',
+					intent: null,
+					maybe_sent: true,
+					submit_block: 7
+				}
+			}
+		};
+	}
+
+	/**
+	 * The core clears the POST on the store's acknowledgement, and the web
+	 * acknowledges a write the store refused (logged, so the machine moves
+	 * on). A refused write-ahead must still let nothing out: the POST would
+	 * leave with no record behind it (the desktop's twin: DESK_B review (2)).
+	 */
+	it('a write-ahead record the store refused lets nothing out — the submit is "not sent"', async () => {
+		const post = vi.fn();
+		submit.impl = async (...args: unknown[]) => {
+			await (args[9] as DAppSubmitHooks).writeAhead!(OP, 7);
+			post();
+			return '0xtx';
+		};
+		store.saveTransaction.mockRejectedValueOnce(new Error('QuotaExceededError'));
+		const executor = createSignExecutor(makePorts());
+		const running = executor.execute(signAndSubmit);
+		expect(await executor.execute(persistAhead(OP))).toEqual({ type: 'record_persisted' });
+		await executor.execute({
+			id: 2,
+			operation: { type: 'clear_to_post', id: 'req-1', user_op_hash: OP }
+		});
+		await expect(running).resolves.toMatchObject({
+			type: 'submit',
+			outcome: { type: 'failed', message: userOpNotSentDetail(), refused: false }
+		});
+		expect(post).not.toHaveBeenCalled();
+	});
+
+	it('the same op signed again is cleared by its own write, never by the last attempt’s', async () => {
+		const post = vi.fn();
+		submit.impl = async (...args: unknown[]) => {
+			await (args[9] as DAppSubmitHooks).writeAhead!(OP, 7);
+			post();
+			return '0xtx';
+		};
+		const executor = createSignExecutor(makePorts());
+		// Attempt 1: written and cleared (its clearance uses the mark up).
+		const first = executor.execute(signAndSubmit);
+		await executor.execute(persistAhead(OP, 'dapp-1-tx'));
+		await executor.execute({
+			id: 2,
+			operation: { type: 'clear_to_post', id: 'req-1', user_op_hash: OP }
+		});
+		await first;
+		expect(post).toHaveBeenCalledTimes(1);
+		// Attempt 2, the same hash: the store refuses this one's record.
+		store.saveTransaction.mockRejectedValueOnce(new Error('QuotaExceededError'));
+		const second = executor.execute(signAndSubmit);
+		await executor.execute(persistAhead(OP, 'dapp-2-tx'));
+		await executor.execute({
+			id: 3,
+			operation: { type: 'clear_to_post', id: 'req-1', user_op_hash: OP }
+		});
+		await expect(second).resolves.toMatchObject({ outcome: { type: 'failed' } });
+		expect(post).toHaveBeenCalledTimes(1);
+	});
+
 	it('announces the op, and the POST waits for its clearance', async () => {
 		const opSigned = vi.fn();
 		let hooks!: DAppSubmitHooks;
@@ -338,6 +423,7 @@ describe('the write-ahead (spec 082 RJ1)', () => {
 		const executor = createSignExecutor(makePorts({ opSigned }));
 		const running = executor.execute(signAndSubmit);
 		await vi.waitFor(() => expect(opSigned).toHaveBeenCalledWith('req-1', OP, 7));
+		await executor.execute(persistAhead(OP));
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(cleared).toBe(false);
 		// A clearance for another op clears nothing.

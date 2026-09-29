@@ -190,8 +190,21 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 	 */
 	const submitted = new Map<string, SubmitResult>();
 
-	/** The write-ahead waiting for the core's `ClearToPost` (spec 082 RJ1), by op hash. */
-	const clearances = new Map<string, () => void>();
+	/**
+	 * The write-ahead waiting for the core's `ClearToPost` (spec 082 RJ1), by
+	 * op hash: `true` lets the POST go, `false` stops it (nothing is sent).
+	 */
+	const clearances = new Map<string, (onDisk: boolean) => void>();
+
+	/**
+	 * Whether the write-ahead's records of each op are really on disk (RJ1), by
+	 * op hash: set by its `PersistTxRecords`, used up by its `ClearToPost`. The
+	 * core clears the POST on the store's acknowledgement, and a write the
+	 * store refused is acknowledged all the same (logged, or the send would
+	 * never move on) — so the clearance is only as good as this mark. Set by
+	 * each write, so a second attempt of the same op is judged by its own.
+	 */
+	const aheadOnDisk = new Map<string, boolean>();
 
 	/**
 	 * The wallet's own Send writes ahead too (spec 082 RJ1): the op is signed
@@ -217,9 +230,16 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				);
 				reject(new WriteAheadTimeoutError(userOpHash));
 			}, userOpWriteAheadWaitMs());
-			clearances.set(key, () => {
+			clearances.set(key, (onDisk) => {
 				clearTimeout(timer);
-				resolve();
+				if (onDisk) {
+					resolve();
+					return;
+				}
+				console.warn(
+					`[send] write-ahead: the store refused the records of ${userOpHash.slice(0, 10)}… — not posting`
+				);
+				reject(new WriteAheadTimeoutError(userOpHash));
 			});
 			dispatch({
 				type: 'op_signed',
@@ -538,7 +558,15 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			case 'persist_tx_records': {
 				// ONE atomic write for every sibling: a per-record `Promise.all` races
 				// the read-modify-write and silently drops all but one (invariant ⑥).
-				await saveTransactions(operation.records.map(toLocalTransaction)).catch(() => {});
+				let onDisk = true;
+				await saveTransactions(operation.records.map(toLocalTransaction)).catch((e) => {
+					onDisk = false;
+					console.warn('[send] Failed to save records:', e);
+				});
+				// The write-ahead's records (may have been sent): whether they are
+				// really there is what its clearance turns on (RJ1).
+				const ahead = operation.records.find((record) => record.maybe_sent);
+				if (ahead) aheadOnDisk.set(ahead.user_op_hash.toLowerCase(), onDisk);
 				return { type: 'records_persisted' };
 			}
 
@@ -585,10 +613,14 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 			}
 
 			case 'clear_to_post': {
-				// Every record of the op is on disk (RJ1): the POST may go.
-				const clear = clearances.get(operation.user_op_hash.toLowerCase());
-				clearances.delete(operation.user_op_hash.toLowerCase());
-				clear?.();
+				// Every record of the op is on disk (RJ1): the POST may go — only if
+				// the store really took them, whatever it acknowledged.
+				const key = operation.user_op_hash.toLowerCase();
+				const clear = clearances.get(key);
+				clearances.delete(key);
+				const onDisk = aheadOnDisk.get(key) === true;
+				aheadOnDisk.delete(key);
+				clear?.(onDisk);
 				return { type: 'post_cleared' };
 			}
 

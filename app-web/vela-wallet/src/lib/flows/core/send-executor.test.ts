@@ -26,7 +26,8 @@ const seams = vi.hoisted(() => ({
 	trackerView: vi.fn(() => ({ entries: [] as unknown[] })),
 	outcomeOf: vi.fn<(entry: unknown) => unknown>(() => null),
 	updateTransactions: vi.fn(),
-	deleteTransactions: vi.fn()
+	deleteTransactions: vi.fn(),
+	saveTransactions: vi.fn()
 }));
 
 vi.mock('$lib/core/kernels', () => ({
@@ -76,7 +77,7 @@ vi.mock('$lib/services/accounts', () => ({
 	findAccountByCredentialId: vi.fn()
 }));
 vi.mock('$lib/services/records', () => ({
-	saveTransactions: vi.fn(),
+	saveTransactions: seams.saveTransactions,
 	updateTransactions: seams.updateTransactions,
 	deleteTransactions: seams.deleteTransactions
 }));
@@ -272,7 +273,35 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		seams.deleteTransactions.mockResolvedValue(undefined);
 		seams.trackerView.mockReturnValue({ entries: [] });
 		seams.outcomeOf.mockReturnValue(null);
+		seams.saveTransactions.mockResolvedValue(undefined);
 	});
+
+	/** The core's `PersistTxRecords` for the write-ahead of `hash`: every line, may have been sent. */
+	function persistAhead(hash: string) {
+		return {
+			id: 90,
+			operation: {
+				type: 'persist_tx_records' as const,
+				records: [0, 1].map((i) => ({
+					id: `${hash}-${i}`,
+					user_op_hash: hash,
+					tx_hash: '',
+					from: ACCOUNT,
+					to: '0x' + '22'.repeat(20),
+					to_name: null,
+					value: '1',
+					symbol: 'xDAI',
+					decimals: 18,
+					logo_urls: [],
+					chain_id: 100,
+					timestamp_s: 1,
+					usd: null,
+					maybe_sent: true,
+					submit_block: 9
+				}))
+			}
+		};
+	}
 
 	/** The submit as `submitUserOp` runs it: the gate before the first POST, then the POST. */
 	function relayPosts(posted: () => void) {
@@ -299,6 +328,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		const submitting = executor.execute(submit);
 		await vi.waitFor(() => expect(dispatched).toHaveLength(1));
 		expect(dispatched[0]).toMatchObject({ type: 'op_signed', user_op_hash: OP, submit_block: 9 });
+		await executor.execute(persistAhead(OP));
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		expect(posted).not.toHaveBeenCalled();
 		expect(
@@ -310,6 +340,30 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 			maybe_sent: false
 		});
 		expect(posted).toHaveBeenCalledTimes(1);
+	});
+
+	/**
+	 * The core clears the POST on the store's acknowledgement, and the web
+	 * acknowledges a write the store refused (so the machine moves on). A
+	 * refused write-ahead must still let nothing out (DESK_B review (2)).
+	 */
+	it('records the store refused let nothing out — the send fails as not sent', async () => {
+		const posted = vi.fn();
+		relayPosts(posted);
+		seams.saveTransactions.mockRejectedValueOnce(new Error('QuotaExceededError'));
+		const dispatched: SendEvent[] = [];
+		const executor = createSendExecutor(ports({ credentialId: () => 'cred-1' }), {
+			dispatch: (event) => dispatched.push(event)
+		});
+		const submitting = executor.execute(submit);
+		await vi.waitFor(() => expect(dispatched).toHaveLength(1));
+		expect(await executor.execute(persistAhead(OP))).toEqual({ type: 'records_persisted' });
+		await executor.execute({ id: 2, operation: { type: 'clear_to_post', user_op_hash: OP } });
+		await expect(submitting).resolves.toEqual({
+			type: 'submit_failed',
+			failure: { type: 'other', message: 'relay unreachable; nothing was sent' }
+		});
+		expect(posted).not.toHaveBeenCalled();
 	});
 
 	it('no clearance in time → zero POSTs, and the send fails as not sent', async () => {
@@ -404,6 +458,7 @@ describe('the wallet’s own Send writes ahead (spec 082 RJ1)', () => {
 		});
 		const submitting = executor.execute(submit);
 		await vi.waitFor(() => expect(dispatched).toHaveLength(1));
+		await executor.execute(persistAhead(OP));
 		await executor.execute({ id: 2, operation: { type: 'clear_to_post', user_op_hash: OP } });
 		await expect(submitting).resolves.toMatchObject({ type: 'submitted', maybe_sent: true });
 		// Only after the core has the result — it names the op then.
