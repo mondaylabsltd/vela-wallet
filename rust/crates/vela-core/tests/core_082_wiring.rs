@@ -117,6 +117,24 @@ fn apply(records: &mut [FeedTxRecord], ops: &[TrackOp]) {
 /// the sign machine hands over the op under the LOCAL hash. Returns the
 /// machine and the pending record it asked the shell to store.
 fn lost_reply() -> (DomainDriver<SignRequest>, SignRecord) {
+    let mut sign = approved();
+    let ops = sign.dispatch(SignEvent::OpSubmitted {
+        id: "req-1".to_owned(),
+        user_op_hash: LOCAL_OP.to_owned(),
+        now_ms: NOW + 40_000.0,
+        maybe_sent: true,
+        submit_block: Some(SUBMIT_BLOCK),
+    });
+    let [SignOp::PersistRecord { record }] = ops.as_slice() else {
+        unreachable!("one pending record: {ops:?}")
+    };
+    let record = record.clone();
+    assert!(sign.resolve(SignRes::RecordPersisted).is_empty());
+    (sign, record)
+}
+
+/// A dApp's plain send, approved and past the pre-check: the submit is out.
+fn approved() -> DomainDriver<SignRequest> {
     let mut sign = DomainDriver::<SignRequest>::new();
     sign.dispatch(SignEvent::NetworksChanged {
         chain_ids: vec![100],
@@ -150,19 +168,7 @@ fn lost_reply() -> (DomainDriver<SignRequest>, SignRecord) {
         matches!(ops.as_slice(), [SignOp::SignAndSubmit { .. }]),
         "{ops:?}"
     );
-    let ops = sign.dispatch(SignEvent::OpSubmitted {
-        id: "req-1".to_owned(),
-        user_op_hash: LOCAL_OP.to_owned(),
-        now_ms: NOW + 40_000.0,
-        maybe_sent: true,
-        submit_block: Some(SUBMIT_BLOCK),
-    });
-    let [SignOp::PersistRecord { record }] = ops.as_slice() else {
-        unreachable!("one pending record: {ops:?}")
-    };
-    let record = record.clone();
-    assert!(sign.resolve(SignRes::RecordPersisted).is_empty());
-    (sign, record)
+    sign
 }
 
 /// The page's one answer after the shell's receipt wait ran out: the op hash.
@@ -464,6 +470,177 @@ fn a_lost_reply_found_on_chain_is_one_row_confirmed_with_the_event_tx() {
     assert_eq!(
         ending_state(&ending, tracker.view().entries.first()),
         SignEndingState::Confirmed {
+            tx_hash: EVENT_TX.to_owned()
+        }
+    );
+}
+
+/// Feed the sign machine's current hand-off to the tracker, as every shell
+/// does once per value.
+fn feed_handoff(
+    sign: &DomainDriver<SignRequest>,
+    tracker: &mut DomainDriver<TxTracker>,
+) -> Vec<TrackOp> {
+    let handoff = sign.view().tracker_handoff.expect("the hand-off");
+    tracker.dispatch(TrackEvent::Submitted {
+        user_op_hash: handoff.user_op_hash,
+        record_ids: handoff.record_ids,
+        chain_id: handoff.chain_id,
+        maybe_sent: handoff.maybe_sent,
+        submit_block: handoff.submit_block,
+        admitted: handoff.admitted,
+    })
+}
+
+/// Forward the tracker's entry for the in-flight op to the sign machine, as
+/// every shell does whenever it changes (RJ4).
+fn forward(
+    sign: &mut DomainDriver<SignRequest>,
+    tracker: &DomainDriver<TxTracker>,
+    now_ms: f64,
+) -> Vec<SignOp> {
+    let entry = tracker.view().entries[0].clone();
+    sign.dispatch(SignEvent::OpTracked {
+        user_op_hash: entry.user_op_hash,
+        status: entry.status,
+        tx_hash: entry.tx_hash,
+        now_ms,
+    })
+}
+
+/// A dApp's plain send through the write-ahead (RJ1), accepted by the relay:
+/// both hand-offs fed to the tracker, the first receipt poll `pending`.
+fn accepted_through_the_write_ahead() -> (DomainDriver<SignRequest>, DomainDriver<TxTracker>) {
+    let mut sign = approved();
+    let ops = sign.dispatch(SignEvent::OpSigned {
+        id: "req-1".to_owned(),
+        user_op_hash: LOCAL_OP.to_owned(),
+        submit_block: Some(SUBMIT_BLOCK),
+        now_ms: NOW + 3_000.0,
+    });
+    assert!(
+        matches!(ops.as_slice(), [SignOp::PersistRecord { .. }]),
+        "{ops:?}"
+    );
+    let mut tracker = DomainDriver::<TxTracker>::new();
+    feed_handoff(&sign, &mut tracker);
+    tracker.resolve(TrackRes::Clock {
+        now_ms: NOW + 3_000.0,
+    });
+    tracker.resolve(TrackRes::ReceiptPending {
+        user_op_hash: LOCAL_OP.to_owned(),
+        now_ms: NOW + 3_300.0,
+    });
+    let ops = sign.resolve_matching(
+        |op| matches!(op, SignOp::PersistRecord { .. }),
+        SignRes::RecordPersisted,
+    );
+    assert!(
+        matches!(ops.as_slice(), [SignOp::ClearToPost { .. }]),
+        "{ops:?}"
+    );
+    sign.resolve_matching(
+        |op| matches!(op, SignOp::ClearToPost { .. }),
+        SignRes::Responded,
+    );
+    sign.dispatch(SignEvent::OpSubmitted {
+        id: "req-1".to_owned(),
+        user_op_hash: LOCAL_OP.to_owned(),
+        now_ms: NOW + 4_000.0,
+        maybe_sent: false,
+        submit_block: Some(SUBMIT_BLOCK),
+    });
+    let ops = feed_handoff(&sign, &mut tracker);
+    assert_eq!(ops, vec![TrackOp::Now], "the admitted hand-off: {ops:?}");
+    tracker.resolve(TrackRes::Clock {
+        now_ms: NOW + 4_000.0,
+    });
+    (sign, tracker)
+}
+
+/// An on-chain revert inside the answer window (ruling 9) — a swap whose
+/// slippage check failed between the relay's simulation and the block, or a
+/// Safe call reverting inside the op. The relay marks it `rejected` and
+/// names the bundle tx; its status can answer before its receipt does. The
+/// page's one answer is the tx hash, never "the network refused this
+/// transaction; nothing was sent" for an op that is on chain and spent gas.
+#[test]
+fn an_on_chain_revert_the_relay_calls_rejected_is_answered_its_tx_hash() {
+    let (mut sign, mut tracker) = accepted_through_the_write_ahead();
+    let ops = tick(&mut tracker, NOW + 15_400.0);
+    assert!(
+        ops.iter()
+            .any(|op| matches!(op, TrackOp::PollStatus { .. })),
+        "{ops:?}"
+    );
+    tracker.resolve_matching(
+        |op| matches!(op, TrackOp::PollStatus { .. }),
+        TrackRes::Status {
+            user_op_hash: LOCAL_OP.to_owned(),
+            status: TrackLifecycle::Rejected,
+            stage: None,
+            now_ms: NOW + 15_600.0,
+            tx_hash: Some(EVENT_TX.to_owned()),
+        },
+    );
+    let early = forward(&mut sign, &tracker, NOW + 15_700.0);
+    assert!(
+        early
+            .iter()
+            .all(|op| !matches!(op, SignOp::SendResponse { .. })),
+        "no answer before the chain has spoken: {early:?}"
+    );
+    // The bundle tx's receipt: the op's own event, `success = false`.
+    let data = format!("0x{:064x}{:064x}{:064x}{:064x}", 22, 0, 0x359a5, 0x359a5);
+    let receipt = serde_json::json!({
+        "transactionHash": EVENT_TX,
+        "status": "0x1",
+        "logs": [{
+            "address": ENTRY_POINT.to_lowercase(),
+            "topics": [
+                USER_OPERATION_EVENT_TOPIC,
+                LOCAL_OP,
+                format!("0x000000000000000000000000{}", &ME[2..]),
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+            ],
+            "data": data,
+            "transactionHash": EVENT_TX,
+        }],
+    })
+    .to_string();
+    let asked = tracker.resolve_matching(
+        |op| matches!(op, TrackOp::TxReceipt { .. }),
+        TrackRes::TxReceipt {
+            user_op_hash: LOCAL_OP.to_owned(),
+            now_ms: NOW + 16_000.0,
+            receipt_json: Some(receipt),
+        },
+    );
+    assert!(
+        asked
+            .iter()
+            .any(|op| matches!(op, TrackOp::HoldingsMoved { .. })),
+        "gas was spent: {asked:?}"
+    );
+    let ops = forward(&mut sign, &tracker, NOW + 16_100.0);
+    let answers: Vec<&SignResponsePayload> = ops
+        .iter()
+        .filter_map(|op| match op {
+            SignOp::SendResponse { payload, .. } => Some(payload),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        answers,
+        vec![&SignResponsePayload::Ok {
+            result: Some(EVENT_TX.to_owned())
+        }],
+        "ruling 9: the revert's tx hash"
+    );
+    let ending = ending_of("eth_sendTransaction", answers[0], Some(LOCAL_OP)).expect("an ending");
+    assert_eq!(
+        ending_state(&ending, tracker.view().entries.first()),
+        SignEndingState::Reverted {
             tx_hash: EVENT_TX.to_owned()
         }
     );

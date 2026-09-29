@@ -67,6 +67,11 @@
 //!   hash); the op's own `UserOperationEvent` in its logs confirms or fails
 //!   the op exactly as a relay receipt does. EX13's landed op read "not on
 //!   chain yet" for 5 min 49 s with the tx hash in hand.
+//! - A relay `rejected` that names a bundle tx is not a refusal before any
+//!   block: the relay marks every op of a mined bundle `rejected` unless its
+//!   own event succeeded. That tx's receipt decides — the op's event fails
+//!   it (Dropped, gas spent) or confirms it; the tx mined without the op
+//!   upholds the refusal (082 second review).
 //!
 //! The shell owns the regex wording layer that used to *be* the classification
 //! (`/dropped from the network/`, `UserOpRejectedError` instanceof checks):
@@ -627,6 +632,11 @@ struct Entry {
     /// Where the not-found grace counts from, when not the submission: the
     /// POST's verdict. `Some(None)` = the verdict came, its clock is next.
     grace_from_ms: Option<Option<f64>>,
+    /// The relay said `rejected` while naming a bundle tx (082 second
+    /// review): the op may be on chain, reverted. Only that tx's receipt
+    /// settles it — the op's event (landed), or the tx mined without it
+    /// (the refusal stands).
+    relay_rejected: bool,
 }
 
 /// Where the relay-independent landing check stands for one entry.
@@ -707,6 +717,7 @@ impl Entry {
             posting: false,
             from_posting: false,
             grace_from_ms: None,
+            relay_rejected: false,
         }
     }
 
@@ -1265,7 +1276,21 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                     entry.relay_tx_hash = Some(tx_hash);
                 }
                 entry.last_status = Some((status, stage));
-                if status == TrackLifecycle::Rejected {
+                if status == TrackLifecycle::Rejected && entry.relay_tx_hash.is_some() {
+                    // The relay marks every op of a MINED bundle `rejected`
+                    // unless the op's own event succeeded (both relay
+                    // shells' `mark_bundle_confirmed`), and names that
+                    // bundle tx: an on-chain revert, gas spent — never
+                    // "refused, nothing was sent" (RJ3's words, ruling 9's
+                    // tx-hash answer, RE8's balance read). The chain decides
+                    // through the tx's receipt: the op's own event fails (or
+                    // confirms) it; the tx mined without it upholds the
+                    // refusal (082 second review).
+                    entry.acknowledged = true;
+                    entry.not_found_streak = 0;
+                    entry.relay_rejected = true;
+                    None
+                } else if status == TrackLifecycle::Rejected {
                     // The relay refused it before any block: nothing was
                     // sent, nothing will land. Terminal, immediately (③).
                     entry.acknowledged = true;
@@ -1697,6 +1722,19 @@ fn on_tx_receipt(
         return render();
     };
     let Some(event) = find_in_log_array(logs, &key) else {
+        let the_named_tx = receipt
+            .and_then(|receipt| receipt.get("transactionHash"))
+            .and_then(serde_json::Value::as_str)
+            .zip(entry.relay_tx_hash.as_deref())
+            .is_some_and(|(mined, named)| mined.eq_ignore_ascii_case(named));
+        if entry.relay_rejected && the_named_tx {
+            // The relay said `rejected` and named this tx, and the tx is
+            // mined without the op: it never reached a block. The refusal
+            // stands — nothing landed, so no balance read.
+            entry.status = EntryStatus::Rejected;
+            let ids = entry.record_ids.clone();
+            return fail_records(attempt, ids, None);
+        }
         // Mined without this op's event (a replaced bundle): proves nothing.
         return render();
     };

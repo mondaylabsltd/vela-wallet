@@ -2352,3 +2352,104 @@ fn a_post_after_not_sent_is_tracked_again() {
     assert_eq!(entry_status(&sut), TrackStatus::Pending);
     assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
 }
+
+// ===========================================================================
+// Spec 082 round 2 — second adversarial review (paths: a Safe inner revert,
+// the NotSent proof on a reload)
+// ===========================================================================
+
+/// The relay's status for an op in a mined bundle whose own event says it
+/// failed — an on-chain revert, gas spent (a swap's slippage between the
+/// relay's simulation and the block; a Safe call reverting inside the op,
+/// which module v0.3.0 turns into `success = false`). The relay marks every
+/// member of a mined bundle `rejected` unless its event succeeded
+/// (`mark_bundle_confirmed`, both relay shells), and names the bundle tx.
+fn rejected_on_chain(now_ms: f64) -> Res {
+    Res::Status {
+        user_op_hash: HASH.to_owned(),
+        status: TrackLifecycle::Rejected,
+        stage: None,
+        now_ms,
+        tx_hash: Some(EVENT_TX.to_owned()),
+    }
+}
+
+/// A `rejected` that names the bundle tx is not "refused before any block":
+/// the op reached a block. Read as a refusal it was terminal at once — the
+/// records failed with no balance re-read (gas was spent, RE8), the dApp
+/// answered "the network refused this transaction; nothing was sent" (RJ3)
+/// for an op that is on chain (ruling 9 answers its tx hash), and the Send
+/// receipt said the fee was rejected. The chain decides: the op's own event
+/// in that tx fails it — Dropped, with the tx hash and the balance read.
+#[test]
+fn a_rejected_status_naming_the_bundle_tx_is_read_from_the_chain() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let ops = tick(&mut sut, T0 + 12_400.0);
+    assert_eq!(ops, vec![poll_receipt(), poll_status()]);
+    // The status answers first (the relay's receipt read raced its store).
+    let ops = sut.resolve_matching(is_status, rejected_on_chain(T0 + 12_600.0));
+    assert_eq!(ops, vec![tx_receipt_op()], "no verdict yet: ask the chain");
+    let view = sut.view();
+    assert_eq!(view.entries[0].status, TrackStatus::Pending);
+    assert!(view.entries[0].polling);
+    assert!(sut
+        .resolve_matching(is_receipt, receipt_pending(T0 + 12_700.0))
+        .is_empty());
+    let ops = sut.resolve_matching(
+        is_tx_receipt,
+        tx_receipt(T0 + 12_900.0, Some(&bundle_receipt(vec![our_event(false)]))),
+    );
+    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    let view = sut.view();
+    assert_eq!(view.entries[0].status, TrackStatus::Dropped);
+    assert_eq!(view.entries[0].tx_hash.as_deref(), Some(EVENT_TX));
+    assert_eq!(view.entries[0].outcome, TrackOutcome::Final);
+
+    // The relay's own receipt (success = false) settles it the same way.
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let _ = tick(&mut sut, T0 + 12_400.0);
+    let _ = sut.resolve_matching(is_status, rejected_on_chain(T0 + 12_600.0));
+    let ops = sut.resolve_matching(
+        is_receipt,
+        Res::ReceiptFailed {
+            user_op_hash: HASH.to_owned(),
+            tx_hash: EVENT_TX.to_owned(),
+            now_ms: T0 + 12_700.0,
+        },
+    );
+    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    assert_eq!(entry_status(&sut), TrackStatus::Dropped);
+}
+
+/// The chain shows that bundle tx mined without the op: it never reached a
+/// block, and the relay's refusal stands — Rejected, no balance read. Not
+/// mined yet (`null`) is no verdict: asked again.
+#[test]
+fn a_rejected_op_absent_from_its_mined_bundle_is_refused() {
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let _ = tick(&mut sut, T0 + 12_400.0);
+    let _ = sut.resolve_matching(is_status, rejected_on_chain(T0 + 12_600.0));
+    let _ = sut.resolve_matching(is_receipt, receipt_pending(T0 + 12_700.0));
+    let ops = sut.resolve_matching(is_tx_receipt, tx_receipt(T0 + 12_900.0, Some("null")));
+    assert!(ops.is_empty(), "{ops:?}");
+    assert_eq!(entry_status(&sut), TrackStatus::Pending);
+    let ops = tick(&mut sut, T0 + 16_000.0);
+    assert!(ops.contains(&tx_receipt_op()), "{ops:?}");
+    let ops = sut.resolve_matching(
+        is_tx_receipt,
+        tx_receipt(T0 + 16_200.0, Some(&bundle_receipt(vec![]))),
+    );
+    assert_eq!(ops, vec![fail_patch()], "nothing landed: no balance read");
+    assert_eq!(entry_status(&sut), TrackStatus::Rejected);
+
+    // A refusal that names no bundle tx is terminal at once, as before.
+    let mut sut = Sut::new();
+    submitted(&mut sut);
+    let _ = tick(&mut sut, T0 + 12_400.0);
+    let ops = sut.resolve_matching(is_status, status(TrackLifecycle::Rejected, T0 + 12_600.0));
+    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(entry_status(&sut), TrackStatus::Rejected);
+}
