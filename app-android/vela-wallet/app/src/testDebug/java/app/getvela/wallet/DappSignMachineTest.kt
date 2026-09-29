@@ -535,6 +535,39 @@ class DappSignMachineTest {
         assertEquals("exactly one answer", 1, answers.count { it.first == "tab-1/r1" })
     }
 
+    /**
+     * Spec 082 RJ4 (review): the tracker holds the op from the write-ahead on,
+     * so it can reach its verdict while the POST is still out — a slow relay,
+     * the op already mined. That verdict reaches the core before the core holds
+     * the op (`OpSubmitted`), and is dropped there; the tracker's entry does not
+     * change again. The page still gets the tracker's tx hash as soon as the
+     * relay's answer lands — not the op hash at the end of the window.
+     */
+    @Test
+    fun `a verdict the tracker reached while the POST was out answers the page once the relay's answer lands`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay(receiptLands = false)
+        port.always("eth_sendUserOperation") { events += "relay.send"; FakeRelayPort.body(signedOp) }
+        val posting = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        port.before = { method -> if (method == "eth_sendUserOperation") { posting.complete(Unit); release.await() } }
+        val c = controller(receiptWaitMs = 60_000L)
+        c.open(transfer())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { posting.await() }
+        val landed = "0x" + "d5".repeat(32)
+        trackerSays(app.getvela.wallet.feature.send.core.TrackStatus.Confirmed, landed)
+        delay(500)
+        assertTrue("nobody is answered while the POST is out: $answers", answers.none { it.first == "tab-1/r1" })
+        release.complete(Unit)
+        withTimeout(10_000) { while (answers.none { it.first == "tab-1/r1" }) delay(20) }
+        assertEquals("the tracker's tx hash, long before the 60 s wait", landed, answers.single { it.first == "tab-1/r1" }.second.getString("result"))
+        delay(500)
+        assertEquals("exactly one answer", 1, answers.count { it.first == "tab-1/r1" })
+        assertEquals("posted once", 1, events.count { it == "relay.send" })
+    }
+
     /** Spec 082 RJ3 (DX-W3): the tracker's `rejected` answers the page -32603 "refused", once. */
     @Test
     fun `the tracker's rejection answers refused once`() = runBlocking<Unit> {

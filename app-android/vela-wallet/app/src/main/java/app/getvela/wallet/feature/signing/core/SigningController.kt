@@ -191,6 +191,31 @@ class SigningController(
         }
     }
 
+    /**
+     * Spec 082 RJ4 (review of T246): the tracker holds the op from the
+     * write-ahead on, so it can see the op land while the POST is still out (a
+     * slow relay). That entry reached the core as `OpTracked` before the core
+     * held the op (`OpSubmitted`) and was dropped there — and a final entry
+     * does not change again, so [followTracker] never sent it twice: the page
+     * waited out its whole window for the op hash. Once the core holds the op,
+     * a landing already known is handed over once more. Only a landing (a tx
+     * hash, a chain fact): a "not sent" judged while the POST was still out
+     * came before the POST finished, and the tracker's own later word decides.
+     */
+    private fun forwardLanding(userOpHash: String) {
+        val op = userOpHash.lowercase()
+        val entry = ports.trackerView()?.value?.entries
+            ?.firstOrNull { it.user_op_hash.equals(op, ignoreCase = true) }
+            ?.takeIf { !it.tx_hash.isNullOrBlank() }
+            ?: return
+        val handed = synchronized(handoffLock) {
+            (op in handedOps).also { if (it) forwarded[op] = entry.status to entry.tx_hash }
+        }
+        if (!handed) return
+        VelaLog.event("sign.tracker", "landing seen during the POST: forwarded again", "op" to op.take(12), "status" to entry.status)
+        dispatchSign(SignEvent.OpTracked(entry.user_op_hash, entry.status, entry.tx_hash, now()))
+    }
+
     /** Spec 082 RJ1: a write-ahead op proven never sent — the tracker forgets it, once per value. */
     private fun feedWithdraw(withdraw: SignTrackerWithdraw) {
         val fresh = synchronized(handoffLock) { withdrawn.add(withdraw) }
@@ -267,6 +292,9 @@ class SigningController(
                         submit_block = submitted.submitBlock,
                     ),
                 )
+                // The core holds the op now: a landing the tracker saw while
+                // the POST was out is handed over again (082 review of T246).
+                forwardLanding(submitted.userOpHash)
             }
 
             // Spec 082 RJ1: signed and hashed, nothing posted — the core writes
