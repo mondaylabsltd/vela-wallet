@@ -64,6 +64,25 @@ nonisolated enum VelaLog {
         remember("\(scope.rawValue): \(kind)")
     }
 
+    // MARK: - The fee's two lines (spec 082 RJ12, G47)
+
+    /// `fee: quote failed chain=… cause=… re-quote #n in N ms` — the words
+    /// every client logs when a quote fails. `cause` is the failure's wire
+    /// name (`FeeFailureText.cause`) or `timeout`; `inMs` `nil` means no
+    /// re-quote follows (the failure is not the network's, or the sheet can
+    /// no longer use a fee). The report's ring gets `fee: quote_failed`.
+    static func feeQuoteFailed(chain: Int, cause: String, requote: UInt32, inMs: UInt32?) {
+        let next = inMs.map { "re-quote #\(requote) in \($0) ms" } ?? "no re-quote"
+        let line = format("quote failed chain=\(chain) cause=\(cause) \(next)")
+        logger(.fee).error("\(line, privacy: .public)")
+        remember("fee: quote_failed")
+    }
+
+    /// `fee: quote back chain=… after n re-quotes` — the fee is on screen again.
+    static func feeQuoteBack(chain: Int, after requotes: UInt32) {
+        notice(.fee, "quote back chain=\(chain) after \(requotes) re-quotes")
+    }
+
     // MARK: - Fields
 
     /// A host as a line may carry it: itself in DEBUG, an FNV-1a token in

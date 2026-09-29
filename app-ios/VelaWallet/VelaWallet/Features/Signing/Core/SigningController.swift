@@ -67,6 +67,9 @@ final class SigningController {
         /// `maybeSent`, the one whose submit reply was lost, from the head
         /// read before its POST (`submitBlock`, ruling 8).
         var trackSubmitted: (TrackSubmission) -> Void = { _ in }
+        /// A write-ahead op the core proved never sent (spec 082 RJ1): the
+        /// tracker drops it.
+        var trackWithdrawn: (_ userOpHash: String, _ recordIds: [String]) -> Void = { _, _ in }
         var recordsPersisted: () -> Void = {}
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
         var knownChains: () -> [Int] = { [] }
@@ -156,10 +159,20 @@ final class SigningController {
     /// 052's ordering invariant, which is what makes a force-quit recoverable.
     private var persistedRecords: Set<String> = []
     private var pendingHandoff: SignTrackerHandoffWire?
-    /// Handoffs already given to the tracker, by the records they name — not
-    /// by hash (spec 082): a may-have-been-sent op is followed under its
-    /// local hash, and a second attempt at the same nonce hashes the same.
+    /// Handoffs already given to the tracker, by hash, records and the two
+    /// facts that change between hand-offs of ONE op (spec 082 RJ1): the
+    /// write-ahead hand-off (`maybeSent`) and the relay's acceptance
+    /// (`admitted`) name the same hash and the same records, and keyed on
+    /// those alone the second was never fed — an accepted op then read "may
+    /// have been sent" and could end "not sent" over money that landed.
     private var handedOff: Set<String> = []
+    /// Withdrawals already given to the tracker, once per value.
+    private var withdrawn: Set<String> = []
+    /// The tracker's last view, for the answer that follows it (RJ4).
+    private var trackerView: TrackViewWire?
+    /// The last entry state forwarded as `op_tracked`, so one state reaches
+    /// the core once however often the tracker's view is rebuilt.
+    private var lastTracked: String?
     private var answered = false
     /// The page behind this request is gone (`transportDropped`): nothing
     /// may be signed or sent for it any more (RB2).
@@ -272,7 +285,20 @@ final class SigningController {
                     "maybe_sent": maybeSent,
                     "submit_block": submitBlock.map { $0 as Any } ?? NSNull(),
                 ])
+                // What the tracker already knows about this op, now that the
+                // core will take it (RJ4).
+                self?.forwardTracked()
             },
+            // The record before the bytes (spec 082 RJ1): the core writes it
+            // "may have been sent", hands it to the tracker, then clears.
+            opSigned: { [weak self] id, hash, submitBlock in
+                self?.dispatchSign([
+                    "type": "op_signed", "id": id, "user_op_hash": hash,
+                    "submit_block": submitBlock.map { $0 as Any } ?? NSNull(),
+                    "now_ms": Date().timeIntervalSince1970 * 1000,
+                ])
+            },
+            answered: { [weak self] in self?.answered ?? true },
             // The prompt's own bracket (RA9): the sheet says "awaiting your
             // signature" only while it is really up — never through the
             // network work before it.
@@ -284,10 +310,8 @@ final class SigningController {
             },
             askerLive: { [weak self] in !(self?.askerGone ?? true) },
             approvedAtMs: { [weak self] in self?.approvedAtMs },
-            recordsPersisted: { [weak self] in
-                self?.ports.recordsPersisted()
-                self?.recordLanded()
-            },
+            recordsPersisted: { [weak self] in self?.ports.recordsPersisted() },
+            recordWritten: { [weak self] id in self?.recordLanded(id) },
             switchAccount: { _ in true },
             nativeSymbol: ports.nativeSymbol,
             // The browser's fact about who asked. The wallet's own request is
@@ -446,10 +470,10 @@ final class SigningController {
 
     /// Why the quote could not even start: the account's deployment could not
     /// be read, so there is no fee session to fail (spec 082 RF5, W10). It is
-    /// the core's own failure for a quote that could not be had —
-    /// `quote_unavailable` — so the row says what a failed quote says (the
-    /// service-unreachable reason) instead of "estimating…" for ever, and it
-    /// is asked again on the core's schedule. `nil` once a quote starts.
+    /// the core's failure for a fee blocked by a chain read — `ChainRead`,
+    /// rate-limited or not (RJ13, G48), as its JSON text — so the row names
+    /// the chain's node, never Vela's relay, and it is asked again on the
+    /// core's schedule. `nil` once a quote starts.
     private(set) var quoteStartFailure: String?
     /// The one loop that asks again for a quote that could not start.
     private var startRetry: Task<Void, Never>?
@@ -466,24 +490,38 @@ final class SigningController {
             guard let self else { return }
             startLoopsAlive += 1
             defer { startLoopsAlive -= 1 }
-            guard let deployed = await relay.isDeployed(chainId: chainId, address: wallet.address)
-            else {
-                guard !Task.isCancelled else { return }
-                // The chain could not say: nothing was quoted. Say why, and
-                // ask on the core's schedule for a quote that could not be
-                // had (spec 079), while the sheet waits.
-                quoteStartFailure = "quote_unavailable"
-                VelaLog.failure(.fee, kind: "quote_failed", "reason=deployed_unreadable chain=\(chainId) re-quote #\(attempt)")
-                guard let wait = feeRequoteDelayMs(failure: "quote_unavailable", attempt: attempt)
-                else { return }
+            let relay = self.relay
+            let address = wallet.address
+            // An automatic re-ask is bounded (RJ12): a read not answered in
+            // `feeRequoteTimeoutMs` is a failure again, and the schedule goes
+            // on — the fee is back within 8 + 6 s of the chain answering.
+            let read: RelayClient.DeploymentRead
+            if attempt > 1 {
+                read = await SignExecutor.within(seconds: Double(feeRequoteTimeoutMs()) / 1000) {
+                    await relay.deploymentRead(chainId: chainId, address: address)
+                } ?? .unread(rateLimited: false)
+            } else {
+                read = await relay.deploymentRead(chainId: chainId, address: address)
+            }
+            guard !Task.isCancelled else { return }
+            guard case .deployed(let deployed) = read else {
+                // The chain could not say: nothing was quoted. Say why — the
+                // chain's node, rate-limited or unreachable (RJ13) — and ask
+                // on the core's schedule while the sheet waits.
+                var rateLimited = false
+                if case .unread(let limited) = read { rateLimited = limited }
+                let failure = FeeFailureText.chainRead(rateLimited: rateLimited)
+                quoteStartFailure = failure.text
+                let wait = feeRequoteDelayMs(failure: failure.text, attempt: attempt)
+                VelaLog.feeQuoteFailed(chain: chainId, cause: failure.cause, requote: attempt, inMs: wait)
+                guard let wait else { return }
                 try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
                 guard !Task.isCancelled, fees.view == nil, requoteAllowed else { return }
                 requestQuote(chainId: chainId, attempt: attempt + 1)
                 return
             }
-            guard !Task.isCancelled else { return }
             if quoteStartFailure != nil {
-                VelaLog.notice(.fee, "quote back chain=\(chainId)")
+                VelaLog.feeQuoteBack(chain: chainId, after: attempt - 1)
             }
             quoteStartFailure = nil
             // HOW FAST is the speed core's to say: the store asks at its tier.
@@ -648,6 +686,25 @@ final class SigningController {
             fees.speedStage(onForm: onForm)
         }
 
+        // A withdrawal first: when the relay answered another hash, the core
+        // takes the write-ahead op back and hands the relay's over in the
+        // same view.
+        if let withdraw = view.trackerWithdraw {
+            let key = Self.withdrawKey(withdraw)
+            if !withdrawn.contains(key) {
+                withdrawn.insert(key)
+                if let pending = pendingHandoff,
+                   pending.userOpHash.caseInsensitiveCompare(withdraw.userOpHash) == .orderedSame {
+                    // Never handed over, and now never will be.
+                    pendingHandoff = nil
+                }
+                // Those records are being deleted: a hand-off that names the
+                // same ids again (the relay's own hash) waits for its own write.
+                persistedRecords.subtract(withdraw.recordIds)
+                VelaLog.notice(.sign, "write-ahead withdrawn hash=\(VelaLog.short(withdraw.userOpHash))")
+                ports.trackWithdrawn(withdraw.userOpHash, withdraw.recordIds)
+            }
+        }
         if let handoff = view.trackerHandoff {
             let key = Self.handoffKey(handoff)
             if !handedOff.contains(key) {
@@ -687,6 +744,10 @@ final class SigningController {
     /// Automatic re-quotes made for the failure on screen; reset by a quote.
     private var requoteAttempt: UInt32 = 0
     private var requoteTask: Task<Void, Never>?
+    /// The bound on the automatic re-quote in flight (RJ12).
+    private var requoteWatch: Task<Void, Never>?
+    /// The failure the schedule is for — the core's text, whole.
+    private var requoteFailure: String?
 
     /// Whether a re-quote may still go out: the sheet is up, nothing is
     /// signing or submitting, and the page has no answer yet.
@@ -695,19 +756,40 @@ final class SigningController {
     }
 
     /// A quote that failed for a reason that can pass (the relay unreachable,
-    /// a busy estimate) is asked again on the core's schedule — 3 s, 6 s,
-    /// 12 s, then every 15 s (`feeRequoteDelayMs`) — while the sheet is up and
-    /// nothing is signing. Android's pass: the row said "点击重试" with the
-    /// relay down and stayed that way after it came back.
+    /// a busy estimate, a chain read) is asked again on the core's schedule —
+    /// 3 s, 6 s, then every 8 s (`feeRequoteDelayMs`, spec 082 RJ12) — while
+    /// the sheet is up and nothing is signing. Android's pass: the row said
+    /// "点击重试" with the relay down and stayed that way after it came back.
+    ///
+    /// A measurement still out is not a verdict: the schedule neither resets
+    /// nor advances on it (a busy view has no `failed`, and reading that as a
+    /// success kept every re-quote at 3 s). Each automatic re-quote is bounded
+    /// by `feeRequoteTimeoutMs`; one that does not answer in time is a
+    /// failure again (`watchRequote`).
     private func scheduleRequote(_ view: FeeViewWire) {
-        guard view.failed != nil else {
+        guard !view.busy else { return }
+        let chain = request?.chainId ?? 0
+        guard let failure = view.failed else {
+            if requoteAttempt > 0, view.fee != nil {
+                VelaLog.feeQuoteBack(chain: chain, after: requoteAttempt)
+            }
             requoteAttempt = 0
+            requoteFailure = nil
             cancelRequote()
             return
         }
-        guard requoteTask == nil,
-              let wait = Self.requoteDelay(view, attempt: requoteAttempt + 1, allowed: requoteAllowed)
-        else { return }
+        requoteWatch?.cancel()
+        requoteWatch = nil
+        guard requoteTask == nil else { return }
+        let wait = Self.requoteDelay(view, attempt: requoteAttempt + 1, allowed: requoteAllowed)
+        // A failure no re-quote follows is said once, however often the view
+        // is drawn again.
+        if wait == nil, requoteFailure == failure { return }
+        requoteFailure = failure
+        VelaLog.feeQuoteFailed(
+            chain: chain, cause: FeeFailureText(failure).cause, requote: requoteAttempt + 1, inMs: wait
+        )
+        guard let wait else { return }
         requoteAttempt += 1
         requoteTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
@@ -715,6 +797,38 @@ final class SigningController {
             requoteTask = nil
             guard fee?.failed != nil, requoteAllowed else { return }
             fees.refresh()
+            watchRequote()
+        }
+    }
+
+    /// The bound on one automatic re-quote (spec 082 RJ12): not answered in
+    /// `feeRequoteTimeoutMs` is a failure again — the next re-quote goes out
+    /// on the schedule, asked from the start (the core abandons the run that
+    /// hung), instead of waiting out a pool's whole sweep.
+    private func watchRequote() {
+        requoteWatch?.cancel()
+        let attempt = requoteAttempt
+        requoteWatch = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(feeRequoteTimeoutMs()) * 1_000_000)
+            guard let self, !Task.isCancelled, requoteAttempt == attempt,
+                  fee?.busy == true, requoteAllowed, requoteTask == nil
+            else { return }
+            requoteWatch = nil
+            let failure = requoteFailure ?? "quote_unavailable"
+            let wait = feeRequoteDelayMs(failure: failure, attempt: attempt + 1)
+            VelaLog.feeQuoteFailed(
+                chain: request?.chainId ?? 0, cause: "timeout", requote: attempt + 1, inMs: wait
+            )
+            guard let wait else { return }
+            requoteAttempt += 1
+            requoteTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
+                guard let self, !Task.isCancelled else { return }
+                requoteTask = nil
+                guard fee?.busy == true || fee?.failed != nil, requoteAllowed else { return }
+                fees.reask()
+                watchRequote()
+            }
         }
     }
 
@@ -733,14 +847,15 @@ final class SigningController {
     private func cancelRequote() {
         requoteTask?.cancel()
         requoteTask = nil
+        requoteWatch?.cancel()
+        requoteWatch = nil
         startRetry?.cancel()
         startRetry = nil
     }
 
-    private func recordLanded() {
-        guard let handoff = pendingHandoff else { return }
-        // `persist_record` answered; the ids it wrote are the handoff's.
-        persistedRecords.formUnion(handoff.recordIds)
+    /// `persist_record` wrote `recordId`: a hand-off naming it may go.
+    private func recordLanded(_ recordId: String) {
+        persistedRecords.insert(recordId)
         tryHandoff()
     }
 
@@ -751,14 +866,56 @@ final class SigningController {
         pendingHandoff = nil
         ports.trackSubmitted(TrackSubmission(
             userOpHash: handoff.userOpHash, recordIds: handoff.recordIds, chainId: handoff.chainId,
-            maybeSent: handoff.maybeSent, submitBlock: handoff.submitBlock
+            maybeSent: handoff.maybeSent, submitBlock: handoff.submitBlock,
+            admitted: handoff.admitted
         ))
     }
 
-    /// A handoff's identity: the records it names (the request's own), never
-    /// the op hash alone.
+    /// A handoff's identity (spec 082 RJ1, the core's contract §4): its op,
+    /// its records, and whether it may have been sent or was admitted — so
+    /// the write-ahead hand-off and the relay's acceptance of the SAME op are
+    /// two hand-offs, each fed once.
     static func handoffKey(_ handoff: SignTrackerHandoffWire) -> String {
-        handoff.recordIds.sorted().joined(separator: ",")
+        [
+            handoff.userOpHash.lowercased(),
+            handoff.recordIds.sorted().joined(separator: ","),
+            handoff.maybeSent ? "maybe_sent" : "-",
+            handoff.admitted ? "admitted" : "-",
+        ].joined(separator: "|")
+    }
+
+    /// A withdrawal's identity: its op and its records.
+    static func withdrawKey(_ withdraw: SignTrackerWithdrawWire) -> String {
+        withdraw.userOpHash.lowercased() + "|" + withdraw.recordIds.sorted().joined(separator: ",")
+    }
+
+    // MARK: - The answer follows the tracker (spec 082 RJ4)
+
+    /// The tracker's view changed: its entry for this request's op goes to
+    /// the core as `op_tracked` — which answers the page at once from a
+    /// terminal verdict (the tx hash, or a refusal) instead of waiting out
+    /// the receipt window. `RootView` feeds every view while the request lives.
+    func trackerChanged(_ view: TrackViewWire) {
+        trackerView = view
+        forwardTracked()
+    }
+
+    /// Only past `op_submitted` (the core takes it no earlier) and only while
+    /// the page has no answer; once per entry state.
+    private func forwardTracked() {
+        guard !answered, let op = submittedHash,
+              let entry = trackerView?.entry(userOpHash: op)
+        else { return }
+        let state = "\(entry.userOpHash.lowercased())|\(entry.status)|\(entry.txHash ?? "")"
+        guard state != lastTracked else { return }
+        lastTracked = state
+        dispatchSign([
+            "type": "op_tracked",
+            "user_op_hash": entry.userOpHash,
+            "status": entry.status,
+            "tx_hash": entry.txHash.map { $0 as Any } ?? NSNull(),
+            "now_ms": Date().timeIntervalSince1970 * 1000,
+        ])
     }
 
     private func markAnswered() {
