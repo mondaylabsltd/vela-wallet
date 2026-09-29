@@ -19,6 +19,7 @@ import VelaCore
 @testable import VelaWallet
 
 @MainActor
+@Suite(.timeLimit(.minutes(2)))
 struct SendReceiptVerdictTests {
 
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])
@@ -133,8 +134,16 @@ struct SendReceiptVerdictTests {
             fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil),
             identity: RecipientIdentity(store: store, pool: pool, accounts: accountStore),
             metadata: TokenMetadata(store: store, pool: pool), accountStore: accountStore,
-            balances: { nil }, networks: { nil }, ports: SendExecutor.Ports()
+            balances: { nil }, networks: { nil }, ports: SendExecutor.Ports(),
+            // The clearance below is a Task hop: on a starved runner that
+            // is seconds, not the core's milliseconds (`Waits.swift`).
+            clearanceWaitMs: 600_000
         )
+        // The core's write-ahead, played by the test (RJ1): the POST is
+        // cleared once the op is signed.
+        executor.ports.opSigned = { [weak executor] hash, _ in
+            Task { @MainActor in _ = await executor?.perform(["type": "clear_to_post", "user_op_hash": hash]) }
+        }
         let reply = try CoreJSON.object(await executor.perform([
             "type": "submit_user_op", "chain_id": 100, "account": fixture.account,
             "public_key_hex": NSNull(),
@@ -187,8 +196,16 @@ struct SendReceiptVerdictTests {
             fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil),
             identity: RecipientIdentity(store: store, pool: pool, accounts: accountStore),
             metadata: TokenMetadata(store: store, pool: pool), accountStore: accountStore,
-            balances: { nil }, networks: { nil }, ports: SendExecutor.Ports()
+            balances: { nil }, networks: { nil }, ports: SendExecutor.Ports(),
+            // The clearance below is a Task hop: on a starved runner that
+            // is seconds, not the core's milliseconds (`Waits.swift`).
+            clearanceWaitMs: 600_000
         )
+        // The core's write-ahead, played by the test (RJ1): the POST is
+        // cleared once the op is signed.
+        executor.ports.opSigned = { [weak executor] hash, _ in
+            Task { @MainActor in _ = await executor?.perform(["type": "clear_to_post", "user_op_hash": hash]) }
+        }
         let submit = Task {
             try CoreJSON.object(await executor.perform([
                 "type": "submit_user_op", "chain_id": 100, "account": fixture.account,
@@ -198,8 +215,9 @@ struct SendReceiptVerdictTests {
                 "quoted_fee": ["amount": "1000", "recipient": fixture.account] as [String: Any],
             ]))
         }
-        let deadline = Date().addingTimeInterval(5)
-        while !port.holding, Date() < deadline { try await Task.sleep(nanoseconds: 5_000_000) }
+        // On state, not a clock (`Waits.swift`): the suite's time limit
+        // reports a POST that never goes out.
+        await Wait.until { port.holding }
         try #require(port.holding, "the POST never went out")
 
         // The person taps Cancel while the relay has the POST.

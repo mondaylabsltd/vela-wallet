@@ -480,7 +480,8 @@ struct TrustedSignerSpineTests {
 
         let hash = try await spine.submit(
             chainId: 100, account: fixture.account, calls: calls, gasFeeToken: nil,
-            quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account)
+            quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account),
+            writeAhead: { _, _ in true }
         )
 
         #expect(hash.userOpHash == opHash)

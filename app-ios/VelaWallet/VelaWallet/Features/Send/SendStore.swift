@@ -62,6 +62,16 @@ final class SendStore {
             self?.trustedSignerNotice = nil
             self?.dispatch(["type": "signing_started"])
         }
+        // The op is signed and nothing has left (spec 082 RJ1): the core
+        // writes every recipient's record ahead, hands the op to the tracker
+        // and only then clears the POST.
+        executor.ports.opSigned = { [weak self] hash, block in
+            self?.dispatch([
+                "type": "op_signed", "user_op_hash": hash,
+                "submit_block": block.map { $0 as Any } ?? NSNull(),
+                "now_ms": Date().timeIntervalSince1970 * 1000,
+            ])
+        }
         executor.ports.alert = { [weak self] kind in self?.alert = kind }
         executor.ports.trustedSignerEnded = { [weak self] notice in self?.trustedSignerNotice = notice }
         // What the asset list has so far, while the first fetch waits for its

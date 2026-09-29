@@ -146,7 +146,7 @@ struct UserOpSpineTests {
         await #expect(throws: UserOpSpine.Refused.self) {
             try await spine(port, signer).submit(
                 chainId: gnosis, account: golden, calls: transfer(),
-                gasFeeToken: nil, quotedFee: usableQuote()
+                gasFeeToken: nil, quotedFee: usableQuote(), writeAhead: { _, _ in true }
             )
         }
         #expect(signer.calls == 0)
@@ -162,7 +162,7 @@ struct UserOpSpineTests {
         await #expect(throws: UserOpSpine.Refused.self) {
             try await spine(port, signer).submit(
                 chainId: gnosis, account: golden, calls: transfer(),
-                gasFeeToken: nil, quotedFee: usableQuote()
+                gasFeeToken: nil, quotedFee: usableQuote(), writeAhead: { _, _ in true }
             )
         }
         #expect(signer.calls == 0)
@@ -181,7 +181,7 @@ struct UserOpSpineTests {
         await #expect(throws: UserOpSpine.Refused.self) {
             try await spine(port, signer).submit(
                 chainId: gnosis, account: golden, calls: transfer(),
-                gasFeeToken: nil, quotedFee: nil
+                gasFeeToken: nil, quotedFee: nil, writeAhead: { _, _ in true }
             )
         }
         #expect(signer.calls == 0)
@@ -204,7 +204,7 @@ struct UserOpSpineTests {
         await #expect(throws: UserOpSpine.Refused.self) {
             try await spine(port, signer, accounts: accounts).submit(
                 chainId: gnosis, account: golden, calls: transfer(),
-                gasFeeToken: nil, quotedFee: usableQuote()
+                gasFeeToken: nil, quotedFee: usableQuote(), writeAhead: { _, _ in true }
             )
         }
         #expect(signer.calls == 0)
@@ -224,7 +224,7 @@ struct UserOpSpineTests {
         do {
             _ = try await spine(port, signer).submit(
                 chainId: gnosis, account: golden, calls: transfer(),
-                gasFeeToken: nil, quotedFee: usableQuote()
+                gasFeeToken: nil, quotedFee: usableQuote(), writeAhead: { _, _ in true }
             )
         } catch let refused as UserOpSpine.Refused {
             caught = refused.failure
@@ -249,7 +249,7 @@ struct UserOpSpineTests {
         )
         _ = try? await spine.submit(
             chainId: gnosis, account: golden, calls: transfer(),
-            gasFeeToken: nil, quotedFee: usableQuote()
+            gasFeeToken: nil, quotedFee: usableQuote(), writeAhead: { _, _ in true }
         )
         #expect(signer.challengeLength == 32)
     }

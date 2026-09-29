@@ -16,6 +16,10 @@
 //    fixed sentence, never the pool's text;
 //  - the relay's `[existingHash:0x…]` marker → Accepted with that hash.
 //
+//  Spec 082 round 2 (T237, RJ1, RJ3): the record before the bytes — nothing
+//  is POSTed before the core clears it, no clearance is no POST at all, and a
+//  relay's refusal is `failed{refused: true}`, never "try again".
+//
 
 import Foundation
 import Testing
@@ -179,15 +183,21 @@ struct SubmitVerdictTests {
     }
 
     /// A mute relay after the signature: the spine answers the op's own hash,
-    /// marked may-have-been-sent, with the head read before the POST.
+    /// marked may-have-been-sent, with the head read before the POST — and
+    /// the write-ahead got that same hash and head before the POST (RJ1).
     @Test func theSpineAnswersAMaybeSentOpWithItsLocalHashAndHead() async throws {
         let port = readyPort()
         port.detailed["eth_sendUserOperation"] = [answer(.failed(rateLimited: false), delivered: true)]
         let (spine, _) = spine(port)
+        var written: (hash: String, block: UInt64?, callsBefore: [String])?
         let submitted = try await spine.submit(
             chainId: 100, account: fixture.account,
             calls: [UserOpCall(to: fixture.account, value: "1000", data: "0x")], gasFeeToken: nil,
-            quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account)
+            quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account),
+            writeAhead: { hash, block in
+                written = (hash, block, port.calls)
+                return true
+            }
         )
         #expect(submitted.maybeSent)
         #expect(submitted.userOpHash.hasPrefix("0x") && submitted.userOpHash.count == 66)
@@ -196,6 +206,65 @@ struct SubmitVerdictTests {
         let head = try #require(port.calls.firstIndex(of: "eth_blockNumber"))
         let post = try #require(port.calls.firstIndex(of: "eth_sendUserOperation"))
         #expect(head < post)
+        let ahead = try #require(written)
+        #expect(ahead.hash == submitted.userOpHash, "the record is written under the op's own hash")
+        #expect(ahead.block == 0x2e3b9d9)
+        #expect(!ahead.callsBefore.contains("eth_sendUserOperation"), "the record precedes the bytes")
+    }
+
+    /// RJ1: nothing is POSTed until the core clears it — however long that
+    /// takes — and then exactly once.
+    @Test func noPostBeforeTheClearance() async throws {
+        let port = readyPort()
+        port.rpc["eth_sendUserOperation"] = .ok(relayHash)
+        let (spine, _) = spine(port)
+        let gate = WriteAheadGate()
+        let signed = Flag()
+        let local = Recorded()
+        let account = fixture.account
+        let submit = Task { @MainActor in
+            try await spine.submit(
+                chainId: 100, account: account,
+                calls: [UserOpCall(to: account, value: "1000", data: "0x")], gasFeeToken: nil,
+                quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: account),
+                writeAhead: { hash, block in
+                    local.signed.append((hash, block, false))
+                    gate.arm(hash)
+                    signed.set()
+                    return await gate.wait(hash, ms: 60_000)
+                }
+            )
+        }
+        await Wait.until { signed.isSet }
+        // Signed, hashed — and held: the relay has not been asked.
+        for _ in 0..<20 { await Task.yield() }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(!port.calls.contains("eth_sendUserOperation"), "no POST before the clearance")
+
+        gate.open(try #require(local.signed.first?.hash))
+        let submitted = try await submit.value
+        #expect(submitted.userOpHash == relayHash)
+        #expect(port.calls.filter { $0 == "eth_sendUserOperation" }.count == 1)
+    }
+
+    /// RJ1: no clearance, no POST — the op is not sent, and says so.
+    @Test func noClearanceIsNoPostAndNotSent() async {
+        let port = readyPort()
+        port.rpc["eth_sendUserOperation"] = .ok(relayHash)
+        let (spine, _) = spine(port)
+        var caught: UserOpSpine.Failure?
+        do {
+            _ = try await spine.submit(
+                chainId: 100, account: fixture.account,
+                calls: [UserOpCall(to: fixture.account, value: "1000", data: "0x")], gasFeeToken: nil,
+                quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account),
+                writeAhead: { _, _ in false }
+            )
+        } catch let refused as UserOpSpine.Refused {
+            caught = refused.failure
+        } catch {}
+        #expect(caught == .notSent)
+        #expect(!port.calls.contains("eth_sendUserOperation"), "zero POSTs")
     }
 
     /// Nothing reached the relay: the spine's refusal is `notSent` — the one
@@ -209,7 +278,8 @@ struct SubmitVerdictTests {
             _ = try await spine.submit(
                 chainId: 100, account: fixture.account,
                 calls: [UserOpCall(to: fixture.account, value: "1000", data: "0x")], gasFeeToken: nil,
-                quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account)
+                quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account),
+                writeAhead: { _, _ in true }
             )
         } catch let refused as UserOpSpine.Refused {
             caught = refused.failure
@@ -228,7 +298,8 @@ struct SubmitVerdictTests {
                 chainId: 100, account: fixture.account,
                 calls: [UserOpCall(to: fixture.account, value: "1000", data: "0x")], gasFeeToken: nil,
                 quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account),
-                askerLive: { false }
+                askerLive: { false },
+                writeAhead: { _, _ in true }
             )
         } catch let refused as UserOpSpine.Refused {
             caught = refused.failure
@@ -240,13 +311,35 @@ struct SubmitVerdictTests {
 
     // MARK: - What the dApp is told
 
-    private func signExecutor(_ port: ScriptedRelayPort) -> (SignExecutor, Recorded) {
+    /// The executor, with the core's write-ahead played by the test: on
+    /// `op_signed` the record is persisted and the POST cleared, in that
+    /// order — unless `clears` is false, when nothing ever clears it.
+    private func signExecutor(
+        _ port: ScriptedRelayPort, clears: Bool = true, clearanceWaitMs: Double = 60_000
+    ) -> (SignExecutor, Recorded) {
         let (spine, _) = spine(port)
         let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         let executor = SignExecutor(
-            spine: spine, relay: client(port), store: store, receiptWaitMs: { _ in 0 }
+            spine: spine, relay: client(port), store: store, receiptWaitMs: { _ in 0 },
+            clearanceWaitMs: clearanceWaitMs
         )
         let recorded = Recorded()
+        executor.ports.opSigned = { [weak executor] id, hash, block in
+            recorded.signed.append((hash, block, port.calls.contains("eth_sendUserOperation")))
+            guard clears else { return }
+            Task { @MainActor in
+                _ = await executor?.perform([
+                    "type": "persist_record",
+                    "record": [
+                        "record_id": "dapp-1-tx", "kind": "dapp_tx", "method": "eth_sendTransaction",
+                        "params_json": "[]", "result": "", "from": "", "chain_id": 100, "now_ms": 0,
+                        "status": "pending", "user_op_hash": hash, "dapp_origin": "",
+                        "maybe_sent": true, "submit_block": block.map { $0 as Any } ?? NSNull(),
+                    ] as [String: Any],
+                ])
+                _ = await executor?.perform(["type": "clear_to_post", "id": id, "user_op_hash": hash])
+            }
+        }
         executor.ports.opSubmitted = { [weak executor] id, hash, maybeSent, block in
             recorded.submitted.append((hash, maybeSent, block))
             // The core persists the record on `op_submitted`; here the test
@@ -289,9 +382,62 @@ struct SubmitVerdictTests {
         let outcome = try #require(reply["outcome"] as? [String: Any])
         #expect(outcome["type"] as? String == "failed")
         #expect(outcome["message"] as? String == userOpNotSentDetail())
+        #expect(outcome["refused"] as? Bool == false, "a relay never reached is not a refusal")
         #expect(userOpNotSentDetail() == "relay unreachable; nothing was sent")
         #expect(recorded.submitted.isEmpty, "nothing was submitted, nothing is tracked")
         #expect(recorded.ceremony == ["started:req-1", "done:req-1"], "the prompt is bracketed for the core (RA9)")
+    }
+
+    /// RJ1 through the executor: the op is handed to the core before any
+    /// POST, and with no clearance the page is told nothing was sent — and
+    /// nothing was: zero POSTs.
+    @Test func noClearanceSendsNothingAndSaysSo() async throws {
+        let port = readyPort()
+        port.rpc["eth_sendUserOperation"] = .ok(relayHash)
+        let (executor, recorded) = signExecutor(port, clears: false, clearanceWaitMs: 100)
+        let reply = try CoreJSON.object(await executor.perform(signAndSubmit()))
+        let outcome = try #require(reply["outcome"] as? [String: Any])
+        #expect(outcome["type"] as? String == "failed")
+        #expect(outcome["message"] as? String == userOpNotSentDetail())
+        #expect(outcome["refused"] as? Bool == false)
+        let signed = try #require(recorded.signed.first, "op_signed went to the core")
+        #expect(signed.hash.count == 66)
+        #expect(signed.block == 0x2e3b9d9)
+        #expect(!signed.postedBefore)
+        #expect(!port.calls.contains("eth_sendUserOperation"), "no clearance, no POST")
+        #expect(recorded.submitted.isEmpty)
+    }
+
+    /// RJ1: with the clearance, the op is POSTed after `op_signed` and never
+    /// before it.
+    @Test func theClearedOpIsPostedAfterItsRecord() async throws {
+        let port = readyPort()
+        port.rpc["eth_sendUserOperation"] = .ok(relayHash)
+        let (executor, recorded) = signExecutor(port)
+        let reply = try CoreJSON.object(await executor.perform(signAndSubmit()))
+        let outcome = try #require(reply["outcome"] as? [String: Any])
+        #expect(outcome["type"] as? String == "receipt_pending")
+        let signed = try #require(recorded.signed.first)
+        #expect(!signed.postedBefore, "op_signed precedes the POST")
+        #expect(port.calls.filter { $0 == "eth_sendUserOperation" }.count == 1)
+        #expect(recorded.submitted.first?.hash == relayHash, "the relay's hash wins")
+    }
+
+    /// RJ3: the relay refused the op — `failed{refused: true}`, whatever its
+    /// sentence, so the page hears the core's "refused" and the sheet never
+    /// says "try again". "Relayer unavailable" is not a refusal.
+    @Test func aRelayRefusalIsRefused() async throws {
+        let port = readyPort()
+        port.detailed["eth_sendUserOperation"] = [
+            answer(.rpcError(code: -32500, message: "AA23 reverted: ERC20: transfer amount exceeds balance"),
+                   delivered: false),
+        ]
+        let (executor, _) = signExecutor(port)
+        let reply = try CoreJSON.object(await executor.perform(signAndSubmit()))
+        let outcome = try #require(reply["outcome"] as? [String: Any])
+        #expect(outcome["type"] as? String == "failed")
+        #expect(outcome["refused"] as? Bool == true)
+        #expect(userOpRefusedDappDetail() == "the network refused this transaction; nothing was sent")
     }
 
     /// MaybeSent reaches the core as `op_submitted{maybe_sent}` under the
@@ -337,4 +483,6 @@ struct SubmitVerdictTests {
 final class Recorded {
     var submitted: [(hash: String, maybeSent: Bool, block: UInt64?)] = []
     var ceremony: [String] = []
+    /// `op_signed` as the core heard it, and whether a POST had gone first.
+    var signed: [(hash: String, block: UInt64?, postedBefore: Bool)] = []
 }

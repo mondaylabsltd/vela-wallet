@@ -12,6 +12,15 @@
 //  Nothing here prices, validates or classifies: the relay's words go to the
 //  core to be classified, and the screen prints the core's sentence.
 //
+//  ## The records before the bytes (spec 082 RJ1)
+//
+//  The person's own send writes ahead exactly as a page's request does: once
+//  the op is signed, `op_signed` goes to the core, which writes every
+//  recipient's record "may have been sent", hands the op to the tracker and
+//  clears the POST (`clear_to_post`). No clearance, no POST. Then the
+//  verdict: `mark_admitted` when the relay took it, `delete_tx_records` and
+//  `track_withdrawn` when it provably did not.
+//
 
 import Foundation
 import VelaCore
@@ -25,15 +34,23 @@ final class SendExecutor {
         "estimate_fee", "probe_treasury", "prewarm_fees", "load_account_credential", "submit_user_op",
         "cancel_passkey_sign", "persist_tx_records", "track_submitted", "resolve_identity",
         "resolve_risk", "simulate_calls", "start_timer", "haptic", "show_alert", "close",
+        "clear_to_post", "mark_admitted", "delete_tx_records", "track_withdrawn",
     ]
 
     /// What the screen owns: the tracker handoff, the alert surface, haptics,
     /// and leaving.
     struct Ports {
         var signingStarted: () -> Void = {}
+        /// The op is signed and its local hash known, and nothing has been
+        /// POSTed (spec 082 RJ1): the core's `op_signed`. Unwired, nothing is
+        /// ever cleared and nothing is ever sent.
+        var opSigned: (_ userOpHash: String, _ submitBlock: UInt64?) -> Void = { _, _ in }
         /// The op, to the tracker — with the two facts a may-have-been-sent
-        /// op is followed by (spec 082 RA4, T183).
+        /// op is followed by (spec 082 RA4, T183), and whether the relay took
+        /// a write-ahead op (RJ1).
         var trackSubmitted: (TrackSubmission) -> Void = { _ in }
+        /// A write-ahead op proven never sent (RJ1): the tracker drops it.
+        var trackWithdrawn: (_ userOpHash: String, _ recordIds: [String]) -> Void = { _, _ in }
         var haptic: (String) -> Void = { _ in }
         var alert: ([String: Any]) -> Void = { _ in }
         var closed: () -> Void = {}
@@ -83,6 +100,12 @@ final class SendExecutor {
     /// The ceremony in flight, so `cancel_passkey_sign` can end it.
     private var signing: Task<UserOpSpine.Submitted, Error>?
 
+    /// The core's clearance for each POST (RJ1).
+    private let gate = WriteAheadGate()
+    /// How long a signed op waits for its clearance — the core's
+    /// `userOpWriteAheadWaitMs`. A test seam.
+    private let clearanceWaitMs: Double
+
     init(
         store: VelaStore,
         relay: RelayClient,
@@ -97,8 +120,10 @@ final class SendExecutor {
         networks: @escaping () -> NetViewWire?,
         holdingsRound: @escaping (String) -> Int? = { _ in 0 },
         openHoldings: @escaping (String) -> Void = { _ in },
-        ports: Ports
+        ports: Ports,
+        clearanceWaitMs: Double = Double(userOpWriteAheadWaitMs())
     ) {
+        self.clearanceWaitMs = clearanceWaitMs
         self.store = store
         self.relay = relay
         self.pool = pool
@@ -192,8 +217,38 @@ final class SendExecutor {
                 recordIds: operation["record_ids"] as? [String] ?? [],
                 chainId: (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
                 maybeSent: operation["maybe_sent"] as? Bool ?? false,
-                submitBlock: (operation["submit_block"] as? NSNumber)?.intValue
+                submitBlock: (operation["submit_block"] as? NSNumber)?.intValue,
+                admitted: operation["admitted"] as? Bool ?? false
             ))
+            return CoreJSON.string(["type": "track_handed_off"])
+
+        // The records are on disk and the tracker has the op (RJ1): the
+        // submit waiting on this op may POST.
+        case "clear_to_post":
+            gate.open(operation["user_op_hash"] as? String ?? "")
+            return CoreJSON.string(["type": "post_cleared"])
+
+        // The relay took the write-ahead op: its records are no longer "may
+        // have been sent" — one write — and stay pending for the tracker.
+        case "mark_admitted":
+            TxRecords.patch(
+                ids: operation["record_ids"] as? [String] ?? [],
+                fields: ["maybeSent": NSNull()], store: store
+            )
+            ports.recordsPersisted()
+            return CoreJSON.string(["type": "records_persisted"])
+
+        // Proven never sent: every record of the op goes, in one write.
+        case "delete_tx_records":
+            TxRecords.delete(ids: operation["ids"] as? [String] ?? [], store: store)
+            ports.recordsPersisted()
+            return CoreJSON.string(["type": "records_persisted"])
+
+        case "track_withdrawn":
+            ports.trackWithdrawn(
+                operation["user_op_hash"] as? String ?? "",
+                operation["record_ids"] as? [String] ?? []
+            )
             return CoreJSON.string(["type": "track_handed_off"])
 
         case "resolve_identity":
@@ -464,14 +519,27 @@ final class SendExecutor {
                 tier: fee["tier"] as? String
             )
         }
-        let task = Task<UserOpSpine.Submitted, Error> { [spine, ports] in
+        let task = Task<UserOpSpine.Submitted, Error> { [spine, ports, gate, clearanceWaitMs] in
             try await spine.submit(
                 chainId: chainId,
                 account: account,
                 calls: calls,
                 gasFeeToken: operation["gas_fee_token"] as? String,
                 quotedFee: quoted,
-                signingStarted: { ports.signingStarted() }
+                signingStarted: { ports.signingStarted() },
+                // The records before the bytes (RJ1).
+                writeAhead: { hash, block in
+                    let started = Date()
+                    gate.arm(hash)
+                    ports.opSigned(hash, block)
+                    let cleared = await gate.wait(hash, ms: clearanceWaitMs)
+                    if cleared {
+                        VelaLog.notice(.sign, "send write-ahead cleared hash=\(VelaLog.short(hash)) in=\(VelaLog.ms(since: started))")
+                    } else {
+                        VelaLog.failure(.sign, kind: "write_ahead_timeout", "send hash=\(VelaLog.short(hash)) after=\(VelaLog.ms(since: started))")
+                    }
+                    return cleared
+                }
             )
         }
         signing = task
@@ -607,7 +675,9 @@ final class SendExecutor {
         case .trustedSigner: return ["type": "passkey_cancelled"]
         case .relayerUnavailable: return ["type": "relayer_unavailable"]
         case .bundlerUnderfunded: return ["type": "bundler_underfunded"]
-        case .other(let message):
+        // The send machine words every other refusal itself; the relay's own
+        // sentence is its diagnostics line, as before 082.
+        case .other(let message), .rejected(let message):
             return ["type": "other", "message": message.map { $0 as Any } ?? NSNull()]
         // Nothing left the device (RA1): the generic refusal is TRUE now,
         // and the core's fixed sentence is the diagnostics line.
@@ -646,10 +716,14 @@ final class SendExecutor {
             ])
         case "cancel_passkey_sign":
             return CoreJSON.string(["type": "passkey_cancel_acknowledged"])
-        case "persist_tx_records":
+        case "persist_tx_records", "mark_admitted", "delete_tx_records":
             return CoreJSON.string(["type": "records_persisted"])
-        case "track_submitted":
+        case "track_submitted", "track_withdrawn":
             return CoreJSON.string(["type": "track_handed_off"])
+        // Acknowledged, never opened: an op whose clearance was lost is not
+        // POSTed (RJ1).
+        case "clear_to_post":
+            return CoreJSON.string(["type": "post_cleared"])
         case "resolve_identity":
             return CoreJSON.string(["type": "identity_resolved", "identity": NSNull()])
         case "resolve_risk":

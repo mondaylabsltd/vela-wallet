@@ -6,6 +6,12 @@
 //  wears its unit (issue 231). Every judgement asserted here is one the shell
 //  used to make for itself, or not make at all.
 //
+//  Spec 082 round 2 (T237, RJ1): a split Send writes every recipient's record
+//  ahead of the bytes, through the real `send` core and this executor — no
+//  POST before the clearance, and the verdict settles the records: the relay
+//  takes it (the records stop saying "may have been sent"), or nothing left
+//  (the records go, and the tracker lets the op go).
+//
 
 import Foundation
 import Testing
@@ -285,5 +291,245 @@ struct SplitVerdictTests {
         let fiat = SendLive.form(inUsd, fee: nil, display: yen, on: drawn, loc: loc)
         #expect(fiat.amount?.unitPrefix == "$", "the figure's own code, not the display's ¥")
         #expect(fiat.amount?.denomLabel == "USD")
+    }
+}
+
+// MARK: - The records before the bytes (spec 082 T237, RJ1)
+
+/// A relay port whose submit POST is answered by the test — which looks at
+/// the store at that moment first.
+@MainActor
+final class WriteAheadProbePort: RelayPort {
+    let inner: ScriptedRelayPort
+    /// The POST's answer, given what the store holds as it goes out.
+    var onPost: () -> RpcCallResult = {
+        RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil)
+    }
+    private(set) var posts = 0
+
+    init(_ inner: ScriptedRelayPort) { self.inner = inner }
+
+    func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome {
+        await callDetailed(chainId: chainId, method: method, params: params, kind: kind).outcome
+    }
+
+    func callDetailed(chainId: Int, method: String, params: [Any], kind: String) async -> RpcCallResult {
+        if method == "eth_sendUserOperation" {
+            posts += 1
+            return onPost()
+        }
+        return await inner.callDetailed(chainId: chainId, method: method, params: params, kind: kind)
+    }
+
+    func bundlerBase(chainId: Int) async -> String? { "https://relay.test" }
+    func bestRpcUrl(chainId: Int) async -> String? { "https://rpc.test" }
+    func restGet(url: String, xRpcUrl: String?) async -> CoreHTTP.RestAnswer { .failed }
+}
+
+@MainActor
+@Suite(.timeLimit(.minutes(3)))
+struct SplitWriteAheadTests {
+
+    private let fixture = TrustedSignerFixture()
+    private static let alice = "0x1111111111111111111111111111111111111111"
+    private static let bob = "0x2222222222222222222222222222222222222222"
+
+    /// What one run saw.
+    @MainActor
+    final class Seen {
+        var signed: [(hash: String, block: UInt64?)] = []
+        var recordsAtPost: [[String: Any]] = []
+        var tracked: [TrackSubmission] = []
+        var withdrawn: [(hash: String, ids: [String])] = []
+    }
+
+    /// The real `send` core, driven to a two-recipient split's submit. Every
+    /// operation that reads or writes money goes through `SendExecutor`; the
+    /// reads that only shape the form (the token list, the fee, the treasury)
+    /// are answered here so the form reaches its confirm without a network.
+    private func runSplit(
+        post: @escaping (_ store: VelaStore, _ port: WriteAheadProbePort) -> RpcCallResult,
+        until done: @escaping (Seen, SendViewWire?) -> Bool
+    ) async throws -> (store: VelaStore, seen: Seen, port: WriteAheadProbePort, view: SendViewWire?) {
+        let scripted = ScriptedRelayPort()
+        scripted.rpc["eth_getCode"] = .ok("0x")
+        scripted.rpc["eth_blockNumber"] = .ok("0x2e3b9d9")
+        scripted.rpc["eth_estimateUserOperationGas"] = .ok([
+            "verificationGasLimit": "0x30d40", "callGasLimit": "0x30d40", "preVerificationGas": "0xc350",
+        ] as [String: Any])
+        let port = WriteAheadProbePort(scripted)
+        let relay = RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        let accounts = ScriptedAccounts()
+        accounts.keyList = fixture.keys
+        accounts.recordJson = fixture.recordJson(signedInWith: UserOpSpine.trustedSignerMethod)
+        let spine = UserOpSpine(relay: relay, accounts: accounts, signer: { CountingSigner() })
+        let fixture = self.fixture
+        spine.trustedSigner = ScriptedTrustedSigner { digest in
+            let data = try! JSONSerialization.data(withJSONObject: fixture.result(for: digest))
+            return .outcome(trustedSignerVerify(
+                resultJson: String(decoding: data, as: UTF8.self), digest: digest, keys: fixture.keys
+            ))
+        }
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = VelaStore(defaults: defaults)
+        let accountStore = AccountStore(defaults: defaults)
+        let pool = RpcPool(store: store, accounts: accountStore)
+        let seen = Seen()
+        let executor = SendExecutor(
+            store: store, relay: relay, pool: pool, spine: spine, accounts: accounts,
+            fees: FeeStore(relay: relay, accounts: accounts, settleDeadline: nil),
+            identity: RecipientIdentity(store: store, pool: pool, accounts: accountStore),
+            metadata: TokenMetadata(store: store, pool: pool), accountStore: accountStore,
+            balances: { nil }, networks: { nil }, ports: SendExecutor.Ports(),
+            clearanceWaitMs: 600_000
+        )
+        port.onPost = {
+            seen.recordsAtPost = TxRecords.load(store: store)
+            return post(store, port)
+        }
+        let keyHex = fixture.keys[0].publicKeyHex
+        let answered: Set<String> = [
+            "fetch_tokens", "prewarm_fees", "load_account_credential", "estimate_fee", "probe_treasury",
+            "resolve_identity", "resolve_risk", "simulate_calls", "haptic", "show_alert",
+            "clear_token_cache", "start_timer",
+        ]
+        var view: SendViewWire?
+        let core = CoreStore<SendViewWire>(
+            bridge: SendCore(),
+            perform: { operation in
+                let type = operation["type"] as? String ?? ""
+                guard answered.contains(type) else { return await executor.perform(operation) }
+                switch type {
+                case "fetch_tokens":
+                    return CoreJSON.string([
+                        "type": "tokens_loaded",
+                        "tokens": [[
+                            "network": "chain-100", "chain_id": 100, "symbol": "xDAI", "balance": "2",
+                            "decimals": 18, "token_address": NSNull(), "price_usd": 1.0,
+                            "logo_urls": [String](), "spam": false,
+                        ] as [String: Any]],
+                        "chains": [["network": "chain-100", "chain_id": 100, "native_symbol": "xDAI"]],
+                    ])
+                case "prewarm_fees": return CoreJSON.string(["type": "fees_prewarmed"])
+                case "load_account_credential":
+                    return CoreJSON.string(["type": "account_credential", "public_key_hex": keyHex])
+                case "estimate_fee":
+                    let estimate = FeeEstimateWire(
+                        chainId: 100, totalWei: "1000", maxFeePerGas: "1000", totalGas: "450000",
+                        deployed: false, quoted: true, feeAsset: .native, feeRecipient: fixture.account
+                    )
+                    return CoreJSON.string([
+                        "type": "fee_estimated", "outcome": ["type": "ok", "estimate": estimate.coreJSON],
+                    ])
+                case "probe_treasury":
+                    return CoreJSON.string(["type": "treasury_probed", "probe": ["type": "covered"]])
+                case "resolve_identity": return CoreJSON.string(["type": "identity_resolved", "identity": NSNull()])
+                case "resolve_risk": return CoreJSON.string(["type": "risk_resolved", "risk": NSNull()])
+                case "simulate_calls": return CoreJSON.string(["type": "sim_resolved", "sim_json": NSNull()])
+                case "haptic": return CoreJSON.string(["type": "haptic_played"])
+                case "show_alert": return CoreJSON.string(["type": "alert_acknowledged"])
+                case "clear_token_cache": return CoreJSON.string(["type": "token_cache_cleared"])
+                default:
+                    // `start_timer`: no timer fires inside this run (the
+                    // form's debounce and the 15 s pre-check timeout are the
+                    // core's own tests); nothing here waits on one.
+                    try? await Task.sleep(nanoseconds: 3_600 * 1_000_000_000)
+                    return CoreJSON.string(["type": "timer_elapsed", "tag": operation["tag"] ?? NSNull()])
+                }
+            },
+            onView: { view = $0 }
+        )
+        func send(_ event: [String: Any]) {
+            let json = CoreJSON.string(event)
+            if !core.boot(json) { core.dispatch(json) }
+        }
+        executor.ports.signingStarted = { send(["type": "signing_started"]) }
+        executor.ports.opSigned = { hash, block in
+            seen.signed.append((hash, block))
+            send([
+                "type": "op_signed", "user_op_hash": hash,
+                "submit_block": block.map { $0 as Any } ?? NSNull(), "now_ms": 1_757_000_000_000.0,
+            ])
+        }
+        executor.ports.trackSubmitted = { seen.tracked.append($0) }
+        executor.ports.trackWithdrawn = { hash, ids in seen.withdrawn.append((hash, ids)) }
+
+        send([
+            "type": "open",
+            "account": ["id": fixture.credentialHex, "address": fixture.account, "name": NSNull()] as [String: Any],
+            "params": [
+                "preselected_symbol": NSNull(), "preselected_network": NSNull(),
+                "prefilled_recipient": NSNull(), "prefilled_chain_id": NSNull(),
+                "prefilled_token_address": NSNull(), "prefilled_amount_base": NSNull(),
+                "locked": false, "preselected_multi": NSNull(),
+            ] as [String: Any],
+            "display": ["code": "USD", "rate": 1.0, "fiat_decimals": 2] as [String: Any],
+        ])
+        await Wait.until { !(view?.tokens.isEmpty ?? true) }
+        send(["type": "select_token", "token_id": "chain-100_native_xDAI"])
+        await Wait.until { view?.stage == .enterDetails }
+        send(["type": "enter_split_mode"])
+        send(["type": "recipients_changed", "recipients": [
+            ["id": "rcpt_1", "address": Self.alice, "amount": "0.5", "name": NSNull()],
+            ["id": "rcpt_2", "address": Self.bob, "amount": "0.25", "name": NSNull()],
+        ]])
+        await Wait.until { view?.canContinue == true }
+        send(["type": "continue"])
+        await Wait.until { view?.stage == .confirm && view?.canConfirm == true }
+        send(["type": "slide_confirm"])
+        await Wait.until { done(seen, view) }
+        return (store, seen, port, view)
+    }
+
+    /// Accepted under the op's own hash: both records were on disk, "may
+    /// have been sent", when the POST went out — and after it they are the
+    /// relay's, pending for the tracker, with the acceptance handed over.
+    @Test func aSplitIsWrittenAheadAndTheRelaysYesAdmitsIt() async throws {
+        let run = try await runSplit(
+            post: { store, _ in
+                // The relay takes it under the op's own hash — read back
+                // from the record written ahead.
+                let hash = TxRecords.load(store: store).first?["userOpHash"] as? String ?? ""
+                return RpcCallResult(outcome: .ok(hash), maybeDelivered: false, heldErrorJson: nil)
+            },
+            until: { seen, _ in seen.tracked.contains { $0.admitted } }
+        )
+        let signed = try #require(run.seen.signed.first)
+        #expect(run.seen.signed.count == 1)
+        #expect(run.port.posts == 1)
+        // At the POST: two records, the op's own hash, may have been sent.
+        let atPost = run.seen.recordsAtPost
+        #expect(atPost.count == 2, "every recipient's record before the bytes: \(atPost)")
+        #expect(Set(atPost.compactMap { $0["id"] as? String }) == ["\(signed.hash)-0", "\(signed.hash)-1"])
+        #expect(atPost.allSatisfy { $0["maybeSent"] as? Bool == true })
+        #expect(atPost.allSatisfy { ($0["userOpHash"] as? String) == signed.hash })
+        // The tracker had the op before the POST, and then its acceptance.
+        let first = try #require(run.seen.tracked.first)
+        #expect(first.maybeSent && !first.admitted)
+        #expect(run.seen.tracked.last?.admitted == true)
+        #expect(run.seen.withdrawn.isEmpty)
+        // Admitted: still pending (the tracker closes them), no longer in doubt.
+        await Wait.until { TxRecords.pending(store: run.store).allSatisfy { $0["maybeSent"] == nil } }
+        let after = TxRecords.pending(store: run.store)
+        #expect(after.count == 2, "no second write of the same payment")
+        #expect(after.allSatisfy { $0["maybeSent"] == nil })
+    }
+
+    /// Nothing left the device: the op is proven not sent — both records go,
+    /// in one write, and the tracker lets the op go.
+    @Test func aSplitNeverSentLeavesNoRecord() async throws {
+        let run = try await runSplit(
+            post: { _, _ in
+                RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil)
+            },
+            until: { seen, _ in !seen.withdrawn.isEmpty }
+        )
+        let signed = try #require(run.seen.signed.first)
+        #expect(run.seen.recordsAtPost.count == 2, "written ahead before the POST")
+        let withdrawn = try #require(run.seen.withdrawn.first)
+        #expect(withdrawn.hash == signed.hash)
+        #expect(Set(withdrawn.ids) == ["\(signed.hash)-0", "\(signed.hash)-1"])
+        await Wait.until { TxRecords.load(store: run.store).isEmpty }
+        #expect(TxRecords.load(store: run.store).isEmpty, "a payment that never left leaves no row")
     }
 }

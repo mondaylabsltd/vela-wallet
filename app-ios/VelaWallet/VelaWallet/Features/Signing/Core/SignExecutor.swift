@@ -34,6 +34,21 @@
 //  Blocking the page on a receipt is what spec 028 found made
 //  `eth_sendTransaction` time out with -32603 on a real dApp.
 //
+//  ## The record before the bytes (spec 082 RJ1)
+//
+//  Once the op is signed and its local hash known, it goes to the core
+//  (`op_signed`) BEFORE any POST: the core writes the record "may have been
+//  sent" and hands it to the tracker, and only then clears the POST
+//  (`clear_to_post`). No clearance within `userOpWriteAheadWaitMs`, no POST —
+//  the page is told nothing was sent. A quit from there on leaves one pending
+//  row the tracker resolves on the next launch (G34).
+//
+//  ## The answer follows the tracker (spec 082 RJ4)
+//
+//  The core may answer the page from what the tracker knows — the tx hash,
+//  or a refusal — before this executor's receipt wait is over. The wait then
+//  ends: its late result is the core's to drop.
+//
 
 import Foundation
 import VelaCore
@@ -44,6 +59,7 @@ final class SignExecutor {
     static let operations = [
         "send_response", "check_bundler_funding", "attempt_sponsorship",
         "sign_and_submit", "persist_record", "update_record", "switch_active_account",
+        "clear_to_post", "delete_record",
     ]
 
     struct Ports {
@@ -59,6 +75,14 @@ final class SignExecutor {
         /// core must hear this **before** the submit resolves.
         var opSubmitted: (_ id: String, _ userOpHash: String, _ maybeSent: Bool, _ submitBlock: UInt64?) -> Void
         = { _, _, _, _ in }
+        /// The op is signed and its local hash known, and nothing has been
+        /// POSTed (spec 082 RJ1): the core's `op_signed`, which writes the
+        /// record ahead and answers with `clear_to_post`. Unwired, nothing is
+        /// ever cleared and nothing is ever sent.
+        var opSigned: (_ id: String, _ userOpHash: String, _ submitBlock: UInt64?) -> Void = { _, _, _ in }
+        /// The core has answered this request (spec 082 RJ4: from what the
+        /// tracker knows): the receipt wait ends.
+        var answered: () -> Bool = { false }
         /// A ceremony is about to be raised for request `id` (the core's
         /// `ceremony_started`, RA9).
         var signingStarted: (_ id: String) -> Void = { _ in }
@@ -72,6 +96,9 @@ final class SignExecutor {
         var approvedAtMs: () -> Double? = { nil }
         /// The feed re-reads its store.
         var recordsPersisted: () -> Void = {}
+        /// One record is on disk — by its id, so a hand-off naming it waits
+        /// for THAT write, not for any write (a delete included).
+        var recordWritten: (_ recordId: String) -> Void = { _ in }
         /// The session's active-account switch.
         var switchAccount: (_ index: Int) async -> Bool = { _ in false }
         /// The chain's native symbol, for the record row.
@@ -104,13 +131,20 @@ final class SignExecutor {
     /// precedes the record.
     private var persisted: Set<String> = []
 
+    /// The core's clearance for each POST (RJ1).
+    private let gate = WriteAheadGate()
+    /// How long a signed op waits for its clearance — the core's
+    /// `userOpWriteAheadWaitMs`. A test seam, and nothing else.
+    private let clearanceWaitMs: Double
+
     init(
         spine: UserOpSpine,
         relay: RelayClient,
         store: VelaStore,
         ports: Ports = Ports(),
         receiptWaitMs: @escaping (_ elapsedMs: Double) -> Double = { dappReceiptWaitMs(elapsedMs: $0) },
-        receiptPollMs: Double = 3_000
+        receiptPollMs: Double = 3_000,
+        clearanceWaitMs: Double = Double(userOpWriteAheadWaitMs())
     ) {
         self.spine = spine
         self.relay = relay
@@ -118,6 +152,7 @@ final class SignExecutor {
         self.ports = ports
         self.receiptWaitMs = receiptWaitMs
         self.receiptPollMs = receiptPollMs
+        self.clearanceWaitMs = clearanceWaitMs
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -165,21 +200,39 @@ final class SignExecutor {
                 persisted.insert(hash.lowercased())
             }
             ports.recordsPersisted()
+            if let id = row["id"] as? String, !id.isEmpty { ports.recordWritten(id) }
             return CoreJSON.string(["type": "record_persisted"])
 
         case "update_record":
             let id = operation["record_id"] as? String ?? ""
             let close = operation["close"] as? [String: Any] ?? [:]
             var fields: [String: Any] = [:]
-            if close["type"] as? String == "confirmed" {
+            switch close["type"] as? String {
+            case "confirmed":
                 fields["status"] = "confirmed"
                 if let txHash = close["tx_hash"] as? String, !txHash.isEmpty {
                     fields["txHash"] = txHash
                 }
-            } else {
+            // The relay took the op the write-ahead record announced (RJ1):
+            // it is no longer "may have been sent", and it stays pending for
+            // the tracker to close.
+            case "admitted":
+                fields["maybeSent"] = NSNull()
+            default:
                 fields["status"] = "failed"
             }
             TxRecords.patch(ids: [id], fields: fields, store: store)
+            ports.recordsPersisted()
+            return CoreJSON.string(["type": "record_updated"])
+
+        // The core cleared this op's POST (RJ1): its record is on disk.
+        case "clear_to_post":
+            gate.open(operation["user_op_hash"] as? String ?? "")
+            return CoreJSON.string(["type": "responded"])
+
+        // A write-ahead record the core proved never sent (RJ1): the row goes.
+        case "delete_record":
+            TxRecords.delete(id: operation["record_id"] as? String ?? "", store: store)
             ports.recordsPersisted()
             return CoreJSON.string(["type": "record_updated"])
 
@@ -207,11 +260,14 @@ final class SignExecutor {
         case "sign_and_submit":
             return CoreJSON.string([
                 "type": "submit",
-                "outcome": ["type": "failed", "message": "Signing failed"],
+                "outcome": Self.failed("Signing failed"),
                 "now_ms": Date().timeIntervalSince1970 * 1000,
             ])
         case "persist_record": return CoreJSON.string(["type": "record_persisted"])
-        case "update_record": return CoreJSON.string(["type": "record_updated"])
+        case "update_record", "delete_record": return CoreJSON.string(["type": "record_updated"])
+        // Acknowledged, never opened: an op whose clearance was lost is not
+        // POSTed (RJ1).
+        case "clear_to_post": return CoreJSON.string(["type": "responded"])
         default: return CoreJSON.string(["type": "account_switched"])
         }
     }
@@ -230,7 +286,7 @@ final class SignExecutor {
         }
 
         guard let calls = Self.callsOf(method: method, paramsJson: paramsJson) else {
-            return ["type": "failed", "message": "\(method) carried no transaction this wallet could read"]
+            return Self.failed("\(method) carried no transaction this wallet could read")
         }
 
         let quoted = (operation["quoted_fee"] as? [String: Any]).map {
@@ -257,7 +313,10 @@ final class SignExecutor {
                 ),
                 signingStarted: { [ports] in ports.signingStarted(id) },
                 signingDone: { [ports] in ports.ceremonyDone(id) },
-                askerLive: { [ports] in ports.askerLive() }
+                askerLive: { [ports] in ports.askerLive() },
+                writeAhead: { [weak self] hash, block in
+                    await self?.writeAhead(id: id, hash: hash, block: block) ?? false
+                }
             )
             let hash = submitted.userOpHash
             VelaLog.notice(
@@ -296,17 +355,44 @@ final class SignExecutor {
                     "funding": NSNull(),
                 ]
             case .relayerUnavailable:
-                return ["type": "failed", "message": "The gas relayer is unavailable right now"]
+                return Self.failed("The gas relayer is unavailable right now")
             case .notSent:
                 // The core's fixed sentence, never the pool's text (RA10):
                 // true, and nothing in it for a page to misread.
-                return ["type": "failed", "message": userOpNotSentDetail()]
+                return Self.failed(userOpNotSentDetail())
+            // The relay refused it (RJ3): the page is answered the core's
+            // "the network refused this" whatever the sentence, and the sheet
+            // never says "try again".
+            case .rejected(let message):
+                VelaLog.failure(.sign, kind: "refused", "chain=\(chainId)")
+                return Self.failed(message ?? userOpRefusedDappDetail(), refused: true)
             case .other(let message):
-                return ["type": "failed", "message": message ?? "Signing failed"]
+                return Self.failed(message ?? "Signing failed")
             }
         } catch {
-            return ["type": "failed", "message": "Signing failed"]
+            return Self.failed("Signing failed")
         }
+    }
+
+    /// `SignSubmitOutcome::Failed`, whole: `refused` is the relay's refusal
+    /// (RJ3), `false` for everything else.
+    static func failed(_ message: String, refused: Bool = false) -> [String: Any] {
+        ["type": "failed", "message": message, "refused": refused]
+    }
+
+    /// The record before the bytes (RJ1): tell the core the op is signed,
+    /// then wait for it to clear the POST. `false` sends nothing.
+    private func writeAhead(id: String, hash: String, block: UInt64?) async -> Bool {
+        let started = Date()
+        gate.arm(hash)
+        ports.opSigned(id, hash, block)
+        let cleared = await gate.wait(hash, ms: clearanceWaitMs)
+        if cleared {
+            VelaLog.notice(.sign, "write-ahead cleared hash=\(VelaLog.short(hash)) in=\(VelaLog.ms(since: started))")
+        } else {
+            VelaLog.failure(.sign, kind: "write_ahead_timeout", "hash=\(VelaLog.short(hash)) after=\(VelaLog.ms(since: started))")
+        }
+        return cleared
     }
 
     /// A message: hashed the way the page's verifier hashes it, signed once,
@@ -315,7 +401,7 @@ final class SignExecutor {
         id: String, method: String, paramsJson: String, chainId: Int, address: String
     ) async -> [String: Any] {
         guard let original = Self.messageHash(method: method, paramsJson: paramsJson) else {
-            return ["type": "failed", "message": "\(method) carried nothing this wallet could sign"]
+            return Self.failed("\(method) carried nothing this wallet could sign")
         }
         do {
             let signature = try await spine.signMessage(
@@ -339,11 +425,11 @@ final class SignExecutor {
                 return ["type": "passkey_cancelled"]
             }
             if case .other(let message) = refused.failure {
-                return ["type": "failed", "message": message ?? "Signing failed"]
+                return Self.failed(message ?? "Signing failed")
             }
-            return ["type": "failed", "message": "Signing failed"]
+            return Self.failed("Signing failed")
         } catch {
-            return ["type": "failed", "message": "Signing failed"]
+            return Self.failed("Signing failed")
         }
     }
 
@@ -360,11 +446,15 @@ final class SignExecutor {
     /// The receipt, if one comes within `waitMs`: its tx hash and whether the
     /// op succeeded. `confirmed: false` is kept (RA8) — a revert is still a
     /// landing, and still the page's hash.
+    ///
+    /// Ends early once the core has answered the request from the tracker
+    /// (RJ4): nothing this wait finds can be the page's answer any more.
     private func awaitReceipt(
         chainId: Int, userOpHash: String, waitMs: Double
     ) async -> (txHash: String, confirmed: Bool)? {
         let deadline = Date().addingTimeInterval(waitMs / 1000)
-        while true {
+        let answered = ports.answered
+        while !answered() {
             let remaining = deadline.timeIntervalSinceNow
             if remaining <= 0 { break }
             // Each poll gets only what is left of the window (spec 079,
@@ -373,16 +463,23 @@ final class SignExecutor {
             // a two-minute wait. A late answer is dropped; the tracker keeps
             // following the operation either way.
             let relay = self.relay
-            let answer = await Self.within(seconds: remaining) {
+            let answer = await Self.within(seconds: remaining, until: answered) {
                 await relay.userOpReceipt(chainId: chainId, userOpHash: userOpHash)
             }
             if case .resolved(let confirmed, let txHash, _, _)? = answer, !txHash.isEmpty {
                 return (txHash, confirmed)
             }
             let left = deadline.timeIntervalSinceNow
-            if left <= 0 { break }
-            let pause = min(receiptPollMs / 1000, left)
-            try? await Task.sleep(nanoseconds: UInt64(pause * 1_000_000_000))
+            if left <= 0 || answered() { break }
+            let resume = Date().addingTimeInterval(min(receiptPollMs / 1000, left))
+            while !answered() {
+                let pause = resume.timeIntervalSinceNow
+                if pause <= 0 { break }
+                try? await Task.sleep(nanoseconds: UInt64(min(pause, 0.05) * 1_000_000_000))
+            }
+        }
+        if answered() {
+            VelaLog.notice(.sign, "receipt wait ended: answered hash=\(VelaLog.short(userOpHash))")
         }
         return nil
     }
@@ -391,8 +488,13 @@ final class SignExecutor {
     /// caller goes on at the deadline, whatever `work` is still doing (it is
     /// cancelled, and a late answer is dropped). The first to finish wins;
     /// both sides run on the main actor, so exactly one resumes.
+    ///
+    /// `until` ends the wait early the moment it holds (checked every 50 ms):
+    /// the request was answered, and nobody needs `work` any more.
     static func within<T>(
-        seconds: Double, _ work: @escaping @MainActor () async -> T
+        seconds: Double,
+        until stop: @escaping @MainActor () -> Bool = { false },
+        _ work: @escaping @MainActor () async -> T
     ) async -> T? {
         let once = FirstOnce()
         return await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
@@ -403,7 +505,12 @@ final class SignExecutor {
                 continuation.resume(returning: value)
             }
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+                let deadline = Date().addingTimeInterval(max(0, seconds))
+                while !once.done, !stop() {
+                    let left = deadline.timeIntervalSinceNow
+                    if left <= 0 { break }
+                    try? await Task.sleep(nanoseconds: UInt64(min(left, 0.05) * 1_000_000_000))
+                }
                 guard !once.done else { return }
                 once.done = true
                 job.cancel()

@@ -162,6 +162,11 @@ final class UserOpSpine {
         /// The page that asked is gone (spec 082 RB2): nothing was signed or
         /// sent, and nobody is left to answer.
         case askerGone
+        /// The relay refused the op and no earlier attempt can have delivered
+        /// it (the core's `NotSent{Some(r)}`, `r` not "relayer unavailable",
+        /// spec 082 RJ3): nothing was sent, and trying the same op again will
+        /// not help — the page is answered "the network refused this".
+        case rejected(String?)
     }
 
     /// What a submit came to when it did not fail (spec 082 RA1, RA4).
@@ -301,6 +306,15 @@ final class UserOpSpine {
     /// "awaiting your signature", RA9); `askerLive` is asked right before the
     /// prompt and again right before the relay POST — a page that is gone
     /// gets nothing signed and nothing sent (RB2).
+    ///
+    /// `writeAhead` is the record before the bytes (spec 082 RJ1): called
+    /// once the op is signed, its local hash computed and the head read, it
+    /// hands both to the core (`op_signed`), which writes the record "may
+    /// have been sent" and hands it to the tracker — and answers `true` only
+    /// once the core has cleared the POST (`clear_to_post`). `false` (no
+    /// clearance in `userOpWriteAheadWaitMs`) sends nothing: the op is
+    /// `notSent`. There is no default: a submit that forgot it would put
+    /// money on the wire with no record behind it (G34).
     func submit(
         chainId: Int,
         account: String,
@@ -310,7 +324,8 @@ final class UserOpSpine {
         asked: Asked? = nil,
         signingStarted: () -> Void = {},
         signingDone: () -> Void = {},
-        askerLive: () -> Bool = { true }
+        askerLive: () -> Bool = { true },
+        writeAhead: (_ localHash: String, _ submitBlock: UInt64?) async -> Bool
     ) async throws -> Submitted {
         let keys = await accounts.keys(of: account)
         guard let pinned = keys.first else {
@@ -404,7 +419,16 @@ final class UserOpSpine {
             ) {
                 draft = await raisedToMeasuredFloor(applied, chainId: chainId, account: account, calls: calls)
             }
-        case .refused, .unreachable:
+        case .refused(let message):
+            // What the refusal says, in the core's classes (spec 082 RJ19):
+            // a revert the relay simulated, or nothing known. Logged only —
+            // this sheet's own simulation already warned about a revert.
+            let reading = userOpEstimateFailure(errorJson: CoreJSON.string(["message": message]))
+            VelaLog.failure(.relay, kind: "estimate_refused", "chain=\(chainId) class=\(reading.kind)")
+            if hasContractCall {
+                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
+            }
+        case .unreachable:
             // A plain transfer can ride the floors. A batch carrying a real
             // contract call cannot: its gas is unknowable without the estimate,
             // and submitting anyway spends a prompt on a rejection.
@@ -471,12 +495,21 @@ final class UserOpSpine {
         } catch {
             throw other("The operation could not be hashed.")
         }
-        // A signature for a page that left while the prompt was up is never
-        // sent (RB2).
-        guard askerLive() else { throw Refused(failure: .askerGone) }
         // Bounded: a head that has not come back by now is unknown, and the
         // core scans below the head instead. The POST never waits on it.
         let submitBlock = await SignExecutor.within(seconds: 3) { await headRead.value } ?? nil
+
+        // The record before the bytes (spec 082 RJ1): the core writes it "may
+        // have been sent" and hands it to the tracker, then clears the POST.
+        // No clearance, no POST — a quit, a crash or a closed window from
+        // here on leaves a record the tracker resolves on the next launch.
+        guard await writeAhead(localHash, submitBlock) else {
+            VelaLog.failure(.relay, kind: "not_cleared", "hash=\(VelaLog.short(localHash)) chain=\(chainId)")
+            throw Refused(failure: .notSent)
+        }
+        // A signature for a page that left while the prompt was up is never
+        // sent (RB2) — asked after the clearance, right before the POST.
+        guard askerLive() else { throw Refused(failure: .askerGone) }
 
         // The speed the displayed fee was priced at, named beside it (spec 069).
         // No local nonce moves here: this client reads `EntryPoint.getNonce`
@@ -496,7 +529,7 @@ final class UserOpSpine {
         case .notSent(.bundlerUnderfunded?):
             throw Refused(failure: .bundlerUnderfunded)
         case .notSent(.other(let text)?):
-            throw Refused(failure: .other(text.isEmpty ? nil : text))
+            throw Refused(failure: .rejected(text.isEmpty ? nil : text))
         }
     }
 
@@ -673,5 +706,37 @@ final class UserOpSpine {
             index = next
         }
         return out
+    }
+}
+
+/// The core's clearance for one POST (spec 082 RJ1), as the executors wait
+/// for it: `clear_to_post` opens it for an op hash, `wait` answers whether it
+/// opened in time. A gate opened for an op nobody waits on is forgotten by
+/// the next `arm` of that hash.
+@MainActor
+final class WriteAheadGate {
+    private var cleared: Set<String> = []
+
+    /// Forget any earlier clearance for `hash` — before `op_signed` goes out,
+    /// so a stale one can never let a new POST through.
+    func arm(_ hash: String) { cleared.remove(hash.lowercased()) }
+
+    /// The core cleared the POST of `hash`.
+    func open(_ hash: String) {
+        guard !hash.isEmpty else { return }
+        cleared.insert(hash.lowercased())
+    }
+
+    /// `true` once `hash` is cleared; `false` at `ms`, or when the waiting
+    /// task is cancelled (a cancel before the POST sends nothing).
+    func wait(_ hash: String, ms: Double) async -> Bool {
+        let key = hash.lowercased()
+        let deadline = Date().addingTimeInterval(ms / 1000)
+        while !cleared.contains(key) {
+            if Task.isCancelled || Date() >= deadline { return false }
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        cleared.remove(key)
+        return true
     }
 }
