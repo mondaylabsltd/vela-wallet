@@ -1,0 +1,3 @@
+07:38:48.701188 [browser] requested host=expired.badssl.com
+07:38:49.862686 [browser] certificate failed host=expired.badssl.com NSURLErrorDomain -1202 → certificate
+(no retry line in the 16 s that followed; chaos: PASS expired.badssl.com:443 ×2 at 07:38:49)

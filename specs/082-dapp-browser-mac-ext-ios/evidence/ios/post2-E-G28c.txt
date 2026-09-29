@@ -1,0 +1,12 @@
+07:28:34.167574 [browser] requested host=app.uniswap.org
+07:28:34.168889 [browser] requested host=app.uniswap.org
+07:28:54.761213 [browser] timeout stalled host=app.uniswap.org after=20534ms
+07:28:56.895243 [browser] retry #1 host=app.uniswap.org
+07:28:01 PASS privy.app.uniswap.org:443 0ms
+07:28:21 CONFIG {"mode": "mute", "latency": 0, "bps": 0, "drop": 1.0, "match": "uniswap"}
+07:28:21 CUT 10 live tunnels: app.uniswap.org,cdn.app.uniswap.org,entry-gateway.backend-prod.api.uniswap.org,interface.gateway.uniswap.org,metrics.interface.gateway.uniswap.org,privy.app.uniswap.org
+07:28:34 MUTE app.uniswap.org:443 0ms
+07:28:48 MUTE app.uniswap.org:443 1ms
+07:29:03 MUTE app.uniswap.org:443 1ms
+07:29:16 MUTE app.uniswap.org:443 0ms
+07:29:21 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "uniswap"}

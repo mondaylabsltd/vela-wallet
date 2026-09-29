@@ -1,0 +1,10 @@
+07:26:22.015779 [browser] requested host=192.168.50.17:8140
+07:26:22.111846 [browser] committed host=192.168.50.17:8140
+07:26:56.756287 [browser] timeout stalled host=app.uniswap.org after=20607ms
+07:26:58.921450 [browser] retry #1 host=app.uniswap.org
+07:26:04 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "uniswap"}
+07:26:35 CONFIG {"mode": "blackhole", "latency": 0, "bps": 0, "drop": 1.0, "match": "uniswap"}
+07:26:36 HOLE app.uniswap.org:443
+07:26:59 HOLE app.uniswap.org:443
+07:27:25 HOLE app.uniswap.org:443
+07:27:41 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "uniswap"}

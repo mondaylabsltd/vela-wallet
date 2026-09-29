@@ -1,0 +1,11 @@
+07:31:40.776703 [browser] requested host=app.uniswap.org
+07:32:01.767172 [browser] timeout stalled host=app.uniswap.org after=20954ms
+07:32:02.601855 [browser] retry #0 host=app.uniswap.org
+07:32:22.986529 [browser] timeout stalled host=app.uniswap.org after=20346ms
+07:32:25.098005 [browser] retry #1 host=app.uniswap.org
+07:32:45.452231 [browser] timeout stalled host=app.uniswap.org after=20310ms
+07:32:49.097763 [browser] requested host=192.168.50.17:8137
+07:32:49.137990 [browser] committed host=192.168.50.17:8137
+07:33:02.362611 [browser] requested host=app.uniswap.org
+07:33:09.831342 [browser] stopped host=192.168.50.17:8137
+(first try: menu opened 07:31:47 showing 停止; the watchdog fired 07:32:01.77 with the menu open; the tap at 07:32:02.6 landed on the row that had become 刷新 → retry #0. Second try: requested 07:33:02.36, 停止 tapped 07:33:09.8 → "stopped", no stall/retry afterwards, no panel at +24 s.)

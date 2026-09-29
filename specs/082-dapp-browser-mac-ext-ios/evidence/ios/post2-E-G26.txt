@@ -1,0 +1,22 @@
+# E-G26 — iPhone build fb8c7026, no fault; three dust sends from the scratch dApp (Gnosis), each landed once
+48491555 09:30:20 op 0x343d54504f9a5e3037356d9097bf22dac16f4e7ffd8ec3eff651a61b0f17ada4 tx 0x2b8dfc0bac899596d069858752067bf18af0aa694f6938db554c06918ebbc8fa nonce 57 success 1
+48491593 09:33:35 op 0x425853bff4763a0ee8095bd3a564458376ac4cc43fbb2078bb08e4a9ce23db5d tx 0xc2ba2e5ab3265970d40e48d01f9fd6593d4fd9050220f139e2eccd992aa69580 nonce 58 success 1
+48491676 09:40:30 op 0x08e3a7957b1ba197f71759ad67ee03f84c5ab9ddb63150730949f6ae53ce7079 tx 0xce1adfffb23b36b45e13ae158ca56cebcf387b4eafbf2acfc18ddc3c0863a9b6 nonce 59 success 1
+# nonce 57 -> 60; chain balance 0.18367 -> 0.15067
+09:30:12.749 2026-09-29 09:30:12.725306+0800 VelaWallet[1817:552194] [relay] submitting chain=100 hash=0x343d54504f
+09:30:13.715 2026-09-29 09:30:13.708930+0800 VelaWallet[1817:552194] [relay] submit verdict=accepted hash=0x343d54504f attempts=1 in=983ms
+09:30:13.715 2026-09-29 09:30:13.708978+0800 VelaWallet[1817:552194] [sign] submit verdict=accepted hash=0x343d54504f chain=100
+09:30:26.244 2026-09-29 09:30:26.226086+0800 VelaWallet[1817:552194] [tracker] tracker confirmed op=0x343d54504f chain=100
+09:30:26.244 2026-09-29 09:30:26.226437+0800 VelaWallet[1817:552194] [balance] balance refresh (holdings_moved) chain=100
+09:33:28.684 2026-09-29 09:33:28.563281+0800 VelaWallet[1817:552194] [relay] submitting chain=100 hash=0x425853bff4
+09:33:29.773 2026-09-29 09:33:29.659856+0800 VelaWallet[1817:552194] [relay] submit verdict=accepted hash=0x425853bff4 attempts=1 in=1096ms
+09:33:29.773 2026-09-29 09:33:29.659906+0800 VelaWallet[1817:552194] [sign] submit verdict=accepted hash=0x425853bff4 chain=100
+09:33:42.537 2026-09-29 09:33:42.461356+0800 VelaWallet[1817:552194] [tracker] tracker confirmed op=0x425853bff4 chain=100
+09:33:42.537 2026-09-29 09:33:42.461719+0800 VelaWallet[1817:552194] [balance] balance refresh (holdings_moved) chain=100
+09:40:22.112 2026-09-29 09:40:22.026198+0800 VelaWallet[1817:552194] [relay] submitting chain=100 hash=0x08e3a7957b
+09:40:23.267 2026-09-29 09:40:23.151272+0800 VelaWallet[1817:552194] [relay] submit verdict=accepted hash=0x08e3a7957b attempts=1 in=1124ms
+09:40:23.267 2026-09-29 09:40:23.151540+0800 VelaWallet[1817:552194] [sign] submit verdict=accepted hash=0x08e3a7957b chain=100
+09:40:35.840 2026-09-29 09:40:35.807136+0800 VelaWallet[1817:552194] [tracker] tracker confirmed op=0x08e3a7957b chain=100
+09:40:35.840 2026-09-29 09:40:35.807969+0800 VelaWallet[1817:552194] [balance] balance refresh (holdings_moved) chain=100
+# run 3 (the timed one, Mac clock): slide 09:40:19.3; 已确认 frame 09:40:35.8; sheet closed by itself 09:40:38.9; 关闭网页 09:40:39.7; 钱包 tapped 09:40:40.5; first 钱包 frame 09:40:40.4-40.7 already reads 总余额 ¥56.82 (was ¥56.89 before the send), unchanged in 19 frames to 09:40:44.0; 资产 xDAI 0.15067 (= chain) — no pull
+# runs 1-2: 钱包 opened 106 s / 128 s after 已确认 — balance already moved (0.18367 -> 0.17267 -> 0.16167)

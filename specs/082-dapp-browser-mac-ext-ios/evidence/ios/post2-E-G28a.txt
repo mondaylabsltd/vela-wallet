@@ -1,0 +1,29 @@
+07:20:19.540426 [browser] requested host=jumper.exchange
+07:20:19.545130 [browser] requested host=jumper.exchange
+07:20:21.420339 [browser] committed host=jumper.xyz
+07:21:21.615951 [browser] requested host=app.uniswap.org
+07:21:41.761698 [browser] timeout stalled host=app.uniswap.org after=20106ms
+07:21:43.894132 [browser] retry #1 host=app.uniswap.org
+07:22:05.109114 [browser] timeout stalled host=app.uniswap.org after=21155ms
+07:22:10.294680 [browser] retry #2 host=app.uniswap.org
+07:22:31.059562 [browser] timeout stalled host=app.uniswap.org after=20719ms
+07:22:41.109721 [browser] retry #0 host=app.uniswap.org
+07:23:01.760772 [browser] timeout stalled host=app.uniswap.org after=20633ms
+07:23:03.809003 [browser] retry #1 host=app.uniswap.org
+07:23:29.760901 [browser] timeout stalled host=app.uniswap.org after=20611ms
+07:23:34.878744 [browser] retry #2 host=app.uniswap.org
+07:23:55.866293 [browser] timeout stalled host=app.uniswap.org after=20941ms
+07:24:05.941594 [browser] retry #3 host=app.uniswap.org
+07:24:26.939236 [browser] timeout stalled host=app.uniswap.org after=20951ms
+--- chaos-ios.log (uniswap)
+07:21:21 HOLE app.uniswap.org:443
+07:21:44 HOLE app.uniswap.org:443
+07:22:10 HOLE app.uniswap.org:443
+07:22:40 HOLE app.uniswap.org:443
+07:22:44 HOLE app.uniswap.org:443
+07:23:07 HOLE app.uniswap.org:443
+07:23:29 HOLE app.uniswap.org:443
+07:23:35 HOLE app.uniswap.org:443
+07:23:42 HOLE app.uniswap.org:443
+07:24:06 HOLE app.uniswap.org:443
+--- 07:22:35-07:22:40 (between retry #2 stall and "retry #0"): UIKeyboardImpl snapshot "not in a visible window", then 32× nw_read_request_report "Software caused connection abort" at 07:22:40.44 (app left the foreground and came back?)

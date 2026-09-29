@@ -1,0 +1,8 @@
+# SC-007-en — iPhone build fb8c7026, relaunched 10:25:58 with {"VELA_PARALLEL_SPACE":"1","VELA_LANG":"en","VELA_DEV_PROXY":"192.168.50.17:8897","NSUnbufferedIO":"YES","OS_ACTIVITY_DT_MODE":"YES"}
+# fresh origin http://192.168.50.17:8143 (the scratch page served on a new port, never connected)
+bar: [closed lock glyph] 192.168.50.17:8143 — private-network http counts as secure by design (spec.md "Checked and by design"); no text
+consent: "Connect to 192.168.50.17:8143" (port's last digit wraps alone: …:814 / 3) / lock glyph / Parallel One 0x88cC…6894 "Switch account" (2 lines) / Network Ethereum / "This site wants to see your address and ask you to sign. It can't move funds without your approval." / Reject · Connect
+connection panel: 192.168.50.17:81… [cut] / [lock] Connected / account row / Network Ethereum / "This site can see your address and ask you for signatures. Every transfer of funds still needs your confirmation." / Disconnect / "Signing requests from this dApp appear here automatically."
+site menu: 192.168.50.17:81… [cut] / Refresh / Share / Copy link / Add to favorites / Open in system browser / Disconnect / Close page
+public http (http://neverssl.com/): open-lock glyph only; its accessibility label is "Insecure site — not encrypted" (identifier explore.insecure) — VoiceOver only, allowed by the row
+whole-tree search (label/name/value) on the consent screen for secure|encrypt|not secure|安全|加密: no hit

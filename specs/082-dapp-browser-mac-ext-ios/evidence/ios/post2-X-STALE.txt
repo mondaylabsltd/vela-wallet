@@ -1,0 +1,7 @@
+# X-STALE: Ethereum EntryPoint 0x0000000071727De22E5E9d8BAf0edAc6f37da032, UserOperationEvent topic0 0x49628fd1…, topic2 = sender 0x88cCA0EeDbF2C4426110bbFc998F048689266894
+# scanned blocks 26,000,000 … 26,079,538 (head at 08:28 CST) in 5,000-block chunks via rpc.mevblocker.io:
+found 1 event: block 26002374 (2026-09-18 13:44:47 CST) opHash 0x769e306409542aeed76288f1ad3fa14a7ec7a3971714d54bf6fb729e1fcbd034 nonce 0 success 1 tx 0x86795d08435531284db9a1ae582c3d7ce910f52efd6cb5e431c75b961584dc5c
+# EntryPoint.getNonce(Safe, 0) on Ethereum = 1 (only nonce 0 was ever used)
+# => the 2026/09/21 22:20 dApp op (−0.001 ETH to 0x2361…de85, app.uniswap.org) never landed, whatever its hash.
+# The record's op hash is not shown anywhere: the pending detail has no 哈希 row, and 在区块浏览器中查看 did nothing when tapped (08:31:45; the app stayed in front, no log line). The app's store (UserDefaults, shared with the owner's real wallet) was not copied off the phone.
+# [tracker] VelaLog lines in 4 launches (07:18–08:31): 0

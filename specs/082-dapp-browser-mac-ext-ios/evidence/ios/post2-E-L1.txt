@@ -1,0 +1,12 @@
+# E-L1: WDA MJPEG stream (127.0.0.1:9100 via iproxy, ~9.6 fps, 115 frames in 12 s); t=0 = Mac time just before the WDA Enter request (1790640785996 ms); the request returned at +0.40 s
+-0.91 s  hairline 0 px, bar in edit mode 'example.com'
++0.12 s  still edit mode (key not yet delivered)
++0.22 s  hairline 72 px (10 %), bar back to 🔒 jumper.xyz
++0.22…+7.05 s  hairline 72-84 px, bar 🔒 jumper.xyz, Jumper page live
++7.16 s  bar 🔒 example.com (commit), Jumper pixels still drawn for one frame
++7.37 s  hairline gone, example.com page
+# app log (Mac-stamped):
+mac=08:13:06.170 dev=08:13:06.167539 [browser] requested host=example.com
+mac=08:13:13.014 dev=08:13:13.054794 [browser] committed host=example.com
+08:13:01 CONFIG {"mode": "latency", "latency": 6000, "bps": 0, "drop": 1.0, "match": "example"}
+08:13:12 LATENCY example.com:443 0ms
