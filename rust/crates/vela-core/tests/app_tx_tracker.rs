@@ -15,9 +15,9 @@ use vela_core::app::tx_tracker::{
     parse_user_op_status, receipt_interval_ms, Event, TrackLifecycle, TrackOperation as Op,
     TrackOutcome, TrackPendingRecord, TrackRecordPatch, TrackRecordStatus, TrackShellResult as Res,
     TrackStatus, TrackStatusAnswer, TxTracker, ABANDON_AGE_MS, FEE_HOLD_STAGE,
-    FIND_OP_LOOKBACK_BLOCKS, FIND_OP_MAX_RANGE, NOT_FOUND_CONFIRMATIONS, NOT_FOUND_GRACE_MS,
-    RECONCILE_MIN_INTERVAL_MS, SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS,
-    USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
+    FIND_OP_LOOKBACK_BLOCKS, FIND_OP_LOOKBACK_COVERS_MS, FIND_OP_MAX_RANGE,
+    NOT_FOUND_CONFIRMATIONS, NOT_FOUND_GRACE_MS, RECONCILE_MIN_INTERVAL_MS,
+    SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS, USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
 };
 use vela_core::safe::ENTRY_POINT;
 use vela_core::user_op::USER_OPERATION_EVENT_TOPIC;
@@ -1347,6 +1347,8 @@ fn first_window(sut: &mut Sut, head: u64) -> Vec<Op> {
 fn the_find_constants_are_pinned() {
     assert_eq!(FIND_OP_MAX_RANGE, 2_000);
     assert_eq!(FIND_OP_LOOKBACK_BLOCKS, 5_000);
+    // The lookback reaches the submit of an op this young on Arbitrum (0.25 s).
+    assert!(FIND_OP_LOOKBACK_COVERS_MS <= FIND_OP_LOOKBACK_BLOCKS as f64 * 250.0);
 }
 
 /// The op's own event with success: confirmed with the event's tx hash —
@@ -2452,4 +2454,82 @@ fn a_rejected_op_absent_from_its_mined_bundle_is_refused() {
     let ops = sut.resolve_matching(is_status, status(TrackLifecycle::Rejected, T0 + 12_600.0));
     assert_eq!(ops, vec![fail_patch()]);
     assert_eq!(entry_status(&sut), TrackStatus::Rejected);
+}
+
+/// Resume a may-have-been-sent record stored `age_ms` before `T0` with no
+/// head read before its POST, and read the chain from below the first head
+/// up to `head`: returns once the scan has caught up.
+fn resumed_without_a_submit_block(sut: &mut Sut, age_ms: f64, head: u64) {
+    assert_eq!(sut.dispatch(Event::AppResumed), vec![Op::Now]);
+    assert_eq!(
+        sut.resolve(Res::Clock { now_ms: T0 }),
+        vec![Op::LoadPendingTxs]
+    );
+    let ops = sut.resolve(Res::RecordsLoaded {
+        records: vec![TrackPendingRecord {
+            record_id: "rec-1".to_owned(),
+            user_op_hash: HASH.to_owned(),
+            chain_id: CHAIN,
+            submitted_at_ms: T0 - age_ms,
+            maybe_sent: true,
+            submit_block: None,
+        }],
+        now_ms: T0 + 100.0,
+    });
+    assert_eq!(ops, vec![poll_receipt(), poll_status(), head_only()]);
+    let ops = sut.resolve_matching(is_find, op_event(T0 + 200.0, None, None, Some(head)));
+    let from = head - FIND_OP_LOOKBACK_BLOCKS;
+    assert_eq!(ops, vec![window(from, from + FIND_OP_MAX_RANGE - 1)]);
+}
+
+/// A write-ahead record left by a quit during its POST — its head read
+/// failed on the same bad network, so no submit block — resumed three hours
+/// later. The relay forgets an op an hour after admitting it (its status
+/// records' TTL) and answers `not_found` for one that landed long ago. The
+/// chain read starts `FIND_OP_LOOKBACK_BLOCKS` below the head read NOW —
+/// 21 minutes on Arbitrum, under three hours on Base — above the landing:
+/// caught up with no event, it proved nothing, yet two `not_found` ended a
+/// landed op "not sent", its record failed. A lookback anchored when the op
+/// was older than the lookback covers may find the event, never prove it
+/// absent: the op stays "may have been sent" (then "unknown" at 24 h).
+#[test]
+fn a_lookback_that_cannot_reach_the_submit_never_proves_not_sent() {
+    let head = 48_480_000;
+    let mut sut = Sut::new();
+    resumed_without_a_submit_block(&mut sut, 3.0 * 3_600_000.0, head);
+    scan_to_head(&mut sut, T0 + 300.0, head);
+    assert!(settle_polls(&mut sut, T0 + 400.0, TrackLifecycle::NotFound).is_empty());
+    let ops = not_found_at(
+        &mut sut,
+        T0 + 400.0 + SLOWEST_RECEIPT_INTERVAL_MS,
+        head + 1_200,
+    );
+    assert!(ops.is_empty(), "no proof the op never landed: {ops:?}");
+    let ops = not_found_at(
+        &mut sut,
+        T0 + 800.0 + 2.0 * SLOWEST_RECEIPT_INTERVAL_MS,
+        head + 2_400,
+    );
+    assert!(ops.is_empty(), "{ops:?}");
+    assert_eq!(entry_status(&sut), TrackStatus::AcceptedNotLanded);
+    assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
+
+    // The same scan still finds an event inside the lookback.
+    let mut sut = Sut::new();
+    resumed_without_a_submit_block(&mut sut, 3.0 * 3_600_000.0, head);
+    let ops = sut.resolve_matching(
+        is_find,
+        op_event(T0 + 300.0, Some(&event_logs(true)), None, Some(head)),
+    );
+    assert_eq!(ops, event_confirmed());
+
+    // Resumed soon enough that the lookback reaches the submit: the chain
+    // read joins the relay's word, as before.
+    let mut sut = Sut::new();
+    resumed_without_a_submit_block(&mut sut, 5.0 * 60_000.0, head);
+    scan_to_head(&mut sut, T0 + 300.0, head);
+    assert!(settle_polls(&mut sut, T0 + 400.0, TrackLifecycle::NotFound).is_empty());
+    let ops = not_found_at(&mut sut, T0 + 400.0 + RECONCILE_MIN_INTERVAL_MS, head + 50);
+    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(entry_status(&sut), TrackStatus::NotSent);
 }

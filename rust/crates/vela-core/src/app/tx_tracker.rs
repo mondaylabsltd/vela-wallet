@@ -72,6 +72,12 @@
 //!   own event succeeded. That tx's receipt decides — the op's event fails
 //!   it (Dropped, gas spent) or confirms it; the tx mined without the op
 //!   upholds the refusal (082 second review).
+//! - The chain read proves an op absent only from at or below its submit:
+//!   the head read before the POST, or a lookback anchored while the op was
+//!   young enough ([`FIND_OP_LOOKBACK_COVERS_MS`]). A write-ahead record
+//!   resumed hours after a quit, with no head read, is past the relay's
+//!   memory of it (its status records live an hour) and past the lookback:
+//!   it stays "may have been sent" unless its event is found.
 //!
 //! The shell owns the regex wording layer that used to *be* the classification
 //! (`/dropped from the network/`, `UserOpRejectedError` instanceof checks):
@@ -157,6 +163,12 @@ pub const FIND_OP_MAX_RANGE: u64 = 2_000;
 /// submit POST is unknown (ruling 8): ≥ 20 minutes on the fastest chain Vela
 /// serves (Arbitrum, 0.25 s blocks), hours elsewhere.
 pub const FIND_OP_LOOKBACK_BLOCKS: u64 = 5_000;
+/// How old an op may be when that lookback is anchored and still reach its
+/// submit on every chain Vela serves (5 000 Arbitrum blocks ≈ 20 min 50 s).
+/// A lookback anchored later — a record resumed hours after a quit, with no
+/// head read before its POST — may find the op's event but can never prove
+/// it absent: it may start above the landing (082 second review).
+pub const FIND_OP_LOOKBACK_COVERS_MS: f64 = 20.0 * 60.0 * 1000.0;
 
 /// The relay's lifecycle-status method (spec 082 RA7, G13). The relay serves
 /// only this name; the `eth_`-prefixed spelling every client had been asking
@@ -656,6 +668,10 @@ struct FindScan {
     last_ms: Option<f64>,
     /// Every block from the start up to here has been read, with no event.
     scanned_through: Option<u64>,
+    /// The start is known to be at or below the submit: the head read before
+    /// the POST, or a lookback anchored while the op was young enough for
+    /// it to reach the submit ([`FIND_OP_LOOKBACK_COVERS_MS`]).
+    anchored: bool,
 }
 
 impl FindScan {
@@ -667,13 +683,17 @@ impl FindScan {
             in_flight: None,
             last_ms: submitted_at_ms,
             scanned_through: None,
+            anchored: submit_block.is_some(),
         }
     }
 
-    /// The chain has been read, with no event, up to the latest head seen —
-    /// what a relay's `not_found` must be joined by before "not sent".
+    /// The chain has been read, with no event, from at or below the submit up
+    /// to the latest head seen — what a relay's `not_found` must be joined by
+    /// before "not sent". A scan that may have started above the submit
+    /// proves nothing absent.
     fn caught_up(&self) -> bool {
-        matches!((self.scanned_through, self.head), (Some(through), Some(head)) if through >= head)
+        self.anchored
+            && matches!((self.scanned_through, self.head), (Some(through), Some(head)) if through >= head)
     }
 
     /// The next window, or `None` (head only) when there is nothing to read
@@ -748,6 +768,7 @@ impl Entry {
             self.submit_block = submit_block;
             if self.find.from.is_none() && self.find.scanned_through.is_none() {
                 self.find.from = submit_block;
+                self.find.anchored = submit_block.is_some();
             }
         }
     }
@@ -1807,6 +1828,11 @@ fn on_op_event(
         if entry.find.from.is_none() {
             if let Some(head) = entry.find.head {
                 entry.find.from = Some(head.saturating_sub(FIND_OP_LOOKBACK_BLOCKS));
+                // Reaches the submit only while the op is young enough (or
+                // the lookback reaches the genesis).
+                let age = entry.submitted_at_ms.map(|at| now_ms - at);
+                entry.find.anchored = head <= FIND_OP_LOOKBACK_BLOCKS
+                    || age.is_some_and(|age| age <= FIND_OP_LOOKBACK_COVERS_MS);
             }
         }
         return continue_scan(attempt, &key, entry, now_ms);
