@@ -6,4 +6,4 @@
  * nonce failure is not permission to simulate as nonce 0"
  * (`safe-transaction.ts:585-588, 1177`).
  */
-export type FeeGasOutcome = { "type": "estimated", verification_gas_limit: string, call_gas_limit: string, pre_verification_gas: string, } | { "type": "simulation_failed" } | { "type": "context_unavailable" };
+export type FeeGasOutcome = { "type": "estimated", verification_gas_limit: string, call_gas_limit: string, pre_verification_gas: string, } | { "type": "simulation_failed" } | { "type": "context_unavailable" } | { "type": "refused" };

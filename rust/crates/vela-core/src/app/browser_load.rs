@@ -8,7 +8,8 @@
 //! live here, and every shell draws the same panel with the same words:
 //!
 //! - [`classify`] — the platform's raw error (Android `WebViewClient.ERROR_*`,
-//!   Apple `NSURLErrorDomain`, or the desktop's own probe) → one class, the
+//!   Apple `NSURLErrorDomain`, WebView2's `COREWEBVIEW2_WEB_ERROR_STATUS` on
+//!   Windows (spec 083), or the desktop's own probe) → one class, the
 //!   corpus key of its sentence, and whether retrying can help. A cancelled
 //!   navigation is not a failure.
 //! - [`retry_delay_ms`] — the short, capped schedule a failed page retries on
@@ -35,6 +36,11 @@ pub enum LoadPlatform {
     /// The desktop's own reachability probe (see [`probe_code`]); wry reports
     /// no load failures of its own.
     Probe,
+    /// WebView2's `COREWEBVIEW2_WEB_ERROR_STATUS` (Windows, spec 083): read
+    /// straight from WebView2, because wry drops it — and Edge's own error
+    /// page then arrived as a commit and took Vela's panel down.
+    #[serde(rename = "webview2")]
+    WebView2,
 }
 
 /// What went wrong, as a person would tell it.
@@ -130,6 +136,27 @@ pub fn classify(
                 _ => LoadFailureClass::Other,
             },
             Some(_) => LoadFailureClass::Other,
+        },
+        LoadPlatform::WebView2 => match code {
+            // OPERATION_CANCELED: a navigation replaced by another, a
+            // download, `window.stop()` — not the page failing.
+            14 => return None,
+            // HOST_NAME_NOT_RESOLVED
+            13 => LoadFailureClass::NotFound,
+            // CANNOT_CONNECT (as Android's ERROR_CONNECT)
+            12 => LoadFailureClass::Refused,
+            // TIMEOUT
+            7 => LoadFailureClass::Timeout,
+            // SERVER_UNREACHABLE, ERROR_HTTP_INVALID_SERVER_RESPONSE (how
+            // `net::ERR_EMPTY_RESPONSE` arrives, as Android's -1),
+            // CONNECTION_ABORTED, CONNECTION_RESET, DISCONNECTED
+            6 | 8 | 9 | 10 | 11 => LoadFailureClass::Offline,
+            // CERTIFICATE_COMMON_NAME_IS_INCORRECT, _EXPIRED,
+            // CLIENT_CERTIFICATE_CONTAINS_ERRORS, _REVOKED, _IS_INVALID
+            1..=5 => LoadFailureClass::Certificate,
+            // UNKNOWN, REDIRECT_FAILED, UNEXPECTED_ERROR, the two
+            // credential statuses, and anything newer
+            _ => LoadFailureClass::Other,
         },
         LoadPlatform::Probe => match code {
             probe_code::DNS => LoadFailureClass::NotFound,

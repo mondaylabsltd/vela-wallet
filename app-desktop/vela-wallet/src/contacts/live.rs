@@ -474,6 +474,7 @@ mod tests {
                     day_start_ms: 0.0,
                     tx_hash: None,
                     batch: None,
+                    dapp: None,
                 },
             }],
             ..host.view()
@@ -549,6 +550,7 @@ mod tests {
                 day_start_ms: 0.0,
                 tx_hash: None,
                 batch: None,
+                dapp: None,
             },
         };
         let feed = FeedView {

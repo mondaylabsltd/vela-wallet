@@ -30,6 +30,53 @@ fn android_codes_map_to_their_class() {
     }
 }
 
+/// Spec 083: WebView2's own error statuses (Windows) map like Android's
+/// codes do — the same person-facing class for the same network fault.
+#[test]
+fn webview2_statuses_map_to_their_class() {
+    for (code, want) in [
+        (0, C::Other), // UNKNOWN
+        (1, C::Certificate),
+        (2, C::Certificate),
+        (3, C::Certificate),
+        (4, C::Certificate),
+        (5, C::Certificate),
+        (6, C::Offline), // SERVER_UNREACHABLE
+        (7, C::Timeout),
+        (8, C::Offline), // ERR_EMPTY_RESPONSE, seen on the device pass
+        (9, C::Offline),
+        (10, C::Offline),
+        (11, C::Offline),
+        (12, C::Refused),
+        (13, C::NotFound),
+        (15, C::Other), // REDIRECT_FAILED
+        (16, C::Other),
+        (17, C::Other),
+        (18, C::Other),
+        (99, C::Other),
+    ] {
+        assert_eq!(
+            class(P::WebView2, code, None),
+            Some(want),
+            "webview2 {code}"
+        );
+    }
+    assert_eq!(
+        class(P::WebView2, 14, None),
+        None,
+        "a replaced navigation is not a failure"
+    );
+    assert_eq!(class(P::WebView2, 8, None), class(P::Android, -1, None));
+    for code in 1..=5 {
+        let failure = classify(P::WebView2, code, None, false);
+        assert!(failure.is_some_and(|f| !f.auto_retry && f.reason_key == "explore.loadCertificate"));
+    }
+    assert_eq!(
+        serde_json::to_string(&P::WebView2).ok().as_deref(),
+        Some("\"webview2\"")
+    );
+}
+
 #[test]
 fn apple_codes_map_to_their_class() {
     let url = Some("NSURLErrorDomain");

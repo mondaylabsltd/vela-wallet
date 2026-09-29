@@ -22,6 +22,12 @@
 //! `SelectFeeAsset` is the in-place chip switch on top of a settled generic
 //! in-band quote, and only there — Tempo re-prices through its own model.
 //!
+//! A fee coin pays from what the operation LEAVES of it (spec 083 fee): the
+//! calls say part of that, the shell's own simulation
+//! (`BalanceChangesMeasured`) says the rest, and a relay that answers "this
+//! operation fails" (`FeeGasOutcome::Refused`) is a reason to try another
+//! coin for the fee leg when nobody chose one — never a network failure.
+//!
 //! Faithful port of the TypeScript sources — behavior aligned line by line,
 //! magic numbers and wording classifications preserved:
 //!
@@ -401,6 +407,27 @@ pub struct FeeCall {
     pub data: String,
 }
 
+/// What the operation being priced does to one asset of the account, as the
+/// shell's own simulation of it measured (spec 083 fee) — the numbers a
+/// signing sheet draws under "balance changes".
+///
+/// The machine reads it for one thing: how much of each fee coin is left to
+/// pay the fee from. The fee leg is the LAST call of the batch (every
+/// shell's submit appends it after the person's calls), so what the
+/// operation takes out is gone before the fee is paid, and what it brings in
+/// is already there — counted at half, since a swap may deliver less than
+/// the simulation measured. A swap of all of a wallet's USDC is the case it
+/// exists for: the calls do not say so (the router pulls the USDC through
+/// Permit2), the simulation does.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeeBalanceChange {
+    /// `None` = the chain's native coin; else the token contract.
+    pub token: Option<String>,
+    /// Signed base units as a decimal string: negative leaves the account.
+    pub delta: String,
+}
+
 /// One fee-asset row of `vela_getInBandGasQuote`
 /// (`bundler-service.ts:570-584`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -489,8 +516,19 @@ pub enum FeeGasOutcome {
         call_gas_limit: String,
         pre_verification_gas: String,
     },
+    /// No simulation came back — the relay refused it, could not be reached,
+    /// or answered nothing usable. A shell that cannot tell those apart says
+    /// this, and is treated exactly as before spec 083's fee fix.
     SimulationFailed,
     ContextUnavailable,
+    /// The relay ANSWERED and said this exact operation fails when it runs
+    /// (spec 083 fee: "UserOperation simulation failed", a revert) — an
+    /// answer, not an outage. Only a shell that can tell it from an
+    /// unreachable relay says it; the desktop does. Nothing a retry of the
+    /// same operation fixes: the machine tries another coin for the fee leg
+    /// when nobody chose one, and otherwise says the operation would fail
+    /// ([`FeeFailure::WouldFail`]) instead of blaming the network.
+    Refused,
 }
 
 // ---------------------------------------------------------------------------
@@ -653,6 +691,14 @@ pub enum Event {
     ChainChanged { chain_id: u32 },
     /// External staleness signal (e.g. app resumed after a long background).
     QuoteExpired,
+    /// The shell's simulation of the operation answered (spec 083 fee): what
+    /// it moves, per asset. From here on a fee coin pays only from what the
+    /// operation leaves of it — the coins the picker offers, the coin the
+    /// machine picks when nobody chose, and the slide's gate all read it. A
+    /// shell that has no simulation never sends it and nothing changes. Kept
+    /// until the next [`Event::QuoteRequested`], which the shell follows
+    /// with this again; ignored on Tempo, whose fee model is its own.
+    BalanceChangesMeasured { changes: Vec<FeeBalanceChange> },
     /// Internal: an effect resolved. `attempt` is captured by the core when
     /// the request is made; an older attempt belongs to a superseded run and
     /// is dropped — this IS the "late old-chain quote never pollutes the new
@@ -691,6 +737,18 @@ pub enum FeeFailure {
     /// times the client's own on-chain measurement — refused rather than
     /// signed, to protect the user from a runaway or hostile relayer quote.
     GasQuoteTooHigh,
+    /// The relay simulated this operation, fee leg included, and it fails
+    /// ([`FeeGasOutcome::Refused`]) — with every coin the machine could try
+    /// when nobody chose one. Not the network's doing, so never said as if it
+    /// were, and never asked again by itself: the same operation gets the
+    /// same answer. The fee coins stay choosable ([`FeeOptionView`] marks
+    /// only a coin with nothing left to pay from), so the person can pay in
+    /// another one (spec 083 fee, the owner's "USDC 换 ETH 不行").
+    ///
+    /// Named for what it says, not how it was learned: it is the relay's
+    /// ANSWER, where [`FeeGasOutcome::SimulationFailed`] is no answer at all
+    /// (and becomes [`FeeFailure::EstimateFailed`]).
+    WouldFail,
 }
 
 /// The wait before automatic re-quote `attempt` (1-based) after a failure a
@@ -709,7 +767,9 @@ pub fn requote_delay_ms(failure: FeeFailure, attempt: u32) -> Option<u32> {
             3 => 12_000,
             _ => 15_000,
         }),
-        FeeFailure::MissingPublicKey | FeeFailure::CalculationFailed => None,
+        FeeFailure::MissingPublicKey | FeeFailure::CalculationFailed | FeeFailure::WouldFail => {
+            None
+        }
     }
 }
 
@@ -1578,6 +1638,19 @@ pub struct Model {
     estimate: Option<FeeEstimate>,
     stale: bool,
     attempt: u64,
+    /// What the operation itself does to each asset, as the shell's
+    /// simulation measured it ([`Event::BalanceChangesMeasured`]):
+    /// `(None = native | token, signed base units)`. `None` = not measured,
+    /// and then only the decoded calls say what it moves — exactly as before.
+    measured: Option<Vec<(Option<String>, i128)>>,
+    /// The in-band gas basis of the last generic run, kept so balance
+    /// changes that land on a FAILED quote can still weigh the coins.
+    last_basis: Option<u128>,
+    /// The coins the relay refused this run's operation with
+    /// ([`FeeGasOutcome::Refused`]), in the order tried — the first is the
+    /// coin the run began with. A run that ends in failure lands on one of
+    /// them ([`landing_coin`]). Emptied when a run begins.
+    refused: Vec<Option<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1629,7 +1702,10 @@ pub enum FeeAssetView {
 }
 
 /// One selector row (`FeeTokenSelector`). `insufficient` is the core-owned
-/// balance<fee gate (invariant ⑧, `FeeTokenSelector.tsx:74`).
+/// balance<fee gate (invariant ⑧, `FeeTokenSelector.tsx:74`) — against what
+/// the operation leaves of the coin once its balance changes were measured
+/// (spec 083 fee). After [`FeeFailure::WouldFail`] there is no fee to
+/// weigh against, and only a coin with nothing left is marked.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct FeeOptionView {
@@ -1712,9 +1788,13 @@ impl App for FeePolicy {
                 model.estimate = None;
                 model.stale = false;
                 model.quotes.clear();
+                // Measured for the question before; the shell tells this one
+                // again right after asking it.
+                model.measured = None;
                 model.origin = Origin::Initial;
                 begin_pipeline(model)
             }
+            Event::BalanceChangesMeasured { changes } => balance_changes_measured(model, &changes),
             Event::Requote => {
                 // `GasFeeCard.handleRefresh`: ignored while one is running.
                 if model.ctx.is_none() || is_busy(&model.phase) {
@@ -1843,6 +1923,7 @@ fn begin_pipeline(model: &mut Model) -> Command<FeeEffect, Event> {
         return fail(model, FeeFailure::MissingPublicKey);
     }
     model.pending = Pending::default();
+    model.refused.clear();
     model.phase = Phase::Gathering;
     let mut operations = vec![FeeOperation::FetchGasPrice {
         chain_id: ctx.chain_id,
@@ -2173,26 +2254,18 @@ fn advance_generic(
     let Some(rows) = quotes else {
         return fail(model, missing_quote_failure(model.fee_token.is_some()));
     };
+    model.last_basis = Some(in_band_gas_basis);
     // Nobody chose the coin: choose, before the simulation, because the coin
     // decides the fee leg being simulated. The gas is not known yet, so the
     // coins are measured against the static model — above a plain transfer's
     // real gas, so a coin that passes here pays for real. `price_generic`
     // checks again on the real figure.
     if model.auto_fee_token {
-        let out = Outflows::of_calls(&ctx.calls);
-        let provisional = static_total_gas(ctx, None);
-        if let Some(native) = find_quote(&rows, None) {
-            let fee_for = |row: &ParsedQuote| {
-                calculate_in_band_fee_amount(
-                    provisional,
-                    in_band_gas_basis,
-                    &row.pricing(),
-                    &native.pricing(),
-                )
-            };
-            if let Some(choice) = auto_pick(&rows, &out, fee_for) {
-                model.fee_token = choice;
-            }
+        let measured = measured_for(ctx, model.measured.as_deref());
+        if let Some(choice) =
+            static_auto_pick(ctx, &rows, measured, in_band_gas_basis, &model.refused)
+        {
+            model.fee_token = choice;
         }
     }
     let selected = find_quote(&rows, model.fee_token.as_deref()).cloned();
@@ -2362,12 +2435,137 @@ impl Outflows {
     }
 }
 
+/// The measured balance changes, as `(None = native | token, signed base
+/// units)` — the model's own form of [`FeeBalanceChange`].
+type Measured = [(Option<String>, i128)];
+
+/// The balance changes to weigh the coins by on this request's chain: the
+/// measured ones, except on Tempo, whose fee model spec 083 leaves as it was.
+fn measured_for<'a>(ctx: &RequestCtx, measured: Option<&'a Measured>) -> Option<&'a Measured> {
+    if is_tempo_chain(ctx.chain_id) {
+        None
+    } else {
+        measured
+    }
+}
+
+/// The net measured change of `row`'s coin, `0` when it does not move.
+fn measured_change(changes: &Measured, row: &ParsedQuote) -> i128 {
+    changes
+        .iter()
+        .filter(
+            |(token, _)| match (token.as_deref(), row.fee_token.as_deref()) {
+                (None, _) => row.is_native,
+                (Some(token), Some(contract)) => {
+                    !row.is_native && token.eq_ignore_ascii_case(contract)
+                }
+                (Some(_), None) => false,
+            },
+        )
+        .fold(0i128, |sum, (_, delta)| sum.saturating_add(*delta))
+}
+
+/// What the operation brings in counts towards its fee only in part: one
+/// unit in [`INFLOW_SHARE_DIVISOR`].
+///
+/// The shell's simulation measured the inflow at one moment's prices, and a
+/// swap delivers at another — its slippage bound lets it come in lower. Nothing
+/// prices the fee leg against the real output before it is signed (the quote
+/// and the submit both simulate a one-unit leg), so a fee that only the full
+/// measured output could pay may not be there when the leg runs, and the
+/// submit fails. Half is far outside the slippage a swap normally carries,
+/// and a fee larger than half of what an operation brings in is paid from
+/// what the account already holds, or not at all.
+const INFLOW_SHARE_DIVISOR: u128 = 2;
+
+/// `balance` after a signed change — never below zero, never wrapping. An
+/// outflow is taken in full; an inflow counts at its share
+/// ([`INFLOW_SHARE_DIVISOR`]).
+fn after_change(balance: u128, change: i128) -> u128 {
+    if change >= 0 {
+        balance.saturating_add(change.unsigned_abs() / INFLOW_SHARE_DIVISOR)
+    } else {
+        balance.saturating_sub(change.unsigned_abs())
+    }
+}
+
+/// What the operation leaves of each fee coin to pay its fee from.
+///
+/// Its calls say part of it (a native `value`, an ERC-20 `transfer`); the
+/// shell's simulation, once it has answered, says all of it — a router that
+/// pulls a token through Permit2 moves it without a `transfer` anywhere in the
+/// calls. The fee leg runs LAST in the batch, so what the operation takes
+/// out is gone before the fee is paid and what it brings in is there — at
+/// the share [`after_change`] trusts it for.
+struct Spend<'a> {
+    decoded: Outflows,
+    measured: Option<&'a Measured>,
+}
+
+impl<'a> Spend<'a> {
+    fn new(calls: &[FeeCall], measured: Option<&'a Measured>) -> Self {
+        Self {
+            decoded: Outflows::of_calls(calls),
+            measured,
+        }
+    }
+
+    /// The calls send this coin — [`auto_pick`]'s first preference, read
+    /// from the calls as it always was.
+    fn sends(&self, row: &ParsedQuote) -> bool {
+        self.decoded.of(row) > 0
+    }
+
+    /// The most this coin's fee leg can move once the operation has run.
+    fn usable(&self, row: &ParsedQuote) -> u128 {
+        match self.measured {
+            Some(changes) => after_change(row.balance, measured_change(changes, row)),
+            None => row.balance.saturating_sub(self.decoded.of(row)),
+        }
+    }
+
+    /// The coin pays `fee` on top of what the operation does with it.
+    fn covers(&self, row: &ParsedQuote, fee: u128) -> bool {
+        match self.measured {
+            Some(_) => fee <= self.usable(row),
+            // Verbatim: an operation nobody measured weighs coins exactly as
+            // it did before the simulation was read.
+            None => fee.saturating_add(self.decoded.of(row)) <= row.balance,
+        }
+    }
+}
+
+/// A row's coin as the machine names it: `None` = native.
+fn coin_of(row: &ParsedQuote) -> Option<String> {
+    if row.is_native {
+        None
+    } else {
+        row.fee_token.clone()
+    }
+}
+
+fn same_coin(a: Option<&str>, b: Option<&str>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+        _ => false,
+    }
+}
+
+fn is_listed(coins: &[Option<String>], row: &ParsedQuote) -> bool {
+    let coin = coin_of(row);
+    coins
+        .iter()
+        .any(|listed| same_coin(listed.as_deref(), coin.as_deref()))
+}
+
 /// The coin the machine pays in when nobody has chosen one: `Some(choice)`
 /// (`None` inside = native), or `None` when no coin can pay — the caller's
 /// requested coin then stands and its refusal is the one that shows.
 ///
 /// Only a coin that provably covers the fee plus what the transaction itself
-/// moves of it is a candidate. Among those, in order:
+/// moves of it is a candidate ([`Spend::covers`]), and never one the relay
+/// already refused this operation with (`excluded`). Among those, in order:
 ///
 /// 1. one the transaction is NOT sending — the fee never comes out of the
 ///    amount while something else can pay it, so a Max stays whole;
@@ -2379,19 +2577,24 @@ impl Outflows {
 /// Ties keep the relay's own row order, so the answer is deterministic.
 fn auto_pick(
     rows: &[ParsedQuote],
-    out: &Outflows,
+    spend: &Spend<'_>,
     fee_for: impl Fn(&ParsedQuote) -> Option<u128>,
+    excluded: &[Option<String>],
 ) -> Option<Option<String>> {
     let rank = |row: &ParsedQuote| {
         (
-            out.of(row) == 0,
+            !spend.sends(row),
             !row.is_native,
             row.usd_balance.trim().parse::<f64>().unwrap_or(0.0),
         )
     };
     let mut best: Option<&ParsedQuote> = None;
-    for row in rows.iter().filter(|row| row.is_native || row.balance > 0) {
-        let covers = fee_for(row).is_some_and(|fee| fee.saturating_add(out.of(row)) <= row.balance);
+    for row in rows
+        .iter()
+        .filter(|row| row.is_native || row.balance > 0)
+        .filter(|row| !is_listed(excluded, row))
+    {
+        let covers = fee_for(row).is_some_and(|fee| spend.covers(row, fee));
         if !covers {
             continue;
         }
@@ -2403,13 +2606,77 @@ fn auto_pick(
             best = Some(row);
         }
     }
-    best.map(|row| {
-        if row.is_native {
-            None
-        } else {
-            row.fee_token.clone()
+    best.map(coin_of)
+}
+
+/// [`auto_pick`] once the operation's balance changes are measured (spec 083
+/// fee).
+///
+/// The coin [`auto_pick`] chooses from the calls alone stays the choice
+/// whenever it still pays from what the operation leaves of it — an operation
+/// that leaves the coin enough is paid exactly as before. When the operation
+/// itself spends it below the fee (a swap of all of a wallet's USDC), the
+/// chain's own coin pays if it can, and otherwise the best coin that can in
+/// [`auto_pick`]'s usual order. `None` when no coin can pay.
+fn measured_auto_pick(
+    rows: &[ParsedQuote],
+    calls: &[FeeCall],
+    measured: &Measured,
+    fee_for: impl Fn(&ParsedQuote) -> Option<u128>,
+    excluded: &[Option<String>],
+) -> Option<Option<String>> {
+    let spend = Spend::new(calls, Some(measured));
+    let pays = |coin: Option<&str>| {
+        find_quote(rows, coin)
+            .filter(|row| !is_listed(excluded, row))
+            .is_some_and(|row| fee_for(row).is_some_and(|fee| spend.covers(row, fee)))
+    };
+    if let Some(usual) = auto_pick(rows, &Spend::new(calls, None), &fee_for, excluded) {
+        if pays(usual.as_deref()) {
+            return Some(usual);
         }
-    })
+    }
+    if pays(None) {
+        return Some(None);
+    }
+    auto_pick(rows, &spend, &fee_for, excluded)
+}
+
+/// The coin nobody chose: [`measured_auto_pick`] once the operation's balance
+/// changes are known, [`auto_pick`] on the calls alone until then.
+fn pick_coin(
+    rows: &[ParsedQuote],
+    calls: &[FeeCall],
+    measured: Option<&Measured>,
+    fee_for: impl Fn(&ParsedQuote) -> Option<u128>,
+    excluded: &[Option<String>],
+) -> Option<Option<String>> {
+    match measured {
+        Some(measured) => measured_auto_pick(rows, calls, measured, fee_for, excluded),
+        None => auto_pick(rows, &Spend::new(calls, None), fee_for, excluded),
+    }
+}
+
+/// [`pick_coin`] against the static model — before anything is simulated,
+/// or when nothing simulated survives (a failed quote).
+fn static_auto_pick(
+    ctx: &RequestCtx,
+    rows: &[ParsedQuote],
+    measured: Option<&Measured>,
+    in_band_gas_basis: u128,
+    excluded: &[Option<String>],
+) -> Option<Option<String>> {
+    let provisional = static_total_gas(ctx, None);
+    let native = find_quote(rows, None)?;
+    let fee_for = |row: &ParsedQuote| {
+        calculate_in_band_fee_amount(
+            provisional,
+            in_band_gas_basis,
+            &row.pricing(),
+            &native.pricing(),
+        )
+    };
+    pick_coin(rows, &ctx.calls, measured, fee_for, excluded)
 }
 
 /// Whether the coin in force still pays once the real gas is known. The pick
@@ -2419,12 +2686,28 @@ fn auto_pick(
 fn auto_pick_holds(
     rows: &[ParsedQuote],
     chosen: Option<&str>,
-    out: &Outflows,
+    spend: &Spend<'_>,
     fee_for: &impl Fn(&ParsedQuote) -> Option<u128>,
 ) -> bool {
-    find_quote(rows, chosen).is_some_and(|row| {
-        fee_for(row).is_some_and(|fee| fee.saturating_add(out.of(row)) <= row.balance)
-    })
+    find_quote(rows, chosen)
+        .is_some_and(|row| fee_for(row).is_some_and(|fee| spend.covers(row, fee)))
+}
+
+/// Where an auto pick lands when no coin can pay: the coin the request
+/// named, so its refusal is the one that shows — unless the relay already
+/// refused the operation with it this run, and then the coin in force, which
+/// it did not.
+fn when_no_coin_pays(model: &Model) -> Option<String> {
+    let requested = model.requested_fee_token.as_deref();
+    let refused = model
+        .refused
+        .iter()
+        .any(|coin| same_coin(coin.as_deref(), requested));
+    if refused {
+        model.fee_token.clone()
+    } else {
+        model.requested_fee_token.clone()
+    }
 }
 
 /// Price once the estimating phase has both answers.
@@ -2445,7 +2728,7 @@ fn try_price(model: &mut Model) -> Command<FeeEffect, Event> {
             PricePlan::Generic {
                 est_calldata_len, ..
             },
-            FeeGasOutcome::SimulationFailed,
+            FeeGasOutcome::SimulationFailed | FeeGasOutcome::Refused,
         ) => *est_calldata_len <= ESTIMATION_REQUIRED_CALLDATA,
         _ => false,
     };
@@ -2483,11 +2766,12 @@ fn advance_tempo(
     // Every Tempo fee coin is a TIP-20 stablecoin and the default one is
     // often not held at all: nobody chose, so pay in one that is.
     if model.auto_fee_token {
-        let out = Outflows::of_calls(&ctx.calls);
+        // Tempo weighs coins by the calls alone (spec 083 leaves it as it was).
+        let spend = Spend::new(&ctx.calls, None);
         let fee_for = |row: &ParsedQuote| {
             (!row.is_native).then(|| tempo_reimbursement(static_gas, gas.gas_price, row.decimals))
         };
-        if let Some(choice) = auto_pick(&model.quotes, &out, fee_for) {
+        if let Some(choice) = auto_pick(&model.quotes, &spend, fee_for, &[]) {
             model.fee_token = choice;
         }
     }
@@ -2581,13 +2865,18 @@ fn accept_gas_outcome(
                 price_generic(model, &ctx, plan, total_gas)
             }
             FeeGasOutcome::ContextUnavailable => fail(model, FeeFailure::EstimateFailed),
-            FeeGasOutcome::SimulationFailed => {
+            failed @ (FeeGasOutcome::SimulationFailed | FeeGasOutcome::Refused) => {
                 // For a large/complex op the static fallback would show a
                 // misleading number and the submit would refuse it anyway
                 // (`safe-transaction.ts:703-713`).
                 if *est_calldata_len > ESTIMATION_REQUIRED_CALLDATA {
+                    if failed == FeeGasOutcome::Refused {
+                        return refused_by_relay(model, &ctx, plan);
+                    }
                     return fail(model, FeeFailure::EstimateFailed);
                 }
+                // A small op keeps the static fallback whichever way the
+                // simulation failed — exactly as before spec 083's fee fix.
                 let total_gas = static_total_gas(&ctx, inner_floor);
                 price_generic(model, &ctx, plan, total_gas)
             }
@@ -2644,7 +2933,7 @@ fn price_generic(
         // The real gas is in: the coin picked on the static model must still
         // pay. When it does not, pick again on this figure — and when nothing
         // can, the requested coin stands and says so, as it would have.
-        let out = Outflows::of_calls(&ctx.calls);
+        let measured = measured_for(ctx, model.measured.as_deref());
         let fee_for = |row: &ParsedQuote| {
             calculate_in_band_fee_amount(
                 total_gas,
@@ -2653,9 +2942,35 @@ fn price_generic(
                 &native.pricing(),
             )
         };
-        if !auto_pick_holds(&model.quotes, model.fee_token.as_deref(), &out, &fee_for) {
-            model.fee_token = auto_pick(&model.quotes, &out, fee_for)
-                .unwrap_or_else(|| model.requested_fee_token.clone());
+        let next = if measured.is_some() {
+            // Measured (spec 083 fee): the coin that pays from what the
+            // operation leaves — the same answer whether the simulation
+            // landed before this quote or after it.
+            Some(pick_coin(
+                &model.quotes,
+                &ctx.calls,
+                measured,
+                fee_for,
+                &model.refused,
+            ))
+        } else if auto_pick_holds(
+            &model.quotes,
+            model.fee_token.as_deref(),
+            &Spend::new(&ctx.calls, None),
+            &fee_for,
+        ) {
+            None
+        } else {
+            Some(pick_coin(
+                &model.quotes,
+                &ctx.calls,
+                None,
+                fee_for,
+                &model.refused,
+            ))
+        };
+        if let Some(next) = next {
+            model.fee_token = next.unwrap_or_else(|| when_no_coin_pays(model));
         }
     }
     let Some(selected) = find_quote(&model.quotes, model.fee_token.as_deref()).cloned() else {
@@ -2740,13 +3055,13 @@ fn price_tempo(
     {
         // The simulation can price above the static model; the coin picked
         // on that model must still pay, or the pick is made again here.
-        let out = Outflows::of_calls(&ctx.calls);
+        let spend = Spend::new(&ctx.calls, None);
         let price = *gas_price_atto;
         let fee_for = |row: &ParsedQuote| {
             (!row.is_native).then(|| tempo_reimbursement(expected_gas, price, row.decimals))
         };
-        if !auto_pick_holds(&model.quotes, Some(fee_token.as_str()), &out, &fee_for) {
-            if let Some(Some(choice)) = auto_pick(&model.quotes, &out, fee_for) {
+        if !auto_pick_holds(&model.quotes, Some(fee_token.as_str()), &spend, &fee_for) {
+            if let Some(Some(choice)) = auto_pick(&model.quotes, &spend, fee_for, &[]) {
                 fee_token.clone_from(&choice);
                 model.fee_token = Some(choice);
             }
@@ -2820,6 +3135,9 @@ fn settle_quoted(model: &mut Model) -> Command<FeeEffect, Event> {
 /// the initial estimate surfaces the failure (send alert / SigningSheet
 /// `gasEstimateFailed`); a refresh keeps the old quote showing; a chip
 /// switch reverts the selection (`GasFeeCard` catch handlers).
+///
+/// A quote that stays on screen keeps its own coin too ([`keep_quote_coin`]):
+/// the run may have moved the coin in force before it failed.
 fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
     match std::mem::take(&mut model.origin) {
         Origin::Initial => {
@@ -2827,6 +3145,7 @@ fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
         }
         Origin::Refresh => {
             model.phase = if model.estimate.is_some() {
+                keep_quote_coin(model);
                 Phase::Quoted
             } else {
                 Phase::Failed(kind)
@@ -2835,6 +3154,7 @@ fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
         Origin::Select { previous } => {
             model.fee_token = previous;
             model.phase = if model.estimate.is_some() {
+                keep_quote_coin(model);
                 Phase::Quoted
             } else {
                 Phase::Failed(kind)
@@ -2842,6 +3162,291 @@ fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
         }
     }
     render()
+}
+
+/// The coin in force goes back to the one the quote on screen is priced in.
+///
+/// The approve carries `fee_token` beside the quote's amount and recipient,
+/// so the two must never name different coins (spec 083 fee review): a
+/// refresh picks its coin afresh when nobody chose one — without the
+/// simulation's balance changes, the coin a relay refusal moved the quote
+/// off — and a refresh that then fails keeps the OLD quote. Signed as it
+/// stood, that was a USDC transfer of a wei amount to the ETH row's
+/// recipient. Tempo's default coin is also named by no coin at all, and
+/// that stays as it is.
+fn keep_quote_coin(model: &mut Model) {
+    let Some(estimate) = model.estimate.as_ref() else {
+        return;
+    };
+    let coin = match &estimate.fee_asset {
+        FeeAsset::Native => None,
+        FeeAsset::Erc20 { token, .. } => Some(token.clone()),
+    };
+    let tempo_default = is_tempo_chain(estimate.chain_id)
+        && model.fee_token.is_none()
+        && coin
+            .as_deref()
+            .is_some_and(|token| token.eq_ignore_ascii_case(TEMPO_DEFAULT_FEE_TOKEN));
+    if !tempo_default && !same_coin(coin.as_deref(), model.fee_token.as_deref()) {
+        model.fee_token = coin;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The relay said the operation fails (spec 083 fee)
+// ---------------------------------------------------------------------------
+
+/// The relay simulated the operation with the coin in force as its fee leg
+/// and it failed ([`FeeGasOutcome::Refused`]).
+///
+/// When nobody chose that coin, the likeliest reason is that the operation
+/// itself spends it: a swap of all of a wallet's USDC cannot then pay its fee
+/// in USDC, and the calls cannot say so — the router pulls the USDC through
+/// Permit2. So the next coin with something left to pay from is simulated
+/// instead, the chain's own coin first and then the relay's order, each coin
+/// at most once. Only when none is left does the quote fail
+/// ([`FeeFailure::WouldFail`]), never saying that the network is down, and
+/// on a coin that had something left to pay from ([`landing_coin`]). A coin
+/// the person chose is never swapped behind their back: that quote fails at
+/// once, with every other coin still on offer.
+///
+/// A refresh's old quote does not survive this: the relay has just said the
+/// operation fails with every coin that could pay, so the figure from before
+/// is no longer one to sign (a swap whose deadline passed while the sheet was
+/// open). A failed chip switch still goes back to the coin and quote it left.
+fn refused_by_relay(
+    model: &mut Model,
+    ctx: &RequestCtx,
+    plan: &PricePlan,
+) -> Command<FeeEffect, Event> {
+    model.refused.push(model.fee_token.clone());
+    if model.auto_fee_token {
+        if let Some(next) = next_coin_to_try(model, ctx) {
+            return estimate_in(model, ctx, plan, next);
+        }
+    }
+    if let Some(landing) = landing_coin(model, ctx) {
+        model.fee_token = landing;
+    }
+    if model.origin == Origin::Refresh {
+        model.estimate = None;
+        model.stale = false;
+    }
+    fail(model, FeeFailure::WouldFail)
+}
+
+/// The coin a run the relay refused with every coin ends on: the LAST one
+/// tried that had something left once the operation ran ([`Spend::usable`]),
+/// else the first one tried (spec 083 fee review).
+///
+/// The shell says why from the coin in force: one with nothing left is "this
+/// coin cannot pay the fee", anything else "the transaction would fail". A
+/// Max sell that the chain's coin could not pay for either failed for the
+/// operation's own reason, not for the USDC it drained — ending on the USDC
+/// said the wrong one.
+fn landing_coin(model: &Model, ctx: &RequestCtx) -> Option<Option<String>> {
+    let spend = Spend::new(&ctx.calls, measured_for(ctx, model.measured.as_deref()));
+    model
+        .refused
+        .iter()
+        .rev()
+        .find(|coin| {
+            find_quote(&model.quotes, coin.as_deref()).is_some_and(|row| spend.usable(row) > 0)
+        })
+        .or_else(|| model.refused.first())
+        .cloned()
+}
+
+/// The next coin to simulate the refused operation with: one the picker
+/// offers, not refused yet, with something left once the operation has run
+/// ([`Spend::usable`] — a fee leg of even one unit of a drained coin fails).
+/// The chain's own coin first, then the relay's row order.
+fn next_coin_to_try(model: &Model, ctx: &RequestCtx) -> Option<Option<String>> {
+    let spend = Spend::new(&ctx.calls, measured_for(ctx, model.measured.as_deref()));
+    let mut candidates = model
+        .quotes
+        .iter()
+        .filter(|row| row.is_native || row.balance > 0)
+        .filter(|row| !is_listed(&model.refused, row))
+        .filter(|row| spend.usable(row) > 0);
+    let first = candidates.clone().find(|row| row.is_native);
+    first.or_else(|| candidates.next()).map(coin_of)
+}
+
+/// Simulate the operation again with `coin` as its fee leg — the same run,
+/// the same gas basis; only the leg (and so the calldata length) changes.
+/// The inner calls' measurement already asked is still the one awaited.
+fn estimate_in(
+    model: &mut Model,
+    ctx: &RequestCtx,
+    plan: &PricePlan,
+    coin: Option<String>,
+) -> Command<FeeEffect, Event> {
+    let Some(row) = find_quote(&model.quotes, coin.as_deref()).cloned() else {
+        return fail(model, FeeFailure::CalculationFailed);
+    };
+    model.fee_token = coin;
+    let mut est_calls: Vec<FeeCall> = if ctx.calls.is_empty() {
+        vec![dummy_estimation_call()]
+    } else {
+        ctx.calls.clone()
+    };
+    let Some(leg) = in_band_fee_leg(model.fee_token.as_deref(), &row.recipient, 1) else {
+        return fail(model, FeeFailure::EstimateFailed);
+    };
+    est_calls.push(leg);
+    let mut plan = plan.clone();
+    if let PricePlan::Generic {
+        est_calldata_len, ..
+    } = &mut plan
+    {
+        *est_calldata_len = multisend_execute_calldata_len(&est_calls);
+    }
+    model.pending.user_op_gas = None;
+    model.phase = Phase::Estimating(plan);
+    requests(
+        model,
+        vec![FeeOperation::EstimateUserOpGas {
+            chain_id: ctx.chain_id,
+            account: ctx.account.clone(),
+            deployed: ctx.deployed,
+            calls: est_calls,
+        }],
+    )
+}
+
+/// [`Event::BalanceChangesMeasured`]: keep what the operation moves, and —
+/// when nobody chose the coin — make sure the coin in force is still one
+/// that can pay from what the operation leaves.
+///
+/// - Quoted: the coins are weighed again at the gas already measured and the
+///   figure switches locally, as a chip tap does.
+/// - A quote that failed on the relay's simulation (or on an estimate the
+///   network cut short) is asked again once, when a coin it did not try can
+///   pay now — the simulation may have shown what the calls could not.
+/// - Gathering or estimating: the run reads it when it prices.
+fn balance_changes_measured(
+    model: &mut Model,
+    changes: &[FeeBalanceChange],
+) -> Command<FeeEffect, Event> {
+    model.measured = Some(
+        changes
+            .iter()
+            .filter_map(|change| {
+                let delta = change.delta.trim().parse::<i128>().ok()?;
+                Some((change.token.clone(), delta))
+            })
+            .collect(),
+    );
+    let Some(ctx) = model.ctx.clone() else {
+        return render();
+    };
+    if is_tempo_chain(ctx.chain_id) || !model.auto_fee_token {
+        return render();
+    }
+    match model.phase.clone() {
+        Phase::Quoted => {
+            repick_quoted(model, &ctx);
+            render()
+        }
+        Phase::Failed(FeeFailure::WouldFail | FeeFailure::EstimateFailed) => {
+            retry_with_a_coin_that_pays(model, &ctx)
+        }
+        _ => render(),
+    }
+}
+
+/// A settled quote in a coin the machine picked, weighed again now that the
+/// operation's balance changes are known: the best coin that pays from what
+/// it leaves, at the gas already measured — switched locally, recipient and
+/// all, so the figure on screen is the one the approve carries.
+fn repick_quoted(model: &mut Model, ctx: &RequestCtx) {
+    let Some(estimate) = model.estimate.as_ref() else {
+        return;
+    };
+    if estimate.chain_id != ctx.chain_id {
+        return;
+    }
+    let (total_gas, basis) = (estimate.total_gas, estimate.in_band_gas_basis);
+    let Some(native) = find_quote(&model.quotes, None).cloned() else {
+        return;
+    };
+    let fee_for = |row: &ParsedQuote| {
+        calculate_in_band_fee_amount(total_gas, basis, &row.pricing(), &native.pricing())
+    };
+    let target = pick_coin(
+        &model.quotes,
+        &ctx.calls,
+        measured_for(ctx, model.measured.as_deref()),
+        fee_for,
+        &model.refused,
+    )
+    .unwrap_or_else(|| when_no_coin_pays(model));
+    if same_coin(target.as_deref(), model.fee_token.as_deref()) {
+        return;
+    }
+    let Some(option) = find_option(model, target.as_deref()).cloned() else {
+        return;
+    };
+    if switch_estimate(model, &option) {
+        model.fee_token = target;
+    }
+}
+
+/// A failed quote in a coin the machine picked, with the operation's balance
+/// changes now known: when they show a coin this run did not try that can
+/// pay, the operation is priced again from the start — once; the machine
+/// picks with what it now knows.
+fn retry_with_a_coin_that_pays(model: &mut Model, ctx: &RequestCtx) -> Command<FeeEffect, Event> {
+    let Some(basis) = model.last_basis else {
+        return render();
+    };
+    if model.quotes.is_empty() {
+        return render();
+    }
+    let measured = measured_for(ctx, model.measured.as_deref());
+    let pick = static_auto_pick(ctx, &model.quotes, measured, basis, &model.refused);
+    let Some(pick) = pick else {
+        return render();
+    };
+    if same_coin(pick.as_deref(), model.fee_token.as_deref()) {
+        return render();
+    }
+    // The coins the relay already refused stay refused for this operation.
+    let refused = std::mem::take(&mut model.refused);
+    model.attempt += 1;
+    model.origin = Origin::Initial;
+    let command = begin_pipeline(model);
+    model.refused = refused;
+    command
+}
+
+/// The local recompute a chip tap makes (`GasFeeCard.tsx:193-215`): the
+/// settled estimate re-denominated in `option`'s coin from the shared gas
+/// basis — amount, recipient and symbol — with no RPC. `false` when the
+/// amount cannot be priced; the estimate is then left as it was.
+fn switch_estimate(model: &mut Model, option: &ParsedQuote) -> bool {
+    let Some(amount) = fee_amount_for_option(model, option) else {
+        return false;
+    };
+    let Some(estimate) = model.estimate.as_mut() else {
+        return false;
+    };
+    estimate.total_wei = if option.is_native { amount } else { 0 };
+    estimate.fee_recipient = Some(option.recipient.clone());
+    estimate.fee_asset = match &option.fee_token {
+        None => FeeAsset::Native,
+        Some(contract) => FeeAsset::Erc20 {
+            token: contract.clone(),
+            decimals: option.decimals,
+            amount,
+            // The picked row's own ticker — the switch is supposed to be
+            // visible, and a fee with no symbol reads as the native coin
+            // everywhere it is drawn.
+            symbol: Some(option.symbol.clone()),
+        },
+    };
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -2853,7 +3458,11 @@ fn fail(model: &mut Model, kind: FeeFailure) -> Command<FeeEffect, Event> {
 /// shared gas basis — no RPC; an unknown one (and EVERY Tempo one) falls back
 /// to a full re-estimate whose failure reverts the selection.
 fn select_fee_asset(model: &mut Model, token: Option<String>) -> Command<FeeEffect, Event> {
-    if model.ctx.is_none() || model.phase != Phase::Quoted {
+    // Spec 083 fee: an operation the relay answered would fail has no figure
+    // to switch locally, but the coins stay choosable — the pick is priced
+    // from the start, and a failure reverts it.
+    let would_fail = model.phase == Phase::Failed(FeeFailure::WouldFail);
+    if model.ctx.is_none() || (model.phase != Phase::Quoted && !would_fail) {
         return Command::done();
     }
     let same = match (&model.fee_token, &token) {
@@ -2868,12 +3477,20 @@ fn select_fee_asset(model: &mut Model, token: Option<String>) -> Command<FeeEffe
         return Command::done();
     }
     let option = find_option(model, token.as_deref()).cloned();
-    if let Some(option) = &option {
+    if would_fail {
+        // A coin with nothing left to pay from is still not choosable.
+        if option
+            .as_ref()
+            .is_none_or(|option| payable_balance(model, option) == 0)
+        {
+            return Command::done();
+        }
+    } else if let Some(option) = &option {
         let amount = fee_amount_for_option(model, option);
         // Invariant ⑧ (`FeeTokenSelector.tsx:74`): a coin that can't cover
         // the fee is shown for context but NOT selectable — paying gas in it
         // would only produce a doomed op.
-        if fee_row_insufficient(option.balance, amount) {
+        if fee_row_insufficient(payable_balance(model, option), amount) {
             return Command::done();
         }
         // Tempo's estimate is NOT a generic in-band quote and must never be
@@ -2889,29 +3506,13 @@ fn select_fee_asset(model: &mut Model, token: Option<String>) -> Command<FeeEffe
             .ctx
             .as_ref()
             .is_some_and(|ctx| is_tempo_chain(ctx.chain_id));
-        if !tempo {
-            if let (Some(amount), Some(estimate)) = (amount, model.estimate.as_mut()) {
-                // Local recompute from the shared basis (`GasFeeCard.tsx:193-215`):
-                // the displayed amount switches immediately, recipient included,
-                // so approve/submit sends exactly what was quoted.
-                estimate.total_wei = if option.is_native { amount } else { 0 };
-                estimate.fee_recipient = Some(option.recipient.clone());
-                estimate.fee_asset = match &option.fee_token {
-                    None => FeeAsset::Native,
-                    Some(contract) => FeeAsset::Erc20 {
-                        token: contract.clone(),
-                        decimals: option.decimals,
-                        amount,
-                        // The picked row's own ticker — the switch is supposed
-                        // to be visible, and a fee with no symbol reads as the
-                        // native coin everywhere it is drawn.
-                        symbol: Some(option.symbol.clone()),
-                    },
-                };
-                model.fee_token = token;
-                model.auto_fee_token = false;
-                return render();
-            }
+        // Local recompute from the shared basis (`GasFeeCard.tsx:193-215`):
+        // the displayed amount switches immediately, recipient included, so
+        // approve/submit sends exactly what was quoted.
+        if !tempo && amount.is_some() && switch_estimate(model, option) {
+            model.fee_token = token;
+            model.auto_fee_token = false;
+            return render();
         }
     }
     // The quote may have expired while the sheet stayed open — fall back to a
@@ -3013,15 +3614,40 @@ fn estimate_view(estimate: &FeeEstimate) -> FeeEstimateView {
 /// the "cannot be priced" half of that flag.
 fn selected_fee_is_short(model: &Model) -> bool {
     find_option(model, model.fee_token.as_deref()).is_some_and(|row| {
-        fee_amount_for_option(model, row).is_some_and(|amount| row.balance < amount)
+        fee_amount_for_option(model, row).is_some_and(|amount| payable_balance(model, row) < amount)
     })
 }
 
+/// What a fee coin has to pay the fee from: its balance — or, once the shell
+/// measured the operation (spec 083 fee), what the operation leaves of it.
+/// Tempo, and every operation nobody measured, read the balance as before.
+fn payable_balance(model: &Model, row: &ParsedQuote) -> u128 {
+    let measured = model
+        .ctx
+        .as_ref()
+        .and_then(|ctx| measured_for(ctx, model.measured.as_deref()));
+    match measured {
+        Some(changes) => after_change(row.balance, measured_change(changes, row)),
+        None => row.balance,
+    }
+}
+
 fn option_views(model: &Model) -> Vec<FeeOptionView> {
+    // Spec 083 fee: the relay answered that the operation fails, and there is
+    // no figure to weigh the coins against. They stay choosable — paying in
+    // another coin is the way forward — except one with nothing left to pay
+    // from.
+    let would_fail =
+        model.estimate.is_none() && model.phase == Phase::Failed(FeeFailure::WouldFail);
     picker_rows(model)
         .map(|row| {
             let amount = fee_amount_for_option(model, row);
-            let insufficient = fee_row_insufficient(row.balance, amount);
+            let payable = payable_balance(model, row);
+            let insufficient = if would_fail {
+                payable == 0
+            } else {
+                fee_row_insufficient(payable, amount)
+            };
             let selected = match (&model.fee_token, &row.fee_token, row.is_native) {
                 (None, _, true) => true,
                 (Some(sel), Some(contract), false) => sel.eq_ignore_ascii_case(contract),

@@ -12,12 +12,18 @@
 //!
 //! - [`approved`] — the request is still open in the core: signing, then
 //!   submitting, then submitted and counting against the chain's usual time,
-//!   or failed with the send flow's sentence.
+//!   or failed with the send flow's sentence — for an operation that
+//!   reverted on chain, the send receipt's failure with its transaction
+//!   (083). The column stays here past the old 90 s: the page is not
+//!   answered until the transaction is known, and "still confirming" is the
+//!   tracker's word meanwhile — also after the core's cap has told the page
+//!   "not confirmed yet", since the operation may still land.
 //! - [`ended`] — the core has answered the page and closed its sheet: the
-//!   tick (a message signed, a transaction landed), or — when the wait ran out
-//!   first — "not landed yet, Vela keeps checking" for as long as the tracker
-//!   follows it, and "unknown" past its 24 h line. Never "failed" on time
-//!   alone: a timeout is not a failure (the tracker's money rule).
+//!   tick (a message signed, a transaction landed), or — when an answer was
+//!   the operation hash, which the desktop no longer gives (083) — "not
+//!   landed yet, Vela keeps checking" for as long as the tracker follows it,
+//!   and "unknown" past its 24 h line. Never "failed" on time alone: a
+//!   timeout is not a failure (the tracker's money rule).
 //!
 //! Nothing here decides anything about the request. Which close answers the
 //! page, and with what, is `sign_request`'s; whether an operation landed is
@@ -26,10 +32,12 @@
 use gpui::SharedString;
 
 use vela_core::app::sign_request::{
-    SignErrorKind, SignMethodKind, SignResponsePayload, SignView, method_kind,
+    SignErrorKind, SignMethodKind, SignResponsePayload, SignSwipeAction, SignView, method_kind,
+    reverted_transaction,
 };
 use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
+use crate::executor::sign_request::PhoneStop;
 use crate::flows::fixtures::ReceiptStage;
 use crate::signing::SigningStrings;
 use crate::signing::fixtures::Block;
@@ -73,6 +81,23 @@ pub struct Clock {
     pub seen_submitted_ms: Option<f64>,
 }
 
+/// Where this approval's signature stands (083 W11) — the executor's word,
+/// since the core's `Submitting` spans building the operation, the passkey
+/// and the submission alike.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Signature {
+    /// Nothing has asked for it yet: the funding check, the nonce, the
+    /// deployment read.
+    #[default]
+    NotYet,
+    /// A prompt is up (or the Trusted Signer's page is asking).
+    Asked,
+    /// The prompt has signed. Not merely answered: a prompt that said no
+    /// signed nothing, and the column's close reads `Given` as "the
+    /// operation goes on" (083 review).
+    Given,
+}
+
 /// Does this method go to the network? A message never does: it is signing,
 /// then signed — never "submitting" (device-found on the Xiaomi, spec 079).
 #[must_use]
@@ -81,6 +106,103 @@ pub fn on_chain(method: &str) -> bool {
         method_kind(method),
         SignMethodKind::Transaction | SignMethodKind::Batch
     )
+}
+
+/// When the column's close reaches the core (083). What it answers stays the
+/// core's (`swipe_action`); this is only whether it may be told NOW.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClosePlan {
+    /// Tell the core now: it refuses a request not yet approved (4001),
+    /// cancels a top-up, or stops watching an operation on its way.
+    Now,
+    /// The core would only stop watching — but the signature is still to
+    /// come, and a prompt that then came back unsigned answered the page
+    /// nothing, ever (083 review; before 083 a scan that ran out answered
+    /// -32603 after 90 s). So the prompt is stopped, and the core is told
+    /// once the ceremony is back: a refusal if nothing was signed, the
+    /// ordinary close if the phone had already signed.
+    AfterCancel,
+    /// A close already waits on the ceremony. A second one must add nothing:
+    /// told to the core as a dismiss, it left the request unanswered.
+    Ignore,
+}
+
+/// Where a request stands, as far as closing its column goes (083).
+#[derive(Clone, Copy, Debug)]
+pub struct CloseFacts {
+    /// What the core does with a close right now.
+    pub swipe: SignSwipeAction,
+    /// A pipeline runs (the core's `is_signing || is_submitting`).
+    pub running: bool,
+    /// An operation went out (`pending_op_hash`).
+    pub submitted: bool,
+    /// The core already failed it — and answered the page.
+    pub failed: bool,
+    pub signature: Signature,
+    /// A close already waits on the ceremony.
+    pub closing: bool,
+}
+
+/// [`ClosePlan`] for these facts.
+#[must_use]
+pub fn close_plan(facts: &CloseFacts) -> ClosePlan {
+    if facts.closing {
+        return ClosePlan::Ignore;
+    }
+    let signature_ahead = facts.swipe == SignSwipeAction::Dismiss
+        && facts.running
+        && !facts.submitted
+        && !facts.failed
+        && facts.signature != Signature::Given;
+    if signature_ahead {
+        ClosePlan::AfterCancel
+    } else {
+        ClosePlan::Now
+    }
+}
+
+/// A close that waited on the ceremony may be told to the core: the ceremony
+/// came back empty (nothing runs — the core now refuses), or an operation
+/// went out (the phone had signed — the core now stops watching it).
+#[must_use]
+pub fn waited_close_due(running: bool, submitted: bool) -> bool {
+    !running || submitted
+}
+
+/// Esc on the signing column (083, the owner's D1): it closes only where
+/// closing answers nothing — an operation already on its way (the core only
+/// stops watching it), or no request at all. A refusal (4001), a funding
+/// cancel, or a blocked request's answer is the ✕'s alone: on Windows Esc is
+/// also the key that leaves the address bar, and one press refused the page.
+/// Nor does it close while the signature is still to come: that close ends
+/// in a refusal too, once the prompt comes back unsigned.
+#[must_use]
+pub fn escape_closes(swipe: SignSwipeAction, plan: ClosePlan) -> bool {
+    plan == ClosePlan::Now && matches!(swipe, SignSwipeAction::Dismiss | SignSwipeAction::None)
+}
+
+/// The title and body keys of the card a phone's stop is told with (083). A
+/// connection that never came up is the onboarding's own pair — "the network
+/// connection is unstable", "the request never arrived — check your network":
+/// nothing reached the phone, and the network is what a person can check
+/// before trying again. One that dropped once the phone was asked has the
+/// same title, but the request DID arrive, so the body is what is true
+/// whatever the phone did (H4 review): a transaction was not submitted and
+/// the funds are safe; a message went nowhere — `on_chain` says which. The
+/// title is a card's sentence case, as the timeout's is: the connection list's
+/// "Connection Failed" is a status label, title-cased in en, id and tr.
+#[must_use]
+pub const fn phone_stop_words(stop: PhoneStop, on_chain: bool) -> (&'static str, &'static str) {
+    const LINK: &str = "onboarding.common.networkTitle";
+    match stop {
+        PhoneStop::ScanExpired => (
+            "onboarding.common.timeoutTitle",
+            "onboarding.common.timeoutBody",
+        ),
+        PhoneStop::LinkFailed => (LINK, "onboarding.common.networkBody"),
+        PhoneStop::Dropped if on_chain => (LINK, "send.txErrorGeneric"),
+        PhoneStop::Dropped => (LINK, "connect.detail.offChainNote"),
+    }
 }
 
 /// The ending an answer stands for, or `None` when there is nothing to show —
@@ -149,7 +271,7 @@ pub fn summary_of(blocks: &[Block]) -> Option<SharedString> {
 /// `None` while it is still a request (the form is drawn).
 ///
 /// `track` is the tracker's entry for the operation this request submitted,
-/// when there is one.
+/// when there is one; `signature` is where its passkey stands.
 #[must_use]
 pub fn approved(
     sign: &SignView,
@@ -157,6 +279,7 @@ pub fn approved(
     summary: Option<&SharedString>,
     track: Option<&TrackEntryView>,
     clock: &Clock,
+    signature: Signature,
     s: &SigningStrings,
 ) -> Option<SigningReceipt> {
     let lead = || summary.cloned().into_iter().collect::<Vec<_>>();
@@ -177,8 +300,48 @@ pub fn approved(
         && error.kind != SignErrorKind::UserRejected
         && (sign.pending_op_hash.is_some() || error.kind == SignErrorKind::SubmitFailed)
     {
+        // 083: an operation that reverted on chain — the tracker holds the
+        // transaction that carried it, so this is the send receipt's own
+        // failure for that: its sentence, the hash, and the explorer, which
+        // says why. Never 已确认.
+        if let Some(op) = sign.pending_op_hash.as_deref()
+            && let Some(entry) = track.filter(|entry| {
+                entry.user_op_hash.eq_ignore_ascii_case(op) && entry.status == TrackStatus::Dropped
+            })
+        {
+            return Some(following(op, Some(entry), lead(), clock, s));
+        }
+        // The core's own word that it reverted, before the tracker has it:
+        // the same receipt at once. "Couldn't be submitted — your funds are
+        // safe" was false here: it was included, and a fee may have gone.
+        if on_chain
+            && let Some(tx) = sign
+                .error
+                .as_ref()
+                .and_then(|error| error.detail.as_deref())
+                .and_then(reverted_transaction)
+        {
+            let mut captions = lead();
+            captions.push(s.receipt_failed_hint.clone());
+            let mut out = receipt(
+                ReceiptStage::Failed,
+                s.receipt_failed.clone(),
+                captions,
+                s.receipt_done.clone(),
+                true,
+            );
+            out.hash = Some((s.receipt_tx_hash.clone(), tx.to_owned()));
+            out.explorer_tx = Some(tx.to_owned());
+            return Some(out);
+        }
         let mut captions = lead();
-        captions.push(s.error_generic.clone());
+        // A message goes nowhere: "the transaction couldn't be submitted" is
+        // not what failed (083 H4), and nothing went on chain.
+        captions.push(if on_chain {
+            s.error_generic.clone()
+        } else {
+            s.error_off_chain.clone()
+        });
         return Some(receipt(
             ReceiptStage::Failed,
             s.receipt_failed.clone(),
@@ -191,7 +354,9 @@ pub fn approved(
         let track = track.filter(|entry| entry.user_op_hash.eq_ignore_ascii_case(op));
         return Some(following(op, track, lead(), clock, s));
     }
-    if sign.is_submitting {
+    // Submitting once the signature is given — the core's `Submitting` also
+    // covers building the operation and the prompt, which are not (083 W11).
+    if sign.is_submitting && (!sign.is_signing || signature == Signature::Given) {
         let mut captions = lead();
         captions.push(s.tx_background_hint.clone());
         return Some(receipt(
@@ -202,12 +367,20 @@ pub fn approved(
             false,
         ));
     }
-    // The passkey is up (or the Trusted Signer's page is — its own dialog
-    // stands over this one).
     if sign.is_signing {
+        // "Waiting for biometric" only while the passkey (or the Trusted
+        // Signer's page — its own dialog stands over this one) is asking.
+        // Before it, the funding check, the nonce and the deployment read
+        // are the wallet preparing; the owner saw the biometric line for
+        // seconds with no prompt anywhere (083 W11).
+        let title = if signature == Signature::Asked {
+            s.tx_signing.clone()
+        } else {
+            s.tx_preparing.clone()
+        };
         return Some(receipt(
             ReceiptStage::Submitting,
-            s.tx_signing.clone(),
+            title,
             lead(),
             s.close.clone(),
             false,
@@ -466,7 +639,18 @@ mod tests {
     #[test]
     fn a_request_not_yet_approved_is_still_the_form() {
         let s = strings();
-        assert!(approved(&view(|_| {}), true, None, None, &clock(0.), &s).is_none());
+        assert!(
+            approved(
+                &view(|_| {}),
+                true,
+                None,
+                None,
+                &clock(0.),
+                Signature::NotYet,
+                &s
+            )
+            .is_none()
+        );
     }
 
     /// The passkey, the submission and the wait are each named in the send's
@@ -480,6 +664,7 @@ mod tests {
             Some(&summary()),
             None,
             &clock(0.),
+            Signature::Asked,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -493,6 +678,7 @@ mod tests {
             None,
             None,
             &clock(0.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -505,6 +691,7 @@ mod tests {
             Some(&summary()),
             Some(&entry(TrackStatus::Pending, TrackOutcome::Landing, None)),
             &clock(3_000.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -542,10 +729,184 @@ mod tests {
             None,
             None,
             &clock(0.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
         assert_eq!(both.stage, ReceiptStage::Submitted);
+    }
+
+    /// 083 W11: the funding check, the nonce and the deployment read are the
+    /// wallet preparing; "waiting for biometric" is said only while a prompt
+    /// is up, and "submitting" once it has answered.
+    #[test]
+    fn preparing_is_not_waiting_for_biometric() {
+        let s = strings();
+        let title = |signing: bool, submitting: bool, signature: Signature| {
+            approved(
+                &view(|v| {
+                    v.is_signing = signing;
+                    v.is_submitting = submitting;
+                }),
+                true,
+                None,
+                None,
+                &clock(0.),
+                signature,
+                &s,
+            )
+            .map(|receipt| receipt.title)
+        };
+        let precheck = title(true, false, Signature::NotYet);
+        assert_eq!(
+            precheck.as_ref(),
+            Some(&s.tx_preparing),
+            "the funding check"
+        );
+        assert_ne!(s.tx_preparing, s.tx_signing);
+        assert_eq!(
+            title(true, true, Signature::NotYet).as_ref(),
+            Some(&s.tx_preparing),
+            "building the operation"
+        );
+        assert_eq!(
+            title(true, true, Signature::Asked).as_ref(),
+            Some(&s.tx_signing)
+        );
+        assert_eq!(
+            title(true, true, Signature::Given).as_ref(),
+            Some(&s.tx_submitting)
+        );
+        assert_eq!(
+            title(false, true, Signature::NotYet).as_ref(),
+            Some(&s.tx_submitting),
+            "the relay's own top-up after a signature"
+        );
+    }
+
+    /// Facts for [`close_plan`]: a transaction past the commitment point
+    /// (a close is a dismiss), nothing submitted, nothing failed.
+    fn committed(signature: Signature) -> CloseFacts {
+        CloseFacts {
+            swipe: SignSwipeAction::Dismiss,
+            running: true,
+            submitted: false,
+            failed: false,
+            signature,
+            closing: false,
+        }
+    }
+
+    /// 083 (review): the close is told to the core now, except while the
+    /// signature is still to come — then only once the ceremony is back —
+    /// and a second close while one waits adds nothing.
+    #[test]
+    fn a_close_waits_only_for_a_signature_still_to_come() {
+        use ClosePlan::{AfterCancel, Ignore, Now};
+        let table: [(&str, CloseFacts, ClosePlan); 10] = [
+            (
+                "preparing: nonce, deployment",
+                committed(Signature::NotYet),
+                AfterCancel,
+            ),
+            (
+                "a prompt or the QR is up",
+                committed(Signature::Asked),
+                AfterCancel,
+            ),
+            (
+                "the phone signed: on its way",
+                committed(Signature::Given),
+                Now,
+            ),
+            (
+                "an operation went out",
+                CloseFacts {
+                    submitted: true,
+                    ..committed(Signature::Asked)
+                },
+                Now,
+            ),
+            (
+                "a failure, already answered",
+                CloseFacts {
+                    failed: true,
+                    ..committed(Signature::NotYet)
+                },
+                Now,
+            ),
+            (
+                "the funding check (the core refuses and stops it)",
+                CloseFacts {
+                    swipe: SignSwipeAction::Reject,
+                    ..committed(Signature::NotYet)
+                },
+                Now,
+            ),
+            (
+                "the form",
+                CloseFacts {
+                    swipe: SignSwipeAction::Reject,
+                    running: false,
+                    ..committed(Signature::NotYet)
+                },
+                Now,
+            ),
+            (
+                "the top-up",
+                CloseFacts {
+                    swipe: SignSwipeAction::FundingCancel,
+                    running: false,
+                    ..committed(Signature::NotYet)
+                },
+                Now,
+            ),
+            (
+                "a close already waits",
+                CloseFacts {
+                    closing: true,
+                    ..committed(Signature::Asked)
+                },
+                Ignore,
+            ),
+            (
+                "…whatever else is true",
+                CloseFacts {
+                    closing: true,
+                    swipe: SignSwipeAction::Reject,
+                    running: false,
+                    ..committed(Signature::NotYet)
+                },
+                Ignore,
+            ),
+        ];
+        for (case, facts, plan) in table {
+            assert_eq!(close_plan(&facts), plan, "{case}");
+        }
+    }
+
+    /// The close that waited goes to the core once nothing runs, or once an
+    /// operation is out — never while the ceremony is still going.
+    #[test]
+    fn a_waited_close_goes_once_the_ceremony_is_back() {
+        assert!(!waited_close_due(true, false), "still asking");
+        assert!(waited_close_due(false, false), "came back empty");
+        assert!(waited_close_due(true, true), "the phone signed");
+    }
+
+    /// 083 (D1): Esc never answers a request — only the ✕ refuses one. It
+    /// still closes a column whose close answers nothing, and never one whose
+    /// close waits for the prompt to come back unsigned — a refusal too.
+    #[test]
+    fn escape_never_refuses_a_request() {
+        use ClosePlan::{AfterCancel, Ignore, Now};
+        assert!(escape_closes(SignSwipeAction::None, Now));
+        assert!(escape_closes(SignSwipeAction::Dismiss, Now));
+        assert!(!escape_closes(SignSwipeAction::Reject, Now));
+        assert!(!escape_closes(SignSwipeAction::FundingCancel, Now));
+        assert!(!escape_closes(SignSwipeAction::Dismiss, AfterCancel));
+        assert!(!escape_closes(SignSwipeAction::Dismiss, Ignore));
+        assert!(!escape_closes(SignSwipeAction::None, Ignore));
     }
 
     /// A message is signing, then signed — never "submitting".
@@ -558,6 +919,7 @@ mod tests {
             None,
             None,
             &clock(0.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -584,6 +946,7 @@ mod tests {
             Some(&summary()),
             None,
             &clock(0.),
+            Signature::NotYet,
             &s,
         )
         .unwrap_or_else(|| unreachable!("approved"));
@@ -606,9 +969,215 @@ mod tests {
                 None,
                 None,
                 &clock(0.),
+                Signature::NotYet,
                 &s,
             );
             assert!(form.is_none(), "{kind:?} is not a submission that failed");
+        }
+    }
+
+    /// 083 S2: an operation that REVERTED on chain. The core answered the
+    /// page an error and failed the record; the column shows the send
+    /// receipt's own failure for it — its sentence, the hash and the
+    /// explorer — at once, from the core's error, and the same once the
+    /// tracker has the transaction. Never the tick, never 已确认, and never
+    /// "couldn't be submitted, your funds are safe" (receipts review).
+    #[test]
+    fn a_reverted_operation_is_a_failure_receipt_with_its_transaction() {
+        let s = strings();
+        let reverted = view(|v| {
+            v.pending_op_hash = Some(OP.to_owned());
+            v.error = Some(SignErrorNotice {
+                kind: SignErrorKind::SubmitFailed,
+                detail: Some(format!(
+                    "{} ({TX})",
+                    vela_core::app::sign_request::REVERTED_MESSAGE
+                )),
+            });
+        });
+        let at = |track: Option<&TrackEntryView>| {
+            approved(
+                &reverted,
+                true,
+                Some(&summary()),
+                track,
+                &clock(20_000.),
+                Signature::Given,
+                &s,
+            )
+            .unwrap_or_else(|| unreachable!("approved"))
+        };
+
+        let at_once = at(None);
+        assert_eq!(at_once.stage, ReceiptStage::Failed);
+        assert_eq!(at_once.title, s.receipt_failed);
+        assert!(at_once.captions.contains(&s.receipt_failed_hint));
+        assert!(!at_once.captions.contains(&s.error_generic));
+        assert_eq!(
+            at_once.hash,
+            Some((s.receipt_tx_hash.clone(), TX.to_owned()))
+        );
+        assert_eq!(at_once.explorer_tx.as_deref(), Some(TX));
+        assert!(
+            !at_once
+                .captions
+                .iter()
+                .any(|line| line.contains(vela_core::app::sign_request::REVERTED_MESSAGE)),
+            "the page's developer sentence stays off the screen (the column's own hint may say reverted)"
+        );
+
+        let dropped = entry(TrackStatus::Dropped, TrackOutcome::Final, Some(TX));
+        let with_tx = at(Some(&dropped));
+        assert_eq!(with_tx.stage, ReceiptStage::Failed);
+        assert_eq!(with_tx.title, s.receipt_failed);
+        assert!(with_tx.captions.contains(&s.receipt_failed_hint));
+        assert_eq!(
+            with_tx.hash,
+            Some((s.receipt_tx_hash.clone(), TX.to_owned()))
+        );
+        assert_eq!(
+            with_tx.explorer_tx.as_deref(),
+            Some(TX),
+            "the explorer says why"
+        );
+
+        // Even with a tracker that has not caught up — or says otherwise —
+        // the core's failure stands.
+        let pending = entry(TrackStatus::Pending, TrackOutcome::Landing, None);
+        assert_eq!(at(Some(&pending)).stage, ReceiptStage::Failed);
+        assert_eq!(at(Some(&pending)).explorer_tx.as_deref(), Some(TX));
+
+        // Any other submit failure is still the generic one.
+        let refused = view(|v| {
+            v.error = Some(SignErrorNotice {
+                kind: SignErrorKind::SubmitFailed,
+                detail: Some("relay said no".to_owned()),
+            });
+        });
+        let generic = approved(
+            &refused,
+            true,
+            Some(&summary()),
+            None,
+            &clock(0.),
+            Signature::Given,
+            &s,
+        )
+        .unwrap_or_else(|| unreachable!("approved"));
+        assert!(generic.captions.contains(&s.error_generic));
+        assert_eq!(generic.explorer_tx, None);
+    }
+
+    /// 083 S3: at the core's cap the page was told "not confirmed yet" — but
+    /// the column does not call it failed: the operation may still land, and
+    /// it says "still confirming" until the tracker knows, then lands.
+    #[test]
+    fn past_the_cap_the_column_still_follows_the_operation() {
+        let s = strings();
+        let answered = view(|v| {
+            v.pending_op_hash = Some(OP.to_owned());
+            v.tracker_handoff = None;
+        });
+        let at = |status, outcome, tx| {
+            approved(
+                &answered,
+                true,
+                None,
+                Some(&entry(status, outcome, tx)),
+                &clock(700_000.),
+                Signature::Given,
+                &s,
+            )
+            .unwrap_or_else(|| unreachable!("approved"))
+        };
+        let still = at(
+            TrackStatus::AcceptedNotLanded,
+            TrackOutcome::StillConfirming,
+            None,
+        );
+        assert_eq!(still.stage, ReceiptStage::Submitted);
+        assert!(still.captions.contains(&s.still_confirming));
+        assert_eq!(
+            still.hash,
+            Some((s.receipt_op_hash.clone(), OP.to_owned())),
+            "the OPERATION hash, labelled as one"
+        );
+        let landed = at(TrackStatus::Confirmed, TrackOutcome::Final, Some(TX));
+        assert_eq!(landed.stage, ReceiptStage::Confirmed);
+    }
+
+    /// 083 H4: a message whose signature failed is not a transaction that
+    /// could not be submitted — it went nowhere, and says so.
+    #[test]
+    fn a_failed_message_is_not_a_failed_transaction() {
+        let s = strings();
+        let failed = approved(
+            &view(|v| {
+                v.error = Some(SignErrorNotice {
+                    kind: SignErrorKind::SubmitFailed,
+                    detail: Some("personal_sign carried nothing this wallet could sign".to_owned()),
+                });
+            }),
+            false,
+            Some(&summary()),
+            None,
+            &clock(0.),
+            Signature::Asked,
+            &s,
+        )
+        .unwrap_or_else(|| unreachable!("approved"));
+        assert_eq!(failed.stage, ReceiptStage::Failed);
+        assert_eq!(failed.captions, vec![summary(), s.error_off_chain.clone()]);
+        assert_ne!(s.error_off_chain, s.error_generic);
+        assert_eq!(failed.cta, s.receipt_done, "the close stays");
+    }
+
+    /// 083: the phone stops are told apart — a scan nobody answered is its
+    /// window; a phone that scanned and never connected is the connection
+    /// and the network; one that dropped once asked (H4 review) is the
+    /// connection, and not "the request never arrived", which was false
+    /// there: its body is the transaction's "not submitted, funds safe" or
+    /// the message's "nothing went on chain" — each in words every
+    /// catalogue has, checked in every one of them (not in whatever language
+    /// the machine running the test is set to), and titled in a card's
+    /// sentence case, as the timeout is.
+    #[test]
+    fn a_phone_stop_says_which_stop_it_was() {
+        for on_chain in [true, false] {
+            let scan = phone_stop_words(PhoneStop::ScanExpired, on_chain);
+            let link = phone_stop_words(PhoneStop::LinkFailed, on_chain);
+            let dropped = phone_stop_words(PhoneStop::Dropped, on_chain);
+            assert_ne!(scan.0, link.0);
+            assert_ne!(scan.1, link.1);
+            assert_eq!(dropped.0, link.0, "the connection, both times");
+            assert_ne!(dropped.1, link.1, "but the request did arrive");
+            assert_ne!(dropped.1, scan.1);
+            for (language, loc) in crate::loc::Loc::every_language() {
+                for key in [scan.0, scan.1, link.0, link.1, dropped.0, dropped.1] {
+                    assert_ne!(
+                        loc.t(key).as_ref(),
+                        key,
+                        "{language}: `{key}` echoed the key"
+                    );
+                }
+            }
+        }
+        let en = crate::loc::Loc::for_language("en");
+        assert_eq!(
+            en.t(phone_stop_words(PhoneStop::LinkFailed, true).0)
+                .as_ref(),
+            "Network connection is unstable",
+            "a card's sentence case, not the list's \"Connection Failed\""
+        );
+        for (language, loc) in crate::loc::Loc::every_language() {
+            let s = SigningStrings::resolve(&loc);
+            let body = |on_chain| loc.t(phone_stop_words(PhoneStop::Dropped, on_chain).1);
+            assert_eq!(body(true), s.error_generic, "{language}: not submitted");
+            assert_eq!(
+                body(false),
+                s.error_off_chain,
+                "{language}: nothing on chain"
+            );
         }
     }
 
@@ -624,6 +1193,7 @@ mod tests {
                 None,
                 Some(&entry(status, outcome, tx)),
                 &clock(60_000.),
+                Signature::NotYet,
                 &s,
             )
             .unwrap_or_else(|| unreachable!("approved"))

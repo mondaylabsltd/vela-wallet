@@ -14,7 +14,9 @@
 //!
 //! Here: the pure assembly the three native tiers would otherwise each write
 //! by hand — `executeUserOp` and MultiSend calldata, `initCode` for one key or
-//! a founding set, the SafeOp EIP-712 hash the passkey signs, the contract
+//! a founding set, the SafeOp EIP-712 hash the passkey signs, the
+//! EntryPoint's own `userOpHash` (checked against `getUserOpHash` on chain),
+//! the contract
 //! signature envelope (`r` = the verifier, `s` = 65, `v` = 0, then the
 //! WebAuthn payload), the estimation dummy, the v0.7 wire dictionary, and the
 //! two parsers of relay wording that decide a retry.
@@ -664,9 +666,11 @@ pub fn user_op_to_json(op: &UserOperation, extra: &[(&str, &str)]) -> Value {
 // Parsers (`safe-transaction.ts:2990-3000`)
 // ---------------------------------------------------------------------------
 
-/// The relay's `[existingHash:0x…]` marker in a submit error: a previous
-/// operation for the account is still pending, and this is its hash to poll
-/// instead of failing.
+/// The relay's `[existingHash:0x…]` marker in a submit error: an operation
+/// for the account is already pending at that nonce — a duplicate of this
+/// one, or ANOTHER operation (a replacement). Which of the two is
+/// [`existing_op`]'s question, and it decides whether the hash may stand for
+/// this request at all.
 pub fn parse_existing_user_op_hash(message: &str) -> Option<String> {
     const MARK: &str = "[existingHash:0x";
     for (at, _) in message.match_indices(MARK) {
@@ -677,6 +681,72 @@ pub fn parse_existing_user_op_hash(message: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// What the relay's pending operation is, next to the one being submitted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExistingOp {
+    /// The relay already holds THIS operation (a retried submit that had in
+    /// fact arrived): its hash is this request's own.
+    ThisOne(String),
+    /// Another operation of the account holds the nonce. Its hash is never
+    /// this request's answer (083): a site answered with it reports the
+    /// earlier operation's outcome — Uniswap called a swap done when only its
+    /// approval had happened.
+    Another(String),
+}
+
+/// The relay's `[existingHash:…]` marker, judged against the hash of the
+/// operation being submitted (`own_user_op_hash`, [`user_op_hash`]). `None`
+/// when the message carries no marker.
+#[must_use]
+pub fn existing_op(message: &str, own_user_op_hash: &str) -> Option<ExistingOp> {
+    let existing = parse_existing_user_op_hash(message)?;
+    Some(if existing.eq_ignore_ascii_case(own_user_op_hash) {
+        ExistingOp::ThisOne(existing)
+    } else {
+        ExistingOp::Another(existing)
+    })
+}
+
+/// `EntryPoint.getUserOpHash` (v0.7): keccak256 of the packed operation's
+/// hash, the EntryPoint and the chain — the id the relay answers
+/// `eth_sendUserOperation` with and names in `[existingHash:…]`.
+///
+/// The operation is packed exactly as [`user_op_to_json`] puts it on the
+/// wire and the bundler re-packs it: `initCode` only when it names a factory,
+/// `paymasterAndData` as paymaster ‖ two zero `uint128` gas limits ‖ data.
+pub fn user_op_hash(op: &UserOperation, chain_id: u64) -> Result<String, CoreError> {
+    let gas_pair = |high: u128, low: u128| {
+        let mut word = high.to_be_bytes().to_vec();
+        word.extend(low.to_be_bytes());
+        word
+    };
+    let init_code: &[u8] = if op.init_code.len() >= 20 {
+        &op.init_code
+    } else {
+        &[]
+    };
+    let paymaster_and_data = if op.paymaster_and_data.len() >= 20 {
+        let mut packed = op.paymaster_and_data[..20].to_vec();
+        packed.extend([0u8; 32]);
+        packed.extend(&op.paymaster_and_data[20..]);
+        packed
+    } else {
+        Vec::new()
+    };
+    let mut packed = abi_encode_address(&op.sender)?;
+    packed.extend(abi_encode_uint256(&op.nonce)?);
+    packed.extend(keccak256(init_code));
+    packed.extend(keccak256(&op.call_data));
+    packed.extend(gas_pair(op.verification_gas_limit, op.call_gas_limit));
+    packed.extend(word_u128(op.pre_verification_gas));
+    packed.extend(gas_pair(op.max_priority_fee_per_gas, op.max_fee_per_gas));
+    packed.extend(keccak256(&paymaster_and_data));
+    let mut outer = keccak256(&packed);
+    outer.extend(abi_encode_address(ENTRY_POINT)?);
+    outer.extend(word_u128(u128::from(chain_id)));
+    Ok(primitives::to_hex(&keccak256(&outer), true))
 }
 
 /// A hex QUANTITY as an integer: `0x` optional, absent / empty / bare `0x`
@@ -931,6 +1001,139 @@ mod tests {
             signer_address_for(&keys, Some("cc03")).is_err(),
             "a foreign credential is refused, never mis-encoded"
         );
+    }
+
+    /// Two operations to hash: one deploying the account (a factory in
+    /// `initCode`) with no paymaster, one deployed with a paymaster — every
+    /// packing branch of [`user_op_hash`].
+    fn hash_fixtures() -> [UserOperation; 2] {
+        let deploying = UserOperation {
+            sender: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            nonce: "0x0".to_owned(),
+            init_code: ok(primitives::from_hex(
+                "0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec671688f0b9deadbeef",
+            )),
+            call_data: ok(primitives::from_hex("0x7bb37428cafe")),
+            verification_gas_limit: 2_000_000,
+            call_gas_limit: 200_000,
+            pre_verification_gas: 100_000,
+            max_fee_per_gas: 0,
+            max_priority_fee_per_gas: 0,
+            paymaster_and_data: Vec::new(),
+            signature: vec![1, 2, 3],
+        };
+        let sponsored = UserOperation {
+            sender: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            nonce: "0x2a".to_owned(),
+            init_code: Vec::new(),
+            call_data: ok(primitives::from_hex("0x7bb37428")),
+            verification_gas_limit: 300_000,
+            call_gas_limit: 450_000,
+            pre_verification_gas: 60_000,
+            max_fee_per_gas: 3_000_000_000,
+            max_priority_fee_per_gas: 1_000_000,
+            paymaster_and_data: ok(primitives::from_hex(
+                "0x2222222222222222222222222222222222222222abcdef",
+            )),
+            signature: Vec::new(),
+        };
+        [deploying, sponsored]
+    }
+
+    /// `getUserOpHash(PackedUserOperation)` calldata for `op`, packed by
+    /// alloy's own encoder — what the EntryPoint is asked on chain.
+    fn get_user_op_hash_call(op: &UserOperation) -> String {
+        let gas_pair = |high: u128, low: u128| {
+            let mut word = [0u8; 32];
+            word[..16].copy_from_slice(&high.to_be_bytes());
+            word[16..].copy_from_slice(&low.to_be_bytes());
+            DynSolValue::FixedBytes(alloy_primitives::B256::from(word), 32)
+        };
+        let paymaster = if op.paymaster_and_data.len() >= 20 {
+            let mut packed = op.paymaster_and_data[..20].to_vec();
+            packed.extend([0u8; 32]);
+            packed.extend(&op.paymaster_and_data[20..]);
+            packed
+        } else {
+            Vec::new()
+        };
+        let tuple = DynSolValue::Tuple(vec![
+            DynSolValue::Address(ok(parse_address(&op.sender))),
+            DynSolValue::Uint(U256::from(ok(parse_hex_quantity(Some(&op.nonce)))), 256),
+            DynSolValue::Bytes(op.init_code.clone()),
+            DynSolValue::Bytes(op.call_data.clone()),
+            gas_pair(op.verification_gas_limit, op.call_gas_limit),
+            DynSolValue::Uint(U256::from(op.pre_verification_gas), 256),
+            gas_pair(op.max_priority_fee_per_gas, op.max_fee_per_gas),
+            DynSolValue::Bytes(paymaster),
+            DynSolValue::Bytes(op.signature.clone()),
+        ]);
+        let mut call = ok(function_selector(
+            "getUserOpHash((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes))",
+        ));
+        call.extend(DynSolValue::Tuple(vec![tuple]).abi_encode_params());
+        primitives::to_hex(&call, true)
+    }
+
+    /// The hash is the EntryPoint's own: both fixtures were sent, as the
+    /// calldata [`get_user_op_hash_call`] builds, to `getUserOpHash` on the
+    /// v0.7 EntryPoint on Base (`eth_call` against mainnet.base.org,
+    /// 2026-09-28), and these are its answers — the relay's `[existingHash:…]`
+    /// is compared with exactly this.
+    #[test]
+    fn the_user_op_hash_is_the_entry_points() {
+        const ON_CHAIN: [(&str, &str); 2] = [
+            (
+                "0x22cdde4c000000000000000000000000000000000000000000000000000000000000002000000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000160000000000000000000000000001e848000000000000000000000000000030d4000000000000000000000000000000000000000000000000000000000000186a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000000000000000000000000000000000000000001c4e1dcf7ad4e460cfd30791ccc4f9c8a4f820ec671688f0b9deadbeef0000000000000000000000000000000000000000000000000000000000000000000000067bb37428cafe0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000030102030000000000000000000000000000000000000000000000000000000000",
+                "0x53da2b04d81c971d60f70f56223eb65d6475b0a2bfdc4cfab32d6044dcf7f570",
+            ),
+            (
+                "0x22cdde4c000000000000000000000000000000000000000000000000000000000000002000000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894000000000000000000000000000000000000000000000000000000000000002a00000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000493e00000000000000000000000000006ddd0000000000000000000000000000000000000000000000000000000000000ea60000000000000000000000000000f4240000000000000000000000000b2d05e00000000000000000000000000000000000000000000000000000000000000018000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000047bb3742800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003722222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000000abcdef0000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                "0x2aad252687f6c74e8777c3f9c9a8052cb8a95034b83f551150f6de470953cc46",
+            ),
+        ];
+        for (op, (call, answer)) in hash_fixtures().iter().zip(ON_CHAIN) {
+            assert_eq!(get_user_op_hash_call(op), call, "the question asked");
+            assert_eq!(
+                ok(user_op_hash(op, 8453)),
+                answer,
+                "the EntryPoint's answer"
+            );
+        }
+        // The chain is part of the id: the same operation elsewhere is another.
+        let [deploying, _] = hash_fixtures();
+        assert_ne!(ok(user_op_hash(&deploying, 100)), ON_CHAIN[0].1);
+        // The signature is not: a re-signed duplicate is still this operation.
+        let mut resigned = deploying.clone();
+        resigned.signature = vec![9; 65];
+        assert_eq!(
+            ok(user_op_hash(&resigned, 8453)),
+            ok(user_op_hash(&deploying, 8453))
+        );
+    }
+
+    /// 083: the relay's marker names THIS operation (a duplicate submit that
+    /// had arrived) or another one holding the nonce — and only the first may
+    /// ever stand for the request.
+    #[test]
+    fn an_existing_hash_is_this_operation_or_another() {
+        let own = "0x53da2b04d81c971d60f70f56223eb65d6475b0a2bfdc4cfab32d6044dcf7f570";
+        let own_as_relay_spells_it =
+            "0x53DA2B04D81C971D60F70F56223EB65D6475B0A2BFDC4CFAB32D6044DCF7F570";
+        let other = "0x2aad252687f6c74e8777c3f9c9a8052cb8a95034b83f551150f6de470953cc46";
+        assert_eq!(
+            existing_op(
+                &format!("AA25 invalid account nonce [existingHash:{own_as_relay_spells_it}]"),
+                own
+            ),
+            Some(ExistingOp::ThisOne(own_as_relay_spells_it.to_owned())),
+            "case is not identity"
+        );
+        assert_eq!(
+            existing_op(&format!("previous op pending [existingHash:{other}]"), own),
+            Some(ExistingOp::Another(other.to_owned()))
+        );
+        assert_eq!(existing_op("AA25 invalid account nonce", own), None);
     }
 
     #[test]

@@ -194,6 +194,9 @@ impl Machine for TxTracker {
                             now_ms: now_ms(),
                         },
                         Some(resolution) => {
+                            // Its nonce is spent, however it ended: the
+                            // account's next operation builds on it (083).
+                            crate::executor::user_op::note_landed(&hash);
                             let logs = resolution.logs.clone();
                             remember_receipt(&hash, resolution.sender, resolution.logs);
                             if resolution.confirmed {

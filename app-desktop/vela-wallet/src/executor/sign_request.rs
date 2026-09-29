@@ -24,10 +24,16 @@
 //! - **once**, the final outcome. For a transaction that is the real tx hash
 //!   from the receipt, because that is what a dApp's `eth_sendTransaction`
 //!   resolves to; the userOpHash is not a tx hash and a dApp that treats it as
-//!   one looks its transaction up forever.
+//!   one looks its transaction up forever. Only an operation that EXECUTED
+//!   is answered with its hash (083): one that reverted is reported as such,
+//!   and the page gets an error — the bundle's own status is `0x1` either
+//!   way, which is how Uniswap and this column both called a swap done that
+//!   moved nothing. And the page waits for the hash — past the 90 s that
+//!   used to end in the op hash — until the core's cap, which ends in an
+//!   error, never in a hash nobody can find ([`crate::executor::landing`]).
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -36,10 +42,11 @@ use vela_core::app::fee_policy::FeeCall;
 use vela_core::app::sign_request::{
     Event, SignFundingNeeded, SignOperation, SignRecord, SignShellResult, SignSubmitOutcome,
 };
-use vela_core::app::{Account, KeyMethod};
+use vela_core::app::{Account, Assertion, KeyMethod};
 use vela_core::user_op::WalletKey;
 
-use crate::executor::passkey::{self, Ceremony};
+use crate::executor::landing::{self, Landing};
+use crate::executor::passkey::{self, Ceremony, PasskeyFailure};
 use crate::executor::trusted_signer::{self, Ask};
 use crate::executor::user_op::Signer;
 use crate::executor::{now_ms, relay, storage, user_op};
@@ -57,6 +64,22 @@ pub enum SignAnswer {
     /// Not this module's business: the transport belongs to whoever raised the
     /// request (the browser column today), and only the host knows which.
     Screen,
+}
+
+/// A phone's ceremony that came back unsigned with the request still open,
+/// for a reason another try can fix (083). The column names which, and
+/// offers the approval again; its close is the person's refusal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PhoneStop {
+    /// The QR ran its whole scan window with no phone (W19).
+    ScanExpired,
+    /// The phone scanned, and its relay tunnel or the encrypted channel
+    /// through it never came up (H4).
+    LinkFailed,
+    /// The phone was connected and asked, and the connection dropped before
+    /// its answer arrived (H4 review) — whatever it did, nothing signed
+    /// reached this desktop, so nothing went anywhere.
+    Dropped,
 }
 
 /// What the ceremony needs, fixed when the REQUEST opens.
@@ -79,6 +102,21 @@ pub struct SignContext {
     /// Raised the instant the passkey prompt opens, so the host can tell the
     /// core the ceremony started rather than guessing from elapsed time.
     pub signing_started: Arc<AtomicBool>,
+    /// Raised once that prompt has signed (083 W11): the core's `Submitting`
+    /// spans building the operation, the prompt and the submission, and only
+    /// these two flags say which of them is running. A prompt that said no
+    /// raises nothing — the column's close reads this as "the phone signed,
+    /// the operation goes on", and must not read it after a no (083 review).
+    pub signature_done: Arc<AtomicBool>,
+    /// Why the phone's ceremony came back unsigned, when it was the phone's
+    /// doing and another try can help (083 W19, H4) — told to the column,
+    /// which says which; the page is told nothing.
+    pub phone_stop: Arc<Mutex<Option<PhoneStop>>>,
+    /// The column was closed while this approval's signature was still to
+    /// come (083 review): a prompt not yet open never opens — the ceremony
+    /// comes back unsigned at once, and the column's close becomes a refusal
+    /// instead of a QR or a Windows Hello dialog nobody will see.
+    pub abandoned: Arc<AtomicBool>,
     /// Who asked, as the transport says — `None` for the wallet's own
     /// requests, which the Trusted Signer's page is told as the wallet's own
     /// send rather than as a site's.
@@ -97,6 +135,30 @@ impl SignContext {
     #[must_use]
     pub fn route(&self) -> (Option<String>, KeyMethod) {
         (self.pinned_credential.clone(), self.key_method)
+    }
+
+    /// A pipeline starting over — an approval, a retry, a top-up's Continue —
+    /// starts with no prompt asked yet (083).
+    pub fn prompt_reset(&self) {
+        for flag in [&self.signing_started, &self.signature_done, &self.abandoned] {
+            flag.store(false, Ordering::SeqCst);
+        }
+        self.take_phone_stop();
+    }
+
+    /// Why the last prompt came back unsigned, when it was the phone's doing
+    /// and another try can help (083): nobody scanned its QR in time, the
+    /// connection to it never came up, or it dropped once the phone was
+    /// asked. Taken once.
+    pub fn take_phone_stop(&self) -> Option<PhoneStop> {
+        self.phone_stop.lock().ok().and_then(|mut stop| stop.take())
+    }
+
+    /// The column is told why the prompt came back unsigned.
+    fn tell_phone_stop(&self, stop: PhoneStop) {
+        if let Ok(mut slot) = self.phone_stop.lock() {
+            *slot = Some(stop);
+        }
     }
 
     /// Point the Trusted Signer channel at this account's page when it signs
@@ -140,6 +202,9 @@ impl SignContext {
             page_key: send.page_key,
             ceremony: send.ceremony,
             signing_started: send.signing_started,
+            signature_done: Arc::new(AtomicBool::new(false)),
+            phone_stop: Arc::default(),
+            abandoned: Arc::new(AtomicBool::new(false)),
             site: None,
             account_name: send.account_name,
             trusted_signer: send.trusted_signer,
@@ -147,14 +212,17 @@ impl SignContext {
     }
 }
 
-/// How long a dApp's transaction waits for its receipt before the answer is
-/// the userOpHash instead.
+/// How long a dApp's transaction waits for its operation to land before the
+/// page is told it has not — the core's number
+/// ([`vela_core::app::sign_request::PAGE_WAIT_CAP_MS`], ten minutes, where
+/// 079 US1 answered the userOpHash at 90 s).
 ///
-/// A dApp's promise must SETTLE. Waiting forever for a receipt is the failure
-/// mode that looks like success from inside the wallet and like a hang from
-/// inside the site.
-const RECEIPT_BUDGET: Duration = Duration::from_secs(90);
-const RECEIPT_POLL: Duration = Duration::from_secs(3);
+/// A dApp's promise must SETTLE, and with the truth: waiting forever is the
+/// failure mode that looks like success from inside the wallet and like a
+/// hang from inside the site; answering a hash no node knows is the same hang
+/// with extra steps (083, Uniswap).
+const LANDING_CAP: Duration =
+    Duration::from_millis(vela_core::app::sign_request::PAGE_WAIT_CAP_MS as u64);
 
 pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
     match operation {
@@ -314,9 +382,10 @@ fn sign_and_submit(
     };
 
     let mut sign = |challenge: &[u8]| {
-        ctx.signing_started.store(true, Ordering::SeqCst);
-        let (credential, method) = ctx.route();
-        passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
+        around_prompt(ctx, || {
+            let (credential, method) = ctx.route();
+            passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
+        })
     };
     let ask = ctx.ask(method, params_json);
     let page = ctx.trusted_signer.chosen();
@@ -352,8 +421,12 @@ fn sign_and_submit(
         now_ms: now_ms(),
     });
 
-    let receipt = await_receipt(&user_op_hash, chain_id);
-    after_receipt_wait(user_op_hash, receipt)
+    let landing = landing::await_landing(&user_op_hash, chain_id, LANDING_CAP);
+    if matches!(landing, Some(Landing::Landed(_) | Landing::Reverted(_))) {
+        // Its nonce is spent: the account's next operation builds on it.
+        user_op::note_landed(&user_op_hash);
+    }
+    after_landing(user_op_hash, landing)
 }
 
 /// A signature, not a transaction (the phones' `SignExecutor`): one
@@ -372,9 +445,10 @@ fn sign_message(
         };
     };
     let mut sign = |challenge: &[u8]| {
-        ctx.signing_started.store(true, Ordering::SeqCst);
-        let (credential, method) = ctx.route();
-        passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
+        around_prompt(ctx, || {
+            let (credential, method) = ctx.route();
+            passkey::assert(challenge, credential.as_deref(), method, &ctx.ceremony)
+        })
     };
     let ask = ctx.ask(method, params_json);
     let page = ctx.trusted_signer.chosen();
@@ -398,25 +472,83 @@ fn is_message(method: &str) -> bool {
     vela_core::sign_message::is_message_method(method)
 }
 
+/// One passkey prompt, as the column follows it (083).
+///
+/// W11: `signing_started` goes up as the prompt opens and `signature_done`
+/// once it has signed, so "waiting for biometric" is said only while
+/// something is asking — the owner saw it for seconds over the funding check
+/// and the nonce read, with no prompt anywhere.
+///
+/// W19: a phone's QR that ran its whole scan window with nobody scanning is
+/// a cancellation, not a failure. As a failure the core answered the page
+/// -32603 with the scan's own English; as a cancellation it keeps the request
+/// open and sends nothing, and the column offers the scan again.
+///
+/// H4: so is a phone whose connection never came up. As a failure the page
+/// got the transport's words and the column a transaction's failure — with
+/// only 完成, where another try (a new QR) is what can work. And (review) so
+/// is one that dropped once the phone was asked: the page got "The security
+/// key stopped responding" or the OS's socket error, though nothing signed
+/// had reached this desktop — and the desktop submits only what it holds,
+/// so another try cannot send anything twice.
+///
+/// Review: a column closed before the prompt opened asks nothing — the
+/// ceremony comes back unsigned at once, and the column's waiting close
+/// refuses. Otherwise the QR went up in a column nobody drew, and the core,
+/// which had only stopped watching, heard the scan run out 90 s later.
+pub(crate) fn around_prompt(
+    ctx: &SignContext,
+    prompt: impl FnOnce() -> Result<Assertion, PasskeyFailure>,
+) -> Result<Assertion, PasskeyFailure> {
+    if ctx.abandoned.load(Ordering::SeqCst) {
+        return Err(PasskeyFailure::cancelled());
+    }
+    ctx.signing_started.store(true, Ordering::SeqCst);
+    let answer = prompt();
+    if answer.is_ok() {
+        ctx.signature_done.store(true, Ordering::SeqCst);
+    }
+    answer.map_err(|failure| match failure.phone_stop() {
+        Some(stop) => {
+            ctx.tell_phone_stop(stop);
+            PasskeyFailure::cancelled()
+        }
+        None => failure,
+    })
+}
+
 /// What the site asked to sign, before the Safe's wrap — the core's one rule
 /// (`vela_core::sign_message`), which the Trusted Signer's page shares.
 pub fn message_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
     vela_core::sign_message::original_hash(method, params_json)
 }
 
-/// What the receipt wait means for the core.
+/// What the landing wait means for the core — one outcome, and never a hash
+/// that is not the answer (083).
 ///
-/// A dApp's `eth_sendTransaction` resolves to a TX hash — handing back the
-/// userOpHash instead gives the site something it can look up forever and
-/// never find. When the wait runs out the op is submitted, NOT confirmed:
-/// the page is still answered with the op hash (a dApp left waiting cannot
-/// tell a slow chain from a lost transaction — the double-spend risk 027 D37
-/// names), but the core must hear it as `ReceiptPending` so the record stays
-/// pending until the tracker sees the receipt (issue 262).
-pub fn after_receipt_wait(user_op_hash: String, receipt: Option<String>) -> SignSubmitOutcome {
-    match receipt {
-        Some(tx_hash) => SignSubmitOutcome::Succeeded { result: tx_hash },
-        None => SignSubmitOutcome::ReceiptPending { user_op_hash },
+/// - Executed: `Succeeded` with the TX hash, what `eth_sendTransaction`
+///   resolves to.
+/// - Reverted: `Reverted` — the core answers the page an error and closes the
+///   record failed. The hash stays out of the page's answer: the bundle's
+///   status is `0x1`, and a site reading it calls the operation done.
+/// - Refused by the relay after it accepted it: a failure, as the tracker
+///   rules it (`rejected` is final there too).
+/// - Nothing by the cap: `NotConfirmed` — the page is told so, and the record
+///   stays pending for the tracker (issue 262: a late receipt is not a
+///   confirmation, and a timeout is not a failure). Never `ReceiptPending`,
+///   whose answer is the op hash.
+pub fn after_landing(user_op_hash: String, landing: Option<Landing>) -> SignSubmitOutcome {
+    match landing {
+        Some(Landing::Landed(tx_hash)) => SignSubmitOutcome::Succeeded { result: tx_hash },
+        Some(Landing::Reverted(tx_hash)) => SignSubmitOutcome::Reverted {
+            user_op_hash,
+            tx_hash,
+        },
+        Some(Landing::Refused) => SignSubmitOutcome::Failed {
+            message: "The relay refused the transaction after accepting it; it was not sent"
+                .to_owned(),
+        },
+        None => SignSubmitOutcome::NotConfirmed { user_op_hash },
     }
 }
 
@@ -497,50 +629,6 @@ fn wei_of(value: Option<&Value>) -> Option<String> {
         .map(|wei| wei.to_string())
 }
 
-/// Poll until the receipt lands or the budget runs out.
-///
-/// `None` is "not yet", never "failed": a relay that could not be reached is
-/// not a transaction that did not happen, and the caller answers with the
-/// userOpHash rather than an error.
-fn await_receipt(user_op_hash: &str, chain_id: u32) -> Option<String> {
-    wait_within(RECEIPT_BUDGET, RECEIPT_POLL, |left| {
-        // A receipt that says the operation reverted is still a receipt: the
-        // tx hash is real and the dApp should have it. What it is NOT is this
-        // wallet's business to relabel.
-        relay::user_op_receipt_within(user_op_hash, chain_id, left)
-            .resolution
-            .map(|resolution| resolution.tx_hash)
-    })
-}
-
-/// Ask `poll` until it answers or `budget` is spent, sleeping `every`
-/// between asks — and giving each ask only what is LEFT of the budget (spec
-/// 079, device-found on Android: with the relay unreachable one poll hung for
-/// its own timeouts and retries, and the page waited 268 s for a two-minute
-/// wait). The page is answered on time; the tracker keeps following the
-/// operation after.
-fn wait_within<T>(
-    budget: Duration,
-    every: Duration,
-    mut poll: impl FnMut(Duration) -> Option<T>,
-) -> Option<T> {
-    let deadline = std::time::Instant::now() + budget;
-    loop {
-        let left = deadline.saturating_duration_since(std::time::Instant::now());
-        if left.is_zero() {
-            return None;
-        }
-        if let Some(answer) = poll(left) {
-            return Some(answer);
-        }
-        let left = deadline.saturating_duration_since(std::time::Instant::now());
-        if left.is_zero() {
-            return None;
-        }
-        std::thread::sleep(every.min(left));
-    }
-}
-
 /// A submit that failed, in the core's vocabulary.
 ///
 /// `SubmitFailure` is already typed, so nothing here matches on wording — the
@@ -593,7 +681,15 @@ fn persist_record(record: &SignRecord) {
 
     let (kind, to, value, symbol, decimals) = match record.kind {
         SignRecordKind::DappTx => {
-            let call = first_param(&record.params_json);
+            // Only a single transaction's `to` and `value` are the ones it
+            // submitted. A batch (`wallet_sendCalls`) submits its `calls`, so
+            // a top-level `to` or `value` beside them is whatever the page
+            // wrote, which the sheet never showed: kept, it drew a recipient
+            // and an amount that never moved (083 H2 review). A batch row has
+            // no single recipient and no single figure.
+            let call = (record.method == "eth_sendTransaction")
+                .then(|| first_param(&record.params_json))
+                .flatten();
             (
                 "dapp_tx",
                 call.as_ref()
@@ -601,11 +697,7 @@ fn persist_record(record: &SignRecord) {
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_owned(),
-                call.as_ref()
-                    .and_then(|tx| tx.get("value"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("0x0")
-                    .to_owned(),
+                stored_value(call.as_ref().and_then(|tx| tx.get("value"))),
                 native_symbol(record.chain_id),
                 18,
             )
@@ -654,11 +746,33 @@ fn persist_record(record: &SignRecord) {
         },
         "type": kind,
         "dappOrigin": record.dapp_origin,
+        // The origin itself, beside the name: Activity names the site from
+        // this one only (083 H2 review).
+        "dappUrl": record.dapp_url,
         "signedRequest": signed_request,
         "requestTruncated": truncated,
     });
     if let Some(intent) = &record.intent {
         row["intent"] = json!(intent);
+    }
+    // What the sheet's simulation showed when the person approved (083 F1),
+    // which Activity reads the row's figure from. The core keeps these for a
+    // transaction only, and only from the approve.
+    if let Some(changes) = record.balance_changes.as_deref().filter(|c| !c.is_empty()) {
+        row["assetChanges"] = stored_changes(changes, record.chain_id);
+    }
+    // Whether it called a contract (083 F3), decided here from the WHOLE
+    // final request by the reading the submit path uses (`calls_of`) — not
+    // later from `signedRequest`, which is clipped at 8 KB (a page controls
+    // its length, so it would control the label) and which Activity cannot
+    // read by method (a page-written `calls` beside a single transaction
+    // would decide it).
+    if let Some(calldata) = (record.kind == SignRecordKind::DappTx)
+        .then(|| calls_of(&record.method, &record.params_json))
+        .flatten()
+        .map(|calls| calls.iter().any(|call| carries_calldata(&call.data)))
+    {
+        row["calldata"] = json!(calldata);
     }
 
     let mut rows = match storage::read_value(TX_KEY) {
@@ -699,6 +813,82 @@ fn update_record(record_id: &str, close: &vela_core::app::sign_request::SignReco
         SignRecordClose::Failed => row["status"] = json!("failed"),
     }
     let _ = storage::write_value(TX_KEY, Value::Array(rows));
+}
+
+/// The call's value as the record keeps it: a `0x` quantity, read by the
+/// same [`wei_of`] the submit path read it with (083 H2 review).
+///
+/// A page may send `value` as a JSON number. The submit path took that and
+/// moved the coin, but this used to read strings only and stored `"0x0"` —
+/// so Activity showed a real transfer with no figure. Unreadable is `"0x0"`
+/// as absent is: `calls_of` refuses an `eth_sendTransaction` whose value it
+/// cannot read, so no such transaction reaches a record.
+fn stored_value(value: Option<&Value>) -> String {
+    wei_of(value)
+        .and_then(|wei| wei.parse::<u128>().ok())
+        .map_or_else(|| "0x0".to_owned(), |wei| format!("{wei:#x}"))
+}
+
+/// The sheet's balance changes as the store keeps them (083 F1), in the
+/// bytes the web writes the same thing (`assetChanges`, its
+/// `StoredAssetSim`): each line an `AssetChange` — a native line named by the
+/// chain's coin at 18 decimals, a judged token with its symbol and decimals
+/// (and `trusted: true` when it is in the set the wallet trusts), an
+/// unverified one with neither and `unverified: true`. No `ok`: this
+/// shell's simulation gives no revert verdict, so the row claims none.
+/// `activity_feed::stored_changes` reads it back.
+fn stored_changes(
+    changes: &[vela_core::app::token_trust::TrustSimJudgment],
+    chain_id: u32,
+) -> Value {
+    use vela_core::app::token_trust::TrustSimJudgment as J;
+    let lines: Vec<Value> = changes
+        .iter()
+        .map(|change| match change {
+            J::Native { delta } => json!({
+                "kind": "native",
+                "delta": delta,
+                "symbol": native_symbol(chain_id),
+                "decimals": 18,
+            }),
+            J::Erc20Trusted {
+                token,
+                delta,
+                symbol,
+                decimals,
+                in_trusted_set,
+            } => {
+                let mut line = json!({
+                    "kind": "erc20",
+                    "token": token,
+                    "delta": delta,
+                    "symbol": symbol,
+                    "decimals": decimals,
+                });
+                // The judgment's word that the wallet already trusts this
+                // token, which only then can be the row's figure (083 F1
+                // review); absent, the line is drawn in the detail only.
+                if *in_trusted_set {
+                    line["trusted"] = json!(true);
+                }
+                line
+            }
+            J::Erc20Unverified { token, delta } => {
+                let mut line = json!({ "kind": "erc20", "delta": delta, "unverified": true });
+                if let Some(token) = token {
+                    line["token"] = json!(token);
+                }
+                line
+            }
+        })
+        .collect();
+    json!({ "engine": "rpc", "changes": lines })
+}
+
+/// Calldata as the submit path sends it: anything but nothing or a bare `0x`.
+pub(crate) fn carries_calldata(data: &str) -> bool {
+    let data = data.trim();
+    !data.is_empty() && data != "0x"
 }
 
 /// The first element of a JSON-RPC params array, when it is an object.
@@ -750,6 +940,7 @@ fn parse_wei(value: &str) -> Option<u128> {
 mod tests {
     use super::*;
 
+    use vela_core::app::FailureKind;
     use vela_core::app::sign_request::{
         SignRecord, SignRecordClose, SignRecordKind, SignRecordStatus,
     };
@@ -767,7 +958,9 @@ mod tests {
             status: SignRecordStatus::Pending,
             user_op_hash: "0xhash".to_owned(),
             dapp_origin: "https://app.uniswap.org".to_owned(),
+            dapp_url: "https://app.uniswap.org".to_owned(),
             intent: Some("Swap".to_owned()),
+            balance_changes: None,
         }
     }
 
@@ -843,6 +1036,199 @@ mod tests {
         );
     }
 
+    /// 083 W11: the prompt is marked open while it asks, and signed only
+    /// once it signed — a no is not a signature (083 review: the column's
+    /// close reads "signed" as "the operation goes on", and a close in the
+    /// breath after a cancelled Windows Hello then answered nothing) — and a
+    /// new pipeline starts with neither.
+    #[test]
+    fn around_prompt_marks_the_prompt_then_the_signature() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        let answer = around_prompt(&ctx, || {
+            assert!(ctx.signing_started.load(Ordering::SeqCst), "asking now");
+            assert!(
+                !ctx.signature_done.load(Ordering::SeqCst),
+                "not answered yet"
+            );
+            Err(PasskeyFailure::cancelled())
+        });
+        assert_eq!(
+            answer.err().map(|failure| failure.kind),
+            Some(FailureKind::Cancelled)
+        );
+        assert!(
+            !ctx.signature_done.load(Ordering::SeqCst),
+            "a no is not a signature"
+        );
+        assert_eq!(ctx.take_phone_stop(), None);
+
+        let signed = around_prompt(&ctx, || {
+            Ok(Assertion {
+                credential_id: "cred0".to_owned(),
+                signature_der_hex: String::new(),
+                authenticator_data_hex: String::new(),
+                client_data_json_hex: String::new(),
+                user_id_hex: None,
+                authenticator_attachment: String::new(),
+                signer_origin: None,
+            })
+        });
+        assert!(signed.is_ok());
+        assert!(ctx.signature_done.load(Ordering::SeqCst), "signed");
+
+        ctx.prompt_reset();
+        assert!(!ctx.signing_started.load(Ordering::SeqCst));
+        assert!(!ctx.signature_done.load(Ordering::SeqCst));
+    }
+
+    /// 083 W19: a QR nobody scanned in the whole window is not an answer to
+    /// the page. It reaches the core as the passkey dismissed — which keeps
+    /// the request open and sends nothing while its form is up (one already
+    /// closed is refused: vela-core's `app_sign_request.rs`,
+    /// `a_close_then_a_cancelled_prompt_answers_4001_once`) — and the column
+    /// is told, so it can say what happened and offer the scan again. Any
+    /// other failure is still the failure it was.
+    #[test]
+    fn scan_timeout_is_not_an_answer() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        let ran_out = around_prompt(&ctx, || {
+            Err(PasskeyFailure::other(crate::ctap::cable::NO_ADVERT))
+        })
+        .err()
+        .unwrap_or_else(|| unreachable!("no phone, no assertion"));
+        assert_eq!(ran_out.kind, FailureKind::Cancelled);
+        assert_eq!(ran_out.message, None, "no scan English for the page");
+        assert_eq!(
+            ctx.take_phone_stop(),
+            Some(PhoneStop::ScanExpired),
+            "the column is told"
+        );
+        assert_eq!(
+            submit_failure(100, "0xabc", user_op::SubmitFailure::PasskeyCancelled),
+            SignSubmitOutcome::PasskeyCancelled,
+            "…which the core answers with nothing while the form is up"
+        );
+
+        ctx.prompt_reset();
+        let broken = around_prompt(&ctx, || {
+            Err(PasskeyFailure::other(
+                crate::ctap::cable::HybridError::BadAdvert.to_string(),
+            ))
+        })
+        .err()
+        .unwrap_or_else(|| unreachable!("a failure"));
+        assert_eq!(broken.kind, FailureKind::Other);
+        assert_eq!(ctx.take_phone_stop(), None);
+    }
+
+    /// 083 H4: a phone that scanned but never connected is not an answer to
+    /// the page either — not "-32603 the encrypted channel failed: Other(…)".
+    /// The request stays open, and the column is told which of the two
+    /// stops it was, once, so it can say so and offer the approval again.
+    #[test]
+    fn a_phone_that_never_connected_is_not_an_answer() {
+        use crate::ctap::cable::HybridError;
+        let ctx = context(Some("https://app.uniswap.org"));
+        for (error, stop) in [
+            (
+                HybridError::Handshake("the phone stopped answering".to_owned()),
+                PhoneStop::LinkFailed,
+            ),
+            (
+                HybridError::Tunnel("cannot reach cable.ua5v.com".to_owned()),
+                PhoneStop::LinkFailed,
+            ),
+            (HybridError::NoAdvert, PhoneStop::ScanExpired),
+        ] {
+            ctx.prompt_reset();
+            let failure = around_prompt(&ctx, || Err(PasskeyFailure::other(error.to_string())))
+                .err()
+                .unwrap_or_else(|| unreachable!("no phone, no assertion"));
+            assert_eq!(failure.kind, FailureKind::Cancelled, "{error}");
+            assert_eq!(failure.message, None, "no transport English: {error}");
+            assert_eq!(ctx.take_phone_stop(), Some(stop), "{error}");
+            assert_eq!(ctx.take_phone_stop(), None, "told once");
+        }
+    }
+
+    /// 083 H4 review: a phone that was asked and then dropped is not an
+    /// answer either — not "-32603 The security key stopped responding", nor
+    /// the OS's socket error. Nothing signed reached this desktop, so the
+    /// request stays open for another try, and the column is told this was
+    /// the third stop. A new approval starts with none told.
+    #[test]
+    fn a_phone_that_dropped_once_asked_is_not_an_answer() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        let dropped = around_prompt(&ctx, || {
+            Err(PasskeyFailure::other(format!(
+                "{}: the phone stopped answering",
+                crate::ctap::cable::PHONE_DROPPED
+            )))
+        })
+        .err()
+        .unwrap_or_else(|| unreachable!("a dropped phone signs nothing"));
+        assert_eq!(dropped.kind, FailureKind::Cancelled);
+        assert_eq!(dropped.message, None, "no transport English");
+        assert!(!ctx.signature_done.load(Ordering::SeqCst));
+
+        ctx.prompt_reset();
+        assert_eq!(ctx.take_phone_stop(), None, "an approval starts clean");
+
+        let _ = around_prompt(&ctx, || {
+            Err(PasskeyFailure::other(format!(
+                "{}: connection reset",
+                crate::ctap::cable::PHONE_DROPPED
+            )))
+        });
+        assert_eq!(ctx.take_phone_stop(), Some(PhoneStop::Dropped));
+
+        // The phone's own cancel (a tunnel it closed) is the person's: no
+        // stop, and the core hears a dismissal as before.
+        let cancelled = around_prompt(&ctx, || {
+            Err(PasskeyFailure::classified(
+                FailureKind::Cancelled,
+                "your phone ended the session before signing",
+            ))
+        })
+        .err()
+        .unwrap_or_else(|| unreachable!("a cancel signs nothing"));
+        assert_eq!(cancelled.kind, FailureKind::Cancelled);
+        assert_eq!(ctx.take_phone_stop(), None);
+    }
+
+    /// 083 (review): a column closed before its prompt opened asks nothing —
+    /// no QR, no Windows Hello — and the ceremony comes back unsigned at
+    /// once, so the column's waiting close can refuse. The next approval
+    /// starts asking again.
+    #[test]
+    fn a_closed_column_opens_no_prompt() {
+        let ctx = context(Some("https://app.uniswap.org"));
+        ctx.abandoned.store(true, Ordering::SeqCst);
+        let mut asked = false;
+        let answer = around_prompt(&ctx, || {
+            asked = true;
+            Err(PasskeyFailure::other("never reached"))
+        });
+        assert!(!asked, "no prompt opened");
+        assert_eq!(
+            answer.err().map(|failure| failure.kind),
+            Some(FailureKind::Cancelled)
+        );
+        assert!(
+            !ctx.signing_started.load(Ordering::SeqCst),
+            "nothing is said to be asking"
+        );
+
+        ctx.prompt_reset();
+        assert!(!ctx.abandoned.load(Ordering::SeqCst));
+        let answer = around_prompt(&ctx, || {
+            asked = true;
+            Err(PasskeyFailure::cancelled())
+        });
+        assert!(asked, "a new approval asks");
+        assert!(answer.is_err());
+    }
+
     /// A site's request reaches the page as the site's — its method, its
     /// FINAL params, its origin; the wallet's own is the wallet's own send.
     #[test]
@@ -914,53 +1300,59 @@ mod tests {
         assert!(!is_message("eth_sendTransaction") && !is_message("wallet_sendCalls"));
     }
 
-    /// Issue 262: a receipt that is late is not a confirmation. The core hears
-    /// `ReceiptPending` (answer the page, keep the record pending); only a
-    /// receipt in time is `Succeeded` with the TX hash.
+    /// 083: each way an operation can end reaches the core as exactly one
+    /// outcome, and the page is answered a hash only for an operation that
+    /// EXECUTED. A reverted one is `Reverted` (the core answers an error and
+    /// fails the record — the bundle's `0x1` is not the op's success); a wait
+    /// that ran the whole cap is `NotConfirmed` (an error, the record left to
+    /// the tracker) — never `ReceiptPending`, whose answer is the op hash
+    /// Uniswap looked up on its own node forever.
     #[test]
-    fn every_poll_gets_only_what_is_left_of_the_wait() {
-        let budget = Duration::from_millis(300);
-        let started = std::time::Instant::now();
-        let mut given = Vec::new();
-        let answer: Option<()> = wait_within(budget, Duration::from_millis(40), |left| {
-            given.push(left);
-            // A relay that holds every call for as long as it is allowed.
-            std::thread::sleep(left.min(Duration::from_millis(120)));
-            None
-        });
-        assert!(answer.is_none(), "no receipt is not a failure, it is none");
-        assert!(
-            started.elapsed() < budget + Duration::from_millis(150),
-            "the wait ends on time: {:?}",
-            started.elapsed()
-        );
-        assert!(given.len() >= 2, "it asks again while there is time");
-        assert!(given.iter().all(|left| *left <= budget));
-        assert!(
-            given.windows(2).all(|pair| pair[1] < pair[0]),
-            "each ask gets less: {given:?}"
-        );
-        // An answer ends the wait at once.
+    fn a_landing_reaches_the_core_as_one_honest_outcome() {
+        let op = || "0xop".to_owned();
         assert_eq!(
-            wait_within(budget, Duration::from_millis(40), |_| Some("0xtx")),
-            Some("0xtx")
-        );
-    }
-
-    #[test]
-    fn a_late_receipt_is_reported_pending_never_succeeded() {
-        assert_eq!(
-            after_receipt_wait("0xop".to_owned(), None),
-            SignSubmitOutcome::ReceiptPending {
-                user_op_hash: "0xop".to_owned()
-            }
-        );
-        assert_eq!(
-            after_receipt_wait("0xop".to_owned(), Some("0xtx".to_owned())),
+            after_landing(op(), Some(Landing::Landed("0xtx".to_owned()))),
             SignSubmitOutcome::Succeeded {
                 result: "0xtx".to_owned()
             }
         );
+        assert_eq!(
+            after_landing(op(), Some(Landing::Reverted("0xtx".to_owned()))),
+            SignSubmitOutcome::Reverted {
+                user_op_hash: op(),
+                tx_hash: "0xtx".to_owned()
+            }
+        );
+        assert_eq!(
+            after_landing(op(), None),
+            SignSubmitOutcome::NotConfirmed { user_op_hash: op() }
+        );
+        assert!(matches!(
+            after_landing(op(), Some(Landing::Refused)),
+            SignSubmitOutcome::Failed { message } if !message.contains("0xop")
+        ));
+        for landing in [
+            None,
+            Some(Landing::Landed("0xtx".to_owned())),
+            Some(Landing::Reverted("0xtx".to_owned())),
+            Some(Landing::Refused),
+        ] {
+            assert!(
+                !matches!(
+                    after_landing(op(), landing.clone()),
+                    SignSubmitOutcome::ReceiptPending { .. }
+                ) && after_landing(op(), landing.clone())
+                    != SignSubmitOutcome::Succeeded { result: op() },
+                "{landing:?} answered the op hash"
+            );
+        }
+    }
+
+    /// The page waits the core's cap — ten minutes, where 079 answered the
+    /// op hash at 90 s.
+    #[test]
+    fn the_page_waits_the_cores_cap() {
+        assert_eq!(LANDING_CAP, Duration::from_secs(600));
     }
 
     /// A dApp transaction lands in the store the feed and the tracker read.
@@ -1019,6 +1411,697 @@ mod tests {
             assert_eq!(
                 rows[0].get("txHash").and_then(Value::as_str),
                 Some("0xdeadbeef")
+            );
+        });
+    }
+
+    /// The row this writes is the one Activity draws (083 H2, 079 D3): read
+    /// back by the feed's own reader, folded by the core, titled by what the
+    /// site asked, labelled with the site — and closed in place when it lands.
+    /// Before 083 the core dropped every `dapp_tx` row, so a dApp's operation
+    /// was on disk and on no screen.
+    /// Answer the feed's asks from the store, as its executor does. Returns
+    /// every name lookup the core asked for.
+    fn settle(
+        host: &mut crate::core_host::CoreHost<vela_core::app::activity_feed::ActivityFeed>,
+        mut pending: Vec<crate::core_host::Pending<vela_core::app::activity_feed::FeedOperation>>,
+    ) -> Vec<String> {
+        use vela_core::app::activity_feed::{FeedOperation, FeedShellResult};
+
+        let mut lookups = Vec::new();
+        while let Some(next) = pending.pop() {
+            let result = match &next.operation {
+                FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
+                    records: crate::executor::activity_feed::read_records(),
+                    now_ms: 1_757_000_001_000.0,
+                    read_id: *read_id,
+                },
+                FeedOperation::ScanIncomingTransfers { .. } => {
+                    FeedShellResult::SyncCompleted { new_count: 0 }
+                }
+                FeedOperation::ResolveRecipientIdentity { addr } => {
+                    lookups.push(addr.clone());
+                    FeedShellResult::AliasResolved {
+                        addr: addr.clone(),
+                        name: None,
+                    }
+                }
+                _ => continue,
+            };
+            pending.extend(host.resolve(next.id, result));
+        }
+        lookups
+    }
+
+    #[test]
+    fn a_dapp_transaction_is_in_activity_with_its_site_until_it_lands() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent, FeedTxStatus};
+        use vela_core::app::clear_signing::ClearTerm;
+
+        storage::tests::with_temp_state("sign-record-feed", || {
+            let mut record = record(
+                SignRecordKind::DappTx,
+                r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x2386f26fc10000"}]"#,
+            );
+            // The name a dApp could have given itself, beside the origin it
+            // came from: the site is read from the origin only.
+            record.dapp_origin = "app.uniswap.org".to_owned();
+            record.dapp_url = "http://127.0.0.1:5173".to_owned();
+            record.intent = Some("Send".to_owned());
+            persist_record(&record);
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: record.from.clone(),
+            });
+            settle(&mut host, asks);
+
+            let loc = crate::loc::Loc::from_env();
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            assert_eq!(rows.len(), 1, "the dApp's transaction is in Activity");
+            let row = &rows[0];
+            assert_eq!(row.kind, crate::wallet::fixtures::ActivityKind::Dapp);
+            assert_eq!(
+                Some(&row.title),
+                s.terms.get(&ClearTerm::IntentSend),
+                "a plain send reads as one"
+            );
+            assert_eq!(row.subtitle.as_ref(), "127.0.0.1", "the site, not the port");
+            // 0x2386f26fc10000 wei is 0.01 of the coin, going out.
+            assert!(
+                row.amount.starts_with('\u{2212}') && row.amount.ends_with("01"),
+                "{}",
+                row.amount
+            );
+            assert_eq!(row.unit.as_ref(), "xDAI");
+            assert_eq!(view.transactions[0].status, FeedTxStatus::Pending);
+
+            // It lands: the same row closes, and the feed's re-read shows it.
+            update_record(
+                &record.record_id,
+                &SignRecordClose::Confirmed {
+                    tx_hash: "0xdeadbeef".to_owned(),
+                },
+            );
+            let asks = host.dispatch(FeedEvent::ReconcileCompleted { resolved_count: 1 });
+            settle(&mut host, asks);
+            let view = host.view();
+            assert_eq!(view.transactions.len(), 1);
+            assert_eq!(view.transactions[0].status, FeedTxStatus::Confirmed);
+            assert_eq!(view.transactions[0].tx_hash, "0xdeadbeef");
+        });
+    }
+
+    /// A batch submits its `calls` and nothing else, so a top-level `to` or
+    /// `value` beside them is the page's to write and the sheet never shows
+    /// it (083 H2 review). Kept, `"to":"日本語日本語"` was shortened by byte on
+    /// the home page and crashed the wallet on every launch, and a forged
+    /// `value` drew −1,208,925 xDAI that never moved. The record keeps
+    /// neither, and the row that reaches the screen has no recipient, no
+    /// figure and no name lookup — the site is what labels it.
+    #[test]
+    fn a_batch_keeps_no_recipient_or_figure_the_page_wrote_beside_its_calls() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        storage::tests::with_temp_state("sign-record-batch", || {
+            let mut record = record(
+                SignRecordKind::DappTx,
+                r#"[{"version":"2.0.0","chainId":"0x64",
+                    "calls":[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x0"}],
+                    "to":"日本語日本語","value":"0xffffffffffffffffffff"}]"#,
+            );
+            record.method = "wallet_sendCalls".to_owned();
+            record.intent = None;
+            persist_record(&record);
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert_eq!(stored[0].get("to").and_then(Value::as_str), Some(""));
+            assert_eq!(stored[0].get("value").and_then(Value::as_str), Some("0x0"));
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: record.from.clone(),
+            });
+            let lookups = settle(&mut host, asks);
+            assert!(lookups.is_empty(), "no name lookup: {lookups:?}");
+
+            let loc = crate::loc::Loc::from_env();
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            for hidden in [false, true] {
+                let rows = crate::wallet::live::activity_rows(&view, &s, &flow, hidden);
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0].title, s.intent_contract_call);
+                assert_eq!(rows[0].subtitle.as_ref(), "app.uniswap.org");
+                assert_eq!((rows[0].amount.as_ref(), rows[0].unit.as_ref()), ("", ""));
+            }
+        });
+    }
+
+    /// A page may send `value` as a JSON number, and the submit path moves
+    /// that coin — so the record keeps that figure, as the `0x` quantity every
+    /// other row carries, rather than `"0x0"` (083 H2 review). The record also
+    /// keeps the origin itself beside the name.
+    #[test]
+    fn a_numeric_value_is_recorded_as_the_quantity_it_moved() {
+        storage::tests::with_temp_state("sign-record-number", || {
+            let record = record(
+                SignRecordKind::DappTx,
+                r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":10000000000000000}]"#,
+            );
+            persist_record(&record);
+            let rows = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert_eq!(
+                rows[0].get("value").and_then(Value::as_str),
+                Some("0x2386f26fc10000"),
+                "0.01 of the coin, not nothing"
+            );
+            assert_eq!(
+                rows[0].get("dappUrl").and_then(Value::as_str),
+                Some("https://app.uniswap.org")
+            );
+        });
+        // Absent, empty and unreadable are all "moved nothing".
+        assert_eq!(stored_value(None), "0x0");
+        assert_eq!(stored_value(Some(&json!("0x"))), "0x0");
+        assert_eq!(stored_value(Some(&json!("banana"))), "0x0");
+        assert_eq!(
+            stored_value(Some(&json!("0x2386F26FC10000"))),
+            "0x2386f26fc10000"
+        );
+        assert_eq!(
+            stored_value(Some(&json!("10000000000000000"))),
+            "0x2386f26fc10000"
+        );
+    }
+
+    /// The Universal Router the device pass's swaps called (0xd614…9c40).
+    const ROUTER: &str = "0xd614000000000000000000000000000000009c40";
+    const USDC_BASE: &str = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+
+    /// Base's USDC as the sheet judged it: one of the chain's stables, so in
+    /// the set the wallet trusts.
+    fn usdc(delta: &str) -> vela_core::app::token_trust::TrustSimJudgment {
+        vela_core::app::token_trust::TrustSimJudgment::Erc20Trusted {
+            token: USDC_BASE.to_owned(),
+            delta: delta.to_owned(),
+            symbol: "USDC".to_owned(),
+            decimals: 6,
+            in_trusted_set: true,
+        }
+    }
+
+    fn eth(delta: &str) -> vela_core::app::token_trust::TrustSimJudgment {
+        vela_core::app::token_trust::TrustSimJudgment::Native {
+            delta: delta.to_owned(),
+        }
+    }
+
+    /// One Uniswap swap on Base as the column records it: the router call
+    /// with its calldata and value, no decoded intent, what the sheet's
+    /// simulation showed, landed under `hash`.
+    fn swap(
+        at_ms: f64,
+        value: &str,
+        changes: Vec<vela_core::app::token_trust::TrustSimJudgment>,
+        hash: &str,
+    ) -> SignRecord {
+        let mut record = record(
+            SignRecordKind::DappTx,
+            &format!(r#"[{{"to":"{ROUTER}","value":"{value}","data":"0x3593564c0000"}}]"#),
+        );
+        record.record_id = format!("dapp-{at_ms}-tx");
+        record.now_ms = at_ms;
+        record.chain_id = 8453;
+        record.intent = None;
+        record.balance_changes = Some(changes);
+        record.result = hash.to_owned();
+        record.status = SignRecordStatus::Confirmed;
+        record
+    }
+
+    /// 083 F1-F3, the device pass's three swaps (2026-09-29), written by
+    /// this executor and read back by the feed's own reader, in Chinese:
+    /// each row says what left — the figure the sheet showed, "≈" unless it
+    /// is the coin the wallet itself sent — and what was expected back; the
+    /// detail lists the sheet's "余额变化" lines, names the router a contract
+    /// (合约), and fits its hash.
+    #[test]
+    fn the_device_passs_swaps_say_what_they_moved() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        const HASH: &str = "0x9f2c4e5d6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f";
+        storage::tests::with_temp_state("sign-record-swaps", || {
+            let swaps = [
+                swap(
+                    1_759_100_000_000.0,
+                    "0x0",
+                    vec![usdc("-100000"), eth("37000000000000")],
+                    HASH,
+                ),
+                swap(
+                    1_759_100_100_000.0,
+                    "0x0",
+                    vec![usdc("-271741"), eth("100548000000000")],
+                    HASH,
+                ),
+                swap(
+                    1_759_100_200_000.0,
+                    "0x5af3107a4000",
+                    vec![eth("-100000000000000"), usdc("269487")],
+                    HASH,
+                ),
+            ];
+            for record in &swaps {
+                persist_record(record);
+            }
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            // The web's shape for the same lines, and the judgment's word
+            // that the wallet trusts the token.
+            assert_eq!(
+                stored[0].get("assetChanges"),
+                Some(&json!({
+                    "engine": "rpc",
+                    "changes": [
+                        { "kind": "erc20", "token": USDC_BASE, "delta": "-100000",
+                          "symbol": "USDC", "decimals": 6, "trusted": true },
+                        { "kind": "native", "delta": "37000000000000",
+                          "symbol": "ETH", "decimals": 18 },
+                    ],
+                }))
+            );
+            assert_eq!(stored[0].get("calldata"), Some(&json!(true)));
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: swaps[0].from.clone(),
+            });
+            settle(&mut host, asks);
+
+            let loc = crate::loc::Loc::for_language("zh");
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            let drawn: Vec<(&str, &str, &str, &str, Option<&str>)> = rows
+                .iter()
+                .map(|row| {
+                    (
+                        row.title.as_ref(),
+                        row.subtitle.as_ref(),
+                        row.amount.as_ref(),
+                        row.unit.as_ref(),
+                        row.received.as_ref().map(AsRef::as_ref),
+                    )
+                })
+                .collect();
+            assert_eq!(
+                drawn,
+                vec![
+                    (
+                        "合约交互",
+                        "app.uniswap.org",
+                        "\u{2212}0.0001",
+                        "ETH",
+                        Some("≈ +0.269487 USDC")
+                    ),
+                    (
+                        "合约交互",
+                        "app.uniswap.org",
+                        "≈ \u{2212}0.271741",
+                        "USDC",
+                        Some("≈ +0.000101 ETH")
+                    ),
+                    (
+                        "合约交互",
+                        "app.uniswap.org",
+                        "≈ \u{2212}0.1",
+                        "USDC",
+                        Some("≈ +0.000037 ETH")
+                    ),
+                ],
+                "newest first; the title stays what the wallet knows"
+            );
+            // Privacy masks both figures and keeps their units.
+            let masked = crate::wallet::live::activity_rows(&view, &s, &flow, true);
+            assert_eq!(masked[2].amount.as_ref(), crate::wallet::fixtures::MASK);
+            assert_eq!(
+                masked[2].received.as_ref().map(AsRef::as_ref),
+                Some("≈ +•••• ETH")
+            );
+
+            let id = view.transactions[0].id.clone();
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &swaps[0].record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists: {id}"));
+            assert_eq!(detail.title.as_ref(), "合约交互");
+            assert_eq!(detail.amount.as_ref(), "≈ \u{2212}0.1 USDC");
+            assert!(detail.fiat.contains("0.10"), "{}", detail.fiat);
+            let facts: Vec<(&str, &str)> = detail
+                .facts
+                .iter()
+                .map(|fact| (fact.label.as_ref(), fact.value.as_ref()))
+                .collect();
+            assert_eq!(facts[0], ("应用", "app.uniswap.org"));
+            assert_eq!(facts[1], ("合约", "0xd614…9c40"));
+            assert_eq!(facts[2].0, "网络");
+            assert_eq!(facts[4], ("哈希", "0x9f2c…6e7f"));
+            assert_eq!(
+                detail.facts[4].copy.as_ref().map(AsRef::as_ref),
+                Some(HASH),
+                "the copy button holds the whole hash"
+            );
+            assert_eq!(
+                detail.breakdown_title.as_ref().map(AsRef::as_ref),
+                Some("余额变化")
+            );
+            let lines: Vec<(&str, &str)> = detail
+                .breakdown
+                .iter()
+                .map(|line| (line.label.as_ref(), line.value.as_ref()))
+                .collect();
+            assert_eq!(
+                lines,
+                vec![("USDC", "≈ \u{2212}0.1"), ("ETH", "≈ +0.000037")]
+            );
+
+            // What the wallet sent reads bare, in the row and in its lines.
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &swaps[2].record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            assert_eq!(detail.amount.as_ref(), "\u{2212}0.0001 ETH");
+            let lines: Vec<(&str, &str)> = detail
+                .breakdown
+                .iter()
+                .map(|line| (line.label.as_ref(), line.value.as_ref()))
+                .collect();
+            assert_eq!(
+                lines,
+                vec![("ETH", "\u{2212}0.0001"), ("USDC", "≈ +0.269487")]
+            );
+        });
+    }
+
+    /// 083 F1 review: a swap that FAILED moved nothing, and Activity's rows
+    /// carry no status mark — so it keeps none of what the sheet expected.
+    /// Closed failed in place (the store keeps its `assetChanges`), its row
+    /// draws as before F1: no figure from the simulation, nothing "≈ back";
+    /// its detail wears 失败 and lists no 余额变化.
+    #[test]
+    fn a_failed_swap_says_nothing_moved() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        storage::tests::with_temp_state("sign-record-failed-swap", || {
+            let mut failed = swap(
+                1_759_100_000_000.0,
+                "0x0",
+                vec![usdc("-100000"), eth("37000000000000")],
+                "",
+            );
+            failed.status = SignRecordStatus::Pending;
+            persist_record(&failed);
+            update_record(&failed.record_id, &SignRecordClose::Failed);
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: failed.from.clone(),
+            });
+            settle(&mut host, asks);
+            let loc = crate::loc::Loc::for_language("zh");
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            assert_eq!(
+                (
+                    rows[0].title.as_ref(),
+                    rows[0].amount.as_ref(),
+                    rows[0].unit.as_ref()
+                ),
+                ("合约交互", "", "")
+            );
+            assert_eq!(rows[0].received, None, "nothing \"≈ back\" on a revert");
+
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &failed.record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            assert_eq!(detail.status.text, flow.status_failed);
+            assert_eq!(detail.amount.as_ref(), "");
+            assert_ne!(
+                detail.breakdown_title.as_ref(),
+                Some(&flow.detail_changes),
+                "no balance changes that never were"
+            );
+            assert!(
+                detail
+                    .breakdown
+                    .iter()
+                    .all(|line| line.label.as_ref() != "USDC" && line.label.as_ref() != "ETH")
+            );
+        });
+    }
+
+    /// 083 F1 review: a site's own contract that emits `Transfer(you, …)` and
+    /// answers "USDC" is on the sheet as an outflow — but it is not a token
+    /// the wallet trusts, so it is never Activity's figure or its price. The
+    /// detail still lists it, as the sheet drew it.
+    #[test]
+    fn a_site_token_does_not_write_the_rows_figure() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        storage::tests::with_temp_state("sign-record-site-token", || {
+            let fake = vela_core::app::token_trust::TrustSimJudgment::Erc20Trusted {
+                token: "0x00000000000000000000000000000000000bad01".to_owned(),
+                delta: "-100000000000".to_owned(),
+                symbol: "USDC".to_owned(),
+                decimals: 6,
+                in_trusted_set: false,
+            };
+            let lure = swap(1_759_100_000_000.0, "0x0", vec![fake], "");
+            persist_record(&lure);
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert!(
+                stored[0]["assetChanges"]["changes"][0]
+                    .get("trusted")
+                    .is_none(),
+                "no word of trust the judgment did not give"
+            );
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: lure.from.clone(),
+            });
+            settle(&mut host, asks);
+            let loc = crate::loc::Loc::for_language("zh");
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            assert_eq!((rows[0].amount.as_ref(), rows[0].unit.as_ref()), ("", ""));
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &lure.record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            assert_eq!(detail.amount.as_ref(), "");
+            assert_eq!(detail.fiat.as_ref(), "", "no dollars for a site's claim");
+            let lines: Vec<(&str, &str)> = detail
+                .breakdown
+                .iter()
+                .map(|line| (line.label.as_ref(), line.value.as_ref()))
+                .collect();
+            assert_eq!(lines, vec![("USDC", "≈ \u{2212}100,000.00")]);
+        });
+    }
+
+    /// 083 F3 review: the executor decides "called a contract" from the WHOLE
+    /// final request, by the reading the submit path uses — so a request past
+    /// the 8 KB clip still names its router a contract, and a `calls` a page
+    /// wrote beside a plain send does not turn its recipient into one.
+    #[test]
+    fn the_record_says_whether_it_called_a_contract() {
+        storage::tests::with_temp_state("sign-record-calldata", || {
+            let padding = "a".repeat(9 * 1024);
+            let mut long = record(
+                SignRecordKind::DappTx,
+                &format!(r#"[{{"to":"{ROUTER}","data":"0x3593564c","pad":"{padding}"}}]"#),
+            );
+            long.record_id = "dapp-1-tx".to_owned();
+            persist_record(&long);
+            let mut smuggled = record(
+                SignRecordKind::DappTx,
+                r#"[{"to":"0xeoa","value":"0xde0b6b3a7640000","calls":[{"data":"0x01"}]}]"#,
+            );
+            smuggled.record_id = "dapp-2-tx".to_owned();
+            persist_record(&smuggled);
+            let mut batch = record(
+                SignRecordKind::DappTx,
+                r#"[{"calls":[{"to":"0xb","value":"0x1"},{"to":"0xr","data":"0x095ea7b3"}]}]"#,
+            );
+            batch.record_id = "dapp-3-tx".to_owned();
+            batch.method = "wallet_sendCalls".to_owned();
+            persist_record(&batch);
+            let mut message = record(SignRecordKind::SignMessage, r#"["0xdeadbeef","0xme"]"#);
+            message.record_id = "dapp-4-msg".to_owned();
+            message.method = "personal_sign".to_owned();
+            persist_record(&message);
+
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert_eq!(stored[0].get("requestTruncated"), Some(&json!(true)));
+            let flags: Vec<Option<&Value>> = stored.iter().map(|row| row.get("calldata")).collect();
+            assert_eq!(
+                flags,
+                vec![
+                    Some(&json!(true)),
+                    Some(&json!(false)),
+                    Some(&json!(true)),
+                    None
+                ]
+            );
+            let read: Vec<Option<bool>> = crate::executor::activity_feed::read_records()
+                .into_iter()
+                .map(|record| record.calldata)
+                .collect();
+            assert_eq!(read, vec![Some(true), Some(false), Some(true), None]);
+        });
+    }
+
+    /// A page cannot put a figure on its row (083 F1): lines only ever come
+    /// from the approve, so a request that carries an `assetChanges` of its
+    /// own stores none, and its row draws as a call that moved no coin — and
+    /// an unverified token the sheet showed without a number has none in
+    /// Activity either.
+    #[test]
+    fn a_page_cannot_put_a_figure_on_its_row() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::activity_feed::{ActivityFeed, Event as FeedEvent};
+
+        storage::tests::with_temp_state("sign-record-forged-sim", || {
+            let mut forged = record(
+                SignRecordKind::DappTx,
+                &format!(
+                    r#"[{{"to":"{ROUTER}","value":"0x0","data":"0xabcdef",
+                        "assetChanges":{{"engine":"rpc","changes":[{{"kind":"native","delta":"-5000000000000000000"}}]}}}}]"#
+                ),
+            );
+            forged.chain_id = 8453;
+            forged.intent = None;
+            persist_record(&forged);
+            let mut lure = swap(
+                1_759_100_300_000.0,
+                "0x0",
+                vec![
+                    usdc("-100000"),
+                    vela_core::app::token_trust::TrustSimJudgment::Erc20Unverified {
+                        token: Some("0x00000000000000000000000000000000000bad01".to_owned()),
+                        delta: "1000000000000000000000000".to_owned(),
+                    },
+                ],
+                "",
+            );
+            lure.status = SignRecordStatus::Pending;
+            persist_record(&lure);
+
+            let stored = match storage::read_value(TX_KEY).ok().flatten() {
+                Some(Value::Array(rows)) => rows,
+                _ => unreachable!("nothing written"),
+            };
+            assert!(
+                stored[0].get("assetChanges").is_none(),
+                "nothing the page sent"
+            );
+
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let asks = host.dispatch(FeedEvent::AccountSwitched {
+                address: forged.from.clone(),
+            });
+            settle(&mut host, asks);
+            let loc = crate::loc::Loc::for_language("zh");
+            let s = crate::wallet::WalletStrings::resolve(&loc);
+            let flow = crate::flows::FlowStrings::resolve(&loc);
+            let view = host.view();
+            let rows = crate::wallet::live::activity_rows(&view, &s, &flow, false);
+            // Newest first: the lure, then the forged call.
+            assert_eq!(
+                (rows[0].amount.as_ref(), rows[0].unit.as_ref()),
+                ("≈ \u{2212}0.1", "USDC")
+            );
+            assert_eq!(rows[0].received, None, "no figure the site's token wrote");
+            assert_eq!((rows[1].amount.as_ref(), rows[1].unit.as_ref()), ("", ""));
+            assert_eq!(rows[1].received, None);
+
+            let detail = crate::flows::live::tx_detail(
+                &view,
+                &lure.record_id,
+                &flow,
+                &s,
+                false,
+                "zh-CN",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            let lines: Vec<(&str, &str)> = detail
+                .breakdown
+                .iter()
+                .map(|line| (line.label.as_ref(), line.value.as_ref()))
+                .collect();
+            assert_eq!(lines, vec![("USDC", "≈ \u{2212}0.1"), ("未验证代币", "+")]);
+            // Still pending, and the hash row waits for a hash.
+            assert_eq!(detail.status.text, flow.status_pending);
+            assert!(
+                detail
+                    .facts
+                    .iter()
+                    .all(|fact| fact.label != flow.detail_hash)
             );
         });
     }

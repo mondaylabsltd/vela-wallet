@@ -79,9 +79,20 @@ Renderer death is survived on every shell (Android `onRenderProcessGone`, iOS
 `webViewWebContentProcessDidTerminate`): the tab shows "This page stopped
 working" with Reload, its requests are settled, the app keeps running. Reads are
 bounded (8 in flight per tab, 256 queued, then -32005). JavaScript dialogs work
-while a page is on screen and are refused off screen. External schemes
-(`mailto:`, `tel:`, `intent:`, app links) leave the browser only for a main-frame
-navigation with a person's tap; `wc:` is answered with a sentence, not guessed at.
+while a page is on screen and are refused off screen. External schemes leave the
+browser only on a person's tap. Phones hand any app scheme to the system
+(`intent:` sanitised). The desktop hands on only `mailto:`/`tel:` (spec 083,
+Windows): a tap in the page's own document, never in a cross-origin frame, and
+escaped as Chromium escapes a handler's command value, up to 2048 bytes. macOS
+refuses them, because its navigation handler cannot tell a tap from a script.
+`javascript:`/`file:` never leave. `wc:` is answered with a sentence on the
+phones, not guessed at (desktop: refused silently for now). A new window loads in
+the same tab on the phones and opens a new tab on the desktop (Windows; macOS
+still drops it), only on a person's gesture; no shell builds a second engine, so
+`window.opener` is gone and popup sign-in does not complete. The desktop's one
+engine serves every tab, so Back stops at a tab's first page. Windows asks the
+engine to forget the other tabs' entries (`Page.resetNavigationHistory`), and
+macOS counts the tab's own. Downloads are refused everywhere.
 
 ## Testing
 

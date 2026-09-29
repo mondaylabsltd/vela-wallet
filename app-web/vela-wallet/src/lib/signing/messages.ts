@@ -231,6 +231,11 @@ export interface SigningMessages {
 	 * as Android's signing receipt says them — never a greyed slide.
 	 */
 	status: {
+		/**
+		 * `send.txPreparing` — approved, and the passkey not asked yet: the
+		 * funding check, the nonce and the estimate (083 H3).
+		 */
+		preparing: string;
 		/** `send.txSigning` — the passkey prompt is up. */
 		signing: string;
 		/** `send.txSubmitting` */

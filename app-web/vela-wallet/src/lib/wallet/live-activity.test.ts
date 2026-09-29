@@ -3,6 +3,7 @@
  * the drawn ActivityGroupModel; the shell only words and formats.
  */
 import { describe, expect, it } from 'vitest';
+import type { FeedDapp } from '$lib/core/generated/FeedDapp';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
@@ -101,6 +102,67 @@ describe('liveActivityRow', () => {
 			false
 		);
 		expect(row.amount).toBe('3');
+	});
+
+	// 083 H2: a dApp's transaction is titled by what it did — the sheet's
+	// words, "Contract interaction" when nobody decoded it — and labelled
+	// with the site that asked; with no figure when it moved no coin.
+	it("a dApp's call is titled by its intent and labelled with its site", () => {
+		const dapp = (
+			id: string,
+			site: string | null,
+			intent: string | null,
+			term: FeedDapp['intent_term']
+		) =>
+			item({
+				id,
+				direction: 'out',
+				value: null,
+				symbol: '',
+				decimals: null,
+				usd_value: 0,
+				dapp: { site, intent, intent_term: term }
+			});
+		const blind = liveActivityRow(dapp('a', 'app.uniswap.org', null, null), m, false);
+		expect(blind).toMatchObject({
+			kind: 'sent',
+			title: m.activity.contractCall,
+			subtitle: 'app.uniswap.org',
+			amount: '',
+			unit: ''
+		});
+		// No figure, nothing to mask: "••••" would claim one (083 H2 review).
+		expect(liveActivityRow(dapp('a', 'app.uniswap.org', null, null), m, true)).toMatchObject({
+			amount: '',
+			masked: false
+		});
+		const swap = liveActivityRow(dapp('b', 'app.uniswap.org', 'Swap', 'intentSwap'), m, false);
+		expect(swap.title).toBe(m.activity.intents.intentSwap);
+		expect(swap.title).not.toBe('');
+		// A descriptor's word with no translation is still better than none,
+		// and without a site the row says who it went to, like a send.
+		const odd = liveActivityRow(dapp('c', null, 'Frobnicate', null), m, false);
+		expect(odd.title).toBe('Frobnicate');
+		expect(odd.subtitle).toMatch(/0xb1b1/i);
+	});
+	it("a dApp's native send reads as a send of its amount", () => {
+		const row = liveActivityRow(
+			item({
+				id: 'e',
+				direction: 'out',
+				value: '0.01',
+				symbol: 'xDAI',
+				dapp: { site: '127.0.0.1', intent: 'Send', intent_term: 'intentSend' }
+			}),
+			m,
+			false
+		);
+		expect(row).toMatchObject({
+			title: m.activity.intents.intentSend,
+			subtitle: '127.0.0.1',
+			amount: '-0.01',
+			unit: 'xDAI'
+		});
 	});
 });
 

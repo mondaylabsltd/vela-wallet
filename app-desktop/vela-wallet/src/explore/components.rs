@@ -229,6 +229,8 @@ pub fn tab_strip_with(
 ) -> Div {
     let mut strip = div()
         .h(px(TAB_STRIP_H))
+        // 083 W15: chrome never gives its height to the page under it.
+        .flex_none()
         .flex()
         .items_end()
         .gap(px(2.))
@@ -404,7 +406,9 @@ pub fn account_chip(
 /// and the two affordances (⋯ and the account chip) are state the page owns.
 /// Back, forward and reload, in that order. `None` leaves them drawn and
 /// inert, which is what the mocks are — a live browser passes three listeners
-/// and the same three buttons start working.
+/// and the same three buttons start working. `history` is whether back and
+/// forward can act (083 W15): an arrow that cannot is drawn disabled, and its
+/// click asks the engine again.
 pub type NavActions = [crate::flows::panels::Click; 3];
 
 pub fn toolbar(
@@ -413,9 +417,12 @@ pub fn toolbar(
     address: AnyElement,
     trailing: Div,
     nav: Option<NavActions>,
+    history: [bool; 2],
 ) -> Div {
     div()
         .h(px(TOOLBAR_H))
+        // 083 W15: chrome never gives its height to the page under it.
+        .flex_none()
         .px(px(20.))
         .flex()
         .items_center()
@@ -423,7 +430,7 @@ pub fn toolbar(
         .bg(theme.bg_base)
         .border_b_1()
         .border_color(theme.divider)
-        .children(nav_controls(theme, icons, nav))
+        .children(nav_controls(theme, icons, nav, history))
         .child(
             div()
                 .flex_1()
@@ -662,12 +669,18 @@ pub fn load_hairline(theme: &Theme, busy: bool) -> Div {
 }
 
 /// The three navigation buttons, live or drawn.
-fn nav_controls(theme: &Theme, icons: &mut IconCache, nav: Option<NavActions>) -> Vec<AnyElement> {
-    // Back and reload act; forward is the web's drawn `canForward: false`
-    // — disabled, not merely grey (078 E-04).
+fn nav_controls(
+    theme: &Theme,
+    icons: &mut IconCache,
+    nav: Option<NavActions>,
+    history: [bool; 2],
+) -> Vec<AnyElement> {
+    // Back and forward as far as the engine's history goes (083 W15) — a new
+    // tab has none — disabled, not merely grey (078 E-04). Reload always acts,
+    // as the web's toolbar's does.
     let icons_and_tints = [
-        (Icon::ArrowLeft, true),
-        (Icon::ArrowRight, false),
+        (Icon::ArrowLeft, history[0]),
+        (Icon::ArrowRight, history[1]),
         (Icon::RefreshCw, true),
     ];
     let mut actions = nav.map(Vec::from).unwrap_or_default().into_iter();
@@ -676,13 +689,20 @@ fn nav_controls(theme: &Theme, icons: &mut IconCache, nav: Option<NavActions>) -
         .enumerate()
         .map(|(i, (icon, enabled))| {
             let control = toolbar_control_with(theme, icons, icon, theme.fg_base, false, enabled);
+            let id = ElementId::from(("browser-nav", i));
             match actions.next() {
-                Some(action) => crate::flows::panels::clickable(
-                    ElementId::from(("browser-nav", i)),
-                    Some(action),
-                    control,
-                )
-                .into_any_element(),
+                Some(action) if enabled => {
+                    crate::flows::panels::clickable(id, Some(action), control).into_any_element()
+                }
+                // 083 W15: a dimmed arrow keeps its action and asks again at
+                // the click. On macOS the drawing can be a moment stale after
+                // a page's own `pushState`, and before 083 Back always worked
+                // there. No pointer, since it looks like it cannot act.
+                Some(action) => div()
+                    .id(id)
+                    .child(control)
+                    .on_click(move |event, window, cx| action(event, window, cx))
+                    .into_any_element(),
                 None => control.into_any_element(),
             }
         })

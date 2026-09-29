@@ -148,10 +148,14 @@ fn hex(bytes: &[u8]) -> String {
     out
 }
 
+/// UPPER-case, as Chromium's `GetConnectURL` writes the ids
+/// (`base::HexEncode`). Google's tunnel server took either case; Apple's
+/// (`cable.auth.com`, every iPhone) closed a lower-case connect with
+/// "Policy violation" right after the first frame (spec 083 W20).
 fn nibble(n: u8) -> char {
     match n {
         0..=9 => (b'0' + n) as char,
-        _ => (b'a' + (n - 10)) as char,
+        _ => (b'A' + (n - 10)) as char,
     }
 }
 
@@ -227,7 +231,10 @@ mod tests {
         let url = session.connect_url(&plaintext).expect("known domain");
         let tunnel_hex = hex(&session.tunnel_id());
         assert!(url.starts_with("wss://"));
-        assert!(url.contains("/cable/connect/abcdef/"));
+        assert!(
+            url.contains("/cable/connect/ABCDEF/"),
+            "upper-case, as Chromium sends it"
+        );
         assert!(url.ends_with(&tunnel_hex));
 
         // A foreign advert (different QR secret) does not decrypt.

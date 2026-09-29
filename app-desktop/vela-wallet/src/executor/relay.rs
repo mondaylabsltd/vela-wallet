@@ -108,7 +108,7 @@ fn rest_get(chain_id: u32, path: &str) -> Rest {
     //
     // Over the candidate chain (spec 038): a refused proxy is retried on the
     // next route, not reported as the relay being down.
-    let mut response = match proxy::with_candidates(REST_TIMEOUT, |agent| {
+    let mut response = match proxy::with_candidates_for(&url, REST_TIMEOUT, |agent| {
         agent.get(&url).header("accept", "application/json").call()
     }) {
         Ok(response) => response,
@@ -513,26 +513,108 @@ pub fn tier_name(tier: FeeTier) -> &'static str {
 }
 
 /// `eth_estimateUserOperationGas` — the relay's raw limits, or its words.
+///
+/// The submit reads the words only; [`estimate_user_op_gas_answer`] is the
+/// same call for a reader that must tell an answer from an outage.
 pub fn estimate_user_op_gas(op: &UserOperation, chain_id: u32) -> Result<GasEstimate, String> {
+    estimate_user_op_gas_answer(op, chain_id).map_err(|error| error.to_string())
+}
+
+/// Why `eth_estimateUserOperationGas` gave no limits (spec 083 fee). The
+/// device pass had "UserOperation simulation failed" — the relay's ANSWER
+/// that the operation fails — said on screen as "cannot reach Vela, check
+/// your network", retried forever. The quote now tells them apart.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EstimateError {
+    /// The relay could not be reached at all.
+    Unreachable(String),
+    /// The relay answered, and said the operation fails when it runs (a
+    /// failed simulation, a revert).
+    Refused(String),
+    /// The relay answered something else: another error, or no limits.
+    Other(String),
+}
+
+impl std::fmt::Display for EstimateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unreachable(message) | Self::Refused(message) | Self::Other(message) => {
+                f.write_str(message)
+            }
+        }
+    }
+}
+
+/// The relay's error says the operation itself fails when it runs — its
+/// simulation failed, or the execution reverted — rather than that the relay
+/// is busy, limited or broken. Only those words are an answer about the
+/// operation; anything else stays an unexplained failure, asked again on
+/// the growing wait as it always was.
+///
+/// An EntryPoint validation code (`AA10`…`AA3x`: "AA23 reverted (or OOG)",
+/// "AA25 invalid account nonce") is never one of them, whatever words wrap
+/// it. It is the account's own check — its signature, nonce or prefund — and
+/// nothing another fee coin changes; a nonce that moved on can clear by the
+/// next ask. Spec 083 fee review.
+fn is_simulation_refusal(message: &str) -> bool {
+    if names_validation_code(message) {
+        return false;
+    }
+    let message = message.to_ascii_lowercase();
+    message.contains("simulation failed")
+        || message.contains("execution reverted")
+        || message.contains("reverted during simulation")
+}
+
+/// `message` carries an EntryPoint code — `AA` and two digits, standing as a
+/// word of its own (never the inside of an address or of hex data).
+fn names_validation_code(message: &str) -> bool {
+    let bytes = message.as_bytes();
+    bytes.windows(4).enumerate().any(|(at, window)| {
+        window[0] == b'A'
+            && window[1] == b'A'
+            && window[2].is_ascii_digit()
+            && window[3].is_ascii_digit()
+            && (at == 0 || !bytes[at - 1].is_ascii_alphanumeric())
+            && bytes
+                .get(at + 4)
+                .is_none_or(|next| !next.is_ascii_alphanumeric())
+    })
+}
+
+/// [`estimate_user_op_gas`], with why there are no limits. The words are the
+/// ones it always had.
+pub fn estimate_user_op_gas_answer(
+    op: &UserOperation,
+    chain_id: u32,
+) -> Result<GasEstimate, EstimateError> {
     let body = pool::bundler_call(
         chain_id,
         "eth_estimateUserOperationGas",
         json!([user_op_to_json(op, &[]), ENTRY_POINT]),
     )
-    .map_err(|error| format!("gas estimation unreachable: {error:?}"))?;
+    .map_err(|error| {
+        EstimateError::Unreachable(format!("gas estimation unreachable: {error:?}"))
+    })?;
     if let Some(error) = body.get("error") {
-        return Err(error
+        let message = error
             .get("message")
             .and_then(Value::as_str)
             .unwrap_or("Gas estimation failed")
-            .to_owned());
+            .to_owned();
+        return Err(if is_simulation_refusal(&message) {
+            EstimateError::Refused(message)
+        } else {
+            EstimateError::Other(message)
+        });
     }
     let result = body
         .get("result")
         .filter(|value| value.is_object())
-        .ok_or_else(|| "Failed to estimate gas — empty result".to_owned())?;
+        .ok_or_else(|| EstimateError::Other("Failed to estimate gas — empty result".to_owned()))?;
     let field = |name: &str| {
-        parse_hex_quantity(result.get(name).and_then(Value::as_str)).map_err(|e| e.to_string())
+        parse_hex_quantity(result.get(name).and_then(Value::as_str))
+            .map_err(|e| EstimateError::Other(e.to_string()))
     };
     Ok(GasEstimate {
         verification_gas_limit: field("verificationGasLimit")?,
@@ -547,6 +629,13 @@ pub enum SubmitError {
     /// The relay answered and refused. Carries `parseBundlerError`'s
     /// sentence — the one the send executor classifies.
     Rejected(String),
+    /// The relay refused because an operation of this account is already
+    /// pending at the nonce — its error carries the `[existingHash:…]`
+    /// marker, and this is that error RAW (083): `parse_bundler_error` words
+    /// an `AA25` as "nonce mismatch" and the marker went with it. Whether the
+    /// operation it names is this one is the caller's question
+    /// (`vela_core::user_op::existing_op`).
+    Occupied { error: String },
     /// The relay could not be reached at all.
     Unreachable,
 }
@@ -600,6 +689,9 @@ pub fn send_user_op(
         if let Some(hash) = body.get("result").and_then(Value::as_str) {
             return Ok(hash.to_owned());
         }
+        if let Some(error) = occupied(body.get("error")) {
+            return Err(SubmitError::Occupied { error });
+        }
         let message = parse_bundler_error(body.get("error"));
         let retryable = message.contains("currently processing") || message.contains("Retry later");
         if !retryable || attempt == SUBMIT_MAX_RETRIES {
@@ -614,6 +706,14 @@ pub fn send_user_op(
     Err(SubmitError::Rejected(
         "Bundler unavailable after retries".to_owned(),
     ))
+}
+
+/// The relay's error, raw, when it names the operation a submit collided
+/// with — anywhere in the error member (`message` or `data`), before any
+/// wording is applied to it.
+fn occupied(error: Option<&Value>) -> Option<String> {
+    let raw = error?.to_string();
+    vela_core::user_op::parse_existing_user_op_hash(&raw).map(|_| raw)
 }
 
 /// A definitive receipt (`UserOpResolution`).
@@ -637,7 +737,7 @@ pub struct ReceiptPoll {
     pub resolution: Option<Resolution>,
 }
 
-fn to_trust_log(log: &Value) -> Option<TrustReceiptLog> {
+pub(crate) fn to_trust_log(log: &Value) -> Option<TrustReceiptLog> {
     let address = log.get("address")?.as_str()?;
     let topics = log.get("topics")?.as_array()?;
     Some(TrustReceiptLog {
@@ -729,15 +829,66 @@ pub fn user_op_status(
     user_op_hash: &str,
     chain_id: u32,
 ) -> Option<(TrackLifecycle, Option<String>)> {
+    status_of(user_op_hash, |params| {
+        pool::bundler_call(chain_id, "eth_getUserOperationStatus", params)
+    })
+}
+
+/// [`user_op_status`] within `budget` — the dApp's landing wait asks it for
+/// a relay that refused the operation after accepting it (083).
+pub fn user_op_status_within(
+    user_op_hash: &str,
+    chain_id: u32,
+    budget: std::time::Duration,
+) -> Option<(TrackLifecycle, Option<String>)> {
+    status_of(user_op_hash, |params| {
+        pool::bundler_call_within(chain_id, "eth_getUserOperationStatus", params, budget)
+    })
+}
+
+/// `eth_getUserOperationByHash` within `budget`: the hash of the transaction
+/// that carried the operation, once the bundler reports one (083). `None`
+/// while it is pending — ERC-7769 answers `transactionHash: null` then —
+/// and for an unknown op, an error or a relay that could not be reached.
+/// The relay has answered this method since before 083 (`null` for an
+/// unknown hash, probed 2026-09-28), which is why the landing wait may ask
+/// it when the receipt has not come.
+pub fn user_op_transaction_within(
+    user_op_hash: &str,
+    chain_id: u32,
+    budget: std::time::Duration,
+) -> Option<String> {
     if user_op_hash.is_empty() {
         return None;
     }
-    let body = pool::bundler_call(
+    let body = pool::bundler_call_within(
         chain_id,
-        "eth_getUserOperationStatus",
+        "eth_getUserOperationByHash",
         json!([user_op_hash]),
+        budget,
     )
     .ok()?;
+    transaction_of(&body)
+}
+
+/// The bundle transaction an `eth_getUserOperationByHash` answer names.
+fn transaction_of(body: &Value) -> Option<String> {
+    let hash = body.get("result")?.get("transactionHash")?.as_str()?;
+    let digits = hash.strip_prefix("0x")?;
+    (digits.len() == 64
+        && digits.bytes().all(|b| b.is_ascii_hexdigit())
+        && digits.bytes().any(|b| b != b'0'))
+    .then(|| hash.to_owned())
+}
+
+fn status_of(
+    user_op_hash: &str,
+    call: impl FnOnce(Value) -> Result<Value, pool::PoolError>,
+) -> Option<(TrackLifecycle, Option<String>)> {
+    if user_op_hash.is_empty() {
+        return None;
+    }
+    let body = call(json!([user_op_hash])).ok()?;
     if body.get("error").is_some() {
         return None;
     }
@@ -909,7 +1060,7 @@ fn request_sponsorship(chain_id: u32, safe: &str, required_wei: u128) -> (bool, 
     // pay twice, and a relay that honours the key collapses the two.
     let idempotency = format!("sponsor:{chain_id}:{safe}:{required}");
     let body = json!({ "requiredWei": required });
-    let answer = proxy::with_candidates(SPONSOR_TIMEOUT, |agent| {
+    let answer = proxy::with_candidates_for(&url, SPONSOR_TIMEOUT, |agent| {
         let mut response = agent
             .post(&url)
             .config()
@@ -1025,6 +1176,50 @@ pub fn parse_bundler_error(error: Option<&Value>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 083 fee: the relay's "UserOperation simulation failed" (the
+    /// device log's words) and a revert are answers about the operation; a
+    /// busy or limited relay is not. The words themselves are unchanged for
+    /// the submit, which reads only them.
+    #[test]
+    fn a_failed_simulation_is_an_answer_and_a_busy_relay_is_not() {
+        assert!(is_simulation_refusal("UserOperation simulation failed"));
+        assert!(is_simulation_refusal("execution reverted: STF"));
+        assert!(is_simulation_refusal(
+            "user operation reverted during simulation"
+        ));
+        // The review: an EntryPoint validation code is the account's own
+        // check, retried on the growing wait as before — whatever words wrap
+        // it.
+        assert!(!is_simulation_refusal("AA23 reverted (or OOG)"));
+        assert!(!is_simulation_refusal(
+            "UserOperation reverted during simulation with reason: AA23 reverted"
+        ));
+        assert!(!is_simulation_refusal(
+            "UserOperation simulation failed: AA25 invalid account nonce"
+        ));
+        assert!(!is_simulation_refusal("reverted"), "no operation named");
+        // Hex that happens to hold "AA" and two digits is not a code.
+        assert!(is_simulation_refusal(
+            "execution reverted: 0x08c379a0AA12ff"
+        ));
+        assert!(is_simulation_refusal("execution reverted: to 0x12AA34"));
+        assert!(!is_simulation_refusal("Retry later"));
+        assert!(!is_simulation_refusal("rate limited"));
+        assert!(!is_simulation_refusal("Gas estimation failed"));
+        for error in [
+            EstimateError::Unreachable("gas estimation unreachable: Timeout".to_owned()),
+            EstimateError::Refused("UserOperation simulation failed".to_owned()),
+            EstimateError::Other("Failed to estimate gas — empty result".to_owned()),
+        ] {
+            let words = match &error {
+                EstimateError::Unreachable(words)
+                | EstimateError::Refused(words)
+                | EstimateError::Other(words) => words.clone(),
+            };
+            assert_eq!(error.to_string(), words);
+        }
+    }
 
     /// 078 W-05, `recommendedFundingWei`: the shortfall plus half again; an
     /// account already at the threshold is asked for the buffered threshold,
@@ -1172,6 +1367,60 @@ mod tests {
             parse_bundler_error(Some(&json!({ "code": -32000 })))
                 .starts_with("Transaction failed:")
         );
+    }
+
+    /// 083: the operation a submit collided with is read from the RAW error.
+    /// The sentence `parse_bundler_error` makes of an AA25 is "nonce
+    /// mismatch", and the marker used to go with it — so the "previous op
+    /// pending" branch could never see it.
+    #[test]
+    fn the_operation_a_submit_collided_with_survives_the_wording() {
+        let error = json!({
+            "code": -32602,
+            "message": "AA25 invalid account nonce [existingHash:0xAbC123]"
+        });
+        assert_eq!(
+            parse_bundler_error(Some(&error)),
+            "Transaction nonce mismatch. Please try again.",
+            "the sentence drops the marker"
+        );
+        let named = |error: &Value| {
+            occupied(Some(error))
+                .and_then(|raw| vela_core::user_op::parse_existing_user_op_hash(&raw))
+        };
+        assert_eq!(named(&error).as_deref(), Some("0xAbC123"));
+        assert_eq!(
+            named(&json!({ "message": "rejected", "data": "pending [existingHash:0xdef456]" }))
+                .as_deref(),
+            Some("0xdef456"),
+            "in `data` too"
+        );
+        assert_eq!(
+            occupied(Some(&json!({ "message": "AA25 invalid account nonce" }))),
+            None
+        );
+        assert_eq!(occupied(None), None);
+    }
+
+    /// 083: `eth_getUserOperationByHash` names the bundle transaction only
+    /// once there is one — `null` (pending, ERC-7769) and unknown ops are
+    /// nothing, never a zero hash.
+    #[test]
+    fn the_bundler_names_a_transaction_only_once_there_is_one() {
+        let tx = format!("0x{}", "cd".repeat(32));
+        assert_eq!(
+            transaction_of(&json!({ "result": { "transactionHash": tx, "blockNumber": "0x11" } })),
+            Some(tx)
+        );
+        for body in [
+            json!({ "result": null }),
+            json!({ "result": { "transactionHash": null, "blockNumber": null } }),
+            json!({ "result": { "transactionHash": format!("0x{}", "0".repeat(64)) } }),
+            json!({ "result": { "transactionHash": "0xabc" } }),
+            json!({ "error": { "code": -32601, "message": "method not found" } }),
+        ] {
+            assert_eq!(transaction_of(&body), None, "{body}");
+        }
     }
 
     #[test]

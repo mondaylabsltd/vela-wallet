@@ -7,6 +7,7 @@
  * Templated values (`{{name}}`, `{{count}}`…) are resolved server-side too:
  * fixtures are static, so every interpolation is known at prerender time.
  */
+import { INTENT_TERMS } from '$lib/signing/terms';
 
 export interface WalletMessages {
 	nav: { wallet: string; contacts: string; explore: string; settings: string };
@@ -27,6 +28,16 @@ export interface WalletMessages {
 		sent: string;
 		received: string;
 		dapp: string;
+		/**
+		 * A dApp's transaction nobody decoded (083 H2) — the signing sheet's
+		 * own "Contract interaction".
+		 */
+		contractCall: string;
+		/**
+		 * A dApp's transaction's recorded intent in the reader's words, keyed
+		 * by `ClearTerm` (`INTENT_TERMS`) — the words the signing sheet used.
+		 */
+		intents: Record<string, string>;
 		today: string;
 		yesterday: string;
 		/** Template with `{{name}}`. */
@@ -130,6 +141,9 @@ export const WALLET_KEYS = [
 	'history.labelSent',
 	'history.labelReceived',
 	'history.txLabelDappTx',
+	// 083 H2: a dApp's transaction is titled by what it did.
+	'componentsUi.signing.intentContractCall',
+	...INTENT_TERMS.map((term) => `componentsUi.signing.${term}` as const),
 	'componentsUi.dayGroup.today',
 	'componentsUi.dayGroup.yesterday',
 	'history.toName',

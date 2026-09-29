@@ -209,6 +209,54 @@ The generated installer is **unsigned** until a code-signing certificate is
 configured. It works, but Windows SmartScreen can show an “unknown publisher”
 warning on first release. Sign the final installer before a public release.
 
+#### For everyone, or for me only
+
+The installer installs **for every account on the machine** by default
+(`C:\Program Files\Vela Wallet`, Windows asks for an administrator). On a
+machine with no Vela yet, Setup first asks which. **Install for me only** puts
+the app in `%LOCALAPPDATA%\Programs\Vela Wallet`, makes its shortcuts,
+uninstall entry and `velawallet://` handler the person's own, and asks for no
+administrator ([spec 083](../../specs/083-windows-dapp-browser-stability/results.md)
+H9). The same choice from a command line, e.g. for an unattended install:
+
+```powershell
+# One account, no administrator prompt:
+.\VelaWallet-Setup-<version>-x64.exe /CURRENTUSER /VERYSILENT
+# Every account (the default); run from an elevated shell to skip the prompt:
+.\VelaWallet-Setup-<version>-x64.exe /ALLUSERS /VERYSILENT
+```
+
+- **An upgrade stays where the app is.** A newer installer finds the existing
+  install and uses its mode without asking, so a per-machine install still
+  needs the administrator — run an unattended upgrade of one from an elevated
+  shell.
+- **To move a per-machine install to "for me only", uninstall it first**
+  (Settings → Apps, as an administrator), then run the installer with
+  `/CURRENTUSER` or pick **Install for me only**. Passing `/CURRENTUSER` over
+  a per-machine install puts a second copy beside it instead. Keep that order:
+  an install first made by 0.9.5 or older wrote its `velawallet://` handler
+  into the account's own registry, and its uninstaller deletes that key even
+  after a per-user copy has taken it over, so Trusted Signer answers stop
+  reaching the app. An uninstaller from a later version keeps a handler that
+  opens another copy; re-running Setup for the per-user copy repairs it either
+  way.
+- **The Visual C++ runtime is machine-wide.** A per-machine install always runs
+  Microsoft's redistributable, as before. A per-user install compares the
+  machine's runtime with the version of the MSVC toolset that linked
+  `vela-wallet.exe` (the build script reads it from the exe and passes it as
+  `MyVCRuntimeMin`, never the bundled redistributable's own version), and does
+  nothing when it is there:
+  - **Interactive, runtime missing or older:** Windows asks for an
+    administrator once, for that runtime alone. Declined, or for an account
+    that cannot approve it, Setup still finishes and says where an
+    administrator can get the runtime.
+  - **Silent (`/SILENT`, `/VERYSILENT`), runtime missing or older:** the
+    redistributable is not run, only logged, so an unattended per-user install
+    never waits on a prompt. Until an administrator installs the runtime, the
+    app may not start (it cannot, if the runtime is missing altogether).
+  - Only linking the C runtime statically (`+crt-static`) would take the
+    runtime, and with it every administrator prompt, out of a per-user install.
+
 ### Fedora / RHEL
 
 ```bash

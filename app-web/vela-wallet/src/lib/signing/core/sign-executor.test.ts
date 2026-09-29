@@ -64,6 +64,31 @@ describe('the receipt wait, as the core hears it', () => {
 		});
 	});
 
+	// 083 H2 review: `wallet_sendCalls` resolves with its EIP-5792 batch id —
+	// the op hash — at acceptance, with no receipt wait. As `succeeded` the
+	// core closed the record "confirmed" under that hash (an explorer link to
+	// nothing, never tracked); as `receipt_pending` the page still gets the id
+	// and the tracker settles the record.
+	it('a batch id is receipt_pending with that id, never succeeded', async () => {
+		submit.impl = () => Promise.resolve('0xbatchid');
+		const batch: SignEffect = {
+			...signAndSubmit,
+			operation: {
+				...(signAndSubmit.operation as Extract<
+					SignEffect['operation'],
+					{ type: 'sign_and_submit' }
+				>),
+				method: 'wallet_sendCalls',
+				params_json: '[{"calls":[{"to":"0x0000000000000000000000000000000000000001"}]}]'
+			}
+		};
+		const result = await createSignExecutor(ports).execute(batch);
+		expect(result).toMatchObject({
+			type: 'submit',
+			outcome: { type: 'receipt_pending', user_op_hash: '0xbatchid' }
+		});
+	});
+
 	it('only a relay rejection or a drop is a verdict; timeout, unreachable and fee-hold are not', () => {
 		expect(receiptStillOutstanding(new UserOpRejectedError('refused'))).toBe(false);
 		expect(

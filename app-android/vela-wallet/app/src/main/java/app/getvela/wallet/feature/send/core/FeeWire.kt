@@ -139,6 +139,15 @@ sealed class FeeGasOutcome {
     @Serializable
     @SerialName("context_unavailable")
     data object ContextUnavailable : FeeGasOutcome()
+
+    /**
+     * Spec 083 fee: the relay ANSWERED that this operation fails. Declared so
+     * the wire matches the core; this shell does not tell a refusal from an
+     * unreachable relay and answers [SimulationFailed] for both, as before.
+     */
+    @Serializable
+    @SerialName("refused")
+    data object Refused : FeeGasOutcome()
 }
 
 @Serializable
@@ -154,6 +163,14 @@ enum class FeeFailure {
     @SerialName("estimate_failed") EstimateFailed,
 
     @SerialName("gas_quote_too_high") GasQuoteTooHigh,
+
+    /**
+     * Spec 083 fee: the relay answered that the operation fails — its answer,
+     * where [FeeGasOutcome.SimulationFailed] is no answer at all. The core
+     * says it only to a shell that reports [FeeGasOutcome.Refused], which
+     * this one does not yet.
+     */
+    @SerialName("would_fail") WouldFail,
 }
 
 /** One row of the fee-token sheet, already judged (`insufficient`, `selected`). */

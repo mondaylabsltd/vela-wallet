@@ -70,6 +70,11 @@ pub struct WalletStrings {
     pub label_sent: SharedString,
     pub label_received: SharedString,
     pub label_dapp: SharedString,
+    /// A dApp transaction's title (083 H2): its decoded intent in the
+    /// reader's words — the signing sheet's own (`componentsUi.signing.<leaf>`)
+    /// — else "Contract interaction", as the sheet called it.
+    pub terms: std::collections::HashMap<vela_core::app::clear_signing::ClearTerm, SharedString>,
+    pub intent_contract_call: SharedString,
     pub today: SharedString,
     pub yesterday: SharedString,
     /// Templates carrying `{{name}}`.
@@ -164,6 +169,10 @@ impl WalletStrings {
             label_sent: s("history.labelSent"),
             label_received: s("history.labelReceived"),
             label_dapp: s("history.txLabelDappTx"),
+            terms: vela_core::app::clear_signing::ClearTerm::all()
+                .map(|term| (term, s(&format!("componentsUi.signing.{}", term.leaf()))))
+                .collect(),
+            intent_contract_call: s("componentsUi.signing.intentContractCall"),
             today: s("componentsUi.dayGroup.today"),
             yesterday: s("componentsUi.dayGroup.yesterday"),
             to_name: raw("history.toName"),

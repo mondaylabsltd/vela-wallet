@@ -184,7 +184,8 @@ struct FeeViewWire: Decodable, Equatable {
     /// is true (the core's invariant ⑦).
     let busy: Bool
     /// `missing_public_key` / `fee_token_unavailable` / `quote_unavailable` /
-    /// `calculation_failed` / `estimate_failed` / `gas_quote_too_high`.
+    /// `calculation_failed` / `estimate_failed` / `gas_quote_too_high` /
+    /// `would_fail` (spec 083 fee; not said to this shell yet).
     let failed: String?
     /// Present only when valid for the form's CURRENT chain. A quote for the
     /// chain somebody just left is withheld rather than shown.

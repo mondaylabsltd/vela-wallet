@@ -2,13 +2,14 @@
  * Where an approved request stands between the slide and the answer (spec 079).
  *
  * The sheet stops being a form the moment the person approves: it says
- * "waiting for the passkey", then "submitting", and its ✕ may close it (the
- * operation carrying on, the page still answered) once the signature exists.
- * The core's view cannot tell those two apart — `is_signing` and
- * `is_submitting` are both true through its `Submitting` stage, which spans
- * the passkey prompt AND the submission — so the passkey ceremony tells the
- * shell itself (`onSignCeremony`), and this folds the two streams into one
- * fact per approval.
+ * "preparing" (the funding check, the nonce, the estimate), then "waiting for
+ * the passkey" while the prompt is up (083 H3), then "submitting", and its ✕
+ * may close it (the operation carrying on, the page still answered) once the
+ * signature exists. The core's view cannot tell these apart — `is_signing`
+ * and `is_submitting` are both true through its `Submitting` stage, which
+ * spans the passkey prompt AND the submission — so the passkey ceremony
+ * tells the shell itself (`onSignCeremony`), and this folds the two streams
+ * into one fact per approval.
  *
  * Why it matters for money: closed while the prompt is up (or before it has
  * appeared), a cancelled prompt ends the attempt with no answer at all — the

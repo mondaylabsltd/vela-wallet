@@ -52,6 +52,9 @@ pub struct SigningStrings {
     /// send receipt's own words (`send.tx*`) — a dApp transaction and a send
     /// must read the same while they land (Android's receipt, word for word).
     pub tx_signing: SharedString,
+    /// Approved, and nothing has asked for the signature yet: the funding
+    /// check, the nonce, the deployment read (083 W11).
+    pub tx_preparing: SharedString,
     pub tx_submitting: SharedString,
     pub tx_background_hint: SharedString,
     pub tx_submitted_title: SharedString,
@@ -155,6 +158,15 @@ pub struct SigningStrings {
     pub warn_unlimited: SharedString,
     pub warn_expired: SharedString,
     pub warn_will_fail: SharedString,
+    /// The fee row's "this transaction would fail" (spec 083 fee review): the
+    /// relay answered that the operation fails with every coin that could
+    /// pay its fee. `simWillFail` without its "you'd still pay gas" — the
+    /// relay refuses such an operation, so nothing is charged, and saying
+    /// otherwise is the misleading feedback the owner reported. Its own first
+    /// clause ([`first_clause`]) until the corpus has room for a sentence of
+    /// its own: the i18n residency budget has 50 bytes left, and raising it
+    /// is the owner's call.
+    pub warn_would_fail: SharedString,
     pub warn_hex_message: SharedString,
     pub warn_blind_typed: SharedString,
     pub warn_eth_sign: SharedString,
@@ -171,6 +183,9 @@ pub struct SigningStrings {
     pub status_signing: SharedString,
     pub status_submitted: SharedString,
     pub error_generic: SharedString,
+    /// What a message signature that failed says in its place (083 H4): it
+    /// was never a transaction, and nothing went on chain.
+    pub error_off_chain: SharedString,
     pub error_network: SharedString,
     /// Spec 081: the request would have changed who controls the account.
     pub blocked_title: SharedString,
@@ -290,6 +305,7 @@ impl SigningStrings {
             receipt_tx_hash: loc.t("componentsTx.receipt.txHash"),
             receipt_explorer: loc.t("componentsTx.receipt.explorer"),
             receipt_done: loc.t("componentsTx.receipt.done"),
+            tx_preparing: loc.t("send.txPreparing"),
             tx_signing: loc.t("send.txSigning"),
             tx_submitting: loc.t("send.txSubmitting"),
             tx_background_hint: loc.t("send.txBackgroundHint"),
@@ -387,6 +403,7 @@ impl SigningStrings {
             warn_unlimited: s("unlimitedWarning"),
             warn_expired: s("expiredWarning"),
             warn_will_fail: s("simWillFail"),
+            warn_would_fail: first_clause(&s("simWillFail")),
             warn_hex_message: s("hexMessageWarning"),
             warn_blind_typed: s("blindTypedWarning"),
             warn_eth_sign: s("ethSignWarning"),
@@ -401,6 +418,7 @@ impl SigningStrings {
             // wallet, one way of saying "it did not go out, your funds are
             // safe" — and no raw relay text on a screen (SC-305).
             error_generic: loc.t("send.txErrorGeneric"),
+            error_off_chain: loc.t("connect.detail.offChainNote"),
             error_network: loc.t("send.lock.netNotFound"),
             blocked_title: s("selfCallBlockedTitle"),
             close: s("close"),
@@ -494,6 +512,25 @@ impl SigningStrings {
     }
 }
 
+/// The first clause of a two-clause sentence, closed with the sentence's own
+/// full stop: "This transaction is expected to fail — you'd still pay gas."
+/// becomes "This transaction is expected to fail." Every language writes
+/// `simWillFail` as "<it fails> — <you pay gas><stop>" (a test holds all
+/// fifteen to it); a sentence without the dash is kept whole.
+fn first_clause(sentence: &str) -> SharedString {
+    let Some((head, _)) = sentence.split_once(" — ") else {
+        return SharedString::from(sentence.to_owned());
+    };
+    let mut clause = head.trim_end().to_owned();
+    clause.extend(
+        sentence
+            .chars()
+            .last()
+            .filter(|stop| !stop.is_alphanumeric()),
+    );
+    SharedString::from(clause)
+}
+
 /// `{{var}}` interpolation for the signing templates — the same one-line fill
 /// the wallet strings use, not a parallel i18n engine.
 pub fn fill(template: &str, vars: &[(&str, &str)]) -> String {
@@ -562,6 +599,7 @@ mod tests {
     fn the_status_words_resolve() {
         let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
         for text in [
+            s.tx_preparing.as_ref(),
             s.tx_signing.as_ref(),
             s.tx_submitting.as_ref(),
             s.tx_background_hint.as_ref(),
@@ -576,6 +614,7 @@ mod tests {
             s.still_confirming.as_ref(),
             s.unknown_outcome.as_ref(),
             s.signed.as_ref(),
+            s.error_off_chain.as_ref(),
             s.fee_refresh.as_ref(),
             s.fee_stale.as_ref(),
             s.fee_unreachable.as_ref(),
@@ -584,11 +623,45 @@ mod tests {
             assert!(
                 !text.starts_with("send.")
                     && !text.starts_with("componentsUi.")
-                    && !text.starts_with("clearSigning."),
+                    && !text.starts_with("clearSigning.")
+                    && !text.starts_with("connect."),
                 "echoed a key: {text}"
             );
         }
         assert!(s.tx_typical_time.contains("{{estSecs}}"));
+    }
+
+    /// Spec 083 fee review: the fee row's "would fail" is `simWillFail`
+    /// without its gas clause, in every language the app ships — the relay
+    /// refuses such an operation, so nothing is charged — and still a whole
+    /// sentence, ending as the full one ends.
+    #[test]
+    fn the_would_fail_sentence_drops_the_gas_clause_in_every_language() {
+        for lang in crate::loc::LANGUAGES {
+            let s = SigningStrings::resolve(&Loc::for_language(lang));
+            let full = s.warn_will_fail.to_string();
+            let short = s.warn_would_fail.to_string();
+            assert!(full.contains(" — "), "{lang}: {full}");
+            assert!(!short.contains('—'), "{lang}: {short}");
+            let clause = short.trim_end_matches(|c: char| !c.is_alphanumeric());
+            assert!(
+                !clause.is_empty() && full.starts_with(clause),
+                "{lang}: {short} / {full}"
+            );
+            assert_eq!(short.chars().last(), full.chars().last(), "{lang}");
+            let lower = short.to_lowercase();
+            for gas in ["gas", "가스", "газ"] {
+                assert!(!lower.contains(gas), "{lang}: {short}");
+            }
+        }
+        let en = SigningStrings::resolve(&Loc::for_language("en"));
+        assert_eq!(
+            en.warn_would_fail.as_ref(),
+            "This transaction is expected to fail."
+        );
+        let zh = SigningStrings::resolve(&Loc::for_language("zh"));
+        assert_eq!(zh.warn_would_fail.as_ref(), "这笔交易预计会失败。");
+        assert_eq!(first_clause("no dash here").as_ref(), "no dash here");
     }
 
     #[test]

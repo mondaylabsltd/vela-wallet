@@ -961,6 +961,7 @@ fn history(s: &FlowStrings) -> Vec<HistoryGroup> {
         badge,
         badge_logo: None,
         day: None,
+        received: None,
     };
     let to = |name: &str, clock: &str| format!("{} · {clock}", fill(&s.to_name, "name", name));
     let from = |name: &str, clock: &str| format!("{} · {clock}", fill(&s.from_name, "name", name));

@@ -1602,7 +1602,8 @@ fn snake_name<T: serde::Serialize>(value: &T) -> String {
 
 /// The platform's raw load error → the one failure every shell shows, or
 /// `None` when it is not a failure (a cancelled navigation). `platform` is
-/// `"android"`, `"apple"` or `"probe"`; `domain` is the `NSError` domain on
+/// `"android"`, `"apple"`, `"probe"` or `"webview2"` (spec 083); `domain` is
+/// the `NSError` domain on
 /// Apple; `certificate` is set when the failure came from a certificate
 /// callback rather than an error code.
 #[uniffi::export]

@@ -39,6 +39,9 @@ specs/002-penpot-design-source/screenshots/
 specs/002-penpot-design-source/dom-dumps/
 specs/002-penpot-design-source/dom-dumps/cells/
 specs/002-penpot-design-source/generator/assets/library.json
+# 084 device-check evidence (~20MB of screenshots, logs and a video): kept on the checking machine only;
+# the findings are in specs/084-mobile-web-083-parity/results*.md.
+specs/084-mobile-web-083-parity/evidence/
 .vscode
 app-android/vela-wallet/.idea/deploymentTargetSelector.xml
 app-android/vela-wallet/.idea/inspectionProfiles/Project_Default.xml

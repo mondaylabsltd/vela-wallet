@@ -1,0 +1,37 @@
+# W20 — iPhone over caBLE on the installed build, owner's account (2026-09-28)
+
+## Before (lower-case ids, 84e09838 installed)
+[vela-cable] scanning for the phone's Bluetooth advert…
+[vela-cable] Bluetooth adapter opened
+[vela-cable] scan started
+[vela-cable] matched this QR on 63:F9:38:AA:4C:38; suffix=(none) PSM=None
+[vela-cable] advert found; decrypted
+[vela-cable] opening tunnel: wss://cable.auth.com/cable/connect/0276ee/705f6d26edb1a0777685f0ccb4cb817f
+[vela-cable] dialing cable.auth.com:443 through http://127.0.0.1:10808
+[vela-cable] socket connected; TLS + WebSocket handshake…
+[vela-cable] WebSocket tunnel established (fido.cable)
+[vela-cable] tunnel open; starting Noise handshake
+[vela-cable] → tunnel frame (81 bytes)
+[vela-cable] ← tunnel CLOSE Some(CloseFrame { code: Policy, reason: "Policy violation" })
+
+page: -32603 the encrypted channel failed: caBLE transport: the tunnel closed
+
+## After (upper-case ids)
+[vela-cable] opening tunnel: wss://cable.auth.com/cable/connect/6B924B/A57EBA05A77B79B2BC45EF7B57CE48EB
+[vela-cable] dialing cable.auth.com:443 through http://127.0.0.1:10808
+[vela-cable] socket connected; TLS + WebSocket handshake…
+[vela-cable] WebSocket tunnel established (fido.cable)
+[vela-cable] tunnel open; starting Noise handshake
+[vela-cable] → tunnel frame (81 bytes)
+[vela-cable] ← tunnel frame (81 bytes)
+[vela-cable] ← tunnel frame (144 bytes)
+[vela-cable] post-handshake 111 bytes; getInfo cached: true
+[vela-cable] handshake complete; channel is up (WebSocket)
+[vela-wallet] your phone: versions=["FIDO_2_0", "FIDO_2_1"] rk=true clientPin=false uv=true pinUvAuthToken=false protocols=[]
+[vela-cable] → CTAP getAssertion (99 bytes)
+[vela-cable] → tunnel frame (144 bytes)
+[vela-cable] ← tunnel frame (272 bytes)
+[vela-cable] → tunnel frame (48 bytes)
+[vela-cable] assertion user handle: 46 bytes
+
+page: personal_sign ok (836 hex chars); Verify sign: EIP-1271 magic 0x1626ba7e valid=true

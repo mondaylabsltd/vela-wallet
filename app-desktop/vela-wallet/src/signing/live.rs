@@ -86,6 +86,20 @@ pub fn fee_of_another_tier(fee: &FeeView, speed_tier: Option<FeeTier>) -> bool {
 pub struct RequestFacts {
     pub to: Option<String>,
     pub data_bytes: usize,
+    /// The request only moves the chain's own coin (083 W10) — there was
+    /// nothing to decode, so it is a send, not the blind rung.
+    pub native_send: Option<NativeSend>,
+}
+
+/// A plain native send: one call, no calldata. Read by the host from the
+/// very calls the executor submits (`executor::sign_request::calls_of`), so
+/// the figure and the recipient on the sheet are the ones that get signed.
+#[derive(Clone)]
+pub struct NativeSend {
+    pub to: String,
+    pub wei: u128,
+    /// The chain's own coin, as the wallet's chain table names it.
+    pub symbol: String,
 }
 
 /// The cap the person chose, where the decode still says "Unlimited".
@@ -228,7 +242,15 @@ pub fn blocks(clear: &ClearSigningView, facts: &RequestFacts, s: &SigningStrings
             .as_ref()
             .map(|typed| blind_typed_blocks(typed, s))
             .unwrap_or_default(),
-        ClearSurface::BlindTransaction => blind_tx_blocks(facts, s),
+        // The core resolves an empty-calldata request with no result and
+        // leaves the transfer to the shell (`ReqKind::TxPlain`); until 083 it
+        // fell through to the blind rung and a 0.001 xDAI send read "contract
+        // interaction, unable to decode (0 bytes)". The phones draw their own
+        // transfer here too (`SigningLive.plainTransferBlocks`).
+        ClearSurface::BlindTransaction => facts.native_send.as_ref().map_or_else(
+            || blind_tx_blocks(facts, s),
+            |send| native_send_blocks(send, s),
+        ),
     }
 }
 
@@ -364,12 +386,14 @@ mod sim_block_tests {
                     delta: "-8450000000".to_owned(),
                     symbol: "USDC".to_owned(),
                     decimals: 6,
+                    in_trusted_set: true,
                 },
                 J::Erc20Trusted {
                     token: "0xa0".to_owned(),
                     delta: "2100000000000000000".to_owned(),
                     symbol: "WETH".to_owned(),
                     decimals: 18,
+                    in_trusted_set: true,
                 },
             ],
             false,
@@ -1066,6 +1090,87 @@ fn blind_tx_blocks(facts: &RequestFacts, s: &SigningStrings) -> Vec<Block> {
     out
 }
 
+/// A send of the chain's own coin, in the gallery's send layout: what it
+/// does, how much, to whom — and no decode warning, because there was no
+/// calldata to decode.
+///
+/// The one figure this file composes, and not a second authority on "how
+/// much": the wei is the executor's own reading of the request, and a
+/// chain's own coin has 18 decimals. Exact, never rounded — every wei that
+/// will be signed.
+fn native_send_blocks(send: &NativeSend, s: &SigningStrings) -> Vec<Block> {
+    vec![
+        Block::Intent {
+            text: s.intent_send.clone(),
+            tone: Tone::Neutral,
+        },
+        Block::Amount {
+            line: crate::signing::fixtures::AmountLine {
+                sign: SharedString::default(),
+                value: SharedString::from(exact_coin_figure(
+                    send.wei,
+                    crate::executor::format_prefs::current().number,
+                )),
+                symbol: SharedString::from(send.symbol.clone()),
+                token: None,
+                fiat: None,
+                caption: None,
+                tone: Tone::Neutral,
+            },
+            card: false,
+            note: None,
+            compact: false,
+        },
+        Block::Party {
+            label: s.label_recipient.clone(),
+            name: SharedString::from(crate::wallet::live::shorten_address(&send.to)),
+            address: Some(SharedString::from(send.to.clone())),
+            badge: None,
+        },
+    ]
+}
+
+/// A chain coin's wei as an exact figure in the person's number format
+/// (083 W10): the whole part grouped the way every other amount on the sheet
+/// is — the core's decoded sends, the gallery's "1,000" — so 25000 xDAI does
+/// not read "25000"; the fraction kept whole, so no wei is rounded away.
+///
+/// Built from the core's own digit grouping over the digit string, never a
+/// float: a u128 of wei does not survive an f64.
+fn exact_coin_figure(wei: u128, preset: vela_core::l10n::number::NumberPreset) -> String {
+    let plain = vela_core::app::fee_policy::from_base_units(wei, 18);
+    let (whole, fraction) = plain
+        .split_once('.')
+        .map_or((plain.as_str(), None), |(whole, fraction)| {
+            (whole, Some(fraction))
+        });
+    let grouped = vela_core::l10n::number::group_digits(whole, preset);
+    match fraction {
+        Some(fraction) => format!("{grouped}{}{fraction}", preset.separators().decimal),
+        None => grouped,
+    }
+}
+
+/// What the technical details call a call's destination (083 W10).
+///
+/// A call with no calldata calls no contract — its `to` is who receives the
+/// coin, so it is the recipient, not "interacting with". `leg` is the call's
+/// 1-based place in a batch, `None` for a lone call. The core's own
+/// `TxPlain` test: calldata empty or `0x`. Its one caller, the page's
+/// technical details, does not exist on Linux (no in-app browser).
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+pub fn tech_destination_label(data: &str, leg: Option<usize>, s: &SigningStrings) -> SharedString {
+    let word = if matches!(data, "" | "0x") {
+        &s.label_recipient
+    } else {
+        &s.label_interacting
+    };
+    match leg {
+        None => word.clone(),
+        Some(leg) => SharedString::from(format!("{word} {leg}")),
+    }
+}
+
 /// The blocks a decoded request draws, in the order they are read.
 ///
 /// Intent first — what this DOES — then what is wrong with it, then the
@@ -1224,6 +1329,9 @@ pub fn fee_model(
     let unreachable = fee
         .failed
         .is_some_and(|failure| vela_core::app::fee_policy::requote_delay_ms(failure, 1).is_some());
+    // Spec 083 fee: the relay ANSWERED that the operation fails with the coin
+    // in force. Said in words too, and never as the network's doing.
+    let refused = refused_fee_warning(fee, s);
     // The send screen's formatter, not a second one: two answers about what a
     // transaction costs, on two screens pricing the same operation, is how
     // they start disagreeing. An unpriced fee renders as its "—" rather than
@@ -1237,7 +1345,7 @@ pub fn fee_model(
         tappable: fee.failed.is_some() || fee.options.len() > 1,
         value: if another_tier || (fee.busy && fee.fee.is_none()) {
             s.fee_estimating.clone()
-        } else if unreachable {
+        } else if unreachable || refused.is_some() {
             SharedString::default()
         } else {
             SharedString::from(crate::flows::live::fee_line(
@@ -1290,6 +1398,7 @@ pub fn fee_model(
             )
         }),
         warning: insufficient_gas_warning(fee, s)
+            .or(refused)
             .or_else(|| unreachable.then(|| s.fee_unreachable.clone())),
         refresh: Some(s.fee_refresh.clone()),
         refreshing: fee.busy,
@@ -1343,6 +1452,72 @@ pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<Sha
             &[("sym", &selected.symbol)],
         ))
     })
+}
+
+/// Spec 083 fee: the relay simulated the operation with the coin in force
+/// paying its fee and ANSWERED that it fails ([`FeeFailure::WouldFail`]).
+///
+/// The device pass drew this as "无法连接 Vela 服务 — 请检查网络" and asked
+/// again forever: a swap of all of a wallet's USDC, with its fee in USDC. Not
+/// the network, and not something asking again fixes. When the coin in force
+/// has nothing left once the operation has run (the core marks it), it is
+/// Issue #262's sentence — that coin cannot pay the fee; otherwise the
+/// operation as it stands would fail ([`SigningStrings::warn_would_fail`]:
+/// never "you'd still pay gas" — the relay refuses it, nothing is charged).
+/// The core ends a run it refused with every coin on one that had something
+/// left, so a Max sell whose other coins were refused too says "would fail",
+/// not that the coin it drained cannot pay.
+///
+/// [`FeeFailure::WouldFail`]: vela_core::app::fee_policy::FeeFailure::WouldFail
+#[must_use]
+pub fn refused_fee_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedString> {
+    if fee.failed != Some(vela_core::app::fee_policy::FeeFailure::WouldFail) {
+        return None;
+    }
+    Some(
+        match fee
+            .options
+            .iter()
+            .find(|option| option.selected && option.insufficient)
+        {
+            Some(selected) => SharedString::from(crate::signing::fill(
+                &s.warn_insufficient_gas,
+                &[("sym", &selected.symbol)],
+            )),
+            None => s.warn_would_fail.clone(),
+        },
+    )
+}
+
+/// What a tap on the fee row does ([`crate::wallet::signing_host::SigningHost::fee_tapped`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FeeTap {
+    /// Open (or close) the coin list in the sheet.
+    Coins,
+    /// Ask the relay again.
+    Requote,
+    /// One coin and a quote: nothing to do.
+    Nothing,
+}
+
+/// The coin list opens whenever there is another coin to choose — even over
+/// a failed quote (spec 083 fee: after the relay refused the operation with
+/// USDC paying, the ">" did nothing the person could use, and ETH could have
+/// paid). A failure with no other coin to choose — the relay out of reach,
+/// where the core marks every coin as unpriced — is asked again, as before.
+#[must_use]
+pub fn fee_tap(fee: &FeeView) -> FeeTap {
+    let another_coin = fee
+        .options
+        .iter()
+        .any(|option| !option.selected && !option.insufficient);
+    if fee.options.len() > 1 && (fee.failed.is_none() || another_coin) {
+        FeeTap::Coins
+    } else if fee.failed.is_some() {
+        FeeTap::Requote
+    } else {
+        FeeTap::Nothing
+    }
 }
 
 /// Who is asking, and on which chain.
@@ -1543,6 +1718,7 @@ mod tests {
         let facts = RequestFacts {
             to: Some("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned()),
             data_bytes: 196,
+            native_send: None,
         };
         let cases: Vec<(ClearSurface, ClearSigningView)> = vec![
             (ClearSurface::Loading, pristine()),
@@ -1602,6 +1778,7 @@ mod tests {
         let facts = RequestFacts {
             to: Some("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned()),
             data_bytes: 196,
+            native_send: None,
         };
         let drawn = blocks(
             &surfaced(ClearSurface::BlindTransaction, pristine()),
@@ -1625,6 +1802,151 @@ mod tests {
                 .iter()
                 .any(|block| matches!(block, Block::Amount { .. })),
             "the shell invented an amount"
+        );
+    }
+
+    /// 083 W10: a dApp's 0.001 xDAI send, through the real core, reads as a
+    /// send — not "contract interaction, unable to decode (0 bytes)" over an
+    /// unverified contract — and its slide still says "confirm send".
+    #[test]
+    fn a_plain_native_send_reads_as_a_send() {
+        const TO: &str = "0x76875eb2c6d2ea8d6b7fc7e0ce6d2c1e6ac0d141";
+        let s = strings();
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
+        let params = format!(r#"[{{"to":"{TO}","value":"0x38d7ea4c68000"}}]"#);
+        let kickoff =
+            crate::wallet::signing_host::clear_kickoff("eth_sendTransaction", &params, 100, None)
+                .unwrap_or_else(|| unreachable!("a transaction starts the decode"));
+        let _ = host.dispatch(kickoff);
+        let clear = localized_terms(&host.view(), &s);
+        assert_eq!(
+            clear.surface,
+            ClearSurface::BlindTransaction,
+            "the core leaves the transfer to the shell"
+        );
+        let facts = RequestFacts {
+            to: Some(TO.to_owned()),
+            data_bytes: 0,
+            native_send: Some(NativeSend {
+                to: TO.to_owned(),
+                wei: 1_000_000_000_000_000,
+                symbol: "xDAI".to_owned(),
+            }),
+        };
+
+        let drawn = blocks(&clear, &facts, &s);
+        assert!(
+            matches!(drawn.first(), Some(Block::Intent { text, tone: Tone::Neutral }) if *text == s.intent_send),
+            "a send, not a contract interaction"
+        );
+        assert!(
+            !drawn
+                .iter()
+                .any(|block| matches!(block, Block::Warning { .. })),
+            "nothing was left to decode, so nothing to warn about"
+        );
+        let figure = exact_coin_figure(
+            1_000_000_000_000_000,
+            crate::executor::format_prefs::current().number,
+        );
+        assert!(
+            drawn.iter().any(|block| matches!(
+                block,
+                Block::Amount { line, .. } if line.value == figure && line.symbol == "xDAI"
+            )),
+            "the amount, exactly, in the chain's own coin"
+        );
+        assert!(
+            drawn.iter().any(|block| matches!(
+                block,
+                Block::Party { label, address: Some(address), badge: None, .. }
+                    if *label == s.label_recipient && address == TO
+            )),
+            "who receives it, and no 'interacting with, unverified' row"
+        );
+        assert_eq!(
+            crate::signing::status::summary_of(&drawn),
+            Some(SharedString::from(format!(
+                "{} · {figure} xDAI",
+                s.intent_send
+            ))),
+            "the receipt names the send too"
+        );
+        assert_eq!(
+            confirm_label(&clear, &s),
+            SharedString::from(format!("{} · {}", s.slide_to_confirm, s.confirm_send))
+        );
+
+        // Calldata the host did not read as a plain send stays blind as today.
+        let blind = blocks(
+            &clear,
+            &RequestFacts {
+                native_send: None,
+                ..facts
+            },
+            &s,
+        );
+        assert!(matches!(
+            blind.first(),
+            Some(Block::Intent { text, .. }) if *text == s.intent_contract_call
+        ));
+    }
+
+    /// 083 W10 review: a coin figure is grouped like every other amount on
+    /// the sheet — 25000 xDAI does not read "25000" — and stays exact to the
+    /// last wei, in each of the four number formats.
+    #[test]
+    fn a_coin_figure_is_grouped_and_exact() {
+        use vela_core::l10n::number::NumberPreset;
+        const COIN: u128 = 1_000_000_000_000_000_000;
+        let cases = [
+            (25_000 * COIN, NumberPreset::CommaDot, "25,000"),
+            (25_000 * COIN + COIN / 2, NumberPreset::DotComma, "25.000,5"),
+            (
+                1_234_567 * COIN + 1,
+                NumberPreset::SpaceComma,
+                "1 234 567,000000000000000001",
+            ),
+            (
+                1_234_567 * COIN + COIN / 2,
+                NumberPreset::Indian,
+                "12,34,567.5",
+            ),
+            (COIN / 1_000, NumberPreset::CommaDot, "0.001"),
+            (COIN / 1_000, NumberPreset::DotComma, "0,001"),
+            (1, NumberPreset::CommaDot, "0.000000000000000001"),
+            (999 * COIN, NumberPreset::DotComma, "999"),
+            (0, NumberPreset::CommaDot, "0"),
+        ];
+        for (wei, preset, figure) in cases {
+            assert_eq!(
+                exact_coin_figure(wei, preset),
+                figure,
+                "{wei} wei, {preset:?}"
+            );
+        }
+    }
+
+    /// 083 W10 review: the technical details name a call's destination by
+    /// what the call does — no calldata is a recipient, anything else is the
+    /// contract being called — and number it inside a batch.
+    #[test]
+    fn a_call_without_calldata_names_its_recipient() {
+        let s = strings();
+        assert_eq!(tech_destination_label("", None, &s), s.label_recipient);
+        assert_eq!(tech_destination_label("0x", None, &s), s.label_recipient);
+        assert_eq!(
+            tech_destination_label("0xa9059cbb", None, &s),
+            s.label_interacting
+        );
+        assert_eq!(
+            tech_destination_label("0x", Some(2), &s),
+            SharedString::from(format!("{} 2", s.label_recipient))
+        );
+        assert_eq!(
+            tech_destination_label("0xdead", Some(1), &s),
+            SharedString::from(format!("{} 1", s.label_interacting))
         );
     }
 
@@ -2717,6 +3039,118 @@ mod fee_tests {
             }
             _ => unreachable!("an open fee row lists its coins"),
         }
+    }
+
+    /// A fee row whose quote the relay refused: the operation fails with the
+    /// coin in force (spec 083 fee).
+    fn refused(options: Vec<FeeOptionView>) -> FeeView {
+        let mut fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        fee.failed = Some(vela_core::app::fee_policy::FeeFailure::WouldFail);
+        fee.options = options;
+        fee
+    }
+
+    /// Spec 083 fee (the device pass: a Max USDC → ETH swap, fee in USDC):
+    /// the relay ANSWERED that the operation fails. The row said "无法连接
+    /// Vela 服务 — 请检查网络" and asked again forever. Now it says the coin
+    /// cannot pay when the operation leaves nothing of it (Issue #262's
+    /// sentence), and otherwise that the transaction would fail — never the
+    /// network sentence, and no dash under a sentence.
+    #[test]
+    fn a_relay_refusal_is_said_as_the_transaction_and_never_the_network() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let row = |fee: &FeeView| match fee_model(
+            &clear,
+            fee,
+            8453,
+            false,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
+            FeeModel::OnChain {
+                value,
+                warning,
+                tappable,
+                ..
+            } => (value, warning, tappable),
+            _ => unreachable!("a transaction has a fee row"),
+        };
+        let usdc = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+
+        // The coin in force has nothing left once the swap has run.
+        let drained = refused(vec![
+            option("ETH", None, false, false),
+            option("USDC", Some(usdc), true, true),
+        ]);
+        let (value, warning, tappable) = row(&drained);
+        let warning = warning.unwrap_or_else(|| unreachable!("the row says why"));
+        assert!(warning.contains("USDC"), "{warning}");
+        assert_eq!(
+            warning.as_ref(),
+            crate::signing::fill(&s.warn_insufficient_gas, &[("sym", "USDC")])
+        );
+        assert_ne!(warning, s.fee_unreachable);
+        assert!(value.is_empty(), "the sentence, not a dash: {value}");
+        assert!(tappable, "another coin can be chosen");
+        assert_eq!(
+            refused_fee_warning(&drained, &s),
+            Some(warning),
+            "the same sentence the row draws"
+        );
+
+        // The coin in force still has something left: the operation fails.
+        let failing = refused(vec![
+            option("ETH", None, false, true),
+            option("USDC", Some(usdc), false, false),
+        ]);
+        let (value, warning, _) = row(&failing);
+        assert_eq!(warning, Some(s.warn_would_fail.clone()));
+        assert_ne!(
+            warning,
+            Some(s.warn_will_fail.clone()),
+            "nothing is charged for an operation the relay refused"
+        );
+        assert!(value.is_empty());
+
+        // The network sentence is still the network's.
+        let mut unreachable = refused(Vec::new());
+        unreachable.failed = Some(vela_core::app::fee_policy::FeeFailure::EstimateFailed);
+        assert_eq!(row(&unreachable).1, Some(s.fee_unreachable.clone()));
+        assert!(refused_fee_warning(&unreachable, &s).is_none());
+    }
+
+    /// Spec 083 fee: the ">" opens the coin list whenever another coin can be
+    /// chosen — over a refused quote too — and a failure with nothing else to
+    /// choose is asked again, as before.
+    #[test]
+    fn the_fee_row_opens_the_coins_whenever_another_can_be_chosen() {
+        let usdc = Some("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+        let one = vec![option("ETH", None, false, true)];
+        let two = || {
+            vec![
+                option("ETH", None, false, false),
+                option("USDC", usdc, true, true),
+            ]
+        };
+        assert_eq!(fee_tap(&quoted(one.clone(), true)), FeeTap::Nothing);
+        assert_eq!(fee_tap(&quoted(two(), true)), FeeTap::Coins);
+        assert_eq!(fee_tap(&refused(two())), FeeTap::Coins, "ETH can pay");
+        assert_eq!(
+            fee_tap(&refused(one)),
+            FeeTap::Requote,
+            "no other coin: ask again"
+        );
+        // The relay out of reach: every coin unpriced, so none to choose.
+        let mut unreachable = refused(vec![
+            option("ETH", None, true, false),
+            option("USDC", usdc, true, true),
+        ]);
+        unreachable.failed = Some(vela_core::app::fee_policy::FeeFailure::EstimateFailed);
+        assert_eq!(fee_tap(&unreachable), FeeTap::Requote);
     }
 
     /// Issue #262: quoted in a coin the wallet cannot pay with, the slide is

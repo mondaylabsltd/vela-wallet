@@ -73,3 +73,12 @@ const ALL = {
 } satisfies Record<ClearTerm, true>;
 
 export const CLEAR_TERMS = Object.keys(ALL) as ClearTerm[];
+
+/**
+ * The terms that name what a call DOES — the ones a recorded intent can be
+ * (083 H2). Activity titles a dApp's transaction with one, so the wallet page
+ * ships these words and not the field labels.
+ */
+export const INTENT_TERMS = CLEAR_TERMS.filter(
+	(term) => term.startsWith('intent') || term === 'deployIntent'
+);

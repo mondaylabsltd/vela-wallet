@@ -80,6 +80,40 @@ function Get-Arm64VsDevCmd {
     return $vsDevCmd
 }
 
+# The oldest Visual C++ runtime the app runs on: the version of the MSVC
+# toolset that linked it, which link.exe writes into the PE optional header
+# (MajorLinkerVersion.MinorLinkerVersion, e.g. 14.51). A per-user install
+# compares the machine's runtime against this, never against the bundled
+# redistributable, whose version is whatever aka.ms served when the cache was
+# filled (spec 083 H9 review).
+function Get-VCRuntimeMinimum([string]$ExePath) {
+    $stream = [System.IO.File]::OpenRead($ExePath)
+    try {
+        $reader = New-Object System.IO.BinaryReader($stream)
+        $stream.Position = 0x3C
+        $peOffset = $reader.ReadInt32()
+        $stream.Position = $peOffset
+        if ($reader.ReadUInt32() -ne 0x00004550) {
+            throw "Not a PE image: $ExePath"
+        }
+        # The optional header follows the 4-byte signature and the 20-byte
+        # COFF header; the linker version is its bytes 2 and 3.
+        $stream.Position = $peOffset + 24 + 2
+        $major = [int]$reader.ReadByte()
+        $minor = [int]$reader.ReadByte()
+    }
+    finally {
+        $stream.Dispose()
+    }
+    # Runtime 14.x serves every toolset since Visual Studio 2015. Anything else
+    # is not link.exe's number (lld-link writes its own), and would make the
+    # per-user check meaningless.
+    if ($major -ne 14) {
+        throw "$ExePath was linked by linker version $major.$minor, not an MSVC 14.x link.exe; the installer cannot tell which Visual C++ runtime it needs."
+    }
+    return [version]::new($major, $minor, 0, 0)
+}
+
 if (-not $SkipBuild) {
     Push-Location $projectRoot
     try {
@@ -131,6 +165,13 @@ if (
     throw "Refusing to package an untrusted VC++ Redistributable: $redistPath"
 }
 
+$vcRuntimeMin = Get-VCRuntimeMinimum $releaseExe
+$redistVersion = (Get-Item -LiteralPath $redistPath).VersionInfo.FileVersionRaw
+if ($redistVersion -lt $vcRuntimeMin) {
+    throw "The cached VC++ Redistributable $redistPath is $redistVersion, older than the runtime $vcRuntimeMin the app was linked against. Delete it to download the current one."
+}
+Write-Host "Visual C++ runtime: needs $vcRuntimeMin or newer; bundling $redistVersion"
+
 $innoCandidates = @(
     (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
@@ -147,6 +188,7 @@ $installerScript = Join-Path $projectRoot 'installer\VelaWallet.iss'
     "/DMyAppExe=$releaseExe" `
     "/DMyVCRedist=$redistPath" `
     "/DMyVCRedistName=$($redist.FileName)" `
+    "/DMyVCRuntimeMin=$vcRuntimeMin" `
     "/DMyArchitecture=$Architecture" `
     "/DMyArchitecturesAllowed=$($redist.InstallerArchitecture)" `
     "/DMyOutputDir=$outputDir" `

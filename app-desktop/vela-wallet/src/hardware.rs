@@ -201,6 +201,51 @@ pub const fn method_words(method: KeyMethod) -> (&'static str, &'static str) {
     }
 }
 
+/// Which chooser a route's line is drawn in (083 W16): the phone row says
+/// what the phone is for, and creating a key on it is not signing in with one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Chooser {
+    Create,
+    SignIn,
+}
+
+/// A route's line under its title, as `chooser` and this machine say it.
+///
+/// Two lines are not [`method_words`]' (083 W16): the sign-in sheet's phone
+/// row said "create it on a nearby device", and "this device" offered Touch
+/// ID on Windows and Windows Hello on a Mac.
+#[must_use]
+pub fn method_line(loc: &Loc, method: KeyMethod, chooser: Chooser) -> SharedString {
+    match (method, chooser, PLATFORM_AUTHENTICATOR) {
+        // Nothing is created by signing in: the phone scans, and a passkey
+        // already on it answers.
+        (KeyMethod::Hybrid, Chooser::SignIn, _) => scan_line(loc),
+        (KeyMethod::Platform, _, Some(name)) => SharedString::from(name),
+        _ => loc.t(method_words(method).1),
+    }
+}
+
+/// The line under a phone's QR wherever the phone creates nothing — a
+/// sign-in, a send, a dApp's signature: "Scan a code", the one thing to do
+/// while the code is up (083 H1 review). What to do on the phone after that
+/// is the touch card's line, which replaces this card once the phone is in.
+#[must_use]
+pub fn scan_line(loc: &Loc) -> SharedString {
+    loc.t("explore.scan")
+}
+
+/// The authenticator "this device" reaches here, by its own name (083 W16).
+/// A product name, not copy: all 15 catalogs keep both verbatim in
+/// `onboarding.create.methodPlatformBody`. Linux reaches none, and its greyed
+/// row says why in its own line.
+const PLATFORM_AUTHENTICATOR: Option<&str> = if cfg!(windows) {
+    Some("Windows Hello")
+} else if cfg!(target_os = "macos") {
+    Some("Touch ID")
+} else {
+    None
+};
+
 /// May this route run on this machine? Only "this device" can answer no: a
 /// platform authenticator needs a system passkey service, which in this app's
 /// reach only Windows has. A key on the desk, a phone by scan and a signer
@@ -235,12 +280,12 @@ pub fn signin_method_card(
     // from gpui at all, so there the row stays greyed and says why.
     let entry = |method: KeyMethod| {
         let available = method_available(method);
-        let (title_key, body_key) = method_words(method);
+        let (title_key, _) = method_words(method);
         // The one row that can be unavailable says why in its own line.
-        let body_key = if available {
-            body_key
+        let line = if available {
+            method_line(loc, method, Chooser::SignIn)
         } else {
-            "onboarding.create.securityKeyRequiredBody"
+            loc.t("onboarding.create.securityKeyRequiredBody")
         };
         let on_pick = on_pick.clone();
         let mark =
@@ -275,7 +320,7 @@ pub fn signin_method_card(
                             .text_color(theme.fg_base)
                             .child(loc.t(title_key)),
                     )
-                    .child(body(theme, loc.t(body_key))),
+                    .child(body(theme, line)),
             );
         if available {
             row.cursor_pointer()
@@ -312,10 +357,15 @@ pub fn signin_method_card(
 ///
 /// **No buttons.** The answer is the phone; there is nothing to press. It clears
 /// itself the moment the tunnel is up.
-pub fn qr_card(
+///
+/// **Its line is the caller's.** The create card's "create it on a nearby
+/// device" is false over a signature (083 W19) and over a sign-in (083 W16);
+/// those say [`scan_line`].
+pub fn qr_card_with(
     theme: &Theme,
     loc: &Loc,
     payload: &str,
+    body_text: SharedString,
     on_cancel: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
     // A module size that keeps a typical caBLE payload (~40 modules a side) to a
@@ -357,7 +407,7 @@ pub fn qr_card(
                 .bg(rgb(0xffffff))
                 .child(matrix),
         )
-        .child(body(theme, loc.t("onboarding.create.methodHybridBody")))
+        .child(body(theme, body_text))
         // The way out. This card waits up to ninety seconds for a phone, over a
         // scrim that swallows every press; without this button the only exit
         // was quitting the app. The PIN and wallet-picker cards always had one.
@@ -674,5 +724,38 @@ mod tests {
             method_available(KeyMethod::Platform),
             crate::executor::passkey::platform_supported()
         );
+    }
+
+    /// 083 W16: the sign-in sheet's phone row creates nothing, and "this
+    /// device" names the one authenticator this machine has — in both
+    /// choosers. Every other line is the same in both.
+    #[test]
+    fn the_sign_in_sheet_signs_in_and_names_this_machines_authenticator() {
+        let loc = crate::loc::Loc::from_env();
+        let phone_create = method_line(&loc, KeyMethod::Hybrid, Chooser::Create);
+        let phone_sign_in = method_line(&loc, KeyMethod::Hybrid, Chooser::SignIn);
+        assert_eq!(phone_create, loc.t("onboarding.create.methodHybridBody"));
+        assert_ne!(phone_sign_in, phone_create, "the sign-in row said create");
+        assert_ne!(phone_sign_in.as_ref(), "explore.scan", "echoed its key");
+        // The QR under a sign-in, a send and a dApp signature: one line.
+        assert_eq!(phone_sign_in, scan_line(&loc));
+
+        let this_device = method_line(&loc, KeyMethod::Platform, Chooser::SignIn);
+        assert_eq!(
+            this_device,
+            method_line(&loc, KeyMethod::Platform, Chooser::Create)
+        );
+        #[cfg(windows)]
+        assert_eq!(this_device.as_ref(), "Windows Hello");
+        #[cfg(target_os = "macos")]
+        assert_eq!(this_device.as_ref(), "Touch ID");
+
+        for method in [KeyMethod::SecurityKey, KeyMethod::TrustedSigner] {
+            assert_eq!(
+                method_line(&loc, method, Chooser::SignIn),
+                method_line(&loc, method, Chooser::Create),
+                "{method:?}"
+            );
+        }
     }
 }

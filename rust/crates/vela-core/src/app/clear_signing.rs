@@ -4495,8 +4495,9 @@ fn parse_siwe(message: &str) -> Option<ClearSiweFields> {
 
 /// `siweHost` (siwe.ts:80-93): lowercased host, no port, single trailing
 /// FQDN dot stripped; unparseable is `None` — fail safe, never a half-parsed
-/// host that could spuriously match.
-fn siwe_host(value: Option<&str>) -> Option<String> {
+/// host that could spuriously match. Also the Activity feed's site label
+/// (083 H2).
+pub(crate) fn siwe_host(value: Option<&str>) -> Option<String> {
     let value = value?;
     if value.is_empty() {
         return None;

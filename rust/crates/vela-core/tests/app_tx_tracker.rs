@@ -780,3 +780,120 @@ fn an_aborted_op_reads_still_confirming() {
     });
     assert_eq!(outcome(&sut), TrackOutcome::StillConfirming);
 }
+
+// ---------------------------------------------------------------------------
+// 083 H2 — a dApp's operation settles like a send's
+// ---------------------------------------------------------------------------
+
+/// Drive the sign machine from a site's `eth_sendTransaction` to the moment
+/// the bundler accepts it; answer the record it persisted and the handoff.
+fn dapp_submitted() -> (String, vela_core::app::sign_request::SignTrackerHandoff) {
+    use vela_core::app::sign_request::{
+        Event as SignEvent, SignAccountRef, SignApproveOpts, SignOperation as SignOp, SignRequest,
+        SignShellResult as SignRes,
+    };
+    let mut sign = DomainDriver::<SignRequest>::new();
+    sign.dispatch(SignEvent::NetworksChanged {
+        chain_ids: vec![CHAIN],
+    });
+    sign.dispatch(SignEvent::AccountsChanged {
+        accounts: vec![SignAccountRef {
+            address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            credential_id: "cred-0".to_owned(),
+        }],
+        active_index: 0,
+    });
+    sign.dispatch(SignEvent::RequestArrived {
+        id: "rid-h2".to_owned(),
+        method: "eth_sendTransaction".to_owned(),
+        params_json:
+            r#"[{"to":"0x3333333333333333333333333333333333333333","data":"0x","value":"0x1"}]"#
+                .to_owned(),
+        origin: "http://127.0.0.1:5173".to_owned(),
+        transport_id: "tab-1".to_owned(),
+        dedicated_transport: true,
+        per_request_chain: Some(CHAIN),
+        dapp: None,
+        granted_address: None,
+        requested_address: None,
+        request_ts_ms: None,
+        now_ms: T0,
+    });
+    sign.dispatch(SignEvent::ApproveTapped {
+        opts: SignApproveOpts::default(),
+    });
+    let ops = sign.resolve(SignRes::PreCheck { funding: None });
+    assert!(
+        matches!(ops.as_slice(), [SignOp::SignAndSubmit { .. }]),
+        "{ops:?}"
+    );
+    let ops = sign.dispatch(SignEvent::OpSubmitted {
+        id: "rid-h2".to_owned(),
+        user_op_hash: HASH.to_owned(),
+        now_ms: T0,
+    });
+    let record_id = match ops.as_slice() {
+        [SignOp::PersistRecord { record }] => record.record_id.clone(),
+        other => panic!("the pending record first: {other:?}"),
+    };
+    let handoff = sign.view().tracker_handoff.expect("the op is handed over");
+    (record_id, handoff)
+}
+
+/// The sign machine hands the tracker the record it just persisted, and the
+/// tracker's verdict patches exactly that record — the one the Activity row
+/// reads its status from. Landed…
+#[test]
+fn a_dapp_operation_lands_on_the_record_the_sign_path_persisted() {
+    let (record_id, handoff) = dapp_submitted();
+    assert_eq!(handoff.record_ids, vec![record_id.clone()]);
+
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::Submitted {
+        user_op_hash: handoff.user_op_hash,
+        record_ids: handoff.record_ids,
+        chain_id: handoff.chain_id,
+    });
+    assert_eq!(ops, vec![Op::Now, poll_receipt()]);
+    assert!(sut.resolve(Res::Clock { now_ms: T0 }).is_empty());
+    let ops = sut.resolve(receipt_confirmed(T0 + 300.0));
+    assert_eq!(
+        ops.first(),
+        Some(&Op::UpdateTxRecords {
+            ids: vec![record_id],
+            patch: TrackRecordPatch {
+                status: TrackRecordStatus::Confirmed,
+                tx_hash: Some(TX.to_owned()),
+            },
+        })
+    );
+}
+
+/// …or failed, the only way a record may be: a definitive drop.
+#[test]
+fn a_dropped_dapp_operation_fails_the_record_the_sign_path_persisted() {
+    let (record_id, handoff) = dapp_submitted();
+
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Submitted {
+        user_op_hash: handoff.user_op_hash,
+        record_ids: handoff.record_ids,
+        chain_id: handoff.chain_id,
+    });
+    sut.resolve(Res::Clock { now_ms: T0 });
+    let ops = sut.resolve(Res::ReceiptFailed {
+        user_op_hash: HASH.to_owned(),
+        tx_hash: TX.to_owned(),
+        now_ms: T0 + 300.0,
+    });
+    assert_eq!(
+        ops,
+        vec![Op::UpdateTxRecords {
+            ids: vec![record_id],
+            patch: TrackRecordPatch {
+                status: TrackRecordStatus::Failed,
+                tx_hash: None,
+            },
+        }]
+    );
+}
