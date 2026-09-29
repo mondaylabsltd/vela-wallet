@@ -524,5 +524,7 @@ describe('a relay refusal is said as one (spec 082 RJ3)', () => {
 				outcome: { type: 'failed', refused }
 			});
 		}
-	});
+		// Four submits on real timers take ~2.3 s alone; a loaded runner
+		// crossed the 5 s default (082 close-out).
+	}, 20_000);
 });
