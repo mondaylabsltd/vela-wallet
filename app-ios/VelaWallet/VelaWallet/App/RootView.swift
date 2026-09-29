@@ -96,7 +96,10 @@ struct RootView: View {
     /// Which history row opened the transaction sheet, and which assets row
     /// opened the token sheet. The drawn sheets show ONE of each; without the
     /// tap travelling with the navigation they would show the first.
-    @State private var activityRow: (group: Int, row: Int) = (0, 0)
+    /// The record the open transaction detail shows — its feed id, set by
+    /// the tap (home or History). Never a list position: the feed moves under
+    /// an open sheet, and a position then named another record (X-FIRST-TAP).
+    @State private var activityItemId: String?
     @State private var assetRow = 0
     /// The network filter on the history screen. `nil` is every chain — the
     /// core owns the filtering; this is only which row was picked.
@@ -1157,6 +1160,7 @@ struct RootView: View {
                         loc: loc,
                         onSelectTab: selectTab,
                         onFlow: { flows.enter($0) },
+                        onOpenActivity: { activityItemId = $0 },
                         onToggleBalance: { wallet.togglePrivacy() },
                         onStatusTap: { openRescue() },
                         // The name line's chevron has drawn a disclosure since
@@ -2739,7 +2743,7 @@ struct RootView: View {
                             networkName: chain.displayName
                         )
                     },
-                    onSelectActivity: { activityRow = ($0, $1) },
+                    onSelectActivityItem: { activityItemId = $0 },
                     onSelectAsset: { selectAsset($0) },
                     onSendToken: { sendSelectedToken() },
                     onReceiveToken: { receiveSelectedToken() },
@@ -3038,19 +3042,11 @@ struct RootView: View {
         }
     }
 
-    /// The feed item behind the tapped history row.
-    ///
-    /// Resolved against the SAME grouping the screen rendered, so the sheet
-    /// cannot open a different transaction than the one that was tapped.
+    /// The feed item behind the tapped activity row, by its id — the same
+    /// record however the feed moved since the tap. None once it is gone.
     private func selectedItem(in feed: FeedViewWire) -> FeedItemWire? {
-        let groups = WalletLive.activityGroups(
-            feed, loc: loc, hidden: wallet.balance?.hidden ?? false
-        )
-        guard groups.indices.contains(activityRow.group) else { return nil }
-        let before = groups[..<activityRow.group].reduce(0) { $0 + $1.rows.count }
-        let flat = before + activityRow.row
-        let items = FlowsLive.items(feed)
-        return items.indices.contains(flat) ? items[flat] : nil
+        guard let id = activityItemId else { return nil }
+        return FlowsLive.items(feed).first { $0.id == id }
     }
 
     /// The address field, owned by the core — and only on the sheet that has

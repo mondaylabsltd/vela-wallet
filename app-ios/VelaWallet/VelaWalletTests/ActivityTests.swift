@@ -319,6 +319,24 @@ struct DappActivityRowTests {
         #expect(detail.facts.contains { $0.label == zh.t("componentsUi.signing.siweOrigin") && $0.value == "192.168.50.9:8137" })
     }
 
+    /// 082 X-FIRST-TAP: every row carries its record's feed id, on the home
+    /// and in History alike, so a tap opens that record — not whichever one
+    /// now sits at the tapped position after the feed moved.
+    @Test func everyRowCarriesItsRecordsId() throws {
+        let view = try feed([
+            dappRecord("dapp-1-tx", status: "pending"),
+            dappRecord("dapp-2-tx", status: "pending", value: "0x0"),
+        ])
+        let rows = WalletLive.activityGroups(view, loc: zh, hidden: false).flatMap(\.rows)
+        let ids = Set(items(view).map(\.id))
+        #expect(rows.count == 2)
+        #expect(Set(rows.compactMap(\.itemId)) == ids, "each row names its own record")
+        for row in rows {
+            let id = try #require(row.itemId)
+            #expect(FlowsLive.items(view).first { $0.id == id } != nil)
+        }
+    }
+
     /// A failed one says so — never a quiet "done".
     @Test func aFailedDappRowSaysFailed() throws {
         // The tracker patches a record `failed` in place; the row is written

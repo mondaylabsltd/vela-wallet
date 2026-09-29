@@ -37,6 +37,8 @@ struct WalletScreen: View {
     /// entries into Receive / Send / Scan / Activity / Assets. Absent in the
     /// gallery, where this screen is a picture.
     var onFlow: ((WalletFlowEntry) -> Void)?
+    /// Which record a home activity row opens — said before the detail shows.
+    var onOpenActivity: ((String?) -> Void)?
     /// Tap the figure to hide it (spec 051). The drawing has carried
     /// `a11yHide` / `a11yShow` labels since spec 015 and the core has owned the
     /// state since phase 2b — this is the gesture that was missing between
@@ -202,7 +204,10 @@ struct WalletScreen: View {
                         rowDivider
                     }
                     if let onFlow {
-                        Button { onFlow(.txDetail) } label: {
+                        Button {
+                            onOpenActivity?(row.itemId)
+                            onFlow(.txDetail)
+                        } label: {
                             ActivityRowView(model: row).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)

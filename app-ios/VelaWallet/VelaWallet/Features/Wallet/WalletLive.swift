@@ -433,7 +433,8 @@ extension WalletLive {
             positive: incoming,
             masked: hidden && !figure.isEmpty,
             badgeColor: chainColor(item.chainId),
-            badgeLogoURL: Marks.chainLogoURL(item.chainId)
+            badgeLogoURL: Marks.chainLogoURL(item.chainId),
+            itemId: item.id
         )
     }
 

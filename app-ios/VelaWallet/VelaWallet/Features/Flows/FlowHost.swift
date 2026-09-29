@@ -70,6 +70,8 @@ struct FlowHost: View {
     var onReceiveNetwork: ((Int) -> Void)?
     /// Which history row opened the transaction sheet, as (group, row).
     var onSelectActivity: ((Int, Int) -> Void)?
+    /// The record behind the tapped history row, by id (never by position).
+    var onSelectActivityItem: ((String?) -> Void)?
     /// Which assets row opened the token sheet.
     var onSelectAsset: ((Int) -> Void)?
     /// 转账 from a token's own sheet, with that token preselected.
@@ -308,6 +310,9 @@ struct FlowHost: View {
         case .history(let m):
             FlowScaffold(header: m.header, onBack: onBack, onPill: { openChainPicker() }) {
                 HistoryBody(model: m, onSelect: { group, row in
+                    let item = m.groups.indices.contains(group) && m.groups[group].rows.indices.contains(row)
+                        ? m.groups[group].rows[row].itemId : nil
+                    onSelectActivityItem?(item)
                     onSelectActivity?(group, row)
                     onNavigate(.txDetail)
                 })
