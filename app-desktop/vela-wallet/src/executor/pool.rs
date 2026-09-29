@@ -873,14 +873,31 @@ fn reached_of(verdict: &RpcCallVerdict) -> Option<bool> {
     }
 }
 
-/// Feed one conclusion into the count. `Some(edge)` when it crossed one.
-fn feed_health(reached: bool) -> Option<NetEdge> {
+/// "Went offline" edges since launch — for the tests that prove one
+/// failing chain never raises one.
+static WENT_OFFLINE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Feed one conclusion into the count: which chain it read (spec 082 RJ14,
+/// G53 — the count is of sources, not calls, so one chain whose nodes all
+/// fail while the others answer is that chain's notice, never "offline"),
+/// and when. `Some(edge)` when it crossed one.
+fn feed_health(reached: bool, chain_id: u32, now_ms: f64) -> Option<NetEdge> {
     let Ok(mut health) = HEALTH.lock() else {
         return None;
     };
-    let (next, edge) = net_health_step(health.clone(), reached, None, now_ms());
+    let (next, edge) = step_health(&health, reached, chain_id, now_ms);
     *health = next;
     edge
+}
+
+/// One pooled read into the core's count, sourced by its chain.
+fn step_health(
+    health: &NetHealth,
+    reached: bool,
+    chain_id: u32,
+    now_ms: f64,
+) -> (NetHealth, Option<NetEdge>) {
+    net_health_step(health.clone(), reached, Some(chain_id), now_ms)
 }
 
 /// The call is over: log a give-up, and count it towards the network's health.
@@ -901,13 +918,18 @@ fn note_conclusion(call: &InFlight, verdict: &RpcCallVerdict) {
     let Some(reached) = reached_of(verdict) else {
         return;
     };
-    match feed_health(reached) {
-        Some(NetEdge::WentOffline) => vlog!("net", "offline (chain reads stopped answering)"),
+    match feed_health(reached, call.chain_id, now_ms()) {
+        Some(NetEdge::WentOffline) => {
+            WENT_OFFLINE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            vlog!("net", "offline (chain reads stopped answering)");
+        }
         Some(NetEdge::CameBack) => {
             vlog!("net", "came back");
             CAME_BACK.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            // RE3: a balance read on the way back, not at the next 10 min pass.
-            crate::executor::balance_dashboard::invalidate();
+            // RE3: a balance read on the way back, not at the next 10 min
+            // pass — one that joins a read already out (G53: every "came
+            // back" used to start a second round beside the first).
+            crate::executor::balance_dashboard::network_back();
         }
         None => {}
     }
@@ -1454,6 +1476,144 @@ mod tests {
             }),
             Some(true)
         );
+    }
+
+    /// Spec 082 RJ14 (G53): the count is of sources, not calls. Ten Gnosis
+    /// sweeps that give up — while the other chains answer, and even with
+    /// nothing else asked at all — are Gnosis's notice, never "offline". The
+    /// device log had ten `net:` lines in two minutes, each "came back"
+    /// 0.2–0.9 s after "offline", with chains 1, 100 and 480 failing and the
+    /// rest answering; each "came back" forced another balance round.
+    #[test]
+    fn ten_gnosis_misses_never_go_offline() {
+        fn feed(
+            health: &mut NetHealth,
+            edges: &mut Vec<NetEdge>,
+            reached: bool,
+            chain: u32,
+            at: f64,
+        ) {
+            let (next, edge) = step_health(health, reached, chain, at);
+            *health = next;
+            edges.extend(edge);
+        }
+        let mut edges = Vec::new();
+        let mut now = 1_757_000_000_000.0;
+
+        let mut health = NetHealth::default();
+        for miss in 0..10 {
+            feed(&mut health, &mut edges, false, 100, now);
+            if miss % 3 == 2 {
+                feed(&mut health, &mut edges, true, 8453, now + 100.0);
+            }
+            now += 4_000.0;
+        }
+        assert!(
+            edges.is_empty(),
+            "one chain failing is not offline: {edges:?}"
+        );
+
+        // Gnosis alone, nothing else asked, far past the quiet window.
+        let mut health = NetHealth::default();
+        for _ in 0..10 {
+            feed(&mut health, &mut edges, false, 100, now);
+            now += 4_000.0;
+        }
+        assert!(edges.is_empty(), "still one source: {edges:?}");
+        assert!(health.online);
+
+        // The network really gone: two chains' sweeps give up with nothing
+        // reached for ten seconds — offline once; the first answer after it
+        // is "came back", once.
+        let mut health = NetHealth::default();
+        feed(&mut health, &mut edges, true, 8453, now);
+        for chain in [100, 1, 100, 1] {
+            now += 4_000.0;
+            feed(&mut health, &mut edges, false, chain, now);
+        }
+        assert_eq!(edges, vec![NetEdge::WentOffline]);
+        feed(&mut health, &mut edges, true, 8453, now + 500.0);
+        assert_eq!(edges, vec![NetEdge::WentOffline, NetEdge::CameBack]);
+    }
+
+    /// Spec 082 T224, G53's relaunch, through the real pool: one chain whose
+    /// endpoint takes no connection and 23 that answer, read twice over as
+    /// two balance rounds would (the second overlapping the first). Every
+    /// answering chain answers, promptly; the pool fails that one chain and
+    /// no other; and no "offline" edge is raised for it.
+    #[test]
+    fn one_dead_chain_among_answering_ones_fails_alone() {
+        const DEAD: u32 = 424_400;
+        const FIRST: u32 = 424_401;
+        const ANSWERING: u32 = 23;
+
+        storage::tests::with_temp_state("pool-one-dead-chain", || {
+            // A port nothing listens on: the connect is refused.
+            let dead_port = std::net::TcpListener::bind("127.0.0.1:0")
+                .and_then(|listener| listener.local_addr())
+                .map(|addr| addr.port())
+                .unwrap_or_else(|error| unreachable!("no loopback port: {error}"));
+            let mut networks =
+                vec![json!({ "chainId": DEAD, "rpcURL": format!("http://127.0.0.1:{dead_port}") })];
+            for chain in FIRST..FIRST + ANSWERING {
+                let port = fake_rpc(chain, Duration::ZERO);
+                networks.push(
+                    json!({ "chainId": chain, "rpcURL": format!("http://127.0.0.1:{port}") }),
+                );
+            }
+            if storage::write_value(storage::KEY_CUSTOM_NETWORKS, Value::Array(networks)).is_err() {
+                unreachable!("could not seed the networks");
+            }
+            let offline_before = WENT_OFFLINE.load(std::sync::atomic::Ordering::SeqCst);
+
+            let round = || {
+                let mut calls = Vec::new();
+                for chain in std::iter::once(DEAD).chain(FIRST..FIRST + ANSWERING) {
+                    for method in ["eth_getBalance", "eth_blockNumber", "eth_call"] {
+                        calls.push(std::thread::spawn(move || {
+                            let began = Instant::now();
+                            let answer = call(chain, method, json!([]));
+                            (chain, answer.is_ok(), began.elapsed())
+                        }));
+                    }
+                }
+                calls
+            };
+            let mut calls = round();
+            std::thread::sleep(Duration::from_millis(200));
+            calls.extend(round());
+            for handle in calls {
+                let (chain, answered, took) = handle
+                    .join()
+                    .unwrap_or_else(|_| unreachable!("a caller panicked"));
+                if chain == DEAD {
+                    assert!(!answered, "the dead chain answered");
+                } else {
+                    assert!(answered, "chain {chain} did not answer");
+                    assert!(
+                        took < Duration::from_secs(5),
+                        "chain {chain} waited {took:?} behind the dead one"
+                    );
+                }
+            }
+
+            let failed = failed_chains();
+            assert!(
+                failed.contains(&DEAD),
+                "the dead chain is failed: {failed:?}"
+            );
+            assert!(
+                !failed
+                    .iter()
+                    .any(|chain| (FIRST..FIRST + ANSWERING).contains(chain)),
+                "an answering chain is failed: {failed:?}"
+            );
+            assert_eq!(
+                WENT_OFFLINE.load(std::sync::atomic::Ordering::SeqCst),
+                offline_before,
+                "one dead chain raised \"offline\""
+            );
+        });
     }
 
     /// The six tiers, in order, with bans deliberately NOT filtered.
