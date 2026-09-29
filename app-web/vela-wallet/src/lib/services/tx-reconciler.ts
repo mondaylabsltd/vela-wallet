@@ -78,14 +78,6 @@ export interface UserOpStatus {
 	txHash?: string;
 }
 
-/** The executor stage that parks an op until network fees fit its signed reimbursement. */
-export const FEE_HOLD_STAGE = 'in_band_settlement_hold';
-
-/** Is this status a deliberate wait for cheaper gas rather than a stall or a failure? */
-export function isFeeHold(status: UserOpStatus | null): boolean {
-	return status?.status === 'queued' && status.stage === FEE_HOLD_STAGE;
-}
-
 /**
  * Ask the relay what became of an op. Never throws: an unreachable or older relay
  * simply yields null, and callers fall back to receipt-only behaviour.

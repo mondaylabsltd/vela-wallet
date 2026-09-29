@@ -46,7 +46,6 @@ import {
 	type SubmitResult,
 	type WalletKeySet,
 	type WalletSigner,
-	UserOpRejectedError,
 	UserOpRevertedError
 } from './safe-transaction';
 import { enforceNoUnlimited } from './approval-guard';
@@ -592,9 +591,12 @@ async function answerFor(
 		// G39), and no longer than the core's own answer (`answered`).
 		return await txResult.waitForTxHash(hooks?.receiptWaitMs(), hooks?.answered);
 	} catch (error) {
+		// A landed revert is answered its tx hash (ruling 9). Whatever else the
+		// wait ended on — its window, the core's own answer, a relay out of
+		// reach — leaves the op in flight: the page gets the op hash, and only
+		// the tracker says the relay refused it (spec 082 RJ4, `OpTracked`).
 		if (error instanceof UserOpRevertedError) return error.txHash;
-		if (receiptStillOutstanding(error)) throw new DAppReceiptPendingError(txResult.userOpHash);
-		throw error;
+		throw new DAppReceiptPendingError(txResult.userOpHash);
 	}
 }
 
@@ -625,26 +627,17 @@ function txSigner(signer: ChallengeSigner) {
 }
 
 /**
- * The bundler accepted the op but no receipt arrived inside the wait — a
- * timeout, an unreachable bundler or a relay fee-hold. The op may still land,
- * so this is NOT a failure and NOT a confirmation (issue 262): the page is
- * answered with the op hash and the pending record is left for the tracker.
+ * The op is on its way (accepted, or may have been sent) but no receipt
+ * arrived inside the wait — its window ran out, the relay was out of reach,
+ * or the core answered the page first. The op may still land, so this is NOT
+ * a failure and NOT a confirmation (issue 262): the page is answered with the
+ * op hash and the pending record is left for the tracker.
  */
 export class DAppReceiptPendingError extends Error {
 	constructor(readonly userOpHash: string) {
 		super(`Transaction ${userOpHash.slice(0, 10)}… submitted; its receipt has not arrived yet.`);
 		this.name = 'DAppReceiptPendingError';
 	}
-}
-
-/**
- * Did `waitForReceipt` give up without a verdict? Only a relay rejection is
- * a "not sent" verdict, and a landed revert is answered its tx hash
- * (`answerFor`); everything else it throws (timeout, unreachable, fee-hold)
- * leaves the op in flight.
- */
-export function receiptStillOutstanding(error: unknown): boolean {
-	return !(error instanceof UserOpRejectedError) && !(error instanceof UserOpRevertedError);
 }
 
 /**

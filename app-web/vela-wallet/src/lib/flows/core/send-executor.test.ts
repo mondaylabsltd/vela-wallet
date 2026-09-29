@@ -67,8 +67,6 @@ vi.mock('$lib/services/recipient-risk', () => ({ resolveRecipientRisk: vi.fn() }
 vi.mock('$lib/services/safe-transaction', () => ({
 	keySetOf: vi.fn(),
 	sendBatchCalls: vi.fn(),
-	UserOpFeeHoldError: class extends Error {},
-	UserOpRejectedError: class extends Error {},
 	accountIsDeployed: seams.deployed,
 	fetchRawGasSignals: seams.gasSignals,
 	fetchRawBundlerQuote: seams.bundlerQuote

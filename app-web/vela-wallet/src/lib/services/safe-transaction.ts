@@ -3558,36 +3558,6 @@ export class UserOpRevertedError extends Error {
 	}
 }
 
-/**
- * The relay refused this op before it ever reached a block. Distinct from a timeout:
- * nothing was spent, nothing will land, and re-sending is the correct next step.
- */
-export class UserOpRejectedError extends Error {
-	constructor(
-		message: string,
-		/** The relay's own diagnostic, for logs — not for display. */
-		readonly detail?: string
-	) {
-		super(message);
-		this.name = 'UserOpRejectedError';
-	}
-}
-
-/**
- * The relay is holding this op because network fees moved above the reimbursement the
- * user signed. It is still queued and sends itself when fees settle, so this is a
- * *waiting* outcome — the transaction must stay pending, never be marked failed.
- */
-export class UserOpFeeHoldError extends Error {
-	constructor(
-		message: string,
-		readonly detail?: string
-	) {
-		super(message);
-		this.name = 'UserOpFeeHoldError';
-	}
-}
-
 /** What {@link withinWindow} settled on: the work's answer, or why it stopped waiting. */
 type WindowRace<T> = { done: T } | { stopped: 'window' | 'aborted' };
 

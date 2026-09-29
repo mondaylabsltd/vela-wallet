@@ -57,9 +57,7 @@ import {
 	keySetOf,
 	sendBatchCalls,
 	type SignFn,
-	UserOpFeeHoldError,
 	UserOpNotSentError,
-	UserOpRejectedError,
 	UserOpRevertedError,
 	type SubmitResult
 } from '$lib/services/safe-transaction';
@@ -277,18 +275,16 @@ export function createSendExecutor(ports: SendShellPorts, self?: SendExecutorSel
 				);
 			})
 			.catch(async (error: unknown) => {
-				// The relay is holding the op until network fees fit what the user
-				// signed. Still queued, so the record stays pending — only the wording
-				// changes (invariant ⑦).
-				if (error instanceof UserOpFeeHoldError) {
-					ports.receiptUpdate(handoff.userOpHash, { type: 'fee_held' });
-					return;
-				}
-				// A definitive relay refusal / drop / revert, versus a slow or
-				// unreachable poll. Only the former is a real failure.
-				const rejected = error instanceof UserOpRejectedError;
-				if (!rejected && !(error instanceof UserOpRevertedError)) return;
-				ports.receiptUpdate(handoff.userOpHash, { type: 'failed', rejected, not_sent: false });
+				// A landed revert, versus a slow or unreachable poll: only the former
+				// is a real failure. The relay's refusal and its fee hold are the
+				// tracker's to read from the relay's status (spec 082 RJ4) — the
+				// receipt wait reads the receipt alone.
+				if (!(error instanceof UserOpRevertedError)) return;
+				ports.receiptUpdate(handoff.userOpHash, {
+					type: 'failed',
+					rejected: false,
+					not_sent: false
+				});
 				await updateTransactions(handoff.recordIds, { status: 'failed' }).catch(() => {});
 			});
 	}

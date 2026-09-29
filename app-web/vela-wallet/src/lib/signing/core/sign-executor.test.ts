@@ -46,15 +46,9 @@ import { userOpNotSentDetail, userOpWriteAheadWaitMs } from '$lib/core/kernels';
 import {
 	DAppReceiptPendingError,
 	guardedSign,
-	receiptStillOutstanding,
 	type DAppSubmitHooks
 } from '$lib/services/dapp-submit';
-import {
-	UserOpFeeHoldError,
-	UserOpNotSentError,
-	UserOpRejectedError,
-	UserOpRevertedError
-} from '$lib/services/safe-transaction';
+import { UserOpNotSentError } from '$lib/services/safe-transaction';
 import { createSignExecutor } from './sign-executor';
 import {
 	AskerGoneError,
@@ -116,21 +110,6 @@ describe('the receipt wait, as the core hears it', () => {
 			type: 'submit',
 			outcome: { type: 'succeeded', result: '0xtxhash' }
 		});
-	});
-
-	it('only a relay rejection is a "not sent" verdict; a revert is answered, the rest stays in flight', () => {
-		expect(receiptStillOutstanding(new UserOpRejectedError('refused'))).toBe(false);
-		// A landed revert is answered its tx hash (ruling 9), not retried.
-		expect(receiptStillOutstanding(new UserOpRevertedError('0x' + 'ab'.repeat(32)))).toBe(false);
-		expect(receiptStillOutstanding(new UserOpFeeHoldError('queued'))).toBe(true);
-		expect(
-			receiptStillOutstanding(
-				new Error('Transaction submitted (0xab…) but not confirmed within 120s.')
-			)
-		).toBe(true);
-		expect(
-			receiptStillOutstanding(new Error("Couldn't reach the bundler to confirm transaction 0xab…"))
-		).toBe(true);
 	});
 });
 
