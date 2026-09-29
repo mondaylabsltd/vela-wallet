@@ -213,7 +213,7 @@ final class RelayClient {
     private let gasSignalsFlights = SingleFlight<String, GasSignals>()
     private let bundlerPriceFlights = SingleFlight<String, [String: Any]?>()
     private let inBandFlights = SingleFlight<String, [[String: Any]]?>()
-    private let deploymentFlights = SingleFlight<String, Bool?>()
+    private let deploymentFlights = SingleFlight<String, DeploymentRead>()
     private let infoFlights = SingleFlight<String, AccountInfo?>()
     private let simulationFlights = SingleFlight<String, String>()
 
@@ -717,6 +717,18 @@ final class RelayClient {
         return (logsJson, errorJson, head)
     }
 
+    /// `eth_getTransactionReceipt` through the chain pool (spec 082 RJ4,
+    /// EX13): the `result` as it came — `"null"` while the transaction is
+    /// not mined — or `nil` when nobody answered. The core reads it; this
+    /// judges nothing.
+    func transactionReceiptJson(chainId: Int, txHash: String) async -> String? {
+        guard !txHash.isEmpty else { return nil }
+        guard case .ok(let value) = await port.call(
+            chainId: chainId, method: "eth_getTransactionReceipt", params: [txHash], kind: "rpc"
+        ) else { return nil }
+        return Self.jsonText(value ?? NSNull())
+    }
+
     /// Any JSON value as text; `nil` for what cannot be written.
     static func jsonText(_ value: Any) -> String? {
         if value is NSNull { return "null" }
@@ -816,6 +828,14 @@ final class RelayClient {
         return Self.hexQuantity(decimal: decimal)
     }
 
+    /// What the deployment read came to: an answer, or none — and whether
+    /// none was a rate limit (spec 082 RJ13: the fee row then names the
+    /// chain's node, never Vela's relay).
+    enum DeploymentRead: Equatable {
+        case deployed(Bool)
+        case unread(rateLimited: Bool)
+    }
+
     /// `eth_getCode` != `0x`; `nil` when the chain could not be asked.
     ///
     /// A `true` is remembered for good — a Safe cannot be un-deployed, and
@@ -823,15 +843,27 @@ final class RelayClient {
     /// or a `nil` is never held: the next send deploys the account, and an
     /// unreachable chain is not an answer.
     func isDeployed(chainId: Int, address: String) async -> Bool? {
+        if case .deployed(let deployed) = await deploymentRead(chainId: chainId, address: address) {
+            return deployed
+        }
+        return nil
+    }
+
+    /// `isDeployed`, saying why there is no answer when there is none.
+    func deploymentRead(chainId: Int, address: String) async -> DeploymentRead {
         let key = "\(chainId):\(address.lowercased())"
-        if deployedAccounts.contains(key) { return true }
+        if deployedAccounts.contains(key) { return .deployed(true) }
         return await deploymentFlights.run(key) {
-            guard let code = await self.chainCall(
-                chainId: chainId, method: "eth_getCode", params: [address, "latest"]
-            ) as? String, code.hasPrefix("0x") else { return nil }
+            let outcome = await self.port.call(
+                chainId: chainId, method: "eth_getCode", params: [address, "latest"], kind: "rpc"
+            )
+            guard case .ok(let value) = outcome, let code = value as? String, code.hasPrefix("0x") else {
+                if case .failed(let rateLimited) = outcome { return .unread(rateLimited: rateLimited) }
+                return .unread(rateLimited: false)
+            }
             let deployed = code.count > 2
             if deployed { self.deployedAccounts.insert(key) }
-            return deployed
+            return .deployed(deployed)
         }
     }
 

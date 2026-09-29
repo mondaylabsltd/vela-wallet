@@ -45,6 +45,10 @@ struct TrackSubmission: Equatable {
     let chainId: Int
     var maybeSent = false
     var submitBlock: Int? = nil
+    /// The relay took the op a write-ahead hand-off announced (spec 082 RJ1):
+    /// the entry is acknowledged — never "may have been sent" — and a
+    /// premature "not sent" reached while the POST was still out yields.
+    var admitted = false
 }
 
 @MainActor
@@ -56,6 +60,24 @@ final class TrackerStore {
     /// machine's receipt (spec 082: its verdict comes from here, through the
     /// core's `sendReceiptOutcomeOf`).
     var onView: ((TrackViewWire) -> Void)?
+
+    /// Who else follows the view while they live — a dApp request's sheet,
+    /// whose answer follows what the tracker knows (spec 082 RJ4). Held
+    /// weakly: a request that ended stops listening by going away.
+    private var followers: [(owner: WeakOwner, onView: (TrackViewWire) -> Void)] = []
+
+    private final class WeakOwner {
+        weak var value: AnyObject?
+        init(_ value: AnyObject) { self.value = value }
+    }
+
+    /// Follow every view from now on while `owner` lives — the current one
+    /// at once, so a follower never waits for the next change to hear it.
+    func follow(_ owner: AnyObject, _ onView: @escaping (TrackViewWire) -> Void) {
+        followers.removeAll { $0.owner.value == nil }
+        followers.append((WeakOwner(owner), onView))
+        if let view { onView(view) }
+    }
 
     private var core: CoreStore<TrackViewWire>!
     private let executor: TrackerExecutor
@@ -100,8 +122,21 @@ final class TrackerStore {
             "chain_id": submission.chainId,
             "maybe_sent": submission.maybeSent,
             "submit_block": submission.submitBlock.map { $0 as Any } ?? NSNull(),
+            "admitted": submission.admitted,
         ])
         if !core.boot(event) { core.dispatch(event) }
+    }
+
+    /// A write-ahead op proven never sent (spec 082 RJ1): the tracker drops
+    /// these records from it — an entry left with none goes, with no patch
+    /// and no balance read. Idempotent; a later hand-off of the same hash
+    /// starts fresh. Before the tracker has booted there is nothing to take
+    /// back (the record is already gone from the store it will read), so the
+    /// event is not the one that boots it.
+    func withdrawn(userOpHash: String, recordIds: [String]) {
+        core.dispatch(CoreJSON.string([
+            "type": "withdrawn", "user_op_hash": userOpHash, "record_ids": recordIds,
+        ]))
     }
 
     func resumed() { core.dispatch(CoreJSON.string(["type": "app_resumed"])) }
@@ -110,6 +145,8 @@ final class TrackerStore {
     private func commit(_ view: TrackViewWire) {
         self.view = view
         onView?(view)
+        followers.removeAll { $0.owner.value == nil }
+        for follower in followers { follower.onView(view) }
         // The tick exists exactly as long as the core follows something —
         // not only inside the wait window (spec 079).
         if view.isFollowing { startTicking() } else { stopTicking() }

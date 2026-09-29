@@ -437,7 +437,10 @@ struct RootView: View {
         // dead network kept away are asked for again, and the balance is
         // read — nobody has to tap anything.
         let netWatch = NetWatch()
-        pool.onOutcome = { [weak netWatch] outcome in netWatch?.observe(outcome) }
+        // Health per source (spec 082 RJ14): each call names its chain.
+        pool.onOutcome = { [weak netWatch] outcome, chainId in
+            netWatch?.observe(outcome, chainId: chainId)
+        }
         netWatch.onCameBack = { [weak browserController, weak wallet] in
             browserController?.networkCameBack()
             LogoStore.networkCameBack()
@@ -468,6 +471,11 @@ struct RootView: View {
                     notify?.askOnceIfNeeded()
                     trackerStore?.submitted(submission)
                 },
+                // A write-ahead op proven never sent (spec 082 RJ1): the
+                // tracker drops it, as the store already has.
+                trackWithdrawn: { [weak trackerStore] hash, ids in
+                    trackerStore?.withdrawn(userOpHash: hash, recordIds: ids)
+                },
                 // The core's `haptic { kind }`: money left, or a refusal the
                 // person should feel. Unwired until 074, so an iPhone sent in
                 // silence where Android buzzed.
@@ -478,7 +486,10 @@ struct RootView: View {
                 // Leaving is what re-arms `Open`. Without it a second visit to
                 // 转账 would render the machine's last state instead of a
                 // fresh picker.
-                refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) }
+                refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) },
+                // The rows changed on disk — written ahead, admitted or taken
+                // back (spec 082 RJ1): the feed reads the store again.
+                recordsPersisted: { [weak activityStore] in activityStore?.reconciled() }
             )
         )
         let sendStore = SendStore(executor: sendExecutor)
@@ -1694,6 +1705,10 @@ struct RootView: View {
                     notifier.askOnceIfNeeded()
                     tracker.submitted(submission)
                 },
+                // A write-ahead op the core proved never sent (spec 082 RJ1).
+                trackWithdrawn: { [tracker] hash, ids in
+                    tracker.withdrawn(userOpHash: hash, recordIds: ids)
+                },
                 recordsPersisted: { [activity] in activity.reconciled() },
                 nativeSymbol: { chainId in ChainCatalog.meta(chainId)?.nativeSymbol ?? "" },
                 knownChains: { [settings] in
@@ -1718,6 +1733,10 @@ struct RootView: View {
         )
         signing = controller
         controller.open(incoming)
+        // The answer follows what the tracker knows (spec 082 RJ4): every
+        // view reaches this request for as long as it lives — a sheet closed
+        // mid-submit included (`retiredSigning`), whose page still waits.
+        tracker.follow(controller) { [weak controller] view in controller?.trackerChanged(view) }
     }
 
     // MARK: - Split (spec 054)
@@ -2985,8 +3004,11 @@ struct RootView: View {
     private func explorerLink(for state: FlowStateId) -> URL? {
         switch state {
         case .a2, .a3:
-            guard let feed = activity.feed, let item = selectedItem(in: feed) else { return nil }
-            let hash = item.txHash ?? feed.transactions.first { $0.id == item.id }?.txHash ?? ""
+            // The core's tx hash only (spec 082 RJ16): a record's stored op
+            // hash is never an explorer link.
+            guard let feed = activity.feed, let item = selectedItem(in: feed),
+                  let hash = item.txHash, !hash.isEmpty
+            else { return nil }
             return ExplorerLinks.tx(chainId: item.chainId, hash: hash, store: shelf)
         case .t2:
             guard let balance = wallet.balance,

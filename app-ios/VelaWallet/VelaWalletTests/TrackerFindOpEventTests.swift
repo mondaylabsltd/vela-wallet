@@ -13,6 +13,11 @@
 //  - A may-have-been-sent record written at submit comes back into the core
 //    as one after a relaunch, and the chain's own event closes it.
 //
+//  Spec 082 round 2 (T238, RJ1, RJ4): the relay's own tx hash is confirmed
+//  through the chain (`tx_receipt`, EX13), a write-ahead op proven never sent
+//  is withdrawn with no patch, and an accepted write-ahead op never reads
+//  "may have been sent".
+//
 //  Hermetic: a scripted port, the real tracker core.
 //
 
@@ -280,5 +285,222 @@ struct TrackerFindOpEventTests {
         #expect(TxRecords.load(store: store).first?["status"] as? String == "failed")
         #expect(moved == [100])
         #expect(tracker.view?.entry(userOpHash: op)?.status == "dropped")
+    }
+}
+
+/// EX13's relay: its own receipt is null for ever, its status says
+/// `included` with the bundle's tx, and the chain has that tx's receipt with
+/// the op's own `UserOperationEvent` in it.
+@MainActor
+final class IncludedChainPort: RelayPort {
+    let op: String
+    let txHash = "0x" + String(repeating: "5d", count: 32)
+    var success = true
+    private(set) var calls: [String] = []
+    private(set) var receiptAsks: [String] = []
+
+    init(op: String) { self.op = op }
+
+    /// keccak("UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)")
+    static let userOperationEventTopic = "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f"
+
+    func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome {
+        calls.append(method)
+        switch method {
+        case "eth_getUserOperationReceipt":
+            return .ok(NSNull())
+        case userOpStatusMethod():
+            return .ok(["status": "included", "transactionHash": txHash] as [String: Any])
+        case "eth_getTransactionReceipt":
+            receiptAsks.append(params.first as? String ?? "")
+            let word = { (value: Int) in String(repeating: "0", count: 63) + String(value) }
+            let event: [String: Any] = [
+                "address": entryPointAddress(),
+                "topics": [Self.userOperationEventTopic, op,
+                           "0x" + String(repeating: "0", count: 64), "0x" + String(repeating: "0", count: 64)],
+                "data": "0x" + word(0) + word(success ? 1 : 0) + word(5) + word(7),
+                "transactionHash": txHash,
+                "removed": false,
+            ]
+            return .ok([
+                "transactionHash": txHash, "status": "0x1", "blockNumber": "0x2e3ba09", "logs": [event],
+            ] as [String: Any])
+        case "eth_blockNumber":
+            return .ok("0x2e3ba0f")
+        case "eth_getLogs":
+            return .ok([Any]())
+        default:
+            return .failed(rateLimited: false)
+        }
+    }
+
+    func bundlerBase(chainId: Int) async -> String? { "https://relay.test" }
+    func bestRpcUrl(chainId: Int) async -> String? { nil }
+    func restGet(url: String, xRpcUrl: String?) async -> CoreHTTP.RestAnswer { .failed }
+}
+
+@MainActor
+@Suite(.timeLimit(.minutes(2)))
+struct TrackerRoundTwoTests {
+
+    private let op = "0x" + String(repeating: "d4", count: 32)
+
+    private func store() -> VelaStore {
+        VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+    }
+
+    /// A pending dApp row half a minute old — inside the wait window, past
+    /// the first status interval.
+    private func pendingRow(maybeSent: Bool = false) -> [String: Any] {
+        var record: [String: Any] = [
+            "record_id": "dapp-7-tx", "kind": "dapp_tx", "method": "eth_sendTransaction",
+            "params_json": #"[{"to":"0xbb","value":"0x1"}]"#, "result": "", "from": "0x1",
+            "user_op_hash": op, "chain_id": 100,
+            "now_ms": Date().timeIntervalSince1970 * 1000 - 30_000, "status": "pending",
+            "dapp_origin": "http://127.0.0.1:8137",
+        ]
+        if maybeSent { record["maybe_sent"] = true }
+        return SignExecutor.recordRow(record, nativeSymbol: "XDAI")
+    }
+
+    /// The executor answers `tx_receipt` with the chain's `result` as it
+    /// came: the receipt, `null` while not mined, and nothing for no answer.
+    @Test func theTxReceiptGoesBackAsItCame() async throws {
+        let port = ScriptedRelayPort()
+        port.rpc["eth_getTransactionReceipt"] = .ok(NSNull())
+        let executor = TrackerExecutor(store: store(), relay: RelayClient(port: port, now: { 0 }, retryDelayMs: 0))
+        let ask: [String: Any] = [
+            "type": "tx_receipt", "chain_id": 100, "tx_hash": "0x" + String(repeating: "5d", count: 32),
+            "user_op_hash": op,
+        ]
+        let notMined = try CoreJSON.object(await executor.perform(ask))
+        #expect(notMined["type"] as? String == "tx_receipt")
+        #expect(notMined["user_op_hash"] as? String == op)
+        #expect(notMined["receipt_json"] as? String == "null")
+
+        port.rpc["eth_getTransactionReceipt"] = .failed(rateLimited: false)
+        let silent = try CoreJSON.object(await executor.perform(ask))
+        #expect(silent["receipt_json"] is NSNull, "no answer is not 'not mined'")
+
+        port.rpc["eth_getTransactionReceipt"] = .ok(["transactionHash": "0x1", "logs": []] as [String: Any])
+        let mined = try CoreJSON.object(await executor.perform(ask))
+        let text = try #require(mined["receipt_json"] as? String)
+        #expect(text.contains("\"transactionHash\""))
+        #expect(TrackerExecutor.operations.contains("tx_receipt"))
+    }
+
+    /// EX13 (G38): the relay's receipt stays null while its status says
+    /// `included` with the tx. The tracker reads that tx's receipt from the
+    /// chain and confirms the row from the op's own event — no relay receipt
+    /// needed, and no six minutes of "not on chain yet".
+    @Test func anIncludedTxHashIsConfirmedThroughTheChain() async throws {
+        let store = store()
+        TxRecords.writeRecords([pendingRow()], store: store)
+        let port = IncludedChainPort(op: op)
+        var confirmed: [String] = []
+        var moved: [Int] = []
+        let tracker = TrackerStore(executor: TrackerExecutor(
+            store: store,
+            relay: RelayClient(port: port, now: { 0 }, retryDelayMs: 0),
+            ports: TrackerExecutor.Ports(
+                notifyConfirmed: { hash, _, _ in confirmed.append(hash) },
+                holdingsMoved: { moved.append($0) }
+            )
+        ))
+        tracker.boot()
+        await Wait.until { TxRecords.pending(store: store).isEmpty }
+        let row = try #require(TxRecords.load(store: store).first)
+        #expect(row["status"] as? String == "confirmed")
+        #expect(row["txHash"] as? String == port.txHash)
+        #expect(port.receiptAsks == [port.txHash], "the relay's tx, asked of the chain once")
+        #expect(confirmed == [op])
+        #expect(moved == [100])
+        #expect(tracker.view?.entry(userOpHash: op)?.status == "confirmed")
+    }
+
+    /// The op's own event says it reverted: failed, with the tx.
+    @Test func anIncludedTxWhoseEventFailedFailsTheRow() async throws {
+        let store = store()
+        TxRecords.writeRecords([pendingRow()], store: store)
+        let port = IncludedChainPort(op: op)
+        port.success = false
+        let tracker = TrackerStore(executor: TrackerExecutor(
+            store: store, relay: RelayClient(port: port, now: { 0 }, retryDelayMs: 0)
+        ))
+        tracker.boot()
+        await Wait.until { TxRecords.pending(store: store).isEmpty }
+        #expect(TxRecords.load(store: store).first?["status"] as? String == "failed")
+        #expect(tracker.view?.entry(userOpHash: op)?.status == "dropped")
+    }
+
+    /// RJ1: a write-ahead op proven never sent is withdrawn — the entry goes,
+    /// with no patch and no balance read; a hand-off of the same hash later
+    /// starts fresh.
+    @Test func aWithdrawnOpLeavesTheTrackerWithNoPatch() async throws {
+        let store = store()
+        var moved: [Int] = []
+        let tracker = TrackerStore(executor: TrackerExecutor(
+            store: store,
+            relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0),
+            ports: TrackerExecutor.Ports(holdingsMoved: { moved.append($0) })
+        ))
+        tracker.boot()
+        await Wait.until({ tracker.view != nil }, orIdle: { tracker.isIdle })
+        let ahead = TrackSubmission(
+            userOpHash: op, recordIds: ["dapp-7-tx"], chainId: 100, maybeSent: true, submitBlock: 48_000_000
+        )
+        tracker.submitted(ahead)
+        await Wait.until { tracker.view?.entry(userOpHash: op) != nil }
+        #expect(tracker.view?.entry(userOpHash: op)?.outcome == "maybe_sent")
+
+        tracker.withdrawn(userOpHash: op, recordIds: ["dapp-7-tx"])
+        await Wait.until { tracker.view?.entry(userOpHash: op) == nil }
+        #expect(moved.isEmpty, "a withdrawal moves nothing")
+
+        tracker.submitted(ahead)
+        await Wait.until { tracker.view?.entry(userOpHash: op) != nil }
+        #expect(tracker.view?.entry(userOpHash: op)?.status == "pending", "starts fresh")
+    }
+
+    /// RJ1: the relay took the write-ahead op — the admitted hand-off makes
+    /// the entry acknowledged, never "may have been sent".
+    @Test func anAdmittedHandOffIsNeverMaybeSent() async throws {
+        let tracker = TrackerStore(executor: TrackerExecutor(
+            store: store(), relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0)
+        ))
+        tracker.boot()
+        await Wait.until({ tracker.view != nil }, orIdle: { tracker.isIdle })
+        tracker.submitted(TrackSubmission(
+            userOpHash: op, recordIds: ["dapp-7-tx"], chainId: 100, maybeSent: true, submitBlock: 48_000_000
+        ))
+        await Wait.until { tracker.view?.entry(userOpHash: op)?.outcome == "maybe_sent" }
+        tracker.submitted(TrackSubmission(
+            userOpHash: op, recordIds: ["dapp-7-tx"], chainId: 100, maybeSent: false,
+            submitBlock: 48_000_000, admitted: true
+        ))
+        await Wait.until { tracker.view?.entry(userOpHash: op)?.outcome != "maybe_sent" }
+        #expect(tracker.view?.entry(userOpHash: op)?.outcome == "landing")
+    }
+
+    /// RJ4: whoever follows the tracker hears the view it has at once, then
+    /// every change, for as long as it lives — and nothing after.
+    @Test func aFollowerHearsEveryViewWhileItLives() async throws {
+        let tracker = TrackerStore(executor: TrackerExecutor(
+            store: store(), relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0)
+        ))
+        tracker.boot()
+        await Wait.until({ tracker.view != nil }, orIdle: { tracker.isIdle })
+        final class Owner {}
+        var owner: Owner? = Owner()
+        var heard = 0
+        tracker.follow(owner!) { _ in heard += 1 }
+        #expect(heard == 1, "the view it has, at once")
+        tracker.submitted(TrackSubmission(userOpHash: op, recordIds: ["r"], chainId: 100))
+        await Wait.until { heard > 1 }
+        owner = nil
+        let before = heard
+        tracker.withdrawn(userOpHash: op, recordIds: ["r"])
+        await Wait.until { tracker.view?.entry(userOpHash: op) == nil }
+        #expect(heard == before, "a follower that went away hears nothing")
     }
 }

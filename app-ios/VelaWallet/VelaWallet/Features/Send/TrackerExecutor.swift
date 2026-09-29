@@ -18,6 +18,16 @@
 //  row carries `maybeSent` / `submitBlock` back into the core on a relaunch
 //  (T183), so a restart does not forget what the submit could not prove.
 //
+//  ## A relay that names the tx is confirmed through the chain (spec 082 RJ4)
+//
+//  When the relay's status names the bundle's transaction, the core asks for
+//  `tx_receipt`: `eth_getTransactionReceipt` through the chain pool, whose
+//  `result` goes back AS IT CAME — `null` is "not mined", no answer is `nil`
+//  — and the core finds the op's own event in its logs (EX13: a landed op
+//  read "not on chain yet" for six minutes while the relay said `included`).
+//  Nothing here reads the receipt, and no token is admitted from it: its
+//  logs are the whole bundle's.
+//
 //  ## The receipt's logs are the ONLY way a token is ever admitted
 //
 //  `notify_confirmed` hands the logs this executor just polled to
@@ -37,6 +47,7 @@ final class TrackerExecutor {
     static let operations = [
         "poll_receipt", "poll_status", "load_pending_txs",
         "update_tx_records", "notify_confirmed", "holdings_moved", "find_op_event", "now",
+        "tx_receipt",
     ]
 
     /// What the app owns: the notification, and the auto-add hand-off.
@@ -110,6 +121,18 @@ final class TrackerExecutor {
                 "logs_json": found.logsJson.map { $0 as Any } ?? NSNull(),
                 "error_json": found.errorJson.map { $0 as Any } ?? NSNull(),
                 "head_block": found.head.map { $0 as Any } ?? NSNull(),
+            ])
+
+        case "tx_receipt":
+            let txHash = operation["tx_hash"] as? String ?? ""
+            let receipt = await relay.transactionReceiptJson(chainId: chainId, txHash: txHash)
+            VelaLog.notice(
+                .tracker,
+                "tx receipt op=\(VelaLog.short(hash)) tx=\(VelaLog.short(txHash)) chain=\(chainId) answer=\(receipt == nil ? "none" : receipt == "null" ? "not_mined" : "receipt")"
+            )
+            return CoreJSON.string([
+                "type": "tx_receipt", "user_op_hash": hash, "now_ms": Self.nowMs,
+                "receipt_json": receipt.map { $0 as Any } ?? NSNull(),
             ])
 
         case "holdings_moved":
@@ -233,6 +256,11 @@ final class TrackerExecutor {
             return CoreJSON.string([
                 "type": "op_event", "user_op_hash": hash, "now_ms": nowMs,
                 "logs_json": NSNull(), "error_json": NSNull(), "head_block": NSNull(),
+            ])
+        case "tx_receipt":
+            // No answer: asked again at the receipt cadence.
+            return CoreJSON.string([
+                "type": "tx_receipt", "user_op_hash": hash, "now_ms": nowMs, "receipt_json": NSNull(),
             ])
         default:
             return CoreJSON.string(["type": "clock", "now_ms": nowMs])
