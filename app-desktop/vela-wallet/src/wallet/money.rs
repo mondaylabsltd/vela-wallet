@@ -750,7 +750,7 @@ impl SendHost {
                 chain_id,
                 maybe_sent,
                 submit_block,
-                admitted: _,
+                admitted,
             } => {
                 self.tracked_hash = Some(user_op_hash.to_lowercase());
                 self.last_receipt = None;
@@ -761,9 +761,20 @@ impl SendHost {
                         chain_id: *chain_id,
                         maybe_sent: *maybe_sent,
                         submit_block: *submit_block,
+                        admitted: *admitted,
                     },
                     cx,
                 );
+                self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
+                return;
+            }
+            // Spec 082 RJ1: the written-ahead payment was proven never sent;
+            // the tracker forgets those records (it never patches them).
+            SendOperation::TrackWithdrawn {
+                user_op_hash,
+                record_ids,
+            } => {
+                tracker::withdrawn(user_op_hash, record_ids, cx);
                 self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
                 return;
             }
@@ -825,6 +836,29 @@ impl SendHost {
                         // Settled before the core hears it: the records and
                         // the tracker hand-off happen in this same turn, and
                         // the redraw it causes lets a closed column go.
+                        if submit {
+                            host.submits.settled();
+                        }
+                        host.resolve_send(id, result, cx);
+                    })
+                    .ok();
+                })
+                .detach();
+            }
+            // The submit (spec 082 RJ1): its `OpSigned` reaches the core
+            // while it waits for the core's clearance, and the result after.
+            SendAnswer::Streaming(work) => {
+                let submit = self.submits.started(&effect.operation);
+                let (tx, mut rx) = futures::channel::mpsc::unbounded();
+                cx.spawn(async move |host, cx| {
+                    let work = cx
+                        .background_executor()
+                        .spawn(async move { work(&resident::Sink::new(tx)) });
+                    while let Some(event) = rx.next().await {
+                        host.update(cx, |host, cx| host.dispatch(event, cx)).ok();
+                    }
+                    let result = work.await;
+                    host.update(cx, |host, cx| {
                         if submit {
                             host.submits.settled();
                         }
@@ -1385,9 +1419,28 @@ mod tests {
                     // The estimate race: answering the timer first would make
                     // every estimate a timeout. Left pending on purpose.
                     SendOperation::StartTimer { .. } => continue,
+                    SendOperation::TrackWithdrawn { .. } => SendShellResult::TrackHandedOff,
                     _ => match send_executor::perform(&effect.operation, &self.ctx) {
                         SendAnswer::Now(result) => result,
                         SendAnswer::Blocking(work) => work(),
+                        // The submit (RJ1): its `OpSigned` is dispatched here
+                        // while the worker waits for the clearance it causes.
+                        SendAnswer::Streaming(work) => {
+                            let (tx, mut rx) = futures::channel::mpsc::unbounded();
+                            let worker = std::thread::spawn(move || work(&resident::Sink::new(tx)));
+                            loop {
+                                match rx.try_recv() {
+                                    Ok(event) => self.dispatch(event),
+                                    Err(futures::channel::mpsc::TryRecvError::Closed) => break,
+                                    Err(_) => {
+                                        std::thread::sleep(std::time::Duration::from_millis(10))
+                                    }
+                                }
+                            }
+                            worker
+                                .join()
+                                .unwrap_or_else(|_| unreachable!("the submit panicked"))
+                        }
                         SendAnswer::After(..) => continue,
                         SendAnswer::Screen => unreachable!("every screen arm is matched above"),
                     },

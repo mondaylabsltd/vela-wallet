@@ -42,6 +42,7 @@ use vela_core::app::{Account, KeyMethod};
 use vela_core::user_op::WalletKey;
 use vela_core::wallet_keys::{DeviceKey, SignRoute};
 
+use crate::diag::vlog;
 use crate::executor::passkey::{self, Ceremony};
 use crate::executor::trusted_signer::{self, Ask};
 use crate::executor::user_op::{self, QuotedFee, Signer};
@@ -50,11 +51,20 @@ use crate::executor::{abi, balances, identity, pool, relay, storage};
 /// `vela.transactionHistory` — the shared local store.
 const TX_KEY: &str = "vela.transactionHistory";
 
+/// The submit's work: it reports `OpSigned` on the way (spec 082 RJ1) and
+/// settles once.
+pub type SubmitWork =
+    Box<dyn FnOnce(&crate::resident::Sink<vela_core::app::send::Event>) -> SendShellResult + Send>;
+
 /// How an operation is performed — the resident's shape, plus the arm that
 /// belongs to the screen.
 pub enum SendAnswer {
     Now(SendShellResult),
     Blocking(Box<dyn FnOnce() -> SendShellResult + Send>),
+    /// Reports events on the way and settles once — the submit, which tells
+    /// the core it has signed (`OpSigned`, spec 082 RJ1) and waits for its
+    /// clearance before the POST.
+    Streaming(SubmitWork),
     After(Duration, SendShellResult),
     /// Not this module's business; the host performs it and answers.
     Screen,
@@ -91,6 +101,10 @@ pub struct SendContext {
     /// hands it the page ([`Self::follow_sign_in`]); the one made here routes
     /// nothing.
     pub trusted_signer: Arc<trusted_signer::Channel>,
+    /// The core's word that this payment's records are on disk and the
+    /// tracker holds them (spec 082 RJ1): `ClearToPost` fills it, and the
+    /// running submit POSTs only after it. Shared with every clone.
+    pub clearance: Arc<user_op::Clearance>,
 }
 
 /// Where a signature goes — the core's route, in this shell's vocabulary.
@@ -159,6 +173,7 @@ impl SendContext {
             page_key,
             account_name: (!account.name.is_empty()).then(|| account.name.clone()),
             trusted_signer: trusted_signer::Channel::new().0,
+            clearance: Arc::new(user_op::Clearance::default()),
         }
     }
 
@@ -384,6 +399,38 @@ pub fn persist_records(records: &[SendTxRecord]) -> bool {
     storage::write_value(TX_KEY, Value::Array(rows)).is_ok()
 }
 
+/// The relay took these written-ahead records' payment (spec 082 RJ1): each
+/// row's `maybeSent` becomes false, in ONE write. They stay pending.
+pub fn mark_admitted(ids: &[String]) -> bool {
+    let Ok(Some(Value::Array(mut rows))) = storage::read_value(TX_KEY) else {
+        return false;
+    };
+    for row in &mut rows {
+        let named = row
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| ids.iter().any(|wanted| wanted == id));
+        if named {
+            row["maybeSent"] = json!(false);
+        }
+    }
+    storage::write_value(TX_KEY, Value::Array(rows)).is_ok()
+}
+
+/// Remove written-ahead records whose payment is proven never sent (spec 082
+/// RJ1), in ONE write.
+pub fn delete_records(ids: &[String]) -> bool {
+    let Ok(Some(Value::Array(mut rows))) = storage::read_value(TX_KEY) else {
+        return true;
+    };
+    rows.retain(|row| {
+        row.get("id")
+            .and_then(Value::as_str)
+            .is_none_or(|id| !ids.iter().any(|gone| gone == id))
+    });
+    storage::write_value(TX_KEY, Value::Array(rows)).is_ok()
+}
+
 // ---------------------------------------------------------------------------
 // Recipient risk (`recipient-risk.ts`)
 // ---------------------------------------------------------------------------
@@ -567,7 +614,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                 ctx.keys.clone()
             };
             let ctx = ctx.clone();
-            SendAnswer::Blocking(Box::new(move || {
+            SendAnswer::Streaming(Box::new(move |sink| {
                 let mut sign = |challenge: &[u8]| {
                     // The prompt is opening: the core moves to `signing` here,
                     // exactly where `setTxStatus('signing')` sat.
@@ -592,6 +639,17 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                     },
                     None => Signer::Passkey(&mut sign),
                 };
+                // RJ1 (G34): signed and hashed — every recipient's record is
+                // written and handed to the tracker before a byte goes out.
+                let before_post = |user_op_hash: &str, submit_block: Option<u64>| {
+                    ctx.clearance.write_ahead(user_op_hash, || {
+                        sink.send(vela_core::app::send::Event::OpSigned {
+                            user_op_hash: user_op_hash.to_owned(),
+                            submit_block,
+                            now_ms: now_ms(),
+                        });
+                    })
+                };
                 match user_op::submit(
                     chain_id,
                     &account,
@@ -605,6 +663,7 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
                     &user_op::quiet,
                     // The person's own payment: no page can withdraw it.
                     &user_op::always_asked,
+                    &before_post,
                 ) {
                     // Accepted, or may have been sent (spec 082 RA4): either
                     // way it is recorded and tracked — a lost reply is never
@@ -633,20 +692,39 @@ pub fn perform(operation: &SendOperation, ctx: &SendContext) -> SendAnswer {
             // Best effort, like the TS `.catch(() => {})` — and the core must
             // still be told, or `TrackSubmitted` never fires.
             if !persist_records(records) {
-                eprintln!("[vela-wallet] send: the transaction store refused the pending records");
+                vlog!("send", "the transaction store refused the pending records");
             }
             SendAnswer::Now(SendShellResult::RecordsPersisted)
         }
 
         SendOperation::TrackSubmitted { .. } => SendAnswer::Screen,
 
-        // Spec 082 RJ1, before T220 wires the write-ahead: nothing asks for
-        // these yet, and each is answered as the core expects.
-        SendOperation::ClearToPost { .. } => SendAnswer::Now(SendShellResult::PostCleared),
-        SendOperation::MarkAdmitted { .. } | SendOperation::DeleteTxRecords { .. } => {
+        // Spec 082 RJ1: the records are on disk and tracked — the submit
+        // waiting in `SubmitUserOp` may POST, and only now.
+        SendOperation::ClearToPost { user_op_hash } => {
+            ctx.clearance.clear(user_op_hash);
+            SendAnswer::Now(SendShellResult::PostCleared)
+        }
+
+        // The relay took the written-ahead payment: its records no longer
+        // "may have been sent" — still pending, only the tracker closes them.
+        SendOperation::MarkAdmitted { record_ids } => {
+            if !mark_admitted(record_ids) {
+                vlog!("send", "the transaction store refused the admitted mark");
+            }
             SendAnswer::Now(SendShellResult::RecordsPersisted)
         }
-        SendOperation::TrackWithdrawn { .. } => SendAnswer::Now(SendShellResult::TrackHandedOff),
+
+        // Proven never sent: the written-ahead records go, in one write.
+        SendOperation::DeleteTxRecords { ids } => {
+            if !delete_records(ids) {
+                vlog!("send", "the transaction store refused the withdrawal");
+            }
+            SendAnswer::Now(SendShellResult::RecordsPersisted)
+        }
+
+        // The tracker is the app-resident's: only the screen can reach it.
+        SendOperation::TrackWithdrawn { .. } => SendAnswer::Screen,
 
         SendOperation::ResolveIdentity { address } => {
             let address = address.clone();

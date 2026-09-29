@@ -513,27 +513,77 @@ pub fn tier_name(tier: FeeTier) -> &'static str {
     tier_key(tier)
 }
 
-/// `eth_estimateUserOperationGas` — the relay's raw limits, or its words.
-pub fn estimate_user_op_gas(op: &UserOperation, chain_id: u32) -> Result<GasEstimate, String> {
+/// Why the relay gave no gas estimate: its words for the log, and the
+/// JSON-RPC `error` member as it came — what the core's
+/// `user_op::estimate_failure` reads to tell "the call reverts" from "no
+/// answer" (spec 082 RJ19). `error_json` is `None` when nothing answered.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EstimateError {
+    pub message: String,
+    pub error_json: Option<String>,
+}
+
+impl EstimateError {
+    fn unanswered(message: String) -> Self {
+        Self {
+            message,
+            error_json: None,
+        }
+    }
+
+    /// The core's reading of it (RJ19): `Reverts` only on the relay's own
+    /// word, never on a missing answer.
+    #[must_use]
+    pub fn classified(&self) -> vela_core::user_op::EstimateFailure {
+        self.error_json.as_deref().map_or(
+            vela_core::user_op::EstimateFailure::Unavailable,
+            vela_core::user_op::estimate_failure,
+        )
+    }
+}
+
+impl std::fmt::Display for EstimateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+/// `eth_estimateUserOperationGas` — the relay's raw limits, or why not.
+pub fn estimate_user_op_gas(
+    op: &UserOperation,
+    chain_id: u32,
+) -> Result<GasEstimate, EstimateError> {
     let body = pool::bundler_call(
         chain_id,
         "eth_estimateUserOperationGas",
         json!([user_op_to_json(op, &[]), ENTRY_POINT]),
     )
-    .map_err(|error| format!("gas estimation unreachable: {error:?}"))?;
-    if let Some(error) = body.get("error") {
-        return Err(error
-            .get("message")
-            .and_then(Value::as_str)
-            .unwrap_or("Gas estimation failed")
-            .to_owned());
+    .map_err(|error| EstimateError::unanswered(format!("gas estimation unreachable: {error:?}")))?;
+    estimate_of(&body)
+}
+
+/// One estimate body read: the limits, or the relay's error member kept
+/// whole for the core.
+fn estimate_of(body: &Value) -> Result<GasEstimate, EstimateError> {
+    if let Some(error) = body.get("error").filter(|error| !error.is_null()) {
+        return Err(EstimateError {
+            message: error
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("Gas estimation failed")
+                .to_owned(),
+            error_json: Some(error.to_string()),
+        });
     }
     let result = body
         .get("result")
         .filter(|value| value.is_object())
-        .ok_or_else(|| "Failed to estimate gas — empty result".to_owned())?;
+        .ok_or_else(|| {
+            EstimateError::unanswered("Failed to estimate gas — empty result".to_owned())
+        })?;
     let field = |name: &str| {
-        parse_hex_quantity(result.get(name).and_then(Value::as_str)).map_err(|e| e.to_string())
+        parse_hex_quantity(result.get(name).and_then(Value::as_str))
+            .map_err(|e| EstimateError::unanswered(e.to_string()))
     };
     Ok(GasEstimate {
         verification_gas_limit: field("verificationGasLimit")?,
@@ -785,14 +835,23 @@ pub fn user_op_receipt(user_op_hash: &str, chain_id: u32) -> ReceiptPoll {
 
 /// [`user_op_receipt`], answered within `budget` (spec 079): the dApp's
 /// receipt wait gives each poll only what is left of its window. Past the
-/// budget the relay counts as not reached — never as a failure.
-pub fn user_op_receipt_within(
+/// budget — or once `stop` says the answer is no longer wanted (spec 082
+/// RJ4: the core answered the page from the tracker) — the relay counts as
+/// not reached, never as a failure.
+pub fn user_op_receipt_until(
     user_op_hash: &str,
     chain_id: u32,
     budget: std::time::Duration,
+    stop: &dyn Fn() -> bool,
 ) -> ReceiptPoll {
     receipt_poll(user_op_hash, |params| {
-        pool::bundler_call_within(chain_id, "eth_getUserOperationReceipt", params, budget)
+        pool::bundler_call_until(
+            chain_id,
+            "eth_getUserOperationReceipt",
+            params,
+            budget,
+            stop,
+        )
     })
 }
 

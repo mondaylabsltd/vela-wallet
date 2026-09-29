@@ -569,6 +569,18 @@ pub fn refresh<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     fee_dispatch(host, FeeEvent::Requote, cx);
 }
 
+/// Ask the question in force again from the start — its deployment read,
+/// then the quote — over a measurement still out (spec 082 RJ12): an
+/// automatic re-quote that ran past its bound is superseded, never waited
+/// out, because the relay it hangs on may be back already.
+pub fn reask<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
+    let Some(ask) = host.speed_control().fee.ask.clone() else {
+        return;
+    };
+    fee_signals::invalidate(ask.chain_id);
+    ask_in_force(host, ask, cx);
+}
+
 // -- the reconcile step (`fee_speed.rs`) ----------------------------------------
 
 /// Report every session to the speed core, then bring the sessions in line

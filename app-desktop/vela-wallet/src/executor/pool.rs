@@ -209,16 +209,20 @@ pub fn bundler_routed(chain_id: u32, method: &str, params: Value) -> Routed {
 
 /// [`bundler_call`], waiting at most `budget` for the answer (spec 079): a
 /// caller with a deadline of its own — the dApp's receipt wait — must not be
-/// held past it by one call's timeouts and retries. The call itself runs on
-/// to its end inside the pool (its verdicts still count); only this caller
-/// stops waiting, and a late answer goes nowhere.
-pub fn bundler_call_within(
+/// held past it by one call's timeouts and retries. It also stops waiting
+/// the moment `stop` says the answer is no longer wanted (spec 082 RJ4: the
+/// core has answered the page from the tracker), looked at a few times a
+/// second. The call itself runs on to its end inside the pool (its verdicts
+/// still count); only this caller stops waiting, and a late answer goes
+/// nowhere.
+pub fn bundler_call_until(
     chain_id: u32,
     method: &str,
     params: Value,
     budget: Duration,
+    stop: &dyn Fn() -> bool,
 ) -> Result<Value, PoolError> {
-    route_within(chain_id, RpcKind::Bundler, method, params, budget)
+    route_within(chain_id, RpcKind::Bundler, method, params, budget, stop)
 }
 
 /// [`call`], waiting at most `budget` — for a best-effort read that must not
@@ -229,7 +233,7 @@ pub fn call_within(
     params: Value,
     budget: Duration,
 ) -> Result<Value, PoolError> {
-    route_within(chain_id, RpcKind::Rpc, method, params, budget)
+    route_within(chain_id, RpcKind::Rpc, method, params, budget, &|| false)
 }
 
 fn route_within(
@@ -238,7 +242,10 @@ fn route_within(
     method: &str,
     params: Value,
     budget: Duration,
+    stop: &dyn Fn() -> bool,
 ) -> Result<Value, PoolError> {
+    /// How often a waiting caller looks at `stop`.
+    const GLANCE: Duration = Duration::from_millis(200);
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
@@ -257,12 +264,21 @@ fn route_within(
             return Err(PoolError::Unavailable);
         }
     }
-    match answer.recv_timeout(budget) {
-        Ok(routed) => routed.answer,
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(PoolError::Failed {
-            rate_limited: false,
-        }),
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(PoolError::Unavailable),
+    let deadline = Instant::now() + budget;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() || stop() {
+            return Err(PoolError::Failed {
+                rate_limited: false,
+            });
+        }
+        match answer.recv_timeout(left.min(GLANCE)) {
+            Ok(routed) => return routed.answer,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(PoolError::Unavailable);
+            }
+        }
     }
 }
 

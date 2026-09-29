@@ -53,6 +53,8 @@ const TX_KEY: &str = "vela.transactionHistory";
 /// `send::SendAnswer` — the signing panel owns its machines the way the send
 /// column owns its two, so `Screen` is the arm the host takes back.
 pub enum SignAnswer {
+    /// Answered on this thread, this frame — a local signal, no I/O.
+    Now(SignShellResult),
     Blocking(Box<dyn FnOnce() -> SignShellResult + Send>),
     /// Reports events on the way and settles once — the submit.
     Streaming(Box<dyn FnOnce(&crate::resident::Sink<Event>) -> SignShellResult + Send>),
@@ -101,6 +103,14 @@ pub struct SignContext {
     /// running: it is read before the ceremony, when it answers, and right
     /// before the relay POST — nothing is signed or sent for nobody.
     asker_gone: Arc<AtomicBool>,
+    /// The core's word that the write-ahead record is on disk (spec 082
+    /// RJ1): `ClearToPost` fills it, and the running submit POSTs only after
+    /// it. Shared with every clone, like `asker_gone`.
+    clearance: Arc<user_op::Clearance>,
+    /// The core has answered the page (spec 082 RJ4): the tracker knew how
+    /// the operation ended before the receipt wait did. The wait stops, so a
+    /// worker thread does not poll a relay for an answer already given.
+    answered: Arc<AtomicBool>,
 }
 
 impl SignContext {
@@ -150,6 +160,18 @@ impl SignContext {
         !self.asker_gone.load(Ordering::SeqCst)
     }
 
+    /// The core has answered the page (RJ4): a receipt wait still running
+    /// for it stops at its next look.
+    pub fn core_answered(&self) {
+        self.answered.store(true, Ordering::SeqCst);
+    }
+
+    /// Has the core answered the page already?
+    #[must_use]
+    pub fn answered(&self) -> bool {
+        self.answered.load(Ordering::SeqCst)
+    }
+
     #[must_use]
     pub fn new(account: &Account, ceremony: Ceremony) -> Self {
         // Deliberately `SendContext::new`'s derivation, called rather than
@@ -170,6 +192,8 @@ impl SignContext {
             trusted_signer: send.trusted_signer,
             approved_at_ms: None,
             asker_gone: Arc::new(AtomicBool::new(false)),
+            clearance: Arc::new(user_op::Clearance::default()),
+            answered: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -211,10 +235,11 @@ pub fn perform(operation: &SignOperation, ctx: &SignContext) -> SignAnswer {
             }))
         }
 
-        // Spec 082 RJ1: the write-ahead record is on disk — the submit may
-        // POST. Nothing asks for it before T219 wires the write-ahead.
-        SignOperation::ClearToPost { .. } => {
-            SignAnswer::Blocking(Box::new(|| SignShellResult::Responded))
+        // Spec 082 RJ1: the write-ahead record is on disk — the submit
+        // waiting in `sign_and_submit` may POST, and only now.
+        SignOperation::ClearToPost { user_op_hash, .. } => {
+            ctx.clearance.clear(user_op_hash);
+            SignAnswer::Now(SignShellResult::Responded)
         }
 
         // Spec 082 RJ1: a write-ahead record whose op is proven never sent.
@@ -394,6 +419,18 @@ fn sign_and_submit(
     };
     let edges = |edge: CeremonyEdge| sink.send(ceremony_event(id, edge));
     let asked = || ctx.still_asked();
+    // RJ1 (G34): signed, hashed and the head read — the core writes the
+    // record before a byte goes to the relay, and says so (`ClearToPost`).
+    let before_post = |user_op_hash: &str, submit_block: Option<u64>| {
+        ctx.clearance.write_ahead(user_op_hash, || {
+            sink.send(Event::OpSigned {
+                id: id.to_owned(),
+                user_op_hash: user_op_hash.to_owned(),
+                submit_block,
+                now_ms: now_ms(),
+            });
+        })
+    };
     let submitted = user_op::submit(
         chain_id,
         address,
@@ -404,6 +441,7 @@ fn sign_and_submit(
         quoted,
         &edges,
         &asked,
+        &before_post,
     );
     let submitted = match submitted {
         Ok(submitted) => submitted,
@@ -426,17 +464,28 @@ fn sign_and_submit(
     });
 
     let budget = receipt_budget(ctx.approved_at_ms, now_ms());
-    let receipt = await_receipt(&user_op_hash, chain_id, budget);
-    vlog!(
-        "dapp",
-        "op={} answered with {} after the receipt wait",
-        short(&user_op_hash),
-        if receipt.is_some() {
-            "its tx hash"
-        } else {
-            "the op hash"
-        }
-    );
+    let answered = || ctx.answered();
+    let receipt = await_receipt(&user_op_hash, chain_id, budget, &answered);
+    if ctx.answered() {
+        // RJ4: the tracker's verdict answered the page first; the core drops
+        // this late result.
+        vlog!(
+            "dapp",
+            "op={} receipt wait ended: answered from the tracker",
+            short(&user_op_hash)
+        );
+    } else {
+        vlog!(
+            "dapp",
+            "op={} answered with {} after the receipt wait",
+            short(&user_op_hash),
+            if receipt.is_some() {
+                "its tx hash"
+            } else {
+                "the op hash"
+            }
+        );
+    }
     after_receipt_wait(user_op_hash, receipt)
 }
 
@@ -611,47 +660,62 @@ fn wei_of(value: Option<&Value>) -> Option<String> {
         .map(|wei| wei.to_string())
 }
 
-/// Poll until the receipt lands or the budget runs out.
+/// Poll until the receipt lands, the budget runs out, or the core has
+/// answered the page from the tracker (`answered`, spec 082 RJ4).
 ///
 /// `None` is "not yet", never "failed": a relay that could not be reached is
 /// not a transaction that did not happen, and the caller answers with the
 /// userOpHash rather than an error.
-fn await_receipt(user_op_hash: &str, chain_id: u32, budget: Duration) -> Option<String> {
-    wait_within(budget, RECEIPT_POLL, |left| {
+fn await_receipt(
+    user_op_hash: &str,
+    chain_id: u32,
+    budget: Duration,
+    answered: &dyn Fn() -> bool,
+) -> Option<String> {
+    wait_within(budget, RECEIPT_POLL, answered, |left| {
         // A receipt that says the operation reverted is still a receipt: the
         // tx hash is real and the dApp should have it. What it is NOT is this
         // wallet's business to relabel.
-        relay::user_op_receipt_within(user_op_hash, chain_id, left)
+        relay::user_op_receipt_until(user_op_hash, chain_id, left, answered)
             .resolution
             .map(|resolution| resolution.tx_hash)
     })
 }
 
-/// Ask `poll` until it answers or `budget` is spent, sleeping `every`
-/// between asks — and giving each ask only what is LEFT of the budget (spec
-/// 079, device-found on Android: with the relay unreachable one poll hung for
-/// its own timeouts and retries, and the page waited 268 s for a two-minute
-/// wait). The page is answered on time; the tracker keeps following the
-/// operation after.
+/// Ask `poll` until it answers, `budget` is spent or `stop` says the answer
+/// is no longer wanted, sleeping `every` between asks — and giving each ask
+/// only what is LEFT of the budget (spec 079, device-found on Android: with
+/// the relay unreachable one poll hung for its own timeouts and retries, and
+/// the page waited 268 s for a two-minute wait). The page is answered on
+/// time; the tracker keeps following the operation after.
 fn wait_within<T>(
     budget: Duration,
     every: Duration,
+    stop: &dyn Fn() -> bool,
     mut poll: impl FnMut(Duration) -> Option<T>,
 ) -> Option<T> {
+    /// How often a sleep between asks looks at `stop`.
+    const GLANCE: Duration = Duration::from_millis(200);
     let deadline = std::time::Instant::now() + budget;
     loop {
         let left = deadline.saturating_duration_since(std::time::Instant::now());
-        if left.is_zero() {
+        if left.is_zero() || stop() {
             return None;
         }
         if let Some(answer) = poll(left) {
             return Some(answer);
         }
-        let left = deadline.saturating_duration_since(std::time::Instant::now());
-        if left.is_zero() {
-            return None;
+        let resume = std::time::Instant::now() + every;
+        loop {
+            let now = std::time::Instant::now();
+            if now >= deadline || stop() {
+                return None;
+            }
+            if now >= resume {
+                break;
+            }
+            std::thread::sleep(GLANCE.min(resume - now).min(deadline - now));
         }
-        std::thread::sleep(every.min(left));
     }
 }
 
@@ -697,6 +761,12 @@ fn submit_failure(
         user_op::SubmitFailure::Other(message) => SignSubmitOutcome::Failed {
             message,
             refused: false,
+        },
+        // The relay refused it (spec 082 RJ3): the page is answered the
+        // core's "refused" sentence, and the sheet never says "try again".
+        user_op::SubmitFailure::Refused(message) => SignSubmitOutcome::Failed {
+            message,
+            refused: true,
         },
         // Nothing signed or sent for a page that has gone (RB2).
         user_op::SubmitFailure::AskerGone => SignSubmitOutcome::AskerGone,
@@ -1072,12 +1142,13 @@ mod tests {
         let budget = Duration::from_millis(300);
         let started = std::time::Instant::now();
         let mut given = Vec::new();
-        let answer: Option<()> = wait_within(budget, Duration::from_millis(40), |left| {
-            given.push(left);
-            // A relay that holds every call for as long as it is allowed.
-            std::thread::sleep(left.min(Duration::from_millis(120)));
-            None
-        });
+        let answer: Option<()> =
+            wait_within(budget, Duration::from_millis(40), &|| false, |left| {
+                given.push(left);
+                // A relay that holds every call for as long as it is allowed.
+                std::thread::sleep(left.min(Duration::from_millis(120)));
+                None
+            });
         assert!(answer.is_none(), "no receipt is not a failure, it is none");
         assert!(
             started.elapsed() < budget + Duration::from_millis(150),
@@ -1092,8 +1163,43 @@ mod tests {
         );
         // An answer ends the wait at once.
         assert_eq!(
-            wait_within(budget, Duration::from_millis(40), |_| Some("0xtx")),
+            wait_within(budget, Duration::from_millis(40), &|| false, |_| Some(
+                "0xtx"
+            )),
             Some("0xtx")
+        );
+    }
+
+    /// Spec 082 RJ4: once the core has answered the page from the tracker,
+    /// the receipt wait stops at its next look — within a glance of the
+    /// sleep between asks — instead of polling a relay for two minutes.
+    #[test]
+    fn the_wait_stops_once_the_core_has_answered() {
+        let ctx = context(Some("http://127.0.0.1:8137"));
+        let running = ctx.clone();
+        let asked = std::sync::atomic::AtomicU32::new(0);
+        let started = std::time::Instant::now();
+        let stopper = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            ctx.core_answered();
+        });
+        let answered = || running.answered();
+        let answer: Option<()> = wait_within(
+            Duration::from_secs(10),
+            Duration::from_secs(3),
+            &answered,
+            |_| {
+                asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                None
+            },
+        );
+        let _ = stopper.join();
+        assert!(answer.is_none());
+        assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(
+            started.elapsed() < Duration::from_millis(800),
+            "stopped at {:?}, not at the next 3 s poll",
+            started.elapsed()
         );
     }
 
@@ -1372,6 +1478,256 @@ mod tests {
         );
         assert!(host.view().tracker_handoff.is_none());
         assert!(host.view().pending_op_hash.is_none());
+    }
+
+    /// Past the ceremony, the op signed and hashed: `OpSigned`, and what
+    /// the core asked for in return (spec 082 RJ1). The submit's effect id
+    /// comes back with it.
+    fn signed(id: &str) -> (Host, u64, Ops) {
+        let (mut host, ops) = approved_send(id);
+        let precheck = only(&ops, "the pre-check").id;
+        let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
+        let submit = only(&ops, "the submit").id;
+        for edge in [CeremonyEdge::Started, CeremonyEdge::Signed] {
+            host.dispatch(ceremony_event(id, edge));
+        }
+        let ops = host.dispatch(Event::OpSigned {
+            id: id.to_owned(),
+            user_op_hash: LOCAL_OP.to_owned(),
+            submit_block: Some(48_487_620),
+            now_ms: 5_000.0,
+        });
+        (host, submit, ops)
+    }
+
+    /// Perform one blocking (or immediate) operation the way the host does.
+    fn run(operation: &SignOperation, ctx: &SignContext) -> SignShellResult {
+        match perform(operation, ctx) {
+            SignAnswer::Now(result) => result,
+            SignAnswer::Blocking(work) => work(),
+            _ => unreachable!("not a record or a clearance: {operation:?}"),
+        }
+    }
+
+    fn stored_rows() -> Vec<Value> {
+        match storage::read_value(TX_KEY) {
+            Ok(Some(Value::Array(rows))) => rows,
+            _ => Vec::new(),
+        }
+    }
+
+    /// Spec 082 RJ1 (G34, DX9 — P0): the op is signed and its hash known, the
+    /// record is written ahead, and then the process quits (no more events,
+    /// no POST's verdict). The store holds exactly one pending dApp row that
+    /// may have been sent, under the local hash with the head it was sent
+    /// at, and the tracker's relaunch sweep hands it back — so an op that
+    /// lands after the quit is found, recorded and followed.
+    #[test]
+    fn a_quit_after_the_op_is_signed_leaves_one_pending_maybe_sent_row() {
+        storage::tests::with_temp_state("sign-dx9", || {
+            let ctx = context(Some("http://127.0.0.1:8137"));
+            let (host, _, ops) = signed("rid-dx9");
+            let persist = ops
+                .iter()
+                .find(|op| matches!(op.operation, SignOperation::PersistRecord { .. }))
+                .unwrap_or_else(|| unreachable!("the record is written ahead"));
+            assert!(
+                !ops.iter()
+                    .any(|op| matches!(op.operation, SignOperation::ClearToPost { .. })),
+                "no clearance before the record is on disk"
+            );
+            let handoff = host
+                .view()
+                .tracker_handoff
+                .unwrap_or_else(|| unreachable!("the tracker is told before the POST"));
+            assert!(handoff.maybe_sent && !handoff.admitted);
+            assert_eq!(handoff.user_op_hash, LOCAL_OP);
+            assert_eq!(
+                run(&persist.operation, &ctx),
+                SignShellResult::RecordPersisted
+            );
+            // …and the process quits here.
+
+            let live = crate::executor::tracker::pending_records(&stored_rows());
+            assert_eq!(live.len(), 1, "one row, pending");
+            assert_eq!(live[0].user_op_hash, LOCAL_OP);
+            assert!(live[0].maybe_sent, "it may have been sent");
+            assert_eq!(live[0].submit_block, Some(48_487_620));
+            assert_eq!(live[0].chain_id, 100);
+        });
+    }
+
+    /// Spec 082 RJ1 + RA10 (S5): the relay was never reached. The write-ahead
+    /// cleared the POST only once the record was on disk; the verdict then
+    /// deletes it, tells the tracker to forget it, and the page gets exactly
+    /// one -32603 "relay unreachable; nothing was sent" — no Activity row.
+    #[test]
+    fn a_not_sent_op_leaves_no_row_and_one_error() {
+        use vela_core::app::sign_request::{SignResponsePayload, SignTrackerWithdraw};
+        storage::tests::with_temp_state("sign-s5", || {
+            let ctx = context(Some("http://127.0.0.1:8137"));
+            let (mut host, submit, ops) = signed("rid-s5");
+            let persist = only(&ops, "the record");
+            let SignOperation::PersistRecord { record } = &persist.operation else {
+                unreachable!("not a record");
+            };
+            let record_id = record.record_id.clone();
+            ctx.clearance.arm(LOCAL_OP);
+            let ops = host.resolve(persist.id, run(&persist.operation, &ctx));
+            let clear = only(&ops, "the clearance");
+            assert!(matches!(
+                &clear.operation,
+                SignOperation::ClearToPost { user_op_hash, .. } if user_op_hash == LOCAL_OP
+            ));
+            assert!(
+                !ctx.clearance.wait(Duration::ZERO),
+                "not cleared until the core's word is performed"
+            );
+            ctx.clearance.arm(LOCAL_OP);
+            let _ = host.resolve(clear.id, run(&clear.operation, &ctx));
+            assert!(
+                ctx.clearance.wait(Duration::ZERO),
+                "cleared: the POST may go"
+            );
+            assert_eq!(stored_rows().len(), 1, "on disk before the bytes leave");
+
+            let settled = host.resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: submit_failure(100, ME, user_op::SubmitFailure::NotSent),
+                    now_ms: 6_000.0,
+                },
+            );
+            let mut told = Vec::new();
+            for op in &settled {
+                match &op.operation {
+                    SignOperation::DeleteRecord { .. } => {
+                        let _ = run(&op.operation, &ctx);
+                    }
+                    SignOperation::SendResponse { payload, .. } => told.push(payload.clone()),
+                    _ => {}
+                }
+            }
+            assert!(
+                stored_rows().is_empty(),
+                "no Activity row once the verdict is in"
+            );
+            assert_eq!(told.len(), 1, "one answer: {told:?}");
+            assert!(matches!(
+                &told[0],
+                SignResponsePayload::Err { code: -32603, message: Some(message), .. }
+                    if message == NOT_SENT_DAPP_DETAIL
+            ));
+            assert_eq!(
+                host.view().tracker_withdraw,
+                Some(SignTrackerWithdraw {
+                    user_op_hash: LOCAL_OP.to_owned(),
+                    record_ids: vec![record_id],
+                }),
+                "the tracker forgets it"
+            );
+            assert!(!host.view().failure_refused);
+        });
+    }
+
+    /// Spec 082 RJ3 (G36): a relay that refuses the op at submit is a
+    /// refusal — the page gets the core's "refused" sentence once, the sheet
+    /// the refusal's words — never a "try again".
+    #[test]
+    fn a_relay_refusal_is_answered_refused() {
+        use vela_core::app::sign_request::SignResponsePayload;
+        let refused = submit_failure(
+            100,
+            ME,
+            user_op::SubmitFailure::Refused("UserOperation reverted during simulation".to_owned()),
+        );
+        assert!(matches!(
+            refused,
+            SignSubmitOutcome::Failed { refused: true, .. }
+        ));
+        for kept in [
+            user_op::SubmitFailure::RelayerUnavailable,
+            user_op::SubmitFailure::NotSent,
+            user_op::SubmitFailure::Other("the passkey ceremony failed".to_owned()),
+        ] {
+            assert!(
+                matches!(
+                    submit_failure(100, ME, kept.clone()),
+                    SignSubmitOutcome::Failed { refused: false, .. }
+                ),
+                "{kept:?} is not a refusal"
+            );
+        }
+        assert!(matches!(
+            submit_failure(100, ME, user_op::SubmitFailure::BundlerUnderfunded),
+            SignSubmitOutcome::Underfunded { .. }
+        ));
+
+        storage::tests::with_temp_state("sign-refused", || {
+            let ctx = context(Some("http://127.0.0.1:8137"));
+            let (mut host, submit, ops) = signed("rid-refused");
+            let persist = only(&ops, "the record");
+            let _ = host.resolve(persist.id, run(&persist.operation, &ctx));
+            let settled = host.resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: refused,
+                    now_ms: 6_000.0,
+                },
+            );
+            let told: Vec<_> = settled
+                .iter()
+                .filter_map(|op| match &op.operation {
+                    SignOperation::SendResponse { payload, .. } => Some(payload.clone()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(told.len(), 1);
+            assert!(matches!(
+                &told[0],
+                SignResponsePayload::Err { code: -32603, message: Some(message), .. }
+                    if message == vela_core::user_op::REFUSED_DAPP_DETAIL
+            ));
+            assert!(host.view().failure_refused, "the sheet says refused");
+        });
+    }
+
+    /// Spec 082 RJ1: the relay took the written-ahead op — its row stays
+    /// pending (only the tracker closes it) and no longer "may have been
+    /// sent"; a proven-not-sent one is deleted, and only that one.
+    #[test]
+    fn admitted_clears_maybe_sent_and_delete_removes_only_its_row() {
+        use vela_core::app::sign_request::SignRecordClose;
+        storage::tests::with_temp_state("sign-admitted", || {
+            let mut kept = record(
+                SignRecordKind::DappTx,
+                r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x1"}]"#,
+            );
+            kept.maybe_sent = true;
+            let mut gone = kept.clone();
+            gone.record_id = "dapp-1757000000001-tx".to_owned();
+            persist_record(&kept);
+            persist_record(&gone);
+            let ctx = context(None);
+            let _ = run(
+                &SignOperation::UpdateRecord {
+                    record_id: kept.record_id.clone(),
+                    close: SignRecordClose::Admitted,
+                },
+                &ctx,
+            );
+            let _ = run(
+                &SignOperation::DeleteRecord {
+                    record_id: gone.record_id.clone(),
+                },
+                &ctx,
+            );
+            let rows = stored_rows();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0]["id"], kept.record_id.as_str());
+            assert_eq!(rows[0]["status"], "pending");
+            assert_eq!(rows[0]["maybeSent"], false);
+        });
     }
 
     /// Spec 082 RG3 (T072): every background record write — the pending

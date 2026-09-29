@@ -81,7 +81,7 @@ fn take_receipt(hash: &str) -> Option<(Option<String>, Vec<TrustReceiptLog>)> {
 /// `dapp_tx`). Deliberately NOT filtered by account: the core keys by hash
 /// and patches by id, so the honest superset is the right answer. The 24 h
 /// line is the core's.
-fn pending_records(rows: &[Value]) -> Vec<TrackPendingRecord> {
+pub(crate) fn pending_records(rows: &[Value]) -> Vec<TrackPendingRecord> {
     rows.iter()
         .filter_map(|row| {
             let text = |key: &str| row.get(key).and_then(Value::as_str).unwrap_or_default();
@@ -333,14 +333,22 @@ impl Machine for TxTracker {
 
             TrackOperation::Now => Answer::Now(TrackShellResult::Clock { now_ms: now_ms() }),
 
-            // Spec 082 RJ4: the bundle transaction the relay named. Answered
-            // with no receipt until T221 reads it through the chain pool.
-            TrackOperation::TxReceipt { user_op_hash, .. } => {
-                Answer::Now(TrackShellResult::TxReceipt {
-                    user_op_hash: user_op_hash.clone(),
-                    now_ms: now_ms(),
-                    receipt_json: None,
-                })
+            // Spec 082 RJ4 (G38): the bundle transaction the relay's status
+            // named, read from the chain rather than waited for from the
+            // relay. The answer goes back as it came; which log is the op's,
+            // and what it says, are the core's.
+            TrackOperation::TxReceipt {
+                chain_id,
+                tx_hash,
+                user_op_hash,
+            } => {
+                let (chain_id, tx_hash, user_op_hash) =
+                    (*chain_id, tx_hash.clone(), user_op_hash.clone());
+                Answer::Blocking(Box::new(move || {
+                    tx_receipt(chain_id, &tx_hash, &user_op_hash, |method, params| {
+                        pool::call(chain_id, method, params)
+                    })
+                }))
             }
         }
     }
@@ -424,6 +432,42 @@ fn find_op_event(
     }
 }
 
+/// One `eth_getTransactionReceipt` through `call` (the chain pool, or a fake
+/// in the tests), answered as it came: the JSON-RPC `result` — `null` while
+/// the transaction is not mined — or no answer at all (an error member, or
+/// nothing reached).
+///
+/// No token auto-add reads this receipt: its logs are the whole bundle's,
+/// other senders' operations included, and which of them are this op's own
+/// is the core's reading, not handed back here.
+fn tx_receipt(
+    chain_id: u32,
+    tx_hash: &str,
+    user_op_hash: &str,
+    call: impl FnOnce(&str, Value) -> Result<Value, PoolError>,
+) -> TrackShellResult {
+    let receipt_json = call("eth_getTransactionReceipt", json!([tx_hash]))
+        .ok()
+        .filter(|body| body.get("error").is_none_or(Value::is_null))
+        .and_then(|body| body.get("result").map(Value::to_string));
+    vlog!(
+        "tracker",
+        "op={} receipt by tx={} chain={chain_id} → {}",
+        short(user_op_hash),
+        short(tx_hash),
+        match receipt_json.as_deref() {
+            None => "no answer",
+            Some("null") => "not mined",
+            Some(_) => "receipt",
+        }
+    );
+    TrackShellResult::TxReceipt {
+        user_op_hash: user_op_hash.to_owned(),
+        now_ms: crate::executor::now_ms(),
+        receipt_json,
+    }
+}
+
 static TICKING: AtomicBool = AtomicBool::new(false);
 /// Records the tracker has patched since the feed was last told.
 static PATCHED: AtomicU32 = AtomicU32::new(0);
@@ -492,18 +536,24 @@ pub struct Handoff {
     pub chain_id: u32,
     pub maybe_sent: bool,
     pub submit_block: Option<u64>,
+    /// The relay took the op a write-ahead hand-off announced (spec 082
+    /// RJ1): it is no longer in doubt, and a relay's `not_found` stops
+    /// counting against it.
+    pub admitted: bool,
 }
 
-/// A user operation left the device: hand it to the tracker, whose patches
-/// will find the records the send path already persisted.
+/// A user operation is about to leave the device (the write-ahead, spec 082
+/// RJ1) or has left it: hand it to the tracker, whose patches will find the
+/// records the submit path already persisted.
 pub fn submitted(handoff: Handoff, cx: &mut App) {
     vlog!(
         "tracker",
-        "op={} handed over chain={} maybe_sent={} submit_block={:?}",
+        "op={} handed over chain={} maybe_sent={} submit_block={:?} admitted={}",
         short(&handoff.user_op_hash),
         handoff.chain_id,
         handoff.maybe_sent,
-        handoff.submit_block
+        handoff.submit_block,
+        handoff.admitted
     );
     resident::resident::<TxTracker>(cx).update(cx, |resident, cx| {
         resident.dispatch(
@@ -513,7 +563,29 @@ pub fn submitted(handoff: Handoff, cx: &mut App) {
                 chain_id: handoff.chain_id,
                 maybe_sent: handoff.maybe_sent,
                 submit_block: handoff.submit_block,
-                admitted: false,
+                admitted: handoff.admitted,
+            },
+            cx,
+        );
+    });
+}
+
+/// A written-ahead op was proven never sent (spec 082 RJ1): the tracker
+/// drops these records — it never patches them, and they are deleted from
+/// the store by the path that wrote them.
+pub fn withdrawn(user_op_hash: &str, record_ids: &[String], cx: &mut App) {
+    vlog!(
+        "tracker",
+        "op={} withdrawn ({} record{}): never sent",
+        short(user_op_hash),
+        record_ids.len(),
+        if record_ids.len() == 1 { "" } else { "s" }
+    );
+    resident::resident::<TxTracker>(cx).update(cx, |resident, cx| {
+        resident.dispatch(
+            Event::Withdrawn {
+                user_op_hash: user_op_hash.to_owned(),
+                record_ids: record_ids.to_vec(),
             },
             cx,
         );
@@ -717,6 +789,189 @@ mod tests {
         assert_eq!(op_event(&answer), (None, None, Some(0x2e3b5dc)));
         assert_eq!(asked.len(), 1);
         assert_eq!(asked[0].0, "eth_blockNumber");
+    }
+
+    /// Spec 082 RJ4: the bundle transaction's receipt goes back as it came —
+    /// the JSON-RPC `result`, `null` while not mined — and an error member or
+    /// no answer at all is no answer.
+    #[test]
+    fn a_tx_receipt_goes_back_as_it_came() {
+        let answer = |body: Result<Value, PoolError>| {
+            let mut asked = None;
+            let result = tx_receipt(100, "0xtx", "0xop", |method, params| {
+                asked = Some((method.to_owned(), params));
+                body
+            });
+            let Some((method, params)) = asked else {
+                unreachable!("nothing was asked");
+            };
+            assert_eq!(method, "eth_getTransactionReceipt");
+            assert_eq!(params, json!(["0xtx"]));
+            match result {
+                TrackShellResult::TxReceipt {
+                    user_op_hash,
+                    receipt_json,
+                    ..
+                } => {
+                    assert_eq!(user_op_hash, "0xop");
+                    receipt_json
+                }
+                other => unreachable!("not a TxReceipt: {other:?}"),
+            }
+        };
+        let receipt = json!({ "transactionHash": "0xtx", "logs": [] });
+        assert_eq!(
+            answer(Ok(json!({ "result": receipt.clone() }))),
+            Some(receipt.to_string())
+        );
+        assert_eq!(
+            answer(Ok(json!({ "result": null }))).as_deref(),
+            Some("null"),
+            "not mined yet"
+        );
+        assert_eq!(answer(Ok(json!({ "error": { "code": -32000 } }))), None);
+        assert_eq!(answer(Err(PoolError::Unavailable)), None);
+    }
+
+    /// Spec 082 RJ4 (G38, EX13): the relay's receipt never came (it said
+    /// `null` for minutes) while its status said `included` with the bundle's
+    /// tx hash — the op read "not landed yet" for 5 min 49 s. Now that tx's
+    /// receipt is read from the chain on the next pass, and the op is
+    /// confirmed from its own `UserOperationEvent` there, within one poll.
+    #[test]
+    fn an_included_op_is_confirmed_from_its_bundle_within_one_poll() {
+        use crate::core_host::CoreHost;
+        use vela_core::app::tx_tracker::{TrackLifecycle, TrackStatus};
+
+        const OP: &str = "0x9da32d527e0000000000000000000000000000000000000000000000000000aa";
+        const TX: &str = "0x111ce047000000000000000000000000000000000000000000000000000000bb";
+        let event_log = |hash: &str| {
+            json!({
+                "address": vela_core::safe::ENTRY_POINT,
+                "topics": [
+                    vela_core::user_op::USER_OPERATION_EVENT_TOPIC,
+                    hash,
+                    format!("0x{:0>64}", "88cca0eedbf2c4426110bbfc998f048689266894"),
+                    format!("0x{:0>64}", "0"),
+                ],
+                "data": format!("0x{:064x}{:064x}{:064x}{:064x}", 44, 1, 0, 90_000),
+                "transactionHash": TX,
+                "removed": false,
+            })
+        };
+        let receipt = json!({
+            "transactionHash": TX,
+            "status": "0x1",
+            // Another sender's op first in the bundle, then this one.
+            "logs": [event_log("0xother"), event_log(OP)],
+        });
+
+        let mut host = CoreHost::<TxTracker>::new();
+        let mut now = 1_757_000_000_000.0;
+        let mut pending = host.dispatch(Event::Submitted {
+            user_op_hash: OP.to_owned(),
+            record_ids: vec!["dapp-1-tx".to_owned()],
+            chain_id: 100,
+            maybe_sent: false,
+            submit_block: Some(48_487_259),
+            admitted: true,
+        });
+        let mut receipts_by_tx = 0;
+        let mut ticks = 0..5;
+        for _ in 0..64 {
+            let Some(next) = pending.pop() else {
+                if ticks.next().is_none() {
+                    break;
+                }
+                now += 3_000.0;
+                pending = host.dispatch(Event::Tick);
+                continue;
+            };
+            let result = match &next.operation {
+                TrackOperation::Now => TrackShellResult::Clock { now_ms: now },
+                // The relay has no receipt for it…
+                TrackOperation::PollReceipt { user_op_hash, .. } => {
+                    TrackShellResult::ReceiptPending {
+                        user_op_hash: user_op_hash.clone(),
+                        now_ms: now,
+                    }
+                }
+                // …while its status names the bundle.
+                TrackOperation::PollStatus { user_op_hash, .. } => TrackShellResult::Status {
+                    user_op_hash: user_op_hash.clone(),
+                    status: TrackLifecycle::Included,
+                    stage: None,
+                    now_ms: now,
+                    tx_hash: Some(TX.to_owned()),
+                },
+                TrackOperation::TxReceipt {
+                    chain_id,
+                    tx_hash,
+                    user_op_hash,
+                } => {
+                    receipts_by_tx += 1;
+                    assert_eq!(tx_hash, TX);
+                    tx_receipt(*chain_id, tx_hash, user_op_hash, |_, _| {
+                        Ok(json!({ "result": receipt.clone() }))
+                    })
+                }
+                TrackOperation::UpdateTxRecords { .. } => TrackShellResult::RecordsPatched,
+                TrackOperation::NotifyConfirmed { .. } | TrackOperation::HoldingsMoved { .. } => {
+                    TrackShellResult::Notified
+                }
+                TrackOperation::LoadPendingTxs => TrackShellResult::RecordsLoaded {
+                    records: Vec::new(),
+                    now_ms: now,
+                },
+                other => unreachable!("not asked here: {other:?}"),
+            };
+            pending.extend(host.resolve(next.id, result));
+            let view = host.view();
+            if view
+                .entries
+                .iter()
+                .any(|entry| entry.status == TrackStatus::Confirmed)
+            {
+                break;
+            }
+        }
+        let entry = host
+            .view()
+            .entries
+            .into_iter()
+            .find(|entry| entry.user_op_hash == OP)
+            .unwrap_or_else(|| unreachable!("the op is tracked"));
+        assert_eq!(entry.status, TrackStatus::Confirmed);
+        assert_eq!(entry.tx_hash.as_deref(), Some(TX));
+        assert_eq!(receipts_by_tx, 1, "one read of the bundle's receipt");
+    }
+
+    /// Spec 082 RJ1: a written-ahead op proven never sent is withdrawn — the
+    /// tracker forgets it and patches nothing.
+    #[test]
+    fn a_withdrawn_op_is_forgotten() {
+        use crate::core_host::CoreHost;
+        let mut host = CoreHost::<TxTracker>::new();
+        let _ = host.dispatch(Event::Submitted {
+            user_op_hash: "0xop".to_owned(),
+            record_ids: vec!["r1".to_owned()],
+            chain_id: 100,
+            maybe_sent: true,
+            submit_block: None,
+            admitted: false,
+        });
+        assert_eq!(host.view().entries.len(), 1);
+        let after = host.dispatch(Event::Withdrawn {
+            user_op_hash: "0xop".to_owned(),
+            record_ids: vec!["r1".to_owned()],
+        });
+        assert!(host.view().entries.is_empty());
+        assert!(
+            !after
+                .iter()
+                .any(|op| matches!(op.operation, TrackOperation::UpdateTxRecords { .. })),
+            "a withdrawal patches no record"
+        );
     }
 
     /// RE8: holdings moved → the balances are invalidated, once, and the core
