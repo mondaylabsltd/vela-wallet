@@ -14,9 +14,10 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::dapp_permissions::{
     dapp_spelling, decide_popup_request, is_connect_method, is_insecure_public_origin,
-    is_signing_method, origin_of, resolve_granted, settle_on_close, DappPermissions, DpermGrant,
-    DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome, DpermPopupView,
-    DpermRejectReason as Reason, DpermRespondPayload as Payload, DpermShellResult as Res, Event,
+    is_signing_method, origin_of, popup_origin_refusal, resolve_granted, settle_on_close,
+    DappPermissions, DpermGrant, DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome,
+    DpermPopupView, DpermRejectReason as Reason, DpermRespondPayload as Payload,
+    DpermShellResult as Res, Event,
 };
 
 type Sut = DomainDriver<DappPermissions>;
@@ -395,6 +396,27 @@ fn popup(
         grant,
         current_addresses: addresses.map(|a| a.iter().map(|s| (*s).to_owned()).collect()),
         pinned_address: pinned.map(str::to_owned),
+        origin: None,
+        params_json: None,
+    }
+}
+
+/// The question as the extension's surface asks it since spec 089: the origin
+/// and the params come with it, and the core reads the address the request
+/// names itself.
+fn popup_with(
+    method: &str,
+    grant: Option<DpermGrant>,
+    origin: &str,
+    params: serde_json::Value,
+) -> Event {
+    Event::PopupRequest {
+        method: method.to_owned(),
+        grant,
+        current_addresses: Some(vec![A1.to_owned(), A2.to_owned()]),
+        pinned_address: None,
+        origin: Some(origin.to_owned()),
+        params_json: Some(params.to_string()),
     }
 }
 
@@ -557,6 +579,187 @@ fn popup_event_connect_on_a_granted_origin_answers_without_a_prompt() {
         DpermPopupOutcome::Respond {
             payload: Payload::Permissions { granted: true },
         },
+    );
+}
+
+/// Spec 089: a transaction naming another account in its `from` is refused
+/// 4100 — the window's by-shape guess read only top-level strings, so a
+/// transaction from A2 was signed by A1, the grant, instead of refused. The
+/// core reads the address by `dapp_rpc::requested_address`, the rule every
+/// in-app browser's sign gate reads.
+#[test]
+fn popup_event_refuses_a_transaction_from_another_account() {
+    let mut sut = Sut::new();
+    for method in ["eth_sendTransaction", "wallet_sendCalls"] {
+        let verdict = ask(
+            &mut sut,
+            popup_with(
+                method,
+                Some(grant(A1)),
+                ORIGIN,
+                serde_json::json!([{ "from": A2, "to": A3, "value": "0x1" }]),
+            ),
+        );
+        assert_eq!(
+            verdict.outcome,
+            DpermPopupOutcome::Reject {
+                code: 4100,
+                reason: Reason::StaleAuthorizedAddress,
+            },
+            "{method} from another account"
+        );
+        // The granted account, in any case, and a request that names nobody,
+        // both go to signing, pinned to the grant.
+        for params in [
+            serde_json::json!([{ "from": A1.to_uppercase().replace("0X", "0x"), "to": A3 }]),
+            serde_json::json!([{ "to": A3, "value": "0x1" }]),
+        ] {
+            let verdict = ask(
+                &mut sut,
+                popup_with(method, Some(grant(A1)), ORIGIN, params),
+            );
+            assert_eq!(
+                verdict.outcome,
+                DpermPopupOutcome::ForwardToSigning {
+                    granted_address: A1.to_owned(),
+                },
+                "{method}"
+            );
+        }
+    }
+}
+
+/// Spec 089: `personal_sign`'s account is its SECOND param. A message that is
+/// itself twenty bytes of hex is a message, not an account — the by-shape
+/// guess took it for one and refused a request for the right account.
+#[test]
+fn popup_event_reads_personal_signs_account_by_position() {
+    let mut sut = Sut::new();
+    let verdict = ask(
+        &mut sut,
+        popup_with(
+            "personal_sign",
+            Some(grant(A1)),
+            ORIGIN,
+            serde_json::json!([A3, A1]),
+        ),
+    );
+    assert_eq!(
+        verdict.outcome,
+        DpermPopupOutcome::ForwardToSigning {
+            granted_address: A1.to_owned(),
+        },
+    );
+    let verdict = ask(
+        &mut sut,
+        popup_with(
+            "personal_sign",
+            Some(grant(A1)),
+            ORIGIN,
+            serde_json::json!(["0x68656c6c6f", A2]),
+        ),
+    );
+    assert_eq!(
+        verdict.outcome,
+        DpermPopupOutcome::Reject {
+            code: 4100,
+            reason: Reason::StaleAuthorizedAddress,
+        },
+    );
+}
+
+/// Spec 089: a signature asked for by a public plain-http origin is refused
+/// 4100 before anything else — the in-app browsers' sign gate. Loopback and
+/// LAN origins keep working (local dApps), and connecting is not refused.
+#[test]
+fn popup_event_refuses_a_signature_from_an_insecure_public_origin() {
+    let mut sut = Sut::new();
+    let insecure = "http://dapp.example";
+    for method in [
+        "personal_sign",
+        "eth_sendTransaction",
+        "eth_signTypedData_v4",
+    ] {
+        let verdict = ask(
+            &mut sut,
+            popup_with(method, Some(grant(A1)), insecure, serde_json::json!([])),
+        );
+        assert_eq!(
+            verdict.outcome,
+            DpermPopupOutcome::Reject {
+                code: 4100,
+                reason: Reason::InsecureOrigin,
+            },
+            "{method}"
+        );
+    }
+    // Not connected AND insecure: the origin is what is said.
+    let verdict = ask(
+        &mut sut,
+        popup_with("personal_sign", None, insecure, serde_json::json!([])),
+    );
+    assert_eq!(
+        verdict.outcome,
+        DpermPopupOutcome::Reject {
+            code: 4100,
+            reason: Reason::InsecureOrigin,
+        },
+    );
+    // Connecting from it is a person's decision, as in an in-app browser.
+    let verdict = ask(
+        &mut sut,
+        popup_with("eth_requestAccounts", None, insecure, serde_json::json!([])),
+    );
+    assert_eq!(verdict.outcome, DpermPopupOutcome::Consent);
+    // https, loopback and the LAN sign as before.
+    for origin in [
+        "https://dapp.example",
+        "http://localhost:5173",
+        "http://127.0.0.1:8080",
+        "http://192.168.1.20:3000",
+    ] {
+        let verdict = ask(
+            &mut sut,
+            popup_with(
+                "personal_sign",
+                Some(grant(A1)),
+                origin,
+                serde_json::json!(["0x68656c6c6f", A1]),
+            ),
+        );
+        assert_eq!(
+            verdict.outcome,
+            DpermPopupOutcome::ForwardToSigning {
+                granted_address: A1.to_owned(),
+            },
+            "{origin}"
+        );
+    }
+}
+
+#[test]
+fn the_origin_rule_is_asked_only_of_signatures() {
+    assert_eq!(
+        popup_origin_refusal("personal_sign", Some("http://dapp.example")),
+        Some(Reason::InsecureOrigin)
+    );
+    assert_eq!(
+        popup_origin_refusal("eth_signTypedData_v2", Some("http://dapp.example")),
+        Some(Reason::InsecureOrigin),
+        "anything dapp_rpc calls a signature"
+    );
+    assert_eq!(
+        popup_origin_refusal("eth_requestAccounts", Some("http://dapp.example")),
+        None
+    );
+    assert_eq!(
+        popup_origin_refusal("personal_sign", Some("https://dapp.example")),
+        None
+    );
+    assert_eq!(
+        popup_origin_refusal("personal_sign", None),
+        None,
+        "no origin, no rule"
     );
 }
 

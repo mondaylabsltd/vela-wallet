@@ -30,8 +30,23 @@ export interface PopupRequestQuestion {
 	 * must NOT log the origin out on a transient empty read.
 	 */
 	currentAddresses: string[] | null;
-	/** The address the request pinned, if any. The empty string is "no pin". */
+	/**
+	 * The address the request pinned, if any. The empty string is "no pin".
+	 * Ignored by the core when `paramsJson` is given (spec 089).
+	 */
 	pinnedAddress: string | null | undefined;
+	/**
+	 * The asking page's origin — the browser's fact. A signature asked for by a
+	 * public plain-http origin is refused (`insecure_origin`), as in every
+	 * in-app browser (spec 089). Absent: no origin rule is asked.
+	 */
+	origin?: string | null;
+	/**
+	 * The request's params as JSON. When given, the CORE reads the address the
+	 * request names (`dapp_rpc::requested_address`: a transaction's `from`,
+	 * `personal_sign`'s second param, typed data's account), spec 089.
+	 */
+	paramsJson?: string | null;
 }
 
 export type PopupVerdict = DpermPopupView;
@@ -51,6 +66,9 @@ export function dpermRejectMessage(reason: DpermRejectReason): string {
 			return 'Connect Vela Wallet to this site first';
 		case 'stale_authorized_address':
 			return 'The requested account is no longer authorized';
+		// The in-app browsers' words for the same refusal (`dapp_browser`).
+		case 'insecure_origin':
+			return 'Signing requires a secure origin';
 		// The six refusals an in-app browser could raise went with the browser
 		// half of `dapp_permissions` (spec 070 T063): every real browser is on
 		// `dapp_browser`, which words its own. What a request WINDOW can refuse

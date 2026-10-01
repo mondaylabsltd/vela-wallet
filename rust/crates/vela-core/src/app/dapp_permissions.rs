@@ -135,12 +135,19 @@ pub enum DpermRejectReason {
     /// The window closed with the answer still pending — 4900, for the
     /// double-spend reason (`webview-transport.ts:77-79`).
     BrowserClosed,
+    /// A signature asked for by a PUBLIC plain-http origin
+    /// ([`is_insecure_public_origin`]), where anyone on the path can rewrite
+    /// the page that asks. The in-app browsers' sign gate (`dapp_browser`)
+    /// refused it from the start; the request window did not (spec 089).
+    InsecureOrigin,
 }
 
 impl DpermRejectReason {
     pub fn code(self) -> u32 {
         match self {
-            Self::NotConnected | Self::StaleAuthorizedAddress => CODE_UNAUTHORIZED,
+            Self::NotConnected | Self::StaleAuthorizedAddress | Self::InsecureOrigin => {
+                CODE_UNAUTHORIZED
+            }
             Self::BrowserClosed => CODE_UNKNOWN_PENDING,
         }
     }
@@ -289,8 +296,22 @@ pub enum Event {
         /// [`resolve_granted`] must NOT log the origin out on that.
         current_addresses: Option<Vec<String>>,
         /// `peer.request.address`, the address the request pins itself to.
-        /// The shell maps the TS empty string to `None`.
+        /// The shell maps the TS empty string to `None`. Ignored when
+        /// `params_json` is given: the core then reads the address itself.
         pinned_address: Option<String>,
+        /// The asking page's origin — the browser's fact, never the page's
+        /// claim. A signature asked for by a public plain-http origin is
+        /// refused ([`DpermRejectReason::InsecureOrigin`]), as every in-app
+        /// browser refuses it (spec 089). `None`: no origin rule is asked.
+        origin: Option<String>,
+        /// The request's params, as JSON. When given, the address the request
+        /// names is read from them by [`super::dapp_rpc::requested_address`] —
+        /// a transaction's `from`, `personal_sign`'s second param, typed
+        /// data's account — the rule every in-app browser's sign gate reads
+        /// (spec 089). The window's own by-shape guess never saw a
+        /// transaction's `from`, so a transaction naming another account was
+        /// signed by the granted one instead of refused.
+        params_json: Option<String>,
     },
     /// The request window's person pressed Connect (spec 070 T063).
     ///
@@ -390,12 +411,18 @@ impl App for DappPermissions {
                 grant,
                 current_addresses,
                 pinned_address,
+                origin,
+                params_json,
             } => popup_request(
                 model,
                 &method,
                 grant.as_ref(),
                 current_addresses.as_deref(),
-                pinned_address.as_deref(),
+                PopupFacts {
+                    pinned_address: pinned_address.as_deref(),
+                    origin: origin.as_deref(),
+                    params_json: params_json.as_deref(),
+                },
             ),
             Event::PopupApproved {
                 origin,
@@ -445,13 +472,17 @@ impl App for DappPermissions {
 /// - the forward is pinned to the GRANT's address, never the wallet's active
 ///   account (invariant ⑨);
 /// - a request pinning some other address is refused 4100 — never a silent
-///   swap of the signer for one the dApp did not ask for.
+///   swap of the signer for one the dApp did not ask for; the address a
+///   request names is read by the core's own rule when the params come with
+///   the question (spec 089);
+/// - a signature asked for by a public plain-http origin is refused 4100,
+///   before anything else is asked of it — the in-app browsers' gate.
 fn popup_request(
     model: &mut Model,
     method: &str,
     grant: Option<&DpermGrant>,
     current_addresses: Option<&[String]>,
-    pinned_address: Option<&str>,
+    facts: PopupFacts<'_>,
 ) -> Command<DpermEffect, Event> {
     // The window answers in the one spelling too, whatever case the stored
     // grant was written in before 082 (RG10). Only the case changes: the match
@@ -460,7 +491,55 @@ fn popup_request(
         .iter()
         .map(|address| dapp_spelling(address))
         .collect();
-    let outcome = match decide_popup_request(method, &granted, pinned_address) {
+    let outcome = if let Some(reason) = popup_origin_refusal(method, facts.origin) {
+        DpermPopupOutcome::Reject {
+            code: reason.code(),
+            reason,
+        }
+    } else {
+        popup_outcome(method, &granted, facts.pinned(method).as_deref())
+    };
+    model.popup = Some(DpermPopupView { outcome, granted });
+    render()
+}
+
+/// What the window states about one request beyond the grant: the address it
+/// pinned (its own guess, the pre-089 shape), the origin, and the params.
+#[derive(Clone, Copy, Debug, Default)]
+struct PopupFacts<'a> {
+    pinned_address: Option<&'a str>,
+    origin: Option<&'a str>,
+    params_json: Option<&'a str>,
+}
+
+impl PopupFacts<'_> {
+    /// The address the request names: read from the params by
+    /// [`super::dapp_rpc::requested_address`] when they were given (an
+    /// unparseable list names nobody), else the window's own pin.
+    fn pinned(&self, method: &str) -> Option<String> {
+        match self.params_json {
+            Some(raw) => serde_json::from_str::<serde_json::Value>(raw)
+                .ok()
+                .and_then(|params| super::dapp_rpc::requested_address(method, &params)),
+            None => self.pinned_address.map(str::to_owned),
+        }
+    }
+}
+
+/// The origin rule of the window's question (spec 089): a signing method
+/// asked for by a public plain-http origin is refused, before the grant is
+/// looked at — the order `dapp_browser`'s sign gate keeps. Connecting is not
+/// refused here, as it is not in an in-app browser.
+#[must_use]
+pub fn popup_origin_refusal(method: &str, origin: Option<&str>) -> Option<DpermRejectReason> {
+    let origin = origin?;
+    (is_signing_method(method) && is_insecure_public_origin(origin))
+        .then_some(DpermRejectReason::InsecureOrigin)
+}
+
+/// [`decide_popup_request`]'s decision, on the wire.
+fn popup_outcome(method: &str, granted: &[String], pinned: Option<&str>) -> DpermPopupOutcome {
+    match decide_popup_request(method, granted, pinned) {
         DpermPopupDecision::Respond(payload) => DpermPopupOutcome::Respond { payload },
         DpermPopupDecision::Consent => DpermPopupOutcome::Consent,
         DpermPopupDecision::Reject(reason) => DpermPopupOutcome::Reject {
@@ -479,9 +558,7 @@ fn popup_request(
                 reason: DpermRejectReason::NotConnected,
             },
         },
-    };
-    model.popup = Some(DpermPopupView { outcome, granted });
-    render()
+    }
 }
 
 /// The request window's approve (spec 070 T063).

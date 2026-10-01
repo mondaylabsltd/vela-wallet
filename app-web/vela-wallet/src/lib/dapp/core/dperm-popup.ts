@@ -38,7 +38,9 @@ export function decidePopupRequest(question: PopupRequestQuestion): PopupVerdict
 					// `[]` and `null` mean the same "not known yet" to the core, and it
 					// is the core that owns the never-log-out-on-a-cold-read rule.
 					current_addresses: question.currentAddresses,
-					pinned_address: question.pinnedAddress ? question.pinnedAddress : null
+					pinned_address: question.pinnedAddress ? question.pinnedAddress : null,
+					origin: question.origin ?? null,
+					params_json: question.paramsJson ?? null
 				})
 			)
 		) as { view: DpermView };
