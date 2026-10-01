@@ -4491,6 +4491,28 @@ export function trustedSignerUsesWalletPasskeys(url) {
 }
 
 /**
+ * The ONE document a typed-data request is read as — what the sheet
+ * decodes, the same bytes `signMessageHash` covers (audit 2026-10-01).
+ * `undefined` when the request is not a valid typed-data request.
+ * @param {string} method
+ * @param {string} params_json
+ * @returns {string | undefined}
+ */
+export function typedDataDocument(method, params_json) {
+    const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.typedDataDocument(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
  * Spec 077: how long a submitted operation usually takes to land on a chain,
  * in seconds — `0` where Vela ships no estimate for it.
  *

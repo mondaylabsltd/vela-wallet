@@ -1270,32 +1270,33 @@ mod tests {
         assert_eq!(hashed("personal_sign", "[]"), None);
     }
 
-    /// Typed data is the core's EIP-712 digest of the document the page
-    /// derives it from: the second parameter, or the first for the legacy
-    /// names and when the second is missing.
+    /// Typed data is the core's EIP-712 digest of the request's ONE document,
+    /// read strictly (085, the EIP-712 WYSIWYS audit): the second parameter
+    /// of `[address, document]`, the first of the legacy `[document, address]`
+    /// — and nothing at all for one param, the wrong order or two documents.
     #[test]
     fn typed_data_is_the_cores_digest_of_the_right_parameter() {
+        let account = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
         let document = r#"{"types":{"EIP712Domain":[{"name":"name","type":"string"}],"Mail":[{"name":"contents","type":"string"}]},"primaryType":"Mail","domain":{"name":"Vela"},"message":{"contents":"hi"}}"#;
         let digest = vela_core::eip712::hash_typed_data(document).ok();
         assert!(digest.is_some());
         let quoted = serde_json::to_string(document).unwrap_or_default();
         assert_eq!(
-            message_hash("eth_signTypedData_v4", &format!(r#"["0xabc",{quoted}]"#)),
+            message_hash("eth_signTypedData_v4", &format!(r#"["{account}",{quoted}]"#)),
             digest
         );
         assert_eq!(
-            message_hash("eth_signTypedData_v4", &format!(r#"["0xabc",{document}]"#)),
+            message_hash("eth_signTypedData_v4", &format!(r#"["{account}",{document}]"#)),
             digest,
             "a document sent as an object is the same document"
         );
         assert_eq!(
-            message_hash("eth_signTypedData_v4", &format!("[{quoted}]")),
+            message_hash("eth_signTypedData", &format!(r#"[{quoted},"{account}"]"#)),
             digest
         );
-        assert_eq!(
-            message_hash("eth_signTypedData", &format!(r#"[{quoted},"0xabc"]"#)),
-            digest
-        );
+        assert_eq!(message_hash("eth_signTypedData_v4", &format!("[{quoted}]")), None);
+        assert_eq!(message_hash("eth_signTypedData_v4", &format!("[{quoted},{quoted}]")), None);
+        assert_eq!(message_hash("eth_signTypedData", &format!("[{quoted},{quoted}]")), None);
         assert!(is_message("eth_signTypedData_v4") && is_message("personal_sign"));
         assert!(!is_message("eth_sendTransaction") && !is_message("wallet_sendCalls"));
     }

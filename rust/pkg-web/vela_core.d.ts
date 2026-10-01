@@ -1048,6 +1048,13 @@ export function trustedSignerUnitRpId(member_origins_json: string, wallet_rp_id:
 export function trustedSignerUsesWalletPasskeys(url: string): boolean;
 
 /**
+ * The ONE document a typed-data request is read as — what the sheet
+ * decodes, the same bytes `signMessageHash` covers (audit 2026-10-01).
+ * `undefined` when the request is not a valid typed-data request.
+ */
+export function typedDataDocument(method: string, params_json: string): string | undefined;
+
+/**
  * Spec 077: how long a submitted operation usually takes to land on a chain,
  * in seconds — `0` where Vela ships no estimate for it.
  *
@@ -1337,6 +1344,7 @@ export interface InitOutput {
     readonly txtrackercore_new: () => number;
     readonly txtrackercore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly txtrackercore_view: (a: number) => [number, number, number, number];
+    readonly typedDataDocument: (a: number, b: number, c: number, d: number) => [number, number];
     readonly typicalInclusionSeconds: (a: number) => number;
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
