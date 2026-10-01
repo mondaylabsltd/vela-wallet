@@ -396,6 +396,12 @@ class ContactsLiveTest {
         assertTrue(report.body.contains("1"))
         val refused = ContactsLive.importNotice(ContactsView(loaded = true, import_failure = ContactImportFailure.NoAddressColumn), strings, close = "关闭")
         assertEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_TITLE), refused?.title)
+        assertEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_BODY), refused?.body)
+        // Issue 333: a legacy encoding is told how to save the file.
+        val encoding = ContactsLive.importNotice(ContactsView(loaded = true, import_failure = ContactImportFailure.UnsupportedEncoding), strings, close = "关闭")
+        assertEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_TITLE), encoding?.title)
+        assertEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_ENCODING), encoding?.body)
+        assertTrue(encoding!!.body.contains("UTF-8"))
         assertNull(ContactsLive.importNotice(ContactsView(loaded = true), strings, close = "关闭"))
     }
 }

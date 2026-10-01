@@ -2071,16 +2071,17 @@ struct RootView: View {
         }
     }
 
-    /// 从文件导入 — a picked file's TEXT, straight to the core.
+    /// 从文件导入 — a picked file's BYTES, straight to the core.
     ///
-    /// The shell does not parse it. The core sniffs JSON from CSV, refuses a
-    /// bad file before any write, and applies existing-wins; a shell that
-    /// pre-parsed would be a second, disagreeing reader of the same file.
+    /// The shell does not decode or parse it. The core reads the encoding
+    /// (issue 333), sniffs JSON from CSV, refuses a bad file before any
+    /// write, and applies existing-wins; a shell that pre-decoded would be a
+    /// second, disagreeing reader of the same file.
     private func importContacts(intoGroup: String? = nil) {
         Task {
             guard let picked = await documents.pick(types: DocumentTypes.addressBook) else { return }
             contacts.importFile(
-                content: String(decoding: picked.bytes, as: UTF8.self),
+                bytes: picked.bytes,
                 filename: picked.name,
                 intoGroup: intoGroup
             )

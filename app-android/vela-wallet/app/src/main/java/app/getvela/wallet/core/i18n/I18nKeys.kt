@@ -419,6 +419,7 @@ object I18nKeys {
         const val IMPORT_DONE_INVALID = "contacts.importDoneInvalid"
         const val IMPORT_FAIL_TITLE = "contacts.importFailTitle"
         const val IMPORT_FAIL_BODY = "contacts.importFailBody"
+        const val IMPORT_FAIL_ENCODING = "contacts.importFailEncoding"
 
         // Reused from the spec-015 map (same keys, no corpus change).
         const val ACTION_SEND = "componentsUi.dock.send"

@@ -398,13 +398,15 @@ pub enum Event {
         chain_id: u32,
         address: String,
     },
-    /// An import FILE as the person picked it — its text and its name. The
-    /// core sniffs JSON from CSV, parses (refusing a bad file before any write,
-    /// D50), applies the existing-wins policy, and — with `into_group` — seats
-    /// every valid row in that group ("导入到本组"). The outcome is
-    /// `ContactsView::last_import` or `import_failure`, until acknowledged.
+    /// An import FILE as the person picked it — its BYTES and its name. The
+    /// core decodes them (`contacts_io::decode_text`: UTF-8, or UTF-16 by its
+    /// BOM, never a guess — issue 333), sniffs JSON from CSV, parses (refusing
+    /// a bad file before any write, D50), applies the existing-wins policy,
+    /// and — with `into_group` — seats every valid row in that group
+    /// ("导入到本组"). The outcome is `ContactsView::last_import` or
+    /// `import_failure`, until acknowledged.
     ImportFile {
-        content: String,
+        bytes: Vec<u8>,
         filename: Option<String>,
         into_group: Option<String>,
         now_ms: f64,
@@ -779,7 +781,7 @@ impl App for Contacts {
                 requests(model, ops)
             }
             Event::ImportFile {
-                content,
+                bytes,
                 filename,
                 into_group,
                 now_ms,
@@ -789,7 +791,7 @@ impl App for Contacts {
                 }
                 match apply_import_file(
                     model,
-                    &content,
+                    &bytes,
                     filename.as_deref(),
                     into_group.as_deref(),
                     now_ms,
@@ -1166,6 +1168,7 @@ fn apply_import(
     let mut report = ContactImportReport::default();
     let mut newly_added: BTreeSet<String> = BTreeSet::new();
     let mut tombstone_cleared = false;
+    let mut repaired = false;
 
     for entry in contacts {
         if !is_address(&entry.address) {
@@ -1175,7 +1178,19 @@ fn apply_import(
         let addr = entry.address.to_lowercase();
         // Existing-wins: never overwrite a local contact; a duplicate within
         // the file is added once (invariant ⑤).
-        if newly_added.contains(&addr) || model.saved.iter().any(|c| c.address == addr) {
+        if newly_added.contains(&addr) {
+            report.skipped += 1;
+            continue;
+        }
+        if let Some(existing) = model.saved.iter_mut().find(|c| c.address == addr) {
+            // ...except a name nobody wrote. U+FFFD is a lenient decoder's
+            // mark, left by the very import this file now replaces (issue
+            // 333); without this, re-importing the file saved as UTF-8 would
+            // say "already existed" and keep `jxjjx����` for good.
+            if repairs_name(existing.name.as_deref(), entry.name.as_deref()) {
+                existing.name = entry.name;
+                repaired = true;
+            }
             report.skipped += 1;
             continue;
         }
@@ -1250,7 +1265,7 @@ fn apply_import(
     model.last_import = Some(report);
 
     let mut ops = Vec::new();
-    if report.added > 0 {
+    if report.added > 0 || repaired {
         ops.push(ContactOperation::WriteContacts {
             contacts: model.saved.clone(),
         });
@@ -1268,16 +1283,25 @@ fn apply_import(
     ops
 }
 
-/// [`Event::ImportFile`]: parse (refusing a bad file before any write, D50),
-/// apply the existing-wins policy, then — for "import into this group" — seat
-/// every VALID row in that group, whether it was just added or already saved.
-/// The person named the group; membership is the one thing an existing entry
-/// does not get to veto (its name, note and star still win, as always).
+/// Whether an imported name replaces a saved one despite existing-wins: only
+/// when the saved name carries U+FFFD — damage, not a choice (issue 333) — and
+/// the file's name is clean.
+fn repairs_name(saved: Option<&str>, imported: Option<&str>) -> bool {
+    saved.is_some_and(|name| name.contains('\u{fffd}'))
+        && imported.is_some_and(|name| !name.is_empty() && !name.contains('\u{fffd}'))
+}
+
+/// [`Event::ImportFile`]: decode and parse (refusing a bad file before any
+/// write, D50), apply the existing-wins policy, then — for "import into this
+/// group" — seat every VALID row in that group, whether it was just added or
+/// already saved. The person named the group; membership is the one thing an
+/// existing entry does not get to veto (its name, note and star still win, as
+/// always — a damaged name aside, [`repairs_name`]).
 ///
 /// `Err` carries the refusal already recorded on the model; `Ok` the writes.
 fn apply_import_file(
     model: &mut Model,
-    content: &str,
+    bytes: &[u8],
     filename: Option<&str>,
     into_group: Option<&str>,
     now_ms: f64,
@@ -1290,7 +1314,9 @@ fn apply_import_file(
             return Err(ContactImportFailure::UnknownGroup);
         }
     }
-    let parsed = match contacts_io::parse(content, filename) {
+    let parsed = match contacts_io::decode_text(bytes)
+        .and_then(|content| contacts_io::parse(&content, filename))
+    {
         Ok(parsed) => parsed,
         Err(failure) => {
             model.import_failure = Some(failure);

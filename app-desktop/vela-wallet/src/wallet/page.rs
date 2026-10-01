@@ -17530,11 +17530,10 @@ impl WalletPage {
         true
     }
 
-    /// Read an address-book backup and hand it to the core.
+    /// Read an address-book backup and hand its BYTES to the core.
     ///
-    /// The shell reads and PARSES; the core applies existing-wins and counts
-    /// what happened. Which of those two halves is which is the reason
-    /// `ImportParsed` takes already-parsed rows rather than a file.
+    /// The shell reads the file; the core decodes it (issue 333), parses it,
+    /// applies existing-wins and counts what happened.
     fn import_contacts(into_group: Option<String>, cx: &mut Context<Self>) {
         // `VELA_IMPORT_FILE=<path>` answers the picker — the `VELA_SCAN_FILE`
         // seam, for the same reason: a system file dialog is a window no
@@ -17568,16 +17567,15 @@ impl WalletPage {
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned());
             // Reading the bytes is the shell's job, and its own way to fail.
-            // Everything ABOUT those bytes — is this JSON, does this CSV have
-            // an address column, is it empty — belongs to the core (028 moved
-            // it into `app/contacts_io.rs`), because a file the web refuses
-            // must not import as "0 contacts added" here.
-            let Ok(content) = std::fs::read_to_string(&path) else {
+            // Everything ABOUT those bytes — which encoding, is this JSON,
+            // does this CSV have an address column, is it empty — belongs to
+            // the core (`app/contacts_io.rs`), because a file the web refuses
+            // must not import as "0 contacts added" here. `read_to_string`
+            // used to decide the encoding here, and refused a UTF-16 file the
+            // core reads (issue 333).
+            let Ok(bytes) = std::fs::read(&path) else {
                 page.update(cx, |this, cx| {
-                    this.import_result = Some((
-                        this.contacts.import_fail_title.clone(),
-                        this.contacts.import_fail_body.clone(),
-                    ));
+                    this.import_result = Some(this.contacts.import_refusal(None));
                     cx.notify();
                 })
                 .ok();
@@ -17588,7 +17586,7 @@ impl WalletPage {
                 let view = resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
                     resident.dispatch(
                         ContactEvent::ImportFile {
-                            content,
+                            bytes,
                             filename,
                             // 导入到本组 names its group; the header's and the
                             // empty book's import are the whole book.
@@ -17603,10 +17601,7 @@ impl WalletPage {
                 // refusal comes FIRST — a file that was rejected wrote
                 // nothing, and "added 0, skipped 0" would describe that as a
                 // successful import of an empty address book.
-                let refused = (
-                    this.contacts.import_fail_title.clone(),
-                    this.contacts.import_fail_body.clone(),
-                );
+                let refused = this.contacts.import_refusal(view.import_failure);
                 this.import_result = Some(match (view.import_failure, view.last_import) {
                     (Some(_), _) => refused,
                     // The COUNTS are the core's — it applied existing-wins and

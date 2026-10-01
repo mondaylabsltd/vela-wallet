@@ -1760,6 +1760,7 @@
   "importDoneInvalid": "アドレスが無効な {{invalid}} 件はスキップしました。",
   "importFailTitle": "取り込みに失敗しました",
   "importFailBody": "JSON または CSV の連絡先ファイルをご利用ください。",
+  "importFailEncoding": "UTF-8（Excel: CSV UTF-8）で保存し直してください。",
   "manage": "管理",
   "sectionContacts": "連絡先",
   "countPeople": "{{count}} 件",
