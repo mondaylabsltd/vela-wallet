@@ -464,6 +464,40 @@ export function isAddressLike(v) {
 	return typeof v === 'string' && ADDR_RE.test(v);
 }
 
+/**
+ * The ONLY typed-data shapes the wallet signs — the core's `typed_data_request`,
+ * twinned here because the worker cannot run the core: the four methods;
+ * exactly two params; legacy `eth_signTypedData` / `_v1` = `[typedData,
+ * address]`, `_v3` / `_v4` = `[address, typedData]`; one EIP-712 document.
+ * Refused at the first untrusted boundary so no later reader can take a second
+ * document for the first (audit 2026-10-01; PR #337 did this for v4 only).
+ * The core checks again, and refuses what this lets through.
+ */
+export function isTypedDataParams(method, params) {
+	const legacy = method === 'eth_signTypedData' || method === 'eth_signTypedData_v1';
+	const modern = method === 'eth_signTypedData_v3' || method === 'eth_signTypedData_v4';
+	if (!legacy && !modern) return false;
+	if (!Array.isArray(params) || params.length !== 2) return false;
+	if (!isAddressLike(params[legacy ? 1 : 0])) return false;
+	let document = params[legacy ? 0 : 1];
+	if (typeof document === 'string') {
+		try {
+			document = JSON.parse(document);
+		} catch {
+			return false;
+		}
+	}
+	const object = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+	return (
+		object(document) &&
+		object(document.types) &&
+		typeof document.primaryType === 'string' &&
+		document.primaryType.length > 0 &&
+		object(document.domain) &&
+		object(document.message)
+	);
+}
+
 /** EIP-1193: minimal lowercase hex, e.g. 1 → "0x1". */
 export function toHexChainId(n) {
 	const num = typeof n === 'string' ? parseInt(n, n.startsWith('0x') ? 16 : 10) : n;
@@ -526,6 +560,7 @@ export function isWellFormedRequest(value) {
 	const objectParams =
 		v.method === 'wallet_watchAsset' && v.params !== null && typeof v.params === 'object';
 	if (!Array.isArray(v.params) && !objectParams) return false;
+	if (v.method.includes('signTypedData') && !isTypedDataParams(v.method, v.params)) return false;
 	try {
 		return JSON.stringify(v.params).length <= MAX_REQUEST_BYTES;
 	} catch {

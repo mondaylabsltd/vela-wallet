@@ -1628,21 +1628,12 @@ pub fn detect_approval(method: &str, params: Option<&Value>) -> Option<GuardDete
         );
     }
 
-    if method.contains("signTypedData") {
-        // `params[1] ?? params[0]`
-        let raw = match arr.get(1) {
-            None | Some(Value::Null) => arr.first()?,
-            Some(value) => value,
-        };
-        let parsed;
-        let td = match raw {
-            Value::String(s) => {
-                parsed = serde_json::from_str::<Value>(s).ok()?;
-                &parsed
-            }
-            other => other,
-        };
-        return detect_typed_data_approval(td);
+    if crate::typed_data_request::looks_like_typed_data(method) {
+        // The request's ONE document, read strictly (audit 2026-10-01): the
+        // legacy order put the address at `params[1]`, so a legacy Permit was
+        // never seen, and `[permit, benign]` was judged by the benign one.
+        let read = crate::typed_data_request::canonical(method, params?).ok()?;
+        return detect_typed_data_approval(&read.document);
     }
 
     None
@@ -1901,6 +1892,58 @@ fn detect_typed_data_approval(td: &Value) -> Option<GuardDetectedApproval> {
         }
     }
 
+    // Permit2 SignatureTransfer — a ONE-SHOT authorization for `spender` to
+    // take up to `permitted.amount` (uint256) of the token, redeemable by the
+    // spender until `deadline`. It moves the coins itself, so it is at least as
+    // dangerous as an allowance; the audit of 2026-10-01 found the guard had
+    // no rule for it. Surfaced under the Permit2 kinds (no new kind: every
+    // shell decodes the kind, and an unknown one refuses the whole view), never
+    // editable, signed verbatim only under the off-chain-permit consent.
+    if pt == "PermitTransferFrom" && js_truthy(msg.get("permitted")) {
+        let permitted = msg.get("permitted").unwrap_or(&empty);
+        let amount = to_big(permitted.get("amount"));
+        return Some(GuardDetectedApproval {
+            kind: GuardApprovalKind::Permit2Single,
+            token_address: nonempty(lc(permitted.get("token"))),
+            spender: lc(msg.get("spender")),
+            is_unbounded: !amount.neg && amount.mag >= UNLIMITED_CAP_256,
+            is_reducing: amount.is_zero(),
+            amount_raw: Some(amount.to_dec()),
+            amount_bits: Some(256),
+            is_boolean_grant: false,
+            editable: false,
+            block_reason: Some(GuardBlockReason::OffChainPermit),
+            deadline: Some(to_big(msg.get("deadline")).to_dec()),
+            locus: GuardLocus::TypedPath {
+                path: "permitted.amount".to_owned(),
+            },
+        });
+    }
+    if pt == "PermitBatchTransferFrom" {
+        if let Some(list) = msg.get("permitted").and_then(Value::as_array) {
+            let any_unbounded = list.iter().any(|p| {
+                let amount = to_big(p.get("amount"));
+                !amount.neg && amount.mag >= UNLIMITED_CAP_256
+            });
+            return Some(GuardDetectedApproval {
+                kind: GuardApprovalKind::Permit2Batch,
+                token_address: None,
+                spender: lc(msg.get("spender")),
+                amount_raw: None,
+                amount_bits: Some(256),
+                is_unbounded: any_unbounded,
+                is_boolean_grant: false,
+                is_reducing: false,
+                editable: false,
+                block_reason: Some(GuardBlockReason::OffChainPermit),
+                deadline: Some(to_big(msg.get("deadline")).to_dec()),
+                locus: GuardLocus::TypedPath {
+                    path: "permitted".to_owned(),
+                },
+            });
+        }
+    }
+
     None
 }
 
@@ -1969,12 +2012,11 @@ pub fn rewrite_approval_params(
         return Ok(Value::Array(out));
     }
 
-    if method.contains("signTypedData") {
-        // `typeof params[1] === 'string' || (params[1] && typeof === 'object')`
-        let idx = match arr.get(1) {
-            Some(Value::String(_)) | Some(Value::Object(_)) | Some(Value::Array(_)) => 1,
-            _ => 0,
-        };
+    if crate::typed_data_request::looks_like_typed_data(method) {
+        // The document's own slot for the method (audit 2026-10-01).
+        let idx = crate::typed_data_request::TypedDataMethod::of(method)
+            .ok_or(GuardRewriteError::MalformedParams)?
+            .document_index();
         let raw = arr.get(idx).ok_or(GuardRewriteError::MalformedParams)?;
         let was_string = matches!(raw, Value::String(_));
         let mut td = match raw {

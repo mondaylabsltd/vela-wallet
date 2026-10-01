@@ -1806,8 +1806,11 @@ pub fn clear_kickoff(
                 locale: ClearLocale::default(),
             })
         }
-        "eth_signTypedData_v4" | "eth_signTypedData" => Some(ClearEvent::ResolveTypedData {
-            typed_data_json: typed_data_of(params_json),
+        "eth_signTypedData_v4"
+        | "eth_signTypedData_v3"
+        | "eth_signTypedData_v1"
+        | "eth_signTypedData" => Some(ClearEvent::ResolveTypedData {
+            typed_data_json: typed_data_of(method, params_json),
             chain_id,
             locale: ClearLocale::default(),
         }),
@@ -1882,19 +1885,14 @@ fn value_text(value: Option<&serde_json::Value>) -> Option<String> {
     }
 }
 
-/// `eth_signTypedData_v4`'s payload: `[address, json]` — the JSON is the
-/// SECOND parameter, and reading the first would hand the decoder an address
-/// where it expects a document.
-fn typed_data_of(params_json: &str) -> String {
-    serde_json::from_str::<serde_json::Value>(params_json)
-        .ok()
-        .and_then(|params| params.get(1).cloned())
-        .map(|value| {
-            value
-                .as_str()
-                .map_or_else(|| value.to_string(), str::to_owned)
-        })
-        .unwrap_or_default()
+/// The ONE document the request is read as — the core's reading, the same
+/// bytes the passkey's digest covers. The audit of 2026-10-01: reading
+/// `params[1]` here previewed the benign half of a legacy
+/// `[malicious, benign]` while the passkey signed the malicious one. Empty
+/// when the request is not a valid typed-data request — the core refuses it
+/// before a sheet.
+fn typed_data_of(method: &str, params_json: &str) -> String {
+    vela_core::typed_data_request::document_json_of(method, params_json).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -2563,23 +2561,43 @@ mod tests {
         assert_eq!(facts.data_bytes, 6);
     }
 
-    /// `eth_signTypedData_v4` is `[address, json]`.
-    ///
-    /// The document is the SECOND parameter. Reading the first hands the
-    /// decoder an address where it expects a typed-data payload, and the
-    /// whole ladder falls to its blind rung for every typed request — a
-    /// degradation nobody would see as a bug, only as "clear signing never
-    /// works here".
+    /// The sheet decodes the request's ONE document, where its method carries
+    /// it — the core's reading, the same bytes the passkey signs (audit
+    /// 2026-10-01). Two documents, in either order, give the sheet nothing
+    /// and sign nothing.
     #[test]
-    fn typed_data_comes_from_the_second_parameter() {
-        let params = r#"["0xaaa","{\"primaryType\":\"Permit\"}"]"#;
-        assert_eq!(typed_data_of(params), r#"{"primaryType":"Permit"}"#);
-
-        // Some sites pass the document as an object rather than a string.
-        let object = r#"["0xaaa",{"primaryType":"Permit"}]"#;
-        assert_eq!(typed_data_of(object), r#"{"primaryType":"Permit"}"#);
-
-        assert_eq!(typed_data_of("[]"), "", "nothing to decode is not a panic");
+    fn the_sheet_decodes_the_one_document_the_core_signs() {
+        let account = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let doc = r#"{"types":{"EIP712Domain":[],"Mail":[{"name":"contents","type":"string"}]},"primaryType":"Mail","domain":{},"message":{"contents":"hi"}}"#;
+        let quoted = serde_json::to_string(doc).unwrap();
+        for (method, params) in [
+            ("eth_signTypedData_v4", format!(r#"["{account}",{quoted}]"#)),
+            ("eth_signTypedData_v3", format!(r#"["{account}",{doc}]"#)),
+            ("eth_signTypedData", format!(r#"[{quoted},"{account}"]"#)),
+            ("eth_signTypedData_v1", format!(r#"[{doc},"{account}"]"#)),
+        ] {
+            let shown = typed_data_of(method, &params);
+            assert!(shown.contains(r#""Mail""#), "{method}: {shown}");
+            assert_eq!(
+                vela_core::eip712::hash_typed_data(&shown).ok(),
+                crate::executor::sign_request::message_hash(method, &params),
+                "{method}: the sheet's document is the signed one"
+            );
+        }
+        for method in ["eth_signTypedData_v4", "eth_signTypedData"] {
+            let two = format!("[{doc},{doc}]");
+            assert_eq!(typed_data_of(method, &two), "", "{method}");
+            assert_eq!(
+                crate::executor::sign_request::message_hash(method, &two),
+                None,
+                "{method}"
+            );
+        }
+        assert_eq!(
+            typed_data_of("eth_signTypedData_v4", "[]"),
+            "",
+            "nothing to decode is not a panic"
+        );
     }
 }
 

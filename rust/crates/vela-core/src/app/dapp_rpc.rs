@@ -206,9 +206,11 @@ pub fn requested_address(method: &str, params: &Value) -> Option<String> {
     let list = params.as_array()?;
     let candidate = match method {
         "eth_sendTransaction" | "wallet_sendCalls" => list.first()?.get("from")?.as_str()?,
-        "personal_sign" | "eth_signTypedData" | "eth_signTypedData_v1" => list.get(1)?.as_str()?,
-        m if m.contains("signTypedData") => list.first()?.as_str()?,
-        _ => return None,
+        "personal_sign" => list.get(1)?.as_str()?,
+        m => {
+            let typed = crate::typed_data_request::TypedDataMethod::of(m)?;
+            list.get(typed.account_index())?.as_str()?
+        }
     };
     let is_address = candidate.len() == 42
         && candidate.starts_with("0x")

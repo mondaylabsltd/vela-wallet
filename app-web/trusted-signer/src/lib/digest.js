@@ -161,9 +161,10 @@ window.VelaCS = window.VelaCS || {};
       // The wallet's own pick (`sign_request::extract_request_chain_id`): the
       // legacy names carry the data first; the rest carry `[address, data]`,
       // falling back to the first when the second is missing.
-      var legacy = intent.method === 'eth_signTypedData' || intent.method === 'eth_signTypedData_v1';
-      var raw = legacy || intent.params[1] == null ? intent.params[0] : intent.params[1];
-      var data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      // The same ONE document the preview drew (`resolve.typedDocument`, audit
+      // 2026-10-01) — never a slot of its own, and no fallback.
+      var data = ns.resolve && ns.resolve.typedDocument ? ns.resolve.typedDocument(intent) : null;
+      if (!data) return { refuse: 'refuse.typedShape' };
       return forAccount(typedDataHash(data), 'EIP-712');
     }
     if (intent.method === 'eth_sign') {

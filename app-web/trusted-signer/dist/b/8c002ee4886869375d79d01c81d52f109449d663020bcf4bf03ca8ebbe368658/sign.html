@@ -2,7 +2,7 @@
 <html lang="zh">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ty/c1YMDwh34FmVQcQOTcrOc4QBWaidZkl9iq7XpnQ8='; style-src 'sha256-rWe+2xLigENrzZnzVrLkPMkDkkBazzy6xncYYAP+YpY='; img-src data:; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-DXH2FruH0nEHT5iE6gY8D6AMSO1evzaAtaxC+VOqBGA='; style-src 'sha256-9q4sbzTCVJGOD+jjHoXJVP0Omm0mzbcoyFxl7DNpv7s='; img-src data:; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Vela · 签名</title>
     <style>
@@ -229,13 +229,7 @@ body {
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.15;
-  /* A figure wider than the card wraps instead of running under its edge. */
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
 }
-.amount-long { font-size: 24px; }
-.amount-longer { font-size: 20px; }
 
 .amount-danger { color: var(--danger); }
 .amount-symbol { font-size: 17px; color: var(--muted); }
@@ -279,7 +273,6 @@ body {
   margin: 12px 0 0;
   font-size: 14px;
   line-height: 1.6;
-  overflow-wrap: anywhere;
 }
 
 /* rows */
@@ -385,7 +378,7 @@ body {
 .tech-label { color: var(--caution); font-size: 12px; margin: 10px 0 4px; }
 .tech-label:first-child { margin-top: 0; }
 .tech-signature { display: block; font: 12px/1.6 var(--mono); overflow-wrap: anywhere; }
-.tech-sim { font-size: 13px; overflow-wrap: anywhere; }
+.tech-sim { font-size: 13px; }
 
 .address-card {
   margin: 6px 0;
@@ -1865,46 +1858,6 @@ window.VelaCS = window.VelaCS || {};
     }
   }
 
-  /**
-   * A call's `value` in wei, or `null` when it cannot be read exactly.
-   *
-   * The reading the wallet's own submit path gives a site's value (the
-   * desktop's `wei_of`, vela-core `to_quantity`), because the page only ever
-   * MATCHES this reading against the operation the wallet built — what the
-   * card states is the operation's own figure. Absent and null are zero. A
-   * string is trimmed; then "" is zero, "0x" or "0X" and hex digits (none:
-   * zero) are that number, and plain decimal digits are that number. A
-   * non-negative integral number and a non-negative BigInt are themselves.
-   * Anything else — a sign, "0b" or "0o", a fraction, inner spaces — is
-   * unreadable.
-   *
-   * Stricter than the submit path is not safer: a site's "0X10" or
-   * " 0x10 " is then missing from the operation the desktop built from it,
-   * and the page refuses a transaction nobody altered with
-   * `refuse.opMismatch` ("altered during assembly"). Before 082 BigInt() read
-   * all of these.
-   *
-   * The page's own grammar, not BigInt()'s: engines disagree at the edges.
-   * JavaScriptCore (Safari, the page's engine on the iPhone and the Mac)
-   * reads "0x " and " 0x " as 0 where V8 throws, so a verdict left to
-   * BigInt() would change with the browser. BigInt() here only ever sees
-   * "0x" and at least one hex digit, or decimal digits.
-   */
-  function quantity(value) {
-    if (value === undefined || value === null) return 0n;
-    if (typeof value === 'bigint') return value >= 0n ? value : null;
-    if (typeof value === 'number') {
-      return Number.isInteger(value) && value >= 0 ? BigInt(value) : null;
-    }
-    if (typeof value !== 'string') return null;
-    var text = value.trim();
-    if (text === '') return 0n;
-    var hex = /^0[xX]([0-9a-fA-F]*)$/.exec(text);
-    if (hex) return hex[1] ? BigInt('0x' + hex[1]) : 0n;
-    if (/^[0-9]+$/.test(text)) return BigInt(text);
-    return null;
-  }
-
   /** Walk a decoded tree by index path, e.g. [1, 4]. */
   function at(values, path) {
     var node = values;
@@ -1922,7 +1875,6 @@ window.VelaCS = window.VelaCS || {};
     splitTypes: splitTypes,
     decode: decode,
     at: at,
-    quantity: quantity,
     byteLength: function (calldata) {
       return Math.floor(strip(calldata).length / 2);
     },
@@ -2583,12 +2535,7 @@ window.VelaCS = window.VelaCS || {};
     };
   }
 
-  /**
-   * `exact`: every one of the 18 decimals that is not a trailing zero, as the
-   * wallet's plain send card states it (vela-core `exact_native_amount`, 082
-   * RC5). Without it the figure stops at six decimals.
-   */
-  function nativeAmount(value, ctx, exact) {
+  function nativeAmount(value, ctx) {
     // The chain's own coin, from the chain id we sign for — the requester's
     // word only for a chain this page does not know (as with its name).
     var symbol = reg.nativeSymbol(ctx.chainId) || ctx.nativeSymbol || 'ETH';
@@ -2596,7 +2543,7 @@ window.VelaCS = window.VelaCS || {};
       value: value,
       token: { symbol: symbol, decimals: 18, tone: '#8a93a5' },
       symbol: symbol,
-      text: formatUnits(value, 18, exact ? 18 : undefined),
+      text: formatUnits(value, 18),
       fiat: fiat(ctx, symbol, value, 18),
       unlimited: false,
     };
@@ -2610,19 +2557,6 @@ window.VelaCS = window.VelaCS || {};
 
   // --- view scaffold ---------------------------------------------------------
 
-  /**
-   * Whether a site's name and its host are the same words, by the apps' rule
-   * (vela-core `browser_load::site_label`, spec 079 F14): both trimmed, then
-   * equal ignoring ASCII case. The wallet names a site it opened by its host,
-   * so without this the head read "127.0.0.1:8137" over "127.0.0.1:8137".
-   */
-  function sameSiteWords(name, host) {
-    var fold = function (text) {
-      return String(text || '').trim().replace(/[A-Z]/g, function (c) { return c.toLowerCase(); });
-    };
-    return fold(name) === fold(host);
-  }
-
   function baseView(intent, ctx) {
     var origin = (intent && intent.origin) || '';
     var host = origin.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -2631,11 +2565,7 @@ window.VelaCS = window.VelaCS || {};
       dapp: {
         name: (known && known.name) || null,
         nameKey: (known && known.name) ? null : (host ? 'tag.unknownSite' : 'tag.wallet'),
-        // The host, for every judgement about it (`warn.claimedOrigin` reads
-        // this). Whether the head draws it as a line of its own is
-        // `originShown`: not when the name above already says it (082 L-HOST).
         origin: host || null,
-        originShown: !!host && !sameSiteWords((known && known.name) || '', host),
         // The wallet asking itself has no host: its initial is the word's.
         letter: ((known && known.name) || host || ns.i18n.t('tag.wallet') || '?').charAt(0).toUpperCase(),
         tone: (known && known.tone) || '#8a93a5',
@@ -2700,39 +2630,12 @@ window.VelaCS = window.VelaCS || {};
 
   // --- transactions ----------------------------------------------------------
 
-  /**
-   * Whether a call carries no calldata: absent, "", "0x" or "0X", after
-   * trimming whitespace — the wallet's own test (vela-core
-   * `clear_signing::is_empty_calldata`, 082 RC1). Such a call runs no
-   * function: it is a plain send of the native coin, whatever the recipient
-   * is (RC2) and whatever the value, 0 included (RC8). Only a string can
-   * carry calldata; anything else that is not absent is read as calldata and
-   * goes down the blind ladder, as before.
-   */
-  function isEmptyCalldata(data) {
-    if (data === undefined || data === null) return true;
-    if (typeof data !== 'string') return false;
-    var body = data.trim();
-    return body === '' || body.toLowerCase() === '0x';
-  }
-
-  /**
-   * A call's value in wei (`abi.quantity`, the wallet's submit reading).
-   * Absent, "" and "0x" are zero (vela-core RC4). `null` when the page cannot
-   * read it ("abc", "-1", 1.5): no figure is printed for it, and it matches no
-   * call of the operation. BigInt() throwing here used to take the whole page
-   * down — no card, no refusal.
-   */
-  function callValue(value) {
-    return abi.quantity(value);
-  }
-
   function resolveCall(call, ctx, view, isLeg) {
     var to = call.to || '';
     var data = call.data || '0x';
-    var value = callValue(call.value);
+    var value = BigInt(call.value || '0x0');
     var selector = abi.selectorOf(data);
-    var hasCalldata = !isEmptyCalldata(call.data);
+    var hasCalldata = !!data && data !== '0x';
     var meta = identify(to, ctx, { isCallTarget: hasCalldata });
 
     if (!to) {
@@ -2751,18 +2654,10 @@ window.VelaCS = window.VelaCS || {};
       return view;
     }
 
-    // Every call with no calldata is a send, value 0 included: "Send · 0 xDAI
-    // · Recipient", never the blind ladder's red "nothing decodes" (082 G14,
-    // RC8). The ladder below sees calldata — or a value no chain carries
-    // (negative) or the page cannot read, which the wallet's own rule refuses
-    // to print (RC4). The figure is exact (RC5): with "0" meaning nothing
-    // moves, a few wei must not read "0" too.
-    if (!hasCalldata && value !== null && value >= 0n) {
-      var amount = nativeAmount(value, ctx, true);
-      var moves = value > 0n;
+    if (!hasCalldata && value > 0n) {
+      var amount = nativeAmount(value, ctx);
       view.intentKey = 'intent.send';
-      // Nothing leaves at 0, so the hero is not an outgoing amount.
-      view.hero = { kind: 'amount', amount: amount, direction: moves ? 'out' : 'none' };
+      view.hero = { kind: 'amount', amount: amount, direction: 'out' };
       view.fields.push({ label: 'field.recipient', identity: meta, format: 'addressName', role: 'recipient' });
       if (meta.kind === 'own') {
         view.risk = 'safe';
@@ -2776,11 +2671,7 @@ window.VelaCS = window.VelaCS || {};
       view.tech = techFor(text('value.noCalldata'), null, null, {
         params: [{ name: 'value', value: amount.text + ' ' + amount.symbol }],
         addresses: [{ roleKey: 'field.recipient', name: label(meta), address: to }],
-        // The "−amount · nothing else changes" line is a statement about what
-        // leaves. At 0 there is no minus to write, and "nothing else changes"
-        // is the simulation's to say, not this page's: a recipient's code
-        // still runs.
-        sim: moves ? text('ui.simNoOther', { delta: '-' + amount.text + ' ' + amount.symbol }) : undefined,
+        sim: text('ui.simNoOther', { delta: '-' + amount.text + ' ' + amount.symbol }),
       });
       return view;
     }
@@ -3564,7 +3455,6 @@ window.VelaCS = window.VelaCS || {};
         : null;
     }
     view.dapp.origin = who.origin || null;
-    view.dapp.originShown = !!view.dapp.origin && !sameSiteWords(view.dapp.name || '', view.dapp.origin);
     view.dapp.originKey = who.originKey || null;
     view.dapp.originVerified = who.verified;
 
@@ -4062,13 +3952,7 @@ window.VelaCS = window.VelaCS || {};
   function heroAmount(hero) {
     var box = el('div', 'hero-amount');
     var line = el('div', 'amount-line');
-    // Every digit stays on screen. An exact figure (a plain send's, 082 RC5)
-    // can run to 18 decimals, and its last digit is the one that differs:
-    // "1,000.000000000000000001" clipped at the card's edge reads 1,000. A
-    // long figure steps down a size; one that still does not fit wraps.
-    var figure = amountText(hero.amount);
-    var size = figure.length > 16 ? ' amount-longer' : figure.length > 10 ? ' amount-long' : '';
-    line.appendChild(el('span', 'amount' + size + (hero.amount.unlimited ? ' amount-danger' : ''), figure));
+    line.appendChild(el('span', 'amount' + (hero.amount.unlimited ? ' amount-danger' : ''), amountText(hero.amount)));
     line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
     line.appendChild(el('span', 'amount-symbol', hero.amount.symbol));
     box.appendChild(line);
@@ -4362,10 +4246,8 @@ window.VelaCS = window.VelaCS || {};
     if (view.dapp.nameClaimed) {
       identity.appendChild(el('div', 'dapp-claimed', t('tag.selfReported')));
     }
-    // `originShown`, not `origin`: a host the name above already says is not
-    // drawn twice (resolve.js decides; 082 L-HOST).
-    if (view.dapp.originShown || view.dapp.originKey) {
-      identity.appendChild(el('div', 'dapp-origin', view.dapp.originShown ? view.dapp.origin : t(view.dapp.originKey)));
+    if (view.dapp.origin || view.dapp.originKey) {
+      identity.appendChild(el('div', 'dapp-origin', view.dapp.origin || t(view.dapp.originKey)));
     }
     head.appendChild(identity);
     sheet.appendChild(head);
@@ -4406,7 +4288,7 @@ window.VelaCS = window.VelaCS || {};
     head.appendChild(remoteLogo(view.dapp.icon, view.dapp.letter, view.dapp.tone));
     var identity = el('div', 'sheet-identity');
     identity.appendChild(el('div', 'dapp-name', view.dapp.name || t(view.dapp.nameKey)));
-    if (view.dapp.originShown) identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
+    if (view.dapp.origin) identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
     head.appendChild(identity);
     var chain = el('span', 'chain-pill');
     var dot = el('i', 'chain-dot');
@@ -4639,23 +4521,10 @@ window.VelaCS = window.VelaCS || {};
 
   function sameCall(a, b) {
     var address = function (v) { return String(v || '').toLowerCase(); };
-    // The site's value as the wallet's submit path reads it (`abi.quantity`,
-    // the same in every engine): "0x" is zero, "0X10" and " 0x10 " are 16. A
-    // value it cannot read ("abc", "-1", 1.5) is null and matches nothing: the
-    // call is not found, and the page refuses instead of throwing.
-    var amount = function (v) {
-      var wei = ns.abi.quantity(v);
-      return wei === null ? null : wei.toString();
-    };
-    var wanted = amount(b.value);
-    // No calldata by the wallet's own test — absent, "", "0x" or "0X" after
-    // trimming (vela-core `is_empty_calldata`) — is one and the same thing.
-    var bytes = function (v) {
-      if (typeof v === 'string' && /^\s*(0x)?\s*$/i.test(v)) return '';
-      return String(v || '0x').toLowerCase().replace(/^0x/, '');
-    };
+    var amount = function (v) { return BigInt(v || 0).toString(); };
+    var bytes = function (v) { return String(v || '0x').toLowerCase().replace(/^0x/, ''); };
     return address(a.to) === address(b.to) &&
-      wanted !== null && amount(a.value) === wanted &&
+      amount(a.value) === amount(b.value) &&
       bytes(a.data) === bytes(b.data);
   }
 

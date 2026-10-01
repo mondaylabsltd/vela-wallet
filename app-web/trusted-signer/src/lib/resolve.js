@@ -789,9 +789,41 @@ window.VelaCS = window.VelaCS || {};
     return view;
   }
 
+  // The ONE typed-data document a request is read as — the wallet core's
+  // `typed_data_request`, and the only reading this page's preview AND its
+  // digest (`digest.js`) take: the four methods; exactly two params; legacy
+  // `eth_signTypedData` / `_v1` = [typedData, address], `_v3` / `_v4` =
+  // [address, typedData]; one EIP-712 document. `null` otherwise. The audit of
+  // 2026-10-01: the preview read params[1] while the digest read params[0] for
+  // the legacy names, so [malicious, benign] showed the benign one.
+  function typedDocument(intent) {
+    var method = intent && intent.method;
+    var legacy = method === 'eth_signTypedData' || method === 'eth_signTypedData_v1';
+    var modern = method === 'eth_signTypedData_v3' || method === 'eth_signTypedData_v4';
+    var params = intent && intent.params;
+    if ((!legacy && !modern) || !Array.isArray(params) || params.length !== 2) return null;
+    var account = params[legacy ? 1 : 0];
+    if (typeof account !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(account)) return null;
+    var doc = params[legacy ? 0 : 1];
+    if (typeof doc === 'string') {
+      try { doc = JSON.parse(doc); } catch (e) { return null; }
+    }
+    function object(value) { return !!value && typeof value === 'object' && !Array.isArray(value); }
+    if (!object(doc) || !object(doc.types) || typeof doc.primaryType !== 'string' ||
+        !doc.primaryType || !object(doc.domain) || !object(doc.message)) return null;
+    return doc;
+  }
+
   function resolveTypedData(intent, ctx, view) {
-    var raw = intent.params[1];
-    var data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    var data = typedDocument(intent);
+    if (!data) {
+      view.intentKey = 'intent.unknownRequest';
+      view.risk = 'danger';
+      view.sentence = text('refuse.typedShape');
+      view.warnings.push({ tone: 'danger', key: 'refuse.typedShape' });
+      view.refuse = true;
+      return view;
+    }
     var primary = data.primaryType;
     var message = data.message || {};
     var domain = data.domain || {};
@@ -1430,6 +1462,7 @@ window.VelaCS = window.VelaCS || {};
   }
 
   ns.resolve = resolve;
+  ns.resolve.typedDocument = typedDocument;
   ns.resolve.walletRequester = walletRequester;
   ns.resolve.answersToWallet = answersToWallet;
   // The waiting card draws the same mark as the request card.

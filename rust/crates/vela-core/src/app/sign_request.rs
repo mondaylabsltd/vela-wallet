@@ -870,7 +870,7 @@ pub fn method_kind(method: &str) -> SignMethodKind {
         SignMethodKind::PersonalSign
     } else if method == "eth_sign" {
         SignMethodKind::EthSign
-    } else if method.contains("signTypedData") {
+    } else if crate::typed_data_request::TypedDataMethod::of(method).is_some() {
         SignMethodKind::TypedData
     } else {
         SignMethodKind::Generic
@@ -929,25 +929,11 @@ fn chain_from_value(v: &Value) -> Option<u32> {
 /// the chain a request embeds, or `None`.
 pub fn extract_request_chain_id(method: &str, params: &Value) -> Option<u32> {
     let arr = params.as_array()?;
-    if method.contains("signTypedData") {
-        let raw = if method == "eth_signTypedData" || method == "eth_signTypedData_v1" {
-            arr.first()?
-        } else {
-            // `params[1] ?? params[0]` — null falls back too.
-            match arr.get(1) {
-                None | Some(Value::Null) => arr.first()?,
-                Some(v) => v,
-            }
-        };
-        let parsed;
-        let typed = match raw {
-            Value::String(s) => {
-                parsed = serde_json::from_str::<Value>(s).ok()?;
-                &parsed
-            }
-            other => other,
-        };
-        chain_from_value(typed.get("domain")?.get("chainId")?)
+    if crate::typed_data_request::looks_like_typed_data(method) {
+        // The one document the request is read as (audit 2026-10-01) — a
+        // request that is not one carries no chain, and is refused at arrival.
+        let read = crate::typed_data_request::canonical(method, params).ok()?;
+        chain_from_value(read.document.get("domain")?.get("chainId")?)
     } else if method == "eth_sendTransaction" || method == "wallet_sendCalls" {
         chain_from_value(arr.first()?.get("chainId")?)
     } else {
@@ -1931,6 +1917,50 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
         if arrival.now_ms - ts > EXTENSION_REQUEST_TTL_MS {
             model.notice = Some(SignNotice::Expired);
             return render();
+        }
+    }
+
+    // What you see is what you sign (audit 2026-10-01): a typed-data request
+    // is read ONCE, strictly — the method's own two params, one document — and
+    // refused -32602 before any sheet when it is not. What passes goes on
+    // rebuilt around that one document, so the preview, both guards, the
+    // passkey and the Trusted Signer page all hold the same bytes; the account
+    // it names must be the granted one (4100 below).
+    let mut arrival = arrival;
+    if crate::typed_data_request::looks_like_typed_data(&arrival.method) {
+        match crate::typed_data_request::signable_json(&arrival.method, &arrival.params_json) {
+            Err(error) => {
+                let op = respond_op(
+                    &arrival.transport_id,
+                    &arrival.id,
+                    err_payload(
+                        CODE_INVALID_PARAMS,
+                        SignErrorKind::InvalidParams,
+                        Some(error.message()),
+                    ),
+                );
+                return ops_and_render(model, vec![op]);
+            }
+            Ok(read) => {
+                if let Some(granted) = &arrival.granted_address {
+                    if !read.account.eq_ignore_ascii_case(granted) {
+                        let op = respond_op(
+                            &arrival.transport_id,
+                            &arrival.id,
+                            err_payload(
+                                CODE_UNAUTHORIZED,
+                                SignErrorKind::UnauthorizedAccount,
+                                None,
+                            ),
+                        );
+                        return ops_and_render(model, vec![op]);
+                    }
+                }
+                arrival.params_json = read.params_json();
+                if arrival.requested_address.is_none() {
+                    arrival.requested_address = Some(read.account);
+                }
+            }
         }
     }
 

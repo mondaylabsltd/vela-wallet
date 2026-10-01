@@ -60,6 +60,15 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // Both of the next two, in one page: 085's typed-data reader and 082's
+    // site and plain-send fixes (the merge of the two branches, 2026-10-01).
+    // NOT yet LAUNCH: the owner deploys it, checks it serves, then moves LAUNCH.
+    "0ba8ee8cc9bb7490a1f31d9d2059a93f6796beec6185a8b76e3db0184b290242",
+    // The preview and the digest read a typed-data request's ONE document by
+    // the same strict reader, and refuse two documents, a missing account or
+    // an unknown method (EIP-712 WYSIWYS audit, 2026-10-01). NOT yet LAUNCH:
+    // the owner deploys it, checks it serves, then moves LAUNCH.
+    "8c002ee4886869375d79d01c81d52f109449d663020bcf4bf03ca8ebbe368658",
     // The site is named once when its name is its host, and a call with no
     // calldata is a plain send, value 0 included, its value read the way the
     // desktop builds the operation (spec 082 L-HOST, G14; T138–T140).

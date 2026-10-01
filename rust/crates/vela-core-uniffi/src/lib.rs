@@ -311,6 +311,16 @@ pub fn sign_message_hash(method: String, params_json: String) -> Option<Vec<u8>>
     vela_core::sign_message::original_hash(&method, &params_json)
 }
 
+/// The ONE document a typed-data request is read as — what a sheet decodes,
+/// the same bytes [`sign_message_hash`] covers. `None` when the request is
+/// not a valid typed-data request (the core refuses it at arrival). The audit
+/// of 2026-10-01: each shell's own pick previewed one document and signed
+/// another.
+#[uniffi::export]
+pub fn typed_data_document(method: String, params_json: String) -> Option<String> {
+    vela_core::typed_data_request::document_json_of(&method, &params_json)
+}
+
 #[uniffi::export]
 pub fn hash_typed_data(typed_data_json: String) -> Result<Vec<u8>, CoreError> {
     Ok(vela_core::eip712::hash_typed_data(&typed_data_json)?)

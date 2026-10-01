@@ -160,6 +160,7 @@ window.VelaCS.i18n.register('zh', {
 
   'refuse.ethSign': '这一页不签 eth_sign。它签的是一段无法解读的哈希，正是清晰签名要消灭的东西。',
   'refuse.noSafeOp': '交易摘要还接不出来：它是 Safe 4337 的 SafeOp 哈希，需要账户、EntryPoint 与模块地址。**这一页不会拿一个猜的摘要去签。**',
+  'refuse.typedShape': '这个请求没有恰好为一个账户携带一份签名内容——显示的内容可能与将签署的不同。不签名。',
   'refuse.unknownMethod': '这个方法的签名摘要无从推导，因此不签。',
   'ui.cannotSign': '这笔请求不能在此签署 —— 上面的理由已列出。关掉即拒绝。',
   'ui.dragToSign': '按住橙色圆点向右拖到底以签名。关掉页面即拒绝。',

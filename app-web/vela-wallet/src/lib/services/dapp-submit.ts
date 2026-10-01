@@ -17,6 +17,7 @@ import {
 	derSignatureToRaw,
 	fromHex,
 	hashTypedData,
+	typedDataDocument,
 	keccak256,
 	stripHexPrefix,
 	toHex,
@@ -272,14 +273,15 @@ export function assertChainSupported(chainId: number): void {
  * Returns undefined when the request carries no chain hint.
  */
 /**
- * Pick the typed-data param by method, per the MetaMask ecosystem order the
- * WalletPair spec pins: unsuffixed / `_v1` = [typedData, address]; `_v3` / `_v4`
- * = [address, typedData].
+ * The request's ONE typed-data document (JSON), read by the core — unsuffixed /
+ * `_v1` = [typedData, address]; `_v3` / `_v4` = [address, typedData]; exactly
+ * two params, a real account, one EIP-712 document — or `undefined` when the
+ * request is not one. No fallback to another slot: `params[1] ?? params[0]`
+ * signed the second of two documents while the sheet showed the first (audit
+ * 2026-10-01).
  */
 export function pickTypedDataParam(method: string, params: unknown[]): unknown {
-	return method === 'eth_signTypedData' || method === 'eth_signTypedData_v1'
-		? params[0]
-		: (params[1] ?? params[0]);
+	return typedDataDocument(method, JSON.stringify(params)) ?? undefined;
 }
 
 export function extractRequestChainId(method: string, params: unknown[]): number | undefined {
@@ -452,9 +454,11 @@ export async function handleSignTypedData(
 	chainId: number,
 	hooks?: DAppSubmitHooks
 ): Promise<string> {
-	const typedDataRaw = pickTypedDataParam(request.method, request.params);
-	const typedData: TypedData =
-		typeof typedDataRaw === 'string' ? JSON.parse(typedDataRaw) : typedDataRaw;
+	// The core's reading — the very document the sheet decoded (audit
+	// 2026-10-01). A request that is not one is never signed.
+	const document = typedDataDocument(request.method, JSON.stringify(request.params));
+	if (document === null) throw new Error('Invalid typed-data request');
+	const typedData: TypedData = JSON.parse(document);
 
 	const effectiveChainId = resolveChainId(
 		chainId,

@@ -82,6 +82,30 @@ describe('what may reach a screen', () => {
 		expect(isWellFormedRequest({ ...ok, params: 'not-an-array' })).toBe(false);
 	});
 
+	it('refuses a typed-data request that is not exactly one document in its method\'s order (audit 2026-10-01)', () => {
+		const account = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
+		const doc = (primaryType: string) =>
+			JSON.stringify({ types: { EIP712Domain: [] }, primaryType, domain: {}, message: {} });
+		const req = (method: string, params: unknown[]) => ({ id: 'td', method, params });
+		// The four methods, well-formed.
+		expect(isWellFormedRequest(req('eth_signTypedData_v4', [account, doc('Mail')]))).toBe(true);
+		expect(isWellFormedRequest(req('eth_signTypedData_v3', [account, JSON.parse(doc('Mail'))]))).toBe(true);
+		expect(isWellFormedRequest(req('eth_signTypedData', [doc('Mail'), account]))).toBe(true);
+		expect(isWellFormedRequest(req('eth_signTypedData_v1', [doc('Mail'), account]))).toBe(true);
+		// The audit's two shapes.
+		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail'), doc('Permit')]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData', [doc('Permit'), doc('Mail')]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData_v1', [doc('Permit'), doc('Mail')]))).toBe(false);
+		// The wrong order, one param, three, and a name that only resembles one.
+		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail'), account]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData', [account, doc('Mail')]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData_v4', [doc('Mail')]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData_v4', [account, doc('Mail'), doc('Mail')]))).toBe(false);
+		expect(isWellFormedRequest(req('eth_signTypedData_v2', [account, doc('Mail')]))).toBe(false);
+		// A document without its EIP-712 fields.
+		expect(isWellFormedRequest(req('eth_signTypedData_v4', [account, '{"primaryType":"Mail"}']))).toBe(false);
+	});
+
 	it('refuses a payload too large to be a request', () => {
 		const huge = 'x'.repeat(MAX_REQUEST_BYTES + 1);
 		expect(isWellFormedRequest({ ...ok, params: [huge] })).toBe(false);
