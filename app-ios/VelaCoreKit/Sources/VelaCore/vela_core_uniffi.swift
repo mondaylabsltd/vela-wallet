@@ -12814,6 +12814,22 @@ public func toQuantity(value: String)throws  -> String  {
 })
 }
 /**
+ * The ONE document a typed-data request is read as — what a sheet decodes,
+ * the same bytes [`sign_message_hash`] covers. `None` when the request is
+ * not a valid typed-data request (the core refuses it at arrival). The audit
+ * of 2026-10-01: each shell's own pick previewed one document and signed
+ * another.
+ */
+public func typedDataDocument(method: String, paramsJson: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_typed_data_document(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(paramsJson),uniffiCallStatus
+    )
+})
+}
+/**
  * The relay's raw estimate onto the draft: ×1.5 on the two limits, each held
  * to its floor, +10,000 on preVerificationGas.
  */
@@ -13942,6 +13958,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_to_quantity() != 54875) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_typed_data_document() != 37492) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_apply_estimate() != 50114) {
