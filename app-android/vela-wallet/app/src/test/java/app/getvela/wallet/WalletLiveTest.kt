@@ -236,10 +236,13 @@ class WalletLiveTest {
     @Test
     fun `an empty list while loading is not an empty wallet`() {
         val loading = home(BalanceView(holdings_loading = true))
+        val unknown = home(BalanceView(balance_unknown = true))
         val settled = home(BalanceView())
 
         assertEquals(SectionMode.Loading, loading.assetsSection.mode)
+        assertEquals("a balance nobody could read is not an empty wallet (087 F03)", SectionMode.Loading, unknown.assetsSection.mode)
         assertEquals(SectionMode.Empty, settled.assetsSection.mode)
+        assertEquals(strings.t("assets.emptyTitle"), settled.assetsSection.empty?.title)
     }
 
     /**
