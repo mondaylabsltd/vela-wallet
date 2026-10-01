@@ -76,6 +76,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -2355,13 +2356,22 @@ private fun RpcFixSheetBody(model: RpcFixModel, onPrimary: () -> Unit, onField: 
             fontSize = VelaTextSize.sm,
             modifier = Modifier.padding(top = VelaSpacing.xl, bottom = VelaSpacing.md),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md)) {
+        // 087 F07: the four names shared one row, so "Chainlist" — the last,
+        // with the least room left — broke mid-word onto a second line. A chip
+        // is one word on one line; when the row is full the next chip wraps
+        // whole onto the next line (a narrow phone, a large text size).
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(VelaSpacing.md),
+        ) {
             model.providers.forEach { name ->
                 Text(
                     text = name,
                     color = colors.fgBase,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                    softWrap = false,
                     modifier = Modifier
                         .background(colors.bgRaised)
                         .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),

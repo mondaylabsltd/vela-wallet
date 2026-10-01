@@ -186,12 +186,12 @@ fn every_failure_carries_its_sentence_and_retry_verdict() {
         failure.map(|f| (f.reason_key, f.auto_retry)),
         Some(("explore.loadOffline".to_owned(), true))
     );
-    // Offline, timeout and refused share one sentence; the class still
-    // drives the retry schedule.
+    // Offline and timeout share one sentence; the class still drives the
+    // retry schedule. A refusal is not the network (087 F15).
     for (c, key) in [
         (C::Offline, "explore.loadOffline"),
         (C::Timeout, "explore.loadOffline"),
-        (C::Refused, "explore.loadOffline"),
+        (C::Refused, "connect.browser.loadFailed"),
         (C::NotFound, "explore.loadNotFound"),
         (C::Certificate, "explore.loadCertificate"),
         (C::Other, "connect.browser.loadFailed"),
@@ -360,13 +360,40 @@ fn a_silent_load_is_probed_once() {
     assert_eq!(quick.watchdog(generation), None);
 }
 
+/// 087 F15: a connection REFUSED — a loopback dev server that is not running,
+/// seen on the Xiaomi at 127.0.0.1:8137 — never says the network is unstable.
+/// Every platform's refusal code reads the generic sentence and still retries
+/// on the network's schedule (a server coming up answers the next attempt).
+#[test]
+fn a_refused_connection_never_blames_the_network() {
+    for (platform, code, domain) in [
+        (P::Android, -6, None),
+        (P::Apple, -1004, Some("NSURLErrorDomain")),
+        (P::Probe, probe_code::REFUSED, None),
+    ] {
+        let failure = classify(platform, code, domain, false)
+            .unwrap_or_else(|| unreachable!("{platform:?} {code} is a failure"));
+        assert_eq!(failure.class, C::Refused, "{platform:?} {code}");
+        assert_eq!(failure.reason_key, "connect.browser.loadFailed");
+        assert_ne!(failure.reason_key, "explore.loadOffline");
+        assert!(failure.auto_retry);
+    }
+    assert_eq!(retry_delay_ms(C::Refused, 1), retry_delay_ms(C::Offline, 1));
+    assert!(retry_when_network_returns(C::Refused));
+}
+
 /// Each probe failure is the core's class, with its sentence and whether
 /// it retries by itself.
 #[test]
 fn a_failed_probe_is_classified_by_the_core() {
     for (code, class, key, auto) in [
         (probe_code::DNS, C::NotFound, "explore.loadNotFound", false),
-        (probe_code::REFUSED, C::Refused, "explore.loadOffline", true),
+        (
+            probe_code::REFUSED,
+            C::Refused,
+            "connect.browser.loadFailed",
+            true,
+        ),
         (probe_code::TIMEOUT, C::Timeout, "explore.loadOffline", true),
         (
             probe_code::TLS,
