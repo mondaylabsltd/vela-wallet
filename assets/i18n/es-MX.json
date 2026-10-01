@@ -1764,6 +1764,7 @@
   "importDoneInvalid": "Se omitieron {{invalid}} con dirección inválida.",
   "importFailTitle": "Falló la importación",
   "importFailBody": "Usa un archivo de contactos en JSON o CSV.",
+  "importFailEncoding": "Guarda el archivo como UTF-8 (Excel: CSV UTF-8) e inténtalo de nuevo.",
   "manage": "Administrar",
   "sectionContacts": "Contactos",
   "countPeople": "{{count}}",

@@ -74,32 +74,34 @@ export function pickTable(): Promise<PickedTable | null> {
 	});
 }
 
-/** What a picked text file carries. */
-export interface PickedTextFile {
+/** What a picked file carries: its name and its bytes, undecoded. */
+export interface PickedFile {
 	name: string;
-	text: string;
+	bytes: Uint8Array;
 }
 
 /**
- * Ask for ONE text file of the given kinds (`accept` is the input's own
- * grammar — `.json,.csv`). Resolves with the file, or `null` when the person
- * cancelled. The same picker discipline as `pickTable` (spec 026): created,
- * clicked, thrown away, and settled on focus-return so the caller is never
- * left waiting on a dialog that closed without a word.
+ * Ask for ONE file of the given kinds (`accept` is the input's own grammar —
+ * `.json,.csv`). Resolves with the file, or `null` when the person cancelled.
+ * The same picker discipline as `pickTable` (spec 026): created, clicked,
+ * thrown away, and settled on focus-return so the caller is never left
+ * waiting on a dialog that closed without a word.
  *
- * The contacts book travels this way (spec 028 US5): the text goes to the
- * core's `import_file`, which owns the format — JSON-or-CSV sniffing, the
- * column heuristics — so what this returns is bytes, not rows.
+ * The contacts book travels this way (spec 028 US5): the BYTES go to the
+ * core's `import_file`, which owns the encoding (issue 333) as well as the
+ * format — JSON-or-CSV sniffing, the column heuristics. `File.text()` used to
+ * decode here, and it turns any byte that is not UTF-8 into U+FFFD without a
+ * word: a GBK CSV from Excel imported every Chinese name as `jxjjx����`.
  */
-export function pickTextFile(accept: string): Promise<PickedTextFile | null> {
+export function pickFile(accept: string): Promise<PickedFile | null> {
 	if (typeof document === 'undefined') return Promise.resolve(null);
-	return new Promise<PickedTextFile | null>((resolve) => {
+	return new Promise<PickedFile | null>((resolve) => {
 		const input = document.createElement('input');
 		input.type = 'file';
 		input.accept = accept;
 		input.style.display = 'none';
 		let settled = false;
-		const done = (value: PickedTextFile | null) => {
+		const done = (value: PickedFile | null) => {
 			if (settled) return;
 			settled = true;
 			window.removeEventListener('focus', onFocus);
@@ -113,7 +115,7 @@ export function pickTextFile(accept: string): Promise<PickedTextFile | null> {
 			const file = input.files?.[0];
 			if (!file) return done(null);
 			try {
-				done({ name: file.name, text: await file.text() });
+				done({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
 			} catch {
 				done(null);
 			}

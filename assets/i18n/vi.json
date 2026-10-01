@@ -1760,6 +1760,7 @@
   "importDoneInvalid": "Đã bỏ qua {{invalid}} dòng có địa chỉ không hợp lệ.",
   "importFailTitle": "Nhập thất bại",
   "importFailBody": "Hãy dùng tệp danh bạ JSON hoặc CSV.",
+  "importFailEncoding": "Hãy lưu tệp ở dạng UTF-8 (Excel: CSV UTF-8) rồi thử lại.",
   "manage": "Quản lý",
   "sectionContacts": "Liên hệ",
   "countPeople": "{{count}}",

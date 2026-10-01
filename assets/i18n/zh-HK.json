@@ -1760,6 +1760,7 @@
   "importDoneInvalid": "另有 {{invalid}} 個地址無效，已略過。",
   "importFailTitle": "匯入失敗",
   "importFailBody": "請使用 JSON 或 CSV 聯絡人檔案。",
+  "importFailEncoding": "請將檔案另存為 UTF-8（在 Excel 中選擇「CSV UTF-8」）後再試。",
   "manage": "管理",
   "sectionContacts": "聯絡人",
   "countPeople": "{{count}} 位",

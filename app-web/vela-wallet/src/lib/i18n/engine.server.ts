@@ -269,6 +269,7 @@ export function resolveContactsMessages(locale: Locale): ContactsMessages {
 		importDoneInvalid: k('contacts.importDoneInvalid'),
 		importFailTitle: k('contacts.importFailTitle'),
 		importFailBody: k('contacts.importFailBody'),
+		importFailEncoding: k('contacts.importFailEncoding'),
 		exportBody: k('contacts.exportBody'),
 		groupDeleteBody: k('contacts.groupDeleteBody'),
 		groupMembersLabel: k('contacts.groupMembersLabel'),

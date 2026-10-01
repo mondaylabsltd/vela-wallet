@@ -56,18 +56,18 @@ async function addGroup(page: Page, name: string): Promise<void> {
 	await expect(page.getByText(name, { exact: true })).toBeVisible();
 }
 
-/** Import through the given menu row; answer the picker with `content`. */
+/** Import through the given menu row; answer the picker with `content` (text is UTF-8). */
 async function importFile(
 	page: Page,
 	openRow: () => Promise<void>,
 	name: string,
-	content: string
+	content: string | Buffer
 ): Promise<void> {
 	const [chooser] = await Promise.all([page.waitForEvent('filechooser'), openRow()]);
 	await chooser.setFiles({
 		name,
 		mimeType: 'application/octet-stream',
-		buffer: Buffer.from(content)
+		buffer: typeof content === 'string' ? Buffer.from(content) : content
 	});
 }
 
@@ -173,6 +173,49 @@ test('a file with no address is refused before anything is written', async ({ pa
 	// The book is exactly what it was: Alice, and nobody from the file.
 	await expect(page.getByText('Alice', { exact: true })).toBeVisible();
 	await expect(page.getByText('Bob', { exact: true })).toHaveCount(0);
+});
+
+/**
+ * Issue 333: the bytes are the core's to decode. A CSV that Excel saved on
+ * Chinese Windows (GBK) used to import every Chinese name as `jxjjx����` —
+ * `File.text()` decoded it here, and leniently. Now it is refused with how
+ * to save it, and the same names saved as UTF-16 or UTF-8 land exactly.
+ */
+test('a GBK file is refused with how to save it; UTF-16 and UTF-8 names land exactly', async ({
+	page
+}) => {
+	await openContacts(page);
+	await addContact(page, 'Alice', ALICE_ADDR);
+	const gbk = Buffer.concat([
+		Buffer.from(`address,name\r\n${BOB_ADDR},jxjjx`),
+		Buffer.from([0xb2, 0xe2, 0xca, 0xd4]), // 测试
+		Buffer.from('\r\n')
+	]);
+	await importFile(page, () => plusMenu(page, en('contacts.importFile')), 'excel.csv', gbk);
+	await expect(page.getByText(en('contacts.importFailTitle'))).toBeVisible();
+	await expect(page.getByTestId('import-report')).toHaveText(en('contacts.importFailEncoding'));
+	await page.getByRole('button', { name: en('common.done') }).click();
+	await expect(page.getByText(/\uFFFD/)).toHaveCount(0);
+	await expect(page.getByText('Alice', { exact: true })).toBeVisible();
+
+	const names = ['jxjjx测试', 'Иван Петров', 'Zoë 🦊'];
+	const rows = (from: number) =>
+		names.map((name, i) => `0x${(from + i).toString(16).padStart(40, '0')},${name}`);
+	const utf16 = Buffer.concat([
+		Buffer.from([0xff, 0xfe]),
+		Buffer.from(['address,name', ...rows(0x100)].join('\r\n'), 'utf16le')
+	]);
+	await importFile(page, () => plusMenu(page, en('contacts.importFile')), 'unicode.csv', utf16);
+	await expectReport(page, filled(en('contacts.importDoneBody'), { added: 3, skipped: 0 }));
+	for (const name of names) await expect(page.getByText(name, { exact: true })).toBeVisible();
+
+	const utf8 = Buffer.concat([
+		Buffer.from([0xef, 0xbb, 0xbf]),
+		Buffer.from(['address,name', `0x${'0'.repeat(37)}200,张小明`].join('\n'))
+	]);
+	await importFile(page, () => plusMenu(page, en('contacts.importFile')), 'utf8.csv', utf8);
+	await expectReport(page, filled(en('contacts.importDoneBody'), { added: 1, skipped: 0 }));
+	await expect(page.getByText('张小明', { exact: true })).toBeVisible();
 });
 
 test('a CSV imported into a group seats every valid row in it', async ({ page }) => {
