@@ -15,6 +15,7 @@
 import QRCode from 'qrcode';
 import { expect, test, type Page } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
+import { shortenAddress } from '../src/lib/wallet/identity';
 import { en, seedSignedIn } from './live-helpers';
 import {
 	abiWord,
@@ -143,6 +144,30 @@ test('a code in a chosen image is read, and its address reaches the send form', 
 	const recipient = page.getByRole('textbox', { name: en('send.recipientLabel') });
 	await expect(recipient).toBeVisible({ timeout: 30_000 });
 	await expect(recipient).toHaveValue(ALICE);
+});
+
+test('going back to change the asset keeps the scanned recipient, and the picker says whom', async ({
+	page
+}) => {
+	// Issue 332: the address a code read is the recipient on the picker as
+	// well as on the form — choosing another asset must not cost the scan.
+	await stubCamera(page, 'NotAllowedError');
+	await openHome(page);
+	await openScanner(page);
+	await pick(page, ALICE);
+	const recipient = page.getByRole('textbox', { name: en('send.recipientLabel') });
+	await expect(recipient).toHaveValue(ALICE, { timeout: 30_000 });
+
+	await page
+		.getByRole('button', { name: en('receive.a11yBack') })
+		.first()
+		.click();
+	await expect(page.getByText(en('send.selectTokenTitle')).first()).toBeVisible();
+	await expect(page.getByText(en('send.toLabel'), { exact: true }).first()).toBeVisible();
+	await expect(page.getByText(shortenAddress(ALICE)).first()).toBeVisible();
+
+	await page.getByText('ETH', { exact: true }).first().click();
+	await expect(recipient).toHaveValue(ALICE, { timeout: 30_000 });
 });
 
 test('the scanner opened from the send form fills the row it was opened from', async ({ page }) => {

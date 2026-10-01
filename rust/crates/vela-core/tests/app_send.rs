@@ -4228,6 +4228,102 @@ fn a_scan_from_the_contact_picker_closes_the_picker_too() {
     assert_eq!(view.recipient, RECIPIENT_B);
 }
 
+/// Issue #332 (Android): Home → Scan opens Send on the asset picker with the
+/// scanner over it, and the code arrives AFTER the open. The address it read
+/// is the recipient from that moment — on the picker, where the person
+/// chooses what to send — and it is still there after they pick, go back,
+/// and pick again. Back used to throw it away, because only an address named
+/// by the open params counted as handed in.
+#[test]
+fn a_code_scanned_onto_the_picker_is_the_recipient_and_survives_back() {
+    for scan in [
+        SendScan::Text {
+            data: RECIPIENT.to_owned(),
+        },
+        SendScan::Request {
+            recipient: RECIPIENT.to_owned(),
+            chain_id: None,
+            token_address: None,
+            amount_base_units: None,
+        },
+    ] {
+        let mut sut = boot(vec![eth("2"), usdc("5")]);
+        sut.dispatch(Event::OpenScanner);
+        let ops = sut.dispatch(Event::ScanResolved { scan });
+        assert!(
+            matches!(ops.as_slice(), [Op::ResolveIdentity { .. }]),
+            "{ops:?}"
+        );
+        assert!(sut
+            .resolve(Res::IdentityResolved { identity: None })
+            .is_empty());
+        let view = sut.view();
+        assert!(!view.show_scanner, "the scan closes the scanner");
+        assert_eq!(
+            view.stage,
+            SendStage::SelectToken,
+            "the asset is chosen next"
+        );
+        assert_eq!(
+            view.recipient, RECIPIENT,
+            "with the scanned recipient in view"
+        );
+        assert!(view.selected_token.is_none(), "nothing is chosen for them");
+
+        select_eth(&mut sut);
+        assert_eq!(sut.view().recipient, RECIPIENT, "the form opens on them");
+
+        sut.dispatch(Event::Back);
+        let view = sut.view();
+        assert_eq!(view.stage, SendStage::SelectToken);
+        assert_eq!(view.recipient, RECIPIENT, "the scan survives Back");
+        assert!(view.selected_token.is_none());
+        assert_eq!(view.amount, "");
+    }
+}
+
+/// The same for an address picked from the book on the form: it came from
+/// outside the field, so changing the asset does not cost it.
+#[test]
+fn a_recipient_picked_from_the_book_survives_back() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT.to_owned(),
+    });
+    sut.drop_matching(|op| matches!(op, Op::ResolveIdentity { .. }));
+    sut.dispatch(Event::Back);
+    assert_eq!(sut.view().recipient, RECIPIENT);
+}
+
+/// Typed over, a scanned recipient is the person's own again — and a typed
+/// recipient still goes on Back, as it always has. An echo of the same
+/// address is not typing.
+#[test]
+fn a_scanned_recipient_typed_over_goes_on_back_like_any_typing() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Text {
+            data: RECIPIENT.to_owned(),
+        },
+    });
+    sut.drop_matching(|op| matches!(op, Op::ResolveIdentity { .. }));
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::Back);
+    assert_eq!(sut.view().recipient, RECIPIENT, "an echo is not typing");
+
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT_B);
+    sut.dispatch(Event::Back);
+    assert_eq!(
+        sut.view().recipient,
+        "",
+        "typed over, it is the person's to redo"
+    );
+}
+
 // ===========================================================================
 // Continue credential path
 // ===========================================================================

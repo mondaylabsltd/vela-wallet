@@ -606,6 +606,15 @@ struct SendPickBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+            // Whom this is for, above what to send (issue #332): a scanned code
+            // or a contact lands here, and the person confirms the payee while
+            // choosing.
+            if let recipient = model.recipient {
+                VStack(spacing: Tokens.Space.s0) {
+                    FactRowView(fact: recipient)
+                    FlowDivider()
+                }
+            }
             FlowSearchField(placeholder: model.searchPlaceholder, text: $query)
             FlowFilterChips(options: model.filters, onSelect: onFilter)
             if let notice = model.notice {

@@ -27,7 +27,7 @@ import { chainColor } from '$lib/wallet/fixtures';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { shortenAddress } from '$lib/wallet/identity';
 import { amountToInput } from '$lib/services/locale-format';
-import { fromBaseUnits } from '$lib/services/eip681';
+import { fromBaseUnits, isHexAddress } from '$lib/services/eip681';
 import {
 	exactAmount,
 	moneyText,
@@ -436,9 +436,11 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 				? m['send.alertLoadTokensError']
 				: m['send.noTokensWithBalance']
 			: m['send.noMatchingTokens'];
+	const recipient = pickRecipient(inputs);
 	if (!inputs.sweepPicking) {
 		return {
 			...model,
+			recipient,
 			header: { ...model.header, title: m['send.selectTokenTitle'], pill },
 			filters,
 			notice: undefined,
@@ -453,6 +455,7 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 	const count = picked.length;
 	return {
 		...model,
+		recipient,
 		header: { ...model.header, title: m['send.multiSendTitle'], pill },
 		filters,
 		empty,
@@ -479,6 +482,27 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 						accent: true
 					}
 				: { label: m['send.multiSendTitle'], accent: false }
+	};
+}
+
+/**
+ * The picker's "To" line (issue 332): the recipient the core already holds,
+ * worded as the confirm page words it — the name the core resolved, else the
+ * short address — so the person sees whom they are paying while they choose
+ * what. Nothing held, nothing drawn. Artwork only for a real address.
+ */
+function pickRecipient(inputs: SendLiveInputs): FactRowModel | undefined {
+	const { send, m, identicon } = inputs;
+	const address = send.recipient.trim();
+	if (address === '') return undefined;
+	const name = send.recipient_identity?.name ?? null;
+	return {
+		label: m['send.toLabel'],
+		value: name ?? shortenAddress(address),
+		lead: isHexAddress(address)
+			? { kind: 'identicon', svg: identicon(address), address }
+			: undefined,
+		mono: name === null
 	};
 }
 

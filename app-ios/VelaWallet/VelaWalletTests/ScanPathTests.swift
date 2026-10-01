@@ -66,6 +66,42 @@ struct ScanPathTests {
         ]))
     }
 
+    /// Issue #332 (the phones' order): Home → Scan opens Send on the picker
+    /// with the scanner over it, and the code arrives afterwards. The address
+    /// it read is the recipient the picker now SAYS — it used to show no sign
+    /// of it, so a scan that worked read as one that had done nothing.
+    @Test func aCodeScannedOntoThePickerIsDrawnAsTheRecipient() throws {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let core = SendCore()
+        _ = try core.dispatch(eventJson: CoreJSON.string(["type": "open_scanner"]))
+        let resolved = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "scan_resolved", "scan": Eip681.scan(of: me),
+        ]))
+        let wire = try CoreJSON.decode(SendViewWire.self, from: try view(from: resolved))
+        #expect(!wire.showScanner)
+        #expect(wire.stage == .selectToken, "the asset is chosen next")
+        #expect(wire.recipient == me)
+
+        guard case .sendPick(let drawn) = WalletFlowFixtures.build(.sd1, loc: loc).base else {
+            Issue.record("SD1 is not the picker")
+            return
+        }
+        let live = SendLive.pick(wire, on: drawn, loc: loc)
+        let line = try #require(live.recipient, "the picker showed no sign of the scan")
+        #expect(line.label == loc.t("send.toLabel"))
+        #expect(line.value == AddressText.short(me))
+        #expect(line.mono)
+        if case .identicon(let seed)? = line.lead {
+            #expect(seed == me)
+        } else {
+            Issue.record("a real address earns its artwork")
+        }
+
+        // Nobody held, no line.
+        let empty = try CoreJSON.decode(SendViewWire.self, from: try CoreJSON.object(SendCore().view()))
+        #expect(SendLive.pick(empty, on: drawn, loc: loc).recipient == nil)
+    }
+
     /// The scanner's flag is the CORE's. A shell that pushed its own screen
     /// would show a viewfinder the machine does not know is open — and the
     /// close would then not close it.

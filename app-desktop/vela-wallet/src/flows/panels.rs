@@ -411,6 +411,7 @@ pub fn render(
             model,
             theme,
             icons,
+            identicons,
             window,
             actions.search,
             actions.open_send_form,
@@ -1490,6 +1491,7 @@ fn send_pick(
     model: &SendPick,
     theme: &Theme,
     icons: &mut IconCache,
+    identicons: &mut IdenticonCache,
     window: &Window,
     search: Option<AddressField>,
     mut open_form: Option<Click>,
@@ -1508,7 +1510,18 @@ fn send_pick(
         return column().child(notice_card(notice, theme, notice_action, None));
     }
     let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
-    let mut col = column()
+    let mut col = column();
+    // Whom this is for, above what to send (issue #332): a scanned code or a
+    // contact lands here, and the person confirms the payee while choosing.
+    if let Some(recipient) = &model.recipient {
+        col = col.child(
+            div()
+                .border_b_1()
+                .border_color(theme.divider)
+                .child(fact_row(theme, icons, identicons, recipient, None)),
+        );
+    }
+    col = col
         .child(flow_search(
             theme,
             icons,

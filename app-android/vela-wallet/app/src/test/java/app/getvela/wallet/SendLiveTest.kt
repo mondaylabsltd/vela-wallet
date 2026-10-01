@@ -397,6 +397,38 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.NO_MATCHING_TOKENS), hidden.empty)
     }
 
+    /**
+     * Issue #332: Home → Scan lands on the picker with the address the code
+     * read, and the picker showed no sign of it — the person could not tell the
+     * scan had worked. It says whom they are paying now, as the confirm does.
+     */
+    @Test
+    fun `the pick says whom the money is for once a recipient is held`() {
+        val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
+        val held = SendLive.pick(drawn.model, SendView(tokens = listOf(xdai), recipient = recipient), ctx())
+        assertEquals(
+            app.getvela.wallet.feature.flows.FactRowModel(
+                label = strings.t(I18nKeys.Flows.TO_LABEL),
+                value = SendLive.shortAddress(recipient),
+                lead = app.getvela.wallet.feature.flows.FactLead.Identicon(recipient),
+                mono = true,
+            ),
+            held.recipient,
+        )
+        // The name the core resolved rides with the address, as on the confirm.
+        val named = SendLive.pick(
+            drawn.model,
+            SendView(tokens = listOf(xdai), recipient = recipient, recipient_identity = SendRecipientIdentity(name = "Alice")),
+            ctx(),
+        )
+        assertEquals("Alice · ${SendLive.shortAddress(recipient)}", named.recipient?.value)
+        // The sweep's picker is about the same person.
+        assertEquals(held.recipient, SendLive.pick(drawn.model, SendView(tokens = listOf(xdai), recipient = recipient), ctx(), sweepPicking = true).recipient)
+        // Nobody held, no line; text that is not an address gets no artwork.
+        assertNull(SendLive.pick(drawn.model, SendView(tokens = listOf(xdai)), ctx()).recipient)
+        assertNull(SendLive.pick(drawn.model, SendView(tokens = listOf(xdai), recipient = "hello"), ctx()).recipient?.lead)
+    }
+
     /** Issue 231: the web's `unitAdornment` — a sign leads, a code or a ticker follows, nothing defaults to "$". */
     @Test
     fun `the amount's unit sits on the figure`() {

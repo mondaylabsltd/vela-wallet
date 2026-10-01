@@ -205,6 +205,43 @@ describe('the token picker', () => {
 		const model = liveSendPick(pickModel(), inputs({ tokens: [{ ...ETH, price_usd: null }] }));
 		expect(model.rows[0].fiat).toEqual({ kind: 'no-price', text: '—' });
 	});
+
+	// Issue 332: a scan from the home lands HERE with the address it read,
+	// and the picker used to show no sign of it.
+	it('says whom the money is for when the core already holds a recipient', () => {
+		const payee = '0x' + 'ab'.repeat(20);
+		const model = liveSendPick(pickModel(), inputs({ tokens: [USDT], recipient: payee }));
+		expect(model.recipient).toEqual({
+			label: m['send.toLabel'],
+			value: shortenAddress(payee),
+			lead: { kind: 'identicon', svg: identicon(payee), address: payee },
+			mono: true
+		});
+
+		// The name the core resolved, when it has one — as the confirm words it.
+		const named = liveSendPick(
+			pickModel(),
+			inputs({
+				tokens: [USDT],
+				recipient: payee,
+				recipient_identity: { name: 'alice.eth', source: 'ens' }
+			})
+		);
+		expect(named.recipient).toMatchObject({ value: 'alice.eth', mono: false });
+
+		// Kept in the sweep's picker too: it is the same person.
+		const sweep = liveSendPick(pickModel(), {
+			...inputs({ tokens: [USDT], recipient: payee }),
+			sweepPicking: true
+		});
+		expect(sweep.recipient?.value).toBe(shortenAddress(payee));
+	});
+
+	it('draws no recipient line when nobody is held, and no artwork for a non-address', () => {
+		expect(liveSendPick(pickModel(), inputs({ tokens: [USDT] })).recipient).toBeUndefined();
+		const odd = liveSendPick(pickModel(), inputs({ tokens: [USDT], recipient: 'hello' }));
+		expect(odd.recipient).toMatchObject({ value: 'hello', lead: undefined });
+	});
 });
 
 describe('the form', () => {

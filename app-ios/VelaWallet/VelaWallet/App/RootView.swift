@@ -1036,7 +1036,16 @@ struct RootView: View {
                 .onChange(of: batch.view.rateInput) { _, value in
                     if value != batchRate { batchRate = value }
                 }
-                .onChange(of: recipientDraft) { _, value in send.setRecipient(value) }
+                // The machine's recipient, when it changed for its own reasons:
+                // a scanned code, a pick, a cleared form (issue #332). The field
+                // showed only what was typed into it, so a code scanned from the
+                // home reached the core and the form opened on an empty field —
+                // or on the last journey's typing. Every edit reaches the
+                // machine in the edit (`recipientBinding`), so a value the
+                // field just sent is already in the field.
+                .onChange(of: send.view?.recipient) { _, _ in
+                    if let live = send.view?.recipient, live != recipientDraft { recipientDraft = live }
+                }
                 // The machine's figure, when it changed for its own reasons —
                 // Max, the ⇄ swap, a cleared form. Its LIVE value, not the one
                 // this change was raised with: that one can be older than the
@@ -2587,6 +2596,19 @@ struct RootView: View {
         )
     }
 
+    /// The recipient field, the amount's way: the edit reaches the machine in
+    /// the edit, and the machine's own changes come back through
+    /// `.onChange(of: send.view?.recipient)`.
+    private var recipientBinding: Binding<String> {
+        Binding(
+            get: { recipientDraft },
+            set: { value in
+                recipientDraft = value
+                send.setRecipient(value)
+            }
+        )
+    }
+
     /// Open the flow for the signed-in account. Idempotent.
     ///
     /// The account **id** is the founding credential's, and the session view
@@ -2776,7 +2798,7 @@ struct RootView: View {
                         }
                     },
                     sendAmount: sendStates.contains(state) ? amountBinding : nil,
-                    sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
+                    sendRecipient: sendStates.contains(state) ? recipientBinding : nil,
                     sendRow: splitRows(for: state),
                     sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
                     sendCtaDisabled: sendCtaDisabled(state),

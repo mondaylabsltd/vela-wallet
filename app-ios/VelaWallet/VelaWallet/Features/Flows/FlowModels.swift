@@ -391,6 +391,11 @@ struct SendCtaModel {
 /// SD1 / SD1b — pick the token, or several of them.
 struct SendPickModel {
     let header: FlowHeaderModel
+    /// Issue #332: whom the money is for, when the core already holds a
+    /// recipient — a code scanned from the home, a contact handed over. The
+    /// picker is where the person chooses WHAT to send; without this line a
+    /// scan that worked looked exactly like one that had done nothing.
+    var recipient: FactRowModel?
     let searchPlaceholder: String
     let filters: [FilterChipModel]
     /// SD1b: the chain lock, once the first token pins the network.
