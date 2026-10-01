@@ -63,6 +63,15 @@ describe('the manifest', () => {
 		expect(manifest.key.length).toBeGreaterThan(300);
 	});
 
+	it('lets no web page reach into the package (spec 089)', () => {
+		// The provider is a MAIN-world content script: Chrome injects it, and no
+		// page ever needs to fetch it. Listed in `web_accessible_resources` it was
+		// fetchable by every site at the pinned id — a free "is Vela installed?"
+		// probe — for nothing. And no page may message the worker directly.
+		expect(manifest.web_accessible_resources).toBeUndefined();
+		expect(manifest.externally_connectable).toBeUndefined();
+	});
+
 	it('opens no action popup — a popup cannot survive a passkey prompt', () => {
 		// Spec 027 D34: the popup is dismissed when focus moves to the
 		// authenticator, mid-ceremony. The toolbar button opens a tab instead.

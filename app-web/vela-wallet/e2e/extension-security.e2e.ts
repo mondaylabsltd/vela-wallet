@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import {
 	extensionBuilt,
+	extensionId,
 	loadExtension,
 	requestWindow,
 	requestWindowOpen
@@ -86,6 +87,36 @@ test.describe('what a page cannot do', () => {
 		await page.evaluate(() => window.__forge(window.location.origin));
 		await page.waitForTimeout(2000);
 		expect(context.pages().filter((p) => p.url().includes('/request.html'))).toHaveLength(1);
+		await context.close();
+	});
+
+	/**
+	 * Spec 089: `inpage.js` was a web-accessible resource, fetchable by any
+	 * site at the pinned id — a free "is Vela installed?" probe — though Chrome
+	 * injects it as a MAIN-world content script and no page needs to fetch it.
+	 * The provider is still there; the package is not reachable.
+	 */
+	test('cannot read the package, and still gets the provider', async () => {
+		const context = await loadExtension();
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+		const probe = await page.evaluate(async (id) => {
+			const out: Record<string, string> = {};
+			for (const path of ['inpage.js', 'manifest.json', 'en/request.html']) {
+				try {
+					out[path] = String((await fetch(`chrome-extension://${id}/${path}`)).status);
+				} catch {
+					out[path] = 'blocked';
+				}
+			}
+			return { out, provider: typeof (window as { ethereum?: unknown }).ethereum };
+		}, extensionId());
+		expect(probe.out).toEqual({
+			'inpage.js': 'blocked',
+			'manifest.json': 'blocked',
+			'en/request.html': 'blocked'
+		});
+		expect(probe.provider).toBe('object');
 		await context.close();
 	});
 
