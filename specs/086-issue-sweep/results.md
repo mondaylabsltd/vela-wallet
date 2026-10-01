@@ -1,6 +1,6 @@
 # 086 results — issue sweep
 
-Status 2026-10-01 evening. Device checks used an integration build of `main` (67e2d193d) plus every fix branch: Android on the Xiaomi alioth in the parallel space; iOS on the iPhone 11 (iOS 26.5.2) and simulators.
+Status 2026-10-01 night: **all 16 issues have PRs** (#341–#350, #371–#374). Device checks used an integration build of `main` (67e2d193d) plus every fix branch: Android on the Xiaomi alioth in the parallel space; iOS on the iPhone 11 (iOS 26.5.2) and simulators.
 
 | Issue | PR | Root cause (on `main`) | Fix | Device evidence |
 |---|---|---|---|---|
@@ -14,7 +14,10 @@ Status 2026-10-01 evening. Device checks used an integration build of `main` (67
 | #312 + #326 network-scoped scan, token card | #348 (stacked on #347) | Quick-send chose the top token on any chain; native-coin placeholder; the card had no handler | Core `request_chain_id`, `change_token` | Xiaomi: @100 → form on xDAI; @8453 → Base only + note; @137 → none + note; card → picker, recipient kept |
 | #334 + #310 contact Edit / Delete placement | #349 | Footer pinned by `margin-top:auto` / a `flex_1` spacer | Pencil by the name; Delete after the content (web + desktop) | Web screenshots at 1440 and 390 px; desktop gallery |
 | #333 import garbles names | #350 | Lenient per-shell decoding | Core `decode_text`, strict UTF-8/UTF-16; refuse anything else | Xiaomi: GBK refused with a message; UTF-16 → "jxjjx测试", "Иван Петров" exact |
-| #331 #322 #321 #314 | — | in progress (cluster C) | | |
+| #331 recipient × too close to amount | #371 | Android: a 19 dp field with the ×'s 48 dp touch target reaching 6.9 dp into it; iOS: the same (a 12 pt gap, nearest-button wins) | A full-height amount well; × kept clear (Android + iOS) | Xiaomi: taps on the well's edges never remove a row |
+| #322 Sign Out looks like text | #372 | Centred grey text with no row (Android, iOS, phone web) | A settings row with icon + chevron | Xiaomi + iPhone: a row like 关于 |
+| #321 Receive too tall | #373 | A fixed 344 dp QR card squeezed sideways kept its height; a ×-only row above the title | A square card capped at the width; × on the title line (Android + iOS) | Xiaomi 15-geometry emulator test; alioth fits |
+| #314 backup-keys sheet dense | #374 | The intent drawn as an eyebrow; a heavy no-change simulation card | The intent as headline (4 apps); no-change simulation folded (phones) | Xiaomi: headline, three rows, folded details |
 
 ## Decisions taken (to confirm with the owner)
 
