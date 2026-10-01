@@ -95,15 +95,24 @@ struct ReceiveQrBody: View {
     let model: ReceiveQrModel
     var onSave: () -> Void = {}
     var onExplorer: () -> Void = {}
+    /// The sheet's ✕, drawn at the end of the heading's line (issue #321).
+    /// Absent, the heading has the line to itself.
+    var onClose: (() -> Void)?
 
     @State private var copied: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-            Text(verbatim: model.title)
-                .typeRole(Typography.rowTitle.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: Tokens.Space.s8) {
+                Text(verbatim: model.title)
+                    .typeRole(Typography.rowTitle.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let onClose {
+                    FlowSheetCloseButton(label: model.closeLabel, action: onClose)
+                }
+            }
 
             if let contract = model.contract {
                 HStack(spacing: Tokens.Space.s4) {

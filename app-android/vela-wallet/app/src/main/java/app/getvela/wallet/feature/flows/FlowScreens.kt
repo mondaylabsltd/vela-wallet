@@ -180,6 +180,8 @@ fun ReceiveListBody(
 fun ReceiveQrBody(
     model: ReceiveQrModel,
     modifier: Modifier = Modifier,
+    /** The sheet's ✕, drawn at the end of the heading's line (issue #321). */
+    close: (@Composable () -> Unit)? = null,
     onSave: () -> Unit = {},
     onExplorer: () -> Unit = {},
 ) {
@@ -189,13 +191,20 @@ fun ReceiveQrBody(
     val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = model.title,
-            color = colors.fgBase,
-            fontFamily = VelaFontFamily,
-            fontWeight = VelaFontWeight.semibold,
-            fontSize = VelaTextSize.lg,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = model.title,
+                color = colors.fgBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.semibold,
+                fontSize = VelaTextSize.lg,
+                modifier = Modifier.weight(1f),
+            )
+            if (close != null) {
+                Spacer(modifier = Modifier.width(VelaSpacing.md))
+                close()
+            }
+        }
         model.contract?.let { contract ->
             Spacer(modifier = Modifier.height(VelaSpacing.md))
             Row(verticalAlignment = Alignment.CenterVertically) {

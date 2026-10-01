@@ -44,6 +44,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -207,7 +210,14 @@ fun QrCard(
     }
     Box(
         modifier = modifier
-            .size(VelaSizing.qrCard)
+            // Square, at the measured 344 — or the screen's width where that is
+            // less (issue #321). It was `size(344)`, which a phone narrower
+            // than 344 + the gutters squeezed sideways and not down: a white
+            // card taller than wide, the code in its top part and dead white
+            // under it, on a screen that already had to scroll.
+            .widthIn(max = VelaSizing.qrCard)
+            .fillMaxWidth()
+            .aspectRatio(1f)
             .semantics { contentDescription = label }
             // White in BOTH appearances: a code is read by a camera, and
             // inverting it in dark mode is the classic way to make one
@@ -216,7 +226,7 @@ fun QrCard(
             .padding(VelaSpacing.xl3),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(modifier = Modifier.fillMaxWidth().height(VelaSizing.qrCard - VelaSpacing.xl3 * 2)) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
             val cells = matrix?.width?.toInt() ?: QR_MODULES
             val module = min(size.width, size.height) / cells
             for (r in 0 until cells) {
