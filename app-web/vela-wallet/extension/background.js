@@ -28,7 +28,8 @@
  *   - a request that ends without a decision answers 4900, never 4001 and
  *     never Chrome's own error text (RB6) — except a claimed submit whose
  *     claim carried the operation hash: that one may have been sent, and its
- *     page is told the hash when its surface goes (RJ2), never 4900.
+ *     page is told "not confirmed yet" when its surface goes (RJ2, 083; a
+ *     batch: its id), never 4900.
  *
  * The rules are pure functions in `lib/request-life.js`; this file performs
  * them and logs every step through `lib/swlog.js` (RB14).
@@ -333,7 +334,8 @@ function end(step) {
 /**
  * The surface's answer, delivered to the page by its document. A surface's own
  * close settlement (4900) for a claimed submit that carried its hash is surface
- * loss: the page is told the hash instead (RJ2, `surfaceAnswer`).
+ * loss: the page is told "not confirmed yet" instead (RJ2, 083,
+ * `surfaceAnswer`).
  */
 async function answer(rid, given, opHash, caller) {
 	const record = records.get(rid);
