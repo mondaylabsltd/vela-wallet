@@ -900,6 +900,24 @@ class SendLiveTest {
             failed.fileError,
         )
         assertNull("nobody parsed: no total", failed.total)
+
+        // 087: a file in a legacy code page says how to save it — not "use a
+        // CSV", which it is.
+        val legacy = SendLive.batchImport(
+            drawn.model,
+            BatchView(
+                opened = true,
+                unit = WireBatchUnit.Token,
+                file_error = true,
+                file_failure = app.getvela.wallet.feature.send.core.BatchFileFailure.UnsupportedEncoding,
+            ),
+            view,
+            ctx(),
+        )
+        assertEquals(
+            "${strings.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_TITLE)}. ${strings.t(I18nKeys.Contacts.IMPORT_FAIL_ENCODING)}",
+            legacy.fileError,
+        )
     }
 
     /** Issue #272: the refusal that dims the button reads as a warning, not as helper text. */

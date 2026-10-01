@@ -11,6 +11,7 @@ export * from './BalanceSwitcherView';
 export * from './BalanceToken';
 export * from './BalanceView';
 export * from './BatchFileContent';
+export * from './BatchFileFailure';
 export * from './BatchImportEvent';
 export * from './BatchOperation';
 export * from './BatchParseError';

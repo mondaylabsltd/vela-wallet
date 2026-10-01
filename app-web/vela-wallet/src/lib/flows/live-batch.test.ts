@@ -38,6 +38,7 @@ const EMPTY: BatchView = {
 	file_name: null,
 	busy: false,
 	file_error: false,
+	file_failure: null,
 	template_saved: false,
 	priced: true,
 	rate_status: 'loading',
@@ -329,6 +330,18 @@ describe('bringing the list (issue 205)', () => {
 		expect(build({ file_error: true }).tools.error).toContain('Could not read file');
 		// The core keeps the flag until the next pick; a parsed list outranks it.
 		expect(build({ file_error: true, preview: [ROW] }).tools.error).toBeUndefined();
+	});
+
+	// 087: a CSV in a legacy code page is refused by the core, never garbled —
+	// and the sheet says how to save it, not "use a CSV", which it is.
+	it('a file in a legacy code page says how to save it', () => {
+		const error = build({ file_error: true, file_failure: 'unsupported_encoding' }).tools.error;
+		expect(error).toContain('Could not read file');
+		expect(error).toContain('UTF-8');
+		expect(error).not.toContain('Please use a CSV');
+		expect(build({ file_error: true, file_failure: 'unreadable' }).tools.error).toContain(
+			'Please use a CSV'
+		);
 	});
 
 	it('names the picked file, because a workbook leaves the paste box empty', () => {

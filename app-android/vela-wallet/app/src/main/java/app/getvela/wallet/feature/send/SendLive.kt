@@ -16,6 +16,7 @@ import app.getvela.wallet.feature.contacts.core.ContactsView
 import app.getvela.wallet.feature.flows.AmountFieldModel
 import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
 import app.getvela.wallet.feature.send.core.BatchView
+import app.getvela.wallet.feature.send.core.BatchFileFailure
 import app.getvela.wallet.feature.send.core.BatchRateStatus
 import app.getvela.wallet.feature.send.core.BatchParseReason
 import app.getvela.wallet.feature.send.core.BATCH_MAX_RECIPIENTS
@@ -311,8 +312,15 @@ object SendLive {
                 ).sortedBy { it.first }.map { it.second },
             // `file_error` outlives a paste in the core (only the next pick clears
             // it), and an error about a file above a list that parsed is about nothing.
+            // 087: a file in a legacy code page is refused with how to save it
+            // — the contacts import's own sentence — not "use a CSV", which it is.
             fileError = if (batch.file_error && seen == 0) {
-                "${s.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_TITLE)}. ${s.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_BODY)}"
+                val body = if (batch.file_failure == BatchFileFailure.UnsupportedEncoding) {
+                    I18nKeys.Contacts.IMPORT_FAIL_ENCODING
+                } else {
+                    I18nKeys.Flows.BATCH_IMPORT_FAILED_BODY
+                }
+                "${s.t(I18nKeys.Flows.BATCH_IMPORT_FAILED_TITLE)}. ${s.t(body)}"
             } else {
                 null
             },

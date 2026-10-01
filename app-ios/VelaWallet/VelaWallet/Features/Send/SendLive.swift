@@ -1364,7 +1364,9 @@ enum SendLive {
         let note: (text: String, error: Bool)? =
             if batch.fileError {
                 (
-                    "\(loc.t("send.batchImportFailedTitle"))\n\(loc.t("send.batchImportFailedBody"))",
+                    // 087: a legacy code page says how to save the file — the
+                    // contacts import's sentence — not "use a CSV", which it is.
+                    "\(loc.t("send.batchImportFailedTitle"))\n\(loc.t(batch.fileFailure == .unsupportedEncoding ? "contacts.importFailEncoding" : "send.batchImportFailedBody"))",
                     true
                 )
             } else if batch.overBalance {

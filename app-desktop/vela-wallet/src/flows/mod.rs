@@ -536,6 +536,9 @@ pub struct FlowStrings {
     pub batch_no_price: SharedString,
     pub batch_import_failed_title: SharedString,
     pub batch_import_failed_body: SharedString,
+    /// 087: a picked file in a legacy code page — how to save it, in the
+    /// contacts import's own words.
+    pub batch_import_failed_encoding: SharedString,
 }
 
 impl FlowStrings {
@@ -820,6 +823,7 @@ impl FlowStrings {
             batch_no_price: s("send.batchNoPrice"),
             batch_import_failed_title: s("send.batchImportFailedTitle"),
             batch_import_failed_body: s("send.batchImportFailedBody"),
+            batch_import_failed_encoding: s("contacts.importFailEncoding"),
         }
     }
 }
