@@ -135,7 +135,14 @@ function uiLocale() {
 
 async function openWallet() {
 	const url = chrome.runtime.getURL(walletPage(uiLocale()));
-	const [existing] = await chrome.tabs.query({ url: chrome.runtime.getURL('') + '*' });
+	// A NORMAL window's tab only (spec 089): a request window is a popup of
+	// this origin too, and with no wallet tab open it was the one reused — the
+	// toolbar navigated the pending request away (answered 4900) and left the
+	// wallet in a 420 px popup.
+	const [existing] = await chrome.tabs.query({
+		url: chrome.runtime.getURL('') + '*',
+		windowType: 'normal'
+	});
 	if (existing) {
 		await chrome.tabs.update(existing.id, { active: true, url });
 		await chrome.windows.update(existing.windowId, { focused: true });

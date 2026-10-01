@@ -931,6 +931,64 @@ describe('a request with no gesture, to an idle panel (RB8 EX2 × RJ20 G63)', ()
 	});
 });
 
+/**
+ * Spec 089: the toolbar's "open the wallet" reused the first tab of the
+ * extension's origin — and a request window is one, in a popup. With no
+ * wallet tab open it navigated the pending request away (4900) and left the
+ * wallet in a 420 px popup. Only a normal window's tab is reused now.
+ */
+describe('the toolbar button (089)', () => {
+	function withTabs(env: Env, tabs: { id: number; windowId: number; url: string; type: string }[]) {
+		env.chrome.tabs.query = vi.fn(async (q: { url?: string; windowType?: string }) =>
+			tabs.filter(
+				(t) =>
+					(!q.url || t.url.startsWith(q.url.replace(/\*$/, ''))) &&
+					(!q.windowType || t.type === q.windowType)
+			)
+		) as any;
+		env.chrome.tabs.update = vi.fn(async () => ({})) as any;
+		env.chrome.tabs.create = vi.fn(async () => ({})) as any;
+	}
+
+	it('never takes a request window: it opens a tab of its own', async () => {
+		const env = makeEnv();
+		withTabs(env, [
+			{
+				id: 40,
+				windowId: 101,
+				url: 'chrome-extension://ext/en/request.html?rid=7:1',
+				type: 'popup'
+			}
+		]);
+		await startWorker(env);
+		env.emit('actionClicked');
+		await settleAll();
+		expect(env.chrome.tabs.update).not.toHaveBeenCalled();
+		expect(env.chrome.tabs.create).toHaveBeenCalledTimes(1);
+	});
+
+	it('reuses the wallet tab a normal window has', async () => {
+		const env = makeEnv();
+		withTabs(env, [
+			{
+				id: 40,
+				windowId: 101,
+				url: 'chrome-extension://ext/en/request.html?rid=7:1',
+				type: 'popup'
+			},
+			{ id: 41, windowId: 3, url: 'chrome-extension://ext/en/wallet.html', type: 'normal' }
+		]);
+		await startWorker(env);
+		env.emit('actionClicked');
+		await settleAll();
+		expect(env.chrome.tabs.update).toHaveBeenCalledWith(
+			41,
+			expect.objectContaining({ active: true })
+		);
+		expect(env.chrome.tabs.create).not.toHaveBeenCalled();
+	});
+});
+
 describe('the page’s own deadline (RB11)', () => {
 	it('an `abandon` settles the record as expired and withdraws the sheet', async () => {
 		const env = makeEnv();
