@@ -224,18 +224,23 @@ fn failure(class: LoadFailureClass) -> LoadFailure {
     }
 }
 
-/// The corpus key of each class's sentence. Offline, timeout and refused
-/// share one: to a person all three are "the network — retrying", and the
-/// class still drives the retry schedule. The generic line is the one the
-/// panel always had (`connect.browser.loadFailed`).
+/// The corpus key of each class's sentence. Offline and timeout share one:
+/// to a person both are "the network — retrying", and the class still drives
+/// the retry schedule. The generic line is the one the panel always had
+/// (`connect.browser.loadFailed`).
+///
+/// A refused connection is not the network (087 F15): the network carried the
+/// request to the host, and nothing there took it — a dev server that is not
+/// running at `127.0.0.1:8137` read "网络不稳定，页面没能打开". It says only
+/// what is known, the generic "couldn't load this page" (the panel's own
+/// title, so no second line), and keeps the network's retry schedule: a
+/// server coming up is answered on the next attempt.
 pub fn reason_key(class: LoadFailureClass) -> &'static str {
     match class {
-        LoadFailureClass::Offline | LoadFailureClass::Timeout | LoadFailureClass::Refused => {
-            "explore.loadOffline"
-        }
+        LoadFailureClass::Offline | LoadFailureClass::Timeout => "explore.loadOffline",
         LoadFailureClass::NotFound => "explore.loadNotFound",
         LoadFailureClass::Certificate => "explore.loadCertificate",
-        LoadFailureClass::Other => "connect.browser.loadFailed",
+        LoadFailureClass::Refused | LoadFailureClass::Other => "connect.browser.loadFailed",
         LoadFailureClass::Proxy => "explore.loadProxy",
     }
 }
