@@ -1,0 +1,52 @@
+EX-LOG (W23) - chrome.storage.session 'vela.sw.log' read from an extension page (no CDP on the worker); ring = 200 lines, oldest 2026-09-28T18:34:29.430Z.
+Scan of all 200 lines: 0 lines with a 0x-blob of 8+ hex digits, 0 lines with a URL or path; hosts only (host=127.0.0.1:8137, host=rpc.gnosischain.com, ...).
+
+vela.sw.counts = {"panel.down":5,"panel.up":28,"read.exhausted":5,"read.fail.network":6,"read.fail.timeout":7,"req.answered":30,"req.arrived.connect":11,"req.arrived.sign":24,"req.claim":28,"req.resumed":1,"req.settled.expired":1,"req.settled.page_left":1,"req.settled.surface_closed":3,"req.shown":35,"req.surface":35,"sw.start":25}
+
+Selected lines from the 200-line ring (verbatim):
+[vela-sw] 2026-09-28T18:34:29.430Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:34:30.861Z req.settled cause=page_left tab=291188710
+[vela-sw] 2026-09-28T18:34:46.353Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:34:48.312Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:34:48.320Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:35:34.562Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:35:36.207Z req.settled cause=surface_closed tab=291188710
+[vela-sw] 2026-09-28T18:41:21.090Z req.settled cause=expired tab=291188710
+[vela-sw] 2026-09-28T18:43:04.386Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:43:05.431Z req.resumed tab=291188710 state=shown
+[vela-sw] 2026-09-28T18:43:05.431Z sw.start records=1 recovered=1
+[vela-sw] 2026-09-28T18:43:25.960Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:43:25.989Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:44:30.231Z req.arrived kind=connect tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:44:30.613Z req.claim phase=approve live=true tab=291188710
+[vela-sw] 2026-09-28T18:44:30.623Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:44:37.369Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:44:59.078Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:44:59.083Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:47:09.449Z req.arrived kind=connect tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:47:10.672Z req.claim phase=approve live=true tab=291188710
+[vela-sw] 2026-09-28T18:47:10.679Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:47:46.806Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:47:48.634Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:47:48.642Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:48:36.133Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:49:44.665Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:49:44.680Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:57:09.271Z read.exhausted chain=100 tried=3
+[vela-sw] 2026-09-28T19:08:04.119Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T19:08:04.124Z req.claim phase=submit live=true tab=291188710
+[vela-sw] 2026-09-28T19:09:38.930Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T19:13:42.538Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T19:13:42.562Z req.claim phase=submit live=true tab=291188710
+[vela-sw] 2026-09-28T19:15:42.953Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T19:27:06.875Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T19:27:06.879Z req.claim phase=submit live=true tab=291188710
+[vela-sw] 2026-09-28T19:27:13.167Z req.settled cause=surface_closed tab=291188710
+[vela-sw] 2026-09-28T19:29:00.050Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T19:29:00.070Z req.claim phase=submit live=true tab=291188710
+[vela-sw] 2026-09-28T19:29:02.230Z req.settled cause=surface_closed tab=291188710
+
+Settings -> 反馈 -> 将要发送的内容 (panel, zh):
+  应用版本 v0.9.5 (80db06a) | 平台 Web (extension) · Chromium 151 on macOS | 语言 zh | 无法连接的 RPC 无
+  最近失败 sw:read.exhausted ×5; sw:read.fail.network ×6; sw:read.fail.timeout ×7; sw:req.settled.expired ×1; sw:req.settled.page_left ×1; sw:req.settled.surface_closed ×3
+  (no URL, no address, no hash)

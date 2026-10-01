@@ -14,6 +14,7 @@
 
 import Foundation
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -81,6 +82,19 @@ struct RelayLiveTests {
             print("[live] nonce: \(await relay.nonce(chainId: gnosis, sender: golden) ?? "nil")")
         }
     }
+    /// Spec 082 T106 (RA7, G13): the relay answers the status method this
+    /// client asks — the core's name, parsed by the core. An unknown hash is
+    /// `not_found`, which is an answer; the `eth_` name used to be -32601 on
+    /// every poll, and a `nil` here is exactly that regression.
+    @Test func theRelayAnswersTheCoresStatusMethod() async {
+        let (relay, _) = live()
+        #expect(userOpStatusMethod() == "pimlico_getUserOperationStatus")
+        let unknown = "0x" + String(repeating: "0", count: 63) + "1"
+        let answer = await relay.userOpStatus(chainId: gnosis, userOpHash: unknown)
+        print("[live] status of an unknown op: \(answer.map { "\($0.status) tx=\($0.txHash ?? "nil")" } ?? "nil")")
+        #expect(answer?.status == "not_found", "the relay's status method did not answer")
+    }
+
     /// Poll one operation this device actually submitted.
     ///
     /// `VELA_USER_OP=0x…` names it. This is how a send is proven to have

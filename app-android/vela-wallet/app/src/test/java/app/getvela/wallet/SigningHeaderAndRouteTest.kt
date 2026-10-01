@@ -68,6 +68,20 @@ class SigningHeaderAndRouteTest {
     }
 
     /**
+     * Spec 082 RE7/RE13 (G12): the name is the core's `browserSiteLabel` — a
+     * host said once, whole, its port kept; the header wraps it to two lines
+     * rather than cutting the end a spoofer controls.
+     */
+    @Test
+    fun `a long host is the whole name, said once`() {
+        val long = "app.a-rather-long-subdomain-name.of-some-decentralised-exchange.example"
+        val site = model("https://$long", "tab-1", ctx())
+        assertEquals(long, site.dappName)
+        assertEquals("", site.dappHost)
+        assertEquals("127.0.0.1:8137", model("http://127.0.0.1:8137", "tab-1", ctx()).dappName)
+    }
+
+    /**
      * Founder, 2026-09-26: 「这个账户只能用当前登录的钥匙签名」. The sheet names the
      * signer and nothing else about the key — no "Sign with", no methods.
      */

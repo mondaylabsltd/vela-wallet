@@ -1,0 +1,20 @@
+# DX2 — blackhole app.uniswap.org 02:50:58.6 → pass 02:51:59.3
+[vela-wallet] 02:50:58.798 browser: navigate asked host=app.uniswap.org view=built composing=false
+[vela-wallet] 02:50:58.799 browser: asked host=app.uniswap.org gen=16 how=navigation
+[vela-wallet] 02:51:01.949 browser: watchdog host=app.uniswap.org gen=16 (no commit in 3000 ms)
+[vela-wallet] 02:51:06.454 browser: probe host=app.uniswap.org gen=16 verdict=timeout route=system
+[vela-wallet] 02:51:06.455 browser: failed host=app.uniswap.org class=timeout
+[vela-wallet] 02:51:08.563 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:51:10.662 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:51:58.280 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:52:00.357 browser: retry host=app.uniswap.org attempt=1
+[vela-wallet] 02:52:00.359 browser: asked host=app.uniswap.org gen=17 how=auto
+[vela-wallet] 02:52:01.476 browser: committed host=app.uniswap.org gen=17
+[vela-wallet] 02:52:01.514 browser: finished host=app.uniswap.org
+(… 25 'skipped (engine still loading)' lines)
+--- Recents (parallel wallet.json vela.browserHistory) before:
+app.uniswap.org 1790621294894 Uniswap | Trade Crypto on DeFi
+127.0.0.1:8137 1790620902414 Vela test dApp (Android)
+example.com 1790620733036 Example Domain
+example.org 1790619944912 Example Domain
+after: app.uniswap.org last_visited_ms=1790621523094 (02:52:03, after pass); no other entry added

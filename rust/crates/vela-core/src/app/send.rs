@@ -31,6 +31,18 @@
 //!   convergence flows back as [`Event::ReceiptUpdate`] typed variants — all
 //!   terminal-wording regexes live in the shell's result-mapping layer.
 //!
+//! Spec 082 round 2 (RJ1) — the records exist before the bytes leave: the
+//! shell reports [`Event::OpSigned`] (signed, hashed, nothing POSTed), the
+//! core writes the records "may have been sent" and hands the op to the
+//! tracker with no record (a POST is about to leave: no "not sent" until its
+//! verdict), and only then [`SendOperation::ClearToPost`] lets the shell POST.
+//! The relay's verdict hands the records over (marking them admitted when the
+//! relay took the op), or a proven "not sent" deletes and withdraws them; the
+//! receipt screen still waits for that verdict. A submit the person cancels
+//! (✕ while "signing") before its records are written is never cleared to
+//! POST — and, as `OpSigned` names no submit, no `OpSigned` is cleared while
+//! that submit's result is still owed (082 second review).
+//!
 //! Faithful port — behavior aligned line by line with the TS sources named per
 //! item; quirks kept and marked "ported verbatim". Deliberate deviations, all
 //! mandated by the migration notes:
@@ -58,6 +70,7 @@ use super::fee_policy::{
     FeeEstimate, FeeEstimateView, FeeTier, MultiTokenSpec, TEMPO_DEFAULT_FEE_TOKEN,
 };
 use super::money::{js_parse_float, Denom, DenominatedAmount, TokenPrice};
+use super::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
@@ -650,6 +663,16 @@ pub struct SendTxRecord {
     /// `'$' + usd.toFixed(2)` when > 0 — a stored-record format, not i18n
     /// (ported verbatim).
     pub usd: Option<String>,
+    /// The submit's reply was lost; `user_op_hash` is the locally computed
+    /// hash (spec 082 RA4). Persisted with the record so a restart hands the
+    /// tracker a may-have-been-sent op again (`TrackPendingRecord`).
+    #[serde(default)]
+    pub maybe_sent: bool,
+    /// The head read before the first submit POST, persisted likewise —
+    /// where the tracker's relay-independent landing check starts (ruling 8).
+    #[serde(default)]
+    #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+    pub submit_block: Option<u64>,
 }
 
 /// Estimate failure vocabulary — `fee_policy::FeeFailure` plus the send-side
@@ -703,10 +726,53 @@ pub enum SendReceiptOutcome {
     },
     Failed {
         rejected: bool,
+        /// The relay never had a may-have-been-sent op (tracker `NotSent`,
+        /// spec 082 RA4): "not sent", never the fee-rejected words.
+        #[serde(default)]
+        not_sent: bool,
     },
     /// The relay parked the op until fees settle — pending, new wording only
     /// (invariant ⑦).
     FeeHeld,
+    /// The relay has shown it holds an op whose submit reply was lost (spec
+    /// 082 RA10): the receipt goes back to the ordinary "submitted" words.
+    Acknowledged,
+}
+
+/// The receipt verdict a tracker entry stands for, or `None` while there is
+/// nothing new to say (spec 082 — the one mapping, where the desktop and the
+/// web each had their own). Only a definitive drop, rejection or never-sent
+/// may be `Failed`; a slow, unreachable or 24 h-old op sends nothing
+/// (invariant ⑤).
+pub fn receipt_outcome_of(entry: &TrackEntryView) -> Option<SendReceiptOutcome> {
+    match entry.status {
+        TrackStatus::Confirmed => entry
+            .tx_hash
+            .clone()
+            .filter(|hash| !hash.is_empty())
+            .map(|tx_hash| SendReceiptOutcome::Confirmed { tx_hash }),
+        TrackStatus::Dropped => Some(SendReceiptOutcome::Failed {
+            rejected: false,
+            not_sent: false,
+        }),
+        TrackStatus::Rejected => Some(SendReceiptOutcome::Failed {
+            rejected: true,
+            not_sent: false,
+        }),
+        TrackStatus::NotSent => Some(SendReceiptOutcome::Failed {
+            rejected: false,
+            not_sent: true,
+        }),
+        TrackStatus::FeeHeld => Some(SendReceiptOutcome::FeeHeld),
+        TrackStatus::Pending | TrackStatus::Unreachable | TrackStatus::AcceptedNotLanded => {
+            match entry.outcome {
+                TrackOutcome::Landing | TrackOutcome::StillConfirming => {
+                    Some(SendReceiptOutcome::Acknowledged)
+                }
+                TrackOutcome::MaybeSent | TrackOutcome::Unknown | TrackOutcome::Final => None,
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -888,8 +954,46 @@ pub enum SendOperation {
     /// find their records (invariant ⑥'s ordering half).
     TrackSubmitted {
         user_op_hash: String,
+        /// EMPTY on the write-ahead's hand-off (spec 082 RJ1, second review):
+        /// a POST is about to leave and the tracker holds the op off "not
+        /// sent" until the POST's verdict, whose hand-off names the records.
+        /// Forwarded as they are, empty or not.
         record_ids: Vec<String>,
         chain_id: u32,
+        /// Forwarded to `tx_tracker::Event::Submitted` (spec 082 RA4).
+        #[serde(default)]
+        maybe_sent: bool,
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        submit_block: Option<u64>,
+        /// Forwarded to `tx_tracker::Event::Submitted` (spec 082 RJ1): the
+        /// relay accepted the op the write-ahead hand-off announced.
+        #[serde(default)]
+        admitted: bool,
+    },
+    /// The write-ahead records are on disk and the tracker holds them (spec
+    /// 082 RJ1): the shell may now POST `user_op_hash`, and only now. With no
+    /// clearance within `user_op::WRITE_AHEAD_WAIT_MS` it does not POST and
+    /// answers `SubmitFailed` (nothing sent). Answered `PostCleared`.
+    ClearToPost {
+        user_op_hash: String,
+    },
+    /// The relay accepted the written-ahead op (RJ1): patch these records'
+    /// `maybeSent` to false, in ONE write; they stay pending. Answered
+    /// `RecordsPersisted`.
+    MarkAdmitted {
+        record_ids: Vec<String>,
+    },
+    /// Remove written-ahead records whose op is proven never sent (RJ1), in
+    /// ONE write. Answered `RecordsPersisted`.
+    DeleteTxRecords {
+        ids: Vec<String>,
+    },
+    /// Forwarded to `tx_tracker::Event::Withdrawn` (RJ1). Answered
+    /// `TrackHandedOff`.
+    TrackWithdrawn {
+        user_op_hash: String,
+        record_ids: Vec<String>,
     },
     /// `resolveRecipientIdentity(addr)`.
     ResolveIdentity {
@@ -964,6 +1068,15 @@ pub enum SendShellResult {
     Submitted {
         user_op_hash: String,
         now_ms: f64,
+        /// The submit's reply was lost and `user_op_hash` is the local hash
+        /// (spec 082 RA4): the payment may be on its way, so it is recorded,
+        /// tracked and shown as such — never an error, never "try again".
+        #[serde(default)]
+        maybe_sent: bool,
+        /// The head read before the first POST (ruling 8); `None` = unknown.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        submit_block: Option<u64>,
     },
     SubmitFailed {
         failure: SendSubmitFailure,
@@ -971,6 +1084,8 @@ pub enum SendShellResult {
     PasskeyCancelAcknowledged,
     RecordsPersisted,
     TrackHandedOff,
+    /// `ClearToPost` was taken (spec 082 RJ1).
+    PostCleared,
     IdentityResolved {
         identity: Option<SendRecipientIdentity>,
     },
@@ -1145,6 +1260,18 @@ pub enum Event {
     SlideConfirm,
     /// The passkey sheet opened inside `SubmitUserOp`.
     SigningStarted,
+    /// Inside `SubmitUserOp`: the op is signed and its hash computed, and
+    /// nothing has been POSTed (spec 082 RJ1). The core writes the records
+    /// ahead and answers [`SendOperation::ClearToPost`] once they are on disk
+    /// and the tracker holds them. Once per submit.
+    OpSigned {
+        user_op_hash: String,
+        /// The head read before the first POST (ruling 8); `None` = unknown.
+        #[serde(default)]
+        #[cfg_attr(feature = "bindings", ts(type = "number | null"))]
+        submit_block: Option<u64>,
+        now_ms: f64,
+    },
     /// The confirm screen's cancel (✕) during preparing/signing.
     CancelSigning,
     /// Treasury sheet "retry" — re-runs the step-appropriate flow.
@@ -1346,6 +1473,20 @@ struct PersistCtx {
     user_op_hash: String,
     record_ids: Vec<String>,
     chain_id: u32,
+    maybe_sent: bool,
+    submit_block: Option<u64>,
+    /// The write-ahead's records (RJ1): their ack also clears the POST.
+    write_ahead: bool,
+}
+
+/// The records written ahead of one submit's POST (spec 082 RJ1).
+#[derive(Clone, Debug, PartialEq)]
+struct WriteAhead {
+    /// The `Pipeline::Submitting` id they belong to.
+    pipeline_id: u64,
+    user_op_hash: String,
+    record_ids: Vec<String>,
+    submit_block: Option<u64>,
 }
 
 /// What `Max` stands for while it is in force.
@@ -1452,6 +1593,10 @@ pub struct Model {
     /// same snapshot discipline — those were already captured at submit).
     receipt_signed: Option<SendLine>,
     receipt_failed: bool,
+    /// The failure is the relay never having the op (spec 082 RA4).
+    receipt_not_sent: bool,
+    /// The submit's reply was lost; cleared when the relay acknowledges.
+    receipt_maybe_sent: bool,
     fee_held: bool,
     /// The submit result's clock (#D3); `None` until the relay accepted.
     submitted_at_ms: Option<f64>,
@@ -1462,6 +1607,14 @@ pub struct Model {
     /// `prefetchedAccount.current?.publicKeyHex`.
     public_key_hex: Option<String>,
     pipeline: Pipeline,
+    /// The write-ahead of the submit in flight (RJ1), until its verdict.
+    write_ahead: Option<WriteAhead>,
+    /// A `SubmitUserOp` the person cancelled (✕ while "signing") before its
+    /// records were written — its result still owed. `OpSigned` names no
+    /// submit, so while one is owed none is cleared to POST: the cancelled
+    /// payment never goes out, and its late `OpSigned` can never ride a
+    /// retry's submit (082 second review).
+    withdrawn_submit: Option<u64>,
     flights: Flights,
     /// Monotonic per-request id source (every request gets a fresh one).
     attempt: u64,
@@ -1565,6 +1718,13 @@ pub enum SendReceiptStatus {
     Submitted,
     Confirmed,
     Failed,
+    /// The submit's reply was lost and the relay has not yet shown it holds
+    /// the op (spec 082 RA10): "It may have been sent. Vela keeps checking —
+    /// don't send it again." No Retry, and no success haptic was played.
+    MaybeSent,
+    /// The relay never had it (spec 082 RA4): "not sent" — never the
+    /// fee-rejected words.
+    NotSent,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1880,6 +2040,11 @@ impl App for Send {
                 }
                 Command::done()
             }
+            Event::OpSigned {
+                user_op_hash,
+                submit_block,
+                now_ms,
+            } => op_signed(model, user_op_hash, submit_block, now_ms),
             Event::CancelSigning => cancel_signing(model),
             Event::RetryAfterBootstrap => retry_after_bootstrap(model),
             Event::DismissTreasurySheet => {
@@ -4363,6 +4528,8 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.user_op_hash = None;
     model.tx_error = None;
     model.receipt_failed = false;
+    model.receipt_not_sent = false;
+    model.receipt_maybe_sent = false;
     model.submitted_at_ms = None;
     model.receipt_signed = None;
     model.fee_held = false;
@@ -4599,6 +4766,17 @@ fn cancel_signing(model: &mut Model) -> Cmd {
     if !matches!(model.tx, SendTxStatus::Preparing | SendTxStatus::Signing) {
         return Command::done();
     }
+    // Spec 082 RJ1: once the records are written ahead the POST is cleared —
+    // on its way; a cancel must not pretend to stop it.
+    if let Pipeline::Submitting { id, .. } = model.pipeline {
+        if model
+            .write_ahead
+            .as_ref()
+            .is_some_and(|wa| wa.pipeline_id == id)
+        {
+            return Command::done();
+        }
+    }
     model.cancelled = true;
     // Release the lock so a retry starts, and invalidate the cancelled run's
     // pending `end()` (issue #91).
@@ -4607,12 +4785,17 @@ fn cancel_signing(model: &mut Model) -> Cmd {
     // a funding sheet may resurrect (invariant ③ — the intent behind TS's
     // never-read `sendCancelledRef`, made real here). An in-flight
     // sign/submit (`Submitting`) is left to its shell outcome, exactly as
-    // `Passkey.cancelSign()` behaves today.
+    // `Passkey.cancelSign()` behaves today — except that its POST is never
+    // cleared (spec 082 RJ1, second review): the passkey may already have
+    // returned while the shell reads the head, and the person withdrew it.
     if matches!(
         model.pipeline,
         Pipeline::SubmitCredential { .. } | Pipeline::SubmitTreasury { .. }
     ) {
         model.pipeline = Pipeline::Idle;
+    }
+    if let Pipeline::Submitting { id, .. } = model.pipeline {
+        model.withdrawn_submit = Some(id);
     }
     model.tx = SendTxStatus::Idle;
     fire(model, SendOperation::CancelPasskeySign)
@@ -4701,17 +4884,35 @@ fn receipt_update(model: &mut Model, user_op_hash: &str, outcome: SendReceiptOut
         SendReceiptOutcome::Confirmed { tx_hash } => {
             model.tx_hash = Some(tx_hash);
         }
-        SendReceiptOutcome::Failed { rejected } => {
+        // `NotSent` judges an op the relay never showed it holds: for one it
+        // accepted (or has since acknowledged) it can only be stale — the
+        // write-ahead hands the op to the tracker before its POST (RJ1), and
+        // a slow POST can outlast the grace. The tracker revives the entry
+        // on the admitted hand-off; the receipt waits for that verdict
+        // (082 round-2 review).
+        SendReceiptOutcome::Failed { not_sent: true, .. } if !model.receipt_maybe_sent => {}
+        SendReceiptOutcome::Failed { rejected, not_sent } => {
             // A definitive failure stamps the receipt — it never turns the
             // submitted payment back into an error state (invariant ⑤).
             model.receipt_failed = true;
-            if rejected {
+            if not_sent {
+                // Never sent is its own ending (spec 082), and it is not the
+                // fee-rejected one whatever else the shell says.
+                model.receipt_not_sent = true;
+            } else if rejected {
                 model.fee_rejected = true;
             }
         }
         SendReceiptOutcome::FeeHeld => {
             // Waiting, not failure: queued until fees settle (invariant ⑦).
+            // The hold stage comes only from the relay's status, so the relay
+            // holds the op: no longer "may have been sent" (RA10).
             model.fee_held = true;
+            model.receipt_maybe_sent = false;
+        }
+        SendReceiptOutcome::Acknowledged => {
+            // The relay holds it: the ordinary "submitted" words (RA10).
+            model.receipt_maybe_sent = false;
         }
     }
     render()
@@ -4752,8 +4953,29 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
         R::Submitted {
             user_op_hash,
             now_ms,
-        } => accept_submitted(model, id, user_op_hash, now_ms),
-        R::SubmitFailed { failure } => accept_submit_failed(model, id, failure),
+            maybe_sent,
+            submit_block,
+        } => {
+            if model.withdrawn_submit == Some(id) {
+                // Never cleared, yet it went out (a shell that POSTs without
+                // the write-ahead): sent is sent — recorded as any other.
+                model.withdrawn_submit = None;
+            }
+            accept_submitted(model, id, user_op_hash, now_ms, (maybe_sent, submit_block))
+        }
+        R::SubmitFailed { failure } => {
+            if model.withdrawn_submit == Some(id) {
+                // The submit the person cancelled ended, and nothing was
+                // sent: no error, no haptic — the form, as they left it.
+                model.withdrawn_submit = None;
+                if matches!(model.pipeline, Pipeline::Submitting { id: expect, .. } if expect == id)
+                {
+                    model.pipeline = Pipeline::Idle;
+                }
+                return render();
+            }
+            accept_submit_failed(model, id, failure)
+        }
         R::RecordsPersisted => {
             let Some((expect, ctx)) = model.flights.persist.clone() else {
                 return Command::done();
@@ -4766,15 +4988,42 @@ fn accept(model: &mut Model, id: u64, result: SendShellResult) -> Cmd {
             // find the records they target (invariant ⑥).
             let track_id = next(model);
             model.flights.track = Some(track_id);
-            issue(
+            let clear = ctx.write_ahead.then(|| ctx.user_op_hash.clone());
+            // The write-ahead's hand-off names NO record (RJ1, 082 second
+            // review): a POST of the op is about to leave, and the tracker
+            // holds it off "not sent" until the POST's verdict — whose
+            // hand-off names the records. Named here, the not-found grace ran
+            // from before the bytes left, and a POST slower than it ended the
+            // op NotSent (the receipt "not sent") while it was delivering it.
+            let record_ids = if ctx.write_ahead {
+                Vec::new()
+            } else {
+                ctx.record_ids
+            };
+            let track = issue(
                 track_id,
                 SendOperation::TrackSubmitted {
                     user_op_hash: ctx.user_op_hash,
-                    record_ids: ctx.record_ids,
+                    record_ids,
                     chain_id: ctx.chain_id,
+                    maybe_sent: ctx.maybe_sent,
+                    submit_block: ctx.submit_block,
+                    admitted: false,
                 },
-            )
+            );
+            match clear {
+                // RJ1: on disk and tracked — the shell may POST.
+                Some(user_op_hash) => {
+                    let clear_id = next(model);
+                    Command::all([
+                        track,
+                        issue(clear_id, SendOperation::ClearToPost { user_op_hash }),
+                    ])
+                }
+                None => track,
+            }
         }
+        R::PostCleared => Command::done(),
         R::TrackHandedOff => {
             if model.flights.track == Some(id) {
                 model.flights.track = None;
@@ -5122,7 +5371,164 @@ fn accept_treasury(model: &mut Model, id: u64, probe: SendTreasuryProbe) -> Cmd 
     }
 }
 
-fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f64) -> Cmd {
+/// One activity record per recipient of `lines`, under `user_op_hash`.
+fn tx_records(
+    model: &Model,
+    lines: &[SendLine],
+    chain_id: u32,
+    user_op_hash: &str,
+    now_ms: f64,
+    (maybe_sent, submit_block): (bool, Option<u64>),
+) -> Vec<SendTxRecord> {
+    let from = model
+        .account
+        .as_ref()
+        .map(|a| a.address.clone())
+        .unwrap_or_default();
+    let timestamp_s = (now_ms / 1000.0).floor();
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, ln)| {
+            let usd = parse_float_or_zero(&ln.amount) * ln.price_usd;
+            SendTxRecord {
+                id: if lines.len() > 1 {
+                    format!("{user_op_hash}-{i}")
+                } else {
+                    user_op_hash.to_owned()
+                },
+                user_op_hash: user_op_hash.to_owned(),
+                tx_hash: String::new(),
+                from: from.clone(),
+                to: ln.to.clone(),
+                to_name: ln.to_name.clone(),
+                value: ln.amount.clone(),
+                symbol: ln.symbol.clone(),
+                decimals: ln.decimals,
+                logo_urls: ln.logo_urls.clone(),
+                chain_id,
+                timestamp_s,
+                usd: (usd > 0.0).then(|| format!("${usd:.2}")),
+                maybe_sent,
+                submit_block,
+            }
+        })
+        .collect()
+}
+
+/// The write-ahead (spec 082 RJ1): signed, nothing POSTed. The records are
+/// written "may have been sent" in ONE write; their ack hands them to the
+/// tracker and clears the POST. The receipt still waits for the verdict.
+fn op_signed(
+    model: &mut Model,
+    user_op_hash: String,
+    submit_block: Option<u64>,
+    now_ms: f64,
+) -> Cmd {
+    let Pipeline::Submitting {
+        id: pipeline_id,
+        chain_id,
+        lines,
+        ..
+    } = model.pipeline.clone()
+    else {
+        return Command::done();
+    };
+    if model
+        .write_ahead
+        .as_ref()
+        .is_some_and(|wa| wa.pipeline_id == pipeline_id)
+    {
+        return Command::done(); // once per submit
+    }
+    if model.withdrawn_submit.is_some() {
+        // A cancelled submit's result is still owed, and `OpSigned` names no
+        // submit: this may be the cancelled one's. Nothing is written or
+        // cleared — the shell's wait runs out and nothing is sent (a retry
+        // caught in this window ends "not sent", and can be slid again).
+        return Command::done();
+    }
+    let records = tx_records(
+        model,
+        &lines,
+        chain_id,
+        &user_op_hash,
+        now_ms,
+        (true, submit_block),
+    );
+    let record_ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
+    model.write_ahead = Some(WriteAhead {
+        pipeline_id,
+        user_op_hash: user_op_hash.clone(),
+        record_ids: record_ids.clone(),
+        submit_block,
+    });
+    // Signed: the sheet is past the passkey, on its way to the relay.
+    if model.tx == SendTxStatus::Signing {
+        model.tx = SendTxStatus::Submitting;
+    }
+    let persist_id = next(model);
+    model.flights.persist = Some((
+        persist_id,
+        PersistCtx {
+            user_op_hash,
+            record_ids,
+            chain_id,
+            maybe_sent: true,
+            submit_block,
+            write_ahead: true,
+        },
+    ));
+    Command::all([
+        issue(persist_id, SendOperation::PersistTxRecords { records }),
+        render(),
+    ])
+}
+
+/// Withdraw the write-ahead of pipeline `pipeline_id`, if any (RJ1): its op
+/// is proven never sent. Deletes the records in one write and tells the
+/// tracker to forget them; a persist of them still in flight is dropped.
+fn withdraw_write_ahead(model: &mut Model, pipeline_id: u64) -> Vec<Cmd> {
+    let Some(wa) = model
+        .write_ahead
+        .take_if(|wa| wa.pipeline_id == pipeline_id)
+    else {
+        return Vec::new();
+    };
+    if model
+        .flights
+        .persist
+        .as_ref()
+        .is_some_and(|(_, ctx)| ctx.write_ahead)
+    {
+        model.flights.persist = None;
+    }
+    let delete_id = next(model);
+    let withdraw_id = next(model);
+    vec![
+        issue(
+            delete_id,
+            SendOperation::DeleteTxRecords {
+                ids: wa.record_ids.clone(),
+            },
+        ),
+        issue(
+            withdraw_id,
+            SendOperation::TrackWithdrawn {
+                user_op_hash: wa.user_op_hash,
+                record_ids: wa.record_ids,
+            },
+        ),
+    ]
+}
+
+fn accept_submitted(
+    model: &mut Model,
+    id: u64,
+    user_op_hash: String,
+    now_ms: f64,
+    (maybe_sent, submit_block): (bool, Option<u64>),
+) -> Cmd {
     let Pipeline::Submitting {
         id: expect,
         gen,
@@ -5136,6 +5542,16 @@ fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f6
         return Command::done();
     }
     model.pipeline = Pipeline::Idle;
+
+    // RJ1: the records written ahead name this op — no second write. Another
+    // hash (the relay's own) withdraws them, and today's write follows.
+    let mut commands = Vec::new();
+    let written = model
+        .write_ahead
+        .take_if(|wa| wa.pipeline_id == id && wa.user_op_hash.eq_ignore_ascii_case(&user_op_hash));
+    if written.is_none() {
+        commands.extend(withdraw_write_ahead(model, id));
+    }
 
     // Bundler accepted — the payment is sent NOW. The tx hash resolves in the
     // background; a slow poll can never turn this into an error (invariant ⑤).
@@ -5157,47 +5573,74 @@ fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f6
     model.receipt_signed = lines.first().cloned();
     model.user_op_hash = Some(user_op_hash.clone());
     model.submitted_at_ms = Some(now_ms);
+    model.receipt_maybe_sent = maybe_sent;
     model.tx = SendTxStatus::Confirmed;
     model.lock.end(gen);
 
-    // One activity record per recipient, all persisted in ONE atomic write
-    // (invariant ⑥) — a per-record write would drop every sibling but one.
     let from = model
         .account
         .as_ref()
         .map(|a| a.address.clone())
         .unwrap_or_default();
-    let timestamp_s = (now_ms / 1000.0).floor();
-    let records: Vec<SendTxRecord> = lines
-        .iter()
-        .enumerate()
-        .map(|(i, ln)| {
-            let usd = parse_float_or_zero(&ln.amount) * ln.price_usd;
-            SendTxRecord {
-                id: if lines.len() > 1 {
-                    format!("{user_op_hash}-{i}")
-                } else {
-                    user_op_hash.clone()
-                },
-                user_op_hash: user_op_hash.clone(),
-                tx_hash: String::new(),
-                from: from.clone(),
-                to: ln.to.clone(),
-                to_name: ln.to_name.clone(),
-                value: ln.amount.clone(),
-                symbol: ln.symbol.clone(),
-                decimals: ln.decimals,
-                logo_urls: ln.logo_urls.clone(),
-                chain_id,
-                timestamp_s,
-                usd: (usd > 0.0).then(|| format!("${usd:.2}")),
-            }
-        })
-        .collect();
-    let record_ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
-
+    if !maybe_sent {
+        // The success haptic says "sent" — a lost reply has not earned it
+        // (spec 082 RA10); the receipt says "may have been sent" instead.
+        let haptic_id = next(model);
+        commands.push(issue(
+            haptic_id,
+            SendOperation::Haptic {
+                kind: SendHapticKind::Success,
+            },
+        ));
+    }
     let clear_id = next(model);
-    let haptic_id = next(model);
+    commands.push(issue(
+        clear_id,
+        SendOperation::ClearTokenCache { address: from },
+    ));
+
+    if let Some(wa) = written {
+        // Accepted: the records stop saying "may have been sent" and the
+        // tracker learns the relay has it. A lost reply writes nothing — the
+        // records already say so. Either way the tracker is handed the
+        // records now: the POST is over (082 second review).
+        if !maybe_sent {
+            let mark_id = next(model);
+            commands.push(issue(
+                mark_id,
+                SendOperation::MarkAdmitted {
+                    record_ids: wa.record_ids.clone(),
+                },
+            ));
+        }
+        let track_id = next(model);
+        model.flights.track = Some(track_id);
+        commands.push(issue(
+            track_id,
+            SendOperation::TrackSubmitted {
+                user_op_hash: wa.user_op_hash,
+                record_ids: wa.record_ids,
+                chain_id,
+                maybe_sent,
+                submit_block: wa.submit_block.or(submit_block),
+                admitted: !maybe_sent,
+            },
+        ));
+        commands.push(render());
+        return Command::all(commands);
+    }
+
+    // One activity record per recipient, all persisted in ONE atomic write
+    // (invariant ⑥) — a per-record write would drop every sibling but one.
+    let records = tx_records(
+        model,
+        &lines,
+        chain_id,
+        &user_op_hash,
+        now_ms,
+        (maybe_sent, submit_block),
+    );
+    let record_ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
     let persist_id = next(model);
     model.flights.persist = Some((
         persist_id,
@@ -5205,19 +5648,17 @@ fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f6
             user_op_hash,
             record_ids,
             chain_id,
+            maybe_sent,
+            submit_block,
+            write_ahead: false,
         },
     ));
-    Command::all([
-        issue(
-            haptic_id,
-            SendOperation::Haptic {
-                kind: SendHapticKind::Success,
-            },
-        ),
-        issue(clear_id, SendOperation::ClearTokenCache { address: from }),
-        issue(persist_id, SendOperation::PersistTxRecords { records }),
-        render(),
-    ])
+    commands.push(issue(
+        persist_id,
+        SendOperation::PersistTxRecords { records },
+    ));
+    commands.push(render());
+    Command::all(commands)
 }
 
 fn accept_submit_failed(model: &mut Model, id: u64, failure: SendSubmitFailure) -> Cmd {
@@ -5231,6 +5672,19 @@ fn accept_submit_failed(model: &mut Model, id: u64, failure: SendSubmitFailure) 
         return Command::done();
     }
     model.pipeline = Pipeline::Idle;
+    // RJ1: a failure is proven "not sent" — nothing is POSTed without
+    // `ClearToPost`, and a POST whose reply was lost is `Submitted{maybe_sent}`.
+    // The written-ahead records go, and the tracker forgets them.
+    let withdrawn = withdraw_write_ahead(model, id);
+    let command = submit_failed(model, gen, failure);
+    if withdrawn.is_empty() {
+        command
+    } else {
+        Command::all(withdrawn.into_iter().chain([command]))
+    }
+}
+
+fn submit_failed(model: &mut Model, gen: u64, failure: SendSubmitFailure) -> Cmd {
     match failure {
         SendSubmitFailure::PasskeyCancelled => {
             // Never an error state, never an alert.
@@ -5384,10 +5838,14 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
         })
         .collect();
     Some(SendReceiptView {
-        status: if model.receipt_failed {
+        status: if model.receipt_failed && model.receipt_not_sent {
+            SendReceiptStatus::NotSent
+        } else if model.receipt_failed {
             SendReceiptStatus::Failed
         } else if model.tx_hash.is_some() {
             SendReceiptStatus::Confirmed
+        } else if model.receipt_maybe_sent {
+            SendReceiptStatus::MaybeSent
         } else {
             SendReceiptStatus::Submitted
         },

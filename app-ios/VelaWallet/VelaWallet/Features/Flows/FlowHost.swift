@@ -55,6 +55,9 @@ struct FlowHost: View {
 
     let model: FlowScreenModel
     var onBack: () -> Void = {}
+    /// The person closed the sheet of this state (× or a drag). The live host
+    /// takes that state off its stack; the gallery ignores it.
+    var onSheetClosed: (FlowStateId) -> Void = { _ in }
     var onNavigate: (FlowStep) -> Void = { _ in }
     /// The live add-token sheet's field and CTA. Absent everywhere the sheet is
     /// a fixture, which is the gallery and the screenshot sweep.
@@ -67,6 +70,8 @@ struct FlowHost: View {
     var onReceiveNetwork: ((Int) -> Void)?
     /// Which history row opened the transaction sheet, as (group, row).
     var onSelectActivity: ((Int, Int) -> Void)?
+    /// The record behind the tapped history row, by id (never by position).
+    var onSelectActivityItem: ((String?) -> Void)?
     /// Which assets row opened the token sheet.
     var onSelectAsset: ((Int) -> Void)?
     /// 转账 from a token's own sheet, with that token preselected.
@@ -183,6 +188,16 @@ struct FlowHost: View {
     var body: some View {
         base
             .walletTextScale(model.textScale)
+            // A closed sheet's flag is for THAT showing only. The flow leaves
+            // the sheet's state when it closes (`onSheetClosed`), and coming
+            // back to it — the next row tapped — is a new sheet: kept, the
+            // flag suppressed it and the tap opened nothing (082 X-HISTORY,
+            // found on the device after the stack fix alone). Cleared on any
+            // change: SwiftUI calls the binding's setter a second time, late,
+            // from the closed showing, and that stale call set the flag again.
+            .onChange(of: model.state) { _, _ in
+                sheetDismissed = nil
+            }
             // The refusal surface belongs to the SCREEN, not only to the sheet.
             //
             // Spec 051 put it inside `FlowSheetHost` because the thing that
@@ -222,7 +237,10 @@ struct FlowHost: View {
                 isPresented: Binding(
                     get: { sheetShown },
                     set: { if !$0 { sheetDismissed = model.state } }
-                )
+                ),
+                // Once per showing, after the sheet has gone — never from the
+                // setter, which SwiftUI calls twice (082 X-HISTORY, device).
+                onDismiss: { onSheetClosed(model.state) }
             ) {
                 if let sheet = model.sheet {
                     FlowSheetHost(
@@ -300,6 +318,9 @@ struct FlowHost: View {
         case .history(let m):
             FlowScaffold(header: m.header, onBack: onBack, onPill: { openChainPicker() }) {
                 HistoryBody(model: m, onSelect: { group, row in
+                    let item = m.groups.indices.contains(group) && m.groups[group].rows.indices.contains(row)
+                        ? m.groups[group].rows[row].itemId : nil
+                    onSelectActivityItem?(item)
                     onSelectActivity?(group, row)
                     onNavigate(.txDetail)
                 })

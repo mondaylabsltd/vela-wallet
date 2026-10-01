@@ -1,0 +1,30 @@
+S7 / S8 - extension side panel, zh. Fault: 8898 drop match=vela-relay at 19:01:20Z; pass at 19:01:58Z.
+dApp: eth_sendTransaction dust (to 0x7687...D141, 0x38d7ea4c68000) at 19:01:20.775Z; closed with the sheet's X at 19:03:34Z -> {ok:false, code:4001, message:'User rejected'} (one answer).
+
+Panel sheet text, relay dropped (+4-12 s):
+  网络费 | 点击重试 | 速度 | 超快 | 无法连接 Vela 服务 — 请检查网络，稍后会自动重试。 | 滑动以确认 · 确认发送  (.track disabled aria-disabled=true)
+After pass (no tap): +0.1..+4.5 s still 点击重试; ~+6 s 估算中… (auto re-quote; the red cause line still shown); by +13 s (19:02:11Z) 网络费 0.01 xDAI · ≈$0.01, slide enabled.
+S8 refresh tap: button.refresh aria-busy=true disabled for 1.5 s (slide shut meanwhile, old fee kept), then fee + slide enabled.
+
+Panel console (CDP, Chrome's own lines; the web client writes no app-level fee line):
+  19:01:24.538 netfail host=vela-relay-cf.getvela.app POST net::ERR_EMPTY_RESPONSE (2ms)
+  19:01:25.101 netfail host=vela-relay-cf.getvela.app POST net::ERR_EMPTY_RESPONSE (2ms)
+  19:01:28.117 netfail host=vela-relay-cf.getvela.app POST net::ERR_EMPTY_RESPONSE (5ms)
+  19:01:34.862 netfail host=vela-relay-cf.getvela.app POST net::ERR_EMPTY_RESPONSE (4ms)
+  19:01:35.811 netfail host=vela-relay-cf.getvela.app POST net::ERR_EMPTY_RESPONSE (4ms)
+  19:01:47.829 netfail host=vela-relay-cf.getvela.app POST net::ERR_EMPTY_RESPONSE (6ms)
+  19:01:48.137 netfail host=vela-relay-cf.getvela.app POST net::ERR_EMPTY_RESPONSE (2ms)
+
+chaos-ext.log:
+02:56:45 CONFIG {"mode": "blackhole", "latency": 0, "bps": 0, "drop": 1.0, "match": "gnosis|xdai|1rpc"}
+02:59:52 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "gnosis|xdai|1rpc"}
+03:01:20 CONFIG {"mode": "drop", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+03:01:24 DROP vela-relay-cf.getvela.app:443
+03:01:24 DROP vela-relay-cf.getvela.app:443
+03:01:24 DROP vela-relay-cf.getvela.app:443
+03:01:25 DROP vela-relay-cf.getvela.app:443
+03:01:28 DROP vela-relay-cf.getvela.app:443
+03:01:28 DROP vela-relay-cf.getvela.app:443
+03:01:28 DROP vela-relay-cf.getvela.app:443
+03:01:28 DROP vela-relay-cf.getvela.app:443
+03:01:34 DROP vela-relay-cf.getvela.app:443

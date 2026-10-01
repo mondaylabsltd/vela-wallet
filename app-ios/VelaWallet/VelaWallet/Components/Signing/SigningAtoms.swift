@@ -12,6 +12,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 // MARK: - Tone
 
@@ -44,8 +45,16 @@ struct SigningHeaderView: View {
     var onClose: (() -> Void)?
     var closeLabel = ""
 
+    /// The name and the host line under it — the core's `browserSiteLabel`
+    /// (spec 082 RE7): a name that IS its host (ignoring case) is said once,
+    /// with no second line. Replaces 079's F14 comparison, one of five.
+    static func label(name: String, host: String) -> BrowserSiteLabel {
+        browserSiteLabel(title: name, host: host)
+    }
+
     var body: some View {
-        HStack(spacing: Tokens.Space.s12) {
+        let label = Self.label(name: dapp.name, host: dapp.host)
+        return HStack(alignment: .top, spacing: Tokens.Space.s12) {
             if own {
                 // The wallet asking itself: its own mark, never a letter on a disc.
                 VelaMark(size: ExploreGeometry.signingAvatar * 0.6)
@@ -58,33 +67,44 @@ struct SigningHeaderView: View {
                                      size: ExploreGeometry.signingAvatar)
                 }
             }
-            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                Text(verbatim: dapp.name)
+            // Spec 082 RE13 (G12): at 375 pt the host was cut to
+            // "192.168.50.9:…" and the chain chip to "Ethe…". Round 1 gave the
+            // column layout priority, but the fixed chip and the close button
+            // still left it 48–90 pt, and the host was cut after two lines
+            // ("192.16"/"8.50.…", 082 iPhone pass). The chip now sits under
+            // the host, so the column has the whole width between the avatar
+            // and the close: the host — the part a spoofer controls — is
+            // never cut, and the chip keeps its whole name.
+            VStack(alignment: .leading, spacing: Tokens.Space.s4) {
+                Text(verbatim: label.name)
                     .typeRole(Typography.rowTitle.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
-                    .lineLimit(1)
-                // A site whose name IS its host says it once (spec 079 F14).
-                if !dapp.host.isEmpty, dapp.host != dapp.name {
-                    Text(verbatim: dapp.host)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let hostLine = label.hostLine, !hostLine.isEmpty {
+                    Text(verbatim: hostLine)
                         .typeRole(Typography.rowSub.scaled(textScale))
                         .foregroundStyle(theme.fgMuted)
-                        .lineLimit(1)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            }
-            Spacer(minLength: Tokens.Space.s8)
-            HStack(spacing: Tokens.Space.s8) {
-                // The chain's logo; the drawn dot until it lands, and when there is none.
-                RemoteLogoView(urls: [networkLogoUrl].compactMap { $0 }, size: Tokens.Space.s16) {
-                    Circle().fill(network.dot).frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
-                        .frame(width: Tokens.Space.s16, height: Tokens.Space.s16)
+                HStack(spacing: Tokens.Space.s8) {
+                    // The chain's logo; the drawn dot until it lands, and when there is none.
+                    RemoteLogoView(urls: [networkLogoUrl].compactMap { $0 }, size: Tokens.Space.s16) {
+                        Circle().fill(network.dot).frame(width: Tokens.Space.s8, height: Tokens.Space.s8)
+                            .frame(width: Tokens.Space.s16, height: Tokens.Space.s16)
+                    }
+                    Text(verbatim: network.name)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgBase)
                 }
-                Text(verbatim: network.name)
-                    .typeRole(Typography.rowSub.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
+                .padding(.horizontal, Tokens.Space.s12)
+                .frame(height: ExploreGeometry.networkChip)
+                .background(theme.bgSunken, in: Capsule())
+                .fixedSize()
+                .padding(.top, Tokens.Space.s4)
             }
-            .padding(.horizontal, Tokens.Space.s12)
-            .frame(height: ExploreGeometry.networkChip)
-            .background(theme.bgSunken, in: Capsule())
+            .frame(maxWidth: .infinity, alignment: .leading)
             if let onClose {
                 Button(action: onClose) {
                     LucideIcon(.close, size: LucideIconSize.menuRow)

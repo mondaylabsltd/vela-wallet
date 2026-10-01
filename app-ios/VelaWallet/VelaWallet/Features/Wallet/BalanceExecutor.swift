@@ -55,6 +55,12 @@ final class BalanceExecutor {
     /// worst endpoint takes.
     var onChainAssets: ([[String: Any]]) -> Void = { _ in }
 
+    /// One chain's registry facts — its stablecoins and wrapped coin — for
+    /// the core's read plan (spec 082 RE9). `nil` (the registry could not be
+    /// reached, or none is wired) reads the native coin and the person's own
+    /// tokens only: silence, never an invented list.
+    var chainFacts: (Int) async -> ChainTokens.Facts? = { _ in nil }
+
     private let store: VelaStore
     private let pool: RpcPool
     /// The Chainlink map, cached across refreshes. One instance, because twelve
@@ -90,10 +96,12 @@ final class BalanceExecutor {
             var tokens: [[String: Any]] = []
             var anyFailed = false
             for chainId in chains {
+                let facts = await chainFacts(chainId)
                 let result = await TokenReads.read(
                     address: address, chainId: chainId,
                     tokens: customTokens(chainId: chainId), pool: pool,
-                    chainlinkPrices: chainlinkPrices
+                    chainlinkPrices: chainlinkPrices,
+                    stables: facts?.stableRefs ?? [], wrappedNative: facts?.wrappedNative
                 )
                 tokens.append(contentsOf: result.tokens)
                 anyFailed = anyFailed || result.failed
@@ -144,7 +152,7 @@ final class BalanceExecutor {
             // See `ContactsExecutor`: logged, not trapped. `fetch_errored` is
             // the answer that leaves the core able to retry rather than stalled
             // holding the home screen blank.
-            print("[vela-wallet] balance_dashboard: unhandled operation \(operation["type"] ?? "?")")
+            VelaLog.failure(.balance, kind: "unhandled_operation", "\(operation["type"] ?? "?")")
             return CoreJSON.string([
                 "type": "fetch_errored", "address": "", "pull": false,
             ])
@@ -176,10 +184,16 @@ final class BalanceExecutor {
         let results = await withTaskGroup(of: TokenReads.ChainResult.self) { group in
             for chainId in chainIds() {
                 let tokens = customTokens(chainId: chainId)
+                let facts = chainFacts
                 group.addTask { [pool] in
-                    await TokenReads.read(address: address, chainId: chainId,
-                                          tokens: tokens, pool: pool,
-                                          chainlinkPrices: chainlinkPrices)
+                    // The registry's stablecoins and wrapped coin join the
+                    // plan (spec 082 RE9) — USDC on Base is counted.
+                    let registry = await facts(chainId)
+                    return await TokenReads.read(address: address, chainId: chainId,
+                                                 tokens: tokens, pool: pool,
+                                                 chainlinkPrices: chainlinkPrices,
+                                                 stables: registry?.stableRefs ?? [],
+                                                 wrappedNative: registry?.wrappedNative)
                 }
             }
             var collected: [TokenReads.ChainResult] = []
@@ -199,6 +213,11 @@ final class BalanceExecutor {
         // the held set, and a set one refresh out of date is a token watched
         // that is no longer there — or worse, one that is not yet.
         held.record(address: address, tokens: results.flatMap(\.tokens))
+        let failedChains = results.filter(\.failed).map(\.chainId)
+        if !failedChains.isEmpty {
+            // Which chains did not answer — never the address (FR-019).
+            VelaLog.failure(.balance, kind: "chains_failed", "chains=\(failedChains.map(String.init).joined(separator: ","))")
+        }
 
         return CoreJSON.string([
             "type": "fetch_settled",

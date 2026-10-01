@@ -1,0 +1,14 @@
+EX8 · G19 — Sign, stop the worker, approve. No CDP session on the worker at any time.
+Stop method: CDP on the wallet TAB (an extension page): ServiceWorker.enable -> stopWorker(versionId 3, running) -> disable -> disconnect.
+page posted personal_sign         1790620984384   (id …:6)
+panel sheet shown                 1790620984399
+worker (old)                      [vela-sw] 18:43:04.386Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+                                  [vela-sw] 18:43:04.387Z req.shown tab=291188710
+stopWorker sent                   1790620984567   (old target 78112577 gone; new worker 96E45710 up within 0.3 s, woken by the page's vela.doc reconnect)
+worker (new)                      [vela-sw] 18:43:05.430Z panel.up window=291188707
+                                  [vela-sw] 18:43:05.431Z req.resumed tab=291188710 state=shown
+                                  [vela-sw] 18:43:05.431Z sw.start records=1 recovered=1
+4 s later: dApp got NO answer for …:6, page text has no "message channel closed"; the panel still shows the one sheet
+slide (approve)                   [vela-sw] 18:43:25.960Z req.claim phase=sign live=true ; 18:43:25.989Z req.answered delivered=true outcome=ok
+dApp                              exactly 1 res for …:6: ok (a signature; value not recorded)
+storage.session vela.req.*        none afterwards

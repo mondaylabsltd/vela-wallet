@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Button from '$lib/ui/Button.svelte';
 	import BlockList from './BlockList.svelte';
 	import FeeRow from './FeeRow.svelte';
 	import SignerRow from './SignerRow.svelte';
@@ -75,7 +76,12 @@
 		the person merely failed to use.
 	-->
 	{#if model.dismissOnly}
-		<button type="button" class="dismiss" onclick={() => onclose?.()}>{model.dismissOnly}</button>
+		<!-- RB12 (G16): the shared Button — bordered, full width, the control height. -->
+		<div class="dismiss">
+			<Button variant="secondary" shape="rounded" onclick={() => onclose?.()}>
+				{model.dismissOnly}
+			</Button>
+		</div>
 	{:else}
 		<SlideToConfirm
 			hint={model.confirm.hint}
@@ -88,15 +94,10 @@
 
 <style>
 	.dismiss {
-		width: 100%;
-		padding: var(--space-md) var(--space-lg);
-		border: var(--border-hairline) solid var(--color-border-strong);
-		border-radius: var(--radius-lg);
-		background: transparent;
-		color: var(--color-text-primary);
-		font-size: var(--font-size-body);
-		font-weight: var(--font-weight-semibold);
-		cursor: pointer;
+		display: flex;
+	}
+	.dismiss > :global(*) {
+		flex: 1;
 	}
 	.blocks {
 		display: flex;

@@ -53,7 +53,9 @@ struct BrowserFailureView: View {
     /// The host that would not load.
     let detail: String
     let retry: String
-    /// An attempt is running: the button says `retryingLabel` and takes no tap.
+    /// An attempt is running: the button is busy — spinner and
+    /// `retryingLabel`, full colour, taps ignored — never dimmed (spec 082
+    /// RE5: busy is not disabled).
     var retrying = false
     var retryingLabel = ""
     var onRetry: () -> Void = {}
@@ -79,8 +81,8 @@ struct BrowserFailureView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, Tokens.Space.s24)
             }
-            VelaButton(title: retrying && !retryingLabel.isEmpty ? retryingLabel : retry,
-                       kind: .secondary, enabled: !retrying, action: onRetry)
+            VelaButton(title: retry, kind: .secondary, loading: retrying,
+                       busyTitle: retryingLabel.isEmpty ? nil : retryingLabel, action: onRetry)
                 .padding(.horizontal, Tokens.Space.s24)
                 .padding(.top, Tokens.Space.s8)
                 .accessibilityIdentifier("explore.loadFailed.retry")

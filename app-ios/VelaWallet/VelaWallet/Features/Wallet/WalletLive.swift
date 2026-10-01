@@ -75,14 +75,26 @@ enum WalletLive {
     ) -> WalletHomeModel {
         var copy = model
         let display = Display.from(currency)
-        copy.balance = balance(view, display: display, fallback: model.balance)
+        copy.balance = balance(view, display: display, fallback: model.balance, loc: loc)
         copy.assetRows = assetRows(view, display: display)
         if let feed {
             copy.activityGroups = activityGroups(feed, loc: loc, hidden: view.hidden)
             copy.activitySection = section(copy.activityGroups, read: feedRead,
-                                           fallback: model.activitySection)
+                                           fallback: model.activitySection,
+                                           empty: homeEmpty(feed, fallback: model.activitySection, loc: loc))
         }
         return copy
+    }
+
+    /// The home Activity's empty line, as the core chose it (spec 082 RG5):
+    /// "nothing yet" with its caption, or — the feed narrowed to one chain —
+    /// "nothing on this network" alone.
+    static func homeEmpty(_ feed: FeedViewWire, fallback: SectionModel, loc: Loc) -> SectionEmptyModel {
+        let key = feed.homeEmptyKey
+        return SectionEmptyModel(
+            title: loc.t(key),
+            caption: key == "home.emptyNoActivity" ? (fallback.empty?.caption ?? loc.t("home.emptySubtitle")) : ""
+        )
     }
 
     /// The section header, kept as drawn except for its mode.
@@ -92,13 +104,14 @@ enum WalletLive {
     /// been read and held nothing, and the **skeleton** until then. "Nothing has
     /// happened here" is a claim, and it must not be made before anybody looked.
     private static func section(
-        _ groups: [ActivityGroupModel], read: Bool, fallback: SectionModel
+        _ groups: [ActivityGroupModel], read: Bool, fallback: SectionModel,
+        empty: SectionEmptyModel? = nil
     ) -> SectionModel {
         SectionModel(
             title: fallback.title,
             action: fallback.action,
             mode: !groups.isEmpty ? .rows : (read ? .empty : .loading),
-            empty: fallback.empty
+            empty: empty ?? fallback.empty
         )
     }
 
@@ -107,7 +120,8 @@ enum WalletLive {
     static func balance(
         _ view: BalanceViewWire,
         display: Display = .usd,
-        fallback: BalanceModel
+        fallback: BalanceModel,
+        loc: Loc? = nil
     ) -> BalanceModel {
         var model = BalanceModel(
             label: fallback.label,
@@ -116,7 +130,7 @@ enum WalletLive {
             integer: nil,
             decimals: nil,
             liveText: nil,
-            status: status(view, fallback: fallback),
+            status: status(view, fallback: fallback, loc: loc),
             a11yHide: fallback.a11yHide,
             a11yShow: fallback.a11yShow
         )
@@ -145,18 +159,20 @@ enum WalletLive {
     }
 
     /// The line under the figure. A partial total says so; a refresh over a
-    /// cached figure says that instead.
+    /// cached figure says that instead — in `home.balanceStale`, as the other
+    /// three clients say it. The drawn fixture's own status was nil on the
+    /// live home, which left a ⚠ › line with no words (082 X-DEADPROXY).
     private static func status(
         _ view: BalanceViewWire,
-        fallback: BalanceModel
+        fallback: BalanceModel,
+        loc: Loc?
     ) -> BalanceStatusModel? {
+        let text = loc?.t("home.balanceStale") ?? fallback.status?.text ?? ""
         if view.balancePartial || !view.failedChainIds.isEmpty {
-            return BalanceStatusModel(kind: .warning,
-                                      text: fallback.status?.text ?? "")
+            return BalanceStatusModel(kind: .warning, text: text)
         }
         if view.refreshing || view.notice == .stillUpdating {
-            return BalanceStatusModel(kind: .refreshing,
-                                      text: fallback.status?.text ?? "")
+            return BalanceStatusModel(kind: .refreshing, text: text)
         }
         return nil
     }
@@ -388,24 +404,59 @@ extension WalletLive {
             .map { ActivityGroupModel(label: $0.label, rows: $0.rows) }
     }
 
+    /// One row, from the core's `kind`, `status` and `site` (spec 082 RG1,
+    /// RG2) — nothing here guesses what a record is or how it ended.
+    ///
+    /// A dApp's transaction is "dApp 交易", under the site that asked (else
+    /// its counterparty, else its chain), with an amount only when it moved
+    /// the native coin; any row not confirmed says so first — "处理中 · …",
+    /// "失败 · …" — so a pending or failed op is never read as done.
     static func activityRow(
         _ item: FeedItemWire, loc: Loc, hidden: Bool
     ) -> ActivityRowModel {
         let incoming = item.direction == .in
-        let amount = hidden
-            ? WalletFixtures.mask
-            : (incoming ? "+" : "\u{2212}") + compactAmount(item.value, batch: item.batch)
+        let dapp = item.kind == .dappTx
+        let figure: String
+        if dapp {
+            // No value moved: no amount, rather than a "−0".
+            figure = item.value.map { "\u{2212}" + compactAmount($0) } ?? ""
+        } else {
+            figure = (incoming ? "+" : "\u{2212}") + compactAmount(item.value, batch: item.batch)
+        }
+        let amount = hidden && !figure.isEmpty ? WalletFixtures.mask : figure
+        let base = dapp ? dappSubject(item) : counterparty(item, loc: loc)
         return ActivityRowModel(
-            kind: incoming ? .received : .sent,
-            title: loc.t(incoming ? "history.labelReceived" : "history.labelSent"),
-            subtitle: counterparty(item, loc: loc),
+            kind: dapp ? .dapp : (incoming ? .received : .sent),
+            title: dapp
+                ? loc.t("history.txLabelDappTx")
+                : loc.t(incoming ? "history.labelReceived" : "history.labelSent"),
+            subtitle: statusPrefix(item.status, loc: loc).map { "\($0) · \(base)" } ?? base,
             amount: amount,
             unit: item.symbol,
             positive: incoming,
-            masked: hidden,
+            masked: hidden && !figure.isEmpty,
             badgeColor: chainColor(item.chainId),
-            badgeLogoURL: Marks.chainLogoURL(item.chainId)
+            badgeLogoURL: Marks.chainLogoURL(item.chainId),
+            itemId: item.id
         )
+    }
+
+    /// Who a dApp row is about: the site that asked (`host[:port]`, verbatim),
+    /// else its counterparty's name or short address, else its chain.
+    private static func dappSubject(_ item: FeedItemWire) -> String {
+        if let site = item.site, !site.isEmpty { return site }
+        if let alias = item.alias, !alias.isEmpty { return alias }
+        if let counterparty = item.counterparty, !counterparty.isEmpty { return AddressText.short(counterparty) }
+        return ChainCatalog.meta(item.chainId)?.displayName ?? String(item.chainId)
+    }
+
+    /// "处理中" / "失败" for a row that is not confirmed; `nil` for one that is.
+    static func statusPrefix(_ status: FeedTxStatusWire, loc: Loc) -> String? {
+        switch status {
+        case .confirmed: nil
+        case .pending: loc.t("componentsTx.detail.statusPending")
+        case .failed: loc.t("componentsTx.detail.statusFailed")
+        }
     }
 
     /// 至 / 来自 somebody, named if anybody could name them.

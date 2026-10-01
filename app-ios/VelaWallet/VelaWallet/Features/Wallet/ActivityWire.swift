@@ -28,6 +28,13 @@ enum FeedDirectionWire: String, Decodable {
 
 enum FeedTxStatusWire: String, Decodable {
     case pending, confirmed, failed
+
+    /// A lifecycle this build has never heard of reads as pending — never as
+    /// confirmed, and never as a view that fails to decode.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = FeedTxStatusWire(rawValue: raw) ?? .pending
+    }
 }
 
 enum FeedTxKindWire: String, Decodable {
@@ -36,6 +43,27 @@ enum FeedTxKindWire: String, Decodable {
     case signMessage = "sign_message"
     case signTypedData = "sign_typed_data"
     case connect
+
+    /// A kind this build has never heard of reads as a send, the core's own
+    /// default for an untyped record — the row still shows, with its status.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = FeedTxKindWire(rawValue: raw) ?? .send
+    }
+}
+
+/// Who a row's `counterparty` is (spec 082 RJ16, G52): the person the money
+/// went to, or the contract a dApp's call went to — which the detail labels
+/// `componentsUi.signing.interactingLabel`, never "To". The core decides.
+enum FeedCounterpartyRoleWire: String, Decodable {
+    case recipient, contract
+
+    /// A role this build has never heard of reads as the recipient, the
+    /// core's own default — the row still shows, with its address.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = FeedCounterpartyRoleWire(rawValue: raw) ?? .recipient
+    }
 }
 
 enum FeedBatchKindWire: String, Decodable {
@@ -65,6 +93,12 @@ struct FeedTxRecordWire: Decodable, Equatable {
     /// `nil` = a legacy untyped record, which the core reads as `send`.
     let kind: FeedTxKindWire?
     let usd: String?
+    /// The origin a `dapp_tx` request arrived from (spec 082 RG1, 083 H2);
+    /// `nil` for every other kind.
+    var dappUrl: String? = nil
+    /// The call's `data`, for a `dapp_tx` record (spec 082 RJ16) — what the
+    /// core reads the counterparty from.
+    var callData: String? = nil
 }
 
 struct FeedBatchTransferWire: Decodable, Equatable {
@@ -118,6 +152,16 @@ struct FeedItemWire: Decodable, Equatable {
     let dayStartMs: Double
     let txHash: String?
     let batch: FeedBatchWire?
+    /// What the row is (spec 082 RG1): `send` (a folded batch too),
+    /// `receive` or `dappTx`. The shell draws from this and never guesses.
+    var kind: FeedTxKindWire = .send
+    /// The record's lifecycle; the tracker alone moves it off `pending`.
+    var status: FeedTxStatusWire = .confirmed
+    /// `dappTx` only: `host[:port]` of the site that asked.
+    var site: String? = nil
+    /// Whether `counterparty` got the money or is the contract a call went
+    /// to (spec 082 RJ16). Always `recipient` except on a `dappTx` row.
+    var counterpartyRole: FeedCounterpartyRoleWire = .recipient
 }
 
 /// A date header or an item, in render order.
@@ -170,4 +214,9 @@ struct FeedViewWire: Decodable, Equatable {
     /// `nil` while balance privacy is on — the core withholds it there rather
     /// than trusting the shell to mask it.
     let toast: FeedToastWire?
+    /// The corpus key of History's empty line (spec 082 RG5), chosen by the
+    /// core from the chain filter. Loading vs empty stays the shell's.
+    var historyEmptyKey: String = "history.emptyTitle"
+    /// The corpus key of the home Activity's empty line, chosen the same way.
+    var homeEmptyKey: String = "home.emptyNoActivity"
 }

@@ -1,0 +1,44 @@
+DX-W1 second run (W1b) — flip to blackhole relay+gnosis at the verdict
+nonce before 45
+[vela-wallet] 03:32:45.310 relay: submitting chain=100 op=0xaddcdc94f0 initCode=no callData=452B
+[vela-wallet] 03:33:15.628 relay: submit verdict=maybe_sent hash=0xaddcdc94f0 attempts=1 in=30318 ms
+[vela-wallet] 03:33:15.629 tracker: op=0xaddcdc94f0 handed over chain=100 maybe_sent=true submit_block=Some(48487318)
+[vela-wallet] 03:33:25.621 dapp: op=0xaddcdc94f0 answered with its tx hash after the receipt wait
+[vela-wallet] 03:33:25.662 tracker: holdings moved on chain=100; balances re-read
+[vela-wallet] 03:37:34.487 relay: submitting chain=100 op=0x9f9157815f initCode=no callData=452B
+[vela-wallet] 03:38:04.982 relay: submit verdict=maybe_sent hash=0x9f9157815f attempts=1 in=30494 ms
+[vela-wallet] 03:38:04.986 tracker: op=0x9f9157815f handed over chain=100 maybe_sent=true submit_block=Some(48487376)
+chaos: 03:33:15 CONFIG blackhole match=vela-relay|gnosis|xdai|1rpc; 03:33:24 MUTE vela-relay-cf.getvela.app:443 (tunnels opened under mute during the leftover latency=9000 sleep, so not cut) — the relay's receipt reached the wallet at 03:33:25 (harness artifact)
+page: eth_sendTransaction {ok:true, result:"0xd8eee45b9883bc21f431ab76249bf2cb9bbf181e3518ae879e986edbc7a850fe"} (tx hash)
+chain: block 48487329 op 0xaddcdc94f003bf62cfc4fa2f448ae8d1ff20418df8acf3452c5c8df3c7fb2de3 tx 0xd8eee45b…a850fe nonce 45 success 1; nonce after 46
+
+T181 / DX-LD3 run (W1c)
+nonce before 03:36:22 = 46
+03:36:48 chaos mute vela-relay latency=0; slide 03:36:51
+[vela-wallet] 03:37:34.487 relay: submitting chain=100 op=0x9f9157815f initCode=no callData=452B
+[vela-wallet] 03:38:04.982 relay: submit verdict=maybe_sent hash=0x9f9157815f attempts=1 in=30494 ms
+[vela-wallet] 03:38:04.986 tracker: op=0x9f9157815f handed over chain=100 maybe_sent=true submit_block=Some(48487376)
+03:38:05.173 chaos blackhole match=vela-relay|gnosis|xdai|1rpc latency=0 (0.2 s after the verdict)
+03:38:09.2 Activity: dApp 交易 · 处理中 · 127.0.0.1:8137 · −0.001 xDAI (4.2 s after the verdict)
+03:38:44 Cmd-Q (quit; no hold, nothing in flight)
+03:39:08 relaunch (desk-post-T181.err):
+[vela-wallet] core: tx_tracker booting
+[vela-wallet] 03:39:23.795 net: offline (chain reads stopped answering)
+[vela-wallet] 03:39:24.226 net: came back
+[vela-wallet] 03:39:31.747 tracker: op=0x9f9157815f status unavailable
+[vela-wallet] 03:39:45.721 tracker: op=0x9f9157815f find-event chain=100 from=None to=None head=None → head only
+[vela-wallet] 03:39:46.738 net: offline (chain reads stopped answering)
+[vela-wallet] 03:39:47.583 net: came back
+[vela-wallet] 03:40:03.070 tracker: op=0x9f9157815f status unavailable
+[vela-wallet] 03:40:10.514 net: offline (chain reads stopped answering)
+[vela-wallet] 03:40:10.750 net: came back
+[vela-wallet] 03:40:33.037 tracker: op=0x9f9157815f find-event chain=100 from=None to=None head=None → head only
+[vela-wallet] 03:40:37.118 net: offline (chain reads stopped answering)
+03:40:5x Activity after relaunch: 处理中 row present; detail 交易详情 / dApp 交易 [处理中] / −0.001 xDAI / 接收方 觉得九点半 / 网络 Gnosis / 日期 今天 03:38 / 发起方 127.0.0.1:8137 / 在区块浏览器中查看 / 删除记录
+chain (checked 03:41:19, relay+gnosis still faulted for the app): block 48487385 op 0x9f9157815f434b48391f733d60b403aceaf508bd66fdffb859a093e2c5f50850 tx 0xbe17d3b9c9d32b15ea4ad385adadcd3e829adec1b6a370fc345ea89179808173 nonce 46 success 1; nonce 47
+03:41:27.3 chaos pass
+[vela-wallet] 03:41:32.516 tracker: op=0x9f9157815f find-event chain=100 from=None to=None head=Some(48487430) → head only
+[vela-wallet] 03:41:32.673 tracker: holdings moved on chain=100; balances re-read
+[vela-wallet] 03:41:34.818 tracker: op=0x9f9157815f find-event chain=100 from=Some(48487376) to=Some(48487430) head=Some(48487430) → logs
+[vela-wallet] 03:41:35.185 tracker: op=0x9f9157815f status=Included
+≤03:41:39 row and detail read 已确认 (chip) with 哈希 0xbe17d3b9…, no tap

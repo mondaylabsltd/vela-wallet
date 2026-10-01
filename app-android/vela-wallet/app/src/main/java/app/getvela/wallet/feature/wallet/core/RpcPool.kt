@@ -116,7 +116,7 @@ class RpcPool(
         kind: RpcKind = RpcKind.Rpc,
     ): RpcResult {
         val callId = "c${nextId.incrementAndGet()}"
-        val waiting = Waiting(RpcPayload(method, params))
+        val waiting = Waiting(RpcPayload(method, params, chainId))
         calls[callId] = waiting
         val asked = System.currentTimeMillis()
         try {
@@ -132,11 +132,14 @@ class RpcPool(
             )
             return when (val verdict = waiting.settled.await()) {
                 is RpcCallVerdict.Respond ->
-                    RpcResult.Body(waiting.bodies[verdict.url] ?: JSONObject())
+                    RpcResult.Body(waiting.bodies[verdict.url] ?: JSONObject(), maybeDelivered = verdict.maybe_delivered)
+                // The endpoint's own answer rides along: a caller that judges
+                // nothing (the tracker's find-event, spec 082 T180) hands the
+                // error member to the core as it came.
                 is RpcCallVerdict.RangeCap ->
-                    RpcResult.RangeCapped(verdict.max_span)
+                    RpcResult.RangeCapped(verdict.max_span, waiting.bodies[verdict.url])
                 is RpcCallVerdict.Failed ->
-                    RpcResult.Failed(rateLimited = verdict.rate_limited)
+                    RpcResult.Failed(rateLimited = verdict.rate_limited, maybeDelivered = verdict.maybe_delivered)
                 // These two answer a different question and never a `call`.
                 is RpcCallVerdict.BundlerBase -> RpcResult.Failed(rateLimited = false)
                 is RpcCallVerdict.BestRpcUrl -> RpcResult.Failed(rateLimited = false)
@@ -197,10 +200,18 @@ class RpcPool(
 
 /** What a routed call ended as, for a caller that must not see endpoints. */
 sealed class RpcResult {
-    data class Body(val json: JSONObject) : RpcResult()
+    /**
+     * [maybeDelivered] (spec 082 RA1): an earlier endpoint of this call may
+     * have acted on it too — what a submit's "may have been sent" rests on.
+     */
+    data class Body(val json: JSONObject, val maybeDelivered: Boolean = false) : RpcResult()
 
-    /** The endpoint capped the block range; ask again within `maxSpan`. */
-    data class RangeCapped(val maxSpan: Double) : RpcResult()
+    /**
+     * The endpoint capped the block range; ask again within `maxSpan`.
+     * [json] is the body the endpoint answered with (its `error` member), for
+     * a caller that hands the core the answer as it came.
+     */
+    data class RangeCapped(val maxSpan: Double, val json: JSONObject? = null) : RpcResult()
 
     /**
      * Nothing answered.
@@ -209,5 +220,5 @@ sealed class RpcResult {
      * back in a moment", and a screen that shows them the same way is telling a
      * person their wallet is broken when it is busy.
      */
-    data class Failed(val rateLimited: Boolean) : RpcResult()
+    data class Failed(val rateLimited: Boolean, val maybeDelivered: Boolean = false) : RpcResult()
 }

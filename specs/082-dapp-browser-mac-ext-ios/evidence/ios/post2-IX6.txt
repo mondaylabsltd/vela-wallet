@@ -1,0 +1,18 @@
+# IX6 (relaunch 07:54:03 with every Gnosis endpoint black-holed; scratch dApp on Gnosis; Send 0.001 tapped 07:55:24.0; pass 07:59:59.1; ✕ 08:01:03)
+# fee row text polled from the accessibility tree:
+07:56:57 … 07:59:31 (every ~12 s): 网络费 估算中...  (no reason, 4 min 7 s after the tap)
+08:00:19 (+20.2 s after pass, poll granularity ~5 s): ~0.01 xDAI · ≈¥0.07
+# VelaLog [fee]/[rpc]/[sign]/[relay]/[net] lines 07:55:10–08:01:10:
+(none)
+# chaos: the pool's walk (one HOLE host per ~8 s, several walks interleaved), first/last lines:
+07:55:24 HOLE rpc.gnosischain.com:443
+07:55:26 HOLE lb.routeme.sh:443
+07:55:26 HOLE web3endpoints.com:443
+07:55:32 HOLE gnosis-rpc.publicnode.com:443
+…
+07:59:57 HOLE rpc.gnosischain.com:443
+07:59:58 HOLE web3endpoints.com:443
+07:59:58 HOLE lb.routeme.sh:443
+07:59:59 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "."}
+08:00:10 PASS vela-relay-cf.getvela.app:443 1ms
+# dApp: send 0.001 ok:false code 4001 'User rejected the request' done 08:01:03 (once)

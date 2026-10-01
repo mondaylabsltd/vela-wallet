@@ -190,7 +190,7 @@
       "verifiedAbiSummary": "Il contratto è verificato sul block explorer e i suoi parametri si decodificano per intero, ma nessun descrittore ERC-7730 ne dà il significato.",
       "verifiedAbiWarning": "Nessun descrittore ERC-7730 per questo contratto — i valori qui sopra sono una decodifica diretta dell’ABI verificata on-chain. Controllali.",
       "bestEffortSummary": "Chiamata a {{fn}} — letta dalla firma pubblica della funzione, non da un descrittore verificato.",
-      "simUnavailableWarning": "Non è stato possibile simulare questa transazione (l’RPC ha rifiutato) — Vela non può prevedere che cosa farebbe. A meno che tu non ti fidi completamente di questo sito, rifiutala.",
+      "simUnavailableWarning": "Vela non ha potuto verificare cosa fa questa transazione. Controllala prima di firmare.",
       "drainSummary": "Il sito la presenta come una richiesta gratuita, ma la simulazione mostra asset che escono dal tuo portafoglio.",
       "drainWarning": "Escono asset che il sito non ha mai menzionato — assomiglia molto a uno svuotamento. Rifiuta.",
       "selectorNotListed": "Impossibile decodificare — nessun descrittore ERC-7730 e selettore non catalogato ({{bytes}} byte)",
@@ -239,6 +239,8 @@
       "selfCallBlockedLegBody": "Il passaggio {{index}} di questa richiesta cambierebbe chi controlla il tuo wallet ({{function}}). Firmarla una volta può consegnarlo a qualcun altro, quindi Vela rifiuta l’intera richiesta. Non è stato firmato nulla.",
       "selfCallBlockedSafeTx": "Questa richiesta chiede alla tua chiave di autorizzare una transazione Safe da eseguire più tardi. Vela la rifiuta: una firma così può essere usata senza di te. Non è stato firmato nulla.",
       "stillConfirming": "Non ancora sulla chain. Vela continua a controllare: non inviarla di nuovo.",
+      "maybeSent": "Potrebbe essere già stata inviata. Vela continua a controllare: non inviarla di nuovo.",
+      "refused": "La rete l’ha rifiutata: non è stato inviato nulla.",
       "unknownOutcome": "Ancora non confermata dopo 24 ore.",
       "openSigner": "Conferma nella pagina di firma",
       "signerDown": "Impossibile aprire la pagina di firma. Controlla la connessione."

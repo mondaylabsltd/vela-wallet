@@ -30,4 +30,19 @@ class WrappedNativeTest {
         assertFalse(wrappedNativeIsTheNative(56u, "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"))
         assertFalse(wrappedNativeIsTheNative(42220u, "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"))
     }
+
+    /**
+     * Spec 082 RE9: the balance walk no longer asks this itself — the core's
+     * `balanceReadPlan` leaves out Celo's "wrapped" GoldToken, and a custom
+     * entry for it, because the native slot already reads that balance.
+     */
+    @Test
+    fun theReadPlanReadsCelosGoldTokenOnceAsTheNative() {
+        val gold = "0x471EcE3750Da237f93B8E339c536989b8978a438"
+        val custom = """[{"contract":"$gold","symbol":"CELO","name":"Celo","decimals":18}]"""
+        val plan = uniffi.vela_core_uniffi.balanceReadPlan(42220u, "", gold, custom)
+        assertTrue(plan.map { it.kind } == listOf("native"))
+        val weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        assertTrue(uniffi.vela_core_uniffi.balanceReadPlan(1u, "", weth, "").map { it.kind } == listOf("native", "wrapped"))
+    }
 }

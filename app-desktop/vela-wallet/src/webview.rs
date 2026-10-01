@@ -85,6 +85,10 @@ const META_JS: &str = r#"
   };
   document.addEventListener('DOMContentLoaded', meta);
   window.addEventListener('load', meta);
+  // A page restored from the back-forward cache runs neither: it says what
+  // it is called when it is shown again (spec 082 G70, a stale tab title
+  // after Back).
+  window.addEventListener('pageshow', (event) => { if (event.persisted) meta(); });
 })();
 "#;
 
@@ -559,11 +563,38 @@ pub fn navigate(url: &str) {
     }
 }
 
-/// Back and forward, through the engine's own history (083 W15) — the pair
-/// wry has had since 0.56, and the one [`history`] reads. Asked at the click,
-/// not from the arrow's last drawing: macOS has no event for a `pushState`,
-/// so an arrow drawn a moment ago can be stale. `true` when the engine had
-/// somewhere to go and was sent there.
+thread_local! {
+    /// How often the wallet took the keyboard back — for the tests.
+    static FOCUS_ASKS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Give the keyboard back to the wallet's own view (spec 082 G41).
+///
+/// A page that holds focus is WebKit's first responder, and AppKit sends it
+/// every key — focusing a gpui element changes nothing there. So a typed URL
+/// landed in a dApp's field and two pastes ran together in the page. wry's
+/// `focus_parent` makes gpui's view the first responder again; a click into
+/// the page hands the keyboard back to WebKit by itself.
+pub fn focus_parent() {
+    FOCUS_ASKS.with(|asks| asks.set(asks.get() + 1));
+    with_view(|view| {
+        let _ = view.focus_parent();
+    });
+}
+
+/// How many times [`focus_parent`] was asked on this thread.
+#[cfg(test)]
+pub fn focus_parent_asks() -> u64 {
+    FOCUS_ASKS.with(std::cell::Cell::get)
+}
+
+/// Back and forward: the engine's own history (spec 082 RD6, 083 W15) — wry's
+/// `go_back` / `go_forward`, not a script in the page: a page that overrides
+/// `history.back` cannot keep the person on it, and a page that has not
+/// loaded (a failed first load) has no script to run one. Asked at the
+/// click, not from the arrow's last drawing: macOS has no event for a
+/// `pushState`, so an arrow drawn a moment ago can be stale. `true` when the
+/// engine had somewhere to go and was sent there.
 pub fn back() -> bool {
     let mut went = false;
     with_view(|view| {
@@ -580,12 +611,47 @@ pub fn forward() -> bool {
     went
 }
 
+/// Whether the one webview has been built yet — for a log line.
+#[must_use]
+pub fn built() -> bool {
+    BROWSER.with(|slot| slot.borrow().is_some())
+}
+
+/// What the engine says about itself (spec 082 RD3, RD6).
+pub struct Engine {
+    /// Its load state — `None` where it cannot be read (WebView2: the
+    /// Windows build stays probe-only).
+    pub sample: Option<vela_core::app::browser_load::EngineSample>,
+    pub can_back: bool,
+    pub can_forward: bool,
+    /// How many entries sit behind the current one in WebKit's back list
+    /// (spec 082 RJ5): the per-tab Back floor is read against it. `None`
+    /// where it cannot be read (WebView2).
+    pub back_len: Option<usize>,
+}
+
+/// One poll of the engine. `None` before the webview is built.
+#[must_use]
+pub fn engine() -> Option<Engine> {
+    BROWSER.with(|slot| {
+        let slot = slot.borrow();
+        let view = &slot.as_ref()?.view;
+        Some(Engine {
+            sample: engine_sample(view),
+            can_back: view.can_go_back().unwrap_or(false),
+            can_forward: view.can_go_forward().unwrap_or(false),
+            back_len: back_len(view),
+        })
+    })
+}
+
 /// Forget every entry of the engine's history but the page on screen, which
 /// is the tab's first page, numbered `floor` (083 W15). One view serves every
 /// tab, so the other entries are other tabs' pages. On Windows the engine is
 /// asked, and [`Load::HistoryFloor`] brings its answer. A refusal is only
 /// logged: the arrows then follow the engine as before 083. macOS has no such
 /// call, and the page counts the tab's entries instead.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn forget_history_behind(floor: u64) {
     #[cfg(windows)]
     with_view(|view| {
@@ -608,6 +674,7 @@ pub fn forget_history_behind(floor: u64) {
 /// Whether the engine can go back / forward (083 W15): the arrows' state,
 /// from the engine's own history, never the page's word.
 #[must_use]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn history() -> [bool; 2] {
     BROWSER.with(|slot| {
         slot.borrow().as_ref().map_or([false, false], |browser| {
@@ -617,6 +684,69 @@ pub fn history() -> [bool; 2] {
             ]
         })
     })
+}
+
+/// WKWebView's `backForwardList.backList.count` — what one webview shared
+/// by every tab has behind the page it shows (spec 082 RJ5). Same pointer
+/// and thread as [`engine_sample`]. Same-document entries (an SPA's
+/// `pushState`) count, which a count of commits would miss.
+#[cfg(target_os = "macos")]
+fn back_len(view: &wry::WebView) -> Option<usize> {
+    use wry::WebViewExtMacOS as _;
+    let webview = view.webview();
+    let raw = std::ptr::from_ref(&*webview)
+        .cast::<objc2::runtime::AnyObject>()
+        .cast_mut();
+    // SAFETY: `raw` is the live WKWebView wry owns for as long as `view`;
+    // `backForwardList` never returns nil for a live view (checked anyway),
+    // `backList` is an NSArray, and `count` takes no arguments.
+    unsafe {
+        let list: *mut objc2::runtime::AnyObject = objc2::msg_send![raw, backForwardList];
+        if list.is_null() {
+            return None;
+        }
+        let back: *mut objc2::runtime::AnyObject = objc2::msg_send![list, backList];
+        if back.is_null() {
+            return None;
+        }
+        let count: usize = objc2::msg_send![back, count];
+        Some(count)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn back_len(_view: &wry::WebView) -> Option<usize> {
+    None
+}
+
+/// WKWebView's `isLoading`, `estimatedProgress` and `URL` — the facts wry's
+/// callbacks leave out (it reports no `didFail*`). Read through the same
+/// pointer [`view_url`] uses, on the main thread, where the view lives.
+#[cfg(target_os = "macos")]
+fn engine_sample(view: &wry::WebView) -> Option<vela_core::app::browser_load::EngineSample> {
+    use wry::WebViewExtMacOS as _;
+    let webview = view.webview();
+    let raw = std::ptr::from_ref(&*webview)
+        .cast::<objc2::runtime::AnyObject>()
+        .cast_mut();
+    // SAFETY: `raw` is the live WKWebView wry owns for as long as `view`;
+    // both are property getters with no arguments.
+    let (loading, progress): (objc2::runtime::Bool, f64) = unsafe {
+        (
+            objc2::msg_send![raw, isLoading],
+            objc2::msg_send![raw, estimatedProgress],
+        )
+    };
+    Some(vela_core::app::browser_load::EngineSample {
+        loading: loading.as_bool(),
+        progress,
+        url: view_url(view),
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn engine_sample(_view: &wry::WebView) -> Option<vela_core::app::browser_load::EngineSample> {
+    None
 }
 
 /// Load the page on screen again. `true` when a load of it is under way, so
@@ -697,7 +827,34 @@ fn clear_profile_on_disk() -> bool {
 /// The document the browser is on, whole. `None` before the first page.
 #[must_use]
 pub fn current_url() -> Option<String> {
-    BROWSER.with(|slot| slot.borrow().as_ref()?.view.url().ok())
+    BROWSER.with(|slot| view_url(&slot.borrow().as_ref()?.view))
+}
+
+/// The webview's URL, or `None` while it has none.
+///
+/// `wry::WebView::url` unwraps WKWebView's `URL`, which is nil while a fresh
+/// view's first navigation has not committed — a refused CONNECT through a
+/// proxy leaves it nil, with no `about:blank` either. Reading it then panicked
+/// inside a draw, which AppKit cannot unwind, and the app aborted on the first
+/// failed page of a new tab (082 G29). So WebKit is asked first.
+fn view_url(view: &wry::WebView) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        use wry::WebViewExtMacOS as _;
+        let webview = view.webview();
+        // wry speaks objc2 0.6 and this crate 0.5, so the object crosses as a
+        // plain pointer; only whether `URL` is nil is read through it.
+        let raw = std::ptr::from_ref(&*webview)
+            .cast::<objc2::runtime::AnyObject>()
+            .cast_mut();
+        // SAFETY: `raw` is the live WKWebView wry owns for as long as `view`;
+        // `URL` takes no arguments and returns an NSURL or nil.
+        let url: *mut objc2::runtime::AnyObject = unsafe { objc2::msg_send![raw, URL] };
+        if url.is_null() {
+            return None;
+        }
+    }
+    view.url().ok()
 }
 
 /// The host the toolbar shows.
@@ -717,7 +874,7 @@ pub fn host() -> Option<String> {
     // empty `about:blank` when a fresh view's first load is refused.
     let url = committed_url()
         .filter(|url| vela_core::app::dapp_permissions::origin_of(url).is_some())
-        .or_else(|| BROWSER.with(|slot| slot.borrow().as_ref()?.view.url().ok()))?;
+        .or_else(|| BROWSER.with(|slot| view_url(&slot.borrow().as_ref()?.view)))?;
     let rest = url.split_once("://").map(|(_, rest)| rest).unwrap_or(&url);
     let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
     (!host.is_empty()).then(|| host.to_owned())
@@ -867,6 +1024,18 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             .with_on_web_content_process_terminate_handler(|| report(Load::Crashed))
             // 083 W15: WKWebView has no word on a page's own entries.
             .with_initialization_script(HISTORY_JS)
+    };
+    // Spec 082: a dev build's fault proxy carries the page too. It is set on
+    // this webview's own data store, not the system, so nothing else on the
+    // machine is pointed at it. macOS 14+, through wry's `mac-proxy`, which
+    // only `dev-fixtures` turns on (Cargo.toml).
+    #[cfg(feature = "dev-fixtures")]
+    let builder = match crate::executor::proxy::dev_proxy() {
+        Some(proxy) => builder.with_proxy_config(wry::ProxyConfig::Http(wry::ProxyEndpoint {
+            host: proxy.host().to_owned(),
+            port: proxy.port().to_string(),
+        })),
+        None => builder,
     };
     match builder.build_as_child(window) {
         Ok(view) => {
@@ -1223,6 +1392,23 @@ mod tests {
         );
         assert_eq!(meta_url("", "https://app.example/"), "https://app.example/");
         assert!(META_JS.contains("location.href") && META_JS.contains("responseStatus"));
+    }
+
+    /// Spec 082 G70: a page restored from the back-forward cache runs no
+    /// `load`, so it reports its title when it is shown again.
+    #[test]
+    fn a_page_back_from_the_cache_reports_its_title() {
+        assert!(META_JS.contains("'pageshow'") && META_JS.contains("event.persisted"));
+    }
+
+    /// Spec 082 G41: taking the keyboard back is asked even before the
+    /// webview exists (nothing to move then) — the counter is what the page's
+    /// callers are checked against.
+    #[test]
+    fn focus_parent_is_counted() {
+        let before = focus_parent_asks();
+        focus_parent();
+        assert_eq!(focus_parent_asks(), before + 1);
     }
 
     /// 083: one rule for where an address goes — pages load, only mail and

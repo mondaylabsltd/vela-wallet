@@ -87,7 +87,27 @@ data class FeedTxRecord(
     /** `null` = a legacy untyped record, which the core reads as a send. */
     val kind: FeedTxKind? = null,
     val usd: String? = null,
+    /**
+     * Spec 082 RG1 / 083 H2: the origin a dApp's request arrived from, as
+     * stored (`dappUrl`) — never `dappOrigin`, which may hold the dApp's own
+     * name. The core names the row's site from it.
+     */
+    val dapp_url: String? = null,
+    /**
+     * Spec 082 RJ16: a dApp record's first call `data`, from the stored
+     * request — what lets the core tell a token transfer's recipient from the
+     * contract the call went to.
+     */
+    val call_data: String? = null,
 )
+
+/** Who a row's `counterparty` is (spec 082 RJ16, G52): the person paid, or the contract a call went to. */
+@Serializable
+enum class FeedCounterpartyRole {
+    @SerialName("recipient") Recipient,
+
+    @SerialName("contract") Contract,
+}
 
 @Serializable
 data class FeedBatchTransfer(
@@ -140,6 +160,24 @@ data class FeedItem(
     val day_start_ms: Double,
     val tx_hash: String? = null,
     val batch: FeedBatch? = null,
+    /**
+     * Spec 082 RG1: what the row is — the core decides, the shell never
+     * guesses from a hash. A folded batch is a send.
+     */
+    val kind: FeedTxKind = FeedTxKind.Send,
+    /**
+     * The record's status (a batch's first line's). Absent reads `Pending`,
+     * as the core's own default: it claims nothing — only the tracker closes
+     * a record, and a default must never say money landed or failed.
+     */
+    val status: FeedTxStatus = FeedTxStatus.Pending,
+    /** `DappTx` only: `host[:port]` of the asking site. */
+    val site: String? = null,
+    /**
+     * Spec 082 RJ16: [counterparty] is the recipient (the default) or the
+     * contract a call went to — labelled `componentsUi.signing.interactingLabel`.
+     */
+    val counterparty_role: FeedCounterpartyRole = FeedCounterpartyRole.Recipient,
 )
 
 /**
@@ -283,4 +321,8 @@ data class FeedView(
     val new_item_id: String? = null,
     /** `null` while balance privacy is on — the core enforces that, not the shell. */
     val toast: FeedToast? = null,
+    /** Spec 082 RG5: History's empty line, chosen by the chain filter. */
+    val history_empty_key: String = "history.emptyTitle",
+    /** The home Activity's empty line, chosen the same way. */
+    val home_empty_key: String = "home.emptyNoActivity",
 )

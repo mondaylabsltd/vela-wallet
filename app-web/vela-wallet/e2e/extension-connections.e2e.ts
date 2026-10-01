@@ -70,16 +70,24 @@ async function openWallet(context: BrowserContext, id: string): Promise<Page> {
 	return page;
 }
 
-/** Whatever the extension has written down, from a page of its own origin. */
-function storage(page: Page, prefix: string): Promise<string[]> {
+type AreaName = 'local' | 'session';
+
+/**
+ * Whatever the extension has written down, from a page of its own origin.
+ * The request ledger lives in `storage.session` since spec 082 (RB1): it
+ * survives an evicted worker and dies with the browser.
+ */
+function storage(page: Page, prefix: string, area: AreaName = 'local'): Promise<string[]> {
 	return page.evaluate(
-		(p) =>
+		([p, a]) =>
 			(
-				window as unknown as { chrome: { storage: { local: { get(k: null): Promise<object> } } } }
-			).chrome.storage.local
+				window as unknown as {
+					chrome: { storage: Record<AreaName, { get(k: null): Promise<object> }> };
+				}
+			).chrome.storage[a]
 				.get(null)
 				.then((all: Record<string, unknown>) => Object.keys(all).filter((k) => k.startsWith(p))),
-		prefix
+		[prefix, area] as const
 	);
 }
 
@@ -150,14 +158,18 @@ test.describe('connections', () => {
 
 		// Durable while it is owed: this is what survives an evicted worker, and
 		// the reason a torn-down window can still be settled at all.
-		expect(await storage(wallet, 'vela.req.')).toHaveLength(1);
+		expect(await storage(wallet, 'vela.req.', 'session')).toHaveLength(1);
+		// Never in storage.local, where the pre-082 worker's start sweep lost it.
+		expect(await storage(wallet, 'vela.req.')).toHaveLength(0);
 
 		await win.getByRole('button', { name: 'Cancel' }).click();
 		expect((await asked).code).toBe(4001);
 
 		// And gone once it is not owed. A record nobody can answer must not
 		// outlive its request, or a later window could open on a dead one.
-		await expect.poll(() => storage(wallet, 'vela.req.'), { timeout: 10_000 }).toHaveLength(0);
+		await expect
+			.poll(() => storage(wallet, 'vela.req.', 'session'), { timeout: 10_000 })
+			.toHaveLength(0);
 		await context.close();
 	});
 });

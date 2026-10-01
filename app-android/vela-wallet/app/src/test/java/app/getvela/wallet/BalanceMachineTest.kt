@@ -536,6 +536,56 @@ class BalanceMachineTest {
     }
 
     /**
+     * Spec 082 RE9 (G24): which balances a read covers is the core's
+     * `balanceReadPlan`. A token the person added that IS a registry
+     * stablecoin is read once — not twice, which counted it twice — keeps its
+     * peg price, and borrows the person's saved decimals, so no `decimals()`
+     * read is spent on it.
+     *
+     * Slots: native, USDC balance (decimals known: no read), wrapped balance,
+     * wrapped decimals, then the native quote tiers against USDC.
+     */
+    @Test
+    fun aCustomTokenThatIsARegistryStableIsReadOnceAtItsPeg() {
+        val store = FakeStore().also {
+            runBlocking {
+                it.write(
+                    app.getvela.wallet.core.data.KeyValueStore.Keys.CUSTOM_TOKENS,
+                    org.json.JSONArray().put(
+                        org.json.JSONObject()
+                            .put("id", "137_${usdc.contract.lowercase()}")
+                            .put("chainId", 137)
+                            .put("contractAddress", usdc.contract.lowercase())
+                            .put("symbol", "USDC")
+                            .put("name", "USD Coin")
+                            .put("decimals", 6),
+                    ).toString(),
+                )
+            }
+        }
+        val h = harness(
+            rows = listOf(row(137, "POL", "Polygon")),
+            chains = mapOf(137 to polygonLike(listOf(usdc))),
+            store = store,
+        ) { _, _ ->
+            batched(
+                word(java.math.BigInteger("1000000000000000000")), // 1 POL
+                word(java.math.BigInteger("5000000")), //              5 USDC, six saved decimals
+                null, word(java.math.BigInteger.valueOf(18)), //       wrapped
+                word(java.math.BigInteger.valueOf(250_000)), null, null, null,
+            )
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val view = h.host.settle { it.tokens.size >= 2 }
+        val usdcRows = view.tokens.filter { it.token_address.equals(usdc.contract, ignoreCase = true) }
+        assertEquals("read once", 1, usdcRows.size)
+        assertEquals("5", usdcRows.single().balance)
+        assertEquals(1.0, usdcRows.single().price_usd!!, 1e-9)
+        assertEquals(5.25, view.display_total_usd!!, 1e-9)
+    }
+
+    /**
      * **The 10^12 trap, on the custom path.**
      *
      * Two stables with different decimals, and only the 18-decimal one quotes.

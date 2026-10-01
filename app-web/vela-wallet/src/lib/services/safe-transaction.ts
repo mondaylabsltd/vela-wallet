@@ -38,18 +38,25 @@ import {
 	keccak256,
 	minGasPriceWei,
 	parsePublicKey,
+	rpcReadTimeoutMs,
 	stripHexPrefix,
-	toHex
+	toHex,
+	userOpHash as localUserOpHash,
+	userOpEstimateFailure,
+	userOpNotSentDetail,
+	userOpPreviousPendingDetail,
+	userOpSubmitStep,
+	type RelayRejection,
+	type SubmitReply
 } from '$lib/core/kernels';
 import { rpcCall } from './rpc-adapter';
+import { maybeDeliveredOf, PoolFailedError } from './rpc-pool';
 import { assertChallengeSigned, attestedSafeOpHash } from './sign-attest';
-import {
-	isFeeHold,
-	pollUserOpStatus,
-	requestUserOpReceipt,
-	USER_OP_RECEIPT_POLL_INTERVAL_MS,
-	type UserOpStatus
-} from './tx-reconciler';
+import { requestUserOpReceipt, USER_OP_RECEIPT_POLL_INTERVAL_MS } from './tx-reconciler';
+import { clearEstimateReverts, recordEstimateReverts } from './estimate-verdict';
+import { DeploymentReadError } from './deployment-read';
+
+export { DeploymentReadError } from './deployment-read';
 import { gasQuoteShouldZero } from './fault-injection';
 import {
 	fetchBundlerAccountInfo,
@@ -90,7 +97,7 @@ const ESTIMATION_REQUIRED_CALLDATA = 1024;
 // Types
 // ---------------------------------------------------------------------------
 
-interface UserOperation {
+export interface UserOperation {
 	sender: string;
 	nonce: string;
 	initCode: Uint8Array;
@@ -111,8 +118,23 @@ export interface TransactionResult {
 
 export interface SubmitResult {
 	userOpHash: string;
-	/** Resolves to txHash once the receipt is available. */
-	waitForTxHash: () => Promise<string>;
+	/**
+	 * The relay's reply was lost after the op may have left (spec 082 RA1/RA2):
+	 * `userOpHash` is the locally computed hash, the local nonce did NOT
+	 * advance, and the op is followed to its end like an accepted one — never
+	 * reported as failed.
+	 */
+	maybeSent: boolean;
+	/** The chain head read once before the first POST; `null` = unknown (ruling 8). */
+	submitBlock: number | null;
+	/**
+	 * Resolves to txHash once the receipt is available. `timeoutMs` is how long
+	 * the caller may still wait (a dApp's answer window, `dappReceiptWaitMs`);
+	 * omitted = the full 120 s. The window holds inside each poll, and `signal`
+	 * stops the wait at once (the core answered the page through the tracker,
+	 * spec 082 RJ4).
+	 */
+	waitForTxHash: (timeoutMs?: number, signal?: AbortSignal) => Promise<string>;
 }
 
 interface GasEstimate {
@@ -132,7 +154,24 @@ export interface OperationToSign {
 	calls: { to: string; value: string; data: string }[];
 }
 
-type SignFn = (
+/**
+ * What runs once the op is signed and hashed, and before its first POST (spec
+ * 082 RJ1): the write-ahead (the record of the op is written and the core
+ * clears the POST), then the asker check with the op's hash (RJ2). It throws
+ * to stop the POST — nothing leaves the device then.
+ */
+export type BeforePost = (op: {
+	userOpHash: string;
+	submitBlock: number | null;
+	chainId: number;
+}) => Promise<void>;
+
+/**
+ * The passkey half of a send, and — riding on it, because it is the one object
+ * every send path threads from its caller to the submit — the caller's
+ * {@link BeforePost} gate.
+ */
+export type SignFn = ((
 	challenge: Uint8Array,
 	operation?: OperationToSign
 ) => Promise<{
@@ -142,7 +181,7 @@ type SignFn = (
 	/** Which credential produced the assertion — a multi-key wallet's signer
 	 *  identity. Absent ⇒ the wallet's first (shared-signer) key. */
 	credentialId?: string;
-}>;
+}>) & { beforePost?: BeforePost };
 
 /** `userOp` and the legs before its fee leg, as {@link OperationToSign} carries them. */
 function operationToSign(userOp: UserOperation, innerCalls: MultiSendCall[]): OperationToSign {
@@ -1523,6 +1562,9 @@ export async function simulateUserOpGas(params: {
 	publicKeyHex?: WalletSigner;
 }): Promise<UserOpGasSimulation> {
 	const { chainId, account, deployed, calls, publicKeyHex } = params;
+	// A new question: the last verdict about this account's operation is not
+	// this one's (spec 082 RJ19). A revert is recorded again below if it is.
+	clearEstimateReverts(chainId, account);
 	// The exact question: the chain, the Safe, whether it carries initCode and
 	// whose keys build it, and the calls byte for byte (see `_simulationCache`).
 	const key = `${chainId}:${JSON.stringify([
@@ -1608,10 +1650,21 @@ async function runUserOpGasSimulation(params: {
 		);
 		return { kind: 'estimated', ...est };
 	} catch (err) {
-		console.log(
-			'[FeeEstimate] Bundler estimation unavailable:',
-			err instanceof Error ? err.message : String(err)
-		);
+		// The relay's own verdict on the op the sheet is pricing (spec 082 RJ19,
+		// G57): a revert is carried to the sheet's danger line, never mistaken
+		// for an estimate that simply did not come back.
+		const verdict = userOpEstimateFailure(estimateErrorJson(err));
+		if (verdict.type === 'reverts') {
+			recordEstimateReverts(chainId, account, verdict.reason);
+			console.warn(
+				`[FeeEstimate] estimate says it reverts: ${verdict.reason ?? '(no reason given)'}`
+			);
+		} else {
+			console.log(
+				'[FeeEstimate] Bundler estimation unavailable:',
+				err instanceof Error ? err.message : String(err)
+			);
+		}
 		return { kind: 'simulation_failed' };
 	}
 }
@@ -1789,33 +1842,11 @@ async function sendUserOp(
 	);
 	userOp.signature = realSig;
 
-	// 11. Submit to bundler
-	let userOpHash: string;
-	try {
-		userOpHash = await submitUserOp(userOp, chainId);
-	} catch (err) {
-		// If bundler says a previous UserOp is already pending (replacement or duplicate),
-		// extract the existing hash and poll for its receipt instead of failing.
-		const errMsg = err instanceof Error ? err.message : String(err);
-		const existingHash = parseExistingUserOpHash(errMsg);
-		if (existingHash) {
-			console.log(`[UserOp] Previous op pending (${existingHash}), polling for receipt...`);
-			return {
-				userOpHash: existingHash,
-				waitForTxHash: () => waitForReceipt(existingHash, chainId, 60_000)
-			};
-		}
-		throw err;
-	}
-
-	// 12. Optimistically increment nonce so concurrent sends don't collide
-	incrementNonceCache(safeAddress, chainId);
-
-	// Return immediately — caller can await txHash separately
-	return {
-		userOpHash,
-		waitForTxHash: () => waitForReceipt(userOpHash, chainId)
-	};
+	// 11. Submit to bundler — the core's submit loop decides accepted / may
+	//     have been sent / not sent (spec 082 RA1).
+	// 12. The nonce moves on only when the relay has the op (RA5).
+	//     Returns immediately — the caller can await txHash separately.
+	return submitSigned(userOp, chainId, safeAddress, undefined, undefined, signFn.beforePost);
 }
 
 // ---------------------------------------------------------------------------
@@ -2125,26 +2156,14 @@ async function sendUserOpTempo(
 		signerAddressFor(publicKeyHex, assertion.credentialId ?? null)
 	);
 
-	let userOpHash: string;
-	try {
-		userOpHash = await submitUserOp(userOp, chainId, { feeToken }, quotedFee?.tier);
-	} catch (err) {
-		const errMsg = err instanceof Error ? err.message : String(err);
-		const existingHash = parseExistingUserOpHash(errMsg);
-		if (existingHash) {
-			return {
-				userOpHash: existingHash,
-				waitForTxHash: () => waitForReceipt(existingHash, chainId, 60_000)
-			};
-		}
-		throw err;
-	}
-
-	incrementNonceCache(safeAddress, chainId);
-	return {
-		userOpHash,
-		waitForTxHash: () => waitForReceipt(userOpHash, chainId)
-	};
+	return submitSigned(
+		userOp,
+		chainId,
+		safeAddress,
+		{ feeToken },
+		quotedFee?.tier,
+		signFn.beforePost
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -2303,14 +2322,25 @@ async function sendUserOpInBand(
 		}
 		userOp.preVerificationGas = est.preVerificationGas + 10_000n;
 	} catch (err) {
-		console.error(
-			'[InBand] Gas estimation failed, using defaults:',
-			err instanceof Error ? err.message : String(err)
-		);
-		if (hasContractCall) {
-			throw new Error(
-				'Could not estimate gas for this transaction. The network may be busy — please try again.'
+		// What the relay said, as the core reads it (spec 082 RJ19): a revert is
+		// not "the network is busy". The sheet warned about it before the slide
+		// (the quote's own estimate, `estimate-verdict`); the person slid anyway —
+		// a warning informs, never blocks (L-D5) — so the op goes with the
+		// defaults and the relay's refusal is answered as one (RJ3). The call's
+		// shape (`isPlainTransferCall`) no longer decides for a revert.
+		const verdict = userOpEstimateFailure(estimateErrorJson(err));
+		if (verdict.type === 'reverts') {
+			console.warn(`[InBand] estimate says it reverts: ${verdict.reason ?? '(no reason given)'}`);
+		} else {
+			console.error(
+				'[InBand] Gas estimation failed, using defaults:',
+				err instanceof Error ? err.message : String(err)
 			);
+			if (hasContractCall) {
+				throw new Error(
+					'Could not estimate gas for this transaction. The network may be busy — please try again.'
+				);
+			}
 		}
 	}
 
@@ -2399,26 +2429,7 @@ async function sendUserOpInBand(
 		signerAddressFor(publicKeyHex, assertion.credentialId ?? null)
 	);
 
-	let userOpHash: string;
-	try {
-		userOpHash = await submitUserOp(userOp, chainId, undefined, quotedFee?.tier);
-	} catch (err) {
-		const errMsg = err instanceof Error ? err.message : String(err);
-		const existingHash = parseExistingUserOpHash(errMsg);
-		if (existingHash) {
-			return {
-				userOpHash: existingHash,
-				waitForTxHash: () => waitForReceipt(existingHash, chainId, 60_000)
-			};
-		}
-		throw err;
-	}
-
-	incrementNonceCache(safeAddress, chainId);
-	return {
-		userOpHash,
-		waitForTxHash: () => waitForReceipt(userOpHash, chainId)
-	};
+	return submitSigned(userOp, chainId, safeAddress, undefined, quotedFee?.tier, signFn.beforePost);
 }
 
 // ---------------------------------------------------------------------------
@@ -2903,9 +2914,10 @@ async function readIsDeployed(address: string, chainId: number, key: string): Pr
 		response = await rpcCall('eth_getCode', [address, 'latest'], chainId);
 	} catch (err) {
 		console.error('[UserOp] eth_getCode failed:', err instanceof Error ? err.message : String(err));
-		throw new Error(
-			'Could not verify the account deployment status — the network may be unstable. Please try again.'
-		);
+		// Whether the chain's nodes turned it away for load is the pool's fact
+		// (spec 082 RJ13): the fee row says "rate-limited, retrying", not
+		// "can't reach Vela".
+		throw new DeploymentReadError(err instanceof PoolFailedError && err.rateLimited);
 	}
 	if (response.error) {
 		console.error('[UserOp] eth_getCode RPC error:', JSON.stringify(response.error));
@@ -3239,6 +3251,27 @@ export async function getBundlerGasQuote(
 	return { maxFeePerGas, maxPriorityFeePerGas, networkFeePerGas, relayerFeePerGas };
 }
 
+/**
+ * A relay estimate that did not come back with gas limits, carrying what the
+ * relay said (`errorJson`: its JSON-RPC `error` member, `''` for no answer) so
+ * the core can say whether it is a revert (`userOpEstimateFailure`, spec 082
+ * RJ19) — the message alone was read as "the network is busy".
+ */
+export class EstimateGasError extends Error {
+	constructor(
+		message: string,
+		readonly errorJson: string
+	) {
+		super(message);
+		this.name = 'EstimateGasError';
+	}
+}
+
+/** What the relay said about a failed estimate, as `userOpEstimateFailure` reads it. */
+export function estimateErrorJson(error: unknown): string {
+	return error instanceof EstimateGasError ? error.errorJson : '';
+}
+
 async function estimateGas(userOp: UserOperation, chainId: number): Promise<GasEstimate> {
 	const dict = userOpToDict(userOp);
 	console.log('[UserOp] Estimating gas, sender:', dict.sender, 'nonce:', dict.nonce);
@@ -3246,8 +3279,9 @@ async function estimateGas(userOp: UserOperation, chainId: number): Promise<GasE
 	const response = await rpcCall('eth_estimateUserOperationGas', [dict, ENTRY_POINT], chainId);
 
 	if (response.error) {
-		console.error('[UserOp] Estimation RPC error:', JSON.stringify(response.error));
-		throw new Error(response.error.message ?? 'Gas estimation failed');
+		const errorJson = JSON.stringify(response.error);
+		console.error('[UserOp] Estimation RPC error:', errorJson);
+		throw new EstimateGasError(response.error.message ?? 'Gas estimation failed', errorJson);
 	}
 
 	const result = response.result as Record<string, string> | undefined;
@@ -3271,8 +3305,10 @@ async function submitUserOp(
 	 * The tier the displayed quote was priced at (spec 068). Present ⇒ it goes
 	 * on the wire as the third `eth_sendUserOperation` parameter.
 	 */
-	tier?: Exclude<GasTier, 'rapid'>
-): Promise<string> {
+	tier?: Exclude<GasTier, 'rapid'>,
+	/** The caller's gate before the first POST (spec 082 RJ1, RJ2). */
+	beforePost?: BeforePost
+): Promise<SubmittedOp> {
 	const dict = userOpToDict(userOp, extra);
 	const initCodePresent = userOp.initCode.length >= 20;
 	console.log(
@@ -3290,6 +3326,11 @@ async function submitUserOp(
 			maxFeePerGas: dict.maxFeePerGas
 		})
 	);
+
+	// Where the find-event starts if the relay stays silent (ruling 8), read
+	// while the deploy guard below runs: best effort, bounded, never a reason
+	// not to send (`readSubmitBlock`).
+	const head = readSubmitBlock(chainId);
 
 	// Structural AA20 guard. An undeployed sender + empty initCode is a GUARANTEED
 	// "AA20 account not deployed" on-chain — and worse, it strands funds silently. Rather
@@ -3310,11 +3351,23 @@ async function submitUserOp(
 		}
 	}
 
-	// Retry on transient bundler errors (e.g. EOA busy processing another bundle).
-	const MAX_RETRIES = 3;
-	const RETRY_DELAY = 3_000;
+	// The op's own name before anything leaves (RA6): if the reply is lost it is
+	// followed under this hash, and the relay's hash, when it answers, wins.
+	const localHash = localUserOpHash(userOp, chainId);
+	const submitBlock = await head;
 
-	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+	// Spec 082 RJ1: a record exists before the bytes leave. The caller writes
+	// the op down under this hash and is cleared to POST, then checks its
+	// asker is still there with the hash in hand (RJ2) — any refusal throws
+	// here, and nothing is sent. A quit from this line on leaves a pending
+	// "may have been sent" record the tracker resolves on the next launch.
+	if (beforePost) await beforePost({ userOpHash: localHash, submitBlock, chainId });
+
+	// One loop, the core's (RA1): every reply goes through `submit_step`, which
+	// alone decides accepted / retry / may-have-been-sent / not sent. The busy
+	// retry re-POSTs the IDENTICAL op, so the relay answers its hash again.
+	let maybeDelivered = false;
+	for (let attempt = 0; ; attempt++) {
 		// `[userOperation, entryPoint, tier?]` — the relay's wire since it learned
 		// about speed (`vela-relay-core/src/wire.rs`, `docs/fees.md` §2a). The
 		// tier is a NAME, never a wei figure: the relay resolves it against the
@@ -3334,71 +3387,242 @@ async function submitUserOp(
 		// no capability probe and no silent fallback: guessing which relay is
 		// on the other end is how a screen and a chain start disagreeing.
 		const params = tier === undefined ? [dict, ENTRY_POINT] : [dict, ENTRY_POINT, tier];
-		const response = await rpcCall('eth_sendUserOperation', params, chainId);
-
-		const result = response.result as string | undefined;
-		if (result) return result;
-
-		const errorMsg = parseBundlerError(response.error);
-		const isRetryable =
-			errorMsg.includes('currently processing') || errorMsg.includes('Retry later');
-		if (!isRetryable || attempt === MAX_RETRIES) {
-			throw new Error(errorMsg);
+		let reply: SubmitReply;
+		let relayMessage = '';
+		try {
+			const response = await rpcCall('eth_sendUserOperation', params, chainId);
+			maybeDelivered ||= maybeDeliveredOf(response);
+			// The core's `SubmitReply`, read as the desktop and Android read it:
+			// an `error` member is the relay's refusal for the core to judge;
+			// ANY other answer is the relay's result, a hash or not — and one
+			// that is not a hash the core calls "may have been sent". A 200 with
+			// no readable hash is never "not sent".
+			if (response.error != null) {
+				reply = { error: response.error };
+				relayMessage = parseBundlerError(response.error);
+			} else {
+				const result = response.result;
+				reply = {
+					hash: typeof result === 'string' ? result : result == null ? '' : JSON.stringify(result)
+				};
+			}
+		} catch (error) {
+			// The pool reached nobody. Whether a POST of it may still have
+			// arrived is the pool's fact; anything else thrown is unknown — so
+			// it may have.
+			maybeDelivered ||= error instanceof PoolFailedError ? error.maybeDelivered : true;
+			reply = 'no_answer';
 		}
 
+		const step = userOpSubmitStep(reply, attempt, maybeDelivered, localHash);
+		if ('retry_after' in step) {
+			console.log(
+				`[UserOp] Bundler busy, retry ${attempt + 1} in ${step.retry_after.delay_ms}ms...`
+			);
+			await sleep(step.retry_after.delay_ms);
+			continue;
+		}
+
+		const verdict = step.done;
 		console.log(
-			`[UserOp] Bundler busy, retry ${attempt + 1}/${MAX_RETRIES} in ${RETRY_DELAY}ms...`
+			`[UserOp] submit verdict=${verdict.type}` +
+				('user_op_hash' in verdict ? ` hash=${verdict.user_op_hash.slice(0, 12)}` : '') +
+				` attempts=${attempt + 1} chain=${chainId}`
 		);
-		await sleep(RETRY_DELAY);
+		switch (verdict.type) {
+			case 'accepted':
+				if (verdict.user_op_hash.toLowerCase() !== localHash.toLowerCase()) {
+					// The relay's hash wins; the difference is worth a line (RA1).
+					console.warn(
+						`[UserOp] userop.hash_mismatch relay=${verdict.user_op_hash.slice(0, 12)} ` +
+							`local=${localHash.slice(0, 12)} chain=${chainId}`
+					);
+				}
+				return { accepted: true, userOpHash: verdict.user_op_hash, submitBlock };
+			case 'maybe_sent':
+				return { accepted: false, userOpHash: verdict.user_op_hash, submitBlock };
+			case 'not_sent':
+				throw new UserOpNotSentError(
+					verdict.rejection,
+					verdict.rejection === null
+						? userOpNotSentDetail()
+						: typeof verdict.rejection === 'object' && 'nonce_held' in verdict.rejection
+							? // Another operation of the account holds the nonce (083): its
+								// hash is never this request's, nor is the relay's sentence
+								// carrying it.
+								userOpPreviousPendingDetail()
+							: relayMessage
+				);
+		}
 	}
+}
 
-	throw new Error('Bundler unavailable after retries');
+/** What {@link submitUserOp} settled on: the relay has it, or it may. */
+interface SubmittedOp {
+	/** The relay answered with the op's hash (or an identical op's). */
+	accepted: boolean;
+	userOpHash: string;
+	submitBlock: number | null;
 }
 
 /**
- * The relay refused this op before it ever reached a block. Distinct from a timeout:
- * nothing was spent, nothing will land, and re-sending is the correct next step.
+ * Submit a signed op and account for it: the local nonce moves on ONLY when
+ * the relay has the op (spec 082 RA5). A may-have-been-sent op leaves nonce N
+ * where it was, so a new attempt reuses it and the EntryPoint lets at most one
+ * land — the double payment needs two different nonces. Exported for the
+ * submit tests; every send path goes through here.
  */
-export class UserOpRejectedError extends Error {
-	constructor(
-		message: string,
-		/** The relay's own diagnostic, for logs — not for display. */
-		readonly detail?: string
-	) {
-		super(message);
-		this.name = 'UserOpRejectedError';
+export async function submitSigned(
+	userOp: UserOperation,
+	chainId: number,
+	safeAddress: string,
+	extra?: Record<string, string>,
+	tier?: Exclude<GasTier, 'rapid'>,
+	beforePost?: BeforePost
+): Promise<SubmitResult> {
+	const submitted = await submitUserOp(userOp, chainId, extra, tier, beforePost);
+	if (submitted.accepted) incrementNonceCache(safeAddress, chainId);
+	return submitResultOf(submitted, chainId);
+}
+
+/** The nonce this module would sign next for `safeAddress` — tests only. */
+export function _cachedNonceForTest(safeAddress: string, chainId: number): string | undefined {
+	return _nonceCache.get(`${chainId}:${safeAddress.toLowerCase()}`)?.nonce;
+}
+
+/** Plant a cached nonce — tests only. */
+export function _seedNonceForTest(safeAddress: string, chainId: number, nonce: string): void {
+	_nonceCache.set(`${chainId}:${safeAddress.toLowerCase()}`, { nonce, at: Date.now() });
+}
+
+function submitResultOf(submitted: SubmittedOp, chainId: number): SubmitResult {
+	return {
+		userOpHash: submitted.userOpHash,
+		maybeSent: !submitted.accepted,
+		submitBlock: submitted.submitBlock,
+		waitForTxHash: (timeoutMs?: number, signal?: AbortSignal) =>
+			waitForReceipt(
+				submitted.userOpHash,
+				chainId,
+				timeoutMs ?? 120_000,
+				signal,
+				submitted.accepted
+			)
+	};
+}
+
+/**
+ * The chain head through the pool, or `null` — never a reason not to send,
+ * and never a reason to wait: it is bounded by one read's budget (the core's
+ * `RPC_READ_TIMEOUT_MS`), because a chain whose nodes do not answer would
+ * otherwise hold the POST for the pool's every pass — after the passkey, and
+ * after the page's last claim (spec 082 ruling 8: best effort).
+ */
+async function readSubmitBlock(chainId: number): Promise<number | null> {
+	const read = rpcCall('eth_blockNumber', [], chainId).then(
+		(response) => {
+			const head = typeof response.result === 'string' ? Number.parseInt(response.result, 16) : NaN;
+			return Number.isSafeInteger(head) && head >= 0 ? head : null;
+		},
+		() => null
+	);
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const budget = new Promise<null>((resolve) => {
+		timer = setTimeout(() => resolve(null), rpcReadTimeoutMs());
+	});
+	try {
+		return await Promise.race([read, budget]);
+	} finally {
+		clearTimeout(timer);
 	}
 }
 
 /**
- * The relay is holding this op because network fees moved above the reimbursement the
- * user signed. It is still queued and sends itself when fees settle, so this is a
- * *waiting* outcome — the transaction must stay pending, never be marked failed.
+ * The relay provably never queued the op (spec 082 RA1 `NotSent`): it refused
+ * it, or it was never reached and nothing left the device. Re-sending is safe,
+ * and it is the ONE submit failure a person may be told to try again after.
+ * `message` is the relay's own sentence for a refusal, or the core's fixed
+ * "relay unreachable; nothing was sent" — never the pool's raw text.
  */
-export class UserOpFeeHoldError extends Error {
+export class UserOpNotSentError extends Error {
 	constructor(
-		message: string,
-		readonly detail?: string
+		readonly rejection: RelayRejection | null,
+		message: string
 	) {
 		super(message);
-		this.name = 'UserOpFeeHoldError';
+		this.name = 'UserOpNotSentError';
 	}
 }
 
-/** How often to ask the relay for a lifecycle status while no receipt exists. */
-const USER_OP_STATUS_POLL_INTERVAL_MS = 12_000;
+/**
+ * The op landed and REVERTED — gas was spent, the call did not happen (spec
+ * 082 RA8). Not "dropped, try again": the chain has a transaction. A dApp is
+ * answered the revert, naming it (083, owner ruling 2026-10-01); the tracker
+ * marks the record failed.
+ */
+export class UserOpRevertedError extends Error {
+	constructor(readonly txHash: string) {
+		super(`Transaction ${txHash.slice(0, 10)}… reverted on-chain.`);
+		this.name = 'UserOpRevertedError';
+	}
+}
 
+/** What {@link withinWindow} settled on: the work's answer, or why it stopped waiting. */
+type WindowRace<T> = { done: T } | { stopped: 'window' | 'aborted' };
+
+/**
+ * `work`, but never past `deadlineMs` and never past `signal` (spec 082 RJ4,
+ * G39). The receipt poll is shared with every other watcher of the hash, so
+ * it is not cancelled — this caller simply stops waiting for it: a muted relay
+ * holds one request ~15 s, and the dApp's answer overshot its window by that
+ * much when the deadline was only read between polls (136.9 s, EX-W1).
+ */
+async function withinWindow<T>(
+	work: Promise<T>,
+	deadlineMs: number,
+	signal?: AbortSignal
+): Promise<WindowRace<T>> {
+	if (signal?.aborted) return { stopped: 'aborted' };
+	const left = deadlineMs - Date.now();
+	if (left <= 0) return { stopped: 'window' };
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let onAbort: (() => void) | undefined;
+	const stop = new Promise<WindowRace<T>>((resolve) => {
+		timer = setTimeout(() => resolve({ stopped: 'window' }), left);
+		onAbort = () => resolve({ stopped: 'aborted' });
+		signal?.addEventListener('abort', onAbort, { once: true });
+	});
+	try {
+		return await Promise.race([work.then((done) => ({ done })), stop]);
+	} finally {
+		clearTimeout(timer);
+		if (onAbort) signal?.removeEventListener('abort', onAbort);
+	}
+}
+
+/**
+ * Wait for the op's receipt, inside `timeout` (the dApp's answer window, or
+ * the full 120 s) and until `signal` — the core answered the page through the
+ * tracker (spec 082 RJ4) — whichever comes first.
+ *
+ * Only the RECEIPT is read here. Whether the relay refused the op, never had
+ * it, or holds it for fees is the tracker's to say (`tx_tracker`, fed by the
+ * relay's status); the core answers the page from that (`OpTracked`). The
+ * status branch that used to live here was a client copy of the tracker's
+ * rule, and it answered "ok + op hash" for an op the relay had refused.
+ *
+ * `accepted`: the relay answered with the op's hash. A may-have-been-sent op
+ * (its reply lost) never did, and its timeout line says so.
+ */
 export async function waitForReceipt(
 	userOpHash: string,
 	chainId: number,
 	timeout: number = 120_000,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	accepted = true
 ): Promise<string> {
 	const start = Date.now();
-	// Give the relay one poll interval before asking what it is doing — a receipt that
-	// is simply not ready yet is by far the common case, and it needs no second call.
-	let lastStatusAt = start;
-	let lastStatus: UserOpStatus | null = null;
+	const deadline = start + timeout;
 
 	// Track whether we ever got a clean "not ready yet" answer vs. only ever hit
 	// RPC/bundler errors. The distinction drives the final message: "submitted but
@@ -3408,89 +3632,51 @@ export async function waitForReceipt(
 	let rpcFailures = 0;
 	let polls = 0;
 
-	while (Date.now() - start < timeout) {
-		// Caller cancelled (e.g. the send screen unmounted) — stop polling.
+	while (Date.now() < deadline) {
+		// Caller cancelled (the core answered, or the screen went) — stop polling.
 		if (signal?.aborted) throw makeAbortError();
 		polls++;
 
-		try {
-			// The submitted-receipt screen and this background waiter can both be active.
-			// They share this request (and its 3-second rate limit), so opening the screen never
-			// doubles eth_getUserOperationReceipt traffic to the bundler.
-			const outcome = await requestUserOpReceipt(userOpHash, chainId);
-			if (!outcome.reachedBundler) {
-				rpcFailures++;
-			} else {
-				sawCleanResponse = true;
-				const result = outcome.resolution;
-				if (result?.txHash) {
-					// Check if the UserOp was marked as failed (e.g. tx dropped from mempool)
-					if (result.failed) {
-						throw new Error(
-							'Transaction was dropped from the network. Try again with a higher gas price.'
-						);
-					}
-					console.log('[UserOp] Receipt landed', {
-						userOpHash: `${userOpHash.slice(0, 10)}…`,
-						chainId,
-						txHash: result.txHash,
-						afterMs: Date.now() - start,
-						polls
-					});
-					return result.txHash;
-				}
-			}
-		} catch (err) {
-			// A genuine drop (success === false) is final — rethrow it.
-			if (err instanceof Error && /dropped from the network/.test(err.message)) throw err;
-			// All bundler endpoints failed this round (network blip). Previously this
-			// aborted the whole wait; instead keep polling, since the op may still land.
-			rpcFailures++;
+		// The submitted-receipt screen and this background waiter can both be active.
+		// They share this request (and its 3-second rate limit), so opening the screen
+		// never doubles eth_getUserOperationReceipt traffic to the bundler.
+		const race = await withinWindow(
+			requestUserOpReceipt(userOpHash, chainId).catch(() => null),
+			deadline,
+			signal
+		);
+		if ('stopped' in race) {
+			if (race.stopped === 'aborted') throw makeAbortError();
+			break;
 		}
-
-		// No receipt yet. Ask the relay what it is doing with the op — a null receipt
-		// alone cannot distinguish "landing shortly" from "refused ten seconds ago",
-		// and waiting out the full timeout on a refusal reports a dead op as pending.
-		if (Date.now() - lastStatusAt >= USER_OP_STATUS_POLL_INTERVAL_MS) {
-			lastStatusAt = Date.now();
-			const status = await pollUserOpStatus(userOpHash, chainId);
-			if (status) {
-				lastStatus = status;
-				if (status.status === 'rejected') {
-					console.warn('[UserOp] Relay REJECTED the operation', {
-						userOpHash: `${userOpHash.slice(0, 10)}…`,
-						chainId,
-						stage: status.stage,
-						detail: status.detail
-					});
-					throw new UserOpRejectedError(
-						'The relay refused this transaction, so nothing was sent.',
-						status.detail
-					);
-				}
+		const outcome = race.done;
+		if (!outcome || !outcome.reachedBundler) {
+			rpcFailures++;
+		} else {
+			sawCleanResponse = true;
+			const result = outcome.resolution;
+			if (result?.txHash) {
+				// The op landed and reverted (`success === false`): a transaction
+				// exists, gas was spent — never "try again" (spec 082 RA8).
+				if (result.failed) throw new UserOpRevertedError(result.txHash);
+				console.log('[UserOp] Receipt landed', {
+					userOpHash: `${userOpHash.slice(0, 10)}…`,
+					chainId,
+					txHash: result.txHash,
+					afterMs: Date.now() - start,
+					polls
+				});
+				return result.txHash;
 			}
 		}
 
 		// Receipt production is asynchronous; a fixed cadence is friendlier to the bundler and
 		// matches the submitted-receipt countdown. The shared poller also coalesces any UI poll.
-		await sleep(USER_OP_RECEIPT_POLL_INTERVAL_MS);
+		const pause = await withinWindow(sleep(USER_OP_RECEIPT_POLL_INTERVAL_MS), deadline, signal);
+		if ('stopped' in pause && pause.stopped === 'aborted') throw makeAbortError();
 	}
 
 	const shortOp = `${userOpHash.slice(0, 10)}…`;
-	// A held op did not fail to confirm — it has not been broadcast yet, on purpose,
-	// and the relay retries it by itself. Report that instead of a timeout, so the
-	// caller keeps the transaction pending rather than marking it failed.
-	if (isFeeHold(lastStatus)) {
-		console.log('[UserOp] Held by the relay until network fees settle', {
-			userOpHash: shortOp,
-			chainId,
-			detail: lastStatus?.detail
-		});
-		throw new UserOpFeeHoldError(
-			`Transaction ${shortOp} is queued until network fees settle.`,
-			lastStatus?.detail
-		);
-	}
 	if (!sawCleanResponse && rpcFailures > 0) {
 		// We never reached the bundler — the op's fate is genuinely unknown, not a
 		// confirmed pending. Mark it as such so the caller can reconcile/retry later.
@@ -3506,24 +3692,29 @@ export async function waitForReceipt(
 				`Check the explorer in a few minutes before retrying.`
 		);
 	}
-	// Submitted and accepted by the bundler, but no on-chain receipt in time. The op
-	// is NOT lost — it may still land (or the bundler's gas account couldn't fund the
-	// bundle). Say so, and surface the hash, instead of implying outright failure.
-	// NOTE: "bundler answered cleanly for the full window but never produced a receipt"
-	// is the signature of a bundler that ACCEPTS the op but never lands the bundle on
-	// this chain (e.g. an unfunded/misconfigured chain-56 gas account) — a bundler-side
-	// condition, NOT a wallet bug. Grep this line to tell it apart from the reach case.
-	console.warn(
-		'[UserOp] ACCEPTED but NOT landed within timeout — bundler is not settling this chain',
-		{
+	if (accepted) {
+		// Submitted and accepted by the bundler, but no on-chain receipt in time. The op
+		// is NOT lost — it may still land (or the bundler's gas account couldn't fund the
+		// bundle). NOTE: "bundler answered cleanly for the full window but never produced
+		// a receipt" is the signature of a bundler that ACCEPTS the op but never lands the
+		// bundle on this chain (e.g. an unfunded/misconfigured chain-56 gas account) — a
+		// bundler-side condition, NOT a wallet bug. Grep this line to tell it apart.
+		console.warn(
+			'[UserOp] ACCEPTED but NOT landed within timeout — bundler is not settling this chain',
+			{ userOpHash: shortOp, chainId, timeoutMs: timeout, polls, rpcFailures, sawCleanResponse }
+		);
+	} else {
+		// The relay never answered this op's POST (spec 082 G61): it may hold it or
+		// never have seen it. "ACCEPTED" here was a false line; the tracker follows
+		// it to a verdict (found on chain, or not sent).
+		console.warn('[UserOp] may-have-been-sent op not seen within the window — tracker follows', {
 			userOpHash: shortOp,
 			chainId,
 			timeoutMs: timeout,
 			polls,
-			rpcFailures,
-			sawCleanResponse
-		}
-	);
+			rpcFailures
+		});
+	}
 	throw new Error(
 		`Transaction submitted (${shortOp}) but not confirmed within ${Math.round(timeout / 1000)}s. ` +
 			`It may still land on-chain — check the explorer before retrying.`
@@ -3578,18 +3769,6 @@ function userOpToDict(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Parse the bundler's "[existingHash:0x…]" marker out of a submit error. When a
- * previous UserOp for the account is still pending, the bundler rejects the new one
- * but reports the in-flight hash so we can poll its receipt instead of failing.
- * Returns the hash, or null when the error isn't this case. (Same recovery is used
- * by both the standard and Tempo send paths — this is their shared parser.)
- */
-export function parseExistingUserOpHash(errMsg: string): string | null {
-	const m = errMsg.match(/\[existingHash:(0x[0-9a-fA-F]+)\]/);
-	return m ? m[1] : null;
-}
 
 export function parseHexUInt64(value: string | undefined): bigint {
 	if (!value) return 0n;

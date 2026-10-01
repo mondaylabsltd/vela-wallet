@@ -1348,6 +1348,9 @@ enum SettingsLive {
         let language: String
         /// Display NAMES of networks whose whole RPC pool failed. Never URLs.
         let unreachable: [String]
+        /// The last failures the app logged, as `scope: kind` (spec 082 RE11,
+        /// `VelaLog.recentFailures`) — no host and no hash is ever in one.
+        var failures: [String] = []
     }
 
     /// The feedback sheet's "what will be sent" block, from THIS device
@@ -1355,21 +1358,24 @@ enum SettingsLive {
     /// was shown under a consent note promising it IS what leaves the phone.
     ///
     /// The lines are the web's (`environmentLines`), label and value each,
-    /// every one redacted of addresses and URLs. The failures line is left
-    /// OUT: its source on the web is the net counters (`*:final_failure`),
-    /// which this client does not keep, and a "none" there would be a claim,
-    /// not a reading.
+    /// every one redacted of addresses and URLs. The failures line reads the
+    /// log's own ring (spec 082 RE11): the last eight `scope: kind` failures
+    /// this launch logged, which is a reading — "none" means none was logged.
     static func withFeedback(_ facts: FeedbackFacts, on model: SettingsScreenModel, loc: Loc) -> SettingsScreenModel {
         let k = I18nKeys.SettingsUi.self
         var live = model
         let unreachable = facts.unreachable.isEmpty
             ? loc.t(k.bugPreviewNone)
             : facts.unreachable.joined(separator: ", ")
+        let failures = facts.failures.isEmpty
+            ? loc.t(k.bugPreviewNone)
+            : facts.failures.joined(separator: "; ")
         live.feedback.previewLines = [
             "\(loc.t(k.bugPreviewVersion)): v\(facts.version) (\(facts.commit))",
             "\(loc.t(k.bugPreviewPlatform)): \(facts.platform)",
             "\(loc.t(k.bugPreviewLanguage)): \(facts.language)",
             "\(loc.t(k.bugPreviewRpc)): \(unreachable)",
+            "\(loc.t(k.bugPreviewFailures)): \(failures)",
         ].map(redact)
         // These lines ARE the report's `environment` — so this sheet may send.
         live.feedback.live = true

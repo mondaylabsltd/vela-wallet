@@ -235,7 +235,9 @@ struct WalletFlowFixturesTests {
         // A transaction still in flight offers no hash and no explorer link.
         #expect(stages[0].hash == nil)
         #expect(stages[2].hash?.value == "0x8f3a…c21d")
-        #expect(stages[0].captions.contains("关闭此页交易会在后台继续"))
+        // The corpus's own words (082 round 2 gave the zh sentence its comma).
+        #expect(stages[0].captions.contains(loc.t("send.txBackgroundHint")))
+        #expect(stages[0].captions.contains("关闭此页，交易会在后台继续"))
     }
 
     @Test func pinsTheChainIdsTheAddNetworkCardPrints() {
@@ -269,5 +271,27 @@ struct WalletFlowFixturesTests {
 
         nav.push(.done)
         #expect(!nav.isOpen)
+    }
+
+    /// 082 iPhone pass (X-HISTORY): a detail sheet closed with × or a drag
+    /// takes its level with it, so the next row opens and ‹ leaves History at
+    /// once. A sheet that is not the top (one the send machine derives) never
+    /// pops the screen under it.
+    @Test func aClosedSheetTakesItsOwnLevelOnly() {
+        let nav = FlowNav()
+        nav.enter(.activity)
+        nav.push(.txDetail)
+        #expect(nav.stack == [.a1, .a2])
+
+        nav.sheetClosed(.a2)
+        #expect(nav.stack == [.a1], "the closed detail is gone")
+        nav.push(.txDetail)
+        #expect(nav.stack == [.a1, .a2], "the next row opens again")
+
+        nav.sheetClosed(.a2)
+        nav.enter(.send)
+        nav.push(.sendForm)
+        nav.sheetClosed(.sd2f)
+        #expect(nav.stack == [.sd1, .sd2], "a sheet that is not the top pops nothing")
     }
 }

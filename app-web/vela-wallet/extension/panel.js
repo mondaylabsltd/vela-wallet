@@ -9,12 +9,24 @@
  * only the panel answers a dApp's pending request, and only the panel may be
  * dismissed by the worker. A tab is the same page with nobody to answer for.
  *
+ * The locale is the wallet's PINNED language when there is one (spec 082 G59:
+ * 简体中文 pinned in the panel's Settings, and the reopened panel was English),
+ * else Chrome's UI language — `panelLocale`. This page shares the wallet's
+ * origin, so it reads the same `localStorage` the preferences store writes.
+ *
  * Bundled by build.mjs like the other page-side scripts. Runs in an extension
- * page, so `chrome.*` is available; `chrome.i18n.getUILanguage()` is the same
- * fact the service worker negotiates the wallet tab from.
+ * page, so `chrome.*` is available.
  */
 /* global chrome */
-import { negotiate, walletPage } from './lib/locales.js';
+import { LANGUAGE_KEY, panelLocale, walletPage } from './lib/locales.js';
 
-const locale = negotiate(chrome.i18n?.getUILanguage?.());
+function pinnedLanguage() {
+	try {
+		return localStorage.getItem(LANGUAGE_KEY);
+	} catch {
+		return null; // storage denied — Chrome's language decides
+	}
+}
+
+const locale = panelLocale(pinnedLanguage(), chrome.i18n?.getUILanguage?.());
 location.replace(`${chrome.runtime.getURL(walletPage(locale))}?panel`);

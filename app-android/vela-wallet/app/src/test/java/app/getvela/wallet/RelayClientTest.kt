@@ -8,8 +8,12 @@ import app.getvela.wallet.feature.send.core.RestAnswer
 import app.getvela.wallet.feature.send.core.SendTreasuryAsset
 import app.getvela.wallet.feature.send.core.SendTreasuryProbe
 import app.getvela.wallet.feature.send.core.TrackLifecycle
+import app.getvela.wallet.feature.wallet.core.OkHttpTransport
 import app.getvela.wallet.feature.wallet.core.RpcKind
 import app.getvela.wallet.feature.wallet.core.RpcResult
+import app.getvela.wallet.feature.wallet.core.RpcTransportOutcome
+import uniffi.vela_core_uniffi.RelayRejection
+import uniffi.vela_core_uniffi.userOpNotSentDetail
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -130,7 +134,7 @@ class RelayClientTest {
     @Test
     fun `a submission names its speed as the third parameter`() = runBlocking {
         val sent = java.util.concurrent.CopyOnWriteArrayList<List<Any?>>()
-        port.always("eth_sendUserOperation") { params -> sent += params; body("0xhash") }
+        port.always("eth_sendUserOperation") { params -> sent += params; body("0x" + "ab".repeat(32)) }
         relay.sendUserOp(100, "{\"sender\":\"0x1\"}", FeeTier.Slow)
         relay.sendUserOp(100, "{\"sender\":\"0x1\"}")
         relay.sendUserOp(100, "{\"sender\":\"0x1\"}", FeeTier.Rapid)
@@ -159,19 +163,75 @@ class RelayClientTest {
         assertEquals(3, port.calls.count { it.endsWith("eth_gasPrice") })
     }
 
+    private val relayHash = "0x" + "ab".repeat(32)
+    private val localHash = "0x" + "cd".repeat(32)
+    private val op = """{"sender":"0x1","nonce":"0x0"}"""
+
     @Test
-    fun `a busy relay is retried and a refusing one is not`() = runBlocking {
-        port.answer("eth_sendUserOperation", error("Bundler is currently processing; Retry later"), body("0xhash"))
-        val accepted = relay.sendUserOp(100, """{"sender":"0x1","nonce":"0x0"}""")
-        assertEquals(RelayClient.SubmitAnswer.Accepted("0xhash"), accepted)
+    fun `a busy relay is retried with the identical operation and its hash wins`() = runBlocking {
+        val sent = java.util.concurrent.CopyOnWriteArrayList<List<Any?>>()
+        port.answer("eth_sendUserOperation", error("Bundler is currently processing; Retry later"))
+        port.always("eth_sendUserOperation") { params -> sent += params; body(relayHash) }
+        assertEquals(RelayClient.SubmitAnswer.Accepted(relayHash), relay.sendUserOp(100, op, localHash = localHash))
         assertEquals(2, port.calls.count { it.endsWith("eth_sendUserOperation") })
+    }
 
+    /**
+     * Spec 082 RA1 (owner ruling 1): the verdict is the core's
+     * `userOpSubmitStep`, never this client's. A lost reply ("mute": the pool
+     * gave up after a POST that may have been acted on) is "may have been
+     * sent" under the LOCAL hash; only proof that nothing left the device is
+     * "not sent", and the page's detail for it is the core's fixed sentence.
+     */
+    @Test
+    fun `a lost reply may have been sent, a refused connection was not, a marker is accepted`() = runBlocking {
+        port.answer("eth_sendUserOperation", RpcResult.Failed(rateLimited = false, maybeDelivered = true))
+        assertEquals(RelayClient.SubmitAnswer.MaybeSent(localHash), relay.sendUserOp(100, op, localHash = localHash))
+
+        port.answer("eth_sendUserOperation", RpcResult.Failed(rateLimited = false, maybeDelivered = false))
+        assertEquals(RelayClient.SubmitAnswer.NotSent(null), relay.sendUserOp(100, op, localHash = localHash))
+        assertEquals("relay unreachable; nothing was sent", userOpNotSentDetail())
+
+        // The relay already holds THIS op: accepted under its own hash.
+        port.answer("eth_sendUserOperation", error("AA25 invalid account nonce [existingHash:$localHash]"))
+        assertEquals(RelayClient.SubmitAnswer.Accepted(localHash), relay.sendUserOp(100, op, localHash = localHash))
+        // Another op of the account holds the nonce (083): never this one's hash.
+        val existing = "0x" + "ef".repeat(32)
+        port.answer("eth_sendUserOperation", error("AA25 invalid account nonce [existingHash:$existing]"))
+        assertEquals(
+            RelayClient.SubmitAnswer.NotSent(uniffi.vela_core_uniffi.RelayRejection.NonceHeld(existing)),
+            relay.sendUserOp(100, op, localHash = localHash),
+        )
+    }
+
+    @Test
+    fun `a refusal is not sent only when no earlier attempt can have delivered it`() = runBlocking {
         port.answer("eth_sendUserOperation", error("AA25 invalid account nonce"))
-        val rejected = relay.sendUserOp(100, """{"sender":"0x1","nonce":"0x0"}""") as RelayClient.SubmitAnswer.Rejected
-        assertTrue(rejected.errorJson.contains("AA25"))
-        assertEquals(3, port.calls.count { it.endsWith("eth_sendUserOperation") })
+        val refused = relay.sendUserOp(100, op, localHash = localHash) as RelayClient.SubmitAnswer.NotSent
+        assertTrue("the relay's refusal is classified: ${refused.rejection}", refused.rejection is RelayRejection.Other)
 
-        assertEquals(RelayClient.SubmitAnswer.Unreachable, relay.sendUserOp(100, """{"sender":"0x1"}"""))
+        // The first POST timed out after the write; the second one is refused
+        // (the op is already in, so its nonce is spent): that proves nothing.
+        port.answer(
+            "eth_sendUserOperation",
+            RpcResult.Body(JSONObject().put("error", JSONObject().put("code", -32000).put("message", "Retry later")), maybeDelivered = true),
+            error("AA25 invalid account nonce"),
+        )
+        assertEquals(RelayClient.SubmitAnswer.MaybeSent(localHash), relay.sendUserOp(100, op, localHash = localHash))
+    }
+
+    /** Contract §2: only a failure before any byte left the device is `not_connected`. */
+    @Test
+    fun `a transport failure says whether anything left the device`() {
+        assertEquals(RpcTransportOutcome.NotConnected, OkHttpTransport.outcomeOf(java.net.UnknownHostException("relay.test")))
+        assertEquals(RpcTransportOutcome.NotConnected, OkHttpTransport.outcomeOf(java.net.ConnectException("refused")))
+        assertEquals(RpcTransportOutcome.NotConnected, OkHttpTransport.outcomeOf(java.net.NoRouteToHostException("no route")))
+        assertEquals(RpcTransportOutcome.NotConnected, OkHttpTransport.outcomeOf(javax.net.ssl.SSLHandshakeException("handshake")))
+        assertEquals(RpcTransportOutcome.NotConnected, OkHttpTransport.outcomeOf(java.net.SocketTimeoutException("connect timed out")))
+        // After the connect, a timeout or a reset may have delivered it.
+        assertEquals(RpcTransportOutcome.Timeout, OkHttpTransport.outcomeOf(java.net.SocketTimeoutException("timeout")))
+        assertEquals(RpcTransportOutcome.Timeout, OkHttpTransport.outcomeOf(java.io.InterruptedIOException("timeout")))
+        assertEquals(RpcTransportOutcome.Network, OkHttpTransport.outcomeOf(java.net.SocketException("Connection reset")))
     }
 
     @Test
@@ -212,11 +272,49 @@ class RelayClientTest {
         assertEquals(RelayClient.ReceiptAnswer.Unreachable, relay.userOpReceipt(100, ""))
     }
 
+    /**
+     * Ruling 8 / T180: the find-event read hands the core the pool's answer as
+     * it came — the log array, or the error member (a range limit included,
+     * which the pool reports as `RangeCapped` with the endpoint's own body),
+     * or nothing — plus the head. Nothing here judges a range error.
+     */
     @Test
-    fun `the status is the relay's word and null for an older relay`() = runBlocking {
-        port.answer("eth_getUserOperationStatus", body(JSONObject().put("status", "included").put("last_executor_stage", "mined")))
-        assertEquals(TrackLifecycle.Included to "mined", relay.userOpStatus(100, "0xop"))
-        assertNull(relay.userOpStatus(100, "0xop"))
+    fun `the find-event read passes the pool's answer through as it came`() = runBlocking {
+        port.always("eth_blockNumber") { body("0x3f2") }
+        val limit = JSONObject().put("code", -32005).put("message", "query exceeds max block range 500")
+        port.answer(
+            "eth_getLogs",
+            body(JSONArray()),
+            RpcResult.RangeCapped(500.0, JSONObject().put("error", limit)),
+            RpcResult.Failed(rateLimited = false),
+        )
+        val clean = relay.findOpEvent(100, "0xep", "0xtopic", "0xop", 1000, 1010)
+        assertEquals(RelayClient.OpEventAnswer("[]", null, 1010), clean)
+        val capped = relay.findOpEvent(100, "0xep", "0xtopic", "0xop", 1000, 1010)
+        assertNull(capped.logsJson)
+        assertEquals(-32005, JSONObject(capped.errorJson!!).getInt("code"))
+        assertEquals(RelayClient.OpEventAnswer(null, null, 1010), relay.findOpEvent(100, "0xep", "0xtopic", "0xop", 1000, 1010))
+        // No window yet: the head alone, and no log read.
+        val before = port.calls.count { it.endsWith("eth_getLogs") }
+        assertEquals(RelayClient.OpEventAnswer(null, null, 1010), relay.findOpEvent(100, "0xep", "0xtopic", "0xop", null, null))
+        assertEquals(before, port.calls.count { it.endsWith("eth_getLogs") })
+    }
+
+    /**
+     * Spec 082 RA7 (G13): the relay serves only `pimlico_getUserOperationStatus`,
+     * and the one parser is the core's — an unknown status is no answer.
+     */
+    @Test
+    fun `the status is the relay's word, asked by the pimlico name, and null for anything else`() = runBlocking {
+        port.answer(
+            "pimlico_getUserOperationStatus",
+            body(JSONObject().put("status", "included").put("last_executor_stage", "mined").put("transactionHash", "0xbundle")),
+            body(JSONObject().put("status", "levitating")),
+        )
+        assertEquals(RelayClient.StatusAnswer(TrackLifecycle.Included, "mined", "0xbundle"), relay.userOpStatus(100, "0xop"))
+        assertNull("an unknown status is not guessed at", relay.userOpStatus(100, "0xop"))
+        assertNull("nothing answered", relay.userOpStatus(100, "0xop"))
+        assertEquals(0, port.calls.count { it.endsWith("eth_getUserOperationStatus") })
     }
 
     @Test

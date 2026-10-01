@@ -315,7 +315,6 @@
   "txRemaining": "剩余约 {{remaining}} 秒",
   "txTypicalTime": "{{chainName}} 通常在约 {{estSecs}} 秒内确认",
   "txRetryBtn": "重试",
-  "txErrorTimeout": "交易已提交，但确认超时。请稍后查看历史记录。",
   "txErrorBundlerLoop": "Gas 账户余额被 bundler 持续拒绝，请稍后再试或提高 Gas 档位。",
   "txErrorBundlerFund": "Bundler 账户 Gas 不足，请在设置中充值。",
   "txErrorPublicKey": "未找到该账户的公钥",
@@ -416,7 +415,7 @@
   "batchParsedCount": "解析结果 · {{n}} 条",
   "confirmTotalLine": "合计 ≈ {{fiat}} · {{network}}",
   "txPreparingBiometric": "正在准备交易并等待生物识别确认",
-  "txBackgroundHint": "关闭此页交易会在后台继续",
+  "txBackgroundHint": "关闭此页，交易会在后台继续",
   "txCloseBackground": "关闭 · 后台继续",
   "txSubmittedTitle": "交易已提交至网络",
   "txConfirmedTitle": "已发送 {{amount}} {{symbol}}"
@@ -1149,7 +1148,7 @@
    "statusConfirmed": "已确认",
    "statusSubmitted": "已提交",
    "statusFailed": "失败",
-   "failedHint": "转账在链上被回滚 —— 你的资金没有送出,网络费可能仍被扣除。可点下方「浏览器」查看失败原因,或返回重试。"
+   "failedHint": "转账在链上被回滚 —— 你的资金没有送出,网络费可能仍被扣除。"
   },
   "detail": {
    "received": "已接收",
@@ -1366,7 +1365,7 @@
    "verifiedAbiSummary": "合约已在区块浏览器验证，参数可完整解码，但没有 ERC-7730 描述符提供语义。",
    "verifiedAbiWarning": "此合约无 ERC-7730 描述符 — 以上为链上验证 ABI 的直接解码，请核对参数。",
    "bestEffortSummary": "调用 {{fn}} — 按公开函数签名解析，非验证描述符。",
-   "simUnavailableWarning": "无法模拟这笔交易（RPC 拒绝）— Vela 无法预知它会做什么。除非你完全信任该站点，否则请拒绝。",
+   "simUnavailableWarning": "Vela 未能检查这笔交易的结果，请核对后再签名。",
    "drainSummary": "站点声称这是一次免费领取（claim），但模拟显示资产将离开你的钱包。",
    "drainWarning": "未在站点意图中声明的资产流出 — 高度疑似盗刷，请拒绝。",
    "selectorNotListed": "无法解码 — 无 ERC-7730 描述符，选择器未收录（{{bytes}} 字节）",
@@ -1415,6 +1414,8 @@
    "selfCallBlockedLegBody": "这笔请求的第 {{index}} 步会改变谁能控制你的钱包（{{function}}）。签一次就可能把钱包交到别人手里，所以 Vela 拒绝了整笔请求。什么都没有签。",
    "selfCallBlockedSafeTx": "这笔请求要你的钥匙授权一笔以后再执行的 Safe 交易。Vela 拒绝了它——这样的签名可以在你不在场时被使用。什么都没有签。",
    "stillConfirming": "还没上链。Vela 会继续查看，请不要重复发送。",
+   "maybeSent": "可能已经发出。Vela 会继续查看，请不要重复发送。",
+   "refused": "网络拒绝了这笔交易，什么都没有发出。",
    "unknownOutcome": "超过 24 小时仍未确认。",
    "openSigner": "去签名页确认",
    "signerDown": "签名页没能打开，请检查网络。"
@@ -1855,7 +1856,9 @@
   "loadOffline": "网络不稳定，页面没能打开。",
   "loadNotFound": "找不到这个网站，请检查网址。",
   "loadCertificate": "网站证书有问题，Vela 已阻止打开。",
+  "loadProxy": "代理没有响应。",
   "loadRetrying": "正在重试…",
-  "chainDown": "暂时连不上 {{chain}}，页面数据可能不完整。"
+  "chainDown": "暂时连不上 {{chain}}，页面数据可能不完整。",
+  "requestOpen": "请先完成或取消这个请求"
  }
 }

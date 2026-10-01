@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 import type { FeedEffect } from './feed-types';
+import type { FeedView } from '$lib/core/generated/FeedView';
 
 const kv = new Map<string, string>();
 vi.mock('$lib/services/storage', () => ({
@@ -25,7 +26,7 @@ vi.mock('$lib/services/recipient-identity', () => ({
 	resolveRecipientIdentity: (addr: string) => waterfall(addr)
 }));
 
-import { createFeedExecutor, toFeedRecord } from './feed-executor';
+import { createFeedExecutor, firstCallData, toFeedRecord } from './feed-executor';
 
 const effect = (operation: FeedEffect['operation']): FeedEffect => ({ id: 1, operation });
 const ME = '0x14fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d1e';
@@ -186,4 +187,183 @@ describe('the failure twin', () => {
 			executor.toFailure(effect({ type: 'timer', ms: 1, generation: 4 }), new Error('x'))
 		).toEqual({ type: 'toast_expired', generation: 4 });
 	});
+});
+
+/**
+ * Spec 082 RG1–RG4: a dApp's transaction is a row of its own, from the stored
+ * record — its site from `dappOrigin`, its status the record's — and a write
+ * shows within one poke (`reconcile_completed`), not the next 10–30 s tick.
+ */
+describe('a dApp transaction in Activity', () => {
+	const LOCAL_HASH = '0x' + 'ab'.repeat(32);
+	const DAPP: LocalTransaction = {
+		id: `dapp-${LOCAL_HASH}`,
+		userOpHash: LOCAL_HASH,
+		txHash: '',
+		from: ME,
+		to: OTHER,
+		value: '0x0',
+		symbol: 'xDAI',
+		decimals: 18,
+		chainId: 100,
+		timestamp: 1_700_000_000,
+		status: 'pending',
+		type: 'dapp_tx',
+		dappOrigin: 'http://127.0.0.1:8137',
+		dappUrl: 'http://127.0.0.1:8137',
+		maybeSent: true
+	};
+
+	// The site is read from `dappUrl`, the origin the request came from —
+	// never `dappOrigin`, which may hold the dApp's own name (083 H2 review).
+	it('maps the stored site for the core', () => {
+		expect(toFeedRecord(DAPP)).toMatchObject({
+			kind: 'dapp_tx',
+			status: 'pending',
+			dapp_url: 'http://127.0.0.1:8137'
+		});
+		expect(toFeedRecord({ ...DAPP, dappUrl: undefined })?.dapp_url).toBeNull();
+		expect(toFeedRecord(RECEIVED)?.dapp_url).toBeUndefined();
+	});
+
+	it('a may-have-been-sent op is a Pending row under its local hash, one poke after the write', async () => {
+		await import('$lib/i18n/wasm-init.server');
+		const { ActivityFeedCore } = await import('$lib/core/client');
+		const core = new ActivityFeedCore();
+		type Result = {
+			view: FeedView;
+			effects: { id: number; operation: { type: string; read_id?: number } }[];
+		};
+		const dispatch = (event: unknown) => JSON.parse(core.dispatch(JSON.stringify(event))) as Result;
+		const resolve = (id: number, result: unknown) =>
+			JSON.parse(core.resolve_effect(BigInt(id), JSON.stringify(result))) as Result;
+		const readOf = (result: Result) =>
+			result.effects.find((e) => e.operation.type === 'read_tx_store');
+		const answer = (effect: NonNullable<ReturnType<typeof readOf>>, rows: LocalTransaction[]) =>
+			resolve(effect.id, {
+				type: 'store_loaded',
+				records: rows.map(toFeedRecord).filter((r) => r !== null),
+				now_ms: 1_700_000_100_000,
+				read_id: effect.operation.read_id
+			});
+		try {
+			const first = readOf(dispatch({ type: 'account_switched', address: ME }));
+			expect(first).toBeDefined();
+			const empty = answer(first!, []);
+			expect(empty.view.rows.filter((r) => r.type === 'item')).toHaveLength(0);
+
+			// The record is written; the executor pokes the feed once.
+			const poke = readOf(dispatch({ type: 'reconcile_completed', resolved_count: 1 }));
+			expect(poke).toBeDefined();
+			const after = answer(poke!, [DAPP]);
+			const items = after.view.rows.flatMap((r) => (r.type === 'item' ? [r.item] : []));
+			expect(items).toHaveLength(1);
+			expect(items[0]).toMatchObject({
+				id: DAPP.id,
+				kind: 'dapp_tx',
+				status: 'pending',
+				site: '127.0.0.1:8137'
+			});
+		} finally {
+			core.free();
+		}
+		// The core's first load, inside the test: 5 s is not enough under a full parallel run.
+	}, 30_000);
+});
+
+/**
+ * Spec 082 RJ16 (T233, G52): a dApp record's detail names who got the money.
+ * The stored request's call data reaches the core, which decodes a plain token
+ * transfer's real recipient and calls any other call's `to` the contract.
+ */
+describe('the call data behind a dApp record (RJ16)', () => {
+	const ME_ = '0x' + '11'.repeat(20);
+	const USDC = '0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83';
+	const RECIPIENT = '76875e38fc6bc2dedcaed807ce00782db5c0d141';
+	const TRANSFER =
+		'0xa9059cbb' + RECIPIENT.padStart(64, '0') + (10n ** 30n).toString(16).padStart(64, '0');
+	const record = (signedRequest: LocalTransaction['signedRequest']): LocalTransaction => ({
+		id: 'dapp-1-tx',
+		userOpHash: '0x' + 'ab'.repeat(32),
+		txHash: '',
+		from: ME_,
+		to: USDC,
+		value: '0',
+		symbol: 'xDAI',
+		decimals: 18,
+		chainId: 100,
+		timestamp: 1_700_000_000,
+		status: 'failed',
+		type: 'dapp_tx',
+		dappOrigin: 'http://127.0.0.1:8137',
+		signedRequest
+	});
+
+	it('eth_sendTransaction: its own data; wallet_sendCalls: the first leg’s', () => {
+		expect(
+			toFeedRecord(
+				record({ method: 'eth_sendTransaction', params: [{ to: USDC, data: TRANSFER }] })
+			)?.call_data
+		).toBe(TRANSFER);
+		expect(
+			firstCallData({
+				method: 'wallet_sendCalls',
+				params: [
+					{
+						calls: [
+							{ to: USDC, data: TRANSFER },
+							{ to: USDC, data: '0x01' }
+						]
+					}
+				]
+			})
+		).toBe(TRANSFER);
+	});
+
+	it('none for a plain send, an unreadable request, or any other kind', () => {
+		expect(
+			firstCallData({ method: 'eth_sendTransaction', params: [{ to: USDC, value: '0x1' }] })
+		).toBeNull();
+		expect(firstCallData({ method: 'eth_sendTransaction', params: [{ data: '0x' }] })).toBeNull();
+		expect(
+			firstCallData({ method: 'eth_sendTransaction', params: [{ data: 'nothex' }] })
+		).toBeNull();
+		expect(firstCallData(undefined)).toBeNull();
+		expect(toFeedRecord({ ...record(undefined), type: 'send' })?.call_data).toBeNull();
+	});
+
+	it('through the core: the DX-W3 record names the transfer’s recipient, and no explorer', async () => {
+		await import('$lib/i18n/wasm-init.server');
+		const { ActivityFeedCore } = await import('$lib/core/client');
+		const core = new ActivityFeedCore();
+		type Result = {
+			view: FeedView;
+			effects: { id: number; operation: { type: string; read_id?: number } }[];
+		};
+		const dispatch = (event: unknown) => JSON.parse(core.dispatch(JSON.stringify(event))) as Result;
+		const resolve = (id: number, result: unknown) =>
+			JSON.parse(core.resolve_effect(BigInt(id), JSON.stringify(result))) as Result;
+		try {
+			const first = dispatch({ type: 'account_switched', address: ME_ }).effects.find(
+				(e) => e.operation.type === 'read_tx_store'
+			)!;
+			const stored = record({
+				method: 'eth_sendTransaction',
+				params: [{ to: USDC, data: TRANSFER }]
+			});
+			const after = resolve(first.id, {
+				type: 'store_loaded',
+				records: [toFeedRecord(stored)],
+				now_ms: 1_700_000_100_000,
+				read_id: first.operation.read_id
+			});
+			const items = after.view.rows.flatMap((r) => (r.type === 'item' ? [r.item] : []));
+			expect(items).toHaveLength(1);
+			expect(items[0].counterparty?.toLowerCase()).toBe(`0x${RECIPIENT}`);
+			expect(items[0].counterparty_role).toBe('recipient');
+			expect(items[0].tx_hash).toBeNull();
+		} finally {
+			core.free();
+		}
+	}, 30_000);
 });

@@ -12,4 +12,10 @@ tx_hash: string | null,
 /**
  * False once terminal or abandoned (24h) — drives "check the explorer".
  */
-polling: boolean, submitted_at_ms: number | null, outcome: TrackOutcome, };
+polling: boolean, submitted_at_ms: number | null, outcome: TrackOutcome, 
+/**
+ * The bundle tx the relay's status named while no receipt has (spec 082
+ * RA7, the 079 D2 explorer link). A link only — `tx_hash` above is the
+ * verdict's.
+ */
+relay_tx_hash: string | null, };

@@ -61,7 +61,6 @@
     "txRemaining": "~{{remaining}}s remaining",
     "txTypicalTime": "{{chainName}} typically confirms in ~{{estSecs}}s",
     "txRetryBtn": "Try Again",
-    "txErrorTimeout": "Transaction submitted but confirmation timed out. Check history later.",
     "txErrorBundlerLoop": "Gas account balance keeps being rejected by the bundler. Try again later or increase gas tier.",
     "txErrorBundlerFund": "Bundler account needs more gas. Please fund it in Settings.",
     "txErrorPublicKey": "Public key not found for this account",

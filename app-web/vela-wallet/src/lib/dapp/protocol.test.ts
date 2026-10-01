@@ -6,15 +6,29 @@
  * A constant that disagrees with the shipped one is exactly the bug this file
  * exists to prevent.
  */
+// The core is loaded the way every build-time consumer loads it, so the
+// worker's constants can be pinned to the core's own numbers (spec 082 §13).
+import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
+import { rpcCooldownMs, rpcReadTimeoutMs, signNotConfirmedDetail } from '$lib/core/kernels';
 import {
+	ENDPOINTS_KEY,
 	ERR,
 	MAX_REQUEST_BYTES,
+	READ_TIMEOUT_MS,
+	chainNameOf,
+	cooldownMs,
+	endpointAnswered,
+	endpointFailed,
+	orderEndpoints,
+	readFailureKind,
+	unreachableChainMessage,
 	chainEndpoints,
 	chainKnown,
 	classifyMethod,
 	hostLabel,
 	isWellFormedRequest,
+	maybeSentPayload,
 	originOfUrl,
 	parseChainId,
 	pickSignAddress,
@@ -183,5 +197,93 @@ describe('what the worker now routes itself (reads, switching)', () => {
 		expect(chainKnown(catalog, 100)).toBe(true);
 		expect(chainKnown(catalog, 8453)).toBe(false);
 		expect(chainKnown(undefined, 1)).toBe(false);
+	});
+});
+
+describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
+	it('gives one endpoint the core’s read budget, not 20 s', () => {
+		expect(READ_TIMEOUT_MS).toBe(rpcReadTimeoutMs());
+		expect(READ_TIMEOUT_MS).toBe(8_000);
+	});
+	it('a lost claimed submit is told the core\'s "not confirmed yet"; a batch, its id (RJ2, 083)', () => {
+		const op = `0x${'ab'.repeat(32)}`;
+		expect(maybeSentPayload('eth_sendTransaction', op)).toEqual({
+			error: { code: -32603, message: signNotConfirmedDetail(op) }
+		});
+		expect(maybeSentPayload('wallet_sendCalls', op)).toEqual({ result: op });
+	});
+
+
+	it('cools a failing endpoint exactly as the core’s pool does', () => {
+		for (let n = 1; n <= 5; n += 1) expect(cooldownMs(n), `n=${n}`).toBe(rpcCooldownMs(n));
+		expect(cooldownMs(0)).toBe(0);
+		expect(cooldownMs(9)).toBe(300_000);
+	});
+
+	it('skips cooled endpoints while one is live, and a success forgets the failure', () => {
+		const now = 1_000_000;
+		let health = endpointFailed({}, 'https://a', now);
+		health = endpointFailed(health, 'https://a', now);
+		health = endpointFailed(health, 'https://b', now);
+		expect(health['https://a']).toEqual({ failures: 2, until: now + 60_000 });
+		expect(health['https://b']).toEqual({ failures: 1, until: now + 30_000 });
+		// The second call goes straight to the node that did not fail — and ONLY
+		// to it: re-paying 8 s on each dead node every call was G64.
+		expect(orderEndpoints(['https://a', 'https://b', 'https://c'], health, now + 1)).toEqual([
+			'https://c'
+		]);
+		// A cool-down that has run out puts the endpoint back in its place.
+		expect(orderEndpoints(['https://a', 'https://b'], health, now + 60_001)).toEqual([
+			'https://a',
+			'https://b'
+		]);
+		expect(endpointAnswered(health, 'https://a')).toEqual({ 'https://b': health['https://b'] });
+		expect(ENDPOINTS_KEY).toBe('vela.ext.endpoints');
+	});
+
+	it('with every endpoint cooled, tries only the one that comes back first (RJ20, G64)', () => {
+		const now = 1_000_000;
+		const health = {
+			'https://a': { failures: 3, until: now + 120_000 },
+			'https://b': { failures: 1, until: now + 30_000 },
+			'https://c': { failures: 2, until: now + 60_000 }
+		};
+		expect(orderEndpoints(['https://a', 'https://b', 'https://c'], health, now + 1)).toEqual([
+			'https://b'
+		]);
+		// One endpoint and it is cooled: it is still asked — a read is never refused unasked.
+		expect(orderEndpoints(['https://a'], health, now + 1)).toEqual(['https://a']);
+		expect(orderEndpoints([], health, now)).toEqual([]);
+	});
+
+	it('names the chain in plain words, with no engine text', () => {
+		const catalog = { chains: { '100': { name: 'Gnosis', rpc: [] } } };
+		expect(unreachableChainMessage(chainNameOf(catalog, 100), 100)).toBe(
+			'Vela could not reach a node for chain Gnosis (100)'
+		);
+		expect(unreachableChainMessage(chainNameOf(catalog, 5), 5)).toBe(
+			'Vela could not reach a node for chain unknown (5)'
+		);
+		expect(unreachableChainMessage('Gnosis', 100)).not.toMatch(/fetch|signal|abort/i);
+	});
+
+	it('names a failure by its kind for the log', () => {
+		expect(readFailureKind(Object.assign(new Error('x'), { name: 'TimeoutError' }))).toBe(
+			'timeout'
+		);
+		expect(readFailureKind(new TypeError('Failed to fetch'))).toBe('network');
+		expect(readFailureKind(new Error('http'), 502)).toBe('http_502');
+	});
+
+	it('an abort by the 8 s timer is a timeout, whatever the engine threw (G64)', () => {
+		// Chrome's worker rejected some timer aborts with a plain "Failed to
+		// fetch": the device log said kind=network for four 8 s waits.
+		expect(readFailureKind(new TypeError('Failed to fetch'), undefined, true)).toBe('timeout');
+		expect(
+			readFailureKind(Object.assign(new Error('x'), { name: 'AbortError' }), undefined, true)
+		).toBe('timeout');
+		// A status is an answer, however long it took.
+		expect(readFailureKind(new Error('http'), 504, true)).toBe('http_504');
+		expect(readFailureKind(new TypeError('Failed to fetch'), undefined, false)).toBe('network');
 	});
 });

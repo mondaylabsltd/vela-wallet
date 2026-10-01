@@ -36,22 +36,38 @@ Redoes PR #337 (web/extension `eth_signTypedData_v4` only; the owner closes it) 
 | iOS | VelaWalletTests on a cloned iPhone simulator, xcframework built from this tree: 969 tests in 127 suites passed |
 | Android | `testDebugUnitTest`: 803 tests, 802 passed; the 1 failure was pre-existing on `main` (below) and is fixed here too |
 
+### After merging `main` with PR #338 (082), 2026-10-01
+
+The only conflicts were the generated stamps (the wasm, `pkg-web`, the signer page's `dist/`, `BUILD_ALLOWED`) and `.specify/feature.json`. The wasm, Swift bindings, TS mirrors and signer page were rebuilt from the merged tree. The merged page is build `0ba8ee8c…` (see Owner steps).
+
+| Suite | Result |
+|---|---|
+| vela-core + workspace (`i18n-all,dev-fixtures`) | 2240 passed, 0 failed; clippy `-D warnings` clean |
+| desktop | 868 passed, 0 failed; fmt clean |
+| signer page | safeop, identicon, typed-shape, takeover, unlimited-line, origin-line, plain-send 153/153, fee-leg, hostile 32/32, channels 19/19, ceremony 47/47, slider 19/19, single-file 12/12 |
+| web | 2235 unit tests pass, plus `extension/package.test.ts` 10/10 after `pnpm build:extension`; `svelte-check` 0 errors |
+| iOS | 1072 tests in 138 suites passed (cloned simulator, xcframework built from this tree) |
+| Android | `testDebugUnitTest`: 863 tests, 0 failures |
+
 Pre-existing on `main`, not 085 (085 changes neither file nor the generated mirror):
 
-- `pnpm check` reports one error in `src/routes/[locale]/wallet/+page.svelte:654` (083's
-  `FeeFailure::would_fail` is not a `SendEstimateFailure`); `main`'s web CI runs only
-  `pnpm run build`, so it is not gated.
+- `pnpm check` reported one error in `src/routes/[locale]/wallet/+page.svelte:654` (083's
+  `FeeFailure::would_fail` is not a `SendEstimateFailure`). The 082 merge (PR #338) fixed it,
+  and after merging `main`, `svelte-check` reports 0 errors.
 - Android `CoreWireDriftTest.signRequestWiresMatchTheMirrors`: 083 added `SignSubmitOutcome`
   `not_confirmed` and `reverted` to the core; Android's Kotlin mirror lacked them. The two
   variants are added here (the same block as the 082 merge, PR #338, so the two merge cleanly).
 
 ## Owner steps
 
-1. Deploy `app-web/trusted-signer/dist/` (the new build `8c002ee4…` is first in `BUILD_ALLOWED`).
-2. Confirm `https://sign.getvela.app/b/8c002ee4…/sign` is 200 with
+1. Deploy `app-web/trusted-signer/dist/`. The build to launch is `0ba8ee8c…`, first in
+   `BUILD_ALLOWED`: one page carrying both 085's typed-data reader and 082's site and plain-send
+   fixes. It comes from merging `main` after PR #338, and it replaces both `8c002ee4…` (085 alone)
+   and `82fae7f2…` (082 alone), which stay in the allow-set.
+2. Confirm `https://sign.getvela.app/b/0ba8ee8c…/sign` is 200 with
    `cache-control: public, max-age=31536000, immutable`.
-3. Then move `LAUNCH` to `8c002ee4…` (a one-line follow-up). Until then phones open the current
-   page; the core's arrival check keeps two documents from ever reaching it.
+3. Then move `LAUNCH` to `0ba8ee8c…` (a one-line follow-up). Until then phones open the current
+   page, and the core's arrival check keeps two documents from ever reaching it.
 4. Close PR #337.
 
 ## Follow-ups

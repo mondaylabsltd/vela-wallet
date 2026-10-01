@@ -1,0 +1,13 @@
+EX4b worker log (storage.session vela.sw.log), 2026-09-29 +0800 = UTC+8
+(a) the row as written: panel Wallet -> Settings -> Wallet, then tab B Connect
+[vela-sw] 2026-09-28T18:32:30.562Z req.arrived kind=connect tab=291188711 host=127.0.0.1:8138
+[vela-sw] 2026-09-28T18:32:30.562Z req.surface surface=panel tab=291188711
+[vela-sw] 2026-09-28T18:32:30.563Z req.shown tab=291188711          <- card within 1 ms
+[vela-sw] 2026-09-28T18:32:39.527Z req.answered delivered=true outcome=error tab=291188711   (取消 -> one 4001)
+
+(b) extra probe of RB9: panel LEFT ON Settings, then tab B Connect
+[vela-sw] 2026-09-28T18:32:47.400Z req.arrived kind=connect tab=291188711 host=127.0.0.1:8138
+[vela-sw] 2026-09-28T18:32:47.400Z req.surface surface=panel tab=291188711
+   ... panel stays on zh/settings.html, no dialog, no badge, for 58 s (polled every ~0.5 s, then 5 s wait) ...
+[vela-sw] 2026-09-28T18:33:45.188Z req.shown tab=291188711          <- only after I tapped 钱包 by hand
+panel target url throughout: chrome-extension://…/zh/settings.html; sessionStorage vela.surface.panel=1

@@ -5,9 +5,9 @@
 //! desktop drew lettermarks where the web and the phones draw token and chain
 //! logos, and why nobody could tell a network apart by looking.
 //!
-//! The transport is the app's own `proxy::agent`, not a second one: a machine
-//! that needs a proxy to reach the RPC needs it to reach the logo index too,
-//! and the proxy candidate list is where that knowledge already lives. `ureq`
+//! The transport is the app's own `proxy::with_routes`, not a second one: a
+//! machine that needs a proxy to reach the RPC needs it to reach the logo
+//! index too, and the system's routes are where that knowledge lives. `ureq`
 //! is blocking, so each request runs on its own short-lived thread and the
 //! future resolves when it lands — logos are a handful of fetches per screen,
 //! cached by gpui's own image cache afterwards, so a pool would be more
@@ -36,7 +36,7 @@ impl HttpClient for AppHttpClient {
     }
 
     fn proxy(&self) -> Option<&Url> {
-        // The agent resolves its own proxy per request (the candidate list can
+        // The routes are resolved per request (the system's setting can
         // change while the app runs); reporting one here would freeze the
         // first answer for the life of the process.
         None
@@ -59,7 +59,8 @@ impl HttpClient for AppHttpClient {
 }
 
 fn fetch(uri: &str) -> Result<Response<AsyncBody>> {
-    let mut response = proxy::agent(LOGO_TIMEOUT).get(uri).call()?;
+    let mut response = proxy::with_routes(uri, LOGO_TIMEOUT, |agent| agent.get(uri).call())
+        .map_err(|failure| failure.error)?;
     let status = response.status();
     let mut body = Vec::new();
     std::io::Read::read_to_end(&mut response.body_mut().as_reader(), &mut body)?;

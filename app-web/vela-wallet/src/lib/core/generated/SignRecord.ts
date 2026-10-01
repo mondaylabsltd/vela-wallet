@@ -31,6 +31,17 @@ dapp_origin: string,
  */
 dapp_url: string, intent: string | null, 
 /**
+ * The submit's reply was lost; `user_op_hash` is the locally computed
+ * hash (spec 082 RA3). Persisted with the record, so a restart hands the
+ * tracker a may-have-been-sent op again (`TrackPendingRecord`).
+ */
+maybe_sent: boolean, 
+/**
+ * The head read before the first submit POST — where the tracker's
+ * relay-independent landing check starts (ruling 8). Persisted likewise.
+ */
+submit_block: number | null, 
+/**
  * A transaction's balance changes as the person approved them — the
  * sheet's simulation, [`SignApproveOpts::balance_changes`] (083 F1).
  * Never a signature's, never empty, and absent from the wire when there

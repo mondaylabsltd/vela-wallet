@@ -2,12 +2,17 @@
 //  SimDeltasTests.swift
 //  VelaWalletTests
 //
-//  The simulation's shell half, against the two things it can get wrong:
-//  the payload the node is asked, and the netting of what comes back.
+//  The simulation's shell half, against the one thing it still does — the
+//  payload the node is asked — and the mapping of the node's answer into the
+//  core's `simOutcome` (spec 082 T110, RG6). The reading of that answer (a
+//  revert, a node that cannot simulate, the person's net moves) moved to the
+//  core with its vectors (T039); what is pinned here is that the shell hands
+//  the core the reply AS IT CAME and draws the core's verdict.
 //
 
 import Foundation
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 struct SignedDigitsTests {
@@ -54,15 +59,18 @@ struct SignedDigitsTests {
     }
 }
 
+@MainActor
 struct SimDeltasTests {
 
     private let me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
     private let usdc = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"
+    /// `keccak256("Transfer(address,address,uint256)")` — test data only.
+    private let transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
     private func transferLog(from: String, to: String, token: String, value: String) -> [String: Any] {
         [
             "address": token,
-            "topics": [SimDeltas.transferTopic, topic(from), topic(to)],
+            "topics": [transferTopic, topic(from), topic(to)],
             "data": value,
         ]
     }
@@ -116,82 +124,75 @@ struct SimDeltasTests {
         #expect(SimDeltas.hexValue("-5") == "0x0")
     }
 
-    // MARK: - The logs
+    // MARK: - The node's answer, to the core (spec 082 T110)
 
-    /// A node that errored has told us NOTHING, and `nil` is how that stays
-    /// distinguishable from "it ran and nothing moved".
-    @Test func anErrorIsNotAnEmptyResult() {
-        #expect(SimDeltas.logsOf(["error": ["code": -32601]]) == nil)
-        #expect(SimDeltas.logsOf(["result": []]) == nil)
-        #expect(SimDeltas.logsOf([:]) == nil)
-        #expect(SimDeltas.logsOf(["result": [["calls": []]]])?.isEmpty == true,
-                "a block with no calls RAN — that is an empty result, not a refusal")
+    private func outcome(_ answer: RpcOutcome) -> SigningController.Simulation {
+        SigningController.simulation(of: simOutcome(user: me, replyJson: SigningController.simReply(answer)))
     }
 
-    /// Only the calls that succeeded. A reverted leg's logs describe a world
-    /// that will not exist.
-    @Test func onlySucceededCallsContributeLogs() throws {
-        let logs = try #require(SimDeltas.logsOf([
-            "result": [[
-                "calls": [
-                    ["status": "0x1", "logs": [transferLog(from: me, to: usdc, token: usdc, value: word(5))]],
-                    ["status": "0x0", "logs": [transferLog(from: usdc, to: me, token: usdc, value: word(99))]],
-                ],
-            ]],
-        ]))
-        #expect(logs.count == 1)
+    /// A call that reverted is DANGER, with its reason — the old parser read
+    /// it as "nothing moves" (L-D5).
+    @Test func aRevertIsDangerWithItsReason() {
+        // Error(string) "nope": 0x08c379a0, offset 0x20, length 4, "nope".
+        let revertData = "0x08c379a0" + String(repeating: "0", count: 62) + "20"
+            + String(repeating: "0", count: 63) + "4" + "6e6f7065" + String(repeating: "0", count: 56)
+        let result: [[String: Any]] = [[
+            "calls": [["status": "0x0", "returnData": revertData, "logs": [[String: Any]](),
+                       "error": ["code": 3, "message": "execution reverted", "data": revertData]]],
+        ]]
+        guard case .notice(let risk, let key, let reason) = outcome(.ok(result)) else {
+            Issue.record("a revert was not a notice")
+            return
+        }
+        #expect(risk == "danger")
+        #expect(key == "componentsUi.signing.simWillFailReason" || key == "componentsUi.signing.simWillFail")
+        if key == "componentsUi.signing.simWillFailReason" { #expect(reason == "nope") }
     }
 
-    // MARK: - The netting
-
-    @Test func transfersNetPerTokenInFirstSeenOrder() throws {
-        let logs = [
-            transferLog(from: me, to: usdc, token: usdc, value: word(30)),
-            transferLog(from: usdc, to: me, token: usdc, value: word(10)),
-            transferLog(from: usdc, to: me, token: SimDeltas.nativeSentinel, value: word(7)),
-        ]
-        let deltas = SimDeltas.deriveDeltas(logs: logs, user: me)
-        #expect(deltas.count == 2)
-        #expect(deltas[0]["kind"] as? String == "erc20")
-        #expect(deltas[0]["token"] as? String == usdc)
-        #expect(deltas[0]["delta"] as? String == "-20")
-        // The sentinel is the NATIVE coin, not a contract.
-        #expect(deltas[1]["kind"] as? String == "native")
-        #expect(deltas[1]["token"] is NSNull)
-        #expect(deltas[1]["delta"] as? String == "7")
+    /// A node that does not offer the method, or answers junk, is CAUTION —
+    /// "couldn't check", never danger and never "nothing moves".
+    @Test func aNodeThatCannotCheckIsCaution() {
+        for answer: RpcOutcome in [
+            .rpcError(code: -32601, message: "method not found"),
+            .rpcError(code: -32603, message: "method handler crashed"),
+            .ok(NSNull()),
+            .ok([Any]()),
+        ] {
+            #expect(outcome(answer) == .notice(
+                risk: "caution", key: "componentsUi.signing.simUnavailableWarning", reason: nil
+            ), "\(answer)")
+        }
+        // Nobody answered at all: the same caution.
+        #expect(outcome(.failed(rateLimited: false)) == .notice(
+            risk: "caution", key: "componentsUi.signing.simUnavailableWarning", reason: nil
+        ))
     }
 
-    /// In and out of the same token nets to nothing, and a pair of moves that
-    /// cancel is how a swap looks like a theft.
-    @Test func aMoveThatCancelsIsNotAMove() {
-        let logs = [
-            transferLog(from: me, to: usdc, token: usdc, value: word(12)),
-            transferLog(from: usdc, to: me, token: usdc, value: word(12)),
-        ]
-        #expect(SimDeltas.deriveDeltas(logs: logs, user: me).isEmpty)
+    /// A clean run is the balance block — the deltas go to `token_trust`,
+    /// the one machine that judges them.
+    @Test func aCleanRunIsAnsweredWithTheCoresDeltas() throws {
+        let result: [[String: Any]] = [[
+            "calls": [["status": "0x1", "logs": [
+                transferLog(from: me, to: usdc, token: usdc, value: word(30)),
+            ]]],
+        ]]
+        #expect(outcome(.ok(result)) == .answered)
+        let record = simOutcome(user: me, replyJson: SigningController.simReply(.ok(result)))
+        let deltas = try #require(
+            try JSONSerialization.jsonObject(with: Data(record.deltasJson.utf8)) as? [[String: Any]]
+        )
+        #expect(deltas.count == 1)
+        #expect((deltas.first?["token"] as? String)?.lowercased() == usdc)
+        #expect(deltas.first?["delta"] as? String == "-30")
     }
 
-    /// Somebody else's transfer is somebody else's business.
-    @Test func transfersThatMissTheWalletAreIgnored() {
-        let other = "0x1111111111111111111111111111111111111111"
-        let logs = [transferLog(from: other, to: usdc, token: usdc, value: word(5))]
-        #expect(SimDeltas.deriveDeltas(logs: logs, user: me).isEmpty)
-    }
-
-    /// A log that is not a `Transfer`, or is malformed, contributes nothing —
-    /// silently, because a simulation is untrusted input by definition.
-    @Test func onlyWellFormedTransfersCount() {
-        let logs: [[String: Any]] = [
-            ["address": usdc, "topics": ["0xdeadbeef", topic(me), topic(usdc)], "data": word(5)],
-            ["address": usdc, "topics": [SimDeltas.transferTopic, topic(me)], "data": word(5)],
-            ["address": "", "topics": [SimDeltas.transferTopic, topic(usdc), topic(me)], "data": word(5)],
-            ["address": usdc, "topics": [SimDeltas.transferTopic, topic(usdc), topic(me)], "data": "0x"],
-        ]
-        #expect(SimDeltas.deriveDeltas(logs: logs, user: me).isEmpty)
-    }
-
-    @Test func topicsBecomeAddresses() {
-        #expect(SimDeltas.topicAddress(topic(me)) == me.lowercased())
-        #expect(SimDeltas.topicAddress("0x00") == "")
+    /// The reply is handed over as it came: a result, the error member, or
+    /// nothing at all.
+    @Test func theReplyIsNormalisedNotJudged() throws {
+        let error = try CoreJSON.object(SigningController.simReply(.rpcError(code: -32601, message: "no")))
+        #expect((error["error"] as? [String: Any])?["message"] as? String == "no")
+        #expect(SigningController.simReply(.failed(rateLimited: true)) == #"{"unreachable":true}"#)
+        let result = try CoreJSON.object(SigningController.simReply(.ok([["calls": []]])))
+        #expect(result["result"] is [Any])
     }
 }

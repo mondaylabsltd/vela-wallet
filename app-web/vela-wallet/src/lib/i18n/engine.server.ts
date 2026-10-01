@@ -145,7 +145,10 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			toName: k('history.toName'),
 			fromName: k('history.fromName'),
 			emptyTitle: k('home.emptyNoActivity'),
-			emptyCaption: k('home.emptySubtitle')
+			emptyCaption: k('home.emptySubtitle'),
+			pending: k('componentsTx.detail.statusPending'),
+			failed: k('componentsTx.detail.statusFailed'),
+			emptyTitleNetwork: k('home.emptyNoActivityNetwork')
 		},
 		assets: {
 			emptyTitle: k('assets.emptyTitle'),
@@ -774,6 +777,17 @@ export function resolveExploreMessages(locale: Locale): ExploreMessages {
 }
 
 /** The serializable strings the signing sheet renders (spec 022 §5). */
+/**
+ * The corpus keys `fee_policy::failure_reason_key` answers with (spec 082
+ * RJ13) — resolved at build time so the sheet can look up whichever the core
+ * names. A key the core adds later and this list lacks draws no line.
+ */
+export const FEE_REASON_KEYS = [
+	'componentsUi.funding.denialNetworkError',
+	'home.balanceDetailStatusRetrying',
+	'explore.chainDown'
+] as const;
+
 export function resolveSigningMessages(locale: Locale): SigningMessages {
 	activate(locale);
 	const k = (key: string) => t(locale, key);
@@ -876,6 +890,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnSelectorNotListed: k('componentsUi.signing.selectorNotListed'),
 		warnExpired: k('componentsUi.signing.expiredWarning'),
 		warnWillFail: k('componentsUi.signing.simWillFail'),
+		warnWillFailReason: k('componentsUi.signing.simWillFailReason'),
 		warnHexMessage: k('componentsUi.signing.hexMessageWarning'),
 		warnBlindTyped: k('componentsUi.signing.blindTypedWarning'),
 		warnEthSign: k('componentsUi.signing.ethSignWarning'),
@@ -904,7 +919,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		feeShort: k('send.warnInsufficientGas'),
 		feeRefresh: k('send.feeRefresh'),
 		feeStale: k('send.feeStale'),
-		feeNetworkError: k('componentsUi.funding.denialNetworkError'),
+		// Spec 082 RJ13: every key `fee_policy::failure_reason_key` can name.
+		feeReasons: Object.fromEntries(FEE_REASON_KEYS.map((key) => [key, k(key)])),
 		speed: {
 			label: k('send.feeSpeedLabel'),
 			once: k('send.feeSpeedOnce'),
@@ -954,7 +970,15 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			// tracker gave up at 24 h, and when a message was signed.
 			stillConfirming: k('componentsUi.signing.stillConfirming'),
 			unknownOutcome: k('componentsUi.signing.unknownOutcome'),
-			signed: k('clearSigning.alertSignedTitle')
+			signed: k('clearSigning.alertSignedTitle'),
+			// Spec 082 RA10: a lost reply, its way out, and "not sent".
+			maybeSent: k('componentsUi.signing.maybeSent'),
+			closeBackground: k('send.txCloseBackground'),
+			notSentHint: k('send.txErrorGeneric'),
+			// Spec 082: "提交至网络…" while it may have been sent (G56), and the
+			// relay's refusal, said without "try again" (RJ3).
+			submitting: k('send.txSubmitting'),
+			refused: k('componentsUi.signing.refused')
 		},
 		// Spec 079: after the approval — the send receipt's words, as
 		// Android's signing receipt uses them.

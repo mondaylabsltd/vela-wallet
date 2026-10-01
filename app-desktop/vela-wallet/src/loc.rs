@@ -21,6 +21,13 @@ impl Loc {
         Self::for_language(&requested_tag())
     }
 
+    /// The engine for one requested tag, whatever the environment says —
+    /// what a test that asserts a language's own words builds.
+    #[cfg(test)]
+    pub fn for_tag(requested: &str) -> Self {
+        Self::for_language(requested)
+    }
+
     /// The engine for one requested language tag, resolved the same way —
     /// what [`Self::from_env`] builds for the language in force.
     pub(crate) fn for_language(requested: &str) -> Self {

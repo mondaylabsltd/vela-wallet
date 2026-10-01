@@ -68,6 +68,10 @@
 //! `openSwitcher` (clipboard), the 650ms minimum pull-spinner hold, all
 //! formatting, and the 10min/10s polling cadences (they arrive as
 //! [`Event::RefreshRequested`] / [`Event::AppFocused`]).
+//!
+//! Also here, pure: [`read_plan`] (spec 082, RE9) — which balances one
+//! chain's read covers, in which order, each contract once — so no client
+//! decides alone which tokens count (the iPhone never counted stablecoins).
 
 use std::collections::BTreeSet;
 
@@ -179,6 +183,192 @@ pub fn native_token_as_erc20(chain_id: u32) -> Option<&'static str> {
 #[must_use]
 pub fn wrapped_native_is_the_native(chain_id: u32, address: &str) -> bool {
     native_token_as_erc20(chain_id).is_some_and(|known| known.eq_ignore_ascii_case(address))
+}
+
+// ---------------------------------------------------------------------------
+// Read plan — which tokens one chain's balance read covers (spec 082, RE9)
+// ---------------------------------------------------------------------------
+
+/// Whether the chain has a native coin somebody can hold. Tempo does not:
+/// its gas is a TIP-20 stablecoin, and `eth_getBalance` there answers one
+/// huge constant for every address (measured 2026-09-04), which is not a
+/// balance.
+#[must_use]
+pub fn chain_has_native_coin(chain_id: u32) -> bool {
+    !super::fee_policy::is_tempo_chain(chain_id)
+}
+
+/// One of a chain's curated stablecoins, as the chain data lists it
+/// (`stables[]`: `symbol`, `contract`; its `type` only orders the quote
+/// preference and is not read here).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct StableRef {
+    pub symbol: String,
+    pub contract: String,
+}
+
+/// One token the person added on this chain (their saved list, this chain's
+/// entries only). Its decimals were read on chain when it was added.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct TokenRef {
+    pub contract: String,
+    pub symbol: String,
+    #[serde(default)]
+    pub name: String,
+    pub decimals: u8,
+}
+
+/// What a slot is, which decides how it is read and priced.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum ReadKind {
+    /// The chain's own coin: `eth_getBalance`, priced as the native.
+    Native,
+    /// A registry stablecoin: `balanceOf` + `decimals()`, worth
+    /// [`ReadSlot::peg_usd`].
+    Stable,
+    /// The wrapped native coin: `balanceOf` + `decimals()`, priced as the
+    /// native.
+    Wrapped,
+    /// The person's own token: `balanceOf`, its saved decimals, priced by DEX.
+    Custom,
+}
+
+/// One balance a chain's read covers.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct ReadSlot {
+    pub kind: ReadKind,
+    /// The token contract; `None` for the native coin.
+    pub contract: Option<String>,
+    /// The registry's or the person's symbol. Empty for [`ReadKind::Native`]
+    /// and [`ReadKind::Wrapped`]: the shell names the chain's coin from its
+    /// own chain data (the wallet's spelling wins — "xDAI"; the wrapped one is
+    /// "W" + it).
+    pub symbol: String,
+    /// The person's saved name for a custom token (or one that overrode a
+    /// registry entry); the symbol for a registry stablecoin; empty for the
+    /// native and wrapped coins, which the shell names.
+    #[serde(default)]
+    pub name: String,
+    /// `Some`: known — no `decimals()` read. `None`: read it on chain
+    /// (stablecoins, the wrapped coin); the native coin takes the chain data's
+    /// native decimals.
+    pub known_decimals: Option<u8>,
+    /// `Some(1.0)` for a registry stablecoin: membership in the curated list
+    /// is the price, the same ≈$1 every client already used.
+    pub peg_usd: Option<f64>,
+}
+
+/// Which balances one chain's read covers, in order (RE9, G24 — the iPhone
+/// read only the native coin and custom tokens, so USDC on Base was missing
+/// from its total):
+///
+/// 1. the native coin, unless the chain has none ([`chain_has_native_coin`]);
+/// 2. the registry stablecoins (`peg_usd = 1.0`, decimals read on chain);
+/// 3. the wrapped native, unless it IS the native ([`wrapped_native_is_the_native`]);
+/// 4. the person's custom tokens.
+///
+/// A contract appears once, compared in lower case: the first slot keeps its
+/// place and its kind (a registry stablecoin stays priced at its peg), and a
+/// custom entry for the same contract lends it its metadata — the person's
+/// symbol, name and saved decimals. A custom entry for the contract that IS
+/// the native coin (Celo's GoldToken) is left out: the native slot already
+/// reads that balance, and reading it twice counts it twice. Blank contracts
+/// are skipped.
+#[must_use]
+pub fn read_plan(
+    chain_id: u32,
+    stables: &[StableRef],
+    wrapped_native: Option<&str>,
+    custom: &[TokenRef],
+) -> Vec<ReadSlot> {
+    let mut plan = Vec::new();
+    if chain_has_native_coin(chain_id) {
+        plan.push(ReadSlot {
+            kind: ReadKind::Native,
+            contract: None,
+            symbol: String::new(),
+            name: String::new(),
+            known_decimals: None,
+            peg_usd: None,
+        });
+    }
+    for stable in stables {
+        push_new(
+            &mut plan,
+            ReadSlot {
+                kind: ReadKind::Stable,
+                contract: Some(stable.contract.trim().to_owned()),
+                symbol: stable.symbol.clone(),
+                name: stable.symbol.clone(),
+                known_decimals: None,
+                peg_usd: Some(1.0),
+            },
+        );
+    }
+    if let Some(wrapped) = wrapped_native
+        .map(str::trim)
+        .filter(|wrapped| !wrapped_native_is_the_native(chain_id, wrapped))
+    {
+        push_new(
+            &mut plan,
+            ReadSlot {
+                kind: ReadKind::Wrapped,
+                contract: Some(wrapped.to_owned()),
+                symbol: String::new(),
+                name: String::new(),
+                known_decimals: None,
+                peg_usd: None,
+            },
+        );
+    }
+    for token in custom {
+        let contract = token.contract.trim();
+        if wrapped_native_is_the_native(chain_id, contract) {
+            continue;
+        }
+        let slot = ReadSlot {
+            kind: ReadKind::Custom,
+            contract: Some(contract.to_owned()),
+            symbol: token.symbol.clone(),
+            name: token.name.clone(),
+            known_decimals: Some(token.decimals),
+            peg_usd: None,
+        };
+        match plan
+            .iter_mut()
+            .find(|held| same_contract(held, contract) && held.kind != ReadKind::Custom)
+        {
+            Some(held) => {
+                held.symbol = slot.symbol;
+                held.name = slot.name;
+                held.known_decimals = slot.known_decimals;
+            }
+            None => push_new(&mut plan, slot),
+        }
+    }
+    plan
+}
+
+fn same_contract(slot: &ReadSlot, contract: &str) -> bool {
+    slot.contract
+        .as_deref()
+        .is_some_and(|held| held.eq_ignore_ascii_case(contract))
+}
+
+/// Adds `slot` unless its contract is blank or already in the plan.
+fn push_new(plan: &mut Vec<ReadSlot>, slot: ReadSlot) {
+    let Some(contract) = slot.contract.as_deref() else {
+        return;
+    };
+    if contract.is_empty() || plan.iter().any(|held| same_contract(held, contract)) {
+        return;
+    }
+    plan.push(slot);
 }
 
 /// `tokenUsdValue` (`models/types.ts:68-70`): balance × (price ?? 0).

@@ -38,16 +38,12 @@ import { offeredTier, speedControlModel } from '$lib/flows/speed-control';
 import type { FeeSpeedModel } from '$lib/flows/model';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
-import type { SignRequestView } from '$lib/core/generated/SignRequestView';
-import { chainLogoURL, isAddress } from '$lib/services/tokens-model';
-import { chainMeta } from '$lib/services/chains';
-import { isTempoChain } from '$lib/services/tempo';
-import { feeRequoteDelayMs } from '$lib/core/kernels';
-import { exactAmount, trimBalance } from '$lib/wallet/live';
+import { chainLogoURL } from '$lib/services/tokens-model';
+import { browserSiteLabel, feeFailureReasonKey } from '$lib/core/kernels';
+import { estimateRevertsFor } from '$lib/services/estimate-verdict';
+import { exactAmount, moneyText, trimBalance } from '$lib/wallet/live';
 import { fromBaseUnits } from '$lib/services/eip681';
-import { resolveChainId } from '$lib/services/chain-id';
-import { groupDigits, numberSeparators } from '$lib/services/locale-format';
-import { chainName } from '$lib/services/networks';
+import { chainName, nativeSymbol } from '$lib/services/networks';
 import { shortenAddress } from '$lib/wallet/identity';
 import type { WalletIdentity } from '$lib/wallet/identity';
 import { fill } from '$lib/wallet/messages';
@@ -148,13 +144,28 @@ function fieldRow(field: ClearSignField): KeyValueRow {
 	};
 }
 
-/** The amount a decoded field carries, when it is the one the eye should land on. */
-function amountLine(field: ClearSignField, outgoing: boolean): AmountLine {
+/**
+ * The sign an outgoing amount wears: U+2212, the minus the core's signed
+ * amounts use (spec 082 RJ15) — never ASCII `-`, which reads as a hyphen.
+ */
+export const MINUS = '\u2212';
+
+/**
+ * The amount a decoded field carries, when it is the one the eye should land
+ * on. Its fiat goes through the wallet's own money formatter (spec 082 G60):
+ * the display currency, the person's number preset, and never exponent
+ * notation — `toFixed` wrote a 10^30-unit transfer as "≈ $1e+24".
+ */
+function amountLine(
+	field: ClearSignField,
+	outgoing: boolean,
+	currency: SigningLiveInputs['currency']
+): AmountLine {
 	return {
-		sign: outgoing ? '-' : '+',
+		sign: outgoing ? MINUS : '+',
 		value: field.value,
 		symbol: '',
-		fiat: field.usd_value === null ? undefined : `≈ $${field.usd_value.toFixed(2)}`,
+		fiat: field.usd_value === null ? undefined : `≈ ${moneyText(field.usd_value, currency)}`,
 		tone: field.warning ? 'danger' : outgoing ? 'neutral' : 'success'
 	};
 }
@@ -311,128 +322,6 @@ export function calldataBytes(paramsJson: string): number {
 	}
 }
 
-/** The first value a uint256 cannot hold — `abi_encode_uint256` refuses it. */
-const UINT256_LIMIT = 1n << 256n;
-
-/** A request that only moves the chain's own coin (083 H3). */
-export interface NativeSend {
-	to: string;
-	wei: bigint;
-	/** The chain's own coin, as the built-in chain table names it. */
-	symbol: string;
-}
-
-/**
- * The plain native send a request is, or `null` (083 H3 — the desktop's W10
- * rule, so the two shells draw the same request the same way).
- *
- * The core resolves an empty-calldata request with no result and leaves the
- * transfer to the shell; the web drew it on the blind rung, and a 0.001 xDAI
- * send read "contract interaction, unable to decode (0 bytes)" in red.
- *
- * Read the way `dapp-submit` reads the call it submits, so the figure and the
- * recipient drawn are the ones signed. `null` keeps the blind rung, which says
- * nothing false: more than one call (a batch whose first leg is a plain send
- * is more than that send), any calldata (in `data` or web3.js's `input`), a
- * recipient that is not an address, a value the executor would read
- * differently from the site (it takes every value as hex — a bare "1000" is
- * 0x1000 there) or could not sign at all (more than a uint256), a chain whose
- * coin the wallet cannot name — Tempo has none, and "ETH" on a custom network
- * would be a guess — or a call that names a chain of its own other than the
- * sheet's.
- *
- * That last one is the executor's rule too: `resolveChainId` lets a
- * `chainId` in `params[0]` win over the request's chain, and reads it
- * leniently (`"1x"` is chain 1, which the core does not switch to). A send of
- * "1 POL" drawn on Polygon while the passkey signed 1 ETH on chain 1 would be
- * a calm, specific lie; blind says nothing false.
- */
-export function nativeSendOf(
-	request: Pick<SignRequestView, 'kind' | 'params_json' | 'chain_id'>
-): NativeSend | null {
-	let params: unknown;
-	try {
-		params = JSON.parse(request.params_json);
-	} catch {
-		return null;
-	}
-	if (!Array.isArray(params)) return null;
-	const first = params[0] as { calls?: unknown; chainId?: unknown } | null | undefined;
-	// Both a transaction and a batch carry their chain on `params[0]`, which is
-	// where `handleSendTransaction` / `handleSendCalls` read it.
-	const embedded = first?.chainId;
-	if (embedded != null) {
-		if (typeof embedded !== 'string' && typeof embedded !== 'number') return null;
-		if (resolveChainId(0, embedded) !== request.chain_id) return null;
-	}
-	let call: unknown = null;
-	if (request.kind === 'transaction') call = first;
-	// Counted as the site sent it: every leg, readable or not, is a leg.
-	else if (request.kind === 'batch' && Array.isArray(first?.calls) && first.calls.length === 1)
-		call = first.calls[0];
-	if (typeof call !== 'object' || call === null) return null;
-	const { to, value, data, input } = call as {
-		to?: unknown;
-		value?: unknown;
-		data?: unknown;
-		input?: unknown;
-	};
-	// Calldata in `input` (web3.js spells it that way) is still calldata. The
-	// executor drops it (`txDict.data ?? '0x'`) and would sign a bare transfer
-	// to a contract that meant to be called; a calm "Send" would hide that, so
-	// only the blind rung may draw it.
-	for (const bytes of [data, input]) {
-		if (bytes !== undefined && bytes !== null && bytes !== '' && bytes !== '0x') return null;
-	}
-	if (typeof to !== 'string' || !isAddress(to)) return null;
-	let wei: bigint;
-	if (value === undefined || value === null || value === '') wei = 0n;
-	else if (typeof value === 'string' && /^0x[0-9a-fA-F]*$/.test(value))
-		wei = BigInt(value === '0x' ? '0' : value);
-	else return null;
-	// More than a uint256 cannot be encoded, so cannot be signed: the submit
-	// would fail after a calm sheet showed an impossible figure.
-	if (wei >= UINT256_LIMIT) return null;
-	const symbol = isTempoChain(request.chain_id)
-		? undefined
-		: chainMeta(request.chain_id)?.nativeSymbol;
-	return symbol === undefined ? null : { to, wei, symbol };
-}
-
-/**
- * A send of the chain's own coin, in the decoded send's layout: what it does,
- * how much, to whom — and no decode warning, because there was no calldata to
- * decode. Exact, never rounded: every wei that will be signed (a chain's own
- * coin has 18 decimals). The whole part is grouped the person's way, like the
- * amounts the core decodes on the same sheet (and the desktop's
- * `exact_coin_figure`): 25000 xDAI reads "25,000", not "25000".
- */
-function nativeSendBlocks(send: NativeSend, m: SigningMessages): Block[] {
-	const [whole, frac] = fromBaseUnits(send.wei, 18).split('.');
-	return [
-		{ kind: 'intent', text: m.intentSend, tone: 'neutral' },
-		{
-			kind: 'amount',
-			line: {
-				// Nothing leaves on a zero-value call: "0", not "-0" (the desktop draws it so).
-				sign: send.wei === 0n ? '' : '-',
-				value:
-					frac === undefined
-						? groupDigits(whole)
-						: `${groupDigits(whole)}${numberSeparators().decimal}${frac}`,
-				symbol: send.symbol,
-				tone: 'neutral'
-			}
-		},
-		{
-			kind: 'party',
-			label: m.labelRecipient,
-			name: shortenAddress(send.to),
-			address: send.to
-		}
-	];
-}
-
 /** The sentence under a refused request (spec 081). */
 function selfCallBlockedText(
 	blocked: NonNullable<SignView['blocked']>,
@@ -477,16 +366,17 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 
 		const send = result.fields.find((f) => f.role === 'send_amount');
 		const receive = result.fields.find((f) => f.role === 'receive_amount');
+		const currency = inputs.currency;
 		if (send && receive) {
 			blocks.push({
 				kind: 'swap',
-				pay: amountLine(send, true),
-				receive: amountLine(receive, false)
+				pay: amountLine(send, true, currency),
+				receive: amountLine(receive, false, currency)
 			});
 		} else if (send) {
-			blocks.push({ kind: 'amount', line: amountLine(send, true) });
+			blocks.push({ kind: 'amount', line: amountLine(send, true, currency) });
 		} else if (receive) {
-			blocks.push({ kind: 'amount', line: amountLine(receive, false) });
+			blocks.push({ kind: 'amount', line: amountLine(receive, false, currency) });
 		}
 
 		for (const field of result.fields) {
@@ -541,11 +431,34 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		return blocks;
 	}
 
-	// 083 H3: nothing to decode is not the same as undecodable — a request
-	// that only moves the chain's own coin is a send.
-	const nativeSend =
-		clear.surface === 'blind_transaction' && sign.request ? nativeSendOf(sign.request) : null;
-	if (nativeSend) return nativeSendBlocks(nativeSend, m);
+	/*
+	 * Spec 082 G14 (RC1–RC6): a call with no calldata is a SEND, whatever the
+	 * recipient — the core decided it and wrote the exact amount. What the
+	 * phones always drew: "Send", the amount card in the coin the fee row
+	 * uses (RC5), and who it goes to. Never the red "Blind signature" over
+	 * bytes that do not exist. A zero value keeps the card, with no minus
+	 * sign (RC3): only a simulation may say that nothing leaves.
+	 */
+	if (clear.surface === 'plain_send' && clear.plain_send && sign.request) {
+		const plain = clear.plain_send;
+		blocks.push({ kind: 'intent', text: m.intentSend, tone: 'neutral' });
+		blocks.push({
+			kind: 'amount',
+			line: {
+				sign: plain.no_value ? '' : MINUS,
+				value: plain.amount,
+				symbol: nativeSymbol(sign.request.chain_id),
+				tone: 'neutral'
+			}
+		});
+		blocks.push({
+			kind: 'party',
+			label: m.labelRecipient,
+			name: shortenAddress(plain.to),
+			address: plain.to
+		});
+		return blocks;
+	}
 
 	// No decode at all — the deepest rung. The core said so; the sheet says so.
 	if (clear.surface === 'blind_transaction' || clear.surface === 'blind_typed_data') {
@@ -622,14 +535,21 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 	// busy flag the "estimating" value reads, so the row can never claim to be
 	// both settled and measuring. The chevron only where a tap opens a list.
 	const refresh = { refreshLabel: m.feeRefresh, refreshing: fee.busy, chevron: choosable };
-	// Spec 079: WHY there is no fee, when it is something a retry can clear —
-	// the relay out of reach, a busy estimate — and that the sheet will ask
-	// again by itself (it does: `FeeRequoteTimer`, on the core's schedule). The
-	// core's schedule decides which failures those are, so the sentence and
-	// the timer cannot disagree. A missing key or a calculation that cannot
-	// come out gets no network sentence: the network did not cause it.
-	const reason = (failure: FeeFailure | null | undefined): string | undefined =>
-		failure != null && feeRequoteDelayMs(failure, 1) !== null ? m.feeNetworkError : undefined;
+	// Spec 079: WHY there is no fee, when it is something a retry can clear,
+	// and that the sheet will ask again by itself (`FeeRequoteTimer`, on the
+	// core's schedule). Spec 082 RJ13: the CORE picks the words
+	// (`feeFailureReasonKey`) — the relay out of reach, a rate-limited chain
+	// node, a chain node out of reach — so a public node's rate limit is never
+	// "can't reach Vela" (G48). A missing key or a calculation that cannot
+	// come out gets no line: the network did not cause it.
+	const reason = (failure: FeeFailure | null | undefined): string | undefined => {
+		if (failure == null) return undefined;
+		const key = feeFailureReasonKey(failure);
+		const words = key === null ? undefined : m.feeReasons[key];
+		if (words === undefined) return undefined;
+		const chain = sign.request ? chainName(sign.request.chain_id) : '';
+		return fill(words, { chain });
+	};
 	if (!fee.fee || ofAnotherTier) {
 		// Asked and not answered yet, or asked and refused: say so in the fee's
 		// own row. A sheet that drew nothing here let a person slide on a
@@ -642,8 +562,10 @@ function feeModel(inputs: SigningLiveInputs): FeeModel {
 				value: m.feeEstimating,
 				speed,
 				tappable,
-				// Asking again after a failure: the reason stays said.
-				warning: fee.busy ? reason(inputs.feeFailing) : undefined,
+				// Asking again after a failure (spec 082 G47): the last ask's
+				// reason is not this one's, so it is not said under
+				// "estimating" — but its line keeps its height, so nothing jumps.
+				warningReserved: fee.busy ? reason(inputs.feeFailing) : undefined,
 				...refresh
 			};
 		}
@@ -908,23 +830,23 @@ export function summaryOf(blocks: Block[]): string | undefined {
 /**
  * Spec 079 (F11): once the person has approved, the sheet is a STATUS — never
  * the form with a greyed slide (the owner: "可信签名器签完后，回到签名提示框，
- * 似乎没有任何提示"). Android's signing receipt, word for word:
+ * 似乎没有任何提示"). Spec 082 (RA9, G22): its words follow the core's
+ * `SignView.phase`, the stage the pipeline is really in:
  *
- * - approved, the passkey not asked yet: "Preparing transaction…"
- *   (`send.txPreparing`, 083 H3);
- * - waiting for the signature: "Waiting for biometric…" (`send.txSigning`);
- * - signed, going to the relay: "Submitting to network…" + "closing keeps it
- *   running" (`send.txSubmitting`, `send.txBackgroundHint`);
+ * - `preparing` — the precheck, the sponsor, the relay's estimate:
+ *   "Preparing transaction…" (`send.txPreparing`). Before 082 this said
+ *   "Waiting for biometric…" through ~40 s of network work, while no prompt
+ *   was up;
+ * - `awaiting_signature` — the passkey prompt is up: "Waiting for
+ *   biometric…" (`send.txSigning`);
+ * - `submitting` — signed, going to the relay: "Submitting to network…" +
+ *   "closing keeps it running" (`send.txSubmitting`, `send.txBackgroundHint`);
  * - a message never submits: "Signing…" throughout;
  * - the submission failed: the receipt's "Failed" + "your funds are safe"
  *   (`send.txErrorGeneric`) — the page was told already.
  *
- * Once the relay accepts the operation the host's landing (the receipt with
- * the chain's clock) takes over, as it did before.
- *
- * The core's `is_signing` and `is_submitting` are BOTH true through its
- * `Submitting` stage (passkey and submission are one step there), so "signed"
- * comes from the ceremony itself (`progress.signed`). `null` = still a request.
+ * Once the relay accepts the operation (or may have: MaybeSent) the host's
+ * landing takes over. `null` = still a request.
  */
 export function signingStatus(
 	sign: SignView,
@@ -945,15 +867,17 @@ export function signingStatus(
 		return {
 			stage: 'failed',
 			title: m.receipt.failed,
-			captions: lines(summary, m.status.failedHint),
+			// Spec 082 RJ3: the relay refused it — say so, with no "try
+			// again": the same op is refused the same way.
+			captions: lines(summary, sign.failure_refused ? m.receipt.refused : m.status.failedHint),
 			closable: true
 		};
 	}
-	if (!sign.is_signing && !sign.is_submitting) return null;
-	// Past the signature: said by the ceremony, or by the core's own reactive
-	// recovery, which only follows a submission.
-	const signed = progress?.signed === true || (sign.is_submitting && !sign.is_signing);
-	const closable = signed && sign.is_submitting && progress?.ceremonyUp !== true;
+	const phase = sign.phase;
+	if (phase === 'idle') return null;
+	// Past the signature, and no prompt still up (a Trusted Signer page can
+	// outlive its answer by a beat): a plain close, the operation carries on.
+	const closable = phase === 'submitting' && progress?.ceremonyUp !== true;
 	const onChain = request.kind === 'transaction' || request.kind === 'batch';
 	if (!onChain) {
 		return {
@@ -963,24 +887,29 @@ export function signingStatus(
 			closable
 		};
 	}
-	if (!signed) {
-		return {
-			stage: 'submitting',
-			// "Waiting for biometric" only while the passkey prompt is up. Before
-			// it, the funding check, the nonce and the estimate are the wallet
-			// preparing — the owner read the biometric line for seconds with no
-			// prompt anywhere (083 W11 on the desktop; H3 is the same line here).
-			title: progress?.ceremonyUp === true ? m.status.signing : m.status.preparing,
-			captions: lines(summary),
-			closable: false
-		};
+	switch (phase) {
+		case 'preparing':
+			return {
+				stage: 'submitting',
+				title: m.status.preparing,
+				captions: lines(summary),
+				closable: false
+			};
+		case 'awaiting_signature':
+			return {
+				stage: 'submitting',
+				title: m.status.signing,
+				captions: lines(summary),
+				closable: false
+			};
+		case 'submitting':
+			return {
+				stage: 'submitting',
+				title: m.status.submitting,
+				captions: lines(summary, m.status.backgroundHint),
+				closable
+			};
 	}
-	return {
-		stage: 'submitting',
-		title: m.status.submitting,
-		captions: lines(summary, m.status.backgroundHint),
-		closable
-	};
 }
 
 /**
@@ -994,6 +923,29 @@ export function signingCloseEvent(
 ): 'reject_tapped' | 'dismiss_tapped' | null {
 	if (!status) return 'reject_tapped';
 	return status.closable ? 'dismiss_tapped' : null;
+}
+
+/**
+ * Spec 082 RJ19 (G57): the relay's own estimate of this operation says it
+ * will revert. The web runs no simulation (RG6), so this is the one voice
+ * that can say it before the slide — in the danger tone, under the intent.
+ * The slide stays live: a warning informs, it never blocks (L-D5); a submit
+ * then meets the relay's refusal, answered as one (RJ3).
+ */
+function withEstimateVerdict(blocks: Block[], inputs: SigningLiveInputs): Block[] {
+	const { sign, m, identity } = inputs;
+	const request = sign.request;
+	if (!request || sign.blocked) return blocks;
+	if (request.kind !== 'transaction' && request.kind !== 'batch') return blocks;
+	const reverts = estimateRevertsFor(request.chain_id, request.signer_address ?? identity.address);
+	if (!reverts) return blocks;
+	const text = reverts.reason
+		? fill(m.warnWillFailReason, { reason: reverts.reason })
+		: m.warnWillFail;
+	const at = blocks.findIndex((block) => block.kind === 'intent');
+	const next = [...blocks];
+	next.splice(at + 1, 0, { kind: 'warning', tone: 'danger', text });
+	return next;
 }
 
 export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
@@ -1013,7 +965,10 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 	const request = sign.request;
 	const dapp = request.dapp;
 	const host = new URL(request.origin).host;
-	const name = dapp?.name ?? host;
+	// Spec 082 RE7 (F14): the core's `site_label` — a name that IS its host
+	// is said once, and the host line stays whenever it adds something.
+	const label = browserSiteLabel(dapp?.name ?? '', host);
+	const name = label.name;
 	const own = ownRequest;
 
 	// Rule 1: the gate is an AND. The core may allow the request; the guard may
@@ -1022,7 +977,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		feeModel(inputs).kind !== 'onchain' || (fee.confirm_fee_ready && !feeOfAnotherTier(inputs));
 	const enabled = sign.confirm_gate_open && guard.confirm_allowed && feeReady && !sign.is_signing;
 
-	const blocks = blocksFor(inputs);
+	const blocks = withEstimateVerdict(blocksFor(inputs), inputs);
 	const status = sign.blocked ? null : signingStatus(sign, inputs.progress, summaryOf(blocks), m);
 
 	return {
@@ -1034,11 +989,7 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			? { name: 'Vela Wallet', host: '', letter: 'V', tint: NEUTRAL_TINT, own: true }
 			: {
 					name,
-					// Spec 079 (F14): a site with no name of its own is named by
-					// its host — said once. "127.0.0.1:8137" over "127.0.0.1:8137"
-					// was the header of every extension request (it hands the core
-					// no dApp name). The host line stays whenever it adds something.
-					host: name === host ? '' : host,
+					host: label.host_line ?? '',
 					letter: letterOf(name),
 					tint: NEUTRAL_TINT,
 					iconUrls: siteIconUrls(request.origin)
@@ -1071,7 +1022,14 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 			 * class as 026's `{{bytes}}`). With no intent from the core, the
 			 * generic word is the honest one.
 			 */
-			action: clear.confirm.type === 'confirm_intent' ? clear.confirm.intent : m.confirmPlain,
+			action:
+				clear.surface === 'plain_send' && clear.plain_send
+					? clear.plain_send.no_value
+						? m.confirmPlain
+						: m.confirmSend
+					: clear.confirm.type === 'confirm_intent'
+						? clear.confirm.intent
+						: m.confirmPlain,
 			enabled
 		},
 		closeLabel: m.close,

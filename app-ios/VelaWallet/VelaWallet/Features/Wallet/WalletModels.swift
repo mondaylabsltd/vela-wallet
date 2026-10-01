@@ -89,6 +89,10 @@ struct ActivityRowModel: Identifiable {
     /// badge was always the coloured dot — a colour nobody can read as a
     /// network.
     var badgeLogoURL: String?
+    /// The feed item this row draws. A tap opens THAT record: resolving the
+    /// row by position against a feed that moved since opened, linked and
+    /// could delete another transaction (082 iPhone pass, X-FIRST-TAP).
+    var itemId: String? = nil
 }
 
 struct ActivityGroupModel: Identifiable {

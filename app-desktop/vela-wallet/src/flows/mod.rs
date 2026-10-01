@@ -237,6 +237,8 @@ pub struct FlowStrings {
     pub label_received: SharedString,
     pub tx_label_sent: String,
     pub tx_label_received: String,
+    /// A dApp's transaction (spec 082 RG2): "dApp 交易".
+    pub tx_label_dapp: SharedString,
     pub to_name: String,
     pub from_name: String,
     pub view_on_explorer: SharedString,
@@ -439,6 +441,9 @@ pub struct FlowStrings {
     pub tx_submitting: SharedString,
     pub tx_preparing: SharedString,
     pub tx_background_hint: SharedString,
+    /// Spec 082 RA10: a payment whose submit reply was lost — "it may have
+    /// been sent; Vela keeps checking, don't send it again".
+    pub tx_maybe_sent: SharedString,
     pub tx_error_generic: SharedString,
     pub tx_error_bundler_fund: SharedString,
     pub first_time_tag: SharedString,
@@ -531,6 +536,17 @@ pub struct FlowStrings {
 }
 
 impl FlowStrings {
+    /// The words for the History empty line the core chose
+    /// (`FeedView.history_empty_key`, spec 082 RG5). The choice is the core's;
+    /// this only looks the key up among the two it hands out.
+    #[must_use]
+    pub fn history_empty_of(&self, key: &str) -> SharedString {
+        match key {
+            "history.emptyFilter" => self.history_empty_filter.clone(),
+            _ => self.history_empty.clone(),
+        }
+    }
+
     /// "1 recipient" / "3 recipients" — the web's `_one` / `_other` pick.
     #[must_use]
     pub fn recipients(&self, count: usize) -> String {
@@ -589,6 +605,7 @@ impl FlowStrings {
             label_received: s("history.labelReceived"),
             tx_label_sent: raw("history.txLabelSent"),
             tx_label_received: raw("history.txLabelReceived"),
+            tx_label_dapp: s("history.txLabelDappTx"),
             to_name: raw("history.toName"),
             from_name: raw("history.fromName"),
             view_on_explorer: s("history.viewOnExplorer"),
@@ -734,6 +751,7 @@ impl FlowStrings {
             tx_submitting: s("send.txSubmitting"),
             tx_preparing: s("send.txPreparingBiometric"),
             tx_background_hint: s("send.txBackgroundHint"),
+            tx_maybe_sent: s("componentsUi.signing.maybeSent"),
             tx_error_generic: s("send.txErrorGeneric"),
             tx_error_bundler_fund: s("send.txErrorBundlerFund"),
             first_time_tag: s("componentsUi.signing.firstTimeTag"),
@@ -824,6 +842,7 @@ mod tests {
             (s.fee_token_hint.as_ref(), "send.feeTokenHint"),
             (s.pick_contact_title.as_ref(), "send.pickContactTitle"),
             (s.tx_submitted_title.as_ref(), "send.txSubmittedTitle"),
+            (s.tx_maybe_sent.as_ref(), "componentsUi.signing.maybeSent"),
             (s.native_alias_title.as_ref(), "addToken.nativeAliasTitle"),
             (s.bad_amount.as_ref(), "send.badAmount"),
             (s.batch_dup.as_ref(), "send.batchDup"),

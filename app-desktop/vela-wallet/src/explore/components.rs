@@ -20,6 +20,13 @@ use super::fixtures::{DemoPage, SiteModel, TabModel, demo_palette};
 pub const TAB_STRIP_H: f32 = 36.;
 pub const TAB_W: f32 = 200.;
 pub const TAB_H: f32 = 32.;
+/// The narrowest a tab gets before the strip scrolls (spec 082 G54): its
+/// padding, its mark and its ✕ — 12 + 16 + 8 + 8 + 20 + 12, the title gone.
+pub const TAB_MIN_W: f32 = 76.;
+/// The strip's own measures, which [`tab_widths`] counts with.
+const TAB_GAP: f32 = 2.;
+const STRIP_PAD_X: f32 = 12.;
+const NEW_TAB_W: f32 = 20.;
 pub const TOOLBAR_H: f32 = 56.;
 pub const TOOLBAR_CONTROL: f32 = 32.;
 pub const TILE_AVATAR: f32 = 56.;
@@ -200,6 +207,94 @@ pub struct TabActions {
     pub select: Vec<Option<crate::flows::panels::Click>>,
     pub close: Vec<Option<crate::flows::panels::Click>>,
     pub new_tab: Option<crate::flows::panels::Click>,
+    /// Spec 082 RD1: a request is open and switching is held — every tab but
+    /// the lit one, and +, are drawn at the disabled opacity. They still take
+    /// clicks: a click is what brings the request forward and says why.
+    pub held: bool,
+    /// Spec 082 G54: the page's measure of the strip and the scroll of its
+    /// tabs. `None` (the gallery) draws every tab at [`TAB_W`].
+    pub scroll: Option<TabStripScroll>,
+}
+
+/// How wide each tab is drawn, and whether the strip scrolls (spec 082 G54).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TabFit {
+    pub tab_w: f32,
+    pub scrolls: bool,
+}
+
+/// The rule: tabs share the row at up to [`TAB_W`] each, shrink to
+/// [`TAB_MIN_W`], and past that the row scrolls — the + always beside them.
+/// `row_w` is the strip's inner row (the strip less its padding), as the
+/// last frame laid it out; nothing measured yet (0) draws the full width.
+#[must_use]
+pub fn tab_widths(count: usize, row_w: f32) -> TabFit {
+    if count == 0 || row_w <= 0. {
+        return TabFit {
+            tab_w: TAB_W,
+            scrolls: false,
+        };
+    }
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a tab count is far below f32's exact range"
+    )]
+    let n = count as f32;
+    // The + and the gap before it are always there; so is one gap between
+    // two tabs.
+    let room = row_w - TAB_GAP - NEW_TAB_W - TAB_GAP * (n - 1.);
+    let shared = (room / n).floor();
+    TabFit {
+        tab_w: shared.clamp(TAB_MIN_W, TAB_W),
+        scrolls: shared < TAB_MIN_W,
+    }
+}
+
+/// The lit tab and the tab count a strip last scrolled to.
+type Followed = std::rc::Rc<std::cell::Cell<Option<(Option<usize>, usize)>>>;
+
+/// The narrowest tab still holds its mark and its ✕ (G54): padding, mark,
+/// gap, gap, ✕, padding — the title's share is zero. Checked when built.
+const _: () = assert!(TAB_MIN_W >= 12. + 16. + 8. + 8. + 20. + 12.);
+
+/// The two handles a live strip keeps across frames (spec 082 G54): the
+/// row's measure, which sizes the tabs, and the tabs' own scroll, which keeps
+/// the lit tab in view.
+#[derive(Clone)]
+pub struct TabStripScroll {
+    row: gpui::ScrollHandle,
+    tabs: gpui::ScrollHandle,
+    /// The lit tab and the count last scrolled to — once per change, so the
+    /// person's own scroll is left alone in between.
+    followed: Followed,
+}
+
+impl Default for TabStripScroll {
+    fn default() -> Self {
+        Self {
+            row: gpui::ScrollHandle::new(),
+            tabs: gpui::ScrollHandle::new(),
+            followed: std::rc::Rc::default(),
+        }
+    }
+}
+
+impl TabStripScroll {
+    /// The row's width as last laid out — 0 before the first frame.
+    fn row_w(&self) -> f32 {
+        f32::from(self.row.bounds().size.width)
+    }
+
+    /// Scroll the lit tab into view when it, or the number of tabs, changed.
+    fn follow(&self, lit: Option<usize>, count: usize) {
+        if self.followed.get() == Some((lit, count)) {
+            return;
+        }
+        self.followed.set(Some((lit, count)));
+        if let Some(lit) = lit {
+            self.tabs.scroll_to_item(lit);
+        }
+    }
 }
 
 pub fn tab_strip(
@@ -227,19 +322,46 @@ pub fn tab_strip_with(
     close_label: SharedString,
     mut actions: TabActions,
 ) -> Div {
-    let mut strip = div()
+    let held = actions.held;
+    let scroll = actions.scroll.take();
+    // Spec 082 G54: at 6+ tabs the lit new tab and + ran off the right
+    // edge. The tabs share the row, shrink to their mark and ✕, then scroll;
+    // the + stays outside the scroll, beside them.
+    let fit = tab_widths(
+        tabs.len(),
+        scroll.as_ref().map_or(0., TabStripScroll::row_w),
+    );
+    if let Some(scroll) = &scroll {
+        scroll.follow(tabs.iter().position(|tab| tab.selected), tabs.len());
+    }
+    // Never shrinks (spec 082 RD8, G6): taffy's default `flex-shrink: 1`
+    // shared a live page's overflow with the strip and the toolbar, which
+    // jumped up by a few points the moment a page loaded.
+    let strip = div()
         .h(px(TAB_STRIP_H))
         // 083 W15: chrome never gives its height to the page under it.
         .flex_none()
         .flex()
         .items_end()
-        .gap(px(2.))
-        .px(px(12.))
+        .px(px(STRIP_PAD_X))
         .bg(theme.bg_sunken);
+    // The tabs' own row: it takes what the + leaves, scrolls sideways once
+    // the tabs are at their narrowest, and never pushes the + out.
+    let mut row = div()
+        .id("tab-scroller")
+        .h_full()
+        .min_w(px(0.))
+        .flex()
+        .items_end()
+        .gap(px(TAB_GAP))
+        .overflow_x_scroll();
+    if let Some(scroll) = &scroll {
+        row = row.track_scroll(&scroll.tabs);
+    }
 
     for (i, tab) in tabs.iter().enumerate() {
         let mut face = div()
-            .w(px(TAB_W))
+            .w(px(fit.tab_w))
             .h(px(TAB_H))
             .px(px(12.))
             .rounded_t(px(8.))
@@ -282,7 +404,15 @@ pub fn tab_strip_with(
                 .id(ElementId::from(("tab-close", i)))
                 .cursor_pointer()
                 .hover(move |el| el.bg(raised))
-                .on_click(move |event, window, cx| close(event, window, cx))
+                // Spec 082 G40: the ✕ lives inside the tab's own click, and
+                // a close that bubbled to it also SELECTED the closed tab —
+                // the one webview loaded a page no tab owned. The press stops
+                // here, and so does the click.
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    close(event, window, cx);
+                })
                 .into_any_element(),
             None => cross.into_any_element(),
         };
@@ -298,33 +428,54 @@ pub fn tab_strip_with(
         let select = actions.select.get_mut(i).and_then(Option::take);
         let mut tab_el = div()
             .id(ElementId::from(("tab", i)))
+            // Its width is the fit's: a scrolling row must not squeeze it.
+            .flex_none()
             .cursor_pointer()
+            .when(held && !tab.selected, |el| el.opacity(0.45))
             .child(face);
         if let Some(select) = select {
             tab_el = tab_el.on_click(move |event, window, cx| select(event, window, cx));
         }
-        strip = strip.child(tab_el);
+        row = row.child(tab_el);
         let _ = &close_label;
     }
 
     let mut plus = div()
         .id("new-tab")
+        .flex_none()
         .mb(px(6.))
-        .w(px(20.))
-        .h(px(20.))
+        .w(px(NEW_TAB_W))
+        .h(px(NEW_TAB_W))
         .flex()
         .items_center()
         .justify_center()
         .cursor_pointer()
+        .when(held, |el| el.opacity(0.45))
         .child(icon_img(icons, Icon::Plus, false, theme.fg_muted, 14.));
     if let Some(new_tab) = actions.new_tab.take() {
         plus = plus.on_click(move |event, window, cx| new_tab(event, window, cx));
     }
-    strip.child(plus).child(
+    // The row the strip measures: all of the strip's width but its padding.
+    let mut measured = div()
+        .id("tab-row")
+        .flex_1()
+        .min_w(px(0.))
+        .h_full()
+        .flex()
+        .items_end()
+        .gap(px(TAB_GAP))
+        .child(row)
+        .child(plus);
+    if let Some(scroll) = &scroll {
+        measured = measured.track_scroll(&scroll.row);
+    }
+    strip.child(measured).child(
+        // The + button's name, for the page's text; never drawn and never in
+        // the row's measure.
         div()
-            .flex_1()
-            .child(div().h(px(1.)).child(new_tab_label.clone()))
-            .invisible(),
+            .absolute()
+            .invisible()
+            .child(div().h(px(1.)).child(new_tab_label.clone())),
     )
 }
 
@@ -411,17 +562,26 @@ pub fn account_chip(
 /// click asks the engine again.
 pub type NavActions = [crate::flows::panels::Click; 3];
 
+/// Which of the three can act — the engine's word (spec 082 RD6) — and
+/// whether a request holds them (RD1: drawn disabled, still clickable).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NavState {
+    pub enabled: [bool; 3],
+    pub held: bool,
+}
+
 pub fn toolbar(
     theme: &Theme,
     icons: &mut IconCache,
     address: AnyElement,
     trailing: Div,
     nav: Option<NavActions>,
-    history: [bool; 2],
+    state: NavState,
 ) -> Div {
     div()
         .h(px(TOOLBAR_H))
-        // 083 W15: chrome never gives its height to the page under it.
+        // Never shrinks (RD8, 083 W15): chrome never gives its height to the
+        // page under it; see `tab_strip_with`.
         .flex_none()
         .px(px(20.))
         .flex()
@@ -430,7 +590,7 @@ pub fn toolbar(
         .bg(theme.bg_base)
         .border_b_1()
         .border_color(theme.divider)
-        .children(nav_controls(theme, icons, nav, history))
+        .children(nav_controls(theme, icons, nav, state))
         .child(
             div()
                 .flex_1()
@@ -452,12 +612,12 @@ pub struct AddressBar {
     /// A page is open: its host and a lock. Otherwise the search box.
     pub browsing: bool,
     pub host: SharedString,
-    /// Whether the lock may be drawn. https, or an http host on this machine
-    /// or its network — the core's `secure`, the same judgement that lets a
-    /// site ask for a signature. A public http page gets a warning glyph: a
-    /// padlock beside it would be the chrome vouching for a connection
-    /// anybody on the path can read.
-    pub secure: bool,
+    /// The core's `address_bar` lock (spec 082 RE1): closed for https or a
+    /// loopback / private-network http host, open (in the warning colour) for
+    /// public http — a padlock there would vouch for a connection anybody on
+    /// the path can read — and none at all over a failure panel or a load
+    /// that has not committed: nothing from that host is on screen.
+    pub lock: vela_core::app::browser_load::BarLock,
     pub placeholder: SharedString,
     /// Somebody is typing: the text so far, drawn with a caret.
     pub draft: Option<SharedString>,
@@ -467,6 +627,9 @@ pub struct AddressBar {
     /// copied its link. The page is a native view gpui cannot draw over, so
     /// a toast over it would be under it; the bar is what stays visible.
     pub notice: Option<SharedString>,
+    /// The notice is a refusal — "finish or cancel the request first" (spec
+    /// 082 RD1, ruling 10) — drawn in the warning colour, not as a tick.
+    pub notice_warns: bool,
 }
 
 /// The address field's contents, for the page to wrap in whatever makes it
@@ -526,27 +689,37 @@ pub fn address_field(
             .child(typed);
     }
     if let Some(notice) = &bar.notice {
-        return row
-            .child(icon_img(icons, Icon::Check, false, theme.success, 12.))
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.success)
-                    .child(notice.clone()),
-            );
+        let (glyph, tint) = if bar.notice_warns {
+            (Icon::TriangleAlert, theme.warning_base)
+        } else {
+            (Icon::Check, theme.success)
+        };
+        return row.child(icon_img(icons, glyph, false, tint, 12.)).child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(tint)
+                .child(notice.clone()),
+        );
     }
     if bar.browsing {
         // Spec 079 (owner: "用一把锁代表 https 和非https 就行了，不文字标记"): a
         // closed lock, quiet, for https — it says the line is encrypted, not
         // that the site is honest — and an open one in the warning colour for
-        // plain http. No word beside either.
-        let (glyph, tint) = lock_glyph(theme, bar.secure);
-        return row.child(icon_img(icons, glyph, false, tint, 12.)).child(
-            div()
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_base)
-                .child(bar.host.clone()),
-        );
+        // plain http. No word beside either, and no lock at all when nothing
+        // of the host is on screen (spec 082 RE1).
+        let lock = match bar.lock {
+            vela_core::app::browser_load::BarLock::Closed => Some(lock_glyph(theme, true)),
+            vela_core::app::browser_load::BarLock::Open => Some(lock_glyph(theme, false)),
+            vela_core::app::browser_load::BarLock::None => None,
+        };
+        return row
+            .children(lock.map(|(glyph, tint)| icon_img(icons, glyph, false, tint, 12.)))
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(bar.host.clone()),
+            );
     }
     row.child(icon_img(icons, Icon::Search, false, theme.fg_subtle, 14.))
         .child(
@@ -669,26 +842,34 @@ pub fn load_hairline(theme: &Theme, busy: bool) -> Div {
 }
 
 /// The three navigation buttons, live or drawn.
+///
+/// Live, each is on when the engine says it can act (spec 082 RD6 — Back was
+/// always on, even with nothing to go back to). The mock draws back and
+/// reload on and forward off, the web's `canForward: false` (078 E-04).
+/// A held button (RD1) is drawn disabled and still takes its click.
 fn nav_controls(
     theme: &Theme,
     icons: &mut IconCache,
     nav: Option<NavActions>,
-    history: [bool; 2],
+    state: NavState,
 ) -> Vec<AnyElement> {
-    // Back and forward as far as the engine's history goes (083 W15) — a new
-    // tab has none — disabled, not merely grey (078 E-04). Reload always acts,
-    // as the web's toolbar's does.
-    let icons_and_tints = [
-        (Icon::ArrowLeft, history[0]),
-        (Icon::ArrowRight, history[1]),
-        (Icon::RefreshCw, true),
-    ];
+    let live = nav.is_some();
+    let glyphs = [Icon::ArrowLeft, Icon::ArrowRight, Icon::RefreshCw];
+    let drawn = [true, false, true];
     let mut actions = nav.map(Vec::from).unwrap_or_default().into_iter();
-    icons_and_tints
+    glyphs
         .into_iter()
         .enumerate()
-        .map(|(i, (icon, enabled))| {
-            let control = toolbar_control_with(theme, icons, icon, theme.fg_base, false, enabled);
+        .map(|(i, icon)| {
+            let enabled = if live { state.enabled[i] } else { drawn[i] };
+            let control = toolbar_control_with(
+                theme,
+                icons,
+                icon,
+                theme.fg_base,
+                false,
+                enabled && !state.held,
+            );
             let id = ElementId::from(("browser-nav", i));
             match actions.next() {
                 Some(action) if enabled => {
@@ -696,13 +877,14 @@ fn nav_controls(
                 }
                 // 083 W15: a dimmed arrow keeps its action and asks again at
                 // the click. On macOS the drawing can be a moment stale after
-                // a page's own `pushState`, and before 083 Back always worked
-                // there. No pointer, since it looks like it cannot act.
-                Some(action) => div()
+                // a page's own `pushState`. No pointer, since it looks like it
+                // cannot act.
+                Some(action) if live && i < 2 => div()
                     .id(id)
                     .child(control)
                     .on_click(move |event, window, cx| action(event, window, cx))
                     .into_any_element(),
+                Some(_) => control.into_any_element(),
                 None => control.into_any_element(),
             }
         })
@@ -799,6 +981,81 @@ pub fn demo_page(page: &DemoPage) -> Div {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 082 RD8 (G6): the strip and the toolbar never shrink, so a live
+    /// page — which asks for the rest of the column and no more — cannot
+    /// take points out of them: the toolbar sits at the same y on the start
+    /// page and over a page (0 pt; the device row DX12 measures it).
+    #[test]
+    fn the_chrome_never_shrinks() {
+        use gpui::Styled as _;
+        let theme = Theme::light();
+        let mut icons = IconCache::default();
+        let mut strip = tab_strip_with(
+            &theme,
+            &mut icons,
+            &[],
+            SharedString::default(),
+            SharedString::default(),
+            TabActions::default(),
+        );
+        assert_eq!(strip.style().flex_shrink, Some(0.));
+        let mut bar = toolbar(
+            &theme,
+            &mut icons,
+            div().into_any_element(),
+            div(),
+            None,
+            NavState::default(),
+        );
+        assert_eq!(bar.style().flex_shrink, Some(0.));
+    }
+
+    /// Spec 082 G54: tabs share the row at up to their full width, shrink to
+    /// their mark and ✕, and only then scroll — the + always beside them.
+    #[test]
+    fn tabs_shrink_then_the_strip_scrolls() {
+        // Nothing measured yet (the first frame, the gallery): full width.
+        assert_eq!(
+            tab_widths(8, 0.),
+            TabFit {
+                tab_w: TAB_W,
+                scrolls: false
+            }
+        );
+        // A few tabs in a wide window keep their width.
+        assert_eq!(tab_widths(3, 1_000.).tab_w, TAB_W);
+        // The six of DX3′ in the column beside a signing panel shrink.
+        let six = tab_widths(6, 640.);
+        assert!(!six.scrolls);
+        assert!(six.tab_w < TAB_W && six.tab_w >= TAB_MIN_W, "{six:?}");
+        // Whenever the tabs do not scroll, they and the + fit the row.
+        for count in 1..=40_usize {
+            for row_w in [300., 480., 640., 900., 1_240.] {
+                let fit = tab_widths(count, row_w);
+                #[allow(clippy::cast_precision_loss, reason = "small counts")]
+                let n = count as f32;
+                let drawn = n * fit.tab_w + TAB_GAP * (n - 1.) + TAB_GAP + NEW_TAB_W;
+                assert!(fit.tab_w >= TAB_MIN_W, "{count} in {row_w}: {fit:?}");
+                if !fit.scrolls {
+                    assert!(drawn <= row_w, "{count} in {row_w}: {drawn} > {row_w}");
+                } else {
+                    assert!(
+                        (fit.tab_w - TAB_MIN_W).abs() < f32::EPSILON,
+                        "a strip scrolls only at the narrowest tab"
+                    );
+                }
+            }
+        }
+        // Twelve tabs in 640 are at the minimum and scroll.
+        assert_eq!(
+            tab_widths(12, 640.),
+            TabFit {
+                tab_w: TAB_MIN_W,
+                scrolls: true
+            }
+        );
+    }
 
     /// Spec 079 FR-015: the scheme is a lock and only a lock — closed and
     /// quiet for https, open in the warning colour for http.

@@ -127,6 +127,19 @@ pub fn nonce(safe: &str, chain_id: u32) -> Result<String, String> {
     Ok(nonce.to_owned())
 }
 
+/// How long the submit waits for the head before POSTing without it.
+const HEAD_BUDGET: Duration = Duration::from_secs(5);
+
+/// The chain's head block, best effort (spec 082 ruling 8): read once before
+/// a submit's first POST, so the tracker's relay-independent landing check
+/// knows where the operation can first appear. `None` when the chain did not
+/// answer within [`HEAD_BUDGET`] — the tracker then scans back from the head.
+pub fn head_block(chain_id: u32) -> Option<u64> {
+    let body = pool::call_within(chain_id, "eth_blockNumber", json!([]), HEAD_BUDGET).ok()?;
+    let hex = body.get("result").and_then(Value::as_str)?;
+    u64::from_str_radix(hex.trim_start_matches("0x"), 16).ok()
+}
+
 /// The EntryPoint's word on how one operation inside a bundle ended:
 /// `UserOperationEvent(bytes32 indexed userOpHash, address indexed sender,
 /// address indexed paymaster, uint256 nonce, bool success, uint256

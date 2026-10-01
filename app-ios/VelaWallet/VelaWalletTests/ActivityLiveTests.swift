@@ -20,11 +20,105 @@
 //  Nothing is sent, nothing is signed, and only public logs are read.
 //
 
-#if VELA_LIVE_TESTS
-
 import Foundation
 import Testing
 @testable import VelaWallet
+
+// MARK: - The detail of a dApp record (spec 082 T242; hermetic)
+
+/// What a dApp record's detail says (RJ16, RJ18, G51, G52): the call's data
+/// reaches the feed, a contract is "Interacting with" rather than "To", an op
+/// that never reached the chain offers no explorer, and a pending record's
+/// delete is a quiet control. Hermetic — unlike the live suite below.
+@MainActor
+struct ActivityDetailTests {
+
+    private let loc = Loc(overrideTag: "en", preferredLanguages: [])
+    private let token = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
+
+    private var drawn: TxDetailModel {
+        get throws {
+            guard case .txDetail(let model)? = WalletFlowFixtures.build(.a2, loc: loc).sheet else {
+                throw Missing()
+            }
+            return model
+        }
+    }
+    private struct Missing: Error {}
+
+    private func item(
+        role: FeedCounterpartyRoleWire, txHash: String?, status: FeedTxStatusWire
+    ) -> FeedItemWire {
+        FeedItemWire(
+            id: "dapp-1-tx", direction: .out, counterparty: token, alias: nil,
+            value: nil, symbol: "xDAI", decimals: 18, usdValue: 0, chainId: 100,
+            timestamp: 1_757_000_000, dayStartMs: 1_756_944_000_000, txHash: txHash, batch: nil,
+            kind: .dappTx, status: status, site: "192.168.50.9:8137", counterpartyRole: role
+        )
+    }
+
+    /// The stored request's first call's `data` is what the core reads the
+    /// counterparty from — `params[0].data`, or the first leg of a
+    /// `wallet_sendCalls` — and nothing for a clipped request, no calldata,
+    /// or another kind of row.
+    @Test func theCallDataReachesTheFeed() {
+        let data = "0xa9059cbb" + String(repeating: "0", count: 128)
+        func wire(_ row: [String: Any]) -> Any? { TxRecords.toWire(row)?["call_data"] }
+        let single: [String: Any] = [
+            "id": "d1", "type": "dapp_tx", "timestamp": 1,
+            "signedRequest": #"[{"to":"\#(token)","value":"0x0","data":"\#(data)"}]"#,
+        ]
+        #expect(wire(single) as? String == data)
+        let batch: [String: Any] = [
+            "id": "d2", "type": "dapp_tx", "timestamp": 1,
+            "signedRequest": #"[{"calls":[{"to":"\#(token)","data":"\#(data)"},{"to":"0xbb","data":"0x"}]}]"#,
+        ]
+        #expect(wire(batch) as? String == data)
+        var clipped = single
+        clipped["requestTruncated"] = true
+        #expect(wire(clipped) is NSNull, "half a call is not a call")
+        let plain: [String: Any] = [
+            "id": "d3", "type": "dapp_tx", "timestamp": 1,
+            "signedRequest": #"[{"to":"\#(token)","value":"0x1","data":"0x"}]"#,
+        ]
+        #expect(wire(plain) is NSNull)
+        let send: [String: Any] = ["id": "s1", "type": "send", "timestamp": 1, "signedRequest": single["signedRequest"]!]
+        #expect(wire(send) is NSNull, "only a dApp's transaction carries its call")
+    }
+
+    /// G52: a relay-refused dApp record — the contract is "Interacting with",
+    /// and no explorer is offered for an op that never reached the chain.
+    @Test func aContractIsInteractedWithAndNoHashIsNoExplorer() throws {
+        let failed = FlowsLive.txDetail(
+            item(role: .contract, txHash: nil, status: .failed), record: nil, on: try drawn, loc: loc
+        )
+        let labels = failed.facts.map(\.label)
+        #expect(labels.contains(loc.t("componentsUi.signing.interactingLabel")))
+        #expect(!labels.contains(loc.t("componentsTx.detail.to")))
+        #expect(failed.viewOnExplorer == nil, "no transaction, no explorer control")
+        #expect(!labels.contains(loc.t("componentsTx.detail.labelHash")))
+        #expect(!failed.deleteQuiet, "a settled record keeps its delete")
+
+        let recipient = FlowsLive.txDetail(
+            item(role: .recipient, txHash: "0x" + String(repeating: "7e", count: 32), status: .confirmed),
+            record: nil, on: try drawn, loc: loc
+        )
+        #expect(recipient.facts.map(\.label).contains(loc.t("componentsTx.detail.to")))
+        #expect(recipient.viewOnExplorer == loc.t("history.viewOnExplorer"))
+    }
+
+    /// G51 (RJ18): on a record still pending — "may have been sent" — the
+    /// delete is a quiet control under the rest, never the loudest thing.
+    @Test func aPendingRecordsDeleteIsQuiet() throws {
+        let pending = FlowsLive.txDetail(
+            item(role: .contract, txHash: nil, status: .pending), record: nil, on: try drawn, loc: loc
+        )
+        #expect(pending.deleteLabel == loc.t("history.deleteRecord"))
+        #expect(pending.deleteQuiet)
+    }
+}
+
+#if VELA_LIVE_TESTS
 
 @MainActor
 @Suite(.serialized)

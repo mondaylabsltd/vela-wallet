@@ -1,7 +1,19 @@
 package app.getvela.wallet.feature.send.core
 
+import app.getvela.wallet.core.crux.Wire
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 
 /**
  * The `fee_policy` machine's wire, transcribed from
@@ -150,19 +162,29 @@ sealed class FeeGasOutcome {
     data object Refused : FeeGasOutcome()
 }
 
-@Serializable
-enum class FeeFailure {
-    @SerialName("missing_public_key") MissingPublicKey,
+/**
+ * Why there is no quote. Six plain words cross as strings; since spec 082
+ * (RJ13) one carries a field and crosses as an object, the way serde writes an
+ * externally tagged enum: `{"chain_read":{"rate_limited":true}}`. A value this
+ * build has no name for fails the whole view (the wire's strict rule), never
+ * reads as some default.
+ */
+@Serializable(with = FeeFailure.WireSerializer::class)
+sealed class FeeFailure {
+    /** The name the core writes for this failure (`quote_unavailable`, `chain_read`, …). */
+    abstract val name: String
 
-    @SerialName("fee_token_unavailable") FeeTokenUnavailable,
+    data object MissingPublicKey : FeeFailure() { override val name = "missing_public_key" }
 
-    @SerialName("quote_unavailable") QuoteUnavailable,
+    data object FeeTokenUnavailable : FeeFailure() { override val name = "fee_token_unavailable" }
 
-    @SerialName("calculation_failed") CalculationFailed,
+    data object QuoteUnavailable : FeeFailure() { override val name = "quote_unavailable" }
 
-    @SerialName("estimate_failed") EstimateFailed,
+    data object CalculationFailed : FeeFailure() { override val name = "calculation_failed" }
 
-    @SerialName("gas_quote_too_high") GasQuoteTooHigh,
+    data object EstimateFailed : FeeFailure() { override val name = "estimate_failed" }
+
+    data object GasQuoteTooHigh : FeeFailure() { override val name = "gas_quote_too_high" }
 
     /**
      * Spec 083 fee: the relay answered that the operation fails — its answer,
@@ -170,7 +192,67 @@ enum class FeeFailure {
      * says it only to a shell that reports [FeeGasOutcome.Refused], which
      * this one does not yet.
      */
-    @SerialName("would_fail") WouldFail,
+    data object WouldFail : FeeFailure() { override val name = "would_fail" }
+
+    /**
+     * A chain read the quote needs (the account's deployment) got no answer
+     * from the chain's nodes (spec 082 RJ13, G48): it is the chain node, not
+     * Vela's relay, that is out of reach — [rate_limited] when the nodes
+     * answered only with rate limits. The shells produce it; the fee machine
+     * never does. Asked again on the same schedule as a relay failure.
+     */
+    data class ChainRead(val rate_limited: Boolean) : FeeFailure() { override val name = CHAIN_READ }
+
+    /**
+     * What the core's `feeRequoteDelayMs` and `feeFailureReasonKey` take: the
+     * wire name, or the whole `ChainRead` JSON.
+     */
+    val wire: String
+        get() = when (this) {
+            is ChainRead -> Wire.json.encodeToString(WireSerializer, this)
+            else -> name
+        }
+
+    object WireSerializer : KSerializer<FeeFailure> {
+        override val descriptor: SerialDescriptor = JsonElement.serializer().descriptor
+
+        override fun deserialize(decoder: Decoder): FeeFailure {
+            val json = decoder as? JsonDecoder ?: throw SerializationException("FeeFailure crosses as JSON only")
+            return when (val element = json.decodeJsonElement()) {
+                is JsonPrimitive -> PLAIN.firstOrNull { element.isString && it.name == element.content }
+                    ?: throw SerializationException("unknown FeeFailure: $element")
+                is JsonObject -> {
+                    val body = (element[CHAIN_READ] as? JsonObject)
+                        ?.takeIf { element.size == 1 }
+                        ?: throw SerializationException("unknown FeeFailure: $element")
+                    val rateLimited = (body["rate_limited"] as? JsonPrimitive)?.booleanOrNull
+                        ?: throw SerializationException("FeeFailure.chain_read without rate_limited: $element")
+                    ChainRead(rateLimited)
+                }
+                else -> throw SerializationException("unknown FeeFailure: $element")
+            }
+        }
+
+        override fun serialize(encoder: Encoder, value: FeeFailure) {
+            val json = encoder as? JsonEncoder ?: throw SerializationException("FeeFailure crosses as JSON only")
+            json.encodeJsonElement(
+                when (value) {
+                    is ChainRead -> JsonObject(mapOf(CHAIN_READ to JsonObject(mapOf("rate_limited" to JsonPrimitive(value.rate_limited)))))
+                    else -> JsonPrimitive(value.name)
+                },
+            )
+        }
+    }
+
+    companion object {
+        private const val CHAIN_READ = "chain_read"
+
+        /** Every word that crosses as a plain string — what the drift test holds against the mirror. */
+        val PLAIN: List<FeeFailure> = listOf(
+            MissingPublicKey, FeeTokenUnavailable, QuoteUnavailable, CalculationFailed, EstimateFailed, GasQuoteTooHigh,
+            WouldFail,
+        )
+    }
 }
 
 /** One row of the fee-token sheet, already judged (`insufficient`, `selected`). */

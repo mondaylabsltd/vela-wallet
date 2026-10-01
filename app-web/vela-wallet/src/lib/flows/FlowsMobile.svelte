@@ -357,10 +357,16 @@
 				/>
 			</BottomSheet>
 		{:else if sheet.kind === 'fee-token'}
+			<!-- Closed without a pick: the host is told, so its "fee sheet open"
+			     state ends too. Only hidden here, the next model the host drew
+			     (a fee re-quote) raised the sheet again under the person. -->
 			<BottomSheet
 				title={sheet.model.title}
 				closeLabel={sheet.model.closeLabel}
-				onclose={() => (sheetClosed = true)}
+				onclose={() => {
+					sheetClosed = true;
+					onsheetclose?.();
+				}}
 			>
 				<FeeTokenPick
 					model={sheet.model}

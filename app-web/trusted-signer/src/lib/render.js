@@ -151,7 +151,13 @@ window.VelaCS = window.VelaCS || {};
   function heroAmount(hero) {
     var box = el('div', 'hero-amount');
     var line = el('div', 'amount-line');
-    line.appendChild(el('span', 'amount' + (hero.amount.unlimited ? ' amount-danger' : ''), amountText(hero.amount)));
+    // Every digit stays on screen. An exact figure (a plain send's, 082 RC5)
+    // can run to 18 decimals, and its last digit is the one that differs:
+    // "1,000.000000000000000001" clipped at the card's edge reads 1,000. A
+    // long figure steps down a size; one that still does not fit wraps.
+    var figure = amountText(hero.amount);
+    var size = figure.length > 16 ? ' amount-longer' : figure.length > 10 ? ' amount-long' : '';
+    line.appendChild(el('span', 'amount' + size + (hero.amount.unlimited ? ' amount-danger' : ''), figure));
     line.appendChild(tokenChip(hero.amount.token, hero.amount.logos));
     line.appendChild(el('span', 'amount-symbol', hero.amount.symbol));
     box.appendChild(line);
@@ -445,8 +451,10 @@ window.VelaCS = window.VelaCS || {};
     if (view.dapp.nameClaimed) {
       identity.appendChild(el('div', 'dapp-claimed', t('tag.selfReported')));
     }
-    if (view.dapp.origin || view.dapp.originKey) {
-      identity.appendChild(el('div', 'dapp-origin', view.dapp.origin || t(view.dapp.originKey)));
+    // `originShown`, not `origin`: a host the name above already says is not
+    // drawn twice (resolve.js decides; 082 L-HOST).
+    if (view.dapp.originShown || view.dapp.originKey) {
+      identity.appendChild(el('div', 'dapp-origin', view.dapp.originShown ? view.dapp.origin : t(view.dapp.originKey)));
     }
     head.appendChild(identity);
     sheet.appendChild(head);
@@ -487,7 +495,7 @@ window.VelaCS = window.VelaCS || {};
     head.appendChild(remoteLogo(view.dapp.icon, view.dapp.letter, view.dapp.tone));
     var identity = el('div', 'sheet-identity');
     identity.appendChild(el('div', 'dapp-name', view.dapp.name || t(view.dapp.nameKey)));
-    if (view.dapp.origin) identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
+    if (view.dapp.originShown) identity.appendChild(el('div', 'dapp-origin', view.dapp.origin));
     head.appendChild(identity);
     var chain = el('span', 'chain-pill');
     var dot = el('i', 'chain-dot');

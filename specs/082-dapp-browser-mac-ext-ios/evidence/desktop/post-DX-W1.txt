@@ -1,0 +1,32 @@
+DX-W1 desktop — 2026-09-29
+nonce before 03:26:33 = 44
+03:26:41 chaos mode=mute match=vela-relay
+03:26:45.5 slide (dust 0.001 xDAI to 0x7687…D141, Gnosis)
+screens: 03:26:46–03:27:25 正在准备交易… · 发送 · −0.001 xDAI · [关闭]; 03:27:33–41 提交至网络… 关闭此页交易会在后台继续 [关闭 · 后台继续]; 03:28:06–11 提交至网络… + 可能已经发出。Vela 会继续查看，请不要重复发送。 + UserOp 哈希 0x9da32d52…c7859b71 + [关闭 · 后台继续], no 重试; 03:28:16 已确认 · 交易哈希 0x111ce047…463702d1 · 在区块浏览器中查看 · [完成] (relay still muted)
+[vela-wallet] 03:27:11.230 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=timeout
+[vela-wallet] 03:27:26.461 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=timeout
+[vela-wallet] in-band: estimation failed, using defaults: gas estimation unreachable: Failed { rate_limited: false }
+[vela-wallet] in-band: signing DISPLAYED quote token=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c
+[vela-wallet] 03:27:26.463 relay: submitting chain=100 op=0x9da32d527e initCode=no callData=452B
+[vela-wallet] 03:27:41.464 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=timeout
+[vela-wallet] 03:27:56.931 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=timeout
+[vela-wallet] 03:27:56.931 relay: submit verdict=maybe_sent hash=0x9da32d527e attempts=1 in=30468 ms
+[vela-wallet] 03:27:56.934 tracker: op=0x9da32d527e handed over chain=100 maybe_sent=true submit_block=Some(48487259)
+[vela-wallet] 03:28:11.460 tracker: op=0x9da32d527e find-event chain=100 from=None to=None head=Some(48487274) → head only
+[vela-wallet] 03:28:11.933 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=timeout
+[vela-wallet] 03:28:11.944 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=timeout
+[vela-wallet] 03:28:12.058 tracker: op=0x9da32d527e find-event chain=100 from=Some(48487259) to=Some(48487274) head=Some(48487274) → logs
+[vela-wallet] 03:28:12.061 tracker: holdings moved on chain=100; balances re-read
+[vela-wallet] 03:28:25.602 rpc: chain=100 host=vela-relay-cf.getvela.app method=pimlico_getUserOperationStatus outcome=timeout
+[vela-wallet] 03:28:28.150 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=timeout
+[vela-wallet] 03:28:28.151 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=timeout
+[vela-wallet] 03:28:41.210 rpc: chain=100 host=vela-relay-cf.getvela.app method=pimlico_getUserOperationStatus outcome=timeout
+[vela-wallet] 03:28:41.210 tracker: op=0x9da32d527e status unavailable
+[vela-wallet] 03:28:46.029 dapp: op=0x9da32d527e answered with the op hash after the receipt wait
+[vela-wallet] 03:28:46.156 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=timeout
+[vela-wallet] 03:29:01.317 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=timeout
+03:30:08 chaos mode=pass
+page log: eth_sendTransaction {ok:true, result:"0x9da32d527e78ac109f6c3ba49ff12bac660e3a2ea89d77398b58a92ec7859b71"} (= op hash, one answer)
+chain: UserOperationEvent block 48487271 op 0x9da32d527e78ac109f6c3ba49ff12bac660e3a2ea89d77398b58a92ec7859b71 tx 0x111ce04770ea8f54fb187d1e1b8e8ad4105834ab7e7fbc0736b7c0cb463702d1 nonce 44 success 1
+explorer: https://gnosisscan.io/tx/0x111ce04770ea8f54fb187d1e1b8e8ad4105834ab7e7fbc0736b7c0cb463702d1
+nonce after 03:29:17 = 45 (+1)

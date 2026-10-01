@@ -98,6 +98,17 @@
 				/>
 			{/if}
 		</div>
+		{#if fee.warning}
+			<!-- Issue 262: the reason the slide is shut, right under the fee it is
+			     about (spec 082 G47 — it sat under the speed row) — the coin cannot
+			     pay, or (spec 079) the fee could not be asked and the sheet is
+			     asking again. -->
+			<p class="warning" role="alert">{fee.warning}</p>
+		{:else if fee.warningReserved}
+			<!-- Asking again: the last failure's words are not this ask's, but
+			     their line keeps its height, so nothing below jumps (G47). -->
+			<p class="warning reserved" aria-hidden="true">{fee.warningReserved}</p>
+		{/if}
 		{#if fee.refreshLabel !== undefined}
 			<!-- The send form's calm note, in its standing line: the slide
 			     below does not move when a quote grows old. -->
@@ -107,10 +118,8 @@
 			<FeeSpeedRow speed={fee.speed} ontoggle={onspeed} onselect={onspeedpick} />
 		{/if}
 	{/if}
-	{#if fee.warning}
-		<!-- Issue 262: the reason the slide is shut, under the row that fixes it
-		     — the coin cannot pay, or (spec 079) the relay could not be reached
-		     and the sheet is asking again. -->
+	{#if fee.selector && fee.warning}
+		<!-- With the list of coins open, the reason sits under the list. -->
 		<p class="warning" role="alert">{fee.warning}</p>
 	{/if}
 {/if}
@@ -122,6 +131,10 @@
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		font-weight: 500;
 		color: var(--color-error-base);
+	}
+
+	.warning.reserved {
+		visibility: hidden;
 	}
 
 	.line {

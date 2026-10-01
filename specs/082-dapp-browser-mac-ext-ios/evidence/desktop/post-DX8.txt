@@ -1,0 +1,15 @@
+# DX8 — tab A = test dApp (shown), tab B = app.uniswap.org (the other tab; example.com in the row)
+Send dust clicked 03:06:26.46; other tab clicked 03:06:30.23; shown tab re-clicked 03:06:34.94; ✕ on the other tab 03:06:36.72; signing ✕ 03:07:21.43
+[vela-wallet] 03:06:30.243 browser: navigation held (tab)
+[vela-wallet] 03:06:36.728 browser: navigation held (tab)
+[vela-wallet] 03:07:26.260 browser: asked host=127.0.0.1:8137 gen=7 how=navigation
+[vela-wallet] 03:07:26.272 browser: committed host=127.0.0.1:8137 gen=7
+[vela-wallet] 03:07:26.276 browser: finished host=127.0.0.1:8137
+page log after ✕: eth_sendTransaction {ok:false, code:4001, message:'User rejected the request'}; events: [] (no 4900); earlier eth_blockNumber result still on the page (no reload during the request)
+
+# CLOSE-TAB (outside a request): 5 × ✕ on background tabs from the start page (03:00:34–03:00:46) each loaded the CLOSED tab's page:
+[vela-wallet] 03:00:34.495 browser: asked host=app.uniswap.org gen=1 how=navigation
+[vela-wallet] 03:00:37.214 browser: asked host=app.uniswap.org gen=2 how=navigation
+[vela-wallet] 03:00:40.016 browser: asked host=app.uniswap.org gen=3 how=navigation
+[vela-wallet] 03:00:42.575 browser: asked host=example.org gen=4 how=navigation
+[vela-wallet] 03:00:45.339 browser: asked host=app.uniswap.org gen=5 how=navigation

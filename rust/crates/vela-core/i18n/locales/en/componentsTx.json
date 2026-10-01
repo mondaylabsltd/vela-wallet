@@ -28,7 +28,7 @@
       "statusConfirmed": "Confirmed",
       "statusSubmitted": "Submitted",
       "statusFailed": "Failed",
-      "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged. Open the explorer below for the reason, or go back and try again."
+      "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged."
     },
     "detail": {
       "received": "Received",

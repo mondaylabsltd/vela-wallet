@@ -1,0 +1,12 @@
+# IX7 — on-chain revert not producible; probe = Gnosis USDC transfer(0x7687…D141, 10^30) from the scratch dApp (relay-reject path, G36/D2 parity) — iPhone build fb8c7026, no fault
+# nonce 57 before (09:21:26) and after (09:22:08); no UserOperationEvent for op 0xd9f297153c60e91edb6a6d9bab4d49c1b07c2fc37796294c73167f89f8701066 (checked from block 48491440)
+09:20:44.723 2026-09-29 09:20:44.674983+0800 VelaWallet[1817:552194] [sign] sim_reverts chain=100
+09:21:29.536 2026-09-29 09:21:29.554510+0800 VelaWallet[1817:552194] [relay] submitting chain=100 hash=0xd9f297153c
+09:21:30.770 2026-09-29 09:21:30.741246+0800 VelaWallet[1817:552194] [relay] submit verdict=accepted hash=0xd9f297153c attempts=1 in=1186ms
+09:21:30.770 2026-09-29 09:21:30.741300+0800 VelaWallet[1817:552194] [sign] submit verdict=accepted hash=0xd9f297153c chain=100
+# sheet (Mac time): 09:20:4x 金额 1,000,000,000,000,000,000,000,000 USDC / 接收方 0x76875e...c0d141 (lower-case, ASCII dots) / danger 这笔交易预计会失败 — 但仍会扣除 gas。 / fee ~0.01 xDAI / slide 滑动以确认 · 发送 (open)
+# 09:21:27 slide -> 09:21:31 交易已提交至网络 / 等待区块链确认... / Gnosis 通常在约 15 秒内确认 -> 09:21:43 失败 / 交易未能提交。您的资金安全无虞——请重试。 / 完成
+# dApp: {"t":"09:20:44","label":"usdc 1e30","result":"0xd9f297153c60e91edb6a6d9bab4d49c1b07c2fc37796294c73167f89f8701066","ok":true,"done":"09:23:28"}  <- ok + op hash 121 s after the slide, 105 s after the sheet said 失败; the op never landed
+# Activity: 'dApp 交易, 失败 · 192.168.50.17:8140' (no amount); detail: 失败 / 发起方 192.168.50.17:8140 / 接收方 0xDDAf…7A83 (the USDC contract) / Gnosis / 今天 09:21 / 在区块浏览器中查看 (no tx) / 删除记录
+# no log line at the rejection (no [tracker] ... rejected / failed line)
+# suspected: fb8c7026 app-ios/VelaWallet/VelaWallet/Features/Signing/Core/SignExecutor.swift:272-281 — awaitReceipt polls only the relay's receipt for up to dappReceiptWaitMs, then afterReceiptWait(userOpHash:receipt:nil) answers ok + op hash whatever the tracker ruled (Rejected here; confirmed-with-tx in IX-W1)

@@ -480,10 +480,12 @@ struct TrustedSignerSpineTests {
 
         let hash = try await spine.submit(
             chainId: 100, account: fixture.account, calls: calls, gasFeeToken: nil,
-            quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account)
+            quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: fixture.account),
+            writeAhead: { _, _ in true }
         )
 
-        #expect(hash == opHash)
+        #expect(hash.userOpHash == opHash)
+        #expect(!hash.maybeSent, "the relay answered: accepted, not may-have-been-sent")
         #expect(signer.calls == 0)
         let asked = try #require(page.asked.first)
         #expect(asked.digest.count == 32)

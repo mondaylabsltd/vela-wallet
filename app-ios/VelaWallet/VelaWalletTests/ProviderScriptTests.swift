@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import JavaScriptCore
 import Testing
 import VelaCore
 @testable import VelaWallet
@@ -95,5 +96,41 @@ struct ProviderScriptTests {
         #expect(BrowserEngine.policy(scheme: "about", isMainFrame: false, linkActivated: false) == .allow)
         #expect(BrowserEngine.policy(scheme: "data", isMainFrame: true, linkActivated: true) == .cancel,
                 "a top-level data: document is a phishing staple")
+    }
+
+    // MARK: - One address spelling (spec 082 T121, RG10, T042)
+
+    /// The page hears the wallet's own spelling — EIP-55 — and an answer that
+    /// differs only in case is not a change. Run on the core's own
+    /// `applyAccounts`, cut from the very script this app injects.
+    @Test func accountsChangedKeepsEip55() throws {
+        let script = ProviderBridge.script
+        let start = try #require(script.range(of: "function applyAccounts(next) {"))
+        var depth = 0
+        var end = start.upperBound
+        for index in script[start.lowerBound...].indices {
+            let character = script[index]
+            if character == "{" { depth += 1 }
+            if character == "}" {
+                depth -= 1
+                if depth == 0 { end = script.index(after: index); break }
+            }
+        }
+        let applyAccounts = String(script[start.lowerBound..<end])
+        let context = try #require(JSContext())
+        context.evaluateScript("""
+        var session = { accounts: [] }; var emitted = [];
+        function emit(name, value) { emitted.push([name, value]); }
+        \(applyAccounts)
+        """)
+        let checksummed = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        context.evaluateScript("applyAccounts(['\(checksummed)']);")
+        #expect(context.evaluateScript("emitted.length").toInt32() == 1)
+        #expect(context.evaluateScript("emitted[0][0]").toString() == "accountsChanged")
+        #expect(context.evaluateScript("emitted[0][1][0]").toString() == checksummed,
+                "the page is handed the wallet's spelling, never lower case")
+        context.evaluateScript("applyAccounts(['\(checksummed.lowercased())']);")
+        #expect(context.evaluateScript("emitted.length").toInt32() == 1,
+                "a difference of case alone is not accountsChanged")
     }
 }

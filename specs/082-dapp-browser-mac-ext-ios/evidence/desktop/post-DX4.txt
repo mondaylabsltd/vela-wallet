@@ -1,0 +1,12 @@
+# DX4 (W18) analog — example.org's own 'Learn more' link (page-initiated) with blackhole iana; click 02:54:38.97
+[vela-wallet] 02:54:39.316 browser: asked host=iana.org gen=20 how=page
+[vela-wallet] 02:54:42.426 browser: watchdog host=iana.org gen=20 (no commit in 3000 ms)
+[vela-wallet] 02:54:46.942 browser: probe host=iana.org gen=20 verdict=timeout route=system
+[vela-wallet] 02:54:46.942 browser: failed host=iana.org class=timeout (the page's own load: retried by hand only)
+(no retry line in the following 30 s)
+02:54:38 CONFIG {"mode": "blackhole", "latency": 9000, "bps": 0, "drop": 1.0, "match": "iana"}
+02:54:38 HOLE iana.org:443
+02:54:42 HOLE iana.org:443
+02:55:10 CONFIG {"mode": "pass", "latency": 9000, "bps": 0, "drop": 1.0, "match": "iana"}
+
+# Forward to a faulted entry (blackhole example): served from WebKit's back-forward cache in 14 ms — no network, no fault reachable

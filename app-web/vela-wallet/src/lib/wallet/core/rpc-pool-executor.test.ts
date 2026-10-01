@@ -132,6 +132,41 @@ describe('json_rpc_post outcomes are transport facts', () => {
 		expect(result).toMatchObject({ outcome: { type: 'http_error', status: 429 } });
 	});
 
+	/**
+	 * Spec 082 RA1: `fetch` cannot tell a refused connection from a reply lost
+	 * after the request went out, so a thrown fetch is `network` (it may have
+	 * arrived) — unless the browser is offline before the call: then nothing
+	 * left, and it is `not_connected`.
+	 */
+	it('a thrown fetch is network; offline before the call is not_connected', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => {
+				throw new TypeError('Failed to fetch');
+			})
+		);
+		const registry = makeRegistry({
+			payload: () => ({ method: 'eth_sendUserOperation', params: [] })
+		});
+		const executor = createRpcPoolExecutor(registry);
+		const post = effect({
+			type: 'json_rpc_post',
+			call_id: 'c1',
+			url: 'https://relay.example/1',
+			method: 'eth_sendUserOperation',
+			x_rpc_url: null,
+			timeout_ms: 1000
+		});
+		vi.stubGlobal('navigator', { onLine: true });
+		await expect(executor.execute(post)).resolves.toMatchObject({
+			outcome: { type: 'network' }
+		});
+		vi.stubGlobal('navigator', { onLine: false });
+		await expect(executor.execute(post)).resolves.toMatchObject({
+			outcome: { type: 'not_connected' }
+		});
+	});
+
 	it('a vanished caller posts nothing and reports network', async () => {
 		const fetchSpy = vi.fn();
 		vi.stubGlobal('fetch', fetchSpy);
@@ -183,9 +218,15 @@ describe('conclude and the failure twin', () => {
 		const registry = makeRegistry();
 		const executor = createRpcPoolExecutor(registry);
 		await executor.execute(
-			effect({ type: 'conclude', call_id: 'c1', verdict: { type: 'failed', rate_limited: false } })
+			effect({
+				type: 'conclude',
+				call_id: 'c1',
+				verdict: { type: 'failed', rate_limited: false, maybe_delivered: false }
+			})
 		);
-		expect(registry.settled).toEqual([{ type: 'failed', rate_limited: false }]);
+		expect(registry.settled).toEqual([
+			{ type: 'failed', rate_limited: false, maybe_delivered: false }
+		]);
 	});
 
 	it('every operation has a failure answer; a failed post is one more endpoint failure', () => {
@@ -207,4 +248,15 @@ describe('conclude and the failure twin', () => {
 			executor.toFailure(effect({ type: 'load_pool_config', chain_id: 1 }), new Error('boom'))
 		).toMatchObject({ type: 'pool_config', rpc_endpoints: [] });
 	});
+});
+
+describe('the relay status method is the core’s spelling (spec 082 RA7, G13)', () => {
+	it('USER_OP_STATUS_METHOD is userOpStatusMethod()', async () => {
+		await import('$lib/i18n/wasm-init.server');
+		const { userOpStatusMethod } = await import('$lib/core/kernels');
+		const { USER_OP_STATUS_METHOD } = await import('$lib/services/rpc-adapter');
+		expect(USER_OP_STATUS_METHOD).toBe(userOpStatusMethod());
+		expect(USER_OP_STATUS_METHOD).toBe('pimlico_getUserOperationStatus');
+		// The core's first load, inside the test: 5 s is not enough under a full parallel run.
+	}, 30_000);
 });

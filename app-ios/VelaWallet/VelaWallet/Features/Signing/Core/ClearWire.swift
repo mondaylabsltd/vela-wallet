@@ -204,6 +204,32 @@ enum ClearSurface: String, Decodable {
     case messageSign = "message_sign"
     case blindTypedData = "blind_typed_data"
     case blindTransaction = "blind_transaction"
+    /// A dApp's plain value transfer — empty calldata (spec 082 RC1): the
+    /// same amount card the wallet's own send draws, from `plainSend`.
+    case plainSend = "plain_send"
+
+    /// A surface this build has never heard of is drawn as the blind
+    /// transaction — the most cautious rung — rather than failing the view: a
+    /// sheet that cannot render is a request nobody can refuse.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ClearSurface(rawValue: raw) ?? .blindTransaction
+    }
+}
+
+/// What a plain native send moves, for the `plainSend` card (spec 082
+/// RC1–RC5). Every figure is exact and the core's; the coin symbol is the
+/// shell's fee-row one (RC5), so a card never shows "xDAI" beside "XDAI".
+struct ClearPlainSendWire: Decodable, Equatable {
+    /// The recipient, EIP-55.
+    let to: String
+    /// The value in wei, plain decimal digits.
+    let valueWei: String
+    /// `valueWei / 10^18`, exact, with the request's locale marks; `"0"` when
+    /// nothing moves.
+    let amount: String
+    /// Zero value: "Send · 0 <coin>", no minus sign, a neutral Confirm (RC3).
+    let noValue: Bool
 }
 
 /// The confirm button's **semantics**. The words stay in the shell, and so
@@ -258,6 +284,9 @@ struct ClearSigningViewWire: Decodable, Equatable {
     /// half of the same buzz is `approval_guard`'s verdict; the sheet ORs the
     /// two and decides nothing.
     let dangerHaptic: Bool
+    /// The plain send card (spec 082 RC1): present exactly when `surface` is
+    /// `plainSend`.
+    var plainSend: ClearPlainSendWire? = nil
 
     static let empty = ClearSigningViewWire(
         resolving: false, resolved: false, result: nil, message: nil,

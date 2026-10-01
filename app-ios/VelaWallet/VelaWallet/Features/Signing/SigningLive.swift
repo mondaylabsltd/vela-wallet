@@ -14,6 +14,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum SigningLive {
 
@@ -48,12 +49,18 @@ enum SigningLive {
         /// Spec 079: this account signs on the Trusted Signer's page — its
         /// slide is the one consent.
         var trustedSignerRoute = false
+        /// Spec 082 RF5: the quote could not even start (the account's
+        /// deployment could not be read) — the core's failure name for it,
+        /// drawn as a failed quote is.
+        var feeStartFailure: String?
 
         /// The Trusted Signer's waiting card is up: the account signs on the
         /// page and the signature is under way. The card speaks for the
         /// signature then — "签名中…" beside "签名页没能打开" contradicted it.
         func signerPageOpen(_ sign: SignViewWire) -> Bool {
-            trustedSignerRoute && sign.isSigning
+            // The page is up exactly while the core says the signature is
+            // awaited (spec 082 RA9) — not through the network work before.
+            trustedSignerRoute && sign.phase == .awaitingSignature
         }
     }
 
@@ -366,7 +373,9 @@ enum SigningLive {
             // Neither of these is an error a person needs to read: one is
             // their own decision and the other is the wallet's.
             case .userRejected, .walletSwitchedChains: ""
-            default: loc.t("send.txErrorGeneric")
+            // The relay refused it (spec 082 RJ3): nothing was sent, and
+            // "try again" would send the same refusal.
+            default: sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric")
             }
             if !text.isEmpty { blocks.append(.warning(tone: .danger, text: text)) }
         }
@@ -374,10 +383,31 @@ enum SigningLive {
             blocks.append(.positive(s(loc, "submitted")))
         } else if signerPageOpen {
             // The waiting card says it.
-        } else if sign.isSigning || sign.isSubmitting {
-            blocks.append(.sentence(text: s(loc, "signing"), tone: .neutral))
+        } else if let words = phaseWords(sign, loc: loc) {
+            blocks.append(.sentence(text: words.title, tone: .neutral))
         }
         return blocks
+    }
+
+    /// What the sheet says while a request is in flight — from the core's
+    /// `phase` (spec 082 RA9, G22), never from `is_signing`: the network work
+    /// before the prompt is "preparing", and "awaiting your signature" is
+    /// said only while the prompt is up. A message never goes to the network,
+    /// so it is never "submitting" (079). `nil` when nothing is in flight.
+    static func phaseWords(_ sign: SignViewWire, loc: Loc) -> (title: String, hint: String?)? {
+        let onChain = sign.request.map { $0.kind == .transaction || $0.kind == .batch } ?? true
+        switch sign.phase {
+        case .idle:
+            return nil
+        case .preparing:
+            return (loc.t("send.txPreparing"), nil)
+        case .awaitingSignature:
+            return (onChain ? loc.t("send.txSigning") : s(loc, "signing"), nil)
+        case .submitting:
+            return onChain
+                ? (loc.t("send.txSubmitting"), loc.t("send.txBackgroundHint"))
+                : (s(loc, "signing"), nil)
+        }
     }
 
     // MARK: - After the approval (spec 079)
@@ -400,27 +430,54 @@ enum SigningLive {
         // A message never goes to the network: it is signing, then signed —
         // never "submitting" (device-found on the Xiaomi, spec 079).
         let onChain = sign.request.map { $0.kind == .transaction || $0.kind == .batch } ?? true
-        if !onChain, sign.isSigning || sign.isSubmitting {
+        if !onChain, let words = phaseWords(sign, loc: loc) {
             return SendReceiptModel(
-                header: header, stage: .submitting, title: s(loc, "signing"),
+                header: header, stage: .submitting, title: words.title,
                 captions: [summary].compactMap { $0 },
                 cta: loc.t("onboarding.common.close"), ctaAccent: false
             )
         }
         // A refusal after the approval (the submission failed): the core's
-        // reason, the sheet's own sentence for it.
+        // reason, the sheet's own sentence for it. After spec 082 this is a
+        // TRUE "not sent": a lost reply never reaches here (RA1). A relay's
+        // refusal says so and never "try again" (RJ3, `failure_refused`).
         if let error = sign.error, error.kind != .userRejected,
            sign.pendingOpHash != nil || error.kind == .submitFailed {
             return SendReceiptModel(
                 header: header, stage: .failed,
                 title: loc.t("componentsTx.receipt.statusFailed"),
-                captions: [summary, loc.t("send.txErrorGeneric")].compactMap { $0 },
+                captions: [
+                    summary, sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"),
+                ].compactMap { $0 },
                 cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
             )
         }
         if let op = sign.pendingOpHash {
+            // The reply was lost (RA10): it may have been sent, Vela keeps
+            // checking, don't send it again — the op hash to look it up by,
+            // and no Retry. Once the relay has shown it holds the op, the
+            // ordinary words below take over.
             let track = context.track.flatMap {
                 $0.userOpHash.caseInsensitiveCompare(op) == .orderedSame ? $0 : nil
+            }
+            // The tracker has its verdict while the page's answer is still
+            // waiting out its window — the relay said twice it never had the
+            // op, or the chain's own event was found while the relay stayed
+            // mute. The sheet says that verdict, in the core's words for the
+            // ending the page is about to get (`signEndingOf` of the op hash,
+            // `signEndingState` with the entry): a tick, a revert with its
+            // hash, or "not sent" — never "submitted, waiting" with a clock
+            // over an op that is settled (082 review).
+            if let track, track.outcome == "final",
+               let settled = SigningAftercare.of(
+                   method: sign.request?.method ?? "eth_sendTransaction",
+                   chainId: sign.request?.chainId ?? track.chainId,
+                   payload: ["type": "ok", "result": op], submittedUserOp: op
+               ) {
+                return aftercareReceipt(settled, summary: summary, context: context)
+            }
+            if sign.pendingOpMaybeSent, track == nil || track?.outcome == "maybe_sent" {
+                return maybeSentReceipt(op: op, summary: summary, header: header, loc: loc)
             }
             let still = track?.outcome == "still_confirming"
             let typicalLine = context.typicalS.map {
@@ -447,52 +504,71 @@ enum SigningLive {
                 cta: closeBackground, ctaAccent: false, eta: eta
             )
         }
-        if sign.isSubmitting {
+        // In flight, in the core's own phases (RA9): preparing, then — only
+        // while the prompt is up — awaiting the signature, then submitting.
+        guard let words = phaseWords(sign, loc: loc) else { return nil }
+        switch sign.phase {
+        case .submitting:
             return SendReceiptModel(
-                header: header, stage: .submitting, title: loc.t("send.txSubmitting"),
-                captions: [summary, loc.t("send.txBackgroundHint")].compactMap { $0 },
+                header: header, stage: .submitting, title: words.title,
+                captions: [summary, words.hint].compactMap { $0 },
                 cta: closeBackground, ctaAccent: false
             )
-        }
-        // The passkey is up (or the Trusted Signer's page is, over this sheet).
-        if sign.isSigning {
+        default:
             return SendReceiptModel(
-                header: header, stage: .submitting, title: loc.t("send.txSigning"),
+                header: header, stage: .submitting, title: words.title,
                 captions: [summary].compactMap { $0 },
                 cta: loc.t("onboarding.common.close"), ctaAccent: false
             )
         }
-        return nil
+    }
+
+    /// "It may have been sent" (spec 082 RA10) — the sheet's and the
+    /// aftercare's one drawing: the submitting title, the caption, the op
+    /// hash, and a close that leaves it running. Never a Retry.
+    static func maybeSentReceipt(
+        op: String, summary: String?, header: FlowHeaderModel, loc: Loc
+    ) -> SendReceiptModel {
+        SendReceiptModel(
+            header: header, stage: .submitted,
+            title: loc.t("send.txSubmitting"),
+            captions: [summary, s(loc, "maybeSent")].compactMap { $0 },
+            hash: ReceiptHashModel(
+                label: loc.t("componentsTx.receipt.userOpHash"),
+                value: "\(op.prefix(10))…\(op.suffix(8))",
+                copyLabel: loc.t("componentsUi.identiconViewer.copyAddress"),
+                copyValue: op
+            ),
+            cta: loc.t("send.txCloseBackground"), ctaAccent: false
+        )
     }
 
     /// The ending of a request whose sheet the core has closed — the same
-    /// receipt, with the tracker's word for an operation still on its way
-    /// (never "failed" on time alone: a timeout is not a failure).
+    /// receipt, in the core's words for it once the tracker has had its say
+    /// (`signEndingState`, spec 082 RA8): a tick only for a signature or an
+    /// op the tracker CONFIRMED; a revert is a failure with its hash and the
+    /// explorer (never 已确认, W3); an op the relay never had is "not sent";
+    /// anything still on its way says so — never "failed" on time alone.
     static func aftercareReceipt(
         _ aftercare: SigningAftercare, summary: String?, context: Context
     ) -> SendReceiptModel {
         let loc = context.loc
         let header = FlowHeaderModel(title: "", backLabel: "")
-        func landed(_ txHash: String?) -> SendReceiptModel {
-            let hash = txHash.flatMap { $0.isEmpty ? nil : $0 }
-            return SendReceiptModel(
-                header: header, stage: .confirmed,
-                title: loc.t("componentsTx.receipt.statusConfirmed"),
-                captions: [summary, context.chainName.isEmpty ? nil : context.chainName].compactMap { $0 },
-                hash: hash.map {
-                    ReceiptHashModel(
-                        label: loc.t("componentsTx.receipt.txHash"),
-                        value: "\($0.prefix(10))…\($0.suffix(8))",
-                        copyLabel: loc.t("componentsUi.identiconViewer.copyAddress"),
-                        copyValue: $0
-                    )
-                },
-                viewOnExplorer: hash != nil && !(context.explorerBase ?? "").isEmpty
-                    ? loc.t("history.viewOnExplorer") : nil,
-                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+        let explorer = !(context.explorerBase ?? "").isEmpty ? loc.t("history.viewOnExplorer") : nil
+        func hashRow(_ tx: String) -> ReceiptHashModel {
+            ReceiptHashModel(
+                label: loc.t("componentsTx.receipt.txHash"),
+                value: "\(tx.prefix(10))…\(tx.suffix(8))",
+                copyLabel: loc.t("componentsUi.identiconViewer.copyAddress"),
+                copyValue: tx
             )
         }
-        switch aftercare {
+        let track = context.track.flatMap { entry in
+            aftercare.userOpHash.flatMap {
+                entry.userOpHash.caseInsensitiveCompare($0) == .orderedSame ? entry : nil
+            }
+        }
+        switch aftercare.state(track: track) {
         case .signed:
             return SendReceiptModel(
                 header: header, stage: .confirmed,
@@ -502,33 +578,64 @@ enum SigningLive {
                 captions: [summary].compactMap { $0 },
                 cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
             )
-        case .landed(_, let txHash):
-            return landed(txHash)
-        case .stillConfirming(_, let op):
-            let track = context.track.flatMap {
-                $0.userOpHash.caseInsensitiveCompare(op) == .orderedSame ? $0 : nil
+        case .confirmed(let tx):
+            let hash = tx.isEmpty ? nil : tx
+            return SendReceiptModel(
+                header: header, stage: .confirmed,
+                title: loc.t("componentsTx.receipt.statusConfirmed"),
+                captions: [summary, context.chainName.isEmpty ? nil : context.chainName].compactMap { $0 },
+                hash: hash.map(hashRow),
+                viewOnExplorer: hash != nil ? explorer : nil,
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+            )
+        case .reverted(let tx):
+            // It landed and reverted: the money did not move, the fee may
+            // have been spent — the corpus's own sentence, and the proof.
+            let hash = tx.isEmpty ? nil : tx
+            return SendReceiptModel(
+                header: header, stage: .failed,
+                title: loc.t("componentsTx.receipt.statusFailed"),
+                captions: [summary, loc.t("componentsTx.receipt.failedHint")].compactMap { $0 },
+                hash: hash.map(hashRow),
+                viewOnExplorer: hash != nil ? explorer : nil,
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+            )
+        case .notSent:
+            return SendReceiptModel(
+                header: header, stage: .failed,
+                title: loc.t("componentsTx.receipt.statusFailed"),
+                captions: [summary, loc.t("send.txErrorGeneric")].compactMap { $0 },
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+            )
+        // The relay refused it (spec 082 RJ3): nothing was sent, and the
+        // same op would be refused again — no "try again", no explorer.
+        case .refused:
+            return SendReceiptModel(
+                header: header, stage: .failed,
+                title: loc.t("componentsTx.receipt.statusFailed"),
+                captions: [summary, s(loc, "refused")].compactMap { $0 },
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+            )
+        case .following(let op, let outcome, let feeHeld):
+            if outcome == "maybe_sent" {
+                return maybeSentReceipt(op: op, summary: summary, header: header, loc: loc)
             }
-            switch track?.status {
-            case "confirmed":
-                return landed(track?.txHash)
-            case "dropped", "rejected":
-                return SendReceiptModel(
-                    header: header, stage: .failed,
-                    title: loc.t("componentsTx.receipt.statusFailed"),
-                    captions: [summary, loc.t("send.txErrorGeneric")].compactMap { $0 },
-                    cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
-                )
-            default:
-                return SendReceiptModel(
-                    header: header, stage: .submitted,
-                    title: loc.t("send.txSubmittedTitle"),
-                    captions: [
-                        summary,
-                        track?.outcome == "unknown" ? s(loc, "unknownOutcome") : s(loc, "stillConfirming"),
-                    ].compactMap { $0 },
-                    cta: loc.t("send.txCloseBackground"), ctaAccent: false
-                )
+            let caption: String
+            if feeHeld {
+                caption = loc.t("send.txHeldFees")
+            } else {
+                switch outcome {
+                case "unknown": caption = s(loc, "unknownOutcome")
+                case "still_confirming": caption = s(loc, "stillConfirming")
+                default: caption = loc.t("send.txWaitingConfirm")
+                }
             }
+            return SendReceiptModel(
+                header: header, stage: .submitted,
+                title: loc.t("send.txSubmittedTitle"),
+                captions: [summary, caption].compactMap { $0 },
+                cta: loc.t("send.txCloseBackground"), ctaAccent: false
+            )
         }
     }
 
@@ -560,38 +667,29 @@ enum SigningLive {
         clear: ClearSigningViewWire, to: String?, valueHex: String?, dataBytes: Int,
         context: Context
     ) -> [SigningBlock] {
-        // A plain native transfer — no calldata — is the one transaction the
-        // core resolves **without** a descriptor: resolved, and no result.
-        // Drawing the blind "cannot decode (0 bytes)" card for it reads a dust
-        // send as a contract interaction, which is what Android shipped for
-        // one screenshot.
-        if clear.resolved, clear.result == nil, clear.message == nil, clear.blindTyped == nil,
-           dataBytes == 0, let to {
-            return plainTransferBlocks(to: to, valueHex: valueHex, context: context)
-        }
-        return blocksBySurface(clear: clear, to: to, dataBytes: dataBytes, context: context)
+        // Spec 082 RC1: a plain native transfer — no calldata — is the core's
+        // verdict now (`ClearSurface.plainSend`), not a guess drawn here. The
+        // interception this replaced read "no result and no bytes" and printed
+        // its own figure; the core's card is exact and refuses a value it
+        // cannot read, which then falls to the blind rung like any other.
+        blocksBySurface(clear: clear, to: to, dataBytes: dataBytes, context: context)
     }
 
-    private static func plainTransferBlocks(
-        to: String, valueHex: String?, context: Context
-    ) -> [SigningBlock] {
+    /// The core's plain send card (RC1–RC5), in the look the wallet's own send
+    /// has always had: 发送 · −amount coin · 接收方. A zero value reads
+    /// "0 coin" with no minus (RC3): only a simulation may say nothing leaves.
+    /// The coin is the fee row's symbol (RC5).
+    static func plainSendBlocks(_ plain: ClearPlainSendWire, context: Context) -> [SigningBlock] {
         let loc = context.loc
-        let wei = GuardExecutor.decimal(fromWordHex: padded(valueHex ?? "0x0")) ?? "0"
         return [
             .intent(text: s(loc, "intentSend"), tone: .neutral),
             .amount(
-                line: AmountLine(sign: "−", value: SendLive.fromBase(wei, decimals: 18),
+                line: AmountLine(sign: plain.noValue ? "" : "−", value: plain.amount,
                                  symbol: context.nativeSymbol),
                 card: true
             ),
-            .party(label: s(loc, "recipientLabel"), name: AddressText.short(to), address: to),
+            .party(label: s(loc, "recipientLabel"), name: AddressText.short(plain.to), address: plain.to),
         ]
-    }
-
-    private static func padded(_ hex: String) -> String {
-        let digits = hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
-        if digits.isEmpty { return "0x00" }
-        return digits.count % 2 == 0 ? "0x" + digits : "0x0" + digits
     }
 
     /// What the simulation found, or that it could not look.
@@ -600,9 +698,10 @@ enum SigningLive {
     ///
     /// - judgments → the rows, each one the CORE's verdict;
     /// - answered, nothing moved → "checked, nothing moves";
-    /// - never answered → the danger-toned "Vela could not tell what this
-    ///   does", because a wallet that stays quiet when it could not check
-    ///   teaches people that silence means safe.
+    /// - the core's notice → its sentence in its tone: "expected to fail"
+    ///   (danger) or "Vela couldn't check" (caution) — never silence, because
+    ///   a wallet that stays quiet when it could not check teaches people
+    ///   that silence means safe.
     ///
     /// Only for transactions: a message moves nothing, and a balance block on
     /// a signature would be an answer to a question nobody asked.
@@ -610,8 +709,11 @@ enum SigningLive {
         let loc = context.loc
         guard isTransaction else { return [] }
 
-        if context.simulation == .unavailable {
-            return [.warning(tone: .danger, text: s(loc, "simUnavailableWarning"))]
+        // The core's notice, in the core's tone (spec 082 RG6): a revert is
+        // danger, a node that could not check is caution.
+        if case .notice(let risk, let key, let reason) = context.simulation {
+            let text = reason.map { loc.t(key, vars: ["reason": $0]) } ?? loc.t(key)
+            return [.warning(tone: risk == "danger" ? .danger : .caution, text: text)]
         }
         // Still running, or a verdict for a previous request. Silence, because
         // a block that appears and then changes its mind is worse than one that
@@ -625,7 +727,9 @@ enum SigningLive {
                 noteTone: .neutral
             )]
         }
-        let rows = sim.judgments.map { balanceRow($0, context: context) }
+        // A zero change is not a change: the core writes none (RJ15), and
+        // the row is not drawn.
+        let rows = sim.judgments.compactMap { balanceRow($0, context: context) }
         // One warning for the whole block, not one per row: the caution is
         // about the same thing each time, and repeating it is how people stop
         // reading it.
@@ -641,7 +745,11 @@ enum SigningLive {
         )]
     }
 
-    /// One judgment, as a row.
+    /// One judgment, as a row — `nil` for a change of zero.
+    ///
+    /// The figure is the core's (`formatSignedTokenAmount`, spec 082 RJ15):
+    /// the shell's own formatter rounded a 1000-wei outflow to "0" and kept
+    /// its minus — "xDAI −0" (G49).
     ///
     /// An unverified INFLOW shows its direction and the word "unverified
     /// token" and **no number**: the amount in a simulated log is whatever the
@@ -649,38 +757,25 @@ enum SigningLive {
     /// credibility to a stranger's arithmetic.
     private static func balanceRow(
         _ judgment: TrustSimJudgmentWire, context: Context
-    ) -> BalanceDeltaRow {
+    ) -> BalanceDeltaRow? {
         let loc = context.loc
         let incoming = judgment.incoming
-        let sign = incoming ? "+" : "−"
         let tone: SigningTone = incoming ? .success : .neutral
         switch judgment {
         case .native(let delta):
-            return BalanceDeltaRow(
-                symbol: context.nativeSymbol,
-                delta: "\(sign)\(SendLive.trim(SendLive.fromBase(magnitude(delta), decimals: 18)))",
-                tone: tone
-            )
+            guard let text = SimDeltas.deltaText(delta, decimals: 18) else { return nil }
+            return BalanceDeltaRow(symbol: context.nativeSymbol, delta: text, tone: tone)
         case .erc20Trusted(_, let delta, let symbol, let decimals):
-            return BalanceDeltaRow(
-                symbol: symbol,
-                delta: "\(sign)\(SendLive.trim(SendLive.fromBase(magnitude(delta), decimals: decimals)))",
-                tone: tone
-            )
+            guard let text = SimDeltas.deltaText(delta, decimals: decimals) else { return nil }
+            return BalanceDeltaRow(symbol: symbol, delta: text, tone: tone)
         case .erc20Unverified:
             return BalanceDeltaRow(
                 symbol: s(loc, "balanceUnverifiedToken"),
                 // Direction only. Never the site's own number.
-                delta: sign,
+                delta: incoming ? "+" : "\u{2212}",
                 tone: .caution
             )
         }
-    }
-
-    /// The magnitude of a signed decimal string — the sign is already carried
-    /// by the row's own glyph.
-    private static func magnitude(_ delta: String) -> String {
-        delta.hasPrefix("-") ? String(delta.dropFirst()) : delta
     }
 
     private static func blocksBySurface(
@@ -717,7 +812,17 @@ enum SigningLive {
                 }))
             }
             return blocks
+        case .plainSend:
+            // `plainSend` is present exactly when the surface is; a view
+            // without it is drawn as the blind rung rather than as nothing.
+            if let plain = clear.plainSend { return plainSendBlocks(plain, context: context) }
+            return blindTransactionBlocks(to: to, dataBytes: dataBytes, loc: loc)
         case .blindTransaction:
+            return blindTransactionBlocks(to: to, dataBytes: dataBytes, loc: loc)
+        }
+    }
+
+    private static func blindTransactionBlocks(to: String?, dataBytes: Int, loc: Loc) -> [SigningBlock] {
             var blocks: [SigningBlock] = [
                 .intent(text: s(loc, "intentContractCall"), tone: .caution),
                 .warning(tone: .caution,
@@ -732,7 +837,6 @@ enum SigningLive {
                 ))
             }
             return blocks
-        }
     }
 
     private static func tone(of risk: ClearRisk) -> SigningTone {
@@ -1011,7 +1115,7 @@ enum SigningLive {
             // the native figure — and what it costs. The design sheet is
             // explicit that these two surfaces must not drift.
             value = "~" + SendLive.feeLine(estimate, view: nil, fee: fee, display: context.display)
-        } else if fee?.failed != nil {
+        } else if fee?.failed != nil || (fee == nil && context.feeStartFailure != nil) {
             value = context.loc.t("componentsUi.gas.estimateFailed")
         } else {
             value = context.loc.t("componentsUi.gas.estimating")
@@ -1044,27 +1148,23 @@ enum SigningLive {
         if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
             warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
-        } else if let failed = fee?.failed, recoverable(failed) {
+        } else if let failed = fee?.failed ?? (fee == nil ? context.feeStartFailure : nil),
+                  let key = feeFailureReasonKey(failure: failed) {
             // Spec 079: why there is no fee, and that it will be asked again
             // (the row said "点击重试" with the relay down and stayed so).
-            warning = context.loc.t("componentsUi.funding.denialNetworkError")
+            // Which words is the core's (spec 082 RJ13): the relay for a
+            // relay's failure, the chain's node — rate-limited, or named
+            // unreachable — for a chain read, and none for a failure that is
+            // not the network's (G48: a public node's rate limit read "Can't
+            // reach Vela").
+            warning = context.loc.t(key, vars: ["chain": context.chainName])
         }
         // The same condition `SigningController.feeTapped` acts on, decided
         // once here so the chevron and the handler cannot disagree.
-        let tappable = fee?.failed != nil || options.count > 1
+        let tappable = fee?.failed != nil || (fee == nil && context.feeStartFailure != nil)
+            || options.count > 1
         return .onchain(label: context.loc.t("componentsUi.gas.networkFee"), value: value,
                         selector: selector, warning: warning, tappable: tappable)
-    }
-
-    /// A fee failure a recovering network or relay can clear — the ones the
-    /// core re-quotes (`feeRequoteDelayMs`). A missing key or a broken
-    /// calculation is not the network's doing, and saying "check your
-    /// connection" about it would send somebody to fix the wrong thing. Nor
-    /// is `would_fail` (spec 083 fee): the relay ANSWERED that the operation
-    /// fails. This shell does not report that answer yet, so the core never
-    /// says it here — but the day it does, it is not the network sentence.
-    static func recoverable(_ failure: String) -> Bool {
-        failure != "missing_public_key" && failure != "calculation_failed" && failure != "would_fail"
     }
 
     /// Spec 079: the fee row's refresh — the send form's own control, dimmed

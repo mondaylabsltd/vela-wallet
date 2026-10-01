@@ -28,6 +28,9 @@ test('entering swaps in the fixture wallet and marks it; leaving gives the real 
 	await expect(page.getByTestId('parallel-space-badge')).toHaveCount(0);
 
 	await page.goto('/en/parallel');
+	// Pressed before hydration, the server-rendered button does nothing (batch.e2e.ts):
+	// the fixture list fills on mount, so a row in it means the handlers are on.
+	await page.locator('li code').first().waitFor({ timeout: 60_000 });
 	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
 
 	// The badge is the promise: a fixture wallet always says so — here, and
@@ -59,6 +62,9 @@ test('the space survives a reload, and the multi-key golden Safe is one of its w
 	page
 }) => {
 	await page.goto('/en/parallel');
+	// Pressed before hydration, the server-rendered button does nothing (batch.e2e.ts):
+	// the fixture list fills on mount, so a row in it means the handlers are on.
+	await page.locator('li code').first().waitFor({ timeout: 60_000 });
 	await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
 	// Entering navigates on its own; reloading mid-flight would abort it.
 	await page.waitForURL(/\/en\/wallet$/);

@@ -108,7 +108,7 @@ class SendRefusalsTest {
         port.always("eth_estimateUserOperationGas") {
             FakeRelayPort.body(JSONObject().put("verificationGasLimit", "0x186a0").put("callGasLimit", "0x30d40").put("preVerificationGas", "0xc350"))
         }
-        port.always("eth_sendUserOperation") { relaySends += 1; FakeRelayPort.body("0xhash") }
+        port.always("eth_sendUserOperation") { relaySends += 1; FakeRelayPort.body("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1") }
         port.rest["https://relay.test/v1/treasury/100"] = RestAnswer.Ok(JSONObject().put("address", "0x1111111111111111111111111111111111111111").put("bootstrapNeeded", false))
         port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
     }
@@ -246,6 +246,49 @@ class SendRefusalsTest {
         withTimeout(30_000) { c.send.first { it.receipt != null } }
         assertEquals(2, signs)
         assertEquals(1, relaySends)
+    }
+
+    /**
+     * Spec 082, owner ruling 1: once the passkey has returned, the operation
+     * is signed and on its way — the core keeps the button saying Cancel
+     * until the relay answers, but a cancel can only stop the ceremony
+     * (`Passkey.cancelSign()`), never the POST. Killing the POST in flight
+     * dropped an op the relay may already hold: no receipt, no row, no
+     * tracker, and the confirm page back with its slide — a second payment
+     * one swipe away.
+     */
+    @Test
+    fun `a cancel after the passkey returned leaves the POST to its verdict and the op is followed`() = runBlocking {
+        seedAccount(); scriptRelay()
+        val posting = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        port.before = { method ->
+            if (method == "eth_sendUserOperation") {
+                posting.complete(Unit)
+                release.await()
+            }
+        }
+        val c = controller()
+        c.toConfirm()
+        c.slideConfirm()
+        withTimeout(30_000) { posting.await() }
+        assertEquals(1, signs)
+        // The POST is out. Since spec 082 RJ1 the op was written ahead first,
+        // and the core moved the sheet to "submitting" then — but a Cancel that
+        // still arrives (a tap in flight) must not stop the POST either.
+        assertEquals(SendTxStatus.Submitting, withTimeout(10_000) { c.send.first { it.tx_status == SendTxStatus.Submitting } }.tx_status)
+        c.cancelSigning()
+        delay(200)
+        release.complete(Unit)
+        val receipt = withTimeout(30_000) { c.send.first { it.receipt != null } }
+        assertEquals(app.getvela.wallet.feature.send.core.SendReceiptStatus.Submitted, receipt.receipt!!.status)
+        assertEquals("0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", receipt.user_op_hash)
+        assertEquals("the POST ran to its answer", 1, relaySends)
+        // …and the row is on disk for the tracker to follow.
+        withTimeout(10_000) {
+            while (store.values[app.getvela.wallet.core.data.KeyValueStore.Keys.TRANSACTIONS].orEmpty().contains(receipt.user_op_hash!!).not()) delay(20)
+        }
+        assertTrue(store.values.getValue(app.getvela.wallet.core.data.KeyValueStore.Keys.TRANSACTIONS).contains(receipt.user_op_hash!!))
     }
 
     @Test

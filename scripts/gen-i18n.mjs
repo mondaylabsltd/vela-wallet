@@ -449,8 +449,25 @@ for (let i = 1; i < PATHS.length; i++) {
 //   refused share one sentence (to a person all three are "the network, retrying").
 //   That is what keeps ja + en inside SC-005, which main left ~900 bytes of.
 //   Same branches: 1773 + 9 = 1782.
-if (PATHS.length !== 1782) fail(`expected 1782 paths (1693 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1693) fail(`expected 1693 leaf paths, got ${leafSet.size}`);
+// 1784 (082, 2026-09-28): + `componentsUi.signing.maybeSent` — a submit whose
+//   reply was lost says the payment may have gone and not to send it again
+//   (owner ruling 1; G21: a landed payment was reported "failed — try again"), +
+//   `explore.loadProxy` (the proxy itself cannot be reached, ruling 3) and
+//   `explore.requestOpen` (why a tab switch is held, ruling 10); − the unread
+//   `send.txErrorTimeout`, whose "submitted but timed out" is what the tracker
+//   rules forbid. `componentsUi.signing.simUnavailableWarning` is reworded
+//   shorter ("couldn’t check", FR-012). Net −21 bytes of ja + en, so SC-005
+//   holds without raising its cap. Same branches: 1782 + 3 − 1 = 1784.
+// 1785 (082 round 2, 2026-09-29): + `componentsUi.signing.refused` — a
+//   transaction the relay refused says so, and that nothing was sent, with no
+//   "try again" (RJ3; G36: a refused op was answered ok and the sheet said
+//   失败 · 请重试). Paid for by trimming `componentsTx.receipt.failedHint` to
+//   its first two sentences: the explorer link sits right under it, and "go
+//   back and try again" is wrong after a revert (RJ6). The zh / zh-TW
+//   `send.txBackgroundHint` gain their comma (0 B of ja + en). Net ≈ −58 B of
+//   ja + en, SC-005 unraised. Same branches: 1784 + 1 = 1785.
+if (PATHS.length !== 1785) fail(`expected 1785 paths (1696 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1696) fail(`expected 1696 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

@@ -1,0 +1,27 @@
+# E-probe (079 T004 + 082 T122) — hermetic, no proxy. build-for-testing of scheme VelaWallet from the 082 worktree at 74192155 (app-ios clean; check-ios-core-fresh: ok, core 4dd8ce5c…) into scratchpad/build/ios-dd-probe; .xctestrun copied to probe.xctestrun with DappBrowserStabilityProbeTests removed from VelaWalletUITests' SkipTestIdentifiers (13 -> 12); WDA's xcodebuild stopped first (iproxy kept), restarted after.
+# NOTE: installing the test host replaced the round-1 app on the phone with this 74192155 (round-2) build.
+Test Case '-[VelaWalletUITests.DappBrowserStabilityProbeTests testProbeALoadThatFails]' started.
+Test Case '-[VelaWalletUITests.DappBrowserStabilityProbeTests testProbeALoadThatFails]' passed (41.982 seconds).
+Test Case '-[VelaWalletUITests.DappBrowserStabilityProbeTests testProbeASiteThatNeverAnswers]' started.
+    t =    36.17s panel after 21.4 s
+Test Case '-[VelaWalletUITests.DappBrowserStabilityProbeTests testProbeASiteThatNeverAnswers]' passed (38.824 seconds).
+Test Case '-[VelaWalletUITests.DappBrowserStabilityProbeTests testProbeTheBrowserCheckpoints]' started.
+    t =    24.33s dismissal: swipe=stays scrim=stays
+Test Case '-[VelaWalletUITests.DappBrowserStabilityProbeTests testProbeTheBrowserCheckpoints]' passed (115.332 seconds).
+** TEST EXECUTE SUCCEEDED **
+    t =    36.17s Waiting 8.0s for "正在重试…" Button to exist
+    t =    37.18s     Checking `Expect predicate `existsNoRetry == 1` for object "正在重试…" Button`
+# money: the checkpoints test sends the harness's dust (0.001 xDAI on Gnosis to 0x7687…D141): nonce 61 (10:34:02) -> 62 (10:38:34); one event:
+48492348 10:37:20 op 0x15ed679452c5cf667665a6bcae99e7404c93818516da90d817abc98980eeacae tx 0xf7ffc22b47bd6d6965473526b9bbe93a311e23fc9353ab9c11cdd5a6c56d675f nonce 61 success 1
+# 18-never-answers-retrying texts (head):
+B 关闭网页
+T 127.0.0.1:60050
+B 站点菜单
+T Vela test dApp
+T 无法加载此页面
+T 网络不稳定，页面没能打开。
+T 127.0.0.1:60050
+B 重试
+B 后退
+B 前进
+# result bundle: scratchpad/build/probe.xcresult; attachments: scratchpad/build/probe-att (129 files)

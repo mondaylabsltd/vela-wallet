@@ -1,0 +1,5 @@
+DX-LD6 desktop — addresses the dApps received in stage B (compare p30-dapp-log.jpg: accountsChanged was 0x88cca0eedb… lower-case before 082)
+127.0.0.1:8137 page, events: accountsChanged ["0x88cCA0EeDbF2C4426110bbFc998F048689266894"] (post-DX-W1-dapp-answer.jpg)
+127.0.0.1:8141 connect 04:04:56→04:05:13: eth_requestAccounts ["0x88cCA0EeDbF2C4426110bbFc998F048689266894"]; event 04:05:13 accountsChanged ["0x88cCA0EeDbF2C4426110bbFc998F048689266894"]
+04:15:08 eth_accounts ["0x88cCA0EeDbF2C4426110bbFc998F048689266894"]; 04:15:09 eth_requestAccounts [same]
+account switch: not possible — the parallel space holds one account (账户 dialog: 1个账户 · MultiTest; only 创建新账户 / 登录已有账户, which would register a new account in the public-key index)

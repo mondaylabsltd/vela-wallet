@@ -1,24 +1,27 @@
 package app.getvela.wallet.feature.signing.core
 
+import app.getvela.wallet.core.crux.Wire
+import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
-import app.getvela.wallet.feature.wallet.core.TrustDeltaKind
-import java.math.BigInteger
+import kotlinx.serialization.builtins.ListSerializer
 import org.json.JSONArray
 import org.json.JSONObject
+import uniffi.vela_core_uniffi.SimOutcomeRecord
+import uniffi.vela_core_uniffi.simOutcome
 
 /**
- * The simulation's shell half (spec 046 D1, the desktop's `executor/sim.rs`
- * verbatim): the `eth_simulateV1` payload for the request's calls, and the
- * net asset deltas from the logs of the calls that succeeded. Transfer logs
- * touching the wallet are netted per token; the `0xeeee…` sender is the
- * native coin. What the deltas MEAN — trusted, unverified, how to show a
- * received amount — is the core's (`token_trust::judge_delta`); nothing
- * here is ever written anywhere.
+ * The simulation's shell half (spec 046 D1): the `eth_simulateV1` payload for
+ * the request's calls, and the pool's answer handed to the core as it came.
+ *
+ * Spec 082 RG6: what the answer MEANS is the core's `sim_outcome` — a node
+ * that could not simulate is a caution ("could not check"), a call that fails
+ * is a danger with its sanitised revert reason, and only a clean run carries
+ * deltas (the per-asset moves the trust machine then judges). This file used
+ * to parse the logs itself, and read every non-answer as "unavailable" in a
+ * tone of its own and a revert as "nothing changes".
  */
 object SimDeltas {
-    const val TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-    const val NATIVE_SENTINEL = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-
     class Call(val to: String, val value: String?, val data: String?)
 
     /** The `eth_simulateV1` params: one block-state call carrying every call; `null` when there is nothing to simulate. */
@@ -46,77 +49,42 @@ object SimDeltas {
             .put("returnFullTransactions", false)
     }
 
-    /** The logs of every succeeded call in every simulated block; `null` when the answer is an error or empty. */
-    fun logsOf(result: JSONObject): List<JSONObject>? {
-        if (result.opt("error") != null && !result.isNull("error")) return null
-        val blocks = result.optJSONArray("result") ?: return null
-        if (blocks.length() == 0) return null
-        val logs = ArrayList<JSONObject>()
-        for (b in 0 until blocks.length()) {
-            val calls = blocks.optJSONObject(b)?.optJSONArray("calls") ?: continue
-            for (c in 0 until calls.length()) {
-                val call = calls.optJSONObject(c) ?: continue
-                if (!succeeded(call)) continue
-                val entries = call.optJSONArray("logs") ?: continue
-                for (l in 0 until entries.length()) entries.optJSONObject(l)?.let(logs::add)
-            }
-        }
-        return logs
+    /**
+     * The reply envelope the core reads (contract §8): the JSON-RPC body as it
+     * came (`{"result": …}` or `{"error": …}`), or `{"unreachable": true}` when
+     * the pool gave up or nothing was asked.
+     */
+    fun replyJson(answer: RpcResult?): String = when (answer) {
+        is RpcResult.Body -> answer.json.toString()
+        is RpcResult.RangeCapped, is RpcResult.Failed, null -> UNREACHABLE
     }
 
-    private fun succeeded(call: JSONObject): Boolean = when (val status = call.opt("status")) {
-        is String -> status == "0x1"
-        is Number -> status.toLong() == 1L
-        else -> call.opt("error") == null || call.isNull("error")
+    /** The core's reading of the answer for [user] (`simOutcome`). */
+    fun outcome(user: String, answer: RpcResult?): SimOutcomeRecord = simOutcome(user, replyJson(answer))
+
+    /** The core's notice, drawn in the core's tone; `null` for a clean run (its deltas are judged instead). */
+    fun notice(record: SimOutcomeRecord): SigningController.SimOutcome.Notice? {
+        val key = record.noticeKey ?: return null
+        val risk = record.noticeRisk
+            ?.let { runCatching { Wire.json.decodeFromString(ClearRisk.serializer(), "\"$it\"") }.getOrNull() }
+            ?: ClearRisk.Caution
+        return SigningController.SimOutcome.Notice(risk = risk, key = key, reason = record.revertReason)
     }
 
-    /** Net Transfer deltas for `user`, in first-seen order, zero totals dropped. */
-    fun deriveDeltas(logs: List<JSONObject>, user: String): List<TrustAssetDelta> {
-        val me = user.lowercase()
-        val order = ArrayList<String>()
-        val totals = HashMap<String, BigInteger>()
-        for (log in logs) {
-            val topics = log.optJSONArray("topics") ?: continue
-            if (topics.length() != 3) continue
-            if (!topics.optString(0).equals(TRANSFER_TOPIC, ignoreCase = true)) continue
-            val from = topicAddress(topics.optString(1))
-            val to = topicAddress(topics.optString(2))
-            if (from != me && to != me) continue
-            val value = firstWord(log.optString("data")) ?: continue
-            if (value.signum() == 0) continue
-            val address = log.optString("address").lowercase()
-            if (address.isEmpty()) continue
-            val key = if (address == NATIVE_SENTINEL) "native" else address
-            if (key !in totals) order.add(key)
-            var total = totals[key] ?: BigInteger.ZERO
-            if (to == me) total += value
-            if (from == me) total -= value
-            totals[key] = total
-        }
-        return order.mapNotNull { key ->
-            val delta = totals[key] ?: BigInteger.ZERO
-            if (delta.signum() == 0) return@mapNotNull null
-            if (key == "native") {
-                TrustAssetDelta(kind = TrustDeltaKind.Native, token = null, delta = delta.toString())
-            } else {
-                TrustAssetDelta(kind = TrustDeltaKind.Erc20, token = key, delta = delta.toString())
-            }
-        }
-    }
+    /**
+     * A clean run's per-asset moves for the signing account (empty = nothing
+     * of theirs moves). `null` when this app cannot read them — "could not
+     * check", never the empty list: that is a calm verdict nobody made.
+     */
+    fun deltas(record: SimOutcomeRecord): List<TrustAssetDelta>? =
+        runCatching { Wire.json.decodeFromString(ListSerializer(TrustAssetDelta.serializer()), record.deltasJson) }
+            .onFailure { VelaLog.failure("signing.sim", "the core's deltas could not be read", it) }
+            .getOrNull()
 
-    /** A 32-byte topic → the address in its low 20 bytes, lowercase. */
-    internal fun topicAddress(topic: String): String {
-        val hex = topic.removePrefix("0x").lowercase()
-        return if (hex.length >= 40) "0x" + hex.takeLast(40) else ""
-    }
-
-    /** The first 32-byte word of `data` as an unsigned integer. */
-    internal fun firstWord(data: String?): BigInteger? {
-        val hex = data.orEmpty().removePrefix("0x")
-        if (hex.isEmpty()) return null
-        val word = hex.take(64)
-        return runCatching { BigInteger(word, 16) }.getOrNull()
-    }
+    /** The core's "could not check" line, for a run whose moves nobody could judge. */
+    fun couldNotCheck(): SigningController.SimOutcome.Notice =
+        notice(simOutcome("", UNREACHABLE))
+            ?: SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning")
 
     /** A value as the node wants it: `0x`-hex; decimal input converted; empty → `0x0`. */
     internal fun hexValue(value: String?): String {
@@ -129,4 +97,6 @@ object SimDeltas {
         val parsed = raw.toBigIntegerOrNull() ?: return "0x0"
         return "0x" + parsed.toString(16)
     }
+
+    private const val UNREACHABLE = """{"unreachable":true}"""
 }

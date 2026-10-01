@@ -152,21 +152,26 @@
 
 	// ---- session cache (backs the synchronous legacy props) -------------------
 	const session = {
-		accounts: [], // lowercased addresses the dApp is authorized to see
+		accounts: [], // addresses the dApp is authorized to see, spelled as the wallet sent them
 		chainIdNum: null, // number, or null until first learned
 		connected: false
 	};
 
 	// Reconcile cache from a fresh (method,result) or an event; emit the EIP-1193
 	// events that actually changed. Called on every response and every 'evt'.
+	//
+	// The wallet's spelling is kept as sent (EIP-55, spec 082 RG10): lower-casing
+	// here made `accountsChanged` name the account differently from the connect
+	// answer, so a strict dApp saw two accounts. A change is still judged
+	// case-insensitively — the same account in another case is not a change and
+	// fires no event, though the cache takes the new spelling.
 	function applyAccounts(next) {
-		const norm = Array.isArray(next)
-			? next.filter((a) => typeof a === 'string').map((a) => a.toLowerCase())
-			: [];
+		const list = Array.isArray(next) ? next.filter((a) => typeof a === 'string') : [];
 		const changed =
-			norm.length !== session.accounts.length || norm.some((a, i) => a !== session.accounts[i]);
-		session.accounts = norm;
-		if (changed) emit('accountsChanged', norm);
+			list.length !== session.accounts.length ||
+			list.some((a, i) => a.toLowerCase() !== session.accounts[i].toLowerCase());
+		session.accounts = list;
+		if (changed) emit('accountsChanged', list.slice());
 		return changed;
 	}
 	function applyChain(nextNum) {

@@ -48,9 +48,25 @@ import VelaCore
 @MainActor
 protocol RelayPort {
     func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome
+    /// `call`, with whether any POST may have been acted on (spec 082 RA1) —
+    /// what lets a submit say "not sent", and only then.
+    func callDetailed(chainId: Int, method: String, params: [Any], kind: String) async -> RpcCallResult
     func bundlerBase(chainId: Int) async -> String?
     func bestRpcUrl(chainId: Int) async -> String?
     func restGet(url: String, xRpcUrl: String?) async -> CoreHTTP.RestAnswer
+}
+
+extension RelayPort {
+    /// A port that knows only outcomes (a scripted one) cannot say whether a
+    /// request left the device, so a give-up MAY have delivered: "not sent"
+    /// is never a guess (contract §2). An answer — a value or a refusal — is
+    /// a JSON reply, which is not.
+    func callDetailed(chainId: Int, method: String, params: [Any], kind: String) async -> RpcCallResult {
+        let outcome = await call(chainId: chainId, method: method, params: params, kind: kind)
+        let maybe: Bool
+        if case .failed = outcome { maybe = true } else { maybe = false }
+        return RpcCallResult(outcome: outcome, maybeDelivered: maybe, heldErrorJson: nil)
+    }
 }
 
 /// The real port: the pool for JSON-RPC and routing, `CoreHTTP` for REST.
@@ -60,6 +76,10 @@ struct PoolRelayPort: RelayPort {
 
     func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome {
         await pool.call(chainId: chainId, method: method, params: params, kind: kind)
+    }
+
+    func callDetailed(chainId: Int, method: String, params: [Any], kind: String) async -> RpcCallResult {
+        await pool.callDetailed(chainId: chainId, method: method, params: params, kind: kind)
     }
 
     func bundlerBase(chainId: Int) async -> String? { await pool.bundlerBase(chainId: chainId) }
@@ -120,12 +140,20 @@ final class RelayClient {
         case unreachable
     }
 
-    enum SubmitAnswer {
+    /// What one submit came to, in the core's words (`user_op::submit_step`,
+    /// spec 082 RA1). Three answers, and the middle one is the reason this
+    /// type exists: a request that may have reached the relay and whose
+    /// answer never came back is NOT "failed — try again" (G21, a paid
+    /// double spend) and is not "sent" either.
+    enum SubmitVerdict: Equatable {
+        /// The relay holds the operation; its hash wins over the local one.
         case accepted(userOpHash: String)
-        /// The relay's error as JSON — the core turns it into a sentence and a
-        /// class.
-        case rejected(errorJson: String)
-        case unreachable
+        /// A POST may have been acted on and no answer came back: followed
+        /// under the LOCAL hash, never retried as a new operation.
+        case maybeSent(userOpHash: String)
+        /// Nothing left the device (`rejection` nil), or the relay refused it
+        /// and no earlier attempt can have delivered it — the core's class.
+        case notSent(rejection: RelayRejection?)
     }
 
     enum ReceiptAnswer {
@@ -142,15 +170,14 @@ final class RelayClient {
 
     private static let quoteTTLMs: Double = 8_000
     private static let infoTTLMs: Double = 30_000
-    private static let submitMaxRetries = 3
-    static let submitRetryDelayMs: Double = 3_000
 
     private let port: RelayPort
     /// The configured relay host, for when the pool names no base for a chain.
     private let builtinBase: () async -> String
     private let now: () -> Double
-    /// The submit retry's pause; tests set zero.
-    private let retryDelayMs: Double
+    /// The submit retry's pause; `nil` is the core's (`RetryAfter.delay_ms`),
+    /// tests set zero.
+    private let retryDelayMs: Double?
 
     private var quoteCache: [String: (quotes: [[String: Any]], at: Double)] = [:]
     private var infoCache: [String: (info: AccountInfo, at: Double)] = [:]
@@ -186,7 +213,7 @@ final class RelayClient {
     private let gasSignalsFlights = SingleFlight<String, GasSignals>()
     private let bundlerPriceFlights = SingleFlight<String, [String: Any]?>()
     private let inBandFlights = SingleFlight<String, [[String: Any]]?>()
-    private let deploymentFlights = SingleFlight<String, Bool?>()
+    private let deploymentFlights = SingleFlight<String, DeploymentRead>()
     private let infoFlights = SingleFlight<String, AccountInfo?>()
     private let simulationFlights = SingleFlight<String, String>()
 
@@ -208,7 +235,7 @@ final class RelayClient {
         port: RelayPort,
         builtinBase: @escaping () async -> String = { NetDefaults.bundlerServiceURL },
         now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 },
-        retryDelayMs: Double = RelayClient.submitRetryDelayMs
+        retryDelayMs: Double? = nil
     ) {
         self.port = port
         self.builtinBase = builtinBase
@@ -489,15 +516,20 @@ final class RelayClient {
         )
     }
 
-    /// `eth_sendUserOperation`, retried up to three times while the relay says
-    /// it is busy — the web's loop, and the one place this file waits.
+    /// `eth_sendUserOperation`, driven by the core's `submit_step` (spec 082
+    /// RA1). Nothing here decides what an answer means:
     ///
-    /// A rejection is returned as the relay's own sentence wrapped in an error
-    /// envelope, untouched: the core reads it (`relay_error_message`), looks
-    /// for an operation already pending for this nonce
-    /// (`parse_existing_user_op_hash` — an idempotent re-submit, never a second
-    /// spend) and classifies the rest. No Swift here decides what a refusal
-    /// means.
+    /// - every POST's "may this have been acted on" (the pool's
+    ///   `maybe_delivered`, contract §2) is OR-ed over the whole submit, so a
+    ///   refusal on attempt two after a lost reply on attempt one proves
+    ///   nothing and reads "may have been sent";
+    /// - the relay's error goes to the core as the JSON member it came as —
+    ///   the `[existingHash:0x…]` marker is searched there first, before any
+    ///   translation can eat it;
+    /// - "currently processing" is the core's to retry, with the identical op.
+    ///
+    /// `localHash` is the operation's own EntryPoint v0.7 hash, computed
+    /// before the first POST: what a may-have-been-sent op is followed under.
     ///
     /// `tier` is the speed the displayed fee was priced at, sent as the
     /// optional third parameter (spec 068's relay contract; iOS's since 069).
@@ -505,34 +537,96 @@ final class RelayClient {
     /// clamps it between its inclusion floor and what the signed reimbursement
     /// funds. `nil` sends the pre-068 two-element params exactly, and the dead
     /// `rapid` is never sent — a relay refuses an unknown name with -32602.
-    func sendUserOp(chainId: Int, opJson: String, tier: String? = nil) async -> SubmitAnswer {
+    func sendUserOp(
+        chainId: Int, opJson: String, localHash: String, tier: String? = nil
+    ) async -> SubmitVerdict {
         guard let op = Self.object(fromJSON: opJson) else {
-            return .rejected(errorJson: Self.errorEnvelope("the operation could not be encoded"))
+            // Never encoded, never sent.
+            VelaLog.failure(.relay, kind: "not_sent", "chain=\(chainId) encode")
+            return .notSent(rejection: .other(message: "the operation could not be encoded"))
         }
         let params = Self.submitParams(op, tier: tier)
-        var attempt = 0
+        let started = Date()
+        var attempt: UInt32 = 0
+        var maybeDelivered = false
+        VelaLog.notice(.relay, "submitting chain=\(chainId) hash=\(VelaLog.short(localHash))")
         while true {
-            switch await bundlerCall(
-                chainId: chainId,
-                method: "eth_sendUserOperation",
-                params: params
-            ) {
-            case .value(let value):
-                guard let hash = value as? String, hash.hasPrefix("0x") else {
-                    return .rejected(errorJson: Self.errorEnvelope("the relay accepted nothing"))
-                }
-                return .accepted(userOpHash: hash)
-            case .unreachable:
-                return .unreachable
-            case .refused(let message):
-                let busy = message.contains("currently processing") || message.contains("Retry later")
-                guard busy, attempt < Self.submitMaxRetries else {
-                    return .rejected(errorJson: Self.errorEnvelope(message))
-                }
+            let result = await port.callDetailed(
+                chainId: chainId, method: "eth_sendUserOperation", params: params, kind: "bundler"
+            )
+            maybeDelivered = maybeDelivered || result.maybeDelivered
+            let step = userOpSubmitStep(
+                reply: Self.submitReply(result), attempt: attempt,
+                maybeDelivered: maybeDelivered, localHash: localHash
+            )
+            let attempts = attempt + 1
+            switch step {
+            case .retryAfter(let delayMs):
                 attempt += 1
-                try? await Task.sleep(nanoseconds: UInt64(max(0, retryDelayMs) * 1_000_000))
+                let pause = retryDelayMs ?? Double(delayMs)
+                try? await Task.sleep(nanoseconds: UInt64(max(0, pause) * 1_000_000))
+            case .accepted(let hash):
+                if hash.caseInsensitiveCompare(localHash) != .orderedSame {
+                    // The relay's hash wins; a different one is worth a line.
+                    VelaLog.notice(.relay, "userop.hash_mismatch local=\(VelaLog.short(localHash)) relay=\(VelaLog.short(hash))")
+                }
+                VelaLog.notice(.relay, "submit verdict=accepted hash=\(VelaLog.short(hash)) attempts=\(attempts) in=\(VelaLog.ms(since: started))")
+                return .accepted(userOpHash: hash)
+            case .maybeSent(let hash):
+                VelaLog.failure(.relay, kind: "maybe_sent", "hash=\(VelaLog.short(hash)) attempts=\(attempts) in=\(VelaLog.ms(since: started))")
+                return .maybeSent(userOpHash: hash)
+            case .notSent(let rejection):
+                VelaLog.failure(.relay, kind: "not_sent", "rejection=\(Self.rejectionName(rejection)) attempts=\(attempts)")
+                return .notSent(rejection: rejection)
             }
         }
+    }
+
+    /// One POST's answer as the core's `SubmitReply`: the relay's result, its
+    /// error member as it came, or no answer at all.
+    ///
+    /// A 200 with no error member is the relay's RESULT whatever it holds — a
+    /// null, a word, an object — and whether that is a hash is the core's to
+    /// say: `submit_step` reads one that is not as "may have been sent" (the
+    /// relay spoke without refusing, so it may hold the op). Turning it into
+    /// a made-up refusal here read NotSent — "failed, try again" over an op
+    /// the relay may have queued (G21's double payment). The desktop and
+    /// Android hand it over the same way.
+    static func submitReply(_ result: RpcCallResult) -> UserOpSubmitReply {
+        switch result.outcome {
+        case .ok(let value):
+            if let hash = value as? String { return .hash(hash: hash) }
+            guard let value, !(value is NSNull) else { return .hash(hash: "") }
+            return .hash(hash: jsonText(value) ?? "")
+        case .rpcError(let code, let message):
+            if let held = result.heldErrorJson { return .rpcError(errorJson: held) }
+            var member: [String: Any] = ["message": message]
+            if let code { member["code"] = code }
+            return .rpcError(errorJson: CoreJSON.string(member))
+        case .failed, .rangeCap:
+            return .noAnswer
+        }
+    }
+
+    /// The rejection's class for a log line — never the relay's sentence.
+    private static func rejectionName(_ rejection: RelayRejection?) -> String {
+        switch rejection {
+        case nil: return "none"
+        case .relayerUnavailable: return "relayer_unavailable"
+        case .bundlerUnderfunded: return "bundler_underfunded"
+        case .nonceHeld: return "nonce_held"
+        case .other: return "other"
+        }
+    }
+
+    /// The chain's head, read once before a submit's first POST — where the
+    /// tracker's relay-independent landing check starts (ruling 8). `nil`
+    /// when the chain could not say; the core then scans below the head.
+    func headBlock(chainId: Int) async -> UInt64? {
+        guard let hex = await chainCall(chainId: chainId, method: "eth_blockNumber", params: []) as? String,
+              hex.hasPrefix("0x"), hex.count > 2
+        else { return nil }
+        return UInt64(hex.dropFirst(2), radix: 16)
     }
 
     /// `eth_getUserOperationReceipt`: unreachable, not yet, or landed with its
@@ -568,20 +662,87 @@ final class RelayClient {
         ]
     }
 
-    /// `eth_getUserOperationStatus` (a Vela extension): `nil` for an older
-    /// relay or a failure — which the core reads as `status_unavailable`, never
-    /// as a verdict.
-    func userOpStatus(chainId: Int, userOpHash: String) async -> (status: String, stage: String?)? {
-        guard !userOpHash.isEmpty else { return nil }
-        guard let result = await bundlerValue(
-            chainId: chainId, method: "eth_getUserOperationStatus", params: [userOpHash]
-        ) as? [String: Any] else { return nil }
-        let known = [
-            "not_found", "queued", "not_submitted", "submitted",
-            "rejected", "included", "failed",
-        ]
-        guard let status = result["status"] as? String, known.contains(status) else { return nil }
-        return (status, (result["last_executor_stage"] as? String).flatMap { $0.isEmpty ? nil : $0 })
+    /// The relay's view of an op with no receipt, through the ONE method name
+    /// and parser the core owns (`userOpStatusMethod`, `parseUserOpStatus`,
+    /// spec 082 RA7 — the relay serves `pimlico_getUserOperationStatus`, and
+    /// the `eth_` name this file used to ask for answered -32601 every time,
+    /// G13). `nil` for an older relay, a failure or a status the core does not
+    /// know — which it reads as `status_unavailable`, never as a verdict.
+    func userOpStatus(chainId: Int, userOpHash: String) async -> TrackStatusAnswer? {
+        guard !userOpHash.isEmpty,
+              let result = await bundlerValue(
+                  chainId: chainId, method: userOpStatusMethod(), params: [userOpHash]
+              ),
+              let json = Self.jsonText(result)
+        else { return nil }
+        return parseUserOpStatus(json: json)
+    }
+
+    /// The relay-independent landing check (spec 082 ruling 8): the
+    /// EntryPoint's `UserOperationEvent` for one op, in the window the core
+    /// chose, and the chain's head — through the pool, answered AS IT CAME.
+    /// The core decides what a range error is (T180) and what a found log
+    /// means; this judges nothing. `fromBlock` nil asks for the head only.
+    func findOpEvent(
+        chainId: Int, entryPoint: String, topic0: String, userOpHash: String,
+        fromBlock: UInt64?, toBlock: UInt64?
+    ) async -> (logsJson: String?, errorJson: String?, head: UInt64?) {
+        var logsJson: String?
+        var errorJson: String?
+        if let fromBlock {
+            let filter: [String: Any] = [
+                "address": entryPoint,
+                "topics": [topic0, userOpHash],
+                "fromBlock": "0x" + String(fromBlock, radix: 16),
+                "toBlock": toBlock.map { "0x" + String($0, radix: 16) } ?? "latest",
+            ]
+            let result = await port.callDetailed(
+                chainId: chainId, method: "eth_getLogs", params: [filter], kind: "rpc"
+            )
+            switch result.outcome {
+            case .ok(let value):
+                logsJson = Self.jsonText(value ?? NSNull())
+            case .rpcError(let code, let message):
+                // The endpoint's own error member, untouched: a range limit
+                // halves the core's window; anything else retries it.
+                var member: [String: Any] = ["message": message]
+                if let code { member["code"] = code }
+                errorJson = result.heldErrorJson ?? CoreJSON.string(member)
+            case .rangeCap:
+                errorJson = result.heldErrorJson
+            case .failed:
+                break // no answer: the core asks the same window next tick
+            }
+        }
+        let head = await headBlock(chainId: chainId)
+        return (logsJson, errorJson, head)
+    }
+
+    /// `eth_getTransactionReceipt` through the chain pool (spec 082 RJ4,
+    /// EX13): the `result` as it came — `"null"` while the transaction is
+    /// not mined — or `nil` when nobody answered. The core reads it; this
+    /// judges nothing.
+    func transactionReceiptJson(chainId: Int, txHash: String) async -> String? {
+        guard !txHash.isEmpty else { return nil }
+        guard case .ok(let value) = await port.call(
+            chainId: chainId, method: "eth_getTransactionReceipt", params: [txHash], kind: "rpc"
+        ) else { return nil }
+        return Self.jsonText(value ?? NSNull())
+    }
+
+    /// Any JSON value as text; `nil` for what cannot be written.
+    static func jsonText(_ value: Any) -> String? {
+        if value is NSNull { return "null" }
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value)
+        else {
+            // A scalar (a string, a number) is valid JSON on its own.
+            guard let data = try? JSONSerialization.data(
+                withJSONObject: value, options: [.fragmentsAllowed]
+            ) else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+        return String(data: data, encoding: .utf8)
     }
 
     // MARK: - The chain reads the send path needs
@@ -668,6 +829,14 @@ final class RelayClient {
         return Self.hexQuantity(decimal: decimal)
     }
 
+    /// What the deployment read came to: an answer, or none — and whether
+    /// none was a rate limit (spec 082 RJ13: the fee row then names the
+    /// chain's node, never Vela's relay).
+    enum DeploymentRead: Equatable {
+        case deployed(Bool)
+        case unread(rateLimited: Bool)
+    }
+
     /// `eth_getCode` != `0x`; `nil` when the chain could not be asked.
     ///
     /// A `true` is remembered for good — a Safe cannot be un-deployed, and
@@ -675,15 +844,27 @@ final class RelayClient {
     /// or a `nil` is never held: the next send deploys the account, and an
     /// unreachable chain is not an answer.
     func isDeployed(chainId: Int, address: String) async -> Bool? {
+        if case .deployed(let deployed) = await deploymentRead(chainId: chainId, address: address) {
+            return deployed
+        }
+        return nil
+    }
+
+    /// `isDeployed`, saying why there is no answer when there is none.
+    func deploymentRead(chainId: Int, address: String) async -> DeploymentRead {
         let key = "\(chainId):\(address.lowercased())"
-        if deployedAccounts.contains(key) { return true }
+        if deployedAccounts.contains(key) { return .deployed(true) }
         return await deploymentFlights.run(key) {
-            guard let code = await self.chainCall(
-                chainId: chainId, method: "eth_getCode", params: [address, "latest"]
-            ) as? String, code.hasPrefix("0x") else { return nil }
+            let outcome = await self.port.call(
+                chainId: chainId, method: "eth_getCode", params: [address, "latest"], kind: "rpc"
+            )
+            guard case .ok(let value) = outcome, let code = value as? String, code.hasPrefix("0x") else {
+                if case .failed(let rateLimited) = outcome { return .unread(rateLimited: rateLimited) }
+                return .unread(rateLimited: false)
+            }
             let deployed = code.count > 2
             if deployed { self.deployedAccounts.insert(key) }
-            return deployed
+            return .deployed(deployed)
         }
     }
 
@@ -784,9 +965,5 @@ final class RelayClient {
     static func object(fromJSON text: String) -> [String: Any]? {
         guard let data = text.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    }
-
-    static func errorEnvelope(_ message: String) -> String {
-        CoreJSON.string(["message": message])
     }
 }

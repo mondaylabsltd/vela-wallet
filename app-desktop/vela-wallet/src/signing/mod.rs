@@ -53,7 +53,8 @@ pub struct SigningStrings {
     /// must read the same while they land (Android's receipt, word for word).
     pub tx_signing: SharedString,
     /// Approved, and nothing has asked for the signature yet: the funding
-    /// check, the nonce, the deployment read (083 W11).
+    /// check, the nonce, the deployment read, the relay's estimate (083 W11,
+    /// spec 082 RA9) — "preparing", never "waiting for biometric".
     pub tx_preparing: SharedString,
     pub tx_submitting: SharedString,
     pub tx_background_hint: SharedString,
@@ -72,6 +73,9 @@ pub struct SigningStrings {
     pub still_confirming: SharedString,
     /// Past the tracker's 24 h line: fate unknown.
     pub unknown_outcome: SharedString,
+    /// Spec 082 RA10 (ruling 1): the submit's reply was lost — "it may have
+    /// been sent; Vela keeps checking, don't send it again".
+    pub maybe_sent: SharedString,
     /// A message signed ("已签名！") — `signHandoff.signed` reads "已发送" in
     /// zh, which a message that went nowhere is not (Android's choice).
     pub signed: SharedString,
@@ -158,6 +162,9 @@ pub struct SigningStrings {
     pub warn_unlimited: SharedString,
     pub warn_expired: SharedString,
     pub warn_will_fail: SharedString,
+    /// Spec 082 RG8: "Expected to fail: {{reason}} — …", with the core's
+    /// sanitised `Error(string)` reason filled in.
+    pub warn_will_fail_reason: SharedString,
     /// The fee row's "this transaction would fail" (spec 083 fee review): the
     /// relay answered that the operation fails with every coin that could
     /// pay its fee. `simWillFail` without its "you'd still pay gas" — the
@@ -238,11 +245,17 @@ pub struct SigningStrings {
     pub fee_estimating: SharedString,
     pub fee_token_title: SharedString,
     pub fee_balance: SharedString,
-    /// Spec 079: the send form's own refresh control, its stale line, and
-    /// why a quote failed when the service could not be reached.
+    /// Spec 079: the send form's own refresh control and its stale line.
     pub fee_refresh: SharedString,
     pub fee_stale: SharedString,
-    pub fee_unreachable: SharedString,
+    /// Why a fee failed, per corpus key the core can name
+    /// (`fee_policy::failure_reason_key`, spec 082 RJ13) — resolved here so
+    /// the row never picks the words itself: the relay, a rate-limited chain
+    /// node, a chain node out of reach (`{{chain}}` left for the row).
+    pub fee_reasons: Vec<(&'static str, String)>,
+    /// Spec 082 RJ3: the relay refused the operation — nothing was sent, and
+    /// sending it again meets the same refusal, so no "try again".
+    pub refused: SharedString,
     /// Spec 079 US7: the Trusted Signer route's confirm ("去签名页确认").
     pub open_signer: SharedString,
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
@@ -319,6 +332,7 @@ impl SigningStrings {
             tx_held_fees: loc.t("send.txHeldFees"),
             still_confirming: s("stillConfirming"),
             unknown_outcome: s("unknownOutcome"),
+            maybe_sent: s("maybeSent"),
             signed: loc.t("clearSigning.alertSignedTitle"),
             signing_account: s("signingAccount"),
             advanced_toggle: s("advancedToggle"),
@@ -403,6 +417,7 @@ impl SigningStrings {
             warn_unlimited: s("unlimitedWarning"),
             warn_expired: s("expiredWarning"),
             warn_will_fail: s("simWillFail"),
+            warn_will_fail_reason: s("simWillFailReason"),
             warn_would_fail: first_clause(&s("simWillFail")),
             warn_hex_message: s("hexMessageWarning"),
             warn_blind_typed: s("blindTypedWarning"),
@@ -473,7 +488,19 @@ impl SigningStrings {
             fee_balance: loc.t("componentsUi.gas.rowBalance"),
             fee_refresh: loc.t("send.feeRefresh"),
             fee_stale: loc.t("send.feeStale"),
-            fee_unreachable: loc.t("componentsUi.funding.denialNetworkError"),
+            fee_reasons: FEE_FAILURES
+                .iter()
+                .filter_map(|failure| {
+                    vela_core::app::fee_policy::failure_reason_key(*failure)
+                        .map(|key| (key, loc.t(key).to_string()))
+                })
+                .fold(Vec::new(), |mut keys, (key, text)| {
+                    if !keys.iter().any(|(known, _)| *known == key) {
+                        keys.push((key, text));
+                    }
+                    keys
+                }),
+            refused: s("refused"),
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
             tech_function: s("techFunction"),
@@ -509,6 +536,41 @@ impl SigningStrings {
             tech_raw_units: raw("techRawUnits"),
             sent_to_token_contract: s("sendingToTokenContract"),
         }
+    }
+}
+
+/// Every way a fee can fail, so the sheet resolves the words for whichever
+/// the core names — the core picks the key, this only reads it once.
+const FEE_FAILURES: [vela_core::app::fee_policy::FeeFailure; 9] = {
+    use vela_core::app::fee_policy::FeeFailure as F;
+    [
+        F::MissingPublicKey,
+        F::FeeTokenUnavailable,
+        F::QuoteUnavailable,
+        F::CalculationFailed,
+        F::EstimateFailed,
+        F::GasQuoteTooHigh,
+        F::WouldFail,
+        F::ChainRead { rate_limited: true },
+        F::ChainRead {
+            rate_limited: false,
+        },
+    ]
+};
+
+impl SigningStrings {
+    /// The line under a failed fee, in the core's words for it (spec 082
+    /// RJ13): `None` when the core names none (the row keeps its dash).
+    /// `chain` fills the chain-down sentence's `{{chain}}`.
+    #[must_use]
+    pub fn fee_reason(
+        &self,
+        failure: vela_core::app::fee_policy::FeeFailure,
+        chain: &str,
+    ) -> Option<SharedString> {
+        let key = vela_core::app::fee_policy::failure_reason_key(failure)?;
+        let (_, text) = self.fee_reasons.iter().find(|(known, _)| *known == key)?;
+        Some(SharedString::from(fill(text, &[("chain", chain)])))
     }
 }
 
@@ -568,6 +630,8 @@ mod tests {
         }
         assert!(s.summary_send.contains("{{amount}}"));
         assert!(s.byte_size.contains("{{n}}"));
+        // Spec 082 RG8: the revert sentence carries its reason's slot.
+        assert!(s.warn_will_fail_reason.contains("{{reason}}"));
     }
 
     /// The landing receipt's words are the send receipt's own keys, outside
@@ -601,6 +665,8 @@ mod tests {
         for text in [
             s.tx_preparing.as_ref(),
             s.tx_signing.as_ref(),
+            s.tx_preparing.as_ref(),
+            s.maybe_sent.as_ref(),
             s.tx_submitting.as_ref(),
             s.tx_background_hint.as_ref(),
             s.tx_submitted_title.as_ref(),
@@ -617,7 +683,7 @@ mod tests {
             s.error_off_chain.as_ref(),
             s.fee_refresh.as_ref(),
             s.fee_stale.as_ref(),
-            s.fee_unreachable.as_ref(),
+            s.refused.as_ref(),
             s.open_signer.as_ref(),
         ] {
             assert!(
@@ -629,6 +695,41 @@ mod tests {
             );
         }
         assert!(s.tx_typical_time.contains("{{estSecs}}"));
+    }
+
+    /// Spec 082 RJ3 / RJ13: the refusal and every reason the core can name
+    /// under a failed fee resolve — none comes back as its key or with a
+    /// placeholder left in — and the chain-down one names the chain.
+    #[test]
+    fn the_refusal_and_the_fee_reasons_resolve() {
+        use vela_core::app::fee_policy::{FeeFailure, failure_reason_key};
+        let s = SigningStrings::resolve(&crate::loc::Loc::from_env());
+        assert!(
+            !s.refused.starts_with("componentsUi."),
+            "echoed a key: {}",
+            s.refused
+        );
+        for failure in FEE_FAILURES {
+            match failure_reason_key(failure) {
+                Some(key) => {
+                    let line = s
+                        .fee_reason(failure, "Gnosis")
+                        .unwrap_or_else(|| unreachable!("{failure:?} names {key}"));
+                    assert!(!line.contains(key), "echoed a key: {line}");
+                    assert!(!line.contains("{{"), "a placeholder left: {line}");
+                }
+                None => assert!(s.fee_reason(failure, "Gnosis").is_none(), "{failure:?}"),
+            }
+        }
+        let down = s
+            .fee_reason(
+                FeeFailure::ChainRead {
+                    rate_limited: false,
+                },
+                "Gnosis",
+            )
+            .unwrap_or_default();
+        assert!(down.contains("Gnosis"), "{down}");
     }
 
     /// Spec 083 fee review: the fee row's "would fail" is `simWillFail`

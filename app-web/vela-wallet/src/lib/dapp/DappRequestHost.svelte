@@ -2,28 +2,29 @@
 	/**
 	 * One dApp request, from arrival to answer — wherever it is answered.
 	 *
-	 * This used to be the body of `[locale]/request/+page.svelte`, which was
-	 * both doors at once: the side panel (no `rid`, ask the worker what this tab
-	 * owes) and the dedicated window (`?rid=`). Spec 077 FR-001 sends the panel
-	 * to the WALLET instead, so the lifecycle had to leave the page it was
-	 * written in — and a second copy of it on the wallet would be a second place
-	 * for an answer to go missing. One copy, two modes.
+	 * Two modes, one lifecycle: the side panel (which IS the wallet since spec
+	 * 077 FR-001, the request rising as a card or sheet over it) and the
+	 * dedicated `?rid=` window a page fired a request into with no user
+	 * gesture. A second copy of this on another surface would be a second
+	 * place for an answer to go missing.
 	 *
-	 * Every decision here is `dapp_permissions`'. The surface shows who is
-	 * asking — the browser's own fact about the origin, never the page's claim —
-	 * and performs what the core authors: the grant, the audit row, the answer.
+	 * Every decision here is `dapp_permissions'` or `sign_request`'s. The
+	 * surface shows who is asking — the browser's own fact about the origin,
+	 * never the page's claim — and performs what the core authors: the grant,
+	 * the audit row, the answer.
 	 *
-	 * Leaving is not neutral. An explicit Cancel is 4001, "nothing happened". A
-	 * surface torn down with an answer still owed settles with the CORE's code,
-	 * which is 4900 unknown-pending — because a dApp reads 4001 as a clean
-	 * decline and re-sends, double-spending an operation that may already be at
-	 * the bundler.
+	 * Spec 082 moved the request's LIFE to the service worker (RB1–RB10): the
+	 * worker hands this surface what it owes (`panelSurface.current`, oldest
+	 * first across every tab of the window — G18), withdraws a request whose
+	 * page left or whose time ran out (the card or sheet closes with no words,
+	 * RB15), and is asked — before a grant, before the passkey, before the
+	 * relay POST — whether the request is still live (RB5). A surface torn down
+	 * with an answer owed still settles with the CORE's code (4900) on
+	 * `pagehide`, as a backstop to the worker seeing the port close.
 	 *
 	 * **What this does NOT own: the sheet.** The page mounts one `SigningHost`
-	 * for everything it signs — a send, a backup, a dApp request — and this
-	 * hands the request to the same resident machine that feeds it. That is the
-	 * "签名管线应该统一" the owner asked for: one sheet, one landing, one
-	 * pipeline, whatever asked.
+	 * for everything it signs, and this hands the request to the same resident
+	 * machine that feeds it.
 	 */
 	import { onMount } from 'svelte';
 	import { session } from '$lib/session/core/session.svelte';
@@ -33,15 +34,15 @@
 	import { getOriginChain } from '$lib/dapp/grants';
 	import { approve, evaluate, type RequestStage } from '$lib/dapp/request';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
+	import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
+	import Button from '$lib/ui/Button.svelte';
 	import type { RequestMessages } from '$lib/dapp/messages';
+	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import {
 		answerRequest,
-		currentPanelRequest,
-		panelTabId,
 		readRequest,
 		rejectRequest,
-		subscribeRequests,
 		type ExtensionRequest
 	} from '$lib/dapp/transport';
 
@@ -73,9 +74,10 @@
 	/** The chain the SITE is on — what the grant records and a signature is asked on. */
 	let chainId = $state(0);
 	let busy = $state(false);
-	let tabId: number | undefined;
 	/** Cleared the moment an answer goes out, so teardown owes nothing. */
 	let owing = $state<string | null>(null);
+	/** The signing transport of the request being signed, for a withdrawal. */
+	let signingTransport: string | null = null;
 	/**
 	 * Spec 077: a transaction is landing in the sheet, so this surface does NOT
 	 * leave. The receipt's own Done is what releases it.
@@ -105,48 +107,62 @@
 	let taking = false;
 	let disposed = false;
 
+	/** The window's own request id (`?rid=`), or `''` in the panel. */
+	const windowRid = $derived(
+		mode === 'window' && typeof location !== 'undefined'
+			? (new URLSearchParams(location.search).get('rid') ?? '')
+			: ''
+	);
+
+	/**
+	 * Is `rid` still live enough to act on (RB5)? A surface with no port cannot
+	 * ask: yes. The `submit` claim carries the op's hash and chain (spec 082
+	 * RJ2), sent after the write-ahead and right before the POST, so the worker
+	 * answers the page by that hash — never 4900 — if this surface goes first.
+	 */
+	function claimFor(rid: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean> {
+		return panelSurface.caller ? panelSurface.claim(rid, phase, submit) : Promise.resolve(true);
+	}
+
 	/**
 	 * Take the request this surface is here for, and carry it to an answer.
 	 *
-	 * Runs at mount, and again — in the panel — whenever the worker records a new
-	 * one, because the panel is the wallet now and STAYS OPEN: a second request
-	 * only re-shows it, with no reload and no fresh mount (measured 2026-09-23,
-	 * when the second request sat unanswered behind a perfectly good wallet).
-	 *
-	 * One at a time. A request already owed is finished before the next is taken;
-	 * the worker hands them over oldest-first and keeps the rest.
+	 * In the panel it is whatever the worker says the window owes next
+	 * (`panelSurface.current`), taken whenever that changes; in the window it is
+	 * the one request the window was opened for. One at a time: a request
+	 * already owed is finished before the next is taken, and nothing is taken
+	 * over a landing — the receipt replaces the sheet, so a request taken now
+	 * would have an invisible sheet. The worker keeps the rest.
 	 */
 	async function take(): Promise<void> {
-		// Not while a landing is on screen. The receipt REPLACES the sheet
-		// (`SigningHost` draws one or the other), so a request taken now would
-		// have an invisible sheet and a person answering a screen they cannot
-		// see. It waits — the worker still holds it — and Done brings it up.
 		if (taking || disposed || owing || landing) return;
 		taking = true;
 		try {
 			await session.boot();
 			let incoming: ExtensionRequest | null;
 			if (mode === 'panel') {
-				tabId ??= await panelTabId();
-				incoming = await currentPanelRequest(tabId);
+				incoming = panelSurface.current;
 				// Nothing owed: the panel is simply the wallet, and stays it.
 				if (!incoming) return;
 			} else {
-				incoming = await readRequest(new URLSearchParams(location.search).get('rid') ?? '');
+				incoming = await readRequest(windowRid);
 			}
 			if (disposed) return;
 			if (!incoming) {
-				stage = { kind: 'refused', code: 4900, message: 'This request is no longer available' };
+				// A window with no live request has nothing to show: it closes,
+				// rather than hard-coding a sentence the corpus does not have.
+				stage = { kind: 'loading' };
 				leave();
 				return;
 			}
 			request = incoming;
 			owing = incoming.rid;
+			signingTransport = null;
 			// A fresh request gets live buttons. The panel outlives the request
 			// that raised it, so `busy` left over from the LAST one would render
-			// the next consent card with both buttons disabled — a card a person
-			// cannot answer, on a request that then only times out.
+			// the next consent card with both buttons disabled.
 			busy = false;
+			panelSurface.shown(incoming.rid);
 
 			// Publish what the worker will need to answer this origin instantly
 			// next time. The core authors it; this only stores it.
@@ -162,16 +178,15 @@
 				publishExtChains()
 			]);
 			chainId = await getOriginChain(incoming.origin, snapshot?.chain_id ?? 0);
+			// Withdrawn while the snapshot was being published.
+			if (owing !== incoming.rid) return;
 
 			stage = await evaluate(incoming, facts);
 			if (stage.kind === 'done' || stage.kind === 'refused') {
 				owing = null;
+				request = null;
 				leave();
 			} else if (stage.kind === 'signing') {
-				// The core said this origin may be answered, and named the address
-				// the signature must be pinned to. Hand the request to
-				// `sign_request` — the SAME machine and the SAME sheet the
-				// wallet's own screens use — on a transport that answers here.
 				await handOffToSigning(incoming, stage.grantedAddress);
 			}
 		} finally {
@@ -179,10 +194,29 @@
 		}
 	}
 
+	/**
+	 * The worker withdrew `rid` — its page left, its surface closed, or its
+	 * time ran out (RB15). The card closes with no words; a request already
+	 * with the signing machine is dropped there, which also stops a pipeline
+	 * still short of the passkey (RB2).
+	 */
+	function withdraw(rid: string): void {
+		if (owing !== rid && request?.rid !== rid) return;
+		if (signingTransport) {
+			signRequest.dispatch({ type: 'transport_dropped', transport_id: signingTransport });
+			signingTransport = null;
+		}
+		owing = null;
+		request = null;
+		busy = false;
+		stage = { kind: 'loading' };
+		leave();
+	}
+
 	onMount(() => {
-		void take();
-		// A request that arrives while this surface is already standing.
-		const unsubscribe = mode === 'panel' ? subscribeRequests(() => void take()) : () => {};
+		if (mode === 'window' && windowRid) void panelSurface.start({ kind: 'window', rid: windowRid });
+		const stopWithdrawn = panelSurface.onWithdrawn((rid) => withdraw(rid));
+		if (mode === 'window') void take();
 
 		// The surface is going away with an answer still owed. The code is NOT
 		// this screen's to pick — it is asked of the core, once, in `settleOnClose`.
@@ -195,48 +229,54 @@
 		window.addEventListener('pagehide', settle);
 		return () => {
 			disposed = true;
-			unsubscribe();
+			stopWithdrawn();
 			window.removeEventListener('pagehide', settle);
 			settle();
 		};
+	});
+
+	// The panel: a request the worker says this window owes — at mount, and
+	// whenever the next one moves up (a second tab, a request that arrives
+	// while the panel stands open).
+	$effect(() => {
+		if (mode !== 'panel') return;
+		if (panelSurface.current) void take();
 	});
 
 	/**
 	 * Register this surface as the transport and deliver the request.
 	 *
 	 * The core speaks a `transport_id` and nothing else about transports: a
-	 * response goes to the transport that OWNS the request, never a shared
-	 * reference. This surface owns exactly one, and answering through it is what
-	 * clears what it owes — so the teardown settlement no longer fires.
+	 * response goes to the transport that OWNS the request. This surface owns
+	 * exactly one, and answering through it is what clears what it owes.
 	 */
 	async function handOffToSigning(incoming: ExtensionRequest, grantedAddress: string) {
 		await signRequest.boot();
 		signRequest.syncNetworks();
 		signRequest.syncAccounts();
 		const transportId = signRequest.registerTransport({
-			sendResponse: (_id, result, error) => {
+			sendResponse: (_id, result, error, opHash) => {
 				// The answer goes out FIRST and unconditionally. Everything below
 				// is about the chain, and nothing below may delay, swallow or
 				// repeat this (spec 077, the invariant).
 				owing = null;
-				void answerRequest(incoming.rid, error ? { error } : { result });
+				signingTransport = null;
+				void answerRequest(incoming.rid, error ? { error } : { result }, opHash);
 				// A request the CORE refuses outright is answered the moment it
 				// arrives — so the page never hangs — but the sheet is still
-				// explaining WHY to the person in front of us. Leaving on the
-				// grace timer would take the explanation away before it could be
-				// read, so their dismissal is what leaves instead (main, spec
-				// 081; `onCancel` already answers and leaves).
+				// explaining WHY; the person's dismissal is what leaves (081).
 				if (error?.kind === 'self_call_blocked') return;
-				// A transaction the wallet can watch stays on screen and lands,
-				// as a send does: the sheet raises its receipt and calls
-				// `onlanding`, and the person's Done is what leaves. Anything
-				// else — a message, a refusal, a transaction with no operation to
-				// follow — leaves as it always has.
+				// A transaction the wallet can watch stays on screen and lands; the
+				// person's Done is what leaves. Anything else leaves as it always has.
 				setTimeout(() => {
 					if (!landing) leave();
 				}, HANDOFF_GRACE_MS);
-			}
+			},
+			// RB5: asked before the passkey and before the relay POST. A page
+			// that is gone gets nothing signed, nothing sent, and no answer.
+			claim: (_id, phase, submit) => claimFor(incoming.rid, phase, submit)
 		});
+		signingTransport = transportId;
 		signRequest.dispatch({
 			type: 'request_arrived',
 			id: incoming.id,
@@ -270,9 +310,7 @@
 				error: { code: settlement.code, message: dpermRejectMessage(settlement.reason) }
 			});
 		} catch {
-			// Teardown must not throw. Saying nothing leaves the dApp on its own
-			// deadline, which is the one honest fallback: anything invented here
-			// would be a second statement of the core's rule.
+			// Teardown must not throw. The worker settles on the port closing.
 		}
 	}
 
@@ -281,17 +319,9 @@
 	 * surface changes underneath it.
 	 *
 	 * In the WINDOW that means closing it. In the PANEL it does not: the panel is
-	 * the wallet, and a wallet that vanished when a site's request was answered is
-	 * the complaint spec 077 started from. It stays, and takes the next request
-	 * the tab owes, if any.
-	 *
-	 * The panel used to RELOAD per request — a fresh core and a fresh fee session
-	 * (026's one-owner rule) — and cannot any more: a reload would throw away the
-	 * wallet the person is looking at, and a request that arrives while the panel
-	 * is open never reloads it anyway. Taking them one at a time is what keeps
-	 * the one-owner rule instead: `take()` refuses to start while a request is
-	 * owed, so the page's single fee session is only ever asked about one
-	 * operation, exactly as it is when a person signs two sends in a row.
+	 * the wallet. It stays, and takes the next request the window owes, if any —
+	 * one at a time, so the page's single fee session is only ever asked about
+	 * one operation (026's one-owner rule).
 	 */
 	function leave(): void {
 		setTimeout(() => {
@@ -300,8 +330,8 @@
 				return;
 			}
 			// Never over a landing: a person watching their transaction is not
-			// interrupted by the next request. It waits — it is still owed, and
-			// this runs again when the receipt is dismissed.
+			// interrupted by the next request. It waits, and this runs again when
+			// the receipt is dismissed.
 			if (!landing) void take();
 		}, 400);
 	}
@@ -309,16 +339,21 @@
 	async function onConnect(): Promise<void> {
 		if (!request || busy) return;
 		busy = true;
+		const current = request;
 		try {
-			await approve(request, facts, chainId);
+			await approve(current, facts, chainId, () => claimFor(current.rid, 'approve'));
 			owing = null;
 			stage = { kind: 'done' };
-			// The card is answered and gone; in the panel the wallet is what is
-			// behind it, and this surface goes on living.
 			request = null;
 			busy = false;
 			leave();
-		} catch {
+		} catch (error) {
+			if (error instanceof AskerGoneError) {
+				// The page left before the grant was written: nothing was granted,
+				// nobody is waiting. The card goes, with no words (RB15).
+				withdraw(current.rid);
+				return;
+			}
 			// The core did not sanction it. Nothing was written and nothing sent,
 			// so both buttons stay live rather than stranding the person.
 			busy = false;
@@ -330,28 +365,46 @@
 		busy = true;
 		const rid = owing;
 		owing = null;
-		if (rid) await rejectRequest(rid);
+		// The card goes BEFORE the answer is awaited: the worker hands the next
+		// request of the window over as soon as it has this answer, and a card
+		// cleared after the await would clear THAT one (EX4 caught it).
 		if (mode === 'panel') {
-			// The card is gone; the wallet is what is behind it.
 			request = null;
 			stage = { kind: 'loading' };
-			busy = false;
 		}
+		if (rid) await rejectRequest(rid);
+		if (mode === 'panel') busy = false;
 		leave();
 	}
 
 	/** The consent card's own words, shared by both shapes. */
 	const cardTitle = $derived(request ? m.title.replace('{{host}}', hostLabel(request.origin)) : '');
-	/** Unused by the panel; the window draws its own preparing/refused lines. */
+	/** Unused by the panel; the window draws its own preparing line. */
 	const showWindowChrome = $derived(mode === 'window' && stage.kind !== 'signing' && !landing);
 </script>
+
+{#snippet actions()}
+	<!--
+		RB12 (G16): the shared Button — Cancel is the bordered secondary, Connect
+		the filled accent with a white label, both at the control height. Busy is
+		not disabled: Connect spins while the grant is written; Cancel is what is
+		disabled then, because a refusal racing a grant is two answers.
+	-->
+	<div class="actions">
+		<Button variant="secondary" shape="rounded" disabled={busy} onclick={onCancel}>
+			{m.cancel}
+		</Button>
+		<Button variant="primary" shape="rounded" loading={busy} onclick={onConnect}>
+			{m.connect}
+		</Button>
+	</div>
+{/snippet}
 
 {#if mode === 'panel'}
 	<!--
 		The wallet is VISIBLE under a pending request, and must not be DRIVABLE:
 		a person who could start a send while a dApp waits on them would have two
-		operations in one fee session, and the dApp's would be the one that
-		quietly lost (spec 077, plan.md's third risk).
+		operations in one fee session (spec 077, plan.md's third risk).
 	-->
 	{#if owing}
 		<div class="guard" role="presentation" aria-hidden="true"></div>
@@ -360,14 +413,7 @@
 	<!--
 		FR-001: over the wallet, as on Android and iOS. Closing the card is the
 		same answer as Cancel — the core's 4001 — so the × goes through
-		`onCancel` rather than merely hiding the card. Spec 079: the × and
-		Cancel are the ONLY ways out (`dismissible="explicit"`): a stray tap on
-		the scrim, a drag or Escape used to refuse the site's request.
-
-		The layer is this component's, not `BottomSheet`'s: the sheet positions
-		itself `absolute`, which over a scrollable wallet would land wherever the
-		nearest positioned ancestor happens to be. Fixed, and stacked with the
-		signing sheet's own 20/21, it is the same modal the sheet is.
+		`onCancel`. Spec 079: the × and Cancel are the ONLY ways out.
 	-->
 	{#if stage.kind === 'consent' && request}
 		<div class="layer">
@@ -379,15 +425,7 @@
 			>
 				<div class="card">
 					<p class="body">{m.body}</p>
-					<p class="method">{request.method}</p>
-					<div class="actions">
-						<button type="button" class="ghost" onclick={onCancel} disabled={busy}>
-							{m.cancel}
-						</button>
-						<button type="button" class="primary" onclick={onConnect} disabled={busy}>
-							{m.connect}
-						</button>
-					</div>
+					{@render actions()}
 				</div>
 			</BottomSheet>
 		</div>
@@ -397,13 +435,7 @@
 		{#if stage.kind === 'consent' && request}
 			<h1>{cardTitle}</h1>
 			<p class="body">{m.body}</p>
-			<p class="method">{request.method}</p>
-			<div class="actions">
-				<button type="button" class="ghost" onclick={onCancel} disabled={busy}>{m.cancel}</button>
-				<button type="button" class="primary" onclick={onConnect} disabled={busy}>
-					{m.connect}
-				</button>
-			</div>
+			{@render actions()}
 		{:else if stage.kind === 'refused'}
 			<p class="body">{stage.message}</p>
 		{:else}
@@ -415,9 +447,8 @@
 <style>
 	/*
 	  Invisible on purpose. The wallet behind a pending request is something to
-	  READ — whose wallet this is, what is in it — not something to operate, and
-	  a dimming layer over it would take the reading away too. It sits just under
-	  the sheet's scrim (`SigningSheet.svelte`, 20) so the sheet always wins.
+	  READ, not to operate. It sits just under the sheet's scrim
+	  (`SigningSheet.svelte`, 20) so the sheet always wins.
 	*/
 	.guard {
 		position: fixed;
@@ -434,54 +465,34 @@
 	main {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-4);
-		padding: var(--space-6);
+		gap: var(--space-xl);
+		padding: var(--space-3xl);
 		min-height: 100vh;
 		background: var(--color-bg-base);
-		color: var(--color-text-primary);
+		color: var(--color-fg-base);
 	}
 	.card {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-4);
-		padding-bottom: var(--space-4);
+		gap: var(--space-xl);
+		padding-bottom: var(--space-xl);
 	}
 	h1 {
-		font-size: var(--font-size-title-3);
-		font-weight: var(--font-weight-semibold);
+		font-size: calc(var(--text-2xl) * var(--text-scale, 1));
+		font-weight: var(--weight-bold);
 		margin: 0;
 	}
 	.body {
-		font-size: var(--font-size-body);
-		color: var(--color-text-secondary);
-		margin: 0;
-	}
-	.method {
-		font-family: var(--font-family-mono);
-		font-size: var(--font-size-caption);
-		color: var(--color-text-tertiary);
+		font-size: calc(var(--text-lg) * var(--text-scale, 1));
+		color: var(--color-fg-muted);
 		margin: 0;
 	}
 	.actions {
 		margin-top: auto;
 		display: flex;
-		gap: var(--space-3);
+		gap: var(--space-lg);
 	}
-	button {
+	.actions > :global(*) {
 		flex: 1;
-		padding: var(--space-4);
-		border-radius: var(--radius-md);
-		font-size: var(--font-size-body);
-		cursor: pointer;
-	}
-	.ghost {
-		border: var(--border-width-hairline) solid var(--color-border-subtle);
-		background: var(--color-bg-elevated);
-		color: var(--color-text-primary);
-	}
-	.primary {
-		border: none;
-		background: var(--color-accent-base);
-		color: var(--color-accent-on);
 	}
 </style>

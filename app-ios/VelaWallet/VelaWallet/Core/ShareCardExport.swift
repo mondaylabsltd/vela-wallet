@@ -51,7 +51,7 @@ enum ShareCardExport {
 
     /// No disk cache: the chain logos a wallet fetched are a list of where it
     /// holds money, and an erase clears `LogoStore`'s cache, not a second one.
-    private static let logoSession = URLSession(configuration: .ephemeral)
+    private static let logoSession = URLSession.vela(.ephemeral)
 
     /// Render the card and write it to the photo library, as a PNG — the
     /// code's edges stay the edges they were drawn with.

@@ -148,11 +148,18 @@ struct TrustedSignerUnreachableTests {
             paramsJson: #"["0x48","0x88cCA0EeDbF2C4426110bbFc998F048689266894"]"#,
             origin: "http://127.0.0.1:8137", transportId: "tab-1", chainId: 100
         )
+        // Spec 082: the prompt is up — the core's `awaiting_signature` — for
+        // a message.
         let signing = SignViewWire(
-            surface: .sheet, request: nil, isSigning: true, isSubmitting: false,
+            surface: .sheet,
+            request: SignRequestViewWire(
+                id: "r1", method: "personal_sign", kind: .personalSign, paramsJson: "[]",
+                origin: "http://127.0.0.1:8137", dapp: nil, chainId: 100, signerAddress: nil
+            ),
+            isSigning: true, isSubmitting: false,
             pendingOpHash: nil, error: nil, funding: nil, confirmGateOpen: true,
             reconcilePending: false, swipeAction: .reject, trackerHandoff: nil,
-            notice: nil, globalChainId: 100, blocked: nil
+            notice: nil, globalChainId: 100, blocked: nil, phase: .awaitingSignature
         )
         var context = SigningLive.Context(
             loc: loc, chainName: "Gnosis", chainDot: .green, nativeSymbol: "XDAI",

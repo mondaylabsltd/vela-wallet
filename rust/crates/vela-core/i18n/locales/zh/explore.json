@@ -62,7 +62,9 @@
     "loadOffline": "网络不稳定，页面没能打开。",
     "loadNotFound": "找不到这个网站，请检查网址。",
     "loadCertificate": "网站证书有问题，Vela 已阻止打开。",
+    "loadProxy": "代理没有响应。",
     "loadRetrying": "正在重试…",
-    "chainDown": "暂时连不上 {{chain}}，页面数据可能不完整。"
+    "chainDown": "暂时连不上 {{chain}}，页面数据可能不完整。",
+    "requestOpen": "请先完成或取消这个请求"
   }
 }

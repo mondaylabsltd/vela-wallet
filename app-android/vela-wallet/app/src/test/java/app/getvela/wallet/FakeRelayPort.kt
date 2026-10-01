@@ -30,8 +30,16 @@ class FakeRelayPort : RelayPort {
         defaults[method] = body
     }
 
+    /**
+     * When set, every call waits here before it is answered — how a test
+     * holds a POST in flight (and sees what cancelling it does).
+     */
+    @Volatile
+    var before: (suspend (method: String) -> Unit)? = null
+
     override suspend fun call(chainId: Int, method: String, params: List<Any?>, kind: RpcKind): RpcResult {
         calls += "$kind:$method"
+        before?.invoke(method)
         return rpc[method]?.removeFirstOrNull()
             ?: defaults[method]?.invoke(params)
             ?: RpcResult.Failed(rateLimited = false)

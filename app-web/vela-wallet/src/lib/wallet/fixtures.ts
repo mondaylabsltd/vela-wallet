@@ -589,13 +589,21 @@ export function buildDesktopState(
 		},
 		balance: balance(m, 'normal', DEFAULT_BALANCE),
 		actions: { receive: m.actions.receive, send: m.actions.send, scan: m.actions.scan },
+		// Spec 082 RB13 (G1): the wide layout carries the same empty copy as the
+		// narrow one, so a wallet with no history says so instead of nothing.
 		activitySection: {
 			title: m.sections.activity,
 			action: m.sections.all,
-			mode: 'rows'
+			mode: 'rows',
+			empty: { title: m.activity.emptyTitle, caption: m.activity.emptyCaption }
 		},
 		activityGroups: groupByDay(m, DEFAULT_ACTIVITY, { withTime: true }),
-		assetsSection: { title: m.sections.assets, action: m.sections.add, mode: 'rows' },
+		assetsSection: {
+			title: m.sections.assets,
+			action: m.sections.add,
+			mode: 'rows',
+			empty: { title: m.assets.emptyTitle, caption: m.assets.emptyCaption }
+		},
 		assetRows: DEFAULT_ASSETS.map((f) => assetRow(m, f)),
 		panels: { receive: receivePanel, assetDetail: assetDetailPanel },
 		initialPanel: state === 'd2' ? 'receive' : state === 'd3' ? 'asset-detail' : 'none',

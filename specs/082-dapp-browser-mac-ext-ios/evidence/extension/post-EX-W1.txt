@@ -1,0 +1,40 @@
+EX-W1 (G21, G22) + T182 - extension side panel (zh), parallel space, Safe 0xD400...130b on Gnosis.
+Fault: 8898 mute match=vela-relay at 19:07:21Z (request reaches the relay, the reply is swallowed); pass at 19:10:40Z.
+
+Safe EntryPoint nonce: before 23 -> after 24 (moved exactly once).
+dApp eth_sendTransaction (dust 0.001 xDAI to 0x7687...D141) asked 19:06:40.398Z; fee shown 0.01 xDAI; slide 19:07:22.04Z.
+
+Sheet/overlay text record (MutationObserver in the panel, UTC):
+19:07:21.013 sheet: ... 网络费 | 0.01 xDAI · ≈$0.01 | 这个数字有点旧了 | ... | 滑动以确认 · 确认发送
+19:07:22.675 sheet: 正在准备交易... | 发送 · -0.001 xDAI
+19:08:04.124 sheet: 等待生物识别... | 发送 · -0.001 xDAI            <- 1 ms only (not visible)
+19:08:04.125 sheet: 提交至网络... | 发送 · -0.001 xDAI | 关闭此页交易会在后台继续
+19:08:34.646 overlay: 已提交 | 可能已经发出。Vela 会继续查看，请不要重复发送。 | UserOp 哈希 | 0xb23551ac…8e2d53b6 | 关闭 · 后台继续
+19:08:47.315 overlay: 已确认 | 交易哈希 | 0xfc30da06…348d7208 | 区块浏览器 | 完成      <- relay still muted: ruling 8 chain check
+19:08:49.931 sheet AGAIN: 提交至网络... | 发送 · -0.001 xDAI | 关闭此页交易会在后台继续   (spinner, 49 s)
+19:09:38.929 sheet gone (request answered)
+
+dApp answers (channel tap, one res for the request id): 19:09:38.930Z ok result = 0xb23551ac13a24b27c2496966ba768c1577bba9ab4c6b8ab9e3cdc9328e2d53b6 (the op hash)
+  = 136.9 s after the slide.
+Worker: 19:08:04.119Z req.claim phase=sign live=true; 19:08:04.124Z req.claim phase=submit live=true; 19:09:38.930Z req.answered delivered=true outcome=ok
+
+Panel console (CDP):
+19:07:22.676 [BundlerFunding] chain=100 isVelaRelay=true
+19:07:32.681 [BundlerFunding] Failed to fetch account info for chain=100: TimeoutError: request timed out after 10000ms  (relay host)
+19:07:33.346 [UserOp] Estimating gas ... (then two relay POSTs abort at 15 s: 19:07:48.348, 19:08:04.119)
+19:08:04.126 [UserOp] Submitting: {...}
+19:08:34.635 [UserOp] submit verdict=maybe_sent hash=0xb23551ac13 attempts=1 chain=100
+19:08:49 .. 19:09:35  receipt polls to the relay, each aborted at 15 s
+19:09:38.928 [UserOp] Bundler UNREACHABLE — status unknown
+
+On chain (eth_getLogs EntryPoint UserOperationEvent topic1=op hash): 1 log
+  block=48487039 tx=0xfc30da065915806bf2ed805ff58fae77deafe913a5bb60337e23593c348d7208 nonce=23 success=1
+
+dApp eth_getTransactionReceipt(op hash):
+  while muted (19:10:2x): null after 8.0 s (worker: read.fail chain=100 host=vela-relay-cf.getvela.app kind=timeout, read.exhausted tried=1)
+  after pass: 1.3 s -> {transactionHash 0xfc30da06...7208, block 48487039, status 0x1}   (RF3)
+  eth_getTransactionByHash(op hash) -> hash 0xfc30da06...7208, block 48487039
+
+T182: side panel reloaded (Page.reload on the panel target) at ~19:10:30Z, relay still muted, before pass:
+  Activity: 今天 · dApp 交易 · 127.0.0.1:8137 · -0.001 xDAI (+ yesterday's row). The op was already confirmed
+  (chain check at 19:08:47), so the "pending row survives a reload" half could not be seen in this run.

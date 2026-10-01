@@ -5,4 +5,4 @@
  * status says WHY (fee-held, unreachable, accepted-not-landed…); this says
  * WHEN, and every client words the four the same way.
  */
-export type TrackOutcome = "landing" | "still_confirming" | "unknown" | "final";
+export type TrackOutcome = "landing" | "still_confirming" | "unknown" | "final" | "maybe_sent";

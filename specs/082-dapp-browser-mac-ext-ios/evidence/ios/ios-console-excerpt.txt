@@ -1,0 +1,20 @@
+[vela-wallet] dev proxy: all traffic via 192.168.50.9:8899
+[vela-wallet] parallel space: entered as 0x88cCA0EeDbF2C4426110bbFc998F048689266894
+[vela-wallet] browser load failed: https://app.uniswap.org/ — NSURLErrorDomain -1000 → not_found
+[vela-wallet] parallel space: entered as 0x88cCA0EeDbF2C4426110bbFc998F048689266894
+[vela-wallet] browser load failed: https://vela-t1.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://vela-t2.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://vela-t3.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://vela-t4.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://vela-t5.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://vela-t6.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://vela-t7.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://vela-t8.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://vela-t9.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://vela-t10.invalid/ — NSURLErrorDomain -1003 → not_found
+[vela-wallet] browser load failed: https://curve.fi/ — NSURLErrorDomain -1004 → refused
+[vela-wallet] browser load failed: https://curve.fi/ — NSURLErrorDomain -1004 → refused
+[vela-wallet] browser load failed: https://curve.fi/ — NSURLErrorDomain -1004 → refused
+[vela-wallet] browser load failed: https://www.sushi.com/ — NSURLErrorDomain -1005 → offline
+[vela-wallet] browser load failed: https://www.sushi.com/ — NSURLErrorDomain -1005 → offline
+[vela-wallet] browser load failed: https://app.uniswap.org/ — NSURLErrorDomain -1001 → timeout

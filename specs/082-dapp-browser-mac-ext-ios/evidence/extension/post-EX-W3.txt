@@ -1,0 +1,18 @@
+EX-W3 (opportunistic revert) - attempt with Gnosis USDC transfer(0x1111…1111, 10^30) from Parallel One (holds no such amount). No proxy fault.
+Nonce before 27, after 27 (nothing landed).
+19:44:16.581 sheet: 发送 | -1,000,000,000,000,000,000,000,000 USDC | ≈ $1e+24 | 接收方 0x111111...111111 | 网络费 0.01 xDAI · ≈$0.01 | 滑动以确认 · 发送
+   (the amount is clipped at the panel's right edge; the fiat line is scientific notation; no warning of any kind; slide enabled)
+   (the request had arrived while the panel showed Settings -> 反馈; it only surfaced after I closed the sheet and went to 钱包 - EX4b again)
+19:44:18.762 panel console: [UserOp] Estimation RPC error: {"code":-32500,"message":"UserOperation simulation failed","data":"Safe execution failed: the target call in executeUserOp reverted"}
+19:44:18.762 panel console: [InBand] Gas estimation failed, using defaults: UserOperation simulation failed      <- goes on and signs anyway
+19:44:18.771 worker: req.claim phase=submit live=true
+19:44:20.264 panel console: [UserOp] submit verdict=accepted hash=0x4d558afa2e attempts=1 chain=100
+19:44:20.274 overlay: 已提交 | 已发送！正在链上确认——区块浏览器链接稍后出现。 | UserOp 哈希 0x4d558afa…449439d7
+19:44:32.602 overlay: 失败 | 交易未能提交。您的资金安全无虞——请重试。 | UserOp 哈希 0x4d558afa…449439d7 | 完成
+19:44:34.234 panel console: [UserOp] Relay REJECTED the operation
+19:44:34.235 worker: req.answered delivered=true outcome=ok
+dApp answer: {ok:true, result:"0x4d558afa2e899ead13277162dfa5b25fa7f9b1bc809de0b9f90f7713449439d7"} (the op hash)
+Relay status (my curl): {"status":"rejected","transactionHash":null}; chain: 0 UserOperationEvent logs for it.
+Activity: 今天 · dApp 交易 · 失败 · 127.0.0.1:8137
+Code: rust/crates/vela-core/src/app/sign_request.rs:2468-2485 maps Failed (incl. a relay rejection, which proves "not sent")
+after OpSubmitted to ReceiptPending{op hash}.

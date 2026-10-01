@@ -1,0 +1,21 @@
+EX-LD6 (L-D6) - extension, side panel (zh), tab A http://127.0.0.1:8137 connected as Parallel One.
+
+1) Old lower-case grant rewritten at wallet boot (RG10):
+   planted vela.perm.http://localhost:8137 address = 0xd400866e00b055b20752a826cd5c89b811de130b (lower-case) in this test profile
+   reloaded the side panel while it showed Settings -> still lower-case after 6 s (normalizeGrantSpelling runs only on the wallet route)
+   reloaded the wallet tab (zh/wallet.html) -> 0xD400866e00B055B20752a826CD5C89b811de130b within 1.5 s
+
+2) Switch account from Settings -> 切换账户 -> Parallel Two (19:3x):
+   panel Settings/home: Parallel Two 0x031d7D…84772b
+   dApp: no accountsChanged; eth_accounts -> ["0xD400866e00B055B20752a826CD5C89b811de130b"] (still One)
+   panel then navigated to 钱包 (home shows Parallel Two): still no event, eth_accounts still One
+   the full wallet tab at the same time: Parallel One
+   Code: routes/[locale]/wallet/+page.svelte:1311-1317 - followActiveAccount runs only from the wallet page's $effect and
+   only when THAT page saw the address change (first run just records it), so a switch made in Settings is never followed.
+
+3) Switch from the wallet home's account header (the follow's own route):
+   -> Parallel Three: dApp accountsChanged ["0x58cd0ce6A27099220543b31710d7860d75Ba1d3d"] (19:36:05.515Z); eth_accounts same
+   -> Parallel One:   dApp accountsChanged ["0xD400866e00B055B20752a826CD5C89b811de130b"] (19:36:19.942Z)
+   eth_accounts ["0xD400866e00B055B20752a826CD5C89b811de130b"], eth_requestAccounts same, ethereum.selectedAddress same
+   grants after: 127.0.0.1:8137 / 127.0.0.1:8138 / localhost:8137 -> 0xD400866e00B055B20752a826CD5C89b811de130b
+   All addresses the dApp received: EIP-55 (checksummed), none lower-case.

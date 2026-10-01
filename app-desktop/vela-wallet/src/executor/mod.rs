@@ -66,6 +66,8 @@ mod platform_macos;
 pub mod pool;
 pub mod preferences;
 pub mod proxy;
+#[cfg(target_os = "macos")]
+pub mod proxy_macos;
 pub mod qr;
 pub mod receive_watch;
 pub mod registry;

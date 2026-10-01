@@ -27,6 +27,10 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		day_start_ms: 0,
 		tx_hash: '0xabc',
 		batch: null,
+		kind: (partial.direction ?? 'in') === 'in' ? 'receive' : 'send',
+		status: 'confirmed',
+		site: null,
+		counterparty_role: 'recipient',
 		...partial
 	};
 }
@@ -63,7 +67,8 @@ describe('liveActivityRow', () => {
 	it('a send is negative and names the recipient by short address when unaliased', () => {
 		const row = liveActivityRow(item({ id: 'b', direction: 'out' }), m, false);
 		expect(row.kind).toBe('sent');
-		expect(row.amount).toBe('-1.5');
+		// U+2212, as the detail and the signing sheet write it (spec 082 G19).
+		expect(row.amount).toBe('\u22121.5');
 		expect(row.subtitle).toMatch(/0xb1b1/i);
 	});
 	it('privacy masks the amount', () => {
@@ -102,6 +107,63 @@ describe('liveActivityRow', () => {
 			false
 		);
 		expect(row.amount).toBe('3');
+	});
+
+	/** Spec 082 RG1–RG4: what the row is and where it stands are the core's. */
+	it('a dApp transaction is titled as one and names its site — never guessed from a direction', () => {
+		const row = liveActivityRow(
+			item({
+				id: 'e',
+				direction: 'out',
+				kind: 'dapp_tx',
+				status: 'confirmed',
+				site: 'app.uniswap.org',
+				value: null,
+				symbol: ''
+			}),
+			m,
+			false
+		);
+		expect(row).toMatchObject({
+			kind: 'dapp',
+			title: m.activity.dapp,
+			subtitle: 'app.uniswap.org'
+		});
+		expect(row.amount).toBe('');
+	});
+
+	it('a row the tracker has not closed says so first: Pending · <site>, Failed · <site>', () => {
+		const pending = liveActivityRow(
+			item({
+				id: 'f',
+				direction: 'out',
+				kind: 'dapp_tx',
+				status: 'pending',
+				site: '127.0.0.1:8137'
+			}),
+			m,
+			false
+		);
+		expect(pending.subtitle).toBe(`${m.activity.pending} · 127.0.0.1:8137`);
+		const failed = liveActivityRow(
+			item({ id: 'g', direction: 'out', kind: 'send', status: 'failed', alias: 'Bob' }),
+			m,
+			false
+		);
+		expect(failed.subtitle).toBe(
+			`${m.activity.failed} · ${m.activity.toName.replace('{{name}}', 'Bob')}`
+		);
+	});
+
+	it('a may-have-been-sent op is a Pending dApp row under its local hash (RG4)', () => {
+		const LOCAL = '0x' + 'ab'.repeat(32);
+		const row = liveActivityRow(
+			item({ id: LOCAL, direction: 'out', kind: 'dapp_tx', status: 'pending', site: 'a.example' }),
+			m,
+			false
+		);
+		expect(row.id).toBe(LOCAL);
+		expect(row.subtitle.startsWith(m.activity.pending)).toBe(true);
 	});
 
 	// 083 H2: a dApp's transaction is titled by what it did — the sheet's
@@ -160,7 +222,7 @@ describe('liveActivityRow', () => {
 		expect(row).toMatchObject({
 			title: m.activity.intents.intentSend,
 			subtitle: '127.0.0.1',
-			amount: '-0.01',
+			amount: '\u22120.01',
 			unit: 'xDAI'
 		});
 	});
@@ -179,7 +241,9 @@ describe('liveActivityGroups', () => {
 			],
 			transactions: [],
 			new_item_id: null,
-			toast: null
+			toast: null,
+			history_empty_key: 'history.emptyTitle',
+			home_empty_key: 'home.emptyNoActivity'
 		};
 		const groups = liveActivityGroups(view, m, false);
 		expect(groups.map((g) => [g.label, g.rows.length])).toEqual([

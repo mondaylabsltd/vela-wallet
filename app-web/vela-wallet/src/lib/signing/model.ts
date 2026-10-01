@@ -215,6 +215,14 @@ export type FeeModel =
 			 */
 			warning?: string;
 			/**
+			 * Spec 082 G47: the cause line is hidden while a re-quote runs (it
+			 * said why the LAST ask failed, under "estimating"), but its height
+			 * is kept, so the speed row and the slide below do not jump each
+			 * time the sheet asks again. The held words, drawn invisibly: the
+			 * reserved line is exactly as tall as the one it stands in for.
+			 */
+			warningReserved?: string;
+			/**
 			 * Spec 079: the send form's refresh control — its accessible name.
 			 * The owner: "似乎没有刷新网络费的按钮呀". Live only.
 			 */

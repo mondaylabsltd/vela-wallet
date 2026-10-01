@@ -1,6 +1,17 @@
 /** Ported from src/__tests__/services/safe-transaction.test.ts @ f9bcb278 — vitest; the core is initialised by the server-side wasm init. */
 import '$lib/i18n/wasm-init.server';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+
+const rpcMock = vi.hoisted(() => ({
+	impl: null as null | ((method: string, params: unknown[], chainId: number) => Promise<unknown>)
+}));
+vi.mock('./rpc-adapter', () => ({
+	USER_OP_STATUS_METHOD: 'pimlico_getUserOperationStatus',
+	rpcCall: (method: string, params: unknown[], chainId: number) => {
+		if (!rpcMock.impl) throw new Error(`no network in this test (${method})`);
+		return rpcMock.impl(method, params, chainId);
+	}
+}));
 /**
  * Tests for safe-transaction service.
  *
@@ -17,13 +28,27 @@ import {
 	buildMultiSendExecuteCallData,
 	buildInitCode,
 	parseHexUInt64,
-	parseExistingUserOpHash,
 	isPlainTransferCall,
 	deriveChainGasPrice,
-	sameAssetFeeLimit
+	sameAssetFeeLimit,
+	simulateUserOpGas,
+	submitSigned,
+	UserOpNotSentError,
+	waitForReceipt,
+	_cachedNonceForTest,
+	_seedNonceForTest
 } from './safe-transaction';
-import type { GasTier, TransactionFeeEstimate } from './safe-transaction';
-import { functionSelector } from '$lib/core/kernels';
+import { estimateRevertsFor } from './estimate-verdict';
+import type { GasTier, TransactionFeeEstimate, UserOperation } from './safe-transaction';
+import {
+	functionSelector,
+	rpcReadTimeoutMs,
+	userOpEstimateFailure,
+	userOpHash as localUserOpHash,
+	userOpNotSentDetail,
+	userOpPreviousPendingDetail
+} from '$lib/core/kernels';
+import { PoolFailedError } from './rpc-pool';
 
 /** Uint8Array → lowercase hex (no 0x), for golden-vector assertions. */
 const hex = (u: Uint8Array) =>
@@ -413,19 +438,6 @@ describe('safe-transaction', () => {
 	});
 
 	// --- pure parsers ----------------------------------------------------------
-	describe('parseExistingUserOpHash', () => {
-		test('extracts the in-flight hash from the bundler marker', () => {
-			expect(parseExistingUserOpHash('AA25 invalid nonce [existingHash:0xabc123]')).toBe(
-				'0xabc123'
-			);
-			expect(parseExistingUserOpHash('[existingHash:0xDEADbeef] and more')).toBe('0xDEADbeef');
-		});
-		test('returns null when the marker is absent or malformed', () => {
-			expect(parseExistingUserOpHash('some unrelated bundler error')).toBeNull();
-			expect(parseExistingUserOpHash('[existingHash:nothex]')).toBeNull();
-			expect(parseExistingUserOpHash('')).toBeNull();
-		});
-	});
 
 	describe('parseHexUInt64', () => {
 		test('coerces hex (with/without 0x) to bigint, empty/undefined → 0n', () => {
@@ -513,5 +525,329 @@ describe('keySetOf', () => {
 			]
 		});
 		expect(multi.keys).toHaveLength(2);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Spec 082 T082: the submit loop is the core's (`submit_step`, RA1), and the
+// local nonce moves on only when the relay has the op (RA5).
+// ---------------------------------------------------------------------------
+
+describe('submitting a signed op (spec 082 RA1, RA5)', () => {
+	const SAFE = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
+	const CHAIN = 100;
+
+	function op(): UserOperation {
+		return {
+			sender: SAFE,
+			nonce: '0x5',
+			// ≥ 20 bytes: carries its deployment, so no on-chain deploy check runs.
+			initCode: new Uint8Array(24).fill(0x11),
+			callData: new Uint8Array([0xde, 0xad]),
+			verificationGasLimit: 300_000n,
+			callGasLimit: 200_000n,
+			preVerificationGas: 100_000n,
+			maxFeePerGas: 0n,
+			maxPriorityFeePerGas: 0n,
+			paymasterAndData: new Uint8Array(0),
+			signature: new Uint8Array(65)
+		};
+	}
+
+	/** What `eth_sendUserOperation` does, per attempt; the head always answers. */
+	function relay(...replies: Array<() => unknown>) {
+		let attempt = 0;
+		rpcMock.impl = async (method: string) => {
+			if (method === 'eth_blockNumber') return { jsonrpc: '2.0', id: 1, result: '0x10' };
+			if (method !== 'eth_sendUserOperation') throw new Error(`unexpected ${method}`);
+			const reply = replies[Math.min(attempt, replies.length - 1)];
+			attempt += 1;
+			return reply();
+		};
+	}
+
+	test('mute (the reply is lost after the POST) → may have been sent, local hash, nonce unchanged', async () => {
+		_seedNonceForTest(SAFE, CHAIN, '0x5');
+		relay(() => {
+			throw new PoolFailedError('All bundler endpoints failed for chain 100', {
+				maybeDelivered: true,
+				rateLimited: false
+			});
+		});
+		const result = await submitSigned(op(), CHAIN, SAFE);
+		expect(result.maybeSent).toBe(true);
+		expect(result.userOpHash).toBe(localUserOpHash(op(), CHAIN));
+		expect(result.submitBlock).toBe(16);
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
+	});
+
+	// 083 S3b: another operation of the account holds the nonce. Its hash is
+	// never this request's (Uniswap called a swap done when only its approval
+	// had happened): not sent, the core's sentence, and the nonce stays.
+	test('[existingHash:] of another op → not sent, held behind it, the nonce stays', async () => {
+		const existing = '0x' + 'ee'.repeat(32);
+		_seedNonceForTest(SAFE, CHAIN, '0x5');
+		relay(() => ({
+			jsonrpc: '2.0',
+			id: 1,
+			error: { code: -32602, message: `AA25 invalid account nonce [existingHash:${existing}]` }
+		}));
+		const error = await submitSigned(op(), CHAIN, SAFE).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(UserOpNotSentError);
+		expect((error as UserOpNotSentError).rejection).toEqual({
+			nonce_held: { user_op_hash: existing }
+		});
+		expect((error as Error).message).toBe(userOpPreviousPendingDetail());
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
+	});
+
+	test('nothing left the device (offline before the call) → not sent, with the fixed detail', async () => {
+		_seedNonceForTest(SAFE, CHAIN, '0x5');
+		relay(() => {
+			throw new PoolFailedError('All bundler endpoints failed for chain 100', {
+				maybeDelivered: false,
+				rateLimited: false
+			});
+		});
+		const error = await submitSigned(op(), CHAIN, SAFE).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(UserOpNotSentError);
+		expect((error as UserOpNotSentError).rejection).toBeNull();
+		expect((error as Error).message).toBe(userOpNotSentDetail());
+		expect((error as Error).message).not.toMatch(/endpoints failed/);
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
+	});
+
+	test('a relay refusal → not sent, in the relay’s words; the nonce stays', async () => {
+		_seedNonceForTest(SAFE, CHAIN, '0x5');
+		relay(() => ({
+			jsonrpc: '2.0',
+			id: 1,
+			error: { code: -32500, message: 'AA21 didn’t pay prefund' }
+		}));
+		const error = await submitSigned(op(), CHAIN, SAFE).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(UserOpNotSentError);
+		expect((error as UserOpNotSentError).rejection).not.toBeNull();
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
+	});
+
+	test('a clean hash → accepted; the nonce moves on', async () => {
+		const hash = '0x' + 'ab'.repeat(32);
+		_seedNonceForTest(SAFE, CHAIN, '0x5');
+		relay(() => ({ jsonrpc: '2.0', id: 1, result: hash }));
+		const result = await submitSigned(op(), CHAIN, SAFE);
+		expect(result).toMatchObject({ userOpHash: hash, maybeSent: false, submitBlock: 16 });
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x6');
+	});
+
+	/*
+	 * The relay ANSWERED — a 200 with JSON — but with no error member and no
+	 * readable hash. That is the core's `SubmitReply::Hash` with something
+	 * that is not a hash, which `submit_step` calls "may have been sent" (the
+	 * desktop and Android map it so). Read as an empty error it became
+	 * NotSent — "failed, try again" over an op the relay may hold (G21).
+	 */
+	test.each([
+		['a null result', { jsonrpc: '2.0', id: 1, result: null }],
+		['no result and no error', { jsonrpc: '2.0', id: 1 }],
+		['an empty result', { jsonrpc: '2.0', id: 1, result: '' }],
+		['a non-string result', { jsonrpc: '2.0', id: 1, result: { hash: 'x' } }]
+	])('%s is may-have-been-sent, never not sent; the nonce stays', async (_label, body) => {
+		_seedNonceForTest(SAFE, CHAIN, '0x5');
+		relay(() => body);
+		const result = await submitSigned(op(), CHAIN, SAFE);
+		expect(result.maybeSent).toBe(true);
+		expect(result.userOpHash).toBe(localUserOpHash(op(), CHAIN));
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
+	});
+
+	/*
+	 * Ruling 8's head is best effort. A chain whose nodes do not answer must
+	 * not hold the POST for the pool's every pass (tens of seconds after the
+	 * passkey, and after the page's last claim): one read's budget at most,
+	 * then the op goes with `submit_block` unknown.
+	 */
+	test('a head that never answers holds the POST one read budget at most', async () => {
+		vi.useFakeTimers();
+		try {
+			const hash = '0x' + 'cd'.repeat(32);
+			let posted = false;
+			rpcMock.impl = (method: string) => {
+				if (method === 'eth_blockNumber') return new Promise(() => {});
+				posted = true;
+				return Promise.resolve({ jsonrpc: '2.0', id: 1, result: hash });
+			};
+			const pending = submitSigned(op(), CHAIN, SAFE);
+			await vi.advanceTimersByTimeAsync(rpcReadTimeoutMs());
+			expect(posted).toBe(true);
+			await expect(pending).resolves.toMatchObject({
+				userOpHash: hash,
+				maybeSent: false,
+				submitBlock: null
+			});
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});
+
+/**
+ * Spec 082 RJ1/RJ2 (T228): the caller's gate runs once the op is signed and
+ * hashed and the head is read — before any POST. A gate that refuses (no
+ * clearance, the asker gone) means zero POSTs.
+ */
+describe('the gate before the first POST (spec 082 RJ1)', () => {
+	const SAFE = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
+	const CHAIN = 100;
+	const op = (): UserOperation => ({
+		sender: SAFE,
+		nonce: '0x6',
+		initCode: new Uint8Array(24).fill(0x11),
+		callData: new Uint8Array([0xde, 0xad]),
+		verificationGasLimit: 300_000n,
+		callGasLimit: 200_000n,
+		preVerificationGas: 100_000n,
+		maxFeePerGas: 0n,
+		maxPriorityFeePerGas: 0n,
+		paymasterAndData: new Uint8Array(0),
+		signature: new Uint8Array(65)
+	});
+
+	test('runs with the local hash and the head, before the POST', async () => {
+		const order: string[] = [];
+		rpcMock.impl = async (method: string) => {
+			order.push(method);
+			if (method === 'eth_blockNumber') return { jsonrpc: '2.0', id: 1, result: '0x20' };
+			return { jsonrpc: '2.0', id: 1, result: '0x' + 'ab'.repeat(32) };
+		};
+		const gate = vi.fn(async () => {
+			order.push('gate');
+		});
+		await submitSigned(op(), CHAIN, SAFE, undefined, undefined, gate);
+		expect(gate).toHaveBeenCalledWith({
+			userOpHash: localUserOpHash(op(), CHAIN),
+			submitBlock: 32,
+			chainId: CHAIN
+		});
+		expect(order).toEqual(['eth_blockNumber', 'gate', 'eth_sendUserOperation']);
+	});
+
+	test('a gate that refuses: zero POSTs, and the nonce stays', async () => {
+		_seedNonceForTest(SAFE, CHAIN, '0x6');
+		const posted: string[] = [];
+		rpcMock.impl = async (method: string) => {
+			if (method === 'eth_sendUserOperation') posted.push(method);
+			return { jsonrpc: '2.0', id: 1, result: '0x20' };
+		};
+		const error = await submitSigned(op(), CHAIN, SAFE, undefined, undefined, async () => {
+			throw new Error('no clearance');
+		}).catch((e: unknown) => e);
+		expect((error as Error).message).toBe('no clearance');
+		expect(posted).toEqual([]);
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x6');
+	});
+});
+
+/**
+ * Spec 082 RJ4 (T228, G39): the dApp's window holds inside each receipt poll.
+ * A muted relay held one poll ~15 s, and the page was answered at 136.9 s.
+ */
+describe('the receipt wait keeps its window (spec 082 RJ4)', () => {
+	const OP = '0x' + 'e7'.repeat(32);
+
+	test('a muted relay: the wait ends at the window, not a poll later', async () => {
+		vi.useFakeTimers();
+		try {
+			rpcMock.impl = () => new Promise(() => {});
+			const started = Date.now();
+			let settledAt = 0;
+			const waiting = waitForReceipt(OP, 100, 120_000).catch((e: unknown) => {
+				settledAt = Date.now();
+				return e;
+			});
+			await vi.advanceTimersByTimeAsync(121_000);
+			const error = await waiting;
+			expect((error as Error).message).toMatch(/not confirmed within 120s/);
+			expect(settledAt - started).toBeLessThanOrEqual(121_000);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test('the core answered: the wait stops at once', async () => {
+		vi.useFakeTimers();
+		try {
+			rpcMock.impl = () => new Promise(() => {});
+			const answered = new AbortController();
+			const waiting = waitForReceipt(OP, 100, 120_000, answered.signal).catch((e: unknown) => e);
+			await vi.advanceTimersByTimeAsync(4_000);
+			answered.abort();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(await waiting).toBeInstanceOf(Error);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	test('the "ACCEPTED" line is only for an op the relay accepted (G61)', async () => {
+		vi.useFakeTimers();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			rpcMock.impl = async () => ({ jsonrpc: '2.0', id: 1, result: null });
+			const maybe = waitForReceipt(OP, 100, 10_000, undefined, false).catch((e: unknown) => e);
+			await vi.advanceTimersByTimeAsync(11_000);
+			await maybe;
+			const lines = warn.mock.calls.map((call) => String(call[0]));
+			expect(lines.some((line) => line.includes('ACCEPTED'))).toBe(false);
+			expect(lines.some((line) => line.includes('may-have-been-sent'))).toBe(true);
+		} finally {
+			warn.mockRestore();
+			vi.useRealTimers();
+		}
+	});
+});
+
+/** Spec 082 RJ19 (T228, G57): the relay's estimate says it reverts. */
+describe('a relay estimate that reverts reaches the sheet (spec 082 RJ19)', () => {
+	const ACCOUNT = '0x' + '5e'.repeat(20);
+	const KEY = '04' + '11'.repeat(64);
+	const calls = [{ to: '0x' + '76'.repeat(20), value: '0x0', data: '0xa9059cbb' }];
+
+	test('the EX-W3 answer is recorded as a revert; a clean estimate clears it', async () => {
+		rpcMock.impl = async (method: string) =>
+			method === 'eth_estimateUserOperationGas'
+				? {
+						jsonrpc: '2.0',
+						id: 1,
+						error: {
+							code: -32500,
+							message: 'UserOperation simulation failed',
+							data: 'Safe execution failed: the target call in executeUserOp reverted'
+						}
+					}
+				: { jsonrpc: '2.0', id: 1, result: '0x1' };
+		const failed = await simulateUserOpGas({
+			chainId: 100,
+			account: ACCOUNT,
+			deployed: false,
+			calls,
+			publicKeyHex: KEY
+		});
+		expect(failed.kind).toBe('simulation_failed');
+		expect(estimateRevertsFor(100, ACCOUNT)).toEqual({ reason: null });
+		expect(userOpEstimateFailure('')).toEqual({ type: 'unavailable' });
+
+		rpcMock.impl = async () => ({
+			jsonrpc: '2.0',
+			id: 1,
+			result: { verificationGasLimit: '0x1', callGasLimit: '0x1', preVerificationGas: '0x1' }
+		});
+		await simulateUserOpGas({
+			chainId: 100,
+			account: ACCOUNT,
+			deployed: false,
+			calls: [{ ...calls[0], data: '0xa9059cbb00' }],
+			publicKeyHex: KEY
+		});
+		expect(estimateRevertsFor(100, ACCOUNT)).toBeNull();
 	});
 });

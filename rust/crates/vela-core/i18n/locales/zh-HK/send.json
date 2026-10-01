@@ -54,7 +54,6 @@
     "txRemaining": "尚餘約 {{remaining}} 秒",
     "txTypicalTime": "{{chainName}} 一般約 {{estSecs}} 秒內確認",
     "txRetryBtn": "重試",
-    "txErrorTimeout": "交易已提交，但確認逾時。請稍後查看記錄。",
     "txErrorBundlerLoop": "Gas 帳戶餘額持續被 bundler 拒絕。請稍後重試或提高 Gas 等級。",
     "txErrorBundlerFund": "Bundler 帳戶需要更多 Gas。請於設定中為其注資。",
     "txErrorPublicKey": "找不到此帳戶的公鑰",

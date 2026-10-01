@@ -49,6 +49,8 @@ describe('buildSigningRecord', () => {
 			dappOrigin: 'https://app.uniswap.org',
 			nowMs: 1_757_000_000_000
 		});
-		expect(record).toMatchObject({ type: 'dapp_tx', to: '', value: '0x0' });
+		// The batch's own first leg names the recipient (spec 082 RC7) and its
+		// legs the figure — never the page's top-level words beside them.
+		expect(record).toMatchObject({ type: 'dapp_tx', to: TO, value: '0x0' });
 	});
 });

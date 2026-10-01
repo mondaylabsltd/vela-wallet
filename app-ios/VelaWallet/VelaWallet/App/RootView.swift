@@ -96,7 +96,10 @@ struct RootView: View {
     /// Which history row opened the transaction sheet, and which assets row
     /// opened the token sheet. The drawn sheets show ONE of each; without the
     /// tap travelling with the navigation they would show the first.
-    @State private var activityRow: (group: Int, row: Int) = (0, 0)
+    /// The record the open transaction detail shows — its feed id, set by
+    /// the tap (home or History). Never a list position: the feed moves under
+    /// an open sheet, and a position then named another record (X-FIRST-TAP).
+    @State private var activityItemId: String?
     @State private var assetRow = 0
     /// The network filter on the history screen. `nil` is every chain — the
     /// core owns the filtering; this is only which row was picked.
@@ -138,6 +141,12 @@ struct RootView: View {
     /// request stays in flight, and a dApp that reloaded every time somebody
     /// glanced at their balance would lose a half-finished swap.
     @State private var browser: BrowserController
+    /// Whether the network came back (spec 082 RE3): the pool's calls and
+    /// the system path, through the core's `netHealthStep`.
+    @State private var netWatch: NetWatch
+    /// The chain notice's Retry is out (spec 082 RF4): busy until its one
+    /// read settles.
+    @State private var chainRetrying = false
     /// The request a page is asking about right now. Born with the request
     /// and dropped when the page has its answer — four machines that must not
     /// outlive the question they were asked.
@@ -355,7 +364,10 @@ struct RootView: View {
         // A saved token has to reach the balances, so the core's
         // "invalidate the token cache" becomes a re-read here — there is no
         // cache on this client, only a fetch.
-        let wallet = WalletStore(store: shelf, pool: pool, held: held)
+        // The registry's stablecoins and wrapped coin join every balance
+        // read (spec 082 RE9, G24): USDC on Base is counted, as on the other
+        // clients.
+        let wallet = WalletStore(store: shelf, pool: pool, held: held, registry: ChainTokens(accounts: store))
         _wallet = State(initialValue: wallet)
         // An incoming transfer the feed just found: the hero follows (#188).
         activityStore.onNewItem = { [weak wallet] in wallet?.refresh(pull: false) }
@@ -377,7 +389,10 @@ struct RootView: View {
                 receiptLogs: { [weak trust] from, chain, logs in
                     trust?.receiptLogsConfirmed(from: from, chainId: chain, logs: logs)
                 },
-                recordsPatched: { [weak activityStore] in activityStore?.reconciled() }
+                recordsPatched: { [weak activityStore] in activityStore?.reconciled() },
+                // An op of ours landed — a send or a page's — so the figure on
+                // the home is read again, without a pull (spec 082 RE8, G26).
+                holdingsMoved: { [weak wallet] _ in wallet?.refresh(pull: false) }
             )
         )
         let trackerStore = TrackerStore(executor: trackerExecutor)
@@ -420,6 +435,22 @@ struct RootView: View {
             }
         )
         _browser = State(initialValue: browserController)
+        // The network came back (spec 082 RE3): every failed page starts its
+        // count again and the one in front is asked for again, the logos a
+        // dead network kept away are asked for again, and the balance is
+        // read — nobody has to tap anything.
+        let netWatch = NetWatch()
+        // Health per source (spec 082 RJ14): each call names its chain.
+        pool.onOutcome = { [weak netWatch] outcome, chainId in
+            netWatch?.observe(outcome, chainId: chainId)
+        }
+        netWatch.onCameBack = { [weak browserController, weak wallet] in
+            browserController?.networkCameBack()
+            LogoStore.networkCameBack()
+            wallet?.refresh(pull: false)
+        }
+        netWatch.watchPath()
+        _netWatch = State(initialValue: netWatch)
         // The send machine, last: it reads the holdings the balance machine
         // found and asks the fee session for a quote, so both must exist.
         let metadata = TokenMetadata(store: shelf, pool: pool)
@@ -439,9 +470,14 @@ struct RootView: View {
                 // The permission is asked HERE — at the first submit, never at
                 // launch — because this is the first time there is anything to
                 // notify about.
-                trackSubmitted: { [weak trackerStore, weak notify] hash, ids, chain in
+                trackSubmitted: { [weak trackerStore, weak notify] submission in
                     notify?.askOnceIfNeeded()
-                    trackerStore?.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
+                    trackerStore?.submitted(submission)
+                },
+                // A write-ahead op proven never sent (spec 082 RJ1): the
+                // tracker drops it, as the store already has.
+                trackWithdrawn: { [weak trackerStore] hash, ids in
+                    trackerStore?.withdrawn(userOpHash: hash, recordIds: ids)
                 },
                 // The core's `haptic { kind }`: money left, or a refusal the
                 // person should feel. Unwired until 074, so an iPhone sent in
@@ -453,7 +489,10 @@ struct RootView: View {
                 // Leaving is what re-arms `Open`. Without it a second visit to
                 // 转账 would render the machine's last state instead of a
                 // fresh picker.
-                refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) }
+                refreshBalances: { [weak wallet] in wallet?.refresh(pull: false) },
+                // The rows changed on disk — written ahead, admitted or taken
+                // back (spec 082 RJ1): the feed reads the store again.
+                recordsPersisted: { [weak activityStore] in activityStore?.reconciled() }
             )
         )
         let sendStore = SendStore(executor: sendExecutor)
@@ -468,10 +507,12 @@ struct RootView: View {
         // Without this the receipt screen sat on "submitted" while the
         // notification said "confirmed": two answers about one payment, on one
         // phone.
-        trackerExecutor.ports.notifyConfirmed = { [weak notify, weak sendStore] hash, chain, tx in
+        trackerExecutor.ports.notifyConfirmed = { [weak notify] hash, chain, tx in
             notify?.confirmed(userOpHash: hash, chainId: chain, txHash: tx)
-            sendStore?.receiptConfirmed(userOpHash: hash, txHash: tx)
         }
+        // Every verdict — confirmed, failed, not sent, held, acknowledged —
+        // reaches the receipt through the core's one mapping (spec 082), once.
+        trackerStore.onView = { [weak sendStore] view in sendStore?.trackerChanged(view) }
         // The payroll importer. Its fiat column is priced through the DISPLAY
         // machine's own waterfall — chain feed, then endpoint, then nothing —
         // so a currency the wallet cannot price stays unpriced here too. A
@@ -1119,6 +1160,7 @@ struct RootView: View {
                         loc: loc,
                         onSelectTab: selectTab,
                         onFlow: { flows.enter($0) },
+                        onOpenActivity: { activityItemId = $0 },
                         onToggleBalance: { wallet.togglePrivacy() },
                         onStatusTap: { openRescue() },
                         // The name line's chevron has drawn a disclosure since
@@ -1285,9 +1327,11 @@ struct RootView: View {
                         onRefreshFee: { signing?.refreshFee() },
                         chainNotice: ExploreLive.chainNotice(
                             chainId: browser.current == nil ? nil : browser.currentTab?.chainId,
-                            failed: pool.failedChains, rateLimited: pool.rateLimitedChains, loc: loc
+                            failed: pool.failedChains, unreached: pool.unreachedChains,
+                            rateLimited: pool.rateLimitedChains, loc: loc
                         ),
                         onChainRetry: { retryPageChain() },
+                        chainRetrying: chainRetrying,
                         controller: browser,
                         camera: camera,
                         onSelectTab: selectTab,
@@ -1484,9 +1528,9 @@ struct RootView: View {
         var model = ending.header
         let chain = ending.aftercare.chainId
         var context = signingContext(chain: chain, live: nil)
-        if case .stillConfirming(_, let op) = ending.aftercare {
-            context.track = tracker.view?.entry(userOpHash: op)
-        }
+        // The tracker's entry for the op, whatever the ending: a landed op is
+        // not "confirmed" until the tracker says so (spec 082 RA8).
+        context.track = tracker.view?.entry(userOpHash: ending.aftercare.userOpHash)
         model.receipt = SigningLive.aftercareReceipt(
             ending.aftercare, summary: SigningLive.summaryOf(model.blocks), context: context
         )
@@ -1511,7 +1555,10 @@ struct RootView: View {
         guard let live = signing, live.request?.id == incoming.id, !live.closedByPerson,
               let aftercare = SigningAftercare.of(
                   method: incoming.method, chainId: incoming.chainId,
-                  payload: payload, submittedUserOp: userOpHash
+                  // The op this request handed the tracker, whether or not
+                  // the answer IS it: a landed ending still names the op the
+                  // tracker follows (the core's `signEndingOf`).
+                  payload: payload, submittedUserOp: live.submittedUserOp ?? userOpHash
               )
         else { return }
         var header = signingModel(for: live)
@@ -1535,11 +1582,15 @@ struct RootView: View {
         let chain: Int
         if let ending = signingEnding, liveSigning == nil {
             chain = ending.aftercare.chainId
-            switch ending.aftercare {
-            case .landed(_, let txHash): hash = txHash
-            case .stillConfirming(_, let op): hash = tracker.view?.entry(userOpHash: op)?.txHash
-            case .signed: hash = nil
-            }
+            let track = tracker.view?.entry(userOpHash: ending.aftercare.userOpHash)
+            hash = ending.aftercare.state(track: track).txHash ?? track?.txHash
+        } else if let live = liveSigning, let op = live.shownSign.pendingOpHash,
+                  let request = live.shownSign.request {
+            // The live sheet draws the tracker's settled verdict before the
+            // page is answered (082 review): its explorer link opens the same
+            // transaction the tracker names.
+            chain = request.chainId
+            hash = tracker.view?.entry(userOpHash: op)?.txHash
         } else {
             return
         }
@@ -1550,9 +1601,22 @@ struct RootView: View {
     /// Spec 079 US4: the chain notice's Retry — one read on the page's chain
     /// through the pool. An answer drops the chain from the failed set, and
     /// the notice goes with it.
+    ///
+    /// Spec 082 RF4: busy — spinner, full colour, taps ignored — until that
+    /// one read settles; an answer clears the notice, a failure leaves it.
     private func retryPageChain() {
-        guard let chain = browser.currentTab?.chainId else { return }
-        Task { _ = await pool.call(chainId: chain, method: "eth_blockNumber") }
+        guard let chain = browser.currentTab?.chainId, !chainRetrying else { return }
+        chainRetrying = true
+        VelaLog.notice(.rpc, "chain notice: retry chain=\(chain)")
+        Task {
+            let outcome = await pool.call(chainId: chain, method: "eth_blockNumber")
+            if case .ok = outcome {
+                VelaLog.notice(.rpc, "chain notice: retry → ok chain=\(chain)")
+            } else {
+                VelaLog.failure(.rpc, kind: "chain_retry_failed", "chain=\(chain)")
+            }
+            chainRetrying = false
+        }
     }
 
     /// The sheet's request is over. Drop it, and open the one waiting.
@@ -1641,9 +1705,13 @@ struct RootView: View {
                     respond(transportId, id, payload, userOpHash)
                     signingAnswered(incoming, payload: payload, userOpHash: userOpHash)
                 },
-                trackSubmitted: { [tracker, notifier] hash, ids, chain in
+                trackSubmitted: { [tracker, notifier] submission in
                     notifier.askOnceIfNeeded()
-                    tracker.submitted(userOpHash: hash, recordIds: ids, chainId: chain)
+                    tracker.submitted(submission)
+                },
+                // A write-ahead op the core proved never sent (spec 082 RJ1).
+                trackWithdrawn: { [tracker] hash, ids in
+                    tracker.withdrawn(userOpHash: hash, recordIds: ids)
                 },
                 recordsPersisted: { [activity] in activity.reconciled() },
                 nativeSymbol: { chainId in ChainCatalog.meta(chainId)?.nativeSymbol ?? "" },
@@ -1669,6 +1737,10 @@ struct RootView: View {
         )
         signing = controller
         controller.open(incoming)
+        // The answer follows what the tracker knows (spec 082 RJ4): every
+        // view reaches this request for as long as it lives — a sheet closed
+        // mid-submit included (`retiredSigning`), whose page still waits.
+        tracker.follow(controller) { [weak controller] view in controller?.trackerChanged(view) }
     }
 
     // MARK: - Split (spec 054)
@@ -2561,7 +2633,8 @@ struct RootView: View {
                 names.first { $0.chainId == chainId }?.displayName
                     ?? ChainCatalog.meta(chainId)?.displayName
                     ?? "chain-\(chainId)"
-            }
+            },
+            failures: VelaLog.recentFailures
         )
     }
 
@@ -2624,7 +2697,8 @@ struct RootView: View {
             explorerBase: ExplorerLinks.base(chainId: chain, store: shelf),
             track: tracker.view?.entry(userOpHash: live?.shownSign.pendingOpHash),
             typicalS: SigningController.typicalInclusionS(chainId: chain),
-            trustedSignerRoute: live?.trustedSignerRoute ?? false
+            trustedSignerRoute: live?.trustedSignerRoute ?? false,
+            feeStartFailure: live?.quoteStartFailure
         )
     }
 
@@ -2643,6 +2717,11 @@ struct RootView: View {
                 FlowHost(
                     model: flowModel(state),
                     onBack: { flows.back() },
+                    // The STACK's state this screen was built for — a detail
+                    // pushed as A2 is drawn as A3 when it names a contract,
+                    // and the model's state then never matched the top, so
+                    // nothing popped (082 X-HISTORY, device).
+                    onSheetClosed: { _ in flows.sheetClosed(state) },
                     onNavigate: { step in
                         // 导入表格 is the CORE's flag, not a push: the live
                         // router derives the send journey's state from the
@@ -2668,7 +2747,7 @@ struct RootView: View {
                             networkName: chain.displayName
                         )
                     },
-                    onSelectActivity: { activityRow = ($0, $1) },
+                    onSelectActivityItem: { activityItemId = $0 },
                     onSelectAsset: { selectAsset($0) },
                     onSendToken: { sendSelectedToken() },
                     onReceiveToken: { receiveSelectedToken() },
@@ -2934,8 +3013,11 @@ struct RootView: View {
     private func explorerLink(for state: FlowStateId) -> URL? {
         switch state {
         case .a2, .a3:
-            guard let feed = activity.feed, let item = selectedItem(in: feed) else { return nil }
-            let hash = item.txHash ?? feed.transactions.first { $0.id == item.id }?.txHash ?? ""
+            // The core's tx hash only (spec 082 RJ16): a record's stored op
+            // hash is never an explorer link.
+            guard let feed = activity.feed, let item = selectedItem(in: feed),
+                  let hash = item.txHash, !hash.isEmpty
+            else { return nil }
             return ExplorerLinks.tx(chainId: item.chainId, hash: hash, store: shelf)
         case .t2:
             guard let balance = wallet.balance,
@@ -2964,19 +3046,11 @@ struct RootView: View {
         }
     }
 
-    /// The feed item behind the tapped history row.
-    ///
-    /// Resolved against the SAME grouping the screen rendered, so the sheet
-    /// cannot open a different transaction than the one that was tapped.
+    /// The feed item behind the tapped activity row, by its id — the same
+    /// record however the feed moved since the tap. None once it is gone.
     private func selectedItem(in feed: FeedViewWire) -> FeedItemWire? {
-        let groups = WalletLive.activityGroups(
-            feed, loc: loc, hidden: wallet.balance?.hidden ?? false
-        )
-        guard groups.indices.contains(activityRow.group) else { return nil }
-        let before = groups[..<activityRow.group].reduce(0) { $0 + $1.rows.count }
-        let flat = before + activityRow.row
-        let items = FlowsLive.items(feed)
-        return items.indices.contains(flat) ? items[flat] : nil
+        guard let id = activityItemId else { return nil }
+        return FlowsLive.items(feed).first { $0.id == id }
     }
 
     /// The address field, owned by the core — and only on the sheet that has

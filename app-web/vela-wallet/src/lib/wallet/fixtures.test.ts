@@ -113,3 +113,14 @@ describe('fixture canon (zh mock verbatim)', () => {
 		expect(d1.sidebar.nav.find((n) => n.selected)?.id).toBe('wallet');
 	});
 });
+
+describe('the wide layout carries the narrow layout’s empty copy (spec 082 RB13, G1)', () => {
+	it('activity and assets, the same words the home uses', () => {
+		const en = resolveWalletMessages('en');
+		const wide = buildDesktopState('d1', en, () => '<svg/>');
+		const narrow = buildMobileState('h1', en, () => '<svg/>');
+		expect(wide.activitySection.empty).toEqual(narrow.activitySection.empty);
+		expect(wide.assetsSection.empty).toEqual(narrow.assetsSection.empty);
+		expect(wide.activitySection.empty?.title).toBe(en.activity.emptyTitle);
+	});
+});

@@ -38,8 +38,23 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.signing.core.SigningController
+import app.getvela.wallet.feature.signing.core.ClearRisk
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.signing.SigningTone
+import app.getvela.wallet.core.crux.CoreHost
+import app.getvela.wallet.core.crux.JsonShell
+import app.getvela.wallet.core.crux.asBridge
+import app.getvela.wallet.feature.signing.core.ClearOperation
+import app.getvela.wallet.feature.signing.core.ClearShellResult
+import app.getvela.wallet.feature.signing.core.ClearSigningEvent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import uniffi.vela_core_uniffi.ClearSigningCore
 import org.junit.Test
 
 /** Spec 044: the signing sheet is the four views, in the corpus's words. */
@@ -53,22 +68,108 @@ class SigningLiveTest {
     private val ctx = SigningLive.Context(strings, "Gnosis", Color.Red, "XDAI", "Parallel space", "0x88cCA0EeDbF2C4426110bbFc998F048689266894")
     private fun request(params: String) = IncomingRequest("r1", "eth_sendTransaction", params, "http://127.0.0.1:8137", "tab-1", 100)
 
+    /**
+     * The REAL `clear_signing` core, kicked off the way the sheet kicks it off
+     * ([SigningController.clearKickoff] and its first-call reader), for one
+     * `eth_sendTransaction` whose first call is [call].
+     */
+    private fun clearOf(call: org.json.JSONObject): ClearSigningView = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val host = CoreHost(
+                bridge = ClearSigningCore().asBridge(), scope = scope, initial = ClearSigningView(), serializer = ClearSigningView.serializer(),
+                perform = JsonShell.perform(ClearOperation.serializer(), ClearShellResult.serializer()) { op ->
+                    when (op) {
+                        is ClearOperation.HttpGet -> ClearShellResult.DescriptorFetched(op.path, null)
+                        is ClearOperation.RpcEthCall -> ClearShellResult.RpcAnswer(op.probe, op.chain_id, op.to, null, true)
+                        is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
+                        is ClearOperation.Timer -> ClearShellResult.TimedOut(op.token)
+                        ClearOperation.Now -> ClearShellResult.Clock(1.0e12)
+                    }
+                },
+                escapedFailure = JsonShell.escapedFailure(ClearOperation.serializer(), ClearShellResult.serializer(), fallback = ClearShellResult.Clock(1.0e12)) { ClearShellResult.Clock(1.0e12) },
+            )
+            val params = org.json.JSONArray().put(call).toString()
+            host.dispatch(SigningController.clearKickoff("eth_sendTransaction", params, 100, "http://127.0.0.1:8137")!!, ClearSigningEvent.serializer())
+            withTimeout(10_000) { host.view.first { it.resolved } }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    private fun plainModel(call: org.json.JSONObject) = run {
+        val params = org.json.JSONArray().put(call).toString()
+        val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "http://127.0.0.1:8137", null, 100, null), confirm_gate_open = true)
+        SigningLive.model(drawn, request(params), sign, clearOf(call), GuardView(), FeeView(confirm_fee_ready = true), ctx)
+    }
+
+    /**
+     * Spec 082 RC1 (G14): a dApp's plain value transfer is the CORE's verdict
+     * (`ClearSurface::PlainSend`), drawn with the fee row's symbol — the look
+     * 079 gave it (Send · −0.001 XDAI · Recipient), no longer this app's own
+     * interception of empty calldata.
+     */
     @Test
     fun `a plain native transfer reads as Send, not as a blind contract call`() {
-        val params = """[{"to":"$founder","value":"0x38d7ea4c68000"}]"""
-        val clear = ClearSigningView(resolving = false, resolved = true, result = null, surface = ClearSurface.BlindTransaction, confirm = ClearConfirm.ConfirmIntent("send"))
-        val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "http://127.0.0.1:8137", null, 100, null), confirm_gate_open = true)
-        val model = SigningLive.model(drawn, request(params), sign, clear, GuardView(), FeeView(confirm_fee_ready = true), ctx)
+        val model = plainModel(org.json.JSONObject().put("to", founder).put("value", "0x38d7ea4c68000"))
         val intent = model.blocks.filterIsInstance<SigningBlock.Intent>().single()
         assertEquals(strings.t("componentsUi.signing.intentSend"), intent.text)
         val amount = model.blocks.filterIsInstance<SigningBlock.Amount>().single()
+        assertEquals("−", amount.line.sign)
         assertEquals("0.001", amount.line.value)
         assertEquals("XDAI", amount.line.symbol)
         assertEquals(founder, model.blocks.filterIsInstance<SigningBlock.Party>().single().address)
+        assertTrue("no blind warning", model.blocks.none { it is SigningBlock.Warning })
         assertEquals("127.0.0.1:8137", model.dappName)
         assertEquals("the host is said once, as the name (spec 079 F14)", "", model.dappHost)
         assertEquals(strings.t("componentsUi.signing.confirmSend"), model.confirmAction)
         assertTrue(model.confirmEnabled)
+    }
+
+    /** RC3: nothing moves — "Send · 0", no minus, and the neutral confirm, never "Confirm send". */
+    @Test
+    fun `a zero-value empty call is the same card with no minus and a neutral confirm`() {
+        for (call in listOf(
+            org.json.JSONObject().put("to", founder).put("value", "0x0"),
+            org.json.JSONObject().put("to", founder),
+            // A JSON null is absent (RC6: `optString` would have read "null").
+            org.json.JSONObject().put("to", founder).put("value", org.json.JSONObject.NULL),
+        )) {
+            val model = plainModel(call)
+            val amount = model.blocks.filterIsInstance<SigningBlock.Amount>().single()
+            assertEquals(call.toString(), "", amount.line.sign)
+            assertEquals(call.toString(), "0", amount.line.value)
+            assertEquals(call.toString(), strings.t("componentsUi.signing.confirmLabel"), model.confirmAction)
+        }
+    }
+
+    /** RC4/RC6: a value the core cannot print exactly is refused — the blind rung, never a calm "0". */
+    @Test
+    fun `a number where the value should be is blind, never a calm zero`() {
+        val model = plainModel(org.json.JSONObject().put("to", founder).put("value", 1000))
+        assertTrue("blind: ${model.blocks}", model.blocks.none { it is SigningBlock.Amount })
+        assertTrue(model.blocks.any { it is SigningBlock.Warning })
+        assertEquals("the reader passes the number as text", "1000", SigningController.firstCall("""[{"to":"$founder","value":1000}]""")?.third)
+    }
+
+    /**
+     * RC6 on the submit side: a leg the reader refuses (a number where the
+     * value should be, no `to`, a value that is not hex) refuses the whole
+     * batch. Dropping it sent the others alone — a batch the dApp never asked
+     * for, answered as if it had run.
+     */
+    @Test
+    fun `a batch with an unreadable leg is refused whole, never sent a leg short`() {
+        val ok = """{"to":"$founder","value":"0x1"}"""
+        assertEquals(2, SignExecutor.callsOf("wallet_sendCalls", """[{"calls":[$ok,$ok]}]""")?.size)
+        for (bad in listOf("""{"to":"$founder","value":1000}""", """{"value":"0x1"}""", """{"to":"$founder","value":"0x12zz"}""")) {
+            assertNull(bad, SignExecutor.callsOf("wallet_sendCalls", """[{"calls":[$ok,$bad]}]"""))
+            assertNull(bad, SignExecutor.callsOf("wallet_sendCalls", """[{"calls":[$bad,$ok]}]"""))
+        }
+        // One call: a number is refused, a JSON null is zero.
+        assertNull(SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":1000}]"""))
+        assertEquals("0", SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":null}]""")?.single()?.value)
+        assertEquals("1000", SignExecutor.callsOf("eth_sendTransaction", """[{"to":"$founder","value":"0x3e8"}]""")?.single()?.value)
     }
 
     @Test
@@ -297,9 +398,52 @@ class SigningLiveTest {
         val none = SigningLive.simBlocks(SigningController.SimOutcome.Ready(emptyList()), ctx).single() as SigningBlock.Balances
         assertEquals(strings.t("componentsUi.signing.simResultNoChange"), none.note)
         assertTrue(none.rows.isEmpty())
-        val unavailable = SigningLive.simBlocks(SigningController.SimOutcome.Unavailable, ctx).single() as SigningBlock.Warning
+        val unavailable = SigningLive.simBlocks(SigningController.SimOutcome.Notice(ClearRisk.Caution, "componentsUi.signing.simUnavailableWarning"), ctx).single() as SigningBlock.Warning
         assertEquals(strings.t("componentsUi.signing.simUnavailableWarning"), unavailable.text)
+        assertEquals("could not check is a caution, never a danger", SigningTone.Caution, unavailable.tone)
+        val reverts = SigningLive.simBlocks(SigningController.SimOutcome.Notice(ClearRisk.Danger, "componentsUi.signing.simWillFailReason", "STF"), ctx).single() as SigningBlock.Warning
+        assertEquals(SigningTone.Danger, reverts.tone)
+        assertEquals(strings.t("componentsUi.signing.simWillFailReason", mapOf("reason" to "STF")), reverts.text)
         assertTrue(SigningLive.simBlocks(null, ctx).isEmpty())
+    }
+
+    /**
+     * Spec 082 RJ15 (G49): a signed amount is the core's (`formatSignedTokenAmount`)
+     * — a dust delta is written exactly, never `−0`, the minus is U+2212, and a
+     * zero is not drawn at all.
+     */
+    @Test
+    fun `a signed amount never reads minus zero and a zero is not drawn`() {
+        val dust = SigningLive.simBlocks(
+            SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000"), TrustSimJudgment.Erc20Trusted(token = "0xddaf", delta = "0", symbol = "USDC", decimals = 6))),
+            ctx,
+        ).single() as SigningBlock.Balances
+        assertEquals("the zero USDC move is not a row", listOf("XDAI"), dust.rows.map { it.symbol })
+        assertEquals("\u22120.000000000000001", dust.rows.single().delta)
+        assertTrue("never −0", dust.rows.none { it.delta == "\u22120" || it.delta == "-0" })
+
+        val zeros = SigningLive.simBlocks(SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("0"))), ctx).single() as SigningBlock.Balances
+        assertTrue(zeros.rows.isEmpty())
+        assertEquals("nothing of theirs moves", strings.t("componentsUi.signing.simResultNoChange"), zeros.note)
+    }
+
+    /**
+     * Spec 082 RJ13 (G48): the reason under a failed fee is the core's
+     * (`feeFailureReasonKey`) — the relay's failure, or the chain's node,
+     * rate-limited or out of reach and named — never Vela's words for a node
+     * that did not answer, and nothing at all for a failure no network caused.
+     */
+    @Test
+    fun `the fee row's reason is the core's, naming the chain's node when that is what failed`() {
+        fun warning(failure: app.getvela.wallet.feature.send.core.FeeFailure) =
+            (SigningLive.feeModel(ClearSigningView(), FeeView(failed = failure), ctx) as FeeModel.OnChain).warning
+        assertEquals(strings.t("home.balanceDetailStatusRetrying"), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = true)))
+        assertEquals(strings.t("explore.chainDown", mapOf("chain" to "Gnosis")), warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false)))
+        assertTrue("the chain is named", warning(app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(rate_limited = false))!!.contains("Gnosis"))
+        assertEquals(strings.t("componentsUi.funding.denialNetworkError"), warning(app.getvela.wallet.feature.send.core.FeeFailure.QuoteUnavailable))
+        assertNull(warning(app.getvela.wallet.feature.send.core.FeeFailure.CalculationFailed))
+        val down = SigningLive.feeModel(ClearSigningView(), FeeView(failed = app.getvela.wallet.feature.send.core.FeeFailure.ChainRead(true)), ctx) as FeeModel.OnChain
+        assertTrue("a chain read that failed is tapped to ask again", down.tappable)
     }
 
     // -- Issue #262: the coin that pays --------------------------------------

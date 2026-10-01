@@ -20,6 +20,7 @@ import { getAllNetworksSync, networkId, chainName, nativeSymbol } from './networ
 import { loadCustomTokens } from './records';
 import { poolRpcCall, getFailedRpcChains } from './rpc-pool';
 import { priceShouldNull } from './fault-injection';
+import { balanceReadPlan } from '$lib/core/kernels';
 import { fetchChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
 // The platform seam for the native-coin price rules (spec 017 wave C): web
 // resolves to `native-price.web.ts` and the CORE decides; iOS/Android resolve
@@ -433,22 +434,6 @@ interface TokenSlot {
 	knownDecimals: number | null;
 }
 
-/**
- * Chains whose native asset is itself an ERC-20 — the chain data names that
- * contract as the "wrapped" native, but nothing is wrapped: `balanceOf` and
- * the native balance are one balance. Listing both doubles the holding.
- */
-const NATIVE_TOKEN_AS_ERC20: Readonly<Record<number, string>> = {
-	// Celo mainnet — the GoldToken.
-	42220: '0x471ece3750da237f93b8e339c536989b8978a438',
-	// Celo Alfajores.
-	44787: '0xf194afdf50b03e69bd7d057c1aa9e10c9954e4c9'
-};
-
-export function wrappedNativeIsTheNative(chainId: number, wrappedNative: string): boolean {
-	return NATIVE_TOKEN_AS_ERC20[chainId] === wrappedNative.toLowerCase();
-}
-
 async function queryChainAssets(
 	address: string,
 	chainId: number,
@@ -472,47 +457,54 @@ async function queryChainAssets(
 	const balIdx: number[] = []; // calls index for each slot's balance
 	const decIdx: (number | null)[] = []; // calls index for each slot's decimals
 
-	// --- Native token ---
-	addSlot('native', nativeCurrency.symbol, nativeCurrency.name, null, nativeCurrency.decimals);
-	balIdx.push(calls.length);
-	calls.push(mc(MULTICALL3, encGetEthBalance(address)));
-	decIdx.push(null);
-
-	// --- Stablecoins ---
-	for (const s of stables) {
-		addSlot('stable', s.symbol, s.symbol, s.contract, null);
-		balIdx.push(calls.length);
-		calls.push(mc(s.contract, encBalanceOf(address)));
-		decIdx.push(calls.length);
-		calls.push(mc(s.contract, encDecimals()));
-	}
-
-	// --- Wrapped native token ---
-	// Not on a chain whose "wrapped" native IS the native (spec 038, the
-	// founder's Celo report): CELO is an ERC-20 at the GoldToken address, so
-	// the native balance call and the token's balanceOf return the SAME
-	// coins, and the list read CELO 6.96 + WCELO 6.96 — counted twice in the
-	// total. The address still quotes the native price below.
-	if (wrappedNative && !wrappedNativeIsTheNative(chainId, wrappedNative)) {
-		addSlot(
-			'wrapped',
-			'W' + nativeCurrency.symbol,
-			'Wrapped ' + nativeCurrency.name,
-			wrappedNative,
-			null
-		);
-		balIdx.push(calls.length);
-		calls.push(mc(wrappedNative, encBalanceOf(address)));
-		decIdx.push(calls.length);
-		calls.push(mc(wrappedNative, encDecimals()));
-	}
-
-	// --- Custom ERC-20s ---
-	for (const ct of customTokens) {
-		addSlot('custom', ct.symbol, ct.name, ct.contractAddress, ct.decimals);
-		balIdx.push(calls.length);
-		calls.push(mc(ct.contractAddress, encBalanceOf(address)));
-		decIdx.push(null); // decimals already known
+	// Which balances this chain's read covers, and in what order, is the
+	// CORE's (spec 082 RE9, `balance_dashboard::read_plan`): the native coin
+	// (unless the chain has none), the registry stablecoins, the wrapped
+	// native (unless it IS the native — Celo's GoldToken, counted twice before
+	// spec 038), then the person's tokens; a contract once, a custom entry
+	// lending a registry slot its saved metadata. This only builds the calls.
+	const plan = balanceReadPlan(
+		chainId,
+		stables.map((s) => ({ symbol: s.symbol, contract: s.contract })),
+		wrappedNative,
+		customTokens.map((ct) => ({
+			contract: ct.contractAddress,
+			symbol: ct.symbol,
+			name: ct.name,
+			decimals: ct.decimals
+		}))
+	);
+	for (const slot of plan) {
+		switch (slot.kind) {
+			case 'native':
+				addSlot(
+					'native',
+					nativeCurrency.symbol,
+					nativeCurrency.name,
+					null,
+					nativeCurrency.decimals
+				);
+				balIdx.push(calls.length);
+				calls.push(mc(MULTICALL3, encGetEthBalance(address)));
+				decIdx.push(null);
+				break;
+			case 'wrapped':
+				// The shell names the chain's coin ("W" + its own spelling).
+				addSlot(
+					'wrapped',
+					'W' + nativeCurrency.symbol,
+					'Wrapped ' + nativeCurrency.name,
+					slot.contract,
+					slot.known_decimals
+				);
+				pushTokenCalls(slot.contract!, slot.known_decimals);
+				break;
+			case 'stable':
+			case 'custom':
+				addSlot(slot.kind, slot.symbol, slot.name, slot.contract, slot.known_decimals);
+				pushTokenCalls(slot.contract!, slot.known_decimals);
+				break;
+		}
 	}
 
 	// --- DEX price queries ---
@@ -785,6 +777,18 @@ async function queryChainAssets(
 	return tokens;
 
 	// --- Local helpers ---
+
+	/** A token's `balanceOf`, and its `decimals()` only when the plan does not know them. */
+	function pushTokenCalls(contract: string, knownDecimals: number | null) {
+		balIdx.push(calls.length);
+		calls.push(mc(contract, encBalanceOf(address)));
+		if (knownDecimals === null) {
+			decIdx.push(calls.length);
+			calls.push(mc(contract, encDecimals()));
+		} else {
+			decIdx.push(null);
+		}
+	}
 
 	function addSlot(
 		category: TokenCategory,

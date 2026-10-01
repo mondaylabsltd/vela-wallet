@@ -315,7 +315,6 @@
   "txRemaining": "~{{remaining}}s remaining",
   "txTypicalTime": "{{chainName}} typically confirms in ~{{estSecs}}s",
   "txRetryBtn": "Try Again",
-  "txErrorTimeout": "Transaction submitted but confirmation timed out. Check history later.",
   "txErrorBundlerLoop": "Gas account balance keeps being rejected by the bundler. Try again later or increase gas tier.",
   "txErrorBundlerFund": "Bundler account needs more gas. Please fund it in Settings.",
   "txErrorPublicKey": "Public key not found for this account",
@@ -1149,7 +1148,7 @@
    "statusConfirmed": "Confirmed",
    "statusSubmitted": "Submitted",
    "statusFailed": "Failed",
-   "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged. Open the explorer below for the reason, or go back and try again."
+   "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged."
   },
   "detail": {
    "received": "Received",
@@ -1408,7 +1407,7 @@
    "verifiedAbiSummary": "The contract is verified on the block explorer and its parameters decode in full, but no ERC-7730 descriptor gives them meaning.",
    "verifiedAbiWarning": "No ERC-7730 descriptor for this contract — the values above are a direct decode of the verified on-chain ABI. Check them.",
    "bestEffortSummary": "Calling {{fn}} — read from its public function signature, not a verified descriptor.",
-   "simUnavailableWarning": "This transaction couldn’t be simulated (the RPC refused) — Vela can’t predict what it would do. Unless you completely trust this site, reject it.",
+   "simUnavailableWarning": "Vela couldn’t check what this transaction does. Review it before you sign.",
    "drainSummary": "The site calls this a free claim, but the simulation shows assets leaving your wallet.",
    "drainWarning": "Assets leave that the site’s stated intent never mentioned — this looks very much like a drain. Reject it.",
    "selectorNotListed": "Unable to decode — no ERC-7730 descriptor, selector not listed ({{bytes}} bytes)",
@@ -1457,6 +1456,8 @@
    "selfCallBlockedLegBody": "Step {{index}} of this request would change who controls your wallet ({{function}}). Signing it once could hand your wallet to someone else, so Vela refuses the whole request. Nothing was signed.",
    "selfCallBlockedSafeTx": "This request asks your key to authorise a Safe transaction for later execution. Vela refuses it — a signature like that can be used without you. Nothing was signed.",
    "stillConfirming": "Not on-chain yet. Vela keeps checking — don't send it again.",
+   "maybeSent": "It may have been sent. Vela keeps checking — don't send it again.",
+   "refused": "The network refused it — nothing was sent.",
    "unknownOutcome": "Still unconfirmed after 24 hours.",
    "openSigner": "Continue to signing page",
    "signerDown": "Couldn't open the signing page. Check your connection."
@@ -1855,7 +1856,9 @@
   "loadOffline": "Unstable connection — the page didn't open.",
   "loadNotFound": "Site not found. Check the address.",
   "loadCertificate": "This site's certificate is invalid, so Vela blocked it.",
+  "loadProxy": "Your proxy isn't responding.",
   "loadRetrying": "Retrying…",
-  "chainDown": "Can't reach {{chain}} — page data may be incomplete."
+  "chainDown": "Can't reach {{chain}} — page data may be incomplete.",
+  "requestOpen": "Finish or cancel the request first"
  }
 }

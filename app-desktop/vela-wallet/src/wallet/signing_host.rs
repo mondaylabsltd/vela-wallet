@@ -46,6 +46,7 @@ use vela_core::app::sign_request::{
 
 use crate::ceremony::CeremonyChannel;
 use crate::core_host::{CoreHost, Pending};
+use crate::diag::{short, vlog};
 use crate::executor::now_ms;
 use crate::executor::passkey::WindowHandle;
 use crate::executor::sign_request::{self as sign_executor, SignAnswer, SignContext};
@@ -71,27 +72,163 @@ impl SpeedHost for SigningHost {
 }
 
 /// Why the fee in force needs asking again, if it does: the core's failure,
-/// or — the deployment read could not answer, so nothing reached the core —
-/// the same thing an unreachable relay is (spec 079).
-fn requote_failure(fee: &FeeView, unanswered: bool) -> Option<FeeFailure> {
-    fee.failed
-        .or_else(|| unanswered.then_some(FeeFailure::QuoteUnavailable))
+/// or — the deployment read got no answer, so nothing reached the core — the
+/// chain read's (spec 082 RJ13, G48): the chain's node, rate-limited or out
+/// of reach, never "Vela" and never the person's network.
+fn requote_failure(fee: &FeeView, chain_read: Option<FeeFailure>) -> Option<FeeFailure> {
+    fee.failed.or(chain_read)
 }
 
-/// The wait before automatic re-quote `attempt`, or `None`: only while the
-/// person can still decide (open, not approved), never over a measurement
-/// already out, and never for a failure no retry fixes (the core's schedule,
-/// `fee_policy::requote_delay_ms`: 3 s, 6 s, 12 s, then every 15 s).
-fn requote_wait(
-    failure: Option<FeeFailure>,
-    attempt: u32,
-    on_form: bool,
-    measuring: bool,
-) -> Option<u32> {
-    if !on_form || measuring {
-        return None;
+/// When the fee in force is asked again by itself (spec 079 FR-008, 082
+/// RJ12, G47) — pure, on the host's clock, so the cadence is provable.
+///
+/// The waits are the core's (`fee_policy::requote_delay_ms`: 3 s, 6 s, then
+/// every 8 s) and each is counted from the START of the re-quote before it,
+/// never from its end: an ask is bounded by `REQUOTE_TIMEOUT_MS` (6 s), which
+/// is shorter than every wait after the first, so an ask that hangs — a
+/// black-holed relay holds its connection long after the relay is back — is
+/// superseded by the next one, and the fee is back within 8 + 6 = 14 s of
+/// the relay returning (SC-003). The device pass measured 15.8–19 s with the
+/// waits counted from each failure and a hung ask waited out.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Requoter {
+    /// Automatic re-quotes fired since the last good quote.
+    fired: u32,
+    /// When the next one is due (epoch ms).
+    due_ms: Option<f64>,
+    /// When the one out now began.
+    out_since_ms: Option<f64>,
+    /// Why the fee last failed — the schedule's step and the log's cause.
+    last_failure: Option<FeeFailure>,
+    /// The re-quote whose failure was last logged — one line each.
+    reported: u32,
+}
+
+/// What the host does next about the fee in force.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RequoteStep {
+    /// Set the one timer for `due_ms`.
+    Schedule { due_ms: f64 },
+    /// Log it: `fee: quote failed chain=… cause=… re-quote #n in N ms`.
+    Failed {
+        cause: String,
+        attempt: u32,
+        in_ms: f64,
+    },
+    /// Ask again now — over a measurement still out, when `supersede` (the
+    /// last re-quote ran past its bound).
+    Fire { attempt: u32, supersede: bool },
+    /// Log it: `fee: quote back chain=… after n re-quotes`.
+    Back { after: u32 },
+}
+
+impl Requoter {
+    /// The fee in force moved: a failure (`failure`), a measurement out, a
+    /// good quote — or the sheet stopped taking a fee (`on_form` false).
+    #[must_use]
+    pub fn observe(
+        &mut self,
+        failure: Option<FeeFailure>,
+        measuring: bool,
+        on_form: bool,
+        now_ms: f64,
+    ) -> Vec<RequoteStep> {
+        if !on_form {
+            // Nothing re-prices under a slide that has gone.
+            *self = Self::default();
+            return Vec::new();
+        }
+        if measuring {
+            return Vec::new();
+        }
+        let Some(failure) = failure else {
+            let after = self.fired;
+            *self = Self::default();
+            return if after > 0 {
+                vec![RequoteStep::Back { after }]
+            } else {
+                Vec::new()
+            };
+        };
+        self.last_failure = Some(failure);
+        let attempt = self.fired + 1;
+        let mut steps = Vec::new();
+        let due = match self.due_ms {
+            Some(due) => due,
+            None => {
+                let Some(wait) = vela_core::app::fee_policy::requote_delay_ms(failure, attempt)
+                else {
+                    // No retry fixes it (no public key, a calculation that
+                    // cannot come out): the row keeps its dash.
+                    return Vec::new();
+                };
+                let due = (self.out_since_ms.unwrap_or(now_ms) + f64::from(wait)).max(now_ms);
+                self.due_ms = Some(due);
+                steps.push(RequoteStep::Schedule { due_ms: due });
+                due
+            }
+        };
+        if self.reported != attempt {
+            self.reported = attempt;
+            steps.push(RequoteStep::Failed {
+                cause: format!("{failure:?}"),
+                attempt,
+                in_ms: (due - now_ms).max(0.0),
+            });
+        }
+        steps
     }
-    vela_core::app::fee_policy::requote_delay_ms(failure?, attempt)
+
+    /// The timer set by the last `Schedule` fired at `now_ms`.
+    #[must_use]
+    pub fn due(
+        &mut self,
+        failure: Option<FeeFailure>,
+        measuring: bool,
+        on_form: bool,
+        now_ms: f64,
+    ) -> Vec<RequoteStep> {
+        match self.due_ms {
+            // Cancelled or moved: a stale timer.
+            Some(due) if now_ms + 1.0 >= due => self.due_ms = None,
+            _ => return Vec::new(),
+        }
+        if !on_form || (!measuring && failure.is_none()) {
+            return self.observe(failure, measuring, on_form, now_ms);
+        }
+        let mut steps = Vec::new();
+        let supersede = measuring;
+        if measuring {
+            if self.out_since_ms.is_none() {
+                // A measurement the person started, not one of these: its
+                // own answer reschedules.
+                return Vec::new();
+            }
+            // The last re-quote is still out past its bound (RJ12).
+            let cause = "timeout".to_owned();
+            steps.push(RequoteStep::Failed {
+                cause,
+                attempt: self.fired,
+                in_ms: 0.0,
+            });
+        }
+        self.fired += 1;
+        self.out_since_ms = Some(now_ms);
+        steps.push(RequoteStep::Fire {
+            attempt: self.fired,
+            supersede,
+        });
+        // The next one, counted from this start: an answer cancels it.
+        let failure = failure
+            .or(self.last_failure)
+            .unwrap_or(FeeFailure::QuoteUnavailable);
+        if let Some(wait) = vela_core::app::fee_policy::requote_delay_ms(failure, self.fired + 1) {
+            let due = now_ms + f64::from(wait);
+            self.due_ms = Some(due);
+            steps.push(RequoteStep::Schedule { due_ms: due });
+        }
+        steps
+    }
 }
 
 /// The simulation's deltas as the fee machine reads them (spec 083 fee):
@@ -275,19 +412,35 @@ pub struct SigningHost {
     /// Empty until the simulation answers, and empty forever when it cannot —
     /// the sheet says so rather than showing an empty list as "nothing moves".
     pub sim: Vec<vela_core::app::token_trust::TrustSimJudgment>,
-    /// The simulation was attempted and could not answer (no `eth_simulateV1`
-    /// on this endpoint, every RPC down, params refused). A different sentence
-    /// from "it ran and found nothing".
-    pub sim_unavailable: bool,
-    /// The hash already handed to the tracker. The handoff stays on the view
-    /// after it is taken, and the tracker merges by hash anyway, but handing
-    /// the same submission over on every render is a poll nobody asked for.
-    handed_off: Option<String>,
+    /// What the simulation's answer says beside its balances (spec 082 RG6,
+    /// the core's `sim_outcome::notice`): a revert is a danger, a node that
+    /// could not check is a caution — a different sentence from "it ran and
+    /// found nothing", which says nothing here.
+    pub sim_notice: Option<vela_core::app::sim_outcome::SimNotice>,
+    /// The submission already handed to the tracker: the records it closes
+    /// (the key it is deduped by — spec 082: a may-have-been-sent op is
+    /// handed over under its local hash, and the dedupe must not hang on a
+    /// hash) and the hash it went under. The handoff stays on the view after
+    /// it is taken; handing the same submission over on every render is a
+    /// poll nobody asked for.
+    handed_off: Option<(Vec<String>, String)>,
+    /// The last hand-off fed to the tracker, whole (spec 082 RJ1): the
+    /// write-ahead hands the op over (`maybe_sent`), and the relay taking it
+    /// hands the SAME hash and records over again with `admitted`. Keyed on
+    /// the records alone, that second one was never fed — the tracker never
+    /// learnt the relay held the op, and two `not_found` answers past the
+    /// grace ended an accepted payment "not sent".
+    handoff_fed: Option<HandoffKey>,
+    /// The last write-ahead withdrawal fed to the tracker (RJ1), once each.
+    withdraw_fed: Option<vela_core::app::sign_request::SignTrackerWithdraw>,
+    /// The tracker's entry for the in-flight op as last told to the core
+    /// (spec 082 RJ4): `(op hash, status, tx hash)`.
+    tracked_fed: Option<Tracked>,
     /// Spec 079: how the request ended, read off the answer the core sent —
     /// a message signed, a transaction landed, or the operation hash because
     /// the wait ran out. The page keeps it on screen after the core closes
     /// the column (the tick, or "not landed yet").
-    pub ending: Option<crate::signing::status::SigningEnding>,
+    pub ending: Option<vela_core::app::sign_request::SignEnding>,
     /// Spec 079: when this column first saw the operation accepted — the
     /// receipt's ring starts here until the tracker has its own clock.
     pub seen_submitted_ms: Option<f64>,
@@ -297,9 +450,36 @@ pub struct SigningHost {
     /// Spec 079: automatic re-quotes since the last good quote, and the
     /// number of the one scheduled — a newer schedule, an approval or a good
     /// quote makes an older timer a no-op.
-    requote_attempt: u32,
-    requote_scheduled: Option<u64>,
+    requoter: Requoter,
+    /// The timer the requoter's last `Schedule` set; an older one is a no-op.
     requote_seq: u64,
+    /// Submits running on a worker (the `Streaming` arm): counted from the
+    /// dispatch until the core has their result. A request whose page left
+    /// keeps its machines only while one runs (spec 082 RB2).
+    streaming: u32,
+}
+
+/// Whether a request's machines keep running, unseen, once its column goes
+/// (spec 079 FR-002, 082 RB2). Nothing is owed once the page has its answer.
+/// A page that LEFT is owed nothing either — but a submit still running for
+/// it may already have POSTed, and its `OpSubmitted` must reach the core so
+/// the operation is recorded and followed; once that run ends, nothing is
+/// left to do. Otherwise a request closed after its approval runs on until
+/// the page has its answer.
+#[must_use]
+pub fn runs_unseen(
+    approved: bool,
+    responded: bool,
+    asker_gone: bool,
+    submit_running: bool,
+) -> bool {
+    if responded {
+        return false;
+    }
+    if asker_gone {
+        return submit_running;
+    }
+    approved
 }
 
 impl SigningHost {
@@ -349,7 +529,7 @@ impl SigningHost {
         let (view, clear_view, guard_view) = (sign.view(), clear.view(), guard.view());
         let mut host = Self {
             sim: Vec::new(),
-            sim_unavailable: false,
+            sim_notice: None,
             transport_id: request.transport_id.clone(),
             request_id: request.id.clone(),
             responded: false,
@@ -375,12 +555,15 @@ impl SigningHost {
             page_asked: false,
             closed: false,
             handed_off: None,
+            handoff_fed: None,
+            withdraw_fed: None,
+            tracked_fed: None,
             ending: None,
             seen_submitted_ms: None,
             approved: false,
-            requote_attempt: 0,
-            requote_scheduled: None,
+            requoter: Requoter::default(),
             requote_seq: 0,
+            streaming: 0,
         };
         // The stored default speed (spec 069), read now and followed while
         // the sheet is up: the column sits beside Settings, which may change it.
@@ -398,6 +581,11 @@ impl SigningHost {
             .view()
             .signer_url;
         host.ctx.follow_sign_in(&page);
+        // Spec 082 RJ4: the answer to the page follows what the tracker knows
+        // of the op this request submitted.
+        let tracker = crate::resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx);
+        cx.observe(&tracker, |host, _, cx| host.forward_tracked(cx))
+            .detach();
         // The Trusted Signer's channel speaks up whenever a ceremony waits,
         // ends, or wants the page opened. The stream ends with the host.
         cx.spawn(async move |host, cx| {
@@ -580,16 +768,18 @@ impl SigningHost {
         cx.spawn(async move |host, cx| {
             let fee_calls = calls.clone();
             let sim_wallet = wallet.clone();
-            let deltas = cx
+            let outcome = cx
                 .background_executor()
                 .spawn(async move { crate::executor::sim::simulate(&sim_wallet, &calls, chain_id) })
                 .await;
-            let Some(deltas) = deltas else {
+            let notice = vela_core::app::sim_outcome::notice(&outcome);
+            let vela_core::app::sim_outcome::SimOutcome::Deltas { deltas } = outcome else {
+                // A revert moves nothing, and a node that could not check says
+                // nothing about what moves. NOT "nothing moves" — the notice is
+                // the sentence for each.
                 host.update(cx, |host, cx| {
-                    // Could not ask. NOT "nothing moves" — the sheet has a
-                    // different sentence for each, and conflating them would
-                    // tell somebody a drain is a no-op.
-                    host.sim_unavailable = true;
+                    host.sim = Vec::new();
+                    host.sim_notice = notice;
                     cx.notify();
                 })
                 .ok();
@@ -614,6 +804,7 @@ impl SigningHost {
                 .await;
             host.update(cx, |host, cx| {
                 host.sim = judgments;
+                host.sim_notice = notice;
                 cx.notify();
             })
             .ok();
@@ -650,11 +841,16 @@ impl SigningHost {
 
     pub fn approve(&mut self, cx: &mut Context<Self>) {
         self.approved = true;
+        // The dApp's answer window starts at the tap (spec 082 RA12).
+        self.ctx.approved_at_ms = Some(now_ms());
         self.phone_stop = None;
         // Nothing re-prices under a slide that has gone.
-        self.requote_scheduled = None;
+        self.requoter = Requoter::default();
+        self.requote_seq += 1;
         let mut opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
-        opts.balance_changes = approved_changes(&self.sim, self.sim_unavailable);
+        // 083 F1: the lines the sheet drew under "Balance changes" — none when
+        // the simulation reverted or could not run (its notice stood there).
+        opts.balance_changes = approved_changes(&self.sim, self.sim_notice.is_some());
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
     }
 
@@ -899,10 +1095,16 @@ impl SigningHost {
         self.speed.measuring()
     }
 
-    /// The fee in force was never asked of the core: its deployment read
-    /// could not answer.
-    pub fn fee_unanswered(&self) -> bool {
-        self.speed.unanswered()
+    /// The fee in force was never asked of the core: its deployment read got
+    /// no answer (spec 082 RJ13) — the chain read's failure, and the chain it
+    /// names, for the fee row's words.
+    pub fn fee_unanswered(&self) -> Option<crate::signing::live::ChainReadFailure> {
+        self.speed
+            .chain_read()
+            .map(|failure| crate::signing::live::ChainReadFailure {
+                failure,
+                chain_id: self.chain_id,
+            })
     }
 
     /// The person can still decide: the sheet is up, nothing is signing,
@@ -916,54 +1118,85 @@ impl SigningHost {
             && !self.closed
     }
 
-    /// Spec 079 FR-008: a quote that failed because the service could not be
-    /// reached is asked again at a growing interval while the sheet is open
-    /// and unapproved. The device pass had the row read "点击重试" with the
-    /// relay down, and stay that way after it came back.
+    /// Spec 079 FR-008, 082 RJ12: a quote that failed for a reason that can
+    /// pass is asked again by itself while the sheet is open and unapproved,
+    /// on the requoter's clock. The device pass had the row read "点击重试"
+    /// with the relay down and stay that way after it came back, and then
+    /// (082) come back 15.8–19 s after the relay did, with no log line.
     fn schedule_requote(&mut self, cx: &mut Context<Self>) {
-        let failure = requote_failure(self.speed.fee_view(), self.speed.unanswered());
-        if failure.is_none() {
-            // A good quote (or one still out): the count starts over.
-            if !self.speed.measuring() {
-                self.requote_attempt = 0;
+        let failure = requote_failure(self.speed.fee_view(), self.speed.chain_read());
+        let steps =
+            self.requoter
+                .observe(failure, self.speed.measuring(), self.on_form(), now_ms());
+        self.run_requote(steps, cx);
+    }
+
+    /// The requoter's timer fired.
+    fn requote_due(&mut self, seq: u64, cx: &mut Context<Self>) {
+        if seq != self.requote_seq {
+            return;
+        }
+        let failure = requote_failure(self.speed.fee_view(), self.speed.chain_read());
+        let steps = self
+            .requoter
+            .due(failure, self.speed.measuring(), self.on_form(), now_ms());
+        self.run_requote(steps, cx);
+    }
+
+    /// Carry out what the requoter decided, and say it in the log (FR-018:
+    /// the chain, the cause, which re-quote and when — never an address).
+    fn run_requote(&mut self, steps: Vec<RequoteStep>, cx: &mut Context<Self>) {
+        let chain = self.chain_id;
+        for step in steps {
+            match step {
+                RequoteStep::Schedule { due_ms } => {
+                    self.requote_seq += 1;
+                    let seq = self.requote_seq;
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        reason = "a wait of seconds"
+                    )]
+                    let wait = (due_ms - now_ms()).max(0.0) as u64;
+                    cx.spawn(async move |host, cx| {
+                        cx.background_executor()
+                            .timer(std::time::Duration::from_millis(wait))
+                            .await;
+                        host.update(cx, |host, cx| host.requote_due(seq, cx)).ok();
+                    })
+                    .detach();
+                }
+                RequoteStep::Failed {
+                    cause,
+                    attempt,
+                    in_ms,
+                } => vlog!(
+                    "fee",
+                    "quote failed chain={chain} cause={cause} re-quote #{attempt} in {in_ms:.0} ms"
+                ),
+                RequoteStep::Fire { attempt, supersede } => {
+                    vlog!(
+                        "fee",
+                        "re-quote #{attempt} chain={chain}{}",
+                        if supersede {
+                            " (the last one ran past its bound)"
+                        } else {
+                            ""
+                        }
+                    );
+                    if supersede {
+                        speed_control::reask(self, cx);
+                    } else {
+                        speed_control::refresh(self, cx);
+                    }
+                }
+                RequoteStep::Back { after } => vlog!(
+                    "fee",
+                    "quote back chain={chain} after {after} re-quote{}",
+                    if after == 1 { "" } else { "s" }
+                ),
             }
-            self.requote_scheduled = None;
-            return;
         }
-        if self.requote_scheduled.is_some() {
-            return;
-        }
-        let Some(wait) = requote_wait(
-            failure,
-            self.requote_attempt + 1,
-            self.on_form(),
-            self.speed.measuring(),
-        ) else {
-            return;
-        };
-        self.requote_attempt += 1;
-        self.requote_seq += 1;
-        let seq = self.requote_seq;
-        self.requote_scheduled = Some(seq);
-        cx.spawn(async move |host, cx| {
-            cx.background_executor()
-                .timer(std::time::Duration::from_millis(u64::from(wait)))
-                .await;
-            host.update(cx, |host, cx| {
-                if host.requote_scheduled != Some(seq) {
-                    return;
-                }
-                host.requote_scheduled = None;
-                let still = requote_failure(host.speed.fee_view(), host.speed.unanswered());
-                if still.is_some() && host.on_form() && !host.speed.measuring() {
-                    speed_control::refresh(host, cx);
-                } else {
-                    host.schedule_requote(cx);
-                }
-            })
-            .ok();
-        })
-        .detach();
     }
 
     // -- the speed control (spec 069) ----------------------------------------
@@ -991,6 +1224,36 @@ impl SigningHost {
     /// A tap on an option — one-shot, never the stored preference.
     pub fn pick_speed(&mut self, tier: FeeTier, cx: &mut Context<Self>) {
         speed_control::pick(self, tier, cx);
+    }
+
+    /// The page that asked is gone (spec 082 RB2): a submit already running
+    /// stops before its ceremony, when the ceremony answers, or right before
+    /// the relay POST — whichever it reaches next.
+    pub fn asker_left(&self) {
+        self.ctx.asker_left();
+    }
+
+    /// Has the page that asked gone?
+    #[must_use]
+    pub fn asker_gone(&self) -> bool {
+        !self.ctx.still_asked()
+    }
+
+    /// Is a submit running for this request?
+    #[must_use]
+    pub fn submit_running(&self) -> bool {
+        self.streaming > 0
+    }
+
+    /// [`runs_unseen`] for this request.
+    #[must_use]
+    pub fn owed_unseen(&self) -> bool {
+        runs_unseen(
+            self.approved,
+            self.responded,
+            self.asker_gone(),
+            self.submit_running(),
+        )
     }
 
     pub fn dispatch_sign(&mut self, event: SignEvent, cx: &mut Context<Self>) {
@@ -1056,6 +1319,7 @@ impl SigningHost {
         for effect in pending {
             let id = effect.id;
             match sign_executor::perform(&effect.operation, &self.ctx) {
+                SignAnswer::Now(result) => self.resolve_sign(id, result, cx),
                 SignAnswer::Blocking(work) => {
                     cx.spawn(async move |host, cx| {
                         let result = cx.background_executor().spawn(async move { work() }).await;
@@ -1065,6 +1329,7 @@ impl SigningHost {
                     .detach();
                 }
                 SignAnswer::Streaming(work) => {
+                    self.streaming += 1;
                     let (tx, mut rx) = futures::channel::mpsc::unbounded();
                     cx.spawn(async move |host, cx| {
                         let work = cx
@@ -1078,8 +1343,13 @@ impl SigningHost {
                                 .ok();
                         }
                         let result = work.await;
-                        host.update(cx, |host, cx| host.resolve_sign(id, result, cx))
-                            .ok();
+                        host.update(cx, |host, cx| {
+                            // Over before the core hears it, so the redraw
+                            // its answer causes sees nothing running.
+                            host.streaming = host.streaming.saturating_sub(1);
+                            host.resolve_sign(id, result, cx);
+                        })
+                        .ok();
                     })
                     .detach();
                 }
@@ -1104,20 +1374,37 @@ impl SigningHost {
         // FORGOTTEN: no pending row settling, no confirmation, nothing on the
         // next launch. The send column has done this since phase 4; this is the
         // same promise for the path a dApp drives.
+        //
+        // Spec 082 RJ1: once per hand-off VALUE — the write-ahead's, then the
+        // relay's admission of the same op — and each withdrawal once.
         if let Some(handoff) = self.view.tracker_handoff.clone()
-            && self.handed_off.as_deref() != Some(handoff.user_op_hash.as_str())
+            && self.handoff_fed.as_ref() != Some(&handoff_key(&handoff))
         {
-            self.handed_off = Some(handoff.user_op_hash.clone());
+            self.handoff_fed = Some(handoff_key(&handoff));
+            self.handed_off = Some((handoff.record_ids.clone(), handoff.user_op_hash.clone()));
             crate::executor::tracker::submitted(
-                handoff.user_op_hash,
-                handoff.record_ids,
-                handoff.chain_id,
+                crate::executor::tracker::Handoff {
+                    user_op_hash: handoff.user_op_hash,
+                    record_ids: handoff.record_ids,
+                    chain_id: handoff.chain_id,
+                    maybe_sent: handoff.maybe_sent,
+                    submit_block: handoff.submit_block,
+                    admitted: handoff.admitted,
+                },
                 cx,
             );
+        }
+        if let Some(withdraw) = self.view.tracker_withdraw.clone()
+            && self.withdraw_fed.as_ref() != Some(&withdraw)
+        {
+            self.withdraw_fed = Some(withdraw.clone());
+            crate::executor::tracker::withdrawn(&withdraw.user_op_hash, &withdraw.record_ids, cx);
         }
         // `Hidden` is the core saying the request is over — the column closes
         // on the machine's word, never on a click this file interpreted.
         self.closed = self.view.surface == vela_core::app::sign_request::SignSurface::Hidden;
+        // The tracker may already know how the op just handed over ended.
+        self.forward_tracked(cx);
         // The ceremony came back with no signature — dismissed, a QR nobody
         // scanned, a phone that never connected — and the core kept the
         // request, unanswered (083).
@@ -1149,6 +1436,34 @@ impl SigningHost {
         }
     }
 
+    /// Spec 082 RJ4 (G37): tell the core what the tracker knows of the op in
+    /// flight — the answer to the page follows it (a landed op's tx hash, a
+    /// refusal, a proven "not sent") instead of waiting out the receipt poll.
+    /// Each change once; which change answers what is the core's.
+    fn forward_tracked(&mut self, cx: &mut Context<Self>) {
+        let Some(op) = self.view.pending_op_hash.clone() else {
+            return;
+        };
+        let tracker = crate::resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx);
+        let entries = tracker.read(cx).view().entries;
+        let Some((fed, event)) = tracked_event(&op, &entries, self.tracked_fed.as_ref(), now_ms())
+        else {
+            return;
+        };
+        vlog!(
+            "dapp",
+            "op={} tracker says {:?}{}",
+            short(&op),
+            fed.1,
+            fed.2
+                .as_deref()
+                .map(|tx| format!(" tx={}", short(tx)))
+                .unwrap_or_default()
+        );
+        self.tracked_fed = Some(fed);
+        self.dispatch_sign(event, cx);
+    }
+
     /// What the page takes away, exactly once.
     pub fn take_answers(&mut self) -> Vec<TransportAnswer> {
         std::mem::take(&mut self.answers)
@@ -1168,7 +1483,7 @@ impl SigningHost {
             return None;
         };
         let submitted = [
-            self.handed_off.as_deref(),
+            self.handed_off.as_ref().map(|(_, hash)| hash.as_str()),
             self.view.pending_op_hash.as_deref(),
             self.view
                 .tracker_handoff
@@ -1191,10 +1506,13 @@ impl SigningHost {
         } = operation
         {
             self.responded = true;
+            // RJ4: a receipt wait still running for this request stops — the
+            // page has its one answer.
+            self.ctx.core_answered();
             // Spec 079: what this answer says about how the request ended —
             // read BEFORE the sheet is cleared, while the hash this column
             // submitted is still known.
-            let submitted = self.handed_off.clone().or_else(|| {
+            let submitted = self.handed_off.clone().map(|(_, hash)| hash).or_else(|| {
                 self.view.pending_op_hash.clone().or_else(|| {
                     self.view
                         .tracker_handoff
@@ -1280,6 +1598,54 @@ impl Drop for SigningHost {
     fn drop(&mut self) {
         release(&self.ctx.trusted_signer, &self.channel);
     }
+}
+
+/// One hand-off as the tracker must hear it — every field that can change
+/// between two hand-offs of the same op (spec 082 RJ1, the review's key):
+/// its hash, its records, whether it may have been sent, and whether the
+/// relay has taken it.
+type HandoffKey = (String, Vec<String>, bool, bool);
+
+fn handoff_key(handoff: &vela_core::app::sign_request::SignTrackerHandoff) -> HandoffKey {
+    (
+        handoff.user_op_hash.to_lowercase(),
+        handoff.record_ids.clone(),
+        handoff.maybe_sent,
+        handoff.admitted,
+    )
+}
+
+/// What the core was last told of the op in flight: its hash, the tracker's
+/// status and the tx hash it named (spec 082 RJ4).
+type Tracked = (
+    String,
+    vela_core::app::tx_tracker::TrackStatus,
+    Option<String>,
+);
+
+/// The tracker's entry for `op` as the core's `OpTracked`, when it changed
+/// since `fed` (spec 082 RJ4) — `None` while the tracker has no entry for it
+/// or nothing moved.
+fn tracked_event(
+    op: &str,
+    entries: &[vela_core::app::tx_tracker::TrackEntryView],
+    fed: Option<&Tracked>,
+    now_ms: f64,
+) -> Option<(Tracked, SignEvent)> {
+    let entry = entries
+        .iter()
+        .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(op))?;
+    let now = (op.to_lowercase(), entry.status, entry.tx_hash.clone());
+    if fed == Some(&now) {
+        return None;
+    }
+    let event = SignEvent::OpTracked {
+        user_op_hash: entry.user_op_hash.clone(),
+        status: entry.status,
+        tx_hash: entry.tx_hash.clone(),
+        now_ms,
+    };
+    Some((now, event))
 }
 
 /// The column is gone: a Trusted Signer still waiting stops now rather than
@@ -1398,49 +1764,10 @@ fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
         // Hex, so two characters per byte; an odd tail is a malformed payload
         // and rounds DOWN rather than claiming a byte that is not there.
         data_bytes: data.trim_start_matches("0x").len() / 2,
-        native_send: native_send_of(request),
+        native_symbol: vela_core::app::network_admin::builtin_native_symbol(request.chain_id)
+            .unwrap_or("—")
+            .to_owned(),
     }
-}
-
-/// A request that only moves the chain's own coin (083 W10), read from the
-/// calls the executor will submit rather than from `first_call`: the figure
-/// and the recipient drawn are then the ones signed.
-///
-/// `None` keeps the blind rung, which says nothing false: more than one call
-/// (a batch whose first leg is a plain send is more than that send), any
-/// calldata (the core's own `TxPlain` test is empty or `0x`), a recipient
-/// that is not an address, or a chain whose coin the wallet cannot name —
-/// Tempo has none, and "ETH" on a custom network would be a guess.
-fn native_send_of(request: &IncomingRequest) -> Option<crate::signing::live::NativeSend> {
-    // A batch is counted as the site SENT it, not as `calls_of` reads it:
-    // `calls_of` drops a leg it cannot read (one with no `to` — a deployment,
-    // which EIP-5792 allows), so `[send, deploy]` would otherwise count as one
-    // call and draw a calm "send 1 ETH" over a batch that is more than that
-    // (083 W10 review).
-    if request.method == "wallet_sendCalls" {
-        let params: serde_json::Value = serde_json::from_str(&request.params_json).ok()?;
-        if params.get(0)?.get("calls")?.as_array()?.len() != 1 {
-            return None;
-        }
-    }
-    let calls = crate::executor::sign_request::calls_of(&request.method, &request.params_json)?;
-    let [call] = calls.as_slice() else {
-        return None;
-    };
-    let plain = matches!(call.data.as_str(), "" | "0x")
-        && vela_core::app::contacts::is_address(&call.to)
-        && !vela_core::app::fee_policy::is_tempo_chain(request.chain_id);
-    if !plain {
-        return None;
-    }
-    // The core's one spelling of a built-in chain's coin; a custom network
-    // has none, and stays blind.
-    let symbol = vela_core::app::network_admin::builtin_native_symbol(request.chain_id)?;
-    Some(crate::signing::live::NativeSend {
-        to: call.to.clone(),
-        wei: call.value.parse().ok()?,
-        symbol: symbol.to_owned(),
-    })
 }
 
 /// A batch decodes from its first leg today, which is what the phone's sheet
@@ -1543,7 +1870,19 @@ fn first_call(
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned)
     };
-    Some((field("to"), field("data"), field("value")))
+    Some((field("to"), field("data"), value_text(call.get("value"))))
+}
+
+/// The first call's `value` as the core is told it (spec 082 RC6): a string
+/// as written, a present non-string (a JSON number) as its text — so the core
+/// refuses it rather than reading it as absent, which drew a calm "0" over a
+/// call that moves 1000 wei — and nothing for an absent or `null` one.
+fn value_text(value: Option<&serde_json::Value>) -> Option<String> {
+    match value? {
+        serde_json::Value::Null => None,
+        serde_json::Value::String(text) => Some(text.clone()),
+        other => Some(other.to_string()),
+    }
 }
 
 /// The ONE document the request is read as — the core's reading, the same
@@ -1561,49 +1900,239 @@ mod tests {
     use super::*;
     use vela_core::app::fee_policy::FeePolicy;
 
-    /// Spec 079 FR-008: 3 s, 6 s, 12 s, then every 15 s.
+    /// Spec 079 FR-002 and 082 RB2: which requests keep their machines,
+    /// unseen, once their column goes. One closed after the approval keeps
+    /// them until the page has its answer. One whose page LEFT keeps them only
+    /// while its submit is still running — a POST that already went must
+    /// reach the core, so it is recorded and handed to the tracker, never
+    /// dropped with the column — and lets them go once that run ends.
     #[test]
-    fn a_failed_quote_is_asked_again_on_the_cores_schedule() {
-        let waits: Vec<Option<u32>> = (1..=5)
-            .map(|attempt| requote_wait(Some(FeeFailure::QuoteUnavailable), attempt, true, false))
-            .collect();
-        assert_eq!(
-            waits,
-            vec![
-                Some(3_000),
-                Some(6_000),
-                Some(12_000),
-                Some(15_000),
-                Some(15_000)
-            ]
+    fn a_request_runs_unseen_only_while_something_is_owed() {
+        // approved, responded, asker gone, submit running
+        assert!(
+            runs_unseen(true, false, false, false),
+            "FR-002: the answer is owed"
+        );
+        assert!(
+            !runs_unseen(true, true, false, true),
+            "answered: nothing owed"
+        );
+        assert!(!runs_unseen(false, false, false, false), "never approved");
+        assert!(
+            runs_unseen(true, false, true, true),
+            "the page left mid-submit: the op may be on its way"
+        );
+        assert!(
+            !runs_unseen(true, false, true, false),
+            "the page left and nothing runs: nothing to record, nobody to answer"
         );
     }
 
-    /// Never under a slide that has gone, never over a measurement already
-    /// out, never for a failure no retry fixes, and nothing to do when the
-    /// quote is good.
+    /// The requoter against a relay that is down until `up_at` and then
+    /// answers `answer_ms` after each ask; while down, an ask either fails
+    /// at once (refused) or hangs for good (black-holed — a connection made
+    /// while the relay was down is not revived by its return). Answers when
+    /// the fee is back, on a fake clock.
+    fn fee_back_at(up_at: f64, answer_ms: f64, hangs: bool) -> f64 {
+        let mut requoter = Requoter::default();
+        let mut timer: Option<f64> = None;
+        // The quote out now: (asked at, answers at — `None` hangs, ok?).
+        let mut out: Option<(f64, Option<f64>, bool)> = None;
+        let mut failed_at: Option<f64> = Some(0.0);
+        let failure = Some(FeeFailure::QuoteUnavailable);
+        let apply = |steps: Vec<RequoteStep>,
+                     now: f64,
+                     timer: &mut Option<f64>,
+                     out: &mut Option<(f64, Option<f64>, bool)>| {
+            for step in steps {
+                match step {
+                    RequoteStep::Schedule { due_ms } => *timer = Some(due_ms),
+                    RequoteStep::Fire { .. } => {
+                        *out = Some(if now >= up_at {
+                            (now, Some(now + answer_ms), true)
+                        } else if hangs {
+                            (now, None, false)
+                        } else {
+                            (now, Some(now + 300.0), false)
+                        });
+                    }
+                    RequoteStep::Failed { .. } | RequoteStep::Back { .. } => {}
+                }
+            }
+        };
+        for _ in 0..200 {
+            let answer_at = out.and_then(|(_, at, _)| at);
+            let next = [failed_at, timer, answer_at]
+                .into_iter()
+                .flatten()
+                .fold(f64::INFINITY, f64::min);
+            assert!(
+                next.is_finite(),
+                "nothing left to happen: the fee never came back"
+            );
+            if failed_at == Some(next) {
+                failed_at = None;
+                let steps = requoter.observe(failure, false, true, next);
+                apply(steps, next, &mut timer, &mut out);
+            } else if answer_at == Some(next) {
+                let (_, _, ok) = out.take().unwrap_or((0.0, None, false));
+                if ok {
+                    let steps = requoter.observe(None, false, true, next);
+                    assert!(
+                        matches!(steps.as_slice(), [RequoteStep::Back { .. }]),
+                        "{steps:?}"
+                    );
+                    return next;
+                }
+                let steps = requoter.observe(failure, false, true, next);
+                apply(steps, next, &mut timer, &mut out);
+            } else {
+                timer = None;
+                let measuring = out.is_some();
+                let steps = requoter.due(failure, measuring, true, next);
+                apply(steps, next, &mut timer, &mut out);
+            }
+        }
+        unreachable!("the fee never came back")
+    }
+
+    /// Spec 082 RJ12 (G47, SC-003): the fee is back within 14 s of the relay
+    /// returning — whenever it returns, however long its answer takes up to
+    /// the 6 s bound, and even when the ask out at that moment hangs. The
+    /// device pass measured 15.8–19 s (the 12 s and 15 s steps, counted from
+    /// each failure, and a hung ask waited out).
+    #[test]
+    fn the_fee_is_back_within_fourteen_seconds_of_the_relay() {
+        for hangs in [false, true] {
+            for answer_ms in [200.0, 2_000.0, 5_000.0, 6_000.0] {
+                let mut up_at = 0.0;
+                while up_at < 60_000.0 {
+                    let back = fee_back_at(up_at, answer_ms, hangs);
+                    assert!(
+                        back - up_at <= 14_000.0,
+                        "relay back at {up_at} ms, fee at {back} ms \
+                         (answer {answer_ms} ms, hangs {hangs})"
+                    );
+                    up_at += 250.0;
+                }
+            }
+        }
+    }
+
+    /// The core's waits (3 s, 6 s, then 8 s), each from the start of the
+    /// re-quote before it; one line per failure; the fee's return logged
+    /// with the count.
+    #[test]
+    fn a_failed_quote_is_asked_again_on_the_cores_schedule() {
+        let failure = Some(FeeFailure::QuoteUnavailable);
+        let mut requoter = Requoter::default();
+        let steps = requoter.observe(failure, false, true, 1_000.0);
+        assert_eq!(
+            steps,
+            vec![
+                RequoteStep::Schedule { due_ms: 4_000.0 },
+                RequoteStep::Failed {
+                    cause: "QuoteUnavailable".to_owned(),
+                    attempt: 1,
+                    in_ms: 3_000.0,
+                },
+            ]
+        );
+        assert!(
+            requoter.observe(failure, false, true, 1_500.0).is_empty(),
+            "one line per failure"
+        );
+        assert_eq!(
+            requoter.due(failure, false, true, 4_000.0),
+            vec![
+                RequoteStep::Fire {
+                    attempt: 1,
+                    supersede: false,
+                },
+                RequoteStep::Schedule { due_ms: 10_000.0 },
+            ]
+        );
+        // Re-quote #1 fails half a second in: #2 is still 6 s from its start.
+        assert_eq!(
+            requoter.observe(failure, false, true, 4_500.0),
+            vec![RequoteStep::Failed {
+                cause: "QuoteUnavailable".to_owned(),
+                attempt: 2,
+                in_ms: 5_500.0,
+            }]
+        );
+        let _ = requoter.due(failure, false, true, 10_000.0);
+        // #2 hangs past its bound: #3 supersedes it 8 s after it began.
+        let steps = requoter.due(failure, true, true, 18_000.0);
+        assert_eq!(
+            steps,
+            vec![
+                RequoteStep::Failed {
+                    cause: "timeout".to_owned(),
+                    attempt: 2,
+                    in_ms: 0.0,
+                },
+                RequoteStep::Fire {
+                    attempt: 3,
+                    supersede: true,
+                },
+                RequoteStep::Schedule { due_ms: 26_000.0 },
+            ]
+        );
+        assert_eq!(
+            requoter.observe(None, false, true, 19_000.0),
+            vec![RequoteStep::Back { after: 3 }]
+        );
+        assert_eq!(requoter, Requoter::default(), "the count starts over");
+        // The timer set for #4 finds nothing to do.
+        assert!(requoter.due(None, false, true, 26_000.0).is_empty());
+    }
+
+    /// Never under a slide that has gone, never over a measurement the
+    /// person started, never for a failure no retry fixes, and nothing to do
+    /// when the quote is good.
     #[test]
     fn the_requote_stops_where_it_must() {
         let unreachable = Some(FeeFailure::QuoteUnavailable);
-        assert_eq!(requote_wait(unreachable, 1, false, false), None, "approved");
-        assert_eq!(requote_wait(unreachable, 1, true, true), None, "measuring");
-        assert_eq!(
-            requote_wait(Some(FeeFailure::MissingPublicKey), 1, true, false),
-            None
+        let mut requoter = Requoter::default();
+        assert!(
+            requoter.observe(unreachable, false, false, 0.0).is_empty(),
+            "approved"
         );
-        assert_eq!(
-            requote_wait(Some(FeeFailure::CalculationFailed), 1, true, false),
-            None
+        assert!(
+            requoter.observe(unreachable, true, true, 0.0).is_empty(),
+            "measuring"
         );
-        // Spec 083 fee: the relay's "this operation fails" is an answer; the
-        // same operation asked again gets the same one.
-        for attempt in 1..=5 {
-            assert_eq!(
-                requote_wait(Some(FeeFailure::WouldFail), attempt, true, false),
-                None
+        for unfixable in [FeeFailure::MissingPublicKey, FeeFailure::CalculationFailed] {
+            assert!(
+                Requoter::default()
+                    .observe(Some(unfixable), false, true, 0.0)
+                    .is_empty(),
+                "{unfixable:?}"
             );
         }
-        assert_eq!(requote_wait(None, 1, true, false), None);
+        assert!(
+            Requoter::default()
+                .observe(None, false, true, 0.0)
+                .is_empty()
+        );
+
+        // Scheduled, then the slide goes: the timer finds nothing to do.
+        let mut requoter = Requoter::default();
+        let _ = requoter.observe(unreachable, false, true, 0.0);
+        assert!(requoter.due(unreachable, false, false, 3_000.0).is_empty());
+        assert!(requoter.due(unreachable, false, true, 3_000.0).is_empty());
+
+        // A refresh the person tapped is out when the timer fires: it is
+        // theirs to finish; its own answer schedules the next.
+        let mut requoter = Requoter::default();
+        let _ = requoter.observe(unreachable, false, true, 0.0);
+        assert!(requoter.due(unreachable, true, true, 3_000.0).is_empty());
+        assert!(
+            !requoter
+                .observe(unreachable, false, true, 3_500.0)
+                .is_empty()
+        );
     }
 
     /// Spec 083 fee: the simulation's deltas reach the fee machine as what the
@@ -1676,25 +2205,180 @@ mod tests {
         assert_eq!(approved_changes(&[], false), None);
     }
 
-    /// A deployment read that could not answer never reached the core; it is
-    /// the same to a person as an unreachable relay, and asked again the same.
+    /// Spec 082 RJ13 (G48): a deployment read that got no answer never
+    /// reached the core. It is the chain read's failure — rate-limited or
+    /// not, from the pool's own signal — and asked again on the same
+    /// schedule; never the relay's `QuoteUnavailable`.
     #[test]
-    fn an_unanswered_read_is_an_unreachable_quote() {
+    fn an_unanswered_read_is_a_chain_read() {
         let quiet = crate::core_host::CoreHost::<FeePolicy>::new().view();
-        assert_eq!(requote_failure(&quiet, false), None);
+        assert_eq!(requote_failure(&quiet, None), None);
+        let limited = FeeFailure::ChainRead { rate_limited: true };
+        assert_eq!(requote_failure(&quiet, Some(limited)), Some(limited));
         assert_eq!(
-            requote_failure(&quiet, true),
-            Some(FeeFailure::QuoteUnavailable)
+            vela_core::app::fee_policy::failure_reason_key(limited),
+            Some("home.balanceDetailStatusRetrying")
+        );
+        assert!(
+            !Requoter::default()
+                .observe(Some(limited), false, true, 0.0)
+                .is_empty(),
+            "asked again by itself"
         );
         let failed = FeeView {
             failed: Some(FeeFailure::EstimateFailed),
             ..quiet
         };
         assert_eq!(
-            requote_failure(&failed, true),
+            requote_failure(&failed, Some(limited)),
             Some(FeeFailure::EstimateFailed),
             "the core's own reason first"
         );
+    }
+
+    /// Spec 082 RJ1 (the review's key): the write-ahead hands the op over
+    /// "may have been sent", and the relay taking it hands the SAME hash and
+    /// records over again, admitted. Keyed on the records alone the second
+    /// was never fed, and an accepted payment could end "not sent".
+    #[test]
+    fn the_admitted_hand_off_is_a_new_one() {
+        use vela_core::app::sign_request::SignTrackerHandoff;
+        let ahead = SignTrackerHandoff {
+            user_op_hash: "0xOP".to_owned(),
+            record_ids: vec!["dapp-1-tx".to_owned()],
+            chain_id: 100,
+            maybe_sent: true,
+            submit_block: Some(48_487_620),
+            admitted: false,
+        };
+        let admitted = SignTrackerHandoff {
+            maybe_sent: false,
+            admitted: true,
+            ..ahead.clone()
+        };
+        assert_ne!(handoff_key(&ahead), handoff_key(&admitted));
+        assert_eq!(
+            handoff_key(&ahead),
+            handoff_key(&SignTrackerHandoff {
+                user_op_hash: "0xop".to_owned(),
+                ..ahead.clone()
+            }),
+            "the same hand-off, whatever the hash's case"
+        );
+    }
+
+    /// Spec 082 RJ4 (G37): the tracker's entry for the op in flight reaches
+    /// the core once per change — and a Rejected one is answered -32603
+    /// "refused", once, the late receipt wait's own result dropped (DX-W3:
+    /// the page got ok + op hash 100 s after the relay had rejected it).
+    #[test]
+    fn the_tracker_s_verdict_answers_the_page_once() {
+        use vela_core::app::sign_request::{
+            SignAccountRef, SignApproveOpts, SignResponsePayload, SignSubmitOutcome,
+        };
+        use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
+        const OP: &str = "0xa974c5dd0a00000000000000000000000000000000000000000000000000beef";
+        const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+
+        let entry = |status: TrackStatus| TrackEntryView {
+            user_op_hash: OP.to_owned(),
+            chain_id: 100,
+            record_ids: vec!["dapp-1-tx".to_owned()],
+            status,
+            tx_hash: None,
+            polling: status == TrackStatus::Pending,
+            submitted_at_ms: Some(1_000.0),
+            outcome: TrackOutcome::Landing,
+            relay_tx_hash: None,
+        };
+        let pending = [entry(TrackStatus::Pending)];
+        let (fed, event) = tracked_event(OP, &pending, None, 1.0)
+            .unwrap_or_else(|| unreachable!("the first word is told"));
+        assert!(
+            tracked_event(OP, &pending, Some(&fed), 2.0).is_none(),
+            "once"
+        );
+        assert!(tracked_event("0xother", &pending, None, 2.0).is_none());
+
+        // The core, past OpSubmitted (accepted), waiting on its receipt.
+        let mut host = crate::core_host::CoreHost::<SignRequest>::new();
+        host.dispatch(SignEvent::NetworksChanged {
+            chain_ids: vec![100],
+        });
+        host.dispatch(SignEvent::AccountsChanged {
+            accounts: vec![SignAccountRef {
+                address: ME.to_owned(),
+                credential_id: "cred0".to_owned(),
+            }],
+            active_index: 0,
+        });
+        host.dispatch(SignEvent::RequestArrived {
+            id: "rid-w3".to_owned(),
+            method: "eth_sendTransaction".to_owned(),
+            params_json:
+                r#"[{"to":"0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83","data":"0xa9059cbb"}]"#
+                    .to_owned(),
+            origin: "http://127.0.0.1:8141".to_owned(),
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            dedicated_transport: true,
+            per_request_chain: Some(100),
+            dapp: None,
+            granted_address: Some(ME.to_owned()),
+            requested_address: None,
+            request_ts_ms: None,
+            now_ms: 1_000.0,
+        });
+        let ops = host.dispatch(SignEvent::ApproveTapped {
+            opts: SignApproveOpts::default(),
+        });
+        let precheck = ops[0].id;
+        let ops = host.resolve(precheck, SignShellResult::PreCheck { funding: None });
+        let submit = ops[0].id;
+        let ops = host.dispatch(SignEvent::OpSubmitted {
+            id: "rid-w3".to_owned(),
+            user_op_hash: OP.to_owned(),
+            now_ms: 5_000.0,
+            maybe_sent: false,
+            submit_block: None,
+        });
+        for op in ops {
+            if matches!(op.operation, SignOperation::PersistRecord { .. }) {
+                let _ = host.resolve(op.id, SignShellResult::RecordPersisted);
+            }
+        }
+        let _ = event;
+        let rejected = [entry(TrackStatus::Rejected)];
+        let (_, verdict) = tracked_event(OP, &rejected, Some(&fed), 20_000.0)
+            .unwrap_or_else(|| unreachable!("a change is told"));
+        let told: Vec<_> = host
+            .dispatch(verdict)
+            .into_iter()
+            .filter_map(|op| match op.operation {
+                SignOperation::SendResponse { payload, .. } => Some(payload),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(told.len(), 1, "{told:?}");
+        assert!(matches!(
+            &told[0],
+            SignResponsePayload::Err { code: -32603, message: Some(message), .. }
+                if message == vela_core::user_op::REFUSED_DAPP_DETAIL
+        ));
+        // The receipt wait's own late result can answer nothing more.
+        let late: Vec<_> = host
+            .resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: SignSubmitOutcome::ReceiptPending {
+                        user_op_hash: OP.to_owned(),
+                    },
+                    now_ms: 120_000.0,
+                },
+            )
+            .into_iter()
+            .filter(|op| matches!(op.operation, SignOperation::SendResponse { .. }))
+            .collect();
+        assert!(late.is_empty(), "one answer only");
     }
 
     /// Invariant ⑨: the capped params are the ones that get signed.
@@ -1875,172 +2559,6 @@ mod tests {
         });
         assert_eq!(facts.to.as_deref(), Some(SIGNED));
         assert_eq!(facts.data_bytes, 6);
-        assert!(
-            facts.native_send.is_none(),
-            "the decoy's plain send is not what is signed"
-        );
-    }
-
-    /// 083 W10: a plain native send is read as one — and only a plain native
-    /// send, from the calls the executor will submit.
-    #[test]
-    fn only_a_single_empty_call_is_a_native_send() {
-        const TO: &str = "0x76875eb2c6d2ea8d6b7fc7e0ce6d2c1e6ac0d141";
-        let request = |method: &str, params: String, chain_id: u32| IncomingRequest {
-            id: "1".to_owned(),
-            method: method.to_owned(),
-            params_json: params,
-            origin: "https://example.com".to_owned(),
-            transport_id: BROWSER_TRANSPORT.to_owned(),
-            chain_id,
-            granted_address: None,
-        };
-        let send = |params: String, chain_id: u32| {
-            native_send_of(&request("eth_sendTransaction", params, chain_id))
-        };
-
-        let dust = send(
-            format!(r#"[{{"to":"{TO}","value":"0x38d7ea4c68000"}}]"#),
-            100,
-        )
-        .unwrap_or_else(|| unreachable!("0.001 xDAI with no calldata is a send"));
-        assert_eq!(dust.wei, 1_000_000_000_000_000);
-        assert_eq!(dust.symbol, "xDAI", "Gnosis' own coin");
-        assert_eq!(dust.to, TO);
-        let empty = send(format!(r#"[{{"to":"{TO}","value":"0x1","data":"0x"}}]"#), 1)
-            .unwrap_or_else(|| unreachable!("`0x` is no calldata"));
-        assert_eq!((empty.wei, empty.symbol.as_str()), (1, "ETH"));
-        assert_eq!(
-            send(format!(r#"[{{"to":"{TO}"}}]"#), 1).map(|s| s.wei),
-            Some(0),
-            "an absent value is zero, as the executor reads it"
-        );
-
-        // Everything else stays on the blind rung.
-        let blind = [
-            (
-                format!(r#"[{{"to":"{TO}","value":"0x1","data":"0xdeadbeef"}}]"#),
-                100,
-            ),
-            (format!(r#"[{{"to":"{TO}","value":"0xzz"}}]"#), 100),
-            (r#"[{"to":"0xbbb","value":"0x1"}]"#.to_owned(), 100),
-            (format!(r#"[{{"to":"{TO}","value":"0x1"}}]"#), 4217),
-            (format!(r#"[{{"to":"{TO}","value":"0x1"}}]"#), 999_999),
-        ];
-        for (params, chain_id) in blind {
-            assert!(
-                send(params.clone(), chain_id).is_none(),
-                "{params} on {chain_id}"
-            );
-        }
-
-        let batch = |calls: &str| {
-            native_send_of(&request(
-                "wallet_sendCalls",
-                format!(r#"[{{"calls":{calls}}}]"#),
-                100,
-            ))
-        };
-        assert!(batch(&format!(r#"[{{"to":"{TO}","value":"0x1"}}]"#)).is_some());
-        assert!(
-            batch(&format!(
-                r#"[{{"to":"{TO}","value":"0x1"}},{{"to":"{TO}","data":"0xdead"}}]"#
-            ))
-            .is_none(),
-            "a batch is more than its first leg"
-        );
-        // 083 W10 review: a leg `calls_of` cannot read (no `to` — a
-        // deployment) still counts; the batch is not a lone send.
-        assert!(
-            batch(&format!(
-                r#"[{{"to":"{TO}","value":"0xde0b6b3a7640000"}},{{"data":"0x6080"}}]"#
-            ))
-            .is_none(),
-            "an unreadable leg is still a leg"
-        );
-        assert!(
-            native_send_of(&request(
-                "personal_sign",
-                r#"["0xdead","0xabc"]"#.to_owned(),
-                1
-            ))
-            .is_none()
-        );
-
-        // 083 W10 review: the blind rung's facts carry it — the path the
-        // sheet actually reads, not only the helper.
-        let facts = facts_of(&request(
-            "eth_sendTransaction",
-            format!(r#"[{{"to":"{TO}","value":"0x1"}}]"#),
-            100,
-        ));
-        assert!(facts.native_send.is_some());
-        assert_eq!(facts.data_bytes, 0);
-    }
-
-    /// 083 W10 review: from the request a dApp sent to the blocks the sheet
-    /// draws, through the real core and the host's own `facts_of` — nothing
-    /// built by hand in between. A 0.001 xDAI send reads as a send; the same
-    /// request with calldata stays on the blind rung.
-    #[test]
-    fn a_dapp_native_send_reaches_the_sheet_as_a_send() {
-        use crate::signing::fixtures::Block;
-        const TO: &str = "0x76875eb2c6d2ea8d6b7fc7e0ce6d2c1e6ac0d141";
-        let s = crate::signing::SigningStrings::resolve(&crate::loc::Loc::from_env());
-        let drawn = |params: String| {
-            let request = IncomingRequest {
-                id: "1".to_owned(),
-                method: "eth_sendTransaction".to_owned(),
-                params_json: params,
-                origin: "https://example.com".to_owned(),
-                transport_id: BROWSER_TRANSPORT.to_owned(),
-                chain_id: 100,
-                granted_address: None,
-            };
-            let mut clear = CoreHost::<ClearSigning>::new();
-            let kickoff = clear_kickoff(
-                &request.method,
-                &request.params_json,
-                request.chain_id,
-                None,
-            )
-            .unwrap_or_else(|| unreachable!("a transaction starts the decode"));
-            let _ = clear.dispatch(kickoff);
-            let view = crate::signing::live::localized_terms(&clear.view(), &s);
-            crate::signing::live::blocks(&view, &facts_of(&request), &s)
-        };
-
-        let send = drawn(format!(r#"[{{"to":"{TO}","value":"0x38d7ea4c68000"}}]"#));
-        assert!(
-            matches!(send.first(), Some(Block::Intent { text, .. }) if *text == s.intent_send),
-            "a send, not a contract interaction"
-        );
-        assert!(
-            !send
-                .iter()
-                .any(|block| matches!(block, Block::Warning { .. })),
-            "nothing was left to decode"
-        );
-        assert!(send.iter().any(|block| matches!(
-            block,
-            Block::Amount { line, .. } if line.symbol == "xDAI"
-        )));
-        assert!(send.iter().any(|block| matches!(
-            block,
-            Block::Party { label, address: Some(address), badge: None, .. }
-                if *label == s.label_recipient && address == TO
-        )));
-
-        let blind = drawn(format!(
-            r#"[{{"to":"{TO}","value":"0x38d7ea4c68000","data":"0xdeadbeef"}}]"#
-        ));
-        assert!(
-            !blind.iter().any(|block| matches!(
-                block,
-                Block::Intent { text, .. } if *text == s.intent_send
-            )),
-            "calldata nobody decoded is never drawn as a send"
-        );
     }
 
     /// The sheet decodes the request's ONE document, where its method carries
@@ -2460,6 +2978,7 @@ mod approve_tests {
             SignShellResult::Submit {
                 outcome: SignSubmitOutcome::Failed {
                     message: "the relay said no".to_owned(),
+                    refused: false,
                 },
                 now_ms: 1.0,
             },

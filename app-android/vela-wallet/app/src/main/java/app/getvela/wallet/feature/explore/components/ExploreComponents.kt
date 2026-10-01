@@ -189,14 +189,19 @@ fun SiteRow(site: SiteModel, onOpen: (String) -> Unit, modifier: Modifier = Modi
                 fontSize = VelaTextSize.xl,
                 maxLines = 1,
             )
-            Text(
-                text = site.subtitle ?: site.host,
-                color = colors.fgMuted,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // An empty second line is a name that already is its host (spec
+            // 082 RE7): said once.
+            val second = site.subtitle ?: site.host
+            if (second.isNotBlank()) {
+                Text(
+                    text = second,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         site.meta?.takeIf { it.isNotEmpty() }?.let {
             Text(

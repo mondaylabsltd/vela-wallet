@@ -1,0 +1,7 @@
+# DX5 — blackhole googleapis|gstatic|googletagmanager 02:55:52.1 → Uniswap; pass 02:56:23.9
+[vela-wallet] 02:55:52.310 browser: navigate asked host=app.uniswap.org view=built composing=false
+[vela-wallet] 02:55:52.314 browser: asked host=app.uniswap.org gen=21 how=navigation
+[vela-wallet] 02:55:52.559 browser: committed host=app.uniswap.org gen=21
+[vela-wallet] 02:55:53.114 browser: finished host=app.uniswap.org
+--- chaos-post.log: HOLE lines in the window:
+0

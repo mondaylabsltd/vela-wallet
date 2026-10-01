@@ -243,7 +243,10 @@ struct SendReceiptTransferWire: Decodable, Equatable {
 }
 
 struct SendReceiptWire: Decodable, Equatable {
-    /// `submitted` / `confirmed` / `failed`.
+    /// `submitted` / `confirmed` / `failed`, and since spec 082 `maybe_sent`
+    /// (the submit's reply was lost: "it may have been sent", no success
+    /// haptic, no retry) and `not_sent` (the relay never had it). A string on
+    /// purpose: a status this build has never heard of must not fail the view.
     let status: String
     /// `fee_hold` / `fee_rejected`.
     let holdReason: String?

@@ -1,0 +1,20 @@
+# post3 extension (082 round 2) — real Chrome (Playwright's Chromium) + the real extension built from 6d199e1a
+# isolated build into node_modules/.cache/vela-extension-e2e (core wasm f658912d02cb), served on 4174; the relay is scripted by the suite (answer semantics, not an on-chain landing)
+npx playwright test -c playwright.isolated.config.ts e2e/extension-lifecycle.e2e.ts e2e/extension-live-provider.e2e.ts
+
+[1/15] [chromium] › e2e/extension-live-provider.e2e.ts:163:2 › a provider a dApp can use › switches chain per site, and the site hears chainChanged
+[2/15] [chromium] › e2e/extension-lifecycle.e2e.ts:467:2 › a request’s life in the extension (spec 082) › EX5 (G17): a reload during a sheet settles the old request; only the new one shows
+[3/15] [chromium] › e2e/extension-live-provider.e2e.ts:212:2 › a provider a dApp can use › forwards reads to the node the wallet named for the site chain, verbatim
+[4/15] [chromium] › e2e/extension-lifecycle.e2e.ts:497:2 › a request’s life in the extension (spec 082) › EX4 (G18): a second tab’s request queues in the same panel and is answered next
+[5/15] [chromium] › e2e/extension-live-provider.e2e.ts:248:2 › a provider a dApp can use › a site cut off in the wallet hears accountsChanged([]) and disconnect
+[6/15] [chromium] › e2e/extension-lifecycle.e2e.ts:533:2 › a request’s life in the extension (spec 082) › EX6: closing the side panel answers 4900 "The browser closed…" at once
+[7/15] [chromium] › e2e/extension-live-provider.e2e.ts:279:2 › a provider a dApp can use › a site follows the account the wallet switches to
+[8/15] [chromium] › e2e/extension-live-provider.e2e.ts:319:2 › a provider a dApp can use › a request a person CLICKED for opens the side panel, and it answers
+[9/15] [chromium] › e2e/extension-lifecycle.e2e.ts:571:2 › a request’s life in the extension (spec 082) › G35 (RJ2): a claimed submit whose panel goes is answered with its op hash, never 4900
+[10/15] [chromium] › e2e/extension-lifecycle.e2e.ts:681:3 › a request’s life in the extension (spec 082) › G35 (RJ2): a dust send slid in the panel, the panel closed after its submit claim → one ok(op hash)
+[11/15] [chromium] › e2e/extension-lifecycle.e2e.ts:681:3 › a request’s life in the extension (spec 082) › G35 (RJ2): a dust send slid in the panel, the panel reloaded after its submit claim → one ok(op hash), and the new panel owes nothing
+[12/15] [chromium] › e2e/extension-live-provider.e2e.ts:366:2 › a provider a dApp can use › a message signed in the panel ends on the Signed tick, which goes by itself (L-PANEL)
+[13/15] [chromium] › e2e/extension-lifecycle.e2e.ts:811:2 › a request’s life in the extension (spec 082) › EX8 (G19): a worker stopped mid-request resumes; the answer arrives once, with no Chrome text
+[14/15] [chromium] › e2e/extension-lifecycle.e2e.ts:856:2 › a request’s life in the extension (spec 082) › EX4b (RB9, G23c): the panel is still the panel after Wallet → Settings → Wallet
+[15/15] [chromium] › e2e/extension-lifecycle.e2e.ts:902:2 › a request’s life in the extension (spec 082) › EX4b (G55): a request arriving while the panel shows Settings rises with no tap
+  15 passed (25.4s)

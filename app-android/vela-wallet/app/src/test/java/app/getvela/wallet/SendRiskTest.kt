@@ -81,7 +81,7 @@ class SendRiskTest {
             },
             ports = object : SendExecutor.SendPorts {
                 override fun signingStarted() = Unit
-                override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) = Unit
+                override fun trackSubmitted(handoff: app.getvela.wallet.feature.send.core.TrackHandoff) = Unit
                 override fun haptic(kind: SendHapticKind) = Unit
                 override fun alert(kind: SendAlertKind) = Unit
                 override fun closed() = Unit

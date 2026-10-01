@@ -1,0 +1,5 @@
+# vela-relay status method probe, 2026-09-28 (082 G13)
+$ POST https://vela-relay-cf.getvela.app/100 {method: eth_getUserOperationStatus, params: [0x…01]}
+{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"method not found","data":"eth_getUserOperationStatus"}}
+$ POST https://vela-relay-cf.getvela.app/100 {method: pimlico_getUserOperationStatus, params: [0x…01]}
+{"jsonrpc":"2.0","id":1,"result":{"status":"not_found","transactionHash":null}}

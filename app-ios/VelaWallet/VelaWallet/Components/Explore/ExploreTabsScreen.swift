@@ -21,8 +21,10 @@ struct ExploreTabsScreen: View {
     var onNew: () -> Void = {}
     var onCloseAll: () -> Void = {}
 
-    private let columns = [GridItem(.flexible(), spacing: Tokens.Space.s16),
-                           GridItem(.flexible(), spacing: Tokens.Space.s16)]
+    /// Top-aligned (spec 082 RE12): a card is never centred against a
+    /// taller neighbour.
+    static let columns = [GridItem(.flexible(), spacing: Tokens.Space.s16, alignment: .top),
+                          GridItem(.flexible(), spacing: Tokens.Space.s16, alignment: .top)]
 
     var body: some View {
         ScrollView {
@@ -41,24 +43,36 @@ struct ExploreTabsScreen: View {
                 }
                 .padding(.top, Tokens.Space.s20)
 
-                LazyVGrid(columns: columns, spacing: Tokens.Space.s16) {
+                LazyVGrid(columns: Self.columns, alignment: .center, spacing: Tokens.Space.s16) {
                     ForEach(tabs) { tab in
                         TabCardView(tab: tab, closeLabel: copy.close,
                                     onOpen: onOpen, onClose: onClose)
                     }
+                    // The same skeleton as a card: the preview box, then a
+                    // caption row — 新建标签页 whole, never squeezed into the
+                    // preview beside the "+".
                     Button(action: onNew) {
-                        VStack(spacing: Tokens.Space.s8) {
-                            LucideIcon(.plus, size: LucideIconSize.action)
-                            Text(verbatim: copy.newTab)
-                                .typeRole(Typography.rowSub.scaled(textScale))
+                        VStack(spacing: Tokens.Space.s0) {
+                            TabCardPreview {
+                                LucideIcon(.plus, size: LucideIconSize.action)
+                                    .foregroundStyle(theme.fgMuted)
+                            }
+                            HStack {
+                                Text(verbatim: copy.newTab)
+                                    .typeRole(Typography.rowSub.scaled(textScale))
+                                    .foregroundStyle(theme.fgMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: Tokens.Space.s0)
+                            }
+                            .padding(Tokens.Space.s12)
+                            .background(theme.bgRaised)
                         }
-                        .foregroundStyle(theme.fgMuted)
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(ExploreGeometry.tabCardAspect, contentMode: .fit)
-                        .background(theme.bgSunken,
-                                    in: RoundedRectangle(cornerRadius: Tokens.Radius.r16))
+                        .background(theme.bgSunken)
+                        .clipShape(RoundedRectangle(cornerRadius: Tokens.Radius.r16))
+                        .contentShape(RoundedRectangle(cornerRadius: Tokens.Radius.r16))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("explore.tabs.new")
                 }
 
                 Button(action: onCloseAll) {

@@ -60,7 +60,7 @@ use vela_core::app::send::{
     SendRecipientDraft, SendShellResult, SendStage, SendView,
 };
 use vela_core::app::sign_pref::SignPref;
-use vela_core::app::tx_tracker::{TrackStatus, TxTracker};
+use vela_core::app::tx_tracker::TxTracker;
 
 use crate::ceremony::CeremonyChannel;
 use crate::core_host::{CoreHost, Pending};
@@ -160,7 +160,45 @@ pub struct SendHost {
     last_counted_second: Option<u64>,
     signing_reported: bool,
     tracked_hash: Option<String>,
-    last_track_status: Option<TrackStatus>,
+    /// The last receipt verdict handed to the send machine — deduped on the
+    /// verdict itself, not the tracker's status: a may-have-been-sent op the
+    /// relay then acknowledges changes its outcome while its status stays
+    /// `pending` (spec 082 RA10).
+    last_receipt: Option<SendReceiptOutcome>,
+    /// The submit running on a worker (spec 082 RA4, ruling 1): the page
+    /// keeps a column closed under it running, unseen, until it is in.
+    submits: Submits,
+}
+
+/// A send column's submits in flight (spec 082 RA4, ruling 1): counted from
+/// the `SubmitUserOp` dispatch until the core has the result — the moment the
+/// payment's records are written and the tracker is handed the op, both in
+/// that same turn. A column closed before then keeps its machines, unseen:
+/// the POST goes on either way, and dropping them dropped the only thing that
+/// would record and follow it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Submits(u32);
+
+impl Submits {
+    /// `operation` is starting on a worker; `true` when it is the submit.
+    fn started(&mut self, operation: &SendOperation) -> bool {
+        let submit = matches!(operation, SendOperation::SubmitUserOp { .. });
+        if submit {
+            self.0 += 1;
+        }
+        submit
+    }
+
+    /// A submit's result reached the core.
+    fn settled(&mut self) {
+        self.0 = self.0.saturating_sub(1);
+    }
+
+    /// Is a submit running?
+    #[must_use]
+    pub fn running(self) -> bool {
+        self.0 > 0
+    }
 }
 
 /// The active account, whole — the send flow signs as it.
@@ -183,6 +221,12 @@ pub fn account_by_address(address: &str) -> Option<Account> {
 }
 
 impl SendHost {
+    /// Is a submit running for this column (spec 082 RA4)?
+    #[must_use]
+    pub fn submit_running(&self) -> bool {
+        self.submits.running()
+    }
+
     pub fn open(
         account: Account,
         params: SendOpenParams,
@@ -229,7 +273,8 @@ impl SendHost {
             last_counted_second: None,
             signing_reported: false,
             tracked_hash: None,
-            last_track_status: None,
+            last_receipt: None,
+            submits: Submits::default(),
         };
 
         // The Trusted Signer's channel speaks up whenever a ceremony waits,
@@ -703,10 +748,33 @@ impl SendHost {
                 user_op_hash,
                 record_ids,
                 chain_id,
+                maybe_sent,
+                submit_block,
+                admitted,
             } => {
                 self.tracked_hash = Some(user_op_hash.to_lowercase());
-                self.last_track_status = None;
-                tracker::submitted(user_op_hash.clone(), record_ids.clone(), *chain_id, cx);
+                self.last_receipt = None;
+                tracker::submitted(
+                    tracker::Handoff {
+                        user_op_hash: user_op_hash.clone(),
+                        record_ids: record_ids.clone(),
+                        chain_id: *chain_id,
+                        maybe_sent: *maybe_sent,
+                        submit_block: *submit_block,
+                        admitted: *admitted,
+                    },
+                    cx,
+                );
+                self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
+                return;
+            }
+            // Spec 082 RJ1: the written-ahead payment was proven never sent;
+            // the tracker forgets those records (it never patches them).
+            SendOperation::TrackWithdrawn {
+                user_op_hash,
+                record_ids,
+            } => {
+                tracker::withdrawn(user_op_hash, record_ids, cx);
                 self.resolve_send(id, SendShellResult::TrackHandedOff, cx);
                 return;
             }
@@ -761,10 +829,42 @@ impl SendHost {
         match send_executor::perform(&effect.operation, &self.ctx) {
             SendAnswer::Now(result) => self.resolve_send(id, result, cx),
             SendAnswer::Blocking(work) => {
+                let submit = self.submits.started(&effect.operation);
                 cx.spawn(async move |host, cx| {
                     let result = cx.background_executor().spawn(async move { work() }).await;
-                    host.update(cx, |host, cx| host.resolve_send(id, result, cx))
-                        .ok();
+                    host.update(cx, |host, cx| {
+                        // Settled before the core hears it: the records and
+                        // the tracker hand-off happen in this same turn, and
+                        // the redraw it causes lets a closed column go.
+                        if submit {
+                            host.submits.settled();
+                        }
+                        host.resolve_send(id, result, cx);
+                    })
+                    .ok();
+                })
+                .detach();
+            }
+            // The submit (spec 082 RJ1): its `OpSigned` reaches the core
+            // while it waits for the core's clearance, and the result after.
+            SendAnswer::Streaming(work) => {
+                let submit = self.submits.started(&effect.operation);
+                let (tx, mut rx) = futures::channel::mpsc::unbounded();
+                cx.spawn(async move |host, cx| {
+                    let work = cx
+                        .background_executor()
+                        .spawn(async move { work(&resident::Sink::new(tx)) });
+                    while let Some(event) = rx.next().await {
+                        host.update(cx, |host, cx| host.dispatch(event, cx)).ok();
+                    }
+                    let result = work.await;
+                    host.update(cx, |host, cx| {
+                        if submit {
+                            host.submits.settled();
+                        }
+                        host.resolve_send(id, result, cx);
+                    })
+                    .ok();
                 })
                 .detach();
             }
@@ -921,23 +1021,15 @@ impl SendHost {
         else {
             return;
         };
-        if self.last_track_status == Some(entry.status) {
+        // The core's one mapping (spec 082): a slow or unreachable poll sends
+        // nothing (invariant ⑤); "not sent" is never the fee-rejected words.
+        let Some(outcome) = vela_core::app::send::receipt_outcome_of(entry) else {
+            return;
+        };
+        if self.last_receipt.as_ref() == Some(&outcome) {
             return;
         }
-        self.last_track_status = Some(entry.status);
-        // Only the three verdicts `ReceiptUpdate` accepts; a slow or
-        // unreachable poll sends nothing (invariant ⑤).
-        let outcome = match entry.status {
-            TrackStatus::Confirmed => SendReceiptOutcome::Confirmed {
-                tx_hash: entry.tx_hash.clone().unwrap_or_default(),
-            },
-            TrackStatus::Dropped => SendReceiptOutcome::Failed { rejected: false },
-            TrackStatus::Rejected => SendReceiptOutcome::Failed { rejected: true },
-            TrackStatus::FeeHeld => SendReceiptOutcome::FeeHeld,
-            TrackStatus::Pending | TrackStatus::Unreachable | TrackStatus::AcceptedNotLanded => {
-                return;
-            }
-        };
+        self.last_receipt = Some(outcome.clone());
         self.dispatch(
             SendEvent::ReceiptUpdate {
                 user_op_hash: entry.user_op_hash.clone(),
@@ -1142,6 +1234,9 @@ fn map_failure(failure: FeeFailure) -> SendEstimateFailure {
         FeeFailure::CalculationFailed => SendEstimateFailure::CalculationFailed,
         FeeFailure::EstimateFailed => SendEstimateFailure::EstimateFailed,
         FeeFailure::GasQuoteTooHigh => SendEstimateFailure::GasQuoteTooHigh,
+        // A chain read the quote needed got no answer (spec 082 RJ13): to the
+        // send machine, a quote that could not be had.
+        FeeFailure::ChainRead { .. } => SendEstimateFailure::QuoteUnavailable,
         // Spec 083 fee: the relay answered that the operation fails. The send
         // screen has no sentence of its own for it and says what it said for
         // this refusal before the fee machine could tell it apart.
@@ -1184,6 +1279,38 @@ mod tests {
     use crate::resident::{Answer, Machine};
     #[cfg(feature = "dev-fixtures")]
     use vela_core::app::fee_policy::FeeOperation;
+
+    /// Spec 082 RA4 / ruling 1: a send column closed (✕, Esc, another
+    /// panel, another flow) while its submit runs must not take the submit's
+    /// answer with it — that answer is what writes the payment's record and
+    /// hands it to the tracker, and the POST goes on either way. The column
+    /// counts the submit from its dispatch until the core has its result;
+    /// only then may its machines go.
+    #[test]
+    fn a_column_closed_mid_submit_runs_until_its_result_is_in() {
+        let mut submits = Submits::default();
+        assert!(!submits.running());
+        assert!(
+            !submits.started(&SendOperation::CancelPasskeySign),
+            "only the submit is money in flight"
+        );
+        assert!(!submits.running());
+        let submit = SendOperation::SubmitUserOp {
+            chain_id: 100,
+            account: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            calls: Vec::new(),
+            max_fee_per_gas: None,
+            gas_fee_token: None,
+            quoted_fee: None,
+        };
+        assert!(submits.started(&submit));
+        assert!(submits.running(), "closed now, it runs on unseen");
+        submits.settled();
+        assert!(!submits.running(), "its result is in: the machines may go");
+        submits.settled();
+        assert!(!submits.running(), "never below nothing");
+    }
 
     /// Issue #265: an import ADDS to the recipients already on the form, and
     /// replaces them only when the person chose "Replace them instead".
@@ -1296,9 +1423,28 @@ mod tests {
                     // The estimate race: answering the timer first would make
                     // every estimate a timeout. Left pending on purpose.
                     SendOperation::StartTimer { .. } => continue,
+                    SendOperation::TrackWithdrawn { .. } => SendShellResult::TrackHandedOff,
                     _ => match send_executor::perform(&effect.operation, &self.ctx) {
                         SendAnswer::Now(result) => result,
                         SendAnswer::Blocking(work) => work(),
+                        // The submit (RJ1): its `OpSigned` is dispatched here
+                        // while the worker waits for the clearance it causes.
+                        SendAnswer::Streaming(work) => {
+                            let (tx, mut rx) = futures::channel::mpsc::unbounded();
+                            let worker = std::thread::spawn(move || work(&resident::Sink::new(tx)));
+                            loop {
+                                match rx.try_recv() {
+                                    Ok(event) => self.dispatch(event),
+                                    Err(futures::channel::mpsc::TryRecvError::Closed) => break,
+                                    Err(_) => {
+                                        std::thread::sleep(std::time::Duration::from_millis(10))
+                                    }
+                                }
+                            }
+                            worker
+                                .join()
+                                .unwrap_or_else(|_| unreachable!("the submit panicked"))
+                        }
                         SendAnswer::After(..) => continue,
                         SendAnswer::Screen => unreachable!("every screen arm is matched above"),
                     },

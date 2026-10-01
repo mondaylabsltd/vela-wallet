@@ -1,0 +1,27 @@
+DX9 desktop
+run 1 (as written): nonce 50; 03:54:02 chaos latency=20000 match=vela-relay; slide 03:54:05
+[vela-wallet] 03:54:29.513 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=not connected
+[vela-wallet] 03:54:43.532 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=not connected
+[vela-wallet] in-band: estimation failed, using defaults: gas estimation unreachable: Failed { rate_limited: false }
+[vela-wallet] in-band: signing DISPLAYED quote token=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c
+[vela-wallet] 03:54:43.534 relay: submitting chain=100 op=0x7df211eddc initCode=no callData=452B
+[vela-wallet] 03:54:57.036 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=not connected
+[vela-wallet] 03:55:10.580 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=not connected
+[vela-wallet] 03:55:10.580 relay: submit verdict=not_sent hash=0x7df211eddc attempts=1 in=27045 ms
+[vela-wallet] 03:55:10.580 relay: submit failed: NotSent
+[vela-wallet] 03:57:37.751 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=timeout
+03:54:49–03:54:53 Cmd-W, 1.5 s, Cmd-W (gui.py key 13 cmd): no effect, no 'window:' line — the desktop binds only cmd-q/cmd-h/alt-cmd-h/ctrl-cmd-f (src/main.rs:443-448), no Close Window item
+nonce after: 50 (NotSent correct: a 20 s CONNECT delay never reaches the relay within the 15 s bundler timeout)
+
+run 2 (mute variant, close via the red traffic-light button): nonce 50; 03:57:08 chaos mute match=vela-relay latency=0; slide 03:57:10
+[vela-wallet] 03:55:10.580 relay: submit failed: NotSent
+[vela-wallet] 03:57:37.751 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=timeout
+[vela-wallet] 03:57:53.508 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=timeout
+[vela-wallet] in-band: estimation failed, using defaults: gas estimation unreachable: Failed { rate_limited: false }
+[vela-wallet] in-band: signing DISPLAYED quote token=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c
+[vela-wallet] 03:57:53.510 relay: submitting chain=100 op=0x7df211eddc initCode=no callData=452B
+[vela-wallet] 03:57:59.006 window: close held (submit in flight)
+03:57:58.9 click close → held (window stays, column forward); ~03:58:01 click close again → app gone 03:58:03
+chain: block 48487627 op 0x7df211eddc09a4456be957b0c899bafd1747ff0327deb88fcc43f16d249c36e4 tx 0xe557f5f0edc0a638d4be20a1b019ee094f97141dd537d2d6bd9e9f0d5c5ed570 nonce 50 success 1; nonce after 51
+relaunch 03:58:2x (desk-post-DX9.err): Activity = the same six dApp rows, NO row for this op; 03:58:59 chaos pass; +60 s: still no row, xDAI 0.24967 (= 7 × 0.011 spent) — the balance moved, the history did not
+[vela-wallet] core: tx_tracker booting

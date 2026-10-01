@@ -22,6 +22,8 @@
  *     the activity feed whether or not the dApp ever heard back).
  */
 
+import { panelSurface } from './panel-surface.svelte';
+
 /** What the service worker wrote down when the request arrived. */
 export interface ExtensionRequest {
 	/** The background's id for this request: `<tabId>:<page id>`. */
@@ -35,16 +37,6 @@ export interface ExtensionRequest {
 	tabId: number;
 	at: number;
 }
-
-/**
- * The worker's `storage.local` key prefix for a pending request
- * (`extension/lib/protocol.js`'s `REQUEST_PREFIX`).
- *
- * Declared here rather than imported because the app bundle must not pull in
- * the extension's worker modules. `one-surface.test.ts` asserts the two are the
- * same string, so a rename cannot leave this behind.
- */
-const REQUEST_PREFIX = 'vela.req.';
 
 /** EIP-1193's refusal, and the one a dismissed window produces. */
 export const USER_REJECTED = 4001;
@@ -89,95 +81,38 @@ export async function readRequest(rid: string): Promise<ExtensionRequest | null>
 }
 
 /**
- * The tab this side panel belongs to, if this page is one.
+ * Hand the answer back — through the surface's port when it is up (spec 082
+ * contract §14), else the worker's message fallback.
  *
- * A side panel is per tab: the worker opened it for the tab that asked, and
- * `tabs.query` for the active tab of the panel's own window is that tab. Off
- * a panel (a window, the hosted site) there is no answer, and the worker then
- * hands the panel whatever is owed on a panel anywhere — one tab at a time is
- * the normal case, so both roads lead to the same request.
+ * Resolves `true` only when the PAGE took it. `false` is not a detail to
+ * ignore (before 082 it was, G17): the asking page is gone, the dApp heard
+ * nothing, and the surface must stop showing a request nobody is waiting on.
+ * Settling twice is the worker's job to refuse.
  */
-export async function panelTabId(): Promise<number | undefined> {
-	const tabs = (globalThis as { chrome?: { tabs?: unknown } }).chrome?.tabs as
-		| { query(info: { active: boolean; currentWindow: boolean }): Promise<{ id?: number }[]> }
-		| undefined;
-	if (!tabs || typeof tabs.query !== 'function') return undefined;
-	try {
-		const [tab] = await tabs.query({ active: true, currentWindow: true });
-		return typeof tab?.id === 'number' ? tab.id : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-/** What the side panel of `tabId` owes an answer for right now, oldest first. */
-export async function currentPanelRequest(
-	tabId: number | undefined
-): Promise<ExtensionRequest | null> {
-	const api = runtime();
-	if (!api) return null;
-	try {
-		const detail = await api.sendMessage({ type: 'requestCurrent', tabId });
-		return isRequest(detail) ? detail : null;
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Call `onArrival` when the worker records a NEW pending request.
- *
- * Spec 077 FR-001. The panel used to be one request per page load: it answered,
- * closed, and the next request opened it again — so asking once at mount was
- * enough. Now the panel is the WALLET and stays open, and
- * `chrome.sidePanel.open` on an already-open panel shows it without reloading
- * the page. A surface that only asked at mount would sit there showing a wallet
- * while a dApp waited (measured 2026-09-23: the second request never raised a
- * sheet).
- *
- * The signal is the worker's OWN bookkeeping — it writes every pending request
- * to `storage.local` under `vela.req.<rid>` so a restarted worker can still
- * answer — so nothing had to be added to the worker to be told. A change to any
- * of those keys means "ask again"; who the request belongs to is still decided
- * by `requestCurrent`, which filters by tab.
- *
- * Returns the unsubscribe. A no-op outside the extension.
- */
-export function subscribeRequests(onArrival: () => void): () => void {
-	type Listener = (changes: Record<string, unknown>, area?: string) => void;
-	type ChangedLike = {
-		addListener?: (listener: Listener) => void;
-		removeListener?: (listener: Listener) => void;
-	};
-	const changed = (globalThis as { chrome?: { storage?: { onChanged?: unknown } } }).chrome?.storage
-		?.onChanged as ChangedLike | undefined;
-	if (!changed || typeof changed.addListener !== 'function') return () => {};
-	const listener: Listener = (changes, area) => {
-		if (area !== undefined && area !== 'local') return;
-		if (Object.keys(changes).some((key) => key.startsWith(REQUEST_PREFIX))) onArrival();
-	};
-	changed.addListener(listener);
-	return () => {
-		try {
-			changed.removeListener?.(listener);
-		} catch {
-			/* the page is going away; the listener goes with it */
-		}
-	};
-}
-
-/** Hand the answer back. Settling twice is the background's job to refuse. */
 export async function answerRequest(
 	rid: string,
-	answer: { result?: unknown; error?: { code: number; message: string } }
+	answer: { result?: unknown; error?: { code: number; message: string } },
+	opHash?: { chainId: number }
 ): Promise<boolean> {
+	if (panelSurface.caller) {
+		const delivered = await panelSurface.answer(rid, answer, opHash);
+		if (!delivered) console.info(`[dapp] answer not delivered rid=${rid}`);
+		return delivered;
+	}
 	const api = runtime();
 	if (!api) return false;
 	try {
-		const reply = (await api.sendMessage({ type: 'requestAnswer', rid, ...answer })) as {
+		const reply = (await api.sendMessage({
+			type: 'requestAnswer',
+			rid,
+			...answer,
+			...(opHash ? { opHash } : {})
+		})) as {
 			delivered?: boolean;
 		} | null;
-		return reply?.delivered === true;
+		const delivered = reply?.delivered === true;
+		if (!delivered) console.info(`[dapp] answer not delivered rid=${rid}`);
+		return delivered;
 	} catch {
 		return false;
 	}

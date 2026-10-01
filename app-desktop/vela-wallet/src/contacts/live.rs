@@ -142,7 +142,7 @@ pub fn detail(
             .into_iter()
             .take(shown)
             .map(|item| {
-                let mut row = crate::wallet::live::activity_row(feed, item, wallet, hidden);
+                let mut row = crate::wallet::live::activity_row(item, wallet, hidden);
                 // On this person's own page "to Alice" is noise: the web's
                 // subtitle is the network and the day (`contactActivityRow`).
                 row.subtitle = SharedString::from(format!(
@@ -474,6 +474,10 @@ mod tests {
                     day_start_ms: 0.0,
                     tx_hash: None,
                     batch: None,
+                    kind: vela_core::app::activity_feed::FeedTxKind::Send,
+                    status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+                    site: None,
+                    counterparty_role: Default::default(),
                     dapp: None,
                 },
             }],
@@ -550,6 +554,10 @@ mod tests {
                 day_start_ms: 0.0,
                 tx_hash: None,
                 batch: None,
+                kind: vela_core::app::activity_feed::FeedTxKind::Receive,
+                status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+                site: None,
+                counterparty_role: Default::default(),
                 dapp: None,
             },
         };

@@ -1,0 +1,58 @@
+# IX8 (reset_mid vela-relay, slide dust, x3) — iPhone build fb8c7026; reset_mid set right before each slide; pass+cut 09:17:29
+# nonce 54 (09:12:33) -> 55 -> 56 -> 57 (09:17:29); balance 0.21667 -> 0.18367
+09:12:37.025 2026-09-29 09:12:36.985060+0800 VelaWallet[1817:552194] [relay] submitting chain=100 hash=0xbfc819e3b7
+09:12:38.887 2026-09-29 09:12:38.850706+0800 VelaWallet[1817:552194] [rpc] gave_up chain=100 method=eth_sendUserOperation kind=bundler
+09:12:38.887 2026-09-29 09:12:38.850795+0800 VelaWallet[1817:552194] [relay] maybe_sent hash=0xbfc819e3b7 attempts=1 in=1865ms
+09:12:38.887 2026-09-29 09:12:38.850832+0800 VelaWallet[1817:552194] [sign] submit verdict=maybe_sent hash=0xbfc819e3b7 chain=100
+09:12:52.831 2026-09-29 09:12:52.833829+0800 VelaWallet[1817:552194] [tracker] tracker confirmed op=0xbfc819e3b7 chain=100
+09:12:52.831 2026-09-29 09:12:52.833984+0800 VelaWallet[1817:552194] [balance] balance refresh (holdings_moved) chain=100
+09:16:11.873 2026-09-29 09:16:11.862765+0800 VelaWallet[1817:552194] [relay] submitting chain=100 hash=0xf2ccdd39f2
+09:16:14.142 2026-09-29 09:16:14.171923+0800 VelaWallet[1817:552194] [rpc] gave_up chain=100 method=eth_sendUserOperation kind=bundler
+09:16:14.142 2026-09-29 09:16:14.171987+0800 VelaWallet[1817:552194] [relay] maybe_sent hash=0xf2ccdd39f2 attempts=1 in=2309ms
+09:16:14.142 2026-09-29 09:16:14.172020+0800 VelaWallet[1817:552194] [sign] submit verdict=maybe_sent hash=0xf2ccdd39f2 chain=100
+09:16:21.503 2026-09-29 09:16:21.484228+0800 VelaWallet[1817:552194] [tracker] tracker confirmed op=0xf2ccdd39f2 chain=100
+09:16:21.503 2026-09-29 09:16:21.484581+0800 VelaWallet[1817:552194] [balance] balance refresh (holdings_moved) chain=100
+09:16:55.371 2026-09-29 09:16:55.310360+0800 VelaWallet[1817:552194] [relay] submitting chain=100 hash=0xfab9921774
+09:16:58.480 2026-09-29 09:16:58.429061+0800 VelaWallet[1817:552194] [relay] submit verdict=accepted hash=0xfab9921774 attempts=1 in=3118ms
+09:16:58.480 2026-09-29 09:16:58.429107+0800 VelaWallet[1817:552194] [sign] submit verdict=accepted hash=0xfab9921774 chain=100
+09:17:12.338 2026-09-29 09:17:12.301694+0800 VelaWallet[1817:552194] [tracker] tracker confirmed op=0xfab9921774 chain=100
+09:17:12.338 2026-09-29 09:17:12.302210+0800 VelaWallet[1817:552194] [balance] balance refresh (holdings_moved) chain=100
+# chain (EntryPoint UserOperationEvent, Safe topic2):
+48491347 09:12:45 op 0xbfc819e3b75e547286a22001f38e038b8ce51eeb53edd147ec84f7be6e505583 tx 0x5bc5fcc47596b825d1a6e37bc0a1436b85125af2996f5ecf3078d63f0274fc50 nonce 54 success 1
+48491389 09:16:20 op 0xf2ccdd39f295640e59eb6163c684544bed7003a5368bae8a0859fb6091d4fb2c tx 0xa49288e1e93310363321cb795bf2de0d7f920f610edff5a7d58090fe32299a12 nonce 55 success 1
+48491398 09:17:05 op 0xfab992177447485ee2f60fbf2dda33781033aa5d49272b1406a960b921faf531 tx 0xc3115c330f03157e2bf0243ded5ce6911702683f49331505c701a486418ab826 nonce 56 success 1
+# dApp page (one answer each, tx hash):
+{"t":"09:12:26","label":"send 0.001","result":"0x5bc5fcc47596b825d1a6e37bc0a1436b85125af2996f5ecf3078d63f0274fc50","ok":true,"done":"09:12:51"}
+{"t":"09:15:58","label":"send 0.001","result":"0xa49288e1e93310363321cb795bf2de0d7f920f610edff5a7d58090fe32299a12","ok":true,"done":"09:16:24"}
+{"t":"09:16:44","label":"send 0.001","result":"0xc3115c330f03157e2bf0243ded5ce6911702683f49331505c701a486418ab826","ok":true,"done":"09:17:09"}
+# chaos
+09:12:33 CONFIG {"mode": "reset_mid", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+09:12:33 CUT 1 live tunnels: vela-relay-cf.getvela.app
+09:12:35 RESET_MID vela-relay-cf.getvela.app:443 0ms
+09:12:37 RESET vela-relay-cf.getvela.app:443
+09:12:37 RESET_MID vela-relay-cf.getvela.app:443 1ms
+09:12:38 RESET vela-relay-cf.getvela.app:443
+09:12:38 RESET_MID vela-relay-cf.getvela.app:443 12ms
+09:12:40 RESET vela-relay-cf.getvela.app:443
+09:12:43 RESET_MID vela-relay-cf.getvela.app:443 1ms
+09:12:44 RESET vela-relay-cf.getvela.app:443
+09:12:45 RESET_MID vela-relay-cf.getvela.app:443 0ms
+09:12:46 RESET vela-relay-cf.getvela.app:443
+09:12:50 RESET_MID vela-relay-cf.getvela.app:443 0ms
+09:12:51 RESET vela-relay-cf.getvela.app:443
+09:12:52 RESET_MID vela-relay-cf.getvela.app:443 0ms
+09:12:53 RESET vela-relay-cf.getvela.app:443
+09:15:58 RESET_MID vela-relay-cf.getvela.app:443 1ms
+09:15:59 RESET vela-relay-cf.getvela.app:443
+09:16:00 RESET_MID vela-relay-cf.getvela.app:443 0ms
+09:16:02 RESET vela-relay-cf.getvela.app:443
+09:16:02 RESET_MID vela-relay-cf.getvela.app:443 0ms
+09:16:03 RESET vela-relay-cf.getvela.app:443
+09:16:06 CONFIG {"mode": "reset_mid", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+09:16:08 RESET_MID vela-relay-cf.getvela.app:443 0ms
+09:16:09 RESET vela-relay-cf.getvela.app:443
+09:16:10 RESET_MID vela-relay-cf.getvela.app:443 1ms
+09:16:11 RESET vela-relay-cf.getvela.app:443
+09:16:12 RESET_MID vela-relay-cf.getvela.app:443 0ms
+09:16:14 RESET vela-relay-cf.getvela.app:443
+09:16:14 RESET_MID vela-relay-cf.getvela.app:443 0ms

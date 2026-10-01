@@ -65,7 +65,8 @@ enum ExploreLive {
             // Spec 079 (owner): the lock alone — no "安全站点", no words.
             statusLine: "",
             items: siteMenuItems(
-                bookmarked: bookmarked, connected: tab?.connectedAddress != nil, loc: loc
+                bookmarked: bookmarked, connected: tab?.connectedAddress != nil,
+                loading: engine?.loading ?? false, loc: loc
             )
         )
 
@@ -114,11 +115,16 @@ enum ExploreLive {
     }
 
     /// The ⋯ sheet's items, saying what a tap will do NOW: the star's row
-    /// removes a site that is already a favourite, and Disconnect is offered
-    /// only to a site that is connected.
-    static func siteMenuItems(bookmarked: Bool, connected: Bool, loc: Loc) -> [SiteMenuItem] {
+    /// removes a site that is already a favourite, Disconnect is offered only
+    /// to a site that is connected, and — spec 082 RE5 — while a page loads
+    /// the refresh row is Stop.
+    static func siteMenuItems(
+        bookmarked: Bool, connected: Bool, loading: Bool = false, loc: Loc
+    ) -> [SiteMenuItem] {
         ExploreFixtures.siteMenuItems(loc).compactMap { item in
             switch item.id {
+            case "refresh" where loading:
+                return SiteMenuItem(id: "stop", icon: "close", label: loc.t("connect.dapp.stop"))
             case "favorite" where bookmarked:
                 return SiteMenuItem(id: item.id, icon: "starSolid",
                                     label: loc.t("explore.removeFromFavorites"))
@@ -327,13 +333,15 @@ enum ExploreLive {
                 name: chainName(chainId),
                 dot: SettingsLive.chainColor(chainId)
             ),
-            explainer: loc.t("explore.connectionExplainer"),
-            disconnect: loc.t("explore.disconnect"),
-            // When a site is ASKING, the explainer is the one written for
-            // exactly that moment: what a connection is, and what it is not.
-            footnote: consent == nil
-                ? loc.t("explore.autoRequestHint")
+            // When a site is ASKING, the one sentence is the one written for
+            // exactly that moment — what a connection is, and what it is not
+            // — above the answers, and nothing under them (spec 082 RE6: two
+            // explainers said it twice). Connected: unchanged.
+            explainer: consent == nil
+                ? loc.t("explore.connectionExplainer")
                 : loc.t("connect.browser.body"),
+            disconnect: loc.t("explore.disconnect"),
+            footnote: consent == nil ? loc.t("explore.autoRequestHint") : "",
             secure: secure,
             // The approve word every client uses (spec 079): "连接" — it was
             // "批准" here alone.
@@ -360,8 +368,16 @@ enum ExploreLive {
     /// limited (a 429 is transient and stays quiet, the wallet's standing
     /// rule). `nil` when there is nothing to say; it goes by itself when the
     /// chain answers again, because the pool drops it from the set.
-    static func chainNotice(chainId: Int?, failed: [Int], rateLimited: [Int], loc: Loc) -> String? {
-        guard let chainId, failed.contains(chainId), !rateLimited.contains(chainId) else { return nil }
+    ///
+    /// Spec 082 RF1: `failed ∪ unreached ∖ rate-limited` — a chain one call's
+    /// first pass could not reach at all is named while the dApp still waits,
+    /// not after three passes (G33). The home banner keeps `failed` alone.
+    static func chainNotice(
+        chainId: Int?, failed: [Int], unreached: [Int] = [], rateLimited: [Int], loc: Loc
+    ) -> String? {
+        guard let chainId, failed.contains(chainId) || unreached.contains(chainId),
+              !rateLimited.contains(chainId)
+        else { return nil }
         return loc.t("explore.chainDown", vars: ["chain": chainName(chainId)])
     }
 

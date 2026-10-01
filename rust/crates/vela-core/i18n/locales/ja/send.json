@@ -54,7 +54,6 @@
     "txRemaining": "残り約 {{remaining}} 秒",
     "txTypicalTime": "{{chainName}} の承認には通常約 {{estSecs}} 秒かかります",
     "txRetryBtn": "再試行",
-    "txErrorTimeout": "トランザクションは送信されましたが、承認がタイムアウトしました。後で履歴をご確認ください。",
     "txErrorBundlerLoop": "Gas アカウントの残高が Bundler に繰り返し拒否されています。後でもう一度試すか、Gas のティアを上げてください。",
     "txErrorBundlerFund": "Bundler アカウントの Gas が不足しています。設定からチャージしてください。",
     "txErrorPublicKey": "このアカウントの公開鍵が見つかりません",

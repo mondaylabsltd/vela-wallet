@@ -2,6 +2,10 @@
 
 /**
  * The `LocalTransaction.type` union (`storage.ts:390-391`). A record with no
- * type is a legacy row and defaults to `send`.
+ * type is a legacy row and defaults to `send` — which is also the
+ * [`Default`], so a [`FeedItem`] decoded from before spec 082 reads as one.
+ *
+ * A [`FeedItem`] only ever carries `Send`, `Receive` or `DappTx`: message
+ * signatures and connects never become rows.
  */
 export type FeedTxKind = "send" | "receive" | "dapp_tx" | "sign_message" | "sign_typed_data" | "connect";

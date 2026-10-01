@@ -61,7 +61,6 @@
     "txRemaining": "剩余约 {{remaining}} 秒",
     "txTypicalTime": "{{chainName}} 通常在约 {{estSecs}} 秒内确认",
     "txRetryBtn": "重试",
-    "txErrorTimeout": "交易已提交，但确认超时。请稍后查看历史记录。",
     "txErrorBundlerLoop": "Gas 账户余额被 bundler 持续拒绝，请稍后再试或提高 Gas 档位。",
     "txErrorBundlerFund": "Bundler 账户 Gas 不足，请在设置中充值。",
     "txErrorPublicKey": "未找到该账户的公钥",
@@ -162,7 +161,7 @@
     "batchParsedCount": "解析结果 · {{n}} 条",
     "confirmTotalLine": "合计 ≈ {{fiat}} · {{network}}",
     "txPreparingBiometric": "正在准备交易并等待生物识别确认",
-    "txBackgroundHint": "关闭此页交易会在后台继续",
+    "txBackgroundHint": "关闭此页，交易会在后台继续",
     "txCloseBackground": "关闭 · 后台继续",
     "txSubmittedTitle": "交易已提交至网络",
     "txConfirmedTitle": "已发送 {{amount}} {{symbol}}"

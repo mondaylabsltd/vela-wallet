@@ -261,12 +261,21 @@ struct TxDetailModel {
     let fiat: String
     let positive: Bool
     let facts: [FactRowModel]
-    let viewOnExplorer: String
+    /// 在区块浏览器中查看 — `nil` where there is no transaction to open (spec
+    /// 082 RJ16, G52): an op the relay refused, or one the chain has not
+    /// shown yet, has only an op hash, and an op hash is never an explorer
+    /// link. No label, no control.
+    let viewOnExplorer: String?
     /// 删除记录 — the local record, not the transaction. Absent where there is
     /// nothing to delete (a fixture, a receipt still in flight). The web's
     /// `TxDetail.svelte` has drawn this button since 028 and never set the
     /// label, so it has been invisible on every client.
     var deleteLabel: String?
+    /// The record is still pending (spec 082 RJ18, G51): its delete is a
+    /// quiet control under the rest, never the most prominent thing on a
+    /// "may have been sent" record — forgetting it is how a person sends the
+    /// same money again.
+    var deleteQuiet = false
 }
 
 // MARK: - Assets

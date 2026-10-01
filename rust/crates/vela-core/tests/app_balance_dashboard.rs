@@ -1536,3 +1536,252 @@ fn a_chains_own_coin_is_written_the_wallets_way() {
     assert!(symbols.contains(&"ABC".to_owned()), "{symbols:?}");
     assert!(!symbols.contains(&"XDAI".to_owned()), "{symbols:?}");
 }
+
+// ---------------------------------------------------------------------------
+// Read plan — which tokens one chain's balance read covers (spec 082 T036,
+// RE9, G24)
+// ---------------------------------------------------------------------------
+
+mod read_plan {
+    use vela_core::app::balance_dashboard::{
+        chain_has_native_coin, read_plan, ReadKind, ReadSlot, StableRef, TokenRef,
+    };
+
+    const BASE: u32 = 8453;
+    const TEMPO: u32 = 4217;
+    const CELO: u32 = 42220;
+    const BASE_USDC: &str = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+    const BASE_WETH: &str = "0x4200000000000000000000000000000000000006";
+    const CELO_GOLD: &str = "0x471EcE3750Da237f93B8E339c536989b8978a438";
+
+    fn stable(symbol: &str, contract: &str) -> StableRef {
+        StableRef {
+            symbol: symbol.to_owned(),
+            contract: contract.to_owned(),
+        }
+    }
+
+    fn custom(symbol: &str, name: &str, contract: &str, decimals: u8) -> TokenRef {
+        TokenRef {
+            contract: contract.to_owned(),
+            symbol: symbol.to_owned(),
+            name: name.to_owned(),
+            decimals,
+        }
+    }
+
+    /// Base's `stables` as ethereum-data.getvela.app served them on
+    /// 2026-09-28 (`chains/eip155-8453.json`), in its order.
+    fn base_stables() -> Vec<StableRef> {
+        vec![
+            stable("USDC", BASE_USDC),
+            stable("USDT", "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"),
+            stable("DAI", "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb"),
+            stable("USDbC", "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA"),
+            stable("EURC", "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42"),
+        ]
+    }
+
+    fn shape(plan: &[ReadSlot]) -> Vec<(ReadKind, Option<&str>, &str)> {
+        plan.iter()
+            .map(|slot| (slot.kind, slot.contract.as_deref(), slot.symbol.as_str()))
+            .collect()
+    }
+
+    /// G24: the same wallet listed USDC on Base (0.470005) on the desktop and
+    /// not on the iPhone, which read only the native coin and custom tokens.
+    #[test]
+    fn base_lists_usdc() {
+        let plan = read_plan(BASE, &base_stables(), Some(BASE_WETH), &[]);
+        assert_eq!(
+            shape(&plan),
+            vec![
+                (ReadKind::Native, None, ""),
+                (ReadKind::Stable, Some(BASE_USDC), "USDC"),
+                (
+                    ReadKind::Stable,
+                    Some("0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2"),
+                    "USDT"
+                ),
+                (
+                    ReadKind::Stable,
+                    Some("0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb"),
+                    "DAI"
+                ),
+                (
+                    ReadKind::Stable,
+                    Some("0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA"),
+                    "USDbC"
+                ),
+                (
+                    ReadKind::Stable,
+                    Some("0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42"),
+                    "EURC"
+                ),
+                (ReadKind::Wrapped, Some(BASE_WETH), ""),
+            ]
+        );
+        let usdc = &plan[1];
+        assert_eq!(usdc.peg_usd, Some(1.0));
+        assert_eq!(usdc.known_decimals, None, "decimals are read on chain");
+        assert_eq!(usdc.name, "USDC");
+        assert!(plan[0].peg_usd.is_none() && plan[6].peg_usd.is_none());
+    }
+
+    /// Tempo has no native coin: its gas is a stablecoin, and its
+    /// `eth_getBalance` answers a constant for every address.
+    #[test]
+    fn tempo_has_no_native_slot() {
+        assert!(!chain_has_native_coin(TEMPO));
+        assert!(!chain_has_native_coin(42431));
+        assert!(chain_has_native_coin(BASE));
+        let plan = read_plan(
+            TEMPO,
+            &[
+                stable("USDC.e", "0x20C000000000000000000000b9537d11c60E8b50"),
+                stable("pathUSD", "0x20C0000000000000000000000000000000000000"),
+            ],
+            None,
+            &[],
+        );
+        assert!(plan.iter().all(|slot| slot.kind == ReadKind::Stable));
+        assert_eq!(plan.len(), 2);
+    }
+
+    /// A contract is read once. The person's own entry for a registry
+    /// stablecoin lends it their symbol, name and saved decimals; it stays in
+    /// the registry's place, priced at its peg.
+    #[test]
+    fn a_custom_usdc_entry_wins_over_the_registry_one() {
+        let mine = custom("USDC", "USD Coin (mine)", &BASE_USDC.to_lowercase(), 6);
+        let plan = read_plan(BASE, &base_stables(), Some(BASE_WETH), &[mine]);
+        assert_eq!(plan.len(), 7, "no second USDC slot");
+        let usdc = &plan[1];
+        assert_eq!(usdc.kind, ReadKind::Stable);
+        assert_eq!(usdc.name, "USD Coin (mine)");
+        assert_eq!(usdc.known_decimals, Some(6));
+        assert_eq!(usdc.peg_usd, Some(1.0));
+        assert!(plan.iter().all(|slot| slot.kind != ReadKind::Custom));
+    }
+
+    /// Native, stables, wrapped, custom — each group in the order given, and
+    /// the same answer every time.
+    #[test]
+    fn order_is_stable() {
+        let degen = custom(
+            "DEGEN",
+            "Degen",
+            "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed",
+            18,
+        );
+        let brett = custom(
+            "BRETT",
+            "Brett",
+            "0x532f27101965dd16442E59d40670FaF5eBB142E4",
+            18,
+        );
+        let tokens = [degen, brett];
+        let plan = read_plan(BASE, &base_stables(), Some(BASE_WETH), &tokens);
+        let kinds: Vec<ReadKind> = plan.iter().map(|slot| slot.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                ReadKind::Native,
+                ReadKind::Stable,
+                ReadKind::Stable,
+                ReadKind::Stable,
+                ReadKind::Stable,
+                ReadKind::Stable,
+                ReadKind::Wrapped,
+                ReadKind::Custom,
+                ReadKind::Custom,
+            ]
+        );
+        assert_eq!(plan[7].symbol, "DEGEN");
+        assert_eq!(plan[8].symbol, "BRETT");
+        assert_eq!(plan[8].known_decimals, Some(18));
+        assert_eq!(
+            plan,
+            read_plan(BASE, &base_stables(), Some(BASE_WETH), &tokens)
+        );
+    }
+
+    /// Celo's "wrapped" native IS the coin (spec 038): no wrapped slot, and a
+    /// custom entry for it is not a second copy of the holding.
+    #[test]
+    fn celo_s_coin_is_read_once() {
+        let plan = read_plan(
+            CELO,
+            &[stable("USDC", "0xcebA9300f2b948710d2653dD7B07f33A8B32118C")],
+            Some(CELO_GOLD),
+            &[custom("CELO", "Celo", CELO_GOLD, 18)],
+        );
+        let kinds: Vec<ReadKind> = plan.iter().map(|slot| slot.kind).collect();
+        assert_eq!(kinds, vec![ReadKind::Native, ReadKind::Stable]);
+    }
+
+    /// Case never makes two slots; the first entry of a contract keeps its
+    /// place; blank contracts are not read.
+    #[test]
+    fn a_contract_is_read_once_whatever_its_case() {
+        let gnosis_wxdai = "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d";
+        let plan = read_plan(
+            100,
+            &[
+                stable("WXDAI", gnosis_wxdai),
+                stable("USDC", "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"),
+                stable("USDC", "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83"),
+                stable("?", "  "),
+            ],
+            Some(&gnosis_wxdai.to_lowercase()),
+            &[
+                custom(
+                    "GNO",
+                    "Gnosis",
+                    "0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb",
+                    18,
+                ),
+                custom(
+                    "gno",
+                    "gno again",
+                    "0x9c58bacc331c9aa871afd802db6379a98e80cedb",
+                    18,
+                ),
+                custom("NONE", "blank", "", 18),
+            ],
+        );
+        assert_eq!(
+            shape(&plan),
+            vec![
+                (ReadKind::Native, None, ""),
+                (ReadKind::Stable, Some(gnosis_wxdai), "WXDAI"),
+                (
+                    ReadKind::Stable,
+                    Some("0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"),
+                    "USDC"
+                ),
+                (
+                    ReadKind::Custom,
+                    Some("0x9C58BAcC331c9aa871AFD802DB6379a98e80CEdb"),
+                    "GNO"
+                ),
+            ]
+        );
+    }
+
+    /// The shells can hand the chain data's own `stables` JSON over as it is.
+    #[test]
+    fn the_chain_data_stables_decode_as_they_are() {
+        let json = r#"[{"symbol":"USDC","type":"native","contract":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"}]"#;
+        let stables: Vec<StableRef> = serde_json::from_str(json).unwrap_or_default();
+        assert_eq!(stables, vec![stable("USDC", BASE_USDC)]);
+        let custom: Vec<TokenRef> =
+            serde_json::from_str(r#"[{"contract":"0xabc","symbol":"X","decimals":6}]"#)
+                .unwrap_or_default();
+        assert_eq!(custom, vec![self::custom("X", "", "0xabc", 6)]);
+        let slot =
+            serde_json::to_value(&read_plan(TEMPO, &stables, None, &[])[0]).unwrap_or_default();
+        assert_eq!(slot["kind"], "stable");
+        assert_eq!(slot["peg_usd"], 1.0);
+    }
+}

@@ -320,6 +320,9 @@ object I18nKeys {
         const val LABEL_DAPP_TX = "history.txLabelDappTx"
         const val TO_NAME = "history.toName"
         const val FROM_NAME = "history.fromName"
+        /** Spec 082 RG2: a row not yet confirmed says so first — "Pending · …" / "Failed · …". */
+        const val ROW_PENDING = "componentsTx.detail.statusPending"
+        const val ROW_FAILED = "componentsTx.detail.statusFailed"
         const val DAY_TODAY = "componentsUi.dayGroup.today"
         const val DAY_YESTERDAY = "componentsUi.dayGroup.yesterday"
 
@@ -496,6 +499,8 @@ object I18nKeys {
         const val STATUS_CONFIRMED = "componentsTx.receipt.statusConfirmed"
         const val DETAIL_FROM = "componentsTx.detail.from"
         const val DETAIL_TO = "componentsTx.detail.to"
+        /** Spec 082 RJ16: a dApp record's counterparty is the contract a call went to ("Interacting with"). */
+        const val DETAIL_CONTRACT = "componentsUi.signing.interactingLabel"
         const val DETAIL_CHAIN = "componentsTx.detail.labelChain"
         const val DETAIL_DATE = "componentsTx.detail.labelDate"
         const val DETAIL_HASH = "componentsTx.detail.labelHash"
@@ -679,6 +684,19 @@ object I18nKeys {
         const val CANNOT_CONVERT = "send.warnCannotConvert"
         const val TX_PREPARING = "send.txPreparing"
         const val TX_SIGNING = "send.txSigning"
+        /**
+         * Spec 082 RA10: the caption under "Submitting…" when the relay's reply
+         * was lost — it may have been sent, Vela keeps checking, do not send it
+         * again. Never "failed, try again" (owner ruling 1).
+         */
+        const val SIGN_MAYBE_SENT = "componentsUi.signing.maybeSent"
+        /**
+         * Spec 082 RJ3/RJ6: under `statusFailed` when the relay refused the op
+         * (the core's `SignEndingState.Refused` / `SignView.failure_refused`):
+         * nothing was sent, and no Retry words — the same request would be
+         * refused again.
+         */
+        const val SIGN_REFUSED = "componentsUi.signing.refused"
         const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
         const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
         const val TX_HELD_FEES = "send.txHeldFees"
@@ -719,6 +737,10 @@ object I18nKeys {
         const val CANCEL = "home.cancel"
         const val STATUS_PENDING = "componentsTx.detail.statusPending"
         const val STATUS_SUCCEEDED = "componentsTx.detail.statusSucceeded"
+        /** Spec 082 RG2: a dApp's transaction that failed, on its detail sheet. */
+        const val STATUS_FAILED_DETAIL = "componentsTx.detail.statusFailed"
+        /** Spec 082 RG2: the detail's "Requested by" fact — the site that asked. */
+        const val REQUESTED_BY = "componentsUi.signing.siweOrigin"
     }
 
     /**
@@ -1037,5 +1059,17 @@ object I18nKeys {
         const val NAV_EXPLORE = "componentsUi.mainNav.explore"
         const val NAV_SETTINGS = "componentsUi.mainNav.settings"
         const val ACTION_SEND = "componentsUi.dock.send"
+    }
+
+    /** The in-app browser's words that code names (the rest arrive as the core's `reason_key`). */
+    object Explore {
+        /**
+         * Spec 082 RD9: the page could not load because the proxy itself could
+         * not be used. The core's `browserLoadClassify` hands this as the
+         * `proxy` class's `reason_key`; named here so a test proves it resolves.
+         */
+        const val LOAD_PROXY = "explore.loadProxy"
+        const val LOAD_OFFLINE = "explore.loadOffline"
+        const val LOAD_RETRYING = "explore.loadRetrying"
     }
 }

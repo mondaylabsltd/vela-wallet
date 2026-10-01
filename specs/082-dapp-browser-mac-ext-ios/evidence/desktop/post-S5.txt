@@ -1,0 +1,23 @@
+S5 desktop (log desk-post-T181.err)
+nonce before 03:51:07 = 50; 03:51:07 chaos drop match=vela-relay latency=0; slide ~03:51:12
+[vela-wallet] 03:51:15.303 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=not connected
+[vela-wallet] 03:51:15.612 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_estimateUserOperationGas outcome=not connected
+[vela-wallet] in-band: estimation failed, using defaults: gas estimation unreachable: Failed { rate_limited: false }
+[vela-wallet] in-band: signing DISPLAYED quote token=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c
+[vela-wallet] 03:51:15.613 relay: submitting chain=100 op=0x7df211eddc initCode=no callData=452B
+[vela-wallet] 03:51:15.614 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=not connected
+[vela-wallet] 03:51:16.234 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=not connected
+[vela-wallet] 03:51:16.234 relay: submit verdict=not_sent hash=0x7df211eddc attempts=1 in=621 ms
+[vela-wallet] 03:51:16.234 relay: submit failed: NotSent
+03:51:07 CONFIG {"mode": "drop", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+03:51:07 CUT 2 live tunnels: vela-relay-cf.getvela.app
+03:51:11 DROP vela-relay-cf.getvela.app:443
+03:51:15 DROP vela-relay-cf.getvela.app:443
+03:51:15 DROP vela-relay-cf.getvela.app:443
+03:51:15 DROP vela-relay-cf.getvela.app:443
+03:51:16 DROP vela-relay-cf.getvela.app:443
+03:51:45 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+screens: 03:51:12–15 正在准备交易…; ≤03:51:17.6 失败 · 发送 · −0.001 xDAI · 交易未能提交。您的资金安全无虞——请重试。 [完成]
+page: eth_sendTransaction {ok:false, code:-32603, message:"relay unreachable; nothing was sent"}
+03:51:45 chaos pass; 03:51:50 nonce = 50 (unchanged); no UserOperationEvent after nonce 49
+Activity: six dApp 交易 rows (the six sends that landed), none for this op

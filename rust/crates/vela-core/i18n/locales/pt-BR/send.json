@@ -54,7 +54,6 @@
     "txRemaining": "~{{remaining}}s restantes",
     "txTypicalTime": "A rede {{chainName}} costuma confirmar em ~{{estSecs}}s",
     "txRetryBtn": "Tentar de novo",
-    "txErrorTimeout": "Transação enviada, mas a confirmação expirou. Verifique o histórico mais tarde.",
     "txErrorBundlerLoop": "O saldo da conta de gas continua sendo rejeitado pelo bundler. Tente de novo mais tarde ou aumente o nível de gas.",
     "txErrorBundlerFund": "A conta do bundler precisa de mais gas. Adicione fundos nas Configurações.",
     "txErrorPublicKey": "Chave pública não encontrada para esta conta",

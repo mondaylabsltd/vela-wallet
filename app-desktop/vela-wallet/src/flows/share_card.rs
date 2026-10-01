@@ -662,15 +662,14 @@ pub fn render_png(card: &ShareCard<'_>) -> Option<Vec<u8>> {
     pixmap.encode_png().ok()
 }
 
-/// The network's logo, fetched for a save on this shell's one route out
-/// (system proxy, environment proxy, then direct). `None` on any failure —
-/// the card then wears the lettered disc rather than waiting.
+/// The network's logo, fetched for a save on the system's routes for it
+/// (`proxy::with_routes`). `None` on any failure — the card then wears the
+/// lettered disc rather than waiting.
 #[must_use]
 pub fn fetch_logo(url: &str) -> Option<Vec<u8>> {
-    let mut response = crate::executor::proxy::agent(LOGO_TIMEOUT)
-        .get(url)
-        .call()
-        .ok()?;
+    let mut response =
+        crate::executor::proxy::with_routes(url, LOGO_TIMEOUT, |agent| agent.get(url).call())
+            .ok()?;
     let mut body = Vec::new();
     std::io::Read::read_to_end(&mut response.body_mut().as_reader(), &mut body).ok()?;
     Some(body)

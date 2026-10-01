@@ -143,19 +143,19 @@ final class BrowserController {
             bridge: ExploreSitesCore(),
             perform: { [exploreExecutor] in await exploreExecutor.perform($0) },
             onView: { [weak self] view in self?.commitExplore(view) },
-            onFault: { print("[vela-wallet] explore_sites fault: \($0)") }
+            onFault: { VelaLog.failure(.browser, kind: "explore_sites_fault", VelaLog.error($0)) }
         )
         historyCore = CoreStore(
             bridge: BrowserHistoryCore(),
             perform: { [historyExecutor] in await historyExecutor.perform($0) },
             onView: { [weak self] view in self?.history = view },
-            onFault: { print("[vela-wallet] browser_history fault: \($0)") }
+            onFault: { VelaLog.failure(.browser, kind: "browser_history_fault", VelaLog.error($0)) }
         )
         dbrCore = CoreStore(
             bridge: DappBrowserCore(),
             perform: { [dbrExecutor] in await dbrExecutor.perform($0) },
             onView: { [weak self] view in self?.dbr = view },
-            onFault: { print("[vela-wallet] dapp_browser fault: \($0)") },
+            onFault: { VelaLog.failure(.browser, kind: "dapp_browser_fault", VelaLog.error($0)) },
             neutralAnswer: { DbrExecutor.neutralAnswer($0) }
         )
 
@@ -298,6 +298,15 @@ final class BrowserController {
     func goBack() { current?.goBack() }
     func goForward() { current?.goForward() }
     func reload() { current?.reload() }
+    /// Stop the load in flight (spec 082 RE5): the committed page stays.
+    func stop() { current?.stop() }
+
+    /// The network came back (spec 082 RE3): every failed page starts its
+    /// count again, and the one in front is asked for again when its class is
+    /// one a returning network can clear.
+    func networkCameBack() {
+        for engine in engines.values { engine.networkCameBack() }
+    }
 
     // MARK: - What is on screen (spec 079)
 
@@ -363,12 +372,18 @@ final class BrowserController {
 
     /// The star: remove a site that is already a favourite, add one that is
     /// not.
+    ///
+    /// Spec 082 RE1: the star acts on what the bar names — the page on
+    /// screen, never where a load in flight is going.
     func toggleFavorite() {
-        guard let engine = current, !engine.url.isEmpty, !engine.origin.isEmpty else { return }
-        if explore.favorites.contains(where: { $0.origin == engine.origin }) {
-            removeFavorite(origin: engine.origin)
+        guard let engine = current else { return }
+        let url = engine.bar.url
+        let origin = ProviderBridge.origin(of: url)
+        guard !url.isEmpty, !origin.isEmpty else { return }
+        if explore.favorites.contains(where: { $0.origin == origin }) {
+            removeFavorite(origin: origin)
         } else {
-            addFavorite(url: engine.url, title: engine.title.isEmpty ? nil : engine.title)
+            addFavorite(url: url, title: engine.title.isEmpty ? nil : engine.title)
         }
     }
 

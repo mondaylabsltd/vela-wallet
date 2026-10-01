@@ -46,13 +46,19 @@ final class WalletStore {
     /// Installed after the store exists, since it closes over it.
     @ObservationIgnored private(set) var homePoller: HomeBalancePoller!
 
-    init(store: VelaStore, pool: RpcPool, held: HeldTokens) {
+    /// `registry`: the token registry the balance read plan takes its
+    /// stablecoins and wrapped coin from (spec 082 RE9); `nil` reads the
+    /// native coin and the person's own tokens only (tests, a gallery).
+    init(store: VelaStore, pool: RpcPool, held: HeldTokens, registry: ChainTokens? = nil) {
         self.executor = BalanceExecutor(store: store, pool: pool, held: held)
+        if let registry {
+            executor.chainFacts = { [registry] chainId in await registry.facts(chainId: chainId) }
+        }
         self.core = CoreStore(
             bridge: BalanceDashboardCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.viewArrived(view) },
-            onFault: { print("[vela-wallet] balance_dashboard fault: \($0)") }
+            onFault: { VelaLog.failure(.balance, kind: "balance_dashboard_fault", VelaLog.error($0)) }
         )
         // The port closes over this store, so it is installed after it exists
         // — the same shape `SendStore` uses for its two.

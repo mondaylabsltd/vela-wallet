@@ -254,6 +254,10 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		day_start_ms: TODAY,
 		tx_hash: null,
 		batch: null,
+		kind: partial.direction === 'in' ? 'receive' : 'send',
+		status: 'confirmed',
+		site: null,
+		counterparty_role: 'recipient',
 		...partial
 	};
 }
@@ -277,7 +281,9 @@ const FEED: FeedView = {
 	],
 	transactions: [],
 	new_item_id: null,
-	toast: null
+	toast: null,
+	history_empty_key: 'history.emptyTitle',
+	home_empty_key: 'home.emptyNoActivity'
 };
 
 describe('contactFeedItems', () => {

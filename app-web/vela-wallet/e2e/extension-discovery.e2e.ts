@@ -105,7 +105,9 @@ test.describe('the injected provider', () => {
 		// The origin is the browser's fact, carried across the boundary. A page
 		// cannot rename itself into someone more trustworthy.
 		await expect(win.getByRole('heading')).toContainText(`localhost:${DAPP_PORT}`);
-		await expect(win.getByText('eth_requestAccounts')).toBeVisible();
+		// The raw JSON-RPC method is not a person's word, and the card no
+		// longer prints it (spec 082 RB12).
+		await expect(win.getByText('eth_requestAccounts')).toHaveCount(0);
 
 		// Refusing answers the dApp — in the standard shape, and exactly once.
 		await win.getByRole('button', { name: 'Cancel' }).click();

@@ -67,6 +67,20 @@ enum RpcOutcome {
     case rpcError(code: Int?, message: String)
 }
 
+/// A routed call with what the submit path and the tracker need beside the
+/// answer (spec 082).
+struct RpcCallResult {
+    let outcome: RpcOutcome
+    /// The core's OR over every POST of this call of `may_have_delivered`:
+    /// `false` only when no POST can have been acted on (contract §2). What
+    /// lets a submit say "not sent" — and only then.
+    let maybeDelivered: Bool
+    /// The JSON-RPC `error` member the endpoint answered, as it came, when the
+    /// core ruled it a range cap (T180): the tracker's find-event judges it
+    /// itself, so it must arrive untouched rather than as a span.
+    let heldErrorJson: String?
+}
+
 @MainActor
 @Observable
 final class RpcPool {
@@ -90,6 +104,11 @@ final class RpcPool {
     /// The transient subset. A chain here keeps its cached balance and must
     /// **never** show the "swap in your own RPC" banner.
     private(set) var rateLimitedChains: [Int] = []
+    /// Chains one call's first pass could not reach at all — every endpoint
+    /// failed on transport, no rate limit (spec 082 RF1). The browser's chain
+    /// notice reads `failed ∪ unreached ∖ rate-limited`; the home banner
+    /// keeps reading `failedChains` alone.
+    private(set) var unreachedChains: [Int] = []
 
     /// One in-flight call: what to send, what came back from where, and who is
     /// waiting.
@@ -102,8 +121,15 @@ final class RpcPool {
         /// beside the bodies rather than inside them so `.ok`'s payload stays
         /// exactly the `result` field every caller since 051 reads.
         var errors: [String: [String: Any]] = [:]
-        var resume: ((RpcOutcome) -> Void)?
+        var resume: ((RpcCallResult) -> Void)?
     }
+
+    /// Every routed call's outcome, once concluded, with the chain it read —
+    /// the network's health is read from these (`NetWatch`, spec 082 RE3):
+    /// the calls are the only witness of a proxy node that hangs while the
+    /// system path stays up, and the chain is what tells one faulted chain
+    /// from a network that is gone (RJ14).
+    var onOutcome: ((_ outcome: RpcOutcome, _ chainId: Int) -> Void)?
 
     private let store: VelaStore
     private let accounts: AccountStore
@@ -122,8 +148,9 @@ final class RpcPool {
             onView: { [weak self] view in
                 self?.failedChains = view.failedChains
                 self?.rateLimitedChains = view.rateLimitedChains
+                self?.unreachedChains = view.unreachedChains
             },
-            onFault: { print("[vela-wallet] rpc_pool fault: \($0)") }
+            onFault: { VelaLog.failure(.rpc, kind: "pool_fault", VelaLog.error($0)) }
         )
     }
 
@@ -160,23 +187,35 @@ final class RpcPool {
         params: [Any] = [],
         kind: String = "rpc"
     ) async -> RpcOutcome {
+        await callDetailed(chainId: chainId, method: method, params: params, kind: kind).outcome
+    }
+
+    /// `call`, with whether any POST may have been acted on and the held
+    /// error of a range cap (spec 082: the submit's verdict and the tracker's
+    /// find-event read these; every other caller wants `call`).
+    func callDetailed(
+        chainId: Int,
+        method: String,
+        params: [Any] = [],
+        kind: String = "rpc"
+    ) async -> RpcCallResult {
         // Fail closed rather than hang. The caller can retry after boot; a
-        // continuation that never resumes cannot.
+        // continuation that never resumes cannot. Nothing was sent.
         guard booted else {
-            print("[vela-wallet] rpc_pool: \(method) on \(chainId) before boot — refused")
-            return .failed(rateLimited: false)
+            VelaLog.failure(.rpc, kind: "before_boot", "method=\(method) chain=\(chainId)")
+            return RpcCallResult(outcome: .failed(rateLimited: false), maybeDelivered: false, heldErrorJson: nil)
         }
         let callId = mintCallId()
-        return await withCheckedContinuation { continuation in
+        let result = await withCheckedContinuation { continuation in
             var entry = Pending(method: method, params: params)
             var resumed = false
-            entry.resume = { outcome in
+            entry.resume = { result in
                 // The core concludes a call exactly once, but a continuation
                 // resumed twice is a crash rather than a bug report — so the
                 // guard is here rather than in a comment.
                 guard !resumed else { return }
                 resumed = true
-                continuation.resume(returning: outcome)
+                continuation.resume(returning: result)
             }
             pending[callId] = entry
             core.dispatch(CoreJSON.string([
@@ -188,6 +227,14 @@ final class RpcPool {
                 "now_ms": Self.nowMs,
             ]))
         }
+        if case .failed(let rateLimited) = result.outcome {
+            VelaLog.failure(
+                .rpc, kind: rateLimited ? "rate_limited" : "gave_up",
+                "chain=\(chainId) method=\(method) kind=\(kind)"
+            )
+        }
+        onOutcome?(result.outcome, chainId)
+        return result
     }
 
     /// Somebody changed an endpoint or a provider key.
@@ -212,10 +259,10 @@ final class RpcPool {
         return await withCheckedContinuation { continuation in
             var entry = Pending(method: "", params: [])
             var resumed = false
-            entry.resume = { outcome in
+            entry.resume = { result in
                 guard !resumed else { return }
                 resumed = true
-                if case .ok(let value) = outcome { continuation.resume(returning: value as? String) }
+                if case .ok(let value) = result.outcome { continuation.resume(returning: value as? String) }
                 else { continuation.resume(returning: nil) }
             }
             pending[callId] = entry
@@ -242,10 +289,10 @@ final class RpcPool {
         return await withCheckedContinuation { continuation in
             var entry = Pending(method: "", params: [])
             var resumed = false
-            entry.resume = { outcome in
+            entry.resume = { result in
                 guard !resumed else { return }
                 resumed = true
-                if case .ok(let value) = outcome { continuation.resume(returning: value as? String) }
+                if case .ok(let value) = result.outcome { continuation.resume(returning: value as? String) }
                 else { continuation.resume(returning: nil) }
             }
             pending[callId] = entry
@@ -339,7 +386,7 @@ final class RpcPool {
             // A pool operation this build does not know cannot be answered with
             // anything meaningful — but it must be answered, or the machine
             // waits forever holding every caller behind it.
-            print("[vela-wallet] rpc_pool: unhandled operation \(operation["type"] ?? "?")")
+            VelaLog.failure(.rpc, kind: "unhandled_operation", "\(operation["type"] ?? "?")")
             return CoreJSON.string(["type": "concluded"])
         }
     }
@@ -399,6 +446,8 @@ final class RpcPool {
             outcome = ["type": "timeout"]
         case .network:
             outcome = ["type": "network"]
+        case .notConnected:
+            outcome = ["type": "not_connected"]
         }
 
         return CoreJSON.string([
@@ -413,31 +462,40 @@ final class RpcPool {
         let callId = operation["call_id"] as? String ?? ""
         guard let entry = pending.removeValue(forKey: callId) else { return }
         let verdict = operation["verdict"] as? [String: Any] ?? [:]
+        // Absent on the verdicts that carry none (a URL lookup): no POST.
+        let maybeDelivered = verdict["maybe_delivered"] as? Bool ?? false
+        func answer(_ outcome: RpcOutcome, held: String? = nil) {
+            entry.resume?(RpcCallResult(outcome: outcome, maybeDelivered: maybeDelivered, heldErrorJson: held))
+        }
 
         switch verdict["type"] as? String ?? "" {
         case "respond":
             let url = verdict["url"] as? String ?? ""
             if let body = entry.bodies[url] {
-                entry.resume?(.ok(body))
+                answer(.ok(body))
             } else if let error = entry.errors[url] {
-                entry.resume?(.rpcError(
+                answer(.rpcError(
                     code: (error["code"] as? NSNumber)?.intValue,
                     message: (error["message"] as? String) ?? ""
-                ))
+                ), held: CoreJSON.string(error))
             } else {
-                entry.resume?(.ok(nil))
+                answer(.ok(nil))
             }
         case "range_cap":
-            entry.resume?(.rangeCap(
-                url: verdict["url"] as? String ?? "",
+            let url = verdict["url"] as? String ?? ""
+            // The error the endpoint answered, as it came: the find-event
+            // judges a range error itself (T180), and a span alone would make
+            // it retry the same too-wide window forever.
+            answer(.rangeCap(
+                url: url,
                 maxSpan: (verdict["max_span"] as? NSNumber)?.doubleValue ?? 0
-            ))
+            ), held: entry.errors[url].map { CoreJSON.string($0) })
         case "best_rpc_url":
-            entry.resume?(.ok(verdict["url"] as? String))
+            answer(.ok(verdict["url"] as? String))
         case "bundler_base":
-            entry.resume?(.ok(verdict["base_url"] as? String))
+            answer(.ok(verdict["base_url"] as? String))
         default:
-            entry.resume?(.failed(rateLimited: verdict["rate_limited"] as? Bool ?? false))
+            answer(.failed(rateLimited: verdict["rate_limited"] as? Bool ?? false))
         }
     }
 
@@ -460,6 +518,8 @@ struct RpcPoolViewWire: Decodable, Equatable {
     let failedChains: [Int]
     let rateLimitedChains: [Int]
     let banned: [RpcBanEntryWire]
+    /// Spec 082 RF1: chains one call's first pass could not reach at all.
+    var unreachedChains: [Int] = []
 }
 
 struct RpcBanEntryWire: Decodable, Equatable {

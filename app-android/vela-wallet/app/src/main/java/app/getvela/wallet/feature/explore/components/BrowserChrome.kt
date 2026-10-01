@@ -81,6 +81,8 @@ fun AddressBar(
     loading: Boolean = false,
     progress: Int = 100,
     onSubmitUrl: ((String) -> Unit)? = null,
+    /** Spec 082 RE1: no lock at all — a failure panel, a pending load in an empty tab. */
+    lockShown: Boolean = true,
 ) {
     val colors = VelaTheme.colors
     var editing by remember { mutableStateOf(false) }
@@ -136,7 +138,9 @@ fun AddressBar(
                     // for https — which says the line is encrypted, not that the
                     // site is honest, so it is decorative to a screen reader too;
                     // open and in the warning colour for plain http.
-                    if (secure) {
+                    if (!lockShown) {
+                        Unit
+                    } else if (secure) {
                         Icon(VelaIcons.Lock, null, tint = colors.fgMuted, modifier = Modifier.size(VelaIconSize.xs))
                         Spacer(Modifier.size(VelaSpacing.md))
                     } else if (host.isNotBlank()) {

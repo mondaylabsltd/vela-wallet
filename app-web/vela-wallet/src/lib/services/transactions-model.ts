@@ -46,6 +46,19 @@ export interface LocalTransaction {
 	requestTruncated?: boolean;
 	/** Opaque to this feature; carried so a stored record survives a rewrite. */
 	assetSim?: unknown;
+	/**
+	 * The submit's reply was lost: `userOpHash` is the locally computed hash and
+	 * the op MAY have been sent (spec 082 RA3/RA4). Kept with the row so a reload
+	 * hands the tracker a may-have-been-sent op again, not a plain one. Absent on
+	 * rows written before 082 — read as `false`.
+	 */
+	maybeSent?: boolean;
+	/**
+	 * The chain head read once before the first submit POST — where the
+	 * tracker's relay-independent landing check starts (spec 082 ruling 8).
+	 * Absent = unknown.
+	 */
+	submitBlock?: number;
 }
 
 /** Cap on persisted signed content (`storage.ts:434` on Expo) — a record stays a record, not a payload dump. */

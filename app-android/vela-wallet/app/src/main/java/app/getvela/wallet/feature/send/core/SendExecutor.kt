@@ -15,9 +15,11 @@ import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.settings.core.NetView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -86,6 +88,8 @@ class SendExecutor(
      * background, into the relay client's caches. Fire-and-forget.
      */
     private val prewarm: (account: String, chainIds: List<Int>) -> Unit = { _, _ -> },
+    /** Spec 082 RJ1: the write-ahead gate; tests pin its wait. */
+    private val writeAhead: WriteAhead = WriteAhead(),
 ) {
 
     /** The account store, as the send path reads it. */
@@ -133,7 +137,22 @@ class SendExecutor(
         /** Spec 046 US3: a scanned chain the wallet lacks — the settings machine adds it (or does not know it). */
         suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = SendAddNetworkOutcome.NotFound
 
-        fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int)
+        /**
+         * The rows are on disk: follow the hash. [maybeSent] and [submitBlock]
+         * (spec 082) go into the tracker's `Submitted`, so a lost reply is
+         * followed as one and its landing check starts where the submit did.
+         */
+        fun trackSubmitted(handoff: TrackHandoff)
+
+        /**
+         * Spec 082 RJ1: the op is signed and hashed and nothing has been
+         * POSTed — the core writes every recipient's row ahead (`OpSigned`) and
+         * answers `ClearToPost` once they are on disk and tracked.
+         */
+        fun opSigned(userOpHash: String, submitBlock: Long?) {}
+
+        /** Spec 082 RJ1: the tracker's `Withdrawn` — written-ahead rows whose op is proven never sent. */
+        fun trackWithdrawn(userOpHash: String, recordIds: List<String>) {}
 
         fun haptic(kind: SendHapticKind)
 
@@ -153,8 +172,19 @@ class SendExecutor(
         fun holdingsHanded(round: HoldingsRound?) {}
     }
 
+    /**
+     * The submit a cancel may still stop — until its passkey returns. From
+     * then on the operation is signed and goes to the relay, and a cancel is
+     * `Passkey.cancelSign()` with no ceremony to cancel: the POST runs to the
+     * core's verdict (spec 082, owner ruling 1). Stopping it mid-flight
+     * dropped an op the relay may hold — no row, no tracker — and put the
+     * slide back one swipe from paying twice.
+     */
     @Volatile
     private var signing: Job? = null
+
+    /** Orders a cancel against the passkey's return: exactly one of them wins. */
+    private val cancelLock = Any()
 
     suspend fun perform(operation: SendOperation): SendShellResult = when (operation) {
         is SendOperation.FetchTokens -> fetchTokens(operation.address)
@@ -198,16 +228,54 @@ class SendExecutor(
             SendShellResult.AccountCredential(accounts.publicKeyOf(operation.account_id))
         is SendOperation.SubmitUserOp -> submit(operation)
         SendOperation.CancelPasskeySign -> {
-            signing?.cancel(CancellationException("cancelled by the person"))
+            val stopped = synchronized(cancelLock) { signing?.also { it.cancel(CancellationException("cancelled by the person")) } }
+            if (stopped == null) VelaLog.event("send.submit", "cancel after the signature: the submit runs to its verdict")
             SendShellResult.PasskeyCancelAcknowledged
         }
         is SendOperation.PersistTxRecords -> {
             val ok = feed.writeRecords(operation.records.map(::feedRow))
-            if (ok) ports.recordsPersisted() else VelaLog.event("send.persist", "refused", "rows" to operation.records.size)
+            if (ok) {
+                // RJ1: the POST these rows were written ahead of may go.
+                operation.records.map { it.user_op_hash }.distinct().forEach(writeAhead::written)
+                ports.recordsPersisted()
+            } else {
+                VelaLog.event("send.persist", "refused", "rows" to operation.records.size)
+            }
             SendShellResult.RecordsPersisted
         }
         is SendOperation.TrackSubmitted -> {
-            ports.trackSubmitted(operation.user_op_hash, operation.record_ids, operation.chain_id)
+            ports.trackSubmitted(
+                TrackHandoff(
+                    userOpHash = operation.user_op_hash,
+                    recordIds = operation.record_ids,
+                    chainId = operation.chain_id,
+                    maybeSent = operation.maybe_sent,
+                    submitBlock = operation.submit_block,
+                    admitted = operation.admitted,
+                ),
+            )
+            SendShellResult.TrackHandedOff
+        }
+        // RJ1: the rows are on disk and tracked — the waiting submit may POST.
+        is SendOperation.ClearToPost -> {
+            writeAhead.clear(operation.user_op_hash.lowercase(), operation.user_op_hash)
+            SendShellResult.PostCleared
+        }
+        // RJ1: the relay took it — the rows are no longer "may have been sent".
+        is SendOperation.MarkAdmitted -> {
+            feed.markAdmitted(operation.record_ids)
+            ports.recordsPersisted()
+            SendShellResult.RecordsPersisted
+        }
+        // RJ1: the op is proven never sent — its rows go, in one write.
+        is SendOperation.DeleteTxRecords -> {
+            feed.deleteRecords(operation.ids)
+            VelaLog.event("send.persist", "write-ahead rows withdrawn: never sent", "rows" to operation.ids.size)
+            ports.recordsPersisted()
+            SendShellResult.RecordsPersisted
+        }
+        is SendOperation.TrackWithdrawn -> {
+            ports.trackWithdrawn(operation.user_op_hash, operation.record_ids)
             SendShellResult.TrackHandedOff
         }
         is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(identity(operation.address))
@@ -370,10 +438,44 @@ class SendExecutor(
 
     // -- the submit spine ---------------------------------------------------------
 
+    /**
+     * The ceremony runs as a child job: a cancel stops IT, and this submit
+     * still answers the core. The core clears no `OpSigned` while a cancelled
+     * submit's result is owed (082 second review), so an unanswered cancel —
+     * a cancelled `coroutineScope` rethrows instead of returning — held every
+     * later attempt to "not sent" for the life of the screen.
+     */
     private suspend fun submit(op: SendOperation.SubmitUserOp): SendShellResult = coroutineScope {
-        signing = currentCoroutineContext().job
+        val attempt = async { submitAttempt(op) }
         try {
-            SendShellResult.Submitted(user_op_hash = submitInner(op), now_ms = now())
+            attempt.await()
+        } catch (cancelled: CancellationException) {
+            // The screen itself going away cancels this scope too: pass that on.
+            ensureActive()
+            VelaLog.event("send.submit", "cancelled")
+            SendShellResult.SubmitFailed(SendSubmitFailure.PasskeyCancelled)
+        }
+    }
+
+    private suspend fun submitAttempt(op: SendOperation.SubmitUserOp): SendShellResult = coroutineScope {
+        val job = currentCoroutineContext().job
+        synchronized(cancelLock) { signing = job }
+        // Only this submit's own hold is let go: a later attempt's must stay.
+        val release = { synchronized(cancelLock) { if (signing === job) signing = null } }
+        // The passkey returned. A cancel that came first stops the submit
+        // here, before anything is sent; after this line none can.
+        val passkeyReturned = {
+            release()
+            job.ensureActive()
+        }
+        try {
+            val submitted = submitInner(op, ceremonyDone = passkeyReturned)
+            SendShellResult.Submitted(
+                user_op_hash = submitted.userOpHash,
+                now_ms = now(),
+                maybe_sent = submitted.maybeSent,
+                submit_block = submitted.submitBlock,
+            )
         } catch (refused: SubmitRefused) {
             VelaLog.event("send.submit", "refused", "why" to refused.failure.toString().take(160))
             SendShellResult.SubmitFailed(refused.failure)
@@ -381,7 +483,7 @@ class SendExecutor(
             VelaLog.event("send.submit", "cancelled")
             SendShellResult.SubmitFailed(SendSubmitFailure.PasskeyCancelled)
         } finally {
-            signing = null
+            release()
         }
     }
 
@@ -395,7 +497,7 @@ class SendExecutor(
     }, trustedSigner = trustedSigner)
 
     /** The spine (spec 044 T028): one implementation for a person's transfer and a dApp's transaction. */
-    private suspend fun submitInner(op: SendOperation.SubmitUserOp): String = try {
+    private suspend fun submitInner(op: SendOperation.SubmitUserOp, ceremonyDone: () -> Unit): UserOpSpine.Submitted = try {
         spine.submit(
             chainId = op.chain_id,
             account = op.account,
@@ -403,13 +505,26 @@ class SendExecutor(
             gasFeeToken = op.gas_fee_token,
             quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient, it.tier) },
             signingStarted = { ports.signingStarted() },
+            // The passkey returned: past here nothing a cancel can stop.
+            ceremonyDone = ceremonyDone,
+            // RJ1: every recipient's row is written ahead of the POST.
+            beforePost = { localHash, submitBlock ->
+                val clearance = writeAhead.expect(localHash.lowercase(), localHash)
+                ports.opSigned(localHash, submitBlock)
+                if (!clearance.await()) throw UserOpSpine.Refused(UserOpSpine.Failure.NotCleared)
+            },
         )
     } catch (refused: UserOpSpine.Refused) {
         throw SubmitRefused(
             when (val failure = refused.failure) {
                 UserOpSpine.Failure.PasskeyCancelled -> SendSubmitFailure.PasskeyCancelled
-                UserOpSpine.Failure.RelayerUnavailable -> SendSubmitFailure.RelayerUnavailable
+                // Nothing left the device (spec 082 RA1): "the relayer could not
+                // be reached — try again" is true of exactly this.
+                UserOpSpine.Failure.RelayerUnavailable, UserOpSpine.Failure.NotSent -> SendSubmitFailure.RelayerUnavailable
                 UserOpSpine.Failure.BundlerUnderfunded -> SendSubmitFailure.BundlerUnderfunded
+                // RJ1: the rows were not on disk in time, so nothing was posted.
+                UserOpSpine.Failure.NotCleared -> SendSubmitFailure.Other("the records were not written ahead in time; nothing was sent")
+                is UserOpSpine.Failure.Rejected -> SendSubmitFailure.Other(failure.message)
                 is UserOpSpine.Failure.Other -> SendSubmitFailure.Other(failure.message)
             },
         )
@@ -431,6 +546,10 @@ class SendExecutor(
         .put("timestamp", record.timestamp_s)
         .put("usd", record.usd ?: JSONObject.NULL)
         .put("type", "send")
+        // Spec 082 T184: kept with the row, read back into `TrackPendingRecord`
+        // by `LoadPendingTxs` — a restart keeps following a lost reply as one.
+        .put("maybeSent", record.maybe_sent)
+        .put("submitBlock", record.submit_block ?: JSONObject.NULL)
 
     /** What the core hears when an arm threw: nothing was done. */
     fun neutralAnswer(operation: SendOperation): SendShellResult = when (operation) {
@@ -446,6 +565,11 @@ class SendExecutor(
         SendOperation.CancelPasskeySign -> SendShellResult.PasskeyCancelAcknowledged
         is SendOperation.PersistTxRecords -> SendShellResult.RecordsPersisted
         is SendOperation.TrackSubmitted -> SendShellResult.TrackHandedOff
+        // No go for the submit: it waits out its clearance and posts nothing.
+        is SendOperation.ClearToPost -> SendShellResult.PostCleared
+        is SendOperation.MarkAdmitted -> SendShellResult.RecordsPersisted
+        is SendOperation.DeleteTxRecords -> SendShellResult.RecordsPersisted
+        is SendOperation.TrackWithdrawn -> SendShellResult.TrackHandedOff
         is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(null)
         is SendOperation.ResolveRisk -> SendShellResult.RiskResolved(null)
         is SendOperation.SimulateCalls -> SendShellResult.SimResolved(null)

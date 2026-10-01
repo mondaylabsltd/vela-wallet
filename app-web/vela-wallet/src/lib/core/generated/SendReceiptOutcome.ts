@@ -6,4 +6,9 @@
  * `Failed` — a slow or unreachable poll simply never sends anything
  * (invariant ⑤).
  */
-export type SendReceiptOutcome = { "type": "confirmed", tx_hash: string, } | { "type": "failed", rejected: boolean, } | { "type": "fee_held" };
+export type SendReceiptOutcome = { "type": "confirmed", tx_hash: string, } | { "type": "failed", rejected: boolean, 
+/**
+ * The relay never had a may-have-been-sent op (tracker `NotSent`,
+ * spec 082 RA4): "not sent", never the fee-rejected words.
+ */
+not_sent: boolean, } | { "type": "fee_held" } | { "type": "acknowledged" };

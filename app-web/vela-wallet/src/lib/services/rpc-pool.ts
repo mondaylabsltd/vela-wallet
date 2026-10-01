@@ -33,6 +33,33 @@ import type { RpcPoolCallRegistry } from '$lib/wallet/core/rpc-pool-types';
 
 export { getBuiltinBundlerUrl, getLogsRangeCap } from './rpc-pool-endpoints';
 
+/**
+ * The pool gave up on a call: every endpoint failed every pass (the core's
+ * `RpcCallVerdict::Failed`). `maybeDelivered` is the core's OR over every POST
+ * of the call (spec 082 RA1): false only when no POST can have been acted on —
+ * which is what lets a submit say "not sent" instead of "may have been sent".
+ */
+export class PoolFailedError extends Error {
+	readonly maybeDelivered: boolean;
+	readonly rateLimited: boolean;
+	constructor(message: string, facts: { maybeDelivered: boolean; rateLimited: boolean }) {
+		super(message);
+		this.name = 'PoolFailedError';
+		this.maybeDelivered = facts.maybeDelivered;
+		this.rateLimited = facts.rateLimited;
+	}
+}
+
+/**
+ * Could an EARLIER endpoint of the call that answered `body` have acted on it
+ * too (the core's `Respond.maybe_delivered`)? `false` for a body the pool did
+ * not route (a fault-injected answer).
+ */
+const deliveredMaybe = new WeakMap<object, boolean>();
+export function maybeDeliveredOf(body: object): boolean {
+	return deliveredMaybe.get(body) ?? false;
+}
+
 // ---------------------------------------------------------------------------
 // Projected core state
 // ---------------------------------------------------------------------------
@@ -114,10 +141,11 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 			note: `all endpoints failed: ${call.method} chain ${call.chainId}`
 		});
 		call.reject(
-			new Error(
+			new PoolFailedError(
 				call.kind === 'bundler'
 					? `All bundler endpoints failed for chain ${call.chainId}`
-					: `All RPC endpoints failed for chain ${call.chainId}`
+					: `All RPC endpoints failed for chain ${call.chainId}`,
+				{ maybeDelivered: verdict.maybe_delivered, rateLimited: verdict.rate_limited }
 			)
 		);
 		return;
@@ -133,6 +161,7 @@ function settle(callId: string, verdict: RpcCallVerdict): void {
 	}
 
 	recordNet(service, 'success');
+	if (verdict.type === 'respond') deliveredMaybe.set(held, verdict.maybe_delivered);
 	call.resolve(held);
 }
 
@@ -161,7 +190,13 @@ function abandonInFlight(error: unknown): void {
 	const message = error instanceof Error ? error.message : String(error);
 	for (const [callId, call] of [...pendingCalls]) {
 		forget(callId);
-		call.reject(new Error(`RPC pool fault for chain ${call.chainId}: ${message}`));
+		// Whether a POST of it went out is unknown here — so it may have.
+		call.reject(
+			new PoolFailedError(`RPC pool fault for chain ${call.chainId}: ${message}`, {
+				maybeDelivered: true,
+				rateLimited: false
+			})
+		);
 	}
 	for (const [callId, resolve] of [...pendingBases]) {
 		pendingBases.delete(callId);

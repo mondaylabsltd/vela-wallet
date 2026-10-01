@@ -62,7 +62,9 @@
     "loadOffline": "Kết nối không ổn định, không mở được trang.",
     "loadNotFound": "Không tìm thấy trang web này. Hãy kiểm tra địa chỉ.",
     "loadCertificate": "Chứng chỉ của trang web không hợp lệ nên Vela đã chặn.",
+    "loadProxy": "Proxy của bạn không phản hồi.",
     "loadRetrying": "Đang thử lại…",
-    "chainDown": "Không kết nối được {{chain}} — dữ liệu trang có thể thiếu."
+    "chainDown": "Không kết nối được {{chain}} — dữ liệu trang có thể thiếu.",
+    "requestOpen": "Hãy hoàn tất hoặc hủy yêu cầu này trước"
   }
 }

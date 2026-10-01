@@ -1,0 +1,11 @@
+# E-LD3 — iPhone build fb8c7026, no fault; dust send from the scratch dApp, left with 关闭 · 后台继续 during 交易已提交至网络, then 钱包
+# chain: blk 48491703 09:42:45 op 0xcc307e63cd2434ceb5244ca0a3a15cfcc9a02fdcd83b9a44efc2bf478d4d5b90 tx 0x2709196554704815b249fada5b2f100175cb295e812ae7e6db4683844321953f nonce 60 success 1; nonce 60 -> 61
+09:42:35.452 2026-09-29 09:42:35.322961+0800 VelaWallet[1817:552194] [relay] submitting chain=100 hash=0xcc307e63cd
+09:42:36.280 2026-09-29 09:42:36.160503+0800 VelaWallet[1817:552194] [relay] submit verdict=accepted hash=0xcc307e63cd attempts=1 in=837ms
+09:42:36.280 2026-09-29 09:42:36.160555+0800 VelaWallet[1817:552194] [sign] submit verdict=accepted hash=0xcc307e63cd chain=100
+09:42:48.726 2026-09-29 09:42:48.679783+0800 VelaWallet[1817:552194] [tracker] tracker confirmed op=0xcc307e63cd chain=100
+09:42:48.726 2026-09-29 09:42:48.681194+0800 VelaWallet[1817:552194] [balance] balance refresh (holdings_moved) chain=100
+# Mac clock: slide 09:42:32.9; 关闭 · 后台继续 09:42:40.9; 关闭网页 09:42:41.8; 钱包 09:42:42.9 -> first frame already lists 'dApp 交易 · 处理中 · ….17:8140' on top (6.7 s after accept; row written before the dApp answer); 09:42:48.7 row turns plain (confirmed) = tracker line; 09:42:49.9 总余额 ¥56.82 -> ¥56.75, no pull
+# relaunch 09:43:44 (same JSON) -> 钱包 lists the row; detail (09:53): dApp 交易 [成功] / −0.001 xDAI / 发起方 192.168.50.17:8140 / 接收方 觉得九点半 (contact name for 0x7687…D141) / 网络 Gnosis / 今天 09:42 / 哈希 0x2709…953f (= chain tx) / 在区块浏览器中查看 / 删除记录 (full-width red)
+# harness note: after this relaunch WDA source calls hung ~4.5 min; at 09:51 the app window screenshot was black (status bar only) while its accessibility tree showed the home, and a row tap did nothing; after the home screen and /wda/apps/activate the app drew normally at 09:53 — cause not established, not counted
+# also: T183 run B shows the same pending row right after a force-quit (post2-T183-strip.jpg)

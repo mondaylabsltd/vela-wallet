@@ -49,6 +49,18 @@
 //! - `FocusTick`/`LiveTick` cadence (focus + 30s auto-refresh, 10s while the
 //!   Activity tab is visible) stays in the shell: which tab is visible is
 //!   render-domain state the core never sees. The core owns the toast timer.
+//! - After every `PersistRecord` / `UpdateRecord` a shell dispatches
+//!   `ReconcileCompleted { resolved_count: 1 }`, so a new or patched row
+//!   shows at once instead of on the next tick (spec 082 RG3).
+//!
+//! # Rows the core decides (spec 082, L-D3 / L-D7)
+//!
+//! Every [`FeedItem`] says what it is ([`FeedItem::kind`]), where its record
+//! stands ([`FeedItem::status`]) and, for a transaction a dApp asked for,
+//! which site asked ([`FeedItem::site`]); the shells delete their own guesses.
+//! Message signatures and connects never become rows. The empty lines of
+//! History and of the home Activity are corpus keys on [`FeedView`], chosen by
+//! the chain filter.
 //!
 //! # Fidelity notes
 //!
@@ -82,6 +94,15 @@ use super::token_trust::TrustSimJudgment;
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
 pub const TOAST_MS: u32 = 2_800;
 
+/// History with nothing to show on every network (spec 082 RG5, L-D7).
+pub const HISTORY_EMPTY_ALL: &str = "history.emptyTitle";
+/// History with nothing to show on the chosen network.
+pub const HISTORY_EMPTY_FILTERED: &str = "history.emptyFilter";
+/// The home Activity with nothing to show on every network.
+pub const HOME_EMPTY_ALL: &str = "home.emptyNoActivity";
+/// The home Activity with nothing to show on the chosen network.
+pub const HOME_EMPTY_FILTERED: &str = "home.emptyNoActivityNetwork";
+
 /// The most decimals a dApp row's stored figure is scaled by (083 H2
 /// review). Every client stores 18; a `u128` has 39 digits, so anything past
 /// this could only print a string of zeros — and an unbounded one sizes an
@@ -100,11 +121,16 @@ pub const STABLE_SYMBOLS: [&str; 15] = [
 // ---------------------------------------------------------------------------
 
 /// The `LocalTransaction.type` union (`storage.ts:390-391`). A record with no
-/// type is a legacy row and defaults to `send`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// type is a legacy row and defaults to `send` — which is also the
+/// [`Default`], so a [`FeedItem`] decoded from before spec 082 reads as one.
+///
+/// A [`FeedItem`] only ever carries `Send`, `Receive` or `DappTx`: message
+/// signatures and connects never become rows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum FeedTxKind {
+    #[default]
     Send,
     Receive,
     DappTx,
@@ -181,11 +207,17 @@ pub struct FeedTxRecord {
     /// anything. `None` when the shell cannot say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub calldata: Option<bool>,
+    /// `dapp_tx` only (spec 082 RJ16): the call's `data` hex, which the shells
+    /// map from the stored request (`signedRequest`), so a token `transfer`
+    /// can name who got the tokens. `None` for every other kind, for a plain
+    /// send, and for a shell that does not map it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_data: Option<String>,
 }
 
 impl FeedTxRecord {
     fn kind(&self) -> FeedTxKind {
-        self.kind.unwrap_or(FeedTxKind::Send)
+        self.kind.unwrap_or_default()
     }
 }
 
@@ -195,6 +227,21 @@ impl FeedTxRecord {
 pub enum FeedDirection {
     In,
     Out,
+}
+
+/// Who a row's `counterparty` is (spec 082 RJ16, G52).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeedCounterpartyRole {
+    /// The party the money went to (or, for an incoming row, came from —
+    /// `direction` picks the words): the send's recipient, or the recipient
+    /// a dApp's token `transfer` names.
+    #[default]
+    Recipient,
+    /// The contract a dApp's call went to, which is not who got anything
+    /// (`componentsUi.signing.interactingLabel`).
+    Contract,
 }
 
 /// `split` = one token → N recipients; `multi_select` = N tokens → 1 recipient.
@@ -280,10 +327,36 @@ pub struct FeedItem {
     pub day_start_ms: f64,
     pub tx_hash: Option<String>,
     pub batch: Option<FeedBatch>,
-    /// A dApp transaction's site and intent (083 H2); `None` on every other
-    /// row.
+    /// What the row is (spec 082 RG1): `Send` (a folded batch too),
+    /// `Receive` or `DappTx`. The shell draws from this and never guesses.
+    #[serde(default)]
+    pub kind: FeedTxKind,
+    /// The record's lifecycle; a folded batch carries its first line's. The
+    /// tracker is the only thing that moves a record off `Pending`, so a row
+    /// says "confirmed" or "failed" only when the stored record does.
+    #[serde(default = "status_unknown")]
+    pub status: FeedTxStatus,
+    /// `DappTx` only: the site that asked, read from the origin the request
+    /// arrived from (`dapp_url`, never the dApp's own name) — the same value
+    /// as `dapp.site`.
+    #[serde(default)]
+    pub site: Option<String>,
+    /// Whether `counterparty` got the money or is the contract a call went
+    /// to (spec 082 RJ16). Always `Recipient` except on a `DappTx` row.
+    #[serde(default)]
+    pub counterparty_role: FeedCounterpartyRole,
+    /// A dApp transaction's site, intent and what it moved (083 H2); `None`
+    /// on every other row. Its `site` and `contract_call` are the row's own
+    /// [`FeedItem::site`] and [`FeedItem::counterparty_role`], read once.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dapp: Option<FeedDapp>,
+}
+
+/// The status of a [`FeedItem`] decoded from before spec 082, which carried
+/// none. `Pending` because it claims nothing: only the tracker closes a
+/// record, and a default must never say money landed or failed.
+fn status_unknown() -> FeedTxStatus {
+    FeedTxStatus::Pending
 }
 
 /// What a dApp transaction row says beyond its money (083 H2, 079 D3): which
@@ -607,6 +680,15 @@ pub struct FeedView {
     /// `None` while balance privacy is on — invariant ④ enforced here, not
     /// in the shell.
     pub toast: Option<FeedToast>,
+    /// The corpus key of History's empty line (spec 082 RG5):
+    /// [`HISTORY_EMPTY_ALL`] with no chain filter, [`HISTORY_EMPTY_FILTERED`]
+    /// with one. Whether the list is loading or empty stays the shell's.
+    #[serde(default)]
+    pub history_empty_key: String,
+    /// The corpus key of the home Activity's empty line: [`HOME_EMPTY_ALL`] /
+    /// [`HOME_EMPTY_FILTERED`], chosen the same way.
+    #[serde(default)]
+    pub home_empty_key: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -731,6 +813,8 @@ impl App for ActivityFeed {
             transactions: model.records.clone(),
             new_item_id: model.celebration.as_ref().map(|c| c.item_id.clone()),
             toast,
+            history_empty_key: history_empty_key(model.chain_filter).to_owned(),
+            home_empty_key: home_empty_key(model.chain_filter).to_owned(),
         }
     }
 }
@@ -755,7 +839,10 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                     // 083 H2: a dApp's transaction is this account's money
                     // moving too — its detail needs the record like a send's.
                     FeedTxKind::Send | FeedTxKind::DappTx => t.from.to_lowercase() == lc,
-                    _ => false,
+                    // Message signatures and connects move nothing: never rows.
+                    FeedTxKind::SignMessage | FeedTxKind::SignTypedData | FeedTxKind::Connect => {
+                        false
+                    }
                 })
                 .cloned()
                 .collect();
@@ -980,6 +1067,10 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         day_start_ms: t.day_start_ms,
         tx_hash: non_empty(&t.tx_hash),
         batch: None,
+        kind: FeedTxKind::Receive,
+        status: t.status,
+        site: None,
+        counterparty_role: FeedCounterpartyRole::Recipient,
         dapp: None,
     }
 }
@@ -1000,6 +1091,10 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         day_start_ms: t.day_start_ms,
         tx_hash: non_empty(&t.tx_hash),
         batch: None,
+        kind: FeedTxKind::Send,
+        status: t.status,
+        site: None,
+        counterparty_role: FeedCounterpartyRole::Recipient,
         dapp: None,
     }
 }
@@ -1038,6 +1133,13 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
 /// - a FAILED operation moved nothing, so it keeps none of what the sheet
 ///   expected: no figure from it, nothing "≈ back", no lines — the row draws
 ///   as before, beside its failed status.
+///
+/// Who the row names (spec 082 RJ16, G52): a call that is exactly an ERC-20
+/// `transfer(address,uint256)` names the transfer's recipient (EIP-55) as the
+/// recipient; any other call names `to` as the contract it went to; no call
+/// data names `to` as the recipient. And an operation hash is never an
+/// explorer link: a `tx_hash` equal to the record's `user_op_hash` (a relay
+/// rejection, a batch id) is no tx hash.
 fn dapp_item(t: &FeedTxRecord) -> FeedItem {
     let recorded = if t.status == FeedTxStatus::Failed {
         Vec::new()
@@ -1100,14 +1202,35 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
     // holds there is the page's to write, and the sheet never showed it: text
     // that is not an address is no counterparty to draw, shorten or look a
     // name up for (083 H2 review). A contract deployment has none either.
-    let counterparty = Some(t.to.trim())
+    let to = Some(t.to.trim())
         .filter(|to| super::contacts::is_address(to))
         .map(str::to_owned);
+    let call = t
+        .call_data
+        .as_deref()
+        .map(str::trim)
+        .filter(|data| !data.is_empty() && *data != "0x" && *data != "0X");
+    let recipient = call.and_then(transfer_recipient);
+    let contract_call = recipient.is_none() && (call.is_some() || t.calldata == Some(true));
+    let counterparty_role = if contract_call {
+        FeedCounterpartyRole::Contract
+    } else {
+        FeedCounterpartyRole::Recipient
+    };
+    // A stored name belongs to the address it was stored beside (`to`), never
+    // to a recipient read out of the call.
+    let alias = match recipient {
+        Some(_) => None,
+        None => to.as_ref().and(t.to_name.clone()),
+    };
+    let counterparty = recipient.or(to);
+    let site = t.dapp_url.as_deref().and_then(site_of);
+    let tx_hash = non_empty(&t.tx_hash)
+        .filter(|hash| t.user_op_hash.is_empty() || !hash.eq_ignore_ascii_case(&t.user_op_hash));
     FeedItem {
         id: t.id.clone(),
         direction: FeedDirection::Out,
-        // A stored name belongs to the address it was stored beside.
-        alias: counterparty.as_ref().and(t.to_name.clone()),
+        alias,
         counterparty,
         symbol,
         decimals,
@@ -1116,18 +1239,44 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
         chain_id: t.chain_id,
         timestamp: t.timestamp,
         day_start_ms: t.day_start_ms,
-        tx_hash: non_empty(&t.tx_hash),
+        tx_hash,
         batch: None,
+        kind: FeedTxKind::DappTx,
+        status: t.status,
+        site: site.clone(),
+        counterparty_role,
         dapp: Some(FeedDapp {
-            site: t.dapp_url.as_deref().and_then(site_of),
+            site,
             intent_term: intent.as_deref().and_then(ClearTerm::of),
             intent,
             received,
             estimated,
             changes: recorded.into_iter().map(|line| line.change).collect(),
-            contract_call: t.calldata == Some(true),
+            contract_call,
         }),
     }
+}
+
+/// The recipient of call data that is exactly `transfer(address,uint256)`:
+/// the selector, a 32-byte address word with its top 12 bytes zero, and a
+/// 32-byte amount — nothing more, nothing less. EIP-55 spelled; `None` for
+/// anything else.
+fn transfer_recipient(data: &str) -> Option<String> {
+    const TRANSFER_SELECTOR: &str = "a9059cbb";
+    let hex = data
+        .strip_prefix("0x")
+        .or_else(|| data.strip_prefix("0X"))?;
+    if hex.len() != 8 + 64 + 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    if !hex[..8].eq_ignore_ascii_case(TRANSFER_SELECTOR) {
+        return None;
+    }
+    let word = &hex[8..72];
+    if word[..24].bytes().any(|b| b != b'0') {
+        return None;
+    }
+    crate::primitives::checksum_address(&format!("0x{}", &word[24..])).ok()
 }
 
 /// One recorded line, with what the row needs to know of it and the wire
@@ -1265,12 +1414,12 @@ fn wei(value: &str) -> Option<u128> {
     }
 }
 
-/// The site a record's origin names, as a person reads it (083 H2):
+/// The site a record's origin names, as a person reads it (083 H2) — the
+/// same `host[:port]` the browser's address bar shows (spec 082 RG1):
 /// `https://app.uniswap.org` → `app.uniswap.org`, `http://127.0.0.1:5173` →
-/// `127.0.0.1`.
+/// `127.0.0.1:5173`.
 ///
-/// Only an origin — a scheme and a host. A bare word is not one: the host
-/// reader below takes `app.uniswap.org` on its own as a host, and a value
+/// Only an origin — a scheme and a host. A bare word is not one, and a value
 /// that never carried a scheme is a name somebody typed, not an address the
 /// request came from (083 H2 review). An origin that will not parse names
 /// nothing rather than something half-read — and neither does `"null"`, the
@@ -1280,8 +1429,26 @@ fn site_of(origin: &str) -> Option<String> {
     if origin.eq_ignore_ascii_case("null") || !origin.contains("://") {
         return None;
     }
-    // The SIWE binding's host reading: lower-cased, no port, fail safe.
-    super::clear_signing::siwe_host(Some(origin))
+    dapp_site(origin)
+}
+
+/// `host[:port]` of an http(s) origin — lower-cased host, default port
+/// dropped, as the browser's address bar names it (spec 082 RG1). `None` for
+/// an origin that is not http(s) or does not parse.
+pub fn dapp_site(origin: &str) -> Option<String> {
+    let origin = super::dapp_permissions::origin_of(origin.trim())?;
+    origin
+        .split_once("://")
+        .map(|(_, host_port)| host_port.to_owned())
+}
+
+/// A wei amount (hex `0x…` or decimal) as a human decimal of the native coin
+/// — the figure a dApp row shows for the call's own value; `None` for zero,
+/// and for anything that is not a whole number that fits.
+pub fn native_amount(value: &str) -> Option<String> {
+    wei(value)
+        .filter(|wei| *wei > 0)
+        .map(|wei| super::fee_policy::from_base_units(wei, 18))
 }
 
 /// `batchSendToActivity`: one row for the whole group, per-line breakdown
@@ -1328,6 +1495,11 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         timestamp: batch.timestamp,
         day_start_ms: first.day_start_ms,
         tx_hash: non_empty(&batch.tx_hash),
+        kind: FeedTxKind::Send,
+        // `build_batch` took the first line's.
+        status: batch.status,
+        site: None,
+        counterparty_role: FeedCounterpartyRole::Recipient,
         batch: Some(batch),
         dapp: None,
     })
@@ -1391,9 +1563,15 @@ fn build_batch(group: &[&FeedTxRecord]) -> Option<FeedBatch> {
 /// missing/zero but the token is a known stablecoin, falls back to the token
 /// amount (≈ $1 each) — a received USDT never shows $0.00 (invariant ⑧).
 pub fn tx_usd_value(t: &FeedTxRecord) -> f64 {
+    usd_value_of(t.usd.as_deref(), &t.symbol, &t.value)
+}
+
+/// [`tx_usd_value`] over its three inputs, so a dApp row (whose stored
+/// `value` is wei) is valued on its human amount.
+fn usd_value_of(usd: Option<&str>, symbol: &str, value: &str) -> f64 {
     // `tx.usd ? parseFloat(tx.usd.replace(/[^0-9.]/g, '')) : 0` — an absent
     // OR empty string is falsy.
-    let stored = match t.usd.as_deref() {
+    let stored = match usd {
         Some(usd) if !usd.is_empty() => {
             let cleaned: String = usd
                 .chars()
@@ -1406,9 +1584,9 @@ pub fn tx_usd_value(t: &FeedTxRecord) -> f64 {
     if stored.is_finite() && stored > 0.0 {
         return stored;
     }
-    if is_stable(&t.symbol) {
+    if is_stable(symbol) {
         // `parseFloat(tx.value || '0')`.
-        let raw = if t.value.is_empty() { "0" } else { &t.value };
+        let raw = if value.is_empty() { "0" } else { value };
         let amount = js_parse_float(raw);
         if amount.is_finite() && amount > 0.0 {
             return amount;
@@ -1472,6 +1650,23 @@ fn js_parse_float(s: &str) -> f64 {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// History's empty-line key for a chain filter (spec 082 RG5).
+pub fn history_empty_key(chain_filter: Option<u32>) -> &'static str {
+    match chain_filter {
+        None => HISTORY_EMPTY_ALL,
+        Some(_) => HISTORY_EMPTY_FILTERED,
+    }
+}
+
+/// The home Activity's empty-line key for a chain filter (spec 082 RG5, RX:
+/// the desktop home under a filter needs the "on this network" line).
+pub fn home_empty_key(chain_filter: Option<u32>) -> &'static str {
+    match chain_filter {
+        None => HOME_EMPTY_ALL,
+        Some(_) => HOME_EMPTY_FILTERED,
+    }
+}
 
 /// `txHash || undefined`.
 fn non_empty(s: &str) -> Option<String> {

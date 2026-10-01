@@ -192,7 +192,7 @@ enum BugReport {
     static let liveTransport: Transport = { request in
         let config = URLSessionConfiguration.ephemeral
         config.waitsForConnectivity = false
-        return try await URLSession(configuration: config).data(for: request)
+        return try await URLSession.vela(config).data(for: request)
     }
 
     /// Where reports go: the site's proxy, or — `VELA_BUG_REPORT_ENDPOINT` — a

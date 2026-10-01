@@ -1,0 +1,4 @@
+# E-W20: drop on the logo hosts (ethereum-data.getvela.app|coingecko|githubusercontent) set 08:06:58, relaunch 08:07:0x
+08:06:58 CONFIG {"mode": "drop", "latency": 0, "bps": 0, "drop": 1.0, "match": "ethereum-data\\.getvela\\.app|coingecko|githubusercontent"}
+ 307 ethereum-data.getvela.app:443
+# home activity/assets, Settings ▸ 网络 (24 chains), 资产 全部, history: every chain and coin logo drawn — all from the app's own cache; no letter or dot anywhere to watch recover

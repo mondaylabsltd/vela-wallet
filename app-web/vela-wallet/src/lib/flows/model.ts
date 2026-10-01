@@ -206,7 +206,11 @@ export interface ReceiveQrModel {
 	/** Live only: what 保存图片 produces — R4, about this network or token (T488). */
 	share?: ShareCardModel;
 	viewOnExplorer: string;
-	/** Where "view on explorer" leads — live only; absent, the control is drawn inert. */
+	/**
+	 * Where "view on explorer" leads — live only. Absent, no control is drawn
+	 * (spec 082 RJ16): an op hash is never an explorer link, and an op that
+	 * never reached the chain has nothing there to look at.
+	 */
 	explorerUrl?: string;
 }
 
@@ -254,13 +258,23 @@ export interface TxDetailModel {
 	positive: boolean;
 	facts: FactRowModel[];
 	viewOnExplorer: string;
-	/** Where "view on explorer" leads — live only; absent, the control is drawn inert. */
+	/**
+	 * Where "view on explorer" leads — live only. Absent, no control is drawn
+	 * (spec 082 RJ16): an op hash is never an explorer link, and an op that
+	 * never reached the chain has nothing there to look at.
+	 */
 	explorerUrl?: string;
 	/**
 	 * "Delete record" — the feed's tombstone (spec 028 Phase 8). Absent in the
 	 * drawn fixtures, where the detail is a picture; present on a live row.
 	 */
 	deleteLabel?: string;
+	/**
+	 * Spec 082 RJ18 (G51): on a record still pending, the delete is a quiet
+	 * control under the explorer — the record is the "don't send it again"
+	 * trace, and a full-width red button was the most prominent thing on it.
+	 */
+	deleteQuiet?: boolean;
 	/** Spec 038 #D2 — a folded batch row: its parts, under the facts. */
 	breakdownTitle?: string;
 	breakdown?: BreakdownRowModel[];
@@ -300,7 +314,11 @@ export interface TokenDetailModel {
 	/** Live only (spec 038 #E2): per row, the history index that opens its detail. */
 	rowTargets?: (number | undefined)[];
 	viewOnExplorer: string;
-	/** Where "view on explorer" leads — live only; absent, the control is drawn inert. */
+	/**
+	 * Where "view on explorer" leads — live only. Absent, no control is drawn
+	 * (spec 082 RJ16): an op hash is never an explorer link, and an op that
+	 * never reached the chain has nothing there to look at.
+	 */
 	explorerUrl?: string;
 }
 

@@ -637,10 +637,29 @@ export function attestSafeMessageHash(original_hash: Uint8Array, chain_id: bigin
 export function attestSafeOpHash(op_json: string, calls_json: string, chain_id: bigint): Uint8Array;
 
 /**
+ * Which balances one chain's read covers, in order —
+ * `balance_dashboard::read_plan` (RE9): the native coin, the registry
+ * stablecoins, the wrapped native, the person's own tokens, each contract
+ * once. `stables_json` is the chain data's `stables[]` (`[{symbol,
+ * contract}]`), `custom_json` the person's tokens on this chain
+ * (`[{contract, symbol, name?, decimals}]`); `""` is an empty list.
+ * Answers a JSON array of `ReadSlot`
+ * (`{kind, contract, symbol, name, known_decimals, peg_usd}`).
+ */
+export function balanceReadPlan(chain_id: number, stables_json: string, wrapped_native: string | null | undefined, custom_json: string): string;
+
+/**
  * The deepest pool across ALL stable quotes — `best_native_dex_price`, which
  * folds `best_group_price` over each group.
  */
 export function bestNativeDexPrice(groups: NativeQuoteGroups): number | undefined;
+
+/**
+ * A site's name and the line under it — `browser_load::site_label` (RE7):
+ * `{"name","host_line"}`, `host_line` `null` when the name already is the
+ * host, so it is said once.
+ */
+export function browserSiteLabel(title: string, host: string): string;
 
 /**
  * Derive the one-time group key from a 32-byte seed and build its closing
@@ -695,6 +714,13 @@ export function create2Address(deployer_hex: string, salt: Uint8Array, init_code
 export function dappProviderScript(host: string): string;
 
 /**
+ * How long to wait for the receipt when the submit answered `elapsed_ms`
+ * after the approve tap: what is left of the 120 s answer window, never less
+ * than 10 s — `sign_request::dapp_receipt_wait_ms` (RA12).
+ */
+export function dappReceiptWaitMs(elapsed_ms: number): number;
+
+/**
  * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
  */
 export function dappRpcClassify(method: string): string;
@@ -726,18 +752,39 @@ export function encodeType(typed_data_json: string): string;
 export function extractAttestationPublicKey(attestation_object: Uint8Array): P256PublicKey;
 
 /**
+ * The corpus key of the reason line under a failed fee, or `undefined` for
+ * none (spec 082 RJ13) — the one choice every shell used to make itself.
+ * `explore.chainDown` takes `{{chain}}`. `failure` as for
+ * [`fee_requote_delay_ms`].
+ */
+export function feeFailureReasonKey(failure: string): string | undefined;
+
+/**
  * The wait in ms before automatic fee re-quote `attempt` (1-based) after
- * `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
- * `undefined` when no retry can fix it (spec 079 FR-008) — the extension's
- * signing sheet re-asks on the same schedule as every other client.
+ * `failure` (see [`fee_failure_of`]), or `undefined` when no retry can fix
+ * it (spec 079 FR-008) — the extension's signing sheet re-asks on the same
+ * schedule as every other client: 3 s, 6 s, then every 8 s (spec 082 RJ12).
  */
 export function feeRequoteDelayMs(failure: string, attempt: number): number | undefined;
+
+/**
+ * The bound on each automatic fee re-quote, in ms (spec 082 RJ12).
+ */
+export function feeRequoteTimeoutMs(): number;
 
 /**
  * Issue 212: how long a chain's fee signals may be held, in ms — the one
  * number every shell's cache used to carry its own copy of.
  */
 export function feeSignalsCacheTtlMs(): number;
+
+/**
+ * A signed balance change from signed base units, or `undefined` for zero
+ * or unreadable text: the token ladder, dust written exactly (never `−0`),
+ * U+2212 / `+` (spec 082 RJ15). `preset` is the number preset's wire name;
+ * anything else is `comma_dot`.
+ */
+export function formatSignedTokenAmount(delta_base_units: string, decimals: number, preset: string): string | undefined;
 
 export function fromBase64Url(s: string): Uint8Array;
 
@@ -802,6 +849,14 @@ export function identiconSvgCircular(seed: string): string;
 
 export function keccak256(data: Uint8Array): Uint8Array;
 
+/**
+ * How long a logo that did not load stays failed, ms — `undefined` for the
+ * session (asking again will not help), a number for a miss that may heal
+ * (RE10). The web's `<img onerror>` has no status: `markMissTtlMs("unknown")`.
+ * See [`mark_miss_of`] for `kind` and `status`.
+ */
+export function markMissTtlMs(kind: string, status?: number | null): number | undefined;
+
 export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 
 /**
@@ -817,6 +872,14 @@ export function matchSelector(sig: string, calldata: Uint8Array): boolean;
 export function minGasPriceWei(chain_id: number): string;
 
 export function parsePublicKey(hex: string): P256PublicKey;
+
+/**
+ * The status method's answer — its `result`, or the whole JSON-RPC body —
+ * as the core's `TrackStatusAnswer` JSON (`{"status","stage","tx_hash"}`),
+ * or `undefined` when it is no answer (an error, or a status the core does
+ * not know). `tx_tracker::parse_user_op_status`.
+ */
+export function parseUserOpStatus(json: string): string | undefined;
 
 /**
  * **Read a directory answer.** `undefined` unless the body is about the AAGUID
@@ -958,9 +1021,43 @@ export function registryResolveKeyStep(public_key_hex: string, answers_json: str
  */
 export function registryResolveUnitStep(unit_id: number, source: string, answers_json: string): string;
 
+/**
+ * How long an endpoint rests after `consecutive_failures` failures in a
+ * row, ms: `30 s · 2^(n−1)`, capped at 300 s, `0` for none —
+ * `rpc_pool::cooldown_ms`.
+ */
+export function rpcCooldownMs(consecutive_failures: number): number;
+
+/**
+ * The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
+ */
+export function rpcReadTimeoutMs(): number;
+
 export function safeProxyRuntimeCode(): string;
 
 export function sha256(data: Uint8Array): Uint8Array;
+
+/**
+ * The ending of a request whose answer to the page was `payload_json` (the
+ * core's `SignResponsePayload` JSON) — `sign_request::ending_of`. Answers
+ * the `SignEnding` JSON (`{"type":"signed"}`,
+ * `{"type":"landed","tx_hash","user_op_hash"}`,
+ * `{"type":"still_confirming","user_op_hash"}`), or `undefined` when there is
+ * nothing to show. `submitted_user_op` is the op this request handed the
+ * tracker.
+ */
+export function signEndingOf(method: string, payload_json: string, submitted_user_op?: string | null): string | undefined;
+
+/**
+ * What the sheet draws for `ending_json` (a `SignEnding`) once the tracker
+ * has had its say — `sign_request::ending_state`. `entry_json` is the
+ * tracker's `TrackEntryView` for the op (`null`, `undefined` or `""` = not
+ * taken yet; an entry for another op is ignored). Answers the
+ * `SignEndingState` JSON: `{"type":"signed"}`, `{"type":"confirmed","tx_hash"}`,
+ * `{"type":"reverted","tx_hash"}`, `{"type":"not_sent"}` or
+ * `{"type":"following","user_op_hash","outcome","fee_held"}`.
+ */
+export function signEndingState(ending_json: string, entry_json?: string | null): string;
 
 /**
  * The route an account's signatures take, as JSON
@@ -976,6 +1073,20 @@ export function signInRoute(account_json: string): string | undefined;
  * Safe's `SafeMessage` wrap — the phones' `sign_message_hash`.
  */
 export function signMessageHash(method: string, params_json: string): Uint8Array | undefined;
+
+/**
+ * The page's "not confirmed yet" for an operation that may still land —
+ * `sign_request::not_confirmed_detail` (083). The extension's worker, which
+ * cannot run the core, mirrors it; `protocol.test.ts` pins the mirror here.
+ */
+export function signNotConfirmedDetail(user_op_hash: string): string;
+
+/**
+ * A sign request older than this (ms) is never signed —
+ * `sign_request::EXTENSION_REQUEST_TTL_MS`. The extension worker pins its
+ * `REQUEST_TTL_MS` to it (RB2).
+ */
+export function signRequestTtlMs(): number;
 
 /**
  * `{value, unit}` — a byte count in 1024s, for the shell to format in the
@@ -1071,6 +1182,74 @@ export function typedDataDocument(method: string, params_json: string): string |
 export function typicalInclusionSeconds(chain_id: number): number;
 
 /**
+ * A failed relay gas estimate, classified (spec 082 RJ19): `error_json` is
+ * the JSON-RPC `error` member or the whole body. Answers the core's
+ * `EstimateFailure` as JSON — `{"type":"reverts","reason":null|"…"}` or
+ * `{"type":"unavailable"}`.
+ */
+export function userOpEstimateFailure(error_json: string): string;
+
+/**
+ * `topics[0]` of the `eth_getLogs` filter a `FindOpEvent` asks for (ruling
+ * 8): the EntryPoint's `UserOperationEvent`; `topics[1]` is the op's hash.
+ */
+export function userOpEventTopic(): string;
+
+/**
+ * The EntryPoint v0.7 `getUserOpHash` of `op_json` on `chain_id`,
+ * 0x-lowercase — `user_op::user_op_hash`. `op_json` is the operation in the
+ * `attestSafeOpHash` shape (gas fields decimal strings, byte fields hex); any
+ * signature is ignored, so the hash is known before the passkey signs.
+ */
+export function userOpHash(op_json: string, chain_id: bigint): string;
+
+/**
+ * The dApp's `-32603` detail for a request that was not sent and has no
+ * relay refusal to quote (RA10) — a fixed sentence, never the pool's text.
+ */
+export function userOpNotSentDetail(): string;
+
+/**
+ * The dApp's `-32603` detail for a request that could not go out behind
+ * another of the account's operations (083, `RelayRejection::NonceHeld`) —
+ * never that operation's hash as this one's answer.
+ */
+export function userOpPreviousPendingDetail(): string;
+
+/**
+ * The dApp's `-32603` detail for an operation the relay refused (spec 082
+ * RJ3) — a fixed sentence.
+ */
+export function userOpRefusedDappDetail(): string;
+
+/**
+ * The relay's lifecycle-status method (RA7) — the only spelling it serves.
+ */
+export function userOpStatusMethod(): string;
+
+/**
+ * One step of the submit loop — `user_op::submit_step` (RA1). `reply_json`
+ * is what the POST came back with (see [`submit_reply_of`]); `attempt` is the
+ * 0-based count of POSTs of this op, the one just answered included;
+ * `maybe_delivered` is the OR over every POST of this op of the pool's
+ * `maybe_delivered`; `local_hash` is [`user_op_hash`]'s answer.
+ *
+ * Answers the core's `SubmitStep` as JSON:
+ * `{"retry_after":{"delay_ms":3000}}`, or `{"done":<verdict>}` where the
+ * verdict is `{"type":"accepted","user_op_hash":…}`,
+ * `{"type":"maybe_sent","user_op_hash":…}` or
+ * `{"type":"not_sent","rejection":null|"relayer_unavailable"|"bundler_underfunded"|{"other":…}}`.
+ * The local nonce advances on `accepted` only.
+ */
+export function userOpSubmitStep(reply_json: string, attempt: number, maybe_delivered: boolean, local_hash: string): string;
+
+/**
+ * How long the page waits for `ClearToPost` after `OpSigned` before it gives
+ * up without POSTing (spec 082 RJ1), in ms.
+ */
+export function userOpWriteAheadWaitMs(): number;
+
+/**
  * `kind` is `"create"` or `"get"` (anything else errors — the caller is
  * choosing which contract-mirrored rule set applies).
  */
@@ -1152,6 +1331,7 @@ export interface InitOutput {
     readonly approvalguardcore_view: (a: number) => [number, number, number, number];
     readonly attestSafeMessageHash: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
     readonly attestSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
+    readonly balanceReadPlan: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly balancedashboardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly balancedashboardcore_new: () => number;
     readonly balancedashboardcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1161,6 +1341,7 @@ export interface InitOutput {
     readonly batchimportcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly batchimportcore_view: (a: number) => [number, number, number, number];
     readonly bestNativeDexPrice: (a: any) => [number, number];
+    readonly browserSiteLabel: (a: number, b: number, c: number, d: number) => [number, number];
     readonly browserhistorycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly browserhistorycore_new: () => number;
     readonly browserhistorycore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1190,6 +1371,7 @@ export interface InitOutput {
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
     readonly dappProviderScript: (a: number, b: number) => [number, number];
+    readonly dappReceiptWaitMs: (a: number) => number;
     readonly dappRpcClassify: (a: number, b: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dapppermissionscore_new: () => number;
@@ -1214,7 +1396,9 @@ export interface InitOutput {
     readonly extcachecore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly extcachecore_view: (a: number) => [number, number, number, number];
     readonly extractAttestationPublicKey: (a: number, b: number) => [number, number, number];
+    readonly feeFailureReasonKey: (a: number, b: number) => [number, number];
     readonly feeRequoteDelayMs: (a: number, b: number, c: number) => number;
+    readonly feeRequoteTimeoutMs: () => number;
     readonly feeSignalsCacheTtlMs: () => number;
     readonly feepolicycore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly feepolicycore_new: () => number;
@@ -1228,6 +1412,7 @@ export interface InitOutput {
     readonly feetierprefcore_new: () => number;
     readonly feetierprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly feetierprefcore_view: (a: number) => [number, number, number, number];
+    readonly formatSignedTokenAmount: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly fromBase64Url: (a: number, b: number) => [number, number, number, number];
     readonly fromHex: (a: number, b: number) => [number, number, number, number];
     readonly functionSelector: (a: number, b: number) => [number, number, number, number];
@@ -1267,6 +1452,7 @@ export interface InitOutput {
     readonly managetokenscore_new: () => number;
     readonly managetokenscore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly managetokenscore_view: (a: number) => [number, number, number, number];
+    readonly markMissTtlMs: (a: number, b: number, c: number) => number;
     readonly matchSelector: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly minGasPriceWei: (a: number) => [number, number];
     readonly networkadmincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
@@ -1274,6 +1460,7 @@ export interface InitOutput {
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly networkadmincore_view: (a: number) => [number, number, number, number];
     readonly parsePublicKey: (a: number, b: number) => [number, number, number];
+    readonly parseUserOpStatus: (a: number, b: number) => [number, number];
     readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
     readonly passkeyDirectoryUrl: (a: number, b: number, c: number, d: number) => [number, number];
     readonly passkeyFallbackIconDataUri: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
@@ -1299,6 +1486,8 @@ export interface InitOutput {
     readonly registryNameStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryResolveKeyStep: (a: number, b: number, c: number, d: number) => [number, number];
     readonly registryResolveUnitStep: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+    readonly rpcCooldownMs: (a: number) => number;
+    readonly rpcReadTimeoutMs: () => number;
     readonly rpcpoolcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly rpcpoolcore_new: () => number;
     readonly rpcpoolcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1313,8 +1502,12 @@ export interface InitOutput {
     readonly sessioncore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly sessioncore_view: (a: number) => [number, number, number, number];
     readonly sha256: (a: number, b: number) => [number, number];
+    readonly signEndingOf: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly signEndingState: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly signInRoute: (a: number, b: number) => [number, number];
     readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly signNotConfirmedDetail: (a: number, b: number) => [number, number];
+    readonly signRequestTtlMs: () => number;
     readonly signprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signprefcore_new: () => number;
     readonly signprefcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
@@ -1346,6 +1539,15 @@ export interface InitOutput {
     readonly txtrackercore_view: (a: number) => [number, number, number, number];
     readonly typedDataDocument: (a: number, b: number, c: number, d: number) => [number, number];
     readonly typicalInclusionSeconds: (a: number) => number;
+    readonly userOpEstimateFailure: (a: number, b: number) => [number, number];
+    readonly userOpEventTopic: () => [number, number];
+    readonly userOpHash: (a: number, b: number, c: bigint) => [number, number, number, number];
+    readonly userOpNotSentDetail: () => [number, number];
+    readonly userOpPreviousPendingDetail: () => [number, number];
+    readonly userOpRefusedDappDetail: () => [number, number];
+    readonly userOpStatusMethod: () => [number, number];
+    readonly userOpSubmitStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly userOpWriteAheadWaitMs: () => number;
     readonly validateClientData: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly verifiedNameStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly walletKeysStep: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number];

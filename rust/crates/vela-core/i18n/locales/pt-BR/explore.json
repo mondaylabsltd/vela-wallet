@@ -62,7 +62,9 @@
     "loadOffline": "Conexão instável — a página não abriu.",
     "loadNotFound": "Não foi possível encontrar este site. Confira o endereço.",
     "loadCertificate": "O certificado deste site é inválido, e o Vela o bloqueou.",
+    "loadProxy": "Seu proxy não está respondendo.",
     "loadRetrying": "Tentando de novo…",
-    "chainDown": "Sem conexão com {{chain}} — os dados da página podem estar incompletos."
+    "chainDown": "Sem conexão com {{chain}} — os dados da página podem estar incompletos.",
+    "requestOpen": "Primeiro conclua ou cancele o pedido"
   }
 }

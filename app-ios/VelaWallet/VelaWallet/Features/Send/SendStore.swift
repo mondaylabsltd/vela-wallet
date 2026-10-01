@@ -48,8 +48,8 @@ final class SendStore {
         self.core = CoreStore(
             bridge: SendCore(),
             perform: { [executor] operation in await executor.perform(operation) },
-            onView: { [weak self] view in self?.view = view },
-            onFault: { print("[vela-wallet] send fault: \($0)") }
+            onView: { [weak self] view in self?.commit(view) },
+            onFault: { VelaLog.failure(.sign, kind: "send_fault", VelaLog.error($0)) }
         )
         // Two ports close over this store, so they are installed after it
         // exists rather than passed into the executor's initialiser.
@@ -61,6 +61,16 @@ final class SendStore {
         executor.ports.signingStarted = { [weak self] in
             self?.trustedSignerNotice = nil
             self?.dispatch(["type": "signing_started"])
+        }
+        // The op is signed and nothing has left (spec 082 RJ1): the core
+        // writes every recipient's record ahead, hands the op to the tracker
+        // and only then clears the POST.
+        executor.ports.opSigned = { [weak self] hash, block in
+            self?.dispatch([
+                "type": "op_signed", "user_op_hash": hash,
+                "submit_block": block.map { $0 as Any } ?? NSNull(),
+                "now_ms": Date().timeIntervalSince1970 * 1000,
+            ])
         }
         executor.ports.alert = { [weak self] kind in self?.alert = kind }
         executor.ports.trustedSignerEnded = { [weak self] notice in self?.trustedSignerNotice = notice }
@@ -248,26 +258,61 @@ final class SendStore {
     func dismissTreasurySheet() { dispatch(["type": "dismiss_treasury_sheet"]) }
     func retryAfterError() { dispatch(["type": "retry_after_error"]) }
 
-    /// The TRACKER's verdict, back to the send machine (spec 056).
+    // MARK: - The TRACKER's verdict, back to the send machine (spec 056)
+    //
+    // The receipt screen and the tracker are two machines watching one
+    // operation, and only the tracker polls. Without this the receipt sat on
+    // "submitted" while the notification said "confirmed" — two answers about
+    // the same money, on one phone. Since 082 the mapping from the tracker's
+    // entry to the receipt's verdict is the core's alone (`trackerChanged`);
+    // the two hand-built verdicts this file kept — one of them stamping every
+    // failure "sent" — are gone with it.
+
+    /// The last receipt verdict handed over, by op — so one verdict reaches
+    /// the machine once however often the tracker's view is rebuilt.
+    private var heardOutcome: [String: String] = [:]
+
+    /// The tracker's last view, whatever op it was about.
     ///
-    /// The receipt screen and the tracker are two machines watching one
-    /// operation, and only the tracker polls. Without this the receipt sat on
-    /// "submitted" while the notification said "confirmed" — two answers about
-    /// the same money, on one phone.
-    func receiptConfirmed(userOpHash: String, txHash: String) {
-        dispatch([
-            "type": "receipt_update",
-            "user_op_hash": userOpHash,
-            "outcome": ["type": "confirmed", "tx_hash": txHash],
-        ])
+    /// Since the write-ahead (spec 082 RJ1) the tracker has the op BEFORE its
+    /// POST, so it can reach its verdict while the relay's reply is still out
+    /// — the chain check finds the landed op while that reply is being lost.
+    /// This journey learns which op is its own only when the reply (or its
+    /// loss) comes back, and by then the tracker may never change again: a
+    /// terminal entry stops its clock, and a may-have-been-sent verdict hands
+    /// it nothing new. So the verdict it already has is read at that moment
+    /// (`commit`), not waited for — or the receipt says "may have been sent"
+    /// over money the tracker saw land (RJ4, G37 on the Send screen).
+    private var lastTracker: TrackViewWire?
+
+    /// The core's view. When it first names this journey's op, the tracker's
+    /// verdict so far is handed over at once.
+    private func commit(_ next: SendViewWire) {
+        let before = view?.userOpHash
+        view = next
+        guard let op = next.userOpHash, !op.isEmpty,
+              op.caseInsensitiveCompare(before ?? "") != .orderedSame,
+              let lastTracker
+        else { return }
+        trackerChanged(lastTracker)
     }
 
-    func receiptFailed(userOpHash: String, rejected: Bool) {
-        dispatch([
-            "type": "receipt_update",
-            "user_op_hash": userOpHash,
-            "outcome": ["type": "failed", "rejected": rejected],
-        ])
+    /// The TRACKER's view, as the receipt's verdict (spec 082): the core's
+    /// one mapping (`sendReceiptOutcomeOf`) — confirmed, failed (a revert, a
+    /// fee rejection, or a may-have-been-sent op the relay never had), held
+    /// for fees, or acknowledged — for the op this journey submitted. Deduped
+    /// on the verdict itself, not on the status alone: a fee hold and an
+    /// acknowledgement are both "pending" to the tracker.
+    func trackerChanged(_ view: TrackViewWire) {
+        lastTracker = view
+        guard let op = self.view?.userOpHash, !op.isEmpty,
+              let entry = view.entry(userOpHash: op),
+              let json = try? sendReceiptOutcomeOf(trackEntryJson: entry.coreJSON),
+              heardOutcome[op.lowercased()] != json,
+              let outcome = try? CoreJSON.object(json)
+        else { return }
+        heardOutcome[op.lowercased()] = json
+        dispatch(["type": "receipt_update", "user_op_hash": op, "outcome": outcome])
     }
     func retryAfterBootstrap() { dispatch(["type": "retry_after_bootstrap"]) }
     func done() { dispatch(["type": "done"]) }

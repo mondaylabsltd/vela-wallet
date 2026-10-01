@@ -1,0 +1,13 @@
+# DX11 (G2) — desk-post-DX11b.err (relaunch after quitting on the Uniswap tab)
+[vela-wallet] dev proxy: all traffic via 127.0.0.1:8899
+[vela-wallet] wallet: locale `zh`, gallery false, section Explore
+[vela-wallet] 02:36:23.480 browser: navigate asked host=127.0.0.1:8137 view=pending composing=false
+[vela-wallet] 02:36:23.602 browser: asked host=127.0.0.1:8137 gen=1 how=navigation
+[vela-wallet] 02:36:23.655 browser: committed host=127.0.0.1:8137 gen=1
+[vela-wallet] 02:36:23.739 browser: finished host=127.0.0.1:8137
+[vela-wallet] 02:37:31.133 browser: asked host=app.uniswap.org gen=2 how=navigation
+[vela-wallet] 02:37:32.147 browser: committed host=app.uniswap.org gen=2
+[vela-wallet] 02:37:32.332 browser: finished host=app.uniswap.org
+[vela-wallet] 02:37:58.628 browser: finished host=127.0.0.1:8137
+
+# tab backgrounds at y=15pt (x=300,500,760,850): launch = all (245,243,239) strip colour → Uniswap tab unlit; when shown = (250,250,248)

@@ -22,9 +22,12 @@
 //! two parsers of relay wording that decide a retry.
 //!
 //! Not here: anything that reads the chain or the relay — deployment status,
-//! the nonce, gas signals, the quote, the estimate, the submit and its retry
-//! loop. Those are a shell's, and the desktop's `executor/user_op.rs` performs
-//! them in the order `sendUserOpInBand` does. The fee MATH (`calc_max_fee_per_gas`,
+//! the nonce, gas signals, the quote, the estimate, the submit POST itself.
+//! Those are a shell's, and the desktop's `executor/user_op.rs` performs
+//! them in the order `sendUserOpInBand` does. What each submit answer MEANS is
+//! here since spec 082 ([`submit_step`]: accepted, may have been sent, or not
+//! sent), with the EntryPoint's own operation hash ([`user_op_hash`]) that
+//! lets a client follow an operation whose reply was lost. The fee MATH (`calc_max_fee_per_gas`,
 //! `derive_chain_gas_price`, the in-band amount) is already `fee_policy`'s and
 //! is not repeated.
 //!
@@ -35,6 +38,7 @@
 //! - `parse_hex_quantity` errors on non-hex, where `BigInt('0x' + junk)` threw
 //!   a `SyntaxError` — the same outcome, typed.
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::error::CoreError;
@@ -378,6 +382,14 @@ pub fn calculate_safe_op_hash(op: &UserOperation, chain_id: u64) -> Result<Vec<u
     ))
 }
 
+/// `keccak256("UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)")`
+/// — the EntryPoint v0.7 event every included operation emits, its
+/// `topics[1]` the operation's hash. The find-event read (spec 082 ruling 8)
+/// filters `eth_getLogs` on `[this, user_op_hash]`, so a shell needs no other
+/// constant to build the filter. Pinned against the core's own keccak by a test.
+pub const USER_OPERATION_EVENT_TOPIC: &str =
+    "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f";
+
 /// The Safe message hash a passkey signs for EIP-1271 verification:
 /// `Safe4337Module.isValidSignature` wraps the original hash in a
 /// `SafeMessage(bytes message)` struct under the SAFE's own domain.
@@ -712,6 +724,13 @@ pub fn existing_op(message: &str, own_user_op_hash: &str) -> Option<ExistingOp> 
 /// `EntryPoint.getUserOpHash` (v0.7): keccak256 of the packed operation's
 /// hash, the EntryPoint and the chain — the id the relay answers
 /// `eth_sendUserOperation` with and names in `[existingHash:…]`.
+///
+/// The signature is not part of it — the hash is known before the passkey
+/// signs and names the same operation whatever signature goes out. A client
+/// computes it before the first submit POST (spec 082 RA6), so an operation
+/// whose reply was lost can still be followed to its end; when the relay
+/// answers, the relay's hash wins (a mismatch is logged, never trusted over
+/// the relay).
 ///
 /// The operation is packed exactly as [`user_op_to_json`] puts it on the
 /// wire and the bundler re-packs it: `initCode` only when it names a factory,
@@ -1649,13 +1668,28 @@ pub fn is_bundler_underfunded(message: &str) -> bool {
 }
 
 /// Why the relay refused a submit, on the axis the send machine speaks.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RelayRejection {
     RelayerUnavailable,
     BundlerUnderfunded,
+    /// Another operation of the account holds the nonce (083 S3b): the
+    /// relay's `[existingHash:…]` names a hash that is not this operation's.
+    /// That hash is NEVER this request's answer — answered with it, Uniswap
+    /// called a swap done when only its approval had happened. A shell may
+    /// wait for that operation to land and send this one again; otherwise
+    /// the request fails with [`PREVIOUS_PENDING_DETAIL`].
+    NonceHeld {
+        user_op_hash: String,
+    },
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
+
+/// What a request that could not go out behind another of the account's
+/// operations ([`RelayRejection::NonceHeld`]) tells its page — for the
+/// developer; the screen has its own words (083).
+pub const PREVIOUS_PENDING_DETAIL: &str = "Another transaction from this account was still pending, so this one was not sent. Try again once it has confirmed.";
 
 /// The relay's sentence, classified the way `classifySubmit` does.
 #[must_use]
@@ -1726,6 +1760,230 @@ pub fn relay_error_message(error_json: &str) -> String {
     }
     let text = error.to_string();
     format!("Transaction failed: {}", &text[..text.len().min(200)])
+}
+
+// ---------------------------------------------------------------------------
+// The submit verdict (spec 082 RA1, G21): one rule for every client's loop
+// ---------------------------------------------------------------------------
+
+/// Busy re-POSTs of the identical operation before the relay's "currently
+/// processing" stops being a reason to wait (the four clients' old loops).
+pub const SUBMIT_MAX_RETRIES: u32 = 3;
+/// The wait before a busy re-POST.
+pub const SUBMIT_RETRY_DELAY_MS: u32 = 3_000;
+/// The dApp's `-32603` detail for "definitely not sent" with no relay
+/// rejection to quote (RA10): a fixed sentence, never the pool's raw text.
+pub const NOT_SENT_DAPP_DETAIL: &str = "relay unreachable; nothing was sent";
+/// The dApp's `-32603` detail for an operation the relay refused (spec 082
+/// RJ3): the tracker's `Rejected`, or a submit-time `NotSent` with a
+/// rejection that is not "relayer unavailable". A fixed sentence — the
+/// relay's own words are diagnostics, never the page's.
+pub const REFUSED_DAPP_DETAIL: &str = "the network refused this transaction; nothing was sent";
+/// How long a shell waits for the core's `ClearToPost` after it reported the
+/// signed operation (`OpSigned`, spec 082 RJ1). The record must be on disk
+/// before the first byte goes to the relay; with no clearance in this time
+/// the shell does not POST and reports the submit failed — nothing was sent.
+pub const WRITE_AHEAD_WAIT_MS: u32 = 5_000;
+
+/// What a failed relay gas estimate says about the call (spec 082 RJ19).
+#[cfg(feature = "crux")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EstimateFailure {
+    /// The relay simulated the operation and it reverts: the sheet warns
+    /// (`componentsUi.signing.simWillFail`, or `simWillFailReason` with the
+    /// reason). A warning informs, it never blocks (L-D5).
+    Reverts {
+        /// The decoded `Error(string)`, sanitised and capped exactly like a
+        /// simulation's revert reason (RG8); `None` when the relay sent no
+        /// readable reason.
+        reason: Option<String>,
+    },
+    /// No answer, a timeout, an exhausted pool, a rate limit, or any other
+    /// refusal: nothing is known about the call.
+    Unavailable,
+}
+
+/// Classify the relay's answer to a failed gas estimate (spec 082 RJ19).
+///
+/// `error_json` is the JSON-RPC `error` member, or the whole body carrying
+/// one; anything else — empty, `null`, not JSON — is no answer. The call
+/// reverts when the error's text (its `message`, or a string `data`) says
+/// "reverted" or names `AA23`, or its code is ERC-4337's `-32521`
+/// (execution-phase revert). The relay's `-32500` alone is a validation
+/// refusal (AA21 prefund, a signature) and says nothing about the call. The
+/// reason is read only from ABI-encoded revert bytes, through
+/// `sim_outcome::revert_reason` — the prose around them is never shown.
+#[cfg(feature = "crux")]
+#[must_use]
+pub fn estimate_failure(error_json: &str) -> EstimateFailure {
+    const EXECUTION_REVERTED_CODE: i64 = -32_521;
+    let Ok(value) = serde_json::from_str::<Value>(error_json) else {
+        return EstimateFailure::Unavailable;
+    };
+    let error = value.get("error").unwrap_or(&value);
+    if !error.is_object() {
+        return EstimateFailure::Unavailable;
+    }
+    let text = |key: &str| {
+        error
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_lowercase()
+    };
+    let words = format!("{} {}", text("message"), text("data"));
+    let reverts = words.contains("reverted")
+        || words.contains("aa23")
+        || error.get("code").and_then(Value::as_i64) == Some(EXECUTION_REVERTED_CODE);
+    if !reverts {
+        return EstimateFailure::Unavailable;
+    }
+    let call = serde_json::json!({ "error": error });
+    EstimateFailure::Reverts {
+        reason: crate::app::sim_outcome::revert_reason(&call),
+    }
+}
+
+/// What one `eth_sendUserOperation` POST came back with, as the pool
+/// concluded it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubmitReply {
+    /// A JSON-RPC `result` — the relay's operation hash.
+    Hash(String),
+    /// A JSON-RPC `error` member, as JSON text.
+    Error(String),
+    /// The pool gave up: no endpoint answered with JSON.
+    NoAnswer,
+}
+
+/// How a submit ended — the three things a person can be told about money
+/// that has left, may have left, or has not left the device.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SubmitVerdict {
+    /// The relay holds the operation. Its hash wins over the local one.
+    Accepted { user_op_hash: String },
+    /// The operation may be on its way to the chain: a request may have
+    /// reached the relay and its answer never came back. Followed under the
+    /// local hash; never "try again" (owner ruling 1).
+    MaybeSent { user_op_hash: String },
+    /// Nothing left the device, or the relay refused it and no earlier
+    /// attempt can have delivered it. `None` = the relay was never reached.
+    NotSent { rejection: Option<RelayRejection> },
+}
+
+/// One step of the submit loop: done, or wait and POST the same operation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubmitStep {
+    Done(SubmitVerdict),
+    RetryAfter { delay_ms: u32 },
+}
+
+/// A 32-byte hash as the relay writes one: `0x` and 64 hex digits.
+fn is_op_hash(text: &str) -> bool {
+    text.len() == 66 && text.starts_with("0x") && text[2..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The relay's "busy with this account" wording — the identical operation is
+/// POSTed again after [`SUBMIT_RETRY_DELAY_MS`].
+fn is_busy_wording(text: &str) -> bool {
+    text.contains("currently processing") || text.contains("Retry later")
+}
+
+/// Decide one submit POST (RA1). `attempt` is the 0-based count of POSTs of
+/// this operation so far, the one just answered included as `attempt`;
+/// `maybe_delivered` is the OR, over every POST of this operation, of
+/// `rpc_pool::may_have_delivered` — sticky, so a lost reply on attempt 0 still
+/// counts when attempt 1 is refused. The rules, first match wins:
+///
+/// 1. a result hash → `Accepted` with the relay's hash (a result that is not a
+///    hash is an answer nobody can read: `MaybeSent`, never "not sent");
+/// 2. an `[existingHash:0x…]` marker, read from the raw error JSON first and
+///    then from [`relay_error_message`], judged by [`existing_op`]: this
+///    operation's own hash → `Accepted` with it; another's (083) → `MaybeSent`
+///    while `maybe_delivered`, else `NotSent` with
+///    [`RelayRejection::NonceHeld`] — never that hash as this one's;
+/// 3. "currently processing" / "Retry later" with `attempt <`
+///    [`SUBMIT_MAX_RETRIES`] → `RetryAfter`;
+/// 4. any error, or the pool giving up, while `maybe_delivered` → `MaybeSent`
+///    with the local hash — an AA25 on attempt 1 after a lost reply on
+///    attempt 0 proves nothing about the first POST;
+/// 5. an error while `!maybe_delivered` → `NotSent` with the relay's refusal;
+/// 6. the pool giving up while `!maybe_delivered` → `NotSent { None }`.
+pub fn submit_step(
+    reply: &SubmitReply,
+    attempt: u32,
+    maybe_delivered: bool,
+    local_user_op_hash: &str,
+) -> SubmitStep {
+    let done = SubmitStep::Done;
+    let maybe_sent = || {
+        done(SubmitVerdict::MaybeSent {
+            user_op_hash: local_user_op_hash.to_owned(),
+        })
+    };
+    match reply {
+        SubmitReply::Hash(hash) => {
+            if is_op_hash(hash.trim()) {
+                done(SubmitVerdict::Accepted {
+                    user_op_hash: hash.trim().to_owned(),
+                })
+            } else {
+                maybe_sent()
+            }
+        }
+        SubmitReply::Error(error_json) => {
+            let sentence = relay_error_message(error_json);
+            match existing_op(error_json, local_user_op_hash)
+                .or_else(|| existing_op(&sentence, local_user_op_hash))
+            {
+                // The relay already holds THIS operation (a retried POST that
+                // had in fact arrived).
+                Some(ExistingOp::ThisOne(existing)) => {
+                    return done(SubmitVerdict::Accepted {
+                        user_op_hash: existing,
+                    });
+                }
+                // Another operation of the account holds the nonce (083): its
+                // hash is never this request's. An earlier POST that may have
+                // delivered keeps "may have been sent" (rule 4) — only the
+                // relay's word on THIS hash proves it never arrived.
+                Some(ExistingOp::Another(previous)) => {
+                    if maybe_delivered {
+                        return maybe_sent();
+                    }
+                    return done(SubmitVerdict::NotSent {
+                        rejection: Some(RelayRejection::NonceHeld {
+                            user_op_hash: previous,
+                        }),
+                    });
+                }
+                None => {}
+            }
+            let busy = is_busy_wording(error_json) || is_busy_wording(&sentence);
+            if busy && attempt < SUBMIT_MAX_RETRIES {
+                return SubmitStep::RetryAfter {
+                    delay_ms: SUBMIT_RETRY_DELAY_MS,
+                };
+            }
+            if maybe_delivered {
+                return maybe_sent();
+            }
+            done(SubmitVerdict::NotSent {
+                rejection: Some(classify_relay_rejection(&sentence)),
+            })
+        }
+        SubmitReply::NoAnswer => {
+            if maybe_delivered {
+                maybe_sent()
+            } else {
+                done(SubmitVerdict::NotSent { rejection: None })
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1904,5 +2162,156 @@ mod submit_spine_tests {
         );
         // A credential outside the wallet is refused, never mis-encoded.
         assert!(envelope_signature(&auth, &client, &der, "cafe", &keys).is_err());
+    }
+}
+
+#[cfg(test)]
+mod op_hash_tests {
+    use super::*;
+    use alloy_dyn_abi::DynSolValue;
+    use alloy_primitives::{Address, B256, U256};
+
+    fn ok<T>(result: Result<T, CoreError>) -> T {
+        result.unwrap_or_else(|error| unreachable!("{error}"))
+    }
+
+    const SAFE: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+    const PAYMASTER: &str = "0x2222222222222222222222222222222222222222";
+
+    fn op() -> UserOperation {
+        UserOperation {
+            sender: SAFE.to_owned(),
+            nonce: "0x29".to_owned(),
+            init_code: Vec::new(),
+            call_data: vec![0x54, 0x1d, 0x63, 0xc8, 0x01, 0x02],
+            verification_gas_limit: 300_000,
+            call_gas_limit: 450_000,
+            pre_verification_gas: 60_000,
+            max_fee_per_gas: 2_000_000_000,
+            max_priority_fee_per_gas: 1_000_000_000,
+            paymaster_and_data: Vec::new(),
+            signature: vec![0xab; 65],
+        }
+    }
+
+    fn word(high: u128, low: u128) -> DynSolValue {
+        let mut bytes = [0u8; 32];
+        bytes[..16].copy_from_slice(&high.to_be_bytes());
+        bytes[16..].copy_from_slice(&low.to_be_bytes());
+        DynSolValue::FixedBytes(B256::from(bytes), 32)
+    }
+
+    fn keccak_word(data: &[u8]) -> DynSolValue {
+        DynSolValue::FixedBytes(B256::from_slice(&keccak256(data)), 32)
+    }
+
+    fn address(text: &str) -> DynSolValue {
+        DynSolValue::Address(
+            text.parse::<Address>()
+                .unwrap_or_else(|e| unreachable!("{e}")),
+        )
+    }
+
+    /// The same hash through alloy's ABI encoder, with `packed` as the
+    /// EntryPoint's `paymasterAndData` — an independent reading of RA6.
+    fn reference(op: &UserOperation, packed: &[u8], chain_id: u64) -> String {
+        let nonce = U256::from_str_radix(op.nonce.trim_start_matches("0x"), 16)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        let inner = DynSolValue::Tuple(vec![
+            address(&op.sender),
+            DynSolValue::Uint(nonce, 256),
+            keccak_word(&op.init_code),
+            keccak_word(&op.call_data),
+            word(op.verification_gas_limit, op.call_gas_limit),
+            DynSolValue::Uint(U256::from(op.pre_verification_gas), 256),
+            word(op.max_priority_fee_per_gas, op.max_fee_per_gas),
+            keccak_word(packed),
+        ])
+        .abi_encode_params();
+        let outer = DynSolValue::Tuple(vec![
+            keccak_word(&inner),
+            address(ENTRY_POINT),
+            DynSolValue::Uint(U256::from(chain_id), 256),
+        ])
+        .abi_encode_params();
+        primitives::to_hex(&keccak256(&outer), true)
+    }
+
+    #[test]
+    fn the_event_topic_is_the_keccak_of_the_entry_point_event() {
+        let digest =
+            keccak256(b"UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)");
+        assert_eq!(
+            primitives::to_hex(&digest, true),
+            USER_OPERATION_EVENT_TOPIC
+        );
+    }
+
+    #[test]
+    fn an_empty_paymaster_hashes_as_the_entry_point_does() {
+        let hash = ok(user_op_hash(&op(), 100));
+        assert_eq!(hash, reference(&op(), &[], 100));
+        assert_eq!(hash.len(), 66);
+        assert_eq!(hash, hash.to_lowercase(), "0x-lowercase");
+    }
+
+    #[test]
+    fn a_paymaster_is_packed_with_two_zero_gas_limits() {
+        let data = [0xde, 0xad, 0xbe, 0xef];
+        let mut with_paymaster = op();
+        with_paymaster.paymaster_and_data = ok(primitives::from_hex(PAYMASTER));
+        with_paymaster.paymaster_and_data.extend_from_slice(&data);
+        // What `user_op_to_json` puts on the wire, packed back the way the
+        // EntryPoint reads it: paymaster ‖ uint128 0 ‖ uint128 0 ‖ data.
+        let mut packed = ok(primitives::from_hex(PAYMASTER));
+        packed.extend_from_slice(&[0u8; 32]);
+        packed.extend_from_slice(&data);
+        let hash = ok(user_op_hash(&with_paymaster, 100));
+        assert_eq!(hash, reference(&with_paymaster, &packed, 100));
+        assert_ne!(hash, ok(user_op_hash(&op(), 100)));
+    }
+
+    #[test]
+    fn the_signature_is_not_part_of_the_hash() {
+        let mut resigned = op();
+        resigned.signature = vec![0x01; 300];
+        assert_eq!(
+            ok(user_op_hash(&resigned, 100)),
+            ok(user_op_hash(&op(), 100))
+        );
+        resigned.signature.clear();
+        assert_eq!(
+            ok(user_op_hash(&resigned, 100)),
+            ok(user_op_hash(&op(), 100))
+        );
+    }
+
+    #[test]
+    fn a_nonce_gas_fee_or_chain_change_moves_the_hash() {
+        let base = ok(user_op_hash(&op(), 100));
+        let mut next_nonce = op();
+        next_nonce.nonce = "0x2a".to_owned();
+        let mut more_gas = op();
+        more_gas.call_gas_limit += 1;
+        let mut dearer = op();
+        dearer.max_fee_per_gas += 1;
+        let mut swapped = op();
+        // The two halves of one word are not interchangeable.
+        swapped.verification_gas_limit = op().call_gas_limit;
+        swapped.call_gas_limit = op().verification_gas_limit;
+        for moved in [next_nonce, more_gas, dearer, swapped] {
+            assert_ne!(ok(user_op_hash(&moved, 100)), base, "{moved:?}");
+        }
+        assert_ne!(ok(user_op_hash(&op(), 8453)), base);
+    }
+
+    #[test]
+    fn a_malformed_sender_or_nonce_is_an_error_not_a_hash() {
+        let mut bad = op();
+        bad.sender = "0x12".to_owned();
+        assert!(user_op_hash(&bad, 100).is_err());
+        let mut bad = op();
+        bad.nonce = "zz".to_owned();
+        assert!(user_op_hash(&bad, 100).is_err());
     }
 }

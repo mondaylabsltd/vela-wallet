@@ -13,10 +13,10 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::dapp_permissions::{
-    decide_popup_request, is_connect_method, is_insecure_public_origin, is_signing_method,
-    origin_of, settle_on_close, DappPermissions, DpermGrant, DpermOperation as Op,
-    DpermPopupDecision, DpermPopupOutcome, DpermPopupView, DpermRejectReason as Reason,
-    DpermRespondPayload as Payload, DpermShellResult as Res, Event,
+    dapp_spelling, decide_popup_request, is_connect_method, is_insecure_public_origin,
+    is_signing_method, origin_of, resolve_granted, settle_on_close, DappPermissions, DpermGrant,
+    DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome, DpermPopupView,
+    DpermRejectReason as Reason, DpermRespondPayload as Payload, DpermShellResult as Res, Event,
 };
 
 type Sut = DomainDriver<DappPermissions>;
@@ -26,6 +26,9 @@ const ORIGIN: &str = "https://dapp.example";
 const A1: &str = "0x1111111111111111111111111111111111111111";
 const A2: &str = "0x2222222222222222222222222222222222222222";
 const A3: &str = "0x3333333333333333333333333333333333333333";
+/// A mixed-case account: its EIP-55 spelling differs from its lower case.
+const V: &str = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+const V_LOWER: &str = "0xd8da6bf26964af9d7eed9e03e53415d37aa96045";
 
 fn grant(address: &str) -> DpermGrant {
     DpermGrant {
@@ -644,5 +647,147 @@ fn origin_of_normalizes_like_the_url_constructor() {
         origin_of("javascript:alert(1)"),
         None,
         "non-http(s) never becomes an origin"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 RG10 — one address spelling toward dApps (L-D6)
+// ---------------------------------------------------------------------------
+
+/// `dapp_spelling` is EIP-55 for any case, and leaves anything that is not an
+/// address exactly as it came — it changes how an account is spelled, never
+/// which one, and never invents one.
+#[test]
+fn dapp_spelling_is_eip55_or_the_input_unchanged() {
+    assert_eq!(dapp_spelling(V_LOWER), V);
+    assert_eq!(dapp_spelling(&V.to_uppercase().replacen("0X", "0x", 1)), V);
+    assert_eq!(dapp_spelling(V), V);
+    assert_eq!(dapp_spelling(A1), A1, "no letters, nothing to change");
+    for not_an_address in [
+        "",
+        "0x",
+        "0x1234",
+        "vitalik.eth",
+        "0xZZ",
+        "0X1111111111111111111111111111111111111111",
+    ] {
+        assert_eq!(dapp_spelling(not_an_address), not_an_address);
+    }
+}
+
+/// A connect approved for a lower-case account writes the grant, the audit row
+/// and the answer in EIP-55 — the spelling every later event uses.
+#[test]
+fn a_lower_case_grant_is_written_eip55() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::PopupApproved {
+        origin: ORIGIN.to_owned(),
+        request_id: "r1".to_owned(),
+        method: "eth_requestAccounts".to_owned(),
+        address: V_LOWER.to_owned(),
+        chain_id: 1,
+        now_ms: T0,
+    });
+    assert_eq!(
+        ops,
+        vec![
+            Op::WriteGrant {
+                grant: DpermGrant {
+                    origin: ORIGIN.to_owned(),
+                    address: V.to_owned(),
+                    chain_id: 1,
+                    granted_at_ms: T0,
+                },
+            },
+            Op::SaveConnectionRecord {
+                address: V.to_owned(),
+                chain_id: 1,
+                origin: ORIGIN.to_owned(),
+            },
+            accounts("r1", &[V]),
+        ]
+    );
+}
+
+/// An account switch re-pins the site in EIP-55, whatever case the wallet
+/// named the account in.
+#[test]
+fn an_account_switch_answers_eip55() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(switch(
+        Some(grant(A1)),
+        Some(vec![A1.to_owned(), V_LOWER.to_owned()]),
+        V_LOWER,
+        ORIGIN,
+    ));
+    assert_eq!(
+        ops,
+        vec![Op::WriteGrant {
+            grant: DpermGrant {
+                origin: ORIGIN.to_owned(),
+                address: V.to_owned(),
+                chain_id: 8453,
+                granted_at_ms: T0 + 2_000.0,
+            },
+        }]
+    );
+}
+
+/// `resolve_granted` is unchanged: it matches in any case and returns the
+/// grant as stored (its JavaScript twin in the worker cannot checksum).
+#[test]
+fn resolve_granted_still_matches_case_insensitively() {
+    let stored = grant(V_LOWER);
+    assert_eq!(
+        resolve_granted(Some(&stored), Some(&[V.to_owned()])),
+        vec![V_LOWER.to_owned()]
+    );
+    let stored = grant(V);
+    assert_eq!(
+        resolve_granted(Some(&stored), Some(&[V_LOWER.to_owned()])),
+        vec![V.to_owned()]
+    );
+    assert!(resolve_granted(Some(&stored), Some(&[A1.to_owned()])).is_empty());
+}
+
+/// A grant stored lower-case before 082 is answered in EIP-55 by the request
+/// window too — the connect answer and the forward — while a pinned address
+/// in either case still matches it.
+#[test]
+fn the_popup_answers_an_old_lower_case_grant_in_eip55() {
+    let mut sut = Sut::new();
+    let verdict = ask(
+        &mut sut,
+        popup(
+            "eth_requestAccounts",
+            Some(grant(V_LOWER)),
+            Some(&[V]),
+            None,
+        ),
+    );
+    assert_eq!(
+        verdict.outcome,
+        DpermPopupOutcome::Respond {
+            payload: Payload::Accounts {
+                addresses: vec![V.to_owned()],
+            },
+        }
+    );
+    assert_eq!(verdict.granted, vec![V.to_owned()]);
+
+    let verdict = ask(
+        &mut sut,
+        popup(
+            "eth_sendTransaction",
+            Some(grant(V_LOWER)),
+            None,
+            Some(V_LOWER),
+        ),
+    );
+    assert_eq!(
+        verdict.outcome,
+        DpermPopupOutcome::ForwardToSigning {
+            granted_address: V.to_owned(),
+        }
     );
 }

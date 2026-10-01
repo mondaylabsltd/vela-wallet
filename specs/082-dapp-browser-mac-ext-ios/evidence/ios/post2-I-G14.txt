@@ -1,0 +1,14 @@
+# I-G14 (+ zero, omitted, numeric, Ethereum) — iPhone build fb8c7026, scratch dApp http://192.168.50.17:8140, no fault
+# request: eth_sendTransaction {from: selectedAddress, to: 0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141, value: ...}
+Gnosis value 0x38d7ea4c68000 (08:55, the IX-W1 sheet): 发送 / −0.001 xDAI (amount card) / 接收方 0x7687…D141 + full EIP-55 / 余额变化 xDAI −0.001 / 网络费 ~0.01 xDAI · ≈¥0.07 / 滑动以确认 · 确认发送 — no 合约交互 / 无法解码 / 未验证合约
+Gnosis value 0x0 (09:25:46): 发送 / 0 xDAI (no minus) / 接收方 0x7687…D141 / 余额变化 没有资产离开你的钱包 (half-width box) / 滑动以确认 · 确认
+Gnosis value omitted (09:26:17): identical to 0x0
+Gnosis value 1000 (JSON number, 09:26:41): 合约交互 / amber 无法解码 — 无 ERC-7730 描述符（0 字节）/ 交互合约 未验证合约 + badge 未验证合约 / 0x76875e38fc6Bc2dEDC|aed807cE00782DB5C0D1|41 (3 lines, narrow column) / 余额变化 没有资产离开你的钱包 / 滑动以确认 · 确认 — no amount, never 0 xDAI, never −0
+  note: iOS submit reads a non-string value as 0x0 (fb8c7026 SignExecutor.swift call(from:)), so "nothing leaves" matches what would be signed; the page asked for 1000 wei
+Ethereum value 0x38d7ea4c68000 (09:27:23): 发送 / −0.001 ETH / 接收方 0x7687…D141 / 余额变化 ETH −0.001 / 网络费 ~0.001667 ETH · ≈¥29.80 (wraps) / 滑动以确认 · 确认发送
+header on every sheet: host cut, `192.168.5` / `0.17:81…` (Gnosis), `192.16` / `8.50.…` (Ethereum) — G12, see E-G12
+dApp page (each closed with the sheet's ✕):
+{"t":"09:25:46","label":"send 0x0","ok":false,"code":4001,"message":"User rejected the request","done":"09:26:15"}
+{"t":"09:26:17","label":"send omitted","ok":false,"code":4001,"message":"User rejected the request","done":"09:26:39"}
+{"t":"09:26:41","label":"send num 1000","ok":false,"code":4001,"message":"User rejected the request","done":"09:27:18"}
+{"t":"09:27:23","label":"send 0.001","ok":false,"code":4001,"message":"User rejected the request","done":"09:28:00"}

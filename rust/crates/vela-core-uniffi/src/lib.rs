@@ -1157,6 +1157,68 @@ pub fn wrapped_native_is_the_native(chain_id: u32, address: String) -> bool {
     vela_core::app::balance_dashboard::wrapped_native_is_the_native(chain_id, &address)
 }
 
+/// One balance a chain's read covers (spec 082 RE9).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BalanceReadSlot {
+    /// `native` (`eth_getBalance`, priced as the native), `stable` (a registry
+    /// stablecoin: `balanceOf` + `decimals()`, worth `peg_usd`), `wrapped`
+    /// (`balanceOf` + `decimals()`, priced as the native) or `custom` (the
+    /// person's token: `balanceOf`, its saved decimals, priced by DEX).
+    pub kind: String,
+    /// The token contract; `None` for the native coin.
+    pub contract: Option<String>,
+    /// The registry's or the person's symbol; empty for `native` and
+    /// `wrapped`, which the shell names from its own chain data.
+    pub symbol: String,
+    /// The person's saved name for a custom token (or one that overrode a
+    /// registry entry); the symbol for a registry stablecoin; empty otherwise.
+    pub name: String,
+    /// `Some`: known, no `decimals()` read. `None`: read it on chain (the
+    /// native coin takes the chain data's native decimals).
+    pub known_decimals: Option<u32>,
+    /// `Some(1.0)` for a registry stablecoin.
+    pub peg_usd: Option<f64>,
+}
+
+/// Which balances one chain's read covers, in order: the native coin (unless
+/// the chain has none — Tempo), the registry stablecoins, the wrapped native
+/// (unless it IS the native), then the person's custom tokens; one slot per
+/// contract, custom metadata winning. `stables_json` is the chain data's
+/// `stables[]` (`[{"symbol","contract"}]`, other fields ignored);
+/// `custom_json` this chain's saved tokens (`[{"contract","symbol","name",
+/// "decimals"}]`). Blank text is an empty list; anything else that is not
+/// that shape is an error.
+#[uniffi::export]
+pub fn balance_read_plan(
+    chain_id: u32,
+    stables_json: String,
+    wrapped_native: Option<String>,
+    custom_json: String,
+) -> Result<Vec<BalanceReadSlot>, CoreError> {
+    use vela_core::app::balance_dashboard::{read_plan, StableRef, TokenRef};
+    fn list<T: serde::de::DeserializeOwned>(what: &str, json: &str) -> Result<Vec<T>, CoreError> {
+        if json.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        json_in(what, json)
+    }
+    let stables: Vec<StableRef> = list("stables_json", &stables_json)?;
+    let custom: Vec<TokenRef> = list("custom_json", &custom_json)?;
+    Ok(
+        read_plan(chain_id, &stables, wrapped_native.as_deref(), &custom)
+            .into_iter()
+            .map(|slot| BalanceReadSlot {
+                kind: snake_name(&slot.kind),
+                contract: slot.contract,
+                symbol: slot.symbol,
+                name: slot.name,
+                known_decimals: slot.known_decimals.map(u32::from),
+                peg_usd: slot.peg_usd,
+            })
+            .collect(),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // The submit spine (spec 043): a draft, its hash, its signature, its wire form
 // ---------------------------------------------------------------------------
@@ -1400,6 +1462,19 @@ pub fn user_op_safe_op_hash(draft: UserOpDraft, chain_id: u32) -> Result<Vec<u8>
     )?)
 }
 
+/// The EntryPoint v0.7 `getUserOpHash` of the draft on `chain_id`, 0x-lower-case
+/// (spec 082 RA6). The signature is not part of it, so it is known before the
+/// passkey signs: a client computes it before the first submit POST and
+/// follows the operation under it when the relay's reply is lost. When the
+/// relay answers, the relay's hash wins.
+#[uniffi::export]
+pub fn user_op_hash(draft: UserOpDraft, chain_id: u32) -> Result<String, CoreError> {
+    Ok(vela_core::user_op::user_op_hash(
+        &op_of(&draft)?,
+        u64::from(chain_id),
+    )?)
+}
+
 /// The assertion as the operation's signature: compatibility-checked, DER →
 /// raw low-S, the client-data fields cut out, the verifier named by the
 /// credential that signed. A credential outside `keys` is an error.
@@ -1519,27 +1594,217 @@ pub fn is_bundler_underfunded(message: String) -> bool {
 pub enum RelayRejection {
     RelayerUnavailable,
     BundlerUnderfunded,
-    Other { message: String },
+    /// Another operation of the account holds the nonce (083): its hash is
+    /// never this request's answer.
+    NonceHeld {
+        user_op_hash: String,
+    },
+    Other {
+        message: String,
+    },
+}
+
+impl From<vela_core::user_op::RelayRejection> for RelayRejection {
+    fn from(rejection: vela_core::user_op::RelayRejection) -> Self {
+        use vela_core::user_op::RelayRejection as R;
+        match rejection {
+            R::RelayerUnavailable => RelayRejection::RelayerUnavailable,
+            R::BundlerUnderfunded => RelayRejection::BundlerUnderfunded,
+            R::NonceHeld { user_op_hash } => RelayRejection::NonceHeld { user_op_hash },
+            R::Other(message) => RelayRejection::Other { message },
+        }
+    }
 }
 
 /// The relay's sentence, classified the way `classifySubmit` does.
 #[uniffi::export]
 pub fn classify_relay_rejection(message: String) -> RelayRejection {
-    match vela_core::user_op::classify_relay_rejection(&message) {
-        vela_core::user_op::RelayRejection::RelayerUnavailable => {
-            RelayRejection::RelayerUnavailable
-        }
-        vela_core::user_op::RelayRejection::BundlerUnderfunded => {
-            RelayRejection::BundlerUnderfunded
-        }
-        vela_core::user_op::RelayRejection::Other(message) => RelayRejection::Other { message },
-    }
+    vela_core::user_op::classify_relay_rejection(&message).into()
 }
 
 /// `parseBundlerError`: the JSON-RPC `error` member as one sentence.
 #[uniffi::export]
 pub fn relay_error_message(error_json: String) -> String {
     vela_core::user_op::relay_error_message(&error_json)
+}
+
+// -- the submit verdict (spec 082 RA1, contract §1) ---------------------------
+//
+// One rule for every client's submit loop: POST → OR the pool's
+// `maybe_delivered` into a sticky flag → `user_op_submit_step` → wait and POST
+// the SAME operation again, or done. The local nonce advances only on
+// `Accepted`; `MaybeSent` is followed under the local hash and is never
+// "try again" (owner ruling 1).
+
+/// What one `eth_sendUserOperation` POST came back with, as the pool
+/// concluded it.
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum UserOpSubmitReply {
+    /// A JSON-RPC `result` — the relay's operation hash.
+    Hash { hash: String },
+    /// A JSON-RPC `error` member, as JSON text.
+    RpcError { error_json: String },
+    /// The pool gave up: no endpoint answered with JSON.
+    NoAnswer,
+}
+
+impl From<UserOpSubmitReply> for vela_core::user_op::SubmitReply {
+    fn from(reply: UserOpSubmitReply) -> Self {
+        match reply {
+            UserOpSubmitReply::Hash { hash } => Self::Hash(hash),
+            UserOpSubmitReply::RpcError { error_json } => Self::Error(error_json),
+            UserOpSubmitReply::NoAnswer => Self::NoAnswer,
+        }
+    }
+}
+
+/// One step of the submit loop: a verdict, or wait `delay_ms` and POST the
+/// identical operation again.
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum UserOpSubmitStep {
+    /// The relay holds the operation; its hash wins over the local one.
+    Accepted {
+        user_op_hash: String,
+    },
+    /// A request may have reached the relay and its answer never came back:
+    /// followed under the LOCAL hash (`OpSubmitted{maybe_sent: true}`).
+    MaybeSent {
+        user_op_hash: String,
+    },
+    /// Nothing left the device (`rejection` `None`: the relay was never
+    /// reached — the dApp's detail is [`user_op_not_sent_detail`]), or the
+    /// relay refused it and no earlier attempt can have delivered it.
+    NotSent {
+        rejection: Option<RelayRejection>,
+    },
+    RetryAfter {
+        delay_ms: u32,
+    },
+}
+
+impl From<vela_core::user_op::SubmitStep> for UserOpSubmitStep {
+    fn from(step: vela_core::user_op::SubmitStep) -> Self {
+        use vela_core::user_op::{SubmitStep, SubmitVerdict};
+        match step {
+            SubmitStep::RetryAfter { delay_ms } => UserOpSubmitStep::RetryAfter { delay_ms },
+            SubmitStep::Done(SubmitVerdict::Accepted { user_op_hash }) => {
+                UserOpSubmitStep::Accepted { user_op_hash }
+            }
+            SubmitStep::Done(SubmitVerdict::MaybeSent { user_op_hash }) => {
+                UserOpSubmitStep::MaybeSent { user_op_hash }
+            }
+            SubmitStep::Done(SubmitVerdict::NotSent { rejection }) => UserOpSubmitStep::NotSent {
+                rejection: rejection.map(Into::into),
+            },
+        }
+    }
+}
+
+/// Decide one submit POST. `attempt` is the 0-based count of POSTs of this
+/// operation, the one just answered included; `maybe_delivered` the OR, over
+/// every POST of it so far, of the pool verdict's `maybe_delivered`;
+/// `local_hash` is [`user_op_hash`] of the operation. See
+/// `vela_core::user_op::submit_step` for the rules.
+#[uniffi::export]
+pub fn user_op_submit_step(
+    reply: UserOpSubmitReply,
+    attempt: u32,
+    maybe_delivered: bool,
+    local_hash: String,
+) -> UserOpSubmitStep {
+    vela_core::user_op::submit_step(&reply.into(), attempt, maybe_delivered, &local_hash).into()
+}
+
+/// The dApp's `-32603` detail when nothing was sent and the relay gave no
+/// refusal to quote (RA10): a fixed sentence, never the pool's raw text.
+#[uniffi::export]
+pub fn user_op_not_sent_detail() -> String {
+    vela_core::user_op::NOT_SENT_DAPP_DETAIL.to_owned()
+}
+
+/// The dApp's `-32603` detail for a request that could not go out behind
+/// another of the account's operations (083, `RelayRejection::NonceHeld`) —
+/// never that operation's hash as this one's answer.
+#[uniffi::export]
+#[must_use]
+pub fn user_op_previous_pending_detail() -> String {
+    vela_core::user_op::PREVIOUS_PENDING_DETAIL.to_owned()
+}
+
+/// The dApp's `-32603` detail when the relay refused the operation (spec 082
+/// RJ3): the tracker's `rejected`, or a submit-time not-sent with a rejection
+/// that is not "relayer unavailable". A fixed sentence.
+#[uniffi::export]
+pub fn user_op_refused_dapp_detail() -> String {
+    vela_core::user_op::REFUSED_DAPP_DETAIL.to_owned()
+}
+
+/// How long a shell waits for the core's `ClearToPost` after `OpSigned`
+/// before it gives up without POSTing (spec 082 RJ1), in ms.
+#[uniffi::export]
+pub fn user_op_write_ahead_wait_ms() -> u32 {
+    vela_core::user_op::WRITE_AHEAD_WAIT_MS
+}
+
+/// A failed relay gas estimate, as the core reads it (spec 082 RJ19).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct UserOpEstimateFailure {
+    /// `reverts` (the relay simulated the call and it reverts: warn with
+    /// `componentsUi.signing.simWillFail` / `simWillFailReason`) or
+    /// `unavailable` (nothing is known about the call).
+    pub kind: String,
+    /// The decoded, sanitised revert reason, when `reverts` carried one.
+    pub reason: Option<String>,
+}
+
+/// Classify the relay's answer to a failed gas estimate: `error_json` is the
+/// JSON-RPC `error` member (or the whole body); anything else is no answer.
+/// See `vela_core::user_op::estimate_failure`.
+#[uniffi::export]
+pub fn user_op_estimate_failure(error_json: String) -> UserOpEstimateFailure {
+    use vela_core::user_op::{estimate_failure, EstimateFailure};
+    match estimate_failure(&error_json) {
+        EstimateFailure::Reverts { reason } => UserOpEstimateFailure {
+            kind: "reverts".to_owned(),
+            reason,
+        },
+        EstimateFailure::Unavailable => UserOpEstimateFailure {
+            kind: "unavailable".to_owned(),
+            reason: None,
+        },
+    }
+}
+
+/// The relay method the tracker's `PollStatus` asks
+/// (`pimlico_getUserOperationStatus`, RA7).
+#[uniffi::export]
+pub fn user_op_status_method() -> String {
+    vela_core::app::tx_tracker::USER_OP_STATUS_METHOD.to_owned()
+}
+
+/// One parsed answer of [`user_op_status_method`] — the fields of the
+/// tracker's `Status` shell result.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct TrackStatusAnswer {
+    /// The `TrackLifecycle` wire name: `not_found | queued | not_submitted |
+    /// submitted | rejected | included | failed`.
+    pub status: String,
+    /// The executor stage that last touched the op (`last_executor_stage`).
+    pub stage: Option<String>,
+    /// The bundle transaction the relay names, when it has one.
+    pub tx_hash: Option<String>,
+}
+
+/// The relay's status answer — its `result`, or the whole JSON-RPC body — or
+/// `None` when it is not one: an error body, a missing or unknown `status`.
+/// The one parser every client uses; an unknown status is never guessed at.
+#[uniffi::export]
+pub fn parse_user_op_status(json: String) -> Option<TrackStatusAnswer> {
+    vela_core::app::tx_tracker::parse_user_op_status(&json).map(|answer| TrackStatusAnswer {
+        status: snake_name(&answer.status),
+        stage: answer.stage,
+        tx_hash: answer.tx_hash,
+    })
 }
 
 /// The origin of a page's URL, normalised the way the browser normalises
@@ -1557,6 +1822,149 @@ pub fn dapp_origin_of(url: String) -> Option<String> {
 #[uniffi::export]
 pub fn dapp_is_signing_method(method: String) -> bool {
     vela_core::app::sign_request::is_signing_method(&method)
+}
+
+// -- the ending of a request (spec 082 RA8, RA12, contract §4) -----------------
+//
+// JSON in and out, deliberately: the ending travels from `sign_ending_of` to
+// `sign_ending_state` unchanged, and both it and the state are tagged enums
+// the hand-written `SignWire` mirrors already decode (with a wire round-trip
+// test), in the same serde shape the web reads over wasm.
+
+fn json_in<T: serde::de::DeserializeOwned>(what: &str, json: &str) -> Result<T, CoreError> {
+    serde_json::from_str(json).map_err(|error| CoreError::Internal(format!("{what}: {error}")))
+}
+
+fn json_out<T: serde::Serialize>(what: &str, value: &T) -> Result<String, CoreError> {
+    serde_json::to_string(value)
+        .map_err(|error| CoreError::Internal(format!("could not serialize {what}: {error}")))
+}
+
+/// What the answer that went to the page stands for — a `SignEnding` as JSON
+/// (`{"type":"signed"}`, `{"type":"landed","tx_hash",…,"user_op_hash"}`,
+/// `{"type":"still_confirming","user_op_hash"}`) — or `None` when there is
+/// nothing to show (a refusal, an empty answer). `payload_json` is the
+/// `SignResponsePayload` the core's `Respond` carried; `submitted_user_op` the
+/// op this request handed the tracker. Replaces each shell's own derivation.
+#[uniffi::export]
+pub fn sign_ending_of(
+    method: String,
+    payload_json: String,
+    submitted_user_op: Option<String>,
+) -> Result<Option<String>, CoreError> {
+    let payload: vela_core::app::sign_request::SignResponsePayload =
+        json_in("payload_json", &payload_json)?;
+    vela_core::app::sign_request::ending_of(&method, &payload, submitted_user_op.as_deref())
+        .map(|ending| json_out("the sign ending", &ending))
+        .transpose()
+}
+
+/// What the sheet draws for an ending once the tracker has had its say — a
+/// `SignEndingState` as JSON (`signed | confirmed | reverted | not_sent |
+/// following{user_op_hash, outcome, fee_held}`). `ending_json` is what
+/// [`sign_ending_of`] returned; `track_entry_json` the tracker's
+/// `TrackEntryView` for the op, `None` (or `null`) while the tracker has not
+/// taken it — that reads `following` / `landing`. A landed or still-confirming
+/// request is never drawn confirmed until the tracker says so (W3).
+#[uniffi::export]
+pub fn sign_ending_state(
+    ending_json: String,
+    track_entry_json: Option<String>,
+) -> Result<String, CoreError> {
+    use vela_core::app::{sign_request, tx_tracker::TrackEntryView};
+    let ending: sign_request::SignEnding = json_in("ending_json", &ending_json)?;
+    let entry: Option<TrackEntryView> = match track_entry_json.as_deref() {
+        Some(json) => json_in("track_entry_json", json)?,
+        None => None,
+    };
+    json_out(
+        "the sign ending state",
+        &sign_request::ending_state(&ending, entry.as_ref()),
+    )
+}
+
+/// How long to wait for the receipt when the submit answered `elapsed_ms`
+/// after the approve tap: what is left of the 120 s answer window, never less
+/// than 10 s (RA12). One number for every client's dApp wait.
+#[uniffi::export]
+pub fn dapp_receipt_wait_ms(elapsed_ms: f64) -> f64 {
+    vela_core::app::sign_request::dapp_receipt_wait_ms(elapsed_ms)
+}
+
+/// The receipt verdict a tracker entry stands for, for the send machine's
+/// `ReceiptUpdate` — a `SendReceiptOutcome` as JSON (`confirmed{tx_hash}`,
+/// `failed{rejected, not_sent}`, `fee_held`, `acknowledged`) — or `None` while
+/// there is nothing new to say: a slow, unreachable, maybe-sent or 24 h-old op
+/// sends nothing, so only a definitive drop, rejection or never-sent is a
+/// failure. `track_entry_json` is the tracker's `TrackEntryView`. The one
+/// mapping (`vela_core::app::send::receipt_outcome_of`), where each shell had
+/// its own.
+#[uniffi::export]
+pub fn send_receipt_outcome_of(track_entry_json: String) -> Result<Option<String>, CoreError> {
+    let entry: vela_core::app::tx_tracker::TrackEntryView =
+        json_in("track_entry_json", &track_entry_json)?;
+    vela_core::app::send::receipt_outcome_of(&entry)
+        .map(|outcome| json_out("the receipt outcome", &outcome))
+        .transpose()
+}
+
+// -- what a simulation says (spec 082 RG6, RG8, contract §8) ------------------
+
+/// A simulation's outcome and the line the signing sheet draws for it.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SimOutcomeRecord {
+    /// `deltas | reverts | not_offered | unreachable`. Only `deltas` means
+    /// the node checked the transaction.
+    pub kind: String,
+    /// The user's signed per-asset moves (`TrustAssetDelta[]` JSON, the input
+    /// `token_trust` takes). `[]` with `kind == "deltas"` is "checked, nothing
+    /// of theirs moves"; every other kind carries `[]` too and means nothing.
+    pub deltas_json: String,
+    /// The sanitised `Error(string)` of a revert, ≤ 64 characters — the
+    /// `{{reason}}` of `notice_key`. Untrusted text made safe to print.
+    pub revert_reason: Option<String>,
+    /// The notice's tone, a `ClearRisk` wire name (`danger` for a revert,
+    /// `caution` for could-not-check); `None` for `deltas`.
+    pub notice_risk: Option<String>,
+    /// The notice's corpus key; `None` for `deltas`.
+    pub notice_key: Option<String>,
+}
+
+/// What the pool's `eth_simulateV1` answer means for `user` (the signing
+/// account). `reply_json` is the JSON-RPC envelope as it came —
+/// `{"result": …}` or `{"error": {"code", "message"}}` — or
+/// `{"unreachable": true}` when the pool gave up; anything else is a node
+/// answer nobody can read ("could not check", never "nothing moves"). A
+/// revert is a danger and a node that could not check is a caution, on every
+/// client.
+#[uniffi::export]
+pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
+    use vela_core::app::sim_outcome::{classify, notice, SimOutcome, SimReply};
+    let outcome = classify(SimReply::from_json(&reply_json), &user);
+    let deltas: &[vela_core::app::token_trust::TrustAssetDelta] = match &outcome {
+        SimOutcome::Deltas { deltas } => deltas,
+        _ => &[],
+    };
+    // A list that cannot be written out is an answer nobody can read: the
+    // could-not-check line, never an empty list that reads "nothing moves".
+    let (outcome, deltas_json) = match serde_json::to_string(deltas) {
+        Ok(json) => (outcome, json),
+        Err(_) => (SimOutcome::NotOffered, "[]".to_owned()),
+    };
+    let notice = notice(&outcome);
+    SimOutcomeRecord {
+        kind: serde_json::to_value(&outcome)
+            .ok()
+            .and_then(|value| value.get("kind")?.as_str().map(str::to_owned))
+            .unwrap_or_default(),
+        deltas_json,
+        revert_reason: match &outcome {
+            SimOutcome::Reverts { reason } => reason.clone(),
+            _ => None,
+        },
+        notice_risk: notice.as_ref().map(|n| snake_name(&n.risk)),
+        notice_key: notice.map(|n| n.key.to_owned()),
+    }
 }
 
 /// The whole document-start script an in-app browser injects (spec 070):
@@ -1583,7 +1991,8 @@ pub fn dapp_browser_input(text: String) -> Option<String> {
 
 /// A main-frame load failure as every browser shell draws it (spec 079):
 /// `class` is one of `offline | timeout | not_found | refused | certificate |
-/// other`, `reason_key` the corpus key of the panel's sentence.
+/// other | proxy` (`proxy` since spec 082: the proxy itself could not be used,
+/// `explore.loadProxy`), `reason_key` the corpus key of the panel's sentence.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct BrowserLoadFailure {
     pub class: String,
@@ -1610,12 +2019,24 @@ fn snake_name<T: serde::Serialize>(value: &T) -> String {
         .unwrap_or_default()
 }
 
+impl From<vela_core::app::browser_load::LoadFailure> for BrowserLoadFailure {
+    fn from(failure: vela_core::app::browser_load::LoadFailure) -> Self {
+        BrowserLoadFailure {
+            class: snake_name(&failure.class),
+            reason_key: failure.reason_key,
+            auto_retry: failure.auto_retry,
+        }
+    }
+}
+
 /// The platform's raw load error → the one failure every shell shows, or
 /// `None` when it is not a failure (a cancelled navigation). `platform` is
 /// `"android"`, `"apple"`, `"probe"` or `"webview2"` (spec 083); `domain` is
 /// the `NSError` domain on
 /// Apple; `certificate` is set when the failure came from a certificate
-/// callback rather than an error code.
+/// callback rather than an error code. Apple `kCFErrorDomainCFNetwork`
+/// 306–310, Android -5 and probe code 6 are `proxy`; a proxy that answered
+/// for the host keeps the host's class.
 #[uniffi::export]
 pub fn browser_load_classify(
     platform: String,
@@ -1625,11 +2046,7 @@ pub fn browser_load_classify(
 ) -> Option<BrowserLoadFailure> {
     use vela_core::app::browser_load::{classify, LoadPlatform};
     let platform: LoadPlatform = snake(&platform)?;
-    classify(platform, code, domain.as_deref(), certificate).map(|failure| BrowserLoadFailure {
-        class: snake_name(&failure.class),
-        reason_key: failure.reason_key,
-        auto_retry: failure.auto_retry,
-    })
+    classify(platform, code, domain.as_deref(), certificate).map(Into::into)
 }
 
 /// The wait before automatic attempt `attempt` (1-based) of a failed page
@@ -1671,6 +2088,199 @@ pub fn browser_site_letter(host: String) -> String {
     vela_core::app::browser_load::site_letter(&host)
 }
 
+// -- page loads, the address bar, a site named once (spec 082, contract §10) --
+
+/// A load that has not committed by now is given up on, on every client,
+/// unless the engine shows it getting somewhere (20 000 ms).
+#[uniffi::export]
+pub fn browser_load_give_up_ms() -> u32 {
+    vela_core::app::browser_load::GIVE_UP_MS
+}
+
+/// Whether a load under way for `elapsed_ms` is given up on: the give-up
+/// time or more, nothing committed, and the engine's `progress` (0.0 – 1.0:
+/// iOS `estimatedProgress`, Android `getProgress() / 100`) never past 0.15 —
+/// a slow but answering site is never cut.
+#[uniffi::export]
+pub fn browser_load_should_give_up(elapsed_ms: u32, committed: bool, progress: f64) -> bool {
+    vela_core::app::browser_load::should_give_up(elapsed_ms, committed, progress)
+}
+
+/// What a given-up load is: `timeout`, the network sentence and the network
+/// retry schedule, whichever client timed it.
+#[uniffi::export]
+pub fn browser_load_stalled() -> BrowserLoadFailure {
+    vela_core::app::browser_load::stalled().into()
+}
+
+/// Whether a failed page of `class` is loaded again when the network comes
+/// back (`net_health_step`'s `came_back`): `offline | timeout | refused |
+/// other | proxy`. A name that does not resolve, a wrong certificate and a
+/// class this core does not know are not. A load the page itself started is
+/// retried by hand only, whatever its class.
+#[uniffi::export]
+pub fn browser_load_retry_when_network_returns(class: String) -> bool {
+    use vela_core::app::browser_load::{retry_when_network_returns, LoadFailureClass};
+    snake::<LoadFailureClass>(&class).is_some_and(retry_when_network_returns)
+}
+
+/// What the address bar shows.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BrowserAddressBar {
+    /// The address share, copy, favourite and the edit field act on; empty
+    /// when the bar names nothing.
+    pub url: String,
+    /// Lower-case host, a non-default port kept; empty when nothing.
+    pub host: String,
+    /// `closed` (https, or http on loopback / a private network), `open`
+    /// (public http) or `none` (a failure panel, a pending load, an empty tab).
+    pub lock: String,
+}
+
+/// What the bar names (RE1, G28), first match: a failure panel is up → the
+/// failed host, no lock; a committed document → its host and lock; a load
+/// pending in an EMPTY tab → the pending host, no lock; else nothing. A
+/// pending load never renames a tab that shows a document. `shown` is the
+/// committed document (the commit callback), never the engine's current URL.
+#[uniffi::export]
+pub fn browser_address_bar(
+    shown: Option<String>,
+    pending: Option<String>,
+    failed: Option<String>,
+) -> BrowserAddressBar {
+    let bar = vela_core::app::browser_load::address_bar(
+        shown.as_deref(),
+        pending.as_deref(),
+        failed.as_deref(),
+    );
+    BrowserAddressBar {
+        url: bar.url,
+        host: bar.host,
+        lock: snake_name(&bar.lock),
+    }
+}
+
+/// A site's name and the host line under it.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BrowserSiteLabel {
+    pub name: String,
+    /// `None`: the name already is the host — say it once.
+    pub host_line: Option<String>,
+}
+
+/// A name that is its host is said once (RE7): an empty title, or one equal to
+/// the host ignoring ASCII case, → the host alone; otherwise the title over
+/// the host. Recents, the signing header and the consent sheet.
+#[uniffi::export]
+pub fn browser_site_label(title: String, host: String) -> BrowserSiteLabel {
+    let label = vela_core::app::browser_load::site_label(&title, &host);
+    BrowserSiteLabel {
+        name: label.name,
+        host_line: label.host_line,
+    }
+}
+
+// -- network health and logo misses (spec 082 RE3, RE10, contract §11) --------
+
+/// The network count so far (spec 082 RE3, RJ14) — the shell keeps it and
+/// hands it back on every call. A fresh app: [`net_health_fresh`].
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct NetHealthState {
+    /// Calls in a row that never reached a server.
+    pub misses: u32,
+    pub online: bool,
+    /// The distinct chains the current run of misses came from.
+    pub sources: Vec<u32>,
+    /// Misses in the current run that named no chain (each its own source).
+    pub unsourced: u32,
+    /// When a call last reached a server (epoch ms).
+    pub last_reach_ms: Option<f64>,
+    /// When the current run of misses began (epoch ms).
+    pub run_started_ms: Option<f64>,
+}
+
+impl From<vela_core::app::net_health::NetHealth> for NetHealthState {
+    fn from(state: vela_core::app::net_health::NetHealth) -> Self {
+        NetHealthState {
+            misses: state.misses,
+            online: state.online,
+            sources: state.sources,
+            unsourced: state.unsourced,
+            last_reach_ms: state.last_reach_ms,
+            run_started_ms: state.run_started_ms,
+        }
+    }
+}
+
+impl From<NetHealthState> for vela_core::app::net_health::NetHealth {
+    fn from(state: NetHealthState) -> Self {
+        vela_core::app::net_health::NetHealth {
+            misses: state.misses,
+            online: state.online,
+            sources: state.sources,
+            unsourced: state.unsourced,
+            last_reach_ms: state.last_reach_ms,
+            run_started_ms: state.run_started_ms,
+        }
+    }
+}
+
+/// One call's outcome applied to the network count.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NetHealthStep {
+    /// The next state — hand it to the next call.
+    pub state: NetHealthState,
+    /// The edge this call crossed: `went_offline` (three misses in a row from
+    /// at least two sources, with nothing answering for 10 s) or `came_back`
+    /// (the first answer after it); `None` while the state holds.
+    pub edge: Option<String>,
+}
+
+/// A fresh app's network count: online, no misses.
+#[uniffi::export]
+pub fn net_health_fresh() -> NetHealthState {
+    vela_core::app::net_health::NetHealth::default().into()
+}
+
+/// Feed one call: `reached` is any answer from a server, whatever its status;
+/// a miss is a call that never reached one (for a pooled read: every endpoint
+/// swept, none answered, not throttled — timeouts included). `source` is the
+/// chain the call read (`None` for a call with no chain); `now_ms` the clock
+/// when it ended. One failing chain is its own notice, never "offline" (spec
+/// 082 RJ14). On `came_back` a shell retries its failed page, clears
+/// transient logo misses and re-reads the balance.
+#[uniffi::export]
+pub fn net_health_step(
+    state: NetHealthState,
+    reached: bool,
+    source: Option<u32>,
+    now_ms: f64,
+) -> NetHealthStep {
+    let (next, edge) =
+        vela_core::app::net_health::net_health_step(state.into(), reached, source, now_ms);
+    NetHealthStep {
+        state: next.into(),
+        edge: edge.map(|edge| snake_name(&edge)),
+    }
+}
+
+/// How long a remote logo that failed to load stays failed: `None` for the
+/// session (asking again will not help), `Some(ms)` for a miss that may heal.
+/// With an HTTP `status` the miss is that status's class (404/410, 401/403,
+/// a 2xx whose bytes do not draw → the session; 429, 408, 5xx → 60 s);
+/// without one it is `kind`, a `MarkMiss` wire name (`transport`,
+/// `not_an_image`, `unknown`…), and a name this core does not know is
+/// `unknown`.
+#[uniffi::export]
+pub fn mark_miss_ttl_ms(kind: String, status: Option<u16>) -> Option<u32> {
+    use vela_core::app::remote_mark::{self as mark, MarkMiss};
+    let miss = match status {
+        Some(status) => mark::mark_miss_of_status(status),
+        None => snake::<MarkMiss>(&kind).unwrap_or(MarkMiss::Unknown),
+    };
+    mark::mark_miss_ttl_ms(miss)
+}
+
 /// A shipped network's usual time to include an operation, in seconds; `None`
 /// for a network Vela does not ship (the receipt then circles instead of
 /// drawing a promise). The dApp signing sheet's wait reads the same number as
@@ -1680,13 +2290,53 @@ pub fn network_typical_inclusion_s(chain_id: u32) -> Option<u32> {
     vela_core::app::network_admin::typical_inclusion_s(chain_id).map(u32::from)
 }
 
+/// A `FeeFailure` from the shell: its wire name (`"quote_unavailable"`), or,
+/// for a failure that carries data, its JSON (`{"chain_read":{"rate_limited":
+/// true}}`, spec 082 RJ13).
+fn fee_failure_of(failure: &str) -> Option<vela_core::app::fee_policy::FeeFailure> {
+    snake(failure).or_else(|| serde_json::from_str(failure).ok())
+}
+
 /// The wait before automatic fee re-quote `attempt` (1-based) after
-/// `failure` (the `FeeFailure` wire name, e.g. `"quote_unavailable"`), or
-/// `None` when no retry can fix it (spec 079 FR-008).
+/// `failure` (see [`fee_failure_of`]), or `None` when no retry can fix it
+/// (spec 079 FR-008): 3 s, 6 s, then every 8 s (spec 082 RJ12).
 #[uniffi::export]
 pub fn fee_requote_delay_ms(failure: String, attempt: u32) -> Option<u32> {
-    use vela_core::app::fee_policy::{requote_delay_ms, FeeFailure};
-    requote_delay_ms(snake::<FeeFailure>(&failure)?, attempt)
+    vela_core::app::fee_policy::requote_delay_ms(fee_failure_of(&failure)?, attempt)
+}
+
+/// The bound on each automatic fee re-quote, in ms (spec 082 RJ12): a re-ask
+/// not answered in this time is a failure again.
+#[uniffi::export]
+pub fn fee_requote_timeout_ms() -> u32 {
+    vela_core::app::fee_policy::REQUOTE_TIMEOUT_MS
+}
+
+/// The corpus key of the reason line under a failed fee (spec 082 RJ13), or
+/// `None` for no reason line. `explore.chainDown` takes `{{chain}}`, the
+/// chain's name. `failure` as for [`fee_requote_delay_ms`].
+#[uniffi::export]
+pub fn fee_failure_reason_key(failure: String) -> Option<String> {
+    vela_core::app::fee_policy::failure_reason_key(fee_failure_of(&failure)?).map(str::to_owned)
+}
+
+/// A signed balance change from signed base units (`"-1000"`, `"+2100…"`):
+/// the token ladder, a dust figure written exactly (never `−0`), U+2212 for
+/// a minus, `+` for a plus; `None` for zero or unreadable text (spec 082
+/// RJ15). `preset` is the number preset's wire name (`comma_dot`,
+/// `dot_comma`, `space_comma`, `indian`; anything else is `comma_dot`).
+#[uniffi::export]
+pub fn format_signed_token_amount(
+    delta_base_units: String,
+    decimals: u32,
+    preset: String,
+) -> Option<String> {
+    use vela_core::l10n::{format_signed_token_amount as format, NumberPreset};
+    format(
+        &delta_base_units,
+        decimals,
+        snake::<NumberPreset>(&preset).unwrap_or_default(),
+    )
 }
 
 /// The Safe message hash a passkey signs for EIP-1271 verification (spec
@@ -1839,4 +2489,494 @@ pub fn is_chain_without_native_coin(chain_id: u32) -> bool {
 #[uniffi::export]
 pub fn default_monitor_chains() -> Vec<u32> {
     vela_core::app::token_trust::DEFAULT_MONITOR_CHAINS.to_vec()
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 exports: the wrappers keep the core's rules and wire names
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests_082 {
+    use super::*;
+    use alloy_dyn_abi::{DynSolType, DynSolValue};
+    use serde_json::{json, Value};
+
+    const LOCAL: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
+    const RELAY: &str = "0x2222222222222222222222222222222222222222222222222222222222222222";
+
+    /// The two Gnosis operations the core pins (T011): their `handleOps`
+    /// calldata and the EntryPoint's own `userOpHash`.
+    const FIXTURE: &str = include_str!("../../vela-core/tests/fixtures/userop-hash-gnosis.json");
+
+    fn halves(word: &[u8]) -> (u128, u128) {
+        let mut high = [0u8; 16];
+        let mut low = [0u8; 16];
+        high.copy_from_slice(&word[..16]);
+        low.copy_from_slice(&word[16..32]);
+        (u128::from_be_bytes(high), u128::from_be_bytes(low))
+    }
+
+    /// The one operation of a `handleOps` calldata, as the FFI record a
+    /// phone carries: decimal gas strings, bytes as bytes.
+    fn draft_from_handle_ops(input: &str) -> UserOpDraft {
+        let calldata = vela_core::primitives::from_hex(input).unwrap();
+        let params: DynSolType =
+            "((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)[],address)"
+                .parse()
+                .unwrap();
+        let DynSolValue::Tuple(top) = params.abi_decode_params(&calldata[4..]).unwrap() else {
+            panic!("params are a tuple")
+        };
+        let DynSolValue::Array(ops) = &top[0] else {
+            panic!("ops array")
+        };
+        assert_eq!(ops.len(), 1);
+        let DynSolValue::Tuple(f) = &ops[0] else {
+            panic!("op tuple")
+        };
+        let bytes = |v: &DynSolValue| match v {
+            DynSolValue::Bytes(b) => b.clone(),
+            other => panic!("not bytes: {other:?}"),
+        };
+        let word = |v: &DynSolValue| match v {
+            DynSolValue::FixedBytes(w, 32) => w.to_vec(),
+            other => panic!("not bytes32: {other:?}"),
+        };
+        let uint = |v: &DynSolValue| match v {
+            DynSolValue::Uint(n, 256) => *n,
+            other => panic!("not uint256: {other:?}"),
+        };
+        let DynSolValue::Address(sender) = &f[0] else {
+            panic!("sender")
+        };
+        let (verification, call) = halves(&word(&f[4]));
+        let (priority, max_fee) = halves(&word(&f[6]));
+        assert!(bytes(&f[7]).is_empty(), "the vectors carry no paymaster");
+        UserOpDraft {
+            sender: sender.to_checksum(None),
+            nonce: format!("0x{:x}", uint(&f[1])),
+            init_code: bytes(&f[2]),
+            call_data: bytes(&f[3]),
+            verification_gas_limit: verification.to_string(),
+            call_gas_limit: call.to_string(),
+            pre_verification_gas: uint(&f[5]).to_string(),
+            max_fee_per_gas: max_fee.to_string(),
+            max_priority_fee_per_gas: priority.to_string(),
+            paymaster_and_data: Vec::new(),
+            signature: bytes(&f[8]),
+        }
+    }
+
+    #[test]
+    fn user_op_hash_through_the_record_is_the_entry_point_s_own() {
+        let fixture: Value = serde_json::from_str(FIXTURE).unwrap();
+        let vectors = fixture["vectors"].as_array().unwrap();
+        assert_eq!(vectors.len(), 2);
+        for vector in vectors {
+            let draft = draft_from_handle_ops(vector["input"].as_str().unwrap());
+            let want = vector["user_operation_event"]["topics"][1]
+                .as_str()
+                .unwrap();
+            assert_eq!(user_op_hash(draft.clone(), 100).unwrap(), want);
+            // Another chain is another operation.
+            assert_ne!(user_op_hash(draft, 10200).unwrap(), want);
+        }
+    }
+
+    #[test]
+    fn the_submit_step_keeps_the_three_verdicts_apart() {
+        let step = |reply, attempt, maybe| user_op_submit_step(reply, attempt, maybe, LOCAL.into());
+        assert!(matches!(
+            step(UserOpSubmitReply::Hash { hash: RELAY.into() }, 0, true),
+            UserOpSubmitStep::Accepted { user_op_hash } if user_op_hash == RELAY
+        ));
+        assert!(matches!(
+            step(UserOpSubmitReply::NoAnswer, 0, true),
+            UserOpSubmitStep::MaybeSent { user_op_hash } if user_op_hash == LOCAL
+        ));
+        assert!(matches!(
+            step(UserOpSubmitReply::NoAnswer, 0, false),
+            UserOpSubmitStep::NotSent { rejection: None }
+        ));
+        let busy = || UserOpSubmitReply::RpcError {
+            error_json: r#"{"code":-32000,"message":"currently processing"}"#.into(),
+        };
+        assert!(matches!(
+            step(busy(), 0, false),
+            UserOpSubmitStep::RetryAfter { delay_ms: 3_000 }
+        ));
+        let aa25 = || UserOpSubmitReply::RpcError {
+            error_json: r#"{"code":-32500,"message":"AA25 invalid account nonce"}"#.into(),
+        };
+        assert!(matches!(
+            step(aa25(), 1, false),
+            UserOpSubmitStep::NotSent {
+                rejection: Some(RelayRejection::Other { .. })
+            }
+        ));
+        // A refusal after a lost reply proves nothing about the first POST.
+        assert!(matches!(
+            step(aa25(), 1, true),
+            UserOpSubmitStep::MaybeSent { user_op_hash } if user_op_hash == LOCAL
+        ));
+        let marker = |hash: &str| UserOpSubmitReply::RpcError {
+            error_json: format!(r#"{{"code":-32000,"message":"pending [existingHash:{hash}]"}}"#),
+        };
+        // This op's own hash: the relay already holds it.
+        assert!(matches!(
+            step(marker(LOCAL), 0, false),
+            UserOpSubmitStep::Accepted { user_op_hash } if user_op_hash == LOCAL
+        ));
+        // Another op holds the nonce (083): never this one's hash.
+        assert!(matches!(
+            step(marker(RELAY), 0, false),
+            UserOpSubmitStep::NotSent {
+                rejection: Some(RelayRejection::NonceHeld { user_op_hash })
+            } if user_op_hash == RELAY
+        ));
+        assert_eq!(
+            user_op_not_sent_detail(),
+            "relay unreachable; nothing was sent"
+        );
+    }
+
+    #[test]
+    fn the_status_parser_speaks_the_tracker_s_words() {
+        assert_eq!(user_op_status_method(), "pimlico_getUserOperationStatus");
+        let answer = parse_user_op_status(
+            json!({"jsonrpc": "2.0", "id": 1, "result": {
+                "status": "not_submitted",
+                "last_executor_stage": "in_band_settlement_hold",
+                "transactionHash": RELAY,
+            }})
+            .to_string(),
+        )
+        .unwrap();
+        assert_eq!(answer.status, "not_submitted");
+        assert_eq!(answer.stage.as_deref(), Some("in_band_settlement_hold"));
+        assert_eq!(answer.tx_hash.as_deref(), Some(RELAY));
+        assert!(parse_user_op_status(r#"{"status":"pending"}"#.into()).is_none());
+        assert!(parse_user_op_status(r#"{"error":{"code":-32601}}"#.into()).is_none());
+    }
+
+    fn entry(status: &str, outcome: &str, tx_hash: Option<&str>) -> String {
+        json!({
+            "user_op_hash": LOCAL, "chain_id": 100, "record_ids": ["r1"],
+            "status": status, "tx_hash": tx_hash, "polling": false,
+            "submitted_at_ms": 1.0, "outcome": outcome,
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn an_ending_is_never_confirmed_before_the_tracker_says_so() {
+        let ok = |result: &str| json!({"type": "ok", "result": result}).to_string();
+        let landed = sign_ending_of("eth_sendTransaction".into(), ok(RELAY), Some(LOCAL.into()))
+            .unwrap()
+            .unwrap();
+        let state = |ending: &str, entry: Option<String>| -> Value {
+            serde_json::from_str(&sign_ending_state(ending.into(), entry).unwrap()).unwrap()
+        };
+        // No tracker entry yet: following, landing.
+        assert_eq!(
+            state(&landed, None),
+            json!({"type": "following", "user_op_hash": LOCAL, "outcome": "landing", "fee_held": false})
+        );
+        assert_eq!(state(&landed, Some("null".into()))["type"], "following");
+        // It landed and reverted: the W3 fault, now a cross.
+        assert_eq!(
+            state(&landed, Some(entry("dropped", "final", Some(RELAY)))),
+            json!({"type": "reverted", "tx_hash": RELAY})
+        );
+        // The wait ran out: the page got the op hash; a lost reply follows.
+        let still = sign_ending_of("wallet_sendCalls".into(), ok(LOCAL), Some(LOCAL.into()))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            state(&still, Some(entry("pending", "maybe_sent", None)))["outcome"],
+            "maybe_sent"
+        );
+        assert_eq!(
+            state(&still, Some(entry("not_sent", "final", None))),
+            json!({"type": "not_sent"})
+        );
+        // A message is signed; a refusal is nothing to show.
+        let signed = sign_ending_of("personal_sign".into(), ok("0xsig"), None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(state(&signed, None), json!({"type": "signed"}));
+        let refused =
+            json!({"type": "err", "code": 4001, "kind": "user_rejected", "message": null});
+        assert_eq!(
+            sign_ending_of("eth_sendTransaction".into(), refused.to_string(), None).unwrap(),
+            None
+        );
+        assert!(sign_ending_of("eth_sendTransaction".into(), "{".into(), None).is_err());
+        assert!(sign_ending_state(landed, Some("{}".into())).is_err());
+    }
+
+    #[test]
+    fn the_receipt_wait_and_the_send_verdict_are_the_core_s() {
+        assert!((dapp_receipt_wait_ms(0.0) - 120_000.0).abs() < f64::EPSILON);
+        assert!((dapp_receipt_wait_ms(46_000.0) - 74_000.0).abs() < f64::EPSILON);
+        assert!((dapp_receipt_wait_ms(200_000.0) - 10_000.0).abs() < f64::EPSILON);
+        let outcome = |status, outcome| -> Option<Value> {
+            send_receipt_outcome_of(entry(status, outcome, Some(RELAY)))
+                .unwrap()
+                .map(|json| serde_json::from_str(&json).unwrap())
+        };
+        assert_eq!(
+            outcome("not_sent", "final"),
+            Some(json!({"type": "failed", "rejected": false, "not_sent": true}))
+        );
+        assert_eq!(
+            outcome("confirmed", "final"),
+            Some(json!({"type": "confirmed", "tx_hash": RELAY}))
+        );
+        // A maybe-sent op says nothing yet — never a failure.
+        assert_eq!(outcome("pending", "maybe_sent"), None);
+    }
+
+    #[test]
+    fn a_simulation_that_could_not_check_is_a_caution_and_a_revert_a_danger() {
+        let user = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let crashed = sim_outcome(
+            user.into(),
+            json!({"error": {"code": -32603, "message": "method handler crashed"}}).to_string(),
+        );
+        assert_eq!(crashed.kind, "not_offered");
+        assert_eq!(crashed.notice_risk.as_deref(), Some("caution"));
+        assert_eq!(
+            crashed.notice_key.as_deref(),
+            Some("componentsUi.signing.simUnavailableWarning")
+        );
+        let unreachable = sim_outcome(user.into(), r#"{"unreachable":true}"#.into());
+        assert_eq!(unreachable.kind, "unreachable");
+        assert_eq!(unreachable.notice_risk.as_deref(), Some("caution"));
+
+        let reason = format!(
+            "0x08c379a0{:0>64}{:0>64}{:0<64}",
+            "20",
+            "4",
+            "6e6f7065" // "nope"
+        );
+        let reverts = sim_outcome(
+            user.into(),
+            json!({"result": [{"calls": [{"status": "0x0", "returnData": reason, "logs": []}]}]})
+                .to_string(),
+        );
+        assert_eq!(reverts.kind, "reverts");
+        assert_eq!(reverts.revert_reason.as_deref(), Some("nope"));
+        assert_eq!(reverts.notice_risk.as_deref(), Some("danger"));
+        assert_eq!(
+            reverts.notice_key.as_deref(),
+            Some("componentsUi.signing.simWillFailReason")
+        );
+        assert_eq!(reverts.deltas_json, "[]");
+
+        let token = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+        let transfer = json!({
+            "address": token,
+            "topics": [
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                format!("0x{:0>64}", "1234"),
+                format!("0x{:0>64}", user[2..].to_lowercase()),
+            ],
+            "data": format!("0x{:0>64}", "5"),
+        });
+        let checked = sim_outcome(
+            user.into(),
+            json!({"result": [{"calls": [{"status": "0x1", "logs": [transfer]}]}]}).to_string(),
+        );
+        assert_eq!(checked.kind, "deltas");
+        assert_eq!(checked.notice_risk, None);
+        assert_eq!(checked.notice_key, None);
+        let deltas: Value = serde_json::from_str(&checked.deltas_json).unwrap();
+        assert_eq!(
+            deltas,
+            json!([{"kind": "erc20", "token": token, "delta": "5"}])
+        );
+    }
+
+    #[test]
+    fn the_browser_rules_cross_with_their_wire_names() {
+        let proxy = browser_load_classify("probe".into(), 6, None, false).unwrap();
+        assert_eq!(proxy.class, "proxy");
+        assert_eq!(proxy.reason_key, "explore.loadProxy");
+        let cf = browser_load_classify(
+            "apple".into(),
+            306,
+            Some("kCFErrorDomainCFNetwork".into()),
+            false,
+        )
+        .unwrap();
+        assert_eq!(cf.class, "proxy");
+        assert_eq!(
+            browser_load_classify("android".into(), -5, None, false)
+                .unwrap()
+                .class,
+            "proxy"
+        );
+
+        assert_eq!(browser_load_give_up_ms(), 20_000);
+        assert!(!browser_load_should_give_up(19_999, false, 0.1));
+        assert!(browser_load_should_give_up(20_000, false, 0.1));
+        assert!(!browser_load_should_give_up(20_000, true, 0.1));
+        assert!(!browser_load_should_give_up(20_000, false, 0.4));
+        let stalled = browser_load_stalled();
+        assert_eq!(stalled.class, "timeout");
+        assert_eq!(stalled.reason_key, "explore.loadOffline");
+        assert!(stalled.auto_retry);
+        for class in ["offline", "timeout", "refused", "other", "proxy"] {
+            assert!(
+                browser_load_retry_when_network_returns(class.into()),
+                "{class}"
+            );
+        }
+        for class in ["not_found", "certificate", "bogus", ""] {
+            assert!(
+                !browser_load_retry_when_network_returns(class.into()),
+                "{class}"
+            );
+        }
+
+        // The G28 spoof shape: a pending load never renames a shown page.
+        let bar = browser_address_bar(
+            Some("https://jumper.exchange/swap".into()),
+            Some("https://app.uniswap.org/".into()),
+            None,
+        );
+        assert_eq!(
+            (bar.host.as_str(), bar.lock.as_str()),
+            ("jumper.exchange", "closed")
+        );
+        let failed = browser_address_bar(None, None, Some("https://gone.example/x".into()));
+        assert_eq!(
+            (failed.host.as_str(), failed.lock.as_str()),
+            ("gone.example", "none")
+        );
+        let public_http = browser_address_bar(Some("http://example.com/".into()), None, None);
+        assert_eq!(public_http.lock, "open");
+        let empty = browser_address_bar(None, None, None);
+        assert_eq!((empty.url.as_str(), empty.lock.as_str()), ("", "none"));
+
+        let once = browser_site_label("127.0.0.1:8137".into(), "127.0.0.1:8137".into());
+        assert_eq!(
+            (once.name.as_str(), once.host_line),
+            ("127.0.0.1:8137", None)
+        );
+        let twice = browser_site_label("Uniswap".into(), "app.uniswap.org".into());
+        assert_eq!(twice.name, "Uniswap");
+        assert_eq!(twice.host_line.as_deref(), Some("app.uniswap.org"));
+    }
+
+    #[test]
+    fn three_misses_from_two_chains_after_ten_quiet_seconds_go_offline() {
+        let fresh = net_health_fresh();
+        assert!(fresh.online && fresh.misses == 0 && fresh.sources.is_empty());
+        let first = net_health_step(fresh, false, Some(100), 0.0);
+        let second = net_health_step(first.state, false, Some(1), 4_000.0);
+        assert_eq!(second.edge, None);
+        assert_eq!(second.state.sources, vec![100, 1]);
+        // One chain only, however long: that chain's notice.
+        let mut one = net_health_fresh();
+        for i in 0..10 {
+            let step = net_health_step(one, false, Some(100), f64::from(i) * 5_000.0);
+            assert_eq!(step.edge, None);
+            one = step.state;
+        }
+        let third = net_health_step(second.state, false, Some(100), 11_000.0);
+        assert!(!third.state.online);
+        assert_eq!(third.edge.as_deref(), Some("went_offline"));
+        let fourth = net_health_step(third.state, false, None, 12_000.0);
+        assert_eq!(fourth.edge, None);
+        let back = net_health_step(fourth.state, true, Some(8453), 13_000.0);
+        assert_eq!((back.state.misses, back.state.online), (0, true));
+        assert_eq!(back.state.last_reach_ms, Some(13_000.0));
+        assert_eq!(back.edge.as_deref(), Some("came_back"));
+    }
+
+    #[test]
+    fn the_round_2_exports() {
+        assert_eq!(
+            user_op_refused_dapp_detail(),
+            "the network refused this transaction; nothing was sent"
+        );
+        assert_eq!(user_op_write_ahead_wait_ms(), 5_000);
+        let reverts = user_op_estimate_failure(
+            r#"{"code":-32500,"message":"UserOperation simulation failed","data":"Safe execution failed: the target call in executeUserOp reverted"}"#.into(),
+        );
+        assert_eq!((reverts.kind.as_str(), reverts.reason), ("reverts", None));
+        assert_eq!(user_op_estimate_failure("null".into()).kind, "unavailable");
+        assert_eq!(fee_requote_timeout_ms(), 6_000);
+        assert_eq!(
+            fee_requote_delay_ms("quote_unavailable".into(), 3),
+            Some(8_000)
+        );
+        let chain = r#"{"chain_read":{"rate_limited":false}}"#;
+        assert_eq!(fee_requote_delay_ms(chain.into(), 1), Some(3_000));
+        assert_eq!(
+            fee_failure_reason_key(chain.into()).as_deref(),
+            Some("explore.chainDown")
+        );
+        assert_eq!(
+            fee_failure_reason_key("quote_unavailable".into()).as_deref(),
+            Some("componentsUi.funding.denialNetworkError")
+        );
+        assert_eq!(fee_failure_reason_key("missing_public_key".into()), None);
+        assert_eq!(fee_failure_reason_key("bogus".into()), None);
+        assert_eq!(
+            format_signed_token_amount("-1000".into(), 18, "comma_dot".into()).as_deref(),
+            Some("\u{2212}0.000000000000001")
+        );
+        assert_eq!(
+            format_signed_token_amount("0".into(), 18, "comma_dot".into()),
+            None
+        );
+    }
+
+    #[test]
+    fn a_missing_logo_stays_missed_and_a_bad_minute_heals() {
+        assert_eq!(mark_miss_ttl_ms("unknown".into(), None), Some(60_000));
+        assert_eq!(mark_miss_ttl_ms("transport".into(), None), Some(60_000));
+        assert_eq!(mark_miss_ttl_ms("not_an_image".into(), None), None);
+        assert_eq!(mark_miss_ttl_ms("bogus".into(), None), Some(60_000));
+        // With a status, the status decides.
+        assert_eq!(mark_miss_ttl_ms("unknown".into(), Some(404)), None);
+        assert_eq!(mark_miss_ttl_ms("unknown".into(), Some(403)), None);
+        assert_eq!(mark_miss_ttl_ms("unknown".into(), Some(503)), Some(60_000));
+        assert_eq!(mark_miss_ttl_ms("unknown".into(), Some(429)), Some(60_000));
+    }
+
+    #[test]
+    fn the_read_plan_counts_the_stablecoins_and_skips_a_coinless_chain() {
+        let usdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+        let stables = json!([{"symbol": "USDC", "contract": usdc, "type": "usd"}]).to_string();
+        let plan = balance_read_plan(
+            8453,
+            stables.clone(),
+            Some("0x4200000000000000000000000000000000000006".into()),
+            String::new(),
+        )
+        .unwrap();
+        let kinds: Vec<&str> = plan.iter().map(|slot| slot.kind.as_str()).collect();
+        assert_eq!(kinds, ["native", "stable", "wrapped"]);
+        assert_eq!(plan[1].contract.as_deref(), Some(usdc));
+        assert_eq!(plan[1].peg_usd, Some(1.0));
+        assert_eq!(plan[1].known_decimals, None);
+
+        // The person's entry for the same contract lends its metadata.
+        let custom = json!([{"contract": usdc.to_lowercase(), "symbol": "USDC.b",
+                             "name": "Mine", "decimals": 6}])
+        .to_string();
+        let plan = balance_read_plan(8453, stables, None, custom).unwrap();
+        assert_eq!(plan.len(), 2);
+        assert_eq!(plan[1].kind, "stable");
+        assert_eq!(plan[1].symbol, "USDC.b");
+        assert_eq!(plan[1].known_decimals, Some(6));
+
+        let tempo = balance_read_plan(4217, "[]".into(), None, "[]".into()).unwrap();
+        assert!(tempo.iter().all(|slot| slot.kind != "native"));
+        assert!(balance_read_plan(8453, "{".into(), None, String::new()).is_err());
+    }
 }

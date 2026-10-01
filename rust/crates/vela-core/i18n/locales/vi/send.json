@@ -54,7 +54,6 @@
     "txRemaining": "Còn ~{{remaining}}s",
     "txTypicalTime": "{{chainName}} thường xác nhận trong ~{{estSecs}}s",
     "txRetryBtn": "Thử lại",
-    "txErrorTimeout": "Giao dịch đã gửi nhưng hết thời gian chờ xác nhận. Kiểm tra lại trong lịch sử sau.",
     "txErrorBundlerLoop": "Số dư tài khoản gas liên tục bị bundler từ chối. Hãy thử lại sau hoặc tăng mức gas.",
     "txErrorBundlerFund": "Tài khoản bundler cần thêm gas. Vui lòng nạp trong Cài đặt.",
     "txErrorPublicKey": "Không tìm thấy khóa công khai cho tài khoản này",

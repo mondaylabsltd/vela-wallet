@@ -19,6 +19,7 @@ import { planPopupConnect } from './core/dperm-connect';
 import { dpermRejectMessage, toWireGrant } from './core/dperm-types';
 import { getGrant, setGrant } from './grants';
 import { answerRequest, type ExtensionRequest } from './transport';
+import { AskerGoneError } from '$lib/signing/core/sign-types';
 import type { PopupVerdict } from './core/dperm-types';
 
 /** The wallet facts the core is seeded with — observed, never judged. */
@@ -98,8 +99,13 @@ export async function evaluate(
 export async function approve(
 	request: ExtensionRequest,
 	wallet: WalletFacts,
-	chainId: number
+	chainId: number,
+	// Spec 082 RB5: is the page still there? Asked before the grant is
+	// written — a connection granted to a page that already left is a grant
+	// nobody asked for. Absent → always yes (a caller with no asker to lose).
+	claim?: () => Promise<boolean>
 ): Promise<void> {
+	if (claim && !(await claim())) throw new AskerGoneError('approve');
 	await loadCore();
 	const stored = await getGrant(request.origin);
 	const plan = planPopupConnect({

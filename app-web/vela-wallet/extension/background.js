@@ -1,70 +1,115 @@
 /**
- * The service worker: routing, and no authoritative state (spec 027 T320/T322).
+ * The service worker: routing, and the one owner of a request's life.
  *
  * Ported in PART from packages/safari-extension/src/background.js @ 52ad8fa9.
- * Safari's version also HELD policy — per-origin grants in `storage.local`, a
- * read proxy to a public node, a native round-trip to the iOS app. None of that
- * comes across. Every decision this extension makes belongs to the core's own
- * machines (`dapp_permissions`, `dapp_session`, `ext_cache`), which run in the
+ * Every decision about a connection or a signature belongs to the core's own
+ * machines (`dapp_permissions`, `sign_request`, `ext_cache`), which run in the
  * wallet, not here. This file carries requests to the wallet and answers back,
- * and it makes exactly one promise of its own:
+ * and it makes one promise of its own:
  *
- *   **a request is never left unanswered.**
+ *   **a request is answered exactly once, and only while its page is there.**
  *
- * MV3 evicts an idle worker, and a page promise that never settles is the worst
- * thing this extension can produce — a dApp spinner that spins forever while
- * the person cannot tell whether their money moved. So a request is written
- * down the moment it arrives, a window closed without a decision answers 4900,
- * and content.js has its own deadline on top (spec 027 D37).
+ * Spec 082 (RB1–RB11) moved the whole life of a request here, because only the
+ * worker sees both the page that asked and the surface that answers:
  *
- * What this file does hold — and why it is not "state" in the sense above:
+ *   - a request is a record in `storage.session`
+ *     (`vela.req.<tabId>:<pageRequestId>`), written the moment it arrives, so
+ *     an evicted worker comes back knowing what it owes (G19 — the old start
+ *     sweep deleted every record, and a live request with it);
+ *   - the page is known by Chrome's `documentId`; content.js holds a
+ *     `vela.doc` port while it owes an answer, and that port closing means the
+ *     page left (a reload settles the old request at once — G17);
+ *   - the surface holds a `vela.surface` port; Chrome's panel ✕ closes it, and
+ *     the requests it owed are settled at once (EX6);
+ *   - one queue per window, whichever tab asked (G18);
+ *   - the surface CLAIMS a request before a grant, before the passkey and
+ *     before the relay POST, so nothing is ever signed or sent for a page that
+ *     is gone (RB5);
+ *   - a request that ends without a decision answers 4900, never 4001 and
+ *     never Chrome's own error text (RB6) — except a claimed submit whose
+ *     claim carried the operation hash: that one may have been sent, and its
+ *     page is told the hash when its surface goes (RJ2), never 4900.
  *
- *   - **the chain each origin is on** (`vela.chain.<origin>`), written on a
- *     `wallet_switchEthereumChain` the wallet's own catalog sanctions. The
- *     wallet has no global network (ext_cache invariant ⑤): the chain is the
- *     SITE's pick, and a site's pick is a fact about the site, not a judgement
- *     about the wallet;
- *   - **a read**, forwarded verbatim to the node or bundler the catalog names
- *     for that chain, and its answer forwarded back verbatim. Nothing here
- *     reads the payload;
+ * The rules are pure functions in `lib/request-life.js`; this file performs
+ * them and logs every step through `lib/swlog.js` (RB14).
+ *
+ * What else this file holds — and why it is not "state" in the sense above:
+ *
+ *   - **the chain each origin is on** (`vela.chain.<origin>`), the SITE's pick;
+ *   - **a read**, forwarded to the node or bundler the catalog names, with the
+ *     core's 8 s budget per endpoint and a memory of endpoints that just
+ *     failed (RF2); receipt reads for an operation hash this wallet handed out
+ *     are translated to the real transaction (RF3);
  *   - **the page events** (`accountsChanged`, `chainChanged`, `disconnect`),
- *     emitted when a grant or a chain pick CHANGES in storage. The grant is
- *     what the core wrote — on connect, on an account switch, on revoke — so
- *     announcing its change is mirroring a decision, not making one. This is
- *     the same twin discipline as `resolveGrantedAccounts` (protocol.js).
+ *     emitted when a grant or a chain pick CHANGES in storage.
  */
 import {
 	CHAIN_PREFIX,
 	CHAINS_KEY,
-	CLOSED_WITHOUT_ANSWER,
+	DOC_PORT,
+	ENDPOINTS_KEY,
 	ERR,
+	PANEL_HELLO_WAIT_MS,
+	PANEL_OPEN_WAIT_MS,
 	PERM_PREFIX,
+	READ_SLOW_MS,
+	READ_TIMEOUT_MS,
 	REQUEST_PREFIX,
 	SURFACE_KEY,
+	SURFACE_PORT,
 	BUNDLER_METHODS,
 	chainEndpoints,
 	chainKnown,
+	chainNameOf,
 	classifyMethod,
+	endpointAnswered,
+	endpointFailed,
 	isWellFormedRequest,
+	orderEndpoints,
 	originOfUrl,
 	parseChainId,
+	readFailureKind,
 	resolveGrantedAccounts,
 	rpcError,
 	switchChainParam,
-	toHexChainId
+	toHexChainId,
+	unreachableChainMessage
 } from './lib/protocol.js';
+import {
+	affectedBy,
+	callerOwns,
+	claimVerdict,
+	newRecord,
+	nextForWindow,
+	recoveryPlan,
+	settlement,
+	surfaceAfterOpen,
+	surfaceAnswer,
+	withClaim
+} from './lib/request-life.js';
+import { createSwLog } from './lib/swlog.js';
+import {
+	expiredOpKeys,
+	liveOpEntry,
+	opKey,
+	opRecord,
+	realTxHash,
+	receiptLookupHash
+} from './lib/op-receipt.js';
 import { negotiate, requestPage, walletPage } from './lib/locales.js';
 
 /** The snapshot the wallet publishes for exactly this purpose. */
 const EXT_CACHE_KEY = 'vela.ext.cache';
 
-/** How long a node may take before the next one is tried. */
-const READ_TIMEOUT_MS = 20_000;
+/** `storage.session`: the ledger, the endpoint memory and the log. */
+const sessionArea = chrome.storage.session;
+const swlog = createSwLog({ storage: sessionArea });
 
 /**
  * Where requests are answered — cached, because the choice has to be made
- * synchronously (see `openSurface`) and storage cannot be read synchronously.
- * Read once at start, kept fresh by the storage listener below.
+ * synchronously (the side panel may only be opened inside the page's user
+ * gesture, which the first `await` spends). Read once at start, kept fresh by
+ * the storage listener below.
  */
 let surfacePreference = 'panel';
 void chrome.storage.local
@@ -80,14 +125,10 @@ void chrome.storage.local
 
 /**
  * There is deliberately NO `default_popup`. An action popup is dismissed the
- * moment it loses focus, and every ceremony this wallet performs — signing IN
- * included — hands focus to the platform authenticator's own prompt. A wallet
- * living in the action popup would close itself in the middle of every passkey
- * it asks for (spec 027 D34). The toolbar button opens a real tab instead, and
- * it reuses the one already open rather than stacking copies.
+ * moment it loses focus, and every ceremony this wallet performs hands focus
+ * to the platform authenticator's own prompt (spec 027 D34). The toolbar
+ * button opens a real tab instead, reusing the one already open.
  */
-
-/** The locale the wallet's own pages should open in. */
 function uiLocale() {
 	return negotiate(chrome.i18n?.getUILanguage?.());
 }
@@ -103,8 +144,8 @@ async function openWallet() {
 	await chrome.tabs.create({ url });
 }
 
-chrome.action.onClicked.addListener(() => {
-	openWallet().catch((error) => console.error('[vela] could not open the wallet', error));
+chrome.action?.onClicked?.addListener(() => {
+	openWallet().catch(() => console.error('[vela] could not open the wallet'));
 });
 
 // ---------------------------------------------------------------------------
@@ -120,182 +161,586 @@ async function readLocal(keys) {
 }
 
 // ---------------------------------------------------------------------------
-// Requests in flight
+// The ledger (RB1)
 // ---------------------------------------------------------------------------
 
 /**
- * The live half of a pending request: the page's own `sendResponse`, which
- * cannot be persisted and does not survive an eviction. The DURABLE half is in
- * `storage.local` under `REQUEST_PREFIX`, so a worker that comes back can still
- * find out what it owes an answer for.
- *
- * `surface` says where the request is being answered: `'panel'` (the side
- * panel of the asking tab) or `'window'` (a dedicated window). The record
- * itself is kept here too, so the surface can be handed it before the storage
- * write has landed.
+ * The in-memory mirror of the records in `storage.session`. The stored copy
+ * is the truth across an eviction; this one is what the synchronous paths
+ * read. Filled by `recover()` before anything reads it (`loaded`).
  */
-const pending = new Map();
+const records = new Map();
+/** documentId → the page's `vela.doc` port. */
+const docPorts = new Map();
+/** surface key (`panel:<windowId>` / `window:<rid>`) → `{port, caller}`. */
+const surfaces = new Map();
 
-async function remember(rid, record) {
+const keyOf = (rid) => REQUEST_PREFIX + rid;
+const surfaceKey = (caller) =>
+	caller.kind === 'panel' ? `panel:${caller.windowId}` : `window:${caller.rid}`;
+
+async function persist(record) {
 	try {
-		await chrome.storage.local.set({ [REQUEST_PREFIX + rid]: record });
+		await sessionArea.set({ [keyOf(record.rid)]: record });
 	} catch {
-		/* storage denied — the in-memory half still answers this session */
+		/* storage denied — the in-memory record still answers this worker's life */
 	}
 }
 
-async function forget(rid) {
+async function unpersist(rid) {
 	try {
-		await chrome.storage.local.remove(REQUEST_PREFIX + rid);
+		await sessionArea.remove(keyOf(rid));
 	} catch {
 		/* nothing to undo */
 	}
 }
 
-/** Settle a request exactly once, whatever settles it. */
-function settle(rid, payload) {
-	const entry = pending.get(rid);
-	if (!entry) return false;
-	pending.delete(rid);
-	void forget(rid);
+/** What a surface is handed: the request, without the worker's bookkeeping. */
+function publicRecord(record) {
+	return {
+		rid: record.rid,
+		id: record.id,
+		method: record.method,
+		params: record.params,
+		origin: record.origin,
+		tabId: record.tabId,
+		at: record.at
+	};
+}
+
+/**
+ * Tell the PAGE, by its document — never a later document in the same tab.
+ * `true` when content.js took it (`{ok:true}`); a rejection means the page is
+ * gone.
+ */
+async function toPage(record, message) {
 	try {
-		entry.reply(payload);
+		const options = record.documentId ? { documentId: record.documentId } : undefined;
+		const reply = await chrome.tabs.sendMessage(record.tabId, message, options);
+		return reply;
 	} catch {
-		/* the page is gone; the wallet's own record is the surviving truth */
+		return null;
 	}
-	if (entry.windowId !== undefined) {
-		chrome.windows.remove(entry.windowId).catch(() => {});
+}
+
+async function deliver(record, payload) {
+	const message = { type: 'answer', id: record.id };
+	if (payload.error) message.error = payload.error;
+	else message.result = payload.result === undefined ? null : payload.result;
+	const reply = await toPage(record, message);
+	return reply?.ok === true;
+}
+
+/** Does the page still own `record.id`? (`alive`, by documentId.) */
+async function probeAlive(record) {
+	const reply = await toPage(record, { type: 'alive', ids: [record.id] });
+	return Array.isArray(reply?.alive) && reply.alive.includes(record.id);
+}
+
+function postTo(caller, message) {
+	const entry = surfaces.get(surfaceKey(caller));
+	if (!entry) return false;
+	try {
+		entry.port.postMessage(message);
+		return true;
+	} catch {
+		return false;
 	}
+}
+
+/** The surface that owns `record`, as a caller. */
+function ownerOf(record) {
+	return record.surface === 'panel'
+		? { kind: 'panel', windowId: record.surfaceWindowId }
+		: { kind: 'window', rid: record.rid };
+}
+
+/** Hand the next owed request to a surface, if that surface is listening. */
+function pushOwed(caller) {
+	const all = [...records.values()];
+	const next =
+		caller.kind === 'panel'
+			? nextForWindow(all, caller.windowId)
+			: (records.get(caller.rid) ?? null);
+	if (next && callerOwns(next, caller)) {
+		postTo(caller, { type: 'owed', request: publicRecord(next) });
+	}
+}
+
+/**
+ * End a request without a decision, exactly once: the page is told 4900 with
+ * the cause's plain words (RB6), the surface is told `withdrawn` (it closes
+ * the card or sheet without words, RB15), and the next owed request moves up.
+ */
+async function settle(rid, cause) {
+	const record = records.get(rid);
+	if (!record) return false;
+	records.delete(rid);
+	await unpersist(rid);
+	const owner = ownerOf(record);
+	postTo(owner, { type: 'withdrawn', rid, cause });
+	void swlog.log('req.settled', { cause, tab: record.tabId });
+	void deliver(record, { error: settlement(cause) });
+	if (record.surface === 'window' && record.surfaceWindowId !== undefined) {
+		chrome.windows.remove(record.surfaceWindowId).catch(() => {});
+	}
+	if (owner.kind === 'panel') pushOwed(owner);
 	return true;
 }
 
 /**
- * The surface that answers — the SIDE PANEL of the asking tab.
- *
- * A panel is what the founder asked for, and it is also the right shape: it
- * belongs to the tab that asked, it cannot be styled, covered or scrolled by
- * the site, and — unlike the action popup — it survives the focus change a
- * passkey prompt causes. `chrome.sidePanel.open` may only be called on a user
- * gesture, and the gesture travels with the page's message: a request a
- * person just clicked for opens the panel, a request a page fired on its own
- * cannot. That one falls back to the dedicated window (D34), which needs no
- * gesture. Either way the request is answered, once.
- *
- * Called SYNCHRONOUSLY from the message listener — the gesture is spent by
- * the first `await`.
+ * End a request whose surface went after it was claimed for submit with its
+ * operation hash (RJ2): it may have been sent, so the page is told so, once —
+ * "not confirmed yet" (083, owner ruling 2026-10-01; a batch: its id) — and
+ * its receipt reads for the hash are translated from now on (RF3). The
+ * wallet's own record of it, written before the POST, is what the tracker
+ * resumes on the next boot.
  */
-function openSurface(rid, tabId) {
-	const entry = pending.get(rid);
-	const panel = chrome.sidePanel;
-	if (surfacePreference !== 'window' && entry && panel && typeof panel.open === 'function') {
-		let attempt;
-		try {
-			attempt = Promise.resolve(panel.open({ tabId }));
-		} catch (error) {
-			attempt = Promise.reject(error);
-		}
-		return attempt.then(
-			() => {
-				entry.surface = 'panel';
-			},
-			() => openRequestWindow(rid)
-		);
-	}
-	return openRequestWindow(rid);
-}
-
-/**
- * The fallback surface: a dedicated window, not the action popup, and not an
- * in-page sheet.
- */
-async function openRequestWindow(rid) {
-	const entry = pending.get(rid);
-	if (!entry) return;
-	const created = await chrome.windows.create({
-		url: chrome.runtime.getURL(requestPage(uiLocale(), rid)),
-		type: 'popup',
-		width: 420,
-		height: 760,
-		focused: true
+async function answerMaybeSent(rid, cause, payload, opHash) {
+	const record = records.get(rid);
+	if (!record) return false;
+	records.delete(rid);
+	await unpersist(rid);
+	const owner = ownerOf(record);
+	postTo(owner, { type: 'withdrawn', rid, cause });
+	const delivered = await deliver(record, payload);
+	void swlog.log('req.answered', {
+		cause,
+		maybe_sent: 1,
+		delivered,
+		outcome: payload.error ? 'not_confirmed' : 'ok',
+		tab: record.tabId
 	});
-	entry.surface = 'window';
-	entry.windowId = created.id;
-}
-
-/*
- * There used to be a `closePanel` here, and a `panelDone` message the page sent
- * when the tab owed nothing more.
- *
- * Spec 077 FR-001 retired both: the panel is the WALLET now, not one request, so
- * "nothing more to show" is no longer a thing that happens — there is always the
- * wallet. It is dismissed by the person, like any side panel.
- */
-
-/** The oldest request a panel on `tabId` still owes an answer for. */
-function nextForPanel(tabId) {
-	let best = null;
-	for (const entry of pending.values()) {
-		if (entry.surface !== 'panel') continue;
-		if (tabId !== undefined && entry.tabId !== tabId) continue;
-		if (!best || entry.record.at < best.record.at) best = entry;
+	void rememberOp(opHash, { chainId: record.chainId });
+	if (record.surface === 'window' && record.surfaceWindowId !== undefined) {
+		chrome.windows.remove(record.surfaceWindowId).catch(() => {});
 	}
-	return best ? best.record : null;
+	if (owner.kind === 'panel') pushOwed(owner);
+	return delivered;
 }
 
 /**
- * A window that went away still owing an answer.
- *
- * The window settles itself with the CORE's answer on teardown; this is the
- * backstop for one that died before it could. Either way the code is 4900, not
- * 4001 — see `CLOSED_WITHOUT_ANSWER`. An explicit Cancel already answered 4001
- * before closing, so it never reaches here.
+ * One request ended by a browser event or a recovery step: `{rid, cause}` is
+ * settled 4900; `{rid, cause, answer, opHash}` — a claimed submit that may
+ * have been sent — is answered `answer` (RJ2, `maybeSentPayload`).
  */
-chrome.windows.onRemoved.addListener((windowId) => {
-	for (const [rid, entry] of pending) {
-		if (entry.windowId === windowId) {
-			settle(rid, {
-				error: rpcError(CLOSED_WITHOUT_ANSWER.code, CLOSED_WITHOUT_ANSWER.message)
-			});
-		}
+function end(step) {
+	return step.answer
+		? answerMaybeSent(step.rid, step.cause, step.answer, step.opHash)
+		: settle(step.rid, step.cause);
+}
+
+/**
+ * The surface's answer, delivered to the page by its document. A surface's own
+ * close settlement (4900) for a claimed submit that carried its hash is surface
+ * loss: the page is told the hash instead (RJ2, `surfaceAnswer`).
+ */
+async function answer(rid, given, opHash, caller) {
+	const record = records.get(rid);
+	if (!record || (caller && !callerOwns(record, caller))) return false;
+	const { payload, maybeSent } = surfaceAnswer(record, given);
+	records.delete(rid);
+	await unpersist(rid);
+	const delivered = await deliver(record, payload);
+	void swlog.log('req.answered', {
+		...(maybeSent ? { cause: 'surface_settled', maybe_sent: 1 } : {}),
+		delivered,
+		outcome: payload.error ? 'error' : 'ok',
+		tab: record.tabId
+	});
+	if (maybeSent) void rememberOp(maybeSent, { chainId: record.chainId });
+	else if (!payload.error) void rememberOp(payload.result, opHash);
+	if (record.surface === 'window' && record.surfaceWindowId !== undefined) {
+		chrome.windows.remove(record.surfaceWindowId).catch(() => {});
 	}
+	const owner = ownerOf(record);
+	if (owner.kind === 'panel') pushOwed(owner);
+	return delivered;
+}
+
+// ---------------------------------------------------------------------------
+// Where a request is shown (RB8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ask Chrome to open the side panel — SYNCHRONOUSLY, inside the page's user
+ * gesture. Returns a promise of `'ok' | 'failed'`; the caller races it with
+ * `PANEL_OPEN_WAIT_MS`.
+ */
+function openPanelNow(tabId) {
+	try {
+		return Promise.resolve(chrome.sidePanel.open({ tabId })).then(
+			() => 'ok',
+			() => 'failed'
+		);
+	} catch {
+		return Promise.resolve('failed');
+	}
+}
+
+function within(promise, ms, fallback) {
+	return Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(fallback), ms))]);
+}
+
+/**
+ * The windows that have a side panel up, or `null` when that cannot be told.
+ *
+ * Chrome reports the manifest's global side panel with `windowId: -1`
+ * (measured on Chrome for Testing 151), so a panel context that names no
+ * window cannot rule any window out: that is `null` — the record is probed,
+ * never settled on a guess. No side panel at all is an empty set. A panel
+ * whose port is connected is up, whatever Chrome reports.
+ */
+async function panelWindows() {
+	let contexts;
+	try {
+		contexts = await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] });
+	} catch {
+		return null;
+	}
+	const ids = contexts.map((c) => c.windowId);
+	if (ids.some((id) => typeof id !== 'number' || id < 0)) return null;
+	const up = new Set(ids);
+	for (const { caller } of surfaces.values()) {
+		if (caller.kind === 'panel') up.add(caller.windowId);
+	}
+	return up;
+}
+
+async function openWindows() {
+	try {
+		const all = await chrome.windows.getAll();
+		return new Set(all.map((w) => w.id));
+	} catch {
+		return null;
+	}
+}
+
+/** The fallback surface: a dedicated window, not the action popup. */
+async function openRequestWindow(record) {
+	try {
+		const created = await chrome.windows.create({
+			url: chrome.runtime.getURL(requestPage(uiLocale(), record.rid)),
+			type: 'popup',
+			width: 420,
+			height: 760,
+			focused: true
+		});
+		const live = records.get(record.rid);
+		if (!live) {
+			// Answered or settled while the window was opening.
+			chrome.windows.remove(created.id).catch(() => {});
+			return;
+		}
+		live.surface = 'window';
+		live.surfaceWindowId = created.id;
+		await persist(live);
+		void swlog.log('req.surface', { surface: 'window', tab: live.tabId });
+	} catch {
+		await settle(record.rid, 'surface_closed');
+	}
+}
+
+/** surface key → the callbacks waiting for that surface's `hello`. */
+const helloWaiters = new Map();
+
+/**
+ * Does the surface `key` say hello within `ms`? `true` at once when its port
+ * is already up.
+ */
+function panelHello(key, ms) {
+	if (surfaces.has(key)) return Promise.resolve(true);
+	return new Promise((resolve) => {
+		const waiting = helloWaiters.get(key) ?? new Set();
+		helloWaiters.set(key, waiting);
+		const done = (up) => {
+			clearTimeout(timer);
+			waiting.delete(done);
+			if (waiting.size === 0 && helloWaiters.get(key) === waiting) helloWaiters.delete(key);
+			resolve(up);
+		};
+		const timer = setTimeout(() => done(surfaces.has(key)), ms);
+		waiting.add(done);
+	});
+}
+
+/** A request that arrived: into the ledger, onto its surface. */
+async function admit(record, panelAttempt) {
+	await loaded;
+	const existing = records.get(record.rid);
+	if (existing) {
+		// The same document asking again (content.js retries a dropped send):
+		// already written down, and answered once, later.
+		if (existing.documentId === record.documentId) return;
+		// Another document in the same tab reusing an id: the old page is gone.
+		await settle(existing.rid, 'page_left');
+	}
+	records.set(record.rid, record);
+	await persist(record);
+	void swlog.log('req.arrived', {
+		kind: classifyMethod(record.method),
+		tab: record.tabId,
+		host: record.origin
+	});
+
+	if (record.surface === 'window') {
+		await openRequestWindow(record);
+		return;
+	}
+	void swlog.log('req.surface', { surface: 'panel', tab: record.tabId });
+	const owner = ownerOf(record);
+	pushOwed(owner);
+
+	const opened = await within(panelAttempt, PANEL_OPEN_WAIT_MS, 'timeout');
+	if (opened === 'ok' || !records.has(record.rid)) return;
+	const key = surfaceKey(owner);
+	let panelOpen = surfaces.has(key);
+	if (!panelOpen) {
+		const up = await panelWindows();
+		// `null`: Chrome cannot say which window its side panel is in (the
+		// global panel reports -1). An idle panel holds no port (RJ20, G63) but
+		// wakes on the record just written for its window — so it is given a
+		// moment to say hello before a window opens beside it (RB8, EX2).
+		panelOpen = up ? up.has(record.surfaceWindowId) : await panelHello(key, PANEL_HELLO_WAIT_MS);
+	}
+	const where = surfaceAfterOpen({ opened, panelOpen, preference: surfacePreference });
+	if (where === 'window' && records.has(record.rid)) await openRequestWindow(record);
+}
+
+// ---------------------------------------------------------------------------
+// Recovery at start (RB4: resume, don't settle)
+// ---------------------------------------------------------------------------
+
+async function recover() {
+	// Records from before 082 lived in storage.local; they are nobody's now.
+	try {
+		const local = await chrome.storage.local.get(null);
+		const leftovers = Object.keys(local).filter((key) => key.startsWith(REQUEST_PREFIX));
+		const expired = expiredOpKeys(local, Date.now());
+		if (leftovers.length || expired.length) {
+			await chrome.storage.local.remove([...leftovers, ...expired]);
+		}
+	} catch {
+		/* storage denied — nothing to clear */
+	}
+	let stored;
+	try {
+		stored = await sessionArea.get(null);
+	} catch {
+		stored = {};
+	}
+	for (const [key, value] of Object.entries(stored)) {
+		if (!key.startsWith(REQUEST_PREFIX) || !value || typeof value !== 'object') continue;
+		if (typeof value.rid === 'string' && !records.has(value.rid)) records.set(value.rid, value);
+	}
+}
+
+async function resume() {
+	const found = records.size;
+	const plan = recoveryPlan([...records.values()], {
+		now: Date.now(),
+		panelWindows: await panelWindows(),
+		openWindows: await openWindows()
+	});
+	let kept = 0;
+	await Promise.all(
+		plan.map(async (step) => {
+			const record = records.get(step.rid);
+			if (!record) return;
+			if (step.action === 'settle') {
+				await end(step);
+				return;
+			}
+			if (await probeAlive(record)) {
+				kept += 1;
+				void swlog.log('req.resumed', { tab: record.tabId, state: record.state });
+				pushOwed(ownerOf(record));
+			} else {
+				await settle(step.rid, 'page_left');
+			}
+		})
+	);
+	void swlog.log('sw.start', { records: found, recovered: kept });
+}
+
+/** Resolves once the ledger is in memory; every request path waits for it. */
+const loaded = recover();
+/** Resolves once every record found at start was resumed or settled. */
+export const ready = loaded.then(resume).catch(() => {});
+
+// ---------------------------------------------------------------------------
+// The page's port and the surface's port
+// ---------------------------------------------------------------------------
+
+chrome.runtime.onConnect.addListener((port) => {
+	if (port.name === DOC_PORT) onDocPort(port);
+	else if (port.name === SURFACE_PORT) onSurfacePort(port);
 });
 
 /**
- * The tab that asked went away, or navigated. Its content script — and the
- * `sendResponse` in hand — died with the document, and a panel bound to the
- * tab has nothing left to answer. Settle with 4900, as a navigation does.
+ * content.js holds this port only while its page owes a sign/connect answer.
+ * Closing it with an `idle` first is content.js saying "nothing owed"; closing
+ * it without one, while this worker lives, is the page leaving (RB3).
  */
-function settleTab(tabId) {
-	for (const [rid, entry] of pending) {
-		if (entry.tabId === tabId) {
-			settle(rid, {
-				error: rpcError(CLOSED_WITHOUT_ANSWER.code, CLOSED_WITHOUT_ANSWER.message)
-			});
-		}
-	}
+function onDocPort(port) {
+	const documentId = port.sender?.documentId;
+	if (!documentId) return;
+	docPorts.set(documentId, port);
+	let idle = false;
+	port.onMessage.addListener((message) => {
+		if (message?.type === 'idle') idle = true;
+	});
+	port.onDisconnect.addListener(() => {
+		if (docPorts.get(documentId) === port) docPorts.delete(documentId);
+		if (idle) return;
+		void loaded.then(() => {
+			// A new port for the same document (content.js reconnected) means
+			// the page is still there.
+			if (docPorts.has(documentId)) return;
+			for (const { rid, cause } of affectedBy([...records.values()], {
+				type: 'doc_closed',
+				documentId
+			})) {
+				void settle(rid, cause);
+			}
+		});
+	});
 }
-chrome.tabs.onRemoved.addListener((tabId) => settleTab(tabId));
 
 /**
- * Drop requests nobody can answer any more.
- *
- * A record outlives the worker on purpose — that is the whole point of writing
- * it down — but it cannot outlive the tab that asked. When this worker starts
- * cold, every record from before it is unanswerable: the page's own
- * `sendResponse` died with the previous worker, and content.js has already
- * settled that page on its deadline. Keeping them would mean a window could
- * later open on a request whose asker is long gone.
+ * The panel (or a request window) — `hello`, then `shown` / `claim` /
+ * `answer` / `ping`; this side pushes `owed` and `withdrawn` (contract §14).
  */
-async function sweepStaleRequests() {
-	try {
-		const all = await chrome.storage.local.get(null);
-		const stale = Object.keys(all).filter((key) => key.startsWith(REQUEST_PREFIX));
-		if (stale.length) await chrome.storage.local.remove(stale);
-	} catch {
-		/* storage denied — nothing to sweep and nothing to report */
+function onSurfacePort(port) {
+	const pageUrl = port.sender?.url ?? '';
+	if (!pageUrl.startsWith(chrome.runtime.getURL(''))) {
+		port.disconnect();
+		return;
+	}
+	let caller = null;
+	port.onMessage.addListener((message) => {
+		if (!message || typeof message !== 'object') return;
+		void loaded.then(() => onSurfaceMessage(port, message, caller, (c) => (caller = c)));
+	});
+	port.onDisconnect.addListener(() => {
+		if (!caller) return;
+		const key = surfaceKey(caller);
+		if (surfaces.get(key)?.port !== port) return;
+		surfaces.delete(key);
+		if (caller.kind === 'panel') void swlog.log('panel.down', { window: caller.windowId });
+		void loaded.then(() => {
+			if (surfaces.has(key)) return;
+			for (const step of affectedBy([...records.values()], { type: 'surface_closed', caller })) {
+				void end(step);
+			}
+		});
+	});
+}
+
+async function onSurfaceMessage(port, message, caller, setCaller) {
+	switch (message.type) {
+		case 'hello': {
+			const next =
+				message.kind === 'panel' && typeof message.windowId === 'number'
+					? { kind: 'panel', windowId: message.windowId }
+					: message.kind === 'window' && typeof message.rid === 'string'
+						? { kind: 'window', rid: message.rid }
+						: null;
+			if (!next) return;
+			setCaller(next);
+			surfaces.set(surfaceKey(next), { port, caller: next });
+			if (next.kind === 'panel') void swlog.log('panel.up', { window: next.windowId });
+			pushOwed(next);
+			for (const done of [...(helloWaiters.get(surfaceKey(next)) ?? [])]) done(true);
+			return;
+		}
+		case 'shown': {
+			const record = records.get(message.rid);
+			if (!record || !caller || !callerOwns(record, caller)) return;
+			if (record.state === 'created') {
+				record.state = 'shown';
+				await persist(record);
+			}
+			void swlog.log('req.shown', { tab: record.tabId });
+			return;
+		}
+		case 'claim': {
+			const live = await claim(message.rid, message.phase, caller, {
+				opHash: message.opHash,
+				chainId: message.chainId
+			});
+			try {
+				port.postMessage({ type: 'claimResult', nonce: message.nonce, ...live });
+			} catch {
+				/* the surface went away; its disconnect settles what it owed */
+			}
+			return;
+		}
+		case 'answer': {
+			const delivered = await answer(
+				message.rid,
+				{ result: message.result, error: message.error },
+				message.opHash,
+				caller
+			);
+			try {
+				port.postMessage({ type: 'answered', rid: message.rid, delivered });
+			} catch {
+				/* the surface went away after answering — nothing is owed */
+			}
+			return;
+		}
+		case 'ping':
+		default:
+			return;
 	}
 }
-void sweepStaleRequests();
+
+/**
+ * RB5: is the request live enough to act on? A live claim moves it to
+ * `claimed` and tells the page, which extends its own deadline; a request
+ * past its limit, or whose page is gone, is settled right here. A live
+ * `submit` claim keeps the operation hash and chain it carries (RJ2).
+ */
+async function claim(rid, phase, caller, detail = {}) {
+	const record = records.get(rid);
+	let docAttached = record ? docPorts.has(record.documentId) : false;
+	if (record && !docAttached) docAttached = await probeAlive(record);
+	const verdict = claimVerdict(record, { now: Date.now(), docAttached, caller, phase });
+	void swlog.log('req.claim', {
+		phase,
+		live: verdict.live,
+		cause: verdict.cause,
+		tab: record?.tabId
+	});
+	if (verdict.live) {
+		const claimed = withClaim(record, { phase, now: Date.now(), ...detail });
+		records.set(rid, claimed);
+		await persist(claimed);
+		void toPage(claimed, { type: 'claimed', id: claimed.id });
+		return { live: true };
+	}
+	if (record && (verdict.cause === 'expired' || verdict.cause === 'page_left')) {
+		await settle(rid, verdict.cause);
+	}
+	return { live: false, cause: verdict.cause };
+}
+
+// ---------------------------------------------------------------------------
+// The browser's own backstops
+// ---------------------------------------------------------------------------
+
+function settleAll(event) {
+	void loaded.then(() => {
+		for (const step of affectedBy([...records.values()], event)) void end(step);
+	});
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => settleAll({ type: 'tab_removed', tabId }));
+chrome.tabs.onReplaced?.addListener((_added, removedTabId) =>
+	settleAll({ type: 'tab_replaced', tabId: removedTabId })
+);
+chrome.windows.onRemoved.addListener((windowId) => settleAll({ type: 'window_removed', windowId }));
 
 // ---------------------------------------------------------------------------
 // The instant answers
@@ -318,11 +763,9 @@ function chainOf(origin, all) {
 const NOT_OPENED = () => rpcError(ERR.UNAUTHORIZED, 'Vela has not been opened in this browser yet');
 
 /**
- * What an origin may be told without asking anyone.
- *
- * Both values come from state the CORE authored — the grant it wrote, and the
- * snapshot `ext_cache` published — combined by `resolveGrantedAccounts`, a
- * pinned twin of the core's own rule (see its note in `lib/protocol.js`).
+ * What an origin may be told without asking anyone — from state the CORE
+ * authored, combined by `resolveGrantedAccounts` (a pinned twin of the core's
+ * rule, see `lib/protocol.js`).
  */
 async function answerFromSnapshot(method, origin) {
 	const all = await readLocal([PERM_PREFIX + origin, CHAIN_PREFIX + origin, EXT_CACHE_KEY]);
@@ -336,8 +779,6 @@ async function answerFromSnapshot(method, origin) {
 
 	switch (method) {
 		case 'eth_accounts':
-			// `[]` for an ungranted origin is the honest answer, and the one
-			// EIP-1193 asks for: a disconnected wallet, with no prompt.
 			return { result: accounts };
 		case 'eth_coinbase':
 			return { result: accounts[0] ?? null };
@@ -346,7 +787,6 @@ async function answerFromSnapshot(method, origin) {
 		case 'net_version':
 			return chainId > 0 ? { result: String(chainId) } : { error: NOT_OPENED() };
 		case 'wallet_getPermissions':
-			// EIP-2255's shape, from the same grant.
 			return { result: accounts.length ? [{ parentCapability: 'eth_accounts' }] : [] };
 		default:
 			return { error: rpcError(ERR.METHOD_NOT_FOUND, `Unhandled state method ${method}`) };
@@ -359,14 +799,9 @@ async function answerFromSnapshot(method, origin) {
 
 /**
  * `wallet_switchEthereumChain` (EIP-3326) and `wallet_addEthereumChain`
- * (EIP-3085) for a chain the wallet already has.
- *
- * One address on every chain is this wallet's whole proposition, so a switch
- * asks nobody: the pick is written for the ORIGIN, the page hears
- * `chainChanged` (from the storage listener below), and the request answers
- * `null` as the EIP says. A chain the catalog does not know is 4902 — the
- * code a dApp reads as "offer to add it" — and adding one is the wallet's
- * Settings screen, never a site's request.
+ * (EIP-3085) for a chain the wallet already has: the pick is written for the
+ * ORIGIN and the page hears `chainChanged` from the storage listener. A chain
+ * the catalog does not know is 4902.
  */
 async function switchChain(method, params, origin) {
 	const chainId = switchChainParam(params);
@@ -402,43 +837,71 @@ async function switchChain(method, params, origin) {
 }
 
 // ---------------------------------------------------------------------------
-// Reads — forwarded, never interpreted
+// Reads — forwarded, never interpreted (RF2, RF3)
 // ---------------------------------------------------------------------------
 
 /**
- * A node or bundler read for the origin's chain, on the endpoints the wallet
- * published. A transport failure moves to the next endpoint; a JSON-RPC error
- * IS an answer (a revert is what the page asked to learn) and goes back as is.
+ * The endpoints that just failed, `{<url>: {failures, until}}` — kept in
+ * memory and written through to `storage.session`, so a woken worker does not
+ * spend another 8 s on a node it already knows is down.
  */
-async function forwardRead(method, params, origin) {
-	const all = await readLocal([
-		CHAINS_KEY,
-		CHAIN_PREFIX + origin,
-		PERM_PREFIX + origin,
-		EXT_CACHE_KEY
-	]);
-	const catalog = all[CHAINS_KEY];
-	if (!catalog) return { error: NOT_OPENED() };
-	const chainId = chainOf(origin, all);
+let endpointHealth = null;
+
+async function health() {
+	if (endpointHealth) return endpointHealth;
+	try {
+		const all = await sessionArea.get(ENDPOINTS_KEY);
+		const stored = all?.[ENDPOINTS_KEY];
+		endpointHealth = stored && typeof stored === 'object' ? stored : {};
+	} catch {
+		endpointHealth = {};
+	}
+	return endpointHealth;
+}
+
+function saveHealth(next) {
+	endpointHealth = next;
+	sessionArea.set({ [ENDPOINTS_KEY]: next }).catch(() => {});
+}
+
+/**
+ * One read on `chainId`'s endpoints: the live ones only, or — when every one
+ * is cooling down — the one back soonest (`orderEndpoints`, RJ20). A transport
+ * failure moves to the next endpoint and cools the failed one
+ * (`30 s · 2^(n−1)`, at most 300 s), logged by its kind (an 8 s timer abort
+ * is `timeout`, G64); a JSON-RPC error IS an answer (a revert is what the page
+ * asked to learn) and goes back as is. When nothing answered, the page gets
+ * the chain by name and no engine text (G33).
+ */
+async function readChain(method, params, catalog, chainId) {
 	const endpoints = chainEndpoints(catalog, chainId, BUNDLER_METHODS.has(method));
 	if (endpoints.length === 0) {
 		return { error: rpcError(ERR.CHAIN_NOT_ADDED, `Vela has no endpoint for chain ${chainId}`) };
 	}
-
-	let failure = 'no endpoint answered';
-	for (const url of endpoints) {
+	const order = orderEndpoints(endpoints, await health(), Date.now());
+	let tried = 0;
+	for (const url of order) {
+		tried += 1;
+		const started = Date.now();
+		const timer = AbortSignal.timeout(READ_TIMEOUT_MS);
+		let status;
 		try {
 			const response = await fetch(url, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-				signal: AbortSignal.timeout(READ_TIMEOUT_MS)
+				signal: timer
 			});
 			if (!response.ok) {
-				failure = `HTTP ${response.status}`;
-				continue;
+				status = response.status;
+				throw new Error('http');
 			}
 			const body = await response.json();
+			const took = Date.now() - started;
+			saveHealth(endpointAnswered(await health(), url));
+			if (tried > 1) void swlog.log('read.failover', { chain: chainId, host: url, tried });
+			if (took >= READ_SLOW_MS)
+				void swlog.log('read.slow', { chain: chainId, host: url, ms: took });
 			if (body && body.error && typeof body.error === 'object') {
 				const { code, message, data } = body.error;
 				return {
@@ -451,12 +914,58 @@ async function forwardRead(method, params, origin) {
 			}
 			return { result: body && 'result' in body ? body.result : null };
 		} catch (error) {
-			failure = String(error?.message ?? error);
+			const kind = readFailureKind(error, status, timer.aborted);
+			saveHealth(endpointFailed(await health(), url, Date.now()));
+			void swlog.log('read.fail', { chain: chainId, host: url, kind });
 		}
 	}
+	void swlog.log('read.exhausted', { chain: chainId, tried });
 	return {
-		error: rpcError(ERR.INTERNAL, `Vela could not reach a node for chain ${chainId}: ${failure}`)
+		error: rpcError(ERR.INTERNAL, unreachableChainMessage(chainNameOf(catalog, chainId), chainId))
 	};
+}
+
+/** Remember an operation hash the page was answered with (RF3). */
+async function rememberOp(result, opHash) {
+	const entry = opRecord(result, opHash, Date.now());
+	if (!entry) return;
+	try {
+		await chrome.storage.local.set({ [entry.key]: entry.value });
+	} catch {
+		/* not remembered: the page's receipt reads for it stay untranslated */
+	}
+}
+
+/**
+ * A receipt read for an operation hash this wallet handed out: the bundler's
+ * receipt names the real transaction, and the page's own method is forwarded
+ * for THAT hash on the chain the operation went to. Not landed yet → `null`,
+ * so the page keeps polling as it would for an unmined transaction.
+ */
+async function translatedReceipt(method, chainId, opHash, catalog) {
+	const found = await readChain('eth_getUserOperationReceipt', [opHash], catalog, chainId);
+	if (found.error) return { result: null };
+	const real = realTxHash(found.result);
+	if (!real) return { result: null };
+	return readChain(method, [real], catalog, chainId);
+}
+
+async function forwardRead(method, params, origin) {
+	const all = await readLocal([
+		CHAINS_KEY,
+		CHAIN_PREFIX + origin,
+		PERM_PREFIX + origin,
+		EXT_CACHE_KEY
+	]);
+	const catalog = all[CHAINS_KEY];
+	if (!catalog) return { error: NOT_OPENED() };
+	const asked = receiptLookupHash(method, params);
+	if (asked) {
+		const stored = await readLocal(opKey(asked));
+		const entry = liveOpEntry(stored[opKey(asked)], Date.now());
+		if (entry) return translatedReceipt(method, entry.chainId, asked, catalog);
+	}
+	return readChain(method, params, catalog, chainOf(origin, all));
 }
 
 // ---------------------------------------------------------------------------
@@ -480,13 +989,9 @@ async function broadcast(origin, event, data) {
 }
 
 /**
- * A grant or a chain pick changed in storage — announce it.
- *
- * The grant is the core's: written on connect, re-pinned by `account_switched`
- * when the wallet switches accounts, removed by a revoke. What each change
- * means to the page is the core's `DpermPageEvent` vocabulary, mirrored here:
- * a new or re-pinned address → `accountsChanged([address])`; a removed grant →
- * `accountsChanged([])` then `disconnect`; a chain pick → `chainChanged`.
+ * A grant or a chain pick changed in storage — announce it. The grant is the
+ * core's; what each change means to the page is the core's `DpermPageEvent`
+ * vocabulary, mirrored here.
  */
 chrome.storage.onChanged.addListener((changes, area) => {
 	if (area !== 'local') return;
@@ -527,16 +1032,7 @@ function route(request, sender, reply) {
 		return;
 	}
 	if (!isWellFormedRequest(request)) {
-		// Malformed, or larger than a request has any business being. Refused
-		// before it reaches a screen that would have to render it.
 		reply({ error: rpcError(ERR.INVALID_PARAMS, 'Malformed request') });
-		return;
-	}
-
-	const rid = `${tabId}:${request.id}`;
-	if (pending.has(rid)) {
-		// One answer, once. A repeated id is a page confusing itself.
-		reply({ error: rpcError(ERR.INVALID_PARAMS, 'Duplicate request id') });
 		return;
 	}
 
@@ -548,9 +1044,6 @@ function route(request, sender, reply) {
 			});
 			return;
 		case 'state':
-			// Answered from what the WALLET published, never from a judgement made
-			// here. A page that is already connected asks these on every load;
-			// opening a surface for them would be absurd.
 			void answerFromSnapshot(request.method, origin).then(reply);
 			return;
 		case 'switch':
@@ -558,17 +1051,12 @@ function route(request, sender, reply) {
 			void switchChain(request.method, request.params, origin).then(reply);
 			return;
 		case 'revoke':
-			// The site disconnects itself (EIP-2255 `wallet_revokePermissions`).
-			// Removing the grant is the whole act: the storage listener below
-			// tells every tab of the origin `accountsChanged([])` + `disconnect`.
 			void chrome.storage.local
 				.remove(PERM_PREFIX + origin)
 				.then(() => reply({ result: null }))
 				.catch(() => reply({ error: rpcError(ERR.INTERNAL, 'Could not record the disconnect') }));
 			return;
 		case 'watchAsset':
-			// EIP-747: `false` is "not added". Tokens are added in the wallet, where
-			// the person can see what they are adding.
 			reply({ result: false });
 			return;
 		case 'read':
@@ -582,23 +1070,22 @@ function route(request, sender, reply) {
 			return;
 	}
 
-	const record = {
-		rid,
-		id: request.id,
-		method: request.method,
-		params: request.params,
-		origin,
-		tabId,
-		at: Date.now()
-	};
-	pending.set(rid, { reply, tabId, origin, record, surface: undefined, windowId: undefined });
 	// The surface FIRST, synchronously: the user gesture that lets the side
-	// panel open does not survive an `await`.
-	const opened = openSurface(rid, tabId);
-	void remember(rid, record);
-	opened.catch((error) => {
-		settle(rid, { error: rpcError(ERR.INTERNAL, String(error?.message ?? error)) });
+	// panel open does not survive an `await`. `surface: 'panel'` is recorded
+	// at once (RB8) — the panel may ask what it owes before `open` resolves.
+	const usePanel = surfacePreference !== 'window' && typeof chrome.sidePanel?.open === 'function';
+	const panelAttempt = usePanel ? openPanelNow(tabId) : Promise.resolve('failed');
+	const record = newRecord({
+		request,
+		sender: { ...sender, origin },
+		now: Date.now(),
+		surface: usePanel ? 'panel' : 'window',
+		surfaceWindowId: usePanel ? sender.tab?.windowId : undefined
 	});
+	// The page learns only that the request was taken; the answer comes by
+	// message, by document, whenever the person decides (contract §14).
+	reply({ accepted: true });
+	void admit(record, panelAttempt);
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -606,38 +1093,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 	if (message.type === 'rpc') {
 		route(message, sender, sendResponse);
-		return true; // the answer comes later
+		return true; // a read's answer comes later
 	}
 
-	// ---- the wallet's own half ---------------------------------------------
+	if (message.type === 'abandon') {
+		// content.js's own deadline passed (RB11): the page has answered itself.
+		const tabId = sender.tab?.id;
+		if (tabId === undefined || typeof message.id !== 'string') return;
+		void loaded.then(() => {
+			const rid = `${tabId}:${message.id}`;
+			const record = records.get(rid);
+			if (record && (!record.documentId || record.documentId === sender.documentId)) {
+				void settle(rid, 'expired');
+			}
+		});
+		return;
+	}
+
+	// ---- the wallet's own half (extension pages only) ----------------------
+
+	const fromWallet =
+		!sender.tab?.url?.startsWith('http') &&
+		typeof sender.url === 'string' &&
+		sender.url.startsWith(chrome.runtime.getURL(''));
+	if (!fromWallet) return;
 
 	if (message.type === 'requestDetail') {
-		// A window opened for one request, by id. The in-memory record first —
-		// the storage write may still be in flight when the page asks.
-		const live = pending.get(message.rid);
-		if (live) {
-			sendResponse(live.record);
-			return false;
-		}
-		chrome.storage.local
-			.get(REQUEST_PREFIX + message.rid)
-			.then((all) => sendResponse(all[REQUEST_PREFIX + message.rid] ?? null))
-			.catch(() => sendResponse(null));
+		// The fallback for a window that could not hold its port.
+		void loaded.then(() => {
+			const record = records.get(message.rid);
+			sendResponse(record ? publicRecord(record) : null);
+		});
 		return true;
 	}
 
-	if (message.type === 'requestCurrent') {
-		// The side panel of a tab, asking what it owes. Nothing → `null`, and the
-		// panel stays as it is: since spec 077 the panel is the wallet, and a
-		// wallet with no pending request is simply a wallet.
-		sendResponse(nextForPanel(typeof message.tabId === 'number' ? message.tabId : undefined));
-		return false;
-	}
-
 	if (message.type === 'requestAnswer') {
-		const delivered = settle(message.rid, { result: message.result, error: message.error });
-		sendResponse({ delivered });
-		return false;
+		// The fallback for a surface whose port was down at the moment it answered.
+		void loaded
+			.then(() =>
+				answer(message.rid, { result: message.result, error: message.error }, message.opHash)
+			)
+			.then((delivered) => sendResponse({ delivered }));
+		return true;
 	}
 
 	return undefined;

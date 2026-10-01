@@ -404,7 +404,7 @@ final class TrustedSignerChannel: TrustedSignerConversation {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 5
         configuration.timeoutIntervalForResource = 5
-        let session = URLSession(configuration: configuration)
+        let session = URLSession.vela(configuration)
         defer { session.finishTasksAndInvalidate() }
         do {
             let (_, response) = try await session.data(for: request)

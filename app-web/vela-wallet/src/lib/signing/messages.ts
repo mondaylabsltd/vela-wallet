@@ -122,6 +122,8 @@ export interface SigningMessages {
 	warnSelectorNotListed: string;
 	warnExpired: string;
 	warnWillFail: string;
+	/** Spec 082 RJ19: the relay's estimate says it reverts, and why (`{{reason}}`). */
+	warnWillFailReason: string;
 	warnHexMessage: string;
 	warnBlindTyped: string;
 	warnEthSign: string;
@@ -163,11 +165,12 @@ export interface SigningMessages {
 	/** Spec 079: the send form's stale note (`send.feeStale`). */
 	feeStale: string;
 	/**
-	 * Spec 079: a quote that failed for a reason that can pass — the relay out
-	 * of reach — and will be asked again by itself
-	 * (`componentsUi.funding.denialNetworkError`).
+	 * Spec 082 RJ13: the reason line under a failed fee, by the corpus key the
+	 * CORE picks (`feeFailureReasonKey`): the relay out of reach, a rate-limited
+	 * chain node, a chain node out of reach (`{{chain}}`). The shell never picks
+	 * these words itself; it only looks the core's key up here.
 	 */
-	feeNetworkError: string;
+	feeReasons: Record<string, string>;
 	/**
 	 * The speed control under the fee row (spec 069) — the send form's words,
 	 * so the two surfaces name a speed identically.
@@ -224,6 +227,23 @@ export interface SigningMessages {
 		stillConfirming: string;
 		unknownOutcome: string;
 		signed: string;
+		/**
+		 * Spec 082 RA10: the relay's reply was lost — `componentsUi.signing.
+		 * maybeSent` ("It may have been sent. Vela keeps checking — don't send
+		 * it again."), never "failed — try again".
+		 */
+		maybeSent: string;
+		/** `send.txCloseBackground` — the one way out of a may-have-been-sent op. */
+		closeBackground: string;
+		/** `send.txErrorGeneric` — not sent: nothing left, funds are safe. */
+		notSentHint: string;
+		/** Spec 082 G56: `send.txSubmitting` — the title while it may have been sent. */
+		submitting: string;
+		/**
+		 * Spec 082 RJ3: `componentsUi.signing.refused` — the network refused it,
+		 * nothing was sent; no Retry words.
+		 */
+		refused: string;
 	};
 	/**
 	 * Spec 079 (F11 — "可信签名器签完后，回到签名提示框，似乎没有任何提示"): what
@@ -233,7 +253,7 @@ export interface SigningMessages {
 	status: {
 		/**
 		 * `send.txPreparing` — approved, and the passkey not asked yet: the
-		 * funding check, the nonce and the estimate (083 H3).
+		 * funding check, the nonce and the estimate (083 H3, spec 082 RA9).
 		 */
 		preparing: string;
 		/** `send.txSigning` — the passkey prompt is up. */

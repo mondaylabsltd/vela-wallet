@@ -127,7 +127,7 @@ test('the detail’s delete removes the row, the record, and stays removed', asy
 	// The seeded send is the one activity row: "Sent", −0.5 ETH.
 	const row = page.getByRole('button', { name: new RegExp(en('history.labelSent')) }).first();
 	await expect(row).toBeVisible({ timeout: 20_000 });
-	await expect(page.getByText('-0.5', { exact: true })).toBeVisible();
+	await expect(page.getByText('\u22120.5', { exact: true })).toBeVisible();
 	await row.click();
 
 	const sheet = page.getByRole('dialog');
@@ -135,7 +135,7 @@ test('the detail’s delete removes the row, the record, and stays removed', asy
 	await sheet.getByRole('button', { name: en('history.deleteRecord') }).click();
 
 	// Gone from the list at once (the optimistic remove + tombstone)…
-	await expect(page.getByText('-0.5', { exact: true })).toHaveCount(0);
+	await expect(page.getByText('\u22120.5', { exact: true })).toHaveCount(0);
 	// …and from the store, so a reload does not repaint it.
 	await expect
 		.poll(async () => (await readKv(page, 'vela.transactionHistory')) ?? '[]')
@@ -143,5 +143,5 @@ test('the detail’s delete removes the row, the record, and stays removed', asy
 	await page.reload();
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 	await expect(page.getByText(en('home.emptyNoActivity'))).toBeVisible({ timeout: 20_000 });
-	await expect(page.getByText('-0.5', { exact: true })).toHaveCount(0);
+	await expect(page.getByText('\u22120.5', { exact: true })).toHaveCount(0);
 });

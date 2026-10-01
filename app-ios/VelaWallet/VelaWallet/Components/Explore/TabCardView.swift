@@ -7,8 +7,46 @@
 //  title, and the ✕ that closes it. The selected card carries an accent
 //  border — the only accent on that screen.
 //
+//  Spec 082 RE12 (G25): ONE skeleton per cell, so every card in a row is the
+//  same height. The preview's size comes from a clear box of the card's
+//  aspect, never from its content, and the content sits in an overlay: a
+//  snapshot top-cropped, a start page's sail, or — a tab not yet shown since
+//  the launch — its avatar and host, never fake page bars that read as a
+//  broken page. The "+" tile is the same skeleton (`TabCardPreview`).
+//
 
 import SwiftUI
+
+/// What a card's preview shows.
+enum TabPreview: Equatable {
+    /// The page as it was last seen.
+    case snapshot
+    /// The start page's own tab: the sail.
+    case startPage
+    /// A tab not yet photographed: its mark and its host.
+    case site(host: String)
+
+    static func of(_ tab: TabModel) -> TabPreview {
+        if tab.startPage { return .startPage }
+        if tab.snapshot != nil { return .snapshot }
+        return .site(host: tab.site?.host ?? tab.title)
+    }
+}
+
+/// The preview's box: the card's aspect, content in an overlay.
+struct TabCardPreview<Content: View>: View {
+    var alignment: Alignment = .center
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        Color.clear
+            .aspectRatio(ExploreGeometry.tabCardAspect, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: alignment) { content() }
+            .clipped()
+            .contentShape(Rectangle())
+    }
+}
 
 struct TabCardView: View {
     @Environment(\.theme) private var theme
@@ -24,38 +62,7 @@ struct TabCardView: View {
             Button {
                 onOpen(tab.id)
             } label: {
-                if let snapshot = tab.snapshot, !tab.startPage {
-                    Color.clear
-                        .aspectRatio(ExploreGeometry.tabCardAspect, contentMode: .fit)
-                        .frame(maxWidth: .infinity)
-                        .overlay(alignment: .top) {
-                            Image(uiImage: snapshot)
-                                .resizable()
-                                .scaledToFill()
-                        }
-                        .clipped()
-                        .contentShape(Rectangle())
-                        .accessibilityHidden(true)
-                } else {
-                VStack(spacing: Tokens.Space.s8) {
-                    if tab.startPage {
-                        VelaMark(size: Tokens.Space.s48)
-                        Capsule().fill(theme.bgRaised).frame(height: Tokens.Space.s12)
-                            .padding(.horizontal, Tokens.Space.s16)
-                    } else {
-                        RoundedRectangle(cornerRadius: Tokens.Radius.r8).fill(theme.bgRaised)
-                            .frame(height: Tokens.Space.s24)
-                        RoundedRectangle(cornerRadius: Tokens.Radius.r8).fill(theme.bgRaised)
-                            .frame(height: Tokens.Space.s24)
-                        Capsule().fill(tab.site?.tint ?? theme.bgRaised)
-                            .frame(height: Tokens.Space.s20)
-                    }
-                }
-                .padding(Tokens.Space.s16)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(ExploreGeometry.tabCardAspect, contentMode: .fit)
-                .contentShape(Rectangle())
-                }
+                preview
             }
             .buttonStyle(.plain)
 
@@ -87,5 +94,36 @@ struct TabCardView: View {
                 .stroke(tab.selected ? theme.accentBase : .clear,
                         lineWidth: Tokens.BorderWidth.emphasis)
         )
+    }
+
+    @ViewBuilder private var preview: some View {
+        switch TabPreview.of(tab) {
+        case .snapshot:
+            TabCardPreview(alignment: .top) {
+                if let snapshot = tab.snapshot {
+                    Image(uiImage: snapshot)
+                        .resizable()
+                        .scaledToFill()
+                        .accessibilityHidden(true)
+                }
+            }
+        case .startPage:
+            TabCardPreview {
+                VelaMark(size: Tokens.Space.s48)
+            }
+        case .site(let host):
+            TabCardPreview {
+                VStack(spacing: Tokens.Space.s8) {
+                    if let site = tab.site {
+                        SiteAvatarView(site: site, size: Tokens.Space.s48)
+                    }
+                    Text(verbatim: host)
+                        .typeRole(Typography.rowSub.scaled(textScale))
+                        .foregroundStyle(theme.fgMuted)
+                        .lineLimit(1)
+                        .padding(.horizontal, Tokens.Space.s12)
+                }
+            }
+        }
     }
 }

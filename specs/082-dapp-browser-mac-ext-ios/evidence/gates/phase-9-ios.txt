@@ -1,0 +1,67 @@
+082 Phase 9 — iOS gates (T243), after T236–T242
+================================================
+
+Tree: branch 082-dapp-browser-mac-ext-ios, app-ios at aa6de6ed (the T236–T242
+commits bf65e05f, 8cd8adc4, 865a62e0, c07e1949, bc90dd87, 48e77ce3, aa6de6ed),
+core/bindings at b27819d0 (round-2 core, merge 7a86cebc). Measured 2026-09-29
+on the integration worktree. No device was installed on or driven.
+
+1. rust/scripts/check-ios-core-fresh.sh
+   check-ios-core-fresh: ok — the xcframework is this tree's core
+   (4dd8ce5c396cf6aa41f10358d112cd771db7b7e2dcd566c683cf6e2643272c50)
+
+2. Hermetic VelaWalletTests on a cloned simulator
+   clone:   xcrun simctl clone BD3C6C43-EAAE-4F18-991C-74B447D1AED2 vela-082-ios2
+            (iPhone 17 Pro, iOS 26.0) → 148AB823-CBDF-4CF3-AE66-C5D16CB4B8BD
+   build:   xcodebuild build-for-testing -project app-ios/VelaWallet/VelaWallet.xcodeproj
+            -scheme VelaWallet -destination 'platform=iOS Simulator,id=148AB823-…'
+            -derivedDataPath <scratchpad>/build/ios-sim-082            → exit 0
+   run:     xcodebuild test-without-building … -only-testing:VelaWalletTests → exit 0
+   result:  ✔ Test run with 1041 tests in 133 suites passed after 8.666 seconds.
+            (XCTest's "Executed 0 tests" line is the Swift Testing false zero.)
+   before round 2: 1023 tests in 128 suites. New suites: CoreWireRoundTwoTests,
+   SigningWriteAheadTests, SplitWriteAheadTests, TrackerRoundTwoTests,
+   ActivityDetailTests; new tests in SubmitVerdictTests, SigningReceiptTests,
+   SigningFeeRetryTests, NetWatchTests, DappSigningTests.
+   One earlier run died in CoreSimulator ("(ipc/mig) server died" launching the
+   test host, no test ran); re-run on the same clone, above. Clone deleted after.
+
+3. Debug device build (not installed)
+   xcodebuild build … -configuration Debug -destination 'generic/platform=iOS'
+     -derivedDataPath <scratchpad>/build/ios-dd-082 -allowProvisioningUpdates
+   ** BUILD SUCCEEDED **
+
+4. scripts/check-event-payloads.mjs
+   0 mismatches · 527 literal dispatch sites checked · 2 skipped (payload not a literal)
+   (was 11 mismatches, all iOS: TrackerStore `submitted` without `admitted`,
+   ten SignExecutor `failed` without `refused`)
+
+5. app-ios/scripts/check-ios-dropped-judgement.mjs (exit 0, a report)
+   not on the wire: 8 · carried but never read: 14 — across 57 views
+   (was 10 / 14: SignView.trackerWithdraw and failureRefused are now mirrored
+   and read. The 8 left are pre-082 rows — BatchView.errors, DpermPopupView,
+   DpermView, ReceiveWatchView.deposits, RpcPoolView's four via its own
+   facade — untouched here.)
+
+6. app-ios/scripts/check-ios-event-parity.mjs (exit 0, a report)
+   strong diffs: 4 across 27 machines — unchanged, none round 2's:
+   DpermEvent popup_* (the extension's popup) and ContactEvent history_changed.
+   SignEvent now dispatches op_signed and op_tracked; SendEvent op_signed;
+   TrackEvent withdrawn.
+
+7. app-ios/scripts/check-generic-class-deinit.mjs
+   OK: every generic class in the app target declares `nonisolated deinit`.
+
+Review re-run (IOS reviewer, 2026-09-29, after 103c4471 and 8772d5dc)
+---------------------------------------------------------------------
+Clone: xcrun simctl clone BD3C6C43-… (iPhone 17 Pro, iOS 26.0) vela-082-ios2r
+       → 93262E73-F5FF-4AE1-BD37-9FB6004170F1; deleted after.
+Baseline at bda40243: ✔ Test run with 1041 tests in 133 suites passed.
+Red first: SendReceiptFollowsTrackerTests.aVerdictTheTrackerAlreadyHasReachesTheReceipt
+   ✘ (send.view?.receipt?.status → "maybe_sent") == "confirmed"; txHash nil — before 8772d5dc.
+After:  ✔ Test run with 1050 tests in 135 suites passed after 11.833 seconds.
+        (+ SigningFollowsTrackerTests 8, SendReceiptFollowsTrackerTests 1)
+Debug device build (generic/platform=iOS, -derivedDataPath <scratchpad>/build/ios-dd-082): ** BUILD SUCCEEDED **
+check-ios-core-fresh: ok (4dd8ce5c…) · check-event-payloads: 0 mismatches (527 sites)
+check-ios-dropped-judgement: 8 / 14 across 57 views (unchanged) · check-ios-event-parity: 4 strong diffs (unchanged)
+check-generic-class-deinit: OK

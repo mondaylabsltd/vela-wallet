@@ -47,6 +47,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+use vela_core::app::net_health::{NetEdge, NetHealth, net_health_step};
 use vela_core::app::network_admin::{
     BUILTIN_CHAINS, NetProviderId, PROVIDER_ORDER, build_provider_rpc_url,
 };
@@ -57,6 +58,7 @@ use vela_core::app::rpc_pool::{
 };
 
 use crate::core_host::CoreHost;
+use crate::diag::{host_of, vlog};
 use crate::executor::{proxy, storage};
 
 /// Curated public fallbacks (`PUBLIC_RPCS`, rpc-pool-endpoints.ts:50-60).
@@ -132,7 +134,7 @@ enum Request {
         kind: RpcKind,
         method: String,
         params: Value,
-        reply: Sender<Result<Value, PoolError>>,
+        reply: Sender<Routed>,
     },
     /// Drop every endpoint's state for a chain, or for all of them.
     Refresh { chain_id: Option<u32> },
@@ -145,6 +147,8 @@ enum Request {
     RateLimited { reply: Sender<Vec<u32>> },
     /// The chains whose whole RPC pool failed on the last attempt.
     Failed { reply: Sender<Vec<u32>> },
+    /// The chains whose first pass reached no endpoint (spec 082 RF1).
+    Unreached { reply: Sender<Vec<u32>> },
     /// How many routed calls the pool thread still holds: a test's proof
     /// that an answered hedge leaves nothing behind (083 H6).
     #[cfg(test)]
@@ -158,9 +162,35 @@ pub enum PoolError {
     /// transient case (invariant ④) and is worth showing differently.
     Failed { rate_limited: bool },
     /// `eth_getLogs` hit a range cap; the caller splits and retries.
-    RangeCap { max_span: f64 },
+    /// `error_json` is the JSON-RPC `error` member the endpoint answered, as
+    /// it came (spec 082 T180): the tracker's find-event hands it to the core,
+    /// which alone decides what a range error is and halves its window —
+    /// dropping it here left the same too-wide window asked forever.
+    RangeCap {
+        max_span: f64,
+        error_json: Option<String>,
+    },
     /// The pool thread is gone. Only reachable if it panicked.
     Unavailable,
+}
+
+/// A routed call's answer, and whether any POST of it may have reached an
+/// endpoint that acted on it while its reply was lost (spec 082 RA1: the OR
+/// of `rpc_pool::may_have_delivered` over every POST). Only the submit reads
+/// the second half; everything else takes [`Routed::answer`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct Routed {
+    pub answer: Result<Value, PoolError>,
+    pub maybe_delivered: bool,
+}
+
+impl Routed {
+    fn unavailable() -> Self {
+        Self {
+            answer: Err(PoolError::Unavailable),
+            maybe_delivered: false,
+        }
+    }
 }
 
 static POOL: OnceLock<Mutex<Sender<Message>>> = OnceLock::new();
@@ -192,39 +222,65 @@ pub fn bundler_call(chain_id: u32, method: &str, params: Value) -> Result<Value,
     dispatch(chain_id, RpcKind::Bundler, method, params)
 }
 
+/// [`bundler_call`] with the delivery half of the verdict — the submit's
+/// entry point (spec 082 RA1): `submit_step` needs to know whether a lost
+/// reply may hide an accepted operation.
+pub fn bundler_routed(chain_id: u32, method: &str, params: Value) -> Routed {
+    route(chain_id, RpcKind::Bundler, method, params)
+}
+
 /// [`bundler_call`], waiting at most `budget` for the answer (spec 079): a
 /// caller with a deadline of its own — the dApp's receipt wait — must not be
-/// held past it by one call's timeouts and retries. The call itself runs on
-/// to its end inside the pool (its verdicts still count); only this caller
-/// stops waiting, and a late answer goes nowhere.
-pub fn bundler_call_within(
+/// held past it by one call's timeouts and retries. It also stops waiting
+/// the moment `stop` says the answer is no longer wanted (spec 082 RJ4: the
+/// core has answered the page from the tracker), looked at a few times a
+/// second. The call itself runs on to its end inside the pool (its verdicts
+/// still count); only this caller stops waiting, and a late answer goes
+/// nowhere.
+pub fn bundler_call_until(
     chain_id: u32,
     method: &str,
     params: Value,
     budget: Duration,
+    stop: &dyn Fn() -> bool,
 ) -> Result<Value, PoolError> {
-    dispatch_within(chain_id, RpcKind::Bundler, method, params, budget)
+    route_within(chain_id, RpcKind::Bundler, method, params, budget, stop)
 }
 
-/// [`call`], waiting at most `budget` — the node's half of the dApp's
-/// landing wait (083: a bundle transaction's receipt, read to learn how the
-/// operation inside it ended).
+/// [`call`], waiting at most `budget` — for a best-effort read that must not
+/// hold its caller for a whole sweep (the submit's head read, spec 082).
 pub fn call_within(
     chain_id: u32,
     method: &str,
     params: Value,
     budget: Duration,
 ) -> Result<Value, PoolError> {
-    dispatch_within(chain_id, RpcKind::Rpc, method, params, budget)
+    route_within(chain_id, RpcKind::Rpc, method, params, budget, &|| false)
 }
 
-fn dispatch_within(
+/// [`bundler_call`], waiting at most `budget` for the answer (spec 079) —
+/// the dApp's landing wait (083) asks the relay this way.
+pub fn bundler_call_within(
+    chain_id: u32,
+    method: &str,
+    params: Value,
+    budget: Duration,
+) -> Result<Value, PoolError> {
+    route_within(chain_id, RpcKind::Bundler, method, params, budget, &|| {
+        false
+    })
+}
+
+fn route_within(
     chain_id: u32,
     kind: RpcKind,
     method: &str,
     params: Value,
     budget: Duration,
+    stop: &dyn Fn() -> bool,
 ) -> Result<Value, PoolError> {
+    /// How often a waiting caller looks at `stop`.
+    const GLANCE: Duration = Duration::from_millis(200);
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
@@ -243,12 +299,21 @@ fn dispatch_within(
             return Err(PoolError::Unavailable);
         }
     }
-    match answer.recv_timeout(budget) {
-        Ok(result) => result,
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(PoolError::Failed {
-            rate_limited: false,
-        }),
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(PoolError::Unavailable),
+    let deadline = Instant::now() + budget;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() || stop() {
+            return Err(PoolError::Failed {
+                rate_limited: false,
+            });
+        }
+        match answer.recv_timeout(left.min(GLANCE)) {
+            Ok(routed) => return routed.answer,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(PoolError::Unavailable);
+            }
+        }
     }
 }
 
@@ -309,6 +374,22 @@ pub fn failed_chains() -> Vec<u32> {
     answer.recv().unwrap_or_default()
 }
 
+/// The chains whose first pass of a call reached no endpoint at all, with no
+/// rate limit in sight (`RpcPoolView.unreached_chains`, spec 082 RF1): the
+/// chain notice's early half, a pass sooner than [`failed_chains`]. The home
+/// RPC banner does not read it. **Blocks** on the pool thread, briefly.
+pub fn unreached_chains() -> Vec<u32> {
+    let (reply, answer) = channel();
+    let sent = sender()
+        .lock()
+        .ok()
+        .is_some_and(|tx| tx.send(Message::Ask(Request::Unreached { reply })).is_ok());
+    if !sent {
+        return Vec::new();
+    }
+    answer.recv().unwrap_or_default()
+}
+
 /// Forget an endpoint's measured state — after the settings screen edits it.
 #[allow(dead_code, reason = "wired to network_admin's invalidate_pools next")]
 pub fn refresh(chain_id: Option<u32>) {
@@ -318,10 +399,14 @@ pub fn refresh(chain_id: Option<u32>) {
 }
 
 fn dispatch(chain_id: u32, kind: RpcKind, method: &str, params: Value) -> Result<Value, PoolError> {
+    route(chain_id, kind, method, params).answer
+}
+
+fn route(chain_id: u32, kind: RpcKind, method: &str, params: Value) -> Routed {
     let (reply, answer) = channel();
     {
         let Ok(tx) = sender().lock() else {
-            return Err(PoolError::Unavailable);
+            return Routed::unavailable();
         };
         if tx
             .send(Message::Ask(Request::Call {
@@ -333,10 +418,10 @@ fn dispatch(chain_id: u32, kind: RpcKind, method: &str, params: Value) -> Result
             }))
             .is_err()
         {
-            return Err(PoolError::Unavailable);
+            return Routed::unavailable();
         }
     }
-    answer.recv().unwrap_or(Err(PoolError::Unavailable))
+    answer.recv().unwrap_or_else(|_| Routed::unavailable())
 }
 
 // ---------------------------------------------------------------------------
@@ -405,12 +490,17 @@ struct InFlight {
     params: Value,
     /// Taken by whoever answers the caller first: the core's verdict, or a
     /// hedge whose answer the core's [`early_verdict`] lets through (083 H6).
-    reply: Option<Sender<Result<Value, PoolError>>>,
+    reply: Option<Sender<Routed>>,
     /// The last body received, per URL. `Conclude { Respond { url } }` names
     /// which one the core accepted — the core never sees a body itself.
     bodies: HashMap<String, Value>,
     /// Only a read the core calls hedged ([`is_hedged_read`]) has one.
     hedge: Option<Hedge>,
+    /// For the log lines and the network-health count only.
+    chain_id: u32,
+    kind: RpcKind,
+    method: String,
+    started: Instant,
 }
 
 impl InFlight {
@@ -597,6 +687,10 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
                         params,
                         reply: Some(reply),
                         bodies: HashMap::new(),
+                        chain_id,
+                        kind,
+                        method: method.clone(),
+                        started: Instant::now(),
                         hedge: Hedge::for_call(kind, &method),
                     },
                 );
@@ -633,6 +727,9 @@ fn run(rx: &std::sync::mpsc::Receiver<Message>, workers: &Sender<Message>) {
             }
             Request::Failed { reply } => {
                 let _ = reply.send(host.view().failed_chains);
+            }
+            Request::Unreached { reply } => {
+                let _ = reply.send(host.view().unreached_chains);
             }
             #[cfg(test)]
             Request::Open { reply } => {
@@ -812,7 +909,7 @@ fn hedge_landed(
     if let Some(verdict) = early_verdict(RpcKind::Rpc, &hedge.method, url, outcome)
         && let Some(reply) = call.reply.take()
     {
-        let _ = reply.send(answer(&verdict, &call.bodies));
+        let _ = reply.send(routed_of(&verdict, &call.bodies));
     }
     match core {
         Some(id) => {
@@ -846,9 +943,10 @@ fn offload(
             timeout_ms,
         } => {
             // The params are read here, on the thread that owns `inflight`.
-            let params = inflight
-                .get(call_id)
-                .map_or(Value::Array(Vec::new()), |call| call.params.clone());
+            let (params, chain_id) = inflight.get(call_id).map_or_else(
+                || (Value::Array(Vec::new()), 0),
+                |call| (call.params.clone(), call.chain_id),
+            );
             let (call_id, url, method, x_rpc_url, timeout_ms) = (
                 call_id.clone(),
                 url.clone(),
@@ -860,6 +958,7 @@ fn offload(
                 let started = Instant::now();
                 let (outcome, body) =
                     post(&url, &method, &params, x_rpc_url.as_deref(), timeout_ms);
+                log_post(chain_id, &url, &method, &outcome);
                 Message::Finished {
                     id,
                     body: body.map(|body| (call_id.clone(), url.clone(), body)),
@@ -999,11 +1098,13 @@ fn perform(
             x_rpc_url,
             timeout_ms,
         } => {
-            let params = inflight
-                .get(call_id)
-                .map_or(Value::Array(Vec::new()), |call| call.params.clone());
+            let (params, chain_id) = inflight.get(call_id).map_or_else(
+                || (Value::Array(Vec::new()), 0),
+                |call| (call.params.clone(), call.chain_id),
+            );
             let started = Instant::now();
             let (outcome, body) = post(url, method, &params, x_rpc_url.as_deref(), *timeout_ms);
+            log_post(chain_id, url, method, &outcome);
             if let (Some(body), Some(call)) = (body, inflight.get_mut(call_id)) {
                 // Held for `Conclude`. The core classifies from the `error`
                 // member alone and never sees a body — which is what keeps a
@@ -1068,39 +1169,280 @@ fn perform(
             }
             // A caller a hedge already answered has no reply left (083 H6);
             // the core's verdict still closed the call, and its books.
-            if let Some(call) = inflight.remove(call_id)
-                && let Some(reply) = call.reply
-            {
-                // A caller that gave up is not an error: the receiver is simply
-                // gone, and the pool has nothing to be sad about.
-                let _ = reply.send(answer(verdict, &call.bodies));
+            if let Some(call) = inflight.remove(call_id) {
+                note_conclusion(&call, verdict);
+                if let Some(reply) = call.reply {
+                    // A caller that gave up is not an error: the receiver is simply
+                    // gone, and the pool has nothing to be sad about.
+                    let _ = reply.send(routed_of(verdict, &call.bodies));
+                }
             }
             RpcShellResult::Concluded
         }
     }
 }
 
-/// What a caller receives for a verdict — from the core's conclusion, or
-/// from a hedge the core would have accepted (083 H6).
-fn answer(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Result<Value, PoolError> {
+/// The core's verdict as the caller's answer: the body it accepted, or why
+/// there is none — with the delivery bit the submit reads (spec 082 RA1).
+fn routed_of(verdict: &RpcCallVerdict, bodies: &HashMap<String, Value>) -> Routed {
     match verdict {
-        RpcCallVerdict::Respond { url } => bodies.get(url).cloned().ok_or(PoolError::Failed {
-            rate_limited: false,
-        }),
-        RpcCallVerdict::RangeCap { max_span, .. } => Err(PoolError::RangeCap {
-            max_span: *max_span,
-        }),
-        RpcCallVerdict::Failed { rate_limited } => Err(PoolError::Failed {
-            rate_limited: *rate_limited,
-        }),
-        // Not answers to a routed call; a caller waiting on one of these
-        // asked the wrong question.
-        RpcCallVerdict::BundlerBase { .. } | RpcCallVerdict::BestRpcUrl { .. } => {
-            Err(PoolError::Failed {
+        RpcCallVerdict::Respond {
+            url,
+            maybe_delivered,
+        } => Routed {
+            answer: bodies.get(url).cloned().ok_or(PoolError::Failed {
                 rate_limited: false,
-            })
-        }
+            }),
+            maybe_delivered: *maybe_delivered,
+        },
+        RpcCallVerdict::RangeCap { url, max_span } => Routed {
+            answer: Err(PoolError::RangeCap {
+                max_span: *max_span,
+                error_json: bodies
+                    .get(url)
+                    .and_then(|body| body.get("error"))
+                    .map(Value::to_string),
+            }),
+            maybe_delivered: false,
+        },
+        RpcCallVerdict::Failed {
+            rate_limited,
+            maybe_delivered,
+        } => Routed {
+            answer: Err(PoolError::Failed {
+                rate_limited: *rate_limited,
+            }),
+            maybe_delivered: *maybe_delivered,
+        },
+        // Not answers to a routed call; a caller waiting on one of these asked
+        // the wrong question.
+        RpcCallVerdict::BundlerBase { .. } | RpcCallVerdict::BestRpcUrl { .. } => Routed {
+            answer: Err(PoolError::Failed {
+                rate_limited: false,
+            }),
+            maybe_delivered: false,
+        },
     }
+}
+
+// ---------------------------------------------------------------------------
+// Is the network there (spec 082 RE3, T069)
+// ---------------------------------------------------------------------------
+
+/// The count the pool keeps from its own conclusions — the one place every
+/// chain read of the app passes through. `net_health_step` is the core's.
+static HEALTH: Mutex<NetHealth> = Mutex::new(NetHealth {
+    misses: 0,
+    online: true,
+    sources: Vec::new(),
+    unsourced: 0,
+    last_reach_ms: None,
+    run_started_ms: None,
+});
+/// Bumped on every "came back" edge. The browser reads it on its poll and
+/// retries a failed page (and the balances are invalidated right here), so no
+/// callback crosses from this thread into the window's.
+static CAME_BACK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How many times the network has come back since launch.
+pub fn came_back_count() -> u64 {
+    CAME_BACK.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// What one routed chain read says about the network (the rule in
+/// `net_health`'s module note): any answer reached a server; every endpoint
+/// swept with none answering — timeouts included, a hanging proxy node only
+/// ever times out — is a miss; a throttled sweep says nothing either way.
+/// Only chain reads count: the relay being down is not the network.
+fn reached_of(verdict: &RpcCallVerdict) -> Option<bool> {
+    match verdict {
+        RpcCallVerdict::Respond { .. } | RpcCallVerdict::RangeCap { .. } => Some(true),
+        RpcCallVerdict::Failed {
+            rate_limited: false,
+            ..
+        } => Some(false),
+        RpcCallVerdict::Failed {
+            rate_limited: true, ..
+        }
+        | RpcCallVerdict::BundlerBase { .. }
+        | RpcCallVerdict::BestRpcUrl { .. } => None,
+    }
+}
+
+/// "Went offline" edges since launch — for the tests that prove one
+/// failing chain never raises one.
+static WENT_OFFLINE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Feed one conclusion into the count: which chain it read (spec 082 RJ14,
+/// G53 — the count is of sources, not calls, so one chain whose nodes all
+/// fail while the others answer is that chain's notice, never "offline"),
+/// and when. `Some(edge)` when it crossed one.
+fn feed_health(reached: bool, chain_id: u32, now_ms: f64) -> Option<NetEdge> {
+    let Ok(mut health) = HEALTH.lock() else {
+        return None;
+    };
+    let (next, edge) = step_health(&health, reached, chain_id, now_ms);
+    *health = next;
+    edge
+}
+
+/// One pooled read into the core's count, sourced by its chain.
+fn step_health(
+    health: &NetHealth,
+    reached: bool,
+    chain_id: u32,
+    now_ms: f64,
+) -> (NetHealth, Option<NetEdge>) {
+    net_health_step(health.clone(), reached, Some(chain_id), now_ms)
+}
+
+/// The call is over: log a give-up, and count it towards the network's health.
+fn note_conclusion(call: &InFlight, verdict: &RpcCallVerdict) {
+    if let RpcCallVerdict::Failed { rate_limited, .. } = verdict {
+        vlog!(
+            "rpc",
+            "chain={} method={} gave up after {} ms{}",
+            call.chain_id,
+            call.method,
+            call.started.elapsed().as_millis(),
+            if *rate_limited { " (rate limited)" } else { "" }
+        );
+    }
+    if call.kind != RpcKind::Rpc {
+        return;
+    }
+    let Some(reached) = reached_of(verdict) else {
+        return;
+    };
+    match feed_health(reached, call.chain_id, now_ms()) {
+        Some(NetEdge::WentOffline) => {
+            WENT_OFFLINE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            vlog!("net", "offline (chain reads stopped answering)");
+        }
+        Some(NetEdge::CameBack) => {
+            vlog!("net", "came back");
+            CAME_BACK.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            // RE3: a balance read on the way back, not at the next 10 min
+            // pass — one that joins a read already out (G53: every "came
+            // back" used to start a second round beside the first).
+            crate::executor::balance_dashboard::network_back();
+        }
+        None => {}
+    }
+}
+
+/// One POST that did not get an answer, as a log line: which chain, which
+/// host (never the URL — a provider's key lives in its path), which method
+/// and what happened. Answers are not logged.
+fn log_post(chain_id: u32, url: &str, method: &str, outcome: &RpcTransportOutcome) {
+    let outcome = match outcome {
+        RpcTransportOutcome::Response { .. } => return,
+        RpcTransportOutcome::HttpError { status } => format!("http {status}"),
+        RpcTransportOutcome::NonJson => "non-json".to_owned(),
+        RpcTransportOutcome::Timeout => "timeout".to_owned(),
+        RpcTransportOutcome::Network => "network".to_owned(),
+        RpcTransportOutcome::NotConnected => "not connected".to_owned(),
+    };
+    vlog!(
+        "rpc",
+        "chain={chain_id} host={} method={method} outcome={outcome}",
+        host_of(url)
+    );
+}
+
+/// A failed request in the pool's five-plus-one outcomes (spec 082 RA1).
+///
+/// The one question that matters for money: could the request have reached
+/// the endpoint? `NotConnected` only when it provably did not — the name did
+/// not resolve, nothing accepted the connection, the TLS handshake (which
+/// precedes the request's first byte) was refused, or the proxy would not
+/// open the tunnel. Anything that may have happened after the request was
+/// written is `Timeout` or `Network`, which the core reads as "may have been
+/// delivered". A timeout counts as not connected only when ureq names the
+/// resolve or connect phase; the global timeout it reports otherwise is the
+/// safe side.
+pub fn transport_outcome_of(error: &ureq::Error) -> RpcTransportOutcome {
+    use std::io::ErrorKind;
+    use ureq::Timeout;
+    match error {
+        ureq::Error::StatusCode(status) => RpcTransportOutcome::HttpError { status: *status },
+        ureq::Error::Timeout(Timeout::Resolve | Timeout::Connect) => {
+            RpcTransportOutcome::NotConnected
+        }
+        ureq::Error::Timeout(_) => RpcTransportOutcome::Timeout,
+        // The proxy's CONNECT was refused (502), closed with no reply, or
+        // answered something else: the tunnel never opened, so the request
+        // never left.
+        ureq::Error::ConnectProxyFailed(_)
+        | ureq::Error::HostNotFound
+        | ureq::Error::ConnectionFailed
+        | ureq::Error::BadUri(_)
+        | ureq::Error::InvalidProxyUrl
+        | ureq::Error::Http(_)
+        | ureq::Error::Tls(_)
+        | ureq::Error::TlsRequired
+        | ureq::Error::RequireHttpsOnly(_) => RpcTransportOutcome::NotConnected,
+        ureq::Error::Rustls(tls) if is_handshake_refusal(tls) => RpcTransportOutcome::NotConnected,
+        ureq::Error::Io(io) => {
+            let refused_here = matches!(
+                io.kind(),
+                ErrorKind::ConnectionRefused
+                    | ErrorKind::AddrNotAvailable
+                    | ErrorKind::HostUnreachable
+                    | ErrorKind::NetworkUnreachable
+                    | ErrorKind::NetworkDown
+            );
+            let tls_refused = io
+                .get_ref()
+                .and_then(|inner| inner.downcast_ref::<rustls::Error>())
+                .is_some_and(is_handshake_refusal);
+            if refused_here || tls_refused || resolver_said_no(&io.to_string()) {
+                RpcTransportOutcome::NotConnected
+            } else {
+                RpcTransportOutcome::Network
+            }
+        }
+        _ => RpcTransportOutcome::Network,
+    }
+}
+
+/// A TLS failure that can only happen before the handshake completes — so
+/// before the request's first byte: the certificate (a server sends it in the
+/// handshake and nowhere else), a peer with nothing in common, or an alert
+/// that only a handshake raises.
+fn is_handshake_refusal(error: &rustls::Error) -> bool {
+    use rustls::AlertDescription as A;
+    match error {
+        rustls::Error::InvalidCertificate(_)
+        | rustls::Error::NoCertificatesPresented
+        | rustls::Error::PeerIncompatible(_)
+        | rustls::Error::HandshakeNotComplete
+        | rustls::Error::UnsupportedNameType => true,
+        rustls::Error::AlertReceived(alert) => matches!(
+            alert,
+            A::HandshakeFailure
+                | A::BadCertificate
+                | A::UnsupportedCertificate
+                | A::CertificateRevoked
+                | A::CertificateExpired
+                | A::CertificateUnknown
+                | A::UnknownCA
+                | A::ProtocolVersion
+                | A::InsufficientSecurity
+        ),
+        _ => false,
+    }
+}
+
+/// A resolver failure arrives as an uncategorised io error carrying libc's
+/// sentence; these are the three desktops' words for "the name did not look
+/// up" (the same fragments `proxy.rs` reads).
+fn resolver_said_no(message: &str) -> bool {
+    message.contains("failed to lookup address information")
+        || message.contains("nodename nor servname")
+        || message.contains("Name or service not known")
+        || message.contains("No such host is known")
+        || message.contains("No address associated with hostname")
 }
 
 // ---------------------------------------------------------------------------
@@ -1119,11 +1461,11 @@ fn post(
     timeout_ms: u32,
 ) -> (RpcTransportOutcome, Option<Value>) {
     let payload = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
-    // Per URL: an endpoint on this machine is never reached through a proxy;
-    // everything else walks the candidate chain (spec 038 Part B, T028), so a
-    // dead proxy in the environment does not get every RPC endpoint banned.
+    // Per URL, over the system's routes for it (spec 082 RD2): loopback is
+    // direct, the next route is tried only when a proxy itself could not be
+    // reached, and a dead proxy is named in the log rather than routed around.
     let timeout = Duration::from_millis(u64::from(timeout_ms));
-    let mut response = match proxy::with_candidates_for(url, timeout, |agent| {
+    let mut response = match proxy::with_routes(url, timeout, |agent| {
         // Spec 081 FR-007: the wallet no longer tells the relay which RPC endpoint it prefers. That header carried the user's first-choice URL, which can contain a provider API key — and the relay never read this name anyway (it reads `x-vela-rpc-url`), so nothing depended on it.
         let _ = x_rpc_url;
         agent
@@ -1132,15 +1474,7 @@ fn post(
             .send_json(&payload)
     }) {
         Ok(response) => response,
-        Err(failure) => {
-            return match failure.error {
-                ureq::Error::StatusCode(status) => {
-                    (RpcTransportOutcome::HttpError { status }, None)
-                }
-                ureq::Error::Timeout(_) => (RpcTransportOutcome::Timeout, None),
-                _ => (RpcTransportOutcome::Network, None),
-            };
-        }
+        Err(failure) => return (transport_outcome_of(&failure.error), None),
     };
 
     let mut text = String::new();
@@ -1336,6 +1670,354 @@ fn stored_provider_keys() -> Vec<(NetProviderId, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A one-connection HTTP proxy on loopback that reads the CONNECT and
+    /// answers it with `reply` — or closes with no reply at all when `reply`
+    /// is empty. Its port.
+    fn proxy_answering(reply: &'static [u8]) -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|e| unreachable!("loopback: {e}"));
+        let port = listener.local_addr().map(|a| a.port()).unwrap_or(0);
+        std::thread::spawn(move || {
+            use std::io::{Read as _, Write as _};
+            if let Some(Ok(mut stream)) = listener.incoming().next() {
+                // The whole CONNECT, so closing sends a FIN, not a reset for
+                // bytes nobody read.
+                let mut seen = Vec::new();
+                let mut buf = [0u8; 512];
+                while !seen.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match stream.read(&mut buf) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => seen.extend_from_slice(&buf[..n]),
+                    }
+                }
+                if !reply.is_empty() {
+                    let _ = stream.write_all(reply);
+                    let _ = stream.flush();
+                }
+                let _ = stream.shutdown(std::net::Shutdown::Write);
+                // Hold the socket until the client lets go.
+                while matches!(stream.read(&mut buf), Ok(n) if n > 0) {}
+            }
+        });
+        port
+    }
+
+    /// The submit's POST through a proxy at `port`, and the error it ends in.
+    fn post_through(port: u16) -> ureq::Error {
+        let proxy = ureq::Proxy::new(&format!("http://127.0.0.1:{port}"))
+            .unwrap_or_else(|e| unreachable!("proxy: {e}"));
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .proxy(Some(proxy))
+            .timeout_global(Some(Duration::from_secs(5)))
+            .build()
+            .into();
+        match agent
+            .post("https://relay.example/100")
+            .send_json(json!({"jsonrpc": "2.0", "method": "eth_sendUserOperation"}))
+        {
+            Ok(_) => unreachable!("nothing answers the tunnel"),
+            Err(error) => error,
+        }
+    }
+
+    /// Spec 082 T050: the exact ureq 3.4 error for a proxy that would not
+    /// open the tunnel — a 502 to the CONNECT — is pinned here. The request
+    /// itself is written only through an open tunnel, so nothing left the
+    /// machine: `NotConnected`, the one outcome that lets a submit say "not
+    /// sent".
+    #[test]
+    fn a_refused_connect_is_not_connected() {
+        let error = post_through(proxy_answering(
+            b"HTTP/1.1 502 Bad Gateway\r\ncontent-length: 0\r\n\r\n",
+        ));
+        assert!(
+            matches!(&error, ureq::Error::ConnectProxyFailed(reason) if reason.contains("502")),
+            "ureq 3.4 names a refused tunnel ConnectProxyFailed: {error:?}"
+        );
+        assert_eq!(
+            transport_outcome_of(&error),
+            RpcTransportOutcome::NotConnected
+        );
+    }
+
+    /// A proxy that reads the CONNECT and closes with no answer (chaos
+    /// `drop`): the tunnel never opened either, and ureq 3.4 says so with the
+    /// same variant — pinned, so an upgrade that renames it fails here rather
+    /// than turning a refusal into "may have been sent".
+    #[test]
+    fn a_connect_closed_with_no_reply_is_not_connected() {
+        let error = post_through(proxy_answering(b""));
+        assert!(
+            matches!(&error, ureq::Error::ConnectProxyFailed(reason) if reason.contains("did not respond")),
+            "{error:?}"
+        );
+        assert_eq!(
+            transport_outcome_of(&error),
+            RpcTransportOutcome::NotConnected
+        );
+    }
+
+    /// The rest of the "nothing left the machine" list (contract §2), and the
+    /// failures that may have happened after the request was written.
+    #[test]
+    fn transport_errors_say_whether_the_request_could_have_left() {
+        use std::io::{Error, ErrorKind};
+        let not_connected = [
+            ureq::Error::HostNotFound,
+            ureq::Error::ConnectionFailed,
+            ureq::Error::Timeout(ureq::Timeout::Resolve),
+            ureq::Error::Timeout(ureq::Timeout::Connect),
+            ureq::Error::ConnectProxyFailed("proxy server responded 502/Bad Gateway".to_owned()),
+            ureq::Error::Io(Error::from(ErrorKind::ConnectionRefused)),
+            ureq::Error::Io(Error::from(ErrorKind::AddrNotAvailable)),
+            ureq::Error::Io(Error::from(ErrorKind::HostUnreachable)),
+            ureq::Error::Io(Error::from(ErrorKind::NetworkUnreachable)),
+            ureq::Error::Io(Error::other(
+                "failed to lookup address information: nodename nor servname provided",
+            )),
+            ureq::Error::Tls("handshake"),
+            ureq::Error::Rustls(rustls::Error::InvalidCertificate(
+                rustls::CertificateError::Expired,
+            )),
+            ureq::Error::Rustls(rustls::Error::AlertReceived(
+                rustls::AlertDescription::HandshakeFailure,
+            )),
+        ];
+        for error in &not_connected {
+            assert_eq!(
+                transport_outcome_of(error),
+                RpcTransportOutcome::NotConnected,
+                "{error:?}"
+            );
+        }
+        // After the request may have been written: the safe side.
+        assert_eq!(
+            transport_outcome_of(&ureq::Error::Timeout(ureq::Timeout::Global)),
+            RpcTransportOutcome::Timeout
+        );
+        assert_eq!(
+            transport_outcome_of(&ureq::Error::Timeout(ureq::Timeout::RecvResponse)),
+            RpcTransportOutcome::Timeout
+        );
+        for error in [
+            ureq::Error::Io(Error::from(ErrorKind::ConnectionReset)),
+            ureq::Error::Io(Error::from(ErrorKind::UnexpectedEof)),
+            ureq::Error::Io(Error::from(ErrorKind::BrokenPipe)),
+            ureq::Error::Rustls(rustls::Error::AlertReceived(
+                rustls::AlertDescription::CloseNotify,
+            )),
+        ] {
+            assert_eq!(
+                transport_outcome_of(&error),
+                RpcTransportOutcome::Network,
+                "{error:?}"
+            );
+        }
+        assert_eq!(
+            transport_outcome_of(&ureq::Error::StatusCode(503)),
+            RpcTransportOutcome::HttpError { status: 503 }
+        );
+    }
+
+    /// The pool's verdict carries the delivery bit, and a range limit keeps
+    /// the endpoint's own error member (T180) for the tracker's find-event.
+    #[test]
+    fn the_verdict_keeps_the_delivery_bit_and_the_range_error() {
+        let url = "https://rpc.example/".to_owned();
+        let words = json!({"code": -32005, "message": "query exceeds max block range 1000"});
+        let bodies: HashMap<String, Value> =
+            std::iter::once((url.clone(), json!({ "error": words.clone() }))).collect();
+        let capped = routed_of(
+            &RpcCallVerdict::RangeCap {
+                url: url.clone(),
+                max_span: 1000.0,
+            },
+            &bodies,
+        );
+        assert_eq!(
+            capped.answer,
+            Err(PoolError::RangeCap {
+                max_span: 1000.0,
+                error_json: Some(words.to_string()),
+            })
+        );
+        let lost = routed_of(
+            &RpcCallVerdict::Failed {
+                rate_limited: false,
+                maybe_delivered: true,
+            },
+            &bodies,
+        );
+        assert!(lost.maybe_delivered);
+        assert!(lost.answer.is_err());
+    }
+
+    /// Spec 082 T069: every unthrottled sweep with no answer is a miss —
+    /// timeouts included — and any answer a reach; a throttled one says
+    /// nothing.
+    #[test]
+    fn a_sweep_with_no_answer_is_a_miss_and_a_throttled_one_is_nothing() {
+        assert_eq!(
+            reached_of(&RpcCallVerdict::Failed {
+                rate_limited: false,
+                maybe_delivered: true,
+            }),
+            Some(false)
+        );
+        assert_eq!(
+            reached_of(&RpcCallVerdict::Failed {
+                rate_limited: true,
+                maybe_delivered: false,
+            }),
+            None
+        );
+        assert_eq!(
+            reached_of(&RpcCallVerdict::Respond {
+                url: String::new(),
+                maybe_delivered: false,
+            }),
+            Some(true)
+        );
+    }
+
+    /// Spec 082 RJ14 (G53): the count is of sources, not calls. Ten Gnosis
+    /// sweeps that give up — while the other chains answer, and even with
+    /// nothing else asked at all — are Gnosis's notice, never "offline". The
+    /// device log had ten `net:` lines in two minutes, each "came back"
+    /// 0.2–0.9 s after "offline", with chains 1, 100 and 480 failing and the
+    /// rest answering; each "came back" forced another balance round.
+    #[test]
+    fn ten_gnosis_misses_never_go_offline() {
+        fn feed(
+            health: &mut NetHealth,
+            edges: &mut Vec<NetEdge>,
+            reached: bool,
+            chain: u32,
+            at: f64,
+        ) {
+            let (next, edge) = step_health(health, reached, chain, at);
+            *health = next;
+            edges.extend(edge);
+        }
+        let mut edges = Vec::new();
+        let mut now = 1_757_000_000_000.0;
+
+        let mut health = NetHealth::default();
+        for miss in 0..10 {
+            feed(&mut health, &mut edges, false, 100, now);
+            if miss % 3 == 2 {
+                feed(&mut health, &mut edges, true, 8453, now + 100.0);
+            }
+            now += 4_000.0;
+        }
+        assert!(
+            edges.is_empty(),
+            "one chain failing is not offline: {edges:?}"
+        );
+
+        // Gnosis alone, nothing else asked, far past the quiet window.
+        let mut health = NetHealth::default();
+        for _ in 0..10 {
+            feed(&mut health, &mut edges, false, 100, now);
+            now += 4_000.0;
+        }
+        assert!(edges.is_empty(), "still one source: {edges:?}");
+        assert!(health.online);
+
+        // The network really gone: two chains' sweeps give up with nothing
+        // reached for ten seconds — offline once; the first answer after it
+        // is "came back", once.
+        let mut health = NetHealth::default();
+        feed(&mut health, &mut edges, true, 8453, now);
+        for chain in [100, 1, 100, 1] {
+            now += 4_000.0;
+            feed(&mut health, &mut edges, false, chain, now);
+        }
+        assert_eq!(edges, vec![NetEdge::WentOffline]);
+        feed(&mut health, &mut edges, true, 8453, now + 500.0);
+        assert_eq!(edges, vec![NetEdge::WentOffline, NetEdge::CameBack]);
+    }
+
+    /// Spec 082 T224, G53's relaunch, through the real pool: one chain whose
+    /// endpoint takes no connection and 23 that answer, read twice over as
+    /// two balance rounds would (the second overlapping the first). Every
+    /// answering chain answers, promptly; the pool fails that one chain and
+    /// no other; and no "offline" edge is raised for it.
+    #[test]
+    fn one_dead_chain_among_answering_ones_fails_alone() {
+        const DEAD: u32 = 424_400;
+        const FIRST: u32 = 424_401;
+        const ANSWERING: u32 = 23;
+
+        storage::tests::with_temp_state("pool-one-dead-chain", || {
+            // A port nothing listens on: the connect is refused.
+            let dead_port = std::net::TcpListener::bind("127.0.0.1:0")
+                .and_then(|listener| listener.local_addr())
+                .map(|addr| addr.port())
+                .unwrap_or_else(|error| unreachable!("no loopback port: {error}"));
+            let mut networks =
+                vec![json!({ "chainId": DEAD, "rpcURL": format!("http://127.0.0.1:{dead_port}") })];
+            for chain in FIRST..FIRST + ANSWERING {
+                let port = fake_rpc(chain, Duration::ZERO);
+                networks.push(
+                    json!({ "chainId": chain, "rpcURL": format!("http://127.0.0.1:{port}") }),
+                );
+            }
+            if storage::write_value(storage::KEY_CUSTOM_NETWORKS, Value::Array(networks)).is_err() {
+                unreachable!("could not seed the networks");
+            }
+            let offline_before = WENT_OFFLINE.load(std::sync::atomic::Ordering::SeqCst);
+
+            let round = || {
+                let mut calls = Vec::new();
+                for chain in std::iter::once(DEAD).chain(FIRST..FIRST + ANSWERING) {
+                    for method in ["eth_getBalance", "eth_blockNumber", "eth_call"] {
+                        calls.push(std::thread::spawn(move || {
+                            let began = Instant::now();
+                            let answer = call(chain, method, json!([]));
+                            (chain, answer.is_ok(), began.elapsed())
+                        }));
+                    }
+                }
+                calls
+            };
+            let mut calls = round();
+            std::thread::sleep(Duration::from_millis(200));
+            calls.extend(round());
+            for handle in calls {
+                let (chain, answered, took) = handle
+                    .join()
+                    .unwrap_or_else(|_| unreachable!("a caller panicked"));
+                if chain == DEAD {
+                    assert!(!answered, "the dead chain answered");
+                } else {
+                    assert!(answered, "chain {chain} did not answer");
+                    assert!(
+                        took < Duration::from_secs(5),
+                        "chain {chain} waited {took:?} behind the dead one"
+                    );
+                }
+            }
+
+            let failed = failed_chains();
+            assert!(
+                failed.contains(&DEAD),
+                "the dead chain is failed: {failed:?}"
+            );
+            assert!(
+                !failed
+                    .iter()
+                    .any(|chain| (FIRST..FIRST + ANSWERING).contains(chain)),
+                "an answering chain is failed: {failed:?}"
+            );
+            assert_eq!(
+                WENT_OFFLINE.load(std::sync::atomic::Ordering::SeqCst),
+                offline_before,
+                "one dead chain raised \"offline\""
+            );
+        });
+    }
 
     /// The six tiers, in order, with bans deliberately NOT filtered.
     #[test]
@@ -2013,6 +2695,7 @@ mod tests {
             )]
             .into_iter()
             .collect(),
+            unreached_chains: Vec::new(),
         };
         let Some(hedge) = Hedge::for_call(RpcKind::Rpc, "eth_call") else {
             unreachable!("eth_call is a read");
@@ -2026,6 +2709,10 @@ mod tests {
                 reply: Some(reply),
                 bodies: HashMap::new(),
                 hedge: Some(hedge),
+                chain_id: 100,
+                kind: RpcKind::Rpc,
+                method: "eth_call".to_owned(),
+                started: Instant::now(),
             },
         )]);
 

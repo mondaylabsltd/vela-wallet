@@ -180,7 +180,10 @@ enum FlowsLive {
         return HistoryModel(
             header: header,
             mode: groups.isEmpty ? .empty : .rows,
-            emptyText: model.emptyText,
+            // The core's choice (spec 082 RG5): "no transactions yet" on
+            // every network, "none on this network" under a filter — never
+            // the gallery board's filter sentence on an unfiltered history.
+            emptyText: loc.t(feed.historyEmptyKey),
             groups: groups
         )
     }
@@ -207,13 +210,26 @@ enum FlowsLive {
         loc: Loc
     ) -> TxDetailModel {
         let incoming = item.direction == .in
+        let dapp = item.kind == .dappTx
         let chain = ChainCatalog.meta(item.chainId)
         let counterparty = item.counterparty ?? record?.from ?? ""
 
         var facts: [FactRowModel] = []
+        // Spec 082 RG2: a dApp's transaction says who asked for it.
+        if dapp, let site = item.site, !site.isEmpty {
+            facts.append(FactRowModel(
+                label: loc.t("componentsUi.signing.siweOrigin"),
+                value: site
+            ))
+        }
         if !counterparty.isEmpty {
             facts.append(FactRowModel(
-                label: loc.t(incoming ? "componentsTx.detail.from" : "componentsTx.detail.to"),
+                // The core says who the counterparty is (spec 082 RJ16): the
+                // contract a dApp's call went to is "Interacting with", never
+                // "To" — G52 named a token contract as the recipient.
+                label: item.counterpartyRole == .contract
+                    ? loc.t("componentsUi.signing.interactingLabel")
+                    : loc.t(incoming ? "componentsTx.detail.from" : "componentsTx.detail.to"),
                 value: item.alias ?? AddressText.short(counterparty),
                 lead: .identicon(counterparty),
                 mono: item.alias == nil,
@@ -244,7 +260,11 @@ enum FlowsLive {
             label: loc.t("componentsTx.detail.labelDate"),
             value: timestamp(item.timestamp, loc: loc)
         ))
-        let hash = item.txHash ?? record?.txHash ?? ""
+        // The core's own tx hash (spec 082 RJ16): `nil` for an op the chain
+        // has not shown, and for a record whose stored "hash" is the op's —
+        // never read back from the record, which is how an op hash became an
+        // explorer link.
+        let hash = item.txHash ?? ""
         if !hash.isEmpty {
             facts.append(FactRowModel(
                 label: loc.t("componentsTx.detail.labelHash"),
@@ -256,26 +276,33 @@ enum FlowsLive {
         }
 
         return TxDetailModel(
-            title: loc.t(incoming ? "history.txLabelReceived" : "history.txLabelSent",
-                         vars: ["symbol": item.symbol]),
-            status: status(record?.status ?? .confirmed, loc: loc),
+            title: dapp
+                ? loc.t("history.txLabelDappTx")
+                : loc.t(incoming ? "history.txLabelReceived" : "history.txLabelSent",
+                        vars: ["symbol": item.symbol]),
+            // The row's own lifecycle, from the core (spec 082 RG1) — never a
+            // record lookup that defaulted a missing one to "succeeded".
+            status: status(item.status, loc: loc),
             closeLabel: model.closeLabel,
-            amount: (incoming ? "+" : "\u{2212}")
-                + WalletLive.compactAmount(item.value, batch: item.batch)
-                + (item.symbol.isEmpty ? "" : " \(item.symbol)"),
+            amount: dapp && item.value == nil
+                ? ""
+                : (incoming ? "+" : "\u{2212}")
+                    + WalletLive.compactAmount(item.value, batch: item.batch)
+                    + (item.symbol.isEmpty ? "" : " \(item.symbol)"),
             // The STORED figure, not a recomputed one: it is what this wallet
             // recorded the transfer was worth when it happened, and re-pricing
             // it today would quietly restate history.
             fiat: record?.usd.map { "≈ \($0)" } ?? "",
             positive: incoming,
             facts: facts,
-            viewOnExplorer: model.viewOnExplorer,
+            viewOnExplorer: hash.isEmpty ? nil : model.viewOnExplorer,
             // The LOCAL record. The chain keeps the transaction; this is the
             // wallet forgetting it, which is why the sentence is "delete
             // record" and not "delete transaction". Placed on the detail, as
             // the web places it — a swipe on a feed row is a gesture nobody
             // drew and a destructive one to discover by accident.
-            deleteLabel: loc.t("history.deleteRecord")
+            deleteLabel: loc.t("history.deleteRecord"),
+            deleteQuiet: item.status == .pending
         )
     }
 

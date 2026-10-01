@@ -1,0 +1,18 @@
+# S5 (drop vela-relay, slide dust) — iPhone build fb8c7026
+# nonce 57 (09:18:28) -> 57 (09:19:03); balance unchanged 0.18367
+09:18:28 CONFIG {"mode": "drop", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+09:18:28 CUT 1 live tunnels: vela-relay-cf.getvela.app
+09:18:30 DROP vela-relay-cf.getvela.app:443
+09:18:30 DROP vela-relay-cf.getvela.app:443
+09:18:30 DROP vela-relay-cf.getvela.app:443
+09:18:31 DROP vela-relay-cf.getvela.app:443
+09:19:11 CONFIG {"mode": "drop", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+09:19:11 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "."}
+09:18:30.897 2026-09-29 09:18:30.859447+0800 VelaWallet[1817:552194] [rpc] gave_up chain=100 method=eth_estimateUserOperationGas kind=bundler
+09:18:31.002 2026-09-29 09:18:30.937994+0800 VelaWallet[1817:552194] [relay] submitting chain=100 hash=0x8163c4b577
+09:18:31.733 2026-09-29 09:18:31.707405+0800 VelaWallet[1817:552194] [rpc] gave_up chain=100 method=eth_sendUserOperation kind=bundler
+09:18:31.733 2026-09-29 09:18:31.707463+0800 VelaWallet[1817:552194] [relay] not_sent rejection=none attempts=1
+# dApp: {"t":"09:18:23","label":"send 0.001","ok":false,"code":-32603,"message":"relay unreachable; nothing was sent","done":"09:18:31"}
+# sheet: 09:18:28.4 slide -> 09:18:30.3 正在准备交易... -> 09:18:32.6 失败 / 交易未能提交。您的资金安全无虞——请重试。 / 完成
+# Activity/History: 6 rows today, all landed ops (IX-W1, T183 a/b, IX8 x3); no failed or pending S5 row
+# note: no '[sign] submit verdict=not_sent' line — SignExecutor.swift:265 logs only accepted/maybe_sent; the relay line carries the kind

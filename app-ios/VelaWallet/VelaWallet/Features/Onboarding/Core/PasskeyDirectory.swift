@@ -45,7 +45,7 @@ final class PasskeyDirectory {
         let config = URLSessionConfiguration.ephemeral
         // A key list must not wait on a name. Nothing here is load-bearing.
         config.timeoutIntervalForRequest = 6
-        return URLSession(configuration: config)
+        return URLSession.vela(config)
     }()
 
     /// What the directory says about `aaguid`, asking it the first time.

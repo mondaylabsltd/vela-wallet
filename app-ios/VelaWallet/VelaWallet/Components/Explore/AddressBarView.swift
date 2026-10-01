@@ -26,6 +26,10 @@ struct AddressBarView: View {
     /// drawn only for a secure origin; an insecure one is named, not merely
     /// left unpraised.
     var insecureLabel: String = ""
+    /// Spec 082 RE1: whether any lock is drawn. A failure panel, and a load
+    /// that has not committed in an empty tab, show NO lock — nothing from
+    /// that host is on screen to vouch for (the core's `browserAddressBar`).
+    var showsLock: Bool = true
     /// The full URL, for editing.
     var url: String = ""
     var addressLabel: String = ""
@@ -106,7 +110,9 @@ struct AddressBarView: View {
             // https — which says the line is encrypted, not that the site is
             // honest, so it is decorative to a screen reader too (the host is
             // read out); open and in the warning colour for plain http.
-            if secure {
+            if !showsLock {
+                // Nothing on screen from this host: no lock either way.
+            } else if secure {
                 LucideIcon(.lock, size: LucideIconSize.addressLock)
                     .foregroundStyle(theme.fgMuted)
                     .accessibilityHidden(true)

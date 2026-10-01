@@ -1,0 +1,36 @@
+EX13 (W12) - panel console vela.silentReceipt(100) (the panel's eth_getUserOperationReceipt on Gnosis stays silent); no proxy fault.
+Nonce before 25, after 26. dApp asked 19:19:46.250Z; slide 19:19:55.770Z.
+19:19:56.363 sheet: 正在准备交易...   19:19:56.974 提交至网络...
+19:19:58.150 panel console: [UserOp] submit verdict=accepted hash=0x7429e548a0 attempts=1 chain=100
+19:19:58.153 overlay: 已提交 | 已发送！正在链上确认——区块浏览器链接稍后出现。 | UserOp 哈希 0x7429e548…78d88e7b | 完成
+On chain: block 48487180 tx 0x0eb2ef03d85e014a43fb0b8c9be58bbaaf71e5bf2b3435d1845d32d288fec910 nonce=25 success=1 (landed within ~10 s)
+19:21:57.246 panel console: [UserOp] ACCEPTED but NOT landed within timeout — bundler is not settling this chain
+19:21:57.248 dApp answered ok = 0x7429e548a011f7749365c376cab2f8d7d072dfe0acb6b940546a4b0f78d88e7b (op hash), 121.5 s after the slide, one res
+19:21:58.157 overlay: 已提交 | 还没上链。Vela 会继续查看，请不要重复发送。 | UserOp 哈希 | 完成
+  ... unchanged through 19:25:44 (5 min 49 s after the slide; the op had been on chain ~5.5 min)
+Relay status (my own curl): pimlico_getUserOperationStatus(op) -> {"status":"included","transactionHash":"0x0eb2ef03…"}
+19:25:44 vela.clearFaults() in the panel -> 19:25:52.383 overlay: 已确认 | 交易哈希 0x0eb2ef03…88fec910 | 区块浏览器 | 完成
+
+dApp polling eth_getTransactionReceipt(<op hash>) every 10 s from 19:22:10 (worker translates via the bundler, RF3):
+19:22:10.522 540ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:22:20.523 538ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:22:30.524 547ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:22:40.524 581ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:22:50.524 547ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:23:00.524 536ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:23:10.523 539ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:23:20.525 548ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:23:30.523 547ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:23:40.525 554ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:23:50.524 543ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:24:00.525 550ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:24:10.525 552ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:24:20.525 552ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:24:30.524 555ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:24:40.524 618ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:24:50.524 535ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:25:00.525 545ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:25:10.525 528ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:25:20.524 540ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:25:30.525 533ms tx=0x0eb2ef03d8… block=48487180 status=0x1
+19:25:40.525 540ms tx=0x0eb2ef03d8… block=48487180 status=0x1

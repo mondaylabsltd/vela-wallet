@@ -66,7 +66,45 @@ data class EngineState(
     val retrying: Boolean = false,
     /** `false` when this WebView cannot carry the provider (no document-start script / message listener). */
     val wallet: Boolean = true,
-)
+    /**
+     * Spec 082 RE1: the committed document's URL — set by the commit callback
+     * (`onPageStarted` of a load that did not fail, a same-document change),
+     * never by a load merely asked for. `null` before anything committed.
+     */
+    val shown: String? = null,
+    /** A load asked for (the person's, a retry, back/forward, a link the page followed) and not yet committed. */
+    val pending: String? = null,
+    /** The address whose failure panel is up. */
+    val failedUrl: String? = null,
+) {
+    /**
+     * What the address bar names — the core's rule (`browserAddressBar`): the
+     * failed host with no lock while the panel is up, else the committed
+     * document with its lock, else a pending load in an EMPTY tab with no
+     * lock. A load under way never renames a tab that shows a document (the
+     * page-initiated spoof), and nothing here guesses a host.
+     */
+    fun addressBar(): uniffi.vela_core_uniffi.BrowserAddressBar =
+        uniffi.vela_core_uniffi.browserAddressBar(shown, pending, failedUrl.takeIf { failed })
+}
+
+/**
+ * The load watchdog's one decision (spec 082 RE2), in the engine's units: a
+ * load under way this long, not committed, with `WebView.getProgress()` at
+ * [progressPercent], is given up — the core's rule; a slow site that is
+ * getting somewhere is never cut.
+ */
+object LoadWatch {
+    fun givesUp(elapsedMs: Long, committed: Boolean, progressPercent: Int): Boolean =
+        uniffi.vela_core_uniffi.browserLoadShouldGiveUp(
+            elapsedMs.coerceIn(0L, UInt.MAX_VALUE.toLong()).toUInt(),
+            committed,
+            progressPercent.coerceIn(0, 100) / 100.0,
+        )
+
+    /** How long a load may go before the watchdog asks. */
+    fun giveUpMs(): Long = uniffi.vela_core_uniffi.browserLoadGiveUpMs().toLong()
+}
 
 /** Where the load hairline starts the moment a load is asked for (spec 079). */
 private const val REQUESTED_PROGRESS = 10
@@ -122,6 +160,17 @@ class BrowserEngine(
     private var retryAttempt = 0
     private var retryTask: Runnable? = null
 
+    // Spec 082 RE2 — the load watchdog: armed at every load asked for,
+    // disarmed by the commit, a failure, the finish or teardown.
+    private var watchdog: Runnable? = null
+    private var watchStartedAt = 0L
+    /** The load being watched has committed a document. */
+    private var committed = true
+    /** The document before the last commit — restored when that commit was an error page. */
+    private var previousShown: String? = null
+    /** The load in flight is one the page started (a link, a script) — retried by hand only (RE3). */
+    private var pageStarted = false
+
     val webView: WebView = WebView(context).apply {
         // MATCH_PARENT, and not for layout's sake: a WebView left at the
         // default WRAP_CONTENT gives Chromium no viewport HEIGHT, and every
@@ -150,17 +199,23 @@ class BrowserEngine(
                 // gives way only to a load that finishes without an error.
                 navFailed = false
                 navHttpStatus = null
-                update(url) { it.copy(loading = true, progress = maxOf(it.progress.takeIf { _ -> it.loading } ?: 0, REQUESTED_PROGRESS)) }
+                // The commit (RE1): what the bar names from now on — undone
+                // below if this document turns out to be the engine's error page.
+                committed = true
+                disarmWatchdog()
+                previousShown = _state.value.shown
+                update(url) { it.copy(loading = true, progress = maxOf(it.progress.takeIf { _ -> it.loading } ?: 0, REQUESTED_PROGRESS), shown = url, pending = null) }
                 listener.navigationStarted(tabId, url)
             }
 
             override fun onPageFinished(view: WebView, url: String) {
+                disarmWatchdog()
                 if (navFailed) {
                     update(url) { it.copy(loading = false, progress = 100, retrying = false) }
                 } else {
                     retryAttempt = 0
                     cancelRetry()
-                    update(url) { it.copy(loading = false, progress = 100, failed = false, failure = null, retrying = false) }
+                    update(url) { it.copy(loading = false, progress = 100, failed = false, failure = null, retrying = false, shown = url, pending = null, failedUrl = null) }
                 }
                 listener.loadFinished(tabId, url, view.title.orEmpty(), navFailed, navHttpStatus)
             }
@@ -170,7 +225,9 @@ class BrowserEngine(
             }
 
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
-                update(url) { it }
+                // A same-document change (pushState) is the document's own; an
+                // error page's history entry is not a document.
+                update(url) { if (navFailed) it else it.copy(shown = url) }
                 listener.shown(tabId, url, view.title.orEmpty())
             }
 
@@ -179,7 +236,11 @@ class BrowserEngine(
                 VelaLog.event("browser.load", "main frame failed", "code" to error.errorCode.toString())
                 // The core's rule (spec 079): the class, its sentence, whether retrying helps.
                 val failure = uniffi.vela_core_uniffi.browserLoadClassify("android", error.errorCode.toLong(), null, false) ?: return
-                failed(failure)
+                val url = request.url.toString()
+                // The error page committed under the failing address: that is
+                // not a document the person saw, so the bar goes back to theirs.
+                if (_state.value.shown == url) _state.value = _state.value.copy(shown = previousShown)
+                failed(failure, url)
             }
 
             @SuppressLint("WebViewClientOnReceivedSslError")
@@ -187,7 +248,7 @@ class BrowserEngine(
                 // Never proceed: a page on a broken certificate is not the site it names.
                 handler.cancel()
                 if (error.url == view.url || view.url.isNullOrBlank()) {
-                    uniffi.vela_core_uniffi.browserLoadClassify("android", 0L, null, true)?.let { failed(it) }
+                    uniffi.vela_core_uniffi.browserLoadClassify("android", 0L, null, true)?.let { failed(it, error.url) }
                 }
             }
 
@@ -195,7 +256,7 @@ class BrowserEngine(
                 val scheme = request.url.scheme?.lowercase()
                 if (scheme == "http" || scheme == "https") {
                     // A link the page follows: progress from the tap, not from the commit.
-                    if (request.isForMainFrame) requested()
+                    if (request.isForMainFrame) requested(request.url.toString(), byPage = true)
                     return false
                 }
                 // Another scheme leaves this browser only for the page a person
@@ -242,14 +303,66 @@ class BrowserEngine(
      * away, and a tap that changes nothing reads as a tap that did nothing.
      * The address bar keeps the committed host until then.
      */
-    private fun requested() {
-        _state.value = _state.value.copy(loading = true, progress = maxOf(if (_state.value.loading) _state.value.progress else 0, REQUESTED_PROGRESS))
+    private fun requested(url: String?, byPage: Boolean = false) {
+        pageStarted = byPage
+        _state.value = _state.value.copy(
+            loading = true,
+            progress = maxOf(if (_state.value.loading) _state.value.progress else 0, REQUESTED_PROGRESS),
+            pending = url ?: _state.value.pending,
+        )
+        armWatchdog()
     }
 
-    private fun failed(failure: uniffi.vela_core_uniffi.BrowserLoadFailure) {
+    private fun failed(failure: uniffi.vela_core_uniffi.BrowserLoadFailure, url: String?) {
         navFailed = true
-        _state.value = _state.value.copy(failed = true, failure = failure, loading = false, retrying = false)
+        disarmWatchdog()
+        val state = _state.value
+        _state.value = state.copy(
+            failed = true, failure = failure, loading = false, retrying = false,
+            failedUrl = url?.takeIf { it.isNotBlank() } ?: state.pending ?: state.failedUrl ?: state.url,
+            pending = null,
+        )
         scheduleRetry(failure)
+    }
+
+    /**
+     * Spec 082 RE2: nothing may look frozen for a minute. At every load asked
+     * for, the core's give-up time starts; the commit, a failure, the finish
+     * or teardown stop it. Off screen it is not armed (a page in the
+     * background is not being waited on); back on screen a load still under
+     * way gets the full budget again.
+     */
+    private fun armWatchdog() {
+        disarmWatchdog()
+        committed = false
+        if (!attached) return
+        watchStartedAt = android.os.SystemClock.elapsedRealtime()
+        val task = Runnable {
+            watchdog = null
+            giveUpIfStalled()
+        }
+        watchdog = task
+        mainLooper.postDelayed(task, LoadWatch.giveUpMs())
+    }
+
+    private fun disarmWatchdog() {
+        watchdog?.let(mainLooper::removeCallbacks)
+        watchdog = null
+    }
+
+    private fun giveUpIfStalled() {
+        val elapsed = android.os.SystemClock.elapsedRealtime() - watchStartedAt
+        val progress = webView.progress
+        val host = _state.value.pending?.let(::dappOriginOf)?.substringAfter("://").orEmpty()
+        if (!LoadWatch.givesUp(elapsed, committed, progress)) {
+            VelaLog.event("browser.load", "slow, still getting somewhere", "host" to host, "ms" to elapsed, "progress" to progress)
+            return
+        }
+        VelaLog.event("browser.load", "stalled: given up", "host" to host, "ms" to elapsed, "progress" to progress)
+        // What `stopLoading` finishes is not a page: the panel stays.
+        navFailed = true
+        webView.stopLoading()
+        failed(uniffi.vela_core_uniffi.browserLoadStalled(), _state.value.pending)
     }
 
     /**
@@ -277,8 +390,12 @@ class BrowserEngine(
 
     private fun retry() {
         _state.value = _state.value.copy(retrying = true)
-        requested()
-        webView.reload()
+        val again = _state.value.failedUrl
+        requested(again, byPage = pageStarted)
+        // A load the watchdog gave up on never reached the WebView's own
+        // history (it still holds the page before, or nothing): ask for the
+        // failed address itself — a reload would load the wrong page.
+        if (again != null && webView.url != again) webView.loadUrl(again) else webView.reload()
     }
 
     private fun dialogOffScreen(result: JsResult): Boolean {
@@ -305,12 +422,31 @@ class BrowserEngine(
         webView.onResume()
         // A page that failed while off screen retries now it is looked at.
         _state.value.failure?.takeIf { retryTask == null && !_state.value.retrying }?.let(::scheduleRetry)
+        // A load still under way gets the watchdog's full budget again.
+        if (_state.value.loading && !committed && watchdog == null) armWatchdog()
+    }
+
+    /**
+     * Spec 082 RE3: the calls reach a server again. A failure the network
+     * explains is loaded again now (the core's `browserLoadRetryWhenNetworkReturns`),
+     * with its count started over — but a load the page itself started is
+     * the person's to retry.
+     */
+    fun networkCameBack() {
+        val failure = _state.value.failure ?: return
+        retryAttempt = 0
+        if (!attached || pageStarted || _state.value.retrying) return
+        if (!uniffi.vela_core_uniffi.browserLoadRetryWhenNetworkReturns(failure.`class`)) return
+        VelaLog.event("browser.load", "network back: retrying", "class" to failure.`class`)
+        cancelRetry()
+        retry()
     }
 
     /** Off screen. The page keeps its state; nothing of it is painted or prompts. */
     fun detach() {
         attached = false
         cancelRetry()
+        disarmWatchdog()
         listener.snapshot(tabId, capture())
         context.baseContext = appContext
         webView.onPause()
@@ -320,12 +456,18 @@ class BrowserEngine(
         // A new address: the old failure and its retries are over.
         cancelRetry()
         retryAttempt = 0
-        _state.value = _state.value.copy(failed = false, failure = null, retrying = false)
-        requested()
+        _state.value = _state.value.copy(failed = false, failure = null, retrying = false, failedUrl = null)
+        requested(url)
         webView.loadUrl(url)
     }
-    fun back() { if (webView.canGoBack()) { requested(); webView.goBack() } }
-    fun forward() { if (webView.canGoForward()) { requested(); webView.goForward() } }
+    fun back() { if (webView.canGoBack()) { requested(historyUrl(-1)); webView.goBack() } }
+    fun forward() { if (webView.canGoForward()) { requested(historyUrl(1)); webView.goForward() } }
+
+    /** The address [step] entries away in this tab's history, if there is one. */
+    private fun historyUrl(step: Int): String? = runCatching {
+        val list = webView.copyBackForwardList()
+        list.getItemAtIndex(list.currentIndex + step)?.url
+    }.getOrNull()
 
     /** Reload — or, on a failed page, the person's retry: the panel stays, saying so, and the count starts again. */
     fun reload() {
@@ -334,7 +476,7 @@ class BrowserEngine(
             retryAttempt = 0
             retry()
         } else {
-            requested()
+            requested(_state.value.shown)
             webView.reload()
         }
     }
@@ -364,6 +506,7 @@ class BrowserEngine(
     fun destroy() {
         attached = false
         cancelRetry()
+        disarmWatchdog()
         (webView.parent as? android.view.ViewGroup)?.removeView(webView)
         webView.stopLoading()
         webView.destroy()
@@ -779,6 +922,17 @@ class BrowserController(
     }
 
     fun forward() = _current.value?.forward()
+
+    /**
+     * Spec 082 RE3: the network came back (`netHealthStep`'s `came_back`).
+     * Every failed page's count starts over; the page in front is loaded
+     * again now when its failure is one the network explains.
+     */
+    fun networkCameBack() {
+        val front = _current.value
+        engines.values.filter { it !== front }.forEach { it.networkCameBack() }
+        front?.networkCameBack()
+    }
 
     /** The device pass's renderer death (debug builds only; `chrome://crash` kills the renderer on purpose). */
     fun debugCrashRenderer() {

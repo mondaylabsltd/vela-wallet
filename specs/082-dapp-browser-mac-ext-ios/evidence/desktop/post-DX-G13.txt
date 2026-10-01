@@ -1,0 +1,19 @@
+DX-G13 desktop
+$ cd app-desktop/vela-wallet && CARGO_TARGET_DIR=/Volumes/data/production/vela-wallet/app-desktop/vela-wallet/target cargo test --release live_an_unknown_hash_is_pending_not_unreachable -- --ignored --nocapture
+    Finished `release` profile [optimized] target(s) in 54.53s
+running 1 test
+receipt poll: ReceiptPoll { reached_bundler: true, resolution: None }
+[vela-wallet] 04:02:04.371 tracker: op=0xababababab status=NotFound
+status: Some(TrackStatusAnswer { status: NotFound, stage: None, tx_hash: None })
+test executor::relay::tests::live_an_unknown_hash_is_pending_not_unreachable ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 753 filtered out; finished in 3.18s
+
+tracker: lines across the stage-B logs (desk-post-std3.err from DX-W1, desk-post-T181.err, desk-post-DX9.err), op hashes and blocks collapsed:
+   6 tracker: holdings moved on chain=100; balances re-read
+   3 tracker: op=… find-event chain=100 from=None to=None head=None → head only
+   3 tracker: op=… find-event chain=100 from=None to=None head=Some(N) → head only
+   3 tracker: op=… find-event chain=100 from=Some(N) to=Some(N) head=Some(N) → logs
+   6 tracker: op=… handed over chain=100 maybe_sent=true submit_block=Some(N)
+   6 tracker: op=… status unavailable
+   1 tracker: op=… status=Included
+status method used: pimlico_getUserOperationStatus only (outcomes: timeout / not connected under faults); no -32601 / 'method not found' anywhere

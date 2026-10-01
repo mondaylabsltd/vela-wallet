@@ -54,7 +54,6 @@
     "txRemaining": "~{{remaining}} sn kaldı",
     "txTypicalTime": "{{chainName}} genellikle ~{{estSecs}} sn içinde onaylar",
     "txRetryBtn": "Tekrar Dene",
-    "txErrorTimeout": "İşlem gönderildi ancak onay zaman aşımına uğradı. Geçmişi daha sonra kontrol edin.",
     "txErrorBundlerLoop": "Gas hesabı bakiyesi bundler tarafından sürekli reddediliyor. Daha sonra tekrar deneyin veya gas kademesini yükseltin.",
     "txErrorBundlerFund": "Bundler hesabının daha fazla gas'a ihtiyacı var. Lütfen Ayarlar'dan fonlayın.",
     "txErrorPublicKey": "Bu hesap için açık anahtar bulunamadı",

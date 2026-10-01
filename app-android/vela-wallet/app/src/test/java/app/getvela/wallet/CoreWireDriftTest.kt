@@ -173,6 +173,7 @@ import app.getvela.wallet.feature.wallet.core.RpcOperation
 import app.getvela.wallet.feature.wallet.core.RpcPoolView
 import app.getvela.wallet.feature.wallet.core.RpcShellResult
 import app.getvela.wallet.feature.wallet.core.RpcSource
+import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.feature.wallet.core.RpcTransportOutcome
 import app.getvela.wallet.feature.settings.core.CurrencyOperation
 import app.getvela.wallet.feature.settings.core.CurrencyShellResult
@@ -432,6 +433,7 @@ class CoreWireDriftTest {
         assertStringUnion<FeedTxStatus>("FeedTxStatus")
         assertStringUnion<FeedDirection>("FeedDirection")
         assertStringUnion<FeedBatchKind>("FeedBatchKind")
+        assertStringUnion<app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole>("FeedCounterpartyRole")
     }
 
     @Test
@@ -768,7 +770,7 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<FeeAssetView>("FeeAssetView")
         assertVariantsExist<FeeEvent>("FeeEvent")
         assertStringUnion<FeeTier>("FeeTier")
-        assertStringUnion<FeeFailure>("FeeFailure")
+        assertFeeFailureMatchesTheMirror()
         assertStringUnion<FeeAssetKind>("FeeAssetKind")
     }
 
@@ -820,6 +822,231 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<MtokOperation>("MtokOperation")
         assertVariantsExhaustive<MtokShellResult>("MtokShellResult")
         assertVariantsExist<MtokEvent>("MtokEvent")
+    }
+
+    // -- spec 082: every new variant decodes (T124) ------------------------------
+    //
+    // kotlinx refuses a whole view over ONE value it does not know: a tracker
+    // entry in `not_sent` would have blanked every entry, a plain send the
+    // whole signing sheet. These are the core's own shapes, decoded and
+    // encoded back — the variant must survive the trip, not merely parse.
+
+    private inline fun <reified T> roundTrip(json: String): T {
+        val decoded = Wire.json.decodeFromString(serializer<T>(), json)
+        val again = Wire.json.decodeFromString(serializer<T>(), Wire.json.encodeToString(serializer<T>(), decoded))
+        assertEquals("round trip changed the value", decoded, again)
+        return decoded
+    }
+
+    @Test
+    fun theTrackerViewDecodesTheNewEndsAndOutcomes() {
+        val view = roundTrip<TrackView>(
+            """{"entries":[
+              {"user_op_hash":"0xaa","chain_id":100,"record_ids":["0xaa"],"status":"not_sent","tx_hash":null,"polling":false,"submitted_at_ms":1.0,"outcome":"final","relay_tx_hash":null},
+              {"user_op_hash":"0xbb","chain_id":100,"record_ids":["0xbb"],"status":"pending","tx_hash":null,"polling":true,"submitted_at_ms":2.0,"outcome":"maybe_sent","relay_tx_hash":"0xcc"}
+            ]}""",
+        )
+        assertEquals(TrackStatus.NotSent, view.entries[0].status)
+        assertEquals(TrackOutcome.MaybeSent, view.entries[1].outcome)
+        assertEquals("0xcc", view.entries[1].relay_tx_hash)
+    }
+
+    @Test
+    fun theTrackerOperationsAndAnswersOf082Decode() {
+        val find = roundTrip<TrackOperation>(
+            """{"type":"find_op_event","chain_id":100,"entry_point":"0x0000000071727De22E5E9d8BAf0edAc6f37da032","topic0":"0x49628fd1","user_op_hash":"0xaa","from_block":48478700,"to_block":null}""",
+        )
+        assertEquals(48_478_700L, (find as TrackOperation.FindOpEvent).from_block)
+        assertEquals(TrackOperation.HoldingsMoved(100), roundTrip<TrackOperation>("""{"type":"holdings_moved","chain_id":100}"""))
+        val event = roundTrip<TrackShellResult>(
+            """{"type":"op_event","user_op_hash":"0xaa","now_ms":5.0,"logs_json":"[]","error_json":null,"head_block":48478800}""",
+        )
+        assertEquals(48_478_800L, (event as TrackShellResult.OpEvent).head_block)
+        val status = roundTrip<TrackShellResult>("""{"type":"status","user_op_hash":"0xaa","status":"queued","stage":null,"now_ms":1.0,"tx_hash":"0xdd"}""")
+        assertEquals("0xdd", (status as TrackShellResult.Status).tx_hash)
+        val record = roundTrip<TrackPendingRecord>("""{"record_id":"0xaa","user_op_hash":"0xaa","chain_id":100,"submitted_at_ms":1.0,"maybe_sent":true,"submit_block":42}""")
+        assertTrue(record.maybe_sent)
+        assertEquals(42L, record.submit_block)
+        // A row stored before 082 reads back as "sent" with no start block.
+        val old = roundTrip<TrackPendingRecord>("""{"record_id":"0xaa","user_op_hash":"0xaa","chain_id":100,"submitted_at_ms":1.0}""")
+        assertEquals(false, old.maybe_sent)
+        assertEquals(null, old.submit_block)
+    }
+
+    @Test
+    fun thePoolsNewOutcomeAndViewFieldDecode() {
+        assertEquals(RpcTransportOutcome.NotConnected, roundTrip<RpcTransportOutcome>("""{"type":"not_connected"}"""))
+        val failed = roundTrip<RpcCallVerdict>("""{"type":"failed","rate_limited":false,"maybe_delivered":true}""")
+        assertTrue((failed as RpcCallVerdict.Failed).maybe_delivered)
+        val view = roundTrip<RpcPoolView>("""{"failed_chains":[],"rate_limited_chains":[],"banned":[],"unreached_chains":[100]}""")
+        assertEquals(listOf(100), view.unreached_chains)
+    }
+
+    @Test
+    fun aPlainSendSheetDecodes() {
+        val view = roundTrip<ClearSigningView>(
+            """{"resolving":false,"resolved":true,"result":null,"message":null,"surface":"plain_send","confirm":{"type":"confirm_intent","intent":"send","intent_term":"intentSend"},"blind_typed":null,"danger_haptic":false,
+               "plain_send":{"to":"0x1111111111111111111111111111111111111111","value_wei":"1000000000000000","amount":"0.001","no_value":false}}""",
+        )
+        assertEquals(ClearSurface.PlainSend, view.surface)
+        assertEquals("0.001", view.plain_send?.amount)
+    }
+
+    @Test
+    fun theSignSheetsPhaseAndEndingsDecode() {
+        val view = roundTrip<SignView>("""{"surface":"sheet","phase":"awaiting_signature","pending_op_maybe_sent":true}""")
+        assertEquals(SignPhase.AwaitingSignature, view.phase)
+        assertTrue(view.pending_op_maybe_sent)
+        assertEquals(SignSubmitOutcome.AskerGone, roundTrip<SignSubmitOutcome>("""{"type":"asker_gone"}"""))
+        assertEquals(
+            SignEnding.Landed("0xtx", "0xop"),
+            roundTrip<SignEnding>("""{"type":"landed","tx_hash":"0xtx","user_op_hash":"0xop"}"""),
+        )
+        assertEquals(
+            SignEndingState.Following("0xop", TrackOutcome.MaybeSent, false),
+            roundTrip<SignEndingState>("""{"type":"following","user_op_hash":"0xop","outcome":"maybe_sent","fee_held":false}"""),
+        )
+        val submitted = roundTrip<SignEvent>("""{"type":"op_submitted","id":"1","user_op_hash":"0xop","now_ms":1.0,"maybe_sent":true,"submit_block":7}""")
+        assertEquals(7L, (submitted as SignEvent.OpSubmitted).submit_block)
+        assertEquals(SignEvent.CeremonyStarted("1"), roundTrip<SignEvent>("""{"type":"ceremony_started","id":"1"}"""))
+    }
+
+    @Test
+    fun theSendReceiptsNewWordsDecode() {
+        val receipt = roundTrip<SendReceiptView>("""{"status":"maybe_sent","amount":"1","usd_value":0.0}""")
+        assertEquals(SendReceiptStatus.MaybeSent, receipt.status)
+        assertEquals(SendReceiptOutcome.Acknowledged, roundTrip<SendReceiptOutcome>("""{"type":"acknowledged"}"""))
+        assertEquals(
+            SendReceiptOutcome.Failed(rejected = false, not_sent = true),
+            roundTrip<SendReceiptOutcome>("""{"type":"failed","rejected":false,"not_sent":true}"""),
+        )
+    }
+
+    @Test
+    fun aFeedRowSaysWhatItIs() {
+        val view = roundTrip<FeedView>(
+            """{"rows":[{"type":"item","item":{"id":"0xaa","direction":"out","counterparty":null,"alias":null,"value":null,"symbol":"","decimals":null,"usd_value":0.0,"chain_id":100,"timestamp":1.0,"day_start_ms":0.0,"tx_hash":null,"batch":null,"kind":"dapp_tx","status":"failed","site":"127.0.0.1:8137"}}],
+               "transactions":[],"new_item_id":null,"toast":null,"history_empty_key":"history.emptyFilter","home_empty_key":"home.emptyNoActivityNetwork"}""",
+        )
+        val item = (view.rows.single() as FeedRow.Item).item
+        assertEquals(FeedTxKind.DappTx, item.kind)
+        assertEquals(FeedTxStatus.Failed, item.status)
+        assertEquals("127.0.0.1:8137", item.site)
+        assertEquals("history.emptyFilter", view.history_empty_key)
+    }
+
+    // -- spec 082 round 2: every new variant decodes (T244) --------------------
+    //
+    // The same rule as above: one unknown value fails the whole view, so each
+    // new variant and field is decoded from the core's own shape and survives
+    // the trip back.
+
+    @Test
+    fun theWriteAheadAndTheTrackersAnswerOfRound2Decode() {
+        assertEquals(
+            SignOperation.ClearToPost("1", "0xop"),
+            roundTrip<SignOperation>("""{"type":"clear_to_post","id":"1","user_op_hash":"0xop"}"""),
+        )
+        assertEquals(SignOperation.DeleteRecord("0xop"), roundTrip<SignOperation>("""{"type":"delete_record","record_id":"0xop"}"""))
+        assertEquals(
+            SignOperation.UpdateRecord("0xop", SignRecordClose.Admitted),
+            roundTrip<SignOperation>("""{"type":"update_record","record_id":"0xop","close":{"type":"admitted"}}"""),
+        )
+        assertEquals(
+            SignSubmitOutcome.Failed("AA23 reverted", refused = true),
+            roundTrip<SignSubmitOutcome>("""{"type":"failed","message":"AA23 reverted","refused":true}"""),
+        )
+        // A pre-082 shape still reads: not refused.
+        assertEquals(SignSubmitOutcome.Failed("x"), roundTrip<SignSubmitOutcome>("""{"type":"failed","message":"x"}"""))
+        val signed = roundTrip<SignEvent>("""{"type":"op_signed","id":"1","user_op_hash":"0xop","submit_block":42,"now_ms":1.0}""")
+        assertEquals(42L, (signed as SignEvent.OpSigned).submit_block)
+        val tracked = roundTrip<SignEvent>("""{"type":"op_tracked","user_op_hash":"0xop","status":"rejected","tx_hash":null,"now_ms":1.0}""")
+        assertEquals(TrackStatus.Rejected, (tracked as SignEvent.OpTracked).status)
+        assertEquals(SignEndingState.Refused, roundTrip<SignEndingState>("""{"type":"refused"}"""))
+        val view = roundTrip<SignView>(
+            """{"surface":"sheet","error":{"kind":"submit_failed","detail":"x"},"failure_refused":true,
+               "tracker_handoff":{"user_op_hash":"0xop","record_ids":["0xop"],"chain_id":100,"maybe_sent":false,"submit_block":null,"admitted":true},
+               "tracker_withdraw":{"user_op_hash":"0xop","record_ids":["0xop"]}}""",
+        )
+        assertTrue(view.failure_refused)
+        assertTrue(view.tracker_handoff!!.admitted)
+        assertEquals(SignTrackerWithdraw("0xop", listOf("0xop")), view.tracker_withdraw)
+
+        assertEquals(
+            TrackOperation.TxReceipt(100, "0xtx", "0xop"),
+            roundTrip<TrackOperation>("""{"type":"tx_receipt","chain_id":100,"tx_hash":"0xtx","user_op_hash":"0xop"}"""),
+        )
+        assertEquals(
+            TrackShellResult.TxReceipt("0xop", 1.0, "null"),
+            roundTrip<TrackShellResult>("""{"type":"tx_receipt","user_op_hash":"0xop","now_ms":1.0,"receipt_json":"null"}"""),
+        )
+        val submitted = roundTrip<TrackEvent>("""{"type":"submitted","user_op_hash":"0xop","record_ids":["0xop"],"chain_id":100,"admitted":true}""")
+        assertTrue((submitted as TrackEvent.Submitted).admitted)
+        assertEquals(
+            TrackEvent.Withdrawn("0xop", listOf("0xop")),
+            roundTrip<TrackEvent>("""{"type":"withdrawn","user_op_hash":"0xop","record_ids":["0xop"]}"""),
+        )
+    }
+
+    @Test
+    fun theSendWriteAheadOfRound2Decodes() {
+        assertEquals(SendOperation.ClearToPost("0xop"), roundTrip<SendOperation>("""{"type":"clear_to_post","user_op_hash":"0xop"}"""))
+        assertEquals(
+            SendOperation.MarkAdmitted(listOf("0xop-0", "0xop-1")),
+            roundTrip<SendOperation>("""{"type":"mark_admitted","record_ids":["0xop-0","0xop-1"]}"""),
+        )
+        assertEquals(SendOperation.DeleteTxRecords(listOf("0xop")), roundTrip<SendOperation>("""{"type":"delete_tx_records","ids":["0xop"]}"""))
+        assertEquals(
+            SendOperation.TrackWithdrawn("0xop", listOf("0xop")),
+            roundTrip<SendOperation>("""{"type":"track_withdrawn","user_op_hash":"0xop","record_ids":["0xop"]}"""),
+        )
+        val track = roundTrip<SendOperation>(
+            """{"type":"track_submitted","user_op_hash":"0xop","record_ids":["0xop"],"chain_id":100,"maybe_sent":false,"submit_block":null,"admitted":true}""",
+        )
+        assertTrue((track as SendOperation.TrackSubmitted).admitted)
+        assertEquals(SendShellResult.PostCleared, roundTrip<SendShellResult>("""{"type":"post_cleared"}"""))
+        val signed = roundTrip<SendEvent>("""{"type":"op_signed","user_op_hash":"0xop","submit_block":7,"now_ms":1.0}""")
+        assertEquals(7L, (signed as SendEvent.OpSigned).submit_block)
+    }
+
+    @Test
+    fun aChainReadFeeFailureAndAFeedRowsRoleDecode() {
+        val view = roundTrip<FeeView>("""{"busy":false,"failed":{"chain_read":{"rate_limited":true}}}""")
+        assertEquals(FeeFailure.ChainRead(rate_limited = true), view.failed)
+        assertEquals(FeeFailure.QuoteUnavailable, roundTrip<FeeView>("""{"failed":"quote_unavailable"}""").failed)
+        assertEquals("""{"chain_read":{"rate_limited":false}}""", FeeFailure.ChainRead(false).wire)
+        assertEquals("quote_unavailable", FeeFailure.QuoteUnavailable.wire)
+        val refused = runCatching { Wire.json.decodeFromString(FeeView.serializer(), """{"failed":"no_such_word"}""") }
+        assertTrue("an unknown fee failure fails the view, never reads as a default", refused.isFailure)
+
+        val record = roundTrip<FeedTxRecord>(
+            """{"id":"0xop","from":"0xa","to":"0xb","value":"0","symbol":"","decimals":18,"chain_id":100,"timestamp":1.0,"day_start_ms":0.0,"status":"pending","call_data":"0xa9059cbb"}""",
+        )
+        assertEquals("0xa9059cbb", record.call_data)
+        val item = roundTrip<FeedItem>(
+            """{"id":"0xaa","direction":"out","counterparty":"0xc","usd_value":0.0,"chain_id":100,"timestamp":1.0,"day_start_ms":0.0,"counterparty_role":"contract"}""",
+        )
+        assertEquals(app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole.Contract, item.counterparty_role)
+    }
+
+    /**
+     * `FeeFailure` since spec 082 (RJ13): the plain words are a string union,
+     * and `chain_read` is the one arm that carries a field. Kotlin's plain words
+     * must be the mirror's, and its object arm must be the mirror's object arm.
+     */
+    private fun assertFeeFailureMatchesTheMirror() {
+        val arms = splitTopLevel(
+            mirror("FeeFailure")
+                .replace(Regex("/\\*\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), " ")
+                .substringAfter("export type FeeFailure =")
+                .substringBeforeLast(";"),
+            '|',
+        ).map { it.trim() }
+        val plain = arms.filter { it.startsWith("\"") }.map { it.trim('"') }
+        assertEquals("FeeFailure's plain words must match the generated mirror", plain.sorted(), FeeFailure.PLAIN.map { it.name }.sorted())
+        val objects = arms.filter { it.startsWith("{") }
+        assertEquals("FeeFailure has exactly one object arm, chain_read: $objects", 1, objects.size)
+        assertTrue(objects.single(), objects.single().contains("\"chain_read\"") && objects.single().contains("rate_limited: boolean"))
     }
 
     // -- assertions ----------------------------------------------------------
@@ -893,6 +1120,7 @@ class CoreWireDriftTest {
         assertFieldsExist<SignQuotedFee>("SignQuotedFee")
         assertFieldsExist<SignErrorNotice>("SignErrorNotice")
         assertFieldsExist<SignTrackerHandoff>("SignTrackerHandoff")
+        assertFieldsExist<SignTrackerWithdraw>("SignTrackerWithdraw")
         assertVariantsExhaustive<SignOperation>("SignOperation")
         assertVariantsExhaustive<SignShellResult>("SignShellResult")
         assertVariantsExhaustive<SignResponsePayload>("SignResponsePayload")
@@ -908,6 +1136,9 @@ class CoreWireDriftTest {
         assertStringUnion<SignRecordKind>("SignRecordKind")
         assertStringUnion<SignRecordStatus>("SignRecordStatus")
         assertStringUnion<SignSettledOutcome>("SignSettledOutcome")
+        assertStringUnion<SignPhase>("SignPhase")
+        assertVariantsExhaustive<SignEnding>("SignEnding")
+        assertVariantsExhaustive<SignEndingState>("SignEndingState")
         assertVariantsExist<SignEvent>("SignEvent")
         assertVariantFields(SignOperation.serializer(), "SignOperation")
         assertVariantFields(SignEvent.serializer(), "SignEvent")
@@ -923,6 +1154,7 @@ class CoreWireDriftTest {
         assertFieldsExist<ClearBlindField>("ClearBlindField")
         assertFieldsExist<ClearSiweFields>("ClearSiweFields")
         assertFieldsExist<ClearLocale>("ClearLocale")
+        assertFieldsExist<ClearPlainSend>("ClearPlainSend")
         assertVariantsExhaustive<ClearOperation>("ClearOperation")
         assertVariantsExhaustive<ClearShellResult>("ClearShellResult")
         assertVariantsExhaustive<ClearConfirm>("ClearConfirm")
@@ -1106,7 +1338,8 @@ class CoreWireDriftTest {
             .map { member ->
                 splitTopLevel(member, ',')
                     .mapNotNull { field ->
-                        val name = field.substringBefore(':', "").trim().trim('"')
+                        // ts-rs writes an optional field (`skip_serializing_if`) as `name?:`.
+                        val name = field.substringBefore(':', "").trim().trim('"').removeSuffix("?")
                         val type = field.substringAfter(':', "").trim()
                         if (name.isEmpty() || type.isEmpty()) null else name to type.trim('"')
                     }

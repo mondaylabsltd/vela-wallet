@@ -25,6 +25,6 @@ pub use datetime::{
     format_date, format_date_time, format_time, weekday_name, Civil, DatePreset, TimePreset,
 };
 pub use number::{
-    format_compact, format_number, format_token_amount, group_digits, parse_locale_number,
-    FractionDigits, NumberPreset, Separators,
+    format_compact, format_number, format_signed_token_amount, format_token_amount, group_digits,
+    parse_locale_number, FractionDigits, NumberPreset, Separators,
 };

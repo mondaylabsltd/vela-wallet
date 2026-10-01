@@ -15,10 +15,11 @@
  * - **The 15 s pre-check race.** `checkBundlerFunding` raced with a timeout that
  *   answers `null`, exactly as `dapp-connection.tsx:666-698` fell through to
  *   submit on a slow RPC.
- * - **Every wording regex.** `PasskeyErrorCode.CANCELLED`,
- *   `parseBundlerUnderfunded` and the `fetchBundlerAccountInfo` composition are
- *   classified HERE into typed `SignSubmitOutcome` variants; the core only ever
- *   sees the variant.
+ * - **The submit outcome, typed.** Whether an op was accepted, may have been
+ *   sent or was provably not sent is the CORE's (`submit_step`, spec 082 RA1);
+ *   this side maps the typed verdicts it throws — a passkey cancel, a page that
+ *   is gone (`asker_gone`), the relay's underfunded refusal with the live
+ *   `fetchBundlerAccountInfo` composition — into `SignSubmitOutcome`.
  * - **The record codec.** The core owns the id scheme, the status and the FINAL
  *   (capped) params; `buildSigningRecord` still owns `capRequest` clipping,
  *   `signedContent`, the recipient/value projection and the asset-sim blob.
@@ -44,15 +45,22 @@ import {
 } from '$lib/services/bundler-service';
 import { buildSigningRecord } from '$lib/services/dapp-history';
 import { nativeSymbol } from '$lib/services/networks';
-import { saveTransaction, updateTransaction } from '$lib/services/records';
+import { deleteTransaction, saveTransaction, updateTransaction } from '$lib/services/records';
 import { serializeAssetSim } from '$lib/services/sim/tx-simulation';
-import { DAppReceiptPendingError, handleDAppRequest } from '$lib/services/dapp-submit';
-import type { SigningAccount } from '$lib/services/dapp-submit';
+import {
+	DAppReceiptPendingError,
+	DAppRevertedError,
+	handleDAppRequest,
+	type DAppSubmitHooks,
+	type SigningAccount
+} from '$lib/services/dapp-submit';
+import { UserOpNotSentError } from '$lib/services/safe-transaction';
+import { dappReceiptWaitMs, userOpNotSentDetail, userOpWriteAheadWaitMs } from '$lib/core/kernels';
 
 import type { SignFundingNeeded } from '$lib/core/generated/SignFundingNeeded';
 import type { SignShellResult } from '$lib/core/generated/SignShellResult';
 import type { SignEffect, SignShellPorts } from './sign-types';
-import { signErrorMessage } from './sign-types';
+import { AskerGoneError, signErrorMessage, WriteAheadTimeoutError } from './sign-types';
 import { wireTier } from '$lib/flows/core/wire-tier';
 
 export { signErrorMessage } from './sign-types';
@@ -115,7 +123,30 @@ function parseParams(json: string): unknown[] {
 // Executor
 // ---------------------------------------------------------------------------
 
+/**
+ * The relay refused the op (spec 082 RJ3): a submit-time `NotSent` with a
+ * rejection other than "relayer unavailable" — the relay being away is not a
+ * refusal, and a person may try again after it.
+ */
+export function isRelayRefusal(error: unknown): boolean {
+	return (
+		error instanceof UserOpNotSentError &&
+		error.rejection !== null &&
+		error.rejection !== 'relayer_unavailable' &&
+		// Held behind another of the account's operations (083): not this
+		// op's refusal — it may go once that one confirms.
+		!(typeof error.rejection === 'object' && 'nonce_held' in error.rejection)
+	);
+}
+
 export function createSignExecutor(ports: SignShellPorts) {
+	/**
+	 * op hash → chain, for the ops this executor answered BY their op hash, so
+	 * the answer can carry `opHash: {chainId}` (spec 082 RF3). Bounded like the
+	 * other per-op maps; consumed by the answer it belongs to.
+	 */
+	const answeredOps = new Map<string, number>();
+
 	/**
 	 * Writes in flight per `record_id`. `saveTransaction` and `updateTransaction`
 	 * are separate round trips over the same key, and the core issues the patch
@@ -123,6 +154,68 @@ export function createSignExecutor(ports: SignShellPorts) {
 	 * Chaining them here is the `await pendingSave` of the TS path.
 	 */
 	const writes = new Map<string, Promise<void>>();
+
+	/**
+	 * The write-ahead waiting for its clearance (spec 082 RJ1), by request id:
+	 * the op's hash and the release. The core answers `ClearToPost` once the
+	 * record of the op is on disk; nothing is POSTed before it.
+	 */
+	const clearances = new Map<string, { userOpHash: string; clear: (onDisk: boolean) => void }>();
+
+	/**
+	 * Whether each op's write-ahead record is really on disk (RJ1), by op hash:
+	 * set by its `PersistRecord`, used up by its `ClearToPost`. The core clears
+	 * the POST on the store's acknowledgement, and a write the store refused is
+	 * acknowledged all the same (logged, or the machine would wait forever) —
+	 * so the clearance is only as good as this mark. Set by each write, so a
+	 * second attempt of the same op is judged by its own record.
+	 */
+	const aheadOnDisk = new Map<string, boolean>();
+
+	/**
+	 * The receipt wait of each request in flight, by request id — aborted when
+	 * the core answers that request itself (`OpTracked`, spec 082 RJ4), so the
+	 * wait stops rather than run on to a result the core will drop.
+	 */
+	const receiptWaits = new Map<string, AbortController>();
+
+	/**
+	 * Write the op down before any byte of it leaves (spec 082 RJ1): announce it
+	 * (`OpSigned`), then wait for the core's `ClearToPost` — at most
+	 * `userOpWriteAheadWaitMs()`. No clearance in time → no POST; the caller's
+	 * submit fails as "not sent", which it provably is.
+	 */
+	function writeAhead(id: string, userOpHash: string, submitBlock: number | null): Promise<void> {
+		return new Promise<void>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				if (clearances.get(id)?.userOpHash !== userOpHash) return;
+				clearances.delete(id);
+				console.warn(
+					`[sign_request] write-ahead: no clearance for ${userOpHash.slice(0, 10)}… in ` +
+						`${userOpWriteAheadWaitMs()} ms — not posting`
+				);
+				reject(new WriteAheadTimeoutError(userOpHash));
+			}, userOpWriteAheadWaitMs());
+			// Registered BEFORE the announcement: the clearance can come back
+			// within the same turn of the effect loop.
+			clearances.set(id, {
+				userOpHash,
+				clear: (onDisk) => {
+					clearTimeout(timer);
+					if (onDisk) {
+						resolve();
+						return;
+					}
+					console.warn(
+						`[sign_request] write-ahead: the store refused the record of ` +
+							`${userOpHash.slice(0, 10)}… — not posting`
+					);
+					reject(new WriteAheadTimeoutError(userOpHash));
+				}
+			});
+			ports.opSigned(id, userOpHash, submitBlock);
+		});
+	}
 
 	function serialised(recordId: string, task: () => Promise<void>): Promise<void> {
 		const previous = writes.get(recordId) ?? Promise.resolve();
@@ -138,11 +231,27 @@ export function createSignExecutor(ports: SignShellPorts) {
 		const operation = effect.operation;
 		switch (operation.type) {
 			case 'send_response': {
+				// The core answered this request: a receipt wait still running for it
+				// (the core answered through the tracker, RJ4) stops here.
+				receiptWaits.get(operation.id)?.abort();
+				receiptWaits.delete(operation.id);
 				// F2: the transport that OWNS the request, resolved from the id the
 				// core carried — never a shared ref.
 				const transport = ports.transportFor(operation.transport_id);
 				if (operation.payload.type === 'ok') {
-					transport?.sendResponse(operation.id, operation.payload.result);
+					// An on-chain request answered by its op hash — the receipt is
+					// late, or the op may only have been sent — carries the chain, so
+					// the extension can translate the page's receipt reads for that
+					// hash (spec 082 RF3).
+					const result = operation.payload.result;
+					const opChain = result ? answeredOps.get(result.toLowerCase()) : undefined;
+					if (result) answeredOps.delete(result.toLowerCase());
+					transport?.sendResponse(
+						operation.id,
+						result,
+						undefined,
+						opChain !== undefined ? { chainId: opChain } : undefined
+					);
 				} else {
 					// The core owns the code and the kind; the words are this side's, and
 					// `signErrorMessage` reproduces the exact string the TS provider sent
@@ -207,6 +316,23 @@ export function createSignExecutor(ports: SignShellPorts) {
 
 			case 'sign_and_submit': {
 				const account: SigningAccount = { id: operation.credential_id };
+				const answered = new AbortController();
+				receiptWaits.get(operation.id)?.abort();
+				receiptWaits.set(operation.id, answered);
+				const hooks: DAppSubmitHooks = {
+					claim: (phase, submit) => ports.askerLive(operation.id, phase, submit),
+					ceremony: (stage) => ports.ceremony(operation.id, stage),
+					// What is LEFT of the page's answer window since the approval
+					// (spec 082 RA12) — never a fresh full wait after a slow submit.
+					receiptWaitMs: () => {
+						const approvedAt = ports.approvedAtMs(operation.id);
+						return dappReceiptWaitMs(approvedAt === null ? 0 : Date.now() - approvedAt);
+					},
+					// RJ1: the record before the bytes.
+					writeAhead: (userOpHash, submitBlock) =>
+						writeAhead(operation.id, userOpHash, submitBlock),
+					answered: answered.signal
+				};
 				try {
 					const result = await handleDAppRequest(
 						{
@@ -219,9 +345,11 @@ export function createSignExecutor(ports: SignShellPorts) {
 						operation.address,
 						operation.chain_id,
 						operation.max_fee_per_gas != null ? fromWireWei(operation.max_fee_per_gas) : undefined,
-						// The bundler accepting the op is a fact the core needs BEFORE this
-						// promise settles — §4's durable record is written from it.
-						(hash: string) => ports.opSubmitted(operation.id, hash),
+						// The op on its way — accepted, or may have been sent — is a fact
+						// the core needs BEFORE this promise settles: §4's durable record
+						// and the tracker hand-off are written from it.
+						(hash, maybeSent, submitBlock) =>
+							ports.opSubmitted(operation.id, hash, maybeSent, submitBlock),
 						operation.gas_fee_token,
 						operation.quoted_fee
 							? {
@@ -239,7 +367,8 @@ export function createSignExecutor(ports: SignShellPorts) {
 						// it again would put one safety mandate in two implementations that
 						// nothing keeps in step. Native never reaches this `.web.ts` module and
 						// so keeps its own TS guard (Hermes has no wasm) — see SubmitGuardOwner.
-						'core'
+						'core',
+						hooks
 					);
 					const answer = typeof result === 'string' ? result : String(result ?? '');
 					// EIP-5792: a batch is answered with its id — the op hash — the moment
@@ -250,6 +379,9 @@ export function createSignExecutor(ports: SignShellPorts) {
 					// (083 H2 review). As `receipt_pending` the page gets the same id, the
 					// record lands pending first, and the tracker settles it.
 					if (operation.method === 'wallet_sendCalls' && answer !== '') {
+						// Remembered like a late receipt's, for the extension's receipt
+						// translation (spec 082).
+						answeredOps.set(answer.toLowerCase(), operation.chain_id);
 						return {
 							type: 'submit',
 							outcome: { type: 'receipt_pending', user_op_hash: answer },
@@ -262,9 +394,29 @@ export function createSignExecutor(ports: SignShellPorts) {
 						now_ms: Date.now()
 					};
 				} catch (error) {
-					// Accepted, receipt late (issue 262): the page still gets the op hash,
-					// but the core must not confirm the record — the tracker settles it.
+					// Accepted (or may have been sent), receipt late (issue 262, spec 082
+					// RA2): the core tells the page it is not confirmed yet (083), and the
+					// tracker alone closes it.
+					// Included and reverted (083): the core answers the page the revert
+					// and closes the record failed — never the tx hash a site reads as
+					// done (owner ruling 2026-10-01).
+					if (error instanceof DAppRevertedError) {
+						return {
+							type: 'submit',
+							outcome: {
+								type: 'reverted',
+								user_op_hash: error.userOpHash,
+								tx_hash: error.txHash
+							},
+							now_ms: Date.now()
+						};
+					}
 					if (error instanceof DAppReceiptPendingError) {
+						// Already answered by the core through the tracker (RJ4): this
+						// result is dropped, and no answer will consume the entry.
+						if (!answered.signal.aborted) {
+							answeredOps.set(error.userOpHash.toLowerCase(), operation.chain_id);
+						}
 						return {
 							type: 'submit',
 							outcome: { type: 'receipt_pending', user_op_hash: error.userOpHash },
@@ -273,10 +425,41 @@ export function createSignExecutor(ports: SignShellPorts) {
 					}
 					return {
 						type: 'submit',
-						outcome: await classifySubmit(operation, error),
+						outcome: await submitOutcomeOf(operation, error),
 						now_ms: Date.now()
 					};
+				} finally {
+					clearances.delete(operation.id);
+					if (receiptWaits.get(operation.id) === answered) receiptWaits.delete(operation.id);
 				}
+			}
+
+			case 'clear_to_post': {
+				// The write-ahead record is on disk (spec 082 RJ1): the POST may go.
+				// Only for the op it names — a clearance for another is dropped.
+				const waiting = clearances.get(operation.id);
+				const key = operation.user_op_hash.toLowerCase();
+				if (waiting && waiting.userOpHash.toLowerCase() === key) {
+					clearances.delete(operation.id);
+					// Only if the store really took the record, whatever it
+					// acknowledged: no POST leaves with no record behind it.
+					const onDisk = aheadOnDisk.get(key) === true;
+					aheadOnDisk.delete(key);
+					waiting.clear(onDisk);
+				}
+				return { type: 'responded' };
+			}
+
+			case 'delete_record': {
+				// A write-ahead record whose op was proven never sent (spec 082 RJ1):
+				// it goes, the Activity row with it. Serialised with its own write.
+				await serialised(operation.record_id, () =>
+					deleteTransaction(operation.record_id).catch((e) => {
+						console.warn('[sign_request] Failed to delete record:', e);
+					})
+				);
+				ports.recordsWritten();
+				return { type: 'record_updated' };
 			}
 
 			case 'persist_record': {
@@ -294,30 +477,48 @@ export function createSignExecutor(ports: SignShellPorts) {
 					status: record.status,
 					userOpHash: record.user_op_hash,
 					assetChanges: sim ? serializeAssetSim(sim) : undefined,
-					intent: record.intent ?? undefined
+					intent: record.intent ?? undefined,
+					// Spec 082 T182: a may-have-been-sent op is one after a reload
+					// too — its record says so, and where its landing check starts.
+					maybeSent: record.maybe_sent,
+					submitBlock: record.submit_block
 				});
 				// The core owns the id (`dapp-<ms>-tx|typed|msg`); the builder derives
 				// the same one from the same clock, but the core's is authoritative
 				// because the patch below is keyed on it.
+				let onDisk = true;
 				await serialised(record.record_id, () =>
 					saveTransaction({ ...row, id: record.record_id }).catch((e) => {
+						onDisk = false;
 						console.warn('[sign_request] Failed to save record:', e);
 					})
 				);
+				// The write-ahead's record (pending, may have been sent): whether it
+				// is really there is what its clearance turns on (RJ1).
+				if (record.maybe_sent && record.status === 'pending') {
+					aheadOnDisk.set(record.user_op_hash.toLowerCase(), onDisk);
+				}
+				// The row shows within one poke, not the next 10–30 s tick (RG3).
+				ports.recordsWritten();
 				return { type: 'record_persisted' };
 			}
 
 			case 'update_record': {
 				const close = operation.close;
+				// `admitted`: the relay took the write-ahead op (spec 082 RJ1) — it is
+				// no longer "may have been sent", and stays pending for the tracker.
 				const patch =
 					close.type === 'confirmed'
 						? ({ status: 'confirmed', txHash: close.tx_hash } as const)
-						: ({ status: 'failed' } as const);
+						: close.type === 'admitted'
+							? ({ maybeSent: false } as const)
+							: ({ status: 'failed' } as const);
 				await serialised(operation.record_id, () =>
 					updateTransaction(operation.record_id, patch).catch((e) => {
 						console.warn('[sign_request] Failed to patch record:', e);
 					})
 				);
+				ports.recordsWritten();
 				// Listing what this tx silently delivered is NOT done here any more:
 				// `tx_tracker` polls the receipt it hands off at `OpSubmitted` and
 				// routes the AUTHENTIC logs to `token_trust`'s `ReceiptLogsConfirmed`,
@@ -334,34 +535,49 @@ export function createSignExecutor(ports: SignShellPorts) {
 	}
 
 	/**
-	 * The submit-failure classification the core deliberately does not own: every
-	 * regex, and the live-account-info composition that turns "underfunded" into
-	 * the facts the funding view needs (`dapp-connection.tsx:807-874`).
+	 * A submit that ended without an op on its way, as the core's typed
+	 * outcome. Nothing here reads the relay's words to decide anything: the
+	 * relay's refusal was read by the core (`submit_step` → `NotSent`, spec 082
+	 * RA1). What is left is the one composition the core cannot do — an
+	 * underfunded refusal needs the gas account's live facts for the funding
+	 * view (`dapp-connection.tsx:807-874`).
 	 */
-	async function classifySubmit(
+	async function submitOutcomeOf(
 		operation: Extract<SignEffect['operation'], { type: 'sign_and_submit' }>,
 		error: unknown
 	): Promise<Extract<SignShellResult, { type: 'submit' }>['outcome']> {
-		const err = error as { code?: unknown; message?: string } | null | undefined;
+		// Nothing was signed or sent, and nobody is there to answer (RB5).
+		if (error instanceof AskerGoneError) return { type: 'asker_gone' };
+		// The record was not written in time, so nothing was POSTed (RJ1): not
+		// sent, in the core's fixed words — never a refusal.
+		if (error instanceof WriteAheadTimeoutError) {
+			return { type: 'failed', message: userOpNotSentDetail(), refused: false };
+		}
 		if (error instanceof PasskeyError && error.kind === 'cancelled') {
 			// Never an error, never a response, never a durable 'rejected' (⑧).
 			return { type: 'passkey_cancelled' };
 		}
-		const message = err?.message ?? 'Signing failed';
-		const underfunded = parseBundlerUnderfunded(message);
-		if (underfunded) {
+		const message = (error as { message?: string } | null)?.message ?? 'Signing failed';
+		// The relay's underfunded refusal (the core's reading), or a pre-submit
+		// estimate that met the same refusal in the relay's own words.
+		const underfundedRefusal =
+			error instanceof UserOpNotSentError
+				? error.rejection === 'bundler_underfunded'
+				: parseBundlerUnderfunded(message) !== null;
+		const underfunded = underfundedRefusal ? parseBundlerUnderfunded(message) : null;
+		if (underfundedRefusal) {
 			try {
 				clearBundlerCache(operation.chain_id, operation.address);
 				const info = await fetchBundlerAccountInfo(operation.chain_id, operation.address);
 				// Prefer live account info; fall back to the values parsed from the error.
-				const depositAddress = info?.depositAddress || underfunded.depositAddress;
+				const depositAddress = info?.depositAddress || underfunded?.depositAddress;
 				if (depositAddress) {
-					const currentBalance = info?.spendableBalance ?? underfunded.spendableWei ?? 0n;
+					const currentBalance = info?.spendableBalance ?? underfunded?.spendableWei ?? 0n;
 					const thresholdWei =
-						underfunded.requiredWei ?? currentBalance + REACTIVE_THRESHOLD_MARGIN_WEI;
+						underfunded?.requiredWei ?? currentBalance + REACTIVE_THRESHOLD_MARGIN_WEI;
 					const nativeSym =
 						info?.nativeSym ??
-						(underfunded.asset === 'pathUSD' ? 'pathUSD' : nativeSymbol(operation.chain_id));
+						(underfunded?.asset === 'pathUSD' ? 'pathUSD' : nativeSymbol(operation.chain_id));
 					return {
 						type: 'underfunded',
 						message,
@@ -370,7 +586,10 @@ export function createSignExecutor(ports: SignShellPorts) {
 							safe_address: operation.address,
 							chain_id: operation.chain_id,
 							native_symbol: nativeSym,
-							threshold_wei: (underfundedRequiredWei(underfunded) ?? thresholdWei).toString(),
+							threshold_wei: (
+								(underfunded && underfundedRequiredWei(underfunded)) ??
+								thresholdWei
+							).toString(),
 							recommended_wei: recommendedFundingWei(thresholdWei, currentBalance).toString(),
 							current_balance_wei: currentBalance.toString()
 						}
@@ -380,7 +599,12 @@ export function createSignExecutor(ports: SignShellPorts) {
 				/* fall through to the generic failure */
 			}
 		}
-		return { type: 'failed', message };
+		// A NotSent op's words are the relay's refusal, or the core's fixed
+		// "relay unreachable; nothing was sent" — never the pool's raw text. A
+		// refusal by the relay (anything but "relayer unavailable") is said as
+		// one (spec 082 RJ3): the page is told the network refused it, and the
+		// sheet offers no Retry — trying again sends the same refused op.
+		return { type: 'failed', message, refused: isRelayRefusal(error) };
 	}
 
 	function toFailure(effect: SignEffect, error: unknown): SignShellResult {
@@ -409,10 +633,15 @@ export function createSignExecutor(ports: SignShellPorts) {
 					type: 'submit',
 					outcome: {
 						type: 'failed',
-						message: (error as { message?: string } | null)?.message ?? 'Signing failed'
+						message: (error as { message?: string } | null)?.message ?? 'Signing failed',
+						refused: isRelayRefusal(error)
 					},
 					now_ms: Date.now()
 				};
+			case 'clear_to_post':
+				return { type: 'responded' };
+			case 'delete_record':
+				return { type: 'record_updated' };
 			case 'persist_record':
 				// Best effort, exactly like the TS inner `.catch(console.warn)` — and
 				// the core must still be told, or §4's respond step never fires.

@@ -248,11 +248,28 @@ struct TxDetailBody: View {
                     onCopy: { copiedIndex = index }
                 )
             }
-            VelaButton(title: model.viewOnExplorer, kind: .secondary, action: onExplorer)
-                .padding(.top, Tokens.Space.s16)
+            if let explorer = model.viewOnExplorer {
+                VelaButton(title: explorer, kind: .secondary, action: onExplorer)
+                    .padding(.top, Tokens.Space.s16)
+            }
             if let label = model.deleteLabel, let onDelete {
-                VelaButton(title: label, kind: .danger, action: onDelete)
+                if model.deleteQuiet {
+                    // A pending record's trace stays the loudest thing here
+                    // (RJ18): forgetting it is a quiet choice, never a red one.
+                    Button(action: onDelete) {
+                        Text(verbatim: label)
+                            .typeRole(Typography.body.scaled(textScale))
+                            .foregroundStyle(theme.fgMuted)
+                            .frame(maxWidth: .infinity)
+                            .padding(Tokens.Space.s12)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                     .padding(.top, Tokens.Space.s8)
+                } else {
+                    VelaButton(title: label, kind: .danger, action: onDelete)
+                        .padding(.top, Tokens.Space.s8)
+                }
             }
         }
     }

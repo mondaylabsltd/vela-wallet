@@ -308,7 +308,6 @@
   "txRemaining": "~{{remaining}} sn kaldı",
   "txTypicalTime": "{{chainName}} genellikle ~{{estSecs}} sn içinde onaylar",
   "txRetryBtn": "Tekrar Dene",
-  "txErrorTimeout": "İşlem gönderildi ancak onay zaman aşımına uğradı. Geçmişi daha sonra kontrol edin.",
   "txErrorBundlerLoop": "Gas hesabı bakiyesi bundler tarafından sürekli reddediliyor. Daha sonra tekrar deneyin veya gas kademesini yükseltin.",
   "txErrorBundlerFund": "Bundler hesabının daha fazla gas'a ihtiyacı var. Lütfen Ayarlar'dan fonlayın.",
   "txErrorPublicKey": "Bu hesap için açık anahtar bulunamadı",
@@ -1138,7 +1137,7 @@
    "statusConfirmed": "Onaylandı",
    "statusSubmitted": "Gönderildi",
    "statusFailed": "Başarısız",
-   "failedHint": "Transfer zincir üzerinde geri alındı — fonlarınız gönderilmedi. Yine de bir ağ ücreti alınmış olabilir. Nedenini görmek için aşağıdaki blok gezginini açın ya da geri dönüp tekrar deneyin.",
+   "failedHint": "Transfer zincir üzerinde geri alındı — fonlarınız gönderilmedi. Yine de bir ağ ücreti alınmış olabilir.",
    "userOpHash": "UserOp Hash'i"
   },
   "detail": {
@@ -1356,7 +1355,7 @@
    "verifiedAbiSummary": "Sözleşme blok gezgininde doğrulanmış ve parametreleri eksiksiz çözülüyor, ancak onlara anlam veren bir ERC-7730 tanımlayıcısı yok.",
    "verifiedAbiWarning": "Bu sözleşmenin ERC-7730 tanımlayıcısı yok — yukarıdaki değerler doğrulanmış zincir üstü ABI’nin doğrudan çözümüdür. Değerleri kontrol edin.",
    "bestEffortSummary": "{{fn}} çağrılıyor — doğrulanmış bir tanımlayıcıdan değil, herkese açık fonksiyon imzasından okundu.",
-   "simUnavailableWarning": "Bu işlem simüle edilemedi (RPC reddetti) — Vela ne yapacağını öngöremiyor. Bu siteye tamamen güvenmiyorsanız reddedin.",
+   "simUnavailableWarning": "Vela bu işlemin ne yapacağını denetleyemedi. İmzalamadan önce gözden geçirin.",
    "drainSummary": "Site bunu ücretsiz bir talep olarak gösteriyor, ancak simülasyon varlıkların cüzdanınızdan çıktığını gösteriyor.",
    "drainWarning": "Sitenin belirttiği amaçta hiç geçmeyen varlıklar çıkıyor — bu büyük olasılıkla bir boşaltma. Reddedin.",
    "selectorNotListed": "Çözülemiyor — ERC-7730 tanımlayıcısı yok, seçici de kayıtlı değil ({{bytes}} bayt)",
@@ -1405,6 +1404,8 @@
    "selfCallBlockedLegBody": "Bu isteğin {{index}}. adımı cüzdanınızı kimin kontrol ettiğini değiştirir ({{function}}). Bir kez imzalamak cüzdanı başkasına devredebilir, bu yüzden Vela isteğin tamamını reddetti. Hiçbir şey imzalanmadı.",
    "selfCallBlockedSafeTx": "Bu istek, sonradan çalıştırılacak bir Safe işlemini onaylamanızı istiyor. Böyle bir imza siz yokken de kullanılabileceği için Vela reddetti. Hiçbir şey imzalanmadı.",
    "stillConfirming": "Henüz zincire yazılmadı. Vela kontrol ediyor — tekrar göndermeyin.",
+   "maybeSent": "Gönderilmiş olabilir. Vela kontrol ediyor — tekrar göndermeyin.",
+   "refused": "Ağ reddetti — hiçbir şey gönderilmedi.",
    "unknownOutcome": "24 saat sonra hâlâ onaylanmadı.",
    "openSigner": "İmza sayfasında onayla",
    "signerDown": "İmza sayfası açılmadı. Bağlantınızı kontrol edin."
@@ -1845,7 +1846,9 @@
   "loadOffline": "Bağlantı kararsız, sayfa açılmadı.",
   "loadNotFound": "Bu site bulunamadı. Adresi kontrol et.",
   "loadCertificate": "Sitenin sertifikası geçersiz, Vela siteyi engelledi.",
+  "loadProxy": "Proxy sunucunuz yanıt vermiyor.",
   "loadRetrying": "Yeniden deneniyor…",
-  "chainDown": "{{chain}} ağına ulaşılamıyor — sayfadaki veriler eksik olabilir."
+  "chainDown": "{{chain}} ağına ulaşılamıyor — sayfadaki veriler eksik olabilir.",
+  "requestOpen": "Önce bu isteği tamamlayın veya iptal edin"
  }
 }

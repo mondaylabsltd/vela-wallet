@@ -20,6 +20,7 @@ import type { SignRequestView } from '$lib/core/generated/SignRequestView';
 import { createApprovalGuardSession, type ApprovalGuardSession } from './guard-session';
 import { createClearSigningSession, type ClearSigningSession } from './clear-session';
 import { toClearLocale } from './clear-types';
+import { txParams } from './tx-params';
 
 /** The machines' own initial projections — mirrored until their first views land. */
 export const INITIAL_CLEAR_VIEW: ClearSigningView = {
@@ -30,7 +31,8 @@ export const INITIAL_CLEAR_VIEW: ClearSigningView = {
 	surface: 'none',
 	confirm: { type: 'confirm' },
 	blind_typed: null,
-	danger_haptic: false
+	danger_haptic: false,
+	plain_send: null
 };
 
 export const INITIAL_GUARD_VIEW: GuardView = {
@@ -46,24 +48,6 @@ export const INITIAL_GUARD_VIEW: GuardView = {
 	expired: false,
 	batch: null
 };
-
-/** A transaction's three params, as the two machines need them. */
-interface TxParams {
-	to: string | null;
-	data: string | null;
-	value: string | null;
-}
-
-function txParams(paramsJson: string): TxParams | null {
-	try {
-		const params = JSON.parse(paramsJson) as unknown[];
-		const tx = params[0] as { to?: string; data?: string; value?: string } | undefined;
-		if (!tx || typeof tx !== 'object') return null;
-		return { to: tx.to ?? null, data: tx.data ?? null, value: tx.value ?? null };
-	} catch {
-		return null;
-	}
-}
 
 class SigningSheet {
 	clear = $state<ClearSigningView>(INITIAL_CLEAR_VIEW);
