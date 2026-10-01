@@ -1067,7 +1067,7 @@ ok before any device row).
 
 ### Close-out (§7)
 
-- [ ] T174 [US8] Close-out (FR-018, FR-019, SC-007): the proxy diff, the secret scan over `$S/logs`, and the SC-007 table in `EV/sc-007-log-lines.md`.
+- [x] T174 [US8] Close-out (FR-018, FR-019, SC-007): the proxy diff, the secret scan over `$S/logs`, and the SC-007 table in `EV/sc-007-log-lines.md`.
   - `chaos mode=pass`; stop the proxy and the dApp servers.
   - `diff $S/proxy-before.txt <(scutil --proxy)` prints "system proxy untouched"; the owner confirms once that the iPhone's Wi-Fi proxy setting was never touched (quickstart §0, ruling 6).
   - The secret scan `rg -n '0x[0-9a-fA-F]{130,}|/v3/[0-9a-f]{20,}|#[A-Za-z0-9_-]{40,}|signature=0x|privateKey|mnemonic|seed' $S/logs` prints nothing.
@@ -1360,13 +1360,13 @@ results.md (spec.md round-2 list); every client gate green; the §8 rows pass.
 
 ## Phase 10: Results, hand-offs, delivery
 
-- [ ] T175 Write `specs/082-dapp-browser-mac-ext-ios/results.md`.
+- [x] T175 Write `specs/082-dapp-browser-mac-ext-ios/results.md`.
   - A verdict per SC-001–SC-010, with evidence links.
   - The **client matrix**: for every G#, L-… and W#, one of fixed / already right / no such surface, for desktop, extension, iPhone and Android.
   - The gates run in each phase (T047, T074, T101, T123, T137, T140, T141).
   - The regression table of quickstart §7 (finding → rows → verdict), and the SC-007 table from T174.
   - What was not done and why: G4 (RD15), W9/W21/W22 (RF6), W25 (b)/(c) (speculative; its (a) is covered by T111's pending URL), os_log on the desktop, one webview per desktop tab, PAC on Windows and Linux, proxy words in `FeeFailure` (RD9), the `tx_call_of` core move (RC6), CS26, Android fault rows (RH3), the spec's edge cases with no quickstart row (Mac sleep/wake, passkey cancel/timeout, unsupported chain).
-- [ ] T176 Relay hand-offs in `results.md` (RG13, plan "Out of scope"), each with its evidence file:
+- [x] T176 Relay hand-offs in `results.md` (RG13, plan "Out of scope"), each with its evidence file:
   - L-D2(a): Arbitrum in-band ops are accepted and never mined;
   - L-D4, ruling 2: on Gnosis and Arc the native coin is the stablecoin, so the relay's pricing and floor are the relay's;
   - an `eth_getUserOperationStatus` alias for builds already shipped (`EV/relay-status-probe.txt`);
