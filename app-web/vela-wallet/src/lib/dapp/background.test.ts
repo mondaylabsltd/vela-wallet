@@ -75,6 +75,8 @@ function makeEnv() {
 	const windows = new Set<number>([3]);
 	let nextWindow = 100;
 	const logs: string[] = [];
+	/** The page events the worker sent a tab (`accountsChanged`, `disconnect`, …). */
+	const events: { tabId: number; event: string; data: unknown }[] = [];
 
 	const chrome = {
 		runtime: {
@@ -92,6 +94,11 @@ function makeEnv() {
 				message: { type: string; id?: string; ids?: string[]; result?: unknown; error?: any },
 				options?: { documentId?: string }
 			) => {
+				if (message.type === 'evt') {
+					const event = message as unknown as { event: string; data: unknown };
+					events.push({ tabId, event: event.event, data: event.data });
+					return undefined;
+				}
 				const page = options?.documentId ? pages.get(options.documentId) : undefined;
 				if (!page || page.tabId !== tabId) throw new Error('Could not establish connection');
 				switch (message.type) {
@@ -110,7 +117,8 @@ function makeEnv() {
 						return undefined;
 				}
 			},
-			query: async () => [],
+			query: async () =>
+				[...pages.values()].map((page) => ({ id: page.tabId, url: `${page.origin}/` })),
 			create: async () => ({}),
 			update: async () => ({}),
 			onRemoved: on('tabRemoved'),
@@ -260,6 +268,7 @@ function makeEnv() {
 		globalPanel,
 		windows,
 		logs,
+		events,
 		emit,
 		portPair,
 		sendFromPage,
@@ -1259,5 +1268,125 @@ describe('receipt reads for handed-out operation hashes (RF3)', () => {
 		});
 		expect(reply).toEqual({ result: null });
 		expect(asked).toEqual(['eth_getTransactionReceipt']);
+	});
+});
+
+describe('who is signed in (spec 086, issue #315)', () => {
+	const ALICE = '0xA1a1a1A1a1A1a1A1a1a1A1a1a1A1a1A1A1a1a1a1';
+	const BOB = '0xb2B2b2B2b2b2b2B2B2b2b2B2b2b2b2b2b2B2b2b2';
+	const ORIGIN = 'https://a.example';
+	const grant = (address: string) => ({ origin: ORIGIN, address, chainId: 137, grantedAt: 1 });
+	const snapshot = (address: string) => ({
+		address,
+		name: '',
+		accounts: [ALICE, BOB].map((a) => ({ name: '', address: a })),
+		chain_id: 1,
+		updated_at_ms: 1,
+		ul_verified: false,
+		ul_verified_at_ms: 0,
+		theme: 'dark',
+		locale: 'en'
+	});
+	const accountsOf = async (env: Env, page: FakePage) =>
+		(await env.sendFromPage(page, { type: 'rpc', id: 'q', method: 'eth_accounts', params: [] }))
+			.result;
+
+	it('answers a grant only while its account is the one signed in — never the previous one', async () => {
+		const env = makeEnv();
+		env.local.data[`vela.perm.${ORIGIN}`] = grant(ALICE);
+		env.local.data['vela.ext.cache'] = snapshot(BOB);
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+
+		// The issue: signed in to BOB ("26"); the device still holds ALICE, and
+		// the site's grant is hers. The site is told nothing — it asks again.
+		expect(await accountsOf(env, page)).toEqual([]);
+		expect(
+			(
+				await env.sendFromPage(page, {
+					type: 'rpc',
+					id: 'p',
+					method: 'wallet_getPermissions',
+					params: []
+				})
+			).result
+		).toEqual([]);
+
+		env.local.data['vela.ext.cache'] = snapshot(ALICE);
+		expect(await accountsOf(env, page)).toEqual([ALICE]);
+
+		// Signed out: the wallet removed its snapshot. Nobody — never "trust the grant".
+		delete env.local.data['vela.ext.cache'];
+		expect(await accountsOf(env, page)).toEqual([]);
+	});
+
+	it('a sign-out tells every connected site `[]`, and signing back in tells it its account', async () => {
+		const env = makeEnv();
+		env.local.data[`vela.perm.${ORIGIN}`] = grant(ALICE);
+		env.local.data['vela.ext.cache'] = snapshot(ALICE);
+		await startWorker(env);
+		env.openPage(7, 'doc-a');
+		env.openPage(8, 'doc-b', 'https://other.example');
+
+		delete env.local.data['vela.ext.cache'];
+		env.emit('storageChanged', { 'vela.ext.cache': { oldValue: snapshot(ALICE) } }, 'local');
+		await settleAll();
+		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [] }]);
+
+		env.events.length = 0;
+		env.local.data['vela.ext.cache'] = snapshot(ALICE);
+		env.emit('storageChanged', { 'vela.ext.cache': { newValue: snapshot(ALICE) } }, 'local');
+		await settleAll();
+		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [ALICE] }]);
+	});
+
+	it('signed in to another account, the re-pin is what the site hears — never a `[]` first', async () => {
+		const env = makeEnv();
+		env.local.data[`vela.perm.${ORIGIN}`] = grant(ALICE);
+		env.local.data['vela.ext.cache'] = snapshot(ALICE);
+		await startWorker(env);
+		env.openPage(7, 'doc-a');
+
+		// The wallet publishes BOB first: the site's answer is gone, but a `[]`
+		// now would end the connection the re-pin is about to carry over.
+		env.local.data['vela.ext.cache'] = snapshot(BOB);
+		env.emit(
+			'storageChanged',
+			{ 'vela.ext.cache': { oldValue: snapshot(ALICE), newValue: snapshot(BOB) } },
+			'local'
+		);
+		await settleAll();
+		expect(env.events).toEqual([]);
+
+		// Then the core's re-pin.
+		env.local.data[`vela.perm.${ORIGIN}`] = grant(BOB);
+		env.emit(
+			'storageChanged',
+			{ [`vela.perm.${ORIGIN}`]: { oldValue: grant(ALICE), newValue: grant(BOB) } },
+			'local'
+		);
+		await settleAll();
+		expect(env.events).toEqual([{ tabId: 7, event: 'accountsChanged', data: [BOB] }]);
+		expect(await accountsOf(env, env.pages.get('doc-a')!)).toEqual([BOB]);
+	});
+
+	it('a republished snapshot for the same account tells nobody anything', async () => {
+		const env = makeEnv();
+		env.local.data[`vela.perm.${ORIGIN}`] = grant(ALICE);
+		env.local.data['vela.ext.cache'] = snapshot(ALICE);
+		await startWorker(env);
+		env.openPage(7, 'doc-a');
+		env.emit(
+			'storageChanged',
+			{
+				'vela.ext.cache': {
+					oldValue: snapshot(ALICE),
+					newValue: { ...snapshot(ALICE.toLowerCase()), updated_at_ms: 2 }
+				}
+			},
+			'local'
+		);
+		await settleAll();
+		expect(env.events).toEqual([]);
 	});
 });

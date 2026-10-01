@@ -13,10 +13,11 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::dapp_permissions::{
-    dapp_spelling, decide_popup_request, is_connect_method, is_insecure_public_origin,
-    is_signing_method, origin_of, resolve_granted, settle_on_close, DappPermissions, DpermGrant,
-    DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome, DpermPopupView,
-    DpermRejectReason as Reason, DpermRespondPayload as Payload, DpermShellResult as Res, Event,
+    dapp_spelling, decide_popup_request, granted_to_signed_in, is_connect_method,
+    is_insecure_public_origin, is_signing_method, origin_of, resolve_granted, settle_on_close,
+    DappPermissions, DpermGrant, DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome,
+    DpermPopupView, DpermRejectReason as Reason, DpermRespondPayload as Payload,
+    DpermShellResult as Res, Event,
 };
 
 type Sut = DomainDriver<DappPermissions>;
@@ -384,16 +385,17 @@ fn popup_pinned_address_must_match_the_grant() {
 // rule, so the projection has to be asserted, not assumed.
 // ---------------------------------------------------------------------------
 
+/// `signed_in` is the account the session settled on — `None` when nobody is.
 fn popup(
     method: &str,
     grant: Option<DpermGrant>,
-    addresses: Option<&[&str]>,
+    signed_in: Option<&str>,
     pinned: Option<&str>,
 ) -> Event {
     Event::PopupRequest {
         method: method.to_owned(),
         grant,
-        current_addresses: addresses.map(|a| a.iter().map(|s| (*s).to_owned()).collect()),
+        signed_in: signed_in.map(str::to_owned),
         pinned_address: pinned.map(str::to_owned),
     }
 }
@@ -414,7 +416,7 @@ fn ask(sut: &mut Sut, event: Event) -> DpermPopupView {
 #[test]
 fn popup_event_refuses_an_unconnected_origin() {
     let mut sut = Sut::new();
-    let verdict = ask(&mut sut, popup("personal_sign", None, Some(&[A1]), None));
+    let verdict = ask(&mut sut, popup("personal_sign", None, Some(A1), None));
     assert_eq!(
         verdict.outcome,
         DpermPopupOutcome::Reject {
@@ -425,26 +427,18 @@ fn popup_event_refuses_an_unconnected_origin() {
     assert!(verdict.granted.is_empty());
 
     // …and the connect methods do not leak one either: they ask the user.
-    let verdict = ask(
-        &mut sut,
-        popup("eth_requestAccounts", None, Some(&[A1]), None),
-    );
+    let verdict = ask(&mut sut, popup("eth_requestAccounts", None, Some(A1), None));
     assert_eq!(verdict.outcome, DpermPopupOutcome::Consent);
 }
 
-/// The forward is pinned to the GRANT's address, never the wallet's active
-/// account (invariant ⑨). A2 is first in the wallet here; A1 is the grant.
+/// The forward is pinned to the GRANT's address (invariant ⑨) — which is the
+/// signed-in account, because a grant for any other account is not answered.
 #[test]
-fn popup_event_forwards_the_granted_address_not_the_active_account() {
+fn popup_event_forwards_the_granted_address() {
     let mut sut = Sut::new();
     let verdict = ask(
         &mut sut,
-        popup(
-            "eth_sendTransaction",
-            Some(grant(A1)),
-            Some(&[A2, A1]),
-            None,
-        ),
+        popup("eth_sendTransaction", Some(grant(A1)), Some(A1), None),
     );
     assert_eq!(
         verdict.outcome,
@@ -452,16 +446,44 @@ fn popup_event_forwards_the_granted_address_not_the_active_account() {
             granted_address: A1.to_owned(),
         },
     );
+    assert_eq!(verdict.granted, vec![A1.to_owned()]);
+}
 
-    // A grant whose account was deleted from the wallet exposes nothing.
+/// Spec 086, issue #315: signed in to A2, a site granted to A1 — an account the
+/// device still holds — learns nothing of A1. It used to: the grant was
+/// answered for any HELD account, so a re-pin the wallet missed (a sign-in in a
+/// fresh document, a side panel open across the switch) handed the site the
+/// previous account on connect, on reconnect and on every signature.
+#[test]
+fn popup_event_never_answers_a_grant_for_an_account_that_is_not_signed_in() {
+    let mut sut = Sut::new();
+    // Connect: the person is ASKED, and connects the account they are in —
+    // never handed the old one, never handed A2 without a word either.
+    for method in ["eth_requestAccounts", "wallet_requestPermissions"] {
+        let verdict = ask(&mut sut, popup(method, Some(grant(A1)), Some(A2), None));
+        assert_eq!(verdict.outcome, DpermPopupOutcome::Consent, "{method}");
+        assert!(verdict.granted.is_empty(), "{method}");
+    }
+    // A signature: refused as not connected, never signed by A1.
+    for method in [
+        "eth_sendTransaction",
+        "personal_sign",
+        "eth_signTypedData_v4",
+    ] {
+        let verdict = ask(&mut sut, popup(method, Some(grant(A1)), Some(A2), None));
+        assert_eq!(
+            verdict.outcome,
+            DpermPopupOutcome::Reject {
+                code: 4100,
+                reason: Reason::NotConnected,
+            },
+            "{method}"
+        );
+    }
+    // Pinning A1 explicitly changes nothing: the grant is not answered at all.
     let verdict = ask(
         &mut sut,
-        popup(
-            "eth_sendTransaction",
-            Some(grant(A3)),
-            Some(&[A1, A2]),
-            None,
-        ),
+        popup("personal_sign", Some(grant(A1)), Some(A2), Some(A1)),
     );
     assert_eq!(
         verdict.outcome,
@@ -470,18 +492,58 @@ fn popup_event_forwards_the_granted_address_not_the_active_account() {
             reason: Reason::NotConnected,
         },
     );
+}
 
-    // Cold read (addresses not known yet): the grant is TRUSTED, not revoked
-    // (invariant ②) — a transient empty list must not log the origin out.
-    let verdict = ask(
-        &mut sut,
-        popup("eth_sendTransaction", Some(grant(A1)), None, None),
-    );
+/// Signed out, a site learns nothing — whatever it was granted. (The grant
+/// stays: signing back in lines it back up, `session.rs`.)
+#[test]
+fn popup_event_tells_nobody_anything_while_signed_out() {
+    let mut sut = Sut::new();
+    for signed_in in [None, Some("")] {
+        let verdict = ask(
+            &mut sut,
+            popup("eth_requestAccounts", Some(grant(A1)), signed_in, None),
+        );
+        assert_eq!(verdict.outcome, DpermPopupOutcome::Consent, "{signed_in:?}");
+        assert!(verdict.granted.is_empty());
+        let verdict = ask(
+            &mut sut,
+            popup("eth_sendTransaction", Some(grant(A1)), signed_in, None),
+        );
+        assert_eq!(
+            verdict.outcome,
+            DpermPopupOutcome::Reject {
+                code: 4100,
+                reason: Reason::NotConnected,
+            },
+            "{signed_in:?}"
+        );
+    }
+}
+
+/// The pure rule, case by case — and the matrix its JavaScript twin in the
+/// service worker is pinned against (`instant.test.ts`).
+#[test]
+fn granted_to_signed_in_answers_only_the_signed_in_account() {
+    let stored = grant(A1);
     assert_eq!(
-        verdict.outcome,
-        DpermPopupOutcome::ForwardToSigning {
-            granted_address: A1.to_owned(),
-        },
+        granted_to_signed_in(Some(&stored), Some(A1)),
+        vec![A1.to_owned()]
+    );
+    assert!(granted_to_signed_in(Some(&stored), Some(A2)).is_empty());
+    assert!(granted_to_signed_in(Some(&stored), None).is_empty());
+    assert!(granted_to_signed_in(Some(&stored), Some("")).is_empty());
+    assert!(granted_to_signed_in(None, Some(A1)).is_empty());
+    // Any case matches, and the grant comes back as stored.
+    let stored = grant(V_LOWER);
+    assert_eq!(
+        granted_to_signed_in(Some(&stored), Some(V)),
+        vec![V_LOWER.to_owned()]
+    );
+    let stored = grant(V);
+    assert_eq!(
+        granted_to_signed_in(Some(&stored), Some(V_LOWER)),
+        vec![V.to_owned()]
     );
 }
 
@@ -492,7 +554,7 @@ fn popup_event_refuses_a_stale_pinned_address() {
     let mut sut = Sut::new();
     let verdict = ask(
         &mut sut,
-        popup("personal_sign", Some(grant(A1)), Some(&[A1, A2]), Some(A2)),
+        popup("personal_sign", Some(grant(A1)), Some(A1), Some(A2)),
     );
     assert_eq!(
         verdict.outcome,
@@ -506,12 +568,7 @@ fn popup_event_refuses_a_stale_pinned_address() {
     let upper = A1.to_uppercase().replace("0X", "0x");
     let verdict = ask(
         &mut sut,
-        popup(
-            "personal_sign",
-            Some(grant(A1)),
-            Some(&[A1, A2]),
-            Some(&upper),
-        ),
+        popup("personal_sign", Some(grant(A1)), Some(A1), Some(&upper)),
     );
     assert_eq!(
         verdict.outcome,
@@ -528,12 +585,7 @@ fn popup_event_connect_on_a_granted_origin_answers_without_a_prompt() {
     let mut sut = Sut::new();
     let verdict = ask(
         &mut sut,
-        popup(
-            "eth_requestAccounts",
-            Some(grant(A1)),
-            Some(&[A1, A2]),
-            None,
-        ),
+        popup("eth_requestAccounts", Some(grant(A1)), Some(A1), None),
     );
     assert_eq!(
         verdict.outcome,
@@ -545,12 +597,7 @@ fn popup_event_connect_on_a_granted_origin_answers_without_a_prompt() {
     );
     let verdict = ask(
         &mut sut,
-        popup(
-            "wallet_requestPermissions",
-            Some(grant(A1)),
-            Some(&[A1, A2]),
-            None,
-        ),
+        popup("wallet_requestPermissions", Some(grant(A1)), Some(A1), None),
     );
     assert_eq!(
         verdict.outcome,
@@ -569,7 +616,7 @@ fn the_popup_question_authors_nothing() {
     let mut sut = Sut::new();
     let first = ask(
         &mut sut,
-        popup("personal_sign", Some(grant(A2)), Some(&[A1, A2]), None),
+        popup("personal_sign", Some(grant(A2)), Some(A2), None),
     );
     assert_eq!(
         first.outcome,
@@ -577,10 +624,7 @@ fn the_popup_question_authors_nothing() {
             granted_address: A2.to_owned(),
         },
     );
-    let second = ask(
-        &mut sut,
-        popup("personal_sign", None, Some(&[A1, A2]), None),
-    );
+    let second = ask(&mut sut, popup("personal_sign", None, Some(A2), None));
     assert_eq!(
         second.outcome,
         DpermPopupOutcome::Reject {
@@ -758,12 +802,7 @@ fn the_popup_answers_an_old_lower_case_grant_in_eip55() {
     let mut sut = Sut::new();
     let verdict = ask(
         &mut sut,
-        popup(
-            "eth_requestAccounts",
-            Some(grant(V_LOWER)),
-            Some(&[V]),
-            None,
-        ),
+        popup("eth_requestAccounts", Some(grant(V_LOWER)), Some(V), None),
     );
     assert_eq!(
         verdict.outcome,
@@ -780,7 +819,7 @@ fn the_popup_answers_an_old_lower_case_grant_in_eip55() {
         popup(
             "eth_sendTransaction",
             Some(grant(V_LOWER)),
-            None,
+            Some(V_LOWER),
             Some(V_LOWER),
         ),
     );

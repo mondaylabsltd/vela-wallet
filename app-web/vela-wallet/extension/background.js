@@ -72,6 +72,7 @@ import {
 	readFailureKind,
 	resolveGrantedAccounts,
 	rpcError,
+	signedInChangeEvent,
 	switchChainParam,
 	toHexChainId,
 	unreachableChainMessage
@@ -831,6 +832,13 @@ function chainOf(origin, all) {
 
 const NOT_OPENED = () => rpcError(ERR.UNAUTHORIZED, 'Vela has not been opened in this browser yet');
 
+/** The account the wallet's snapshot says is signed in; `null` with no snapshot. */
+function signedInOf(snapshot) {
+	return snapshot && typeof snapshot === 'object' && typeof snapshot.address === 'string'
+		? snapshot.address
+		: null;
+}
+
 /**
  * The accounts an origin may see — its grant, combined with the wallet's
  * snapshot by `resolveGrantedAccounts` (a pinned twin of the core's rule, see
@@ -839,15 +847,15 @@ const NOT_OPENED = () => rpcError(ERR.UNAUTHORIZED, 'Vela has not been opened in
  * two can never tell a site different things.
  */
 function grantedAccounts(grant, snapshot) {
-	const addresses = Array.isArray(snapshot?.accounts)
-		? snapshot.accounts.map((a) => a?.address).filter((a) => typeof a === 'string')
-		: null;
-	return resolveGrantedAccounts(grant, addresses);
+	// Issue #315: a grant is answered only while its account is the signed-in
+	// one — `resolveGrantedAccounts` is the core's `granted_to_signed_in`, pinned.
+	return resolveGrantedAccounts(grant, signedInOf(snapshot));
 }
 
 /**
  * What an origin may be told without asking anyone — from state the CORE
- * authored (`grantedAccounts`).
+ * authored (`grantedAccounts`: the grant, only while its account is the one
+ * the wallet is signed in to).
  */
 async function answerFromSnapshot(method, origin) {
 	const all = await readLocal([PERM_PREFIX + origin, CHAIN_PREFIX + origin, EXT_CACHE_KEY]);
@@ -1068,9 +1076,26 @@ async function broadcast(origin, event, data) {
 }
 
 /**
- * A grant or a chain pick changed in storage — announce it. The grant is the
- * core's; what each change means to the page is the core's `DpermPageEvent`
- * vocabulary, mirrored here.
+ * The wallet signed in, out, or to another account (its snapshot's address
+ * changed): tell each granted origin what it may see now — `signedInChangeEvent`
+ * says what, from the same twin rule `eth_accounts` answers with.
+ */
+async function announceSignedIn(before, after) {
+	const was = signedInOf(before);
+	const now = signedInOf(after);
+	if ((was ?? '').toLowerCase() === (now ?? '').toLowerCase()) return;
+	const all = await readLocal(null);
+	for (const [key, grant] of Object.entries(all)) {
+		if (!key.startsWith(PERM_PREFIX)) continue;
+		const accounts = signedInChangeEvent(grant, was, now);
+		if (accounts) void broadcast(key.slice(PERM_PREFIX.length), 'accountsChanged', accounts);
+	}
+}
+
+/**
+ * A grant, a chain pick or the signed-in account changed in storage —
+ * announce it. The grant is the core's; what each change means to the page
+ * (`accountsChanged`, `disconnect`, `chainChanged`) is mirrored here.
  */
 chrome.storage.onChanged.addListener((changes, area) => {
 	if (area !== 'local') return;
@@ -1078,6 +1103,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 		noteGrantedChange(key, change.newValue);
 		if (key === SURFACE_KEY) {
 			surfacePreference = change.newValue === 'window' ? 'window' : 'panel';
+		} else if (key === EXT_CACHE_KEY) {
+			void announceSignedIn(change.oldValue, change.newValue);
 		} else if (key.startsWith(PERM_PREFIX)) {
 			const origin = key.slice(PERM_PREFIX.length);
 			const before = change.oldValue?.address;

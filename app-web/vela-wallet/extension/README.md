@@ -81,4 +81,10 @@ dist/              build output — gitignored
 
 The page hears `accountsChanged` / `chainChanged` / `disconnect` when the
 site's grant or chain pick changes in storage — on connect, when the wallet
-switches accounts (the core re-pins the grant), on revoke, on a switch.
+switches accounts (the core re-pins the grant), on revoke, on a switch — and
+`accountsChanged` when the wallet signs out or back in (its snapshot).
+
+A grant is answered only while its account is the one the wallet is signed in
+to (`granted_to_signed_in`, spec 086, issue 315): `eth_accounts` reads the
+snapshot's `address`, and no snapshot — the wallet removes it on sign-out —
+is nobody.

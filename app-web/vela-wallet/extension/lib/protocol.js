@@ -572,26 +572,52 @@ export function isWellFormedRequest(value) {
 // ---- what an already-granted origin may be told, without a window ----------
 
 /**
- * The accounts an origin may see, given its grant and the wallet's snapshot.
+ * The accounts an origin may see, given its grant and who is signed in.
  *
- * **This is a TWIN of a rule `dapp_permissions` owns** (`resolve_granted`), and
- * it exists only because the service worker cannot run the core: loading a
+ * **This is a TWIN of a rule `dapp_permissions` owns** (`granted_to_signed_in`),
+ * and it exists only because the service worker cannot run the core: loading a
  * 3.6 MB binary to answer `eth_accounts` on every page load is not a trade
- * anyone would make. `dapp-instant.test.ts` drives the REAL core over the same
+ * anyone would make. `instant.test.ts` drives the REAL core over the same
  * matrix of inputs and asserts identical answers, so the two cannot drift in
  * silence — the same treatment 026 gave the relay's error strings.
  *
- * The load-bearing case is the last one. A cold read, before the wallet has
- * published anything, must NOT be read as "the account is gone" — that would
- * log the person out of every open dApp on every browser start.
+ * `signedIn` is the snapshot's `address` — the account the wallet is signed in
+ * to — or `null` when there is no snapshot: the wallet removes it on sign-out
+ * (`ext_cache`), and it lives in `storage.local`, so a browser start does not
+ * lose it. A grant is answered only for that account (spec 086, issue 315):
+ * answering one for any account the wallet merely HOLDS handed a site the
+ * person's previous account after a switch the wallet did not re-pin.
  */
-export function resolveGrantedAccounts(grant, snapshotAddresses) {
+export function resolveGrantedAccounts(grant, signedIn) {
 	if (!grant || typeof grant.address !== 'string') return [];
-	if (!Array.isArray(snapshotAddresses) || snapshotAddresses.length === 0) return [grant.address];
-	const present = snapshotAddresses.some(
-		(a) => typeof a === 'string' && a.toLowerCase() === grant.address.toLowerCase()
-	);
-	return present ? [grant.address] : [];
+	if (typeof signedIn !== 'string' || signedIn.length === 0) return [];
+	return grant.address.toLowerCase() === signedIn.toLowerCase() ? [grant.address] : [];
+}
+
+/**
+ * What a granted origin hears when the account the wallet is signed in to
+ * changes — the accounts to announce, or `null` for nothing (spec 086, issue 315).
+ *
+ * `before` / `after` are the snapshot's signed-in account (`null`: none). A
+ * sign-out tells every site that was answered `[]` — the person is no longer
+ * in that wallet, and a site still showing it connected is the defect itself.
+ * Signing back in tells the sites of that account their account again.
+ *
+ * Signed in to ANOTHER account, a site that loses its answer is NOT told `[]`
+ * here: the wallet re-pins its grant to the new account, or drops it, right
+ * after it publishes the snapshot, and that grant write is what the page hears
+ * (`accountsChanged([new])`, or `[]` and `disconnect`). A `[]` first would end
+ * a connection that is about to follow — wagmi disconnects on it.
+ */
+export function signedInChangeEvent(grant, before, after) {
+	const told = resolveGrantedAccounts(grant, before);
+	const tell = resolveGrantedAccounts(grant, after);
+	const same =
+		told.length === tell.length &&
+		told.every((address, i) => address.toLowerCase() === tell[i].toLowerCase());
+	if (same) return null;
+	if (tell.length === 0 && typeof after === 'string' && after.length > 0) return null;
+	return tell;
 }
 
 /**
