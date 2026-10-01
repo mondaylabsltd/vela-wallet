@@ -346,7 +346,8 @@ describe('fixture canon (zh mock verbatim)', () => {
 		// A transaction still in flight offers no hash and no explorer link.
 		expect(stages[0].hash).toBeUndefined();
 		expect(stages[2].hash?.value).toBe('0x8f3a…c21d');
-		expect(stages[0].captions).toContain('关闭此页交易会在后台继续');
+		// Spec 082 RJ6: the corpus now carries the comma D22 asked for.
+		expect(stages[0].captions).toContain('关闭此页，交易会在后台继续');
 	});
 
 	it('every affordance the desktop send form draws has a panel behind it', () => {

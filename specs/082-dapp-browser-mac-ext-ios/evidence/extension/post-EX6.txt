@@ -1,0 +1,11 @@
+EX6 — Sign, then close the side panel (headless CfT has no visible ✕; closed with chrome.sidePanel.close({windowId}) from the wallet tab — Chrome's own close of the panel UI)
+panel dialogs before close         1
+sidePanel.close called at          1790620535850 (Date.now, ms)
+dApp got                           1790620536208  {code:4900, message:"The browser closed before the request finished"}  (+358 ms), 1 answer for that id
+dApp log (results.personal_sign)   {ok:false, code:4900, message:"The browser closed before the request finished"}
+panel target                       gone from /json/list
+storage.session vela.req.*         none
+[vela-sw] 2026-09-28T18:35:34.562Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:35:34.564Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:35:36.203Z panel.down window=291188707
+[vela-sw] 2026-09-28T18:35:36.207Z req.settled cause=surface_closed tab=291188710

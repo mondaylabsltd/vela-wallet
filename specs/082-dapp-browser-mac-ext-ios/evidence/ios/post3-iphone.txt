@@ -1,0 +1,19 @@
+# post3 iPhone (round 2 + iOS fixes, installed build = 6b9cdf7b app code) — 2026-10-01, Mac LAN 192.168.0.7, per-app proxy only
+
+## X-DEADPROXY — VELA_DEV_PROXY=192.168.0.7:9 (nothing answers)
+[vela-wallet] dev proxy: all traffic via 192.168.0.7:9
+2026-10-01 11:18:36.226703+0800 VelaWallet[808:79105] [net] offline misses=82 chains=24
+home: ⚠ 部分余额仍在更新。 › (words present; was an empty ⚠ ›) — post3-deadproxy.jpg
+NEW (P2, follow-up): the total reads ¥0.00 when no chain answered and nothing is cached — an unknown total drawn as zero (shared balance_dashboard rule).
+no direct bypass: every read failed through the dead proxy (offline misses, chains=24).
+
+## IX6 / RF5 — blackhole every host but getvela + LAN, before launch; scratch dApp 192.168.0.7:8141 on Gnosis, Send value 0x0
++4 s 估算中…, +12 s 估算中…, +19 s 点击重试 + red reason 暂时连不上 Gnosis，页面数据可能不完整。, slide shut (post3-ix6-fee.jpg). Before: 估算中 4 min 35 s, no reason, no log.
+2026-10-01 11:21:11.193227+0800 VelaWallet[812:79589] [fee] quote failed chain=100 cause=chain_read re-quote #1 in 3000 ms
+2026-10-01 11:21:20.261008+0800 VelaWallet[812:79589] [fee] quote failed chain=100 cause=chain_read re-quote #2 in 6000 ms
+2026-10-01 11:21:32.660615+0800 VelaWallet[812:79589] [fee] quote failed chain=100 cause=chain_read re-quote #3 in 8000 ms
+2026-10-01 11:21:46.733485+0800 VelaWallet[812:79589] [fee] quote back chain=100 after 3 re-quotes
+pass → fee back by itself at ~16 s (target 15 s; the third re-ask took ~6 s), no tap (post3-ix6-back.jpg).
+copy nit: the fee row reuses the chain notice sentence (页面数据可能不完整).
+
+## Earlier in this pass (2026-09-29, Mac LAN .20): X-FIRST-TAP ✓, X-HISTORY ✓ (after the onDismiss fix), E-G12 ✓, G14-zero ✓, E-G9 consent ✓ (title still wraps mid-number, P3).

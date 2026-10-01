@@ -207,6 +207,10 @@ data class SendTxRecord(
     val chain_id: Int,
     val timestamp_s: Double,
     val usd: String? = null,
+    /** Spec 082 RA4/T184: the submit's reply was lost; persisted with the row. */
+    val maybe_sent: Boolean = false,
+    /** The head read before the first submit POST (`u64` → `Long`). */
+    val submit_block: Long? = null,
 )
 
 @Serializable
@@ -405,6 +409,12 @@ enum class SendReceiptStatus {
     @SerialName("confirmed") Confirmed,
 
     @SerialName("failed") Failed,
+
+    /** Spec 082 RA10: the reply was lost — "may have been sent", no Retry. */
+    @SerialName("maybe_sent") MaybeSent,
+
+    /** The relay never had it: "not sent". */
+    @SerialName("not_sent") NotSent,
 }
 
 @Serializable
@@ -451,11 +461,20 @@ sealed class SendReceiptOutcome {
 
     @Serializable
     @SerialName("failed")
-    data class Failed(val rejected: Boolean) : SendReceiptOutcome()
+    data class Failed(
+        val rejected: Boolean,
+        /** Spec 082: the tracker's `NotSent` — "not sent", never the fee-rejected words. */
+        val not_sent: Boolean = false,
+    ) : SendReceiptOutcome()
 
     @Serializable
     @SerialName("fee_held")
     data object FeeHeld : SendReceiptOutcome()
+
+    /** The relay has shown it holds an op whose reply was lost: back to "submitted". */
+    @Serializable
+    @SerialName("acknowledged")
+    data object Acknowledged : SendReceiptOutcome()
 }
 
 @Serializable
@@ -626,7 +645,37 @@ sealed class SendOperation {
         val user_op_hash: String,
         val record_ids: List<String> = emptyList(),
         val chain_id: Int,
+        /** Spec 082: carried into the tracker's `Submitted`. */
+        val maybe_sent: Boolean = false,
+        val submit_block: Long? = null,
+        /** Spec 082 RJ1: the relay accepted the op the write-ahead hand-off announced. */
+        val admitted: Boolean = false,
     ) : SendOperation()
+
+    /**
+     * Spec 082 RJ1: the write-ahead records are on disk and the tracker holds
+     * them — the shell may POST [user_op_hash] now, and only now. With no
+     * clearance within `userOpWriteAheadWaitMs()` it does not POST and answers
+     * `submit_failed` (nothing sent). Answered `post_cleared`.
+     */
+    @Serializable
+    @SerialName("clear_to_post")
+    data class ClearToPost(val user_op_hash: String) : SendOperation()
+
+    /** Spec 082 RJ1: the relay took the written-ahead op — these rows' `maybeSent` → false, in one write. Answered `records_persisted`. */
+    @Serializable
+    @SerialName("mark_admitted")
+    data class MarkAdmitted(val record_ids: List<String> = emptyList()) : SendOperation()
+
+    /** Spec 082 RJ1: written-ahead rows whose op is proven never sent, removed in one write. Answered `records_persisted`. */
+    @Serializable
+    @SerialName("delete_tx_records")
+    data class DeleteTxRecords(val ids: List<String> = emptyList()) : SendOperation()
+
+    /** Spec 082 RJ1: forwarded to the tracker's `Withdrawn`. Answered `track_handed_off`. */
+    @Serializable
+    @SerialName("track_withdrawn")
+    data class TrackWithdrawn(val user_op_hash: String, val record_ids: List<String> = emptyList()) : SendOperation()
 
     @Serializable
     @SerialName("resolve_identity")
@@ -704,7 +753,14 @@ sealed class SendShellResult {
 
     @Serializable
     @SerialName("submitted")
-    data class Submitted(val user_op_hash: String, val now_ms: Double) : SendShellResult()
+    data class Submitted(
+        val user_op_hash: String,
+        val now_ms: Double,
+        /** Spec 082 RA4: the reply was lost; [user_op_hash] is the local one. */
+        val maybe_sent: Boolean = false,
+        /** The head read before the first submit POST; `null` = unknown. */
+        val submit_block: Long? = null,
+    ) : SendShellResult()
 
     @Serializable
     @SerialName("submit_failed")
@@ -721,6 +777,11 @@ sealed class SendShellResult {
     @Serializable
     @SerialName("track_handed_off")
     data object TrackHandedOff : SendShellResult()
+
+    /** Spec 082 RJ1: `ClearToPost` was taken. */
+    @Serializable
+    @SerialName("post_cleared")
+    data object PostCleared : SendShellResult()
 
     @Serializable
     @SerialName("identity_resolved")
@@ -905,6 +966,15 @@ sealed class SendEvent {
     @Serializable
     @SerialName("signing_started")
     data object SigningStarted : SendEvent()
+
+    /**
+     * Spec 082 RJ1: inside `submit_user_op`, the op is signed and its hash
+     * computed, and nothing has been POSTed. The core writes the records ahead
+     * and answers `ClearToPost` once they are on disk and tracked.
+     */
+    @Serializable
+    @SerialName("op_signed")
+    data class OpSigned(val user_op_hash: String, val submit_block: Long? = null, val now_ms: Double) : SendEvent()
 
     @Serializable
     @SerialName("cancel_signing")

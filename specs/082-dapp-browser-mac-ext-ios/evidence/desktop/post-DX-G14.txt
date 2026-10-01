@@ -1,0 +1,7 @@
+DX-G14 / G14-zero/num desktop — requests from a scratch page (scratchpad/b/dapp/index.html, copy: post-DX-G14-scratch-dapp.html.txt) served at http://127.0.0.1:8141, because the desktop webview has no console and the bar turns javascript: into a search
+requests: send {to:0x7687…D141, value:'0x38d7ea4c68000'}; zero value '0x0'; value omitted; value 1000 (JSON number); switches 0x1/0x64
+[vela-wallet] 04:05:17.942 rpc: chain=1 method=eth_getCode gave up after 2014 ms (rate limited)
+[vela-wallet] 04:05:19.280 rpc: chain=1 method=eth_simulateV1 gave up after 3353 ms (rate limited)
+[vela-wallet] 04:05:24.429 rpc: chain=1 method=eth_getCode gave up after 3336 ms (rate limited)
+[vela-wallet] 04:05:32.398 rpc: chain=1 method=eth_getCode gave up after 1911 ms (rate limited)
+page log: connect 04:04:56→04:05:13 ['0x88cCA0EeDbF2C4426110bbFc998F048689266894']; Ethereum send → 4001 at 04:05:42; switch 0x64 → null; Gnosis send/zero/omitted/num → 4001 each, once

@@ -317,7 +317,7 @@ impl WebSocketCablePort {
             .filter(|host| !host.is_empty())
             .ok_or_else(|| HybridError::Tunnel(format!("not a wss:// URL: {url}")))?;
 
-        let stream = match resolve_proxy() {
+        let stream = match resolve_proxy(&format!("https://{host}/"))? {
             Some(proxy) => {
                 log(&format!("dialing {host}:443 through {proxy}"));
                 proxy.connect(host, 443)?
@@ -841,29 +841,38 @@ fn http_connect(
     Ok(stream)
 }
 
-/// The forward proxy to dial the tunnel through, or `None` for a direct
-/// connection.
+/// The forward proxy to dial the tunnel to `url` through, or `None` for a
+/// direct connection.
 ///
-/// Spec 038: asks `executor::proxy` — the app's ONE proxy decision (system
-/// setting → environment → direct, re-derived on failure) — rather than
-/// reading the environment and `scutil` on its own, which was a second
-/// decision that could disagree with the first. Auth is dropped: the local
-/// proxies this meets do not use it, and carrying it wrong is worse than not
-/// carrying it.
-fn resolve_proxy() -> Option<ProxyEndpoint> {
-    let proxy = crate::executor::proxy::system_proxy()?;
-    let socks = matches!(
-        proxy.protocol(),
-        ureq::ProxyProtocol::Socks5
-            | ureq::ProxyProtocol::Socks5h
-            | ureq::ProxyProtocol::Socks4
-            | ureq::ProxyProtocol::Socks4A
-    );
-    Some(ProxyEndpoint {
-        socks,
-        host: proxy.host().to_owned(),
-        port: proxy.port(),
-    })
+/// Spec 082 RD2: asks `executor::proxy` — the app's ONE proxy decision, the
+/// system's first route for this URL (PAC included) — rather than reading the
+/// environment on its own, which was a second decision that could disagree
+/// with the first. A PAC that cannot run names no route, and the tunnel is
+/// not dialled direct behind it: the dial then fails, as every other request
+/// does. Auth is dropped: the local proxies this meets do not use it, and
+/// carrying it wrong is worse than not carrying it.
+fn resolve_proxy(url: &str) -> Result<Option<ProxyEndpoint>, HybridError> {
+    use crate::executor::proxy::Route;
+    let route = crate::executor::proxy::first_route(url).map_err(|failure| {
+        HybridError::Tunnel(format!("proxy {} failed; no route out", failure.proxy))
+    })?;
+    let (socks, host, port) = match route {
+        Route::Direct => return Ok(None),
+        Route::HttpConnect { host, port } => (false, host, port),
+        Route::Socks5h { host, port } => (true, host, port),
+        Route::Env(proxy) => (
+            matches!(
+                proxy.protocol(),
+                ureq::ProxyProtocol::Socks5
+                    | ureq::ProxyProtocol::Socks5h
+                    | ureq::ProxyProtocol::Socks4
+                    | ureq::ProxyProtocol::Socks4A
+            ),
+            proxy.host().to_owned(),
+            proxy.port(),
+        ),
+    };
+    Ok(Some(ProxyEndpoint { socks, host, port }))
 }
 
 /// Scan the Bluetooth radio for a proximity advert that decrypts under this

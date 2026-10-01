@@ -49,6 +49,9 @@
 //!   origin starts on its grant's chain, else [`DEFAULT_CHAIN_ID`].
 //! - `wallet_addEthereumChain` for a chain the wallet has IS a switch.
 //! - Every grant follows the wallet's active account (`followActiveAccount`).
+//! - Every address a page is given is spelled EIP-55
+//!   ([`dapp_spelling`], spec 082 RG10): the active account as it arrives, and
+//!   a stored grant as it loads.
 //! - Signing needs a grant (4100), is pinned to the granted address, and is
 //!   serialised: one sheet at a time, the rest in order.
 //! - Reads are bounded per tab ([`READS_IN_FLIGHT`], [`READS_QUEUED`], then
@@ -71,7 +74,8 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use super::dapp_permissions::{
-    is_insecure_public_origin, origin_of, resolve_granted, should_drop_grant, DpermGrant,
+    dapp_spelling, is_insecure_public_origin, origin_of, resolve_granted, should_drop_grant,
+    DpermGrant,
 };
 use super::dapp_rpc::{
     self, chain_param, classify, error_body_json, error_json, event_json, hex_chain_id,
@@ -491,7 +495,11 @@ impl App for DappBrowser {
                 reconcile_grants(model, None, &mut out);
             }
             Event::AccountSwitched { address, now_ms } => {
-                model.active_address = Some(address);
+                // The one spelling every page is given, whatever the shell
+                // sent (spec 082 RG10): the re-pinned grant, the
+                // `accountsChanged` it announces and every later connect
+                // answer all read from here.
+                model.active_address = Some(dapp_spelling(&address));
                 reconcile_grants(model, Some(now_ms), &mut out);
             }
             Event::SitesListed { sites } => {
@@ -785,7 +793,13 @@ fn sites_listed(model: &mut Model, sites: Vec<DbrStoredSite>, out: &mut Out) {
         if let Some(grant) = stored.grant {
             // A grant is only ever FOR the origin it is filed under.
             if origin_of(&grant.origin).as_deref() == Some(origin.as_str()) {
-                site.grant = Some(grant);
+                // A grant stored lower-case (before 082) is answered in the
+                // same spelling as a new one; the store is left as it is —
+                // every comparison with it is case-insensitive.
+                site.grant = Some(DpermGrant {
+                    address: dapp_spelling(&grant.address),
+                    ..grant
+                });
             }
         }
         if let Some(chain_id) = stored.chain_id.filter(|chain| *chain > 0) {

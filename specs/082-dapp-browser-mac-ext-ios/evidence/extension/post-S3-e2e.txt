@@ -1,0 +1,23 @@
+S3 e2e - cd app-web/vela-wallet && npx playwright test -c playwright.isolated.config.ts e2e/extension-live-provider.e2e.ts e2e/extension-lifecycle.e2e.ts
+(config: own wrangler dev on port 4174, reuseExistingServer=false; 4174 was free before the run; its webServer runs npm run build && npm run build:extension)
+
+  ✓   2 [chromium] › e2e/extension-live-provider.e2e.ts:163:2 › a provider a dApp can use › switches chain per site, and the site hears chainChanged (1.4s)
+  ✓   1 [chromium] › e2e/extension-lifecycle.e2e.ts:154:2 › a request’s life in the extension (spec 082) › EX5 (G17): a reload during a sheet settles the old request; only the new one shows (2.4s)
+  ✓   3 [chromium] › e2e/extension-live-provider.e2e.ts:212:2 › a provider a dApp can use › forwards reads to the node the wallet named for the site chain, verbatim (1.1s)
+  ✓   4 [chromium] › e2e/extension-lifecycle.e2e.ts:184:2 › a request’s life in the extension (spec 082) › EX4 (G18): a second tab’s request queues in the same panel and is answered next (1.4s)
+  ✓   5 [chromium] › e2e/extension-live-provider.e2e.ts:248:2 › a provider a dApp can use › a site cut off in the wallet hears accountsChanged([]) and disconnect (1.5s)
+  ✓   7 [chromium] › e2e/extension-live-provider.e2e.ts:279:2 › a provider a dApp can use › a site follows the account the wallet switches to (1.5s)
+  ✓   6 [chromium] › e2e/extension-lifecycle.e2e.ts:220:2 › a request’s life in the extension (spec 082) › EX6: closing the side panel answers 4900 "The browser closed…" at once (2.0s)
+  ✓   9 [chromium] › e2e/extension-lifecycle.e2e.ts:246:2 › a request’s life in the extension (spec 082) › EX8 (G19): a worker stopped mid-request resumes; the answer arrives once, with no Chrome text (2.0s)
+  ✓  10 [chromium] › e2e/extension-lifecycle.e2e.ts:291:2 › a request’s life in the extension (spec 082) › EX4b (RB9, G23c): the panel is still the panel after Wallet → Settings → Wallet (4.7s)
+  ✓   8 [chromium] › e2e/extension-live-provider.e2e.ts:319:2 › a provider a dApp can use › a request a person CLICKED for opens the side panel, and it answers (7.4s)
+  ✓  11 [chromium] › e2e/extension-live-provider.e2e.ts:366:2 › a provider a dApp can use › a message signed in the panel ends on the Signed tick, which goes by itself (L-PANEL) (3.4s)
+  11 passed (39.7s)
+exit=0
+
+Side effect: the config's build step rewrote extension/dist (the unpacked build this CfT instance runs): 1266 files before and after,
+content hash a539176a… -> 4abe2d85…; the new dist embeds fb8c702 where the old one had 80db06a (settings chunk names moved), same wasm
+vela_core_bg.80945236660e.wasm. The side panel opened before the rebuild then failed on its next in-app navigation
+("Your file couldn't be accessed", GET chrome-extension://…/zh/settings net::ERR_FILE_NOT_FOUND at 19:48:24Z); I navigated the panel to
+zh/wallet.html and reloaded the wallet tab (19:48:45Z), after which Settings and Wallet load again. The worker still runs the old
+background.js from memory until Chrome next restarts it; storage and grants are untouched.

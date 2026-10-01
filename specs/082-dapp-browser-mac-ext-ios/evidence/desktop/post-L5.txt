@@ -1,0 +1,18 @@
+# L5 — https://expired.badssl.com/ ; Enter 02:49:30.466
+[vela-wallet] 02:49:30.408 browser: navigate asked host=expired.badssl.com view=built composing=false
+[vela-wallet] 02:49:30.410 browser: asked host=expired.badssl.com gen=14 how=navigation
+[vela-wallet] 02:49:32.253 browser: engine stopped without commit host=expired.badssl.com gen=14
+[vela-wallet] 02:49:33.069 browser: probe host=expired.badssl.com gen=14 verdict=other route=system
+[vela-wallet] 02:49:33.070 browser: failed host=expired.badssl.com class=other
+[vela-wallet] 02:49:36.138 browser: retry host=expired.badssl.com attempt=1
+[vela-wallet] 02:49:36.139 browser: asked host=expired.badssl.com gen=15 how=auto
+[vela-wallet] 02:49:36.945 browser: engine stopped without commit host=expired.badssl.com gen=15
+[vela-wallet] 02:49:37.328 browser: probe host=expired.badssl.com gen=15 verdict=other route=system
+[vela-wallet] 02:49:37.328 browser: failed host=expired.badssl.com class=other
+--- chaos-post.log
+02:49:30 PASS expired.badssl.com:443 1ms
+02:49:31 PASS expired.badssl.com:443 0ms
+02:49:32 PASS expired.badssl.com:443 0ms
+02:49:36 PASS expired.badssl.com:443 0ms
+02:49:36 PASS expired.badssl.com:443 0ms
+02:49:36 PASS expired.badssl.com:443 0ms

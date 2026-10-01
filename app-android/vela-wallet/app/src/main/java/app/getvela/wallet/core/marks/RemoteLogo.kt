@@ -33,9 +33,48 @@ import java.util.concurrent.TimeUnit
  * put without a refetch storm, and nothing is drawn until the bytes are here
  * — the fallback is the whole mark, not a blank circle.
  */
+/**
+ * How long a logo that failed stays failed (spec 082 RE10, W20) — the core's
+ * rule (`markMissTtlMs`): a missing, refused or undrawable image for the
+ * session; a throttled, broken or unreached one for a minute, and until the
+ * network comes back. A miss is remembered at all because a token with no
+ * logo would otherwise be fetched on every scroll.
+ */
+object LogoMisses {
+    /** The session: a miss that will not heal by asking again. */
+    private const val SESSION = Long.MAX_VALUE
+
+    private val until = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Whether [url] is still a miss at [nowMs]; an expired one is forgotten. */
+    fun missed(url: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        val expiry = until[url] ?: return false
+        if (nowMs < expiry) return true
+        until.remove(url, expiry)
+        return false
+    }
+
+    /**
+     * [status]: the HTTP status the fetch answered with (a 2xx whose bytes do
+     * not draw included); `null` when no answer came — [kind] names why.
+     */
+    fun record(url: String, status: Int?, kind: String = TRANSPORT, nowMs: Long = System.currentTimeMillis()) {
+        val ttl = uniffi.vela_core_uniffi.markMissTtlMs(kind, status?.takeIf { it in 0..0xFFFF }?.toUShort())
+        until[url] = ttl?.let { nowMs + it.toLong() } ?: SESSION
+    }
+
+    /** The network came back: every miss that may heal is asked for again. */
+    fun clearTransient() {
+        until.entries.removeIf { it.value != SESSION }
+    }
+
+    fun clear() = until.clear()
+
+    const val TRANSPORT = "transport"
+}
+
 object LogoStore {
     private val memory = object : LruCache<String, Bitmap>(96) {}
-    private val misses = java.util.Collections.synchronizedSet(HashSet<String>())
 
     @Volatile
     private var client: OkHttpClient? = null
@@ -55,21 +94,22 @@ object LogoStore {
 
     suspend fun load(context: Context, url: String): Bitmap? {
         memory.get(url)?.let { return it }
-        if (url in misses) return null
+        if (LogoMisses.missed(url)) return null
         return withContext(Dispatchers.IO) {
-            val bytes = runCatching {
+            // The status rides along: what the miss is decides how long it lasts.
+            val fetched = runCatching {
                 client(context.applicationContext).newCall(Request.Builder().url(url).build()).execute().use { response ->
-                    if (response.isSuccessful) response.body?.bytes() else null
+                    response.code to (if (response.isSuccessful) response.body?.bytes() else null)
                 }
             }.getOrNull()
-            val bitmap = bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-            if (bitmap == null) misses.add(url) else memory.put(url, bitmap)
+            val bitmap = fetched?.second?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+            if (bitmap == null) LogoMisses.record(url, fetched?.first) else memory.put(url, bitmap)
             bitmap
         }
     }
 
     /** Tests and the erase-device path: forget everything held in memory. */
-    fun clear() { memory.evictAll(); misses.clear() }
+    fun clear() { memory.evictAll(); LogoMisses.clear() }
 }
 
 @Composable

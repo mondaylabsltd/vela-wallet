@@ -13,8 +13,14 @@ import {
 	moneyParts,
 	tokenAmountText,
 	trimBalance,
-	withLiveWallet
+	withLiveWallet,
+	withLiveWalletDesktop
 } from './live';
+import { buildDesktopState } from './fixtures';
+import type { FeedView } from '$lib/core/generated/FeedView';
+import { resolveWalletFlowMessages } from '$lib/i18n/engine.server';
+import { buildFlowState } from '$lib/flows/fixtures';
+import { withLiveFlow } from '$lib/flows/live';
 
 const m = resolveWalletMessages('en');
 const USD: CurrencyView = { code: 'USD', rate: 1, committed: true };
@@ -277,5 +283,88 @@ describe('liveBalance — the decimal mark is the preset’s (spec 028 Phase 9, 
 		const model = liveBalance({ ...PRISTINE, display_total_usd: 1575.55 }, USD, m);
 		expect(model.integer).toBe('$1,575');
 		expect(model.decimalMark).toBe('.');
+	});
+});
+
+/**
+ * Spec 082 RG5, RB13 (L-D7, G1): which empty line the home and the history
+ * say is the core's (`home_empty_key`, `history_empty_key`), and the wide
+ * layout draws the section's mode the way the narrow one does.
+ */
+describe('empty activity, chosen by the core', () => {
+	const IDENT = (seed: string) => `<svg data-seed="${seed}"></svg>`;
+	const EMPTY_FEED: FeedView = {
+		rows: [],
+		transactions: [],
+		new_item_id: null,
+		toast: null,
+		history_empty_key: 'history.emptyTitle',
+		home_empty_key: 'home.emptyNoActivity'
+	};
+	const FILTERED: FeedView = {
+		...EMPTY_FEED,
+		history_empty_key: 'history.emptyFilter',
+		home_empty_key: 'home.emptyNoActivityNetwork'
+	};
+	const LOOKED = { ...PRISTINE, balance_unknown: false, display_total_usd: 0 };
+
+	it('all networks → "no activity"; filtered → "none on this network"', () => {
+		const base = buildMobileState('h1', m, IDENT);
+		const all = withLiveWallet(base, { balance: LOOKED, currency: USD, m, feed: EMPTY_FEED });
+		expect(all.activitySection.mode).toBe('empty');
+		expect(all.activitySection.empty?.title).toBe(m.activity.emptyTitle);
+		const one = withLiveWallet(base, {
+			balance: LOOKED,
+			currency: USD,
+			m,
+			feed: FILTERED,
+			chainFilter: 100
+		});
+		expect(one.activitySection.empty?.title).toBe(m.activity.emptyTitleNetwork);
+		expect(one.activitySection.empty?.title).not.toBe(m.activity.emptyTitle);
+	});
+
+	it('the wide layout: a skeleton while loading, then the empty state with the narrow copy', () => {
+		const base = buildDesktopState('d1', m, IDENT);
+		const loading = withLiveWalletDesktop(base, { balance: PRISTINE, currency: USD, m });
+		expect(loading.activitySection.mode).toBe('loading');
+		const empty = withLiveWalletDesktop(base, {
+			balance: LOOKED,
+			currency: USD,
+			m,
+			feed: EMPTY_FEED
+		});
+		expect(empty.activitySection.mode).toBe('empty');
+		expect(empty.activitySection.empty).toEqual({
+			title: m.activity.emptyTitle,
+			caption: m.activity.emptyCaption
+		});
+		expect(empty.assetsSection.mode).toBe('empty');
+		expect(empty.assetsSection.empty).toEqual({
+			title: m.assets.emptyTitle,
+			caption: m.assets.emptyCaption
+		});
+	});
+
+	it('the history says the core’s key: emptyTitle, or emptyFilter under a filter', () => {
+		const fm = resolveWalletFlowMessages('en');
+		const history = buildFlowState('a1', fm, IDENT);
+		const live = (feed: FeedView) =>
+			withLiveFlow(history, {
+				balance: LOOKED,
+				currency: USD,
+				m,
+				emptyCopy: undefined,
+				feed,
+				fm
+			});
+		const all = live(EMPTY_FEED);
+		const filtered = live(FILTERED);
+		if (all.base.kind !== 'history' || filtered.base.kind !== 'history') {
+			throw new Error('expected the history');
+		}
+		expect(all.base.model.mode).toBe('empty');
+		expect(all.base.model.emptyText).toBe(fm['history.emptyTitle']);
+		expect(filtered.base.model.emptyText).toBe(fm['history.emptyFilter']);
 	});
 });

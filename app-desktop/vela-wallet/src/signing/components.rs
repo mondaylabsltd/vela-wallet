@@ -73,6 +73,7 @@ pub fn header(theme: &Theme, model: &SigningModel) -> Div {
 
 /// The header from its facts alone.
 pub fn header_view(theme: &Theme, model: &HeaderModel) -> Div {
+    let label = vela_core::app::browser_load::site_label(&model.dapp_name, &model.dapp_host);
     div()
         .flex()
         .items_center()
@@ -125,21 +126,18 @@ pub fn header_view(theme: &Theme, model: &HeaderModel) -> Div {
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme.fg_base)
                         .truncate()
-                        .child(model.dapp_name.clone()),
+                        .child(SharedString::from(label.name)),
                 )
                 // A site whose name IS its host says it once (spec 079 F14:
-                // "127.0.0.1:8137" over "127.0.0.1:8137").
-                .children(
-                    (!model.dapp_host.is_empty() && model.dapp_host != model.dapp_name).then(
-                        || {
-                            div()
-                                .text_size(theme::text_row_sub())
-                                .text_color(theme.fg_muted)
-                                .truncate()
-                                .child(model.dapp_host.clone())
-                        },
-                    ),
-                ),
+                // "127.0.0.1:8137" over "127.0.0.1:8137") — the core's rule
+                // (spec 082 RE7), not this file's comparison.
+                .children(label.host_line.map(|host| {
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .truncate()
+                        .child(SharedString::from(host))
+                })),
         )
         .child(
             div()

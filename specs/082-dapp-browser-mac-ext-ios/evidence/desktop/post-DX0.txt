@@ -1,0 +1,9 @@
+[vela-wallet] dev proxy: all traffic via 127.0.0.1:8899
+[vela-wallet] 02:24:34.814 browser: navigate asked host=example.com view=pending composing=false
+[vela-wallet] 02:24:34.982 browser: asked host=example.com gen=1 how=navigation
+[vela-wallet] 02:24:37.040 browser: committed host=example.com gen=1
+[vela-wallet] 02:24:37.313 browser: finished host=example.com
+--- chaos-post.log
+02:24:34 PASS example.com:443 8ms
+02:24:34 PASS example.com:443 12ms
+02:24:34 PASS example.com:443 4ms

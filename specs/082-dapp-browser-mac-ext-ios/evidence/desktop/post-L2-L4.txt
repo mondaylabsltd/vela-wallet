@@ -1,0 +1,44 @@
+# L2–L4 — blackhole uniswap from a new tab; Enter 02:46:06.712; Retry tapped 02:47:13.562 (during auto attempt 1); pass 02:47:23.769
+[vela-wallet] 02:46:06.655 browser: navigate asked host=app.uniswap.org view=built composing=false
+[vela-wallet] 02:46:06.657 browser: asked host=app.uniswap.org gen=10 how=navigation
+[vela-wallet] 02:46:09.807 browser: watchdog host=app.uniswap.org gen=10 (no commit in 3000 ms)
+[vela-wallet] 02:46:14.323 browser: probe host=app.uniswap.org gen=10 verdict=timeout route=system
+[vela-wallet] 02:46:14.323 browser: failed host=app.uniswap.org class=timeout
+[vela-wallet] 02:46:16.388 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:46:18.431 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:46:20.531 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:47:07.992 browser: retry host=app.uniswap.org attempt=1
+[vela-wallet] 02:47:07.993 browser: asked host=app.uniswap.org gen=11 how=auto
+[vela-wallet] 02:47:11.100 browser: watchdog host=app.uniswap.org gen=11 (no commit in 3000 ms)
+[vela-wallet] 02:47:15.616 browser: probe host=app.uniswap.org gen=11 verdict=timeout route=system
+[vela-wallet] 02:47:15.616 browser: failed host=app.uniswap.org class=timeout
+[vela-wallet] 02:47:46.518 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:47:51.699 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:47:56.827 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:48:01.975 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:48:07.110 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:48:12.284 browser: retry host=app.uniswap.org attempt=2
+[vela-wallet] 02:48:12.285 browser: asked host=app.uniswap.org gen=12 how=page
+[vela-wallet] 02:48:12.285 browser: asked host=app.uniswap.org gen=13 how=navigation
+[vela-wallet] 02:48:13.426 browser: committed host=app.uniswap.org gen=13
+[vela-wallet] 02:48:14.894 browser: finished host=app.uniswap.org
+(… 35 'retry … skipped (engine still loading)' lines in total)
+--- WebKit os_log
+2026-09-29 02:46:06.655 Df vela-wallet[98763:8d02d5] [com.apple.WebKit:Loading] 0xa4606ce18 - [pageProxyID=5, webPageID=115, PID=14024] WebP
+2026-09-29 02:47:07.103 E  vela-wallet[98763:8d02d5] [com.apple.WebKit:Process] 0xa4606ce18 - [pageProxyID=5, webPageID=115, PID=14024] WebP
+2026-09-29 02:47:07.993 Df vela-wallet[98763:8d02d5] [com.apple.WebKit:Loading] 0xa4606ce18 - [pageProxyID=5, webPageID=115, PID=14024] WebP
+2026-09-29 02:48:08.223 E  vela-wallet[98763:8d02d5] [com.apple.WebKit:Process] 0xa4606ce18 - [pageProxyID=5, webPageID=115, PID=14024] WebP
+2026-09-29 02:48:12.284 Df vela-wallet[98763:8d02d5] [com.apple.WebKit:Loading] 0xa4606ce18 - [pageProxyID=5, webPageID=115, PID=14024] WebP
+2026-09-29 02:48:13.426 Df vela-wallet[98763:8d02d5] [com.apple.WebKit:Loading] 0xa4606ce18 - [pageProxyID=5, webPageID=115, PID=14024] WebP
+--- chaos-post.log
+02:46:06 CONFIG {"mode": "blackhole", "latency": 9000, "bps": 0, "drop": 1.0, "match": "uniswap"}
+02:46:06 CUT 4 live tunnels: app.uniswap.org,entry-gateway.backend-prod.api.uniswap.org,metrics.interface.gateway.uniswap.org
+02:46:06 HOLE app.uniswap.org:443
+02:46:09 HOLE app.uniswap.org:443
+02:46:35 CONFIG {"mode": "blackhole", "latency": 9000, "bps": 0, "drop": 1.0, "match": "uniswap"}
+02:47:07 HOLE app.uniswap.org:443
+02:47:11 HOLE app.uniswap.org:443
+02:47:23 CONFIG {"mode": "pass", "latency": 9000, "bps": 0, "drop": 1.0, "match": "uniswap"}
+02:48:12 PASS app.uniswap.org:443 0ms
+02:48:13 PASS cdn.app.uniswap.org:443 1ms
+02:48:15 PASS privy.app.uniswap.org:443 0ms

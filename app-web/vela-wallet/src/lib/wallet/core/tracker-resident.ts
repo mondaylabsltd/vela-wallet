@@ -51,6 +51,7 @@ import { feed } from '$lib/wallet/core/feed.svelte';
 import { notifyReceiptLogsConfirmed } from './token-trust-resident';
 import { loadCore } from '$lib/core/client';
 import { createTxTrackerSession } from './tracker-session';
+import { trackerLogLines } from './tracker-executor';
 
 import type { SendReceiptOutcome } from '$lib/core/generated/SendReceiptOutcome';
 import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
@@ -76,8 +77,13 @@ const listeners = new Set<(view: TrackView) => void>();
 /** A surface waiting on one hash — the send screen's receipt, today's only one. */
 interface OutcomeWatcher {
 	notify: (outcome: SendReceiptOutcome) => void;
-	/** A fee-hold is not terminal: it may still confirm, so it is sent once. */
-	feeHeldSent: boolean;
+	/**
+	 * The last outcome handed over, so the same one is never sent twice. A
+	 * non-terminal outcome (fee-held, acknowledged) arrives on EVERY view while
+	 * it holds; the send core hears each once (spec 082: deduped on the outcome
+	 * as well as the status).
+	 */
+	lastSent: string | null;
 }
 
 const watchers = new Map<string, OutcomeWatcher>();
@@ -87,31 +93,46 @@ function normalize(hash: string): string {
 }
 
 /**
- * The verdict a receipt-watching surface understands, or `null` while the op is
- * still in flight. `unreachable` and `accepted_not_landed` deliberately produce
+ * The verdict a receipt-watching surface understands, or `null` while there is
+ * nothing new to say. A mirror of the core's `send::receipt_outcome_of` —
+ * which has no wasm export yet (listed for the exports phase) — kept
+ * exhaustive with no `default`, so a new verdict breaks this build rather than
+ * defaulting into silence on a money surface.
+ *
+ * `unreachable` and `accepted_not_landed` with no acknowledgement produce
  * NOTHING: a slow or unreachable poll leaves the payment submitted, which is
  * invariant ① on the send core's side too (`SendReceiptOutcome`'s doc).
  */
-function outcomeOf(entry: TrackEntryView): SendReceiptOutcome | null {
-	// Deliberately exhaustive, with no `default`: a new verdict in the core must
-	// break this build rather than default into silence on a money surface.
+export function outcomeOf(entry: TrackEntryView): SendReceiptOutcome | null {
 	switch (entry.status) {
 		case 'confirmed':
 			return entry.tx_hash ? { type: 'confirmed', tx_hash: entry.tx_hash } : null;
 		case 'dropped':
 			// A definitive `success === false` receipt — dropped or reverted.
-			return { type: 'failed', rejected: false };
+			return { type: 'failed', rejected: false, not_sent: false };
 		case 'rejected':
 			// The relay refused it before any block; nothing was sent.
-			return { type: 'failed', rejected: true };
+			return { type: 'failed', rejected: true, not_sent: false };
+		case 'not_sent':
+			// A may-have-been-sent op the relay never had (spec 082 RA4): not
+			// sent — never the fee-rejected words.
+			return { type: 'failed', rejected: false, not_sent: true };
 		case 'fee_held':
 			return { type: 'fee_held' };
 		case 'pending':
 		case 'unreachable':
 		case 'accepted_not_landed':
-			// Invariant ①: still in flight, or genuinely unknown. The surface keeps
-			// showing "submitted" — it is never told a timeout was a failure.
-			return null;
+			switch (entry.outcome) {
+				case 'landing':
+				case 'still_confirming':
+					// The relay has it (or it was accepted outright): a receipt that
+					// read "may have been sent" can drop that caption.
+					return { type: 'acknowledged' };
+				case 'maybe_sent':
+				case 'unknown':
+				case 'final':
+					return null;
+			}
 	}
 }
 
@@ -122,15 +143,14 @@ function deliver(view: TrackView): void {
 		if (!watcher) continue;
 		const outcome = outcomeOf(entry);
 		if (!outcome) continue;
-		if (outcome.type === 'fee_held') {
-			// Still pending, only the wording changes (invariant ②) — so the watcher
-			// stays registered for the confirmation that may follow.
-			if (watcher.feeHeldSent) continue;
-			watcher.feeHeldSent = true;
-			watcher.notify(outcome);
-			continue;
+		const key = JSON.stringify(outcome);
+		if (key === watcher.lastSent) continue;
+		watcher.lastSent = key;
+		// Still pending — only the wording changes (invariant ②) — so the watcher
+		// stays registered for the verdict that may follow.
+		if (outcome.type !== 'fee_held' && outcome.type !== 'acknowledged') {
+			watchers.delete(entry.user_op_hash);
 		}
-		watchers.delete(entry.user_op_hash);
 		watcher.notify(outcome);
 	}
 }
@@ -170,6 +190,8 @@ export function ensureTxTracker(): Promise<void> {
 		await loadCore();
 		session = createTxTrackerSession({
 			onView: (view: TrackView) => {
+				// Every status change is a console line (spec 082 G61).
+				for (const line of trackerLogLines(current, view)) console.log(line);
 				current = view;
 				deliver(view);
 				syncTicker(view);
@@ -177,9 +199,7 @@ export function ensureTxTracker(): Promise<void> {
 			},
 			onError: (error) => console.error('[tx_tracker] core fault:', error),
 			ports: {
-				feedReconciled: (count: number) => {
-					if (count > 0) feed.liveTick();
-				},
+				feedReconciled: (count: number) => feed.reconciled(count),
 				receiptLogsConfirmed: notifyReceiptLogsConfirmed,
 				// Money left: the hero total refetches past the token cache, so
 				// the figure follows a send the moment its receipt lands (issue 188).
@@ -239,17 +259,41 @@ export function trackSubmitted(
 	userOpHash: string,
 	recordIds: string[],
 	chainId: number,
-	watch?: (outcome: SendReceiptOutcome) => void
+	watch?: (outcome: SendReceiptOutcome) => void,
+	/** The submit's reply was lost; the hash is the local one (spec 082 RA4). */
+	maybeSent = false,
+	/** The head read before the first POST — the find-event's start (ruling 8). */
+	submitBlock: number | null = null,
+	/**
+	 * The relay took the op a write-ahead hand-off announced (spec 082 RJ1): it
+	 * is never "may have been sent" again. Its watcher, if any, is kept.
+	 */
+	admitted = false
 ): void {
 	if (!userOpHash) return;
 	const key = normalize(userOpHash);
-	if (watch) watchers.set(key, { notify: watch, feeHeldSent: false });
+	if (watch) watchers.set(key, { notify: watch, lastSent: null });
 	dispatchTxTracker({
 		type: 'submitted',
 		user_op_hash: key,
 		record_ids: recordIds,
-		chain_id: chainId
+		chain_id: chainId,
+		maybe_sent: maybeSent,
+		submit_block: submitBlock,
+		admitted
 	});
+}
+
+/**
+ * A write-ahead op proven never sent (spec 082 RJ1): the tracker drops those
+ * records (and the entry, when none is left) without patching anything, and
+ * whoever watched it stops hearing about it.
+ */
+export function withdrawTracked(userOpHash: string, recordIds: string[]): void {
+	if (!userOpHash) return;
+	const key = normalize(userOpHash);
+	watchers.delete(key);
+	dispatchTxTracker({ type: 'withdrawn', user_op_hash: key, record_ids: recordIds });
 }
 
 /** Stop watching a hash — the surface went away, the tracking continues. */

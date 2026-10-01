@@ -1,0 +1,15 @@
+EX5 · G17 — timings are Date.now() in ms (same Mac clock)
+Sign (tab A, real click)
+  panel sheet appeared        1790620469441   ("1 127.0.0.1:8137 Gnosis 签名消息 Hello, Vela …")
+  storage.session             vela.req.291188710:…:8   (one record)
+Page.reload tab A sent at     1790620470774
+  panel sheet removed         1790620470862   (+88 ms)
+  worker                      [vela-sw] 2026-09-28T18:34:30.861Z req.settled cause=page_left tab=291188710
+  storage.session vela.req.*  none
+Sign again after the reload
+  [vela-sw] 18:34:46.353Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+  [vela-sw] 18:34:46.354Z req.shown tab=291188710            (one dialog in the panel)
+  storage.session             vela.req.291188710:…:3   (only the new record)
+  slide -> [vela-sw] 18:34:48.312Z req.claim phase=sign live=true ; 18:34:48.320Z req.answered delivered=true outcome=ok
+  page hook on vela-1193: exactly 1 res for id …:3 (ok, a signature — value not recorded here)
+after: storage.session vela.req.* = none; storage.local vela.req.* = none

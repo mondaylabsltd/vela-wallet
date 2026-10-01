@@ -13,11 +13,21 @@
  * passing quietly: a budget you skipped is not a budget you met.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const APP_ROOT = join(import.meta.dirname, '../../..');
-const DIST = join(APP_ROOT, 'extension/dist');
+/**
+ * The package under test: the one `extension/build.mjs` just wrote —
+ * `VELA_EXTENSION_DIST` (relative to the app, or absolute) when set, as the
+ * isolated e2e and the gates set it so a running browser's package is never
+ * rewritten (spec 082 RJ21), else `extension/dist`. The same rule as the build
+ * and `e2e/extension-helpers.ts`: reading `extension/dist` after a build that
+ * went elsewhere passed a package nobody had checked.
+ */
+const DIST = process.env.VELA_EXTENSION_DIST
+	? resolve(APP_ROOT, process.env.VELA_EXTENSION_DIST)
+	: join(APP_ROOT, 'extension/dist');
 const MANIFEST = join(APP_ROOT, 'extension/manifest.json');
 
 /** Every `.html` in the package. */

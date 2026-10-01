@@ -112,6 +112,20 @@
 //!   wrong-chain memory — which is materially weaker than the TypeScript pool
 //!   it replaced, on a value that decides a treasury transfer.
 //!
+//! # Spec 082 additions
+//!
+//! - Did a POST leave the device? [`RpcTransportOutcome::NotConnected`] (routed
+//!   like `Network`) and [`may_have_delivered`]; both concluding verdicts carry
+//!   the call's sticky OR, which is what lets a submit say "not sent" only
+//!   when that is true (RA1).
+//! - `unreached_chains`: one clean first pass of transport failures, no
+//!   rate-limit signal, is enough for the browser's chain notice (RF1).
+//! - [`OPTIONAL_METHODS`]: a node that does not serve `eth_simulateV1` answers
+//!   so; that is never a ban or a chain fault (RG7).
+//! - [`is_log_range_error`]: the one reading of an `eth_getLogs` range limit,
+//!   shared with `tx_tracker`'s find-event (ruling 8); rate-limit wording on
+//!   `eth_getLogs` is never mistaken for one (T180).
+//!
 //! Time never originates here: every shell result carries `now_ms` (epoch
 //! milliseconds, f64). Randomness never originates here: the backoff jitter
 //! is drawn by the shell via [`RpcOperation::DrawJitter`]. The two global
@@ -286,8 +300,30 @@ pub enum RpcTransportOutcome {
     NonJson,
     /// The per-request timeout elapsed.
     Timeout,
-    /// DNS/TLS/socket failure.
+    /// A socket failure after the request may have been written (a reset,
+    /// a closed connection mid-answer), or a failure the shell cannot place.
     Network,
+    /// Nothing left the device (spec 082 RA1): DNS, a refused connection,
+    /// the TLS handshake, the proxy's CONNECT, a connect or resolve timeout.
+    /// Routed exactly like [`Self::Network`]; it differs only in
+    /// [`may_have_delivered`], which is what lets a submit say "not sent".
+    NotConnected,
+}
+
+/// Could this one POST have reached the endpoint and been acted on, with its
+/// answer lost on the way back (spec 082 RA1)? True for a timeout, a socket
+/// failure after the write, a body that is not JSON and an HTTP 5xx; false
+/// when nothing left the device ([`RpcTransportOutcome::NotConnected`]), for
+/// any JSON answer (the endpoint said what it did) and for an HTTP 4xx (the
+/// request was refused before any handler ran).
+pub fn may_have_delivered(outcome: &RpcTransportOutcome) -> bool {
+    match outcome {
+        RpcTransportOutcome::Timeout
+        | RpcTransportOutcome::Network
+        | RpcTransportOutcome::NonJson => true,
+        RpcTransportOutcome::HttpError { status } => (500..=599).contains(status),
+        RpcTransportOutcome::NotConnected | RpcTransportOutcome::Response { .. } => false,
+    }
 }
 
 /// How a routed call ends — delivered to the shell so it can settle the
@@ -298,14 +334,26 @@ pub enum RpcTransportOutcome {
 pub enum RpcCallVerdict {
     /// Use the JSON body held for (call_id, url). Includes valid execution
     /// errors like "execution reverted" — those are answers, not faults.
-    Respond { url: String },
+    /// `maybe_delivered` is the OR of [`may_have_delivered`] over every POST
+    /// of this call — an earlier endpoint may have acted on it too.
+    Respond {
+        url: String,
+        #[serde(default)]
+        maybe_delivered: bool,
+    },
     /// `eth_getLogs` range/size cap (invariant ⑤): the caller splits the
     /// block range. `max_span` is the endpoint's stated block span, or 0 for
     /// "halve" (a result-count cap or a range error with no usable number).
     RangeCap { url: String, max_span: f64 },
     /// Every endpoint failed every pass. For RPC calls `rate_limited`
     /// distinguishes the self-healing transient condition (invariant ④).
-    Failed { rate_limited: bool },
+    /// `maybe_delivered` as on [`Self::Respond`]: false only when no POST of
+    /// the call can have been acted on (spec 082 RA1).
+    Failed {
+        rate_limited: bool,
+        #[serde(default)]
+        maybe_delivered: bool,
+    },
     /// Answer to [`Event::BundlerBaseRequested`]: the REST base of the
     /// bundler the pool would submit to (invariant ③). `None` ⇒ every
     /// bundler endpoint is banned or the pool is empty — use the built-in
@@ -704,7 +752,11 @@ pub fn get_logs_range_cap(error: &RpcErrorInfo) -> Option<f64> {
             && (msg.contains("exceed")
                 || msg.contains("large")
                 || msg.contains("wide")
-                || msg.contains("maximum")));
+                || msg.contains("maximum")
+                // dRPC's free tier: "ranges over 10000 blocks are not
+                // supported on free plan" (answered for a 500-block window on
+                // Gnosis, 2026-09-28; 100 blocks pass) — spec 082 T180.
+                || msg.contains("blocks")));
     if !is_range_error {
         return None;
     }
@@ -725,6 +777,44 @@ pub fn get_logs_range_cap(error: &RpcErrorInfo) -> Option<f64> {
         }
     }
     Some(0.0)
+}
+
+/// Methods a healthy node may simply not offer (spec 082 RG7). A JSON error
+/// to one is the node's answer — "not served here" — never a fault of the
+/// endpoint or of the chain: no ban, no score change, no chain notice or
+/// banner. A rate-limit signal on one still fails over.
+pub const OPTIONAL_METHODS: &[&str] = &["eth_simulateV1"];
+
+/// Is `method` one of [`OPTIONAL_METHODS`]?
+pub fn is_optional_method(method: &str) -> bool {
+    OPTIONAL_METHODS.contains(&method)
+}
+
+/// Does this JSON-RPC error say the `eth_getLogs` window was too wide — a
+/// block-range limit or a result cap (spec 082 T180, ruling 8)? The one rule
+/// both readers of that answer use: the pool, which answers it to the caller
+/// instead of banning the endpoint or classifying the chain (invariant ⑤),
+/// and `tx_tracker`'s find-event, which halves its window on it. It is
+/// [`get_logs_range_cap`] as a predicate, so the two can never disagree.
+pub fn is_log_range_error(error: &RpcErrorInfo) -> bool {
+    get_logs_range_cap(error).is_some()
+}
+
+/// Rate-limit WORDS, without the error codes [`is_rate_limit_signal`] also
+/// counts: `-32005` is "limit exceeded" to EIP-1474 and a result cap to many
+/// log providers ("query returned more than 10000 results"), so on
+/// `eth_getLogs` only the wording may overrule a range error.
+fn has_rate_limit_wording(error: &RpcErrorInfo) -> bool {
+    let msg = error.message.as_deref().unwrap_or("").to_lowercase();
+    [
+        "rate limit",
+        "rate-limit",
+        "too many request",
+        "usage limit",
+        "quota",
+    ]
+    .iter()
+    .any(|needle| msg.contains(needle))
 }
 
 /// The `(\d[\d,_]*)\s*([km])?` scan: first digit anywhere, greedy digits/
@@ -856,6 +946,15 @@ struct CallSession {
     /// The verified same-chain RPC URL for `X-Rpc-Url` (bundler calls).
     x_rpc_url: Option<String>,
     state: SessionState,
+    /// Sticky OR of [`may_have_delivered`] over every POST of this call
+    /// (spec 082 RA1) — carried on the verdict, never reset between passes.
+    maybe_delivered: bool,
+    /// First pass only (spec 082 RF1): how many endpoints were tried, and
+    /// whether every one of them failed on transport. A pass that swept clean
+    /// this way, with no rate-limit signal, puts the chain in
+    /// `unreached_chains` without waiting for the later passes.
+    first_pass_tried: u32,
+    first_pass_all_transport: bool,
 }
 
 /// The fastest-RPC ping race (`pickFastestRpcUrl`), run at most once per
@@ -894,6 +993,12 @@ pub struct Model {
     /// rate-limiting — the UI must NOT nag the user to swap RPCs for these
     /// (invariant ④; was `getRateLimitedChains`).
     rate_limited_chains: BTreeSet<u32>,
+    /// Chains whose RPC endpoints ALL failed on transport in one call's first
+    /// pass, with no rate-limit signal (spec 082 RF1). Earlier than
+    /// `failed_chains` (one pass, not three) and cleared by the same usable
+    /// answer. The browser's chain notice reads `failed ∪ unreached`; the home
+    /// banner keeps `failed_chains` alone.
+    unreached_chains: BTreeSet<u32>,
     /// Cached fastest-RPC winner per chain, 1h TTL (`fastestRpcCache`).
     fastest: BTreeMap<u32, FastestPick>,
     /// Per chain, the URLs that answered `eth_chainId` with a DIFFERENT id.
@@ -941,6 +1046,13 @@ pub struct RpcPoolView {
     /// The ban map as persisted (expired entries may linger until the next
     /// prune — check [`is_ban_active`] with a current timestamp).
     pub banned: Vec<RpcBanEntry>,
+    /// Chains one call's first pass could not reach at all — every endpoint
+    /// failed on transport, no rate-limit signal (spec 082 RF1). Sorted
+    /// ascending. The chain notice is `chain ∈ failed_chains ∪
+    /// unreached_chains ∧ chain ∉ rate_limited_chains`; the home "fix your
+    /// RPC" banner still reads `failed_chains` only.
+    #[serde(default)]
+    pub unreached_chains: Vec<u32>,
     /// Per routed call, the endpoints its current pass has still to try, in
     /// the order it will try them (the endpoint it is waiting on is already
     /// off the list). For a shell that asks the next endpoint early — the
@@ -1001,6 +1113,9 @@ impl App for RpcPool {
                         saw_rate_limit: false,
                         x_rpc_url: None,
                         state: SessionState::WaitingPool,
+                        maybe_delivered: false,
+                        first_pass_tried: 0,
+                        first_pass_all_transport: true,
                     },
                 );
                 ensure_pool_then(model, chain_id, PendingWork::Call { call_id }, now_ms)
@@ -1055,6 +1170,7 @@ impl App for RpcPool {
             failed_chains: model.failed_chains.iter().copied().collect(),
             rate_limited_chains: model.rate_limited_chains.iter().copied().collect(),
             banned: model.bans.values().cloned().collect(),
+            unreached_chains: model.unreached_chains.iter().copied().collect(),
             pending_urls: model
                 .calls
                 .iter()
@@ -1643,6 +1759,21 @@ fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEf
     }
 
     // Pass swept clean.
+    if session.pass == 0
+        && session.kind == RpcKind::Rpc
+        && session.first_pass_tried > 0
+        && session.first_pass_all_transport
+        && !session.saw_rate_limit
+        && !is_optional_method(&session.method)
+    {
+        // RF1: nothing on this chain answered at all — say so after one pass
+        // (endpoints × 8 s), not three. `failed_chains` keeps its meaning.
+        let chain_id = session.chain_id;
+        model.unreached_chains.insert(chain_id);
+    }
+    let Some(session) = model.calls.get_mut(call_id) else {
+        return Command::done();
+    };
     if session.pass + 1 < max_passes(session.kind) {
         session.state = SessionState::WaitingJitter;
         return request(
@@ -1663,6 +1794,9 @@ fn conclude_failed(model: &mut Model, call_id: &str) -> Command<RpcEffect, Event
         return Command::done();
     };
     let rate_limited = match session.kind {
+        // Spec 082 RG7: a method a node may simply not offer never says
+        // anything about the chain — neither banner nor notice.
+        RpcKind::Rpc if is_optional_method(&session.method) => session.saw_rate_limit,
         RpcKind::Rpc => {
             model.failed_chains.insert(session.chain_id);
             if session.saw_rate_limit {
@@ -1680,7 +1814,10 @@ fn conclude_failed(model: &mut Model, call_id: &str) -> Command<RpcEffect, Event
             model,
             RpcOperation::Conclude {
                 call_id: call_id.to_owned(),
-                verdict: RpcCallVerdict::Failed { rate_limited },
+                verdict: RpcCallVerdict::Failed {
+                    rate_limited,
+                    maybe_delivered: session.maybe_delivered,
+                },
             },
         ),
         render(),
@@ -1707,6 +1844,25 @@ enum Route {
     RateLimited429,
     /// Timeout / network / non-JSON / other HTTP status.
     PlainFailure,
+    /// An optional method's JSON error (spec 082 RG7): the node answered that
+    /// it does not serve this — delivered as an answer, with no score change,
+    /// no ban and no chain classification.
+    NotServed,
+}
+
+/// Nothing usable came back from the endpoint at all — the RF1 notion of
+/// "unreached": no socket, no answer in time, a reset, a body that is not
+/// JSON, or a gateway's 5xx in front of a dead node. A JSON answer (even an
+/// error), a ban-class status and a 429 all mean something answered.
+fn is_transport_failure(outcome: &RpcTransportOutcome) -> bool {
+    match outcome {
+        RpcTransportOutcome::Timeout
+        | RpcTransportOutcome::Network
+        | RpcTransportOutcome::NotConnected
+        | RpcTransportOutcome::NonJson => true,
+        RpcTransportOutcome::HttpError { status } => (500..=599).contains(status),
+        RpcTransportOutcome::Response { .. } => false,
+    }
 }
 
 fn classify_response_error(error: &RpcErrorInfo) -> Route {
@@ -1733,11 +1889,37 @@ fn route_of(kind: RpcKind, method: &str, outcome: &RpcTransportOutcome) -> Route
             // The range check MUST come before the permanent/transient checks:
             // these errors often carry "exceed" or a -32000 code that would
             // otherwise (wrongly) ban or fail over the endpoint
-            // (`rpc-pool.ts:768-772`). RPC calls only, as in TS.
+            // (`rpc-pool.ts:768-772`). RPC calls only, as in TS. Rate-limit
+            // wording goes first (spec 082 T180): a throttled node is not a
+            // range limit, and the caller must not shrink its window for it.
+            // Nor is it a ban (contract §2): the find-event reads `eth_getLogs`
+            // every tick while an op may have been sent, and "exceeded" would
+            // otherwise ban a throttled node for an hour for every method.
             if kind == RpcKind::Rpc && method == "eth_getLogs" {
-                match get_logs_range_cap(error) {
-                    Some(cap) => Route::RangeCap(cap),
-                    None => classify_response_error(error),
+                if has_rate_limit_wording(error) {
+                    Route::Transient {
+                        rate_limit_signal: true,
+                    }
+                } else if let Some(cap) = get_logs_range_cap(error) {
+                    Route::RangeCap(cap)
+                } else if is_rate_limit_signal(error) {
+                    Route::Transient {
+                        rate_limit_signal: true,
+                    }
+                } else {
+                    classify_response_error(error)
+                }
+            } else if kind == RpcKind::Rpc && is_optional_method(method) {
+                // Spec 082 RG7: plan words or `-32603 "method handler
+                // crashed"` from a node that cannot simulate must not ban it
+                // for `eth_call`, nor raise Arbitrum's notice. Throttling still
+                // fails over, without a ban.
+                if is_rate_limit_signal(error) {
+                    Route::Transient {
+                        rate_limit_signal: true,
+                    }
+                } else {
+                    Route::NotServed
                 }
             } else {
                 classify_response_error(error)
@@ -1753,7 +1935,8 @@ fn route_of(kind: RpcKind, method: &str, outcome: &RpcTransportOutcome) -> Route
         RpcTransportOutcome::HttpError { .. }
         | RpcTransportOutcome::NonJson
         | RpcTransportOutcome::Timeout
-        | RpcTransportOutcome::Network => Route::PlainFailure,
+        | RpcTransportOutcome::Network
+        | RpcTransportOutcome::NotConnected => Route::PlainFailure,
     }
 }
 
@@ -1836,8 +2019,11 @@ pub fn early_verdict(
         _ => false,
     };
     match route_of(kind, method, outcome) {
+        // A hedged read changes nothing on any node (`HEDGED_READS`), so no
+        // POST of it delivered anything (spec 082 RA1).
         Route::Success if node_independent => Some(RpcCallVerdict::Respond {
             url: url.to_owned(),
+            maybe_delivered: false,
         }),
         _ => None,
     }
@@ -1862,7 +2048,22 @@ fn handle_outcome(
         (session.kind, session.method.clone(), session.chain_id)
     };
 
-    match route_of(kind, &method, &outcome) {
+    // Facts about this POST that outlive the route (spec 082 RA1, RF1).
+    if let Some(session) = model.calls.get_mut(call_id) {
+        session.maybe_delivered |= may_have_delivered(&outcome);
+        if session.pass == 0 {
+            session.first_pass_tried = session.first_pass_tried.saturating_add(1);
+            session.first_pass_all_transport &= is_transport_failure(&outcome);
+        }
+    }
+
+    let route = route_of(kind, &method, &outcome);
+    let maybe_delivered = model
+        .calls
+        .get(call_id)
+        .is_some_and(|session| session.maybe_delivered);
+
+    match route {
         Route::Success => {
             touch_success(model, chain_id, kind, url, latency_ms);
             clear_chain_failure(model, chain_id, kind);
@@ -1871,6 +2072,20 @@ fn handle_outcome(
                 call_id,
                 RpcCallVerdict::Respond {
                     url: url.to_owned(),
+                    maybe_delivered,
+                },
+            )
+        }
+        Route::NotServed => {
+            // An answer about the method, not the endpoint: the chain is
+            // reachable, the endpoint's record is untouched.
+            clear_chain_failure(model, chain_id, kind);
+            conclude(
+                model,
+                call_id,
+                RpcCallVerdict::Respond {
+                    url: url.to_owned(),
+                    maybe_delivered,
                 },
             )
         }
@@ -1955,6 +2170,7 @@ fn clear_chain_failure(model: &mut Model, chain_id: u32, kind: RpcKind) {
     if kind == RpcKind::Rpc {
         model.failed_chains.remove(&chain_id);
         model.rate_limited_chains.remove(&chain_id);
+        model.unreached_chains.remove(&chain_id);
     }
 }
 

@@ -141,7 +141,8 @@ pub fn fetch(chain_id: u32) -> Option<ChainTokenData> {
 
 fn fetch_uncached(chain_id: u32) -> Option<ChainTokenData> {
     let url = format!("{}/chains/eip155-{chain_id}.json", data_base());
-    let mut response = proxy::agent(FETCH_TIMEOUT).get(&url).call().ok()?;
+    let mut response =
+        proxy::with_routes(&url, FETCH_TIMEOUT, |agent| agent.get(&url).call()).ok()?;
     let mut body = String::new();
     response
         .body_mut()

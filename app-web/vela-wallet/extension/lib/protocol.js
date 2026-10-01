@@ -35,9 +35,194 @@ export const WALLET_NAME = 'Vela Wallet';
 /** Per-origin connect grant. The CORE decides what a grant contains; this is
  *  only where the answer is kept. */
 export const PERM_PREFIX = 'vela.perm.';
-/** A request in flight, written down the moment it arrives so an evicted
- *  service worker cannot lose it (spec 027 D37). */
+/**
+ * A request in flight — `vela.req.<tabId>:<pageRequestId>` in
+ * `storage.SESSION` (spec 082 RB1): written the moment it arrives, so an
+ * evicted service worker comes back knowing what it owes; cleared with the
+ * browser, and unreadable by content scripts. It leaves only when answered or
+ * settled. (Before 082 these lived in storage.local and a start sweep deleted
+ * them all — which is how a restarted worker lost a live request, G19.)
+ */
 export const REQUEST_PREFIX = 'vela.req.';
+
+// ---- the request lifecycle (spec 082 RB1–RB11, contract §14) ----------------
+
+/** content.js ↔ worker: open only while the page owes a sign/connect answer. */
+export const DOC_PORT = 'vela.doc';
+/** panel or request window ↔ worker: the surface a request is answered on. */
+export const SURFACE_PORT = 'vela.surface';
+/**
+ * How long a request may wait for a decision — the core's
+ * `EXTENSION_REQUEST_TTL_MS` (`instant.test.ts` pins it to `signRequestTtlMs()`).
+ * The worker refuses an approve/sign claim at this age.
+ */
+export const REQUEST_TTL_MS = 300_000;
+/** content.js gives up this long AFTER the worker's deadline, never before it. */
+export const CONTENT_GRACE_MS = 5_000;
+/** A claim with no answer in this long (after one reconnect) is not live. */
+export const CLAIM_TIMEOUT_MS = 5_000;
+/** The surface's heartbeat while it owes an answer — keeps the worker awake. */
+export const SURFACE_PING_MS = 20_000;
+/** A side panel that neither opened nor failed in this long is given up on. */
+export const PANEL_OPEN_WAIT_MS = 2_000;
+/**
+ * When the panel could not be opened (no user gesture left) and Chrome cannot
+ * say which window its side panel is in (`windowId: -1`), how long an idle
+ * panel — one that holds no port (RJ20, G63) and wakes on the request just
+ * written for its window — has to say hello before a request window opens
+ * instead (RB8, EX2).
+ */
+export const PANEL_HELLO_WAIT_MS = 1_000;
+/** content.js's reconnect backoff after its port to the worker closed. */
+export const RECONNECT_BACKOFF_MS = [0, 250, 1_000, 3_000];
+
+/**
+ * What the page is told when a request ends without a decision (RB6). ALWAYS
+ * 4900 — "it may have happened" — pinned to the core's
+ * `popupCloseSettlement().code`, never 4001 (a dApp reads 4001 as "nothing
+ * happened" and sends again). These go to the dApp's code, not to a screen,
+ * so they are plain English and not corpus strings; Chrome's own error text
+ * is never passed on.
+ */
+export const SETTLE = {
+	page_left: { code: 4900, message: 'The page navigated away' },
+	surface_closed: { code: 4900, message: 'The browser closed before the request finished' },
+	expired: { code: 4900, message: 'Vela did not answer in time — check its activity' },
+	restarted: {
+		code: 4900,
+		message: 'Vela restarted before the request finished — check its activity'
+	},
+	updated: { code: 4900, message: 'Vela was updated — reload this page and try again' }
+};
+
+/** A read whose channel dropped twice: plain words, never Chrome's (G19). */
+export const READ_DROPPED_MESSAGE = 'Vela could not finish this read — try again';
+
+/**
+ * Reads that SEND something. A dropped channel on one of these may have
+ * delivered it, so it is never retried — it is answered `restarted` (4900).
+ */
+export const SENDING_READS = new Set(['eth_sendRawTransaction', 'eth_sendUserOperation']);
+
+/**
+ * What content.js does when its channel to the worker dropped under a request
+ * (data-model §4) — never echoing Chrome's `error.message`:
+ *
+ *   - a read: retried once, then `-32603 "Vela could not finish this read"`;
+ *   - a read that sends (`eth_sendRawTransaction` / `eth_sendUserOperation`):
+ *     never retried — `4900 restarted`, it may have gone out;
+ *   - a sign/connect: retried once (the reconnect wakes a new worker, which
+ *     still holds the record), then `4900 restarted`.
+ *
+ * `attempt` counts the drops already seen for this request (0 = the first).
+ * Returns `{ retry: true }` or `{ error }`.
+ */
+export function droppedChannelAnswer(bucket, method, attempt) {
+	if (bucket === 'sign' || bucket === 'connect') {
+		return attempt < 1 ? { retry: true } : { error: settleError('restarted') };
+	}
+	if (SENDING_READS.has(method)) return { error: settleError('restarted') };
+	return attempt < 1 ? { retry: true } : { error: rpcError(ERR.INTERNAL, READ_DROPPED_MESSAGE) };
+}
+
+/** The error a settlement cause answers the page with. */
+export function settleError(cause) {
+	const settle = SETTLE[cause] ?? SETTLE.surface_closed;
+	return rpcError(settle.code, settle.message);
+}
+
+// ---- the worker's chain reads (spec 082 RF2) --------------------------------
+
+/**
+ * One endpoint's read budget — the core's `RPC_READ_TIMEOUT_MS` (8 s), pinned
+ * by `protocol.test.ts` to `rpcReadTimeoutMs()`. It was 20 s, so a dead Gnosis
+ * cost 3 × 20 s on EVERY read (G20).
+ */
+export const READ_TIMEOUT_MS = 8_000;
+/** Where the worker remembers endpoints that just failed (storage.session). */
+export const ENDPOINTS_KEY = 'vela.ext.endpoints';
+const COOLDOWN_BASE_MS = 30_000;
+const COOLDOWN_CAP_MS = 300_000;
+
+/**
+ * How long an endpoint is skipped after `failures` in a row — the core's
+ * `rpc_pool::cooldown_ms`: 30 s · 2^(n−1), capped at 300 s; 0 for none.
+ * Pinned to `rpcCooldownMs(n)` for n = 1..5.
+ */
+export function cooldownMs(failures) {
+	if (!Number.isFinite(failures) || failures <= 0) return 0;
+	return Math.min(COOLDOWN_CAP_MS, COOLDOWN_BASE_MS * 2 ** (failures - 1));
+}
+
+/**
+ * The endpoints to try, in order (RF2, RJ20): while any endpoint is not
+ * cooling down, ONLY those, in their own order — a cooled node is skipped, not
+ * re-paid 8 s on every call (G64: each faulted read cost 3 × 8 s again). With
+ * every endpoint cooled, only the one whose cool-down ends first, so a read is
+ * still asked once (a node that recovered must be reachable) and costs one
+ * budget, not all of them. `health` is the stored `{<url>: {failures, until}}`.
+ */
+export function orderEndpoints(endpoints, health, now) {
+	const cooling = (url) => {
+		const entry = health && typeof health === 'object' ? health[url] : null;
+		return entry && typeof entry.until === 'number' && entry.until > now ? entry.until : 0;
+	};
+	const live = endpoints.filter((url) => cooling(url) === 0);
+	if (live.length > 0) return live;
+	const soonest = [...endpoints].sort((a, b) => cooling(a) - cooling(b))[0];
+	return soonest === undefined ? [] : [soonest];
+}
+
+/** `health` after one endpoint failed: one more failure, the next cool-down. */
+export function endpointFailed(health, url, now) {
+	const prior = health && typeof health === 'object' ? health[url] : null;
+	const failures = (prior && Number.isFinite(prior.failures) ? prior.failures : 0) + 1;
+	return { ...(health ?? {}), [url]: { failures, until: now + cooldownMs(failures) } };
+}
+
+/** `health` after one endpoint answered: its entry is gone. */
+export function endpointAnswered(health, url) {
+	if (!health || typeof health !== 'object' || !(url in health)) return health ?? {};
+	const next = { ...health };
+	delete next[url];
+	return next;
+}
+
+/** A read that took longer than this is logged `read.slow` (it still answered). */
+export const READ_SLOW_MS = 3_000;
+
+/**
+ * The final words when no node answered a read for `chainId` (G33): the
+ * chain by name, never the engine's text ("Failed to fetch", "signal timed
+ * out"), which says nothing to a dApp's user.
+ */
+export function unreachableChainMessage(chainName, chainId) {
+	const name = typeof chainName === 'string' && chainName.trim() ? chainName.trim() : 'unknown';
+	return `Vela could not reach a node for chain ${name} (${chainId})`;
+}
+
+/** The catalog's name for `chainId`, or `null`. */
+export function chainNameOf(catalog, chainId) {
+	const chains = catalog && typeof catalog === 'object' ? catalog.chains : null;
+	const entry = chains && typeof chains === 'object' ? chains[String(chainId)] : null;
+	return entry && typeof entry.name === 'string' && entry.name ? entry.name : null;
+}
+
+/**
+ * How a failed endpoint read is named in the log: `http_<status>` (the node
+ * answered with one), `timeout` (the 8 s budget ran out — `timedOut` is the
+ * read's own timer having fired, which is the fact; Chrome's worker rejected
+ * some of those aborts with a plain "Failed to fetch", and the log said
+ * `network` for an 8 s wait, G64), or `network` (anything else the engine
+ * threw).
+ */
+export function readFailureKind(error, status, timedOut = false) {
+	if (typeof status === 'number') return `http_${status}`;
+	if (timedOut) return 'timeout';
+	const name = error && typeof error === 'object' ? error.name : '';
+	return name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'network';
+}
+
 /**
  * The chain an origin is on — `vela.chain.<origin>` → chain id (number).
  *
@@ -83,6 +268,31 @@ export function rpcError(code, message, data) {
 	const e = { code, message };
 	if (data !== undefined) e.data = data;
 	return e;
+}
+
+/**
+ * What a page is told when the wallet's surface went after a claimed submit
+ * that may have been sent (RJ2): never 4900, which a dApp reads as "not sent"
+ * and pays again, and never the op hash as if it were a transaction — no
+ * node the site asks knows it (083, owner ruling 2026-10-01). The core's
+ * `sign_request::not_confirmed_detail`, mirrored because the worker cannot
+ * run the core; `protocol.test.ts` pins it to `signNotConfirmedDetail`.
+ */
+export const NOT_CONFIRMED_MESSAGE =
+	'The transaction was submitted but is not confirmed yet; it may still complete, so check the wallet before sending it again';
+
+/**
+ * The answer a may-have-been-sent request is owed (RJ2): for a transaction,
+ * `-32603` "not confirmed yet" naming its operation; for a `wallet_sendCalls`
+ * batch, its id — the op hash, by EIP-5792's own terms.
+ *
+ * @param {unknown} method
+ * @param {string} hash
+ */
+export function maybeSentPayload(method, hash) {
+	return method === 'wallet_sendCalls'
+		? { result: hash }
+		: { error: rpcError(-32603, `${NOT_CONFIRMED_MESSAGE} (user operation ${hash})`) };
 }
 
 // ---- method classification (mirrors the app) --------------------------------
@@ -361,7 +571,4 @@ export function resolveGrantedAccounts(grant, snapshotAddresses) {
  * The request WINDOW settles itself with the core's own answer; this is the
  * backstop for a window that died before it could.
  */
-export const CLOSED_WITHOUT_ANSWER = {
-	code: ERR.UNKNOWN_PENDING,
-	message: 'The browser closed before the request finished'
-};
+export const CLOSED_WITHOUT_ANSWER = SETTLE.surface_closed;

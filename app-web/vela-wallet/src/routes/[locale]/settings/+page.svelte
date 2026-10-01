@@ -88,6 +88,7 @@
 	import {
 		AREA_OTHER,
 		buildBugReport,
+		readWorkerFailureLines,
 		sendBugReport,
 		webClient,
 		webOs,
@@ -214,11 +215,17 @@
 	 * raw `vela.*` value. The failure lines are the net counters' CLASSES
 	 * (`rpc:final_failure ×3`), which say what broke without saying where.
 	 */
+	/** The extension worker's failure counters (spec 082 RB14), read once per visit. */
+	let workerFailures = $state<string[]>([]);
+	onMount(() => {
+		void readWorkerFailureLines().then((lines) => (workerFailures = lines));
+	});
 	const deviceFacts = $derived.by<DeviceFacts>(() => {
 		const failures: string[] = [];
 		for (const [key, count] of netCounters()) {
 			if (key.endsWith(':final_failure') && count > 0) failures.push(`${key} ×${count}`);
 		}
+		failures.push(...workerFailures);
 		return {
 			version: BUILD_VERSION,
 			// 078 §E: the issue title's "[Web]" / "[Extension]", and the short

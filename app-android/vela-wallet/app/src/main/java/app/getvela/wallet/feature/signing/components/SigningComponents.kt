@@ -105,23 +105,27 @@ fun SigningHeader(
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs)) {
+            // Spec 082 RE13 (G12): two lines each and never an ellipsis — the
+            // end of a host is the part a spoofer controls, so it is never the
+            // part cut off. Whether the host is said at all is the core's
+            // (`browserSiteLabel`): an empty [host] means the name IS it.
             Text(
                 text = name,
                 color = colors.fgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
                 fontSize = VelaTextSize.xl,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = 2,
+                overflow = TextOverflow.Clip,
             )
-            // A site whose name IS its host says it once (spec 079 F14).
-            if (host.isNotEmpty() && host != name) {
+            if (host.isNotEmpty()) {
                 Text(
                     text = host,
                     color = colors.fgMuted,
                     fontFamily = VelaFontFamily,
                     fontSize = VelaTextSize.base,
-                    maxLines = 1,
+                    maxLines = 2,
+                    overflow = TextOverflow.Clip,
                 )
             }
         }

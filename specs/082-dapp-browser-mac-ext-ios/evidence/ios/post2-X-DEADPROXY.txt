@@ -1,0 +1,24 @@
+# X-DEADPROXY: launch 08:33:57 with VELA_DEV_PROXY=192.168.50.17:9 (dead port)
+[vela-wallet] dev proxy: all traffic via 192.168.50.17:9
+[vela-wallet] parallel space: entered as 0x88cCA0EeDbF2C4426110bbFc998F048689266894
+08:33:58.043109 [net] offline misses=3
+08:34:00.064881 [balance] chains_failed chains=130,5000,143,5042,137,1440000,1868,43114,480,42220,4663,988,196,8217,98866,4326,1,100,57073,10,42161,56,8453
+08:34:03.485028 [balance] chains_failed chains=137,4663,98866,480,42220,8217,130,5042,5000,1868,143,57073,988,196,4326,1440000,56,8453,43114,10,100,42161,1
+08:34:09.696024 [balance] chains_failed chains=480,4663,42220,143,1440000,196,98866,988,137,1868,5000,5042,57073,4326,130,8217,1,8453,43114,100,42161,56,10
+08:34:20.268663 [balance] chains_failed chains=5042,98866,143,130,4326,5000,137,8217,42220,1868,1440000,100,4663,480,988,196,57073,10,56,43114,1,8453,42161
+08:36:17.720263 [browser] requested host=192.168.50.17:8137
+08:36:17.721853 [browser] requested host=192.168.50.17:8137
+08:36:18.225142 [browser] committed host=192.168.50.17:8137
+08:36:58.544817 [browser] requested host=app.uniswap.org
+08:36:58.674705 [browser] refused failed host=app.uniswap.org NSURLErrorDomain -1004 → refused
+08:37:00.687034 [browser] retry #1 host=app.uniswap.org
+08:37:00.779160 [browser] refused failed host=app.uniswap.org NSURLErrorDomain -1004 → refused
+08:37:05.961996 [browser] retry #2 host=app.uniswap.org
+08:37:06.051322 [browser] refused failed host=app.uniswap.org NSURLErrorDomain -1004 → refused
+08:37:16.095399 [browser] retry #3 host=app.uniswap.org
+08:37:16.383250 [browser] refused failed host=app.uniswap.org NSURLErrorDomain -1004 → refused
+08:38:35.159518 [balance] chains_failed chains=5000,98866,4326,137,988,57073,8217,143,4663,196,1440000,42161,480,5042,100,130,1868,42220,56,8453,10,1,43114
+rpc gave_up lines in the first 2 s: 278
+# no line names the proxy (no 'proxy … unreachable'); the test dApp page came from WebKit's cache (no GET in testdapp-8137.log after 07:32:49)
+# home status line: a Button with no label, 40x15 pt: ⚠ + '' + › (WalletLive.status takes its text from the fallback model)
+# tapping it: 修复 RPC / Polygon 离线 / RPC URL prefilled https://rpc.mantle.xyz (Polygon's configured RPC is https://polygon-bor-rpc.publicnode.com) with a red error border before any input

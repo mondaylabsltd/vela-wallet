@@ -69,15 +69,16 @@ struct SettingsTruthTests {
             "\(loc.t(k.bugPreviewPlatform)): iOS \(UIDevice.current.systemVersion)",
             "\(loc.t(k.bugPreviewLanguage)): en",
             "\(loc.t(k.bugPreviewRpc)): Gnosis",
+            // Spec 082 RE11: the failures line has a source on iOS now — the
+            // log's own ring — so "none" is a reading, not a claim.
+            "\(loc.t(k.bugPreviewFailures)): \(loc.t(k.bugPreviewNone))",
         ])
-        // The fixture's figures are nowhere, and the failures line — no source
-        // on iOS — is not drawn as "none".
+        // The fixture's figures are nowhere.
         let joined = lines.joined(separator: "\n")
         #expect(!joined.contains(fixtureCommit))
-        #expect(!joined.contains(loc.t(k.bugPreviewFailures)))
         // Nothing unreachable says so in the corpus's word.
         let calm = SettingsLive.withFeedback(facts(), on: base, loc: loc).feedback.previewLines
-        #expect(calm.last == "\(loc.t(k.bugPreviewRpc)): \(loc.t(k.bugPreviewNone))")
+        #expect(calm.contains("\(loc.t(k.bugPreviewRpc)): \(loc.t(k.bugPreviewNone))"))
     }
 
     /// A network somebody named after its URL, or an address, is redacted.
@@ -86,7 +87,7 @@ struct SettingsTruthTests {
             facts(unreachable: ["https://rpc.example/key123", "0x88cCA0EeDbF2C4426110bbFc998F048689266894"]),
             on: SettingsFixtures.build(.st15, loc: loc), loc: loc
         ).feedback.previewLines
-        let rpc = lines.last ?? ""
+        let rpc = lines.first { $0.hasPrefix(loc.t(I18nKeys.SettingsUi.bugPreviewRpc)) } ?? ""
         #expect(!rpc.contains("key123"))
         #expect(!rpc.contains("88cCA0"))
         #expect(rpc.contains("[url]") && rpc.contains("[address]"), "\(rpc)")

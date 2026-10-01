@@ -4,4 +4,14 @@
  * One still-pending stored submission, as the shell maps it from
  * `LocalTransaction` (`timestamp` seconds → `submitted_at_ms`).
  */
-export type TrackPendingRecord = { record_id: string, user_op_hash: string, chain_id: number, submitted_at_ms: number, };
+export type TrackPendingRecord = { record_id: string, user_op_hash: string, chain_id: number, submitted_at_ms: number, 
+/**
+ * The submit ended "may have been sent" (spec 082 RA4) — persisted with
+ * the record so a restart keeps following it as such.
+ */
+maybe_sent: boolean, 
+/**
+ * The chain head read before the first submit POST, persisted with the
+ * record: where the relay-independent landing check starts (ruling 8).
+ */
+submit_block: number | null, };

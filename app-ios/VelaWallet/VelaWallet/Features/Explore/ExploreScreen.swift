@@ -14,6 +14,7 @@
 
 import AVFoundation
 import SwiftUI
+import VelaCore
 
 struct ExploreScreen: View {
     @Environment(\.theme) private var theme
@@ -52,6 +53,8 @@ struct ExploreScreen: View {
     /// the pool; an answer clears it.
     var chainNotice: String?
     var onChainRetry: () -> Void = {}
+    /// Spec 082 RF4: the notice's Retry is out — busy until its read settles.
+    var chainRetrying = false
     /// The live browser. `nil` is the gallery: every E-state still renders
     /// from fixtures, and a gallery that ran somebody else's JavaScript would
     /// not be a gallery.
@@ -151,7 +154,16 @@ struct ExploreScreen: View {
     /// Chrome reads the engine, when there is one, and the fixture otherwise.
     /// Never a blend: a live address bar over a drawn page would be a lie
     /// about what is on screen.
-    private var browserHost: String { engine?.host ?? model.browser.host }
+    ///
+    /// Spec 082 RE1: the bar is the core's `browserAddressBar` over the
+    /// engine's committed, pending and failed pages — the page on screen,
+    /// never where a load in flight is going.
+    private var addressBar: BrowserAddressBar? {
+        guard let engine else { return nil }
+        _ = controller?.engineTick
+        return engine.bar
+    }
+    private var browserHost: String { addressBar?.host ?? model.browser.host }
     /// The lock tells the truth: the core's judgement of the tab's origin.
     private var browserSecure: Bool {
         engine == nil ? model.browser.secure : (currentTab?.secure ?? false)
@@ -200,14 +212,14 @@ struct ExploreScreen: View {
                 .foregroundStyle(theme.fgMuted)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Button(action: onChainRetry) {
-                Text(verbatim: loc.t("connect.browser.retry"))
-                    .typeRole(Typography.label)
-                    .foregroundStyle(theme.accentBase)
-                    .frame(minHeight: Tokens.Layout.hitTarget)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            // Spec 082 RF4: the house button, busy — spinner, full colour,
+            // taps ignored — until its one read settles; never a plain word
+            // that "looks dead" while it works (W11).
+            VelaButton(
+                title: loc.t("connect.browser.retry"), kind: .secondary,
+                loading: chainRetrying, action: onChainRetry
+            )
+            .fixedSize()
             .accessibilityIdentifier("explore.chainDown.retry")
         }
         .padding(.horizontal, Tokens.Space.s16)
@@ -256,10 +268,13 @@ struct ExploreScreen: View {
             if id == "close" { viewOverride = .start }
             return
         }
-        let url = controller.current?.url ?? ""
+        // What the bar names — the page on screen (spec 082 RE1).
+        let url = controller.current?.bar.url ?? ""
         switch id {
         case "refresh":
             controller.reload()
+        case "stop":
+            controller.stop()
         case "share":
             guard let target = URL(string: url), !url.isEmpty else { return }
             share(target)
@@ -512,11 +527,13 @@ struct ExploreScreen: View {
             )
         case .browsing:
             AddressBarView(
-                host: browserHost, secure: browserSecure,
+                host: browserHost,
+                secure: addressBar.map { $0.lock == "closed" } ?? browserSecure,
                 closeLabel: loc.t("explore.closePage"),
                 menuLabel: loc.t("explore.siteMenu"),
                 insecureLabel: loc.t("connect.browser.a11yInsecure"),
-                url: engine?.url ?? "",
+                showsLock: addressBar.map { $0.lock != "none" } ?? true,
+                url: addressBar?.url ?? "",
                 addressLabel: loc.t("explore.addressBar"),
                 progress: loadProgress,
                 // The page keeps running — leaving it is not closing it

@@ -15,6 +15,12 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	_resetPanelFailuresForTest,
+	countPanelFailure,
+	panelFailureLines,
+	workerFailureLines,
+	readWorkerFailureLines,
+	SW_COUNTS_KEY,
 	AREA_OTHER,
 	MAX_SCREENSHOTS,
 	SCREENSHOT_TIMEOUT_MS,
@@ -521,5 +527,146 @@ describe('the dedup marker', () => {
 		const a = fingerprintOf('Send froze', AREA_OTHER, '1.0.0');
 		expect(fingerprintOf('  SEND FROZE ', AREA_OTHER, '1.0.0')).toBe(a);
 		expect(fingerprintOf('Receive froze', AREA_OTHER, '1.0.0')).not.toBe(a);
+	});
+});
+
+describe('the extension worker’s counters (spec 082 RB14)', () => {
+	it('become `sw:<event>.<cause> ×N` lines, the failures only', () => {
+		expect(
+			workerFailureLines({
+				'req.settled.page_left': 2,
+				'read.fail.timeout': 3,
+				'read.exhausted': 1,
+				'req.claim.expired': 1,
+				'sw.start': 4,
+				'req.arrived': 9,
+				'req.answered': 5
+			})
+		).toEqual([
+			'sw:read.exhausted ×1',
+			'sw:read.fail.timeout ×3',
+			'sw:req.claim.expired ×1',
+			'sw:req.settled.page_left ×2'
+		]);
+	});
+
+	it('read the worker’s REAL counters: an arrival is not a failure', async () => {
+		// The worker logs every step through swlog, and swlog names a counter
+		// by its cause — or, failing that, its `kind`. `req.arrived` carries
+		// the request's kind (`sign`, `connect`), so its counter is
+		// `req.arrived.sign`: a closed word with a third segment, which the
+		// failures line must not read as a failure.
+		const { createSwLog, SW_COUNTS_KEY: WORKER_COUNTS_KEY } =
+			await import('../../../extension/lib/swlog.js');
+		const stored: Record<string, unknown> = {};
+		const storage = {
+			get: async (keys: string[]) => Object.fromEntries(keys.map((k) => [k, stored[k]])),
+			set: async (items: Record<string, unknown>) => void Object.assign(stored, items)
+		};
+		const swlog = createSwLog({ storage, sink: { info: () => {} } });
+		// The calls background.js makes, field for field.
+		void swlog.log('req.arrived', { kind: 'sign', tab: 3, host: 'https://app.example' });
+		void swlog.log('req.arrived', { kind: 'connect', tab: 3, host: 'https://app.example' });
+		void swlog.log('req.surface', { surface: 'panel', tab: 3 });
+		void swlog.log('req.claim', { phase: 'sign', live: true, cause: undefined, tab: 3 });
+		void swlog.log('req.answered', { delivered: true, outcome: 'ok', tab: 3 });
+		void swlog.log('req.settled', { cause: 'page_left', tab: 3 });
+		void swlog.log('read.fail', { chain: 100, host: 'https://rpc.example/k', kind: 'timeout' });
+		await swlog.flush();
+
+		expect(workerFailureLines(stored[WORKER_COUNTS_KEY])).toEqual([
+			'sw:read.fail.timeout ×1',
+			'sw:req.settled.page_left ×1'
+		]);
+	});
+
+	it('carry no URL, no address and no value a counter name could smuggle', () => {
+		const lines = workerFailureLines({
+			'read.fail.https://rpc.example/key': 1,
+			[`req.settled.0x${'ab'.repeat(20)}`]: 1,
+			'req.settled.page_left': 'x',
+			'req.settled.surface_closed': -1,
+			'req.settled.expired': 1
+		});
+		expect(lines).toEqual(['sw:req.settled.expired ×1']);
+		expect(lines.join(' ')).not.toMatch(/https?:|0x/);
+	});
+
+	it('reach the preview’s failures line through the same list', () => {
+		const lines = environmentLines(LABELS, {
+			...FACTS,
+			failures: [...FACTS.failures, ...workerFailureLines({ 'req.settled.page_left': 1 })]
+		});
+		expect(lines.at(-1)).toContain('sw:req.settled.page_left ×1');
+	});
+
+	it('are read from the extension’s session store, and nowhere else', async () => {
+		expect(await readWorkerFailureLines()).toEqual([]);
+		vi.stubGlobal('chrome', {
+			runtime: { id: 'ext' },
+			storage: {
+				session: {
+					get: async (key: string) => ({ [key]: { 'req.settled.surface_closed': 2 } })
+				}
+			}
+		});
+		expect(await readWorkerFailureLines()).toEqual(['sw:req.settled.surface_closed ×2']);
+		expect(SW_COUNTS_KEY).toBe('vela.sw.counts');
+	});
+});
+
+/**
+ * Spec 082 G61 (T234): what the page saw itself reaches the report beside the
+ * worker's counters — a submit that may have been sent, one not sent, one the
+ * relay refused, a fee quote that failed by cause. Classes, never values.
+ */
+describe('the page’s own failure counters (spec 082 G61)', () => {
+	afterEach(() => _resetPanelFailuresForTest());
+
+	it('counts each class, and the report reads them as `panel:` lines', async () => {
+		countPanelFailure('submit.maybe_sent');
+		countPanelFailure('submit.not_sent');
+		countPanelFailure('submit.not_sent');
+		countPanelFailure('submit.refused');
+		countPanelFailure('fee.quote_failed.chain_read_rate_limited');
+		expect(panelFailureLines()).toEqual([
+			'panel:fee.quote_failed.chain_read_rate_limited ×1',
+			'panel:submit.maybe_sent ×1',
+			'panel:submit.not_sent ×2',
+			'panel:submit.refused ×1'
+		]);
+		// Off the extension there is no worker; the page's lines still go.
+		await expect(readWorkerFailureLines()).resolves.toEqual(panelFailureLines());
+	});
+
+	it('a name that could carry a value is dropped — no hash, address or URL', () => {
+		countPanelFailure(`fee.quote_failed.0x${'ab'.repeat(20)}` as `fee.quote_failed.${string}`);
+		countPanelFailure('fee.quote_failed.https://rpc.example/key' as `fee.quote_failed.${string}`);
+		expect(panelFailureLines()).toEqual([]);
+	});
+
+	it('the lines ride the preview and the payload like the worker’s', () => {
+		countPanelFailure('submit.refused');
+		const lines = environmentLines(
+			{
+				version: 'Version',
+				platform: 'Platform',
+				language: 'Language',
+				rpc: 'RPC',
+				failures: 'Failures',
+				none: 'none'
+			},
+			{
+				version: '1.0.0',
+				client: 'extension',
+				os: 'macOS',
+				commit: 'abc',
+				platform: 'Extension',
+				language: 'en',
+				unreachable: [],
+				failures: panelFailureLines()
+			}
+		);
+		expect(lines.at(-1)).toBe('Failures: panel:submit.refused ×1');
 	});
 });

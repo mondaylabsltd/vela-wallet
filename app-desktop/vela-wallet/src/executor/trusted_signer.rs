@@ -152,6 +152,11 @@ struct State {
     /// An attempt owns this channel's surfaces from the moment it opens a
     /// page until it is done.
     claimed: bool,
+    /// Spec 082 RD13 (W16): the page could not be reached when the person
+    /// came back to the wallet with no answer. The wait — the request and its
+    /// five-minute clock — goes on; the card says the page did not open and
+    /// offers to try again.
+    unreachable: bool,
 }
 
 /// What one screen and its Trusted Signer attempts say to each other.
@@ -238,10 +243,40 @@ impl Channel {
     }
 
     /// "Open the page again": the same URL — the same port and token, so the
-    /// same listener still takes its answer.
+    /// same listener still takes its answer. Also the Retry of a page that
+    /// could not be reached (RD13).
     pub fn reopen(&self) {
-        self.with(|state| state.open = state.waiting.is_some());
+        self.with(|state| {
+            state.open = state.waiting.is_some();
+            state.unreachable = false;
+        });
         self.announce();
+    }
+
+    /// The page this wait is on could not be reached (spec 082 RD13).
+    pub fn mark_unreachable(&self) {
+        let marked = self.with(|state| {
+            let fresh = state.waiting.is_some() && !state.unreachable;
+            if fresh {
+                state.unreachable = true;
+            }
+            fresh
+        });
+        if marked {
+            self.announce();
+        }
+    }
+
+    /// The page could not be reached, and the wait is still on.
+    #[must_use]
+    pub fn unreachable(&self) -> bool {
+        self.with(|state| state.waiting.is_some() && state.unreachable)
+    }
+
+    /// The URL this wait is on — for the check the window's return runs.
+    #[must_use]
+    pub fn waiting_on(&self) -> Option<String> {
+        self.with(|state| state.waiting.clone())
     }
 
     /// "Cancel" on a waiting sheet: the person declined.
@@ -371,6 +406,7 @@ impl Channel {
             state.waiting = Some(url);
             state.open = open;
             state.ended = None;
+            state.unreachable = false;
             true
         });
         self.announce();
@@ -392,6 +428,7 @@ impl Channel {
             state.waiting = None;
             state.open = false;
             state.ended = ended;
+            state.unreachable = false;
         });
         self.announce();
     }
@@ -402,6 +439,57 @@ impl Channel {
         self.with(|state| state.open = false);
         self.announce();
     }
+}
+
+// ---------------------------------------------------------------------------
+// Could the page open at all (spec 082 RD13, W16)
+// ---------------------------------------------------------------------------
+
+/// How long the check may take.
+pub const PAGE_CHECK_BUDGET: Duration = Duration::from_secs(5);
+
+/// The page's address as a HEAD asks for it: scheme, host and path. The
+/// fragment carries the request and its one-time token and is never sent —
+/// a HEAD would not send it anyway, and it is cut here so nothing downstream
+/// could.
+#[must_use]
+pub fn page_address(url: &str) -> String {
+    let without_fragment = url.split('#').next().unwrap_or(url);
+    without_fragment
+        .split('?')
+        .next()
+        .unwrap_or(without_fragment)
+        .to_owned()
+}
+
+/// The person came back to the wallet and the page has not answered: can it
+/// be reached at all? One HEAD of the page's address, over the wallet's own
+/// routes, within [`PAGE_CHECK_BUDGET`]. A failure to reach it marks the wait
+/// (the card then says the page did not open, with Retry); any answer —
+/// whatever its status — leaves it alone, so a page the browser has cached
+/// keeps working. **Blocks**: run it off the frame. `true` when it marked.
+pub fn check_page(channel: &Channel) -> bool {
+    let Some(url) = channel.waiting_on() else {
+        return false;
+    };
+    let address = page_address(&url);
+    let reached = crate::executor::proxy::with_routes(&address, PAGE_CHECK_BUDGET, |agent| {
+        agent.head(&address).call()
+    })
+    .map_or_else(
+        |failure| matches!(failure.error, ureq::Error::StatusCode(_)),
+        |_| true,
+    );
+    if reached {
+        return false;
+    }
+    crate::diag::vlog!(
+        "trusted signer",
+        "page {} unreachable",
+        crate::diag::host_of(&address)
+    );
+    channel.mark_unreachable();
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -1171,6 +1259,60 @@ pub(crate) mod tests {
     /// before the page could open, and the screen said "closed without
     /// signing" about a page nobody had seen. Reported from using the app;
     /// no test here covered a SECOND attempt.
+    /// Spec 082 RD13 (W16): a page that cannot be reached marks the wait —
+    /// which goes on — and a page that answers (a cached one too) is left
+    /// alone. The fragment never leaves the machine.
+    #[test]
+    fn an_unreachable_page_is_said_and_a_reachable_one_is_left_alone() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .map(|addr| addr.port())
+            .unwrap_or(1);
+        let (channel, _woken) = Channel::new();
+        assert!(channel.begin(
+            format!("http://127.0.0.1:{closed}/b/abc/sign#req=eyJ0b2tlbiI6InNlY3JldCJ9"),
+            true,
+        ));
+        assert!(check_page(&channel), "nothing listens there");
+        assert!(channel.unreachable());
+        assert!(channel.waiting(), "the request and its clock stay");
+        channel.reopen();
+        assert!(!channel.unreachable(), "Retry opens the page again");
+
+        // A page that answers: the HEAD asks for its path, never the fragment.
+        let server = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap_or_else(|e| unreachable!("loopback: {e}"));
+        let port = server.local_addr().map(|addr| addr.port()).unwrap_or(0);
+        let seen = std::thread::spawn(move || {
+            use std::io::{Read as _, Write as _};
+            let mut line = String::new();
+            if let Some(Ok(mut stream)) = server.incoming().next() {
+                let mut buf = [0u8; 2048];
+                let n = stream.read(&mut buf).unwrap_or(0);
+                line = String::from_utf8_lossy(&buf[..n])
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .to_owned();
+                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n\r\n");
+            }
+            line
+        });
+        let (answering, _woken) = Channel::new();
+        assert!(answering.begin(
+            format!("http://127.0.0.1:{port}/b/abc/sign?x=1#req=secret-token"),
+            true,
+        ));
+        assert!(!check_page(&answering), "an answer, whatever its status");
+        assert!(!answering.unreachable());
+        let line = seen.join().unwrap_or_default();
+        assert_eq!(line, "HEAD /b/abc/sign HTTP/1.1", "no query, no fragment");
+        assert_eq!(
+            page_address("https://sign.getvela.app/b/abc/sign#req=eyJ"),
+            "https://sign.getvela.app/b/abc/sign"
+        );
+    }
+
     #[test]
     fn a_cancel_does_not_outlive_its_own_attempt() {
         let (channel, _changed) = Channel::new();

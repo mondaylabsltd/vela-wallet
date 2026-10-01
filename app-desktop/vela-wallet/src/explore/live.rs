@@ -26,20 +26,18 @@ use super::fixtures::{GroupAction, GroupModel, SiteModel, TabModel};
 /// site name itself after another one.
 #[must_use]
 pub fn site_of(entry: &BhistEntry) -> SiteModel {
-    let name = if entry.title.trim().is_empty() {
-        entry.host.clone()
-    } else {
-        entry.title.clone()
-    };
+    // The core's one wording (spec 082 RE7): a title that is its host — or
+    // no title — is said once; any other title stands over the host.
+    let label = vela_core::app::browser_load::site_label(&entry.title, &entry.host);
     SiteModel {
         // Keyed by ORIGIN, which is what the core dedupes on, so a row's
         // element id is stable across visits to the same site.
         id: "recent",
-        name: SharedString::from(name),
+        name: SharedString::from(label.name),
         host: SharedString::from(entry.host.clone()),
         letter: SharedString::from(letter_of(&entry.host)),
         tint: tint_of(&entry.host),
-        subtitle: Some(SharedString::from(entry.host.clone())),
+        subtitle: label.host_line.map(SharedString::from),
         // No "2 hours ago": there is no word for it in the corpus, and an
         // English one on a Chinese screen is worse than no line at all
         // (phase 22's rule about showing a key to somebody who reads Chinese).
@@ -110,29 +108,60 @@ pub fn custom_groups(view: &ExploreView) -> Vec<GroupModel> {
 /// A tab with no url is the START PAGE — every browser's first tab, drawn with
 /// the wallet's own mark rather than a favicon, and the core keeps that
 /// distinction as `url: None` rather than as an empty string.
+///
+/// `lit` is the tab the page lights (spec 082 RD6: the one on screen — a
+/// restored tab waits unlit), and `failed_host` the host a failure panel is
+/// up for, which that tab is called while it is (RD5).
 #[must_use]
-pub fn tab_models(view: &ExploreView, strings: &ExploreStrings) -> Vec<TabModel> {
+pub fn tab_models(
+    view: &ExploreView,
+    strings: &ExploreStrings,
+    lit: Option<&str>,
+    failed_host: Option<String>,
+) -> Vec<TabModel> {
     view.tabs
         .iter()
-        .map(|tab| TabModel {
-            id: "tab",
-            title: if tab.title.trim().is_empty() {
-                strings.start_page.clone()
-            } else {
-                SharedString::from(tab.title.clone())
-            },
-            site: tab.url.as_ref().map(|url| SiteModel {
+        .map(|tab| {
+            // The tab on screen under a failure panel is named as the bar
+            // names it (082 RD5, 083 H8): the site that failed — its letter,
+            // and none of its icons, since nothing of it loaded. After a
+            // certificate error it kept the page before's title and icon.
+            let failed = failed_host
+                .as_deref()
+                .filter(|host| !host.is_empty() && lit == Some(tab.id.as_str()));
+            TabModel {
                 id: "tab",
-                name: SharedString::from(tab.title.clone()),
-                host: SharedString::from(tab.host.clone()),
-                letter: SharedString::from(letter_of(&tab.host)),
-                tint: tint_of(&tab.host),
-                subtitle: None,
-                meta: None,
-                url: None,
-                icon_urls: icons_of(url, None),
-            }),
-            selected: view.selected_tab.as_deref() == Some(tab.id.as_str()),
+                title: match failed {
+                    Some(host) => SharedString::from(host.to_owned()),
+                    None if tab.title.trim().is_empty() => strings.start_page.clone(),
+                    None => SharedString::from(tab.title.clone()),
+                },
+                site: match failed {
+                    Some(host) => Some(SiteModel {
+                        id: "tab",
+                        name: SharedString::from(host.to_owned()),
+                        host: SharedString::from(host.to_owned()),
+                        letter: SharedString::from(letter_of(host)),
+                        tint: tint_of(host),
+                        subtitle: None,
+                        meta: None,
+                        url: None,
+                        icon_urls: Vec::new(),
+                    }),
+                    None => tab.url.as_ref().map(|url| SiteModel {
+                        id: "tab",
+                        name: SharedString::from(tab.title.clone()),
+                        host: SharedString::from(tab.host.clone()),
+                        letter: SharedString::from(letter_of(&tab.host)),
+                        tint: tint_of(&tab.host),
+                        subtitle: None,
+                        meta: None,
+                        url: None,
+                        icon_urls: icons_of(url, None),
+                    }),
+                },
+                selected: lit == Some(tab.id.as_str()),
+            }
         })
         .collect()
 }
@@ -143,7 +172,7 @@ pub fn tab_models(view: &ExploreView, strings: &ExploreStrings) -> Vec<TabModel>
 /// neither of which was open or did anything.
 pub fn pending_tab(strings: &ExploreStrings, opening: Option<&str>) -> TabModel {
     let host = opening
-        .map(crate::explore::load_watch::host_of)
+        .map(vela_core::app::browser_load::host_of)
         .filter(|host| !host.is_empty());
     match (opening, host) {
         (Some(url), Some(host)) => TabModel {
@@ -158,21 +187,6 @@ pub fn pending_tab(strings: &ExploreStrings, opening: Option<&str>) -> TabModel 
             site: None,
             selected: true,
         },
-    }
-}
-
-/// The tab on screen while a load's failure panel stands where the page was
-/// (083 H8): named by the address that failed, as the bar names it. The core's
-/// tab still holds the page before it, and that page is not what failed. Its
-/// letter and no icon: nothing of the failed site loaded.
-pub fn name_failed_tab(tabs: &mut [TabModel], failed_url: &str) {
-    let host = crate::explore::load_watch::host_of(failed_url);
-    if host.is_empty() {
-        return;
-    }
-    if let Some(tab) = tabs.iter_mut().find(|tab| tab.selected) {
-        tab.title = SharedString::from(host.clone());
-        tab.site = Some(address_site(&host, Vec::new()));
     }
 }
 
@@ -317,12 +331,24 @@ mod tests {
         assert_eq!(row.letter, SharedString::from("E"));
     }
 
-    /// A page with no title is its host, not a blank row.
+    /// A page with no title is its host, not a blank row — said once.
     #[test]
     fn an_untitled_page_falls_back_to_its_host() {
         let row = site_of(&entry("127.0.0.1:8137", "   "));
         assert_eq!(row.name, SharedString::from("127.0.0.1:8137"));
+        assert_eq!(row.subtitle, None, "the host is not said twice");
         assert_eq!(row.letter, SharedString::from("1"));
+    }
+
+    /// Spec 082 RE7 (G8 parity): a page titled with its own host is named
+    /// once, whatever the case of the letters.
+    #[test]
+    fn a_title_that_is_its_host_is_said_once() {
+        let row = site_of(&entry("127.0.0.1:8137", "127.0.0.1:8137"));
+        assert_eq!(row.name, SharedString::from("127.0.0.1:8137"));
+        assert_eq!(row.subtitle, None);
+        let row = site_of(&entry("app.example", "APP.EXAMPLE"));
+        assert_eq!(row.subtitle, None);
     }
 
     /// One colour per host, every launch.
@@ -393,8 +419,12 @@ mod tests {
             tabs_full: false,
             ready: true,
         };
-        let mut tabs = tab_models(&view, &strings);
-        name_failed_tab(&mut tabs, "https://expired.badssl.com/path?q=1");
+        let tabs = tab_models(
+            &view,
+            &strings,
+            Some("a"),
+            Some(crate::diag::host_of("https://expired.badssl.com/path?q=1")),
+        );
 
         assert_eq!(tabs[0].title, SharedString::from("expired.badssl.com"));
         let site = tabs[0].site.as_ref();
@@ -413,8 +443,12 @@ mod tests {
         assert_eq!(tabs[1].title, SharedString::from("Polymarket"));
 
         // An address with no host names nothing.
-        let mut tabs = tab_models(&view, &strings);
-        name_failed_tab(&mut tabs, "https://");
+        let tabs = tab_models(
+            &view,
+            &strings,
+            Some("a"),
+            Some(crate::diag::host_of("https://")),
+        );
         assert_eq!(tabs[0].title, SharedString::from("Uniswap Interface"));
     }
 }

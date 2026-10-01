@@ -1,0 +1,126 @@
+# chrome.storage.session['vela.sw.log'] dump after Stage A (2026-09-29 02:51 +0800), read from the wallet tab; times are UTC
+[vela-sw] 2026-09-28T18:17:17.352Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:26:54.036Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:27:33.117Z req.arrived kind=connect tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:27:33.117Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:27:33.230Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:27:33.253Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:28:12.995Z req.answered delivered=true outcome=error tab=291188710
+[vela-sw] 2026-09-28T18:28:43.008Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:28:43.008Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:29:13.587Z req.arrived kind=connect tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:29:13.587Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:29:13.588Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:29:33.125Z req.claim phase=approve live=true tab=291188710
+[vela-sw] 2026-09-28T18:29:33.130Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:30:01.075Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:30:01.075Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:30:01.076Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:30:17.981Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:30:18.015Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:30:48.035Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:30:48.036Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:30:57.270Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:30:57.270Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:30:57.271Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:31:03.550Z req.arrived kind=connect tab=291188711 host=127.0.0.1:8138
+[vela-sw] 2026-09-28T18:31:03.550Z req.surface surface=panel tab=291188711
+[vela-sw] 2026-09-28T18:31:13.836Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:31:13.852Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:31:13.853Z req.shown tab=291188711
+[vela-sw] 2026-09-28T18:31:37.261Z req.claim phase=approve live=true tab=291188711
+[vela-sw] 2026-09-28T18:31:37.267Z req.answered delivered=true outcome=ok tab=291188711
+[vela-sw] 2026-09-28T18:31:50.855Z req.arrived kind=connect tab=291188711 host=127.0.0.1:8138
+[vela-sw] 2026-09-28T18:31:50.856Z req.surface surface=panel tab=291188711
+[vela-sw] 2026-09-28T18:31:50.857Z req.shown tab=291188711
+[vela-sw] 2026-09-28T18:31:56.482Z req.claim phase=approve live=true tab=291188711
+[vela-sw] 2026-09-28T18:31:56.487Z req.answered delivered=true outcome=ok tab=291188711
+[vela-sw] 2026-09-28T18:32:30.562Z req.arrived kind=connect tab=291188711 host=127.0.0.1:8138
+[vela-sw] 2026-09-28T18:32:30.562Z req.surface surface=panel tab=291188711
+[vela-sw] 2026-09-28T18:32:30.563Z req.shown tab=291188711
+[vela-sw] 2026-09-28T18:32:39.527Z req.answered delivered=true outcome=error tab=291188711
+[vela-sw] 2026-09-28T18:32:47.400Z req.arrived kind=connect tab=291188711 host=127.0.0.1:8138
+[vela-sw] 2026-09-28T18:32:47.400Z req.surface surface=panel tab=291188711
+[vela-sw] 2026-09-28T18:33:45.188Z req.shown tab=291188711
+[vela-sw] 2026-09-28T18:34:03.431Z req.claim phase=approve live=true tab=291188711
+[vela-sw] 2026-09-28T18:34:03.437Z req.answered delivered=true outcome=ok tab=291188711
+[vela-sw] 2026-09-28T18:34:29.430Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:34:29.431Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:34:29.432Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:34:30.861Z req.settled cause=page_left tab=291188710
+[vela-sw] 2026-09-28T18:34:46.353Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:34:46.353Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:34:46.354Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:34:48.312Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:34:48.320Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:35:18.341Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:35:18.342Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:35:34.562Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:35:34.562Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:35:34.564Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:35:36.203Z panel.down window=291188707
+[vela-sw] 2026-09-28T18:35:36.207Z req.settled cause=surface_closed tab=291188710
+[vela-sw] 2026-09-28T18:36:15.695Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:36:15.695Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:36:15.697Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:36:15.794Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:36:15.806Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:41:21.090Z req.settled cause=expired tab=291188710
+[vela-sw] 2026-09-28T18:41:51.108Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:41:51.109Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:42:21.122Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:42:21.123Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:43:04.386Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:43:04.386Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:43:04.387Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:43:05.430Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:43:05.431Z req.resumed tab=291188710 state=shown
+[vela-sw] 2026-09-28T18:43:05.431Z sw.start records=1 recovered=1
+[vela-sw] 2026-09-28T18:43:25.960Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:43:25.989Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:43:55.999Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:43:56.000Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:44:30.231Z req.arrived kind=connect tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:44:30.231Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:44:30.232Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:44:30.613Z req.claim phase=approve live=true tab=291188710
+[vela-sw] 2026-09-28T18:44:30.623Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:44:37.369Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:44:37.369Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:44:37.370Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:44:59.078Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:44:59.083Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:45:48.176Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:45:48.177Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:46:18.187Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:46:18.191Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:46:48.208Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:46:48.210Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:47:09.449Z req.arrived kind=connect tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:47:09.449Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:47:09.450Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:47:10.672Z req.claim phase=approve live=true tab=291188710
+[vela-sw] 2026-09-28T18:47:10.679Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:47:40.699Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:47:40.701Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:47:46.806Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:47:46.807Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:47:46.808Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:47:48.634Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:47:48.642Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:48:18.659Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:48:18.659Z sw.start records=0 recovered=0
+[vela-sw] 2026-09-28T18:48:36.133Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+[vela-sw] 2026-09-28T18:48:36.134Z req.surface surface=panel tab=291188710
+[vela-sw] 2026-09-28T18:48:36.135Z req.shown tab=291188710
+[vela-sw] 2026-09-28T18:49:44.665Z req.claim phase=sign live=true tab=291188710
+[vela-sw] 2026-09-28T18:49:44.680Z req.answered delivered=true outcome=ok tab=291188710
+[vela-sw] 2026-09-28T18:50:23.121Z req.arrived kind=connect tab=291188718 host=localhost:8137
+[vela-sw] 2026-09-28T18:50:23.121Z req.surface surface=panel tab=291188718
+[vela-sw] 2026-09-28T18:50:23.122Z req.shown tab=291188718
+[vela-sw] 2026-09-28T18:50:24.361Z req.claim phase=approve live=true tab=291188718
+[vela-sw] 2026-09-28T18:50:24.366Z req.answered delivered=true outcome=ok tab=291188718
+[vela-sw] 2026-09-28T18:50:57.198Z panel.up window=291188707
+[vela-sw] 2026-09-28T18:50:57.198Z sw.start records=0 recovered=0
+
+counts {"panel.down":1,"panel.up":15,"req.answered":16,"req.arrived.connect":9,"req.arrived.sign":10,"req.claim":14,"req.resumed":1,"req.settled.expired":1,"req.settled.page_left":1,"req.settled.surface_closed":1,"req.shown":19,"req.surface":19,"sw.start":16}

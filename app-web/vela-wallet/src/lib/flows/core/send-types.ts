@@ -21,6 +21,7 @@ import { chainName } from '$lib/services/networks';
 import { tokenChainId, tokenId, tokenLogoURLs, type APIToken } from '$lib/services/tokens-model';
 
 import type { FeeCall } from '$lib/core/generated/FeeCall';
+import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 import type { SendFeeOutcome } from '$lib/core/generated/SendFeeOutcome';
@@ -92,7 +93,7 @@ export interface SendShellPorts {
 	 * React tree: it is created by the screen, disposed with it, and must not be
 	 * reachable from a module.
 	 */
-	feeQuote(request: SendFeeQuoteRequest): Promise<SendFeeOutcome>;
+	feeQuote(request: SendFeeQuoteRequest): Promise<SendFeeQuoteOutcome>;
 	/**
 	 * `FetchTokens`, answered from the asset list's holdings (`send-holdings.ts`).
 	 *
@@ -110,6 +111,26 @@ export interface SendShellPorts {
 	 * warms the relay's gas quote. Omitted = `fast`, the factory default.
 	 */
 	feeTier?(): FeeTier;
+}
+
+/**
+ * What the fee port answers: the send core's own outcome, or a failure in the
+ * fee machine's words (`FeeFailure`). The two vocabularies differ by one
+ * variant — `ChainRead` (spec 082 RJ13), a chain node that did not answer the
+ * deployment read, which the send core has no word for; the executor maps it
+ * (`toSendFeeOutcome`).
+ */
+export type SendFeeQuoteOutcome = SendFeeOutcome | { type: 'failed'; kind: FeeFailure };
+
+/**
+ * The fee port's answer in the send core's vocabulary: a chain read that got
+ * no answer (`ChainRead`) is, for the send form, a quote it could not get.
+ */
+export function toSendFeeOutcome(outcome: SendFeeQuoteOutcome): SendFeeOutcome {
+	if (outcome.type === 'failed' && typeof outcome.kind === 'object') {
+		return { type: 'failed', kind: 'quote_unavailable' };
+	}
+	return outcome as SendFeeOutcome;
 }
 
 /** What `EstimateFee` asks for, in the shell's own vocabulary. */

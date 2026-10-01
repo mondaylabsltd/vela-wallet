@@ -62,7 +62,9 @@
     "loadOffline": "연결이 불안정해 열지 못했습니다.",
     "loadNotFound": "이 사이트를 찾을 수 없습니다. 주소를 확인하세요.",
     "loadCertificate": "인증서가 유효하지 않아 Vela가 차단했습니다.",
+    "loadProxy": "프록시가 응답하지 않습니다.",
     "loadRetrying": "다시 시도하는 중…",
-    "chainDown": "{{chain}}에 연결할 수 없어 데이터가 불완전할 수 있습니다."
+    "chainDown": "{{chain}}에 연결할 수 없어 데이터가 불완전할 수 있습니다.",
+    "requestOpen": "먼저 이 요청을 완료하거나 취소하세요"
   }
 }

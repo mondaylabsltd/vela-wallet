@@ -32,7 +32,8 @@
 	import {
 		dappReceiptModel,
 		endsOnSignedTick,
-		landingFromEntry,
+		landingFor,
+		handoffLands,
 		landingToRaise,
 		receiptProgress,
 		autoCloseAfterMs,
@@ -42,12 +43,17 @@
 	} from '$lib/signing/dapp-receipt';
 	import type { SignMethodKind } from '$lib/core/generated/SignMethodKind';
 	import { explorerBaseURL } from '$lib/services/networks';
-	import { feeRequoteDelayMs, typicalInclusionSeconds } from '$lib/core/kernels';
+	import {
+		feeRequoteDelayMs,
+		feeRequoteTimeoutMs,
+		typicalInclusionSeconds
+	} from '$lib/core/kernels';
 	import { FeeRequoteTimer, heldFeeFailure, withLostContext } from '$lib/signing/fee-requote';
 	import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 	import { subscribeTxTracker, txTrackerView } from '$lib/wallet/core/tracker-resident';
 	import type { FeeTier } from '$lib/core/generated/FeeTier';
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
+	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { onMount, untrack } from 'svelte';
 
 	interface Props {
@@ -108,7 +114,10 @@
 	 * `tracker_handoff` over the moment it appears — so this subscribes to what
 	 * is running rather than starting a second watch of the same hash.
 	 */
-	function watchLanding(opHash: string, chain: number): void {
+	function watchLanding(opHash: string, chain: number, maybeSent: boolean): void {
+		// The request whose operation this is, while its answer may still be
+		// out (a lost relay reply raises the landing before the answer).
+		landingRequest = untrack(() => signRequest.view.request?.id ?? null);
 		landingChain = chain;
 		landedAtMs = Date.now();
 		// How long this chain usually takes, from the CORE's table — the same
@@ -116,27 +125,24 @@
 		// no estimate for) makes the ring circle instead of filling.
 		landingTypicalS = typicalInclusionSeconds(chain);
 		landing = { kind: 'submitting' };
-		readTracker(opHash);
+		readTracker(opHash, maybeSent);
 		unsubscribeTracker?.();
-		unsubscribeTracker = subscribeTxTracker(() => readTracker(opHash));
+		unsubscribeTracker = subscribeTxTracker(() => readTracker(opHash, maybeSent));
 		onlanding?.();
 	}
 
 	/**
-	 * What the tracker says, as the receipt's own state (`landingFromEntry`).
-	 *
-	 * `dropped` / `rejected` are failures with a hash to look at; `unreachable`
-	 * is NOT — the wallet could not ask, which is not the chain saying no, and
-	 * a cross drawn for it would be a verdict this wallet does not have. Past
-	 * the wait window the entry's `outcome` says "still confirming", and past
-	 * 24 h "unknown" — never "submitted" forever (spec 079, F13).
+	 * What the tracker says, as the core's ending (`landingFor` →
+	 * `signEndingState`, spec 082 RA8): confirmed, reverted, not sent, or
+	 * still followed with its outcome — "may have been sent" while the relay
+	 * never acknowledged it (RA10). Nothing drawn before the tracker has an
+	 * entry, unless the handoff itself said the reply was lost.
 	 */
-	function readTracker(opHash: string): void {
+	function readTracker(opHash: string, maybeSent: boolean): void {
 		const entry = trackEntryFor(txTrackerView().entries, opHash);
-		const next = landingFromEntry(entry, opHash);
-		if (!entry || !next) return;
-		landing = next;
-		if (entry.submitted_at_ms) landedAtMs = entry.submitted_at_ms;
+		if (!entry && !maybeSent) return;
+		landing = landingFor(entry, opHash, maybeSent);
+		if (entry?.submitted_at_ms) landedAtMs = entry.submitted_at_ms;
 	}
 
 	/**
@@ -149,13 +155,15 @@
 	 * Neither is `$state`: the effect below writes them and must not re-run
 	 * because it did.
 	 */
-	let shownRequest: { id: string; kind: SignMethodKind } | null = null;
+	let shownRequest: { id: string; kind: SignMethodKind; origin: string } | null = null;
 	let answerSeen: unknown = null;
 	let signedTick = $state(false);
+	/** The request the tick is for — so a DIFFERENT one owed is told apart from it. */
+	let tickFor = $state<{ id: string; origin: string } | null>(null);
 	$effect(() => {
 		const request = signRequest.view.request;
 		if (request && signRequest.view.surface !== 'hidden') {
-			shownRequest = { id: request.id, kind: request.kind };
+			shownRequest = { id: request.id, kind: request.kind, origin: request.origin };
 		}
 	});
 	$effect(() => {
@@ -175,12 +183,32 @@
 		// One answer per shown request: an id a site reuses later is not the
 		// request this sheet drew.
 		if (shown?.id === answer.id) shownRequest = null;
-		if (endsOnSignedTick(answer, shown)) signedTick = true;
+		if (endsOnSignedTick(answer, shown)) {
+			tickFor = shown ? { id: shown.id, origin: shown.origin } : null;
+			signedTick = true;
+		}
 	});
 	$effect(() => {
 		if (!signedTick) return;
 		const timer = setTimeout(() => (signedTick = false), autoCloseAfterMs({ kind: 'signed' }) ?? 0);
 		return () => clearTimeout(timer);
+	});
+
+	/**
+	 * Spec 082 G65 (RJ20): the full-panel tick hid the NEXT request's card for
+	 * ≥ 1.4 s — A signed, B's Connect already queued behind it, and B looked
+	 * like it arrived late. When the panel already owes another request, the
+	 * tick is skipped and that card shows at once; the page has its signature
+	 * either way. `panelSurface.current` is what the worker says this window
+	 * owes next (null outside the side panel, where the tick is unchanged).
+	 */
+	const nextOwed = $derived.by(() => {
+		const owed = panelSurface.current;
+		if (!owed || !signedTick) return false;
+		return !(tickFor !== null && owed.id === tickFor.id && owed.origin === tickFor.origin);
+	});
+	$effect(() => {
+		if (nextOwed) signedTick = false;
 	});
 
 	/**
@@ -238,6 +266,25 @@
 	let landedOp: string | null = null;
 
 	/**
+	 * Spec 082 G37 (D3): the request whose landing was raised and then closed
+	 * while its answer was still out. A lost relay reply raises the landing
+	 * before the answer; the chain check found the op, 已确认 closed itself —
+	 * and the sheet underneath came back as 提交至网络… for 49 s, until the page
+	 * was answered. That request's sheet now waits hidden for its answer; the
+	 * page still gets it, and the next request's sheet is not affected.
+	 */
+	let landingRequest: string | null = null;
+	let settledRequest = $state<string | null>(null);
+	const sheetHidden = $derived(
+		settledRequest !== null && signRequest.view.request?.id === settledRequest
+	);
+	$effect(() => {
+		const id = signRequest.view.request?.id ?? null;
+		// The request was answered (or another took its place): nothing to hide.
+		if (id !== untrack(() => settledRequest)) settledRequest = null;
+	});
+
+	/**
 	 * The handoff lands on a view AFTER the one that answered the requester, so
 	 * this WATCHES for it rather than reading it at the answer. Reading it too
 	 * early found `null` every time and the request window closed on the person
@@ -248,17 +295,25 @@
 	 */
 	$effect(() => {
 		if (!receipt) return;
-		const handoff = signRequest.view.tracker_handoff;
+		// Spec 082 RJ1: not the write-ahead's hand-off while its POST is out.
+		const offered = signRequest.view.tracker_handoff;
+		const handoff =
+			offered && handoffLands(offered, signRequest.view.pending_op_hash) ? offered : null;
 		const op = landingToRaise(handoff?.user_op_hash, landedOp);
 		if (!op || !handoff) return;
 		landedOp = op;
 		// Closed after approving: tracked, answered — and not raised again.
 		if (closedInFlight !== null) return;
-		watchLanding(op, handoff.chain_id);
+		watchLanding(op, handoff.chain_id, handoff.maybe_sent);
 	});
 
 	/** The landing goes: Done, or a landed transaction's own beat. */
 	function closeLanding(): void {
+		// Its request still unanswered: its sheet does not come back (G37).
+		if (landingRequest !== null && signRequest.view.request?.id === landingRequest) {
+			settledRequest = landingRequest;
+		}
+		landingRequest = null;
 		landing = null;
 		unsubscribeTracker?.();
 		unsubscribeTracker = undefined;
@@ -381,11 +436,18 @@
 	 * and retried, never an idle row over an open slide (`withLostContext`).
 	 */
 	const feeShown = $derived(
-		withLostContext(speedControl.feeInForce, speedControl.feeQuote.contextLost)
+		withLostContext(
+			speedControl.feeInForce,
+			speedControl.feeQuote.contextLost,
+			speedControl.feeQuote.contextRateLimited
+		)
 	);
 	const requoter = new FeeRequoteTimer({
 		delayMs: feeRequoteDelayMs,
-		requote: () => speedControl.refresh()
+		requote: () => speedControl.refresh(),
+		// Spec 082 RJ12: each automatic re-ask is bounded, and logged per chain.
+		timeoutMs: feeRequoteTimeoutMs,
+		chainId: () => untrack(() => signView.request?.chain_id ?? null)
 	});
 	$effect(() => {
 		const view = feeShown;
@@ -526,7 +588,7 @@
 			ondone={closeLanding}
 		/>
 	</div>
-{:else if signedTick && receipt && !model}
+{:else if signedTick && receipt && !model && !nextOwed}
 	<!--
 		Spec 079: the message is signed — the tick, the same landing layer and
 		disc, gone by itself (`autoCloseAfterMs`). A new request's sheet wins
@@ -538,7 +600,7 @@
 			ondone={() => (signedTick = false)}
 		/>
 	</div>
-{:else if model}
+{:else if model && !sheetHidden}
 	<!--
 		The ✕ IS the rejection (the 022 interaction contract draws no reject
 		button), so closing answers the transport with 4001 through the core —

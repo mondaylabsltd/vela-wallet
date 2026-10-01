@@ -184,7 +184,10 @@ fn normalize(name: &str) -> Option<String> {
 /// make one name look like another: C0/C1 controls, every flavour of space,
 /// and the invisible formatting blocks (zero width, bidi overrides, variation
 /// selectors, the interlinear annotations).
-fn is_never_in_a_name(c: char) -> bool {
+///
+/// Also the set `sim_outcome` strips from a revert reason (spec 082 RG8), so
+/// a contract's text and a name are cleaned by one rule.
+pub(crate) fn is_never_in_a_name(c: char) -> bool {
     c.is_control()
         || c.is_whitespace()
         || matches!(c,

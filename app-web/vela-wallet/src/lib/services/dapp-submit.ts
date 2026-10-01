@@ -30,6 +30,7 @@ export interface SigningAccount {
 
 import type { Assertion } from '$lib/onboarding/core/passkey';
 import { signChallenge, type ChallengeSigner } from '$lib/signing/sign-challenge';
+import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
 import { rpcCall } from './rpc-adapter';
 import {
 	sendBatchCalls,
@@ -40,11 +41,12 @@ import {
 	computeSafeMessageHash,
 	keySetOf,
 	signerAddressFor,
+	type BeforePost,
 	type QuotedInBandFee,
+	type SubmitResult,
 	type WalletKeySet,
 	type WalletSigner,
-	UserOpFeeHoldError,
-	UserOpRejectedError
+	UserOpRevertedError
 } from './safe-transaction';
 import { enforceNoUnlimited } from './approval-guard';
 import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
@@ -79,6 +81,84 @@ export interface DAppRequest {
 	params: unknown[];
 	origin?: string;
 }
+
+/**
+ * What the core-driven path hands a submit (spec 082), so the wallet never
+ * signs or sends for a page that is gone, the sheet says what is really
+ * happening, and the dApp is answered inside its window.
+ */
+export interface DAppSubmitHooks {
+	/**
+	 * Is the asker still there (RB5)? `sign` is asked before the passkey,
+	 * `submit` after the write-ahead's clearance and right before the relay
+	 * POST, carrying the op's hash and chain (RJ2). `false` → nothing is sent,
+	 * and the core hears `asker_gone`.
+	 */
+	claim(phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean>;
+	/** The passkey (or Trusted Signer) prompt opened / returned (RA9). */
+	ceremony(stage: 'started' | 'done'): void;
+	/** How long the page may still wait for a receipt (`dappReceiptWaitMs`, RA12). */
+	receiptWaitMs(): number;
+	/**
+	 * The write-ahead (spec 082 RJ1): the op is signed and hashed, nothing has
+	 * been POSTed. Resolves once its record is on disk (the core's
+	 * `ClearToPost`); throws when that does not come in time — then nothing is
+	 * sent. Absent: no record to wait for (a caller outside the core).
+	 */
+	writeAhead?(userOpHash: string, submitBlock: number | null): Promise<void>;
+	/**
+	 * Aborted once the core has answered the page by what the tracker knows
+	 * (`OpTracked`, spec 082 RJ4): the receipt wait stops there.
+	 */
+	answered?: AbortSignal;
+}
+
+/**
+ * `sign`, with the claims and the ceremony around it: claimed before the
+ * prompt opens. For an operation that goes to the relay next, the signer also
+ * carries the gate its submit runs before the first POST
+ * ({@link writeAheadGate}): the write-ahead, then the second claim — with the
+ * op's hash, once the signature exists and before a byte of it is sent (RB5,
+ * RJ1, RJ2).
+ */
+export function guardedSign<A extends unknown[], T>(
+	sign: (...args: A) => Promise<T>,
+	hooks: DAppSubmitHooks | undefined,
+	submits: boolean
+): ((...args: A) => Promise<T>) & { beforePost?: BeforePost } {
+	if (!hooks) return sign;
+	const guarded = async (...args: A) => {
+		if (!(await hooks.claim('sign'))) throw new AskerGoneError('sign');
+		hooks.ceremony('started');
+		const signed = await sign(...args);
+		hooks.ceremony('done');
+		return signed;
+	};
+	return submits ? Object.assign(guarded, { beforePost: writeAheadGate(hooks) }) : guarded;
+}
+
+/**
+ * What a dApp op does after its local hash and head read and before its first
+ * POST (spec 082 RJ1, RJ2): the record is written and the core clears the
+ * POST, then the asker is asked once more — with the hash, so a surface that
+ * goes from here on has its page answered by it, never 4900. Either refusal
+ * throws, and nothing is sent.
+ */
+export function writeAheadGate(hooks: DAppSubmitHooks): BeforePost {
+	return async ({ userOpHash, submitBlock, chainId }) => {
+		if (hooks.writeAhead) await hooks.writeAhead(userOpHash, submitBlock);
+		if (!(await hooks.claim('submit', { opHash: userOpHash, chainId }))) {
+			throw new AskerGoneError('submit');
+		}
+	};
+}
+
+/** Who reported the op to the core: its hash, whether it may only have been sent, its head. */
+export type OnSubmitted = (
+	userOpHash: string,
+	maybeSent: boolean,
+	submitBlock: number | null
+) => void;
 
 /**
  * Who signs for `safeAddress` and what was asked — the question
@@ -266,17 +346,19 @@ async function signSafeMessage(
 	account: SigningAccount,
 	safeAddress: string,
 	chainId: number,
-	safeHash: Uint8Array
+	safeHash: Uint8Array,
+	hooks?: DAppSubmitHooks
 ): Promise<{ assertion: Assertion; signerAddress?: string }> {
 	const stored = storedWalletFor(account, safeAddress);
 	const keySet = stored?.keys && stored.keys.length > 1 ? keySetOf(stored) : null;
 	const credentials = keySet
 		? keySet.keys.map((key) => ({ id: key.credentialId }))
 		: [{ id: account.id }];
-	const assertion = await signChallenge(
-		safeHash,
-		challengeSigner(request, stored, credentials, safeAddress, chainId)
-	);
+	const assertion = await guardedSign(
+		signChallenge,
+		hooks,
+		false
+	)(safeHash, challengeSigner(request, stored, credentials, safeAddress, chainId));
 	// The authenticator signed the hash that was asked for, and nothing else
 	// (spec 028 Phase 8).
 	assertChallengeSigned(fromHex(stripHexPrefix(assertion.clientDataJSONHex)), safeHash);
@@ -332,7 +414,8 @@ export async function handlePersonalSign(
 	request: DAppRequest,
 	account: SigningAccount,
 	safeAddress: string,
-	chainId: number
+	chainId: number,
+	hooks?: DAppSubmitHooks
 ): Promise<string> {
 	// personal_sign has no embedded chainId — use the fallback
 	assertChainSupported(chainId);
@@ -352,7 +435,8 @@ export async function handlePersonalSign(
 		account,
 		safeAddress,
 		chainId,
-		safeHash
+		safeHash,
+		hooks
 	);
 	return buildContractSignature(assertion, signerAddress);
 }
@@ -365,7 +449,8 @@ export async function handleSignTypedData(
 	request: DAppRequest,
 	account: SigningAccount,
 	safeAddress: string,
-	chainId: number
+	chainId: number,
+	hooks?: DAppSubmitHooks
 ): Promise<string> {
 	const typedDataRaw = pickTypedDataParam(request.method, request.params);
 	const typedData: TypedData =
@@ -384,7 +469,8 @@ export async function handleSignTypedData(
 		account,
 		safeAddress,
 		effectiveChainId,
-		safeHash
+		safeHash,
+		hooks
 	);
 	return buildContractSignature(assertion, signerAddress);
 }
@@ -398,12 +484,13 @@ export async function handleSendTransaction(
 	safeAddress: string,
 	chainId: number,
 	maxFeeOverride?: bigint,
-	onSubmitted?: (userOpHash: string) => void,
+	onSubmitted?: OnSubmitted,
 	// In-band chains only: settle gas in this whitelisted stablecoin (null/omitted
 	// = native). Ignored on legacy chains and on Tempo (always pathUSD there).
 	gasFeeToken?: string | null,
 	// In-band: the displayed fee (amount + recipient) — signed verbatim.
-	quotedFee?: QuotedInBandFee
+	quotedFee?: QuotedInBandFee,
+	hooks?: DAppSubmitHooks
 ): Promise<string> {
 	const txDict = request.params[0] as Record<string, string>;
 	const effectiveChainId = resolveChainId(chainId, txDict.chainId);
@@ -432,25 +519,7 @@ export async function handleSendTransaction(
 		: [{ id: account.id }];
 
 	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
-	const signFn = async (challenge: Uint8Array) => {
-		const assertion = await signChallenge(challenge, signer);
-
-		const compat = verifySafeWebAuthn(assertion);
-		if (!compat.ok) {
-			throw new Error(
-				"Your device's identity provider is not compatible with Vela Wallet. " +
-					'Please switch to Google Password Manager.\n\n' +
-					compat.reason
-			);
-		}
-
-		return {
-			signature: fromHex(assertion.signatureHex),
-			authenticatorData: fromHex(assertion.authenticatorDataHex),
-			clientDataJSON: fromHex(assertion.clientDataJSONHex),
-			credentialId: assertion.credentialId
-		};
-	};
+	const signFn = guardedSign(txSigner(signer), hooks, true);
 
 	const valueClean = stripHexPrefix(valueHex) || '0';
 
@@ -483,25 +552,80 @@ export async function handleSendTransaction(
 		);
 	}
 
-	// Op is signed + accepted by the bundler here; the receipt wait can take a while.
+	return answerFor(txResult, effectiveChainId, onSubmitted, hooks);
+}
+
+/**
+ * The one answer an on-chain request gets once its op is on its way (spec 082
+ * RA2, RA8): the tx hash when a receipt arrives inside the page's window —
+ * a revert included (ruling 9: gas was spent, a transaction exists) — else the
+ * op hash (`DAppReceiptPendingError`). An op the relay may only have received
+ * (`maybeSent`) is answered the same way, under its local hash: never 4900 or
+ * -32603, which a dApp reads as "not sent" and sends again.
+ */
+async function answerFor(
+	txResult: SubmitResult,
+	chainId: number,
+	onSubmitted: OnSubmitted | undefined,
+	hooks: DAppSubmitHooks | undefined
+): Promise<string> {
 	// Remember the chain so a later eth_getTransactionReceipt(userOpHash) poll can be
 	// translated to the real bundle tx on the ORIGINAL chain (not the current one).
-	rememberUserOpChain(txResult.userOpHash, effectiveChainId);
-	// Report the hash so the UI can show "submitted, waiting" instead of a blank spin.
-	onSubmitted?.(txResult.userOpHash);
+	rememberUserOpChain(txResult.userOpHash, chainId);
+	// Report the hash so the core records and tracks it before anything is
+	// answered — accepted, or may have been sent.
+	onSubmitted?.(txResult.userOpHash, txResult.maybeSent, txResult.submitBlock);
 	try {
-		return await txResult.waitForTxHash();
+		// Inside what is left of the page's window, each poll included (RJ4,
+		// G39), and no longer than the core's own answer (`answered`).
+		return await txResult.waitForTxHash(hooks?.receiptWaitMs(), hooks?.answered);
 	} catch (error) {
-		if (receiptStillOutstanding(error)) throw new DAppReceiptPendingError(txResult.userOpHash);
-		throw error;
+		// A landed revert is the page's error, naming its transaction — never
+		// the hash a site reads as done (083, owner ruling 2026-10-01). Whatever
+		// else the wait ended on — its window, the core's own answer, a relay
+		// out of reach — leaves the op in flight: the core tells the page it is
+		// not confirmed yet, and only the tracker says the relay refused it
+		// (spec 082 RJ4, `OpTracked`).
+		if (error instanceof UserOpRevertedError) {
+			throw new DAppRevertedError(txResult.userOpHash, error.txHash);
+		}
+		throw new DAppReceiptPendingError(txResult.userOpHash);
 	}
 }
 
 /**
- * The bundler accepted the op but no receipt arrived inside the wait — a
- * timeout, an unreachable bundler or a relay fee-hold. The op may still land,
- * so this is NOT a failure and NOT a confirmation (issue 262): the page is
- * answered with the op hash and the pending record is left for the tracker.
+ * The passkey half of a transaction signer: the assertion over the SafeOp
+ * challenge, with the identity-provider compatibility check.
+ */
+function txSigner(signer: ChallengeSigner) {
+	return async (challenge: Uint8Array) => {
+		const assertion = await signChallenge(challenge, signer);
+
+		const compat = verifySafeWebAuthn(assertion);
+		if (!compat.ok) {
+			throw new Error(
+				"Your device's identity provider is not compatible with Vela Wallet. " +
+					'Please switch to Google Password Manager.\n\n' +
+					compat.reason
+			);
+		}
+
+		return {
+			signature: fromHex(assertion.signatureHex),
+			authenticatorData: fromHex(assertion.authenticatorDataHex),
+			clientDataJSON: fromHex(assertion.clientDataJSONHex),
+			credentialId: assertion.credentialId
+		};
+	};
+}
+
+/**
+ * The op is on its way (accepted, or may have been sent) but no receipt
+ * arrived inside the wait — its window ran out, the relay was out of reach,
+ * or the core answered the page first. The op may still land, so this is NOT
+ * a failure and NOT a confirmation (issue 262): the core answers the page
+ * "not confirmed yet" (083 — the op hash only as a batch id) and the pending
+ * record is left for the tracker.
  */
 export class DAppReceiptPendingError extends Error {
 	constructor(readonly userOpHash: string) {
@@ -511,15 +635,18 @@ export class DAppReceiptPendingError extends Error {
 }
 
 /**
- * Did `waitForReceipt` give up without a verdict? Only a relay rejection and a
- * `success === false` drop are verdicts; everything else it throws (timeout,
- * unreachable, fee-hold) leaves the op in flight.
+ * The op was included and its execution REVERTED (083): the receipt said
+ * `success: false`. The core answers the page one error naming the
+ * transaction ([`reverted_detail`]) and closes the record failed.
  */
-export function receiptStillOutstanding(error: unknown): boolean {
-	if (error instanceof UserOpFeeHoldError) return true;
-	if (error instanceof UserOpRejectedError) return false;
-	const message = (error as { message?: string } | null)?.message ?? '';
-	return !/dropped from the network/i.test(message);
+export class DAppRevertedError extends Error {
+	constructor(
+		readonly userOpHash: string,
+		readonly txHash: string
+	) {
+		super(`Transaction ${txHash.slice(0, 10)}… was included but reverted.`);
+		this.name = 'DAppRevertedError';
+	}
 }
 
 /**
@@ -530,7 +657,8 @@ export async function handleGenericSign(
 	request: DAppRequest,
 	account: SigningAccount,
 	safeAddress: string,
-	chainId: number
+	chainId: number,
+	hooks?: DAppSubmitHooks
 ): Promise<string> {
 	assertChainSupported(chainId);
 
@@ -544,7 +672,8 @@ export async function handleGenericSign(
 		account,
 		safeAddress,
 		chainId,
-		safeHash
+		safeHash,
+		hooks
 	);
 	return buildContractSignature(assertion, signerAddress);
 }
@@ -584,7 +713,7 @@ export async function handleDAppRequest(
 	safeAddress: string,
 	chainId: number,
 	maxFeeOverride?: bigint,
-	onSubmitted?: (userOpHash: string) => void,
+	onSubmitted?: OnSubmitted,
 	// In-band chains only: settle gas in this whitelisted stablecoin (null/omitted
 	// = native). Only meaningful for the tx/batch methods.
 	gasFeeToken?: string | null,
@@ -592,7 +721,10 @@ export async function handleDAppRequest(
 	quotedFee?: QuotedInBandFee,
 	// Who already enforced the never-unlimited mandate for this request. See
 	// {@link SubmitGuardOwner}; omitting it keeps the guard here.
-	guardOwner: SubmitGuardOwner = 'ts'
+	guardOwner: SubmitGuardOwner = 'ts',
+	// Spec 082: the claims, the ceremony and the answer window. Absent → the
+	// request is signed as before (a caller with no asker to lose).
+	hooks?: DAppSubmitHooks
 ): Promise<unknown> {
 	const { method } = request;
 
@@ -611,7 +743,8 @@ export async function handleDAppRequest(
 			maxFeeOverride,
 			onSubmitted,
 			gasFeeToken,
-			quotedFee
+			quotedFee,
+			hooks
 		);
 	} else if (method === 'wallet_sendCalls') {
 		return handleSendCalls(
@@ -621,14 +754,16 @@ export async function handleDAppRequest(
 			chainId,
 			gasFeeToken,
 			quotedFee,
-			guardOwner
+			guardOwner,
+			onSubmitted,
+			hooks
 		);
 	} else if (method === 'personal_sign') {
-		return handlePersonalSign(request, account, safeAddress, chainId);
+		return handlePersonalSign(request, account, safeAddress, chainId, hooks);
 	} else if (method.includes('signTypedData')) {
-		return handleSignTypedData(request, account, safeAddress, chainId);
+		return handleSignTypedData(request, account, safeAddress, chainId, hooks);
 	} else {
-		return handleGenericSign(request, account, safeAddress, chainId);
+		return handleGenericSign(request, account, safeAddress, chainId, hooks);
 	}
 }
 
@@ -653,7 +788,11 @@ export async function handleSendCalls(
 	quotedFee?: QuotedInBandFee,
 	// Who already enforced the never-unlimited mandate for these legs. See
 	// {@link SubmitGuardOwner}; omitting it keeps the guard here.
-	guardOwner: SubmitGuardOwner = 'ts'
+	guardOwner: SubmitGuardOwner = 'ts',
+	// Spec 082: the op is reported to the core like any other on-chain request,
+	// so the batch is recorded, tracked and ended by the tracker.
+	onSubmitted?: OnSubmitted,
+	hooks?: DAppSubmitHooks
 ): Promise<string> {
 	const payload = request.params[0] as {
 		calls: Array<{
@@ -705,25 +844,7 @@ export async function handleSendCalls(
 		: [{ id: account.id }];
 
 	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
-	const signFn = async (challenge: Uint8Array) => {
-		const assertion = await signChallenge(challenge, signer);
-
-		const compat = verifySafeWebAuthn(assertion);
-		if (!compat.ok) {
-			throw new Error(
-				"Your device's identity provider is not compatible with Vela Wallet. " +
-					'Please switch to Google Password Manager.\n\n' +
-					compat.reason
-			);
-		}
-
-		return {
-			signature: fromHex(assertion.signatureHex),
-			authenticatorData: fromHex(assertion.authenticatorDataHex),
-			clientDataJSON: fromHex(assertion.clientDataJSONHex),
-			credentialId: assertion.credentialId
-		};
-	};
+	const signFn = guardedSign(txSigner(signer), hooks, true);
 
 	// Single call → use existing send logic
 	if (calls.length === 1) {
@@ -761,8 +882,7 @@ export async function handleSendCalls(
 				quotedFee
 			);
 		}
-		rememberUserOpChain(txResult.userOpHash, effectiveChainId);
-		return txResult.userOpHash;
+		return batchIdFor(txResult, effectiveChainId, onSubmitted);
 	}
 
 	// Multiple calls → batch via Safe multiSend
@@ -780,7 +900,21 @@ export async function handleSendCalls(
 		gasFeeToken,
 		quotedFee
 	);
-	rememberUserOpChain(txResult.userOpHash, effectiveChainId);
+	return batchIdFor(txResult, effectiveChainId, onSubmitted);
+}
+
+/**
+ * EIP-5792's answer: the batch id, which is the op hash — at once, with no
+ * receipt wait. Reported to the core first, so the batch is recorded and
+ * followed; an op that may only have been sent answers its local hash.
+ */
+function batchIdFor(
+	txResult: SubmitResult,
+	chainId: number,
+	onSubmitted: OnSubmitted | undefined
+): string {
+	rememberUserOpChain(txResult.userOpHash, chainId);
+	onSubmitted?.(txResult.userOpHash, txResult.maybeSent, txResult.submitBlock);
 	return txResult.userOpHash;
 }
 

@@ -72,24 +72,60 @@ fn hashes_at(key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// What reading the endpoint's index came to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Index {
+    /// The endpoint answered: what it lists (empty for a missing or
+    /// malformed index — it has no authority, so that is no error).
+    Listed(Vec<String>),
+    /// Nothing answered: the network, a proxy, a name — never the page
+    /// (spec 082 G67). `kind` is the probe's word for the failure.
+    Unfetched { host: String, kind: &'static str },
+}
+
 /// What the endpoint says it publishes, as hashes.
 ///
 /// The index has no authority — it narrows the choice and never makes it
 /// (`choose_version`) — so a malformed or missing one is not an error worth
 /// shouting about. It yields an empty list, and the caller falls back to asking
-/// for a version directly.
-fn published(base: &str) -> Vec<String> {
+/// for a version directly. A request that reached nothing is another matter:
+/// "publishes no version this wallet knows — update the wallet" was logged for
+/// a dead proxy (spec 082 G67).
+fn published(base: &str) -> Index {
     let url = format!("{}{INDEX_PATH}", with_trailing_slash(base));
-    let Ok(mut response) = crate::executor::proxy::agent(TIMEOUT).get(&url).call() else {
-        return Vec::new();
-    };
+    let mut response =
+        match crate::executor::proxy::with_routes(&url, TIMEOUT, |agent| agent.get(&url).call()) {
+            Ok(response) => response,
+            Err(failure) => return unanswered(&url, &failure),
+        };
     if response.status() != 200 {
-        return Vec::new();
+        return Index::Listed(Vec::new());
     }
     let Ok(text) = response.body_mut().read_to_string() else {
-        return Vec::new();
+        return Index::Listed(Vec::new());
     };
-    serde_json::from_str::<Value>(&text)
+    Index::Listed(listed(&text))
+}
+
+/// A request for the index that did not come back with a body: an HTTP
+/// status is an answer (no index, which is allowed); anything else reached
+/// nothing.
+fn unanswered(url: &str, failure: &crate::executor::proxy::Transport) -> Index {
+    if matches!(failure.error, ureq::Error::StatusCode(_)) {
+        return Index::Listed(Vec::new());
+    }
+    Index::Unfetched {
+        host: crate::diag::host_of(url),
+        kind: crate::explore::probe::verdict_word(Err(crate::explore::probe::code_of(
+            &failure.error,
+            failure.proxy.as_ref(),
+        ))),
+    }
+}
+
+/// The index's hashes, from its body.
+fn listed(text: &str) -> Vec<String> {
+    serde_json::from_str::<Value>(text)
         .ok()
         .as_ref()
         .and_then(|value| value.get("versions").or(Some(value)))
@@ -118,10 +154,9 @@ fn with_trailing_slash(base: &str) -> String {
 /// refused connection, a 404 and a body too large are not different verdicts;
 /// they are all "this wallet could not see the page".
 fn fetch_and_hash(url: &str) -> Result<String, CheckFailure> {
-    let mut response = crate::executor::proxy::agent(TIMEOUT)
-        .get(url)
-        .call()
-        .map_err(|_| CheckFailure::Unreachable)?;
+    let mut response =
+        crate::executor::proxy::with_routes(url, TIMEOUT, |agent| agent.get(url).call())
+            .map_err(|_| CheckFailure::Unreachable)?;
     if response.status() != 200 {
         return Err(CheckFailure::Unreachable);
     }
@@ -158,20 +193,11 @@ pub fn check(base: &str) -> Verdict {
 pub fn check_with(base: &str, trusted: &[String], blocked: &[String]) -> Verdict {
     // Which version to ask for. The endpoint's index narrows the candidates;
     // the order is this client's, so the endpoint cannot steer the choice.
-    let available = published(base);
-    let wanted = integrity::choose_version(&available, trusted, blocked);
-    if let Ok(hash) = &wanted {
-        remember_version(base, hash);
-    }
-
-    let hash = match wanted {
+    let hash = match choose(&published(base), trusted, blocked) {
         Ok(hash) => hash,
-        // Nothing to ask for. WHY matters: "this endpoint publishes nothing
-        // this wallet knows" sends a person to update, and "you have blocked
-        // every usable version" sends them to their own list. Saying "could
-        // not check" for either would send them to their network settings.
-        Err(why) => return Verdict::NoVersionToAsk(why),
+        Err(verdict) => return verdict,
     };
+    remember_version(base, &hash);
     let Some(url) = integrity::content_addressed_url(base, &hash) else {
         return Verdict::CouldNotCheck(CheckFailure::NotChecked);
     };
@@ -180,6 +206,32 @@ pub fn check_with(base: &str, trusted: &[String], blocked: &[String]) -> Verdict
     // copied. A host serving a single page has no index, so `choose_version`
     // already returned `None` above and this is never reached.
     verdict_for(base, fetch_and_hash(&url), trusted, blocked)
+}
+
+/// The version to ask for, or the verdict without one.
+///
+/// Nothing to ask for, and WHY matters: "this endpoint publishes nothing this
+/// wallet knows" sends a person to update, and "you have blocked every usable
+/// version" sends them to their own list. Saying "could not check" for either
+/// would send them to their network settings — and saying "update the wallet"
+/// for an index that never answered sent them the wrong way (G67): that is
+/// "could not check", with the host and the failure in the log.
+fn choose(index: &Index, trusted: &[String], blocked: &[String]) -> Result<String, Verdict> {
+    match index {
+        Index::Unfetched { host, kind } => {
+            crate::diag::vlog!("signer page", "{}", fetch_line(host, kind));
+            Err(Verdict::CouldNotCheck(CheckFailure::Unreachable))
+        }
+        Index::Listed(available) => {
+            integrity::choose_version(available, trusted, blocked).map_err(Verdict::NoVersionToAsk)
+        }
+    }
+}
+
+/// The log line for an index that never answered (the area is the caller's
+/// `signer page`).
+fn fetch_line(host: &str, kind: &str) -> String {
+    format!("could not fetch {host} ({kind})")
 }
 
 /// The pure half: bytes-or-failure in, the core's verdict out.
@@ -438,6 +490,62 @@ mod tests {
             opened.contains(BUILD_ALLOWED[0]),
             "opened an unknown version: {opened}"
         );
+    }
+
+    /// Spec 082 G67: an index request that reached nothing (a dead dev
+    /// proxy) is "could not fetch <host> (<kind>)" and "could not be checked"
+    /// — never "publishes no version … update the wallet".
+    #[test]
+    fn a_transport_failure_is_the_fetch_line_not_update_the_wallet() {
+        use crate::executor::proxy::{ProxyFailure, ProxyFailureKind, Transport};
+        let url = "https://sign.getvela.app/versions.json";
+        let dead = Transport {
+            error: ureq::Error::ConnectionFailed,
+            local: true,
+            proxy: Some(ProxyFailure {
+                proxy: "127.0.0.1:9".to_owned(),
+                kind: ProxyFailureKind::Unreachable,
+            }),
+        };
+        let index = unanswered(url, &dead);
+        assert_eq!(
+            index,
+            Index::Unfetched {
+                host: "sign.getvela.app".to_owned(),
+                kind: "proxy"
+            }
+        );
+        assert_eq!(
+            fetch_line("sign.getvela.app", "proxy"),
+            "could not fetch sign.getvela.app (proxy)"
+        );
+        let Err(verdict) = choose(&index, &[], &[]) else {
+            unreachable!("nothing answered, so there is nothing to ask for")
+        };
+        assert_eq!(verdict, Verdict::CouldNotCheck(CheckFailure::Unreachable));
+        assert!(!describe(&verdict).contains("update the wallet"));
+        // An HTTP status is an answer: no index, which is allowed.
+        let missing = Transport {
+            error: ureq::Error::StatusCode(404),
+            local: false,
+            proxy: None,
+        };
+        assert_eq!(unanswered(url, &missing), Index::Listed(Vec::new()));
+    }
+
+    /// An endpoint that answered with no version this wallet knows is the
+    /// version line — the one that sends a person to update.
+    #[test]
+    fn an_empty_version_list_is_the_version_line() {
+        let Err(verdict) = choose(&Index::Listed(Vec::new()), &[], &[]) else {
+            unreachable!("an empty index offers nothing")
+        };
+        assert_eq!(
+            verdict,
+            Verdict::NoVersionToAsk(NoVersion::NothingPublishedThisWalletKnows)
+        );
+        assert!(describe(&verdict).contains("publishes no version this wallet knows"));
+        assert_eq!(listed(r#"{"versions":[]}"#), Vec::<String>::new());
     }
 
     #[test]

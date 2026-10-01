@@ -54,7 +54,6 @@
     "txRemaining": "~{{remaining}} s rimanenti",
     "txTypicalTime": "{{chainName}} di solito conferma in ~{{estSecs}} s",
     "txRetryBtn": "Riprova",
-    "txErrorTimeout": "Transazione inviata ma la conferma è scaduta. Controlla la cronologia più tardi.",
     "txErrorBundlerLoop": "Il saldo dell'account gas continua a essere rifiutato dal bundler. Riprova più tardi o aumenta il livello di gas.",
     "txErrorBundlerFund": "All'account del bundler serve più gas. Ricaricalo nelle impostazioni.",
     "txErrorPublicKey": "Chiave pubblica non trovata per questo account",

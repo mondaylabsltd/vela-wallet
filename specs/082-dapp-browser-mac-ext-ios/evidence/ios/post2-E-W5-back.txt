@@ -1,0 +1,14 @@
+07:36:42.185289 [browser] requested host=app.uniswap.org
+07:36:42.259765 [browser] offline failed host=app.uniswap.org NSURLErrorDomain -1000 → offline
+07:36:44.264516 [browser] retry #1 host=app.uniswap.org
+07:36:44.353067 [browser] offline failed host=app.uniswap.org NSURLErrorDomain -1000 → offline
+07:36:49.433292 [browser] retry #2 host=app.uniswap.org
+07:36:49.521542 [browser] offline failed host=app.uniswap.org NSURLErrorDomain -1000 → offline
+07:37:00.026603 [browser] retry #3 host=app.uniswap.org
+07:37:00.117709 [browser] offline failed host=app.uniswap.org NSURLErrorDomain -1000 → offline
+07:37:06.182395 [net] offline misses=3
+07:37:37.230553 [net] net came back (rpc)
+07:37:45.025884 [browser] retry #1 host=app.uniswap.org
+07:37:45.914978 [browser] committed host=app.uniswap.org
+07:36:38 CONFIG {"mode": "drop", "latency": 0, "bps": 0, "drop": 1.0, "match": "."}
+07:37:36 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "."}

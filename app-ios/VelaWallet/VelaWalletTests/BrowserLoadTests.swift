@@ -23,6 +23,7 @@ struct BrowserLoadTests {
         let engine = BrowserEngine(id: "tab-\(UUID().uuidString)")
         var asked: [URL] = []
         engine.loader = { request in if let url = request.url { asked.append(url) } }
+        engine.stopper = {}
         return (engine, { asked })
     }
 
@@ -248,5 +249,145 @@ struct BrowserLoadTests {
         #expect(BrowserEngine.leavesDocument(from: here, to: URL(string: "https://app.uniswap.org/pool")!))
         #expect(BrowserEngine.leavesDocument(from: here, to: here))
         #expect(BrowserEngine.leavesDocument(from: nil, to: here))
+    }
+
+    // MARK: - Spec 082: the watchdog, Stop, and the classes (T112)
+
+    /// Twenty seconds with no commit and WebKit never alive: the load is
+    /// stopped, the core's stalled panel shows with the host it was going to,
+    /// and it retries on the usual schedule — not the ~75 s WebKit gave up at
+    /// (G32).
+    @Test func theWatchdogGivesUpAtTheCoresBudget() {
+        let (engine, asked) = engine()
+        defer { engine.tearDown() }
+        var stopped = 0
+        engine.stopper = { stopped += 1 }
+        engine.reportedProgress = { 0.1 }
+        engine.setOnScreen(true)
+        engine.load(url)
+        #expect(engine.watchdogArmed, "armed at the request")
+        engine.provisionalStarted(attempt: url)
+        engine.watchdogFired(elapsedMs: browserLoadGiveUpMs())
+        #expect(stopped == 1)
+        #expect(engine.failure == browserLoadStalled())
+        #expect(engine.failureReasonKey == "explore.loadOffline")
+        #expect(!engine.loading)
+        #expect(!engine.watchdogArmed)
+        #expect(engine.bar.host == "app.uniswap.org")
+        #expect(engine.retryPendingMs == 2_000)
+        #expect(browserLoadGiveUpMs() == 20_000)
+
+        // WebKit's cancellation of the stopped load is not a second failure:
+        // the panel stays.
+        engine.provisionalFailed(code: NSURLErrorCancelled, domain: NSURLErrorDomain, attempt: url)
+        #expect(engine.failure == browserLoadStalled(), "the -999 keeps the panel")
+
+        // The retry is re-armed like any request.
+        engine.fireRetry()
+        #expect(engine.watchdogArmed)
+        #expect(asked().count == 2)
+    }
+
+    /// A slow page that is answering is never cut: WebKit's own progress
+    /// past the live mark means the site is there.
+    @Test func aSlowPageThatIsAnsweringIsNeverCut() {
+        let (engine, _) = engine()
+        defer { engine.tearDown() }
+        var stopped = 0
+        engine.stopper = { stopped += 1 }
+        engine.reportedProgress = { 0.4 }
+        engine.load(url)
+        engine.provisionalStarted(attempt: url)
+        engine.watchdogFired(elapsedMs: browserLoadGiveUpMs())
+        #expect(engine.failure == nil)
+        #expect(stopped == 0)
+        #expect(engine.loading)
+    }
+
+    /// A committed load, or an older generation's timer, is never given up.
+    @Test func aCommittedOrSupersededLoadIsNeverGivenUp() {
+        let (engine, _) = engine()
+        defer { engine.tearDown() }
+        engine.reportedProgress = { 0.1 }
+        engine.load(url)
+        let first = engine.loadGeneration
+        engine.load("https://example.com/")
+        engine.watchdogFired(generation: first, elapsedMs: 30_000)
+        #expect(engine.failure == nil, "a newer request owns the watchdog")
+        engine.committed()
+        #expect(!engine.watchdogArmed, "a commit disarms it")
+        engine.watchdogFired(elapsedMs: 30_000)
+        #expect(engine.failure == nil)
+    }
+
+    /// The watchdog is dropped while the app is away and re-armed with the
+    /// full budget on return.
+    @Test func theWatchdogSleepsWithTheApp() {
+        let (engine, _) = engine()
+        defer { engine.tearDown() }
+        engine.load(url)
+        #expect(engine.watchdogArmed)
+        engine.setAppActive(false)
+        #expect(!engine.watchdogArmed)
+        engine.setAppActive(true)
+        #expect(engine.watchdogArmed)
+    }
+
+    /// Stop ends the load and its watchdog; the committed page and its bar
+    /// stay, and WebKit's -999 that follows draws no panel.
+    @Test func stopKeepsTheCommittedPage() {
+        let (engine, _) = engine()
+        defer { engine.tearDown() }
+        var stopped = 0
+        engine.stopper = { stopped += 1 }
+        engine.reportedURL = { URL(string: "https://jumper.exchange/") }
+        engine.committed()
+        engine.load(url)
+        #expect(engine.loading)
+        engine.stop()
+        #expect(stopped == 1)
+        #expect(!engine.loading)
+        #expect(!engine.watchdogArmed)
+        engine.provisionalFailed(code: NSURLErrorCancelled, domain: NSURLErrorDomain, attempt: url)
+        #expect(engine.failure == nil, "a -999 after Stop is not a failure")
+        #expect(engine.bar.host == "jumper.exchange")
+        #expect(engine.bar.lock == "closed")
+    }
+
+    /// RE4 (G31): -1000 is the per-app proxy refusing CONNECT — "the network
+    /// is unstable", retried — never "this site does not exist". A proxy that
+    /// cannot be reached (CFNetwork 306) says so, in the corpus's words.
+    @Test func theAppleClassesAreTheCores() {
+        let (engine, _) = engine()
+        defer { engine.tearDown() }
+        engine.setOnScreen(true)
+        engine.load(url)
+        engine.provisionalFailed(code: NSURLErrorBadURL, domain: NSURLErrorDomain, attempt: url)
+        #expect(engine.failure?.class == "offline")
+        #expect(engine.failureReasonKey == "explore.loadOffline")
+        #expect(engine.retryPendingMs == 2_000)
+
+        engine.load(url)
+        engine.provisionalFailed(code: 306, domain: "kCFErrorDomainCFNetwork", attempt: url)
+        #expect(engine.failure?.class == "proxy")
+        #expect(engine.failureReasonKey == "explore.loadProxy")
+        #expect(engine.retryPendingMs != nil, "a proxy failure retries like the network")
+        for tag in ["zh", "en"] {
+            let words = Loc(overrideTag: tag, preferredLanguages: []).t("explore.loadProxy")
+            #expect(!words.isEmpty && words != "explore.loadProxy", "\(tag) echoed the key")
+        }
+    }
+
+    /// The busy Retry: a spinner and "retrying" at full colour, never a
+    /// dimmed button (house rule: busy is not disabled).
+    @Test func theRetryIsBusyNotDisabled() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("VelaWallet/Components/Explore/BrowserWebView.swift"),
+            encoding: .utf8
+        )
+        #expect(source.contains("loading: retrying"))
+        #expect(!source.contains("enabled: !retrying"))
     }
 }

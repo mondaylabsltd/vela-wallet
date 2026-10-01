@@ -1,0 +1,85 @@
+/**
+ * Spec 082 round 2 (T227): the new words resolve in every locale — the
+ * refusal (RJ3/RJ6), "提交至网络…" for a may-have-been-sent op (G56), and every
+ * reason key the core's `feeFailureReasonKey` can name (RJ13).
+ */
+import '$lib/i18n/wasm-init.server';
+import { describe, expect, it } from 'vitest';
+import { FEE_REASON_KEYS, rawResolve, resolveSigningMessages } from '$lib/i18n/engine.server';
+import { SUPPORTED_LOCALES } from '$lib/i18n/locales';
+import { feeFailureReasonKey } from '$lib/core/kernels';
+import type { FeeFailure } from '$lib/core/generated/FeeFailure';
+
+describe('the refusal resolves (RJ3, RJ6)', () => {
+	it.each(SUPPORTED_LOCALES)(
+		'%s: `componentsUi.signing.refused` is a sentence, not its key',
+		(locale) => {
+			const m = resolveSigningMessages(locale);
+			expect(m.receipt.refused).toBe(rawResolve(locale, 'componentsUi.signing.refused'));
+			expect(m.receipt.refused).not.toBe('componentsUi.signing.refused');
+			expect(m.receipt.refused.trim()).not.toBe('');
+		}
+	);
+
+	it('says the network refused it and nothing was sent — and never "try again"', () => {
+		expect(resolveSigningMessages('en').receipt.refused).toBe(
+			'The network refused it — nothing was sent.'
+		);
+		expect(resolveSigningMessages('zh').receipt.refused).toBe(
+			'网络拒绝了这笔交易，什么都没有发出。'
+		);
+		for (const locale of ['en', 'zh'] as const) {
+			const m = resolveSigningMessages(locale);
+			expect(m.receipt.refused).not.toBe(m.status.failedHint);
+		}
+		expect(resolveSigningMessages('zh').receipt.refused).not.toContain('重试');
+		expect(resolveSigningMessages('en').receipt.refused.toLowerCase()).not.toContain('try again');
+	});
+
+	it('a may-have-been-sent op is titled "提交至网络…" (G56)', () => {
+		expect(resolveSigningMessages('zh').receipt.submitting).toBe(
+			rawResolve('zh', 'send.txSubmitting')
+		);
+		expect(resolveSigningMessages('zh').receipt.submitting).toContain('提交至网络');
+	});
+});
+
+describe('every fee reason the core can name resolves (RJ13)', () => {
+	const failures: FeeFailure[] = [
+		'quote_unavailable',
+		'fee_token_unavailable',
+		'estimate_failed',
+		'gas_quote_too_high',
+		'missing_public_key',
+		'calculation_failed',
+		{ chain_read: { rate_limited: true } },
+		{ chain_read: { rate_limited: false } }
+	];
+
+	it('the core’s keys are the ones the build resolves', () => {
+		for (const failure of failures) {
+			const key = feeFailureReasonKey(failure);
+			if (key !== null) expect(FEE_REASON_KEYS, JSON.stringify(failure)).toContain(key);
+		}
+		expect(feeFailureReasonKey('missing_public_key')).toBeNull();
+		expect(feeFailureReasonKey({ chain_read: { rate_limited: true } })).toBe(
+			'home.balanceDetailStatusRetrying'
+		);
+	});
+
+	it.each(SUPPORTED_LOCALES)('%s: each reason is a sentence', (locale) => {
+		const m = resolveSigningMessages(locale);
+		for (const key of FEE_REASON_KEYS) {
+			expect(m.feeReasons[key], `${key} in ${locale}`).not.toBe(key);
+			expect(m.feeReasons[key]?.trim(), `${key} in ${locale}`).not.toBe('');
+		}
+		// `{{chain}}` is left for the sheet to fill with the chain's name.
+		expect(m.feeReasons['explore.chainDown']).toContain('{{chain}}');
+	});
+
+	it('the revert warning with its reason resolves (RJ19)', () => {
+		const m = resolveSigningMessages('en');
+		expect(m.warnWillFailReason).toContain('{{reason}}');
+		expect(m.warnWillFail).not.toBe('componentsUi.signing.simWillFail');
+	});
+});

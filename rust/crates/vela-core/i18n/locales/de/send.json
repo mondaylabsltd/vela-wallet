@@ -54,7 +54,6 @@
     "txRemaining": "~{{remaining}} s verbleibend",
     "txTypicalTime": "{{chainName}} bestätigt in der Regel in ~{{estSecs}} s",
     "txRetryBtn": "Erneut versuchen",
-    "txErrorTimeout": "Transaktion übermittelt, aber Zeitüberschreitung bei der Bestätigung. Prüfen Sie den Verlauf später.",
     "txErrorBundlerLoop": "Das Gas-Konto-Guthaben wird vom Bundler weiterhin abgelehnt. Versuchen Sie es später erneut oder erhöhen Sie die Gas-Stufe.",
     "txErrorBundlerFund": "Das Bundler-Konto benötigt mehr Gas. Bitte füllen Sie es in den Einstellungen auf.",
     "txErrorPublicKey": "Kein öffentlicher Schlüssel für dieses Konto gefunden",

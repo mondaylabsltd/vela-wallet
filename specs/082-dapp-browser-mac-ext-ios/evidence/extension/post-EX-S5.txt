@@ -1,0 +1,23 @@
+EX-S5 (NotSent, web) - extension side panel (zh). Fault: 8898 drop match=vela-relay at 19:13:40.1Z; pass at 19:14:10.807Z (+30 s).
+Nonce before 24, after 24 (unchanged). dApp asked 19:13:25.323Z; fee shown; slide 19:13:40.669Z.
+
+Sheet/overlay record (UTC):
+19:13:41.293 sheet: 正在准备交易... | 发送 · -0.001 xDAI
+19:13:42.562 sheet: 等待生物识别...      <- 2 ms
+19:13:42.564 sheet: 提交至网络... | 关闭此页交易会在后台继续
+19:13:43.480 overlay: 已提交 | 可能已经发出。Vela 会继续查看，请不要重复发送。 | UserOp 哈希 | 0x86d36d30…84adabdc | 关闭 · 后台继续   (+2.8 s)
+19:15:07.833 overlay: 失败 | 交易未能提交。您的资金安全无虞——请重试。 | UserOp 哈希 | 0x86d36d30…84adabdc | 完成   (+87.2 s after the slide, +85.3 s after submit)
+Activity after 完成: 今天 · dApp 交易 · 失败 · 127.0.0.1:8137 · -0.001 xDAI
+
+Panel console:
+19:13:42.565 [UserOp] Submitting: {...nonce 0x18...}
+19:13:43.471 [UserOp] submit verdict=maybe_sent hash=0x86d36d305a attempts=1 chain=100
+(no console line at all between 19:14:55 and 19:15:12 - the NotSent verdict / 失败 leaves no trace)
+19:15:42.948 [UserOp] ACCEPTED but NOT landed within timeout — bundler is not settling this chain   <- wrong words: the relay never accepted it
+Worker: 19:13:42.538Z req.claim phase=sign live=true; 19:13:42.562Z req.claim phase=submit live=true; 19:15:42.953Z req.answered delivered=true outcome=ok
+
+dApp answer (one): 19:15:42.952Z {ok:true, result:0x86d36d305a8b61b00cfe2ee812209b9de1ff28c182b2ad79041989f684adabdc}
+  = 35 s AFTER the wallet showed 失败; the dApp's eth_getTransactionReceipt(that hash) -> null (346 ms), forever.
+Relay (my own curl, not the device): pimlico_getUserOperationStatus(op) -> {"status":"not_found","transactionHash":null}
+Chain: eth_getLogs UserOperationEvent topic1=op over 2000 blocks -> 0 logs.
+chaos-ext.log: 03:13:4x DROP vela-relay-cf.getvela.app:443 ...; 03:14:10 CONFIG pass

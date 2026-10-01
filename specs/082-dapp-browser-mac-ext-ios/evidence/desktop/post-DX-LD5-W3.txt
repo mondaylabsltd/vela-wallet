@@ -1,0 +1,19 @@
+DX-LD5 / DX-W3 desktop (log desk-post-DX9.err), scratch page 127.0.0.1:8141
+Arbitrum: 04:09:04 switch 0xa4b1 → null + chainChanged; 04:09:07 send 0.001 → sheet: 发送 −0.001 ETH, caution 'Vela 未能检查这笔交易的结果，请核对后再签名。', fee 0.000241 ETH ≈ $0.65 + 'ETH 余额不足以支付 Gas 费', slide shut; ✕ 04:09:44 → 4001; eth_chainId 0xa4b1; 20 s later no chain notice on the page, wallet shows no RPC banner
+log lines for chain=42161 after the sheet: 0 (none)
+
+Gnosis USDC transfer(0x7687…D141, 10^30): sheet 发送 / 金额 1,000,000,000,000,000,000,000,000 USDC / 接收方 0x76875e…c0d141 / danger '这笔交易预计会失败 — 但仍会扣除 gas。' / fee 0.01 xDAI ≈ $0.01 / slide 滑动以确认 · 发送 (live)
+[vela-wallet] fee: relay estimation unavailable: UserOperation simulation failed
+
+DX-W3 attempt (nonce 51): slid the reverting transfer 04:11:07
+[vela-wallet] in-band: estimation failed, using defaults: UserOperation simulation failed
+[vela-wallet] in-band: signing DISPLAYED quote token=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c
+[vela-wallet] 04:11:09.768 relay: submitting chain=100 op=0xa974c5dd0a initCode=no callData=516B
+[vela-wallet] 04:11:10.757 relay: submit verdict=accepted hash=0xa974c5dd0a attempts=1 in=988 ms
+[vela-wallet] 04:11:10.759 tracker: op=0xa974c5dd0a handed over chain=100 maybe_sent=false submit_block=Some(48487780)
+[vela-wallet] 04:11:25.190 tracker: op=0xa974c5dd0a status=Rejected
+[vela-wallet] 04:13:05.872 dapp: op=0xa974c5dd0a answered with the op hash after the receipt wait
+screens: 04:11:10 提交至网络… → 04:11:16 交易已提交至网络 · 等待区块链确认… · Gnosis 通常在约 15 秒内确认 · 剩余约 10 秒 · UserOp 哈希 0xa974c5dd…f602d0a9 → 04:11:26 失败 · 交易未能提交。您的资金安全无虞——请重试。
+page: usdc 1e30 → {ok:true, result:'0xa974c5dd0a912baea223c39d729da5c9bd2437ab0fa3028e42491622f602d0a9'} at 04:13:05 (op hash, 100 s after the wallet knew the relay rejected it)
+chain: no UserOperationEvent, nonce 51 unchanged (checked 04:11:48)
+Activity: dApp 交易 · 失败 · 127.0.0.1:8141; detail chip 失败, empty amount block, 接收方 0xDDAf…7A83 (the USDC contract), 在区块浏览器中查看, 删除记录

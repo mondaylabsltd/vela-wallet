@@ -26,12 +26,14 @@ struct DrilldownTests {
         counterparty: String? = "0x9F3cA71b8021aE9F3cA71b8021aE9F3cA71b8021",
         value: String? = "120",
         symbol: String = "USDT",
-        chainId: Int = 1
+        chainId: Int = 1,
+        status: FeedTxStatusWire = .confirmed
     ) -> FeedItemWire {
         FeedItemWire(
             id: id, direction: direction, counterparty: counterparty, alias: alias,
             value: value, symbol: symbol, decimals: 6, usdValue: 120, chainId: chainId,
-            timestamp: now, dayStartMs: dayStart, txHash: "0xabcdef0123456789", batch: nil
+            timestamp: now, dayStartMs: dayStart, txHash: "0xabcdef0123456789", batch: nil,
+            status: status
         )
     }
 
@@ -129,17 +131,24 @@ struct DrilldownTests {
         #expect(!labels.contains(loc.t("receive.tokenContract")))
     }
 
+    /// Spec 082 RG1: the status is the ROW's — the core's `FeedItem.status`
+    /// — not a record lookup that defaulted a missing record to "succeeded".
     @Test func aPendingTransactionSaysSoAndAFailedOneDoesToo() {
         let pending = FlowsLive.txDetail(
-            item(id: "a"), record: record(id: "a", status: .pending),
+            item(id: "a", status: .pending), record: record(id: "a", status: .pending),
             on: baseTxDetail, loc: loc
         )
         #expect(pending.status.text == loc.t("componentsTx.detail.statusPending"))
         let failed = FlowsLive.txDetail(
-            item(id: "a"), record: record(id: "a", status: .failed),
+            item(id: "a", status: .failed), record: record(id: "a", status: .failed),
             on: baseTxDetail, loc: loc
         )
         #expect(failed.status.text == loc.t("componentsTx.detail.statusFailed"))
+        // No record behind the row (a folded batch): still the row's own word.
+        let batchPending = FlowsLive.txDetail(
+            item(id: "b", status: .pending), record: nil, on: baseTxDetail, loc: loc
+        )
+        #expect(batchPending.status.text == loc.t("componentsTx.detail.statusPending"))
     }
 
     /// A row with no stored record behind it — a folded batch — still opens,

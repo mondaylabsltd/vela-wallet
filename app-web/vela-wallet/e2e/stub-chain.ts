@@ -298,8 +298,11 @@ export function happyRelay(
 				];
 			case 'eth_sendUserOperation':
 				return userOpHash;
-			case 'eth_getUserOperationStatus':
-				return { status: receipt() === 'pending' ? 'pending' : 'included' };
+			// The relay's own method and statuses (spec 082 RA7, G13): the web
+			// used to ask `eth_getUserOperationStatus`, which the relay never
+			// served, and `pending` is not a status it ever answers.
+			case 'pimlico_getUserOperationStatus':
+				return { status: receipt() === 'pending' ? 'submitted' : 'included' };
 			case 'eth_getUserOperationReceipt': {
 				const state = receipt();
 				if (state === 'pending') return null;

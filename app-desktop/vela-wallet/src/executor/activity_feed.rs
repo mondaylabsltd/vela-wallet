@@ -38,7 +38,7 @@ const TX_KEY: &str = "vela.transactionHistory";
 /// failing the load, exactly as the contacts and network ledgers do. A feed that
 /// refuses to render because one legacy row is odd is worse than a feed missing
 /// that row.
-fn to_record(row: &Value) -> Option<FeedTxRecord> {
+pub(crate) fn to_record(row: &Value) -> Option<FeedTxRecord> {
     let text = |key: &str| {
         row.get(key)
             .and_then(Value::as_str)
@@ -123,7 +123,50 @@ fn to_record(row: &Value) -> Option<FeedTxRecord> {
         // approve alone; a row without it draws as it always has.
         balance_changes: row.get("assetChanges").and_then(stored_changes),
         calldata: calldata_of(row),
+        // What the call does, for a dApp's record (spec 082 RJ16, G52): the
+        // first call's `data` from the request as it was stored. Who the
+        // row names — a token transfer's recipient or the contract — is the
+        // core's reading of it.
+        call_data: first_call_data(row),
     })
+}
+
+/// The first call's `data` in a stored dApp request (`signedRequest`, the
+/// params array as `sign_request::persist_record` kept it): the call of
+/// `eth_sendTransaction`, or the first of a `wallet_sendCalls` batch. `None`
+/// for any other row.
+fn first_call_data(row: &Value) -> Option<String> {
+    if row.get("type").and_then(Value::as_str) != Some("dapp_tx") {
+        return None;
+    }
+    let request = row.get("signedRequest").and_then(Value::as_str)?;
+    let Ok(params) = serde_json::from_str::<Value>(request) else {
+        return clipped_call_data(request);
+    };
+    let first = params.get(0)?;
+    let call = first
+        .get("calls")
+        .and_then(|calls| calls.get(0))
+        .unwrap_or(first);
+    call.get("data").and_then(Value::as_str).map(str::to_owned)
+}
+
+/// A request over the 8 KB the store keeps is clipped and no longer parses
+/// (`requestTruncated`): its first `data` is read off the text — the hex that
+/// survived the clip. A prefix is enough for the core to tell a contract call
+/// from a token transfer, whose whole calldata is 68 bytes.
+fn clipped_call_data(request: &str) -> Option<String> {
+    let after = &request[request.find("\"data\"")? + "\"data\"".len()..];
+    let value = after
+        .trim_start()
+        .strip_prefix(':')?
+        .trim_start()
+        .strip_prefix('"')?;
+    let hex: String = value
+        .chars()
+        .take_while(char::is_ascii_alphanumeric)
+        .collect();
+    (hex.len() > 2 && hex.starts_with("0x")).then_some(hex)
 }
 
 /// The balance changes a row kept (083 F1), from its `assetChanges` — the
@@ -260,46 +303,44 @@ fn scan(address: &str) -> u32 {
         return 0;
     }
 
-    let mut rows = match storage::read_value(TX_KEY) {
-        Ok(Some(Value::Array(rows))) => rows,
-        _ => Vec::new(),
-    };
-    let mut known: std::collections::BTreeSet<String> = rows
-        .iter()
-        .filter_map(|row| row.get("id").and_then(Value::as_str).map(str::to_owned))
-        .collect();
-
+    // One read-modify-write under the store's lock (spec 082 RJ1 review):
+    // this runs on a worker while a dApp's record, the Send and the tracker
+    // write the same list, and a stale copy written back loses their rows.
     let mut added = 0u32;
-    for transfer in &incoming {
-        if known.contains(&transfer.id) {
-            continue;
+    let written = storage::update_list(TX_KEY, |rows| {
+        let mut known: std::collections::BTreeSet<String> = rows
+            .iter()
+            .filter_map(|row| row.get("id").and_then(Value::as_str).map(str::to_owned))
+            .collect();
+        for transfer in &incoming {
+            if known.contains(&transfer.id) {
+                continue;
+            }
+            // A non-native token whose metadata would not resolve is SKIPPED,
+            // not stored at a guessed scale. The web says why: an 18-decimal
+            // fallback on a 6-decimal token stores a misleading "+0 tokens",
+            // and the transfer stays in the scan window to be retried once
+            // metadata resolves. Genuine spam with no readable symbol never
+            // reaches the feed.
+            let (Some(symbol), Some(decimals)) = (
+                transfer
+                    .symbol
+                    .clone()
+                    .or_else(|| transfer.is_native.then(|| native_symbol(transfer.chain_id))),
+                transfer.decimals.or(transfer.is_native.then_some(18)),
+            ) else {
+                continue;
+            };
+            let Some(row) = incoming_row(transfer, address, &symbol, decimals) else {
+                continue;
+            };
+            known.insert(transfer.id.clone());
+            rows.push(row);
+            added += 1;
         }
-        // A non-native token whose metadata would not resolve is SKIPPED, not
-        // stored at a guessed scale. The web says why: an 18-decimal fallback
-        // on a 6-decimal token stores a misleading "+0 tokens", and the
-        // transfer stays in the scan window to be retried once metadata
-        // resolves. Genuine spam with no readable symbol never reaches the feed.
-        let (Some(symbol), Some(decimals)) = (
-            transfer
-                .symbol
-                .clone()
-                .or_else(|| transfer.is_native.then(|| native_symbol(transfer.chain_id))),
-            transfer.decimals.or(transfer.is_native.then_some(18)),
-        ) else {
-            continue;
-        };
-        let Some(row) = incoming_row(transfer, address, &symbol, decimals) else {
-            continue;
-        };
-        known.insert(transfer.id.clone());
-        rows.push(row);
-        added += 1;
-    }
-
-    if added == 0 {
-        return 0;
-    }
-    if storage::write_value(TX_KEY, Value::Array(rows)).is_err() {
+        added > 0
+    });
+    if written.is_err() {
         // The store refused. Reporting new records that are not on disk would
         // celebrate a payment the next launch has never heard of.
         return 0;
@@ -393,18 +434,12 @@ impl Machine for ActivityFeed {
 
             FeedOperation::DeleteTxRecord { id } => {
                 let id = id.clone();
-                let removed = match storage::read_value(TX_KEY) {
-                    Ok(Some(Value::Array(rows))) => {
-                        let before = rows.len();
-                        let kept: Vec<Value> = rows
-                            .into_iter()
-                            .filter(|row| row.get("id").and_then(Value::as_str) != Some(&id))
-                            .collect();
-                        let removed = kept.len() != before;
-                        storage::write_value(TX_KEY, Value::Array(kept)).is_ok() && removed
-                    }
-                    _ => false,
-                };
+                let removed = storage::update_list(TX_KEY, |rows| {
+                    let before = rows.len();
+                    rows.retain(|row| row.get("id").and_then(Value::as_str) != Some(&id));
+                    rows.len() != before
+                })
+                .unwrap_or(false);
                 Answer::Now(if removed {
                     FeedShellResult::DeleteCommitted { id }
                 } else {
@@ -576,6 +611,48 @@ mod tests {
         if storage::write_value(TX_KEY, rows).is_err() {
             unreachable!("could not seed the tx store");
         }
+    }
+
+    /// Spec 082 RJ16 (G52): a request over the 8 KB the store keeps is
+    /// clipped (`requestTruncated`) and no longer parses — a big multicall,
+    /// a marketplace order. Its first call's `data` is still read off the
+    /// text, so the contract is named as the contract, not as 接收方 (who got
+    /// the money); a clip with no `data` in it says nothing.
+    #[test]
+    fn a_clipped_request_still_names_its_contract() {
+        let call = format!("0x5ae401dc{}", "ab".repeat(6_000));
+        let whole = json!([{ "to": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83", "data": call }])
+            .to_string();
+        let clipped = &whole[..8 * 1024];
+        assert!(serde_json::from_str::<Value>(clipped).is_err());
+        let row = |request: &str, truncated: bool| {
+            json!({
+                "id": "dapp-1-tx", "userOpHash": "0xop", "txHash": "", "from": "0xme",
+                "to": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83", "value": "0x0",
+                "symbol": "xDAI", "decimals": 18, "chainId": 100, "timestamp": 1,
+                "status": "pending", "type": "dapp_tx", "signedRequest": request,
+                "requestTruncated": truncated,
+            })
+        };
+        let data = to_record(&row(clipped, true))
+            .and_then(|record| record.call_data)
+            .unwrap_or_default();
+        assert!(
+            data.starts_with("0x5ae401dc"),
+            "{}",
+            &data[..data.len().min(20)]
+        );
+        assert!(call.starts_with(&data));
+        let spaced = r#"[{"to":"0xDD", "data" :  "0xa9059cbb00"#;
+        assert_eq!(
+            to_record(&row(spaced, true)).and_then(|record| record.call_data),
+            Some("0xa9059cbb00".to_owned())
+        );
+        assert_eq!(
+            to_record(&row(r#"[{"to":"0xDD","value":"0x"#, true))
+                .and_then(|record| record.call_data),
+            None
+        );
     }
 
     /// A discovered receipt becomes a stored row, and the same one twice does

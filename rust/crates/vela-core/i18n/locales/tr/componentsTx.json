@@ -24,7 +24,7 @@
       "statusConfirmed": "Onaylandı",
       "statusSubmitted": "Gönderildi",
       "statusFailed": "Başarısız",
-      "failedHint": "Transfer zincir üzerinde geri alındı — fonlarınız gönderilmedi. Yine de bir ağ ücreti alınmış olabilir. Nedenini görmek için aşağıdaki blok gezginini açın ya da geri dönüp tekrar deneyin.",
+      "failedHint": "Transfer zincir üzerinde geri alındı — fonlarınız gönderilmedi. Yine de bir ağ ücreti alınmış olabilir.",
       "userOpHash": "UserOp Hash'i"
     },
     "detail": {

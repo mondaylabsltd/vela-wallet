@@ -6,4 +6,4 @@ import type { RpcErrorInfo } from "./RpcErrorInfo";
  * are transport facts the shell knows; everything *meaningful* about them
  * (ban vs cool-down vs deliver) is decided here.
  */
-export type RpcTransportOutcome = { "type": "response", error: RpcErrorInfo | null, } | { "type": "http_error", status: number, } | { "type": "non_json" } | { "type": "timeout" } | { "type": "network" };
+export type RpcTransportOutcome = { "type": "response", error: RpcErrorInfo | null, } | { "type": "http_error", status: number, } | { "type": "non_json" } | { "type": "timeout" } | { "type": "network" } | { "type": "not_connected" };

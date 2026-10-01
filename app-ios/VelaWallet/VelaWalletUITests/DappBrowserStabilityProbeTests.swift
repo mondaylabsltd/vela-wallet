@@ -212,4 +212,60 @@ final class DappBrowserStabilityProbeTests: XCTestCase {
             frames(app, "15-retry", count: 8, every: 0.5)
         }
     }
+
+    /// Spec 082 T122 (RH4, G32, W5): a site that accepts the connection and
+    /// never answers — the stall no failure callback ever reports (WebKit
+    /// gave up at ~75 s). The browser's own watchdog gives up at the core's
+    /// budget: the panel at 20 ± 2 s, then the automatic retry, whose button
+    /// is BUSY — "正在重试…" at full colour — never dimmed. Hermetic: an
+    /// in-process loopback listener, no proxy.
+    func testProbeASiteThatNeverAnswers() throws {
+        let silent = try SilentListener()
+        XCTAssertTrue(silent.start(), "the silent listener never got a port")
+        defer { silent.stop() }
+
+        // The harness page first, then the silent site typed into the bar —
+        // so the clock starts at the Go, not somewhere in the launch.
+        let app = launch()
+        let tab = app.buttons["探索"].firstMatch
+        if tab.waitForExistence(timeout: 5), tab.isHittable { tab.tap() }
+        let host = app.staticTexts["127.0.0.1:\(LocalDappServer.port)"].firstMatch
+        XCTAssertTrue(host.waitForExistence(timeout: 40), "the harness page never loaded")
+        host.tap()
+        let field = app.textFields["explore.addressField"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.clearAndType(silent.url + "\n")
+        let asked = Date()
+        record(app, "16-never-answers-asked")
+        // The bar keeps the page on screen while the silent site hangs (RE1).
+        XCTAssertTrue(app.staticTexts["127.0.0.1:\(LocalDappServer.port)"].firstMatch.exists,
+                      "the bar renamed itself to a page that has not arrived")
+
+        let panel = app.descendants(matching: .any)["explore.loadFailed"].firstMatch
+        XCTAssertTrue(panel.waitForExistence(timeout: 40), "no panel for a site that never answers")
+        let elapsed = Date().timeIntervalSince(asked)
+        record(app, "17-never-answers-panel")
+        XCTContext.runActivity(named: String(format: "panel after %.1f s", elapsed)) { _ in }
+        XCTAssertGreaterThanOrEqual(elapsed, 18, "the watchdog cut a load before its budget")
+        XCTAssertLessThanOrEqual(elapsed, 22, "the panel is the watchdog's, at 20 ± 2 s")
+
+        // The automatic retry at +2 s: the same button, busy, never dimmed.
+        // (The busy button ignores taps, so XCUITest may read it as not
+        // enabled; what the house rule forbids is the DIMMING, which the
+        // screenshot below shows is absent.)
+        let busy = app.buttons["正在重试…"].firstMatch
+        XCTAssertTrue(busy.waitForExistence(timeout: 8), "the retry does not say it is retrying")
+        record(app, "18-never-answers-retrying")
+    }
+}
+
+private extension XCUIElement {
+    /// Replace whatever the field holds with `text`.
+    func clearAndType(_ text: String) {
+        tap()
+        if let current = value as? String, !current.isEmpty {
+            typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+        }
+        typeText(text)
+    }
 }

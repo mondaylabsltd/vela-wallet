@@ -1,0 +1,67 @@
+Phase 9 WEB_B gates (T227–T235), branch 082-dapp-browser-mac-ext-ios, worktree vela-wallet-082, 2026-09-29.
+Measured at 9b16c602 (app-web/vela-wallet), after the round-2 core merge 7a86cebc and its bindings (9f876e48, wasm 3cf42392a06f).
+
+cd app-web/vela-wallet
+pnpm test:unit -- --run          155 files, 2220 passed, 5 skipped, 0 failed (server + chromium projects)
+pnpm check                       gen-tokens/sync-wasm/gen-core-types --check clean; svelte-check 1587 files, 0 errors, 0 warnings
+                                 (was 19 errors at 77ade673 — the round-2 generated types, T227)
+prettier --check + eslint        clean on every file WEB_B changed (lint of own files only; the shared `pnpm lint` not claimed)
+pnpm build                       ok (adapter-cloudflare)
+node extension/build.mjs         ok — extension/dist rebuilt: 37.6 MB, 120 pages, loads vela_core_bg.3cf42392a06f.wasm
+                                 (was 80945236660e — hand-off open item 3 closed)
+node scripts/check-event-payloads.mjs (repo root)
+                                 0 mismatches · 527 literal dispatch sites checked · 2 skipped (payload not a literal)
+
+Isolated e2e (playwright.isolated.config.ts, port 4174, extension built into node_modules/.cache/vela-extension-e2e —
+extension/dist untouched by the suite):
+  full run at d8d1e7e8           317 passed, 6 failed (323)
+    pre-existing (fail identically on a detached baseline worktree at 77ade673, chromium):
+      accounts.e2e.ts:174        two records deriving one address — active index stays 0
+      welcome-layout.e2e.ts:130  sign-in offers four ways in — three render (390px and 1440px); :190 intro slide timeout in earlier runs
+    firefox NS_BINDING_ABORTED on reload/goto after entering the wallet (home-truth, parallel-entry, settings-persistence):
+      pre-existing — the baseline at 77ade673 fails 11 of 21 of home-truth + parallel-entry on firefox (--repeat-each=3);
+      which ones fail changes run to run
+    chromium parallel-space hydration race (budgets.e2e.ts:62/:116, parallel-entry.e2e.ts:58): Enter pressed before hydration;
+      fixed in 9b16c602 (wait for the fixture list, as batch/desktop-send/fee suites do) → budgets + parallel-entry 24/24 chromium, --repeat-each=4
+  found and fixed by the gate runs:
+    activity-delete / tx-detail-account-switch looked for ASCII "-0.5"; the row writes U+2212 now (aad7881f)
+    fee-coin-unheld: the phone's fee-coin sheet came back ~600 ms after its scrim closed it (the page's feeSheetOpen never ended,
+      FlowsMobile re-shows a hidden sheet on every new model) — d8d1e7e8; then fee-coin-unheld, fee-coin-switch, fee-speed,
+      send-lands, send-fee-over-balance, sweep, batch, desktop-send, activity-delete, tx-detail-account-switch, relay-faults,
+      reopen-pending, signing-scenarios: 34/34 chromium
+  extension suites in the full run (chromium): extension-boot, -connect, -connections, -discovery, -lifecycle (incl. G35 RJ2,
+    EX4b G55, EX6, EX8), -live-provider, -security, -signing — all passed
+
+Proof tests added per task (red before the change, green at 9b16c602):
+  T227 signing/messages.test.ts (new, 34): `refused` resolves in 15 locales, no retry words, 提交至网络…, every core fee-reason key resolved
+  T228 signing/core/sign-executor.test.ts (+6), services/dapp-submit.test.ts (+3, 2 updated), services/safe-transaction.test.ts (+6):
+       OpSigned then no POST until ClearToPost; no clearance → zero POSTs, not-sent/unrefused; claim carries {opHash, chainId};
+       muted relay → the wait ends ≤ 121 s; answered abort; ACCEPTED line only when accepted; EX-W3 estimate → Reverts
+  T229 flows/core/send-executor.test.ts (+4), flows/live-send.test.ts (+2)
+  T230 signing/core/track-forward.test.ts (new, 7), wallet/core/tracker-executor.test.ts (+4)
+  T231 signing/live.test.ts (+5, 4 updated), signing/dapp-receipt.test.ts (+3, 2 updated), SigningHost.svelte.test.ts (+1)
+  T232 signing/fee-requote.test.ts (+8, 3 updated)
+  T233 wallet/core/feed-executor.test.ts (+3 incl. the real core: DX-W3 → 0x7687…, Recipient, no tx hash), wallet/live-detail.test.ts (+2)
+  T234 services/bug-report.test.ts (+3)
+
+Not run here (device verification is a later step): no device, no running Chrome for Testing, no chaos proxy was touched.
+
+WEB_B adversarial review re-run (2026-09-29), at 38423928 (four fixes on top of 91aba157: 4a0d8b4c, fc39e209 + f63b25b5,
+35fab379, 38423928 — see tasks.md, the review note under T235):
+  pnpm test:unit -- --run          155 files, 2225 passed, 5 skipped, 0 failed (was 2220: +6 red-first tests, −1 test of a deleted helper)
+                                   (an earlier full run under load average ~89 timed out rpc-pool-executor "USER_OP_STATUS_METHOD" at
+                                   31.8 s and passkey-fixture at 8.9 s; both pass alone and in the full run above)
+  pnpm check                       svelte-check 1587 files, 0 errors, 0 warnings
+  prettier --check + eslint        clean on every file the review touched
+  pnpm build                       ok
+  node extension/build.mjs         ok — extension/dist 37.6 MB, 120 pages, loads vela_core_bg.3cf42392a06f.wasm
+  node scripts/check-event-payloads.mjs
+                                   0 mismatches · 527 literal dispatch sites checked · 2 skipped
+  Isolated e2e (4174)              full run: 298 passed, 25 failed (323). 17 of the 25 are webkit settings/preferences tests after the
+                                   wrangler server on 4174 stopped answering at test 307 ("Could not connect to the server");
+                                   rerun alone (webkit: preferences, settings-desktop, settings-persistence): 18/18 passed.
+                                   The other 8 are the pre-existing classes above: accounts.e2e.ts:174, welcome-layout.e2e.ts:130 (390px,
+                                   1440px) and :190, firefox NS_BINDING_ABORTED on reload (home-truth :91 :107 :124, parallel-entry :61).
+                                   Every money suite passed: relay-faults, reopen-pending (3 engines), send-lands, signing-scenarios,
+                                   extension-lifecycle (G35), extension-signing, extension-live-provider, activity-delete,
+                                   tx-detail-account-switch, fee-coin-unheld, desktop-send, sweep, batch.

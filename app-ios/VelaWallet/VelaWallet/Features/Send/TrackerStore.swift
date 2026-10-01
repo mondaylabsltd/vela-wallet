@@ -34,11 +34,50 @@ import VelaCore
 
 extension TxTrackerCore: CoreBridge {}
 
+/// One op handed to the tracker: what it follows, and — for an op whose
+/// submit reply was lost — that it may have been sent and the head read
+/// before its first POST (spec 082 RA4, ruling 8). Written with the record
+/// and read back on a relaunch (T183), so the handoff and a restart say the
+/// same thing.
+struct TrackSubmission: Equatable {
+    let userOpHash: String
+    let recordIds: [String]
+    let chainId: Int
+    var maybeSent = false
+    var submitBlock: Int? = nil
+    /// The relay took the op a write-ahead hand-off announced (spec 082 RJ1):
+    /// the entry is acknowledged — never "may have been sent" — and a
+    /// premature "not sent" reached while the POST was still out yields.
+    var admitted = false
+}
+
 @MainActor
 @Observable
 final class TrackerStore {
 
     private(set) var view: TrackViewWire?
+    /// Every view, to whoever else watches the same operations — the send
+    /// machine's receipt (spec 082: its verdict comes from here, through the
+    /// core's `sendReceiptOutcomeOf`).
+    var onView: ((TrackViewWire) -> Void)?
+
+    /// Who else follows the view while they live — a dApp request's sheet,
+    /// whose answer follows what the tracker knows (spec 082 RJ4). Held
+    /// weakly: a request that ended stops listening by going away.
+    private var followers: [(owner: WeakOwner, onView: (TrackViewWire) -> Void)] = []
+
+    private final class WeakOwner {
+        weak var value: AnyObject?
+        init(_ value: AnyObject) { self.value = value }
+    }
+
+    /// Follow every view from now on while `owner` lives — the current one
+    /// at once, so a follower never waits for the next change to hear it.
+    func follow(_ owner: AnyObject, _ onView: @escaping (TrackViewWire) -> Void) {
+        followers.removeAll { $0.owner.value == nil }
+        followers.append((WeakOwner(owner), onView))
+        if let view { onView(view) }
+    }
 
     private var core: CoreStore<TrackViewWire>!
     private let executor: TrackerExecutor
@@ -60,7 +99,7 @@ final class TrackerStore {
             bridge: TxTrackerCore(),
             perform: { [executor] operation in await executor.perform(operation) },
             onView: { [weak self] view in self?.commit(view) },
-            onFault: { print("[vela-wallet] tx_tracker fault: \($0)") }
+            onFault: { VelaLog.failure(.tracker, kind: "tx_tracker_fault", VelaLog.error($0)) }
         )
     }
 
@@ -72,15 +111,32 @@ final class TrackerStore {
         core.boot(CoreJSON.string(["type": "app_resumed"]))
     }
 
-    /// A send was just accepted by the relay.
-    func submitted(userOpHash: String, recordIds: [String], chainId: Int) {
+    /// A send was just accepted by the relay — or may have been: `maybeSent`
+    /// follows it to its end under the local hash, from `submitBlock`
+    /// (spec 082 RA4, ruling 8).
+    func submitted(_ submission: TrackSubmission) {
         let event = CoreJSON.string([
             "type": "submitted",
-            "user_op_hash": userOpHash,
-            "record_ids": recordIds,
-            "chain_id": chainId,
+            "user_op_hash": submission.userOpHash,
+            "record_ids": submission.recordIds,
+            "chain_id": submission.chainId,
+            "maybe_sent": submission.maybeSent,
+            "submit_block": submission.submitBlock.map { $0 as Any } ?? NSNull(),
+            "admitted": submission.admitted,
         ])
         if !core.boot(event) { core.dispatch(event) }
+    }
+
+    /// A write-ahead op proven never sent (spec 082 RJ1): the tracker drops
+    /// these records from it — an entry left with none goes, with no patch
+    /// and no balance read. Idempotent; a later hand-off of the same hash
+    /// starts fresh. Before the tracker has booted there is nothing to take
+    /// back (the record is already gone from the store it will read), so the
+    /// event is not the one that boots it.
+    func withdrawn(userOpHash: String, recordIds: [String]) {
+        core.dispatch(CoreJSON.string([
+            "type": "withdrawn", "user_op_hash": userOpHash, "record_ids": recordIds,
+        ]))
     }
 
     func resumed() { core.dispatch(CoreJSON.string(["type": "app_resumed"])) }
@@ -88,6 +144,9 @@ final class TrackerStore {
 
     private func commit(_ view: TrackViewWire) {
         self.view = view
+        onView?(view)
+        followers.removeAll { $0.owner.value == nil }
+        for follower in followers { follower.onView(view) }
         // The tick exists exactly as long as the core follows something —
         // not only inside the wait window (spec 079).
         if view.isFollowing { startTicking() } else { stopTicking() }

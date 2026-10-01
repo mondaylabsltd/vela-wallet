@@ -16,6 +16,9 @@ import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.SendExecutor
 import app.getvela.wallet.feature.send.core.SpeedControl
+import app.getvela.wallet.feature.send.core.TrackHandoff
+import app.getvela.wallet.feature.wallet.core.RpcResult
+import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
 import app.getvela.wallet.feature.send.core.UserOpSigner
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
@@ -84,7 +87,8 @@ class SigningController(
      */
     private val preferredTier: () -> FeeTier = { FeeTier.Fast },
     private val numberPreset: () -> String = { "comma_dot" },
-    receiptWaitMs: Long = 120_000L,
+    /** `null`: the core's answer window (`dappReceiptWaitMs`, spec 082 RA12); tests pin a number. */
+    receiptWaitMs: Long? = null,
     receiptPollMs: Long = 3_000L,
     /** Spec 071: the Trusted Signer, for an account that signed in through it. */
     trustedSigner: () -> TrustedSigner? = { null },
@@ -102,20 +106,133 @@ class SigningController(
      */
     private val handoffLock = Any()
 
-    /** The tracker is handed the hash only once every record it names is on disk (043's ordering invariant). */
+    /**
+     * The tracker is handed the hash only once every record it names is on
+     * disk (043's ordering invariant), and each hand-off only once.
+     *
+     * Spec 082 (review of RJ1): once per `(hash, ids, maybe_sent, admitted)`,
+     * never per record. The write-ahead hands the op over "may have been
+     * sent" before its POST; the relay taking it hands over the SAME hash and
+     * ids again, `admitted`. Keyed by record alone, that second hand-off was
+     * never fed — the tracker kept an accepted op in doubt, and two relay
+     * `not_found` answers past the grace ended it "not sent" with its record
+     * failed over money that landed.
+     */
     private fun tryHandoff() {
         val handoff = synchronized(handoffLock) {
             val handoff = pendingHandoff ?: return
             if (!handoff.record_ids.all { it in persistedRecords }) return
             pendingHandoff = null
+            if (!handedKeys.add(handoffKey(handoff))) return
+            handedOps += handoff.user_op_hash.lowercase()
             handoff
         }
-        ports.trackSubmitted(handoff.user_op_hash, handoff.record_ids, handoff.chain_id)
+        VelaLog.event(
+            "sign.tracker", "handed",
+            "op" to handoff.user_op_hash.take(12), "maybeSent" to handoff.maybe_sent, "admitted" to handoff.admitted,
+        )
+        ports.trackSubmitted(
+            TrackHandoff(
+                userOpHash = handoff.user_op_hash,
+                recordIds = handoff.record_ids,
+                chainId = handoff.chain_id,
+                maybeSent = handoff.maybe_sent,
+                submitBlock = handoff.submit_block,
+                admitted = handoff.admitted,
+            ),
+        )
+        followTracker()
+    }
+
+    /** One hand-off, as fed: the op, its records, and the two flags. */
+    private data class HandoffKey(val op: String, val ids: List<String>, val maybeSent: Boolean, val admitted: Boolean)
+
+    private fun handoffKey(handoff: SignTrackerHandoff) =
+        HandoffKey(handoff.user_op_hash.lowercase(), handoff.record_ids.sorted(), handoff.maybe_sent, handoff.admitted)
+
+    /** The hand-offs this request has fed the tracker (guarded by [handoffLock]). */
+    private val handedKeys = HashSet<HandoffKey>()
+
+    /** The ops this request handed the tracker — whose entries it forwards as `OpTracked` (guarded by [handoffLock]). */
+    private val handedOps = HashSet<String>()
+
+    /** The withdrawals already fed to the tracker, once per value (guarded by [handoffLock]). */
+    private val withdrawn = HashSet<SignTrackerWithdraw>()
+
+    /** The last `(status, tx hash)` forwarded per op (guarded by [handoffLock]). */
+    private val forwarded = HashMap<String, Pair<app.getvela.wallet.feature.send.core.TrackStatus, String?>>()
+
+    @Volatile
+    private var following: kotlinx.coroutines.Job? = null
+
+    /**
+     * Spec 082 RJ4: the answer follows the tracker. Every change of the
+     * tracker's entry for an op this request handed over reaches the core as
+     * `OpTracked`; the core decides whether it answers the page (a terminal
+     * verdict past `OpSubmitted`) or waits — never this file.
+     */
+    private fun followTracker() {
+        val tracker = ports.trackerView() ?: return
+        synchronized(handoffLock) {
+            if (following != null) return
+            following = scope.launch {
+                tracker.collect { view ->
+                    val changed = synchronized(handoffLock) {
+                        view.entries.filter { entry ->
+                            val op = entry.user_op_hash.lowercase()
+                            op in handedOps && forwarded.put(op, entry.status to entry.tx_hash) != (entry.status to entry.tx_hash)
+                        }
+                    }
+                    changed.forEach { entry ->
+                        dispatchSign(SignEvent.OpTracked(entry.user_op_hash, entry.status, entry.tx_hash, now()))
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Spec 082 RJ4 (review of T246): the tracker holds the op from the
+     * write-ahead on, so it can see the op land while the POST is still out (a
+     * slow relay). That entry reached the core as `OpTracked` before the core
+     * held the op (`OpSubmitted`) and was dropped there — and a final entry
+     * does not change again, so [followTracker] never sent it twice: the page
+     * waited out its whole window for the op hash. Once the core holds the op,
+     * a landing already known is handed over once more. Only a landing (a tx
+     * hash, a chain fact): a "not sent" judged while the POST was still out
+     * came before the POST finished, and the tracker's own later word decides.
+     */
+    private fun forwardLanding(userOpHash: String) {
+        val op = userOpHash.lowercase()
+        val entry = ports.trackerView()?.value?.entries
+            ?.firstOrNull { it.user_op_hash.equals(op, ignoreCase = true) }
+            ?.takeIf { !it.tx_hash.isNullOrBlank() }
+            ?: return
+        val handed = synchronized(handoffLock) {
+            (op in handedOps).also { if (it) forwarded[op] = entry.status to entry.tx_hash }
+        }
+        if (!handed) return
+        VelaLog.event("sign.tracker", "landing seen during the POST: forwarded again", "op" to op.take(12), "status" to entry.status)
+        dispatchSign(SignEvent.OpTracked(entry.user_op_hash, entry.status, entry.tx_hash, now()))
+    }
+
+    /** Spec 082 RJ1: a write-ahead op proven never sent — the tracker forgets it, once per value. */
+    private fun feedWithdraw(withdraw: SignTrackerWithdraw) {
+        val fresh = synchronized(handoffLock) { withdrawn.add(withdraw) }
+        if (!fresh) return
+        VelaLog.event("sign.tracker", "withdrawn: never sent", "op" to withdraw.user_op_hash.take(12))
+        ports.trackWithdrawn(withdraw.user_op_hash, withdraw.record_ids)
     }
 
     interface Ports : SignExecutor.Ports {
-        /** The tracker follows the accepted operation to its verdict (043's `trackSubmitted`). */
-        fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int)
+        /** The tracker follows the operation to its verdict (043's `trackSubmitted`; 082's flags ride along). */
+        fun trackSubmitted(handoff: TrackHandoff)
+
+        /** Spec 082 RJ1: the tracker's `Withdrawn` — a written-ahead op proven never sent. */
+        fun trackWithdrawn(userOpHash: String, recordIds: List<String>) {}
+
+        /** Spec 082 RJ4: the tracker's entries, which this request forwards to the core as `OpTracked`; `null` = none. */
+        fun trackerView(): StateFlow<app.getvela.wallet.feature.send.core.TrackView>? = null
 
         /** The descriptor endpoint base. */
         fun dataBase(): String
@@ -123,14 +240,26 @@ class SigningController(
         /** `eth_call` through the pool: `(result, reverted)`. */
         suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean>
 
-        /** Spec 046 US1: the simulated balance changes, judged by the trust machine; `null` = could not simulate. */
-        suspend fun simulate(chainId: Int, wallet: String, calls: List<SimDeltas.Call>): List<TrustSimJudgment>? = null
+        /**
+         * Spec 046 US1 / 082 RG6: `eth_simulateV1` with these params, through
+         * the pool — its answer as it came. `null` = this host has no
+         * simulator (nothing is drawn). What the answer MEANS is the core's
+         * (`simOutcome`), never the port's.
+         */
+        suspend fun simulate(chainId: Int, params: List<Any?>): RpcResult? = null
+
+        /** The core's deltas, judged by the trust machine; `null` = could not judge. */
+        suspend fun judgeDeltas(chainId: Int, wallet: String, deltas: List<TrustAssetDelta>): List<TrustSimJudgment>? = null
     }
 
-    /** What the simulation said (spec 046 US1): pending (`null`), the judgments, or unavailable. */
+    /**
+     * What the simulation said (spec 046 US1, 082 RG6): pending (`null`), the
+     * checked moves ([Ready]; empty = nothing of theirs moves), or the core's
+     * notice — a revert (danger) or "could not check" (caution).
+     */
     sealed class SimOutcome {
         data class Ready(val judgments: List<TrustSimJudgment>) : SimOutcome()
-        data object Unavailable : SimOutcome()
+        data class Notice(val risk: ClearRisk, val key: String, val reason: String? = null) : SimOutcome()
     }
 
     private val _sim = MutableStateFlow<SimOutcome?>(null)
@@ -152,10 +281,43 @@ class SigningController(
         relay = relay,
         feed = feed,
         ports = object : SignExecutor.Ports by ports {
-            override fun opSubmitted(id: String, userOpHash: String) {
-                ports.opSubmitted(id, userOpHash)
-                dispatchSign(SignEvent.OpSubmitted(id = id, user_op_hash = userOpHash, now_ms = now()))
+            override fun opSubmitted(id: String, submitted: UserOpSpine.Submitted) {
+                ports.opSubmitted(id, submitted)
+                dispatchSign(
+                    SignEvent.OpSubmitted(
+                        id = id,
+                        user_op_hash = submitted.userOpHash,
+                        now_ms = now(),
+                        maybe_sent = submitted.maybeSent,
+                        submit_block = submitted.submitBlock,
+                    ),
+                )
+                // The core holds the op now: a landing the tracker saw while
+                // the POST was out is handed over again (082 review of T246).
+                forwardLanding(submitted.userOpHash)
             }
+
+            // Spec 082 RJ1: signed and hashed, nothing posted — the core writes
+            // the record ahead and clears the POST once it is on disk.
+            override fun opSigned(id: String, userOpHash: String, submitBlock: Long?) {
+                ports.opSigned(id, userOpHash, submitBlock)
+                dispatchSign(SignEvent.OpSigned(id = id, user_op_hash = userOpHash, submit_block = submitBlock, now_ms = now()))
+            }
+
+            // Spec 082 RA9: the sheet's words follow the ceremony — "preparing"
+            // until the passkey is up, "waiting for your signature" while it
+            // is, "submitting" after. The core guards them by request id.
+            override fun ceremonyStarted(id: String) {
+                ports.ceremonyStarted(id)
+                dispatchSign(SignEvent.CeremonyStarted(id))
+            }
+
+            override fun ceremonyDone(id: String) {
+                ports.ceremonyDone(id)
+                dispatchSign(SignEvent.CeremonyDone(id))
+            }
+
+            override fun askerGone(): Boolean = askerLeft
 
             override fun recordPersisted(recordId: String) {
                 persistedRecords += recordId
@@ -236,9 +398,62 @@ class SigningController(
      */
     val feeOpen = MutableStateFlow(false)
 
-    /** The `FeeFailure` wire name the core's schedule takes (`quote_unavailable`, …). */
-    private fun feeFailureWire(failure: app.getvela.wallet.feature.send.core.FeeFailure): String =
-        app.getvela.wallet.core.crux.Wire.json.encodeToString(app.getvela.wallet.feature.send.core.FeeFailure.serializer(), failure).trim('"')
+    @Volatile
+    private var requoting: kotlinx.coroutines.Job? = null
+
+    /**
+     * The automatic re-quotes after [first] (spec 079 FR-008, spec 082 RJ12):
+     * the core's wait before each (`feeRequoteDelayMs`), each re-ask bounded
+     * by `feeRequoteTimeoutMs()` — one that has not answered by then is a
+     * failure again, and the schedule goes on (the next ask abandons it).
+     * Ends when the fee is back, when a failure no retry fixes is reached, or
+     * once the sheet is approved or closed. Every step is a `fee:` line.
+     */
+    private suspend fun requoteLoop(chainId: Int, first: app.getvela.wallet.feature.send.core.FeeFailure) {
+        val timeoutMs = uniffi.vela_core_uniffi.feeRequoteTimeoutMs().toLong()
+        var failure = first
+        var cause = causeOf(first)
+        var attempt = 0
+        while (true) {
+            attempt += 1
+            val wait = uniffi.vela_core_uniffi.feeRequoteDelayMs(failure.wire, attempt.toUInt())?.toLong()
+            if (wait == null) {
+                VelaLog.event("fee", "quote failed chain=$chainId cause=$cause: no re-quote fixes it")
+                return
+            }
+            VelaLog.event("fee", "quote failed chain=$chainId cause=$cause re-quote #$attempt in $wait ms")
+            kotlinx.coroutines.delay(wait)
+            if (!mayRequote(signHost.view.value, answered)) return
+            // A tap on the row (or a coin picked) asked meanwhile, and it came back.
+            if (fee.value.failed == null && fee.value.fee != null) {
+                VelaLog.event("fee", "quote back chain=$chainId after ${attempt - 1} re-quotes")
+                return
+            }
+            val started = System.currentTimeMillis()
+            when (val quoted = speedControl.requote(timeoutMs)) {
+                is SpeedControl.Quoted.Settled -> {
+                    val next = quoted.view.failed
+                    if (next == null) {
+                        VelaLog.event("fee", "quote back chain=$chainId after $attempt re-quotes", "ms" to (System.currentTimeMillis() - started))
+                        return
+                    }
+                    failure = next
+                    cause = causeOf(next)
+                }
+                // Not answered in time: a failure again, of the same kind the
+                // schedule was following.
+                SpeedControl.Quoted.TimedOut -> cause = "timeout"
+                // Somebody asked another question (a speed, a coin): its own answer drives the row.
+                SpeedControl.Quoted.Superseded -> return
+            }
+        }
+    }
+
+    /** A failure as the `fee:` lines name it: the core's word, and whether a chain read was rate-limited. */
+    private fun causeOf(failure: app.getvela.wallet.feature.send.core.FeeFailure): String = when (failure) {
+        is app.getvela.wallet.feature.send.core.FeeFailure.ChainRead -> if (failure.rate_limited) "chain_read(rate_limited)" else "chain_read"
+        else -> failure.name
+    }
 
     /** A tap on the fee row: a failed quote is asked again; with more than one coin, the list opens or closes. */
     fun feeTapped() {
@@ -265,7 +480,6 @@ class SigningController(
     /** The request was answered: the sheet may go, and this controller with it. */
     val closed: StateFlow<Boolean> = _closed
 
-    private var handedOff = false
 
     private fun dispatchSign(event: SignEvent) = signHost.dispatch(event, SignEvent.serializer())
 
@@ -303,10 +517,7 @@ class SigningController(
             speedControl.ask(request.chainId, wallet.address, publicKeyAvailable = true, calls = feeCalls, feeToken = null, autoFeeToken = true)
             // Spec 046 US1: the one block a site cannot author. Read only.
             scope.launch {
-                val judged = runCatching { ports.simulate(request.chainId, wallet.address, calls.map { SimDeltas.Call(it.to, it.value, it.data) }) }
-                    .onFailure { VelaLog.failure("signing.sim", "simulation failed", it) }
-                    .getOrNull()
-                _sim.value = judged?.let { SimOutcome.Ready(it) } ?: SimOutcome.Unavailable
+                _sim.value = simulated(request.chainId, calls.map { SimDeltas.Call(it.to, it.value, it.data) }) ?: return@launch
             }
             // A quote goes stale while the person reads (the policy's TTL);
             // while the sheet is still up and nothing is signing, ask again —
@@ -320,30 +531,22 @@ class SigningController(
                 }
             }
             // Spec 079: a quote that failed for a reason that can pass (the
-            // relay unreachable, a busy estimate) is asked again on the core's
-            // schedule — 3 s, 6 s, 12 s, then every 15 s — while the sheet is up
-            // and nothing is signing. On the Xiaomi the row said "点击重试" with
-            // the relay down and stayed that way after it came back.
+            // relay unreachable, a busy estimate, the chain's node) is asked
+            // again on the core's schedule while the sheet is up and nothing
+            // is signing. On the Xiaomi the row said "点击重试" with the relay
+            // down and stayed that way after it came back. Spec 082 RJ12: 3 s,
+            // 6 s, then every 8 s, each re-ask bounded by the core's
+            // `feeRequoteTimeoutMs()` — the fee is back within 14 s of the
+            // relay returning — and every step on the log.
             scope.launch {
-                var attempt = 0
-                var pending: kotlinx.coroutines.Job? = null
-                fee.collect { fee ->
-                    val failure = fee.failed
-                    if (failure == null) {
-                        attempt = 0
-                        pending?.cancel()
-                        return@collect
-                    }
-                    if (fee.busy || pending?.isActive == true) return@collect
-                    if (!mayRequote(signHost.view.value, answered)) return@collect
-                    attempt += 1
-                    val wait = uniffi.vela_core_uniffi.feeRequoteDelayMs(feeFailureWire(failure), attempt.toUInt()) ?: return@collect
-                    pending = scope.launch {
-                        kotlinx.coroutines.delay(wait.toLong())
-                        if (this@SigningController.fee.value.failed != null && mayRequote(signHost.view.value, answered)) {
-                            speedControl.refresh()
-                        }
-                    }
+                // The sheet's own state too: a failure that landed before the
+                // sheet was up is asked about once it is.
+                kotlinx.coroutines.flow.combine(fee, signHost.view) { fee, view -> fee to view }.collect { (fee, view) ->
+                    if (fee.failed == null || fee.busy || requoting?.isActive == true) return@collect
+                    if (!mayRequote(view, answered)) return@collect
+                    // A failure no retry fixes (a missing key, a calculation): the row says so once.
+                    if (uniffi.vela_core_uniffi.feeRequoteDelayMs(fee.failed.wire, 1u) == null) return@collect
+                    requoting = scope.launch { requoteLoop(request.chainId, fee.failed) }
                 }
             }
         }
@@ -354,18 +557,52 @@ class SigningController(
                 // A free upgrade is decided only while the person can still
                 // choose — never under a slide that has already gone.
                 speedControl.stage(view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting)
-                view.tracker_handoff?.takeIf { !handedOff }?.let { handoff ->
-                    handedOff = true
-                    synchronized(handoffLock) { pendingHandoff = handoff }
-                    tryHandoff()
+                view.tracker_handoff?.let { handoff ->
+                    val fresh = synchronized(handoffLock) {
+                        (handoffKey(handoff) !in handedKeys).also { if (it) pendingHandoff = handoff }
+                    }
+                    if (fresh) tryHandoff()
                 }
+                view.tracker_withdraw?.let(::feedWithdraw)
                 if (view.surface == SignSurface.Hidden && view.request == null && _request.value != null && answered) _closed.value = true
             }
         }
     }
 
+    /**
+     * The simulation, read by the core (spec 082 RG6): the pool's answer goes
+     * to `simOutcome` as it came, and only a `deltas` verdict is judged by the
+     * trust machine. `null` when this host has no simulator.
+     */
+    private suspend fun simulated(chainId: Int, calls: List<SimDeltas.Call>): SimOutcome? {
+        val params = SimDeltas.payload(wallet.address, calls)?.let { array -> (0 until array.length()).map(array::get) }
+        val answer = if (params == null) {
+            null
+        } else {
+            runCatching { ports.simulate(chainId, params) }
+                .onFailure { VelaLog.failure("signing.sim", "simulation failed", it) }
+                .getOrElse { RpcResult.Failed(rateLimited = false) }
+                ?: return null
+        }
+        val record = SimDeltas.outcome(wallet.address, answer)
+        VelaLog.event("signing.sim", "outcome", "chain" to chainId, "kind" to record.kind)
+        val notice = SimDeltas.notice(record)
+        if (notice != null) return notice
+        // Moves this build cannot read are not "nothing moves".
+        val deltas = SimDeltas.deltas(record) ?: return SimDeltas.couldNotCheck()
+        val judged = runCatching { ports.judgeDeltas(chainId, wallet.address, deltas) }
+            .onFailure { VelaLog.failure("signing.sim", "the trust machine could not judge the deltas", it) }
+            .getOrNull()
+        // Checked, but nothing could say what the moves are: "could not check".
+        return judged?.let { SimOutcome.Ready(it) } ?: SimDeltas.couldNotCheck()
+    }
+
     @Volatile
     private var answered = false
+
+    /** The page that asked is gone ([cancel]). */
+    @Volatile
+    private var askerLeft = false
 
     /** Called by the container's response port so the sheet closes only once the page has its answer. */
     fun markAnswered() { answered = true; if (sign.value.surface == SignSurface.Hidden) _closed.value = true }
@@ -376,14 +613,18 @@ class SigningController(
      * operation already at the relay keeps its record and its tracker.
      */
     fun cancel() {
+        // Spec 082 RB2: from here nothing is signed or sent for this request
+        // — the executor asks before the passkey and before the relay POST.
+        askerLeft = true
         _request.value?.let { dispatchSign(SignEvent.TransportDropped(it.transportId)) }
         answered = true
         _closed.value = true
     }
 
     init {
-        // One request, one controller: its fee sessions end with it.
-        scope.launch { closed.first { it }; speedControl.dispose() }
+        // One request, one controller: its fee sessions end with it, and so
+        // do its ear on the tracker and its re-quotes.
+        scope.launch { closed.first { it }; requoting?.cancel(); speedControl.dispose(); following?.cancel() }
     }
 
     fun approve() = dispatchSign(SignEvent.ApproveTapped(approveOpts(fee.value, clear.value, guard.value)))
@@ -464,7 +705,10 @@ class SigningController(
         fun firstCall(paramsJson: String): Triple<String?, String?, String?>? {
             val first = runCatching { JSONArray(paramsJson).optJSONObject(0) }.getOrNull() ?: return null
             val call = first.optJSONArray("calls")?.optJSONObject(0) ?: first
-            fun field(name: String) = call.optString(name).ifBlank { null }
+            // A JSON null is absent — `optString` would read it as the text
+            // "null". A present non-string (a number) goes as its text, so the
+            // core refuses it rather than reading a calm "0" (spec 082 RC6).
+            fun field(name: String) = if (call.isNull(name)) null else call.optString(name).ifBlank { null }
             return Triple(field("to"), field("data"), field("value"))
         }
 

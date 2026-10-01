@@ -56,6 +56,16 @@ const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../docs/design/onboarding/la
 const EXTENSION_TARGET = process.env.VELA_TARGET === 'extension';
 
 /**
+ * Where the extension build lands: `extension/dist` — the package Chrome
+ * loads, the one a person or the device pass has open — unless
+ * `VELA_EXTENSION_DIST` names another directory. The isolated e2e sets it
+ * (`playwright.isolated.config.ts`), so a test run never rewrites the package
+ * under a running browser (spec 082 RJ21, G66: the pre-opened side panel
+ * failed its next navigation). `extension/build.mjs` reads the same variable.
+ */
+const EXTENSION_OUT = process.env.VELA_EXTENSION_DIST || 'extension/dist';
+
+/**
  * The version and commit every page of this build reports (spec 064 §3).
  *
  * VERSION is `extension/manifest.json`'s — the one declared version this app
@@ -128,8 +138,8 @@ export default defineConfig({
 						// above all — then resolve exactly as they do on the hosted
 						// site, instead of needing a base-aware rewrite the hosted
 						// build would have to carry too.
-						pages: 'extension/dist',
-						assets: 'extension/dist',
+						pages: EXTENSION_OUT,
+						assets: EXTENSION_OUT,
 						// `/` is the hosted site's Accept-Language negotiation endpoint —
 						// a dynamic route by nature, and meaningless inside an extension
 						// that opens its pages by file URL. `strict` would demand a

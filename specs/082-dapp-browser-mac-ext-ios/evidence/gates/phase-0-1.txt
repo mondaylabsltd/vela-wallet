@@ -1,0 +1,729 @@
+082 T047 - phase-0/1 gates (plan.md "Phases" rows 0 and 1, tasks.md T047)
+tree: /Volumes/data/production/vela-wallet-082, branch 082-dapp-browser-mac-ext-ios, HEAD 579807b8, clean working tree
+run: 2026-09-28, sequentially, after T046 (bindings regenerated from this tree)
+
+Summary
+-------
+01  exit=0    8s  (cd ./rust) cargo test -p vela-core --features i18n-all,crux
+02  exit=0    1s  (cd ./rust) cargo test -p vela-core --features i18n-all,crux --test i18n_residency -- --nocapture
+03  exit=0    0s  (cd ./rust) cargo test -p vela-core --features i18n-all,crux --test user_op_hash -- --nocapture
+04  exit=0   19s  (cd ./rust) cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings
+05  exit=0    1s  (cd ./rust) cargo fmt --all --check
+06  exit=0    2s  (cd ./) npm --prefix scripts run gen:i18n && npm --prefix scripts run lint:i18n && npm --prefix scripts run verify:i18n && npm --prefix scripts run dump:vectors
+07  exit=0    0s  (cd ./) git diff --exit-code --stat -- rust/crates/vela-core/src/i18n/paths.rs rust/crates/vela-core/src/i18n_catalogs assets/i18n && echo 'git diff: clean on paths.rs, i18n_catalogs, assets/i18n' && git status --short && echo '(git status --short above: empty = the whole tree is clean)'
+08  exit=1    1s  (cd ./) node scripts/check-event-payloads.mjs (expected red)
+09  exit=0    0s  (cd ./) node scripts/check-ios-android-copy-parity.mjs
+10  exit=0   12s  (cd ./) npm --prefix scripts run gen:core-types -- --check
+11  exit=0   81s  (cd ./) node rust/scripts/build-web.mjs --check
+12  exit=0    5s  (cd ./) npm --prefix scripts run verify:wasm
+13  exit=1   19s  (cd ./app-web/vela-wallet) pnpm sync:wasm && pnpm check (expected red)
+14  exit=0    0s  (cd ./) bash rust/scripts/check-ios-core-fresh.sh
+15  exit=0   82s  (cd ./) bash rust/scripts/smoke-swift.sh
+16  exit=0   18s  (cd ./) bash rust/scripts/smoke-kotlin.sh
+
+Only exits 08 and 13 are non-zero. Both are the expected reds tasks.md T047 names.
+
+Key numbers:
+- 01: 53 "test result:" lines, 2037 passed, 0 failed, 0 ignored.
+- 02: residency printed. ja + en per-locale halves are 134,713 bytes; the runtime-JSON route is 138,729 bytes; the budget is 138,800.
+- 03: the two Gnosis chain vectors (T011, RA6). user_op_hash equals the EntryPoint's own topics[1] for both operations.
+- 10–12: the phase-1 generate and build steps (gen:core-types, build:wasm) ran in T046 (commits 92bab021, 0d96a18a). This file records their --check forms and verify:wasm. The wasm is vela_core_bg.db3646bd0ab2.wasm (4,140,758 bytes).
+- 14: xcframework stamp af8d4003… equals the tree (T046 commit 579807b8).
+
+Output is raw stdout+stderr with two edits. In gate 01 the 2037 lines of the form "test <name> ... ok" are left out; every "running", "Running" and "test result:" line is kept, and none reports a failure or an ignore. In gate 13 the ANSI colour codes are removed.
+
+====================================================================================================
+[01] $ (cd ./rust) cargo test -p vela-core --features i18n-all,crux
+[01] exit=0, 8s
+====================================================================================================
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running unittests src/lib.rs (target/debug/deps/vela_core-2bcd132a240c7791)
+
+running 329 tests
+
+test result: ok. 329 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/app_activity_feed.rs (target/debug/deps/app_activity_feed-295ab0474aa3a7a6)
+
+running 37 tests
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_approval_guard.rs (target/debug/deps/app_approval_guard-c032ff8464c6a202)
+
+running 81 tests
+
+test result: ok. 81 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_balance_dashboard.rs (target/debug/deps/app_balance_dashboard-37299dcf2a4e3e47)
+
+running 52 tests
+
+test result: ok. 52 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_batch_import.rs (target/debug/deps/app_batch_import-12aa5a3b941f9cf8)
+
+running 76 tests
+
+test result: ok. 76 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_browser_history.rs (target/debug/deps/app_browser_history-452db00b707c1dd9)
+
+running 15 tests
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_browser_load.rs (target/debug/deps/app_browser_load-fcc7441418ad1c11)
+
+running 43 tests
+
+test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_clear_signing.rs (target/debug/deps/app_clear_signing-6029660624f63b8d)
+
+running 85 tests
+
+test result: ok. 85 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_contacts.rs (target/debug/deps/app_contacts-f126bda57fd6f1ff)
+
+running 68 tests
+
+test result: ok. 68 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_create_wallet.rs (target/debug/deps/app_create_wallet-d59709d039be7748)
+
+running 36 tests
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_dapp_browser.rs (target/debug/deps/app_dapp_browser-e3db62a3962343f8)
+
+running 64 tests
+
+test result: ok. 64 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_dapp_permissions.rs (target/debug/deps/app_dapp_permissions-95605f93bcafcb0b)
+
+running 24 tests
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_dapp_session.rs (target/debug/deps/app_dapp_session-3986c53adc402991)
+
+running 66 tests
+
+test result: ok. 66 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_display_currency.rs (target/debug/deps/app_display_currency-c1269db3c90e16da)
+
+running 14 tests
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_explore_sites.rs (target/debug/deps/app_explore_sites-2d9396928d866637)
+
+running 18 tests
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_ext_cache.rs (target/debug/deps/app_ext_cache-475da03ac0c00f41)
+
+running 29 tests
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_fee_policy.rs (target/debug/deps/app_fee_policy-d1dfb1112958367e)
+
+running 118 tests
+
+test result: ok. 118 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_fee_policy_parity.rs (target/debug/deps/app_fee_policy_parity-f26e863eff309654)
+
+running 1 test
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_fee_speed.rs (target/debug/deps/app_fee_speed-3fa63b20ac84ef6c)
+
+running 58 tests
+
+test result: ok. 58 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_fee_tier_pref.rs (target/debug/deps/app_fee_tier_pref-efc937933663d414)
+
+running 9 tests
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_login.rs (target/debug/deps/app_login-e526e7efa4dc7ac4)
+
+running 36 tests
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/app_manage_tokens.rs (target/debug/deps/app_manage_tokens-e29c77c86125c919)
+
+running 24 tests
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_name_verify.rs (target/debug/deps/app_name_verify-83245d48803055d7)
+
+running 15 tests
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_net_health.rs (target/debug/deps/app_net_health-a05c26ec93299414)
+
+running 6 tests
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_network_admin.rs (target/debug/deps/app_network_admin-aa83b23982e5b821)
+
+running 74 tests
+
+test result: ok. 74 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_payment_request.rs (target/debug/deps/app_payment_request-49c3e432dd6a86b6)
+
+running 19 tests
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_receive_watch.rs (target/debug/deps/app_receive_watch-5d030906f6cce212)
+
+running 10 tests
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_remote_mark.rs (target/debug/deps/app_remote_mark-b65419b8750c8443)
+
+running 4 tests
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_rpc_pool.rs (target/debug/deps/app_rpc_pool-a8ab7f6974d63357)
+
+running 58 tests
+
+test result: ok. 58 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_self_call_guard.rs (target/debug/deps/app_self_call_guard-1393b474c5fbc20b)
+
+running 14 tests
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_send.rs (target/debug/deps/app_send-98d8cce8974db299)
+
+running 156 tests
+
+test result: ok. 156 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_session.rs (target/debug/deps/app_session-6fc60972dcda5e96)
+
+running 43 tests
+
+test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_sign_pref.rs (target/debug/deps/app_sign_pref-47a5e345e08cadfa)
+
+running 8 tests
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_sign_request.rs (target/debug/deps/app_sign_request-81c105019dce2212)
+
+running 64 tests
+
+test result: ok. 64 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/app_sim_outcome.rs (target/debug/deps/app_sim_outcome-99be54aad3902cdb)
+
+running 31 tests
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_token_trust.rs (target/debug/deps/app_token_trust-a28938dbad65e8bd)
+
+running 39 tests
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/app_tx_tracker.rs (target/debug/deps/app_tx_tracker-5ae4df3e7e3606d7)
+
+running 52 tests
+
+test result: ok. 52 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/conformance.rs (target/debug/deps/conformance-d41c4f4553435838)
+
+running 4 tests
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/core_082_wiring.rs (target/debug/deps/core_082_wiring-d56e91fdf2a06367)
+
+running 6 tests
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/ctap_commands.rs (target/debug/deps/ctap_commands-9c8e369ebbeefb94)
+
+running 21 tests
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ctap_hid.rs (target/debug/deps/ctap_hid-02e3ec1f3387a7a8)
+
+running 14 tests
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ctap_pin_uv.rs (target/debug/deps/ctap_pin_uv-92e3d85e216c295a)
+
+running 16 tests
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/i18n_bench.rs (target/debug/deps/i18n_bench-62b27a4553a0e8d2)
+
+running 1 test
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/i18n_memory.rs (target/debug/deps/i18n_memory-93ade45d3abcfc31)
+
+running 1 test
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.56s
+
+     Running tests/i18n_residency.rs (target/debug/deps/i18n_residency-0604893f8c4c22cd)
+
+running 6 tests
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/identicon_bench.rs (target/debug/deps/identicon_bench-c56b01c662b60231)
+
+running 1 test
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/l10n_parity.rs (target/debug/deps/l10n_parity-fe798093ad6f570d)
+
+running 18 tests
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/proptests.rs (target/debug/deps/proptests-b822c57a04cf07ac)
+
+running 29 tests
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s
+
+     Running tests/trusted_signer.rs (target/debug/deps/trusted_signer-d8aed7d39ba77ac2)
+
+running 23 tests
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/trusted_signer_ceremony.rs (target/debug/deps/trusted_signer_ceremony-79834060f2e487b3)
+
+running 9 tests
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/user_op_hash.rs (target/debug/deps/user_op_hash-80b26052223915bf)
+
+running 2 tests
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/user_op_submit.rs (target/debug/deps/user_op_submit-06aadceef7d2bd41)
+
+running 10 tests
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests vela_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+====================================================================================================
+[02] $ (cd ./rust) cargo test -p vela-core --features i18n-all,crux --test i18n_residency -- --nocapture
+[02] exit=0, 1s
+====================================================================================================
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+     Running tests/i18n_residency.rs (target/debug/deps/i18n_residency-0604893f8c4c22cd)
+
+running 6 tests
+cold start (ja):
+  resident            134713 bytes
+  SC-005 budget       138800 bytes
+  whole corpus        990499 bytes  (what the app loads today)
+  reduction            86.4%
+release:
+  ru + en             153950 bytes
+after switch ja -> de:
+  ja + en             134713 bytes
+  de + en             116332 bytes
+  en only              52429 bytes
+test cold_start_holds_only_the_active_language_and_the_fallback ... ok
+test residency_is_bounded_at_two_under_any_sequence ... ok
+test the_pinned_fallback_cannot_be_released ... ok
+test switching_language_does_not_accumulate_catalogs ... ok
+test releasing_returns_to_the_fallback_alone ... ok
+runtime-JSON route (what the web build uses):
+  ja + en             138729 bytes
+test runtime_json_catalogs_fit_the_same_budget ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+====================================================================================================
+[03] $ (cd ./rust) cargo test -p vela-core --features i18n-all,crux --test user_op_hash -- --nocapture
+[03] exit=0, 0s
+====================================================================================================
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests/user_op_hash.rs (target/debug/deps/user_op_hash-80b26052223915bf)
+
+running 2 tests
+test the_vectors_are_the_two_operations_the_device_pass_recorded ... ok
+test the_local_hash_is_the_entry_point_s_own_for_both_gnosis_operations ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+====================================================================================================
+[04] $ (cd ./rust) cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings
+[04] exit=0, 19s
+====================================================================================================
+    Checking vela-core v0.1.0 (/Volumes/data/production/vela-wallet-082/rust/crates/vela-core)
+    Checking vela-uniffi-bindgen v0.1.0 (/Volumes/data/production/vela-wallet-082/rust/crates/vela-uniffi-bindgen)
+    Checking vela-core-uniffi v0.1.0 (/Volumes/data/production/vela-wallet-082/rust/crates/vela-core-uniffi)
+    Checking vela-core-wasm v0.1.0 (/Volumes/data/production/vela-wallet-082/rust/crates/vela-core-wasm)
+    Checking vela-dev-fixtures-uniffi v0.1.0 (/Volumes/data/production/vela-wallet-082/rust/crates/vela-dev-fixtures-uniffi)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 18.92s
+
+====================================================================================================
+[05] $ (cd ./rust) cargo fmt --all --check
+[05] exit=0, 1s
+====================================================================================================
+(no output)
+
+====================================================================================================
+[06] $ (cd ./) npm --prefix scripts run gen:i18n && npm --prefix scripts run lint:i18n && npm --prefix scripts run verify:i18n && npm --prefix scripts run dump:vectors
+[06] exit=0, 2s
+====================================================================================================
+
+> vela-wallet-tooling@1.0.0 gen:i18n
+> cd .. && node scripts/gen-i18n.mjs
+
+paths.rs   : 1784 paths (1695 leaf + 89 branch), key blob 49122 bytes, branch bitmap 223 bytes
+  en      1683 values  blob  48636  table  52429 bytes
+  zh      1683 values  blob  46977  table  50770 bytes
+  zh-TW   1673 values  blob  47273  table  51066 bytes
+  zh-HK   1673 values  blob  47488  table  51281 bytes
+  ja      1673 values  blob  74921  table  82284 bytes
+  ko      1673 values  blob  63192  table  66985 bytes
+  vi      1673 values  blob  65817  table  73180 bytes
+  id      1673 values  blob  53449  table  57242 bytes
+  tr      1673 values  blob  55612  table  59405 bytes
+  es-MX   1677 values  blob  56415  table  60208 bytes
+  pt-BR   1677 values  blob  56265  table  60058 bytes
+  fr      1677 values  blob  60849  table  64642 bytes
+  de      1673 values  blob  60110  table  63903 bytes
+  ru      1685 values  blob  94158  table 101521 bytes
+  it      1677 values  blob  56577  table  60370 bytes
+
+SC-005 check — ja + en resident, shared table included:
+  shared 63617 + ja 82284 + en 52429 = 198330 bytes (budget 138,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)
+  per-locale halves only: 134713 bytes
+assets     : 15 files, 1499626 bytes total -> assets/i18n/
+  on-demand: a ja reader fetches 115626 + 89634 = 205260 bytes, not 1499626
+datetime   : 15 locales, 518 bytes of strings (ICU 78.2) -> rust/crates/vela-core/src/l10n/datetime_data.rs
+
+> vela-wallet-tooling@1.0.0 lint:i18n
+> cd .. && node scripts/lint-i18n-corpus.mjs
+
+i18n corpus defect register (FR-018 — reported, not fixed)
+
+  A1_en_only_keys                   130  ok
+  A2_missing_cldr_category            0  ok
+  A3_dead_plural_category            28  ok
+  A4_inconsistent_plural_shape       14  ok
+  A5_count_without_plurals          359  ok
+  A6_significant_whitespace          37  ok
+
+lint-i18n: no new defects.
+
+> vela-wallet-tooling@1.0.0 verify:i18n
+> cd .. && node scripts/verify-i18n-parity.mjs
+
+verify-i18n: pass 1 — 25425 exhaustive (locale, key) pairs compared
+verify-i18n: pass 2 — 50000 fuzzed option bundles compared (seed 0x9e3779b9)
+
+verify-i18n: 75425 comparisons, zero divergences from i18next@26.3.1.
+
+> vela-wallet-tooling@1.0.0 dump:vectors
+> cd .. && node scripts/dump-vectors/identicon.dump.mjs && node scripts/dump-vectors/i18n.dump.mjs
+
+[Nimiq Identicon] - Invalid address: `0xd8da6bf26964af9d7eed9e03e53415d37aa96045`
+[Nimiq Identicon] - Invalid address: ``
+[Nimiq Identicon] - Invalid address: `NQ07 0000`
+[Nimiq Identicon] - Invalid address: `NQ07 IOWZ 0000 0000 0000 0000 0000 0000 0000`
+[Nimiq Identicon] - Invalid address: `NQ99 0000 0000 0000 0000 0000 0000 0000 0000`
+[Nimiq Identicon] - Invalid address: `0000 0000 0000 0000 0000 0000 0000 0000 0000`
+wrote 1499 entries -> rust/crates/vela-core/tests/vectors/identicon.json
+wrote 20000 pairs -> rust/crates/vela-core/tests/vectors/identicon-bulk.json
+identicon corpus: 1499 cases + 20000 bulk pairs (0 degenerate)
+key paths (union over 15 locales): 1695
+per-locale leaf counts: en=1683 zh=1683 zh-TW=1673 zh-HK=1673 ja=1673 ko=1673 vi=1673 id=1673 tr=1673 es-MX=1677 pt-BR=1677 fr=1677 de=1673 ru=1685 it=1677
+sum of per-locale leaves: 25143
+plural bases: 5 -> contacts.groupMembers, contacts.sends, send.batchApply, send.batchRejected, send.recipientCount
+
+(a) exhaustive           : 1695 keys x 15 locales = 25425 cases
+(b) behaviour + language : 164 + 51 = 215 cases
+(c) plural mode A        : 825 cases
+(d) plural mode B        : 825 cases
+TOTAL                    : 27290
+
+  i18n-exhaustive.json                 1107.2 KiB  (1133768 bytes)
+  i18n-behaviour.json                    51.0 KiB  (52198 bytes)
+  i18n-plural.json                      178.4 KiB  (182725 bytes)
+  i18n-plural-legacy.json               188.7 KiB  (193279 bytes)
+
+non-string / throwing results in the exhaustive suite: 0
+anomalies in behaviour suite: 6
+  THROW count/bigint: TypeError: Cannot convert a BigInt value to a number
+  NON-STRING default/number: number 42
+  NON-STRING default/bool: boolean true
+  NON-STRING branch/object-returnObjects: object {"cancel":"Cancel","system":"System","automatic":"Automatic","error":"Error","somethingWrong":"Something went wrong","tryAgain":"Try again","done":"Done","gotIt":"Got it"}
+  NON-STRING leaf/returnDetails: object {"res":"Cancel","usedKey":"common.cancel","exactUsedKey":"common.cancel","usedLng":"en","usedNS":"translation","usedParams":{}}
+  NON-STRING default/array-joinArrays: object ["a","b"]
+anomalies in plural A: 0  B: 0
+
+chosen exhaustive encoding: /Volumes/data/production/vela-wallet-082/rust/crates/vela-core/tests/vectors/i18n-exhaustive.json
+
+====================================================================================================
+[07] $ (cd ./) git diff --exit-code --stat -- rust/crates/vela-core/src/i18n/paths.rs rust/crates/vela-core/src/i18n_catalogs assets/i18n && echo 'git diff: clean on paths.rs, i18n_catalogs, assets/i18n' && git status --short && echo '(git status --short above: empty = the whole tree is clean)'
+[07] exit=0, 0s
+====================================================================================================
+git diff: clean on paths.rs, i18n_catalogs, assets/i18n
+(git status --short above: empty = the whole tree is clean)
+
+====================================================================================================
+[08] $ (cd ./) node scripts/check-event-payloads.mjs
+[08] exit=1, 1s
+[08] NOTE: EXPECTED RED (tasks.md T047): the shells do not send the 082 fields yet. Every field flagged carries #[serde(default)] in the core, so the core still accepts these payloads; the checker cannot see serde defaults. The SendStore.swift:254 row is SendReceiptOutcome::Failed (it now declares `not_sent`), matched to NetHealthBody by a tie in the checker's scoring. The same script over the pre-T046 generated types (92bab021~1) reports 0 mismatches over the same 513 sites.
+====================================================================================================
+| Shell | Where | Event | Machine | Sends | Core declares | Verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| ios | app-ios/VelaWallet/VelaWallet/Features/Send/SendExecutor.swift:459 | `submitted` | SendShellResult | user_op_hash, now_ms | user_op_hash, now_ms, maybe_sent, submit_block | missing: maybe_sent, submit_block |
+| ios | app-ios/VelaWallet/VelaWallet/Features/Send/SendStore.swift:254 | `failed` | NetHealthBody | rejected | — | unknown: rejected |
+| ios | app-ios/VelaWallet/VelaWallet/Features/Send/TrackerExecutor.swift:70 | `status` | TrackShellResult | user_op_hash, status, stage, now_ms | user_op_hash, status, stage, now_ms, tx_hash | missing: tx_hash |
+| ios | app-ios/VelaWallet/VelaWallet/Features/Send/TrackerStore.swift:74 | `submitted` | TrackEvent | user_op_hash, record_ids, chain_id | user_op_hash, record_ids, chain_id, maybe_sent, submit_block | missing: maybe_sent, submit_block |
+| ios | app-ios/VelaWallet/VelaWallet/Features/Signing/Core/SigningController.swift:230 | `op_submitted` | SignEvent | id, user_op_hash, now_ms | id, user_op_hash, now_ms, maybe_sent, submit_block | missing: maybe_sent, submit_block |
+
+5 mismatches · 513 literal dispatch sites checked · 2 skipped (payload not a literal)
+
+4 sites omit a declared field: serde rejects the whole value, so the core never sees the event — unless that field carries a serde default, which the generated types do not say. 1 sends only keys the core does not declare: those are dropped in silence, which means the shell believes it is passing something that never arrives.
+
+====================================================================================================
+[09] $ (cd ./) node scripts/check-ios-android-copy-parity.mjs
+[09] exit=0, 0s
+====================================================================================================
+| Area | Both | Android-only | iOS-only |
+| --- | --- | --- | --- |
+| onboarding | 105 | 11 | 6 |
+| send | 114 | 11 | 6 |
+| addToken | 21 | 3 | 4 |
+| componentsUi | 90 | 2 | 6 |
+| home | 18 | 1 | 0 |
+| assets | 18 | 1 | 0 |
+| contacts | 44 | 1 | 2 |
+| explore | 51 | 1 | 1 |
+| connect | 6 | 1 | 1 |
+| settings | 98 | 0 | 1 |
+| settingsModals | 73 | 0 | 1 |
+| receive | 14 | 0 | 4 |
+| common | 6 | 0 | 0 |
+| history | 12 | 0 | 0 |
+| componentsTx | 12 | 0 | 3 |
+| tokenDetail | 8 | 0 | 0 |
+| language | 6 | 0 | 0 |
+| activity | 1 | 0 | 0 |
+| about | 17 | 0 | 0 |
+| clearSigning | 1 | 0 | 0 |
+| time | 0 | 0 | 2 |
+
+Android-only keys: 32 · iOS-only: 37
+
+====================================================================================================
+[10] $ (cd ./) npm --prefix scripts run gen:core-types -- --check
+[10] exit=0, 12s
+====================================================================================================
+
+> vela-wallet-tooling@1.0.0 gen:core-types
+> cd .. && node rust/scripts/gen-core-types.mjs --check
+
+gen-core-types --check [onboarding]: 27 generated types are current in 1 mirror(s)
+gen-core-types --check [session]: 13 generated types are current in 1 mirror(s)
+gen-core-types --check [wallet-state]: 369 generated types are current in 1 mirror(s)
+
+====================================================================================================
+[11] $ (cd ./) node rust/scripts/build-web.mjs --check
+[11] exit=0, 81s
+====================================================================================================
+[INFO]: 🎯  Checking for the Wasm target...
+[INFO]: 🌀  Compiling to Wasm...
+   Compiling vela-core v0.1.0 (/Volumes/data/production/vela-wallet-082/rust/crates/vela-core)
+   Compiling vela-core-wasm v0.1.0 (/Volumes/data/production/vela-wallet-082/rust/crates/vela-core-wasm)
+    Finished `release` profile [optimized] target(s) in 1m 18s
+[INFO]: ⬇️  Installing wasm-bindgen...
+[INFO]: Optimizing wasm binaries with `wasm-opt`...
+[INFO]: Optional fields missing from Cargo.toml: 'repository', 'license'. These are not necessary, but recommended
+[INFO]: ✨   Done in 1m 20s
+[INFO]: 📦   Your wasm pkg is ready to publish at /Volumes/data/production/vela-wallet-082/rust/target/pkg-web-staging.
+build-web --check: rust/pkg-web is current (wasm 4140758 bytes)
+
+====================================================================================================
+[12] $ (cd ./) npm --prefix scripts run verify:wasm
+[12] exit=0, 5s
+====================================================================================================
+
+> vela-wallet-tooling@1.0.0 verify:wasm
+> cd .. && node rust/scripts/verify-web.mjs
+
+verify-web: 48798 conformance cases green through the shipped web artifact (199 skipped — core-only functions with no binding surface: identicon_params_js_compat, section_svg, create_identicon, nimiq_is_valid_address, constants)
+verify-web: 5 boundary regressions green (FR-023 borrow safety, FR-024 non-finite vars)
+
+====================================================================================================
+[13] $ (cd ./app-web/vela-wallet) pnpm sync:wasm && pnpm check
+[13] exit=1, 19s
+[13] NOTE: EXPECTED RED until T075 (web wire mirrors): 29 errors in 15 files, every one a hand-built object missing a new required field or a switch missing the new TrackOperation variants. pnpm sync:wasm itself is green.
+====================================================================================================
+
+> app-web@0.0.1 sync:wasm /Volumes/data/production/vela-wallet-082/app-web/vela-wallet
+> node scripts/sync-wasm.mjs
+
+sync-wasm: static/vela_core_bg.db3646bd0ab2.wasm already current (4140758 bytes)
+
+> app-web@0.0.1 check /Volumes/data/production/vela-wallet-082/app-web/vela-wallet
+> node scripts/gen-tokens.mjs --check && node scripts/sync-wasm.mjs --check && node ../../rust/scripts/gen-core-types.mjs wallet-state session --check && wrangler types && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+
+tokens in sync
+sync-wasm: static/vela_core_bg.db3646bd0ab2.wasm matches pkg-web (4140758 bytes)
+gen-core-types --check [session]: 13 generated types are current in 1 mirror(s)
+gen-core-types --check [wallet-state]: 369 generated types are current in 1 mirror(s)
+▲ [WARNING] Proxy environment variables detected. We'll use your proxy for fetch requests.
+
+
+
+ ⛅️ wrangler 4.115.0
+────────────────────
+Generating project types...
+
+interface __BaseEnv_Env {
+	ASSETS: Fetcher;
+}
+declare namespace Cloudflare {
+	interface Env extends __BaseEnv_Env {}
+}
+interface Env extends __BaseEnv_Env {}
+
+Generating runtime types...
+
+Runtime types generated.
+
+
+✨ Types written to worker-configuration.d.ts
+
+📖 Read about runtime types
+https://developers.cloudflare.com/workers/languages/typescript/#generate-types
+📣 Remember to rerun 'wrangler types' after you change your wrangler.jsonc file.
+
+▲ [WARNING] Proxy environment variables detected. We'll use your proxy for fetch requests.
+
+
+▲ [WARNING] Proxy environment variables detected. We'll use your proxy for fetch requests.
+
+
+1790601817572 START "/Volumes/data/production/vela-wallet-082/app-web/vela-wallet"
+1790601817575 ERROR "src/lib/wallet/core/feed-executor.ts" 78:2 "Property 'dapp_origin' is missing in type '{ id: string; user_op_hash: string; tx_hash: string; from: string; to: string; to_name: string | null; value: string; symbol: string; decimals: number; logo_urls: string[] | null; chain_id: number; ... 4 more ...; usd: string | null; }' but required in type 'FeedTxRecord'."
+1790601817575 ERROR "src/lib/wallet/core/feed-resident.ts" 32:14 "Type '{ rows: never[]; transactions: never[]; new_item_id: null; toast: null; }' is missing the following properties from type 'FeedView': history_empty_key, home_empty_key"
+1790601817575 ERROR "src/lib/wallet/core/tracker-executor.ts" 107:16 "Argument of type '{ record_id: string; user_op_hash: string; chain_id: number; submitted_at_ms: number; }' is not assignable to parameter of type 'TrackPendingRecord'.\n  Type '{ record_id: string; user_op_hash: string; chain_id: number; submitted_at_ms: number; }' is missing the following properties from type 'TrackPendingRecord': maybe_sent, submit_block"
+1790601817575 ERROR "src/lib/wallet/core/tracker-executor.ts" 152:47 "Function lacks ending return statement and return type does not include 'undefined'."
+1790601817575 ERROR "src/lib/wallet/core/tracker-executor.ts" 195:5 "Type '{ type: \"status\"; user_op_hash: string; status: TrackLifecycle; stage: string | null; now_ms: number; }' is not assignable to type 'TrackShellResult'.\n  Property 'tx_hash' is missing in type '{ type: \"status\"; user_op_hash: string; status: TrackLifecycle; stage: string | null; now_ms: number; }' but required in type '{ type: \"status\"; user_op_hash: string; status: TrackLifecycle; stage: string | null; now_ms: number; tx_hash: string | null; }'."
+1790601817575 ERROR "src/lib/wallet/core/tracker-executor.ts" 254:43 "Function lacks ending return statement and return type does not include 'undefined'."
+1790601817575 ERROR "src/lib/wallet/core/tracker-resident.ts" 95:44 "Function lacks ending return statement and return type does not include 'undefined'."
+1790601817575 ERROR "src/lib/wallet/core/tracker-resident.ts" 103:4 "Type '{ type: \"failed\"; rejected: false; }' is not assignable to type 'SendReceiptOutcome | null'.\n  Property 'not_sent' is missing in type '{ type: \"failed\"; rejected: false; }' but required in type '{ type: \"failed\"; rejected: boolean; not_sent: boolean; }'."
+1790601817575 ERROR "src/lib/wallet/core/tracker-resident.ts" 106:4 "Type '{ type: \"failed\"; rejected: true; }' is not assignable to type 'SendReceiptOutcome | null'.\n  Property 'not_sent' is missing in type '{ type: \"failed\"; rejected: true; }' but required in type '{ type: \"failed\"; rejected: boolean; not_sent: boolean; }'."
+1790601817575 ERROR "src/lib/wallet/core/tracker-resident.ts" 247:20 "Argument of type '{ type: \"submitted\"; user_op_hash: string; record_ids: string[]; chain_id: number; }' is not assignable to parameter of type 'TrackEvent'.\n  Type '{ type: \"submitted\"; user_op_hash: string; record_ids: string[]; chain_id: number; }' is missing the following properties from type '{ type: \"submitted\"; user_op_hash: string; record_ids: string[]; chain_id: number; maybe_sent: boolean; submit_block: number | null; }': maybe_sent, submit_block"
+1790601817575 ERROR "src/lib/signing/core/sign-resident.svelte.ts" 44:14 "Type '{ surface: \"hidden\"; request: null; is_signing: false; is_submitting: false; pending_op_hash: null; error: null; funding: null; confirm_gate_open: false; reconcile_pending: false; swipe_action: \"none\"; tracker_handoff: null; notice: null; blocked: null; global_chain_id: number; }' is missing the following properties from type 'SignView': phase, pending_op_maybe_sent"
+1790601817575 ERROR "src/lib/signing/core/sign-resident.svelte.ts" 158:21 "Argument of type '{ type: \"op_submitted\"; id: string; user_op_hash: string; now_ms: number; }' is not assignable to parameter of type 'SignEvent'.\n  Type '{ type: \"op_submitted\"; id: string; user_op_hash: string; now_ms: number; }' is missing the following properties from type '{ type: \"op_submitted\"; id: string; user_op_hash: string; now_ms: number; maybe_sent: boolean; submit_block: number | null; }': maybe_sent, submit_block"
+1790601817575 ERROR "src/lib/signing/core/sign-resident.svelte.ts" 275:21 "Argument of type '{ type: \"submitted\"; user_op_hash: string; record_ids: string[]; chain_id: number; }' is not assignable to parameter of type 'TrackEvent'.\n  Type '{ type: \"submitted\"; user_op_hash: string; record_ids: string[]; chain_id: number; }' is missing the following properties from type '{ type: \"submitted\"; user_op_hash: string; record_ids: string[]; chain_id: number; maybe_sent: boolean; submit_block: number | null; }': maybe_sent, submit_block"
+1790601817575 ERROR "src/lib/contacts/live.test.ts" 244:2 "Type '{ id: string; direction: FeedDirection; counterparty: string | null; alias: string | null; value: string | null; symbol: string; decimals: number | null; ... 8 more ...; site?: string | ... 1 more ... | undefined; }' is not assignable to type 'FeedItem'.\n  Types of property 'kind' are incompatible.\n    Type 'FeedTxKind | undefined' is not assignable to type 'FeedTxKind'.\n      Type 'undefined' is not assignable to type 'FeedTxKind'."
+1790601817575 ERROR "src/lib/contacts/live.test.ts" 261:7 "Type '{ rows: ({ type: \"header\"; id: string; day_start_ms: number; timestamp: number; } | { type: \"item\"; item: FeedItem; })[]; transactions: never[]; new_item_id: null; toast: null; }' is missing the following properties from type 'FeedView': history_empty_key, home_empty_key"
+1790601817577 ERROR "src/lib/flows/core/send-executor.ts" 198:45 "Argument of type '{ type: \"failed\"; rejected: boolean; }' is not assignable to parameter of type 'SendReceiptOutcome'.\n  Property 'not_sent' is missing in type '{ type: \"failed\"; rejected: boolean; }' but required in type '{ type: \"failed\"; rejected: boolean; not_sent: boolean; }'."
+1790601817577 ERROR "src/lib/flows/core/send-executor.ts" 423:6 "Type '{ type: \"submitted\"; user_op_hash: string; now_ms: number; }' is not assignable to type 'SendShellResult'.\n  Type '{ type: \"submitted\"; user_op_hash: string; now_ms: number; }' is missing the following properties from type '{ type: \"submitted\"; user_op_hash: string; now_ms: number; maybe_sent: boolean; submit_block: number | null; }': maybe_sent, submit_block"
+1790601817578 ERROR "src/lib/signing/dapp-receipt.ts" 159:4 "Function lacks ending return statement and return type does not include 'undefined'."
+1790601817578 ERROR "src/lib/signing/dapp-receipt.test.ts" 171:3 "Type '{ user_op_hash: string; chain_id: number; record_ids: Array<string>; status: TrackStatus; tx_hash: string | null; polling: boolean; submitted_at_ms: number | null; outcome: TrackOutcome; relay_tx_hash?: string | ... 1 more ... | undefined; }' is not assignable to type 'TrackEntryView'.\n  Types of property 'relay_tx_hash' are incompatible.\n    Type 'string | null | undefined' is not assignable to type 'string | null'.\n      Type 'undefined' is not assignable to type 'string | null'."
+1790601817578 ERROR "src/lib/signing/core/sheet.svelte.ts" 24:14 "Property 'plain_send' is missing in type '{ resolving: false; resolved: false; result: null; message: null; surface: \"none\"; confirm: { type: \"confirm\"; }; blind_typed: null; danger_haptic: false; }' but required in type 'ClearSigningView'."
+1790601817578 ERROR "src/lib/wallet/live-activity.test.ts" 16:2 "Type '{ id: string; direction: FeedDirection; counterparty: string | null; alias: string | null; value: string | null; symbol: string; decimals: number | null; ... 8 more ...; site?: string | ... 1 more ... | undefined; }' is not assignable to type 'FeedItem'.\n  Types of property 'kind' are incompatible.\n    Type 'FeedTxKind | undefined' is not assignable to type 'FeedTxKind'.\n      Type 'undefined' is not assignable to type 'FeedTxKind'."
+1790601817578 ERROR "src/lib/wallet/live-activity.test.ts" 110:9 "Type '{ rows: ({ type: \"header\"; id: string; day_start_ms: number; timestamp: number; } | { type: \"item\"; item: FeedItem; })[]; transactions: never[]; new_item_id: null; toast: null; }' is missing the following properties from type 'FeedView': history_empty_key, home_empty_key"
+1790601817578 ERROR "src/lib/wallet/live-chain-filter.test.ts" 59:2 "Type '{ id: string; direction: \"in\"; counterparty: string; alias: null; value: string; symbol: string; decimals: number; usd_value: number; chain_id: number; timestamp: number; day_start_ms: number; tx_hash: string; batch: null; }' is missing the following properties from type 'FeedItem': kind, status, site"
+1790601817578 ERROR "src/lib/wallet/live-chain-filter.test.ts" 78:7 "Type '{ transactions: never[]; new_item_id: null; toast: null; rows: ({ type: \"header\"; id: string; day_start_ms: number; timestamp: number; } | { type: \"item\"; item: FeedItem; })[]; }' is missing the following properties from type 'FeedView': history_empty_key, home_empty_key"
+1790601817578 ERROR "src/lib/wallet/live-detail.test.ts" 51:2 "Type '{ id: string; direction: FeedDirection; counterparty: string | null; alias: string | null; value: string | null; symbol: string; decimals: number | null; ... 8 more ...; site?: string | ... 1 more ... | undefined; }' is not assignable to type 'FeedItem'.\n  Types of property 'kind' are incompatible.\n    Type 'FeedTxKind | undefined' is not assignable to type 'FeedTxKind'.\n      Type 'undefined' is not assignable to type 'FeedTxKind'."
+1790601817578 ERROR "src/lib/wallet/live-detail.test.ts" 69:7 "Type '{ transactions: never[]; new_item_id: null; toast: null; rows: ({ type: \"header\"; id: string; day_start_ms: number; timestamp: number; } | { type: \"item\"; item: FeedItem; })[]; }' is missing the following properties from type 'FeedView': history_empty_key, home_empty_key"
+1790601817578 ERROR "src/lib/wallet/live-detail.test.ts" 230:3 "Property 'dapp_origin' is missing in type '{ id: string; user_op_hash: string; tx_hash: string; from: string; to: string; to_name: null; value: string; symbol: string; decimals: number; logo_urls: null; chain_id: number; timestamp: number; day_start_ms: number; status: FeedTxStatus; kind: \"send\"; usd: null; }' but required in type 'FeedTxRecord'."
+1790601817578 ERROR "src/lib/wallet/core/rpc-pool-executor.test.ts" 186:46 "Type '{ type: \"failed\"; rate_limited: false; }' is not assignable to type 'RpcCallVerdict'.\n  Property 'maybe_delivered' is missing in type '{ type: \"failed\"; rate_limited: false; }' but required in type '{ type: \"failed\"; rate_limited: boolean; maybe_delivered: boolean; }'."
+1790601817578 ERROR "src/lib/wallet/core/tracker-resident.test.ts" 13:2 "Type '{ user_op_hash: string; chain_id: number; record_ids: Array<string>; status: TrackStatus; tx_hash: string | null; polling: boolean; submitted_at_ms: number | null; outcome: TrackOutcome; relay_tx_hash?: string | ... 1 more ... | undefined; }' is not assignable to type 'TrackEntryView'.\n  Types of property 'relay_tx_hash' are incompatible.\n    Type 'string | null | undefined' is not assignable to type 'string | null'.\n      Type 'undefined' is not assignable to type 'string | null'."
+1790601817578 COMPLETED 1504 FILES 29 ERRORS 0 WARNINGS 15 FILES_WITH_PROBLEMS
+ ELIFECYCLE  Command failed with exit code 1.
+
+====================================================================================================
+[14] $ (cd ./) bash rust/scripts/check-ios-core-fresh.sh
+[14] exit=0, 0s
+====================================================================================================
+check-ios-core-fresh: ok — the xcframework is this tree's core (af8d40039a4b1390ea4a8a1519266ce024e42b280529561a2a4687d077c0e2dd)
+
+====================================================================================================
+[15] $ (cd ./) bash rust/scripts/smoke-swift.sh
+[15] exit=0, 82s
+====================================================================================================
+smoke-swift: building the cdylib
+   Compiling vela-core v0.1.0 (/Volumes/data/production/vela-wallet-082/rust/crates/vela-core)
+   Compiling vela-core-uniffi v0.1.0 (/Volumes/data/production/vela-wallet-082/rust/crates/vela-core-uniffi)
+    Finished `release` profile [optimized] target(s) in 1m 10s
+smoke-swift: generating Swift bindings
+    Finished `release` profile [optimized] target(s) in 0.21s
+     Running `target/release/uniffi-bindgen generate --library target/release/libvela_core_uniffi.dylib --language swift --out-dir bindings/swift`
+smoke-swift: compiling the harness
+smoke-swift: running
+smoke-swift: 48753 conformance cases green through the Swift bindings (244 skipped: 199 core-only functions with no binding surface, 45 i18n cases carrying an option the FFI record does not model)
+smoke-swift:   i18n skips — branch/object-joinArrays, branch/object-returnObjects, context/synthetic-hit, count/"3", count/NaN, count/bigint, count/infinity, count/neg-infinity, count/null, count/object, count/own-undefined, count/ru/"3", count/ru/NaN, default/array, default/array-joinArrays, default/bool, default/null, default/number, default/object, default/other-and-base, default/other-only, default/other-ru-many, default/undefined-own-property, default/zero-suffix, interp/array, interp/bigint, interp/date, interp/dotted-path, interp/dotted-path-missing, interp/function, interp/infinity, interp/nan, interp/neg-infinity, interp/nested-array, interp/object, interp/own-undefined, interp/replace-object, interp/replace-shadows-top-level, interp/symbol-free-object-with-toString, interpolate/dotted, leaf/returnDetails, ns/option-bogus-ns, ns/option-ns, sep/keySeparator-false, sep/nsSeparator-false
+smoke-swift: recursive AbiValue survives the boundary (tuple with 4 fields)
+smoke-swift: flat-error message preserved ("invalid hex: invalid hex pair `zz`")
+smoke-swift: onboarding bridge green (create → login → session, correlation rules held)
+smoke-swift: golden multi-key Safe agrees (0x88cCA0EeDbF2C4426110bbFc998F048689266894)
+
+====================================================================================================
+[16] $ (cd ./) bash rust/scripts/smoke-kotlin.sh
+[16] exit=0, 18s
+====================================================================================================
+smoke-kotlin: building the cdylib
+    Finished `release` profile [optimized] target(s) in 0.18s
+smoke-kotlin: generating Kotlin bindings
+    Finished `release` profile [optimized] target(s) in 0.06s
+     Running `target/release/uniffi-bindgen generate --library target/release/libvela_core_uniffi.dylib --language kotlin --out-dir bindings/kotlin --no-format`
+smoke-kotlin: compiling the harness
+smoke-kotlin: running
+smoke-kotlin: 48753 conformance cases green through the Kotlin bindings (244 skipped: 199 core-only functions with no binding surface, 45 i18n cases carrying an option the FFI record does not model)
+smoke-kotlin: flat-error Display message preserved ("invalid hex: invalid hex pair `zz`")
+smoke-kotlin: onboarding bridge green (create → login → session, correlation rules held)
+smoke-kotlin: golden multi-key Safe agrees (0x88cCA0EeDbF2C4426110bbFc998F048689266894)

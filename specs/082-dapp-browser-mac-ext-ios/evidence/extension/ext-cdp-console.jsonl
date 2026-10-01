@@ -1,0 +1,513 @@
+{"t":"07:08:51.932","kind":"attach","type":"page","url":"about:blank"}
+{"t":"07:08:51.932","kind":"attach","type":"browser_ui","url":"chrome://webui-toolbar.top-chrome/"}
+{"t":"07:08:51.933","kind":"attach","type":"page","url":"about:blank"}
+{"t":"07:08:56.692","kind":"attach","type":"page","url":"about:blank"}
+{"t":"07:08:56.762","kind":"attach","type":"page","url":"about:blank"}
+{"t":"07:09:10.480","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:09:10.481","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:09:10.481","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:09:10.485","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:09:44.872","kind":"attach","type":"page","url":"about:blank"}
+{"t":"07:09:44.928","kind":"attach","type":"page","url":"about:blank"}
+{"t":"07:09:44.998","kind":"console","level":"log","where":"page:about:blank","text":"[Vela] EIP-1193/6963 provider installed app.getvela 77bde2e8-47e7-41d0-98cd-ef382fddf841"}
+{"t":"07:09:44.998","kind":"console","level":"log","where":"page:about:blank","text":"[Vela] EIP-1193/6963 provider installed app.getvela 77bde2e8-47e7-41d0-98cd-ef382fddf841"}
+{"t":"07:09:47.438","kind":"attach","type":"other","url":""}
+{"t":"07:09:47.457","kind":"attach","type":"page","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/panel.html"}
+{"t":"07:09:47.457","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:09:47.491","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:12:39.664","kind":"console","level":"log","where":"page:about:blank","text":"[Vela] EIP-1193/6963 provider installed app.getvela 4229fb11-5979-474e-8d87-7fe281e0e808"}
+{"t":"07:12:39.664","kind":"console","level":"log","where":"page:about:blank","text":"[Vela] EIP-1193/6963 provider installed app.getvela 4229fb11-5979-474e-8d87-7fe281e0e808"}
+{"t":"07:13:46.594","kind":"attach","type":"page","url":"about:blank"}
+{"t":"07:13:46.676","kind":"attach","type":"page","url":"about:blank"}
+{"t":"07:13:46.817","kind":"console","level":"log","where":"page:about:blank","text":"[Vela] EIP-1193/6963 provider installed app.getvela 75d1a2cb-6d8c-4021-bcd5-8dd77b9de1e8"}
+{"t":"07:13:46.817","kind":"console","level":"log","where":"page:about:blank","text":"[Vela] EIP-1193/6963 provider installed app.getvela 75d1a2cb-6d8c-4021-bcd5-8dd77b9de1e8"}
+{"t":"07:13:46.915","kind":"netfail","where":"page:about:blank","url":"http://127.0.0.1:8139/attacker.html","method":"GET","error":"net::ERR_CONNECTION_REFUSED","canceled":false,"ms":45}
+{"t":"07:13:46.915","kind":"netfail","where":"page:about:blank","url":"http://127.0.0.1:8139/attacker.html","method":"GET","error":"net::ERR_CONNECTION_REFUSED","canceled":false,"ms":45}
+{"t":"07:15:03.795","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:15:03.796","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:15:03.800","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:15:03.800","kind":"attach","type":"service_worker","url":"chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/background.js"}
+{"t":"07:15:17.842","kind":"netfail","where":"page:about:blank","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8004}
+{"t":"07:15:17.843","kind":"netfail","where":"page:about:blank","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8004}
+{"t":"07:15:17.929","kind":"netfail","where":"page:about:blank","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:15:17.930","kind":"netfail","where":"page:about:blank","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:15:25.627","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8006}
+{"t":"07:15:25.627","kind":"netfail","where":"other:","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8006}
+{"t":"07:15:25.627","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8005}
+{"t":"07:15:25.627","kind":"netfail","where":"other:","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8005}
+{"t":"07:15:25.844","kind":"netfail","where":"page:about:blank","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:25.844","kind":"netfail","where":"page:about:blank","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:25.931","kind":"netfail","where":"page:about:blank","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:25.932","kind":"netfail","where":"page:about:blank","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:30.939","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:15:30.944","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:15:30.944","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:15:30.944","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:15:30.945","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:15:30.945","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:15:33.628","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:33.628","kind":"netfail","where":"other:","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:33.628","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:15:33.629","kind":"netfail","where":"other:","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:15:33.933","kind":"netfail","where":"page:about:blank","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:33.933","kind":"netfail","where":"page:about:blank","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:41.629","kind":"netfail","where":"page:ext/panel.html","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:41.629","kind":"netfail","where":"other:","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:41.935","kind":"netfail","where":"page:about:blank","url":"https://gnosis.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:41.935","kind":"netfail","where":"page:about:blank","url":"https://gnosis.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:47.932","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17053}
+{"t":"07:15:47.933","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17053}
+{"t":"07:15:47.933","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17053}
+{"t":"07:15:47.933","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17053}
+{"t":"07:15:47.933","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17053}
+{"t":"07:15:47.933","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17053}
+{"t":"07:15:49.656","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:15:49.656","kind":"netfail","where":"other:","url":"https://gnosis.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:15:49.938","kind":"netfail","where":"page:about:blank","url":"https://gnosis.oat.farm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:15:49.938","kind":"netfail","where":"page:about:blank","url":"https://gnosis.oat.farm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:15:55.934","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":8001}
+{"t":"07:15:55.934","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":8001}
+{"t":"07:15:55.934","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":8001}
+{"t":"07:15:55.935","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":8001}
+{"t":"07:15:55.935","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":8001}
+{"t":"07:15:55.935","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":8001}
+{"t":"07:15:57.634","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.oat.farm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:57.634","kind":"netfail","where":"other:","url":"https://gnosis.oat.farm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:15:57.952","kind":"netfail","where":"page:about:blank","url":"https://rpc.gnosis.gateway.fm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:15:57.955","kind":"netfail","where":"page:about:blank","url":"https://rpc.gnosis.gateway.fm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:16:03.531","kind":"netfail","where":"page:about:blank","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":4660}
+{"t":"07:16:03.534","kind":"netfail","where":"page:about:blank","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":4660}
+{"t":"07:16:07.753","kind":"netfail","where":"page:about:blank","url":"https://xdai-archive.blockscout.com/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":943}
+{"t":"07:16:07.754","kind":"netfail","where":"page:about:blank","url":"https://xdai-archive.blockscout.com/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":943}
+{"t":"07:16:07.754","kind":"netfail","where":"other:","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":133}
+{"t":"07:16:07.754","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":133}
+{"t":"07:16:15.629","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8005}
+{"t":"07:16:15.629","kind":"netfail","where":"other:","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8005}
+{"t":"07:16:15.760","kind":"netfail","where":"page:about:blank","url":"https://gnosis-public.nodies.app/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8004}
+{"t":"07:16:15.760","kind":"netfail","where":"page:about:blank","url":"https://gnosis-public.nodies.app/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8004}
+{"t":"07:16:15.760","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8004}
+{"t":"07:16:15.760","kind":"netfail","where":"other:","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8004}
+{"t":"07:16:23.626","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:16:23.626","kind":"netfail","where":"other:","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:16:28.434","kind":"netfail","where":"page:about:blank","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:16:28.434","kind":"netfail","where":"page:about:blank","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:16:28.434","kind":"netfail","where":"page:about:blank","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:16:28.434","kind":"netfail","where":"page:about:blank","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:16:28.492","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:16:28.492","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:16:28.492","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:16:28.492","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:16:28.492","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:16:28.492","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:16:31.637","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.ankr.com/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8007}
+{"t":"07:16:31.637","kind":"netfail","where":"other:","url":"https://rpc.ankr.com/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8007}
+{"t":"07:16:36.435","kind":"netfail","where":"page:about:blank","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:16:36.436","kind":"netfail","where":"page:about:blank","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:16:37.461","kind":"netfail","where":"page:about:blank","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:16:37.462","kind":"netfail","where":"page:about:blank","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:16:39.634","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:16:39.634","kind":"netfail","where":"other:","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:16:44.438","kind":"netfail","where":"page:about:blank","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:16:44.438","kind":"netfail","where":"page:about:blank","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:16:45.628","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17138}
+{"t":"07:16:45.629","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17138}
+{"t":"07:16:45.629","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17138}
+{"t":"07:16:45.629","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17138}
+{"t":"07:16:45.629","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17138}
+{"t":"07:16:45.629","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":17138}
+{"t":"07:16:47.633","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis-mainnet.public.blastapi.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:16:47.633","kind":"netfail","where":"other:","url":"https://gnosis-mainnet.public.blastapi.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:16:53.396","kind":"netfail","where":"page:about:blank","url":"https://public.1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8004}
+{"t":"07:16:53.396","kind":"netfail","where":"page:about:blank","url":"https://public.1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8004}
+{"t":"07:16:55.634","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:16:55.634","kind":"netfail","where":"other:","url":"https://gnosis.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:02.201","kind":"netfail","where":"page:about:blank","url":"https://gnosis.therpc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:02.201","kind":"netfail","where":"page:about:blank","url":"https://gnosis.therpc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:03.636","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.blockpi.network/v1/rpc/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:03.636","kind":"netfail","where":"other:","url":"https://gnosis.blockpi.network/v1/rpc/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:05.634","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:05.635","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:05.635","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:05.635","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:05.635","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:05.635","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:10.202","kind":"netfail","where":"page:about:blank","url":"https://gnosis.api.pocket.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:10.202","kind":"netfail","where":"page:about:blank","url":"https://gnosis.api.pocket.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:12.319","kind":"netfail","where":"page:ext/panel.html","url":"https://xdai-archive.blockscout.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:12.319","kind":"netfail","where":"other:","url":"https://xdai-archive.blockscout.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:20.321","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis-public.nodies.app/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:20.321","kind":"netfail","where":"other:","url":"https://gnosis-public.nodies.app/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:26.268","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:26.268","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:26.268","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:26.268","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:26.268","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:26.269","kind":"netfail","where":"service_worker:ext/background.js","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:28.657","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:17:28.658","kind":"netfail","where":"other:","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:17:36.263","kind":"netfail","where":"page:about:blank","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":5832}
+{"t":"07:17:36.264","kind":"netfail","where":"page:about:blank","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":5832}
+{"t":"07:17:36.660","kind":"netfail","where":"page:ext/panel.html","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:17:36.660","kind":"netfail","where":"other:","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:17:38.434","kind":"netfail","where":"page:about:blank","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:17:38.435","kind":"netfail","where":"page:about:blank","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:17:44.648","kind":"netfail","where":"page:about:blank","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:44.648","kind":"netfail","where":"page:about:blank","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:44.987","kind":"netfail","where":"page:ext/panel.html","url":"https://public.1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:44.987","kind":"netfail","where":"other:","url":"https://public.1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:46.274","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:46.274","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:46.275","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:46.275","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:46.275","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:46.275","kind":"netfail","where":"service_worker:ext/background.js","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":20006}
+{"t":"07:17:55.626","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:55.626","kind":"netfail","where":"other:","url":"https://bsc-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:55.626","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:55.626","kind":"netfail","where":"other:","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:17:58.444","kind":"netfail","where":"page:about:blank","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:17:58.445","kind":"netfail","where":"page:about:blank","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:17:58.658","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":12385}
+{"t":"07:17:58.658","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":12385}
+{"t":"07:17:58.659","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":12385}
+{"t":"07:17:58.659","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":12385}
+{"t":"07:17:58.659","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":12385}
+{"t":"07:17:58.659","kind":"netfail","where":"service_worker:ext/background.js","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_TIMED_OUT","canceled":false,"ms":12385}
+{"t":"07:18:03.627","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:18:03.627","kind":"netfail","where":"other:","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:18:03.627","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.therpc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:18:03.627","kind":"netfail","where":"other:","url":"https://gnosis.therpc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:18:22.344","kind":"console","level":"log","where":"other:","text":"[UserOp] isDeployed: true code length: 344"}
+{"t":"07:18:22.344","kind":"console","level":"log","where":"page:ext/panel.html","text":"[UserOp] isDeployed: true code length: 344"}
+{"t":"07:18:25.352","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":3001}
+{"t":"07:18:25.352","kind":"netfail","where":"other:","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":3001}
+{"t":"07:18:25.354","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.therpc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":3002}
+{"t":"07:18:25.354","kind":"netfail","where":"other:","url":"https://gnosis.therpc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":3002}
+{"t":"07:18:25.355","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":2}
+{"t":"07:18:25.355","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":2}
+{"t":"07:18:25.355","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":2}
+{"t":"07:18:25.355","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":2}
+{"t":"07:18:25.507","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":1}
+{"t":"07:18:25.507","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":1}
+{"t":"07:18:25.510","kind":"console","level":"warning","where":"other:","text":"[InBand] quote failed for chain=100: Error: All bundler endpoints failed for chain 100\n    at Object.q [as settle] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6956)\n    at Object.n [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:5229)\n    at Object.execute (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6204)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:439)\n    at u (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:340)\n    at f (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:610)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:553)"}
+{"t":"07:18:25.510","kind":"console","level":"warning","where":"page:ext/panel.html","text":"[InBand] quote failed for chain=100: Error: All bundler endpoints failed for chain 100\n    at Object.q [as settle] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6956)\n    at Object.n [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:5229)\n    at Object.execute (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6204)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:439)\n    at u (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:340)\n    at f (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:610)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:553)"}
+{"t":"07:18:25.990","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":1}
+{"t":"07:18:25.990","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":1}
+{"t":"07:18:25.990","kind":"console","level":"log","where":"other:","text":"[Gas] Bundler gas-price quote unavailable: All bundler endpoints failed for chain 100"}
+{"t":"07:18:25.990","kind":"console","level":"log","where":"page:ext/panel.html","text":"[Gas] Bundler gas-price quote unavailable: All bundler endpoints failed for chain 100"}
+{"t":"07:18:29.000","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":4}
+{"t":"07:18:29.001","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":4}
+{"t":"07:18:29.001","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":4}
+{"t":"07:18:29.001","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":4}
+{"t":"07:18:29.128","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":1}
+{"t":"07:18:29.128","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":1}
+{"t":"07:18:29.129","kind":"console","level":"log","where":"other:","text":"[Gas] Bundler gas-price quote unavailable: All bundler endpoints failed for chain 100"}
+{"t":"07:18:29.129","kind":"console","level":"log","where":"page:ext/panel.html","text":"[Gas] Bundler gas-price quote unavailable: All bundler endpoints failed for chain 100"}
+{"t":"07:18:29.692","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":1}
+{"t":"07:18:29.692","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":1}
+{"t":"07:18:29.693","kind":"console","level":"warning","where":"other:","text":"[InBand] quote failed for chain=100: Error: All bundler endpoints failed for chain 100\n    at Object.q [as settle] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6956)\n    at Object.n [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:5229)\n    at Object.execute (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6204)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:439)\n    at u (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:340)\n    at f (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:610)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:553)"}
+{"t":"07:18:29.693","kind":"console","level":"warning","where":"page:ext/panel.html","text":"[InBand] quote failed for chain=100: Error: All bundler endpoints failed for chain 100\n    at Object.q [as settle] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6956)\n    at Object.n [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:5229)\n    at Object.execute (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6204)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:439)\n    at u (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:340)\n    at f (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:610)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:553)"}
+{"t":"07:18:35.708","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":3}
+{"t":"07:18:35.708","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":3}
+{"t":"07:18:35.709","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":3}
+{"t":"07:18:35.709","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":3}
+{"t":"07:18:35.798","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":2}
+{"t":"07:18:35.799","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":2}
+{"t":"07:18:35.799","kind":"console","level":"warning","where":"other:","text":"[InBand] quote failed for chain=100: Error: All bundler endpoints failed for chain 100\n    at Object.q [as settle] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6956)\n    at Object.n [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:5229)\n    at Object.execute (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6204)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:439)\n    at u (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:340)\n    at f (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:610)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:553)"}
+{"t":"07:18:35.799","kind":"console","level":"warning","where":"page:ext/panel.html","text":"[InBand] quote failed for chain=100: Error: All bundler endpoints failed for chain 100\n    at Object.q [as settle] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6956)\n    at Object.n [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:5229)\n    at Object.execute (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DI3VSzJ5.js:1:6204)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:439)\n    at u (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:340)\n    at f (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:610)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:553)"}
+{"t":"07:18:36.463","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":2}
+{"t":"07:18:36.464","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_EMPTY_RESPONSE","canceled":false,"ms":2}
+{"t":"07:18:36.465","kind":"console","level":"log","where":"other:","text":"[Gas] Bundler gas-price quote unavailable: All bundler endpoints failed for chain 100"}
+{"t":"07:18:36.465","kind":"console","level":"log","where":"page:ext/panel.html","text":"[Gas] Bundler gas-price quote unavailable: All bundler endpoints failed for chain 100"}
+{"t":"07:18:50.743","kind":"console","level":"log","where":"other:","text":"[UserOp] Estimating gas, sender: 0xD400866e00B055B20752a826CD5C89b811de130b nonce: 0x0000000000000000000000000000000000000000000000000000000000000015"}
+{"t":"07:18:50.743","kind":"console","level":"log","where":"page:ext/panel.html","text":"[UserOp] Estimating gas, sender: 0xD400866e00B055B20752a826CD5C89b811de130b nonce: 0x0000000000000000000000000000000000000000000000000000000000000015"}
+{"t":"07:19:27.998","kind":"console","level":"log","where":"other:","text":"[BundlerFunding] chain=100 isVelaRelay=true"}
+{"t":"07:19:27.998","kind":"console","level":"log","where":"page:ext/panel.html","text":"[BundlerFunding] chain=100 isVelaRelay=true"}
+{"t":"07:19:29.503","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/v1/account/100/0xd400866e00b055b20752a826cd5c89b811de130b","method":"GET","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":1506}
+{"t":"07:19:29.503","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/v1/account/100/0xd400866e00b055b20752a826cd5c89b811de130b","method":"GET","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":1506}
+{"t":"07:19:29.503","kind":"console","level":"warning","where":"other:","text":"[BundlerFunding] Failed to fetch account info for chain=100: TypeError: Failed to fetch\n    at window.fetch (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/CCkuGWp2.js:1:1484)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/BL8eJAU4.js:1:1286)\n    at Qt (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:1:12548)\n    at async Gt (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:1:10151)\n    at async Object.r [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:5:2589)\n    at async d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:431)"}
+{"t":"07:19:29.504","kind":"console","level":"warning","where":"page:ext/panel.html","text":"[BundlerFunding] Failed to fetch account info for chain=100: TypeError: Failed to fetch\n    at window.fetch (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/CCkuGWp2.js:1:1484)\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/BL8eJAU4.js:1:1286)\n    at Qt (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:1:12548)\n    at async Gt (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:1:10151)\n    at async Object.r [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:5:2589)\n    at async d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:431)"}
+{"t":"07:19:29.504","kind":"console","level":"log","where":"other:","text":"[BundlerFunding] account info: unreachable"}
+{"t":"07:19:29.504","kind":"console","level":"log","where":"page:ext/panel.html","text":"[BundlerFunding] account info: unreachable"}
+{"t":"07:19:30.264","kind":"console","level":"log","where":"other:","text":"[UserOp] isDeployed: true code length: 32072"}
+{"t":"07:19:30.264","kind":"console","level":"log","where":"page:ext/panel.html","text":"[UserOp] isDeployed: true code length: 32072"}
+{"t":"07:19:30.578","kind":"console","level":"log","where":"other:","text":"[UserOp] Estimating gas, sender: 0xD400866e00B055B20752a826CD5C89b811de130b nonce: 0x0000000000000000000000000000000000000000000000000000000000000015"}
+{"t":"07:19:30.578","kind":"console","level":"log","where":"page:ext/panel.html","text":"[UserOp] Estimating gas, sender: 0xD400866e00B055B20752a826CD5C89b811de130b nonce: 0x0000000000000000000000000000000000000000000000000000000000000015"}
+{"t":"07:19:32.065","kind":"console","level":"log","where":"other:","text":"[InBand] signing DISPLAYED quote: feeToken=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c"}
+{"t":"07:19:32.066","kind":"console","level":"log","where":"page:ext/panel.html","text":"[InBand] signing DISPLAYED quote: feeToken=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c"}
+{"t":"07:19:32.072","kind":"console","level":"log","where":"other:","text":"[UserOp] Submitting: {\"sender\":\"0xD400866e00B055B20752a826CD5C89b811de130b\",\"nonce\":\"0x0000000000000000000000000000000000000000000000000000000000000015\",\"initCodePresent\":false,\"factory\":\"(none)\",\"factoryDataLen\":0,\"callDataLen\":906,\"signatureLen\":860,\"verificationGasLimit\":\"0x493e0\",\"callGasLimit\":\"0x30d40\",\"maxFeePerGas\":\"0x0\"}"}
+{"t":"07:19:32.075","kind":"console","level":"log","where":"page:ext/panel.html","text":"[UserOp] Submitting: {\"sender\":\"0xD400866e00B055B20752a826CD5C89b811de130b\",\"nonce\":\"0x0000000000000000000000000000000000000000000000000000000000000015\",\"initCodePresent\":false,\"factory\":\"(none)\",\"factoryDataLen\":0,\"callDataLen\":906,\"signatureLen\":860,\"verificationGasLimit\":\"0x493e0\",\"callGasLimit\":\"0x30d40\",\"maxFeePerGas\":\"0x0\"}"}
+{"t":"07:19:44.573","kind":"console","level":"log","where":"other:","text":"[UserOp] Receipt landed Object"}
+{"t":"07:19:44.573","kind":"console","level":"log","where":"page:ext/panel.html","text":"[UserOp] Receipt landed Object"}
+{"t":"07:22:00.333","kind":"console","level":"log","where":"other:","text":"[UserOp] Estimating gas, sender: 0xD400866e00B055B20752a826CD5C89b811de130b nonce: 0x0000000000000000000000000000000000000000000000000000000000000016"}
+{"t":"07:22:00.333","kind":"console","level":"log","where":"page:ext/panel.html","text":"[UserOp] Estimating gas, sender: 0xD400866e00B055B20752a826CD5C89b811de130b nonce: 0x0000000000000000000000000000000000000000000000000000000000000016"}
+{"t":"07:22:02.943","kind":"console","level":"log","where":"other:","text":"[BundlerFunding] chain=100 isVelaRelay=true"}
+{"t":"07:22:02.943","kind":"console","level":"log","where":"page:ext/panel.html","text":"[BundlerFunding] chain=100 isVelaRelay=true"}
+{"t":"07:22:12.944","kind":"console","level":"warning","where":"other:","text":"[BundlerFunding] Failed to fetch account info for chain=100: TimeoutError: request timed out after 10000ms: https://vela-relay-cf.getvela.app/v1/account/100/0xd400866e00b055b20752a826cd5c89b811de130b\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/BL8eJAU4.js:1:1341)\n    at async Qt (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:1:12542)\n    at async Gt (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:1:10151)\n    at async Object.r [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:5:2589)\n    at async d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:431)"}
+{"t":"07:22:12.944","kind":"console","level":"warning","where":"page:ext/panel.html","text":"[BundlerFunding] Failed to fetch account info for chain=100: TimeoutError: request timed out after 10000ms: https://vela-relay-cf.getvela.app/v1/account/100/0xd400866e00b055b20752a826cd5c89b811de130b\n    at d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/BL8eJAU4.js:1:1341)\n    at async Qt (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:1:12542)\n    at async Gt (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:1:10151)\n    at async Object.r [as execute] (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DJJbUkWN.js:5:2589)\n    at async d (chrome-extension://bjbdmnmpgcfkocfcfdocopkioacojkhl/app/immutable/chunks/DNQI-ZTl.js:1:431)"}
+{"t":"07:22:12.944","kind":"console","level":"log","where":"other:","text":"[BundlerFunding] account info: unreachable"}
+{"t":"07:22:12.944","kind":"console","level":"log","where":"page:ext/panel.html","text":"[BundlerFunding] account info: unreachable"}
+{"t":"07:22:12.950","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/v1/account/100/0xd400866e00b055b20752a826cd5c89b811de130b","method":"GET","error":"net::ERR_ABORTED","canceled":true,"ms":10012}
+{"t":"07:22:12.950","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/v1/account/100/0xd400866e00b055b20752a826cd5c89b811de130b","method":"GET","error":"net::ERR_ABORTED","canceled":true,"ms":10012}
+{"t":"07:22:13.293","kind":"console","level":"log","where":"other:","text":"[UserOp] Estimating gas, sender: 0xD400866e00B055B20752a826CD5C89b811de130b nonce: 0x0000000000000000000000000000000000000000000000000000000000000016"}
+{"t":"07:22:13.293","kind":"console","level":"log","where":"page:ext/panel.html","text":"[UserOp] Estimating gas, sender: 0xD400866e00B055B20752a826CD5C89b811de130b nonce: 0x0000000000000000000000000000000000000000000000000000000000000016"}
+{"t":"07:22:28.294","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":15001}
+{"t":"07:22:28.294","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":15001}
+{"t":"07:22:44.011","kind":"console","level":"error","where":"other:","text":"[InBand] Gas estimation failed, using defaults: All bundler endpoints failed for chain 100"}
+{"t":"07:22:44.011","kind":"console","level":"error","where":"page:ext/panel.html","text":"[InBand] Gas estimation failed, using defaults: All bundler endpoints failed for chain 100"}
+{"t":"07:22:44.012","kind":"console","level":"log","where":"other:","text":"[InBand] signing DISPLAYED quote: feeToken=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c"}
+{"t":"07:22:44.012","kind":"console","level":"log","where":"page:ext/panel.html","text":"[InBand] signing DISPLAYED quote: feeToken=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c"}
+{"t":"07:22:44.018","kind":"console","level":"log","where":"other:","text":"[UserOp] Submitting: {\"sender\":\"0xD400866e00B055B20752a826CD5C89b811de130b\",\"nonce\":\"0x0000000000000000000000000000000000000000000000000000000000000016\",\"initCodePresent\":false,\"factory\":\"(none)\",\"factoryDataLen\":0,\"callDataLen\":906,\"signatureLen\":860,\"verificationGasLimit\":\"0x493e0\",\"callGasLimit\":\"0x30d40\",\"maxFeePerGas\":\"0x0\"}"}
+{"t":"07:22:44.018","kind":"console","level":"log","where":"page:ext/panel.html","text":"[UserOp] Submitting: {\"sender\":\"0xD400866e00B055B20752a826CD5C89b811de130b\",\"nonce\":\"0x0000000000000000000000000000000000000000000000000000000000000016\",\"initCodePresent\":false,\"factory\":\"(none)\",\"factoryDataLen\":0,\"callDataLen\":906,\"signatureLen\":860,\"verificationGasLimit\":\"0x493e0\",\"callGasLimit\":\"0x30d40\",\"maxFeePerGas\":\"0x0\"}"}
+{"t":"07:22:44.020","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":15010}
+{"t":"07:22:44.020","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":15010}
+{"t":"07:22:59.019","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":15001}
+{"t":"07:22:59.019","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":15001}
+{"t":"07:23:14.276","kind":"netfail","where":"page:ext/panel.html","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":15026}
+{"t":"07:23:14.279","kind":"netfail","where":"other:","url":"https://vela-relay-cf.getvela.app/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":15026}
+{"t":"07:25:40.879","kind":"console","level":"log","where":"page:about:blank","text":"[Vela] EIP-1193/6963 provider installed app.getvela 2a5ab1ec-f07d-4343-9e0c-2bb65013dc93"}
+{"t":"07:25:40.879","kind":"console","level":"log","where":"page:about:blank","text":"[Vela] EIP-1193/6963 provider installed app.getvela 2a5ab1ec-f07d-4343-9e0c-2bb65013dc93"}
+{"t":"07:50:07.394","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.mainnet.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:07.394","kind":"netfail","where":"other:","url":"https://rpc.mainnet.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:07.477","kind":"netfail","where":"page:ext/panel.html","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:07.478","kind":"netfail","where":"other:","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:07.478","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:07.478","kind":"netfail","where":"other:","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:07.570","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.xlayer.tech/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:07.570","kind":"netfail","where":"other:","url":"https://rpc.xlayer.tech/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:15.396","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:15.396","kind":"netfail","where":"other:","url":"https://rpc.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:15.479","kind":"netfail","where":"page:ext/panel.html","url":"https://bnb.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:50:15.479","kind":"netfail","where":"other:","url":"https://bnb.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:50:15.480","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:15.480","kind":"netfail","where":"other:","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:15.572","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayer.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:15.573","kind":"netfail","where":"other:","url":"https://xlayer.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:23.397","kind":"netfail","where":"page:ext/panel.html","url":"https://tempo-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:23.397","kind":"netfail","where":"other:","url":"https://tempo-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:23.481","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc-rpc-public.chainpulse.cc/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:23.481","kind":"netfail","where":"other:","url":"https://bsc-rpc-public.chainpulse.cc/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:23.481","kind":"netfail","where":"page:ext/panel.html","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:23.481","kind":"netfail","where":"other:","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:23.574","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayerrpc.okx.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:23.574","kind":"netfail","where":"other:","url":"https://xlayerrpc.okx.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:31.399","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/4217","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:31.399","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/4217","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:31.483","kind":"netfail","where":"page:ext/panel.html","url":"https://xrpc.cl/bsc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:31.483","kind":"netfail","where":"other:","url":"https://xrpc.cl/bsc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:31.483","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:31.483","kind":"netfail","where":"other:","url":"https://gnosis.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:31.575","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/196","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:31.575","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/196","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:39.400","kind":"netfail","where":"page:ext/panel.html","url":"https://tempo-mainnet.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:39.401","kind":"netfail","where":"other:","url":"https://tempo-mainnet.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:39.484","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/56","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:39.484","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/56","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:39.484","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.oat.farm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:39.485","kind":"netfail","where":"other:","url":"https://gnosis.oat.farm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:39.577","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.nodeflare.app/xlayer/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:39.577","kind":"netfail","where":"other:","url":"https://rpc.nodeflare.app/xlayer/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:47.487","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.nodeflare.app/bnb/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:50:47.487","kind":"netfail","where":"other:","url":"https://rpc.nodeflare.app/bnb/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:50:47.487","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.gnosis.gateway.fm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:47.487","kind":"netfail","where":"other:","url":"https://rpc.gnosis.gateway.fm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:47.579","kind":"netfail","where":"page:ext/panel.html","url":"https://endpoints.omniatech.io/v1/xlayer/mainnet/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:47.579","kind":"netfail","where":"other:","url":"https://endpoints.omniatech.io/v1/xlayer/mainnet/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:47.654","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.mainnet.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:47.654","kind":"netfail","where":"other:","url":"https://rpc.mainnet.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:55.490","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:50:55.490","kind":"netfail","where":"other:","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:50:55.490","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.ankr.com/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:55.490","kind":"netfail","where":"other:","url":"https://rpc.ankr.com/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:55.582","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.ankr.com/xlayer","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:55.582","kind":"netfail","where":"other:","url":"https://rpc.ankr.com/xlayer","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:55.656","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:50:55.656","kind":"netfail","where":"other:","url":"https://rpc.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:03.491","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:03.491","kind":"netfail","where":"other:","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:03.584","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayer.rpc.blxrbdn.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:03.584","kind":"netfail","where":"other:","url":"https://xlayer.rpc.blxrbdn.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:03.607","kind":"netfail","where":"page:ext/panel.html","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:03.607","kind":"netfail","where":"other:","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:03.658","kind":"netfail","where":"page:ext/panel.html","url":"https://tempo-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:03.658","kind":"netfail","where":"other:","url":"https://tempo-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:11.493","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis-mainnet.public.blastapi.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:11.493","kind":"netfail","where":"other:","url":"https://gnosis-mainnet.public.blastapi.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:11.586","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayer-mainnet.rpc.sentio.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:11.586","kind":"netfail","where":"other:","url":"https://xlayer-mainnet.rpc.sentio.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:11.609","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:11.609","kind":"netfail","where":"other:","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:11.660","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/4217","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:11.660","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/4217","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:19.494","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:19.494","kind":"netfail","where":"other:","url":"https://gnosis.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:19.586","kind":"netfail","where":"page:ext/panel.html","url":"https://196.rpc.thirdweb.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:19.586","kind":"netfail","where":"other:","url":"https://196.rpc.thirdweb.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:19.610","kind":"netfail","where":"page:ext/panel.html","url":"https://bnb.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:19.611","kind":"netfail","where":"other:","url":"https://bnb.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:19.660","kind":"netfail","where":"page:ext/panel.html","url":"https://tempo-mainnet.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:19.660","kind":"netfail","where":"other:","url":"https://tempo-mainnet.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:27.496","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.blockpi.network/v1/rpc/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:27.497","kind":"netfail","where":"other:","url":"https://gnosis.blockpi.network/v1/rpc/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:27.612","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc-rpc-public.chainpulse.cc/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:27.612","kind":"netfail","where":"other:","url":"https://bsc-rpc-public.chainpulse.cc/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:27.675","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.mainnet.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:27.675","kind":"netfail","where":"other:","url":"https://rpc.mainnet.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:27.828","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.xlayer.tech/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:27.828","kind":"netfail","where":"other:","url":"https://rpc.xlayer.tech/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:35.498","kind":"netfail","where":"page:ext/panel.html","url":"https://web3endpoints.com/gnosischain-mainnet","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:35.498","kind":"netfail","where":"other:","url":"https://web3endpoints.com/gnosischain-mainnet","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:35.613","kind":"netfail","where":"page:ext/panel.html","url":"https://xrpc.cl/bsc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:35.613","kind":"netfail","where":"other:","url":"https://xrpc.cl/bsc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:35.677","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:35.677","kind":"netfail","where":"other:","url":"https://rpc.tempo.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:35.829","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayer.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:35.829","kind":"netfail","where":"other:","url":"https://xlayer.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:43.500","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:43.500","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/100","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:43.615","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/56","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:51:43.616","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/56","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:51:43.679","kind":"netfail","where":"page:ext/panel.html","url":"https://tempo-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:43.679","kind":"netfail","where":"other:","url":"https://tempo-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:43.830","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayerrpc.okx.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:43.830","kind":"netfail","where":"other:","url":"https://xlayerrpc.okx.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:51.501","kind":"netfail","where":"page:ext/panel.html","url":"https://xdai-archive.blockscout.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:51.501","kind":"netfail","where":"other:","url":"https://xdai-archive.blockscout.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:51.616","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.nodeflare.app/bnb/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:51.616","kind":"netfail","where":"other:","url":"https://rpc.nodeflare.app/bnb/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:51.681","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/4217","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:51.681","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/4217","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:51.832","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/196","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:51.833","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/196","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:59.502","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis-public.nodies.app/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:59.503","kind":"netfail","where":"other:","url":"https://gnosis-public.nodies.app/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:51:59.683","kind":"netfail","where":"page:ext/panel.html","url":"https://tempo-mainnet.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:51:59.683","kind":"netfail","where":"other:","url":"https://tempo-mainnet.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:51:59.693","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:59.693","kind":"netfail","where":"other:","url":"https://bsc.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:59.834","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.nodeflare.app/xlayer/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:51:59.834","kind":"netfail","where":"other:","url":"https://rpc.nodeflare.app/xlayer/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:07.504","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.ap-southeast-1.gateway.fm/v4/gnosis/non-archival/mainnet","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:07.504","kind":"netfail","where":"other:","url":"https://rpc.ap-southeast-1.gateway.fm/v4/gnosis/non-archival/mainnet","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:07.696","kind":"netfail","where":"page:ext/panel.html","url":"https://bnb.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:07.696","kind":"netfail","where":"other:","url":"https://bnb.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:07.836","kind":"netfail","where":"page:ext/panel.html","url":"https://endpoints.omniatech.io/v1/xlayer/mainnet/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:07.837","kind":"netfail","where":"other:","url":"https://endpoints.omniatech.io/v1/xlayer/mainnet/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:15.505","kind":"netfail","where":"page:ext/panel.html","url":"https://endpoints.omniatech.io/v1/gnosis/mainnet/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:15.506","kind":"netfail","where":"other:","url":"https://endpoints.omniatech.io/v1/gnosis/mainnet/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:15.697","kind":"netfail","where":"page:ext/panel.html","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:15.698","kind":"netfail","where":"other:","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:15.838","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.ankr.com/xlayer","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:15.838","kind":"netfail","where":"other:","url":"https://rpc.ankr.com/xlayer","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:23.507","kind":"netfail","where":"page:ext/panel.html","url":"https://public.1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:23.507","kind":"netfail","where":"other:","url":"https://public.1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:23.699","kind":"netfail","where":"page:ext/panel.html","url":"https://bsc-rpc-public.chainpulse.cc/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:23.699","kind":"netfail","where":"other:","url":"https://bsc-rpc-public.chainpulse.cc/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:23.840","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayer.rpc.blxrbdn.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:23.840","kind":"netfail","where":"other:","url":"https://xlayer.rpc.blxrbdn.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:27.118","kind":"netfail","where":"page:ext/panel.html","url":"https://ethereum-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:27.118","kind":"netfail","where":"other:","url":"https://ethereum-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:31.510","kind":"netfail","where":"page:ext/panel.html","url":"https://gno-mainnet.gateway.tatum.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:31.510","kind":"netfail","where":"other:","url":"https://gno-mainnet.gateway.tatum.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:31.701","kind":"netfail","where":"page:ext/panel.html","url":"https://xrpc.cl/bsc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:52:31.701","kind":"netfail","where":"other:","url":"https://xrpc.cl/bsc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:52:31.842","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayer-mainnet.rpc.sentio.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:52:31.842","kind":"netfail","where":"other:","url":"https://xlayer-mainnet.rpc.sentio.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:52:35.119","kind":"netfail","where":"page:ext/panel.html","url":"https://1rpc.io/eth","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:35.119","kind":"netfail","where":"other:","url":"https://1rpc.io/eth","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:39.511","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.therpc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:39.511","kind":"netfail","where":"other:","url":"https://gnosis.therpc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:39.703","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/56","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:39.703","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/56","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:39.846","kind":"netfail","where":"page:ext/panel.html","url":"https://196.rpc.thirdweb.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:52:39.846","kind":"netfail","where":"other:","url":"https://196.rpc.thirdweb.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:52:43.121","kind":"netfail","where":"page:ext/panel.html","url":"https://eth.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:43.121","kind":"netfail","where":"other:","url":"https://eth.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:47.512","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.api.pocket.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:52:47.512","kind":"netfail","where":"other:","url":"https://gnosis.api.pocket.network/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:52:47.704","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.nodeflare.app/bnb/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:47.704","kind":"netfail","where":"other:","url":"https://rpc.nodeflare.app/bnb/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:47.882","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.xlayer.tech/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:52:47.882","kind":"netfail","where":"other:","url":"https://rpc.xlayer.tech/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8001}
+{"t":"07:52:51.123","kind":"netfail","where":"page:ext/panel.html","url":"https://mainnet.gateway.tenderly.co/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:51.123","kind":"netfail","where":"other:","url":"https://mainnet.gateway.tenderly.co/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:55.626","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:55.626","kind":"netfail","where":"other:","url":"https://rpc.gnosischain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:55.884","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayer.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:55.884","kind":"netfail","where":"other:","url":"https://xlayer.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:59.125","kind":"netfail","where":"page:ext/panel.html","url":"https://eth-pokt.nodies.app/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:52:59.125","kind":"netfail","where":"other:","url":"https://eth-pokt.nodies.app/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:03.627","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:03.627","kind":"netfail","where":"other:","url":"https://gnosis-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:03.885","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayerrpc.okx.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:03.885","kind":"netfail","where":"other:","url":"https://xlayerrpc.okx.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:07.127","kind":"netfail","where":"page:ext/panel.html","url":"https://eth.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:07.127","kind":"netfail","where":"other:","url":"https://eth.api.onfinality.io/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:11.630","kind":"netfail","where":"page:ext/panel.html","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:53:11.630","kind":"netfail","where":"other:","url":"https://1rpc.io/gnosis","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8003}
+{"t":"07:53:11.886","kind":"netfail","where":"page:ext/panel.html","url":"https://lb.routeme.sh/rpc/evm/196","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:11.886","kind":"netfail","where":"other:","url":"https://lb.routeme.sh/rpc/evm/196","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:15.128","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.mevblocker.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:15.129","kind":"netfail","where":"other:","url":"https://rpc.mevblocker.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:19.632","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:19.632","kind":"netfail","where":"other:","url":"https://gnosis.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:19.888","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.nodeflare.app/xlayer/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:19.888","kind":"netfail","where":"other:","url":"https://rpc.nodeflare.app/xlayer/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:23.130","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.mevblocker.io/fast","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:23.130","kind":"netfail","where":"other:","url":"https://rpc.mevblocker.io/fast","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:27.633","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosis.oat.farm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:27.634","kind":"netfail","where":"other:","url":"https://gnosis.oat.farm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:27.890","kind":"netfail","where":"page:ext/panel.html","url":"https://endpoints.omniatech.io/v1/xlayer/mainnet/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:27.890","kind":"netfail","where":"other:","url":"https://endpoints.omniatech.io/v1/xlayer/mainnet/public","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:31.132","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.mevblocker.io/noreverts","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:31.132","kind":"netfail","where":"other:","url":"https://rpc.mevblocker.io/noreverts","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:35.635","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.gnosis.gateway.fm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:35.635","kind":"netfail","where":"other:","url":"https://rpc.gnosis.gateway.fm/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:35.893","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.ankr.com/xlayer","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:35.893","kind":"netfail","where":"other:","url":"https://rpc.ankr.com/xlayer","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:39.135","kind":"netfail","where":"page:ext/panel.html","url":"https://cloudflare-eth.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:39.135","kind":"netfail","where":"other:","url":"https://cloudflare-eth.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:53:41.007","kind":"netfail","where":"other:","url":"https://xlayer.rpc.blxrbdn.com/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":5116}
+{"t":"07:53:41.008","kind":"netfail","where":"page:ext/panel.html","url":"https://xlayer.rpc.blxrbdn.com/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":5116}
+{"t":"07:53:42.255","kind":"netfail","where":"other:","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":4989}
+{"t":"07:53:42.255","kind":"netfail","where":"page:ext/panel.html","url":"https://gnosischain-rpc.gateway.pokt.network/","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":4989}
+{"t":"07:53:42.494","kind":"netfail","where":"other:","url":"https://rpc.blocknative.com/boost","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":2827}
+{"t":"07:53:42.494","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.blocknative.com/boost","method":"POST","error":"net::ERR_CONNECTION_CLOSED","canceled":false,"ms":2827}
+{"t":"07:53:52.081","kind":"netfail","where":"page:ext/panel.html","url":"https://polygon-bor-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8006}
+{"t":"07:53:52.081","kind":"netfail","where":"other:","url":"https://polygon-bor-rpc.publicnode.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8006}
+{"t":"07:53:52.084","kind":"netfail","where":"page:ext/panel.html","url":"https://arb1.arbitrum.io/rpc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.084","kind":"netfail","where":"other:","url":"https://arb1.arbitrum.io/rpc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.086","kind":"netfail","where":"page:ext/panel.html","url":"https://mainnet.optimism.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.086","kind":"netfail","where":"other:","url":"https://mainnet.optimism.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.087","kind":"netfail","where":"page:ext/panel.html","url":"https://mainnet.base.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.087","kind":"netfail","where":"other:","url":"https://mainnet.base.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://api.avax.network/ext/bc/C/rpc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8011}
+{"t":"07:53:52.089","kind":"netfail","where":"other:","url":"https://api.avax.network/ext/bc/C/rpc","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8011}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://mainnet.unichain.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8010}
+{"t":"07:53:52.089","kind":"netfail","where":"other:","url":"https://mainnet.unichain.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8010}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.monad.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.089","kind":"netfail","where":"other:","url":"https://rpc.monad.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://worldchain.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.089","kind":"netfail","where":"other:","url":"https://worldchain.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.mainnet.arc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.089","kind":"netfail","where":"other:","url":"https://rpc.mainnet.arc.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.stable.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.089","kind":"netfail","where":"other:","url":"https://rpc.stable.xyz/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8009}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.soneium.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.089","kind":"netfail","where":"other:","url":"https://rpc.soneium.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://megaeth.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.089","kind":"netfail","where":"other:","url":"https://megaeth.drpc.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.mainnet.chain.robinhood.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.089","kind":"netfail","where":"other:","url":"https://rpc.mainnet.chain.robinhood.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.089","kind":"netfail","where":"page:ext/panel.html","url":"https://public-en.node.kaia.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.090","kind":"netfail","where":"other:","url":"https://public-en.node.kaia.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8008}
+{"t":"07:53:52.090","kind":"netfail","where":"page:ext/panel.html","url":"https://forno.celo.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8007}
+{"t":"07:53:52.090","kind":"netfail","where":"other:","url":"https://forno.celo.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8007}
+{"t":"07:53:52.090","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc-gel.inkonchain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8007}
+{"t":"07:53:52.090","kind":"netfail","where":"other:","url":"https://rpc-gel.inkonchain.com/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8007}
+{"t":"07:53:52.090","kind":"netfail","where":"page:ext/panel.html","url":"https://rpc.plume.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8007}
+{"t":"07:53:52.090","kind":"netfail","where":"other:","url":"https://rpc.plume.org/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8007}
+{"t":"07:54:07.470","kind":"netfail","where":"page:ext/panel.html","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"07:54:07.470","kind":"netfail","where":"other:","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"08:06:17.542","kind":"netfail","where":"page:ext/panel.html","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}
+{"t":"08:06:17.542","kind":"netfail","where":"other:","url":"https://public-bsc.nownodes.io/","method":"POST","error":"net::ERR_ABORTED","canceled":true,"ms":8002}

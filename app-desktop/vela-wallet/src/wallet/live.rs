@@ -6,7 +6,9 @@
 
 use gpui::SharedString;
 
-use vela_core::app::activity_feed::{FeedDirection, FeedItem, FeedRow, FeedTxKind, FeedView};
+use vela_core::app::activity_feed::{
+    FeedDirection, FeedItem, FeedRow, FeedTxKind, FeedTxStatus, FeedView,
+};
 use vela_core::app::balance_dashboard::{BalanceNotice, BalanceToken, BalanceView};
 use vela_core::l10n::currency::format_fiat;
 use vela_core::l10n::number::format_token_amount;
@@ -614,6 +616,7 @@ mod tests {
             intent: None,
             balance_changes: None,
             calldata: None,
+            call_data: None,
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -728,8 +731,173 @@ mod tests {
             day_start_ms: 0.0,
             tx_hash: None,
             batch: None,
+            kind: if incoming {
+                vela_core::app::activity_feed::FeedTxKind::Receive
+            } else {
+                vela_core::app::activity_feed::FeedTxKind::Send
+            },
+            status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+            site: None,
+            counterparty_role: Default::default(),
             dapp: None,
         }
+    }
+
+    fn flow_strings() -> crate::flows::FlowStrings {
+        crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env())
+    }
+
+    /// The feed core over `records`, loaded the way the executor answers it.
+    fn feed_of(records: Vec<vela_core::app::activity_feed::FeedTxRecord>) -> FeedView {
+        use vela_core::app::activity_feed::{FeedOperation, FeedShellResult};
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let mut pending = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        for _ in 0..16 {
+            let Some(next) = pending.pop() else {
+                break;
+            };
+            let result = match &next.operation {
+                FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
+                    records: records.clone(),
+                    now_ms: 1_756_000_000_000.0,
+                    read_id: *read_id,
+                },
+                FeedOperation::ScanIncomingTransfers { .. } => {
+                    FeedShellResult::SyncCompleted { new_count: 0 }
+                }
+                FeedOperation::ResolveRecipientIdentity { addr } => {
+                    FeedShellResult::AliasResolved {
+                        addr: addr.clone(),
+                        name: None,
+                    }
+                }
+                FeedOperation::Timer { .. } => continue,
+                FeedOperation::DeleteTxRecord { id } => {
+                    FeedShellResult::DeleteCommitted { id: id.clone() }
+                }
+                FeedOperation::Haptic => FeedShellResult::HapticPlayed,
+            };
+            pending.extend(host.resolve(next.id, result));
+        }
+        host.view()
+    }
+
+    /// A dApp's transaction as `sign_request::persist_record` stores it.
+    fn dapp_record(
+        id: &str,
+        status: vela_core::app::activity_feed::FeedTxStatus,
+    ) -> vela_core::app::activity_feed::FeedTxRecord {
+        vela_core::app::activity_feed::FeedTxRecord {
+            id: id.to_owned(),
+            user_op_hash: "0xop".to_owned(),
+            tx_hash: String::new(),
+            from: "0xme".to_owned(),
+            to: "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".to_owned(),
+            to_name: None,
+            value: "0x38d7ea4c68000".to_owned(),
+            symbol: "xDAI".to_owned(),
+            decimals: 18,
+            logo_urls: None,
+            chain_id: 100,
+            timestamp: 1_756_000_000.0,
+            day_start_ms: 0.0,
+            status,
+            kind: Some(vela_core::app::activity_feed::FeedTxKind::DappTx),
+            usd: None,
+            dapp_url: Some("http://127.0.0.1:8137".to_owned()),
+            intent: None,
+            balance_changes: None,
+            calldata: None,
+            call_data: None,
+        }
+    }
+
+    /// Spec 082 L-D3 (T072, RG1–RG2): a dApp's transaction is in Activity,
+    /// titled "dApp transaction", its subtitle the site that asked under its
+    /// status — "处理中 · 127.0.0.1:8137" — and a failed one says so.
+    #[test]
+    fn a_dapp_transaction_is_a_row_with_its_site_and_status() {
+        use vela_core::app::activity_feed::FeedTxStatus;
+        let s = strings();
+        for (status, word) in [
+            (FeedTxStatus::Pending, s.status_pending.clone()),
+            (FeedTxStatus::Failed, s.status_failed.clone()),
+        ] {
+            let view = feed_of(vec![dapp_record("dapp-1-tx", status)]);
+            let rows = activity_rows(&view, &s, &flow_strings(), false);
+            assert_eq!(rows.len(), 1, "{status:?}: the row is in Activity");
+            let row = &rows[0];
+            assert!(matches!(row.kind, ActivityKind::Dapp));
+            // Titled by what it did (083 H2): no intent was recorded.
+            assert_eq!(row.title, s.intent_contract_call);
+            assert_eq!(
+                row.subtitle.as_ref(),
+                format!("{word} · 127.0.0.1:8137"),
+                "{status:?}"
+            );
+            assert_eq!(row.amount.as_ref(), "\u{2212}0.001");
+        }
+        // Confirmed: the site alone.
+        let view = feed_of(vec![dapp_record("dapp-2-tx", FeedTxStatus::Confirmed)]);
+        let rows = activity_rows(&view, &s, &flow_strings(), false);
+        assert_eq!(rows[0].subtitle.as_ref(), "127.0.0.1:8137");
+    }
+
+    /// With no site the recipient names it, and with neither the chain.
+    #[test]
+    fn a_dapp_row_without_a_site_falls_back_to_recipient_then_chain() {
+        let s = strings();
+        let mut dapp = item("d", false, None, "");
+        dapp.kind = vela_core::app::activity_feed::FeedTxKind::DappTx;
+        assert_eq!(
+            activity_row(&dapp, &s, false).subtitle.as_ref(),
+            "0xAbCd…0001"
+        );
+        dapp.counterparty = None;
+        assert_eq!(
+            activity_row(&dapp, &s, false).subtitle.as_ref(),
+            crate::flows::live::chain_name(100)
+        );
+        assert_eq!(activity_row(&dapp, &s, false).amount.as_ref(), "");
+    }
+
+    /// Spec 082 RD10 / RG5 (T073): the home's Activity — rows, skeletons
+    /// while nothing has been ruled, else the core's empty line: the plain one
+    /// with its caption, or the network's own with none under a chain filter.
+    #[test]
+    fn the_home_activity_has_three_states_under_both_filters() {
+        let s = strings();
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let _ = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0xme".to_owned(),
+        });
+        let all = host.view();
+        let _ = host.dispatch(FeedEvent::ChainFilterChanged {
+            chain_id: Some(100),
+        });
+        let narrowed = host.view();
+        for feed in [&all, &narrowed] {
+            assert_eq!(home_activity(true, true, feed, &s), HomeActivity::Rows);
+            assert_eq!(home_activity(true, false, feed, &s), HomeActivity::Rows);
+            assert_eq!(home_activity(false, true, feed, &s), HomeActivity::Loading);
+        }
+        assert_eq!(
+            home_activity(false, false, &all, &s),
+            HomeActivity::Empty {
+                title: s.empty_activity_title.clone(),
+                caption: s.empty_activity_caption.clone(),
+            }
+        );
+        assert_eq!(
+            home_activity(false, false, &narrowed, &s),
+            HomeActivity::Empty {
+                title: s.empty_activity_network.clone(),
+                caption: SharedString::default(),
+            }
+        );
+        assert_ne!(s.empty_activity_title, s.empty_activity_network);
     }
 
     /// Day headers are dropped for the home preview — the mocks draw a flat
@@ -1413,6 +1581,10 @@ mod tests {
                         day_start_ms: 0.0,
                         tx_hash: None,
                         batch: None,
+                        kind: vela_core::app::activity_feed::FeedTxKind::Receive,
+                        status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+                        site: None,
+                        counterparty_role: Default::default(),
                         dapp: None,
                     },
                 }],
@@ -2069,7 +2241,7 @@ pub fn asset_detail(
         // Matched on symbol AND chain: two chains' USDC are different money.
         activity: own
             .iter()
-            .map(|item| activity_row(feed, item, s, view.hidden))
+            .map(|item| activity_row(item, s, view.hidden))
             .collect(),
         // …and the id behind each, from the SAME walk, so row N opens
         // record N.
@@ -2138,7 +2310,7 @@ pub fn activity_rows(
                 day = Some(crate::flows::live::day_label(*day_start_ms, flow));
             }
             FeedRow::Item { item } => {
-                let mut model = activity_row(view, item, s, hidden);
+                let mut model = activity_row(item, s, hidden);
                 model.day = day.take();
                 rows.push(model);
             }
@@ -2147,37 +2319,76 @@ pub fn activity_rows(
     rows
 }
 
-/// What kind of event a row is.
-///
-/// `FeedItem` carries only a direction; the RECORD carries the kind, and
-/// `FeedView::transactions` is the account-scoped record list the core exposes
-/// beside the rows. Looking it up there keeps the dApp distinction the mocks
-/// draw — a swap is not "sent", and labelling it so loses the one word that
-/// explains where the money went.
-pub(crate) fn kind_of(view: &FeedView, item: &FeedItem, incoming: bool) -> ActivityKind {
-    let record_kind = view
-        .transactions
-        .iter()
-        .find(|record| record.id == item.id)
-        .and_then(|record| record.kind);
-    match record_kind {
-        Some(FeedTxKind::DappTx) => ActivityKind::Dapp,
-        // A signature is not money moving, but the home preview has no row for
-        // it; treating it as the direction says is the least wrong of the three
-        // shapes available, and the full Activity screen draws it properly.
-        _ if incoming => ActivityKind::Received,
-        _ => ActivityKind::Sent,
+/// What the home's Activity strip shows (spec 082 RD10, RG5, G1).
+#[derive(Clone, Debug, PartialEq)]
+pub enum HomeActivity {
+    /// Rows to draw.
+    Rows,
+    /// Nothing yet, and the balance core has not ruled: skeletons, never
+    /// "nothing happened" before anyone looked.
+    Loading,
+    /// Nothing, and it is known: the core's empty line — the network's own
+    /// when the sidebar narrows to one chain, with no caption then.
+    Empty {
+        title: SharedString,
+        caption: SharedString,
+    },
+}
+
+/// The home Activity's state. Which empty line is the core's
+/// (`FeedView.home_empty_key`, from the filter the page told it); loading
+/// versus empty is the shell's, from `BalanceView.balance_unknown` — the
+/// iPhone's rows / loading / empty (`WalletLive.swift:88-103`).
+#[must_use]
+pub fn home_activity(
+    has_rows: bool,
+    balance_unknown: bool,
+    feed: &FeedView,
+    s: &WalletStrings,
+) -> HomeActivity {
+    if has_rows {
+        return HomeActivity::Rows;
+    }
+    if balance_unknown {
+        return HomeActivity::Loading;
+    }
+    match feed.home_empty_key.as_str() {
+        "home.emptyNoActivityNetwork" => HomeActivity::Empty {
+            title: s.empty_activity_network.clone(),
+            caption: SharedString::default(),
+        },
+        _ => HomeActivity::Empty {
+            title: s.empty_activity_title.clone(),
+            caption: s.empty_activity_caption.clone(),
+        },
     }
 }
 
-pub(crate) fn activity_row(
-    view: &FeedView,
-    item: &FeedItem,
-    s: &WalletStrings,
-    hidden: bool,
-) -> ActivityRowModel {
+/// One feed item as a row (spec 082 RG1, RG2) — everything it says is the
+/// core's: what it is (`FeedItem.kind`), where it stands
+/// (`FeedItem.status`) and, for a dApp's transaction, the site that asked
+/// (`FeedItem.site`). The desktop's own record lookup is gone.
+///
+/// The subtitle is who it was with — for a dApp's transaction the site
+/// verbatim, else the recipient, else the chain — and a row that is not
+/// confirmed leads with its status, "处理中 · 127.0.0.1:8137": a pending or
+/// failed transaction must never read like one that landed.
+pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> ActivityRowModel {
     let incoming = item.direction == FeedDirection::In;
-    let kind = kind_of(view, item, incoming);
+    let kind = match item.kind {
+        FeedTxKind::DappTx => ActivityKind::Dapp,
+        FeedTxKind::Receive => ActivityKind::Received,
+        FeedTxKind::Send => ActivityKind::Sent,
+        // Signatures and connections never become rows (the core's
+        // `accept()`); should one arrive, it is drawn by its direction.
+        FeedTxKind::SignMessage | FeedTxKind::SignTypedData | FeedTxKind::Connect => {
+            if incoming {
+                ActivityKind::Received
+            } else {
+                ActivityKind::Sent
+            }
+        }
+    };
 
     // Who it was with: the resolved alias if the core has one, else a shortened
     // address, else nothing — a batch row has no single counterparty.
@@ -2185,20 +2396,36 @@ pub(crate) fn activity_row(
         .alias
         .clone()
         .or_else(|| item.counterparty.as_ref().map(|a| shorten_address(a)));
-    let to_who = who.map_or_else(
-        || SharedString::from(""),
-        |name| {
-            SharedString::from(crate::wallet::fill(
+    // A dApp's transaction is labelled with the site that asked (083 H2,
+    // spec 082 RG2) — the router it called is an address nobody chose.
+    let site = item
+        .dapp
+        .as_ref()
+        .and_then(|dapp| dapp.site.clone())
+        .or_else(|| item.site.clone());
+    let with = match (kind, site) {
+        (_, Some(site)) => site,
+        (ActivityKind::Dapp, None) => {
+            who.unwrap_or_else(|| crate::flows::live::chain_name(item.chain_id))
+        }
+        _ => who.map_or_else(String::new, |name| {
+            crate::wallet::fill(
                 if incoming { &s.from_name } else { &s.to_name },
                 "name",
                 &name,
-            ))
-        },
-    );
-    // A dApp's transaction is labelled with the site that asked (083 H2) —
-    // the router it called is an address nobody chose.
-    let site = item.dapp.as_ref().and_then(|dapp| dapp.site.clone());
-    let subtitle = site.map_or(to_who, SharedString::from);
+            )
+        }),
+    };
+    let status = match item.status {
+        FeedTxStatus::Confirmed => None,
+        FeedTxStatus::Pending => Some(&s.status_pending),
+        FeedTxStatus::Failed => Some(&s.status_failed),
+    };
+    let subtitle = match (status, with.is_empty()) {
+        (None, _) => SharedString::from(with),
+        (Some(status), true) => status.clone(),
+        (Some(status), false) => SharedString::from(format!("{status} · {with}")),
+    };
 
     ActivityRowModel {
         kind,

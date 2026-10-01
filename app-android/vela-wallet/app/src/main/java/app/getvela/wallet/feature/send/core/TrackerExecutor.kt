@@ -31,6 +31,9 @@ class TrackerExecutor(
 
         /** The confirmed receipt's logs, for `token_trust::ReceiptLogsConfirmed`. */
         fun receiptLogsConfirmed(from: String, chainId: Int, logs: List<TrustReceiptLog>)
+
+        /** Spec 082 RE8: an op of ours landed on [chainId] — re-read the balances. */
+        fun holdingsMoved(chainId: Int) {}
     }
 
     /** Logs by hash, from the receipt that resolved it, until `notify_confirmed` takes them. */
@@ -43,22 +46,37 @@ class TrackerExecutor(
             if (answer == null) {
                 TrackShellResult.StatusUnavailable(operation.user_op_hash, now())
             } else {
-                TrackShellResult.Status(operation.user_op_hash, answer.first, answer.second, now())
+                TrackShellResult.Status(operation.user_op_hash, answer.status, answer.stage, now(), answer.txHash)
             }
         }
         TrackOperation.LoadPendingTxs -> TrackShellResult.RecordsLoaded(
-            records = feed.pendingRecords().mapNotNull { row ->
-                val hash = row.optString("userOpHash").ifBlank { return@mapNotNull null }
-                TrackPendingRecord(
-                    record_id = row.optString("id").ifBlank { hash },
-                    user_op_hash = hash,
-                    chain_id = row.optInt("chainId"),
-                    // The feed keeps seconds; the tracker's clock is milliseconds.
-                    submitted_at_ms = row.optDouble("timestamp", 0.0) * 1000.0,
-                )
-            },
+            records = feed.pendingRecords().mapNotNull(::pendingRecord),
             now_ms = now(),
         )
+        // Ruling 8: the pool's answer as it came — the core judges a range
+        // error, never this file.
+        is TrackOperation.FindOpEvent -> {
+            val answer = relay.findOpEvent(
+                chainId = operation.chain_id,
+                entryPoint = operation.entry_point,
+                topic0 = operation.topic0,
+                userOpHash = operation.user_op_hash,
+                fromBlock = operation.from_block,
+                toBlock = operation.to_block,
+            )
+            TrackShellResult.OpEvent(
+                user_op_hash = operation.user_op_hash,
+                now_ms = now(),
+                logs_json = answer.logsJson,
+                error_json = answer.errorJson,
+                head_block = answer.headBlock,
+            )
+        }
+        is TrackOperation.HoldingsMoved -> {
+            VelaLog.event("tracker.holdings", "moved", "chain" to operation.chain_id)
+            ports.holdingsMoved(operation.chain_id)
+            TrackShellResult.Notified
+        }
         is TrackOperation.UpdateTxRecords -> {
             val status = when (operation.patch.status) {
                 TrackRecordStatus.Confirmed -> "confirmed"
@@ -71,6 +89,9 @@ class TrackerExecutor(
         }
         is TrackOperation.NotifyConfirmed -> {
             ports.notifyConfirmed(operation.user_op_hash, operation.chain_id, operation.tx_hash)
+            // A confirmation found by its chain event (ruling 8) has no receipt
+            // behind it, so no logs reach the trust machine: token auto-add
+            // stays with authentic receipt logs only.
             synchronized(receipts) { receipts.remove(operation.user_op_hash.lowercase()) }?.let { receipt ->
                 val sender = receipt.sender ?: senderOf(operation.user_op_hash)
                 if (sender != null && receipt.logs.isNotEmpty()) {
@@ -80,6 +101,21 @@ class TrackerExecutor(
             TrackShellResult.Notified
         }
         TrackOperation.Now -> TrackShellResult.Clock(now())
+        // Spec 082 RJ4: the relay named the bundle tx — its receipt through
+        // the chain pool, as it came; the core finds the op's own event in it.
+        is TrackOperation.TxReceipt -> {
+            val receipt = relay.txReceipt(operation.chain_id, operation.tx_hash)
+            VelaLog.event(
+                "tracker.receipt", "by tx",
+                "op" to operation.user_op_hash.take(12), "tx" to operation.tx_hash.take(12), "chain" to operation.chain_id,
+                "answer" to when (receipt) {
+                    null -> "no answer"
+                    "null" -> "not mined"
+                    else -> "mined"
+                },
+            )
+            TrackShellResult.TxReceipt(operation.user_op_hash, now(), receipt)
+        }
     }
 
     private suspend fun pollReceipt(hash: String, chainId: Int): TrackShellResult = when (val answer = relay.userOpReceipt(chainId, hash)) {
@@ -107,6 +143,37 @@ class TrackerExecutor(
         TrackOperation.LoadPendingTxs -> TrackShellResult.RecordsLoaded(emptyList(), now())
         is TrackOperation.UpdateTxRecords -> TrackShellResult.RecordsPatched
         is TrackOperation.NotifyConfirmed -> TrackShellResult.Notified
+        is TrackOperation.HoldingsMoved -> TrackShellResult.Notified
+        // No answer: the core asks the same window again next tick.
+        is TrackOperation.FindOpEvent -> TrackShellResult.OpEvent(operation.user_op_hash, now())
         TrackOperation.Now -> TrackShellResult.Clock(now())
+        // No answer: the core asks again at the receipt cadence.
+        is TrackOperation.TxReceipt -> TrackShellResult.TxReceipt(operation.user_op_hash, now(), null)
+    }
+
+    companion object {
+        /**
+         * A stored row as the tracker's pending record (spec 082 T184): the
+         * two flags the submit wrote with it come back, so a restart keeps a
+         * may-have-been-sent op following as one and its landing check starts
+         * where the submit did. A row stored before 082 has neither: `false`
+         * and unknown.
+         */
+        fun pendingRecord(row: org.json.JSONObject): TrackPendingRecord? {
+            val hash = row.optString("userOpHash").ifBlank { return null }
+            return TrackPendingRecord(
+                record_id = row.optString("id").ifBlank { hash },
+                user_op_hash = hash,
+                chain_id = row.optInt("chainId"),
+                // The feed keeps seconds; the tracker's clock is milliseconds.
+                submitted_at_ms = row.optDouble("timestamp", 0.0) * 1000.0,
+                maybe_sent = row.optBoolean("maybeSent", false),
+                submit_block = if (row.has("submitBlock") && !row.isNull("submitBlock")) {
+                    row.optLong("submitBlock", -1L).takeIf { it >= 0 }
+                } else {
+                    null
+                },
+            )
+        }
     }
 }

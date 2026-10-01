@@ -1,0 +1,49 @@
+# S7/S8 iPhone (scratch dApp on Gnosis). drop vela-relay 08:01:5x; Send 0.001 08:01:56.8
+08:01:56 CONFIG {"mode": "drop", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+08:01:56 CUT 1 live tunnels: vela-relay-cf.getvela.app
+08:01:57 DROP vela-relay-cf.getvela.app:443
+08:01:57 DROP vela-relay-cf.getvela.app:443
+08:01:57 DROP vela-relay-cf.getvela.app:443
+08:01:58 DROP vela-relay-cf.getvela.app:443
+…
+# VelaLog [fee]/[rpc] 08:01:50–08:03:20 (no [fee] line exists in this build for the relay path):
+08:01:57.503258 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:01:57.981726 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:02.339868 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:02.573029 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:06.003737 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:06.309135 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:10.066124 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:10.531086 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:14.481164 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:15.374102 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:18.703880 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:18.797475 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:23.184880 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:23.462255 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:27.199383 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:28.121571 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:31.804397 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:32.248666 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:36.446462 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:36.653351 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:40.423906 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:41.048895 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:44.718335 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:45.356740 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:49.317062 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:49.642629 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:53.871297 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:54.153110 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:02:58.313820 [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:02:58.533251 [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+# frames: reason line from 13.2 s; pass 08:02:59.9; 估算中 at +4.2 s; fee + live slide at +6.2 s
+# refresh with the relay dropped (08:05:33.8): DROP vela-relay at 08:05:34/35 (the tap asked), yet no spinner and the old fee stayed in every 0.6 s frame for 7 s
+08:05:33 CONFIG {"mode": "drop", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+08:05:33 CUT 1 live tunnels: vela-relay-cf.getvela.app
+08:05:34 DROP vela-relay-cf.getvela.app:443
+08:05:34 DROP vela-relay-cf.getvela.app:443
+08:05:35 DROP vela-relay-cf.getvela.app:443
+08:05:35 DROP vela-relay-cf.getvela.app:443
+08:05:43 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "."}
+# two ✕ → two 4001 (07:55:24→08:01:03, 08:01:57→08:06:00); Safe nonce 51 before and after

@@ -31,6 +31,25 @@ export function negotiate(tag) {
 	return LOCALES.find((l) => l === base || l.startsWith(`${base}-`)) ?? 'en';
 }
 
+/**
+ * Where the wallet keeps the language a person pinned (`localStorage`, the
+ * Expo key the preferences store writes — `PREF_KEYS.language`).
+ */
+export const LANGUAGE_KEY = 'vela.language';
+
+/**
+ * The locale the SIDE PANEL opens in (G59): the wallet's pinned language
+ * first, Chrome's UI language otherwise. "Not pinned" is the core's reading
+ * of the stored value (`prefs::language`: empty, `system` or `auto`), and a
+ * tag no page is packaged for falls back to Chrome's language rather than to
+ * a page that does not exist. `panel-locale.test.ts` pins the correspondence.
+ */
+export function panelLocale(pinned, uiLanguage) {
+	const tag = typeof pinned === 'string' ? pinned.trim() : '';
+	if (tag && LOCALES.includes(tag)) return tag;
+	return negotiate(uiLanguage);
+}
+
 export const walletPage = (locale) => `${locale}/wallet.html`;
 export const requestPage = (locale, rid) =>
 	rid === undefined

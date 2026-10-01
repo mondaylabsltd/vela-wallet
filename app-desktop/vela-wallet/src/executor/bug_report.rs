@@ -517,15 +517,14 @@ pub fn send_bug_report(payload: &BugReportPayload, endpoint: &str) -> BugReportO
     let Ok(body) = serde_json::to_string(payload) else {
         return fallback;
     };
-    let text =
-        crate::executor::proxy::with_candidates_for(endpoint, timeout_for(payload), |agent| {
-            agent
-                .post(endpoint)
-                .header("Content-Type", "application/json")
-                .send(body.as_bytes())?
-                .body_mut()
-                .read_to_string()
-        });
+    let text = crate::executor::proxy::with_routes(endpoint, timeout_for(payload), |agent| {
+        agent
+            .post(endpoint)
+            .header("Content-Type", "application/json")
+            .send(body.as_bytes())?
+            .body_mut()
+            .read_to_string()
+    });
     let text = match text {
         Ok(text) => text,
         Err(failure) => {

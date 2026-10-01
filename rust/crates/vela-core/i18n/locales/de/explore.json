@@ -62,7 +62,9 @@
     "loadOffline": "Instabile Verbindung – die Seite ließ sich nicht öffnen.",
     "loadNotFound": "Diese Website wurde nicht gefunden. Prüfe die Adresse.",
     "loadCertificate": "Das Zertifikat dieser Website ist ungültig, Vela hat sie blockiert.",
+    "loadProxy": "Ihr Proxy antwortet nicht.",
     "loadRetrying": "Neuer Versuch…",
-    "chainDown": "{{chain}} nicht erreichbar – Daten auf der Seite sind eventuell unvollständig."
+    "chainDown": "{{chain}} nicht erreichbar – Daten auf der Seite sind eventuell unvollständig.",
+    "requestOpen": "Bitte zuerst die Anfrage abschließen oder abbrechen"
   }
 }

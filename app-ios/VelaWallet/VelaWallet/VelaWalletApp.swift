@@ -17,6 +17,8 @@ struct VelaWalletApp: App {
         // install there and the symbols are not in the binary at all.
         #if DEBUG
         ParallelSpaceBinding.install()
+        // `VELA_DEV_PROXY` (spec 082): the browser's store, before any tab.
+        DevProxy.install()
         #endif
     }
 

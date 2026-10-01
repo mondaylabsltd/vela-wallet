@@ -1,0 +1,40 @@
+# Desktop abort on paste in the Explore address bar (082 G3)
+## owner's app, /Applications 0.9.5 @ de93634f, 2026-09-28 14:10:44 — stderr
+2026-09-28 14:10:44.724 vela-wallet[95570:2533814] error messaging the mach port for IMKCFRunLoopWakeUpReliable
+[vela-wallet] panic: cannot update vela_wallet::wallet::page::WalletPage while it is already being updated
+    at /Users/shelchin/.cargo/git/checkouts/zed-a70e2ad075855582/c97b7c0/crates/gpui/src/app/entity_map.rs:142
+[vela-wallet] panic: panic in a function that cannot unwind
+    at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/panicking.rs:225
+thread caused non-unwinding panic. aborting.
+
+## crash report vela-wallet-2026-09-28-141115.ips — faulting thread (main)
+exception EXC_CRASH SIGABRT
+  libsystem_kernel.dylib __pthread_kill
+  libsystem_pthread.dylib pthread_kill
+  libsystem_c.dylib abort
+  vela-wallet _RNvNtNtNtCsa9BKTri5B3M_3std3sys3pal4unix14abort_internal
+  vela-wallet _RNvNtCsa9BKTri5B3M_3std7process5abort
+  vela-wallet _RNvNtCsa9BKTri5B3M_3std9panicking15panic_with_hook
+  vela-wallet _RNCNvNtCsa9BKTri5B3M_3std9panicking13panic_handler0B5_
+  vela-wallet _RINvNtNtCsa9BKTri5B3M_3std3sys9backtrace26___rust_end_short_backtraceNCNvNtB6_9panicking13panic_handler0zEB6_
+  vela-wallet _RNvCs9wFQrvczXsK_7___rustc17rust_begin_unwind
+  vela-wallet _RNvNtCsgtPOCBgevO_4core9panicking18panic_nounwind_fmt
+  vela-wallet _RNvNtCsgtPOCBgevO_4core9panicking14panic_nounwind
+  vela-wallet _RNvNtCsgtPOCBgevO_4core9panicking19panic_cannot_unwind
+  vela-wallet _RNvNtCs3h5NDyCAL4Z_10gpui_macos6window16handle_key_event
+  AppKit -[NSView performKeyEquivalent:]
+  AppKit -[NSView performKeyEquivalent:]
+  AppKit -[NSWindow _commonPerformKeyEquivalent:conditionally:]
+  AppKit routeKeyEquivalent
+  AppKit -[NSApplication(NSEventRouting) sendEvent:]
+  AppKit -[NSApplication _handleEvent:]
+  AppKit -[NSApplication run]
+  vela-wallet <deduplicated_symbol>
+  vela-wallet RustObjCExceptionTryCatch
+
+## parallel copy (dev-fixtures build of the same tree), reproduced 14:20 — stderr
+[vela-wallet] panic: cannot update vela_wallet::wallet::page::WalletPage while it is already being updated
+    at /Users/shelchin/.cargo/git/checkouts/zed-a70e2ad075855582/c97b7c0/crates/gpui/src/app/entity_map.rs:142
+[vela-wallet] panic: panic in a function that cannot unwind
+    at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/panicking.rs:225
+thread caused non-unwinding panic. aborting.

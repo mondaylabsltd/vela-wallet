@@ -62,7 +62,9 @@
     "loadOffline": "Bağlantı kararsız, sayfa açılmadı.",
     "loadNotFound": "Bu site bulunamadı. Adresi kontrol et.",
     "loadCertificate": "Sitenin sertifikası geçersiz, Vela siteyi engelledi.",
+    "loadProxy": "Proxy sunucunuz yanıt vermiyor.",
     "loadRetrying": "Yeniden deneniyor…",
-    "chainDown": "{{chain}} ağına ulaşılamıyor — sayfadaki veriler eksik olabilir."
+    "chainDown": "{{chain}} ağına ulaşılamıyor — sayfadaki veriler eksik olabilir.",
+    "requestOpen": "Önce bu isteği tamamlayın veya iptal edin"
   }
 }

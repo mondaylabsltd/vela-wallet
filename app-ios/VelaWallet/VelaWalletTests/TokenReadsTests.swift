@@ -135,4 +135,41 @@ struct TokenReadsTests {
         #expect(ChainCatalog.meta(4_217)?.gasModel == .tempo)
         #expect(ChainCatalog.chains.filter { $0.gasModel == .tempo }.count == 1)
     }
+
+    // MARK: - The read plan (spec 082 T119, RE9, G24)
+
+    private let usdc = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    private let weth = "0x4200000000000000000000000000000000000006"
+
+    /// Base's read counts its stablecoins: the native coin, USDC at its peg
+    /// with its decimals read on chain, the wrapped coin — the core's plan.
+    /// This client used to read the native coin and custom tokens only.
+    @Test func baseIncludesUsdc() {
+        let plan = TokenReads.plan(
+            chainId: 8453, stables: [(symbol: "USDC", contract: usdc)], wrappedNative: weth, custom: []
+        )
+        #expect(plan.map(\.kind) == ["native", "stable", "wrapped"])
+        let stable = plan[1]
+        #expect(stable.contract?.lowercased() == usdc.lowercased())
+        #expect(stable.symbol == "USDC")
+        #expect(stable.pegUsd == 1.0, "membership in the curated list is the price")
+        #expect(stable.knownDecimals == nil, "its decimals are read on chain")
+    }
+
+    /// One contract once: a custom entry for a registry stablecoin lends it
+    /// its metadata instead of being read twice; a chain with no native coin
+    /// has no native slot; a registry that could not be reached is the
+    /// native coin and the person's own tokens only.
+    @Test func theCoresPlanDedupesAndSkips() {
+        let custom = [CustomTokenRef(address: usdc.lowercased(), symbol: "USDC.e", name: "Mine",
+                                     decimals: 6, chainId: 8453)]
+        let plan = TokenReads.plan(
+            chainId: 8453, stables: [(symbol: "USDC", contract: usdc)], wrappedNative: nil, custom: custom
+        )
+        #expect(plan.filter { $0.contract?.lowercased() == usdc.lowercased() }.count == 1)
+        #expect(!TokenReads.plan(chainId: 4_217, stables: [], wrappedNative: nil, custom: [])
+            .contains { $0.kind == "native" }, "Tempo has no native coin")
+        let offline = TokenReads.plan(chainId: 100, stables: [], wrappedNative: nil, custom: [])
+        #expect(offline.map(\.kind) == ["native"])
+    }
 }

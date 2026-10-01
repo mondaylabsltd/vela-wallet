@@ -1,5 +1,7 @@
 //! Rules of the Activity feed, one test per invariant (inventory
-//! `activity_feed` ① – ⑧ plus the celebration lifecycle and staleness).
+//! `activity_feed` ① – ⑧ plus the celebration lifecycle and staleness), and
+//! spec 082's rows the core decides: dApp transactions with their status and
+//! site (RG1–RG4) and the empty-line keys (RG5).
 //!
 //! The fake clock is `now_ms` on each `StoreLoaded`; day keys are
 //! shell-supplied `day_start_ms` values — the core never owns time or
@@ -11,9 +13,10 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::activity_feed::{
-    is_stable, tx_usd_value, ActivityFeed, Event, FeedBatchKind, FeedDapp, FeedDappChange,
-    FeedDirection, FeedOperation as Op, FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord,
-    FeedTxStatus,
+    history_empty_key, home_empty_key, is_stable, tx_usd_value, ActivityFeed, Event, FeedBatchKind,
+    FeedCounterpartyRole, FeedDapp, FeedDappChange, FeedDirection, FeedItem, FeedOperation as Op,
+    FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus, FeedView,
+    HISTORY_EMPTY_ALL, HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED,
 };
 use vela_core::app::clear_signing::ClearTerm;
 use vela_core::app::token_trust::TrustSimJudgment;
@@ -56,6 +59,7 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         intent: None,
         balance_changes: None,
         calldata: None,
+        call_data: None,
     }
 }
 
@@ -83,6 +87,24 @@ fn recv(id: &str, from: &str, value: &str, symbol: &str, ts: f64) -> FeedTxRecor
     r
 }
 
+/// A transaction a dApp asked for, as the shells store it
+/// (`buildSigningRecord`): wei `value`, the native symbol, 18 decimals, the
+/// asking site's origin.
+fn dapp_tx(id: &str, origin: &str, to: &str, value: &str, ts: f64) -> FeedTxRecord {
+    let mut r = base(id, ts);
+    r.kind = Some(FeedTxKind::DappTx);
+    r.from = ADDR.to_owned();
+    r.to = to.to_owned();
+    r.to_name = Some(format!("name-of-{to}"));
+    r.value = value.to_owned();
+    r.symbol = "xDAI".to_owned();
+    r.decimals = 18;
+    r.chain_id = 100;
+    r.user_op_hash = format!("0xop{id}");
+    r.dapp_url = Some(origin.to_owned());
+    r
+}
+
 /// A real address for a dApp row's recipient: the row names nothing else
 /// (083 H2 review).
 const CAFE: &str = "0x000000000000000000000000000000000000cafe";
@@ -90,7 +112,7 @@ const CAFE: &str = "0x000000000000000000000000000000000000cafe";
 /// A transaction a dApp asked this account to send, in the shape every
 /// client's signing path stores (`buildSigningRecord`): the call's own wei
 /// figure, the chain's coin at 18 decimals, the site's origin (083 H2).
-fn dapp_tx(id: &str, to: &str, wei_hex: &str, intent: Option<&str>, ts: f64) -> FeedTxRecord {
+fn dapp_tx_h2(id: &str, to: &str, wei_hex: &str, intent: Option<&str>, ts: f64) -> FeedTxRecord {
     let mut r = base(id, ts);
     r.kind = Some(FeedTxKind::DappTx);
     r.from = ADDR.to_owned();
@@ -293,8 +315,10 @@ fn resubmitted_line_in_a_real_batch_counts_once() {
     assert_eq!(rows[0].value.as_deref(), Some("30"));
 }
 
-/// Feed scoping: only this account's transfers, connection events excluded —
-/// and the raw `transactions` view is scoped the same way.
+/// Feed scoping: only this account's transfers and the transactions its
+/// dApps asked for — signatures and connects excluded — and the raw
+/// `transactions` view is scoped the same way (spec 082 RG1 rewrote this
+/// test, which used to pin the dApp transaction's exclusion).
 #[test]
 fn feed_and_transactions_are_account_scoped() {
     let ours_send = send("s1", "0xU1", "0xCafe", "1", 300_000.0);
@@ -303,33 +327,326 @@ fn feed_and_transactions_are_account_scoped() {
     let ours_recv = recv("r1", "0xBob", "2", "USDT", 280_000.0);
     let mut foreign_recv = recv("r2", "0xBob", "2", "USDT", 270_000.0);
     foreign_recv.to = OTHER.to_owned();
-    let mut dapp = base("d1", 260_000.0);
-    dapp.kind = Some(FeedTxKind::DappTx);
-    dapp.from = ADDR.to_owned();
+    let dapp = dapp_tx(
+        "d1",
+        "https://app.test",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x0",
+        260_000.0,
+    );
+    let mut foreign_dapp = dapp_tx(
+        "d2",
+        "https://app.test",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x0",
+        255_000.0,
+    );
+    foreign_dapp.from = OTHER.to_owned();
     // Legacy untyped record ⇒ send (`t.type ?? 'send'`), matched case-insensitively.
     let mut legacy = base("l1", 250_000.0);
     legacy.from = ADDR.to_uppercase();
     legacy.to = "0xCafe".to_owned();
     legacy.to_name = Some("Ann".to_owned());
+    let signed: Vec<FeedTxRecord> = [
+        FeedTxKind::SignMessage,
+        FeedTxKind::SignTypedData,
+        FeedTxKind::Connect,
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(n, kind)| {
+        let mut r = base(&format!("x{n}"), 240_000.0);
+        r.kind = Some(kind);
+        r.from = ADDR.to_owned();
+        r.dapp_url = Some("https://app.test".to_owned());
+        r
+    })
+    .collect();
 
-    let mut sut = boot(vec![
+    let mut records = vec![
         ours_send,
         foreign_send,
         ours_recv,
         foreign_recv,
         dapp,
+        foreign_dapp,
         legacy,
-    ]);
+    ];
+    records.extend(signed);
+    let mut sut = boot(records);
     drain_aliases(&mut sut);
 
     let ids: Vec<String> = items(&sut).into_iter().map(|i| i.id).collect();
-    assert_eq!(
-        ids,
-        vec!["s1", "r1", "d1", "l1"],
-        "a dApp's transaction is a row (083 H2)"
-    );
+    assert_eq!(ids, vec!["s1", "r1", "d1", "l1"]);
     let tx_ids: Vec<String> = sut.view().transactions.into_iter().map(|t| t.id).collect();
     assert_eq!(tx_ids, vec!["s1", "r1", "d1", "l1"]);
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 — rows the core decides (RG1–RG4)
+// ---------------------------------------------------------------------------
+
+/// A dApp transaction just submitted is a pending `DappTx` row, out from this
+/// account, naming the site that asked (`host[:port]`, nothing else of the
+/// origin) and the contract it called.
+#[test]
+fn a_pending_dapp_transaction_is_a_row_with_its_site() {
+    let mut pending = dapp_tx(
+        "dapp-1-tx",
+        "http://127.0.0.1:8137",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x2386f26fc10000",
+        100_000.0,
+    );
+    pending.status = FeedTxStatus::Pending;
+    pending.tx_hash = String::new();
+    let sut = boot(vec![pending]);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.id, "dapp-1-tx");
+    assert_eq!(row.kind, FeedTxKind::DappTx);
+    assert_eq!(row.status, FeedTxStatus::Pending);
+    assert_eq!(
+        row.site.as_deref(),
+        Some("127.0.0.1:8137"),
+        "the address bar's host[:port]"
+    );
+    assert_eq!(row.direction, FeedDirection::Out);
+    assert_eq!(
+        row.counterparty.as_deref(),
+        Some("0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad")
+    );
+    assert_eq!(row.chain_id, 100);
+    assert_eq!(row.tx_hash, None, "no on-chain hash yet");
+    // 0x2386f26fc10000 wei = 0.01 of the native coin.
+    assert_eq!(row.value.as_deref(), Some("0.01"));
+    assert_eq!(row.symbol, "xDAI");
+    assert_eq!(row.decimals, Some(18));
+    assert!(row.batch.is_none());
+}
+
+/// The row carries the record's status as the tracker left it: confirmed with
+/// its hash, or failed.
+#[test]
+fn a_dapp_row_carries_confirmed_and_failed() {
+    let confirmed = dapp_tx("c", "https://app.uniswap.org", "0xR", "0", 200_000.0);
+    let mut failed = dapp_tx("f", "https://app.uniswap.org", "0xR", "0", 100_000.0);
+    failed.status = FeedTxStatus::Failed;
+    let sut = boot(vec![confirmed, failed]);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].status, FeedTxStatus::Confirmed);
+    assert_eq!(rows[0].tx_hash.as_deref(), Some("0xtxc"));
+    assert_eq!(rows[1].status, FeedTxStatus::Failed);
+    assert!(rows
+        .iter()
+        .all(|r| r.site.as_deref() == Some("app.uniswap.org")));
+}
+
+/// A submit whose reply was lost (MaybeSent) is persisted pending under the
+/// LOCAL operation hash with no tx hash; it is a pending `DappTx` row like any
+/// other until the tracker patches the record (RG4) — never failed on time,
+/// never hidden.
+#[test]
+fn a_maybe_sent_op_under_its_local_hash_is_a_pending_row() {
+    let local_hash = "0xc6f3544fc4e3ac769e92c92ab4804cd3f38ffb8d607ba07b5103a59710094dc4";
+    let mut maybe_sent = dapp_tx(
+        "dapp-9-tx",
+        "https://app.test",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x0",
+        100_000.0,
+    );
+    maybe_sent.user_op_hash = local_hash.to_owned();
+    maybe_sent.tx_hash = String::new();
+    maybe_sent.status = FeedTxStatus::Pending;
+    let sut = boot(vec![maybe_sent]);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].kind, FeedTxKind::DappTx);
+    assert_eq!(rows[0].status, FeedTxStatus::Pending);
+    assert_eq!(rows[0].site.as_deref(), Some("app.test"));
+    assert_eq!(rows[0].tx_hash, None);
+    let tx = &sut.view().transactions[0];
+    assert_eq!(
+        tx.user_op_hash, local_hash,
+        "the detail sheet keeps the hash"
+    );
+}
+
+/// `personal_sign` (and every other signature) moves nothing: its record is
+/// never a row, even with the dApp's origin on it.
+#[test]
+fn a_personal_sign_is_never_a_row() {
+    let mut msg = base("dapp-5-msg", 100_000.0);
+    msg.kind = Some(FeedTxKind::SignMessage);
+    msg.from = ADDR.to_owned();
+    msg.value = "0".to_owned();
+    msg.symbol = String::new();
+    msg.dapp_url = Some("https://app.test".to_owned());
+    let sut = boot(vec![msg]);
+    assert!(items(&sut).is_empty());
+    assert!(sut.view().transactions.is_empty());
+}
+
+/// A zero value is no amount (a contract call does not read as money), and
+/// wei arrives as hex or decimal.
+#[test]
+fn a_dapp_row_shows_an_amount_only_for_native_value() {
+    let zero = dapp_tx("z", "https://a.test", "0xR", "0x0", 300_000.0);
+    let hex = dapp_tx("h", "https://a.test", "0xR", "0xde0b6b3a7640000", 200_000.0);
+    let dec = dapp_tx(
+        "d",
+        "https://a.test",
+        "0xR",
+        "1500000000000000000",
+        100_000.0,
+    );
+    let sut = boot(vec![zero, hex, dec]);
+    let rows = items(&sut);
+    assert_eq!(rows[0].value, None);
+    assert_eq!(rows[0].symbol, "", "no amount, no symbol");
+    assert_eq!(rows[0].decimals, None);
+    assert_eq!(rows[0].usd_value, 0.0);
+    assert_eq!(rows[1].value.as_deref(), Some("1"));
+    assert_eq!(rows[1].symbol, "xDAI");
+    assert_eq!(rows[2].value.as_deref(), Some("1.5"));
+}
+
+/// Sends and receives say what they are, with their record's status; a folded
+/// batch is a `Send` carrying its FIRST line's status.
+#[test]
+fn every_row_says_its_kind_and_status_and_a_batch_uses_its_first_line() {
+    let mut a = send("h-0", "0xH", "0xAaa", "10", 300_000.0);
+    let mut b = send("h-1", "0xH", "0xBbb", "20", 300_000.0);
+    a.status = FeedTxStatus::Failed;
+    b.status = FeedTxStatus::Confirmed;
+    let mut single = send("s", "0xS", "0xCcc", "1", 200_000.0);
+    single.status = FeedTxStatus::Pending;
+    let incoming = recv("r", "0xBob", "5", "USDT", 100_000.0);
+    let mut sut = boot(vec![a, b, single, incoming]);
+    drain_aliases(&mut sut);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 3);
+    assert!(rows[0].batch.is_some());
+    assert_eq!(rows[0].kind, FeedTxKind::Send);
+    assert_eq!(rows[0].status, FeedTxStatus::Failed, "the first line's");
+    assert_eq!(rows[1].kind, FeedTxKind::Send);
+    assert_eq!(rows[1].status, FeedTxStatus::Pending);
+    assert_eq!(rows[2].kind, FeedTxKind::Receive);
+    assert_eq!(rows[2].status, FeedTxStatus::Confirmed);
+    assert!(
+        rows.iter().all(|r| r.site.is_none()),
+        "only a DappTx has a site"
+    );
+
+    // The other order: the first line decides either way.
+    let mut a = send("g-0", "0xG", "0xAaa", "10", 300_000.0);
+    let mut b = send("g-1", "0xG", "0xBbb", "20", 300_000.0);
+    a.status = FeedTxStatus::Confirmed;
+    b.status = FeedTxStatus::Failed;
+    let sut = boot(vec![a, b]);
+    assert_eq!(items(&sut)[0].status, FeedTxStatus::Confirmed);
+}
+
+/// Old shell JSON still decodes: a record without `dapp_origin`, and an item
+/// or view from before 082 (a missing status claims nothing — `Pending` —
+/// and a missing kind is the legacy `send`).
+#[test]
+fn json_from_before_082_still_decodes() {
+    let record: FeedTxRecord = serde_json::from_value(serde_json::json!({
+        "id": "a", "user_op_hash": "", "tx_hash": "", "from": ADDR, "to": "0xB",
+        "to_name": null, "value": "1", "symbol": "USDC", "decimals": 6,
+        "logo_urls": null, "chain_id": 8453, "timestamp": 1.0, "day_start_ms": 0.0,
+        "status": "confirmed", "kind": "dapp_tx", "usd": null
+    }))
+    .expect("a record without dapp_url");
+    assert_eq!(record.dapp_url, None);
+    assert_eq!(record.call_data, None);
+
+    let item: FeedItem = serde_json::from_value(serde_json::json!({
+        "id": "a", "direction": "out", "counterparty": "0xB", "alias": null,
+        "value": "1", "symbol": "USDC", "decimals": 6, "usd_value": 1.0,
+        "chain_id": 8453, "timestamp": 1.0, "day_start_ms": 0.0,
+        "tx_hash": null, "batch": null
+    }))
+    .expect("an item without kind/status/site");
+    assert_eq!(item.kind, FeedTxKind::Send);
+    assert_eq!(item.status, FeedTxStatus::Pending);
+    assert_eq!(item.site, None);
+
+    let view: FeedView = serde_json::from_value(serde_json::json!({
+        "rows": [], "transactions": [], "new_item_id": null, "toast": null
+    }))
+    .expect("a view without the empty keys");
+    assert_eq!(view.history_empty_key, "");
+
+    let wire = serde_json::to_value(
+        &items(&boot(vec![dapp_tx(
+            "w",
+            "https://a.test",
+            "0xR",
+            "0x0",
+            1.0,
+        )]))[0],
+    )
+    .expect("serialises");
+    assert_eq!(wire["kind"], "dapp_tx");
+    assert_eq!(wire["status"], "confirmed");
+    assert_eq!(wire["site"], "a.test");
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 — the empty lines (RG5, L-D7)
+// ---------------------------------------------------------------------------
+
+/// All networks: "No transactions yet" / "No activity yet"; one network: the
+/// "on this network" lines. The core chooses, from the chain filter.
+#[test]
+fn the_empty_keys_follow_the_chain_filter() {
+    let mut sut = boot(Vec::new());
+    let view = sut.view();
+    assert_eq!(view.history_empty_key, "history.emptyTitle");
+    assert_eq!(view.home_empty_key, "home.emptyNoActivity");
+
+    sut.dispatch(Event::ChainFilterChanged {
+        chain_id: Some(100),
+    });
+    let view = sut.view();
+    assert_eq!(view.history_empty_key, "history.emptyFilter");
+    assert_eq!(view.home_empty_key, "home.emptyNoActivityNetwork");
+
+    sut.dispatch(Event::ChainFilterChanged { chain_id: None });
+    assert_eq!(sut.view().history_empty_key, HISTORY_EMPTY_ALL);
+    assert_eq!(sut.view().home_empty_key, HOME_EMPTY_ALL);
+
+    // A core that was never given an account says the same.
+    let fresh = Sut::new();
+    assert_eq!(fresh.view().history_empty_key, HISTORY_EMPTY_ALL);
+
+    assert_eq!(history_empty_key(Some(1)), HISTORY_EMPTY_FILTERED);
+    assert_eq!(home_empty_key(Some(1)), HOME_EMPTY_FILTERED);
+}
+
+/// Every key the feed hands a shell is in the corpus.
+#[cfg(feature = "i18n-en")]
+#[test]
+fn the_empty_keys_are_in_the_corpus() {
+    let i18n = vela_core::i18n::I18n::embedded().expect("embedded corpus");
+    let opts = vela_core::i18n::Options::default();
+    for key in [
+        HISTORY_EMPTY_ALL,
+        HISTORY_EMPTY_FILTERED,
+        HOME_EMPTY_ALL,
+        HOME_EMPTY_FILTERED,
+    ] {
+        assert!(i18n.exists(key, &opts), "{key}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -997,6 +1314,152 @@ fn a_stale_read_never_eats_the_celebration_the_sync_earned() {
 }
 
 // ---------------------------------------------------------------------------
+// Spec 082 round 2 — what a dApp record's detail says (RJ16, G52)
+// ---------------------------------------------------------------------------
+
+/// The founder's address, as the DX-W3 run sent to it.
+const FOUNDER: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+/// USDC on Gnosis — the contract the DX-W3 call went to.
+const GNOSIS_USDC: &str = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83";
+
+/// `transfer(FOUNDER, 10^30)` — exactly 4 + 32 + 32 bytes.
+fn transfer_to_founder() -> String {
+    format!(
+        "0xa9059cbb{:0>64}{:0>64}",
+        FOUNDER.trim_start_matches("0x").to_lowercase(),
+        "c9f2c9cd04674edea40000000"
+    )
+}
+
+/// DX-W3: a relay-rejected USDC transfer. The detail named the token contract
+/// as 接收方 and offered the explorer for an op that never reached the chain.
+/// The recipient is the transfer's, checksummed; there is no tx hash to link.
+#[test]
+fn a_token_transfer_names_its_recipient_and_links_no_op_hash() {
+    let op = "0x4d558afa2e899ead13277162dfa5b25fa7f9b1bc809de0b9f90f7713449439d7";
+    let mut rejected = dapp_tx(
+        "dapp-w3-tx",
+        "http://127.0.0.1:8137",
+        GNOSIS_USDC,
+        "0x0",
+        100_000.0,
+    );
+    rejected.call_data = Some(transfer_to_founder());
+    rejected.status = FeedTxStatus::Failed;
+    rejected.user_op_hash = op.to_owned();
+    rejected.tx_hash = op.to_uppercase().replace("0X", "0x");
+    rejected.to_name = None;
+    let sut = boot(vec![rejected]);
+
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.counterparty.as_deref(), Some(FOUNDER));
+    assert_eq!(row.counterparty_role, FeedCounterpartyRole::Recipient);
+    assert_eq!(row.tx_hash, None, "an op hash is never an explorer link");
+    assert_eq!(row.status, FeedTxStatus::Failed);
+}
+
+/// Any other call goes to a contract: the counterparty is the contract, said
+/// as the contract ("interacting with"), not as a recipient.
+#[test]
+fn a_swap_call_names_the_contract() {
+    let mut swap = dapp_tx(
+        "dapp-s-tx",
+        "https://app.uniswap.org",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x0",
+        100_000.0,
+    );
+    swap.call_data = Some(format!("0x3593564c{}", "00".repeat(96)));
+    let sut = boot(vec![swap]);
+    let row = &items(&sut)[0];
+    assert_eq!(
+        row.counterparty.as_deref(),
+        Some("0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad")
+    );
+    assert_eq!(row.counterparty_role, FeedCounterpartyRole::Contract);
+    assert_eq!(
+        row.tx_hash.as_deref(),
+        Some("0xtxdapp-s-tx"),
+        "a real tx hash stays"
+    );
+
+    // A transfer selector with the wrong length is not a transfer.
+    let mut odd = dapp_tx(
+        "dapp-o-tx",
+        "https://x.test",
+        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+        "0x0",
+        100_000.0,
+    );
+    odd.call_data = Some(format!("{}00", transfer_to_founder()));
+    let sut = boot(vec![odd]);
+    let row = &items(&sut)[0];
+    assert_eq!(
+        row.counterparty.as_deref(),
+        Some("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")
+    );
+    assert_eq!(row.counterparty_role, FeedCounterpartyRole::Contract);
+}
+
+/// No calldata (a plain native send from a page, or a shell that does not
+/// map it yet): `to`, as a recipient — today's row, unchanged.
+#[test]
+fn a_plain_send_is_unchanged() {
+    let plain = dapp_tx(
+        "dapp-p-tx",
+        "https://x.test",
+        "0x000000000000000000000000000000000000f00d",
+        "0x2386f26fc10000",
+        100_000.0,
+    );
+    let sut = boot(vec![plain]);
+    let row = &items(&sut)[0];
+    assert_eq!(
+        row.counterparty.as_deref(),
+        Some("0x000000000000000000000000000000000000f00d")
+    );
+    assert_eq!(row.counterparty_role, FeedCounterpartyRole::Recipient);
+    assert_eq!(row.value.as_deref(), Some("0.01"));
+
+    let mut empty = dapp_tx(
+        "dapp-e-tx",
+        "https://x.test",
+        "0x000000000000000000000000000000000000f00d",
+        "0x0",
+        100_000.0,
+    );
+    empty.call_data = Some("0x".to_owned());
+    let sut = boot(vec![empty]);
+    assert_eq!(
+        items(&sut)[0].counterparty_role,
+        FeedCounterpartyRole::Recipient,
+        "empty calldata is no call"
+    );
+}
+
+/// The wire: both fields default, so a record or row from before round 2
+/// still reads.
+#[test]
+fn the_new_fields_default_on_the_wire() {
+    let record = serde_json::to_value(base("x", 1.0)).unwrap_or_default();
+    let mut old = record.clone();
+    if let Some(map) = old.as_object_mut() {
+        map.remove("call_data");
+    }
+    let back: FeedTxRecord = serde_json::from_value(old).expect("an old record reads");
+    assert_eq!(back.call_data, None);
+    assert_eq!(
+        serde_json::to_value(FeedCounterpartyRole::Contract).unwrap_or_default(),
+        serde_json::json!("contract")
+    );
+    assert_eq!(
+        FeedCounterpartyRole::default(),
+        FeedCounterpartyRole::Recipient
+    );
+}
+
 // 083 H2 (079 D3) — a dApp's transaction is in Activity
 // ---------------------------------------------------------------------------
 
@@ -1004,7 +1467,7 @@ fn a_stale_read_never_eats_the_celebration_the_sync_earned() {
 /// that site: the page's wei figure scaled to the coin, the origin's host.
 #[test]
 fn a_dapp_native_send_is_a_row_with_its_amount_and_site() {
-    let sut = boot(vec![dapp_tx(
+    let sut = boot(vec![dapp_tx_h2(
         "dapp-1-tx",
         CAFE,
         "0x2386f26fc10000",
@@ -1023,7 +1486,7 @@ fn a_dapp_native_send_is_a_row_with_its_amount_and_site() {
     assert_eq!(
         row.dapp,
         Some(FeedDapp {
-            site: Some("127.0.0.1".to_owned()),
+            site: Some("127.0.0.1:5173".to_owned()),
             intent: Some("Send".to_owned()),
             intent_term: Some(ClearTerm::IntentSend),
             changes: Vec::new(),
@@ -1041,9 +1504,15 @@ fn a_dapp_native_send_is_a_row_with_its_amount_and_site() {
 /// batch (`wallet_sendCalls`) has no single counterparty.
 #[test]
 fn a_dapp_contract_call_carries_its_intent_and_no_zero_amount() {
-    let mut swap = dapp_tx("dapp-2-tx", "0xRouter", "0x0", Some("Swap"), 200_000.0);
+    let mut swap = dapp_tx_h2(
+        "dapp-2-tx",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x0",
+        Some("Swap"),
+        200_000.0,
+    );
     swap.dapp_url = Some("https://app.uniswap.org".to_owned());
-    let blind = dapp_tx("dapp-3-tx", "", "0x0", None, 190_000.0);
+    let blind = dapp_tx_h2("dapp-3-tx", "", "0x0", None, 190_000.0);
     let sut = boot(vec![swap, blind]);
     let rows = items(&sut);
     assert_eq!(rows.len(), 2);
@@ -1061,7 +1530,7 @@ fn a_dapp_contract_call_carries_its_intent_and_no_zero_amount() {
         "a batch has no single recipient"
     );
     let blind = rows[1].dapp.clone().expect("a dApp row");
-    assert_eq!(blind.site.as_deref(), Some("127.0.0.1"));
+    assert_eq!(blind.site.as_deref(), Some("127.0.0.1:5173"));
     assert_eq!((blind.intent, blind.intent_term), (None, None));
 }
 
@@ -1071,14 +1540,38 @@ fn a_dapp_contract_call_carries_its_intent_and_no_zero_amount() {
 /// alone would take `app.uniswap.org` as one.
 #[test]
 fn a_dapp_row_names_no_site_from_a_bare_name() {
-    let mut named = dapp_tx("d-named", "0xRouter", "0x0", None, 100_000.0);
+    let mut named = dapp_tx_h2(
+        "d-named",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x0",
+        None,
+        100_000.0,
+    );
     named.dapp_url = Some("app.uniswap.org".to_owned());
-    let mut junk = dapp_tx("d-junk", "0xRouter", "0x0", None, 90_000.0);
+    let mut junk = dapp_tx_h2(
+        "d-junk",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x0",
+        None,
+        90_000.0,
+    );
     junk.dapp_url = Some("https://trusted.org:evil@/".to_owned());
-    let mut userinfo = dapp_tx("d-userinfo", "0xRouter", "0x0", None, 80_000.0);
+    let mut userinfo = dapp_tx_h2(
+        "d-userinfo",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x0",
+        None,
+        80_000.0,
+    );
     userinfo.dapp_url = Some("https://app.uniswap.org@evil.example".to_owned());
     // An opaque page's origin serializes as the word "null".
-    let mut opaque = dapp_tx("d-opaque", "0xRouter", "0x0", None, 70_000.0);
+    let mut opaque = dapp_tx_h2(
+        "d-opaque",
+        "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+        "0x0",
+        None,
+        70_000.0,
+    );
     opaque.dapp_url = Some("null".to_owned());
     let sut = boot(vec![named, junk, userinfo, opaque]);
     let sites: Vec<Option<String>> = items(&sut)
@@ -1100,10 +1593,10 @@ fn a_dapp_row_names_no_site_from_a_bare_name() {
 /// keeps no stored name, and is never sent to the name lookup.
 #[test]
 fn a_dapp_row_names_no_recipient_that_is_not_an_address() {
-    let mut forged = dapp_tx("d-forged", "日本語日本語", "0x0", None, 100_000.0);
+    let mut forged = dapp_tx_h2("d-forged", "日本語日本語", "0x0", None, 100_000.0);
     forged.to_name = Some("Vitalik".to_owned());
-    let short = dapp_tx("d-short", "0xCafe", "0x0", None, 90_000.0);
-    let upper = dapp_tx(
+    let short = dapp_tx_h2("d-short", "0xCafe", "0x0", None, 90_000.0);
+    let upper = dapp_tx_h2(
         "d-real",
         "0x000000000000000000000000000000000000CAFE",
         "0x0",
@@ -1152,7 +1645,7 @@ fn signatures_and_connections_stay_out_of_activity() {
         r.dapp_url = Some("https://app.uniswap.org".to_owned());
         records.push(r);
     }
-    records.push(dapp_tx("d1", "0xCafe", "0x1", None, 90_000.0));
+    records.push(dapp_tx_h2("d1", "0xCafe", "0x1", None, 90_000.0));
     let sut = boot(records);
     let ids: Vec<String> = items(&sut).into_iter().map(|i| i.id).collect();
     assert_eq!(ids, vec!["d1"]);
@@ -1165,9 +1658,9 @@ fn signatures_and_connections_stay_out_of_activity() {
 /// shows no figure, and the feed still loads (083 H2 review).
 #[test]
 fn a_dapp_row_with_absurd_decimals_shows_no_figure() {
-    let mut absurd = dapp_tx("d-absurd", "0xCafe", "0x2386f26fc10000", None, 100_000.0);
+    let mut absurd = dapp_tx_h2("d-absurd", "0xCafe", "0x2386f26fc10000", None, 100_000.0);
     absurd.decimals = u32::MAX;
-    let mut edge = dapp_tx("d-edge", "0xCafe", "0x1", None, 90_000.0);
+    let mut edge = dapp_tx_h2("d-edge", "0xCafe", "0x1", None, 90_000.0);
     edge.decimals = vela_core::app::activity_feed::MAX_DAPP_DECIMALS;
     let sut = boot(vec![absurd, edge]);
     let rows = items(&sut);
@@ -1187,9 +1680,9 @@ fn a_dapp_row_with_absurd_decimals_shows_no_figure() {
 /// record from a shell that stores no origin names no site.
 #[test]
 fn a_dapp_row_is_account_scoped_and_survives_a_missing_origin() {
-    let mut ours = dapp_tx("d-ours", "0xCafe", "0x1", None, 100_000.0);
+    let mut ours = dapp_tx_h2("d-ours", "0xCafe", "0x1", None, 100_000.0);
     ours.dapp_url = None;
-    let mut theirs = dapp_tx("d-theirs", "0xCafe", "0x1", None, 90_000.0);
+    let mut theirs = dapp_tx_h2("d-theirs", "0xCafe", "0x1", None, 90_000.0);
     theirs.from = OTHER.to_owned();
     let sut = boot(vec![ours, theirs]);
     let rows = items(&sut);
@@ -1206,7 +1699,7 @@ fn a_dapp_row_is_account_scoped_and_survives_a_missing_origin() {
 /// and never celebrates, because money leaving is not money arriving.
 #[test]
 fn a_dapp_row_settles_when_the_tracker_lands_it() {
-    let pending = dapp_tx("dapp-4-tx", "0xCafe", "0x1", Some("Send"), 100_000.0);
+    let pending = dapp_tx_h2("dapp-4-tx", "0xCafe", "0x1", Some("Send"), 100_000.0);
     let mut sut = boot(vec![pending.clone()]);
     assert_eq!(sut.view().transactions[0].status, FeedTxStatus::Pending);
 
@@ -1285,7 +1778,7 @@ fn eth(delta: &str) -> TrustSimJudgment {
 /// A swap on Base, as the desktop stores it: the router, the call's own wei
 /// value, no decoded intent, the site, and what the sheet's simulation showed.
 fn swap(id: &str, wei_hex: &str, changes: Option<Vec<TrustSimJudgment>>, ts: f64) -> FeedTxRecord {
-    let mut r = dapp_tx(id, ROUTER, wei_hex, None, ts);
+    let mut r = dapp_tx_h2(id, ROUTER, wei_hex, None, ts);
     r.chain_id = 8453;
     r.symbol = "ETH".to_owned();
     r.dapp_url = Some("https://app.uniswap.org".to_owned());
@@ -1593,7 +2086,15 @@ fn a_failed_swap_claims_nothing_it_expected() {
         items(sut).remove(0)
     };
     let landed = settle(&mut sut, FeedTxStatus::Confirmed);
-    assert_eq!(landed, in_flight, "confirmed: what it was doing, it did");
+    assert_eq!(landed.status, FeedTxStatus::Confirmed);
+    assert_eq!(
+        FeedItem {
+            status: in_flight.status,
+            ..landed
+        },
+        in_flight,
+        "confirmed: what it was doing, it did"
+    );
 
     let failed = settle(&mut sut, FeedTxStatus::Failed);
     assert_eq!(

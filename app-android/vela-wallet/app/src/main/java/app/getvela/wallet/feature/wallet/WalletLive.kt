@@ -19,6 +19,8 @@ import app.getvela.wallet.feature.wallet.core.FeedDirection
 import app.getvela.wallet.feature.wallet.core.FeedItem
 import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
+import app.getvela.wallet.feature.wallet.core.FeedTxKind
+import app.getvela.wallet.feature.wallet.core.FeedTxStatus
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DateFormat
@@ -78,11 +80,14 @@ object WalletLive {
         val money = Money.of(currency)
         val rows = assetRows(view, chainNames, currency)
             .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
-        val groups = activity(feed, strings, now)
+        val groups = activity(feed, strings, now, chainNames)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money, chainNames),
             activitySection = fallback.activitySection.copy(
                 mode = if (groups.isEmpty()) SectionMode.Empty else SectionMode.Rows,
+                // Spec 082 RG5: which empty line — "no activity yet" or "none
+                // on this network" — is the core's, by the chain filter.
+                empty = fallback.activitySection.empty?.copy(title = strings.t(feed.home_empty_key)),
             ),
             activityGroups = groups,
             assetsSection = fallback.assetsSection.copy(
@@ -111,13 +116,15 @@ object WalletLive {
         feed: FeedView,
         strings: VelaStrings,
         now: Long = System.currentTimeMillis(),
+        /** A dApp row with no site and no recipient names its chain (RG2). */
+        chainNames: Map<Int, String> = emptyMap(),
     ): List<ActivityGroupModel> {
         val groups = mutableListOf<ActivityGroupModel>()
         for (row in feed.rows) {
             when (row) {
                 is FeedRow.Header -> groups += ActivityGroupModel(dayLabel(row, strings, now), emptyList())
                 is FeedRow.Item -> {
-                    val model = activityRow(row.item, strings)
+                    val model = activityRow(row.item, strings, chainNames)
                     val last = groups.lastOrNull()
                     if (last == null) {
                         // An item before any header cannot happen — but if the
@@ -157,23 +164,27 @@ object WalletLive {
         }
     }
 
-    private fun activityRow(item: FeedItem, strings: VelaStrings): ActivityRowModel {
+    private fun activityRow(item: FeedItem, strings: VelaStrings, chainNames: Map<Int, String>): ActivityRowModel {
         val received = item.direction == FeedDirection.In
         val batch = item.batch
+        // What the row is and where its record stands are the core's (spec
+        // 082 RG1): `kind` and `status`, never a guess from a hash.
+        val dapp = item.kind == FeedTxKind.DappTx
         return ActivityRowModel(
             id = item.id,
             kind = when {
-                // A dApp transaction is a send whose counterparty is a
-                // contract; the core does not label it, because what to call it
-                // is display vocabulary.
-                item.batch != null -> if (received) ActivityKind.Received else ActivityKind.Sent
-                received -> ActivityKind.Received
+                dapp -> ActivityKind.Dapp
+                item.kind == FeedTxKind.Receive || received -> ActivityKind.Received
                 else -> ActivityKind.Sent
             },
             title = strings.t(
-                if (received) I18nKeys.Wallet.LABEL_RECEIVED else I18nKeys.Wallet.LABEL_SENT,
+                when {
+                    dapp -> I18nKeys.Wallet.LABEL_DAPP_TX
+                    received -> I18nKeys.Wallet.LABEL_RECEIVED
+                    else -> I18nKeys.Wallet.LABEL_SENT
+                },
             ),
-            subtitle = counterparty(item, strings),
+            subtitle = statusLead(item, strings) + if (dapp) dappSubtitle(item, chainNames) else counterparty(item, strings),
             amount = signedAmount(item, received),
             unit = item.symbol.ifBlank { batch?.symbol.orEmpty() },
             positive = received,
@@ -199,6 +210,24 @@ object WalletLive {
             mapOf("name" to name),
         )
     }
+
+    /**
+     * Spec 082 RG2: a row whose record is not confirmed says so first —
+     * "Pending · " or "Failed · " — in the detail sheet's words.
+     */
+    private fun statusLead(item: FeedItem, strings: VelaStrings): String = when (item.status) {
+        FeedTxStatus.Confirmed -> ""
+        FeedTxStatus.Pending -> strings.t(I18nKeys.Wallet.ROW_PENDING) + " · "
+        FeedTxStatus.Failed -> strings.t(I18nKeys.Wallet.ROW_FAILED) + " · "
+    }
+
+    /** A dApp's row names the site that asked, else the recipient, else the chain (RG2). */
+    private fun dappSubtitle(item: FeedItem, chainNames: Map<Int, String>): String =
+        item.site?.takeIf { it.isNotBlank() }
+            ?: item.alias
+            ?: item.counterparty?.takeIf { it.isNotBlank() }?.let(::shortenAddress)
+            ?: chainNames[item.chain_id]
+            ?: ""
 
     private fun shortenAddress(address: String): String =
         if (address.length <= 12) address else address.take(6) + "…" + address.takeLast(4)

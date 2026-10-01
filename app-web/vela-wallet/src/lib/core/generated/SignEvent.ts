@@ -2,6 +2,7 @@
 import type { SignAccountRef } from "./SignAccountRef";
 import type { SignApproveOpts } from "./SignApproveOpts";
 import type { SignDappIdentity } from "./SignDappIdentity";
+import type { TrackStatus } from "./TrackStatus";
 
 export type SignEvent = { "type": "networks_changed", chain_ids: Array<number>, } | { "type": "accounts_changed", accounts: Array<SignAccountRef>, active_index: number, } | { "type": "request_arrived", id: string, method: string, 
 /**
@@ -15,4 +16,20 @@ granted_address: string | null,
 /**
  * §12.1.6: the address the request asks to act as (popup path).
  */
-requested_address: string | null, request_ts_ms: number | null, now_ms: number, } | { "type": "chain_switch_requested", id: string | null, transport_id: string | null, chain_id_param: string | null, } | { "type": "approve_tapped", opts: SignApproveOpts, } | { "type": "reject_tapped" } | { "type": "dismiss_tapped" } | { "type": "swipe_dismissed" } | { "type": "funding_complete_tapped" } | { "type": "funding_cancelled" } | { "type": "op_submitted", id: string, user_op_hash: string, now_ms: number, } | { "type": "transport_dropped", transport_id: string, };
+requested_address: string | null, request_ts_ms: number | null, now_ms: number, } | { "type": "chain_switch_requested", id: string | null, transport_id: string | null, chain_id_param: string | null, } | { "type": "approve_tapped", opts: SignApproveOpts, } | { "type": "reject_tapped" } | { "type": "dismiss_tapped" } | { "type": "swipe_dismissed" } | { "type": "funding_complete_tapped" } | { "type": "funding_cancelled" } | { "type": "op_submitted", id: string, user_op_hash: string, now_ms: number, 
+/**
+ * The submit's reply was lost and `user_op_hash` is the local hash
+ * (spec 082 RA2/RA3): the op is recorded and tracked all the same,
+ * and the page is answered from the chain — the tx hash once it
+ * lands, the revert, or "not confirmed yet" — never 4900 and never
+ * that hash (owner ruling 2026-10-01).
+ */
+maybe_sent: boolean, 
+/**
+ * The head read before the first POST (ruling 8); `None` = unknown.
+ */
+submit_block: number | null, } | { "type": "op_signed", id: string, user_op_hash: string, 
+/**
+ * The head read before the first POST (ruling 8); `None` = unknown.
+ */
+submit_block: number | null, now_ms: number, } | { "type": "op_tracked", user_op_hash: string, status: TrackStatus, tx_hash: string | null, now_ms: number, } | { "type": "ceremony_started", id: string, } | { "type": "ceremony_done", id: string, } | { "type": "transport_dropped", transport_id: string, };

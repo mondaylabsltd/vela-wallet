@@ -144,7 +144,12 @@ window.VelaCS = window.VelaCS || {};
     };
   }
 
-  function nativeAmount(value, ctx) {
+  /**
+   * `exact`: every one of the 18 decimals that is not a trailing zero, as the
+   * wallet's plain send card states it (vela-core `exact_native_amount`, 082
+   * RC5). Without it the figure stops at six decimals.
+   */
+  function nativeAmount(value, ctx, exact) {
     // The chain's own coin, from the chain id we sign for — the requester's
     // word only for a chain this page does not know (as with its name).
     var symbol = reg.nativeSymbol(ctx.chainId) || ctx.nativeSymbol || 'ETH';
@@ -152,7 +157,7 @@ window.VelaCS = window.VelaCS || {};
       value: value,
       token: { symbol: symbol, decimals: 18, tone: '#8a93a5' },
       symbol: symbol,
-      text: formatUnits(value, 18),
+      text: formatUnits(value, 18, exact ? 18 : undefined),
       fiat: fiat(ctx, symbol, value, 18),
       unlimited: false,
     };
@@ -166,6 +171,19 @@ window.VelaCS = window.VelaCS || {};
 
   // --- view scaffold ---------------------------------------------------------
 
+  /**
+   * Whether a site's name and its host are the same words, by the apps' rule
+   * (vela-core `browser_load::site_label`, spec 079 F14): both trimmed, then
+   * equal ignoring ASCII case. The wallet names a site it opened by its host,
+   * so without this the head read "127.0.0.1:8137" over "127.0.0.1:8137".
+   */
+  function sameSiteWords(name, host) {
+    var fold = function (text) {
+      return String(text || '').trim().replace(/[A-Z]/g, function (c) { return c.toLowerCase(); });
+    };
+    return fold(name) === fold(host);
+  }
+
   function baseView(intent, ctx) {
     var origin = (intent && intent.origin) || '';
     var host = origin.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -174,7 +192,11 @@ window.VelaCS = window.VelaCS || {};
       dapp: {
         name: (known && known.name) || null,
         nameKey: (known && known.name) ? null : (host ? 'tag.unknownSite' : 'tag.wallet'),
+        // The host, for every judgement about it (`warn.claimedOrigin` reads
+        // this). Whether the head draws it as a line of its own is
+        // `originShown`: not when the name above already says it (082 L-HOST).
         origin: host || null,
+        originShown: !!host && !sameSiteWords((known && known.name) || '', host),
         // The wallet asking itself has no host: its initial is the word's.
         letter: ((known && known.name) || host || ns.i18n.t('tag.wallet') || '?').charAt(0).toUpperCase(),
         tone: (known && known.tone) || '#8a93a5',
@@ -239,12 +261,39 @@ window.VelaCS = window.VelaCS || {};
 
   // --- transactions ----------------------------------------------------------
 
+  /**
+   * Whether a call carries no calldata: absent, "", "0x" or "0X", after
+   * trimming whitespace — the wallet's own test (vela-core
+   * `clear_signing::is_empty_calldata`, 082 RC1). Such a call runs no
+   * function: it is a plain send of the native coin, whatever the recipient
+   * is (RC2) and whatever the value, 0 included (RC8). Only a string can
+   * carry calldata; anything else that is not absent is read as calldata and
+   * goes down the blind ladder, as before.
+   */
+  function isEmptyCalldata(data) {
+    if (data === undefined || data === null) return true;
+    if (typeof data !== 'string') return false;
+    var body = data.trim();
+    return body === '' || body.toLowerCase() === '0x';
+  }
+
+  /**
+   * A call's value in wei (`abi.quantity`, the wallet's submit reading).
+   * Absent, "" and "0x" are zero (vela-core RC4). `null` when the page cannot
+   * read it ("abc", "-1", 1.5): no figure is printed for it, and it matches no
+   * call of the operation. BigInt() throwing here used to take the whole page
+   * down — no card, no refusal.
+   */
+  function callValue(value) {
+    return abi.quantity(value);
+  }
+
   function resolveCall(call, ctx, view, isLeg) {
     var to = call.to || '';
     var data = call.data || '0x';
-    var value = BigInt(call.value || '0x0');
+    var value = callValue(call.value);
     var selector = abi.selectorOf(data);
-    var hasCalldata = !!data && data !== '0x';
+    var hasCalldata = !isEmptyCalldata(call.data);
     var meta = identify(to, ctx, { isCallTarget: hasCalldata });
 
     if (!to) {
@@ -263,10 +312,18 @@ window.VelaCS = window.VelaCS || {};
       return view;
     }
 
-    if (!hasCalldata && value > 0n) {
-      var amount = nativeAmount(value, ctx);
+    // Every call with no calldata is a send, value 0 included: "Send · 0 xDAI
+    // · Recipient", never the blind ladder's red "nothing decodes" (082 G14,
+    // RC8). The ladder below sees calldata — or a value no chain carries
+    // (negative) or the page cannot read, which the wallet's own rule refuses
+    // to print (RC4). The figure is exact (RC5): with "0" meaning nothing
+    // moves, a few wei must not read "0" too.
+    if (!hasCalldata && value !== null && value >= 0n) {
+      var amount = nativeAmount(value, ctx, true);
+      var moves = value > 0n;
       view.intentKey = 'intent.send';
-      view.hero = { kind: 'amount', amount: amount, direction: 'out' };
+      // Nothing leaves at 0, so the hero is not an outgoing amount.
+      view.hero = { kind: 'amount', amount: amount, direction: moves ? 'out' : 'none' };
       view.fields.push({ label: 'field.recipient', identity: meta, format: 'addressName', role: 'recipient' });
       if (meta.kind === 'own') {
         view.risk = 'safe';
@@ -280,7 +337,11 @@ window.VelaCS = window.VelaCS || {};
       view.tech = techFor(text('value.noCalldata'), null, null, {
         params: [{ name: 'value', value: amount.text + ' ' + amount.symbol }],
         addresses: [{ roleKey: 'field.recipient', name: label(meta), address: to }],
-        sim: text('ui.simNoOther', { delta: '-' + amount.text + ' ' + amount.symbol }),
+        // The "−amount · nothing else changes" line is a statement about what
+        // leaves. At 0 there is no minus to write, and "nothing else changes"
+        // is the simulation's to say, not this page's: a recipient's code
+        // still runs.
+        sim: moves ? text('ui.simNoOther', { delta: '-' + amount.text + ' ' + amount.symbol }) : undefined,
       });
       return view;
     }
@@ -1032,6 +1093,7 @@ window.VelaCS = window.VelaCS || {};
         : null;
     }
     view.dapp.origin = who.origin || null;
+    view.dapp.originShown = !!view.dapp.origin && !sameSiteWords(view.dapp.name || '', view.dapp.origin);
     view.dapp.originKey = who.originKey || null;
     view.dapp.originVerified = who.verified;
 

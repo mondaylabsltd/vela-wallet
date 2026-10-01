@@ -1,0 +1,12 @@
+EX7 — Sign, then 5 min 10 s with no CDP/DevTools on anything (a plain `until date` loop; no ext.mjs/tcdp.mjs/xt.mjs)
+page posted personal_sign        1790620575642  (18:36:15.642Z, dApp hook on vela-1193 'req')
+worker                           [vela-sw] 2026-09-28T18:36:15.695Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+                                 [vela-sw] 2026-09-28T18:36:15.697Z sw.start records=0 recovered=0   (cold worker, woken by the request)
+                                 [vela-sw] 2026-09-28T18:36:15.794Z panel.up window=291188707
+                                 [vela-sw] 2026-09-28T18:36:15.806Z req.shown tab=291188710
+dApp got 4900                    1790620881089  "Vela did not answer in time — check its activity"   (+305.45 s after the page's request), 1 answer
+worker                           [vela-sw] 2026-09-28T18:41:21.090Z req.settled cause=expired tab=291188710
+panel sheet removed              1790620881092  (+3 ms after the 4900); dialogs in panel afterwards: 0; nothing left to approve
+storage.session vela.req.*       none
+Note: the panel reopened (after EX6 closed it) at en/wallet.html?panel although the wallet language is pinned to zh
+      (localStorage vela.language = "zh"; the wallet tab is zh) — see notes.

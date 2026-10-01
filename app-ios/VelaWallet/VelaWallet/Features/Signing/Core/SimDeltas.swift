@@ -5,9 +5,12 @@
 //  The transaction simulation's SHELL half (spec 055 D2).
 //
 //  Ported from `app-desktop/.../executor/sim.rs` and
-//  `app-android/.../feature/signing/core/SimDeltas.kt`. Two jobs and no third:
-//  build the `eth_simulateV1` payload for a request's calls, and net the
-//  `Transfer` logs of the calls that succeeded into per-token deltas.
+//  `app-android/.../feature/signing/core/SimDeltas.kt`. One job since spec 082:
+//  build the `eth_simulateV1` payload for a request's calls. Reading the reply
+//  — a revert, a node that cannot simulate, the person's net moves — is the
+//  core's `simOutcome` (RG6); the parser that lived here moved there with its
+//  vectors (T039), because three shells parsed it three ways and none saw a
+//  revert.
 //
 //  **What the deltas MEAN is the core's** (`token_trust::judge_delta`), and its
 //  judgment is asymmetric on purpose: an outflow renders whenever the token's
@@ -21,15 +24,22 @@
 //
 
 import Foundation
+import VelaCore
 
 enum SimDeltas {
 
-    /// `keccak256("Transfer(address,address,uint256)")`.
-    static let transferTopic = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-
-    /// The sender a node reports for a NATIVE value move under
-    /// `traceTransfers` — not a contract, a sentinel.
-    static let nativeSentinel = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    /// A simulated balance change as the sheet writes it — the core's
+    /// `formatSignedTokenAmount` (spec 082 RJ15, G49): the token ladder in
+    /// the person's number preset, U+2212 for a minus, a dust amount written
+    /// exactly (1000 wei is never "−0"), and `nil` for a zero change, which is
+    /// not drawn at all. `delta` is the core's signed base units ("-1000").
+    static func deltaText(_ delta: String, decimals: Int, preset: String? = nil) -> String? {
+        formatSignedTokenAmount(
+            deltaBaseUnits: delta,
+            decimals: UInt32(clamping: max(0, decimals)),
+            preset: preset ?? Formats.resolve(Formats.current.number).rawValue
+        )
+    }
 
     /// One leg of the operation being simulated.
     struct Call {
@@ -67,77 +77,6 @@ enum SimDeltas {
             "traceTransfers": true,
             "returnFullTransactions": false,
         ]
-    }
-
-    /// The logs of every SUCCEEDED call in every simulated block.
-    ///
-    /// `nil` when the node answered an error or nothing at all — which the
-    /// sheet must show as "could not check", never as "nothing moves".
-    static func logsOf(_ result: [String: Any]) -> [[String: Any]]? {
-        if let error = result["error"], !(error is NSNull) { return nil }
-        guard let blocks = result["result"] as? [[String: Any]], !blocks.isEmpty else { return nil }
-        var logs: [[String: Any]] = []
-        for block in blocks {
-            guard let calls = block["calls"] as? [[String: Any]] else { continue }
-            for call in calls where succeeded(call) {
-                logs += (call["logs"] as? [[String: Any]]) ?? []
-            }
-        }
-        return logs
-    }
-
-    /// A call is a success unless the node says otherwise. Two spellings of the
-    /// status are in the wild (`"0x1"` and a number), and a call with neither
-    /// and no error is one that ran.
-    private static func succeeded(_ call: [String: Any]) -> Bool {
-        if let status = call["status"] as? String { return status == "0x1" }
-        if let status = call["status"] as? NSNumber { return status.intValue == 1 }
-        let error = call["error"]
-        return error == nil || error is NSNull
-    }
-
-    /// Net `Transfer` deltas for one address, in first-seen order, zeros
-    /// dropped.
-    ///
-    /// In-and-out of the same token nets to nothing, and printing a pair of
-    /// moves that cancel is how a swap looks like a theft.
-    static func deriveDeltas(logs: [[String: Any]], user: String) -> [[String: Any]] {
-        let me = user.lowercased()
-        var order: [String] = []
-        var totals: [String: SignedDigits] = [:]
-
-        for log in logs {
-            guard let topics = log["topics"] as? [String], topics.count == 3,
-                  topics[0].caseInsensitiveCompare(transferTopic) == .orderedSame
-            else { continue }
-            let from = topicAddress(topics[1])
-            let to = topicAddress(topics[2])
-            guard from == me || to == me else { continue }
-            guard let value = SignedDigits.firstWord(hex: log["data"] as? String ?? ""),
-                  !value.isZero
-            else { continue }
-            let address = (log["address"] as? String ?? "").lowercased()
-            guard !address.isEmpty else { continue }
-            let key = address == nativeSentinel ? "native" : address
-            if totals[key] == nil { order.append(key) }
-            var total = totals[key] ?? .zero
-            if to == me { total = total.adding(value) }
-            if from == me { total = total.subtracting(value) }
-            totals[key] = total
-        }
-
-        return order.compactMap { key in
-            guard let total = totals[key], !total.isZero else { return nil }
-            return key == "native"
-                ? ["kind": "native", "token": NSNull(), "delta": total.text]
-                : ["kind": "erc20", "token": key, "delta": total.text]
-        }
-    }
-
-    /// A 32-byte topic → the address in its low 20 bytes, lowercase.
-    static func topicAddress(_ topic: String) -> String {
-        let hex = (topic.hasPrefix("0x") ? String(topic.dropFirst(2)) : topic).lowercased()
-        return hex.count >= 40 ? "0x" + String(hex.suffix(40)) : ""
     }
 
     /// A value as the node wants it: `0x` hex, decimal input converted, empty

@@ -113,6 +113,11 @@ data class BrowserModel(
     val chainAsking: Boolean = false,
     /** The page's renderer died: the tab shows the reload panel until the person asks. */
     val crashed: Boolean = false,
+    /**
+     * Spec 082 RE1: whether the bar shows a lock at all — none for a failure
+     * panel, a load still pending in an empty tab, or an empty tab.
+     */
+    val lockShown: Boolean = true,
 )
 
 @Immutable

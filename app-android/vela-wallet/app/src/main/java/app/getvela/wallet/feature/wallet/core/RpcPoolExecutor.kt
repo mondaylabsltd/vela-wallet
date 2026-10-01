@@ -64,11 +64,12 @@ class RpcPoolExecutor(
                 // The caller is already gone — a cancelled screen, a superseded
                 // refresh. Report the endpoint as unreachable rather than
                 // leaving the core waiting on a call nobody wants; it will route
-                // on and conclude.
+                // on and conclude. Nothing was posted: `not_connected`, never a
+                // "may have been delivered" (spec 082 RA1).
                 RpcShellResult.PostOutcome(
                     call_id = operation.call_id,
                     url = operation.url,
-                    outcome = RpcTransportOutcome.Network,
+                    outcome = RpcTransportOutcome.NotConnected,
                     latency_ms = 0.0,
                     now_ms = started,
                 )
@@ -81,6 +82,7 @@ class RpcPoolExecutor(
                     timeoutMs = operation.timeout_ms,
                 )
                 result.body?.let { registry.keepBody(operation.call_id, operation.url, it) }
+                health(result.outcome, payload.chainId)
                 // Debug trace (spec 043 phase 4, device-found): which host,
                 // which method, what came back. The pool's verdicts are the
                 // core's; this is the only place the raw outcome is visible.
@@ -115,6 +117,7 @@ class RpcPoolExecutor(
                 xRpcUrl = null,
                 timeoutMs = operation.timeout_ms,
             )
+            health(result.outcome, operation.chain_id)
             RpcShellResult.ChainIdProbed(
                 chain_id = operation.chain_id,
                 url = operation.url,
@@ -160,6 +163,21 @@ class RpcPoolExecutor(
         is RpcOperation.Conclude -> {
             registry.settle(operation.call_id, operation.verdict)
             RpcShellResult.Concluded
+        }
+    }
+
+    /**
+     * What one POST says about the network, per source (spec 082 RJ14): an
+     * answer of any kind reached a server; a transport failure did not; a
+     * timeout says nothing either way (a slow server is not a missing
+     * network). The chain is the source — one chain whose nodes are all down
+     * is that chain's notice, never "offline" (G53).
+     */
+    private fun health(outcome: RpcTransportOutcome, chainId: Int?) {
+        when (outcome) {
+            is RpcTransportOutcome.Response, is RpcTransportOutcome.HttpError, RpcTransportOutcome.NonJson -> NetHealth.reached(chainId)
+            RpcTransportOutcome.Timeout -> Unit
+            else -> NetHealth.unreached(chainId)
         }
     }
 
@@ -220,7 +238,8 @@ interface RpcPoolCallRegistry {
     fun settle(callId: String, verdict: RpcCallVerdict)
 }
 
-data class RpcPayload(val method: String, val params: List<Any?>)
+/** [chainId]: the chain the call reads — the source network health counts it under (spec 082 RJ14). */
+data class RpcPayload(val method: String, val params: List<Any?>, val chainId: Int? = null)
 
 /** Where a chain's candidate endpoints come from (research D4). */
 interface RpcEndpointSource {
@@ -297,7 +316,6 @@ class OkHttpTransport : RpcTransport {
 
         try {
             call.await().use { response ->
-                NetHealth.reached()
                 if (!response.isSuccessful) {
                     return@withContext RpcPostResult(RpcTransportOutcome.HttpError(response.code))
                 }
@@ -312,15 +330,8 @@ class OkHttpTransport : RpcTransport {
                 }
                 RpcPostResult(RpcTransportOutcome.Response(error), json)
             }
-        } catch (timeout: java.io.InterruptedIOException) {
-            // okhttp reports a call timeout as an InterruptedIOException, which
-            // is a subclass of IOException — so it must be caught FIRST or every
-            // timeout would be reported as a generic network failure, and the
-            // core would ban an endpoint that was merely slow.
-            RpcPostResult(RpcTransportOutcome.Timeout)
-        } catch (network: IOException) {
-            NetHealth.unreached()
-            RpcPostResult(RpcTransportOutcome.Network)
+        } catch (failure: IOException) {
+            RpcPostResult(outcomeOf(failure))
         }
     }
 
@@ -351,7 +362,37 @@ class OkHttpTransport : RpcTransport {
             })
         }
 
-    private companion object {
+    internal companion object {
         val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * What a failed POST says about delivery (spec 082 RA1, contract §2).
+         *
+         * `NotConnected` only when nothing can have left the device — the name
+         * did not resolve, the connection was refused or unroutable, the TLS
+         * handshake failed, or the connect itself timed out. That is the one
+         * fact that lets a submit say "not sent — try again". A call timeout
+         * after connecting (okhttp's `InterruptedIOException("timeout")`) is a
+         * `Timeout`: the request may have been written and acted on; so is any
+         * other socket failure (`Network`). An `SSLHandshakeException` is
+         * matched before its `IOException` parent, a connect-timeout
+         * `SocketTimeoutException` before the `InterruptedIOException` it is.
+         */
+        fun outcomeOf(failure: IOException): RpcTransportOutcome = when (failure) {
+            is java.net.UnknownHostException,
+            is java.net.ConnectException,
+            is java.net.NoRouteToHostException,
+            is javax.net.ssl.SSLHandshakeException,
+            -> RpcTransportOutcome.NotConnected
+            is java.net.SocketTimeoutException ->
+                if (failure.message.orEmpty().contains("connect", ignoreCase = true)) RpcTransportOutcome.NotConnected
+                else RpcTransportOutcome.Timeout
+            // okhttp reports a call timeout as an InterruptedIOException, which
+            // is a subclass of IOException — so it must be matched before the
+            // generic case or every timeout would be reported as a network
+            // failure, and the core would ban an endpoint that was merely slow.
+            is java.io.InterruptedIOException -> RpcTransportOutcome.Timeout
+            else -> RpcTransportOutcome.Network
+        }
     }
 }

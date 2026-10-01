@@ -503,3 +503,41 @@ fn bidi_isolation_is_off_by_default_and_wraps_only_when_asked() {
     // Explicit isolation wraps only the substituted value.
     assert_eq!(vela_core::l10n::isolate("Alice"), "\u{2068}Alice\u{2069}");
 }
+
+/// Spec 082 RJ15 (G49): a signed balance change never reads `−0`. A delta the
+/// ladder rounds to nothing is written exactly; zero is never drawn; the
+/// minus is U+2212 and the plus is written.
+#[test]
+fn a_signed_token_amount_never_reads_minus_zero() {
+    use vela_core::l10n::format_signed_token_amount;
+    let cd = NumberPreset::CommaDot;
+    assert_eq!(
+        format_signed_token_amount("-1000", 18, cd).as_deref(),
+        Some("\u{2212}0.000000000000001"),
+        "1000 wei is not −0"
+    );
+    assert_eq!(
+        format_signed_token_amount("-1000000000000000", 18, cd).as_deref(),
+        Some("\u{2212}0.001")
+    );
+    assert_eq!(format_signed_token_amount("0", 18, cd), None);
+    assert_eq!(format_signed_token_amount("-000", 18, cd), None);
+    assert_eq!(
+        format_signed_token_amount("+2100000000000000000", 18, cd).as_deref(),
+        Some("+2.1")
+    );
+    assert_eq!(
+        format_signed_token_amount("-8450000000", 6, cd).as_deref(),
+        Some("\u{2212}8,450.00"),
+        "the ladder, where it prints a figure"
+    );
+    // The exact form speaks the preset's marks.
+    assert_eq!(
+        format_signed_token_amount("-1000", 18, NumberPreset::DotComma).as_deref(),
+        Some("\u{2212}0,000000000000001")
+    );
+    // Unreadable text is no figure.
+    for junk in ["", "-", "0x10", "1.5", "abc", "--1"] {
+        assert_eq!(format_signed_token_amount(junk, 18, cd), None, "{junk:?}");
+    }
+}

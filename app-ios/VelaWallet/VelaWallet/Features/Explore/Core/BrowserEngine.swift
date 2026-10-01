@@ -18,6 +18,25 @@
 //  `title`, `progress`, `canGoBack`/`canGoForward` and `loading` for the
 //  chrome; whether the page is secure, connected or crashed is the core's.
 //
+//  ## The address bar names the page on screen (spec 082 RE1, G28)
+//
+//  `webView.url` is WebKit's ACTIVE url — during any provisional load it is
+//  where the load is going, not where the page is. The bar used to follow it
+//  by KVO, so a typed address renamed the bar the instant Go was tapped and a
+//  page's own `location.href` to a host that never answered showed that host
+//  over the live page — a spoofing shape. The engine now keeps three facts —
+//  the committed document, the pending load and the failed one — and the
+//  core's `browserAddressBar` says which one the bar names and with what lock.
+//
+//  ## Nothing looks frozen (spec 082 RE2, RE5)
+//
+//  Every request arms a watchdog for the core's give-up budget, keyed by a
+//  load generation. When it fires and the core's `browserLoadShouldGiveUp`
+//  holds (no commit, WebKit's own progress never came alive) the load is
+//  stopped and the core's `browserLoadStalled` panel shows, retried on the
+//  usual schedule. A slow site that is answering is never cut. Stop ends a
+//  load in flight and keeps the committed page.
+//
 //  ## A closed tab is torn down, not merely forgotten
 //
 //  Before 070 a closed tab's web view kept its script handler — which retained
@@ -107,6 +126,49 @@ final class BrowserEngine: NSObject {
     /// own blank document without loading one.
     var reportedURL: () -> URL?
 
+    /// WebKit's own progress (`estimatedProgress`) — never this engine's
+    /// `progress`, which starts the hairline before WebKit does. A seam.
+    var reportedProgress: () -> Double
+    /// Whether WebKit has a load of a new document running (`isLoading`). A
+    /// navigation inside the document — a fragment, Back or Forward across a
+    /// single-page app's own entries — never sets it. A seam.
+    var reportedLoading: () -> Bool
+    /// How a load in flight is stopped. A seam, so tests stop nothing real.
+    var stopper: () -> Void
+
+    // MARK: - What the bar names (spec 082 RE1)
+
+    /// The document on screen: set at its commit, and followed by a
+    /// same-origin change while nothing is pending (a single-page app's
+    /// `pushState`, a fragment).
+    private(set) var committedURL: String?
+    /// Where a load now running is going: a typed address, a retry,
+    /// back/forward, a page's own navigation, a `_blank` link. It names the
+    /// bar only in a tab that has no page yet — the core's rule.
+    private(set) var pendingURL: String?
+
+    /// What the address bar shows, from the core (`browserAddressBar`): a
+    /// failure panel → the failed host and no lock; else the committed page
+    /// and its lock; else a pending load in an empty tab, no lock. Share,
+    /// copy, favourite and the edit field act on its `url`.
+    var bar: BrowserAddressBar {
+        browserAddressBar(
+            shown: committedURL,
+            pending: pendingURL,
+            failed: failure == nil ? nil : (failedURL.isEmpty ? pendingURL : failedURL)
+        )
+    }
+
+    // MARK: - The watchdog (spec 082 RE2)
+
+    /// Bumped at every request; the watchdog is armed for one generation.
+    private(set) var loadGeneration: UInt64 = 0
+    /// The last generation whose document committed.
+    private var committedGeneration: UInt64 = 0
+    private var watchdogTask: Task<Void, Never>?
+    /// Whether a watchdog is running (tests read it).
+    var watchdogArmed: Bool { watchdogTask != nil }
+
     /// Where the load hairline starts the moment a load is asked for
     /// (spec 079): on a slow network the engine's own progress starts only
     /// at the commit, seconds later, and a tap that changes nothing reads as
@@ -151,6 +213,9 @@ final class BrowserEngine: NSObject {
         self.webView = webView
         self.loader = { [weak webView] request in webView?.load(request) }
         self.reportedURL = { [weak webView] in webView?.url }
+        self.reportedProgress = { [weak webView] in webView?.estimatedProgress ?? 0 }
+        self.reportedLoading = { [weak webView] in webView?.isLoading ?? false }
+        self.stopper = { [weak webView] in webView?.stopLoading() }
         super.init()
 
         ProviderBridge.install(into: configuration.userContentController, handler: self)
@@ -175,20 +240,35 @@ final class BrowserEngine: NSObject {
         retryAttempt = 0
         failure = nil
         retrying = false
-        requested()
+        requested(target.absoluteString)
+        VelaLog.notice(.browser, "requested host=\(VelaLog.hostOf(url: target.absoluteString))")
         loader(URLRequest(url: target))
     }
 
     func goBack() {
         guard webView.canGoBack else { return }
-        requested()
+        requested(webView.backForwardList.backItem?.url.absoluteString)
         webView.goBack()
     }
 
     func goForward() {
         guard webView.canGoForward else { return }
-        requested()
+        requested(webView.backForwardList.forwardItem?.url.absoluteString)
         webView.goForward()
+    }
+
+    /// Stop (spec 082 RE5): the load in flight and its watchdog end; the
+    /// committed page and its bar stay, and no panel is drawn. WebKit's
+    /// cancellation that follows is not a failure.
+    func stop() {
+        guard !tornDown else { return }
+        disarmWatchdog()
+        cancelRetry()
+        pendingURL = nil
+        retrying = false
+        VelaLog.notice(.browser, "stopped host=\(VelaLog.hostOf(url: bar.url))")
+        stopper()
+        update(loading: false)
     }
 
     /// Reload — or, on a failed page, the person's Retry: the panel stays,
@@ -203,7 +283,7 @@ final class BrowserEngine: NSObject {
             retry()
             return
         }
-        requested()
+        requested(committedURL ?? (url.isEmpty ? nil : url))
         if liveURL == nil, !url.isEmpty, let target = URL(string: url) {
             loader(URLRequest(url: target))
             return
@@ -213,11 +293,20 @@ final class BrowserEngine: NSObject {
 
     /// The person or the page asked for a load (spec 079): progress shows
     /// now, not when the engine commits. The address bar keeps the committed
-    /// host until then.
-    func requested() {
+    /// host until then (spec 082: `target` is the pending load, which names
+    /// the bar only in an empty tab). The watchdog is armed for it.
+    func requested(_ target: String? = nil) {
         guard !tornDown else { return }
+        // Only a web address is a page the bar could name: a frame's
+        // `about:blank` or a `data:` document is not somewhere a load goes.
+        if let target, let scheme = URL(string: target)?.scheme?.lowercased(),
+           scheme == "http" || scheme == "https" {
+            pendingURL = target
+        }
         progress = max(loading ? progress : 0, Self.requestedProgress)
         loading = true
+        loadGeneration &+= 1
+        armWatchdog()
         onStateChanged()
     }
 
@@ -228,7 +317,8 @@ final class BrowserEngine: NSObject {
         let target = failedURL.isEmpty ? url : failedURL
         guard let request = URL(string: target).map({ URLRequest(url: $0) }) else { return }
         retrying = true
-        requested()
+        requested(target)
+        VelaLog.notice(.browser, "retry #\(retryAttempt) host=\(VelaLog.hostOf(url: target))")
         loader(request)
     }
 
@@ -259,10 +349,88 @@ final class BrowserEngine: NSObject {
         }
     }
 
-    /// The app came to the front, or left it.
+    /// The app came to the front, or left it. The watchdog is dropped while
+    /// the app is away and re-armed with the full budget on return: time in
+    /// the background is not the site's.
     func setAppActive(_ active: Bool) {
         appActive = active
         active ? resumeRetry() : cancelRetry()
+        if active {
+            if loading, committedGeneration != loadGeneration, watchdogTask == nil { armWatchdog() }
+        } else {
+            disarmWatchdog()
+        }
+    }
+
+    // MARK: - The watchdog (spec 082 RE2)
+
+    /// Armed at every request, for the core's give-up budget.
+    private func armWatchdog() {
+        disarmWatchdog()
+        guard appActive, !tornDown else { return }
+        let generation = loadGeneration
+        let budget = browserLoadGiveUpMs()
+        let started = Date()
+        watchdogTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(budget) * 1_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.watchdogTask = nil
+            let elapsed = UInt32(clamping: Int(Date().timeIntervalSince(started) * 1000))
+            self.watchdogFired(generation: generation, elapsedMs: elapsed)
+        }
+    }
+
+    private func disarmWatchdog() {
+        watchdogTask?.cancel()
+        watchdogTask = nil
+    }
+
+    /// The budget ran out for `generation` (tests call it rather than waiting
+    /// twenty seconds). The core decides whether that is a stall: no commit,
+    /// and WebKit's own progress never came alive. A slow page that is
+    /// answering is never cut.
+    func watchdogFired(generation: UInt64? = nil, elapsedMs: UInt32) {
+        let generation = generation ?? loadGeneration
+        guard !tornDown, generation == loadGeneration, loading else { return }
+        let committed = committedGeneration == generation
+        let progress = reportedProgress()
+        guard browserLoadShouldGiveUp(elapsedMs: elapsedMs, committed: committed, progress: progress) else {
+            VelaLog.notice(.browser, "watchdog: still loading progress=\(progress) — not cut")
+            return
+        }
+        giveUp(elapsedMs: elapsedMs)
+    }
+
+    /// The load is stopped and the core's stalled panel shows, with the host
+    /// it was going to, retried on the usual schedule while in front.
+    private func giveUp(elapsedMs: UInt32) {
+        disarmWatchdog()
+        let target = pendingURL ?? (failedURL.isEmpty ? url : failedURL)
+        failedURL = target
+        pendingURL = nil
+        let stalled = browserLoadStalled()
+        failure = stalled
+        attemptFailed = true
+        retrying = false
+        VelaLog.failure(.browser, kind: stalled.class, "stalled host=\(VelaLog.hostOf(url: target)) after=\(elapsedMs)ms")
+        // WebKit's cancellation that follows (-999) is not a failure: the
+        // panel stays (`fail` reads the core's `nil` for it).
+        stopper()
+        update(loading: false)
+        scheduleRetry(stalled)
+    }
+
+    /// The network came back (spec 082 RE3): the failed page's attempt count
+    /// starts again, and the page in front is asked for again at once when
+    /// its class is one a returning network can clear (the core's rule).
+    func networkCameBack() {
+        guard let failure, !tornDown else { return }
+        retryAttempt = 0
+        guard onScreen, appActive, !retrying,
+              browserLoadRetryWhenNetworkReturns(class: failure.class)
+        else { return }
+        cancelRetry()
+        retry()
     }
 
     private func resumeRetry() {
@@ -313,6 +481,7 @@ final class BrowserEngine: NSObject {
         guard !tornDown else { return }
         tornDown = true
         cancelRetry()
+        disarmWatchdog()
         observations.forEach { $0.invalidate() }
         observations.removeAll()
         let controller = webView.configuration.userContentController
@@ -341,6 +510,14 @@ final class BrowserEngine: NSObject {
             webView.observe(\.title, options: [.new]) { [weak self] _, _ in
                 MainActor.assumeIsolated { self?.metaChanged() }
             },
+            // A navigation inside the document (a fragment, Back or Forward
+            // across a single-page app's entries) ends with WebKit's loading
+            // flag going down and no commit or finish at all: that is where
+            // its arrival is read (082 review, `metaChanged`).
+            webView.observe(\.isLoading, options: [.new]) { [weak self] webView, _ in
+                let busy = webView.isLoading
+                MainActor.assumeIsolated { if !busy { self?.metaChanged() } }
+            },
         ]
     }
 
@@ -350,19 +527,50 @@ final class BrowserEngine: NSObject {
         onStateChanged()
     }
 
-    private func metaChanged() {
-        guard !tornDown, liveURL != nil else { return }
-        update(loading: loading)
+    /// The URL or the title changed. A same-origin change while nothing is
+    /// pending is the page moving itself — the committed address follows it.
+    /// A provisional URL (a load not yet committed) never does (G28).
+    ///
+    /// A navigation that never leaves the document — a fragment, or Back and
+    /// Forward across a single-page app's own history entries — is asked for
+    /// like any load (`requested`), but WebKit sends it no commit and no
+    /// finish: only the new URL, with no document loading. Arriving at the
+    /// very address that was pending, on the committed page's origin, while
+    /// WebKit loads nothing, IS its arrival: the load ends there (082 review).
+    /// Without it the Stop row, the watchdog and the pending page stayed up
+    /// for good after one tap on Back, and the bar stopped following the page.
+    /// A load of a new document always has `isLoading` set when its URL shows,
+    /// and another origin is never taken for this — the bar still never names
+    /// a page that has not arrived.
+    func metaChanged() {
+        guard !tornDown, let live = liveURL else { return }
+        let here = live.absoluteString
+        var arrived = false
+        if let pending = pendingURL, pending == here, let committed = committedURL,
+           ProviderBridge.origin(of: committed) == ProviderBridge.origin(of: here),
+           !reportedLoading() {
+            committedURL = here
+            committedGeneration = loadGeneration
+            pendingURL = nil
+            disarmWatchdog()
+            arrived = true
+        } else if pendingURL == nil, let committed = committedURL,
+                  ProviderBridge.origin(of: committed) == ProviderBridge.origin(of: here) {
+            committedURL = here
+        }
+        update(loading: arrived ? false : loading)
         guard !url.isEmpty, !origin.isEmpty else { return }
         onMeta(url, title)
     }
 
     private func update(loading: Bool) {
-        // A provisional failure discards the URL, so fall back to the one the
-        // navigation was for: an address bar that empties itself tells a
-        // person their tap did nothing.
+        // The committed document names the tab — never the provisional URL a
+        // load in flight shows in `webView.url` (spec 082 G28). Before any
+        // commit: where the failed navigation was going, or where the load
+        // is — an address bar that empties itself tells a person their tap
+        // did nothing.
         let live = liveURL
-        let current = live?.absoluteString ?? (failure != nil ? failedURL : url)
+        let current = committedURL ?? (failure != nil ? failedURL : (live?.absoluteString ?? url))
         url = current
         origin = ProviderBridge.origin(of: current)
         host = Self.hostOf(origin: origin)
@@ -482,9 +690,15 @@ extension BrowserEngine: WKNavigationDelegate {
     /// always the site — unlike Android's WebView.)
     func committed() {
         guard !tornDown, !Self.isEngineBlank(reportedURL()) else { return }
+        committedURL = reportedURL()?.absoluteString ?? pendingURL ?? committedURL
+        committedGeneration = loadGeneration
+        pendingURL = nil
+        disarmWatchdog()
         clearFailure()
         update(loading: true)
+        VelaLog.notice(.browser, "committed host=\(VelaLog.hostOf(url: url))")
         onNavigationStarted(url)
+        if !url.isEmpty, !origin.isEmpty { onMeta(url, title) }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -512,6 +726,8 @@ extension BrowserEngine: WKNavigationDelegate {
             }
             return
         }
+        pendingURL = nil
+        disarmWatchdog()
         clearFailure()
         update(loading: false)
         onLoadFinished(url)
@@ -610,6 +826,9 @@ extension BrowserEngine: WKNavigationDelegate {
         // that navigates while the last request is in flight cancels it, and
         // every redirect chain does this — or a frame load interrupted by a
         // new one. A retry cut short that way is simply over.
+        //
+        // The watchdog and the pending load are left alone here: a newer
+        // request (the page's own redirect) may be what cancelled this one.
         guard let classified = browserLoadClassify(
             platform: "apple", code: Int64(code), domain: domain, certificate: false
         ) else {
@@ -617,11 +836,16 @@ extension BrowserEngine: WKNavigationDelegate {
             update(loading: false)
             return
         }
+        disarmWatchdog()
+        pendingURL = nil
         failure = classified
         attemptFailed = true
         retrying = false
         update(loading: false)
-        print("[vela-wallet] browser load failed: \(failedURL) — \(domain) \(code) → \(classified.class)")
+        VelaLog.failure(
+            .browser, kind: classified.class,
+            "failed host=\(VelaLog.hostOf(url: failedURL)) \(domain) \(code) → \(classified.class)"
+        )
         scheduleRetry(classified)
     }
 
@@ -649,10 +873,13 @@ extension BrowserEngine: WKNavigationDelegate {
             // A new document the page asked for (a link, a form, a script):
             // progress from the tap, not from the commit (spec 079). Not for a
             // jump within the same document — no load follows one.
+            //
+            // Spec 082 G28: the page's own navigation is a PENDING load — it
+            // never renames the bar over the page that is committed.
             if isMainFrame, let target {
                 let current = webView.url
                 MainActor.assumeIsolated {
-                    if Self.leavesDocument(from: current, to: target) { requested() }
+                    if Self.leavesDocument(from: current, to: target) { requested(target.absoluteString) }
                 }
             }
             decisionHandler(.allow)

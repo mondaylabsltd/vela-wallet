@@ -36,7 +36,7 @@
 //! healthy endpoint over it is how a pool loses its best RPC.
 //!
 //! The classification already exists: `rpc_pool` parses the wording and answers
-//! `PoolError::RangeCap { max_span }`. This file maps that one error onto
+//! `PoolError::RangeCap { max_span, .. }`. This file maps that one error onto
 //! `TrustLogsOutcome::RangeCapped` and everything else onto `Failed`. It does
 //! not read an error message.
 //!
@@ -436,7 +436,7 @@ fn perform(operation: &TrustOperation) -> TrustShellResult {
                 // The pool already parsed the endpoint's wording. A cap it
                 // could not put a number to arrives as 0, which the core reads
                 // as "narrow conservatively".
-                Err(PoolError::RangeCap { max_span }) => TrustLogsOutcome::RangeCapped {
+                Err(PoolError::RangeCap { max_span, .. }) => TrustLogsOutcome::RangeCapped {
                     cap: if max_span.is_finite() && max_span > 0.0 {
                         #[allow(
                             clippy::cast_possible_truncation,

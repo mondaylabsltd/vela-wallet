@@ -303,7 +303,8 @@ struct DisplayedIsSignedTests {
             // A USABLE quote: `quoted_fee_usable` refuses a zero amount with
             // no recipient, and the spine then stops before the ceremony —
             // which is correct, and would make this test measure nothing.
-            gasFeeToken: nil, quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: golden)
+            gasFeeToken: nil, quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: golden),
+            writeAhead: { _, _ in true }
         )
         return signer.challenge
     }
@@ -453,6 +454,39 @@ struct SigningLiveTests {
 
     private let loc = Loc(overrideTag: "en", preferredLanguages: [])
 
+    /// G49 (RJ15): a 1000-wei outflow is written exactly — never "xDAI −0" —
+    /// with U+2212; a zero change is not drawn at all. The figure is the
+    /// core's `formatSignedTokenAmount`, in the person's number preset.
+    @Test func aSignedAmountNeverReadsMinusZero() throws {
+        let before = Formats.current
+        defer { Formats.current = before }
+        Formats.current = Formats.Current(number: .commaDot, date: .iso, time: .h24)
+        let sim = try CoreJSON.decode(TrustSimViewWire.self, from: [
+            "ready": true,
+            "judgments": [
+                ["type": "native", "delta": "-1000"],
+                ["type": "erc20_trusted", "token": "0xusdc", "delta": "0", "symbol": "USDC", "decimals": 6],
+                ["type": "erc20_trusted", "token": "0xusdc", "delta": "2500000", "symbol": "USDC", "decimals": 6],
+            ] as [[String: Any]],
+        ])
+        var ctx = context()
+        ctx.sim = sim
+        ctx.simulation = .answered
+        guard case .balances(_, let rows, _, _)? = SigningLive.balanceBlocks(isTransaction: true, context: ctx).first
+        else {
+            Issue.record("no balance block")
+            return
+        }
+        #expect(rows.count == 2, "the zero change is not drawn: \(rows.map(\.delta))")
+        let dust = try #require(rows.first)
+        #expect(dust.symbol == "xDAI")
+        #expect(dust.delta != "\u{2212}0" && dust.delta != "-0")
+        #expect(dust.delta.hasPrefix("\u{2212}"), "U+2212, not a hyphen: \(dust.delta)")
+        #expect(dust.delta == formatSignedTokenAmount(deltaBaseUnits: "-1000", decimals: 18, preset: "comma_dot"))
+        #expect(rows.last?.delta == "+2.5")
+        #expect(SimDeltas.deltaText("0", decimals: 18) == nil)
+    }
+
     private func context() -> SigningLive.Context {
         SigningLive.Context(
             loc: loc, chainName: "Gnosis", chainDot: .green, nativeSymbol: "xDAI",
@@ -463,34 +497,95 @@ struct SigningLiveTests {
 
     private func clear(
         surface: ClearSurface, resolved: Bool = true,
-        result: ClearSignResultWire? = nil, confirm: ClearConfirmWire = .confirm
+        result: ClearSignResultWire? = nil, confirm: ClearConfirmWire = .confirm,
+        plainSend: ClearPlainSendWire? = nil
     ) -> ClearSigningViewWire {
         ClearSigningViewWire(
             resolving: false, resolved: resolved, result: result, message: nil,
-            surface: surface, confirm: confirm, blindTyped: nil, dangerHaptic: false
+            surface: surface, confirm: confirm, blindTyped: nil, dangerHaptic: false,
+            plainSend: plainSend
         )
     }
 
-    /// **A plain native transfer is not a contract interaction.**
-    ///
-    /// The core resolves it without a descriptor — resolved, and no result —
-    /// and the blind card's "cannot decode (0 bytes)" read a dust send as an
-    /// unknown contract call on Android's first pass.
-    @Test func aNoCalldataTransferIsDrawnAsASendRatherThanAsABlindCall() {
-        let blocks = SigningLive.blocks(
-            clear: clear(surface: .none),
-            to: "0x76875e38fc6bc2dedcaed807ce00782db5c0d141",
-            valueHex: "0x38d7ea4c68000", dataBytes: 0, context: context()
-        )
-        let intents = blocks.compactMap { block -> String? in
+    /// The core's verdict for a request, as the live sheet would receive it.
+    private func resolved(value: Any?) throws -> ClearSigningViewWire {
+        let params: [[String: Any]] = [[
+            "to": "0x76875e38fc6bc2dedcaed807ce00782db5c0d141", "data": "0x",
+            "value": value ?? NSNull(),
+        ]]
+        let paramsJson = String(decoding: try JSONSerialization.data(withJSONObject: params), as: UTF8.self)
+        let call = SigningController.firstCall(paramsJson: paramsJson)
+        let core = ClearSigningCore()
+        let result = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "resolve_transaction",
+            "to": call?.to as Any? ?? NSNull(), "data": call?.data as Any? ?? NSNull(),
+            "value": call?.value as Any? ?? NSNull(),
+            "chain_id": 100, "locale": SigningController.defaultLocale,
+        ]))
+        return try CoreJSON.decode(ClearSigningViewWire.self, from: CoreJSON.object(result)["view"] as? [String: Any] ?? [:])
+    }
+
+    private func intents(_ blocks: [SigningBlock]) -> [String] {
+        blocks.compactMap { block -> String? in
             if case .intent(let text, _) = block { return text }
             return nil
         }
-        #expect(intents.count == 1)
-        #expect(intents.first != loc.t("componentsUi.signing.intentContractCall"))
-        #expect(blocks.contains { if case .amount = $0 { true } else { false } },
-                "the amount is the first thing a person needs to see")
+    }
+
+    /// **A plain native transfer is not a contract interaction** — and since
+    /// spec 082 the core says so (RC1): the look is the one the phones always
+    /// drew (发送 · −0.001 xDAI · 接收方), from the core's exact card.
+    @Test func aNoCalldataTransferIsDrawnAsASendRatherThanAsABlindCall() throws {
+        let view = try resolved(value: "0x38d7ea4c68000")
+        #expect(view.surface == .plainSend)
+        let blocks = SigningLive.blocks(
+            clear: view, to: "0x76875e38fc6bc2dedcaed807ce00782db5c0d141",
+            valueHex: "0x38d7ea4c68000", dataBytes: 0, context: context()
+        )
+        #expect(intents(blocks) == [loc.t("componentsUi.signing.intentSend")])
+        let amount = blocks.compactMap { block -> AmountLine? in
+            if case .amount(let line, _, _) = block { return line }
+            return nil
+        }.first
+        #expect(amount?.sign == "−", "the amount is the first thing a person needs to see")
+        #expect(amount?.value == "0.001")
+        #expect(amount?.symbol == "xDAI", "the coin is the fee row's (RC5)")
         #expect(blocks.contains { if case .party = $0 { true } else { false } })
+        #expect(SigningLive.confirmLabel(clear: view, loc: loc) == loc.t("componentsUi.signing.confirmSend"))
+    }
+
+    /// Zero with no calldata: the same card, "0 xDAI" with no minus, and a
+    /// neutral 确认 — never "confirm send" (RC3).
+    @Test func aZeroValuePlainSendReadsZeroWithANeutralConfirm() throws {
+        let view = try resolved(value: "0x0")
+        #expect(view.surface == .plainSend)
+        #expect(view.plainSend?.noValue == true)
+        let blocks = SigningLive.blocks(
+            clear: view, to: "0x76875e38fc6bc2dedcaed807ce00782db5c0d141",
+            valueHex: "0x0", dataBytes: 0, context: context()
+        )
+        let amount = blocks.compactMap { block -> AmountLine? in
+            if case .amount(let line, _, _) = block { return line }
+            return nil
+        }.first
+        #expect(amount?.sign == "")
+        #expect(amount?.value == "0")
+        #expect(SigningLive.confirmLabel(clear: view, loc: loc) == loc.t("componentsUi.signing.confirmLabel"))
+    }
+
+    /// A JSON number is passed to the core as text (RC6), which refuses to
+    /// print it (RC4): the blind card, never a calm "0".
+    @Test func aNumericValueIsTheBlindCardNeverACalmZero() throws {
+        #expect(SigningController.valueText(NSNumber(value: 1000)) == "1000")
+        #expect(SigningController.valueText(NSNull()) == nil)
+        let view = try resolved(value: NSNumber(value: 1000))
+        #expect(view.surface == .blindTransaction)
+        #expect(view.plainSend == nil)
+        let blocks = SigningLive.blocks(
+            clear: view, to: "0x76875e38fc6bc2dedcaed807ce00782db5c0d141",
+            valueHex: "1000", dataBytes: 0, context: context()
+        )
+        #expect(intents(blocks) == [loc.t("componentsUi.signing.intentContractCall")])
     }
 
     /// A real contract call with calldata gets the blind card, honestly.

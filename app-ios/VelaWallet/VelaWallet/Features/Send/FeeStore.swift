@@ -362,6 +362,16 @@ final class FeeStore {
         settleSpeed()
     }
 
+    /// Ask the operation in force again FROM THE START (spec 082 RJ12): an
+    /// automatic re-quote that did not answer in time. `requote` is ignored
+    /// while a run is out; a fresh request makes the core abandon whatever the
+    /// hung run was still waiting on, and measure again.
+    func reask() {
+        guard let ask = inForce.ask else { return }
+        relay.invalidateFeeSignals(chainId: ask.chainId)
+        askInForce(ask)
+    }
+
     /// Leaving the confirm step.
     func leaveConfirm() { inForce.send(CoreJSON.string(["type": "leave_confirm"])) }
 

@@ -161,6 +161,70 @@ fn gallery_bar_caption_pad(caption: bool) -> f32 {
     if caption { CAPTION_H + 4. - 8. } else { 0. }
 }
 
+/// The panel a switch of section leaves (spec 082 RJ18): a signing column
+/// that was only hidden comes back with Explore; anywhere else no panel.
+fn panel_after_switch(destination: Section, signing_kept: bool) -> PanelId {
+    if destination == Section::Explore && signing_kept {
+        PanelId::Signing
+    } else {
+        PanelId::None
+    }
+}
+
+/// Whether a request's ending that arrives now is kept (RJ18): the column is
+/// on screen, or only hidden by a switch of section. One the person closed
+/// opens for nothing.
+fn keeps_ending(panel: PanelId, signing_hidden: bool) -> bool {
+    panel == PanelId::Signing || signing_hidden
+}
+
+/// A close of the window (or Quit) the RD14 hold refused, counted (spec 082
+/// RJ17). `main.rs` bumps it; every wallet page observes it and says why.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CloseHeld(pub u64);
+
+impl gpui::Global for CloseHeld {}
+
+/// A close was held: tell the page.
+pub fn close_held(cx: &mut gpui::App) {
+    let next = cx.try_global::<CloseHeld>().map_or(0, |held| held.0) + 1;
+    cx.set_global(CloseHeld(next));
+}
+
+/// The words a held close shows: 提交至网络… — what the window is waiting on.
+const CLOSE_HELD_WORDS: &str = "send.txSubmitting";
+
+/// The column a held close brings forward.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HeldColumn {
+    /// A dApp's request, submitting.
+    Signing,
+    /// The wallet's own Send.
+    Send,
+}
+
+/// What a held close shows (RJ17): the words in the bar's notice slot when
+/// the browser is in front — the bar is the one place there that speaks —
+/// and the column whose submit is holding the window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CloseHeldNotice {
+    bar_words: Option<&'static str>,
+    column: Option<HeldColumn>,
+}
+
+fn close_held_notice(section: Section, signing: bool, send_open: bool) -> CloseHeldNotice {
+    CloseHeldNotice {
+        bar_words: (section == Section::Explore).then_some(CLOSE_HELD_WORDS),
+        column: if signing {
+            Some(HeldColumn::Signing)
+        } else if send_open {
+            Some(HeldColumn::Send)
+        } else {
+            None
+        },
+    }
+}
+
 /// Which destination the content column renders. The sidebar's selected nav
 /// row derives from this (spec 018 research.md D1).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -586,6 +650,9 @@ pub struct WalletPage {
     dapp_landing: Option<DappLanding>,
     /// Numbers each ending, so a tick's timer closes only its own.
     dapp_landing_seq: u64,
+    /// Spec 082 RJ18: the signing column was left for another section, not
+    /// closed — its ending is kept, and shown again when Explore returns.
+    signing_hidden: bool,
     /// The signing column's header and one-line summary as last drawn — what
     /// the ending still shows once the request is gone (spec 079).
     signing_last: Option<(signing_components::HeaderModel, Option<SharedString>)>,
@@ -604,6 +671,10 @@ pub struct WalletPage {
     /// open and discarded with it — a second send starts from a fresh
     /// machine, never a resumed one.
     send_host: Option<gpui::Entity<SendHost>>,
+    /// Send columns closed while their submit ran (spec 082 RA4, ruling 1):
+    /// kept, unseen, until the core has the submit's result — which is what
+    /// writes the payment's record and hands it to the tracker.
+    send_background: Vec<gpui::Entity<SendHost>>,
     /// The signing journey's four machines, born with a dApp request and gone
     /// when the core hides the sheet. `None` means the panel draws its mock,
     /// which is what the gallery and an unsigned-in window get.
@@ -652,12 +723,44 @@ pub struct WalletPage {
     /// The star pins with THIS rather than the host, because the host is what
     /// a tile falls back to and a page's title is what a person recognises.
     browser_title: Option<String>,
-    /// Spec 079 US3: the shell's own account of the page's load — wry reports
-    /// no failures, so the watchdog, the probe and the retries live here.
-    load_watch: crate::explore::load_watch::LoadWatch,
-    /// Spec 083 W15: where the tab on screen begins in the one engine
-    /// history, so Back never goes into another tab's pages.
-    #[cfg(not(target_os = "linux"))]
+    /// Spec 079 US3 / 082 RD3–RD7: the page's load — the core's `LoadWatch`,
+    /// fed by the wallet's requests, WebKit's own state and the probe.
+    load: crate::wallet::browser_host::LoadDriver,
+    /// Spec 082 RD6: the tab whose page is in the webview — `None` at launch,
+    /// when a restored tab waits unlit for a click.
+    shown_tab: Option<String>,
+    /// Spec 082 G54: the tab strip's measure and scroll, kept across frames.
+    tab_strip: explore_components::TabStripScroll,
+    /// Spec 082 RJ5: which tab's document the one webview holds, and the
+    /// shown tab's Back floor.
+    tab_doc: crate::wallet::browser_host::TabDoc,
+    /// Spec 082 RE1: the web document committed since the shown tab last
+    /// changed — what the bar may name. The one webview still holds the
+    /// previous tab's page while a new tab's first load is pending, and that
+    /// page is not this tab's.
+    bar_committed: Option<String>,
+    /// Back, forward and reload, as the engine says they can act (RD6); all
+    /// off on the start page.
+    nav_enabled: [bool; 3],
+    /// The engine poll (RD3) is running.
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
+    engine_polling: bool,
+    /// The pool's "came back" count as last acted on (spec 082 T069).
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
+    came_back_seen: u64,
+    /// Spec 082 RD1: a held navigation's words stand in the bar until this
+    /// press is superseded (`explore.requestOpen`, 2.5 s).
+    held_notice: Option<u64>,
+    held_press: u64,
+    /// Spec 082 RJ17: the held words are a held CLOSE's (`send.txSubmitting`),
+    /// not a held navigation's.
+    held_close: bool,
+    /// Spec 082 RF1: the chain whose notice is on screen, for its log lines.
+    chain_notice_shown: Option<u32>,
+    /// Spec 083 W15: where the tab on screen begins in WebView2's one
+    /// history, so Back never goes into another tab's pages. macOS reads the
+    /// back list's length instead (`tab_doc`, 082 RJ5).
+    #[cfg(windows)]
     tab_history: crate::explore::tab_history::TabHistory,
     /// The browser machine (spec 070): every page's requests, the grants,
     /// each site's chain, the signing line. Born the first time anything needs
@@ -1086,6 +1189,9 @@ impl WalletPage {
         let explore = ExploreStrings::resolve(&loc);
         let signing = SigningStrings::resolve(&loc);
 
+        // Spec 082 RJ17: a close the RD14 hold refused says why, here.
+        cx.observe_global::<CloseHeld>(|page, cx| page.close_was_held(cx))
+            .detach();
         // The window coming back is the desktop's `visibilitychange`: the web
         // refreshes the hero and ticks the feed on it, and this app did
         // neither. Registered for the life of the page; the guard is the
@@ -1104,6 +1210,10 @@ impl WalletPage {
                 // exactly when a submission somebody walked away from should
                 // be settled.
                 crate::executor::tracker::focused(cx);
+                // Spec 082 RD13 (W16): back with a Trusted Signer page still
+                // unanswered — could the page open at all? Checked only now,
+                // so a page the browser cached keeps working.
+                page.check_signer_pages(cx);
             } else {
                 crate::executor::balance_dashboard::dispatch(
                     vela_core::app::balance_dashboard::Event::AppBackgrounded,
@@ -1169,6 +1279,7 @@ impl WalletPage {
             receipt_ticking: false,
             dapp_landing: None,
             dapp_landing_seq: 0,
+            signing_hidden: false,
             signing_last: None,
             #[cfg(not(target_os = "linux"))]
             signing_background: Vec::new(),
@@ -1176,6 +1287,7 @@ impl WalletPage {
             balance_detail_open: false,
             contacts_query_focus: cx.focus_handle(),
             send_host: None,
+            send_background: Vec::new(),
             #[cfg(not(target_os = "linux"))]
             signing_host: None,
             backup_for: None,
@@ -1198,8 +1310,19 @@ impl WalletPage {
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
             browser_title: None,
-            load_watch: crate::explore::load_watch::LoadWatch::default(),
-            #[cfg(not(target_os = "linux"))]
+            load: crate::wallet::browser_host::LoadDriver::default(),
+            shown_tab: None,
+            tab_strip: explore_components::TabStripScroll::default(),
+            tab_doc: crate::wallet::browser_host::TabDoc::default(),
+            bar_committed: None,
+            nav_enabled: [false; 3],
+            engine_polling: false,
+            came_back_seen: crate::executor::pool::came_back_count(),
+            held_notice: None,
+            held_press: 0,
+            held_close: false,
+            chain_notice_shown: None,
+            #[cfg(windows)]
             tab_history: crate::explore::tab_history::TabHistory::default(),
             cap_focus: cx.focus_handle(),
             leg_cap_focus: std::collections::HashMap::new(),
@@ -3427,8 +3550,17 @@ impl WalletPage {
                         // Leaving 设置 leaves the accounts panel with it.
                         this.close_switcher(cx);
                     }
+                    // RJ18: a signing column left for another section is
+                    // hidden, not closed; it comes back with Explore.
+                    if this.panel == PanelId::Signing {
+                        this.signing_hidden = true;
+                    }
+                    let kept = this.signing_hidden && this.signing_to_show();
                     this.section = destination;
-                    this.panel = PanelId::None;
+                    this.panel = panel_after_switch(destination, kept);
+                    if this.panel == PanelId::Signing {
+                        this.signing_hidden = false;
+                    }
                     this.menu = None;
                     cx.notify();
                 })),
@@ -3646,6 +3778,39 @@ impl WalletPage {
                         })
                     }),
             );
+        }
+
+        // Nothing to list (spec 082 RD10, G1): skeletons while the balance
+        // core has not ruled, else the core's empty line — never a blank
+        // strip, which reads as a list that failed to load.
+        if self.identity.is_some() {
+            let state = wallet_live::home_activity(
+                !activity.is_empty(),
+                resident::resident::<BalanceDashboard>(cx)
+                    .read(cx)
+                    .view()
+                    .balance_unknown,
+                &resident::resident::<ActivityFeed>(cx).read(cx).view(),
+                &self.strings,
+            );
+            match state {
+                wallet_live::HomeActivity::Rows => {}
+                wallet_live::HomeActivity::Loading => {
+                    activity_col = activity_col
+                        .child(skeleton_row(theme))
+                        .child(skeleton_row(theme))
+                        .child(skeleton_row(theme));
+                }
+                wallet_live::HomeActivity::Empty { title, caption } => {
+                    activity_col = activity_col.child(empty_state(
+                        theme,
+                        &mut self.icons,
+                        Icon::Inbox,
+                        title,
+                        caption,
+                    ));
+                }
+            }
         }
 
         // The strip is narrowed by the sidebar's filter, and the panel it opens
@@ -5676,7 +5841,7 @@ impl WalletPage {
     ) {
         self.flows = FlowPanel::entry(entry);
         self.panel = PanelId::Flow;
-        self.send_host = None;
+        self.let_send_go(cx);
         self.send_fee_picker = false;
         if entry == FlowEntry::AddToken {
             // Every add starts on ERC-20 with a clean network search, as the
@@ -5709,6 +5874,24 @@ impl WalletPage {
         }
     }
 
+    /// The send column goes, and its machines with it — unless its submit is
+    /// still running (spec 082 RA4, ruling 1): the POST goes on whatever the
+    /// column does, and its answer is what records the payment and hands it
+    /// to the tracker, so the machines run on, unseen, until it is in.
+    fn let_send_go(&mut self, cx: &mut Context<Self>) {
+        let Some(host) = self.send_host.take() else {
+            return;
+        };
+        if host.read(cx).submit_running() {
+            // As when the machines went with the column: a Trusted Signer
+            // wait nobody can see stops (nothing is signed). A submit past
+            // its signature is not stopped by that.
+            host.read(cx).trusted_signer().close();
+            crate::diag::vlog!("send", "column closed during a submit; it finishes unseen");
+            self.send_background.push(host);
+        }
+    }
+
     /// Spec 032: the send journey's machines, born with the flow. The mocks
     /// keep drawing when there is no account to send from.
     fn open_send(&mut self, params: SendOpenParams, cx: &mut Context<Self>) {
@@ -5718,7 +5901,13 @@ impl WalletPage {
         let display = self.send_display(cx);
         let window_handle = self.window_handle;
         let host = cx.new(|cx| SendHost::open(account, params, display, window_handle, cx));
-        cx.observe(&host, |_, _, cx| cx.notify()).detach();
+        cx.observe(&host, |page, _, cx| {
+            // A column that ran on unseen goes once its submit is in.
+            page.send_background
+                .retain(|kept| kept.read(cx).submit_running());
+            cx.notify();
+        })
+        .detach();
         self.send_host = Some(host);
         // Every send starts on 全部: a chip left lit from the last one would
         // hide tokens with nothing on screen saying why.
@@ -5778,7 +5967,7 @@ impl WalletPage {
     fn sync_send_flow(&mut self, cx: &mut Context<Self>) -> Option<FlowPanel> {
         if let Some(host) = self.send_host.clone() {
             if host.read(cx).closed {
-                self.send_host = None;
+                self.let_send_go(cx);
                 self.send_fee_picker = false;
                 self.flows.clear();
                 self.panel = PanelId::None;
@@ -5811,7 +6000,7 @@ impl WalletPage {
                 }),
                 Some(FlowPanel::Dsd2f) => self.send_fee_picker = false,
                 Some(FlowPanel::Dsd1) | None => {
-                    self.send_host = None;
+                    self.let_send_go(cx);
                     self.flows.clear();
                     self.panel = PanelId::None;
                 }
@@ -5903,6 +6092,34 @@ impl WalletPage {
         })
     }
 
+    /// Every Trusted Signer wait still unanswered, checked off the frame
+    /// (spec 082 RD13): a page that cannot be reached is said on its card.
+    fn check_signer_pages(&mut self, cx: &mut Context<Self>) {
+        let mut channels = Vec::new();
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = self.signing_host.as_ref() {
+            channels.push(host.read(cx).trusted_signer());
+        }
+        if let Some(host) = self.send_host.as_ref() {
+            channels.push(host.read(cx).trusted_signer());
+        }
+        for channel in channels {
+            if !channel.waiting() || channel.unreachable() {
+                continue;
+            }
+            cx.spawn(async move |page, cx| {
+                let marked = cx
+                    .background_executor()
+                    .spawn(async move { crate::executor::trusted_signer::check_page(&channel) })
+                    .await;
+                if marked {
+                    page.update(cx, |_, cx| cx.notify()).ok();
+                }
+            })
+            .detach();
+        }
+    }
+
     /// The Trusted Signer's four dialogs (specs 071 and 075), over whichever flow
     /// started the attempt — the signing column or the send: where the signer
     /// is, the cross-device pairing, the wait, and its last word. The buttons
@@ -5925,10 +6142,12 @@ impl WalletPage {
             .into_iter()
             .find(|channel| channel.waiting() || channel.ended().is_some())?;
         let card = if channel.waiting() {
+            let unreachable = channel.unreachable();
             let (reopen, cancel) = (Arc::clone(&channel), channel);
             signing_trusted_signer::waiting_card(
                 theme,
                 &self.loc,
+                unreachable,
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| reopen.reopen(),
                 move |_: &gpui::ClickEvent, _: &mut Window, _: &mut gpui::App| cancel.cancel(),
             )
@@ -6201,7 +6420,6 @@ impl WalletPage {
                 flow_fixtures::FlowBody::History(flows_live::history_panel(
                     &feed,
                     balance.balance_unknown,
-                    self.chain_filter,
                     &self.flow_strings,
                     &self.strings,
                     balance.hidden,
@@ -12250,70 +12468,342 @@ impl WalletPage {
         if url.trim().is_empty() {
             return;
         }
-        self.browsing = true;
-        self.browser_home = url.clone();
-        #[cfg(not(target_os = "linux"))]
-        crate::webview::navigate(&url);
+        self.open_here(url, cx);
+    }
+
+    /// The tab the strip lights (spec 082 RD6): the one whose page is in the
+    /// webview, or a selected start-page tab over the start page. A restored
+    /// tab waits unlit until somebody clicks it.
+    fn lit_tab(&self, view: &vela_core::app::explore_sites::ExploreView) -> Option<String> {
+        crate::wallet::browser_host::lit_tab(view, self.shown_tab.as_deref(), self.browsing)
+    }
+
+    /// Every navigation the page starts goes through here (spec 082 RD1,
+    /// ruling 4): held while a connect or signing request is open, nothing
+    /// for the tab already on screen, otherwise gone.
+    fn browser_go(&mut self, go: crate::wallet::browser_host::Go, cx: &mut Context<Self>) {
+        use crate::wallet::browser_host::{Go, Went, went};
+        let holds = self
+            .browser_host
+            .as_ref()
+            .is_some_and(|host| crate::wallet::browser_host::holds_navigation(&host.read(cx).view));
+        let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
+        let lit = self.lit_tab(&explore);
+        match went(&go, holds, lit.as_deref()) {
+            Went::Held => self.navigation_held(cx),
+            Went::AlreadyThere => {}
+            Went::Go => match go {
+                Go::Tab { id, url } => {
+                    resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(
+                            vela_core::app::explore_sites::Event::TabSelected { id: id.clone() },
+                            cx,
+                        );
+                    });
+                    match url {
+                        Some(url) => {
+                            self.show_tab(Some(id));
+                            self.navigate_to(url);
+                        }
+                        // A start-page tab: the wallet's own screen.
+                        None => self.browsing = false,
+                    }
+                }
+                Go::NewTab => {
+                    // A new tab is the START page: a browser does not decide
+                    // where somebody wants to go next.
+                    resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
+                        resident.dispatch(
+                            vela_core::app::explore_sites::Event::TabOpened {
+                                url: None,
+                                title: None,
+                                now_ms: crate::executor::now_ms(),
+                            },
+                            cx,
+                        );
+                    });
+                    self.browsing = false;
+                }
+                Go::Typed(url) | Go::Open(url) => self.open_here(url, cx),
+                Go::OpenInNewTab(url) => self.open_in_new_tab(url, None, cx),
+                Go::Reload => {
+                    // Over the failure panel, reload is its Retry: the
+                    // address that failed, not the page before it.
+                    #[cfg(not(target_os = "linux"))]
+                    let engine_down = crate::webview::engine_failure().is_some();
+                    #[cfg(target_os = "linux")]
+                    let engine_down = false;
+                    if engine_down {
+                        // Over the engine's panel, reload starts the engine (083).
+                        #[cfg(not(target_os = "linux"))]
+                        crate::webview::retry_engine();
+                    } else if self.load.watch.failure.is_some() {
+                        self.load_retry(cx);
+                    } else if self.tab_doc.floor(self.shown_tab.as_deref()).is_some() {
+                        // RJ5: only this tab's own page — while it is veiled
+                        // the webview holds another tab's.
+                        #[cfg(windows)]
+                        if crate::webview::reload() {
+                            // What lands is the same page, not one more for
+                            // Back to go through (083 W15).
+                            self.tab_history.reloading();
+                        }
+                        #[cfg(not(any(windows, target_os = "linux")))]
+                        crate::webview::reload();
+                    }
+                }
+                // RJ5: never past the shown tab's floor, into another tab's
+                // history — the buttons are dark then, and so is this.
+                Go::Back if self.nav_enabled[0] => {
+                    // 083 W15: never below the tab's first page on WebView2.
+                    #[cfg(windows)]
+                    if self.tab_history.may_go_back() && crate::webview::back() {
+                        self.tab_history.stepped(true);
+                    }
+                    #[cfg(not(any(windows, target_os = "linux")))]
+                    crate::webview::back();
+                }
+                Go::Forward if self.nav_enabled[1] => {
+                    #[cfg(windows)]
+                    if self.tab_history.may_go_forward() && crate::webview::forward() {
+                        self.tab_history.stepped(false);
+                    }
+                    #[cfg(not(any(windows, target_os = "linux")))]
+                    crate::webview::forward();
+                }
+                Go::Back | Go::Forward => {}
+            },
+        }
         cx.notify();
     }
 
-    /// The page about to be asked for is another tab's first page (083 W15).
-    /// The engine's entries up to it belong to the tab left behind, and Back
-    /// must not go there. Called before the navigation.
-    fn browser_tab_changes(&mut self) {
-        #[cfg(not(target_os = "linux"))]
-        self.tab_history.tab_changed();
+    /// A navigation was held (RD1): the request's column comes forward — the
+    /// signing column re-attached if it was sent to the background — and
+    /// the bar says why for 2.5 s. The typed draft is kept.
+    fn navigation_held(&mut self, cx: &mut Context<Self>) {
+        let (consent, signing) = self.browser_host.as_ref().map_or((false, false), |host| {
+            let view = &host.read(cx).view;
+            (
+                view.consent.is_some(),
+                view.signing.is_some() || view.queued_signing > 0,
+            )
+        });
+        if consent {
+            self.panel = PanelId::Connection;
+        } else if signing {
+            self.bring_signing_forward(cx);
+        }
+        self.held_close = false;
+        self.show_held_words(cx);
     }
 
-    /// Load the page on screen again (083 W15). What lands is the same page,
-    /// not one more for Back to go through.
-    #[cfg(not(target_os = "linux"))]
-    fn browser_reload(&mut self) {
-        if crate::webview::reload() {
-            self.tab_history.reloading();
+    /// The bar's held words for 2.5 s (RD1, RJ17), until a newer press.
+    fn show_held_words(&mut self, cx: &mut Context<Self>) {
+        self.held_press += 1;
+        let press = self.held_press;
+        self.held_notice = Some(press);
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(2_500))
+                .await;
+            page.update(cx, |this, cx| {
+                if this.held_notice == Some(press) {
+                    this.held_notice = None;
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// Something the signing column would show: an ending, or its request.
+    fn signing_to_show(&self) -> bool {
+        #[cfg(not(target_os = "linux"))]
+        let live = self.signing_host.is_some();
+        #[cfg(target_os = "linux")]
+        let live = false;
+        self.dapp_landing.is_some() || live
+    }
+
+    /// The window's close (or Quit) was held while a submit POST was out
+    /// (RD14, RJ17): the submitting column comes forward — the dApp's signing
+    /// column, else the Send screen — and over the browser the bar says
+    /// 提交至网络… for 2.5 s. A second close within 5 s still quits.
+    fn close_was_held(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        let signing = self
+            .signing_host
+            .iter()
+            .chain(self.signing_background.iter())
+            .any(|host| host.read(cx).view.is_submitting);
+        #[cfg(target_os = "linux")]
+        let signing = false;
+        let notice = close_held_notice(self.section, signing, self.send_host.is_some());
+        match notice.column {
+            Some(HeldColumn::Signing) => self.bring_signing_forward(cx),
+            Some(HeldColumn::Send) => self.panel = PanelId::Flow,
+            None => {}
+        }
+        if notice.bar_words.is_some() {
+            self.held_close = true;
+            self.show_held_words(cx);
+        }
+        cx.notify();
+    }
+
+    /// The open request's column, in front (RD1): the live one, or — for a
+    /// request approved and sent to the background — its operation as the
+    /// receipt follows it. A request still preparing in the background has
+    /// nothing to show yet; the bar's words say why the tab did not switch.
+    fn bring_signing_forward(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        {
+            if self.signing_host.is_some() {
+                self.panel = PanelId::Signing;
+                return;
+            }
+            let following = self.signing_background.iter().rev().find_map(|host| {
+                let host = host.read(cx);
+                host.view
+                    .pending_op_hash
+                    .clone()
+                    .map(|op| (op, host.chain_id, host.seen_submitted_ms))
+            });
+            if let Some((user_op_hash, chain_id, seen_submitted_ms)) = following {
+                self.dapp_landing_seq += 1;
+                self.dapp_landing = Some(DappLanding {
+                    ending: vela_core::app::sign_request::SignEnding::StillConfirming {
+                        user_op_hash,
+                    },
+                    chain_id,
+                    seq: self.dapp_landing_seq,
+                    seen_submitted_ms,
+                    closing: false,
+                });
+                self.panel = PanelId::Signing;
+            }
+        }
+        #[cfg(target_os = "linux")]
+        let _ = cx;
+    }
+
+    /// An address, in the page on screen (RD6): the shown tab's page; over
+    /// the start page, the selected start-page tab; otherwise — a restored
+    /// tab waiting unlit — a NEW tab, leaving the waiting one intact.
+    fn open_here(&mut self, url: String, cx: &mut Context<Self>) {
+        let explore = resident::resident::<ExploreSites>(cx).read(cx).view();
+        let target = crate::wallet::browser_host::open_target(
+            &explore,
+            self.shown_tab.as_deref(),
+            self.browsing,
+        );
+        crate::diag::vlog!(
+            "browser",
+            "navigate asked host={} view={} composing={}",
+            crate::diag::host_of(&url),
+            if crate::webview::built() {
+                "built"
+            } else {
+                "pending"
+            },
+            crate::ui::editor::is_composing(&self.address_focus)
+        );
+        match target {
+            Some(id) => {
+                self.show_tab(Some(id));
+                self.navigate_to(url);
+            }
+            None => self.open_in_new_tab(url, None, cx),
         }
     }
 
-    /// Show the tab somebody picked.
-    ///
-    /// One webview, so a switch is a navigation. A tab with no url is the
-    /// start page — the wallet's own screen, not a blank document.
-    fn select_browser_tab(&mut self, id: &str, url: Option<&str>, cx: &mut Context<Self>) {
+    /// A new tab onto `url`, shown at once.
+    fn open_in_new_tab(&mut self, url: String, title: Option<String>, cx: &mut Context<Self>) {
         let explore = resident::resident::<ExploreSites>(cx);
-        let same_tab = explore.read(cx).view().selected_tab.as_deref() == Some(id);
         explore.update(cx, |resident, cx| {
             resident.dispatch(
-                vela_core::app::explore_sites::Event::TabSelected { id: id.to_owned() },
+                vela_core::app::explore_sites::Event::TabOpened {
+                    url: Some(url.clone()),
+                    title,
+                    now_ms: crate::executor::now_ms(),
+                },
                 cx,
             );
         });
-        match url {
-            // The tab on screen picked again is left alone (083 review): a
-            // navigation there reloaded the dApp, settled what it had asked
-            // (4900) and, on macOS, let Back cross into another tab.
-            Some(_) if same_tab && self.browsing => {}
-            Some(url) => {
-                self.browser_tab_changes();
-                self.browsing = true;
-                self.browser_home = url.to_owned();
-                #[cfg(not(target_os = "linux"))]
-                crate::webview::navigate(url);
-            }
-            None => self.browsing = false,
+        let opened = explore.read(cx).view().selected_tab;
+        self.show_tab(opened);
+        self.navigate_to(url);
+    }
+
+    /// A document of the tab on screen arrived (083 W15). When it is the
+    /// tab's first page, WebView2 is asked to forget the other tabs' entries
+    /// around it.
+    #[cfg(windows)]
+    fn browser_landed(&mut self) {
+        if let Some(floor) = self.tab_history.landed() {
+            crate::webview::forget_history_behind(floor);
         }
-        cx.notify();
+    }
+
+    /// Where a page's new window or other-app address goes (083 W6/W7): the
+    /// webview has already decided it may, on a person's gesture.
+    #[cfg(not(target_os = "linux"))]
+    fn browser_leave(&mut self, leave: crate::webview::Leave, cx: &mut Context<Self>) {
+        match leave {
+            crate::webview::Leave::NewTab(url) => {
+                self.browser_go(crate::wallet::browser_host::Go::OpenInNewTab(url), cx);
+            }
+            // A page's address, handed to another program's command line.
+            crate::webview::Leave::External(url) => {
+                crate::executor::opener::open_from_page(&url, cx);
+            }
+        }
+    }
+
+    /// The tab whose page the webview is (to) show. A different tab starts
+    /// with nothing committed for the bar to name.
+    fn show_tab(&mut self, id: Option<String>) {
+        if self.shown_tab != id {
+            self.bar_committed = None;
+            // RJ5: the new tab has no history of its own until it commits —
+            // Back and Forward go dark now, not at the next engine poll.
+            self.tab_doc.shown_changed();
+            self.nav_enabled[0] = false;
+            self.nav_enabled[1] = false;
+            // 083 W15: the engine's entries up to the new tab's first page
+            // belong to the tab left behind (WebView2: forgotten when it lands).
+            #[cfg(windows)]
+            self.tab_history.tab_changed();
+        }
+        self.shown_tab = id;
+    }
+
+    /// Point the one webview at `url`: the column shows the page, and the
+    /// engine's request reaches the load watch through `Load::Requested`.
+    fn navigate_to(&mut self, url: String) {
+        self.browsing = true;
+        #[cfg(not(target_os = "linux"))]
+        crate::webview::navigate(&url);
+        self.browser_home = url;
     }
 
     /// Close a tab, and follow the core to whatever it selected next.
     ///
     /// The neighbour rule is the machine's (right, then left); this only obeys
-    /// the answer — a shell that picked its own next tab would be a second
-    /// opinion about where a person just went.
+    /// the answer. Only the tab on screen has a document behind it: closing
+    /// one in the background changes nothing on screen (it used to reload the
+    /// page in front, cancelling what it had asked — W14). Closing the tab of
+    /// an open request is never held: its page goes at the close, and the
+    /// core answers the request 4900 and stops its column
+    /// (`browser_host::tab_close`) — not at the neighbour's hello, which a
+    /// neighbour that fails to load never sends.
     fn close_browser_tab(&mut self, id: &str, cx: &mut Context<Self>) {
+        use crate::wallet::browser_host::TabClose;
         let resident = resident::resident::<ExploreSites>(cx);
-        // Only the tab on screen has a document behind it: the others are
-        // URLs the one webview will load when somebody picks them.
-        let was_shown = resident.read(cx).view().selected_tab.as_deref() == Some(id);
+        let was_shown = self.shown_tab.as_deref() == Some(id)
+            || (!self.browsing && resident.read(cx).view().selected_tab.as_deref() == Some(id));
         resident.update(cx, |resident, cx| {
             resident.dispatch(
                 vela_core::app::explore_sites::Event::TabClosed { id: id.to_owned() },
@@ -12325,26 +12815,26 @@ impl WalletPage {
             .selected_tab
             .as_ref()
             .and_then(|id| view.tabs.iter().find(|tab| &tab.id == id))
-            .and_then(|tab| tab.url.clone());
-        match next {
-            // The neighbour's page replaces this one, and its hello is what
-            // retires the closed page's document in the core.
-            // Closing a tab behind the one on screen leaves that page alone —
-            // its document, its history and what it asked (083 review).
-            Some(_) if !was_shown && self.browsing => {}
-            Some(url) => {
-                self.browser_tab_changes();
-                self.browsing = true;
-                self.browser_home = url.clone();
-                #[cfg(not(target_os = "linux"))]
-                crate::webview::navigate(&url);
+            .map(|tab| (tab.id.clone(), tab.url.clone()));
+        let close = crate::wallet::browser_host::tab_close(was_shown, next);
+        if close.page_goes()
+            && let Some(host) = self.browser_host.clone()
+        {
+            host.update(cx, BrowserHost::page_gone);
+        }
+        match close {
+            TabClose::Background => {}
+            // The neighbour's page replaces this one.
+            TabClose::Neighbour { id, url } => {
+                self.show_tab(Some(id));
+                self.navigate_to(url);
             }
             // Nothing left, or a start-page tab: the wallet's own screen.
-            None => {
+            TabClose::StartPage => {
+                self.show_tab(None);
                 self.browsing = false;
-                if was_shown {
-                    self.close_browser_page(cx);
-                }
+                #[cfg(not(target_os = "linux"))]
+                crate::webview::navigate("about:blank");
             }
         }
         cx.notify();
@@ -12355,15 +12845,10 @@ impl WalletPage {
     /// stops running. Hiding the webview alone would leave the page alive and
     /// able to ask for things nobody can see.
     fn close_browser_page(&mut self, cx: &mut Context<Self>) {
+        // Not `TabClosed`: the one webview's tab id must keep answering the
+        // next page (`browser_host::page_gone_events`).
         if let Some(host) = self.browser_host.clone() {
-            host.update(cx, |host, cx| {
-                host.dispatch(
-                    DbrEvent::TabClosed {
-                        tab: BROWSER_TAB.to_owned(),
-                    },
-                    cx,
-                );
-            });
+            host.update(cx, BrowserHost::page_gone);
         }
         #[cfg(not(target_os = "linux"))]
         crate::webview::navigate("about:blank");
@@ -12384,8 +12869,24 @@ impl WalletPage {
         let explore_tabs = resident::resident::<ExploreSites>(cx).read(cx).view();
         let live_tabs =
             self.identity.is_some() && explore_tabs.ready && !explore_tabs.tabs.is_empty();
-        let mut tabs = if live_tabs {
-            explore_live::tab_models(&explore_tabs, &self.explore)
+        // Spec 082 RD1: a connect or signing request is open — every way to
+        // another page is held (drawn disabled, still answering a click).
+        let held = self
+            .browser_host
+            .as_ref()
+            .is_some_and(|host| crate::wallet::browser_host::holds_navigation(&host.read(cx).view));
+        // Spec 082 RD5: while a failure panel is up, the shown tab is called
+        // by the host that failed.
+        let failed_host = self
+            .load
+            .watch
+            .url
+            .as_deref()
+            .filter(|_| self.load.watch.failure.is_some() && browsing)
+            .map(crate::diag::host_of);
+        let tabs = if live_tabs {
+            let lit = self.lit_tab(&explore_tabs);
+            explore_live::tab_models(&explore_tabs, &self.explore, lit.as_deref(), failed_host)
         } else if self.identity.is_some() {
             // Signed in, before the core has a tab on record (a fresh profile,
             // the first page opening): the page's own tab — never the gallery's
@@ -12397,21 +12898,6 @@ impl WalletPage {
         } else {
             explore_fixtures::tabs(&self.explore, browsing)
         };
-        // 083 H8: while a load's failure panel stands where the page was (the
-        // panel's own condition, below), the tab on screen is named as the bar
-        // names it — after a certificate error it kept the page before's title.
-        let renderer_gone = self
-            .browser_host
-            .as_ref()
-            .is_some_and(|host| host.read(cx).tab().is_some_and(|tab| tab.crashed));
-        if browsing
-            && self.identity.is_some()
-            && !renderer_gone
-            && self.load_watch.failure.is_some()
-            && let Some(url) = self.load_watch.url.as_deref()
-        {
-            explore_live::name_failed_tab(&mut tabs, url);
-        }
         let actions = if self.identity.is_some() && explore_tabs.ready {
             let ids: Vec<String> = explore_tabs.tabs.iter().map(|tab| tab.id.clone()).collect();
             let urls: Vec<Option<String>> = explore_tabs
@@ -12427,7 +12913,13 @@ impl WalletPage {
                         let (id, url) = (id.clone(), url.clone());
                         Some(
                             Box::new(cx.listener(move |page, _: &gpui::ClickEvent, _, cx| {
-                                page.select_browser_tab(&id, url.as_deref(), cx);
+                                page.browser_go(
+                                    crate::wallet::browser_host::Go::Tab {
+                                        id: id.clone(),
+                                        url: url.clone(),
+                                    },
+                                    cx,
+                                );
                             })) as panels::Click,
                         )
                     })
@@ -12444,21 +12936,10 @@ impl WalletPage {
                     })
                     .collect(),
                 new_tab: Some(Box::new(cx.listener(|page, _: &gpui::ClickEvent, _, cx| {
-                    // A new tab is the START page: a browser does not
-                    // decide where somebody wants to go next.
-                    resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
-                        resident.dispatch(
-                            vela_core::app::explore_sites::Event::TabOpened {
-                                url: None,
-                                title: None,
-                                now_ms: crate::executor::now_ms(),
-                            },
-                            cx,
-                        );
-                    });
-                    page.browsing = false;
-                    cx.notify();
+                    page.browser_go(crate::wallet::browser_host::Go::NewTab, cx);
                 })) as panels::Click),
+                held,
+                scroll: Some(self.tab_strip.clone()),
             }
         } else {
             explore_components::TabActions::default()
@@ -12480,10 +12961,17 @@ impl WalletPage {
         let live_browser = browsing && self.identity.is_some();
         #[cfg(target_os = "linux")]
         let live_browser = false;
+        // Spec 082 RJ5 (G42): the one webview still holds another tab's page
+        // until this tab's own load commits — it is hidden, and nothing from
+        // it (its site, its connection dot, its chain) is drawn as this tab's.
+        let veiled = live_browser
+            && self
+                .tab_doc
+                .veiled(self.shown_tab.as_deref(), self.browsing);
         // What the browser machine says about the page on screen: its site,
         // whether that site is connected, whether its lock may be drawn, and
         // whether its renderer died.
-        let tab_view = if live_browser {
+        let tab_view = if live_browser && !veiled {
             self.browser_host
                 .as_ref()
                 .and_then(|host| host.read(cx).tab().cloned())
@@ -12594,48 +13082,36 @@ impl WalletPage {
                         cx.notify();
                     })),
             );
-        // The host beside the lock is the WEBVIEW's, never the fixture's: a
-        // label fed from anywhere else is a claim about which origin is loaded,
-        // and that is the one thing browser chrome must not get wrong. Before
-        // the first page — and in the mock — it stays the drawn host.
-        #[cfg(not(target_os = "linux"))]
-        let host = if live_browser {
-            // Before any web page has committed in this view (the engine's
-            // blank page is not one), the site being loaded is the only name
-            // there is (spec 079). With neither, NO name: the gallery's demo
-            // host stood here once, a lock beside a site that was not there
-            // (083 W1c).
-            let loading = self
-                .load_watch
-                .url
-                .as_deref()
-                .filter(|_| self.load_watch.loading)
-                .map(crate::explore::load_watch::host_of);
-            crate::webview::host()
-                .filter(|host| !host.starts_with("about:"))
-                .or(loading)
-                .map(SharedString::from)
-        } else {
-            Some(explore_fixtures::uniswap().host)
-        };
-        #[cfg(target_os = "linux")]
-        let host = Some(explore_fixtures::uniswap().host);
-        // The lock tells the truth: the core's judgement of the site on
-        // screen, the same one that decides whether it may ask to sign.
-        let secure = !live_browser || tab_view.as_ref().is_none_or(|tab| tab.secure);
         let crashed = tab_view.as_ref().is_some_and(|tab| tab.crashed);
-        // Spec 079 US3: a load that failed stands where the page was — the bar
-        // names the site that failed (by its address alone: nothing of it
-        // loaded to judge), and its scheme is the only lock there is.
+        // Spec 079 US3: a load that failed stands where the page was.
         let failed_load = self
-            .load_watch
+            .load
+            .watch
             .failure
             .clone()
-            .zip(self.load_watch.url.clone())
+            .zip(self.load.watch.url.clone())
             .filter(|_| live_browser && !crashed);
-        // Spec 079 US4: the page's chain cannot be reached — said in one line
-        // under the bar, with Retry; the connection chip stays as it is (the
-        // connection is fine). Not over the failure panel: no page, no chain.
+        // What the bar names is the core's (spec 082 RE1, G28, G30): the
+        // failed host with no lock while a failure panel is up — nothing from
+        // it is on screen; else the committed document's host and its lock;
+        // else a load pending in an empty tab, with no lock; else nothing.
+        // Never the drawn fixture's host over a live page.
+        let address_bar = self.address_bar_now(live_browser);
+        let (host, lock) = if live_browser {
+            (
+                SharedString::from(address_bar.host.clone()),
+                address_bar.lock,
+            )
+        } else {
+            (
+                explore_fixtures::uniswap().host,
+                vela_core::app::browser_load::BarLock::Closed,
+            )
+        };
+        // Spec 079 US4 / 082 RF1: the page's chain cannot be reached — said in
+        // one line under the bar, with Retry; the connection chip stays as it
+        // is (the connection is fine). Not over the failure panel: no page,
+        // no chain.
         let chain_notice = tab_view
             .as_ref()
             .filter(|_| live_browser && !crashed && failed_load.is_none())
@@ -12645,47 +13121,33 @@ impl WalletPage {
                     .as_ref()
                     .is_some_and(|host| host.read(cx).chain_unreachable(*chain_id))
             });
-        // Spec 083 W1c: the engine has not started (starting, or refused): the
-        // address asked for is named by its address alone, as a failed load's.
-        #[cfg(not(target_os = "linux"))]
-        let unbuilt = (live_browser && !crashed && !crate::webview::ready())
-            .then(|| self.browser_home.clone())
-            .filter(|url| !url.is_empty());
-        #[cfg(target_os = "linux")]
-        let unbuilt: Option<String> = None;
-        // Spec 083 FR-005: a load the wallet asked for (typed, a favourite,
-        // Retry) is named from the moment it is asked. WebView2 keeps the
-        // previous document until the new one commits, and a bar that named it
-        // after Enter named the site the person had just left. A failed load
-        // stays named (079 US3). Nothing of it has loaded to judge, so its
-        // scheme is the only lock there is.
-        let named = self
-            .load_watch
-            .named_url()
-            .filter(|_| live_browser && !crashed)
-            .map(str::to_owned)
-            .or(unbuilt);
-        // A certificate the engine refused is the one https that is not safe:
-        // no closed lock beside it (083).
-        let certificate_failed = self.load_watch.failure.as_ref().is_some_and(|failure| {
-            failure.class == vela_core::app::browser_load::LoadFailureClass::Certificate
-        });
-        let (host, secure) = match named.as_ref() {
-            Some(url) => (
-                Some(SharedString::from(crate::explore::load_watch::host_of(url))),
-                url.to_ascii_lowercase().starts_with("https://") && !certificate_failed,
-            ),
-            None => (host, secure),
-        };
+        if chain_notice != self.chain_notice_shown {
+            match (self.chain_notice_shown, chain_notice) {
+                (_, Some(chain)) => crate::diag::vlog!("chain notice", "shown chain={chain}"),
+                (Some(chain), None) => crate::diag::vlog!("chain notice", "cleared chain={chain}"),
+                (None, None) => {}
+            }
+            self.chain_notice_shown = chain_notice;
+        }
+        let held_words = self.held_notice.is_some();
         let bar = explore_components::AddressBar {
-            browsing: browsing && host.is_some(),
-            host: host.unwrap_or_default(),
-            secure,
+            // A live page with nothing to name yet is the search box.
+            browsing: browsing && !host.is_empty(),
+            host,
+            lock,
             placeholder: self.explore.search_placeholder.clone(),
             draft: self.address_draft.clone().map(SharedString::from),
             selected: self.address_selected,
-            notice: (self.copied.as_deref() == Some(EXPLORE_COPY))
-                .then(|| self.explore.copied.clone()),
+            notice: if held_words {
+                Some(if self.held_close {
+                    self.loc.t(CLOSE_HELD_WORDS)
+                } else {
+                    self.explore.request_open.clone()
+                })
+            } else {
+                (self.copied.as_deref() == Some(EXPLORE_COPY)).then(|| self.explore.copied.clone())
+            },
+            notice_warns: held_words,
         };
         // Editable once somebody is signed in: a click takes the page's URL
         // into the field, Enter goes wherever the core's `browser_input` says
@@ -12703,7 +13165,9 @@ impl WalletPage {
                 });
             })
         };
-        let typing = match (&self.address_draft, live_address) {
+        // While the bar says why a navigation was held, the words stand in
+        // place of the draft — which is kept, and comes back after them.
+        let typing = match (&self.address_draft, live_address && !held_words) {
             (Some(draft), true) => {
                 crate::ui::editor::sync(&self.address_focus, draft);
                 let size = theme::text_row_sub();
@@ -12732,8 +13196,17 @@ impl WalletPage {
         };
         let field = explore_components::address_field(theme, &mut self.icons, &bar, typing);
         let address: gpui::AnyElement = if live_address {
-            let editor_click =
-                crate::ui::editor::mouse_down(&self.address_focus, address_change.clone());
+            let editor_click = {
+                // A press in the open bar is a focus of it too (G41): the
+                // keyboard comes back from WebKit before the caret moves.
+                let place_caret =
+                    crate::ui::editor::mouse_down(&self.address_focus, address_change.clone());
+                move |event: &gpui::MouseDownEvent, window: &mut Window, cx: &mut gpui::App| {
+                    #[cfg(not(target_os = "linux"))]
+                    crate::webview::focus_parent();
+                    place_caret(event, window, cx);
+                }
+            };
             let editor_keys = crate::ui::editor::key_down(
                 &self.address_focus,
                 crate::ui::editor::Wrap::None,
@@ -12755,91 +13228,101 @@ impl WalletPage {
                     el.on_mouse_down(MouseButton::Left, editor_click)
                 })
                 .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
-                    // A click is the mouse's. gpui also makes one from Enter or
-                    // Space released on the focused bar — the Enter that just
-                    // navigated, which reopened the bar on the previous page's
-                    // URL (083 W2). Neither opens the bar; it is not a tab stop,
-                    // so no keyboard route to it is lost.
+                    // Enter on the focused bar arrives here as a keyboard
+                    // click (gpui turns it into one): it is "go", never "edit
+                    // again" — which re-opened the field over the page that
+                    // had just been asked for (spec 082 RD5, G7, G30).
                     if event.is_keyboard() {
                         return;
                     }
                     this.edit_address(window, cx);
                 }))
-                .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
-                    if !this.address_key(event, window, cx) {
-                        editor_keys(event, window, cx);
+                // The page's own keys (Enter, Esc) run under the page's lease;
+                // the editor's run AFTER it is released. The editor reports a
+                // paste, a delete or a cut through `address_change`, which
+                // updates this page — inside a `cx.listener` that is a nested
+                // update, gpui panics, and AppKit's key dispatch cannot unwind,
+                // so the app aborted on ⌘V or Backspace in the address bar
+                // (082 G3).
+                .on_key_down({
+                    let page = cx.entity().downgrade();
+                    move |event: &KeyDownEvent, window: &mut Window, cx: &mut gpui::App| {
+                        let key = page
+                            .update(cx, |this, cx| this.address_key(event, cx))
+                            .unwrap_or(AddressKey::NotMine);
+                        match key {
+                            // The bar lets go of the keyboard (RD5): the
+                            // pending keyboard click is dropped with it.
+                            AddressKey::Go | AddressKey::Stop => window.blur(),
+                            AddressKey::Held => {}
+                            AddressKey::NotMine => editor_keys(event, window, cx),
+                        }
                     }
-                }))
+                })
                 .into_any_element()
         } else {
             field.into_any_element()
         };
 
-        // Drawn and inert in the mock; three real listeners in a live session.
-        // 083 W15: an arrow asks again at the click, whatever it looked like
-        // when drawn. macOS reports a page's own entries only through the
-        // page, so a dimmed arrow can be a moment stale. It never goes below
-        // the tab's first page.
+        // Drawn and inert in the mock; three real listeners in a live
+        // session, each through the one funnel (RD1) and each on only when
+        // the engine says it can act (RD6) — all off over the start page.
         #[cfg(not(target_os = "linux"))]
-        let nav: Option<explore_components::NavActions> = live_browser.then(|| {
+        let nav: Option<explore_components::NavActions> = self.identity.is_some().then(|| {
+            use crate::wallet::browser_host::Go;
             [
                 Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    if this.tab_history.may_go_back() && crate::webview::back() {
-                        this.tab_history.stepped(true);
-                    }
-                    cx.notify();
+                    this.browser_go(Go::Back, cx);
                 })) as panels::Click,
                 Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    if this.tab_history.may_go_forward() && crate::webview::forward() {
-                        this.tab_history.stepped(false);
-                    }
-                    cx.notify();
+                    this.browser_go(Go::Forward, cx);
                 })),
                 // Over the failure panel, reload is its Retry: the address
                 // that failed, not the page before it.
                 Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    if crate::webview::engine_failure().is_some() {
-                        // Over the engine's panel, reload starts the engine (083).
-                        crate::webview::retry_engine();
-                        cx.notify();
-                    } else if this.load_watch.failure.is_some() {
-                        this.load_retry(cx);
-                    } else {
-                        this.browser_reload();
-                    }
+                    this.browser_go(Go::Reload, cx);
                 })),
             ]
         });
         #[cfg(target_os = "linux")]
         let nav: Option<explore_components::NavActions> = None;
-        // 083 W15: the arrows are the engine's own history within the tab on
-        // screen, read again on every render. A load, a page's own entry and
-        // the engine's answer all repaint.
-        #[cfg(not(target_os = "linux"))]
-        let live_history = live_browser.then(|| self.tab_history.arrows(crate::webview::history()));
-        #[cfg(target_os = "linux")]
-        let live_history: Option<[bool; 2]> = None;
-        let history = nav_history(live_history, self.identity.is_some());
+        let nav_state = explore_components::NavState {
+            enabled: if live_browser {
+                self.nav_enabled
+            } else {
+                [false; 3]
+            },
+            held,
+        };
 
         let toolbar =
-            explore_components::toolbar(theme, &mut self.icons, address, trailing, nav, history);
+            explore_components::toolbar(theme, &mut self.icons, address, trailing, nav, nav_state);
 
         // An automatic attempt that came due while the page was elsewhere
-        // runs now that it is back (never while it is out of sight).
+        // runs now that it is back (never while it is out of sight); and
+        // WebKit is watched while the page is in front (RD3).
         #[cfg(not(target_os = "linux"))]
-        if live_browser && self.load_watch.retry_due {
-            cx.spawn(async move |page, cx| {
-                page.update(cx, |this, cx| {
-                    if this.load_in_front()
-                        && let Some(url) = this.load_watch.take_due()
-                    {
-                        crate::webview::navigate(&url);
-                    }
-                    cx.notify();
+        if live_browser {
+            self.ensure_engine_poll(cx);
+            if self.load.watch.retry_due {
+                cx.spawn(async move |page, cx| {
+                    page.update(cx, |this, cx| {
+                        if this.load_in_front() {
+                            // WebKit went on while the page was away and was
+                            // not polled: read it before the attempt is
+                            // judged (RJ9, W7).
+                            let engine = crate::webview::engine().and_then(|engine| engine.sample);
+                            let steps = this
+                                .load
+                                .take_due(engine.as_ref(), crate::executor::now_ms());
+                            this.run_load_steps(steps, cx);
+                        }
+                        cx.notify();
+                    })
+                    .ok();
                 })
-                .ok();
-            })
-            .detach();
+                .detach();
+            }
         }
         #[cfg(not(target_os = "linux"))]
         let engine_failed = live_browser.then(crate::webview::engine_failure).flatten();
@@ -12859,7 +13342,7 @@ impl WalletPage {
             crate::webview::hide();
             self.load_failed_panel(theme, &failure, &url, cx)
                 .into_any_element()
-        } else if live_browser && self.load_watch.engine_page {
+        } else if live_browser && self.load.watch.engine_page {
             // Spec 083 W3: WebView2's own error page is up and its reason is a
             // moment away. Never on screen: nothing, then Vela's panel.
             #[cfg(not(target_os = "linux"))]
@@ -12869,6 +13352,18 @@ impl WalletPage {
             // Spec 083 W1b: the engine itself did not start. Said once, with the
             // two ways on — never a blank page retried sixty times a second.
             self.engine_failed_panel(theme, failure, cx)
+                .into_any_element()
+        } else if veiled {
+            // RJ5: the page background under the hairline until this tab's
+            // own document commits — never the tab before it, live and
+            // clickable, under this tab's host.
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::hide();
+            div()
+                .flex_1()
+                .min_h(px(0.))
+                .w_full()
+                .bg(theme.bg_base)
                 .into_any_element()
         } else if live_browser {
             #[cfg(not(target_os = "linux"))]
@@ -12889,9 +13384,10 @@ impl WalletPage {
                         }
                     },
                 )
-                // 083 W15: the space the chrome leaves, as every other body
-                // takes it. At full height it overflowed the column, and the
-                // strip and toolbar shrank ~3 px to make room.
+                // The rest of the column, and no more (spec 082 RD8, G6): a
+                // `size_full` canvas asked for the whole column, and taffy
+                // took the overflow out of the strip and the toolbar above
+                // it — the chrome jumped when a page loaded.
                 .flex_1()
                 .min_h(px(0.))
                 .w_full()
@@ -12932,7 +13428,7 @@ impl WalletPage {
             // until it finishes or fails. Its 2 px are always there, so the
             // page never moves when it appears.
             .children(live_browser.then(|| {
-                crate::explore::components::load_hairline(theme, self.load_watch.busy() && !crashed)
+                crate::explore::components::load_hairline(theme, self.load.watch.busy() && !crashed)
             }))
             .children(chain_notice.map(|chain_id| self.chain_notice(theme, chain_id, cx)))
             .child(body)
@@ -12971,19 +13467,35 @@ impl WalletPage {
                     .text_color(theme.fg_base)
                     .child(SharedString::from(text)),
             )
-            .child(
-                div()
+            .child({
+                // Busy until its one read settles (spec 082 RF4, W11): a
+                // spinner, the full colour, taps ignored — never a Retry that
+                // looks dead while it works.
+                let busy = self
+                    .browser_host
+                    .as_ref()
+                    .is_some_and(|host| host.read(cx).retrying_chain(chain_id));
+                let retry = div()
                     .id("chain-notice-retry")
                     .flex_none()
-                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
                     .text_size(theme::text_row_sub())
                     .text_color(theme.accent)
-                    .child(self.explore.load_retry.clone())
-                    .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                        let host = this.browser_host(cx);
-                        host.update(cx, |host, cx| host.retry_chain(chain_id, cx));
-                    })),
-            )
+                    .children(busy.then(|| crate::ui::spinner(theme.accent, px(12.), px(1.5))))
+                    .child(self.explore.load_retry.clone());
+                if busy {
+                    retry
+                } else {
+                    retry.cursor_pointer().on_click(cx.listener(
+                        move |this, _: &gpui::ClickEvent, _, cx| {
+                            let host = this.browser_host(cx);
+                            host.update(cx, |host, cx| host.retry_chain(chain_id, cx));
+                        },
+                    ))
+                }
+            })
     }
 
     /// The load failed (spec 079 US3): the generic line, the core's reason for
@@ -12998,7 +13510,7 @@ impl WalletPage {
     ) -> Div {
         let title = self.explore.load_failed.clone();
         let reason = self.loc.t(&failure.reason_key);
-        let retrying = self.load_watch.retrying || self.load_watch.loading;
+        let retrying = self.load.watch.retrying || self.load.watch.loading;
         let button = outline_button(
             ElementId::from("load-retry"),
             theme,
@@ -13010,8 +13522,10 @@ impl WalletPage {
                 self.explore.load_retry.clone()
             },
         );
+        // Busy is not disabled: while an attempt runs the button says so in
+        // its full colour and takes no second press.
         let button = if retrying {
-            button.opacity(0.6)
+            button
         } else {
             button.on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                 #[cfg(not(target_os = "linux"))]
@@ -13056,7 +13570,7 @@ impl WalletPage {
                     .text_center()
                     .text_size(theme::text_label())
                     .text_color(theme.fg_subtle)
-                    .child(SharedString::from(crate::explore::load_watch::host_of(url))),
+                    .child(SharedString::from(crate::diag::host_of(url))),
             )
             .child(div().pt(px(4.)).child(button))
     }
@@ -13071,7 +13585,7 @@ impl WalletPage {
         failure: crate::explore::engine::EngineFailure,
         cx: &mut Context<Self>,
     ) -> Div {
-        let host = crate::explore::load_watch::host_of(&self.browser_home);
+        let host = vela_core::app::browser_load::host_of(&self.browser_home);
         let detail = match failure.code() {
             Some(code) if host.is_empty() => format!("WebView2 {code}"),
             Some(code) => format!("{host} · WebView2 {code}"),
@@ -13188,8 +13702,7 @@ impl WalletPage {
                     self.explore.reload.clone(),
                 )
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                    #[cfg(not(target_os = "linux"))]
-                    this.browser_reload();
+                    this.browser_go(crate::wallet::browser_host::Go::Reload, cx);
                     #[cfg(target_os = "linux")]
                     let _ = this;
                     cx.notify();
@@ -13201,6 +13714,14 @@ impl WalletPage {
     /// address bar's text: what is pinned has to be the document that is
     /// actually open. The star and the site menu's "Add to favorites" both.
     fn pin_current_page(&mut self, cx: &mut Context<Self>) {
+        // RJ5: while the tab is veiled the webview holds another tab's page,
+        // and that is not what the person is pinning.
+        if self
+            .tab_doc
+            .veiled(self.shown_tab.as_deref(), self.browsing)
+        {
+            return;
+        }
         #[cfg(not(target_os = "linux"))]
         if let Some(url) = crate::webview::current_url() {
             // The page's own title when it has reported one; the host
@@ -13230,23 +13751,15 @@ impl WalletPage {
     /// open, so editing a URL is editing THAT URL, not retyping it.
     fn edit_address(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.address_draft.is_none() {
-            #[cfg(not(target_os = "linux"))]
+            // The address the bar SHOWS (spec 082 RD5): the one that failed
+            // while its panel is up, the one loading, else the page's — never
+            // the engine's provisional URL, and never a blank field over a
+            // failed first load.
             let current = if self.browsing {
-                // 083 FR-006: the address the bar NAMES — a load asked for and
-                // not committed yet, or the one failed under the panel. WebView2's
-                // own URL is the previous page's until the new one commits;
-                // starting from it turned "example.com" typed on PancakeSwap
-                // into pancakeswap.finance/example.com.
-                self.load_watch
-                    .named_url()
-                    .map(str::to_owned)
-                    .or_else(|| crate::webview::current_url().filter(|url| url != "about:blank"))
+                self.address_bar_now(self.identity.is_some()).url
             } else {
-                None
+                String::new()
             };
-            #[cfg(target_os = "linux")]
-            let current: Option<String> = None;
-            let current = current.unwrap_or_default();
             // As a browser does: the URL taken into the field is selected, so
             // typing replaces it and a paste lands in its place.
             crate::ui::editor::sync(&self.address_focus, &current);
@@ -13260,113 +13773,68 @@ impl WalletPage {
             }
             self.address_draft = Some(current);
         }
-        window.focus(&self.address_focus, cx);
+        self.focus_address(window, cx);
         cx.notify();
+    }
+
+    /// Every focus of the address bar (spec 082 G41): the keyboard is taken
+    /// back from WebKit first — while a page is WebKit's first responder,
+    /// AppKit sends it every key whatever gpui has focused.
+    fn focus_address(&self, window: &mut Window, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        crate::webview::focus_parent();
+        window.focus(&self.address_focus, cx);
+    }
+
+    /// What the bar names right now — the core's `address_bar` over the
+    /// committed document, the pending load and a failure (spec 082 RE1).
+    fn address_bar_now(&self, live: bool) -> vela_core::app::browser_load::AddressBar {
+        let shown = self.bar_committed.as_deref().filter(|_| live);
+        crate::wallet::browser_host::bar_of(shown, &self.load.watch)
     }
 
     /// The address bar's own two keys; everything else is the editor's.
     /// Enter goes where the core's `browser_input` says the text means: a URL
     /// as typed, a bare host with a scheme, anything else a search — the same
     /// rule on every client. Escape stops typing and leaves the column.
-    /// `true` when the key was one of the two.
-    fn address_key(
-        &mut self,
-        event: &KeyDownEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> bool {
+    fn address_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> AddressKey {
         // While the IME composes, Enter commits and Esc cancels ITS text —
         // never "go" or "stop typing".
         if self.address_draft.is_none() || crate::ui::editor::is_composing(&self.address_focus) {
-            return false;
+            return AddressKey::NotMine;
         }
         match event.keystroke.key.as_str() {
             "enter" => {
                 cx.stop_propagation();
                 let typed = self.address_draft.clone().unwrap_or_default();
-                // Spec 083 FR-005: Enter is done with the bar, so the keyboard
-                // goes back to the page, as Enter in a settings field does.
-                // Left on the bar, gpui turned Enter's key-UP into a click on
-                // it, which reopened the bar on the previous page's URL; a
-                // focus change between the key's down and up cancels that.
-                self.leave_address(window, cx);
                 // A pasted URL is one line, and so is what is sent.
-                if let Some(url) = vela_core::app::dapp_rpc::browser_input(typed.trim()) {
-                    self.open_typed_url(url, cx);
+                let typed = typed.trim().to_owned();
+                let Some(url) = vela_core::app::dapp_rpc::browser_input(&typed) else {
+                    return AddressKey::Held;
+                };
+                let holds = self.browser_host.as_ref().is_some_and(|host| {
+                    crate::wallet::browser_host::holds_navigation(&host.read(cx).view)
+                });
+                self.browser_go(crate::wallet::browser_host::Go::Typed(url), cx);
+                if holds {
+                    // Held (RD1): the typed draft is kept for when the
+                    // request is done.
+                    return AddressKey::Held;
                 }
-                true
+                self.address_selected = false;
+                self.address_draft = None;
+                cx.notify();
+                AddressKey::Go
             }
             "escape" => {
                 // One layer only: the typing stops, the column stays.
                 cx.stop_propagation();
-                self.leave_address(window, cx);
-                true
+                self.address_selected = false;
+                self.address_draft = None;
+                cx.notify();
+                AddressKey::Stop
             }
-            _ => false,
-        }
-    }
-
-    /// The bar stops being typed in, and the keyboard goes back to the page.
-    fn leave_address(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.address_selected = false;
-        self.address_draft = None;
-        #[cfg(not(target_os = "linux"))]
-        {
-            self.address_opened = None;
-        }
-        window.focus(&self.focus_handle, cx);
-        cx.notify();
-    }
-
-    /// Open what the address bar resolved to, in the page on screen — as a
-    /// favourite or a history row does.
-    fn open_typed_url(&mut self, url: String, cx: &mut Context<Self>) {
-        // From the start page (a new tab's), this is the tab's first page.
-        if !self.browsing {
-            self.browser_tab_changes();
-        }
-        self.browsing = true;
-        #[cfg(not(target_os = "linux"))]
-        crate::webview::navigate(&url);
-        self.browser_home = url;
-        cx.notify();
-    }
-
-    /// A page's new window, as a new tab on screen (083 W6) — the way the
-    /// Recent and favourite menus open one. A full strip loads it in the tab on
-    /// screen instead, the phones' rule, rather than dropping the click.
-    #[cfg(not(target_os = "linux"))]
-    fn open_in_new_tab(&mut self, url: String, cx: &mut Context<Self>) {
-        let explore = resident::resident::<ExploreSites>(cx);
-        if !explore.read(cx).view().tabs_full {
-            explore.update(cx, |resident, cx| {
-                resident.dispatch(
-                    vela_core::app::explore_sites::Event::TabOpened {
-                        url: Some(url.clone()),
-                        title: None,
-                        now_ms: crate::executor::now_ms(),
-                    },
-                    cx,
-                );
-            });
-            // 083 W15: Back in the new tab must not return to the page that
-            // opened it. In a full strip the page stays in its tab, and
-            // Back goes to the opener there, as in any browser.
-            self.browser_tab_changes();
-        }
-        self.open_typed_url(url, cx);
-    }
-
-    /// Where a page's new window or other-app address goes (083 W6/W7): the
-    /// webview has already decided it may, on a person's gesture.
-    #[cfg(not(target_os = "linux"))]
-    fn browser_leave(&mut self, leave: crate::webview::Leave, cx: &mut Context<Self>) {
-        match leave {
-            crate::webview::Leave::NewTab(url) => self.open_in_new_tab(url, cx),
-            // A page's address, handed to another program's command line.
-            crate::webview::Leave::External(url) => {
-                crate::executor::opener::open_from_page(&url, cx);
-            }
+            _ => AddressKey::NotMine,
         }
     }
 
@@ -13435,30 +13903,51 @@ impl WalletPage {
                         ) else {
                             return;
                         };
-                        page.browser_title.clone_from(&visit.title);
                         // The strip follows the document, from the one place
-                        // that knows a page settled. A navigation with no tab
-                        // OPENS one: the first page a person opens is the
-                        // first tab they have, and a strip that stayed empty
-                        // while a site was on screen would be lying about
-                        // where they are.
+                        // that knows a page settled — into the tab whose page
+                        // it is (spec 082 RD6, RJ5): the tab whose document
+                        // the webview holds, never a veiled tab still waiting
+                        // for its own; with no owner known, the shown tab,
+                        // else a selected start-page tab, else a NEW one. A
+                        // restored tab waiting unlit is never the one renamed.
+                        use crate::wallet::browser_host::MetaTarget;
                         let explore = resident::resident::<ExploreSites>(cx);
-                        let selected = explore.read(cx).view().selected_tab;
+                        let target = crate::wallet::browser_host::meta_target(
+                            &explore.read(cx).view(),
+                            page.tab_doc.doc_tab.as_deref(),
+                            page.shown_tab.as_deref(),
+                            page.browsing,
+                        );
+                        if target == MetaTarget::Nobody {
+                            return;
+                        }
+                        page.browser_title.clone_from(&visit.title);
+                        let opened = target == MetaTarget::NewTab;
                         explore.update(cx, |resident, cx| {
-                            let event = match selected {
-                                Some(id) => vela_core::app::explore_sites::Event::TabNavigated {
-                                    id,
-                                    url: visit.url.clone(),
-                                    title: visit.title.clone(),
-                                },
-                                None => vela_core::app::explore_sites::Event::TabOpened {
-                                    url: Some(visit.url.clone()),
-                                    title: visit.title.clone(),
-                                    now_ms: crate::executor::now_ms(),
-                                },
+                            let event = match target {
+                                MetaTarget::Tab(id) => {
+                                    vela_core::app::explore_sites::Event::TabNavigated {
+                                        id,
+                                        url: visit.url.clone(),
+                                        title: visit.title.clone(),
+                                    }
+                                }
+                                MetaTarget::NewTab | MetaTarget::Nobody => {
+                                    vela_core::app::explore_sites::Event::TabOpened {
+                                        url: Some(visit.url.clone()),
+                                        title: visit.title.clone(),
+                                        now_ms: crate::executor::now_ms(),
+                                    }
+                                }
                             };
                             resident.dispatch(event, cx);
                         });
+                        if opened {
+                            page.shown_tab = explore.read(cx).view().selected_tab;
+                            let back_len =
+                                crate::webview::engine().and_then(|engine| engine.back_len);
+                            page.tab_doc.adopted(page.shown_tab.as_deref(), back_len);
+                        }
                         resident::resident::<BrowserHistory>(cx).update(cx, |resident, cx| {
                             resident.dispatch(
                                 vela_core::app::browser_history::Event::VisitRecorded {
@@ -13518,12 +14007,21 @@ impl WalletPage {
         let event = match load {
             // The wallet's own request: the core hears the commit, not this.
             crate::webview::Load::Requested(url) => {
-                self.load_requested(&url, cx);
+                self.tab_doc.requested(self.shown_tab.as_deref());
+                let steps = self.load.requested(&url, crate::executor::now_ms());
+                self.run_load_steps(steps, cx);
+                self.ensure_engine_poll(cx);
+                cx.notify();
                 return;
             }
             crate::webview::Load::Started(url) => {
+                // RJ5: whose document this is, and — at the shown tab's first
+                // commit — where its Back stops.
+                let back_len = crate::webview::engine().and_then(|engine| engine.back_len);
+                self.tab_doc.committed(self.shown_tab.as_deref(), back_len);
+                #[cfg(windows)]
                 self.browser_landed();
-                self.load_watch.committed(&url);
+                self.load.committed(&url);
                 // 083 FR-006: an open bar nobody has typed in follows the page
                 // (a link clicked while the bar was open) — never a stale
                 // address a click would drop a caret into.
@@ -13537,11 +14035,21 @@ impl WalletPage {
                     self.address_opened = Some(next.clone());
                     self.address_draft = Some(next);
                 }
+                // The bar names the shown tab's own document only (RJ5): a
+                // commit of the page a veiled tab is hiding is not its.
+                if !self
+                    .tab_doc
+                    .veiled(self.shown_tab.as_deref(), self.browsing)
+                {
+                    self.bar_committed = vela_core::app::dapp_permissions::origin_of(&url)
+                        .is_some()
+                        .then(|| url.clone());
+                }
                 cx.notify();
                 DbrEvent::NavigationStarted { tab, url }
             }
             crate::webview::Load::Finished(url) => {
-                self.load_watch.finished(&url);
+                self.load.finished(&url);
                 cx.notify();
                 DbrEvent::LoadFinished { tab, url }
             }
@@ -13550,8 +14058,9 @@ impl WalletPage {
                 // is gone, so the core hears a load begin and the failure's
                 // LoadFinished retires it. It is an entry in the engine's
                 // history all the same (W15).
+                #[cfg(windows)]
                 self.browser_landed();
-                self.load_watch.error_page();
+                self.load.error_page();
                 cx.notify();
                 DbrEvent::NavigationStarted { tab, url }
             }
@@ -13560,8 +14069,9 @@ impl WalletPage {
                 status,
                 certificate,
             } => {
-                if self.load_watch.engine_failed(&url, status, certificate) {
-                    self.load_failed(cx);
+                let steps = self.load.engine_failed(&url, status, certificate);
+                if !steps.is_empty() {
+                    self.run_load_steps(steps, cx);
                 }
                 cx.notify();
                 DbrEvent::LoadFinished { tab, url }
@@ -13573,18 +14083,25 @@ impl WalletPage {
                 cx.notify();
                 return;
             }
+            // 083 W15: the tab's own entries, counted on WebView2; on macOS
+            // the back list's own length is read instead (082 RJ5).
             crate::webview::Load::Pushed => {
+                #[cfg(windows)]
                 self.tab_history.pushed();
                 cx.notify();
                 return;
             }
             crate::webview::Load::Popped => {
+                #[cfg(windows)]
                 self.tab_history.popped();
                 cx.notify();
                 return;
             }
             crate::webview::Load::HistoryFloor(floor) => {
+                #[cfg(windows)]
                 self.tab_history.engine_answered(floor);
+                #[cfg(not(windows))]
+                let _ = floor;
                 cx.notify();
                 return;
             }
@@ -13593,97 +14110,177 @@ impl WalletPage {
         host.update(cx, |host, cx| host.dispatch(event, cx));
     }
 
-    /// A document of the tab on screen arrived (083 W15). When it is the
-    /// tab's first page, the engine is asked to forget the other tabs'
-    /// entries around it.
+    /// What the load watch asked for, done: a timer, a probe off the frame,
+    /// or an attempt (spec 079 US3, 082 RD3).
     #[cfg(not(target_os = "linux"))]
-    fn browser_landed(&mut self) {
-        if let Some(floor) = self.tab_history.landed() {
-            crate::webview::forget_history_behind(floor);
-        }
-    }
-
-    /// A load the wallet asked for (spec 079 US3): progress from now, and a
-    /// watchdog — wry says nothing when a navigation fails, so a load with no
-    /// commit in three seconds is probed.
-    #[cfg(not(target_os = "linux"))]
-    fn load_requested(&mut self, url: &str, cx: &mut Context<Self>) {
-        use crate::explore::load_watch::WATCHDOG;
-        if let Some(generation) = self.load_watch.requested(url, crate::executor::now_ms()) {
-            cx.spawn(async move |page, cx| {
-                cx.background_executor().timer(WATCHDOG).await;
-                page.update(cx, |this, cx| this.load_watchdog(generation, cx))
-                    .ok();
-            })
-            .detach();
+    fn run_load_steps(
+        &mut self,
+        steps: Vec<crate::wallet::browser_host::LoadStep>,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::wallet::browser_host::LoadStep;
+        for step in steps {
+            match step {
+                LoadStep::Navigate(url) => {
+                    // An attempt the watch asked for: the watch already knows
+                    // how it was asked (Retry / AutoRetry).
+                    self.browsing = true;
+                    crate::webview::navigate(&url);
+                }
+                LoadStep::Watchdog {
+                    generation,
+                    after_ms,
+                } => self.after_load(after_ms, cx, move |this, cx| {
+                    let steps = this.load.watchdog(generation);
+                    this.run_load_steps(steps, cx);
+                }),
+                LoadStep::Probe { generation, url } => {
+                    cx.spawn(async move |page, cx| {
+                        let budget = std::time::Duration::from_millis(u64::from(
+                            vela_core::app::browser_load::PROBE_BUDGET_MS,
+                        ));
+                        let answer = cx
+                            .background_executor()
+                            .spawn(async move { crate::explore::probe::probe(&url, budget) })
+                            .await;
+                        page.update(cx, |this, cx| {
+                            let steps =
+                                this.load
+                                    .probed(generation, &answer, crate::executor::now_ms());
+                            this.run_load_steps(steps, cx);
+                            cx.notify();
+                        })
+                        .ok();
+                    })
+                    .detach();
+                }
+                LoadStep::GiveUp {
+                    generation,
+                    after_ms,
+                } => self.after_load(after_ms, cx, move |this, cx| {
+                    let steps = this.load.give_up(generation);
+                    this.run_load_steps(steps, cx);
+                }),
+                LoadStep::Retry {
+                    generation,
+                    after_ms,
+                } => self.after_load(after_ms, cx, move |this, cx| {
+                    let in_front = this.load_in_front();
+                    let steps =
+                        this.load
+                            .retry_fired(generation, in_front, crate::executor::now_ms());
+                    this.run_load_steps(steps, cx);
+                }),
+            }
         }
         cx.notify();
     }
 
-    /// Three seconds, no commit: ask the address natively, off the frame.
+    /// Run `then` on the page `after_ms` from now.
     #[cfg(not(target_os = "linux"))]
-    fn load_watchdog(&mut self, generation: u64, cx: &mut Context<Self>) {
-        use crate::explore::load_watch::{PROBE_BUDGET, probe};
-        let Some(url) = self.load_watch.watchdog(generation) else {
-            return;
-        };
+    fn after_load(
+        &mut self,
+        after_ms: u32,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, &mut Context<Self>) + 'static,
+    ) {
         cx.spawn(async move |page, cx| {
-            let answer = cx
-                .background_executor()
-                .spawn(async move { probe(&url, PROBE_BUDGET) })
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(u64::from(after_ms)))
                 .await;
-            page.update(cx, |this, cx| this.load_probed(generation, answer, cx))
-                .ok();
+            page.update(cx, |this, cx| {
+                then(this, cx);
+                cx.notify();
+            })
+            .ok();
         })
         .detach();
     }
 
-    /// The probe answered: a failure is the panel, with its reason; a site
-    /// that answered gets until twenty seconds to commit.
+    /// WebKit's own account of the load (spec 082 RD3, RD7), polled while the
+    /// browser is in front: every 250 ms while a load is watched or a panel
+    /// is up, every 500 ms otherwise. It also carries the nav buttons' state
+    /// (RD6) and the network's "came back" edge (RE3, T069). Stops by itself
+    /// when the browser leaves the front; the next frame that draws it starts
+    /// it again.
     #[cfg(not(target_os = "linux"))]
-    fn load_probed(&mut self, generation: u64, answer: Result<(), i64>, cx: &mut Context<Self>) {
-        use crate::explore::load_watch::Probed;
-        match self.load_watch.probed(generation, answer) {
-            Probed::Ignored => return,
-            Probed::WaitUntil(at_ms) => {
-                let wait = (at_ms - crate::executor::now_ms()).max(0.) as u64;
-                cx.spawn(async move |page, cx| {
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_millis(wait))
-                        .await;
-                    page.update(cx, |this, cx| {
-                        if this.load_watch.give_up(generation) {
-                            this.load_failed(cx);
+    fn ensure_engine_poll(&mut self, cx: &mut Context<Self>) {
+        if self.engine_polling {
+            return;
+        }
+        self.engine_polling = true;
+        cx.spawn(async move |page, cx| {
+            loop {
+                let wait = page
+                    .update(cx, |this, _| {
+                        if this.load.watch.busy() || this.load.watch.failure.is_some() {
+                            250
+                        } else {
+                            500
                         }
                     })
-                    .ok();
-                })
-                .detach();
+                    .unwrap_or(500);
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(wait))
+                    .await;
+                let go_on = page
+                    .update(cx, |this, cx| this.engine_tick(cx))
+                    .unwrap_or(false);
+                if !go_on {
+                    break;
+                }
             }
-            Probed::Failed => self.load_failed(cx),
-        }
-        cx.notify();
+        })
+        .detach();
     }
 
-    /// The panel is up: a network failure is tried again by itself, on the
-    /// core's schedule, while the page is in front.
+    /// One poll. Returns whether to keep polling.
     #[cfg(not(target_os = "linux"))]
-    fn load_failed(&mut self, cx: &mut Context<Self>) {
-        if let Some((generation, wait)) = self.load_watch.schedule_retry() {
-            cx.spawn(async move |page, cx| {
-                cx.background_executor().timer(wait).await;
-                page.update(cx, |this, cx| {
-                    let in_front = this.load_in_front();
-                    if let Some(url) = this.load_watch.retry_fired(generation, in_front) {
-                        crate::webview::navigate(&url);
-                    }
-                    cx.notify();
-                })
-                .ok();
-            })
-            .detach();
+    fn engine_tick(&mut self, cx: &mut Context<Self>) -> bool {
+        if !self.load_in_front() {
+            self.engine_polling = false;
+            if self.nav_enabled != [false; 3] && self.section == Section::Explore {
+                self.nav_enabled = [false; 3];
+                cx.notify();
+            }
+            return false;
         }
-        cx.notify();
+        if let Some(engine) = crate::webview::engine() {
+            let nav = crate::wallet::browser_host::nav_enabled(
+                self.browsing,
+                engine.can_back,
+                engine.can_forward,
+                engine.back_len,
+                self.tab_doc.floor(self.shown_tab.as_deref()),
+                self.load.watch.failure.is_some(),
+            );
+            // 083 W15: on WebView2 the arrows stay within the tab on screen.
+            #[cfg(windows)]
+            let nav = {
+                let [back, forward] = self.tab_history.arrows(crate::webview::history());
+                [nav[0] && back, nav[1] && forward, nav[2]]
+            };
+            if nav != self.nav_enabled {
+                self.nav_enabled = nav;
+                cx.notify();
+            }
+            if let Some(sample) = engine.sample {
+                let steps = self.load.engine(&sample, crate::executor::now_ms());
+                if !steps.is_empty() {
+                    self.run_load_steps(steps, cx);
+                }
+            }
+        }
+        // The network came back (RE3): a failed page a returning network can
+        // heal is loaded again, once — the balances were already told by the
+        // pool.
+        let came_back = crate::executor::pool::came_back_count();
+        if came_back != self.came_back_seen {
+            self.came_back_seen = came_back;
+            let steps = self.load.network_came_back();
+            self.run_load_steps(steps, cx);
+        }
+        true
     }
 
     /// The page is what the person is looking at: Explore, a page, signed in.
@@ -13695,9 +14292,12 @@ impl WalletPage {
     /// address that failed, again — a reload would load the page before it.
     #[cfg(not(target_os = "linux"))]
     fn load_retry(&mut self, cx: &mut Context<Self>) {
-        if let Some(url) = self.load_watch.retry() {
-            crate::webview::navigate(&url);
-        }
+        let steps = self.load.retry();
+        self.run_load_steps(steps, cx);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn load_retry(&mut self, cx: &mut Context<Self>) {
         cx.notify();
     }
 
@@ -13819,33 +14419,56 @@ impl WalletPage {
     }
 
     /// The page that asked is gone and already has its 4900: close its sheet,
-    /// unanswered. A column showing something else is left alone.
+    /// unanswered. A column showing something else is left alone — and so is
+    /// one this request left in the background after its approval, whose
+    /// submit may be running still.
     #[cfg(not(target_os = "linux"))]
     fn cancel_dapp_signing(&mut self, id: &str, cx: &mut Context<Self>) {
-        let Some(host) = self.signing_host.clone() else {
-            return;
-        };
-        let ours = {
+        let ours = |host: &gpui::Entity<crate::wallet::signing_host::SigningHost>,
+                    cx: &gpui::App| {
             let host = host.read(cx);
             host.transport_id == crate::wallet::signing_host::BROWSER_TRANSPORT
                 && host.request_id == id
         };
-        if !ours {
+        let shown = self.signing_host.clone().filter(|host| ours(host, cx));
+        let unseen = self
+            .signing_background
+            .iter()
+            .find(|host| ours(host, cx))
+            .cloned();
+        let Some(host) = shown.clone().or(unseen) else {
             return;
-        }
-        host.update(cx, |host, cx| {
+        };
+        // Spec 082 RB2 (the money rule): from here nothing is signed or sent
+        // for this request — a submit already running asks before its
+        // ceremony, when the ceremony answers, and right before the relay
+        // POST. The core stops a pipeline still before the passkey itself.
+        let owed = host.update(cx, |host, cx| {
+            host.asker_left();
             host.dispatch_sign(
                 vela_core::app::sign_request::Event::TransportDropped {
                     transport_id: crate::wallet::signing_host::BROWSER_TRANSPORT.to_owned(),
                 },
                 cx,
             );
+            host.owed_unseen()
         });
-        // Gone whatever the machine did with it: a decoded intent must never
-        // outlive the page that asked for it.
-        self.signing_host = None;
-        if self.panel == PanelId::Signing {
-            self.panel = PanelId::None;
+        // …but a submit that already reached the relay must still be recorded
+        // and handed to the tracker, so its machines run on, unseen, until it
+        // ends. Nothing else of it stays: a decoded intent must never outlive
+        // the page that asked for it.
+        if owed {
+            if !self.signing_background.contains(&host) {
+                self.signing_background.push(host.clone());
+            }
+        } else {
+            self.signing_background.retain(|kept| kept != &host);
+        }
+        if shown.is_some() {
+            self.signing_host = None;
+            if self.panel == PanelId::Signing {
+                self.panel = PanelId::None;
+            }
         }
         cx.notify();
     }
@@ -13907,7 +14530,6 @@ impl WalletPage {
             summary,
             track.as_ref(),
             &clock,
-            host.signature(),
             &self.signing,
         )
         .map(|receipt| (receipt, host.chain_id))
@@ -14007,6 +14629,7 @@ impl WalletPage {
             host.update(cx, |host, cx| host.close(cx));
         }
         self.dapp_landing = None;
+        self.signing_hidden = false;
         if self.panel == PanelId::Signing {
             self.panel = PanelId::None;
         }
@@ -14078,6 +14701,7 @@ impl WalletPage {
         .detach();
         self.signing_host = Some(host.clone());
         self.panel = PanelId::Signing;
+        self.signing_hidden = false;
         // A new request is what the column is about now.
         self.dapp_landing = None;
         // A new request opens closed: the last one's decision to look at the
@@ -14099,9 +14723,9 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         let answers = host.update(cx, |host, _| host.take_answers());
-        let (closed, responded, approved) = {
+        let (closed, owed) = {
             let read = host.read(cx);
-            (read.closed, read.responded, read.approved)
+            (read.closed, read.owed_unseen())
         };
         // WHETHER there is a column is the core's answer, not this file's —
         // and only for the column on screen: a column already replaced (its
@@ -14121,7 +14745,11 @@ impl WalletPage {
                         closing: false,
                     })
                 };
-                if let Some(mut landing) = ending.filter(|_| self.panel == PanelId::Signing) {
+                // RJ18: also while the column is only hidden by a switch of
+                // section — the "don't send it again" trace comes back.
+                if let Some(mut landing) =
+                    ending.filter(|_| keeps_ending(self.panel, self.signing_hidden))
+                {
                     self.dapp_landing_seq += 1;
                     landing.seq = self.dapp_landing_seq;
                     self.dapp_landing = Some(landing);
@@ -14133,7 +14761,7 @@ impl WalletPage {
                 // …unless it was closed after the approval and the core has
                 // not answered the page yet (FR-002): nothing was refused, so
                 // its machines keep running, unseen, until the answer is out.
-                if approved && !responded {
+                if owed && !self.signing_background.contains(host) {
                     self.signing_background.push(host.clone());
                 }
                 // …and unless its ending is showing: the column stays for it
@@ -14151,8 +14779,9 @@ impl WalletPage {
                 self.panel = PanelId::Signing;
             }
         }
-        // A request running unseen has answered: its machines can go.
-        if responded {
+        // A request running unseen owes nothing more — it has answered, or
+        // its page left and its submit is over (RB2): its machines can go.
+        if !owed {
             self.signing_background.retain(|kept| kept != host);
         }
         if let Some(tab) = tab {
@@ -14330,16 +14959,7 @@ impl WalletPage {
                             .map(|(_, url)| url.clone())
                             .unwrap_or_default();
                         cx.listener(move |this, _, _, cx| {
-                            // The start page's site is its tab's first page
-                            // (083 W15).
-                            if !this.browsing {
-                                this.browser_tab_changes();
-                            }
-                            this.browsing = true;
-                            this.browser_home = url.clone();
-                            #[cfg(not(target_os = "linux"))]
-                            crate::webview::navigate(&url);
-                            cx.notify();
+                            this.browser_go(crate::wallet::browser_host::Go::Open(url.clone()), cx);
                         })
                     })
                     .on_mouse_down(MouseButton::Right, {
@@ -14483,14 +15103,7 @@ impl WalletPage {
                         // whatever page was loaded last.
                         let url = site.open_url();
                         cx.listener(move |this, _, _, cx| {
-                            if !this.browsing {
-                                this.browser_tab_changes();
-                            }
-                            this.browser_home = url.clone();
-                            #[cfg(not(target_os = "linux"))]
-                            crate::webview::navigate(&url);
-                            this.browsing = true;
-                            cx.notify();
+                            this.browser_go(crate::wallet::browser_host::Go::Open(url.clone()), cx);
                         })
                     })
                     .into_any_element(),
@@ -14514,95 +15127,6 @@ impl WalletPage {
         column
     }
 
-    /// The account a site sees, as the connection panel and the consent draw
-    /// it: identicon, name, short address. The panel adds its switch.
-    fn account_row(&mut self, theme: &Theme, identity: &Identity) -> Div {
-        div()
-            .flex()
-            .items_center()
-            .gap(px(12.))
-            .child(identicon_avatar(
-                &mut self.identicons,
-                &identity.address,
-                40.,
-            ))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(2.))
-                    .flex_1()
-                    // An address with no name is its address line alone (083).
-                    .when(!identity.name.is_empty(), |column| {
-                        column.child(
-                            div()
-                                .text_size(theme::text_row_title())
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(theme.fg_base)
-                                .child(identity.name.clone()),
-                        )
-                    })
-                    .child(
-                        div()
-                            .font_family("monospace")
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_muted)
-                            .child(identity.display()),
-                    ),
-            )
-    }
-
-    /// A site's network, as the connection panel and the consent draw it:
-    /// label, the chain's logo and name, and a chevron where it can be changed.
-    fn site_chain_row(&mut self, theme: &Theme, chain_id: u32, chevron: bool) -> Div {
-        div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .child(
-                div()
-                    .text_size(theme::text_row_sub())
-                    .text_color(theme.fg_muted)
-                    .child(self.explore.network.clone()),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    // The chain's own logo (owner: "连接时 切换网络，没有网络
-                    // logo呀") — the dot was Ethereum's colour on every chain.
-                    .child(chain_logo_mark(
-                        u64::from(chain_id),
-                        crate::settings::model::lettermark(
-                            &crate::executor::custom_tokens::network_name(chain_id),
-                        ),
-                        crate::settings::model::chain_tint(u64::from(chain_id))
-                            .unwrap_or(0x8A_8F_98),
-                        20.,
-                    ))
-                    .child(
-                        div()
-                            .text_size(theme::text_row_title())
-                            .text_color(theme.fg_base)
-                            // The chain THIS SITE is on — the one its
-                            // `eth_chainId` answers and a signature from it
-                            // is quoted, routed and submitted on. Not a
-                            // column-wide chain: there is none any more.
-                            .child(SharedString::from(crate::flows::live::chain_name(chain_id))),
-                    )
-                    .when(chevron, |row| {
-                        row.child(icon_img(
-                            &mut self.icons,
-                            Icon::ChevronDown,
-                            false,
-                            theme.fg_muted,
-                            14.,
-                        ))
-                    }),
-            )
-    }
-
     /// The question a site is asking, and the two answers.
     ///
     /// The origin is drawn from the CORE's consent view, which got it from
@@ -14620,12 +15144,6 @@ impl WalletPage {
         // and this panel are asking about the same site.
         let (host, _, letter) = signing_live::dapp_identity(&consent.origin);
         let title = crate::signing::fill(&self.explore.consent_title, &[("host", &host)]);
-        // 083 W14 (owner D4): WHAT the site would get — the account and the
-        // network — as the phones name them; the site alone said neither.
-        let accounts = session::view(cx).accounts;
-        let account = consent_account(consent.address.as_deref(), &self.identity(), &accounts);
-        let account_row = self.account_row(theme, &account);
-        let network_row = self.site_chain_row(theme, consent.chain_id, false);
         div()
             .flex()
             .flex_col()
@@ -14649,16 +15167,20 @@ impl WalletPage {
                             .child(SharedString::from(title)),
                     ),
             )
-            .child(row_divider(theme))
-            .child(account_row)
-            .child(row_divider(theme))
-            .child(network_row)
             .child(
                 div()
                     .text_size(theme::text_row_sub())
                     .text_color(theme.fg_muted)
                     .child(self.explore.consent_body.clone()),
             )
+            // Spec 082 RD11 (G11): WHO would be connected and on WHICH network,
+            // before the answer — the account the grant would be made for,
+            // and the site's network, which can be changed right here.
+            .child(row_divider(theme))
+            .child(self.account_row(theme, consent.address.as_deref(), cx))
+            .child(row_divider(theme))
+            .child(self.site_network_row(theme, consent.chain_id, Some(consent.origin.clone()), cx))
+            .child(row_divider(theme))
             .child(
                 div()
                     .id("consent-approve")
@@ -14757,22 +15279,10 @@ impl WalletPage {
             .as_deref()
             .map(|origin| explore_live::icons_of(origin, None))
             .unwrap_or_default();
-        let identity = self.identity();
-        // The site's own network, which the person can change here — the
-        // site hears `chainChanged`, and every other site stays where it is.
-        let network_row = self
-            .site_chain_row(theme, chain_id, origin.is_some())
-            .id("site-network");
-        let account_row = self.account_row(theme, &identity);
-        let e = &self.explore;
-        let network_row = match origin.clone() {
-            Some(origin) => network_row.cursor_pointer().on_click(cx.listener(
-                move |this, event: &gpui::ClickEvent, _, cx| {
-                    this.open_site_networks(origin.clone(), chain_id, event.position(), cx);
-                },
-            )),
-            None => network_row,
-        };
+        // The account the grant is for (spec 082 RD11) — the page's own
+        // connection, not merely whichever account is active.
+        let granted = live.as_ref().and_then(|tab| tab.connected_address.clone());
+        let network_row = self.site_network_row(theme, chain_id, origin.clone(), cx);
         div()
             .flex()
             .flex_col()
@@ -14816,23 +15326,7 @@ impl WalletPage {
                     ),
             )
             .child(row_divider(theme))
-            .child(
-                account_row
-                    // It had no listener (the audit's F9): the header's own
-                    // switcher, over the browser — every connected site
-                    // follows the account the person picks.
-                    .child(
-                        div()
-                            .id("connection-switch-account")
-                            .cursor_pointer()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.accent)
-                            .child(e.switch_account.clone())
-                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                this.open_account_switcher(cx);
-                            })),
-                    ),
-            )
+            .child(self.account_row(theme, granted.as_deref(), cx))
             .child(row_divider(theme))
             .child(network_row)
             .child(
@@ -14868,6 +15362,132 @@ impl WalletPage {
                     .text_color(theme.fg_subtle)
                     .child(self.explore.auto_request_hint.clone()),
             )
+    }
+
+    /// One account row — identicon, name, short address — and the switcher:
+    /// the account `address` names (a grant's, or the one a consent would be
+    /// made for), or the active one when it names none. Every connected site
+    /// follows the account the person picks.
+    fn account_row(&mut self, theme: &Theme, address: Option<&str>, cx: &mut Context<Self>) -> Div {
+        // 083 W14 (owner D4): the account the site would get, as the switcher
+        // names it — an address the wallet has no name for is its address
+        // line alone, never under the active account's name.
+        let accounts = session::view(cx).accounts;
+        let who = consent_account(
+            address.filter(|address| !address.is_empty()),
+            &self.identity(),
+            &accounts,
+        );
+        let (name, seed, shown) = (who.name.clone(), who.address.clone(), who.display());
+        div()
+            .flex()
+            .items_center()
+            .gap(px(12.))
+            .child(identicon_avatar(&mut self.identicons, &seed, 40.))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.))
+                    .flex_1()
+                    .when(!name.is_empty(), |column| {
+                        column.child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(name),
+                        )
+                    })
+                    .child(
+                        div()
+                            .font_family("monospace")
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_muted)
+                            .child(shown),
+                    ),
+            )
+            // It had no listener (the audit's F9): the header's own
+            // switcher, over the browser — every connected site follows the
+            // account the person picks.
+            .child(
+                div()
+                    .id("connection-switch-account")
+                    .cursor_pointer()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.accent)
+                    .child(self.explore.switch_account.clone())
+                    .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                        this.open_account_switcher(cx);
+                    })),
+            )
+    }
+
+    /// The site's own network, with its logo, which the person can change
+    /// here when there is a site to change it for — the site hears
+    /// `chainChanged`, and every other site stays where it is. The consent
+    /// sheet and the connected panel draw the same row (spec 082 RD11).
+    fn site_network_row(
+        &mut self,
+        theme: &Theme,
+        chain_id: u32,
+        origin: Option<String>,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<Div> {
+        let row = div()
+            .id("site-network")
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(self.explore.network.clone()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    // The chain's own logo (owner: "连接时 切换网络，没有网络
+                    // logo呀") — the dot was Ethereum's colour on every chain.
+                    .child(chain_logo_mark(
+                        u64::from(chain_id),
+                        crate::settings::model::lettermark(
+                            &crate::executor::custom_tokens::network_name(chain_id),
+                        ),
+                        crate::settings::model::chain_tint(u64::from(chain_id))
+                            .unwrap_or(0x8A_8F_98),
+                        20.,
+                    ))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_title())
+                            .text_color(theme.fg_base)
+                            // The chain THIS SITE is on — the one its
+                            // `eth_chainId` answers and a signature from it
+                            // is quoted, routed and submitted on.
+                            .child(SharedString::from(crate::flows::live::chain_name(chain_id))),
+                    )
+                    .when(origin.is_some(), |row| {
+                        row.child(icon_img(
+                            &mut self.icons,
+                            Icon::ChevronDown,
+                            false,
+                            theme.fg_muted,
+                            14.,
+                        ))
+                    }),
+            );
+        match origin {
+            Some(origin) => row.cursor_pointer().on_click(cx.listener(
+                move |this, event: &gpui::ClickEvent, _, cx| {
+                    this.open_site_networks(origin.clone(), chain_id, event.position(), cx);
+                },
+            )),
+            None => row,
+        }
     }
 
     /// The networks a site can be put on, as a menu under the network row.
@@ -15084,7 +15704,7 @@ impl WalletPage {
                 // write.
                 model.blocks.extend(signing_live::sim_blocks(
                     &host.sim,
-                    host.sim_unavailable,
+                    host.sim_notice.as_ref(),
                     host.chain_id,
                     &self.signing,
                 ));
@@ -16242,17 +16862,24 @@ impl WalletPage {
         let Some(landing) = self.dapp_landing.clone() else {
             return div();
         };
-        let track = match &landing.ending {
-            crate::signing::status::SigningEnding::StillConfirming { user_op_hash } => {
-                resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
-                    .read(cx)
-                    .view()
-                    .entries
-                    .into_iter()
-                    .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(user_op_hash))
-            }
+        // The operation this ending follows — a landed one too: its tick is
+        // the tracker's to give (spec 082 RA8, W3).
+        let op = match &landing.ending {
+            vela_core::app::sign_request::SignEnding::StillConfirming { user_op_hash }
+            | vela_core::app::sign_request::SignEnding::Landed {
+                user_op_hash: Some(user_op_hash),
+                ..
+            } => Some(user_op_hash.clone()),
             _ => None,
         };
+        let track = op.and_then(|op| {
+            resident::resident::<vela_core::app::tx_tracker::TxTracker>(cx)
+                .read(cx)
+                .view()
+                .entries
+                .into_iter()
+                .find(|entry| entry.user_op_hash.eq_ignore_ascii_case(&op))
+        });
         let (header, summary) = self.signing_last.clone().unzip();
         let clock = signing_clock(landing.chain_id, landing.seen_submitted_ms);
         let receipt = crate::signing::status::ended(
@@ -17273,9 +17900,7 @@ impl WalletPage {
                 vec![
                     Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                         this.menu = None;
-                        #[cfg(not(target_os = "linux"))]
-                        this.browser_reload();
-                        cx.notify();
+                        this.browser_go(crate::wallet::browser_host::Go::Reload, cx);
                     })) as contacts_components::MenuAction),
                     copy(url.clone()),
                     copy(url.clone()),
@@ -17314,11 +17939,7 @@ impl WalletPage {
                     Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                         this.menu = None;
                         this.panel = PanelId::None;
-                        let selected = resident::resident::<ExploreSites>(cx)
-                            .read(cx)
-                            .view()
-                            .selected_tab;
-                        match selected {
+                        match this.shown_tab.clone() {
                             Some(id) => this.close_browser_tab(&id, cx),
                             None => {
                                 this.browsing = false;
@@ -17501,22 +18122,8 @@ impl WalletPage {
                 Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                     let entry = this.take_menu_entry(cx);
                     this.menu = None;
-                    if let Some((url, title)) = entry {
-                        resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
-                            resident.dispatch(
-                                vela_core::app::explore_sites::Event::TabOpened {
-                                    url: Some(url.clone()),
-                                    title: Some(title),
-                                    now_ms: crate::executor::now_ms(),
-                                },
-                                cx,
-                            );
-                        });
-                        this.browser_tab_changes();
-                        this.browsing = true;
-                        this.browser_home = url.clone();
-                        #[cfg(not(target_os = "linux"))]
-                        crate::webview::navigate(&url);
+                    if let Some((url, _title)) = entry {
+                        this.browser_go(crate::wallet::browser_host::Go::OpenInNewTab(url), cx);
                     }
                     cx.notify();
                 })) as contacts_components::MenuAction),
@@ -17573,22 +18180,8 @@ impl WalletPage {
                             .find(|site| site.origin == origin)
                             .map(|site| (site.url.clone(), site.name.clone()))
                     });
-                    if let Some((url, title)) = entry {
-                        resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
-                            resident.dispatch(
-                                vela_core::app::explore_sites::Event::TabOpened {
-                                    url: Some(url.clone()),
-                                    title: Some(title),
-                                    now_ms: crate::executor::now_ms(),
-                                },
-                                cx,
-                            );
-                        });
-                        this.browser_tab_changes();
-                        this.browsing = true;
-                        this.browser_home = url.clone();
-                        #[cfg(not(target_os = "linux"))]
-                        crate::webview::navigate(&url);
+                    if let Some((url, _title)) = entry {
+                        this.browser_go(crate::wallet::browser_host::Go::OpenInNewTab(url), cx);
                     }
                     cx.notify();
                 })) as contacts_components::MenuAction),
@@ -17813,7 +18406,7 @@ impl Render for WalletPage {
 
         // The column was closed under a live send: its machines go with it.
         if self.panel != PanelId::Flow && self.send_host.is_some() {
-            self.send_host = None;
+            self.let_send_go(cx);
             self.send_fee_picker = false;
         }
 
@@ -18049,10 +18642,23 @@ impl Render for WalletPage {
     }
 }
 
+/// What a key in the address bar was (spec 082 RD5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AddressKey {
+    /// Enter went somewhere: the bar lets go of the keyboard.
+    Go,
+    /// Escape: the typing stops, and the bar lets go.
+    Stop,
+    /// Enter was held (a request is open), or went nowhere: the draft stays.
+    Held,
+    /// The editor's key.
+    NotMine,
+}
+
 /// A dApp transaction landing in the signing column (078 G-04).
 #[derive(Clone, Debug)]
 struct DappLanding {
-    ending: crate::signing::status::SigningEnding,
+    ending: vela_core::app::sign_request::SignEnding,
     chain_id: u32,
     /// Its number (`dapp_landing_seq`) — a tick's timer closes only its own.
     seq: u64,
@@ -18147,17 +18753,6 @@ fn signing_clock(chain_id: u32, seen_submitted_ms: Option<f64>) -> crate::signin
     }
 }
 
-/// 083 W15: whether back and forward can act. A live page's come from the
-/// engine; a signed-in window with no page (a new tab) has no history; the
-/// gallery mock keeps the web's drawn `canBack: true, canForward: false`.
-fn nav_history(live: Option<[bool; 2]>, signed_in: bool) -> [bool; 2] {
-    live.unwrap_or(if signed_in {
-        [false, false]
-    } else {
-        [true, false]
-    })
-}
-
 fn page_host(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     rest.split(['/', '?', '#'])
@@ -18219,6 +18814,93 @@ fn key_page(key: &vela_core::wallet_keys::WalletKeyRow) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 082 RJ18 (G51, T181): a may-have-been-sent ending on screen →
+    /// 钱包 → back to 探索: the ending is there. One that arrives while the
+    /// column is hidden is kept too; one the person closed is not.
+    #[test]
+    fn a_dapp_ending_survives_a_switch_of_section() {
+        // The ending on screen: the column is Signing, the landing is kept.
+        let landing = true;
+        let mut panel = PanelId::Signing;
+        let mut hidden = false;
+        // → 钱包.
+        if panel == PanelId::Signing {
+            hidden = true;
+        }
+        panel = panel_after_switch(Section::Wallet, hidden && landing);
+        assert_eq!(panel, PanelId::None, "no signing column over the wallet");
+        // The request ends while the column is away: its ending is kept.
+        assert!(keeps_ending(panel, hidden));
+        // → 探索: the ending is there again.
+        panel = panel_after_switch(Section::Explore, hidden && landing);
+        assert_eq!(panel, PanelId::Signing);
+        // Closed by the person (✕, Done): nothing comes back.
+        assert!(!keeps_ending(PanelId::None, false));
+        assert_eq!(panel_after_switch(Section::Explore, false), PanelId::None);
+    }
+
+    /// Spec 082 RJ17 (G68, DX9): a held close says 提交至网络… in the bar
+    /// when the browser is in front, and brings the submitting column
+    /// forward — the dApp's, else the Send screen.
+    #[test]
+    fn a_held_close_says_why_and_shows_what_it_waits_on() {
+        let explore = close_held_notice(Section::Explore, true, false);
+        assert_eq!(explore.bar_words, Some("send.txSubmitting"));
+        assert_eq!(explore.column, Some(HeldColumn::Signing));
+        let wallet = close_held_notice(Section::Wallet, false, true);
+        assert_eq!(wallet.bar_words, None, "no bar outside the browser");
+        assert_eq!(wallet.column, Some(HeldColumn::Send));
+        assert_eq!(
+            close_held_notice(Section::Settings, true, true).column,
+            Some(HeldColumn::Signing)
+        );
+        assert_eq!(
+            close_held_notice(Section::Contacts, false, false).column,
+            None
+        );
+        // The words are a corpus key the desktop already resolves.
+        let loc = Loc::from_env();
+        assert_ne!(loc.t(CLOSE_HELD_WORDS).as_ref(), CLOSE_HELD_WORDS);
+    }
+
+    /// Spec 082 G41: every way into the address bar takes the keyboard back
+    /// from WebKit — `edit_address` through `focus_address`, and a press in
+    /// the open bar before its caret moves. The bar's focus handle is focused
+    /// nowhere else.
+    #[test]
+    fn the_address_bar_takes_the_keyboard_back_from_the_page() {
+        // The needles are assembled, so this test's own text never matches.
+        let source = include_str!("page.rs");
+        let focus_bar = ["window.focus(&self.", "address_focus"].concat();
+        let ask_webkit = ["crate::webview::", "focus_parent();"].concat();
+        let body = |name: &str| {
+            let start = source
+                .find(&["fn ", name, "("].concat())
+                .unwrap_or_else(|| unreachable!("{name} is gone"));
+            let rest = &source[start..];
+            &rest[..rest.find("\n    }\n").unwrap_or(rest.len())]
+        };
+        assert!(body("edit_address").contains(&["self.focus_", "address(window, cx)"].concat()));
+        let focus = body("focus_address");
+        let asked = focus
+            .find(&ask_webkit)
+            .unwrap_or_else(|| unreachable!("focus_address no longer asks WebKit"));
+        let focused = focus
+            .find(&focus_bar)
+            .unwrap_or_else(|| unreachable!("focus_address no longer focuses the bar"));
+        assert!(asked < focused, "WebKit is asked before the bar is focused");
+        // The one other focus of the bar: its press, which asks first too.
+        let press = source
+            .find(&["let place_", "caret ="].concat())
+            .unwrap_or_else(|| unreachable!("the bar's press is gone"));
+        assert!(source[press..press + 600].contains(&ask_webkit));
+        assert_eq!(
+            source.matches(&focus_bar).count(),
+            1,
+            "a focus of the bar that skips WebKit"
+        );
+    }
 
     /// Spec 083 FR-006: an open bar nobody typed in follows the page; typed
     /// text, a closed bar and the engine's blank page do not move it.
@@ -18294,25 +18976,6 @@ mod tests {
         );
         assert!(unknown.name.is_empty(), "the address line says it once");
         assert_eq!(unknown.display().as_ref(), "0x5E1f00…000077");
-    }
-
-    /// 083 W15: a new tab has no history to go back to. A live page's arrows
-    /// are the engine's, within the tab on screen. The gallery keeps its
-    /// drawing.
-    #[test]
-    fn the_arrows_are_the_engines_history() {
-        assert_eq!(nav_history(None, true), [false, false], "a new tab");
-        assert_eq!(nav_history(None, false), [true, false], "the gallery");
-        assert_eq!(nav_history(Some([false, true]), true), [false, true]);
-        // A tab a page opened: the engine can go back, to the opener's page,
-        // and the arrow the page draws cannot.
-        let mut tab = crate::explore::tab_history::TabHistory::default();
-        tab.tab_changed();
-        assert_eq!(tab.landed(), Some(1));
-        assert_eq!(
-            nav_history(Some(tab.arrows([true, false])), true),
-            [false, false]
-        );
     }
 
     /// **Linux has three destinations, as the web does** (owner call,

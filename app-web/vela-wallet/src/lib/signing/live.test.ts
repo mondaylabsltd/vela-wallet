@@ -14,21 +14,22 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { FeeSpeedEvent } from '$lib/core/generated/FeeSpeedEvent';
 import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
-import { FeeSpeedCore } from '$lib/core/client';
+import { ClearSigningCore, FeeSpeedCore } from '$lib/core/client';
+import { toClearLocale } from './core/clear-types';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
-import { numberSeparators } from '$lib/services/locale-format';
 import { CLEAR_TERMS } from './terms';
 import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
+import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
+import { fill } from '$lib/wallet/messages';
 import {
 	buildSigningModel,
 	calldataBytes,
 	cappedApproval,
 	localizedTerms,
-	nativeSendOf,
 	signingCloseEvent,
 	signingStatus,
 	summaryOf,
@@ -356,11 +357,13 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		expect(fee).toMatchObject({ value: m.feeEstimating, refreshing: true });
 	});
 
+	const NET = m.feeReasons['componentsUi.funding.denialNetworkError'];
+
 	it('a relay out of reach says so, and that the sheet asks again — the row is still a retry', () => {
 		const fee = buildSigningModel(inputs({ fee: failedWith('quote_unavailable') }))?.fee;
 		expect(fee).toMatchObject({
 			value: m.feeRetry,
-			warning: m.feeNetworkError,
+			warning: NET,
 			tappable: true,
 			// One coin: a tap asks again but opens no list, so no chevron.
 			chevron: false,
@@ -378,7 +381,7 @@ describe('the fee can be refreshed, and says why it failed', () => {
 			'gas_quote_too_high'
 		] as const) {
 			expect(buildSigningModel(inputs({ fee: failedWith(failed) }))?.fee, failed).toMatchObject({
-				warning: m.feeNetworkError
+				warning: NET
 			});
 		}
 		for (const failed of ['missing_public_key', 'calculation_failed'] as const) {
@@ -388,17 +391,34 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		}
 	});
 
-	it('the reason stays said while the sheet asks again, and goes with an answer', () => {
+	it('while the sheet asks again the reason is not said, but its line keeps its height (G47)', () => {
 		const asking: FeeView = { ...QUOTED_FEE, fee: null, busy: true, confirm_fee_ready: false };
-		expect(
-			buildSigningModel(inputs({ fee: asking, feeFailing: 'quote_unavailable' }))?.fee
-		).toMatchObject({ value: m.feeEstimating, warning: m.feeNetworkError });
+		const again = buildSigningModel(inputs({ fee: asking, feeFailing: 'quote_unavailable' }))?.fee;
+		expect(again).toMatchObject({ value: m.feeEstimating, warningReserved: NET });
+		expect(again && 'warning' in again ? again.warning : undefined).toBeUndefined();
 		// A first measurement, with no failure behind it, says nothing yet.
 		const first = buildSigningModel(inputs({ fee: asking, feeFailing: null }))?.fee;
-		expect(first && 'warning' in first ? first.warning : 'x').toBeUndefined();
+		expect((first as { warning?: string } | undefined)?.warning).toBeUndefined();
+		expect((first as { warningReserved?: string } | undefined)?.warningReserved).toBeUndefined();
 		// The answer: a quote, and no sentence.
 		const answered = buildSigningModel(inputs({ feeFailing: null }))?.fee;
 		expect(answered && 'warning' in answered ? answered.warning : 'x').toBeUndefined();
+	});
+
+	it('a chain node, not Vela, is named when the chain read failed (RJ13, G48)', () => {
+		const limited = buildSigningModel(
+			inputs({ fee: failedWith({ chain_read: { rate_limited: true } }) })
+		)?.fee;
+		expect(limited).toMatchObject({
+			warning: m.feeReasons['home.balanceDetailStatusRetrying']
+		});
+		const down = buildSigningModel(
+			inputs({ fee: failedWith({ chain_read: { rate_limited: false } }) })
+		)?.fee;
+		const words = down && 'warning' in down ? (down.warning ?? '') : '';
+		expect(words).toContain('Ethereum');
+		expect(words).not.toContain('{{chain}}');
+		expect(words).not.toBe(NET);
 	});
 
 	it('an old quote gets the send form’s calm note — not while a fresh one is out', () => {
@@ -478,39 +498,50 @@ describe('after the approval the sheet is a status', () => {
 		expect(signingCloseEvent(null)).toBe('reject_tapped');
 	});
 
-	/**
-	 * 083 H3: "Waiting for biometric…" only while the passkey prompt is up.
-	 * Before it — the funding check, the nonce, the estimate — the wallet is
-	 * preparing, and says so; the ✕ is shut through both.
-	 */
-	it('approved, preparing and then waiting for the passkey, with the ✕ shut', () => {
-		for (const [progress, title] of [
-			[UNSIGNED, m.status.preparing],
-			[undefined, m.status.preparing],
-			[PROMPT_UP, m.status.signing]
-		] as const) {
-			// The core's Precheck (is_signing alone) and its Submitting stage
-			// (both flags) before the signature exists read the same.
-			for (const flags of [
-				{ is_signing: true, is_submitting: false },
-				{ is_signing: true, is_submitting: true }
-			]) {
-				const status = signingStatus(at(flags), progress, SUMMARY, m);
-				expect(status).toEqual({
-					stage: 'submitting',
-					title,
-					captions: [SUMMARY],
-					closable: false
-				});
-				expect(signingCloseEvent(status)).toBeNull();
-			}
+	it('preparing — the precheck, the sponsor, the relay estimate — says so, never "Waiting for biometric" (RA9, G22)', () => {
+		for (const progress of [UNSIGNED, PROMPT_UP]) {
+			const status = signingStatus(
+				at({ phase: 'preparing', is_signing: true }),
+				progress,
+				SUMMARY,
+				m
+			);
+			expect(status).toEqual({
+				stage: 'submitting',
+				title: m.status.preparing,
+				captions: [SUMMARY],
+				closable: false
+			});
+			expect(status?.title).not.toBe(m.status.signing);
+			expect(signingCloseEvent(status)).toBeNull();
 		}
 		expect(m.status.preparing).toBe('Preparing transaction...');
 		expect(m.status.preparing).not.toBe(m.status.signing);
 	});
 
+	it('the passkey prompt is up: "Waiting for biometric…", and the ✕ shut', () => {
+		const status = signingStatus(
+			at({ phase: 'awaiting_signature', is_signing: true, is_submitting: true }),
+			PROMPT_UP,
+			SUMMARY,
+			m
+		);
+		expect(status).toEqual({
+			stage: 'submitting',
+			title: m.status.signing,
+			captions: [SUMMARY],
+			closable: false
+		});
+		expect(signingCloseEvent(status)).toBeNull();
+	});
+
 	it('signed, going to the relay: "Submitting to network…" + closing keeps it running; the ✕ closes without refusing', () => {
-		const status = signingStatus(at({ is_signing: true, is_submitting: true }), SIGNED, SUMMARY, m);
+		const status = signingStatus(
+			at({ phase: 'submitting', is_signing: true, is_submitting: true }),
+			SIGNED,
+			SUMMARY,
+			m
+		);
 		expect(status).toEqual({
 			stage: 'submitting',
 			title: m.status.submitting,
@@ -520,19 +551,18 @@ describe('after the approval the sheet is a status', () => {
 		expect(signingCloseEvent(status)).toBe('dismiss_tapped');
 	});
 
-	it('the core’s reactive recovery after a submission counts as signed', () => {
-		const status = signingStatus(
-			at({ is_signing: false, is_submitting: true }),
-			UNSIGNED,
-			SUMMARY,
-			m
+	it('every phase has its own words; idle is no status at all', () => {
+		const titles = (['preparing', 'awaiting_signature', 'submitting'] as const).map(
+			(phase) => signingStatus(at({ phase, is_signing: true }), UNSIGNED, SUMMARY, m)?.title
 		);
-		expect(status).toMatchObject({ title: m.status.submitting, closable: true });
+		expect(titles).toEqual([m.status.preparing, m.status.signing, m.status.submitting]);
+		expect(new Set(titles).size).toBe(3);
+		expect(signingStatus(at({ phase: 'idle', is_signing: true }), SIGNED, SUMMARY, m)).toBeNull();
 	});
 
 	it('a second passkey prompt in the same approval shuts the ✕ again', () => {
 		const status = signingStatus(
-			at({ is_signing: true, is_submitting: true }),
+			at({ phase: 'submitting', is_signing: true, is_submitting: true }),
 			{ signed: true, ceremonyUp: true },
 			SUMMARY,
 			m
@@ -543,15 +573,18 @@ describe('after the approval the sheet is a status', () => {
 
 	it('a message never "submits": "Signing…" throughout', () => {
 		const message = (flags: Partial<SignView>) => at({ request: MESSAGE_REQUEST, ...flags });
-		expect(signingStatus(message({ is_signing: true }), UNSIGNED, undefined, m)).toEqual({
-			stage: 'submitting',
+		expect(signingStatus(message({ phase: 'awaiting_signature' }), UNSIGNED, undefined, m)).toEqual(
+			{
+				stage: 'submitting',
+				title: m.status.messageSigning,
+				captions: [],
+				closable: false
+			}
+		);
+		expect(signingStatus(message({ phase: 'submitting' }), SIGNED, undefined, m)).toMatchObject({
 			title: m.status.messageSigning,
-			captions: [],
-			closable: false
+			closable: true
 		});
-		expect(
-			signingStatus(message({ is_signing: true, is_submitting: true }), SIGNED, undefined, m)
-		).toMatchObject({ title: m.status.messageSigning, closable: true });
 	});
 
 	it('a failed submission says so, with the funds-are-safe line; the ✕ just closes', () => {
@@ -581,15 +614,19 @@ describe('after the approval the sheet is a status', () => {
 
 	it('the sheet carries the status, with the request in one line, and no refused request gets one', () => {
 		const model = buildSigningModel(
-			inputs({ sign: at({ is_signing: true, is_submitting: true }), progress: SIGNED })
+			inputs({
+				sign: at({ phase: 'submitting', is_signing: true, is_submitting: true }),
+				progress: SIGNED
+			})
 		);
 		expect(model?.status).toMatchObject({
 			title: m.status.submitting,
-			captions: ['Send USDC · -100 USDC', m.status.backgroundHint]
+			captions: ['Send USDC · \u2212100 USDC', m.status.backgroundHint]
 		});
 		const blocked = buildSigningModel(
 			inputs({
 				sign: at({
+					phase: 'submitting',
 					is_signing: true,
 					blocked: {
 						function: 'enableModule',
@@ -1251,152 +1288,6 @@ describe('the blind line names the real length', () => {
 	});
 });
 
-/**
- * 083 H3 (the desktop's W10): a request that only moves the chain's own coin
- * reads as a send — not "contract interaction, unable to decode (0 bytes)" in
- * red — and only such a request, read as `dapp-submit` will submit it.
- */
-describe('a plain native send reads as a send', () => {
-	const TO = '0x76875eb2c6d2ea8d6b7fc7e0ce6d2c1e6ac0d141';
-	const BLIND: ClearSigningView = {
-		...INITIAL_CLEAR_VIEW,
-		resolved: true,
-		surface: 'blind_transaction'
-	};
-	const tx = (call: Record<string, unknown>, chain_id = 100) => ({
-		kind: 'transaction' as const,
-		params_json: JSON.stringify([call]),
-		chain_id
-	});
-	const batch = (calls: Record<string, unknown>[], extra: Record<string, unknown> = {}) => ({
-		kind: 'batch' as const,
-		params_json: JSON.stringify([{ version: '2.0.0', ...extra, calls }]),
-		chain_id: 100
-	});
-	const sheet = (params_json: string, chain_id = 100) =>
-		buildSigningModel(
-			inputs({
-				sign: { ...OPEN_SIGN, request: { ...REQUEST, params_json, chain_id } },
-				clear: BLIND
-			})
-		)!;
-
-	it('reads the call the executor submits', () => {
-		expect(nativeSendOf(tx({ to: TO, value: '0x38d7ea4c68000' }))).toEqual({
-			to: TO,
-			wei: 1_000_000_000_000_000n,
-			symbol: 'xDAI'
-		});
-		expect(nativeSendOf(tx({ to: TO, value: '0x1', data: '0x' }, 1))).toEqual({
-			to: TO,
-			wei: 1n,
-			symbol: 'ETH'
-		});
-		// Absent is zero, as `dapp-submit` reads it (`value ?? '0x0'`).
-		expect(nativeSendOf(tx({ to: TO }))?.wei).toBe(0n);
-		// An empty `input` is no calldata, as an empty `data` is none.
-		expect(nativeSendOf(tx({ to: TO, value: '0x1', input: '0x' }))?.wei).toBe(1n);
-		expect(nativeSendOf(tx({ to: TO, value: '0x1', input: null }))?.wei).toBe(1n);
-		expect(nativeSendOf(batch([{ to: TO, value: '0x1' }]))?.wei).toBe(1n);
-		// A call that names the sheet's own chain, in either spelling the
-		// executor reads, is still the send drawn.
-		expect(nativeSendOf(tx({ to: TO, value: '0x1', chainId: '0x64' }, 100))?.wei).toBe(1n);
-		expect(nativeSendOf(tx({ to: TO, value: '0x1', chainId: 100 }, 100))?.wei).toBe(1n);
-		expect(nativeSendOf(tx({ to: TO, value: '0x1', chainId: '100' }, 100))?.wei).toBe(1n);
-		expect(nativeSendOf(batch([{ to: TO, value: '0x1' }], { chainId: '0x64' }))?.wei).toBe(1n);
-		// The largest value a uint256 holds can still be encoded and signed.
-		const max = (1n << 256n) - 1n;
-		expect(nativeSendOf(tx({ to: TO, value: `0x${max.toString(16)}` }))?.wei).toBe(max);
-	});
-
-	it('keeps everything else on the blind rung', () => {
-		const blind = [
-			tx({ to: TO, value: '0x1', data: '0xdeadbeef' }),
-			// Calldata spelled `input` (web3.js) is calldata the executor drops:
-			// drawn calm, a router call would be signed as a bare transfer.
-			tx({ to: TO, value: '0x1', input: '0xdeadbeef' }),
-			tx({ to: TO, value: '0x1', data: '0x', input: '0x3593564c' }),
-			batch([{ to: TO, value: '0x1', input: '0xdeadbeef' }]),
-			tx({ to: TO, value: '0xzz' }),
-			// The executor reads every value as hex: a bare "1000" is 0x1000 there.
-			tx({ to: TO, value: '1000' }),
-			tx({ to: TO, value: 1000 }),
-			tx({ to: '0xbbb', value: '0x1' }),
-			tx({ value: '0x1', data: '0x' }),
-			// Tempo has no coin of its own; a custom network's would be a guess.
-			tx({ to: TO, value: '0x1' }, 4217),
-			tx({ to: TO, value: '0x1' }, 999_999),
-			// A batch is more than its first leg — even a leg with no `to`.
-			batch([
-				{ to: TO, value: '0x1' },
-				{ to: TO, data: '0xdead' }
-			]),
-			batch([{ to: TO, value: '0xde0b6b3a7640000' }, { data: '0x6080' }]),
-			batch([]),
-			// More than a uint256: the executor cannot encode it, so cannot sign it.
-			tx({ to: TO, value: `0x1${'0'.repeat(64)}` }),
-			// A call naming another chain is submitted THERE (`resolveChainId`
-			// lets it win): "1 xDAI" drawn while 1 ETH is signed on chain 1.
-			tx({ to: TO, value: '0xde0b6b3a7640000', chainId: '0x1' }),
-			tx({ to: TO, value: '0x1', chainId: 1 }),
-			// Read as leniently as the executor reads it: "1x" is chain 1 there.
-			tx({ to: TO, value: '0x1', chainId: '1x' }),
-			// A chain nobody can read, or a shape nobody sent: blind, not a guess.
-			tx({ to: TO, value: '0x1', chainId: 'gnosis' }),
-			tx({ to: TO, value: '0x1', chainId: { id: 100 } }),
-			tx({ to: TO, value: '0x1', chainId: true }),
-			batch([{ to: TO, value: '0x1' }], { chainId: '0x1' }),
-			{ kind: 'personal_sign' as const, params_json: '["0xdead","0xabc"]', chain_id: 1 },
-			{ kind: 'transaction' as const, params_json: 'not json', chain_id: 1 }
-		];
-		for (const request of blind) {
-			expect(nativeSendOf(request), `${request.params_json} on ${request.chain_id}`).toBeNull();
-		}
-	});
-
-	it('draws what it does, how much and to whom, with no decode warning', () => {
-		const model = sheet(JSON.stringify([{ to: TO, value: '0x38d7ea4c68000' }]));
-		expect(model.blocks).toEqual([
-			{ kind: 'intent', text: m.intentSend, tone: 'neutral' },
-			{
-				kind: 'amount',
-				line: { sign: '-', value: '0.001', symbol: 'xDAI', tone: 'neutral' }
-			},
-			{ kind: 'party', label: m.labelRecipient, name: shortenAddress(TO), address: TO }
-		]);
-		expect(summaryOf(model.blocks)).toBe(`${m.intentSend} · -0.001 xDAI`);
-	});
-
-	it('a zero-value call moves nothing, so its figure carries no minus', () => {
-		const model = sheet(JSON.stringify([{ to: TO }]));
-		expect(model.blocks.find((b) => b.kind === 'amount')).toEqual({
-			kind: 'amount',
-			line: { sign: '', value: '0', symbol: 'xDAI', tone: 'neutral' }
-		});
-		expect(summaryOf(model.blocks)).toBe(`${m.intentSend} · 0 xDAI`);
-	});
-
-	it("groups the whole part the person's way, like the amounts the core decodes", () => {
-		const { group, decimal } = numberSeparators();
-		const amountOf = (value: string) =>
-			sheet(JSON.stringify([{ to: TO, value }])).blocks.find((b) => b.kind === 'amount');
-		// 25,000 xDAI — exact, not "25000".
-		expect(amountOf('0x54b40b1f852bda00000')).toMatchObject({
-			line: { value: `25${group}000`, symbol: 'xDAI' }
-		});
-		// 1,234.5 xDAI: grouped whole part, every fractional digit kept.
-		expect(amountOf(`0x${1_234_500_000_000_000_000_000n.toString(16)}`)).toMatchObject({
-			line: { value: `1${group}234${decimal}5` }
-		});
-	});
-
-	it('the same request with calldata still says it could not be decoded', () => {
-		const model = sheet(JSON.stringify([{ to: TO, value: '0x1', data: '0xdeadbeef' }]));
-		expect(model.blocks[0]).toEqual({ kind: 'intent', text: m.intentBlind, tone: 'danger' });
-		expect(model.blocks[1]).toMatchObject({ kind: 'warning', tone: 'danger' });
-	});
-});
-
 describe("localizedTerms — the core names the word, the sheet says it in the reader's language", () => {
 	const zh = resolveSigningMessages('zh');
 	const approve: ClearSigningView = {
@@ -1445,5 +1336,177 @@ describe("localizedTerms — the core names the word, the sheet says it in the r
 
 	it('every term the core can name has a word in this locale', () => {
 		for (const term of CLEAR_TERMS) expect(zh.terms[term], term).toBeTruthy();
+	});
+});
+
+/**
+ * Spec 082 G14 (RC1–RC6): a dApp's plain value transfer — no calldata — is a
+ * SEND, whatever the recipient. It used to be the red "Blind signature" over
+ * bytes that did not exist.
+ */
+describe('a plain send is a send (G14)', () => {
+	const TO = '0x7687C0bC1dD2B9d7e9a5b1b4e1B0cBd8e0C3D141';
+	const tx = (value: unknown) => ({
+		...OPEN_SIGN,
+		request: {
+			...REQUEST,
+			chain_id: 100,
+			method: 'eth_sendTransaction',
+			params_json: JSON.stringify([{ to: TO, value }])
+		}
+	});
+
+	/** What the REAL clear-signing core says for one transaction. */
+	function coreView(value: unknown): ClearSigningView {
+		const core = new ClearSigningCore();
+		try {
+			const params = JSON.parse(tx(value).request.params_json)[0] as Record<string, unknown>;
+			core.dispatch(
+				JSON.stringify({
+					type: 'resolve_transaction',
+					to: params.to,
+					data: null,
+					value: params.value === undefined ? null : String(params.value),
+					chain_id: 100,
+					locale: toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })
+				})
+			);
+			return JSON.parse(core.view()) as ClearSigningView;
+		} finally {
+			core.free();
+		}
+	}
+
+	it('−0.001 xDAI to the recipient: "Send", the amount card, the party, "Confirm send"', () => {
+		const clear = coreView('0x38d7ea4c68000');
+		expect(clear.surface).toBe('plain_send');
+		const model = buildSigningModel(inputs({ sign: tx('0x38d7ea4c68000'), clear }))!;
+		expect(model.blocks).toEqual([
+			{ kind: 'intent', text: m.intentSend, tone: 'neutral' },
+			{
+				kind: 'amount',
+				// U+2212, never an ASCII hyphen (spec 082 G19/RJ15).
+				line: { sign: '\u2212', value: '0.001', symbol: 'xDAI', tone: 'neutral' }
+			},
+			{
+				kind: 'party',
+				label: m.labelRecipient,
+				name: shortenAddress(clear.plain_send!.to),
+				// The core's EIP-55 spelling of the recipient (RC1).
+				address: clear.plain_send!.to
+			}
+		]);
+		expect(clear.plain_send!.to.toLowerCase()).toBe(TO.toLowerCase());
+		expect(model.blocks.some((b) => b.kind === 'intent' && b.text === m.intentBlind)).toBe(false);
+		expect(model.confirm.action).toBe(m.confirmSend);
+	});
+
+	it('zero moves nothing: the card stays, no minus sign, a neutral Confirm (RC3)', () => {
+		const clear = coreView('0x0');
+		expect(clear.surface).toBe('plain_send');
+		const model = buildSigningModel(inputs({ sign: tx('0x0'), clear }))!;
+		const amount = model.blocks.find((b) => b.kind === 'amount');
+		expect(amount).toMatchObject({ line: { sign: '', value: '0', symbol: 'xDAI' } });
+		expect(model.confirm.action).toBe(m.confirmPlain);
+	});
+
+	it('a value the core cannot read as an amount is the blind card with no amount (RC4, RC6)', () => {
+		const clear = coreView(1000);
+		expect(clear.surface).toBe('blind_transaction');
+		const model = buildSigningModel(inputs({ sign: tx(1000), clear }))!;
+		expect(model.blocks.find((b) => b.kind === 'amount')).toBeUndefined();
+		expect(model.blocks[0]).toMatchObject({ kind: 'intent', text: m.intentBlind });
+	});
+});
+
+describe('the site is named by the core’s label (spec 082 RE7)', () => {
+	it('a name that is its host, in any case, is said once', () => {
+		const named = {
+			...OPEN_SIGN,
+			request: { ...REQUEST, dapp: { name: 'APP.EXAMPLE', url: 'https://app.example' } }
+		};
+		const model = buildSigningModel(inputs({ sign: named }));
+		expect(model?.dapp.host).toBe('');
+	});
+});
+
+/**
+ * Spec 082 round 2 (T231): the endings' words, the amount's fiat, the
+ * estimate's warning.
+ */
+describe('the words after a refusal, the fiat, and the estimate’s warning (spec 082)', () => {
+	const failedSign = (refused: boolean): SignView => ({
+		...OPEN_SIGN,
+		phase: 'idle',
+		error: {
+			kind: 'submit_failed',
+			detail: 'the network refused this transaction; nothing was sent'
+		},
+		failure_refused: refused
+	});
+
+	it('a refusal says the network refused it — no "try again" (RJ3, G36)', () => {
+		const refused = signingStatus(failedSign(true), undefined, 'Send · −1 USDC', m);
+		expect(refused).toMatchObject({ stage: 'failed', title: m.receipt.failed });
+		expect(refused?.captions).toEqual(['Send · −1 USDC', m.receipt.refused]);
+		expect(refused?.captions).not.toContain(m.status.failedHint);
+		// Not sent for any other reason: the calm "funds are safe" line, as before.
+		const notSent = signingStatus(failedSign(false), undefined, undefined, m);
+		expect(notSent?.captions).toEqual([m.status.failedHint]);
+	});
+
+	it('the fiat is the wallet’s money line — no exponent, no hard-coded $ (G60)', () => {
+		const huge: ClearSigningView = {
+			...DECODED,
+			result: { ...DECODED.result!, fields: [field({ value: '1e30 USDC', usd_value: 1e24 })] }
+		};
+		const line = buildSigningModel(inputs({ clear: huge }))!.blocks.find(
+			(b) => b.kind === 'amount'
+		);
+		const fiat = line?.kind === 'amount' ? (line.line.fiat ?? '') : '';
+		expect(fiat).not.toMatch(/e\+/);
+		expect(fiat).toContain('1,000,000,000,000,000,000,000,000');
+		// The display currency, converted — not "$" over a euro figure.
+		const eur = buildSigningModel(
+			inputs({ currency: { code: 'EUR', rate: 0.5, committed: true } })
+		)!.blocks.find((b) => b.kind === 'amount');
+		const euros = eur?.kind === 'amount' ? (eur.line.fiat ?? '') : '';
+		expect(euros).not.toContain('$');
+		expect(euros).toContain('50');
+	});
+
+	it('an outgoing amount wears U+2212', () => {
+		const line = buildSigningModel(inputs())!.blocks.find((b) => b.kind === 'amount');
+		expect(line?.kind === 'amount' ? line.line.sign : '').toBe('−');
+	});
+
+	it('the relay’s estimate says it reverts → the danger line under the intent; the slide stays live (RJ19, G57)', () => {
+		recordEstimateReverts(
+			REQUEST.chain_id,
+			identity.address,
+			'ERC20: transfer amount exceeds balance'
+		);
+		try {
+			const model = buildSigningModel(inputs())!;
+			expect(model.blocks[0]).toMatchObject({ kind: 'intent' });
+			expect(model.blocks[1]).toEqual({
+				kind: 'warning',
+				tone: 'danger',
+				text: fill(m.warnWillFailReason, { reason: 'ERC20: transfer amount exceeds balance' })
+			});
+			// A warning informs, never blocks (L-D5).
+			expect(model.confirm.enabled).toBe(true);
+			// No reason given: the plain sentence.
+			recordEstimateReverts(REQUEST.chain_id, identity.address, null);
+			expect(buildSigningModel(inputs())!.blocks[1]).toMatchObject({ text: m.warnWillFail });
+		} finally {
+			clearEstimateReverts(REQUEST.chain_id, identity.address);
+		}
+		// Another question about the same account: no stale warning.
+		expect(
+			buildSigningModel(inputs())!.blocks.some(
+				(b) => b.kind === 'warning' && b.text === m.warnWillFail
+			)
+		).toBe(false);
 	});
 });

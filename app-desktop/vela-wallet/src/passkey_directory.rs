@@ -134,14 +134,13 @@ pub fn fetch_mark(url: &str, size: u32) -> Option<Arc<RenderImage>> {
     render_image_from_png(&png)
 }
 
-/// On the same route as every other request this shell makes (spec 038 Part
-/// B): the system proxy first, then the environment's, then direct. A bare
-/// agent here was the one lookup that ignored the person's proxy.
+/// On the same routes as every other request this shell makes (spec 082
+/// RD2): the system's proxy for this URL, PAC included, never a silent
+/// direct fall-back. A bare agent here was the one lookup that ignored the
+/// person's proxy.
 fn fetch(url: &str) -> Option<Vec<u8>> {
-    let mut response = crate::executor::proxy::agent(TIMEOUT)
-        .get(url)
-        .call()
-        .ok()?;
+    let mut response =
+        crate::executor::proxy::with_routes(url, TIMEOUT, |agent| agent.get(url).call()).ok()?;
     let mut body = Vec::new();
     std::io::Read::read_to_end(&mut response.body_mut().as_reader(), &mut body).ok()?;
     Some(body)

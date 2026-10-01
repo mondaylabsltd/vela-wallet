@@ -309,7 +309,8 @@ where
 
     // Read what the boot event needs BEFORE taking the entity's borrow.
     let event = A::boot_event(cx);
-    eprintln!("[vela-wallet] core: {} booting", A::LABEL);
+    // Timestamped like every other line (spec 082 G67).
+    crate::diag::vlog!("core", "{} booting", A::LABEL);
     let entity = cx.new(|_| ResidentCore::<A>::new());
     entity.update(cx, |resident, cx| resident.dispatch(event, cx));
 

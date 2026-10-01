@@ -281,12 +281,12 @@ fn save_connection_record(address: &str, chain_id: u32, origin: &str) {
         "type": "connect",
         "dappOrigin": origin,
     });
-    let mut rows = match storage::read_value(TX_KEY) {
-        Ok(Some(Value::Array(rows))) => rows,
-        _ => Vec::new(),
-    };
-    rows.push(row);
-    let _ = storage::write_value(TX_KEY, Value::Array(rows));
+    // Under the store's lock: the list has writers on other threads (spec
+    // 082 RJ1 review), and a stale copy written back loses their rows.
+    let _ = storage::update_list(TX_KEY, |rows| {
+        rows.push(row);
+        true
+    });
 }
 
 #[cfg(test)]

@@ -92,16 +92,43 @@ describe('the side panel is the wallet', () => {
 	});
 });
 
-describe('the panel hears about a request that arrives while it is open', () => {
-	it('watches the same storage keys the worker writes', async () => {
-		// The panel stays open now, so `sidePanel.open` on a second request only
-		// SHOWS it — no reload, no fresh mount. The page learns from the worker's
-		// own record of pending requests, and this pins the two spellings of that
-		// key together.
+describe('the panel and the worker spell their shared names alike (spec 082 §13)', () => {
+	// The app bundle must not import the worker's modules, so each name the two
+	// sides share is declared twice — and pinned together here, so a rename
+	// cannot leave one side talking to nobody.
+	it('the surface port and the ledger prefix', async () => {
 		const worker = await import('../../../extension/lib/protocol.js');
-		const app = read(join(SRC, 'lib/dapp/transport.ts'));
-		const declared = /const REQUEST_PREFIX = '([^']+)'/.exec(app)?.[1];
-		expect(declared).toBe(worker.REQUEST_PREFIX);
+		// Read, not imported: the panel module compiles through Svelte, and the
+		// declaration is what this pins.
+		const panel = read(join(SRC, 'lib/dapp/panel-surface.svelte.ts'));
+		const declared = (name: string) =>
+			new RegExp(`export const ${name} = '([^']+)'`).exec(panel)?.[1];
+		expect(declared('SURFACE_PORT')).toBe(worker.SURFACE_PORT);
+		expect(declared('REQUEST_PREFIX')).toBe(worker.REQUEST_PREFIX);
+		expect(worker.SURFACE_PORT).toBe('vela.surface');
+		expect(worker.DOC_PORT).toBe('vela.doc');
+		expect(worker.REQUEST_PREFIX).toBe('vela.req.');
+	});
+
+	it('the page bridge opens the port the worker listens for', () => {
+		const content = read(join(ROOT, 'extension/content.js'));
+		const background = read(join(ROOT, 'extension/background.js'));
+		expect(content).toMatch(/name: DOC_PORT/);
+		expect(background).toMatch(/port\.name === DOC_PORT/);
+		expect(background).toMatch(/port\.name === SURFACE_PORT/);
+	});
+
+	it('the worker counters the bug report reads', async () => {
+		const swlog = await import('../../../extension/lib/swlog.js');
+		const report = read(join(SRC, 'lib/services/bug-report.ts'));
+		expect(/export const SW_COUNTS_KEY = '([^']+)'/.exec(report)?.[1]).toBe(swlog.SW_COUNTS_KEY);
+	});
+
+	it('the panel no longer asks by tab — the worker owns the queue (RB7)', () => {
+		const background = read(join(ROOT, 'extension/background.js'));
+		const transport = read(join(SRC, 'lib/dapp/transport.ts'));
+		expect(background).not.toMatch(/requestCurrent|nextForPanel/);
+		expect(transport).not.toMatch(/requestCurrent|panelTabId/);
 	});
 });
 

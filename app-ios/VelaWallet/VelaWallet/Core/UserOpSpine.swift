@@ -155,6 +155,31 @@ final class UserOpSpine {
         case relayerUnavailable
         case bundlerUnderfunded
         case other(String?)
+        /// Nothing left the device: the relay was never reached (the core's
+        /// `NotSent{None}`, spec 082 RA1). The one failure after a signature
+        /// that may honestly say "not sent — try again".
+        case notSent
+        /// The page that asked is gone (spec 082 RB2): nothing was signed or
+        /// sent, and nobody is left to answer.
+        case askerGone
+        /// The relay refused the op and no earlier attempt can have delivered
+        /// it (the core's `NotSent{Some(r)}`, `r` not "relayer unavailable",
+        /// spec 082 RJ3): nothing was sent, and trying the same op again will
+        /// not help — the page is answered "the network refused this".
+        case rejected(String?)
+    }
+
+    /// What a submit came to when it did not fail (spec 082 RA1, RA4).
+    struct Submitted: Equatable {
+        /// The relay's hash when it answered; the local one otherwise.
+        let userOpHash: String
+        /// The reply was lost after a POST that may have been acted on: the
+        /// op is followed as "may have been sent" to its end, and the local
+        /// nonce does not move.
+        let maybeSent: Bool
+        /// The chain head read before the first POST (ruling 8); `nil` when
+        /// the chain could not say.
+        let submitBlock: UInt64?
     }
 
     struct Refused: Error {
@@ -221,7 +246,9 @@ final class UserOpSpine {
         account: String,
         originalHash: Data,
         asked: Asked? = nil,
-        signingStarted: () -> Void = {}
+        signingStarted: () -> Void = {},
+        signingDone: () -> Void = {},
+        askerLive: () -> Bool = { true }
     ) async throws -> String {
         let keys = await accounts.keys(of: account)
         guard let pinned = keys.first else {
@@ -235,6 +262,8 @@ final class UserOpSpine {
         } catch {
             throw other("The message could not be hashed")
         }
+        // Never a prompt for a page that is gone (spec 082 RB2).
+        guard askerLive() else { throw Refused(failure: .askerGone) }
         signingStarted()
         let signed = try await ceremony(
             account: account, pinned: pinned, keys: keys, challenge: challenge,
@@ -251,6 +280,7 @@ final class UserOpSpine {
                 )
             }
         )
+        signingDone()
         do {
             let signature = try eip1271Signature(
                 assertion: signed.assertion,
@@ -267,7 +297,24 @@ final class UserOpSpine {
 
     /// Assembles, signs once and submits; answers the accepted user-operation
     /// hash — or the one already pending for this nonce, which is an idempotent
-    /// re-submit rather than a second spend.
+    /// re-submit rather than a second spend — or, when the relay's reply was
+    /// lost after a request that may have been acted on, the LOCAL hash marked
+    /// `maybeSent` (spec 082 RA1): never "failed — try again" for money that
+    /// may be on its way.
+    ///
+    /// `signingStarted` / `signingDone` bracket the prompt (the sheet's
+    /// "awaiting your signature", RA9); `askerLive` is asked right before the
+    /// prompt and again right before the relay POST — a page that is gone
+    /// gets nothing signed and nothing sent (RB2).
+    ///
+    /// `writeAhead` is the record before the bytes (spec 082 RJ1): called
+    /// once the op is signed, its local hash computed and the head read, it
+    /// hands both to the core (`op_signed`), which writes the record "may
+    /// have been sent" and hands it to the tracker — and answers `true` only
+    /// once the core has cleared the POST (`clear_to_post`). `false` (no
+    /// clearance in `userOpWriteAheadWaitMs`) sends nothing: the op is
+    /// `notSent`. There is no default: a submit that forgot it would put
+    /// money on the wire with no record behind it (G34).
     func submit(
         chainId: Int,
         account: String,
@@ -275,8 +322,11 @@ final class UserOpSpine {
         gasFeeToken: String?,
         quotedFee: Quoted?,
         asked: Asked? = nil,
-        signingStarted: () -> Void = {}
-    ) async throws -> String {
+        signingStarted: () -> Void = {},
+        signingDone: () -> Void = {},
+        askerLive: () -> Bool = { true },
+        writeAhead: (_ localHash: String, _ submitBlock: UInt64?) async -> Bool
+    ) async throws -> Submitted {
         let keys = await accounts.keys(of: account)
         guard let pinned = keys.first else {
             throw other("No passkey credential for the active account")
@@ -301,6 +351,10 @@ final class UserOpSpine {
         } else {
             nonce = "0x0"
         }
+        // The head, read once before the first POST (ruling 8) — started now,
+        // while the chain has just answered, and awaited at the POST.
+        let chainReads = relay
+        let headRead = Task { await chainReads.headBlock(chainId: chainId) }
 
         let floors = userOpFloors(
             chainId: UInt32(chainId), deployed: deployed, subCalls: UInt32(calls.count + 1)
@@ -365,7 +419,16 @@ final class UserOpSpine {
             ) {
                 draft = await raisedToMeasuredFloor(applied, chainId: chainId, account: account, calls: calls)
             }
-        case .refused, .unreachable:
+        case .refused(let message):
+            // What the refusal says, in the core's classes (spec 082 RJ19):
+            // a revert the relay simulated, or nothing known. Logged only —
+            // this sheet's own simulation already warned about a revert.
+            let reading = userOpEstimateFailure(errorJson: CoreJSON.string(["message": message]))
+            VelaLog.failure(.relay, kind: "estimate_refused", "chain=\(chainId) class=\(reading.kind)")
+            if hasContractCall {
+                throw other("Could not estimate gas for this transaction. The network may be busy — please try again.")
+            }
+        case .unreachable:
             // A plain transfer can ride the floors. A batch carrying a real
             // contract call cannot: its gas is unknowable without the estimate,
             // and submitting anyway spends a prompt on a rejection.
@@ -386,6 +449,7 @@ final class UserOpSpine {
         } catch {
             throw other("The operation could not be hashed.")
         }
+        guard askerLive() else { throw Refused(failure: .askerGone) }
         signingStarted()
         let assembled = draft
         let answer = try await ceremony(
@@ -402,6 +466,7 @@ final class UserOpSpine {
                 )
             }
         )
+        signingDone()
 
         let signed: UserOpDraft
         do {
@@ -422,36 +487,53 @@ final class UserOpSpine {
             throw other("The operation could not be encoded.")
         }
 
+        // The operation's own hash, before anything is sent: what a
+        // may-have-been-sent op is followed under (RA6). The relay's wins.
+        let localHash: String
+        do {
+            localHash = try userOpHash(draft: signed, chainId: UInt32(chainId))
+        } catch {
+            throw other("The operation could not be hashed.")
+        }
+        // Bounded: a head that has not come back by now is unknown, and the
+        // core scans below the head instead. The POST never waits on it.
+        let submitBlock = await SignExecutor.within(seconds: 3) { await headRead.value } ?? nil
+
+        // The record before the bytes (spec 082 RJ1): the core writes it "may
+        // have been sent" and hands it to the tracker, then clears the POST.
+        // No clearance, no POST — a quit, a crash or a closed window from
+        // here on leaves a record the tracker resolves on the next launch.
+        guard await writeAhead(localHash, submitBlock) else {
+            VelaLog.failure(.relay, kind: "not_cleared", "hash=\(VelaLog.short(localHash)) chain=\(chainId)")
+            throw Refused(failure: .notSent)
+        }
+        // A signature for a page that left while the prompt was up is never
+        // sent (RB2) — asked after the clearance, right before the POST.
+        guard askerLive() else { throw Refused(failure: .askerGone) }
+
         // The speed the displayed fee was priced at, named beside it (spec 069).
-        switch await relay.sendUserOp(chainId: chainId, opJson: signedJson, tier: quoted.tier) {
+        // No local nonce moves here: this client reads `EntryPoint.getNonce`
+        // on every submit (RA5), so a may-have-been-sent op's nonce is the
+        // next attempt's too, and the EntryPoint lets at most one land.
+        switch await relay.sendUserOp(
+            chainId: chainId, opJson: signedJson, localHash: localHash, tier: quoted.tier
+        ) {
         case .accepted(let hash):
-            return hash
-        case .unreachable:
-            throw other("The gas relayer could not be reached. Please try again.")
-        case .rejected(let errorJson):
-            let message = relayErrorMessage(errorJson: errorJson)
-            // Already pending for this nonce: the same operation, not a second
-            // one. Answering its hash lets the tracker follow what is really on
-            // the wire instead of submitting a duplicate.
-            //
-            // **The RAW json is searched first, and that is a deviation from
-            // the other clients.** `relay_error_message` is a translator, not a
-            // pass-through: a message matching a known rung ("AA25", "invalid
-            // account nonce") is REPLACED wholesale by its human sentence, and
-            // the relay's `[existingHash:0x…]` marker goes with it. A second
-            // submit for the same nonce is exactly an AA25 condition, so the
-            // one case where the marker matters most is the one where the
-            // translation can eat it. Android and the desktop parse only the
-            // translated text; this is reported rather than quietly diverged.
-            if let existing = parseExistingUserOpHash(message: errorJson)
-                ?? parseExistingUserOpHash(message: message) {
-                return existing
-            }
-            switch classifyRelayRejection(message: message) {
-            case .relayerUnavailable: throw Refused(failure: .relayerUnavailable)
-            case .bundlerUnderfunded: throw Refused(failure: .bundlerUnderfunded)
-            case .other(let text): throw Refused(failure: .other(text.isEmpty ? nil : text))
-            }
+            return Submitted(userOpHash: hash, maybeSent: false, submitBlock: submitBlock)
+        case .maybeSent(let hash):
+            return Submitted(userOpHash: hash, maybeSent: true, submitBlock: submitBlock)
+        case .notSent(nil):
+            throw Refused(failure: .notSent)
+        case .notSent(.relayerUnavailable?):
+            throw Refused(failure: .relayerUnavailable)
+        case .notSent(.bundlerUnderfunded?):
+            throw Refused(failure: .bundlerUnderfunded)
+        case .notSent(.other(let text)?):
+            throw Refused(failure: .rejected(text.isEmpty ? nil : text))
+        case .notSent(.nonceHeld?):
+            // 083: another operation of the account holds the nonce — its
+            // hash is never this request's; nothing of this one went out.
+            throw Refused(failure: .other(userOpPreviousPendingDetail()))
         }
     }
 
@@ -628,5 +710,37 @@ final class UserOpSpine {
             index = next
         }
         return out
+    }
+}
+
+/// The core's clearance for one POST (spec 082 RJ1), as the executors wait
+/// for it: `clear_to_post` opens it for an op hash, `wait` answers whether it
+/// opened in time. A gate opened for an op nobody waits on is forgotten by
+/// the next `arm` of that hash.
+@MainActor
+final class WriteAheadGate {
+    private var cleared: Set<String> = []
+
+    /// Forget any earlier clearance for `hash` — before `op_signed` goes out,
+    /// so a stale one can never let a new POST through.
+    func arm(_ hash: String) { cleared.remove(hash.lowercased()) }
+
+    /// The core cleared the POST of `hash`.
+    func open(_ hash: String) {
+        guard !hash.isEmpty else { return }
+        cleared.insert(hash.lowercased())
+    }
+
+    /// `true` once `hash` is cleared; `false` at `ms`, or when the waiting
+    /// task is cancelled (a cancel before the POST sends nothing).
+    func wait(_ hash: String, ms: Double) async -> Bool {
+        let key = hash.lowercased()
+        let deadline = Date().addingTimeInterval(ms / 1000)
+        while !cleared.contains(key) {
+            if Task.isCancelled || Date() >= deadline { return false }
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        cleared.remove(key)
+        return true
     }
 }

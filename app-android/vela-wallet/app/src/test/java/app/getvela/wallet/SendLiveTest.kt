@@ -272,6 +272,40 @@ class SendLiveTest {
     }
 
     /**
+     * Spec 082 RA10 (owner ruling 1): a lost reply is "Submitting…", it may
+     * have been sent, with the op hash and a close that keeps it running —
+     * never a failure, never a Retry. "Not sent" (the relay never had it) is
+     * the plain failure, with no hash and no explorer.
+     */
+    @Test
+    fun `a lost reply may have been sent and a never-sent op is the plain failure`() {
+        val c = ctx()
+        val drawn = (FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model
+        val op = "0x" + "7a".repeat(32)
+        val maybe = SendView(
+            stage = SendStage.Receipt, selected_token = xdai, tx_status = SendTxStatus.Submitting, user_op_hash = op,
+            receipt = SendReceiptView(status = SendReceiptStatus.MaybeSent, amount = "0.001", usd_value = 0.0, typical_inclusion_s = 5),
+        )
+        val m = SendLive.receipt(drawn, maybe, c)
+        assertEquals(ReceiptStage.Submitting, m.stage)
+        assertEquals(strings.t(I18nKeys.Flows.TX_SUBMITTING), m.title)
+        assertEquals(listOf(strings.t("componentsUi.signing.maybeSent")), m.captions)
+        assertEquals(op, m.hash?.copyValue)
+        assertEquals(strings.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND), m.cta)
+        assertNull("nothing to show on an explorer yet", m.viewOnExplorer)
+        assertEquals(FlowState.SD4B, SendLive.flowState(maybe, false))
+        assertEquals(ReceiptStage.Submitting, SendLive.receiptStage(maybe))
+
+        val never = maybe.copy(receipt = maybe.receipt!!.copy(status = SendReceiptStatus.NotSent))
+        val n = SendLive.receipt(drawn, never, c)
+        assertEquals(ReceiptStage.Failed, n.stage)
+        assertEquals(strings.t(I18nKeys.Flows.STATUS_FAILED), n.title)
+        assertEquals(listOf(strings.t(I18nKeys.Flows.TX_ERROR_GENERIC)), n.captions)
+        assertNull(n.hash)
+        assertNull(n.viewOnExplorer)
+    }
+
+    /**
      * Issue 199 (web cf2a9e17): the wait counted up from a still clock and
      * said "almost there" six seconds into fifteen. With the relay's clock the
      * receipt counts DOWN inside the typical time, says "almost" only past it,

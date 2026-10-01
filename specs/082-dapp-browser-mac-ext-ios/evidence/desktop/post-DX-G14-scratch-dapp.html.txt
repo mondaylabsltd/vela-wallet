@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>082 custom requests</title>
+<style>
+body{font:16px -apple-system,sans-serif;margin:16px}
+.g{display:grid;grid-template-columns:repeat(5,170px);gap:8px}
+button{font-size:15px;height:44px}
+pre{font:13px ui-monospace,monospace;background:#f3f3f3;padding:8px;white-space:pre-wrap;word-break:break-all}
+</style></head><body>
+<h3 style="margin:0 0 8px">082 custom requests (scratch page, desktop tester)</h3>
+<div class="g">
+<button id="b1">1 Connect</button><button id="b2">2 Chain</button><button id="b3">3 → Ethereum 0x1</button><button id="b4">4 → Gnosis 0x64</button><button id="b5">5 → Arbitrum 0xa4b1</button>
+<button id="b6">6 Send 0.001</button><button id="b7">7 Send value 0x0</button><button id="b8">8 Send no value</button><button id="b9">9 Send value 1000 (num)</button><button id="b10">10 USDC transfer 1e30</button>
+<button id="b11">11 eth_accounts</button><button id="b12">12 Clear log</button>
+</div>
+<pre id="out">waiting…</pre>
+<script>
+const out=document.getElementById('out');
+const S={results:[],events:[]};
+const show=()=>out.textContent=JSON.stringify(S,null,1);
+const t=()=>new Date().toTimeString().slice(0,8);
+const P=window.ethereum;
+if(P){for(const e of ['accountsChanged','chainChanged','connect','disconnect'])P.on(e,d=>{S.events.push({t:t(),event:e,data:d});show();});}
+const FOUNDER='0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141';
+const GUSDC='0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83';
+const me=()=>P.selectedAddress;
+async function ask(label,method,params){const r={t:t(),label,method};S.results.push(r);show();
+ try{r.result=await P.request({method,params:params??[]});r.ok=true;}catch(e){r.ok=false;r.code=e.code;r.message=e.message;}
+ r.done=t();show();}
+const $=id=>document.getElementById(id);
+$('b1').onclick=()=>ask('connect','eth_requestAccounts');
+$('b2').onclick=()=>ask('chain','eth_chainId');
+$('b3').onclick=()=>ask('to eth','wallet_switchEthereumChain',[{chainId:'0x1'}]);
+$('b4').onclick=()=>ask('to gnosis','wallet_switchEthereumChain',[{chainId:'0x64'}]);
+$('b5').onclick=()=>ask('to arbitrum','wallet_switchEthereumChain',[{chainId:'0xa4b1'}]);
+$('b6').onclick=()=>ask('send 0.001','eth_sendTransaction',[{from:me(),to:FOUNDER,value:'0x38d7ea4c68000'}]);
+$('b7').onclick=()=>ask('send 0x0','eth_sendTransaction',[{from:me(),to:FOUNDER,value:'0x0'}]);
+$('b8').onclick=()=>ask('send omitted','eth_sendTransaction',[{from:me(),to:FOUNDER}]);
+$('b9').onclick=()=>ask('send num 1000','eth_sendTransaction',[{from:me(),to:FOUNDER,value:1000}]);
+$('b10').onclick=()=>ask('usdc 1e30','eth_sendTransaction',[{from:me(),to:GUSDC,data:'0xa9059cbb'+FOUNDER.slice(2).toLowerCase().padStart(64,'0')+(10n**30n).toString(16).padStart(64,'0'),value:'0x0'}]);
+$('b11').onclick=()=>ask('accounts','eth_accounts');
+$('b12').onclick=()=>{S.results=[];S.events=[];show();};
+show();
+</script></body></html>

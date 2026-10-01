@@ -175,6 +175,14 @@ function liveHistory(model: HistoryModel, inputs: FlowsLiveInputs): HistoryModel
 		...model,
 		header,
 		mode: groups.length > 0 ? 'rows' : view.balance_unknown ? 'loading' : 'empty',
+		// Spec 082 RG5 (L-D7): "no transactions yet" with every network shown,
+		// "none on this network" under a filter — the core's choice of key.
+		emptyText:
+			inputs.fm === undefined
+				? model.emptyText
+				: inputs.feed.history_empty_key === 'history.emptyFilter'
+					? inputs.fm['history.emptyFilter']
+					: inputs.fm['history.emptyTitle'],
 		groups
 	};
 }

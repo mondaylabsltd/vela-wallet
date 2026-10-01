@@ -62,7 +62,7 @@ final class GuardExecutor {
             return CoreJSON.string(["type": "balance_read", "balance": value as Any? ?? NSNull()])
 
         default:
-            print("[vela-wallet] approval_guard: unhandled operation \(operation["type"] ?? "?")")
+            VelaLog.failure(.sign, kind: "unhandled_operation", "approval_guard \(operation["type"] ?? "?")")
             return Self.neutralAnswer(operation)
         }
     }

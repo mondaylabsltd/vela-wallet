@@ -1156,13 +1156,17 @@ pub fn empty_state_wrapped(
                 .text_color(theme.fg_base)
                 .child(title),
         )
-        .child(
-            div()
-                .when_some(caption_w, |el, w| el.w(w))
-                .text_size(theme::text_row_sub())
-                .text_color(theme.fg_muted)
-                .child(caption),
-        )
+        // A title with no caption (a narrowed list's one line) draws no
+        // empty line under it.
+        .when(!caption.is_empty(), |el| {
+            el.child(
+                div()
+                    .when_some(caption_w, |el, w| el.w(w))
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(caption),
+            )
+        })
 }
 
 /// Loading placeholder mimicking row geometry (static — motion adds nothing

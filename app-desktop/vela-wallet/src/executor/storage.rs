@@ -320,6 +320,31 @@ pub fn write_value(key: &str, value: Value) -> Result<()> {
     write_key(key, value)
 }
 
+/// Read a list-valued key, change it and write it back, all under the file
+/// lock (spec 082 RJ1 review). The transaction history has writers on several
+/// threads — a dApp's record on a worker, the tracker's patches and the Send
+/// on the window's thread, the incoming scan on another worker — and a read
+/// done before the lock is a stale copy one of them writes back over another's
+/// row: a written-ahead record gone after its POST was cleared. A missing or
+/// non-list value reads as empty; `change` answers whether it changed
+/// anything, and only a change is written. A read that fails writes nothing.
+pub fn update_list(key: &str, change: impl FnOnce(&mut Vec<Value>) -> bool) -> Result<bool> {
+    let Ok(_guard) = LOCK.lock() else {
+        return Err(StorageError("the storage lock is poisoned".to_owned()));
+    };
+    let mut map = read_all()?;
+    let mut list = match map.remove(key) {
+        Some(Value::Array(list)) => list,
+        _ => Vec::new(),
+    };
+    if !change(&mut list) {
+        return Ok(false);
+    }
+    map.insert(key.to_owned(), Value::Array(list));
+    write_all(map)?;
+    Ok(true)
+}
+
 /// Merge fields into an object-valued key, leaving its siblings alone.
 ///
 /// `vela.serviceEndpoints` has two independent writers — onboarding's registry

@@ -24,7 +24,7 @@
       "statusConfirmed": "Confirmado",
       "statusSubmitted": "Enviado",
       "statusFailed": "Falhou",
-      "failedHint": "A transferência foi revertida on-chain — seus fundos não foram enviados. Uma taxa de rede ainda pode ter sido cobrada. Abra o explorer abaixo para ver o motivo, ou volte e tente de novo.",
+      "failedHint": "A transferência foi revertida on-chain — seus fundos não foram enviados. Uma taxa de rede ainda pode ter sido cobrada.",
       "userOpHash": "Hash da UserOp"
     },
     "detail": {

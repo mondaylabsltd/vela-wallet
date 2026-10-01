@@ -101,9 +101,20 @@ sealed class RpcTransportOutcome {
     @SerialName("timeout")
     data object Timeout : RpcTransportOutcome()
 
+    /** A socket failure after the request may have been written (a reset, a close mid-answer). */
     @Serializable
     @SerialName("network")
     data object Network : RpcTransportOutcome()
+
+    /**
+     * Spec 082 RA1: nothing left the device — DNS, a refused connection, the
+     * TLS handshake, a connect timeout. Routed like [Network]; it differs only
+     * in the core's `may_have_delivered`, which is what lets a submit say
+     * "not sent".
+     */
+    @Serializable
+    @SerialName("not_connected")
+    data object NotConnected : RpcTransportOutcome()
 }
 
 /** How a routed call ended, in the core's words. */
@@ -112,7 +123,11 @@ sealed class RpcCallVerdict {
     /** Use the body the shell kept for this url. */
     @Serializable
     @SerialName("respond")
-    data class Respond(val url: String) : RpcCallVerdict()
+    data class Respond(
+        val url: String,
+        /** Spec 082 RA1: the OR, over every POST of this call, of "this one may have been acted on". */
+        val maybe_delivered: Boolean = false,
+    ) : RpcCallVerdict()
 
     /** The endpoint capped the block range; retry within `max_span`. */
     @Serializable
@@ -127,7 +142,11 @@ sealed class RpcCallVerdict {
      */
     @Serializable
     @SerialName("failed")
-    data class Failed(val rate_limited: Boolean = false) : RpcCallVerdict()
+    data class Failed(
+        val rate_limited: Boolean = false,
+        /** False only when no POST of the call can have been acted on (spec 082 RA1). */
+        val maybe_delivered: Boolean = false,
+    ) : RpcCallVerdict()
 
     @Serializable
     @SerialName("bundler_base")
@@ -145,6 +164,12 @@ data class RpcPoolView(
     val failed_chains: List<Int> = emptyList(),
     val rate_limited_chains: List<Int> = emptyList(),
     val banned: List<RpcBanEntry> = emptyList(),
+    /**
+     * Spec 082 RF1: chains one call's first pass could not reach at all. The
+     * chain notice reads `failed ∪ unreached`, minus rate-limited; the home
+     * RPC banner keeps reading [failed_chains] only.
+     */
+    val unreached_chains: List<Int> = emptyList(),
 )
 
 // -- what the shell sends ----------------------------------------------------

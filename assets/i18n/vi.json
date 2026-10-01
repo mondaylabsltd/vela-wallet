@@ -308,7 +308,6 @@
   "txRemaining": "Còn ~{{remaining}}s",
   "txTypicalTime": "{{chainName}} thường xác nhận trong ~{{estSecs}}s",
   "txRetryBtn": "Thử lại",
-  "txErrorTimeout": "Giao dịch đã gửi nhưng hết thời gian chờ xác nhận. Kiểm tra lại trong lịch sử sau.",
   "txErrorBundlerLoop": "Số dư tài khoản gas liên tục bị bundler từ chối. Hãy thử lại sau hoặc tăng mức gas.",
   "txErrorBundlerFund": "Tài khoản bundler cần thêm gas. Vui lòng nạp trong Cài đặt.",
   "txErrorPublicKey": "Không tìm thấy khóa công khai cho tài khoản này",
@@ -1138,7 +1137,7 @@
    "statusConfirmed": "Đã xác nhận",
    "statusSubmitted": "Đã gửi",
    "statusFailed": "Thất bại",
-   "failedHint": "Giao dịch bị hoàn ngược on-chain — tiền của bạn chưa được gửi đi. Có thể bạn vẫn bị tính một khoản phí mạng. Mở explorer bên dưới để xem lý do, hoặc quay lại và thử lại.",
+   "failedHint": "Giao dịch bị hoàn ngược on-chain — tiền của bạn chưa được gửi đi. Có thể bạn vẫn bị tính một khoản phí mạng.",
    "userOpHash": "Hash UserOp"
   },
   "detail": {
@@ -1356,7 +1355,7 @@
    "verifiedAbiSummary": "Hợp đồng đã được xác minh trên trình duyệt khối và các tham số giải mã đầy đủ, nhưng không có bộ mô tả ERC-7730 nào giải nghĩa chúng.",
    "verifiedAbiWarning": "Hợp đồng này không có bộ mô tả ERC-7730 — các giá trị ở trên là kết quả giải mã trực tiếp từ ABI đã xác minh on-chain. Hãy kiểm tra kỹ.",
    "bestEffortSummary": "Gọi {{fn}} — đọc từ chữ ký hàm công khai, không phải bộ mô tả đã xác minh.",
-   "simUnavailableWarning": "Không mô phỏng được giao dịch này (RPC từ chối) — Vela không thể đoán nó sẽ làm gì. Trừ khi bạn hoàn toàn tin tưởng trang này, hãy từ chối.",
+   "simUnavailableWarning": "Vela không kiểm tra được giao dịch này sẽ làm gì. Hãy xem kỹ trước khi ký.",
    "drainSummary": "Trang này gọi đây là một lần nhận miễn phí, nhưng mô phỏng cho thấy tài sản rời khỏi ví của bạn.",
    "drainWarning": "Có tài sản rời đi mà trang này chưa hề nhắc tới — rất giống một vụ rút sạch ví. Hãy từ chối.",
    "selectorNotListed": "Không giải mã được — không có bộ mô tả ERC-7730, selector chưa được ghi nhận ({{bytes}} byte)",
@@ -1405,6 +1404,8 @@
    "selfCallBlockedLegBody": "Bước {{index}} của yêu cầu này sẽ thay đổi ai kiểm soát ví của bạn ({{function}}). Chỉ cần ký một lần là ví có thể rơi vào tay người khác, nên Vela từ chối toàn bộ yêu cầu. Không có gì được ký.",
    "selfCallBlockedSafeTx": "Yêu cầu này muốn khóa của bạn phê duyệt một giao dịch Safe để thực thi sau. Vela từ chối — chữ ký như vậy có thể được dùng khi bạn không có mặt. Không có gì được ký.",
    "stillConfirming": "Chưa lên chuỗi. Vela vẫn đang theo dõi — đừng gửi lại.",
+   "maybeSent": "Có thể đã được gửi. Vela vẫn đang theo dõi — đừng gửi lại.",
+   "refused": "Mạng đã từ chối — chưa có gì được gửi đi.",
    "unknownOutcome": "Sau 24 giờ vẫn chưa xác nhận.",
    "openSigner": "Xác nhận ở trang ký",
    "signerDown": "Không mở được trang ký. Hãy kiểm tra kết nối."
@@ -1845,7 +1846,9 @@
   "loadOffline": "Kết nối không ổn định, không mở được trang.",
   "loadNotFound": "Không tìm thấy trang web này. Hãy kiểm tra địa chỉ.",
   "loadCertificate": "Chứng chỉ của trang web không hợp lệ nên Vela đã chặn.",
+  "loadProxy": "Proxy của bạn không phản hồi.",
   "loadRetrying": "Đang thử lại…",
-  "chainDown": "Không kết nối được {{chain}} — dữ liệu trang có thể thiếu."
+  "chainDown": "Không kết nối được {{chain}} — dữ liệu trang có thể thiếu.",
+  "requestOpen": "Hãy hoàn tất hoặc hủy yêu cầu này trước"
  }
 }

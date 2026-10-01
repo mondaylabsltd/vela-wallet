@@ -165,7 +165,7 @@ async function expectNoDrawnTransaction(page: Page): Promise<void> {
 	await expect(page.getByText(DRAWN_COUNTERPARTY)).toHaveCount(0);
 	await expect(page.getByText(en('history.deleteRecord'))).toHaveCount(0);
 	// The record that WAS open belonged to the other account: it is gone too.
-	await expect(page.getByText('-0.5', { exact: true })).toHaveCount(0);
+	await expect(page.getByText('\u22120.5', { exact: true })).toHaveCount(0);
 }
 
 test.describe('desktop — the third column', () => {

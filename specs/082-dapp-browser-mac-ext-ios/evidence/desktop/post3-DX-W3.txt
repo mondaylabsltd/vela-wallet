@@ -1,0 +1,18 @@
+# post3 DX-W3 (P1, RJ3) — a relay-rejected op answers the dApp with an error, once, at once
+scratch dApp 127.0.0.1:8141 → USDC transfer(0x7687…, 1e30) on Gnosis, no fault
+[vela-wallet] 13:00:16.637 fee: relay estimate reverts chain=100 reason=none given
+[vela-wallet] 13:00:55.733 in-band: relay estimate reverts chain=100 reason=none given
+[vela-wallet] 13:00:55.734 tracker: op=0x06f178bc8a handed over chain=100 maybe_sent=true submit_block=Some(48494036) admitted=false
+[vela-wallet] 13:00:55.739 relay: submitting chain=100 op=0x06f178bc8a initCode=no callData=516B
+[vela-wallet] 13:00:57.154 relay: submit verdict=accepted hash=0x06f178bc8a attempts=1 in=1415 ms
+[vela-wallet] 13:00:57.155 tracker: op=0x06f178bc8a handed over chain=100 maybe_sent=false submit_block=Some(48494036) admitted=true
+[vela-wallet] 13:00:57.155 dapp: op=0x06f178bc8a tracker says Pending
+[vela-wallet] 13:01:09.773 tracker: op=0x06f178bc8a status=Rejected
+[vela-wallet] 13:01:09.773 dapp: op=0x06f178bc8a tracker says Rejected
+[vela-wallet] 13:01:09.867 dapp: op=0x06f178bc8a receipt wait ended: answered from the tracker
+dApp: {ok:false, code:-32603, message:'the network refused this transaction; nothing was sent', done:13:01:09}
+sheet: 失败 · 发送 · 网络拒绝了这笔交易，什么都没有发出。 · 完成 (no 请重试)
+nonce before 63, after 63 — nothing landed
+copy note: the pre-sign danger line says 这笔交易预计会失败 — 但仍会扣除 gas。; the relay refuses such ops, so no gas was charged here (P3 wording)
+
+# post3 KEY-FOCUS (partial) — a new tab does not focus the bar by itself; after a click on the bar, paste + Enter navigates (browser: navigate asked host=127.0.0.1:8141)

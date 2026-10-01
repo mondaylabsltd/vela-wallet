@@ -1,0 +1,95 @@
+# C1/C2 iPhone (scratch dApp 192.168.50.17:8140 on Gnosis)
+# attempt 1 (quickstart regex gnosis|xdai|1rpc): Block number answered in 8 s via rpc.swiftnodes.io (not in the regex)
+07:40:30 CONFIG {"mode": "blackhole", "latency": 0, "bps": 0, "drop": 1.0, "match": "gnosis|xdai|1rpc"}
+07:40:30 CUT 4 live tunnels: gnosis-public.nodies.app,public.1rpc.io,rpc.gnosischain.com,xdai-archive.blockscout.com
+07:40:30 HOLE rpc.gnosischain.com:443
+07:40:38 PASS rpc.swiftnodes.io:443 0ms
+07:40:38 HOLE rpc.gnosischain.com:443
+# attempt 2: every Gnosis endpoint of eip155-100.json blackholed; T0 (Block number) 07:48:21.4
+07:48:21 CONFIG {"mode": "blackhole", "latency": 0, "bps": 0, "drop": 1.0, "match": "gnosis|xdai|1rpc|gno-|swiftnodes|ankr|routemesh|route|web3endpoints|omniatech|fastnode|100\\.rpc\\.thirdweb|ap-southeast-1\\.gateway"}
+07:48:21 CUT 1 live tunnels: rpc.ap-southeast-1.gateway.fm
+07:48:21 HOLE rpc.ap-southeast-1.gateway.fm:443
+07:48:29 HOLE rpc.ap-southeast-1.gateway.fm:443
+07:48:29 HOLE gnosis-rpc.publicnode.com:443
+07:48:37 HOLE gnosis-rpc.publicnode.com:443
+07:48:37 HOLE 1rpc.io:443
+07:48:45 HOLE 1rpc.io:443
+07:48:45 HOLE endpoints.omniatech.io:443
+07:48:53 HOLE endpoints.omniatech.io:443
+07:48:53 HOLE public.1rpc.io:443
+07:49:01 HOLE public.1rpc.io:443
+07:49:01 HOLE gno-mainnet.gateway.tatum.io:443
+07:49:09 HOLE gno-mainnet.gateway.tatum.io:443
+07:49:09 HOLE gnosis.therpc.io:443
+07:49:17 HOLE gnosis.therpc.io:443
+07:49:17 HOLE gnosis.api.pocket.network:443
+07:49:25 HOLE gnosis.api.pocket.network:443
+07:49:25 HOLE gnosis.drpc.org:443
+07:49:33 HOLE gnosis.drpc.org:443
+07:49:34 HOLE gnosis.oat.farm:443
+07:49:41 HOLE gnosis.oat.farm:443
+07:49:41 HOLE rpc.gnosis.gateway.fm:443
+07:49:49 HOLE rpc.gnosis.gateway.fm:443
+07:49:49 HOLE rpc.ankr.com:443
+07:49:57 HOLE rpc.ankr.com:443
+07:49:57 HOLE gnosischain-rpc.gateway.pokt.network:443
+07:50:05 HOLE gnosischain-rpc.gateway.pokt.network:443
+07:50:05 HOLE gnosis-mainnet.public.blastapi.io:443
+07:50:13 HOLE gnosis-mainnet.public.blastapi.io:443
+07:50:13 HOLE gnosis.api.onfinality.io:443
+07:50:21 HOLE gnosis.api.onfinality.io:443
+07:50:21 HOLE gnosis.blockpi.network:443
+07:50:30 HOLE gnosis.blockpi.network:443
+07:50:30 HOLE web3endpoints.com:443
+07:50:38 HOLE web3endpoints.com:443
+07:50:38 HOLE lb.routeme.sh:443
+07:50:46 HOLE lb.routeme.sh:443
+07:50:46 HOLE rpc.gnosischain.com:443
+07:50:54 HOLE rpc.gnosischain.com:443
+07:50:54 HOLE rpc.ap-southeast-1.gateway.fm:443
+07:51:02 HOLE rpc.ap-southeast-1.gateway.fm:443
+07:51:02 HOLE rpc.gnosischain.com:443
+07:51:10 HOLE rpc.gnosischain.com:443
+07:51:10 HOLE gnosis-rpc.publicnode.com:443
+07:51:14 HOLE rpc.gnosischain.com:443
+07:51:18 HOLE gnosis-rpc.publicnode.com:443
+07:51:18 HOLE 1rpc.io:443
+07:51:22 HOLE gnosis-rpc.publicnode.com:443
+07:51:26 HOLE 1rpc.io:443
+07:51:26 HOLE gnosis.drpc.org:443
+07:51:30 HOLE 1rpc.io:443
+07:51:34 HOLE gnosis.drpc.org:443
+07:51:34 HOLE gnosis.oat.farm:443
+07:51:38 HOLE gnosis.drpc.org:443
+07:51:42 HOLE gnosis.oat.farm:443
+07:51:42 HOLE rpc.gnosis.gateway.fm:443
+07:51:46 HOLE gnosis.oat.farm:443
+07:51:50 HOLE rpc.gnosis.gateway.fm:443
+07:51:50 HOLE rpc.ankr.com:443
+07:51:54 HOLE rpc.gnosis.gateway.fm:443
+07:51:58 HOLE rpc.ankr.com:443
+07:51:58 HOLE gnosischain-rpc.gateway.pokt.network:443
+07:52:02 HOLE rpc.ap-southeast-1.gateway.fm:443
+07:52:06 HOLE gnosischain-rpc.gateway.pokt.network:443
+07:52:06 HOLE gnosis-mainnet.public.blastapi.io:443
+07:52:07 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "."}
+07:52:10 PASS rpc.ankr.com:443 0ms
+07:52:11 PASS gnosischain-rpc.gateway.pokt.network:443 3ms
+07:52:14 PASS gnosis-mainnet.public.blastapi.io:443 0ms
+07:52:14 PASS gnosis.api.onfinality.io:443 0ms
+07:52:15 PASS gnosis.blockpi.network:443 0ms
+07:52:16 PASS web3endpoints.com:443 2ms
+07:52:17 PASS web3endpoints.com:443 0ms
+07:52:17 PASS lb.routeme.sh:443 0ms
+07:52:18 PASS endpoints.omniatech.io:443 1ms
+07:52:19 PASS app.uniswap.org:443 0ms
+07:52:20 PASS public.1rpc.io:443 0ms
+07:52:20 PASS mainnet.infura.io:443 1ms
+07:52:20 PASS interface.gateway.uniswap.org:443 1ms
+07:52:20 PASS cdn.app.uniswap.org:443 1ms
+07:52:20 PASS challenges.cloudflare.com:443 1ms
+# VelaLog lines 07:48:20–07:52:30 (all of them):
+07:51:14.251712 [rpc] chain notice: retry chain=100
+07:52:20.578254 [browser] committed host=app.uniswap.org
+07:52:22.231986 [rpc] chain notice: retry → ok chain=100
+# notice first seen by the 5 s tree poll at 07:50:56.9 (= T0+155.5 s); dApp answer 0x2e3e799 done 07:52:14 after pass 07:52:07; notice gone in the 07:52:17.9 frame

@@ -1,0 +1,22 @@
+# L1 — latency 6000 example; Enter at 02:38:45.550 (navigate asked)
+shot times (file mtime): l1-a +0.51 s, l1-b +1.03 s, l1-c +2.74 s, l1-d +5.45 s, l1-e +7.66 s, l1-f +9.87 s
+[vela-wallet] 02:38:41.628 browser: asked host=127.0.0.1:8137 gen=3 how=navigation
+[vela-wallet] 02:38:41.640 browser: committed host=127.0.0.1:8137 gen=3
+[vela-wallet] 02:38:41.644 browser: finished host=127.0.0.1:8137
+[vela-wallet] 02:38:42.787 browser: asked host=127.0.0.1:8137 gen=4 how=navigation
+[vela-wallet] 02:38:42.800 browser: committed host=127.0.0.1:8137 gen=4
+[vela-wallet] 02:38:42.804 browser: finished host=127.0.0.1:8137
+[vela-wallet] 02:38:45.550 browser: navigate asked host=example.com view=built composing=false
+[vela-wallet] 02:38:45.551 browser: asked host=example.com gen=5 how=navigation
+[vela-wallet] 02:38:48.669 browser: watchdog host=example.com gen=5 (no commit in 3000 ms)
+[vela-wallet] 02:38:52.744 browser: committed host=example.com gen=5
+[vela-wallet] 02:38:53.044 browser: finished host=example.com
+[vela-wallet] 02:38:53.179 browser: probe host=example.com gen=5 verdict=timeout route=system
+02:38:38 CONFIG {"mode": "latency", "latency": 6000, "bps": 0, "drop": 1.0, "match": "example"}
+02:38:51 LATENCY example.com:443 1ms
+02:38:54 LATENCY example.com:443 1ms
+02:38:55 CONFIG {"mode": "pass", "latency": 6000, "bps": 0, "drop": 1.0, "match": "example"}
+
+# before L1: two background-tab closes (✕ on tab 1 twice) each reloaded the shown page:
+02:38:41.628 browser: asked host=127.0.0.1:8137 gen=3 how=navigation / 02:38:42.787 … gen=4 how=navigation
+# core state after L1 (parallel wallet.json vela.explore): tabs = [app.uniswap.org (selected), 127.0.0.1:8137]; the webview shows example.com, no tab lit, no tab titled Example Domain

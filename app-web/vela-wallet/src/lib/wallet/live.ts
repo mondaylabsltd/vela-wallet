@@ -136,6 +136,26 @@ export function narrowedFeed(feed: FeedView, filter: number | null): FeedView {
 // ---------------------------------------------------------------------------
 
 /**
+ * `value` to two decimals as plain digits, never exponent notation (spec 082
+ * G60): `toFixed` switches to "1e+24" from 10^21 up, and a dApp transfer of
+ * 10^30 token units was shown as "≈ $1e+24". Past 10^15 a double has no cents
+ * left to show, so the figure is its 15 significant digits and zeros.
+ * `[whole, fraction]`; anything that is not a finite number reads 0.
+ */
+export function fixedTwo(value: number): [string, string] {
+	if (!Number.isFinite(value)) return ['0', '00'];
+	if (Math.abs(value) < 1e15) {
+		const [whole, frac] = value.toFixed(2).split('.');
+		return [whole, frac ?? '00'];
+	}
+	const [mantissa, exponent] = Math.abs(value).toExponential(14).split('e');
+	const digits = mantissa.replace('.', '');
+	const places = Number.parseInt(exponent, 10) + 1;
+	const whole = digits.length >= places ? digits.slice(0, places) : digits.padEnd(places, '0');
+	return [value < 0 ? `-${whole}` : whole, '00'];
+}
+
+/**
  * A USD amount in the display currency: converted at the committed rate, or
  * the USD figure itself when the shell could not price the currency —
  * `rate: null` is NOT 1 (024's rule; a defaulted 1 under a ¥ is a lie).
@@ -147,8 +167,7 @@ export function moneyParts(
 	const convertible = currency.rate !== null;
 	const code = convertible ? currency.code : 'USD';
 	const amount = convertible ? usd * (currency.rate as number) : usd;
-	const fixed = Math.abs(amount).toFixed(2);
-	const [whole, frac] = fixed.split('.');
+	const [whole, frac] = fixedTwo(Math.abs(amount));
 	// The person's own number preset, not the platform's idea of one (spec 028
 	// D47). Money is where this stops being cosmetic: a wallet that groups one
 	// way here and another way on the next machine is a wallet whose totals a
@@ -428,26 +447,37 @@ export function liveActivityRow(
 	m: WalletMessages,
 	hidden: boolean
 ): ActivityRowModel {
-	const received = item.direction === 'in';
-	const kind: ActivityRowModel['kind'] = received
-		? 'received'
-		: item.direction === 'out'
-			? 'sent'
-			: 'dapp';
+	// Spec 082 RG1: what the row IS, and where it stands, are the core's
+	// (`FeedItem.kind`, `.status`) — never guessed from a direction or looked up
+	// in the store here.
+	const kind: ActivityRowModel['kind'] =
+		item.kind === 'receive' ? 'received' : item.kind === 'dapp_tx' ? 'dapp' : 'sent';
+	const received = kind === 'received';
 	const who = item.alias ?? (item.counterparty !== null ? shortenAddress(item.counterparty) : null);
-	// A dApp's transaction is labelled with the site that asked (083 H2) — the
-	// router it called is an address nobody chose.
-	const site = item.dapp?.site ?? null;
-	const subtitle =
+	// A dApp's transaction is labelled with the site that asked (083 H2, spec
+	// 082 RG2) — the router it called is an address nobody chose; else who it
+	// went to; else the chain.
+	const site = item.dapp?.site ?? item.site ?? null;
+	const base =
 		site !== null
 			? site
-			: who === null
-				? chainName(item.chain_id)
-				: fill(received ? m.activity.fromName : m.activity.toName, { name: who });
+			: kind === 'dapp'
+				? (who ?? chainName(item.chain_id))
+				: who === null
+					? chainName(item.chain_id)
+					: fill(received ? m.activity.fromName : m.activity.toName, { name: who });
+	// A row the tracker has not closed says so first (RG2, RG4): a may-have-
+	// been-sent op reads "Pending · <site>" until the tracker patches it.
+	const subtitle =
+		item.status === 'pending'
+			? `${m.activity.pending} · ${base}`
+			: item.status === 'failed'
+				? `${m.activity.failed} · ${base}`
+				: base;
 	const amount =
 		item.value === null
 			? String(item.batch?.count ?? '')
-			: `${received ? '+' : '-'}${trimBalance(item.value)}`;
+			: `${received ? '+' : '−'}${trimBalance(item.value)}`;
 	const figureless = item.dapp != null && item.value === null;
 	return {
 		id: item.id,
@@ -622,7 +652,16 @@ function liveSections(inputs: WalletLiveInputs) {
 				: assetsMode(view),
 		assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
 		activityMode: activityMode(view, feed),
-		activityGroups: feed ? liveActivityGroups(feed, m, view.hidden) : []
+		activityGroups: feed ? liveActivityGroups(feed, m, view.hidden) : [],
+		// Spec 082 RG5: which empty line the home says is the core's
+		// (`FeedView.home_empty_key`) — "no activity" or "none on this network".
+		activityEmpty: {
+			title:
+				inputs.feed?.home_empty_key === 'home.emptyNoActivityNetwork'
+					? m.activity.emptyTitleNetwork
+					: m.activity.emptyTitle,
+			caption: m.activity.emptyCaption
+		}
 	};
 }
 
@@ -634,7 +673,11 @@ export function withLiveWallet(model: WalletHomeModel, inputs: WalletLiveInputs)
 		balance: live.balance,
 		assetsSection: { ...model.assetsSection, mode: live.assetsMode },
 		assetRows: live.assetRows,
-		activitySection: { ...model.activitySection, mode: live.activityMode },
+		activitySection: {
+			...model.activitySection,
+			mode: live.activityMode,
+			empty: live.activityEmpty
+		},
 		activityGroups: live.activityGroups
 	};
 }
@@ -659,7 +702,11 @@ export function withLiveWalletDesktop(
 		balance: live.balance,
 		assetsSection: { ...model.assetsSection, mode: live.assetsMode },
 		assetRows: live.assetRows,
-		activitySection: { ...model.activitySection, mode: live.activityMode },
+		activitySection: {
+			...model.activitySection,
+			mode: live.activityMode,
+			empty: live.activityEmpty
+		},
 		activityGroups: live.activityGroups,
 		// The third column is the model's to open on a live page: a tapped row
 		// puts its token here, and closing the column takes it away again.

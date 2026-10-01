@@ -1,0 +1,20 @@
+EX8b · G23 — after EX8. Times: page 'req' (dApp hook) -> panel dialog (MutationObserver), Date.now ms.
+Part 1 (after reloading tab A; revoke first so Connect needs a card)
+  Connect  page 1790621070230 -> panel 1790621070236  (+6 ms)   连接 -> 1 answer (EIP-55)
+  Sign     page 1790621077368 -> panel 1790621077374  (+6 ms)   slide -> 1 answer (ok)
+  storage.session vela.req.*: only the one live record while open; none after; storage.local vela.req.*: none
+Idle (no CDP at all; only HTTP GET /json/list, which attaches nothing), revoke first:
+  02:45:18 +0s  sw=03E60EBD
+  02:45:48 +30s sw=34338031     <- Chrome stopped the idle worker; the open panel's port reconnect started a new one at once
+  02:46:19 +61s sw=1E7549EC
+  02:46:48 +90s sw=23CF0F28
+  worker log: every 30 s "panel.up window=291188707" + "sw.start records=0 recovered=0"
+Repeat
+  Connect  page 1790621229448 -> panel 1790621229452  (+4 ms)   1 answer
+  (waited for the next Chrome stop: sw 23CF0F28 -> 6F786B19 at 02:47:41, then at once)
+  Sign     page 1790621266805 -> panel 1790621266812  (+7 ms)   1 answer
+  [vela-sw] 18:47:40.701Z sw.start records=0 recovered=0
+  [vela-sw] 18:47:46.806Z req.arrived kind=sign tab=291188710 host=127.0.0.1:8137
+  [vela-sw] 18:47:46.808Z req.shown tab=291188710
+after: storage.session vela.req.* none; storage.local vela.req.* none
+counts: sw.start 14, panel.up 13 in ~30 min of this pass (most from the 30 s idle cycle)

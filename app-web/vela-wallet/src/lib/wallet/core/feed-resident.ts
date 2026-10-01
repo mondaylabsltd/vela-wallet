@@ -33,7 +33,11 @@ export const INITIAL_VIEW: FeedView = {
 	rows: [],
 	transactions: [],
 	new_item_id: null,
-	toast: null
+	toast: null,
+	// The core's own choice for "no chain filter" (spec 082 RG5), mirrored
+	// until the first view lands.
+	history_empty_key: 'history.emptyTitle',
+	home_empty_key: 'home.emptyNoActivity'
 };
 
 let current: FeedView = INITIAL_VIEW;

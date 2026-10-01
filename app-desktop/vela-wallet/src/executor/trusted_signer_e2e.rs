@@ -529,6 +529,8 @@ fn the_page_signs_a_message_as_the_wallet_hashes_it() {
                     channel: &rig.channel,
                     only: None,
                 },
+                &user_op::quiet,
+                &user_op::always_asked,
             )
         });
         let _stop = rig.guard();

@@ -1,0 +1,45 @@
+# IX-W1 — iPhone, build fb8c7026 (round 1), scratch dApp http://192.168.50.17:8140 on Gnosis, Send 0.001 xDAI to 0x7687…D141
+# nonce before 51 (09:00:10), after 52 (09:01:37); balance 0.24967 -> 0.23867
+# chain: blk 48491208 09:00:55 op 0xdd6ad0a27e4a6c8823c8d1604694489880b02ca74de6ec3e3c3906d44ae8091c tx 0x9ce6994d6de3c6161f269a6a6abff17d3ff19cdff81a448bba25db17cd81047f nonce 51 success 1 (one event)
+# first try 08:56:24: mute set while the sheet was open -> slide shut at once (a re-quote was in flight), fee row kept '~0.01 xDAI · ≈¥0.07' with no spinner/reason for 2+ min; gave_up lines below
+08:56:40.773 2026-09-29 08:56:40.800849+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=eth_estimateUserOperationGas kind=bundler
+08:57:12.963 2026-09-29 08:57:12.950257+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:57:12.963 2026-09-29 08:57:12.950680+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:57:44.578 2026-09-29 08:57:44.606717+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:57:44.578 2026-09-29 08:57:44.607142+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:58:17.038 2026-09-29 08:58:17.013258+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:58:17.038 2026-09-29 08:58:17.014063+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:58:48.585 2026-09-29 08:58:48.520520+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:58:48.585 2026-09-29 08:58:48.522668+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:59:19.498 2026-09-29 08:59:19.333034+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:59:20.394 2026-09-29 08:59:20.374660+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+08:59:40.674 2026-09-29 08:59:40.703300+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler
+08:59:42.962 2026-09-29 08:59:42.876673+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=pimlico_getUserOperationGasPrice kind=bundler
+09:00:45.278 2026-09-29 09:00:45.280604+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=eth_estimateUserOperationGas kind=bundler
+09:00:45.387 2026-09-29 09:00:45.346315+0800 VelaWallet[1788:541975] [relay] submitting chain=100 hash=0xdd6ad0a27e
+09:01:17.342 2026-09-29 09:01:17.358406+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=eth_sendUserOperation kind=bundler
+09:01:17.342 2026-09-29 09:01:17.358506+0800 VelaWallet[1788:541975] [relay] maybe_sent hash=0xdd6ad0a27e attempts=1 in=32012ms
+09:01:17.342 2026-09-29 09:01:17.358549+0800 VelaWallet[1788:541975] [sign] submit verdict=maybe_sent hash=0xdd6ad0a27e chain=100
+09:01:31.034 2026-09-29 09:01:31.028380+0800 VelaWallet[1788:541975] [tracker] tracker confirmed op=0xdd6ad0a27e chain=100
+09:01:31.034 2026-09-29 09:01:31.028551+0800 VelaWallet[1788:541975] [balance] balance refresh (holdings_moved) chain=100
+09:01:47.668 2026-09-29 09:01:47.723667+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=eth_getUserOperationReceipt kind=bundler
+09:01:48.085 2026-09-29 09:01:48.127044+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=eth_getUserOperationReceipt kind=bundler
+09:02:01.798 2026-09-29 09:02:01.825984+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=pimlico_getUserOperationStatus kind=bundler
+09:02:01.798 2026-09-29 09:02:01.826035+0800 VelaWallet[1788:541975] [tracker] op=0xdd6ad0a27e status unavailable
+09:02:23.355 2026-09-29 09:02:23.375240+0800 VelaWallet[1788:541975] [rpc] gave_up chain=100 method=eth_getUserOperationReceipt kind=bundler
+# chaos
+08:56:24 CONFIG {"mode": "mute", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+08:56:24 CUT 1 live tunnels: vela-relay-cf.getvela.app
+08:56:24 MUTE vela-relay-cf.getvela.app:443 1ms
+08:58:00 MUTE vela-relay-cf.getvela.app:443 1ms
+08:58:36 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+08:59:39 PASS vela-relay-cf.getvela.app:443 2930ms
+08:59:41 PASS vela-relay-cf.getvela.app:443 302ms
+08:59:42 PASS vela-relay-cf.getvela.app:443 47ms
+09:00:10 CONFIG {"mode": "mute", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+09:00:10 CUT 1 live tunnels: vela-relay-cf.getvela.app
+09:00:13 MUTE vela-relay-cf.getvela.app:443 0ms
+09:02:07 MUTE vela-relay-cf.getvela.app:443 0ms
+09:02:46 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+# sheet (watcher labels, Mac time): 09:00:13 正在准备交易... | 09:00:45 提交至网络... + 关闭 · 后台继续 | 09:01:17 + 可能已经发出。Vela 会继续查看，请不要重复发送。 + UserOp 哈希 0xdd6ad0a2…4ae8091c (no 重试) | 09:01:32 已确认 + 交易哈希 0x9ce6994d…cd81047f + 在区块浏览器中查看 + 完成 | 09:02:16 sheet closed by itself
+# dApp page: {"t":"08:55:46","label":"send 0.001","result":"0xdd6ad0a27e4a6c8823c8d1604694489880b02ca74de6ec3e3c3906d44ae8091c","ok":true,"done":"09:02:14"}  (one answer, the op hash, 121 s after the slide, 43 s after 已确认)

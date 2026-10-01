@@ -303,17 +303,17 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
                 dismiss()
             }
             when (sheet) {
-                is FlowSheet.ReceiveQr -> ReceiveQrBody(model = sheet.model, onSave = { onSaveImage?.invoke() }, onExplorer = { VelaLog.event("flows", "explorer", "url" to sheet.model.explorerUrl); sheet.model.explorerUrl?.let(onOpenUrl) })
+                is FlowSheet.ReceiveQr -> ReceiveQrBody(model = sheet.model, onSave = { onSaveImage?.invoke() }, onExplorer = { VelaLog.event("flows", "explorer", "host" to sheet.model.explorerUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }); sheet.model.explorerUrl?.let(onOpenUrl) })
                 is FlowSheet.TxDetail -> TxDetailBody(
                     model = sheet.model,
-                    onExplorer = { VelaLog.event("flows", "explorer", "url" to sheet.model.explorerUrl); sheet.model.explorerUrl?.let(onOpenUrl) },
+                    onExplorer = { VelaLog.event("flows", "explorer", "host" to sheet.model.explorerUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }); sheet.model.explorerUrl?.let(onOpenUrl) },
                     onDelete = onDeleteTx,
                 )
                 is FlowSheet.TokenDetail -> TokenDetailBody(
                     model = sheet.model,
                     onReceive = { selected?.takeIf { onReceiveToken != null }?.let { onReceiveToken?.invoke(it) } ?: onNavigate(FlowStep.Receive) },
                     onSend = { selected?.takeIf { onSendToken != null }?.let { onSendToken?.invoke(it) } ?: onNavigate(FlowStep.SendForm) },
-                    onExplorer = { VelaLog.event("flows", "explorer", "url" to sheet.model.explorerUrl); sheet.model.explorerUrl?.let(onOpenUrl) },
+                    onExplorer = { VelaLog.event("flows", "explorer", "host" to sheet.model.explorerUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }); sheet.model.explorerUrl?.let(onOpenUrl) },
                 )
                 is FlowSheet.AddToken -> AddTokenBody(
                     model = sheet.model,

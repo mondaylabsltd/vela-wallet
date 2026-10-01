@@ -395,7 +395,9 @@ function history(m: WalletFlowMessages): HistoryModel {
 			}
 		},
 		mode: 'rows',
-		emptyText: m['history.emptyFilter'],
+		// The drawn history has rows; which empty line a live one says is the
+		// core's (`FeedView.history_empty_key`, spec 082 RG5), read in live.ts.
+		emptyText: '',
 		groups: historyGroups(m)
 	};
 }

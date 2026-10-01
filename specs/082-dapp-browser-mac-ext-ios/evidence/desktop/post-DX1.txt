@@ -1,0 +1,23 @@
+# DX1 — latency 9000 app.uniswap.org; Enter 02:41:46.095
+[vela-wallet] 02:41:46.095 browser: navigate asked host=app.uniswap.org view=built composing=false
+[vela-wallet] 02:41:46.095 browser: asked host=app.uniswap.org gen=9 how=navigation
+[vela-wallet] 02:41:49.119 browser: watchdog host=app.uniswap.org gen=9 (no commit in 3000 ms)
+[vela-wallet] 02:41:53.635 browser: probe host=app.uniswap.org gen=9 verdict=timeout route=system
+[vela-wallet] 02:41:53.636 browser: failed host=app.uniswap.org class=timeout
+[vela-wallet] 02:41:55.705 browser: retry host=app.uniswap.org skipped (engine still loading)
+[vela-wallet] 02:41:56.169 browser: committed host=app.uniswap.org gen=9
+[vela-wallet] 02:41:56.196 browser: finished host=app.uniswap.org
+--- WebKit os_log (desktop-oslog.txt): every WebPageProxy::loadRequest in the window
+2026-09-29 02:41:42.400 Df vela-wallet[98763:8d02d5] [com.apple.WebKit:Loading] 0xa4606ce18 - [pageProxyID=5, webPageID=95, PID=14024] WebPageProxy::l
+2026-09-29 02:41:42.410 Df vela-wallet[98763:8d02d5] [com.apple.WebKit:Loading] 0xa4606ce18 - [pageProxyID=5, webPageID=105, PID=4952] WebPageProxy::d
+2026-09-29 02:41:46.095 Df vela-wallet[98763:8d02d5] [com.apple.WebKit:Loading] 0xa4606ce18 - [pageProxyID=5, webPageID=105, PID=4952] WebPageProxy::l
+2026-09-29 02:41:56.169 Df vela-wallet[98763:8d02d5] [com.apple.WebKit:Loading] 0xa4606ce18 - [pageProxyID=5, webPageID=115, PID=14024] WebPageProxy::
+--- chaos-post.log
+02:41:39 CONFIG {"mode": "latency", "latency": 9000, "bps": 0, "drop": 1.0, "match": "app\\.uniswap\\.org"}
+02:41:39 CUT 3 live tunnels: app.uniswap.org,cdn.app.uniswap.org,privy.app.uniswap.org
+02:41:55 LATENCY app.uniswap.org:443 1ms
+02:41:56 PASS entry-gateway.backend-prod.api.uniswap.org:443 0ms
+02:41:58 LATENCY app.uniswap.org:443 1ms
+02:42:05 LATENCY cdn.app.uniswap.org:443 0ms
+02:42:05 CONFIG {"mode": "pass", "latency": 9000, "bps": 0, "drop": 1.0, "match": "app\\.uniswap\\.org"}
+02:42:05 LATENCY privy.app.uniswap.org:443 0ms

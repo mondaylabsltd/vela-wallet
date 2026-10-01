@@ -208,6 +208,7 @@ fun ExploreScreen(
                     loading = model.browser.loading,
                     progress = model.browser.progress,
                     onSubmitUrl = onOpenUrl,
+                    lockShown = model.browser.lockShown,
                 )
                 // Spec 079: the page loaded but its chain cannot be reached — said
                 // once, under the address bar, while the page stays usable.

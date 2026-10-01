@@ -1,0 +1,134 @@
+Phase 9 DESK_B gates (T217–T225; T226 partial), branch 082-dapp-browser-mac-ext-ios, worktree vela-wallet-082, 2026-09-29.
+Measured at 5e770a8d (T217 c85676b2, T224 2dda17d8, T225 dd89cd36, T223 5ddcb6a8, T218–T222 5e770a8d),
+against the merged round-2 core 7a86cebc (the crate, not the bindings). CARGO_TARGET_DIR = the warm cache at
+/Volumes/data/production/vela-wallet/app-desktop/vela-wallet/target.
+
+WHY A MIRROR: in the worktree the TEST target does not compile yet — two errors, both in DESK_A's
+src/wallet/browser_host.rs test `three_misses_then_a_reach_retry_the_failed_page_once` (:2201-2207, the
+two-argument net_health_step and the two-field NetHealth literal), which the hand-off gives to DESK_A (T203).
+The binary compiles. So the test and clippy gates ran on a copy of app-desktop/vela-wallet at 5e770a8d
+(scratchpad deskb/mirror; rust/, assets/ and the rest symlinked to the worktree) whose ONLY difference is
+that test moved to net_health_step(state, reached, Some(chain), now_ms) — nothing of it committed.
+`diff -rq` mirror/src worktree/src: only src/wallet/browser_host.rs differs.
+
+cd app-desktop/vela-wallet (worktree)
+  cargo check --all-targets --features dev-fixtures   bin: ok; test target: the 2 browser_host.rs errors above
+  cargo build --release --features dev-fixtures       Finished release in 1m 23s (target/release/vela-wallet 08:11)
+  cargo test --release --no-run                       the same 2 browser_host.rs errors (DESK_A T203)
+  rustfmt --edition 2024 --check <every file DESK_B changed in c85676b2..5e770a8d>   ok
+
+mirror (5e770a8d + the browser_host test fix)
+  cargo test --release                                752 passed, 0 failed, 49 ignored
+  cargo test --release --features dev-fixtures        756 passed, 0 failed, 50 ignored
+  cargo clippy --all-targets --features dev-fixtures -- -D warnings
+      red before and after (48 pre-existing findings in untouched code: cable.rs, settings/, page.rs, …);
+      per file and message against the same command on c85676b2 (T217, the round-2 compile fix): 0 new.
+      Three new ones found on the way and fixed before the commits (send.rs SubmitWork alias,
+      signing_host.rs Tracked alias, a test loop counter).
+  cargo clippy --all-targets -- -D warnings           the same comparison: 48 = 48, 0 new
+  live (real relay, read-only):
+    cargo test --release executor::relay::tests::live -- --ignored        3 passed
+      (live_the_relay_covers_gnosis, live_the_golden_safe_is_quoted_in_band,
+       live_an_unknown_hash_is_pending_not_unreachable: pimlico_getUserOperationStatus → NotFound)
+    cargo test --release executor::user_op::tests::live -- --ignored      1 passed (dust estimate, the new EstimateError)
+    a one-off probe (mirror only, not committed): the golden Safe's Gnosis USDC transfer(0x7687…D141, 10^30),
+      the DX-W3 call, estimated through relay::estimate_user_op_gas → error member
+      {"code":-32500,"message":"UserOperation simulation failed","data":"Safe execution failed: the target
+      call in executeUserOp reverted"} → core estimate_failure = Reverts{reason: None}; the log line is
+      "in-band: relay estimate reverts chain=100 reason=none given".
+
+round-2 tests (all in the counts above)
+  user_op        nothing_is_posted_before_the_record_is_written, no_clearance_means_no_post,
+                 a_relay_rejection_is_a_refusal, a_clearance_is_for_one_hash_and_one_attempt,
+                 a_failed_estimate_is_read_by_the_core
+  sign_request   a_quit_after_the_op_is_signed_leaves_one_pending_maybe_sent_row (DX9),
+                 a_not_sent_op_leaves_no_row_and_one_error (S5), a_relay_refusal_is_answered_refused,
+                 admitted_clears_maybe_sent_and_delete_removes_only_its_row,
+                 the_wait_stops_once_the_core_has_answered
+  tracker        an_included_op_is_confirmed_from_its_bundle_within_one_poll (EX13),
+                 a_tx_receipt_goes_back_as_it_came, a_withdrawn_op_is_forgotten
+  signing_host   the_fee_is_back_within_fourteen_seconds_of_the_relay (fake clock: relay back every 250 ms
+                 over 60 s × answers 0.2–6 s × refused or hung asks — worst case ≤ 14 s),
+                 a_failed_quote_is_asked_again_on_the_cores_schedule, the_requote_stops_where_it_must,
+                 an_unanswered_read_is_a_chain_read, the_admitted_hand_off_is_a_new_one,
+                 the_tracker_s_verdict_answers_the_page_once (DX-W3: one -32603 refused)
+  signing        status: Refused / failure_refused / tracker Rejected → statusFailed + refused, never
+                 txErrorGeneric; live: a_rate_limited_chain_read_names_the_node_not_vela ("被限流 · 正在
+                 自动重试"), a_dust_delta_is_written_exactly_and_a_zero_one_not_at_all ("−0.000000000000001
+                 xDAI"); mod: the_refusal_and_the_fee_reasons_resolve
+  pool           ten_gnosis_misses_never_go_offline, one_dead_chain_among_answering_ones_fails_alone
+                 (the real pool, 23 local chains answering + 1 refusing, two overlapping rounds)
+  balances       a_network_back_joins_the_round_already_reading
+  feed           a_dapp_record_names_who_got_it_and_offers_no_explorer_without_a_tx (DX-W3 row)
+
+Not run here: the device rows (DX9, DX-W3, EX13-shape on desktop, S7/S8, DX-G14, G14-num, T181 relaunch) —
+the device re-run T252; no device, app, Chrome or chaos proxy was touched.
+
+REVIEW (DESK_B adversarial reviewer), 2026-09-29, after b600ad18, 0315ca71, fe2a239c — same mirror recipe
+(worktree HEAD fe2a239c + the browser_host.rs:2201-2207 test moved to the four-argument net_health_step; `diff -rq`
+mirror/src worktree/src: only src/wallet/browser_host.rs differs).
+  cargo test --release                                757 passed, 0 failed, 49 ignored   (752 + 5 review tests)
+  cargo test --release --features dev-fixtures        761 passed, 0 failed, 50 ignored
+  cargo clippy --all-targets --features dev-fixtures -- -D warnings   57 findings = the 57 before (48 distinct lines);
+      touched files carry only their pre-existing five (activity_feed.rs:441 redundant closure, sign_request.rs complex
+      type, tracker.rs:525/534 + complex type)
+  cargo clippy --all-targets -- -D warnings           57 = 57, the same
+  live: relay::tests::live 3 passed; user_op::tests::live 1 passed
+  worktree: cargo build --release --features dev-fixtures   Finished release in 2m 20s
+  worktree: cargo test --release --no-run              only the two browser_host.rs:2201/2207 errors (T203)
+  rustfmt --edition 2024 --check on storage.rs, sign_request.rs, send.rs, tracker.rs, activity_feed.rs,
+      dapp_browser.rs   ok
+  review tests: sign_request::tests::records_written_at_once_all_stay (red: 6 of 54 rows),
+      sign_request::tests::the_post_is_cleared_only_with_its_record_on_disk (red),
+      send::tests::a_send_is_on_disk_before_its_post_and_gone_when_never_sent (T220's missing proof; red at its
+      first assertion), send::tests::a_write_ahead_replaces_an_earlier_attempt_but_never_a_landed_payment
+      (red: the relaunch sweep found 0 of 1), activity_feed::tests::a_clipped_request_still_names_its_contract (red)
+
+T226 CLOSE-OUT (T203 landed), 2026-09-29 — IN THE WORKTREE, no mirror. HEAD 11d8906f (T203: 0c305f7f the network-back
+test on the four-argument net_health_step; 11d8906f LoadDriver::retry_fired/take_due pass the moment's clock to the
+core's retry_fired_at/take_due_at, RJ9). CARGO_TARGET_DIR = /Volumes/data/production/vela-wallet/app-desktop/vela-wallet/target.
+cd app-desktop/vela-wallet
+  cargo test --release                                758 passed, 0 failed, 49 ignored   (757 + 1: the RJ9 hung-load test)
+  cargo test --release --features dev-fixtures        762 passed, 0 failed, 50 ignored
+  cargo clippy --all-targets --features dev-fixtures -- -D warnings
+      red crate-wide as before: 52 findings in the bin, 54 in the bin's tests; by file and message against DESK_B's
+      list: 0 new (three of DESK_B's own gone). browser_host.rs: 0 findings; page.rs: its six pre-existing ones
+      (:850, :4208, :4227, :6586, :11275, :11370), none on a line T203 touched (:13199, :13869).
+  cargo clippy --all-targets -- -D warnings           the same 52 / 54; touched files the same
+  cargo build --release --features dev-fixtures       Finished release; the same 10 dead-code warnings, none in the
+                                                      touched files beyond page.rs:850/:11275 (pre-existing)
+  live (real relay, read-only; no VELA_DEV_PROXY, no chaos proxy):
+    cargo test --release executor::relay::tests::live -- --ignored        3 passed
+    cargo test --release executor::user_op::tests::live -- --ignored      1 passed
+  rustfmt --edition 2024 --check src/wallet/browser_host.rs src/wallet/page.rs   ok
+  T203 tests: three_misses_then_a_reach_retry_the_failed_page_once (chains 1 + 100 → offline → back → one reload;
+      Gnosis alone ×10 → no edge, no reload), a_hung_load_is_replaced_by_the_attempt_due_after_twenty_seconds
+      (red with the clockless calls), the_chain_notice_comes_after_the_first_pass_while_the_read_waits,
+      a_skipped_attempt_is_logged_once_per_load, the_probe_names_its_route.
+Not run: device rows (C1, L2–L4, DX3′) — the device re-run T252; no device, app, Chrome or chaos proxy was touched.
+
+REVIEW (T203 + T226 adversarial reviewer), 2026-09-29, after 30906a09 — IN THE WORKTREE; reverts proven in a
+scratch copy (symlinked tree, a copy of app-desktop/vela-wallet), never with git stash.
+CARGO_TARGET_DIR = /Volumes/data/production/vela-wallet/app-desktop/vela-wallet/target.
+cd app-desktop/vela-wallet
+  cargo test --release                                760 passed, 0 failed, 49 ignored   (758 + 2 review tests)
+  cargo test --release --features dev-fixtures        764 passed, 0 failed, 50 ignored
+  cargo clippy --all-targets --features dev-fixtures -- -D warnings
+      red crate-wide as before: 57 distinct findings (52 bin / 54 bin-test) = 57 before; browser_host.rs 0;
+      page.rs its six pre-existing (:850, :4208, :4227, :6586, :11275, :11370), none on a touched line (:13199-13205)
+  cargo clippy --all-targets -- -D warnings           the same 57 / 52 / 54; touched files the same
+  cargo build --release --features dev-fixtures       Finished release; the same 10 dead-code warnings
+  rustfmt --edition 2024 (stdin) on src/wallet/browser_host.rs, src/wallet/page.rs   clean
+  live relay / live estimate                          not re-run: no executor file touched since the close-out
+  review tests
+    the_attempt_taken_on_return_reads_the_engine_first   red before, both legs: a load at 0.5 taken at 25 s on
+        return → Navigate (restarted an arriving load, W7); a load WebKit dropped by 15 s → Retry, not Navigate
+    a_page_read_going_out_starts_the_health_beat          red in the scratch copy with the beat's start
+        (act: read_watch.started → watch_reads) or the read's settle removed; green otherwise
+  scratch-copy reverts of the implementer's product lines
+    LoadDriver → clockless retry_fired/take_due          a_hung_load_is_replaced_… FAILED (as 11d8906f says)
+    skip guard removed                                   a_skipped_attempt_is_logged_once_per_load and the
+                                                         hung-load test FAILED
+    beat wiring removed (before the review test)         30 of 30 green: the proof gap the review test closes
+Not run: device rows C1, L2–L4 (+ leave Explore during a hung load, return after 20 s), DX3′ — the device
+re-run T252; no device, app, Chrome, WDA or chaos proxy was touched.

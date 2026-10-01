@@ -1,0 +1,22 @@
+# T183 (force-quit during the may-have-been-sent caption, relaunch) — iPhone, build fb8c7026 (round 1)
+# run A (09:05-09:07): op 0x7621ab25a751a06de0699ada09aed18ab3c124505ed87e1dc2cf3a1cfaa7a07d landed 09:06:35 blk 48491275 nonce 52; relaunch 09:07:03; first shot 09:07:15 already confirmed
+09:06:27.274 2026-09-29 09:06:27.286501+0800 VelaWallet[1788:541975] [relay] submitting chain=100 hash=0x7621ab25a7
+09:06:59.663 2026-09-29 09:06:59.683715+0800 VelaWallet[1788:541975] [relay] maybe_sent hash=0x7621ab25a7 attempts=1 in=32397ms
+09:06:59.663 2026-09-29 09:06:59.683773+0800 VelaWallet[1788:541975] [sign] submit verdict=maybe_sent hash=0x7621ab25a7 chain=100
+09:07:03.646 [vela-wallet] dev proxy: all traffic via 192.168.50.17:8897
+09:07:04.063 [vela-wallet] parallel space: entered as 0x88cCA0EeDbF2C4426110bbFc998F048689266894
+09:07:15.098 2026-09-29 09:07:15.094950+0800 VelaWallet[1809:550731] [tracker] tracker confirmed op=0x7621ab25a7 chain=100
+09:07:15.098 2026-09-29 09:07:15.095985+0800 VelaWallet[1809:550731] [balance] balance refresh (holdings_moved) chain=100
+09:07:45.475 2026-09-29 09:07:45.498396+0800 VelaWallet[1809:550731] [tracker] op=0x7621ab25a7 status unavailable
+# run B (09:08-09:10): op 0x03033a6400ec96df3127a2e8ed2009ba85f5cd78577e0a1ec948f384b43d9d0a landed 09:09:45 blk 48491312 nonce 53 tx 0x856d368b…7ce48c
+09:09:38.384 2026-09-29 09:09:38.394870+0800 VelaWallet[1809:550731] [relay] submitting chain=100 hash=0x03033a6400
+09:10:10.069 2026-09-29 09:10:10.073978+0800 VelaWallet[1809:550731] [relay] maybe_sent hash=0x03033a6400 attempts=1 in=31679ms
+09:10:10.069 2026-09-29 09:10:10.074025+0800 VelaWallet[1809:550731] [sign] submit verdict=maybe_sent hash=0x03033a6400 chain=100
+09:10:13.630 (Mac) caption seen -> 09:10:14.075 devicectl --terminate-existing relaunch (same JSON)
+09:10:14.701 [vela-wallet] dev proxy: all traffic via 192.168.50.17:8897
+09:10:15.116 [vela-wallet] parallel space: entered as 0x88cCA0EeDbF2C4426110bbFc998F048689266894
+09:10:25.839 2026-09-29 09:10:25.867125+0800 VelaWallet[1817:552194] [tracker] tracker confirmed op=0x03033a6400 chain=100
+09:10:25.839 2026-09-29 09:10:25.867839+0800 VelaWallet[1817:552194] [balance] balance refresh (holdings_moved) chain=100
+09:10:57.203 2026-09-29 09:10:57.173570+0800 VelaWallet[1817:552194] [tracker] op=0x03033a6400 status unavailable
+# frames: home first drawn 09:10:17.4 with 'dApp 交易 · 处理中 · ….17:8140'; 总余额 · USD $8.58 until 09:10:18.1, then 总余额 · CNY ¥57.54
+# chaos: mute vela-relay 09:09:04 → pass+cut 09:11:37 (after the row confirmed)

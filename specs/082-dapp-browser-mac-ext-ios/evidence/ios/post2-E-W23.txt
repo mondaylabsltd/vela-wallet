@@ -1,0 +1,24 @@
+# E-W23 — iPhone build fb8c7026. 'log collect --device-udid 00008030-001A75961445802E --last 2h' -> 'log: Must be root to collect logs from attached device' (no password path; not run). Lines below are the app's os.Logger/print lines from the devicectl --console stdout (OS_ACTIVITY_DT_MODE=YES), Mac-stamped.
+# failure row | line found (first occurrence) | names host/service + kind?
+E-G28a/b/c | [browser] timeout stalled host=app.uniswap.org after=20106ms
+IX2 | [browser] timeout stalled host=example.org after=20784ms
+E-G31, E-W5-back | [browser] offline failed host=app.uniswap.org NSURLErrorDomain -1000 → offline
+E-W5-back recovery | [net] net came back (rpc)
+L5 | [browser] certificate failed host=expired.badssl.com NSURLErrorDomain -1202 → certificate
+X-DEADPROXY | [browser] refused failed host=app.uniswap.org NSURLErrorDomain -1004 → refused
+X-DEADPROXY wallet | [net] offline misses=3
+C1 | [rpc] chain notice: retry chain=100
+C1 notice shown/cleared | NONE — only '[rpc] chain notice: retry chain=100' and 'retry → ok' from the Retry tap; nothing when the notice appears or clears
+IX6 fee blocked by an unreadable deployment | NONE in 4.5 min (no [fee] line; the deploy read never returned)
+S7/S8 relay dropped on the fee | '[rpc] gave_up chain=100 method=vela_getInBandGasQuote kind=bundler' (method + kind, no host; no [fee] line for failure or recovery)
+IX-W1, IX8 #1-2, T183 | [relay] maybe_sent hash=0xdd6ad0a27e attempts=1 in=32012ms
+IX-W1, IX8, T183 | [sign] submit verdict=maybe_sent hash=0xdd6ad0a27e chain=100
+S5 | [relay] not_sent rejection=none attempts=1
+T183 relaunch | [tracker] tracker confirmed op=0xdd6ad0a27e chain=100
+IX-W1 first try: mute while the sheet re-quotes | '[rpc] gave_up chain=100 method=eth_estimateUserOperationGas kind=bundler' then gave_up for pimlico_getUserOperationGasPrice / vela_getInBandGasQuote every ~32 s; nothing says the slide is shut
+IX7 probe: relay rejected an accepted op | NONE — the sheet turned 失败 at 09:21:43 with no [tracker]/[relay]/[sign] line; the dApp's ok+op-hash answer at 09:23:28 has no line either
+# Settings → 反馈 → 将要发送的内容 (in-memory, per launch):
+#  09:56 (fresh launch 09:43): 无法连接的 RPC 无 / 最近失败 无
+#  09:58 after expired.badssl.com, drop uniswap, blackhole example: 'browser: certificate; browser: offline; browser: offline; browser: offline; browser: timeout; browser: timeout'
+#  10:03 after a relay-dropped send (nonce 61 unchanged): 'browser: offline; browser: offline; browser: offline; browser: timeout; browser: timeout; rpc: gave_up; rpc: gave_up; relay: not_sent' (8 newest; certificate aged out)
+#  no host, URL, address or hash in any preview

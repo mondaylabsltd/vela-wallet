@@ -1,0 +1,116 @@
+# SC-006a/b — iPhone build fb8c7026, no fault (dev proxy 192.168.50.17:8897 in pass mode, upstream = the Mac's proxy). Script scratchpad/sc006b.sh (adapted from sc006_ios.sh: states polled, 8 s cap for .invalid, 20 s for dApps), then inv.sh (40 s cap).
+10:05:53 GO https://vela-t1.invalid
+10:06:02 https://vela-t1.invalid +8s -> no panel
+10:06:07 GO https://vela-t2.invalid
+10:06:17 https://vela-t2.invalid +9s -> no panel
+10:06:23 GO https://vela-t3.invalid
+10:06:33 https://vela-t3.invalid +9s -> no panel
+10:06:40 GO https://vela-t4.invalid
+10:06:50 https://vela-t4.invalid +8s -> no panel
+10:06:56 GO https://vela-t5.invalid
+10:07:06 https://vela-t5.invalid +9s -> no panel
+10:07:13 GO https://vela-t6.invalid
+10:07:23 https://vela-t6.invalid +8s -> no panel
+10:07:29 GO https://vela-t7.invalid
+10:07:39 https://vela-t7.invalid +9s -> no panel
+10:07:45 GO https://vela-t8.invalid
+10:07:55 https://vela-t8.invalid +9s -> no panel
+10:08:01 GO https://vela-t9.invalid
+10:08:11 https://vela-t9.invalid +9s -> no panel
+10:08:17 GO https://vela-t10.invalid
+10:08:27 https://vela-t10.invalid +8s -> no panel
+10:08:33 GO https://example.com
+10:09:04 https://example.com +22s -> no panel
+10:09:19 GO https://app.uniswap.org
+10:10:07 https://app.uniswap.org +32s -> no panel
+10:10:29 GO https://pancakeswap.finance
+10:10:57 https://pancakeswap.finance +21s -> no panel
+10:11:09 GO https://app.aave.com
+10:12:27 https://app.aave.com +44s -> no panel
+10:13:07 GO https://curve.fi
+10:14:23 https://curve.fi +74s -> no panel
+10:14:32 GO https://app.1inch.io
+10:15:11 https://app.1inch.io +29s -> no panel
+10:15:26 GO https://www.sushi.com
+10:16:34 https://www.sushi.com +66s -> no panel
+10:16:42 GO https://lido.fi
+10:17:09 https://lido.fi +20s -> no panel
+10:17:23 GO https://app.compound.finance
+10:17:45 https://app.compound.finance +20s -> no panel
+10:17:55 GO https://jumper.exchange
+10:19:05 https://jumper.exchange +67s -> no panel
+# note: the '+Ns' above includes the time WDA needed to dump the heavy dApp pages; the app's own commit times are the log lines below
+ [browser] requested host=vela-t1.invalid
+ [browser] requested host=vela-t2.invalid
+ [browser] requested host=vela-t3.invalid
+ [browser] requested host=vela-t4.invalid
+ [browser] requested host=vela-t5.invalid
+ [browser] requested host=vela-t6.invalid
+ [browser] requested host=vela-t7.invalid
+ [browser] requested host=vela-t8.invalid
+ [browser] requested host=vela-t9.invalid
+ [browser] requested host=vela-t10.invalid
+ [browser] requested host=example.com
+ [browser] committed host=example.com
+ [browser] requested host=app.uniswap.org
+ [browser] committed host=app.uniswap.org
+ [browser] requested host=pancakeswap.finance
+ [browser] committed host=pancakeswap.finance
+ [browser] requested host=app.aave.com
+ [browser] committed host=app.aave.com
+ [browser] requested host=curve.fi
+ [browser] committed host=www.curve.finance
+ [browser] requested host=app.1inch.io
+ [browser] committed host=1inch.com
+ [browser] requested host=www.sushi.com
+ [browser] committed host=www.sushi.com
+ [browser] requested host=lido.fi
+ [browser] committed host=lido.fi
+ [browser] requested host=app.compound.finance
+ [browser] committed host=app.compound.xyz
+ [browser] committed host=app.compound.xyz
+ [browser] requested host=jumper.exchange
+ [browser] committed host=jumper.xyz
+ [browser] requested host=vela-t11.invalid
+ [browser] certificate failed host=vela-t11.invalid NSURLErrorDomain -1200 → certificate
+ [browser] requested host=vela-t12.invalid
+ [browser] certificate failed host=vela-t12.invalid NSURLErrorDomain -1200 → certificate
+ [browser] requested host=vela-t13.invalid
+ [browser] certificate failed host=vela-t13.invalid NSURLErrorDomain -1200 → certificate
+# chaos (vela-t11): CONNECT passed upstream 8 times in 18 s (10:20:02..10:20:20), then WebKit -1200
+10:20:02 PASS vela-t11.invalid:443 7ms
+10:20:05 PASS vela-t11.invalid:443 0ms
+10:20:07 PASS vela-t11.invalid:443 0ms
+10:20:10 PASS vela-t11.invalid:443 0ms
+10:20:13 PASS vela-t11.invalid:443 1ms
+10:20:15 PASS vela-t11.invalid:443 0ms
+10:20:18 PASS vela-t11.invalid:443 0ms
+10:20:20 PASS vela-t11.invalid:443 1ms
+# SC-006a long-wait run (inv.sh):
+10:20:02 GO vela-t11.invalid
+10:20:25 +22s -> 无法加载此页面/网站证书有问题，Vela 已阻止打开。/
+10:20:41 +14s later -> 无法加载此页面/网站证书有问题，Vela 已阻止打开。/
+10:20:49 GO vela-t12.invalid
+10:21:12 +21s -> 无法加载此页面/网站证书有问题，Vela 已阻止打开。/
+10:21:27 +14s later -> 无法加载此页面/网站证书有问题，Vela 已阻止打开。/
+10:21:35 GO vela-t13.invalid
+10:21:59 +22s -> 无法加载此页面/网站证书有问题，Vela 已阻止打开。/
+10:22:14 +14s later -> 无法加载此页面/网站证书有问题，Vela 已阻止打开。/
+RECENT: Jumper | Smart App for the Universal Market, jumper.xyz
+RECENT: Compound Dashboard, app.compound.xyz
+RECENT: Lido Liquid Staking, lido.fi
+RECENT: Swap | Sushi 🍣, www.sushi.com
+RECENT: 1inch | Swap Crypto Tokens at the Best Rates in DeFi, 1inch.
+RECENT: Curve.finance, www.curve.finance
+RECENT2: Swap | Sushi 🍣, www.sushi.com
+RECENT2: 1inch | Swap Crypto Tokens at the Best Rates in DeFi, 1inch.
+RECENT2: Curve.finance, www.curve.finance
+RECENT2: Aave - Open Source Liquidity Protocol, app.aave.com
+RECENT2: Home | PancakeSwap, pancakeswap.finance
+RECENT2: Uniswap Interface, app.uniswap.org
+RECENT2: Example Domain, example.com
+RECENT2: 082 iPhone scratch B, 192.168.50.17:8140
+RECENT2: Example Domain, example.org
+RECENT2: Vela test dApp (Android), 192.168.50.17:8138
+RECENT2: Vela test dApp (Android), 192.168.50.17:8137
+# Recents before the run (top 5): 082 iPhone scratch B · 192.168.50.17:8140 / Example Domain · example.org / Uniswap Interface · app.uniswap.org / Vela test dApp (Android) · 192.168.50.17:8138 / … :8137

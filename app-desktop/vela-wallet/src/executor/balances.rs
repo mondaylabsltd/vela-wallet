@@ -57,10 +57,9 @@ use std::thread;
 use serde_json::{Value, json};
 
 use vela_core::app::balance_dashboard::{
-    BalanceToken, NativeQuoteGroup, best_native_dex_price, choose_native_price,
-    first_grouped_quote_price,
+    BalanceToken, NativeQuoteGroup, ReadKind, ReadSlot, StableRef, TokenRef, best_native_dex_price,
+    choose_native_price, first_grouped_quote_price, read_plan,
 };
-use vela_core::app::fee_policy::TEMPO_CHAIN_IDS;
 use vela_core::app::network_admin::BUILTIN_CHAINS;
 
 use crate::executor::abi::{self, Call3, McResult};
@@ -136,6 +135,8 @@ struct Slot {
     contract: Option<String>,
     category: Category,
     known_decimals: Option<u32>,
+    /// A registry stablecoin's peg, from the core's read plan.
+    peg_usd: Option<f64>,
     /// Index into the batch for this slot's `balanceOf`. `None` for the native
     /// coin, which is read by its own call.
     balance_at: Option<usize>,
@@ -143,9 +144,13 @@ struct Slot {
     decimals_at: Option<usize>,
 }
 
-/// Does this chain have a native coin somebody can hold?
+/// The core's read plan (`balance_dashboard::read_plan`, spec 082 RE9) for
+/// one chain: its stablecoins and wrapped coin from the chain data, and the
+/// person's own tokens on that chain.
 ///
-/// Tempo does not: its gas is a TIP-20 stablecoin (`fee_policy`'s
+/// The plan has no native slot on a chain with no native coin somebody can
+/// hold (`chain_has_native_coin`). Tempo does not: its gas is a TIP-20
+/// stablecoin (`fee_policy`'s
 /// `TEMPO_DEFAULT_FEE_TOKEN`), and there is no coin behind `eth_getBalance`.
 ///
 /// **MEASURED 2026-09-04.** `rpc.mainnet.tempo.xyz` answers
@@ -158,8 +163,44 @@ struct Slot {
 /// This was invisible before this phase: with every `price_usd` at `None` the
 /// total was zero however large the quantity. The two changes that made money
 /// visible are the two that made this dangerous.
-fn has_native_coin(chain_id: u32) -> bool {
-    !TEMPO_CHAIN_IDS.contains(&chain_id)
+fn read_plan_for(chain_id: u32, stables: &[StableToken], wrapped: Option<&str>) -> Vec<ReadSlot> {
+    let stables: Vec<StableRef> = stables
+        .iter()
+        .map(|stable| StableRef {
+            symbol: stable.symbol.clone(),
+            contract: stable.contract.clone(),
+        })
+        .collect();
+    let custom: Vec<TokenRef> = custom_tokens::read()
+        .into_iter()
+        .filter(|token| token.chain_id == chain_id)
+        // A saved token claiming more than 255 decimals is not a token any
+        // balance can be shown for.
+        .filter_map(|token| {
+            Some(TokenRef {
+                contract: token.contract_address,
+                symbol: token.symbol,
+                name: token.name,
+                decimals: u8::try_from(token.decimals).ok()?,
+            })
+        })
+        .collect();
+    read_plan(chain_id, &stables, wrapped, &custom)
+}
+
+/// The batch index of a stablecoin's own `decimals()` read — found by its
+/// contract, since the plan dedupes and the list's order is not the slots'.
+fn stable_decimals_at(slots: &[Slot], contract: &str) -> Option<usize> {
+    slots
+        .iter()
+        .find(|slot| {
+            slot.category == Category::Stable
+                && slot
+                    .contract
+                    .as_deref()
+                    .is_some_and(|held| held.eq_ignore_ascii_case(contract))
+        })
+        .and_then(|slot| slot.decimals_at)
 }
 
 /// One chain's native balance in base units, or `None` if the chain could not
@@ -361,93 +402,70 @@ fn chain_tokens_for(
     );
     let native_decimals = data.as_ref().map_or(18, |d| d.native_decimals);
 
+    // Which balances this chain's read covers is the core's (spec 082 RE9):
+    // the native coin unless the chain has none, the registry stablecoins,
+    // the wrapped coin unless it IS the coin, the person's own tokens — one
+    // contract once, the person's metadata winning. This file only reads
+    // them. A chain with no native coin is still READ, for reachability — it
+    // simply has no row to show for it.
+    let plan = read_plan_for(chain_id, &stables, wrapped.as_deref());
     let mut calls: Vec<Call3> = Vec::new();
-    // A chain with no native coin is still READ, for reachability — it simply
-    // has no row to show for it.
-    let mut slots: Vec<Slot> = if has_native_coin(chain_id) {
-        vec![Slot {
-            symbol: native_symbol.clone(),
-            name: native_name,
-            contract: None,
-            category: Category::Native,
-            known_decimals: Some(native_decimals),
-            balance_at: None,
-            decimals_at: None,
-        }]
-    } else {
-        Vec::new()
-    };
-    let native_slots = slots.len();
-
-    for stable in &stables {
+    let mut slots: Vec<Slot> = Vec::with_capacity(plan.len());
+    for planned in plan {
+        let known_decimals = planned.known_decimals.map(u32::from);
+        let (symbol, name, category) = match planned.kind {
+            ReadKind::Native => {
+                slots.push(Slot {
+                    symbol: native_symbol.clone(),
+                    name: native_name.clone(),
+                    contract: None,
+                    category: Category::Native,
+                    known_decimals: Some(native_decimals),
+                    peg_usd: None,
+                    balance_at: None,
+                    decimals_at: None,
+                });
+                continue;
+            }
+            ReadKind::Stable => (planned.symbol, planned.name, Category::Stable),
+            ReadKind::Wrapped if planned.symbol.is_empty() => (
+                format!("W{native_symbol}"),
+                format!("Wrapped {native_symbol}"),
+                Category::Wrapped,
+            ),
+            ReadKind::Wrapped => (planned.symbol, planned.name, Category::Wrapped),
+            ReadKind::Custom => (planned.symbol, planned.name, Category::Custom),
+        };
+        let Some(contract) = planned.contract else {
+            continue;
+        };
         let balance_at = calls.len();
         calls.push(Call3 {
-            target: stable.contract.clone(),
+            target: contract.clone(),
             call_data: abi::enc_balance_of(address),
         });
-        let decimals_at = calls.len();
-        calls.push(Call3 {
-            target: stable.contract.clone(),
-            call_data: abi::enc_decimals(),
+        // A stablecoin's and the wrapped coin's own `decimals()` are read even
+        // when a saved entry names them: the DEX quotes below scale by the
+        // quote token's decimals as the chain reports them.
+        let decimals_at = (category != Category::Custom).then(|| {
+            calls.push(Call3 {
+                target: contract.clone(),
+                call_data: abi::enc_decimals(),
+            });
+            calls.len() - 1
         });
         slots.push(Slot {
-            symbol: stable.symbol.clone(),
-            name: stable.symbol.clone(),
-            contract: Some(stable.contract.clone()),
-            category: Category::Stable,
-            known_decimals: None,
+            symbol,
+            name,
+            contract: Some(contract),
+            category,
+            // A custom token's decimals were read from the chain when it was
+            // added, and all-or-nothing then (`manage_tokens.rs`), so they are
+            // a fact rather than a guess.
+            known_decimals,
+            peg_usd: planned.peg_usd,
             balance_at: Some(balance_at),
-            decimals_at: Some(decimals_at),
-        });
-    }
-
-    // Not on a chain whose "wrapped" native IS the native (spec 038, the
-    // founder's Celo report): the core knows the two, and listing both would
-    // count one holding twice. The address still serves the price quote below.
-    if let Some(wrapped) = wrapped
-        .as_ref()
-        .filter(|w| !vela_core::app::balance_dashboard::wrapped_native_is_the_native(chain_id, w))
-    {
-        let balance_at = calls.len();
-        calls.push(Call3 {
-            target: wrapped.clone(),
-            call_data: abi::enc_balance_of(address),
-        });
-        let decimals_at = calls.len();
-        calls.push(Call3 {
-            target: wrapped.clone(),
-            call_data: abi::enc_decimals(),
-        });
-        slots.push(Slot {
-            symbol: format!("W{native_symbol}"),
-            name: format!("Wrapped {native_symbol}"),
-            contract: Some(wrapped.clone()),
-            category: Category::Wrapped,
-            known_decimals: None,
-            balance_at: Some(balance_at),
-            decimals_at: Some(decimals_at),
-        });
-    }
-
-    for token in custom_tokens::read()
-        .into_iter()
-        .filter(|token| token.chain_id == chain_id)
-    {
-        let balance_at = calls.len();
-        calls.push(Call3 {
-            target: token.contract_address.clone(),
-            call_data: abi::enc_balance_of(address),
-        });
-        slots.push(Slot {
-            symbol: token.symbol.clone(),
-            name: token.name.clone(),
-            contract: Some(token.contract_address.clone()),
-            category: Category::Custom,
-            // Read from the chain when the token was added, and all-or-nothing
-            // then (`manage_tokens.rs`), so it is a fact rather than a guess.
-            known_decimals: Some(token.decimals),
-            balance_at: Some(balance_at),
-            decimals_at: None,
+            decimals_at,
         });
     }
 
@@ -459,14 +477,10 @@ fn chain_tokens_for(
     if let (Some(wrapped), Some(dex), Some(amount_in)) =
         (wrapped.as_ref(), dex.as_ref(), one_whole(native_decimals))
     {
-        for (index, stable) in stables.iter().enumerate() {
+        for stable in &stables {
             let indices = push_quote_calls(&mut calls, dex, wrapped, &stable.contract, amount_in);
             if !indices.is_empty() {
-                // The stables follow the native slot, where there is one.
-                quote_groups.push((
-                    indices,
-                    slots.get(native_slots + index).and_then(|s| s.decimals_at),
-                ));
+                quote_groups.push((indices, stable_decimals_at(&slots, &stable.contract)));
             }
         }
     }
@@ -497,12 +511,7 @@ fn chain_tokens_for(
                 let indices =
                     push_quote_calls(&mut calls, dex, &contract, &stable.contract, amount_in);
                 if !indices.is_empty() {
-                    direct.push((
-                        indices,
-                        slots
-                            .get(native_slots + *stable_index)
-                            .and_then(|slot| slot.decimals_at),
-                    ));
+                    direct.push((indices, stable_decimals_at(&slots, &stable.contract)));
                 }
             }
             let via_native = match wrapped.as_ref() {
@@ -592,7 +601,7 @@ fn chain_tokens_for(
             // The web owns this the same way and says so at length
             // (`wallet-api.ts:498-527`), including why a de-peg gate was
             // considered and rejected.
-            Category::Stable => Some(1.0),
+            Category::Stable => slot.peg_usd,
             Category::Custom => custom_price(
                 slot,
                 &slots,
@@ -872,18 +881,48 @@ mod tests {
         assert_eq!(one_whole(255), None);
     }
 
-    /// The chain whose `eth_getBalance` is a constant gets no native row.
+    /// The chain whose `eth_getBalance` is a constant gets no native row —
+    /// the core's plan says so, and the desktop keeps no copy of the rule.
     #[test]
     fn a_chain_with_no_native_coin_reports_no_native_coin() {
-        assert!(has_native_coin(1));
-        assert!(has_native_coin(100));
-        assert!(has_native_coin(8453));
-        for chain_id in TEMPO_CHAIN_IDS {
+        for chain_id in [1, 100, 8453] {
+            assert_eq!(
+                read_plan(chain_id, &[], None, &[])[0].kind,
+                ReadKind::Native
+            );
+        }
+        for chain_id in vela_core::app::fee_policy::TEMPO_CHAIN_IDS {
             assert!(
-                !has_native_coin(chain_id),
+                read_plan(chain_id, &[], None, &[]).is_empty(),
                 "chain {chain_id} settles gas in a TIP-20 stablecoin"
             );
         }
+    }
+
+    /// Spec 082 T071 (RE9, G24): Base's read covers its registry USDC, in
+    /// the order the desktop always read — the coin, the stablecoins, the
+    /// wrapped coin, the person's own tokens — through the core's plan.
+    #[test]
+    fn bases_read_includes_usdc_in_the_old_order() {
+        crate::executor::storage::tests::with_temp_state("balances-plan", || {
+            const USDC: &str = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+            const WETH: &str = "0x4200000000000000000000000000000000000006";
+            let stables = [StableToken {
+                symbol: "USDC".to_owned(),
+                kind: "native".to_owned(),
+                contract: USDC.to_owned(),
+            }];
+            let plan = read_plan_for(8453, &stables, Some(WETH));
+            let kinds: Vec<ReadKind> = plan.iter().map(|slot| slot.kind).collect();
+            assert_eq!(
+                kinds,
+                vec![ReadKind::Native, ReadKind::Stable, ReadKind::Wrapped]
+            );
+            assert_eq!(plan[1].contract.as_deref(), Some(USDC));
+            assert_eq!(plan[1].symbol, "USDC");
+            assert_eq!(plan[1].peg_usd, Some(1.0));
+            assert_eq!(plan[2].contract.as_deref(), Some(WETH));
+        });
     }
 
     /// The two DEX protocols encode different calls, and an unknown one encodes

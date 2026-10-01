@@ -75,4 +75,11 @@ balance_changes?: Array<TrustSimJudgment> | null,
  * contract it called (a router, a token), not somebody who received
  * anything. `None` when the shell cannot say.
  */
-calldata?: boolean | null, };
+calldata?: boolean | null, 
+/**
+ * `dapp_tx` only (spec 082 RJ16): the call's `data` hex, which the shells
+ * map from the stored request (`signedRequest`), so a token `transfer`
+ * can name who got the tokens. `None` for every other kind, for a plain
+ * send, and for a shell that does not map it.
+ */
+call_data?: string | null, };

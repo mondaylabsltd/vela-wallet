@@ -75,7 +75,8 @@ struct SignInRouteTests {
             _ = try await spine.submit(
                 chainId: 100, account: address,
                 calls: [UserOpCall(to: address, value: "1000", data: "0x")],
-                gasFeeToken: nil, quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: address)
+                gasFeeToken: nil, quotedFee: UserOpSpine.Quoted(amount: "1000", recipient: address),
+                writeAhead: { _, _ in true }
             )
         }
 

@@ -747,16 +747,19 @@ pub fn judge_delta(
         return unverified;
     };
     let trusted = in_trusted_set || known_token(token).is_some();
+    // ERC-20 `decimals` is a uint8: metadata claiming more is not readable
+    // metadata (082 review) — the amount at that width is no amount.
+    let readable = |m: &TrustTokenMeta| {
+        !m.symbol.is_empty() && m.decimals <= crate::l10n::number::MAX_TOKEN_DECIMALS
+    };
     match meta {
-        Some(m) if !m.symbol.is_empty() && (!received || trusted) => {
-            TrustSimJudgment::Erc20Trusted {
-                token: token.to_owned(),
-                delta: delta.delta.clone(),
-                symbol: m.symbol.clone(),
-                decimals: m.decimals,
-                in_trusted_set: trusted,
-            }
-        }
+        Some(m) if readable(m) && (!received || trusted) => TrustSimJudgment::Erc20Trusted {
+            token: token.to_owned(),
+            delta: delta.delta.clone(),
+            symbol: m.symbol.clone(),
+            decimals: m.decimals,
+            in_trusted_set: trusted,
+        },
         _ => unverified,
     }
 }

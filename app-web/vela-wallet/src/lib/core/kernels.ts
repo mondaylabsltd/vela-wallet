@@ -15,6 +15,14 @@ import type { Assertion } from '$lib/onboarding/core/passkey';
 import type { Account } from '$lib/core/generated/Account';
 import type { KeyMethod } from '$lib/core/generated/KeyMethod';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
+import type { ReadSlot } from '$lib/core/generated/ReadSlot';
+import type { SignEnding } from '$lib/core/generated/SignEnding';
+import type { SignEndingState } from '$lib/core/generated/SignEndingState';
+import type { SignResponsePayload } from '$lib/core/generated/SignResponsePayload';
+import type { StableRef } from '$lib/core/generated/StableRef';
+import type { TokenRef } from '$lib/core/generated/TokenRef';
+import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
+import type { TrackStatusAnswer } from '$lib/core/generated/TrackStatusAnswer';
 
 export {
 	PROXY_CREATION_CODE,
@@ -567,18 +575,7 @@ export function attestSafeOpHash(
 	chainId: number
 ): Uint8Array {
 	return translated(() => {
-		const opJson = JSON.stringify({
-			sender: op.sender,
-			nonce: op.nonce,
-			init_code_hex: toHex(op.initCode),
-			call_data_hex: toHex(op.callData),
-			verification_gas_limit: op.verificationGasLimit.toString(),
-			call_gas_limit: op.callGasLimit.toString(),
-			pre_verification_gas: op.preVerificationGas.toString(),
-			max_fee_per_gas: op.maxFeePerGas.toString(),
-			max_priority_fee_per_gas: op.maxPriorityFeePerGas.toString(),
-			paymaster_and_data_hex: toHex(op.paymasterAndData)
-		});
+		const opJson = attestOpJson(op);
 		const callsJson =
 			calls === null
 				? ''
@@ -712,7 +709,10 @@ export function trustedSignerRegistryRpId(signerOrigin: string | null): string |
  * naming the parties found when its members do not agree — refused here rather
  * than written on chain and never provable.
  */
-export function trustedSignerUnitRpId(memberOrigins: (string | null)[], walletRpId: string): string {
+export function trustedSignerUnitRpId(
+	memberOrigins: (string | null)[],
+	walletRpId: string
+): string {
 	return translated(() => wasm.trustedSignerUnitRpId(JSON.stringify(memberOrigins), walletRpId));
 }
 
@@ -761,14 +761,43 @@ export function typicalInclusionSeconds(chainId: number): number {
 }
 
 /**
+ * A `FeeFailure` as the wasm exports take it: the wire name for the plain
+ * variants, the JSON for `ChainRead` (spec 082 RJ13), which is an object.
+ */
+function feeFailureWire(failure: FeeFailure): string {
+	return typeof failure === 'string' ? failure : JSON.stringify(failure);
+}
+
+/**
  * The wait before automatic fee re-quote `attempt` (1-based) after `failure`,
- * or `null` when no retry can fix it (`fee_policy::requote_delay_ms`, spec 079:
- * 3 s, 6 s, 12 s, then every 15 s for a relay out of reach or a busy estimate;
- * never for a missing public key or a calculation that cannot come out). The
- * signing sheet re-asks on the schedule every other client uses.
+ * or `null` when no retry can fix it (`fee_policy::requote_delay_ms`: 3 s,
+ * 6 s, then every 8 s for a relay out of reach, a busy estimate or a chain
+ * read that got no answer — spec 082 RJ12; never for a missing public key or
+ * a calculation that cannot come out). The signing sheet re-asks on the
+ * schedule every other client uses.
  */
 export function feeRequoteDelayMs(failure: FeeFailure, attempt: number): number | null {
-	return wasm.feeRequoteDelayMs(failure, attempt) ?? null;
+	return wasm.feeRequoteDelayMs(feeFailureWire(failure), attempt) ?? null;
+}
+
+/**
+ * The bound on each automatic fee re-quote, in ms (`fee_policy::REQUOTE_TIMEOUT_MS`,
+ * spec 082 RJ12): a re-ask that has not settled by then is given up and the
+ * next one is scheduled, so the fee is back within wait + bound of the relay
+ * returning.
+ */
+export function feeRequoteTimeoutMs(): number {
+	return wasm.feeRequoteTimeoutMs();
+}
+
+/**
+ * The corpus key of the reason line under a failed fee, or `null` for none
+ * (`fee_policy::failure_reason_key`, spec 082 RJ13): the relay out of reach,
+ * a rate-limited chain node, or a chain node out of reach (`explore.chainDown`,
+ * whose `{{chain}}` the shell fills). The shell never picks these words itself.
+ */
+export function feeFailureReasonKey(failure: FeeFailure): string | null {
+	return wasm.feeFailureReasonKey(feeFailureWire(failure)) ?? null;
 }
 
 /**
@@ -820,4 +849,251 @@ export function amountTextClean(
  */
 export function amountTextCaret(raw: string, clean: string, caret: number): number {
 	return wasm.amountTextCaret(raw, clean, caret);
+}
+
+// ---------------------------------------------------------------------------
+// Spec 082 — submit, answer, reads: the core's rules the web shell draws from
+// ---------------------------------------------------------------------------
+
+/** The operation in the `attestSafeOpHash` wire shape (gas decimal, bytes hex). */
+function attestOpJson(op: AttestOp): string {
+	return JSON.stringify({
+		sender: op.sender,
+		nonce: op.nonce,
+		init_code_hex: toHex(op.initCode),
+		call_data_hex: toHex(op.callData),
+		verification_gas_limit: op.verificationGasLimit.toString(),
+		call_gas_limit: op.callGasLimit.toString(),
+		pre_verification_gas: op.preVerificationGas.toString(),
+		max_fee_per_gas: op.maxFeePerGas.toString(),
+		max_priority_fee_per_gas: op.maxPriorityFeePerGas.toString(),
+		paymaster_and_data_hex: toHex(op.paymasterAndData)
+	});
+}
+
+/**
+ * The EntryPoint v0.7 `getUserOpHash` of `op` on `chainId`, 0x-lowercase —
+ * `user_op::user_op_hash` (RA6). Known before the POST, so an op whose reply is
+ * lost still has a name to be followed by. The relay's own hash always wins.
+ */
+export function userOpHash(op: AttestOp, chainId: number): string {
+	return translated(() => wasm.userOpHash(attestOpJson(op), BigInt(chainId)));
+}
+
+/** What one POST of `eth_sendUserOperation` came back with (`SubmitReply`). */
+export type SubmitReply =
+	| { hash: string }
+	/** The JSON-RPC `error` member, as the relay sent it. */
+	| { error: unknown }
+	/** The pool gave up: no endpoint answered. */
+	| 'no_answer';
+
+/** Why the relay refused an op it never queued (`RelayRejection`). */
+export type RelayRejection =
+	| 'relayer_unavailable'
+	| 'bundler_underfunded'
+	| { nonce_held: { user_op_hash: string } }
+	| { other: string };
+
+/** The end of one submit (`SubmitVerdict`). Hand-written: no ts-rs type exists. */
+export type SubmitVerdict =
+	| { type: 'accepted'; user_op_hash: string }
+	/** The reply was lost after bytes may have left: `user_op_hash` is the local hash. */
+	| { type: 'maybe_sent'; user_op_hash: string }
+	/** Provably not queued. `null` = the relay was never reached. */
+	| { type: 'not_sent'; rejection: RelayRejection | null };
+
+/** One step of the submit loop (`SubmitStep`). */
+export type SubmitStep = { retry_after: { delay_ms: number } } | { done: SubmitVerdict };
+
+/**
+ * One step of the submit loop — `user_op::submit_step` (RA1). `attempt` is the
+ * 0-based count of POSTs of this op, the one just answered included;
+ * `maybeDelivered` the OR over every POST of this op of the pool's verdict.
+ */
+export function userOpSubmitStep(
+	reply: SubmitReply,
+	attempt: number,
+	maybeDelivered: boolean,
+	localHash: string
+): SubmitStep {
+	return translated(
+		() =>
+			JSON.parse(
+				wasm.userOpSubmitStep(JSON.stringify(reply), attempt, maybeDelivered, localHash)
+			) as SubmitStep
+	);
+}
+
+/** The dApp's `-32603` detail for an op that was not sent and has no refusal to quote (RA10). */
+export function userOpNotSentDetail(): string {
+	return wasm.userOpNotSentDetail();
+}
+
+/**
+ * The core's sentence for a request that could not go out behind another of
+ * the account's operations (083, `nonce_held`) — never that operation's hash.
+ */
+export function userOpPreviousPendingDetail(): string {
+	return wasm.userOpPreviousPendingDetail();
+}
+
+/**
+ * The dApp's `-32603` detail for an op the relay refused (spec 082 RJ3,
+ * `user_op::REFUSED_DAPP_DETAIL`): "the network refused this transaction;
+ * nothing was sent".
+ */
+export function userOpRefusedDappDetail(): string {
+	return wasm.userOpRefusedDappDetail();
+}
+
+/**
+ * How long a shell waits for the write-ahead's clearance after `OpSigned`
+ * (`user_op::WRITE_AHEAD_WAIT_MS`, spec 082 RJ1). None in time → no POST,
+ * and the submit is reported as not sent.
+ */
+export function userOpWriteAheadWaitMs(): number {
+	return wasm.userOpWriteAheadWaitMs();
+}
+
+/**
+ * What a failed relay estimate says (`user_op::EstimateFailure`, spec 082
+ * RJ19). Hand-written: the core type carries no ts-rs derive. `reason` is
+ * the revert's own words, already cleaned by the core (RG8), or `null`.
+ */
+export type EstimateFailure = { type: 'reverts'; reason: string | null } | { type: 'unavailable' };
+
+/**
+ * Classify a failed `eth_estimateUserOperationGas` (`user_op::estimate_failure`):
+ * `errorJson` is the JSON-RPC `error` member, or the whole body, or `''` for
+ * no answer. A revert ("reverted", AA23, -32521) → `reverts`; a timeout, an
+ * exhausted pool, a rate limit, a signature (AA21) → `unavailable`.
+ */
+export function userOpEstimateFailure(errorJson: string): EstimateFailure {
+	try {
+		const parsed = JSON.parse(wasm.userOpEstimateFailure(errorJson)) as EstimateFailure;
+		if (parsed.type === 'reverts') return { type: 'reverts', reason: parsed.reason ?? null };
+		return { type: 'unavailable' };
+	} catch {
+		return { type: 'unavailable' };
+	}
+}
+
+/**
+ * A signed balance change, as the sheet writes it (`l10n::format_signed_token_amount`,
+ * spec 082 RJ15): `null` for zero (never drawn), U+2212 for a minus, `+` for a
+ * gain, and a dust amount written exactly instead of `−0`. `preset` is the
+ * number preset's wire name (`comma_dot` when unknown).
+ */
+export function formatSignedTokenAmount(
+	deltaBaseUnits: string | bigint,
+	decimals: number,
+	preset: string
+): string | null {
+	return wasm.formatSignedTokenAmount(String(deltaBaseUnits), decimals, preset) ?? null;
+}
+
+/** The relay's lifecycle-status method (RA7) — the only spelling it serves. */
+export function userOpStatusMethod(): string {
+	return wasm.userOpStatusMethod();
+}
+
+/** One parsed status answer (`TrackStatusAnswer`), or `null` for an unknown status. */
+export function parseUserOpStatus(resultJson: string): TrackStatusAnswer | null {
+	const answer = wasm.parseUserOpStatus(resultJson);
+	return answer === undefined ? null : (JSON.parse(answer) as TrackStatusAnswer);
+}
+
+/** What the answer to a request stands for, before the tracker is asked (RA8). */
+export function signEndingOf(
+	method: string,
+	payload: SignResponsePayload,
+	submittedUserOp: string | null
+): SignEnding | null {
+	return translated(() => {
+		const ending = wasm.signEndingOf(method, JSON.stringify(payload), submittedUserOp);
+		return ending === undefined ? null : (JSON.parse(ending) as SignEnding);
+	});
+}
+
+/** What the sheet draws for an ending once the tracker had its say (RA8). */
+export function signEndingState(
+	ending: SignEnding,
+	entry: TrackEntryView | null | undefined
+): SignEndingState {
+	return translated(
+		() =>
+			JSON.parse(
+				wasm.signEndingState(JSON.stringify(ending), entry ? JSON.stringify(entry) : null)
+			) as SignEndingState
+	);
+}
+
+/** How long the dApp's receipt wait may still run, `elapsedMs` after approval (RA12). */
+export function dappReceiptWaitMs(elapsedMs: number): number {
+	return wasm.dappReceiptWaitMs(elapsedMs);
+}
+
+/**
+ * The page's "not confirmed yet" for an operation that may still land —
+ * `sign_request::not_confirmed_detail` (083). The extension's worker mirrors
+ * it (`maybeSentPayload`); `protocol.test.ts` pins the mirror here.
+ */
+export function signNotConfirmedDetail(userOpHash: string): string {
+	return wasm.signNotConfirmedDetail(userOpHash);
+}
+
+/** The extension's request lifetime — the core's `EXTENSION_REQUEST_TTL_MS` (RB11). */
+export function signRequestTtlMs(): number {
+	return wasm.signRequestTtlMs();
+}
+
+/** One endpoint's read budget — the core's `RPC_READ_TIMEOUT_MS` (RF2). */
+export function rpcReadTimeoutMs(): number {
+	return wasm.rpcReadTimeoutMs();
+}
+
+/** An endpoint's cool-down after `consecutiveFailures` in a row (RF2). */
+export function rpcCooldownMs(consecutiveFailures: number): number {
+	return wasm.rpcCooldownMs(consecutiveFailures);
+}
+
+/** A site's name and the line under it (`SiteLabel`, hand-written — no ts-rs type). */
+export interface SiteLabel {
+	name: string;
+	/** `null` when the name already is the host, so it is said once. */
+	host_line: string | null;
+}
+
+/** `browser_load::site_label` (RE7). */
+export function browserSiteLabel(title: string, host: string): SiteLabel {
+	return JSON.parse(wasm.browserSiteLabel(title, host)) as SiteLabel;
+}
+
+/**
+ * How long a failed remote mark stays failed (RE10): ms, or `null` for the
+ * rest of the session. The web's `<img onerror>` has no status → `unknown`.
+ */
+export function markMissTtlMs(kind: string, status?: number | null): number | null {
+	return wasm.markMissTtlMs(kind, status ?? null) ?? null;
+}
+
+/** Which balances one chain's read covers, in order (RE9). */
+export function balanceReadPlan(
+	chainId: number,
+	stables: StableRef[],
+	wrappedNative: string | null,
+	custom: TokenRef[]
+): ReadSlot[] {
+	return translated(
+		() =>
+			JSON.parse(
+				wasm.balanceReadPlan(
+					chainId,
+					JSON.stringify(stables),
+					wrappedNative,
+					JSON.stringify(custom)
+				)
+			) as ReadSlot[]
+	);
 }

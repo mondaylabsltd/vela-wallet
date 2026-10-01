@@ -116,7 +116,7 @@ fn look(user_op_hash: &str, chain_id: u32, budget: Duration, deep: bool) -> Opti
     look_with(
         Sources {
             receipt: || {
-                relay::user_op_receipt_within(user_op_hash, chain_id, budget)
+                relay::user_op_receipt_until(user_op_hash, chain_id, budget, &|| false)
                     .resolution
                     .map(|resolution| (executed(&resolution, user_op_hash), resolution.tx_hash))
             },
@@ -154,10 +154,22 @@ fn cadence(elapsed: Duration) -> Duration {
 /// Wait for `user_op_hash` to land, for at most `cap`. `None` when the cap
 /// went by with no outcome.
 pub fn await_landing(user_op_hash: &str, chain_id: u32, cap: Duration) -> Option<Landing> {
+    await_landing_until(user_op_hash, chain_id, cap, &|| false)
+}
+
+/// [`await_landing`], ending early — `None` — the moment `stop` says the
+/// answer is no longer wanted (spec 082 RJ4: the core has answered the page
+/// from the tracker), looked at a few times a second.
+pub fn await_landing_until(
+    user_op_hash: &str,
+    chain_id: u32,
+    cap: Duration,
+    stop: &dyn Fn() -> bool,
+) -> Option<Landing> {
     let every_deep = Duration::from_secs_f64(STATUS_POLL_INTERVAL_MS / 1000.0);
     let mut next_deep = every_deep;
     let started = Instant::now();
-    wait_within(cap, cadence, |left| {
+    wait_until(cap, cadence, stop, |left| {
         // The first deep look waits one interval, as the tracker's status
         // poll does: "not landed yet" is by far the common case.
         let deep = started.elapsed() >= next_deep;
@@ -174,28 +186,50 @@ pub fn await_landing(user_op_hash: &str, chain_id: u32, cap: Duration) -> Option
 /// its own timeouts and retries, and the page waited 268 s for a two-minute
 /// wait). The page is answered on time; the tracker keeps following the
 /// operation after.
+#[cfg(test)]
 pub fn wait_within<T>(
     budget: Duration,
     every: impl Fn(Duration) -> Duration,
+    poll: impl FnMut(Duration) -> Option<T>,
+) -> Option<T> {
+    wait_until(budget, every, &|| false, poll)
+}
+
+/// [`wait_within`], ending early — `None` — once `stop` says the answer is
+/// no longer wanted (spec 082 RJ4), looked at before each ask and every
+/// [`GLANCE`] of the sleep between them.
+pub fn wait_until<T>(
+    budget: Duration,
+    every: impl Fn(Duration) -> Duration,
+    stop: &dyn Fn() -> bool,
     mut poll: impl FnMut(Duration) -> Option<T>,
 ) -> Option<T> {
     let started = Instant::now();
     let deadline = started + budget;
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
-        if left.is_zero() {
+        if left.is_zero() || stop() {
             return None;
         }
         if let Some(answer) = poll(left) {
             return Some(answer);
         }
-        let left = deadline.saturating_duration_since(Instant::now());
-        if left.is_zero() {
-            return None;
+        let resume = Instant::now() + every(started.elapsed());
+        loop {
+            let now = Instant::now();
+            if now >= deadline || stop() {
+                return None;
+            }
+            if now >= resume {
+                break;
+            }
+            std::thread::sleep(GLANCE.min(resume - now).min(deadline - now));
         }
-        std::thread::sleep(every(started.elapsed()).min(left));
     }
 }
+
+/// How often a sleep between asks looks at `stop`.
+const GLANCE: Duration = Duration::from_millis(200);
 
 #[cfg(test)]
 mod tests {

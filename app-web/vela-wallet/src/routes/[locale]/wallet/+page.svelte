@@ -46,9 +46,9 @@
 	import { preferences } from '$lib/services/preferences.svelte';
 	import { publishExtSnapshot } from '$lib/dapp/core/ext-cache';
 	import { publishExtChains } from '$lib/dapp/core/ext-chains';
-	import { followActiveAccount } from '$lib/dapp/follow';
 	import { subscribeNetworks } from '$lib/services/networks';
 	import { inExtension } from '$lib/dapp/transport';
+	import { isPanelDocument } from '$lib/dapp/panel-surface.svelte';
 	import DappRequestHost from '$lib/dapp/DappRequestHost.svelte';
 	import { amountFromInput } from '$lib/services/locale-format';
 	import { identiconSvgForClient } from '$lib/wallet/identicon';
@@ -114,7 +114,6 @@
 	import {
 		feedItemAt,
 		findFeedItem,
-		feedItemStatus,
 		liveTxDetail,
 		shownTxDetailStateDesktop,
 		shownTxDetailStateMobile,
@@ -198,8 +197,6 @@
 					wm: data.walletMessages,
 					currency: currency.view,
 					hidden: balance.view.hidden,
-					// The record's own lifecycle, not a chip this page assumes.
-					status: feedItemStatus(feed.view, selectedTx),
 					identicon: identiconSvgForClient
 				})
 	);
@@ -235,10 +232,9 @@
 	 * in an ordinary tab answers nobody's dApp request, so the marker is what
 	 * decides — not merely "is this the extension", which a tab also is.
 	 */
-	const inPanel =
-		typeof location !== 'undefined' &&
-		inExtension() &&
-		new URLSearchParams(location.search).has('panel');
+	// Spec 082 RB9: `?panel` OR the mark its first load left, because
+	// Wallet → Settings → Wallet drops the query (G23c).
+	const inPanel = typeof location !== 'undefined' && inExtension() && isPanelDocument();
 	/** The request host, so the ONE sheet can tell it a landing is on screen. */
 	let dappHost = $state<ReturnType<typeof DappRequestHost> | null>(null);
 	/** The fee-coin sheet is a shell surface: the core has no state for it. */
@@ -611,12 +607,18 @@
 		// The tracker owns the receipt from the moment the op is accepted; the
 		// send core only hears the verdict back (invariant ⑥'s ordering half).
 		setSendTrackerSink((handoff) =>
-			trackSubmitted(handoff.userOpHash, handoff.recordIds, handoff.chainId, (outcome) =>
-				sendSession?.dispatch({
-					type: 'receipt_update',
-					user_op_hash: handoff.userOpHash,
-					outcome
-				})
+			trackSubmitted(
+				handoff.userOpHash,
+				handoff.recordIds,
+				handoff.chainId,
+				(outcome) =>
+					sendSession?.dispatch({
+						type: 'receipt_update',
+						user_op_hash: handoff.userOpHash,
+						outcome
+					}),
+				handoff.maybeSent,
+				handoff.submitBlock
 			)
 		);
 		startTxTracker();
@@ -1291,24 +1293,22 @@
 		return subscribeNetworks(() => void publishExtChains());
 	});
 
+	// A connected site follows the active account, and old grants get the
+	// core's spelling — from the ROOT LAYOUT since 082 round 2 (G58), so a
+	// switch made on any screen reaches the site (`$lib/dapp/follow`).
+
 	/**
-	 * A connected site follows the active account (spec 027 T350's rule,
-	 * performed). The FIRST address the session settles on is a boot, not a
-	 * switch: only a change from one known address to another asks the core to
-	 * re-pin the grants, and the worker announces each re-pinned grant to the
-	 * site's tabs as `accountsChanged`.
+	 * Spec 082 G62: the network filter reaches the feed's CORE, which narrows
+	 * its rows and picks the empty lines ("none on this network" under a
+	 * filter). The sidebar and the phone's sheet only set `chainFilter`; the
+	 * core was never told, so a filtered empty list still said "no activity".
+	 * An effect over the filter, not the two pickers: a filter chosen on
+	 * another screen reaches the core when the wallet mounts, and the feed is
+	 * booted before it is told.
 	 */
-	let followedAddress: string | null = null;
 	$effect(() => {
-		const view = session.view;
-		if (view.loading || !inExtension() || !view.address) return;
-		const previous = followedAddress;
-		followedAddress = view.address;
-		if (previous === null || previous.toLowerCase() === view.address.toLowerCase()) return;
-		void followActiveAccount({
-			activeAddress: view.address,
-			addresses: view.accounts.map((row) => row.account.address)
-		});
+		const chainId = chainFilter.chainId;
+		void feed.boot().then(() => feed.chainFilter(chainId));
 	});
 
 	// The account the balances belong to. `account_changed` is also the
@@ -1931,6 +1931,9 @@
 						}
 						if (sendView?.show_contact_picker)
 							sendSession?.dispatch({ type: 'close_contact_picker' });
+						// The fee-coin sheet closed without a pick: it is closed, not
+						// merely hidden until the next re-render raises it again.
+						if (feeSheetOpen) feeSheetOpen = false;
 					}}
 					send={sendActions}
 					batch={batchActions}

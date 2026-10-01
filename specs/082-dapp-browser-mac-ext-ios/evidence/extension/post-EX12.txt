@@ -1,0 +1,12 @@
+EX12 - extension side panel (zh). Fault: 8898 latency=6000 match=vela-relay (delay before the upstream CONNECT) 19:18:03Z..19:18:4xZ.
+Nonce before 24, after 25.
+dApp asked 19:18:03.199Z; fee 0.01 xDAI shown at ~19:18:11 (+8 s: the first relay CONNECT paid the 6 s); slide 19:18:22.357Z.
+19:18:22.964 sheet: 正在准备交易... | 发送 · -0.001 xDAI
+19:18:23.935 sheet: 等待生物识别...  (2 ms)
+19:18:23.937 sheet: 提交至网络... | 关闭此页交易会在后台继续
+19:18:25.033 overlay: 确认中… (2 ms) -> 19:18:25.035 已提交 | 已发送！正在链上确认——区块浏览器链接稍后出现。 | UserOp 哈希 0x8a313908…ee9d0690 | 完成   (ring)
+19:18:34.883 dApp answered ok: 0xe88f61b8cb039c8a332c4f91ddde269ecae20e37537f66f9de283787d56e16a9 (real tx hash), one res
+19:18:37.265 overlay: 已确认 | 交易哈希 0xe88f61b8…d56e16a9 | 区块浏览器 | 完成
+19:18:39.893 overlay gone by itself (2.6 s); Activity: 今天 · dApp 交易 · 127.0.0.1:8137 · -0.001 xDAI (confirmed)
+dApp eth_getTransactionReceipt(0xe88f61b8…) -> 323 ms, block 48487160, status 0x1, 5 logs.
+Note: the relay's connection was reused after the first CONNECT, so the submit itself paid no latency (the proxy delays CONNECT only).

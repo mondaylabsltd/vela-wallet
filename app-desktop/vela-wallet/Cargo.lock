@@ -10029,6 +10029,8 @@ version = "0.9.5"
 dependencies = [
  "btleplug",
  "calamine",
+ "core-foundation 0.10.1",
+ "core-foundation-sys 0.8.7",
  "crux_core",
  "dirs",
  "dotlottie-rs",
@@ -10051,6 +10053,7 @@ dependencies = [
  "raw-window-handle",
  "resvg 0.45.1",
  "rqrr",
+ "rustls",
  "serde",
  "serde_json",
  "tokio",

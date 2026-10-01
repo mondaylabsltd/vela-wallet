@@ -215,19 +215,42 @@ struct SimulationSheetTests {
         #expect(note == loc.t("componentsUi.signing.balanceNoAssetsMove"))
     }
 
-    /// **The one that matters.** A node that could not simulate is a DANGER
-    /// warning, never silence: a wallet that says nothing when it could not
-    /// look teaches people that silence means safe.
+    /// **The one that matters.** A node that could not simulate is a warning,
+    /// never silence: a wallet that says nothing when it could not look
+    /// teaches people that silence means safe. Its tone is the CORE's —
+    /// caution for "couldn't check" (spec 082 RG6, L-D5).
     @Test func aSimulationThatCouldNotRunWarns() {
         let blocks = SigningLive.balanceBlocks(
-            isTransaction: true, context: context(sim: nil, simulation: .unavailable)
+            isTransaction: true,
+            context: context(sim: nil, simulation: .notice(
+                risk: "caution", key: "componentsUi.signing.simUnavailableWarning", reason: nil
+            ))
         )
         guard case .warning(let tone, let text)? = blocks.first else {
             Issue.record("a refused simulation was silent")
             return
         }
-        #expect(tone == .danger)
+        #expect(tone == .caution)
         #expect(text == loc.t("componentsUi.signing.simUnavailableWarning"))
+    }
+
+    /// A simulated revert is DANGER, with the reason the core cleaned — the
+    /// old sheet read a revert as "nothing moves".
+    @Test func aSimulatedRevertIsDangerWithItsReason() {
+        let blocks = SigningLive.balanceBlocks(
+            isTransaction: true,
+            context: context(sim: nil, simulation: .notice(
+                risk: "danger", key: "componentsUi.signing.simWillFailReason", reason: "nope"
+            ))
+        )
+        guard case .warning(let tone, let text)? = blocks.first else {
+            Issue.record("a revert was silent")
+            return
+        }
+        #expect(tone == .danger)
+        #expect(text == loc.t("componentsUi.signing.simWillFailReason", vars: ["reason": "nope"]))
+        #expect(text.contains("nope"))
+        #expect(!text.contains("{{"))
     }
 
     /// Still running is silence — a block that appears and then changes its
@@ -241,7 +264,10 @@ struct SimulationSheetTests {
     /// A MESSAGE moves nothing, so it gets no block — not even the warning.
     @Test func aMessageSheetHasNoBalanceBlock() {
         #expect(SigningLive.balanceBlocks(
-            isTransaction: false, context: context(sim: nil, simulation: .unavailable)
+            isTransaction: false,
+            context: context(sim: nil, simulation: .notice(
+                risk: "caution", key: "componentsUi.signing.simUnavailableWarning", reason: nil
+            ))
         ).isEmpty)
     }
 

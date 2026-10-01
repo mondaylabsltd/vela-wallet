@@ -527,12 +527,25 @@ fun VelaNavHost(
                 val scope = rememberCoroutineScope()
                 // Spec 047 FR-006, under the manifest's rule (no ACCESS_NETWORK_STATE:
                 // "offline" is what the calls did, not what the radio claims): three
-                // calls in a row that never reached a server, cleared by the first
-                // answered one. Coming back refreshes what went stale meanwhile.
+                // calls in a row that never reached a server, from at least two
+                // chains, with nothing answered for ten seconds — cleared by the
+                // first answered one. The core's `netHealthStep` (spec 082 RE3,
+                // RJ14), fed per chain by the pool: one chain down is its own
+                // notice, and never flaps this refresh (G53). Coming
+                // back refreshes what went stale meanwhile, asks again for the
+                // logos a bad minute lost (RE10), and loads again the page the
+                // network failed (the core's `browserLoadRetryWhenNetworkReturns`).
                 val online by NetHealth.online.collectAsStateWithLifecycle()
                 var wasOffline by remember { mutableStateOf(false) }
                 LaunchedEffect(online) {
-                    if (!online) wasOffline = true else if (wasOffline) { wasOffline = false; wallet.refresh() }
+                    if (!online) {
+                        wasOffline = true
+                    } else if (wasOffline) {
+                        wasOffline = false
+                        wallet.refresh()
+                        app.getvela.wallet.core.marks.LogoMisses.clearTransient()
+                        application.container.browser.networkCameBack()
+                    }
                 }
                 // Who the send is for and the money it shows — one definition for
                 // the open below and for a payment request that re-opens a Send
@@ -748,13 +761,17 @@ fun VelaNavHost(
                 val endingHeader = lastSigning
                 if (ending != null && endingHeader != null && signingController == null) {
                     val (headerModel, headerCtx) = endingHeader
+                    // Spec 082 RA8: the tracker's entry for the operation this
+                    // ending stands for — landed or still on its way, it is the
+                    // tracker that says confirmed, reverted or not sent.
                     val endCtx = headerCtx.copy(
-                        track = (ending as? app.getvela.wallet.feature.signing.SigningAftercare.StillConfirming)?.let { still ->
-                            trackView.entries.firstOrNull { it.user_op_hash.equals(still.userOpHash, ignoreCase = true) }
+                        track = ending.userOpHash?.let { op ->
+                            trackView.entries.firstOrNull { it.user_op_hash.equals(op, ignoreCase = true) }
                         },
                     )
+                    val endState = ending.state(endCtx.track)
                     val endReceipt = app.getvela.wallet.feature.signing.SigningLive.aftercareReceipt(
-                        ending,
+                        endState,
                         app.getvela.wallet.feature.signing.SigningLive.summaryOf(headerModel.blocks),
                         endCtx,
                     )
@@ -762,7 +779,7 @@ fun VelaNavHost(
                     // A tick is seen, then it goes: no one should have to close a success.
                     LaunchedEffect(ending, endReceipt.stage) {
                         if (endReceipt.stage == app.getvela.wallet.feature.flows.ReceiptStage.Confirmed) {
-                            kotlinx.coroutines.delay(if (ending is app.getvela.wallet.feature.signing.SigningAftercare.Signed) 1_400L else 2_600L)
+                            kotlinx.coroutines.delay(if (ending.ending is app.getvela.wallet.feature.signing.core.SignEnding.Signed) 1_400L else 2_600L)
                             if (application.container.signingAftercare.value === ending) close()
                         }
                     }
@@ -771,7 +788,11 @@ fun VelaNavHost(
                         receipt = endReceipt,
                         onClose = close,
                         onExplorer = {
-                            val hash = (ending as? app.getvela.wallet.feature.signing.SigningAftercare.Landed)?.txHash ?: endCtx.track?.tx_hash
+                            val hash = when (endState) {
+                                is app.getvela.wallet.feature.signing.core.SignEndingState.Confirmed -> endState.tx_hash
+                                is app.getvela.wallet.feature.signing.core.SignEndingState.Reverted -> endState.tx_hash
+                                else -> endCtx.track?.tx_hash ?: endCtx.track?.relay_tx_hash
+                            }
                             openExplorer(ending.chainId, hash)
                         },
                     )

@@ -18,8 +18,10 @@ import {
 	extensionId,
 	loadExtension,
 	noRequestWindow,
+	inSidePanel,
 	requestWindow,
-	sidePanelOpen,
+	sidePanelShowsRequest,
+	sidePanelUp,
 	sidePanelView
 } from './extension-helpers';
 
@@ -336,12 +338,15 @@ test.describe('a provider a dApp can use', () => {
 		);
 		const state = await readState(page);
 		expect(state.results.eth_requestAccounts.result).toEqual([FIXTURE_ONE]);
-		// Answered, the panel goes away — a sidebar that stays is a sidebar in
-		// the way.
-		await expect.poll(() => sidePanelOpen(wallet), { timeout: 10_000 }).toBe(false);
+		// Answered, the CARD goes and the panel stays: the panel is the wallet
+		// (spec 077 FR-001), and a sidebar that vanished with the answer is the
+		// complaint 077 started from.
+		await expect.poll(() => sidePanelShowsRequest(wallet), { timeout: 10_000 }).toBe(false);
+		expect(await sidePanelUp(wallet)).toBe(true);
 
-		// And a request the page fires on its OWN — no click, the transient
-		// activation long spent — opens the window instead. Either way, answered.
+		// A request the page fires on its OWN — no click, the transient
+		// activation long spent — shows in the panel that is already open,
+		// not in a window beside it (spec 082 RB8, row EX2).
 		await page.evaluate(() =>
 			setTimeout(
 				() =>
@@ -352,8 +357,90 @@ test.describe('a provider a dApp can use', () => {
 				6000
 			)
 		);
-		const win = await requestWindow(context, 20_000);
-		expect(win.url()).toContain('rid=');
+		const sheet = await sidePanelView(wallet, 20_000);
+		expect(sheet.heading.length).toBeGreaterThan(0);
+		expect(context.pages().some((p) => p.url().includes('rid='))).toBe(false);
+		await context.close();
+	});
+
+	test('a message signed in the panel ends on the Signed tick, which goes by itself (L-PANEL)', async () => {
+		const context = await loadExtension({ surface: 'panel' });
+		const id = extensionId();
+		const wallet = await seedWallet(context, id);
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${DAPP_PORT}/`);
+
+		// Connected first, in the panel — the product's own surface.
+		await page.getByRole('button', { name: 'Connect' }).click();
+		await (await sidePanelView(wallet)).click('Connect');
+		await page.waitForFunction(
+			() => JSON.parse(document.getElementById('out')!.textContent!).results.eth_requestAccounts
+		);
+		await expect.poll(() => sidePanelShowsRequest(wallet), { timeout: 10_000 }).toBe(false);
+
+		// A trusted click: the sign request rises in the panel.
+		await page.getByRole('button', { name: 'Sign' }).click();
+		await sidePanelView(wallet, 20_000);
+
+		// Watch the panel for the landing before approving, so a tick that
+		// comes and goes between two polls is still seen.
+		await inSidePanel(
+			wallet,
+			`
+			const seen = { shownAt: 0, goneAt: 0, title: '' };
+			panel.__velaTick = seen;
+			const look = () => {
+				const receipt = panel.document.querySelector('.landing-over [data-testid="dapp-receipt"]');
+				if (receipt && !seen.shownAt) {
+					seen.shownAt = Date.now();
+					seen.title = receipt.textContent ?? '';
+				} else if (!receipt && seen.shownAt && !seen.goneAt) {
+					seen.goneAt = Date.now();
+				}
+			};
+			new panel.MutationObserver(look).observe(panel.document.body, { childList: true, subtree: true });
+			`
+		);
+		// The slide, by keyboard (the same onconfirm a drag reaches).
+		await inSidePanel(
+			wallet,
+			`
+			const slider = [...panel.document.querySelectorAll('[role="button"]')].find((el) =>
+				(el.getAttribute('aria-label') ?? '').startsWith('Slide to confirm')
+			);
+			if (!slider) throw new Error('no slider in the panel');
+			slider.focus();
+			slider.dispatchEvent(new panel.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+			`
+		);
+
+		await page.waitForFunction(
+			() => JSON.parse(document.getElementById('out')!.textContent!).results.personal_sign,
+			null,
+			{ timeout: 30_000 }
+		);
+		expect((await readState(page)).results.personal_sign.ok).toBe(true);
+		await expect
+			.poll(
+				() =>
+					inSidePanel<{ shownAt: number; goneAt: number; title: string }>(
+						wallet,
+						'return panel.__velaTick;'
+					),
+				{ timeout: 10_000 }
+			)
+			.toMatchObject({ title: expect.stringContaining('Signed') });
+		const tick = await inSidePanel<{ shownAt: number; goneAt: number }>(
+			wallet,
+			'return panel.__velaTick;'
+		);
+		await expect
+			.poll(() => inSidePanel<number>(wallet, 'return panel.__velaTick.goneAt;'), {
+				timeout: 5_000
+			})
+			.toBeGreaterThan(0);
+		const gone = await inSidePanel<number>(wallet, 'return panel.__velaTick.goneAt;');
+		expect(gone - tick.shownAt).toBeLessThan(5_000);
 		await context.close();
 	});
 });

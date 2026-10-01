@@ -10,11 +10,19 @@
  */
 
 import { receiptShouldStaySilent, relayShouldFail, submitShouldReject } from './fault-injection';
-import { poolBundlerCall, poolRpcCall } from './rpc-pool';
+import { PoolFailedError, poolBundlerCall, poolRpcCall } from './rpc-pool';
 
 // ---------------------------------------------------------------------------
 // Method classification
 // ---------------------------------------------------------------------------
+
+/**
+ * The relay's lifecycle-status method — `tx_tracker::USER_OP_STATUS_METHOD`
+ * (spec 082 RA7). A TS constant because a module-level Set cannot wait for the
+ * wasm; `rpc-pool-executor.test.ts` pins it to `userOpStatusMethod()`, so the
+ * two spellings cannot drift the way `eth_getUserOperationStatus` did (G13).
+ */
+export const USER_OP_STATUS_METHOD = 'pimlico_getUserOperationStatus';
 
 /** ERC-4337 bundler methods (routed to bundler pool). */
 const BUNDLER_METHODS = new Set([
@@ -25,7 +33,7 @@ const BUNDLER_METHODS = new Set([
 	// A receipt only exists once an op lands. Before that it is the only thing that
 	// separates "still going" from "the relay refused it" — without this the wallet
 	// polls a null receipt until timeout and reports a rejected op as pending.
-	'eth_getUserOperationStatus',
+	USER_OP_STATUS_METHOD,
 	'pimlico_getUserOperationGasPrice'
 ]);
 
@@ -56,7 +64,11 @@ export async function rpcCall(
 		// caller — fee quote, submit, receipt poll — meets them identically.
 		// Each is a shape the relay really produces, not an invented one.
 		if (relayShouldFail(chainId)) {
-			throw new Error(`[fault] relay unreachable for chain ${chainId}`);
+			// Thrown before any byte leaves: the pool's "reached nobody".
+			throw new PoolFailedError(`[fault] relay unreachable for chain ${chainId}`, {
+				maybeDelivered: false,
+				rateLimited: false
+			});
 		}
 		if (method === 'eth_sendUserOperation' && submitShouldReject(chainId)) {
 			return {

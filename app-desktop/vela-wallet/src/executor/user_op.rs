@@ -48,16 +48,18 @@ use vela_core::app::tx_tracker::WAIT_WINDOW_MS;
 use vela_core::app::{Account, Assertion, FailureKind};
 use vela_core::primitives::{from_hex, to_hex};
 use vela_core::user_op::{
-    CALL_GAS_LIMIT, ExistingOp, MultiSendCall, PRE_VERIFICATION_GAS, UserOperation,
-    VERIFICATION_GAS_DEPLOYED, VERIFICATION_GAS_UNDEPLOYED, WalletKey, build_dummy_signature,
+    CALL_GAS_LIMIT, EstimateFailure, MultiSendCall, NOT_SENT_DAPP_DETAIL, PRE_VERIFICATION_GAS,
+    RelayRejection, SubmitVerdict, UserOperation, VERIFICATION_GAS_DEPLOYED,
+    VERIFICATION_GAS_UNDEPLOYED, WRITE_AHEAD_WAIT_MS, WalletKey, build_dummy_signature,
     build_in_band_fee_leg, build_init_code_for_keys, build_multi_send_execute_call_data,
     build_user_op_signature, calculate_safe_op_hash, compute_safe_message_hash,
-    eip1271_envelope_signature, encode_erc20_transfer, existing_op, extract_client_data_fields,
+    eip1271_envelope_signature, encode_erc20_transfer, extract_client_data_fields,
     inner_calls_gas_floor, is_plain_transfer_call, pad_gas_estimate, parse_hex_quantity,
     signer_address_for, user_op_hash,
 };
 use vela_core::webauthn::{der_signature_to_raw_low_s, validate_client_data};
 
+use crate::diag::{short, vlog};
 use crate::executor::landing::{self, Landing};
 use crate::executor::passkey::PasskeyFailure;
 use crate::executor::trusted_signer::{self, Ask, Channel};
@@ -72,11 +74,28 @@ const MAX_QUOTE_VS_CHAIN_MULTIPLE: u128 = 3;
 
 /// How a submit failed — the send machine's vocabulary, decided here from
 /// the relay's words and the ceremony's kind (`classifySubmit`).
+///
+/// Every one of these means **nothing left the device**, or the relay
+/// refused the operation with no earlier POST that could have delivered it
+/// (spec 082 RA1). An operation that may have been sent is never a failure:
+/// it is a [`Submitted`] with `maybe_sent`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SubmitFailure {
     PasskeyCancelled,
     RelayerUnavailable,
     BundlerUnderfunded,
+    /// The relay was never reached (`NotSent { rejection: None }`), or the
+    /// write-ahead got no clearance and nothing was POSTed (RJ1): the dApp
+    /// is told the core's fixed sentence, never the pool's text.
+    NotSent,
+    /// The relay refused the operation (`NotSent { rejection:
+    /// Some(Other(..)) }`, spec 082 RJ3): nothing was sent, and trying again
+    /// sends the same refusal. The words are the relay's, for diagnostics.
+    Refused(String),
+    /// The page that asked is gone (spec 082 RB2): the check before the
+    /// ceremony, after it, or right before the relay POST stopped the
+    /// submit. Nothing was signed or sent.
+    AskerGone,
     /// Diagnostics only; the core words the screen.
     Other(String),
 }
@@ -87,9 +106,161 @@ impl From<SubmitFailure> for SendSubmitFailure {
             SubmitFailure::PasskeyCancelled => SendSubmitFailure::PasskeyCancelled,
             SubmitFailure::RelayerUnavailable => SendSubmitFailure::RelayerUnavailable,
             SubmitFailure::BundlerUnderfunded => SendSubmitFailure::BundlerUnderfunded,
-            SubmitFailure::Other(message) => SendSubmitFailure::Other {
-                message: (!message.is_empty()).then_some(message),
+            SubmitFailure::NotSent => SendSubmitFailure::Other {
+                message: Some(NOT_SENT_DAPP_DETAIL.to_owned()),
             },
+            // The wallet's own Send is never withdrawn by a page
+            // ([`always_asked`]); diagnostics only, should that change.
+            SubmitFailure::AskerGone => SendSubmitFailure::Other {
+                message: Some("the request was withdrawn; nothing was sent".to_owned()),
+            },
+            SubmitFailure::Other(message) | SubmitFailure::Refused(message) => {
+                SendSubmitFailure::Other {
+                    message: (!message.is_empty()).then_some(message),
+                }
+            }
+        }
+    }
+}
+
+/// An operation that left the device (spec 082 RA1–RA4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Submitted {
+    /// The relay's hash when it answered; the locally computed one when its
+    /// reply was lost.
+    pub user_op_hash: String,
+    /// The reply was lost: the operation may be on its way. Recorded,
+    /// tracked and answered all the same — never "failed, try again".
+    pub maybe_sent: bool,
+    /// The chain head read before the first POST, where the tracker's
+    /// relay-independent landing check starts (ruling 8). Best effort.
+    pub submit_block: Option<u64>,
+}
+
+/// The ceremony's two edges (spec 082 RA9): the prompt opened, and it came
+/// back with a signature. The signing sheet words its stage from them —
+/// "waiting for biometric" only while the prompt is really up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CeremonyEdge {
+    Started,
+    Signed,
+}
+
+/// Who hears the edges. The wallet's own Send reads its flags instead and
+/// passes [`quiet`].
+pub type Edges<'a> = &'a dyn Fn(CeremonyEdge);
+
+/// Edges nobody listens to.
+pub fn quiet(_: CeremonyEdge) {}
+
+/// Is the request still wanted — is the page that asked still there (spec
+/// 082 RB2, the money rule)? Asked before the ceremony opens, when it
+/// answers, and right before the relay POST: nothing is signed or sent for a
+/// page that has gone, however far its submit had got.
+pub type Asked<'a> = &'a dyn Fn() -> bool;
+
+/// A request no page can withdraw — the wallet's own Send.
+pub fn always_asked() -> bool {
+    true
+}
+
+/// The write-ahead (spec 082 RJ1, G34): told the operation's local hash and
+/// the head read before its first POST, once it is signed and before any
+/// byte goes to the relay; answers whether the POST may go. The caller tells
+/// its core (`OpSigned`) and waits, at most [`WRITE_AHEAD_WAIT_MS`], for the
+/// core's word that the record is on disk (`ClearToPost`). `false` — no word
+/// in time — sends nothing: a payment that could land with no record behind
+/// it is the one thing this must never do.
+pub type BeforePost<'a> = &'a dyn Fn(&str, Option<u64>) -> bool;
+
+/// The core's clearance to POST one operation (spec 082 RJ1), handed from
+/// the thread that performs `ClearToPost` to the submit waiting for it.
+///
+/// Armed for one hash before `OpSigned` goes out, so a clearance that arrives
+/// before the wait begins is not lost, and consumed by the wait, so a second
+/// attempt at the same hash (a deterministic hash does repeat — S5 and both
+/// DX9 runs shared one) waits for its own record rather than the last one's.
+#[derive(Debug, Default)]
+pub struct Clearance {
+    state: std::sync::Mutex<ClearanceState>,
+    signal: std::sync::Condvar,
+}
+
+#[derive(Debug, Default)]
+struct ClearanceState {
+    armed: Option<String>,
+    cleared: bool,
+}
+
+impl Clearance {
+    /// Expect the core's clearance for `user_op_hash`, and only for it.
+    pub fn arm(&self, user_op_hash: &str) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.armed = Some(user_op_hash.to_lowercase());
+        state.cleared = false;
+    }
+
+    /// The core cleared `user_op_hash`. A clearance for anything but the
+    /// armed hash is somebody else's and changes nothing.
+    pub fn clear(&self, user_op_hash: &str) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state
+            .armed
+            .as_deref()
+            .is_some_and(|armed| armed.eq_ignore_ascii_case(user_op_hash))
+        {
+            state.cleared = true;
+            self.signal.notify_all();
+        }
+    }
+
+    /// Wait at most `within` for the armed hash's clearance, and disarm.
+    #[must_use]
+    pub fn wait(&self, within: std::time::Duration) -> bool {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (mut state, _) = self
+            .signal
+            .wait_timeout_while(state, within, |state| !state.cleared)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let cleared = state.cleared;
+        state.armed = None;
+        state.cleared = false;
+        cleared
+    }
+
+    /// The whole write-ahead for one operation: arm, tell the core (`tell`
+    /// sends `OpSigned`), and wait [`WRITE_AHEAD_WAIT_MS`] for its word.
+    #[must_use]
+    pub fn write_ahead(&self, user_op_hash: &str, tell: impl FnOnce()) -> bool {
+        self.arm(user_op_hash);
+        tell();
+        self.wait(std::time::Duration::from_millis(u64::from(
+            WRITE_AHEAD_WAIT_MS,
+        )))
+    }
+}
+
+/// One failed relay estimate, as the core reads it (RJ19), in the log: which
+/// chain, and whether the relay said the call reverts — with its reason,
+/// sanitised by the core — or simply gave no estimate.
+fn log_estimate_failure(area: &str, chain_id: u32, error: &relay::EstimateError) {
+    match error.classified() {
+        EstimateFailure::Reverts { reason } => vlog!(
+            area,
+            "relay estimate reverts chain={chain_id} reason={}",
+            reason.as_deref().unwrap_or("none given")
+        ),
+        EstimateFailure::Unavailable => {
+            vlog!(area, "relay estimate unavailable chain={chain_id}: {error}")
         }
     }
 }
@@ -134,8 +305,39 @@ pub enum Signer<'a> {
 impl Signer<'_> {
     /// One signature over `digest`. `operation` is what the Trusted Signer
     /// shows and derives the digest from — the assembled operation and the
-    /// calls before its fee leg; `None` for a message.
+    /// calls before its fee leg; `None` for a message. `edges` hears the
+    /// prompt open and the signature come back, whichever signer it is;
+    /// `asked` says whether the page that asked is still there (RB2).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the digest, what the page is shown, who hears the edges and whether it is still wanted"
+    )]
     fn sign(
+        &mut self,
+        digest: &[u8],
+        chain_id: u32,
+        safe: &str,
+        keys: &[WalletKey],
+        operation: Option<(&UserOperation, &[MultiSendCall])>,
+        edges: Edges<'_>,
+        asked: Asked<'_>,
+    ) -> Result<Assertion, SubmitFailure> {
+        // No prompt for a page that has gone (RB2).
+        if !asked() {
+            return Err(SubmitFailure::AskerGone);
+        }
+        edges(CeremonyEdge::Started);
+        let signed = self.ceremony(digest, chain_id, safe, keys, operation)?;
+        // The page left while the prompt was up: the signature is dropped
+        // here, so the relay POST after it never happens.
+        if !asked() {
+            return Err(SubmitFailure::AskerGone);
+        }
+        edges(CeremonyEdge::Signed);
+        Ok(signed)
+    }
+
+    fn ceremony(
         &mut self,
         digest: &[u8],
         chain_id: u32,
@@ -283,18 +485,22 @@ pub fn simulate_gas(
         paymaster_and_data: Vec::new(),
         signature,
     };
-    match relay::estimate_user_op_gas_answer(&op, chain_id) {
+    match relay::estimate_user_op_gas(&op, chain_id) {
         Ok(estimate) => FeeGasOutcome::Estimated {
             verification_gas_limit: estimate.verification_gas_limit.to_string(),
             call_gas_limit: estimate.call_gas_limit.to_string(),
             pre_verification_gas: estimate.pre_verification_gas.to_string(),
         },
-        Err(relay::EstimateError::Refused(message)) => {
-            eprintln!("[vela-wallet] fee: the relay says the operation fails: {message}");
+        Err(error) if error.refuses() => {
+            vlog!(
+                "fee",
+                "chain={chain_id} the relay says the operation fails: {}",
+                error.message
+            );
             FeeGasOutcome::Refused
         }
         Err(error) => {
-            eprintln!("[vela-wallet] fee: relay estimation unavailable: {error}");
+            log_estimate_failure("fee", chain_id, &error);
             FeeGasOutcome::SimulationFailed
         }
     }
@@ -306,7 +512,13 @@ pub fn simulate_gas(
 
 /// The whole sign→submit orchestration (`sendBatchCalls`): Tempo pays gas
 /// in its stablecoin, every other chain settles in band. Answers the
-/// accepted operation's hash, or why there is none.
+/// operation that left the device — accepted, or may have been sent — or
+/// why nothing did. `before_post` is the write-ahead (RJ1): nothing is
+/// POSTed until it says the record is on disk.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the operation, its signer, who hears the ceremony, whether it is still wanted and the write-ahead"
+)]
 pub fn submit(
     chain_id: u32,
     safe: &str,
@@ -315,7 +527,10 @@ pub fn submit(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-) -> Result<String, SubmitFailure> {
+    edges: Edges<'_>,
+    asked: Asked<'_>,
+    before_post: BeforePost<'_>,
+) -> Result<Submitted, SubmitFailure> {
     let outcome = submit_inner(
         chain_id,
         safe,
@@ -324,6 +539,12 @@ pub fn submit(
         keys,
         signer,
         quoted_fee,
+        Tail {
+            head: None,
+            edges,
+            asked,
+            before_post,
+        },
     );
     // The SCREEN gets the core's sentence — SC-305: no relay text reaches a
     // person. The OPERATOR gets the detail, because a submit that failed
@@ -332,8 +553,12 @@ pub fn submit(
     // the same words whether the passkey was refused, the hash would not
     // compute, or the account is undeployed. One line, at the one place every
     // failure passes through.
-    if let Err(failure) = &outcome {
-        eprintln!("[vela-wallet] submit failed: {failure:?}");
+    // A relay refusal already has its `submit verdict` line; this one is for
+    // everything that failed before the relay (or instead of it).
+    if let Err(failure) = &outcome
+        && *failure != SubmitFailure::NotSent
+    {
+        vlog!("relay", "submit failed: {failure:?}");
     }
     outcome
 }
@@ -350,15 +575,27 @@ fn submit_inner(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-) -> Result<String, SubmitFailure> {
+    tail: Tail<'_>,
+) -> Result<Submitted, SubmitFailure> {
     let inner: Vec<MultiSendCall> = calls
         .iter()
         .map(to_multi_send_call)
         .collect::<Result<_, _>>()
         .map_err(other)?;
+    // The head, read while the ceremony runs (spec 082 ruling 8): where the
+    // tracker starts looking for the operation's own event if the relay's
+    // reply is lost. Best effort and bounded — a chain that cannot answer
+    // leaves it unknown, and the tracker then scans back from the head.
+    let head = std::thread::Builder::new()
+        .name("vela-submit-head".to_owned())
+        .spawn(move || chain::head_block(chain_id))
+        .ok();
+    let tail = Tail { head, ..tail };
     if is_tempo_chain(chain_id) {
         let fee_token = gas_fee_token.unwrap_or(TEMPO_DEFAULT_FEE_TOKEN);
-        return submit_tempo(chain_id, safe, &inner, fee_token, keys, signer, quoted_fee);
+        return submit_tempo(
+            chain_id, safe, &inner, fee_token, keys, signer, quoted_fee, tail,
+        );
     }
     submit_in_band(
         chain_id,
@@ -368,7 +605,18 @@ fn submit_inner(
         keys,
         signer,
         quoted_fee,
+        tail,
     )
+}
+
+/// What the shared tail needs besides the operation: the head read started
+/// before the ceremony, who hears the ceremony's edges, whether the page
+/// that asked is still there (RB2), and the write-ahead (RJ1).
+struct Tail<'a> {
+    head: Option<std::thread::JoinHandle<Option<u64>>>,
+    edges: Edges<'a>,
+    asked: Asked<'a>,
+    before_post: BeforePost<'a>,
 }
 
 /// Deployment status and the nonce, together, with the two refusals.
@@ -489,8 +737,9 @@ fn fallback_fee(
     let amount =
         calculate_in_band_fee_amount(total_gas, gas_price, &pricing(quote), &pricing(native))
             .ok_or_else(|| other("Could not calculate the selected gas fee. Please try again."))?;
-    eprintln!(
-        "[vela-wallet] in-band fallback quote: token={} amount={amount} recipient={} gas={total_gas} price={gas_price}",
+    vlog!(
+        "in-band",
+        "fallback quote: token={} amount={amount} recipient={} gas={total_gas} price={gas_price}",
         gas_fee_token.unwrap_or("native"),
         quote.recipient
     );
@@ -503,6 +752,10 @@ fn fallback_fee(
     })
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one call site; the arguments are the operation"
+)]
 fn submit_in_band(
     chain_id: u32,
     safe: &str,
@@ -511,7 +764,8 @@ fn submit_in_band(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-) -> Result<String, SubmitFailure> {
+    tail: Tail<'_>,
+) -> Result<Submitted, SubmitFailure> {
     let (deployed, nonce, init_code) = account_context(chain_id, safe, keys)?;
 
     // The batch: the person's calls + one fee leg. Estimated with a
@@ -557,8 +811,8 @@ fn submit_in_band(
             op.pre_verification_gas = padded.pre_verification_gas;
             raise_to_measured_floor(&mut op, chain_id, safe, inner, has_contract_call);
         }
-        Err(message) => {
-            eprintln!("[vela-wallet] in-band: estimation failed, using defaults: {message}");
+        Err(error) => {
+            log_estimate_failure("in-band", chain_id, &error);
             if has_contract_call {
                 return Err(other(
                     "Could not estimate gas for this transaction. The network may be busy — please try again.",
@@ -569,8 +823,9 @@ fn submit_in_band(
 
     let fee = match usable(quoted_fee) {
         Some(fee) => {
-            eprintln!(
-                "[vela-wallet] in-band: signing DISPLAYED quote token={} amount={} recipient={}",
+            vlog!(
+                "in-band",
+                "signing DISPLAYED quote token={} amount={} recipient={}",
                 gas_fee_token.unwrap_or("native"),
                 fee.amount,
                 fee.recipient
@@ -585,9 +840,13 @@ fn submit_in_band(
     op.call_data = batch(fee.amount, &fee.recipient)?;
 
     // The displayed quote's speed, or none for the fallback nobody saw.
-    sign_and_submit(op, chain_id, safe, inner, keys, signer, &[], fee.tier)
+    sign_and_submit(op, chain_id, safe, inner, keys, signer, &[], fee.tier, tail)
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one call site; the arguments are the operation"
+)]
 fn submit_tempo(
     chain_id: u32,
     safe: &str,
@@ -596,7 +855,8 @@ fn submit_tempo(
     keys: &[WalletKey],
     signer: Signer<'_>,
     quoted_fee: Option<QuotedFee>,
-) -> Result<String, SubmitFailure> {
+    tail: Tail<'_>,
+) -> Result<Submitted, SubmitFailure> {
     chain::verify_chain_ready(chain_id).map_err(other)?;
     // The reimbursement recipient MUST come from the relay that submits.
     let collector = relay::account_info(chain_id, safe)
@@ -656,8 +916,8 @@ fn submit_tempo(
             op.pre_verification_gas = padded.pre_verification_gas;
             raise_to_measured_floor(&mut op, chain_id, safe, inner, has_contract_call);
         }
-        Err(message) => {
-            eprintln!("[vela-wallet] tempo: estimation failed, using defaults: {message}");
+        Err(error) => {
+            log_estimate_failure("tempo", chain_id, &error);
             if has_contract_call {
                 return Err(other(
                     "Could not estimate gas for this transaction. The network may be busy — please try again.",
@@ -684,8 +944,9 @@ fn submit_tempo(
     let tier = quoted_fee.as_ref().and_then(|fee| fee.tier);
     let reimbursement = usable(quoted_fee).map_or(calculated, |fee| fee.amount);
     op.call_data = batch(reimbursement)?;
-    eprintln!(
-        "[vela-wallet] tempo: feeToken={fee_token} reimbursement={reimbursement} calculated={calculated} realisticGas={realistic_gas} collector={collector}"
+    vlog!(
+        "tempo",
+        "feeToken={fee_token} reimbursement={reimbursement} calculated={calculated} realisticGas={realistic_gas} collector={collector}"
     );
 
     sign_and_submit(
@@ -697,12 +958,13 @@ fn submit_tempo(
         signer,
         &[("feeToken", fee_token)],
         tier,
+        tail,
     )
 }
 
-/// The shared tail: hash, sign, envelope, submit (with the AA20 guard and
-/// the in-flight-hash recovery), bump the nonce. `inner` is the person's
-/// calls — the operation carries them and then its fee leg.
+/// The shared tail: hash, sign, envelope, submit through the core's verdict
+/// (spec 082 RA1), and bump the nonce only when the relay took it. `inner`
+/// is the person's calls — the operation carries them and then its fee leg.
 #[allow(
     clippy::too_many_arguments,
     reason = "the operation, its calls, its signer, and the two things the wire names beside it"
@@ -716,10 +978,19 @@ fn sign_and_submit(
     mut signer: Signer<'_>,
     extra: &[(&str, &str)],
     tier: Option<FeeTier>,
-) -> Result<String, SubmitFailure> {
+    tail: Tail<'_>,
+) -> Result<Submitted, SubmitFailure> {
     let safe_op_hash =
         calculate_safe_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?;
-    let assertion = signer.sign(&safe_op_hash, chain_id, safe, keys, Some((&op, inner)))?;
+    let assertion = signer.sign(
+        &safe_op_hash,
+        chain_id,
+        safe,
+        keys,
+        Some((&op, inner)),
+        tail.edges,
+        tail.asked,
+    )?;
     op.signature = envelope(&assertion, keys)?;
 
     // The AA20 guard: an undeployed sender with no initCode is a guaranteed
@@ -731,25 +1002,92 @@ fn sign_and_submit(
         ));
     }
 
-    // This operation's own id, the relay's `[existingHash:…]` judged by it.
-    let own = user_op_hash(&op, u64::from(chain_id)).unwrap_or_default();
-    let hash = match relay::send_user_op(&op, chain_id, extra, tier) {
-        Ok(hash) => hash,
-        Err(relay::SubmitError::Occupied { error }) => after_collision(
-            &error,
-            &own,
-            |previous| landing::await_landing(previous, chain_id, PREVIOUS_OP_WAIT),
-            || relay::send_user_op(&op, chain_id, extra, tier),
-        )?,
-        Err(relay::SubmitError::Rejected(message)) => return Err(classify_rejection(message)),
-        Err(relay::SubmitError::Unreachable) => return Err(other(UNREACHABLE)),
-    };
-    chain::bump_nonce(safe, chain_id);
-    note_submitted(chain_id, safe, &hash, &op.nonce);
-    Ok(hash)
+    // Known before the first POST (RA6): the name the operation is followed
+    // by when the relay's reply never comes back. The signature is not part
+    // of it, so this is the hash of exactly what goes out.
+    let local_hash = user_op_hash(&op, u64::from(chain_id)).map_err(|e| other(e.to_string()))?;
+    let submit_block = tail.head.and_then(|head| head.join().ok()).flatten();
+    clear_and_post(
+        &local_hash,
+        submit_block,
+        tail.before_post,
+        tail.asked,
+        // 083 S3b: another operation of the account holds the nonce — wait
+        // for it to land, then send this one again, as signed.
+        || {
+            after_collision(
+                relay::send_user_op(&op, chain_id, extra, tier, &local_hash),
+                |previous| landing::await_landing(previous, chain_id, PREVIOUS_OP_WAIT),
+                || relay::send_user_op(&op, chain_id, extra, tier, &local_hash),
+            )
+        },
+        // RA5: the local nonce moves only for an operation the relay holds.
+        // One that may have been sent keeps nonce N, so a second attempt can
+        // never become a second payment: the EntryPoint lets at most one
+        // operation with N land.
+        |accepted| {
+            chain::bump_nonce(safe, chain_id);
+            // The next submit for this account waits for this one (083).
+            note_submitted(chain_id, safe, accepted, &op.nonce);
+        },
+    )
 }
 
-const UNREACHABLE: &str = "The gas relayer could not be reached. Please try again.";
+/// The last steps before the bytes leave, in the order the money rules set:
+/// the write-ahead (RJ1: the record is on disk, or nothing is sent), then
+/// the asker check (RB2: nobody is left to answer, so nothing is sent), then
+/// the POST — its verdict the core's (`post`, a seam for the tests) — and
+/// the nonce bump for an operation the relay took (`accepted`).
+fn clear_and_post(
+    local_hash: &str,
+    submit_block: Option<u64>,
+    before_post: BeforePost<'_>,
+    asked: Asked<'_>,
+    post: impl FnOnce() -> SubmitVerdict,
+    accepted: impl FnOnce(&str),
+) -> Result<Submitted, SubmitFailure> {
+    if !before_post(local_hash, submit_block) {
+        vlog!(
+            "relay",
+            "op={} not sent: its record was not written within {WRITE_AHEAD_WAIT_MS} ms",
+            short(local_hash)
+        );
+        return Err(SubmitFailure::NotSent);
+    }
+    // The last moment a page that left can still stop it (RB2): past this
+    // line the operation may reach the relay, and then it is recorded and
+    // followed like any other.
+    if !asked() {
+        vlog!(
+            "relay",
+            "op={} not sent: the page that asked is gone",
+            short(local_hash)
+        );
+        return Err(SubmitFailure::AskerGone);
+    }
+    match post() {
+        SubmitVerdict::Accepted { user_op_hash } => {
+            accepted(&user_op_hash);
+            Ok(Submitted {
+                user_op_hash,
+                maybe_sent: false,
+                submit_block,
+            })
+        }
+        SubmitVerdict::MaybeSent { user_op_hash } => Ok(Submitted {
+            user_op_hash,
+            maybe_sent: true,
+            submit_block,
+        }),
+        SubmitVerdict::NotSent { rejection } => Err(match rejection {
+            None => SubmitFailure::NotSent,
+            Some(RelayRejection::RelayerUnavailable) => SubmitFailure::RelayerUnavailable,
+            Some(RelayRejection::BundlerUnderfunded) => SubmitFailure::BundlerUnderfunded,
+            Some(RelayRejection::NonceHeld { .. }) => other(PREVIOUS_PENDING),
+            Some(RelayRejection::Other(message)) => SubmitFailure::Refused(message),
+        }),
+    }
+}
 
 // ---------------------------------------------------------------------------
 // This account's previous operation (083)
@@ -762,7 +1100,7 @@ const PREVIOUS_OP_WAIT: Duration = Duration::from_millis(WAIT_WINDOW_MS as u64);
 /// What a request that could not go out behind another of the account's
 /// operations tells its page — for the developer; the screen has its own
 /// words.
-pub const PREVIOUS_PENDING: &str = "Another transaction from this account was still pending, so this one was not sent. Try again once it has confirmed.";
+pub const PREVIOUS_PENDING: &str = vela_core::user_op::PREVIOUS_PENDING_DETAIL;
 
 /// The last operation this app submitted for an account on a chain, and
 /// whether it has been seen to land (spent its nonce).
@@ -883,51 +1221,40 @@ fn at_least(nonce: String, floor: Option<u128>) -> String {
     }
 }
 
-/// The relay refused a signed operation because one of the account's is
-/// already pending at its nonce (083, S3b). That operation's hash is NEVER
-/// this request's answer — answered with it, Uniswap reported a swap done
-/// when only its approval had happened. So:
-///
-/// - it IS this operation (a submit that had in fact arrived): its hash;
-/// - another one: wait for it to land ([`PREVIOUS_OP_WAIT`]), then send this
-///   one again, as signed. The relay takes it when the two nonces differ; it
-///   refuses it when they were the same (the earlier operation spent it) —
-///   and then, or when the other never lands, this request fails clearly and
-///   nothing of it went out.
+/// The relay refused a signed operation because another of the account's
+/// is already pending at its nonce (083, S3b; the core's
+/// `RelayRejection::NonceHeld`). That operation's hash is NEVER this
+/// request's answer — answered with it, Uniswap reported a swap done when
+/// only its approval had happened. So wait for it to land
+/// ([`PREVIOUS_OP_WAIT`]), then send this one again, as signed: the relay
+/// takes it when the two nonces differ, and refuses it when they were the
+/// same (the earlier operation spent it). When the other never lands, or the
+/// relay still refuses, nothing of this one went out and the request fails
+/// clearly ([`PREVIOUS_PENDING`]). Any other verdict passes through.
 fn after_collision(
-    error: &str,
-    own: &str,
+    verdict: SubmitVerdict,
     wait: impl FnOnce(&str) -> Option<Landing>,
-    resubmit: impl FnOnce() -> Result<String, relay::SubmitError>,
-) -> Result<String, SubmitFailure> {
-    let previous = match existing_op(error, own) {
-        Some(ExistingOp::ThisOne(hash)) => {
-            eprintln!("[vela-wallet] relay: already holds this operation ({hash})");
-            return Ok(hash);
-        }
-        Some(ExistingOp::Another(previous)) => previous,
-        None => return Err(other(PREVIOUS_PENDING)),
+    resubmit: impl FnOnce() -> SubmitVerdict,
+) -> SubmitVerdict {
+    let SubmitVerdict::NotSent {
+        rejection: Some(RelayRejection::NonceHeld {
+            user_op_hash: previous,
+        }),
+    } = &verdict
+    else {
+        return verdict;
     };
-    eprintln!(
-        "[vela-wallet] relay: another operation of this account is pending ({previous}); waiting for it"
+    vlog!(
+        "relay",
+        "another operation of this account is pending ({}); waiting for it",
+        short(previous)
     );
-    match wait(&previous) {
-        Some(Landing::Landed(_) | Landing::Reverted(_)) => note_landed(&previous),
+    match wait(previous) {
+        Some(Landing::Landed(_) | Landing::Reverted(_)) => note_landed(previous),
         Some(Landing::Refused) => {}
-        None => return Err(other(PREVIOUS_PENDING)),
+        None => return verdict,
     }
-    match resubmit() {
-        Ok(hash) => Ok(hash),
-        Err(relay::SubmitError::Occupied { error }) => match existing_op(&error, own) {
-            Some(ExistingOp::ThisOne(hash)) => Ok(hash),
-            _ => Err(other(PREVIOUS_PENDING)),
-        },
-        Err(relay::SubmitError::Rejected(message)) => {
-            eprintln!("[vela-wallet] relay: refused again after {previous} landed: {message}");
-            Err(other(PREVIOUS_PENDING))
-        }
-        Err(relay::SubmitError::Unreachable) => Err(other(UNREACHABLE)),
-    }
+    resubmit()
 }
 
 /// A message (EIP-1271, spec 044 on the phones): the key signs the Safe's
@@ -940,10 +1267,12 @@ pub fn sign_message(
     original_hash: &[u8],
     keys: &[WalletKey],
     mut signer: Signer<'_>,
+    edges: Edges<'_>,
+    asked: Asked<'_>,
 ) -> Result<String, SubmitFailure> {
     let challenge = compute_safe_message_hash(original_hash, u64::from(chain_id), safe)
         .map_err(|e| other(e.to_string()))?;
-    let assertion = signer.sign(&challenge, chain_id, safe, keys, None)?;
+    let assertion = signer.sign(&challenge, chain_id, safe, keys, None, edges, asked)?;
     let hex = |text: &str| from_hex(text).map_err(|e| other(e.to_string()));
     let signature = eip1271_envelope_signature(
         &hex(&assertion.authenticator_data_hex)?,
@@ -954,21 +1283,6 @@ pub fn sign_message(
     )
     .map_err(|e| other(e.to_string()))?;
     Ok(to_hex(&signature, true))
-}
-
-/// The relay's sentence, classified the way `classifySubmit` does.
-fn classify_rejection(message: String) -> SubmitFailure {
-    if message
-        .to_lowercase()
-        .contains("gas relayer is unavailable")
-    {
-        return SubmitFailure::RelayerUnavailable;
-    }
-    if relay::is_bundler_underfunded(&message) {
-        return SubmitFailure::BundlerUnderfunded;
-    }
-    eprintln!("[vela-wallet] send: unhandled relay error: {message}");
-    other(message)
 }
 
 /// The assertion as the Safe's contract signature: compatibility-checked,
@@ -1051,8 +1365,9 @@ fn raise_to_measured_floor(
     }
     match inner_calls_gas_floor(&measured, inner.len()) {
         Some(floor) if floor > op.call_gas_limit => {
-            eprintln!(
-                "[vela-wallet] callGasLimit raised to the inner calls' own estimate bundler={} inner={floor}",
+            vlog!(
+                "fee",
+                "callGasLimit raised to the inner calls' own estimate bundler={} inner={floor}",
                 op.call_gas_limit
             );
             op.call_gas_limit = floor;
@@ -1089,76 +1404,92 @@ mod tests {
     const OWN: &str = "0x2222222222222222222222222222222222222222222222222222222222222222";
     const APPROVAL: &str = "0x1111111111111111111111111111111111111111111111111111111111111111";
 
-    fn occupied_by(hash: &str) -> String {
-        format!(r#"{{"code":-32602,"message":"AA25 invalid account nonce [existingHash:{hash}]"}}"#)
+    fn held_by(hash: &str) -> SubmitVerdict {
+        SubmitVerdict::NotSent {
+            rejection: Some(RelayRejection::NonceHeld {
+                user_op_hash: hash.to_owned(),
+            }),
+        }
+    }
+
+    fn accepted(hash: &str) -> SubmitVerdict {
+        SubmitVerdict::Accepted {
+            user_op_hash: hash.to_owned(),
+        }
     }
 
     /// 083 S3b: the relay names ANOTHER pending operation of the account —
-    /// Uniswap's approval, when its swap is submitted. That hash is never
-    /// the swap's answer: the swap waits for the approval to land, then goes
-    /// out as signed; if the relay still will not take it, the request fails
-    /// clearly and nothing of it went out.
+    /// Uniswap's approval, when its swap is submitted (the core's
+    /// `NonceHeld`). That hash is never the swap's answer: the swap waits for
+    /// the approval to land, then goes out as signed; if the relay still will
+    /// not take it, the request fails clearly and nothing of it went out.
     #[test]
     fn another_pending_operation_is_never_this_requests_hash() {
         // It lands; this one goes out after it.
         let mut waited_for = None;
         let sent = after_collision(
-            &occupied_by(APPROVAL),
-            OWN,
+            held_by(APPROVAL),
             |previous| {
                 waited_for = Some(previous.to_owned());
                 Some(Landing::Landed("0xtx".to_owned()))
             },
-            || Ok(OWN.to_owned()),
+            || accepted(OWN),
         );
-        assert_eq!(sent, Ok(OWN.to_owned()), "this operation's own hash");
+        assert_eq!(sent, accepted(OWN), "this operation's own hash");
         assert_eq!(waited_for.as_deref(), Some(APPROVAL));
 
         // It lands, and the relay refuses this one: the approval spent the
-        // nonce it was signed with.
+        // nonce it was signed with. The relay's refusal stands — not sent.
+        let refused = SubmitVerdict::NotSent {
+            rejection: Some(RelayRejection::Other(
+                "Transaction nonce mismatch. Please try again.".to_owned(),
+            )),
+        };
         let spent = after_collision(
-            &occupied_by(APPROVAL),
-            OWN,
+            held_by(APPROVAL),
             |_| Some(Landing::Landed("0xtx".to_owned())),
-            || {
-                Err(relay::SubmitError::Rejected(
-                    "Transaction nonce mismatch. Please try again.".to_owned(),
-                ))
-            },
+            || refused.clone(),
         );
-        assert_eq!(spent, Err(other(PREVIOUS_PENDING)));
+        assert_eq!(spent, refused);
 
-        // It never lands in the window: nothing is sent again.
+        // It never lands in the window: nothing is sent again, and the
+        // request fails as held behind it.
         let mut resent = false;
         let stuck = after_collision(
-            &occupied_by(APPROVAL),
-            OWN,
+            held_by(APPROVAL),
             |_| None,
             || {
                 resent = true;
-                Ok(OWN.to_owned())
+                accepted(OWN)
             },
         );
-        assert_eq!(stuck, Err(other(PREVIOUS_PENDING)));
+        assert_eq!(stuck, held_by(APPROVAL));
         assert!(!resent);
 
-        for answer in [sent, spent, stuck] {
-            assert_ne!(answer, Ok(APPROVAL.to_owned()), "the approval's hash");
+        for answer in [&sent, &spent, &stuck] {
+            assert_ne!(*answer, accepted(APPROVAL), "the approval's hash");
         }
         assert!(PREVIOUS_PENDING.starts_with("Another transaction from this account"));
     }
 
-    /// …and when the relay names THIS operation (a submit that had arrived),
-    /// that is this request's hash — nothing to wait for, nothing to resend.
+    /// Any other verdict passes through untouched — nothing to wait for,
+    /// nothing to resend.
     #[test]
-    fn this_very_operation_is_its_own_hash() {
-        let answer = after_collision(
-            &occupied_by(&OWN.to_uppercase().replace("0X", "0x")),
-            OWN,
-            |_| unreachable!("nothing to wait for"),
-            || unreachable!("nothing to resend"),
-        );
-        assert!(answer.is_ok_and(|hash| hash.eq_ignore_ascii_case(OWN)));
+    fn a_verdict_without_a_held_nonce_passes_through() {
+        for verdict in [
+            accepted(OWN),
+            SubmitVerdict::MaybeSent {
+                user_op_hash: OWN.to_owned(),
+            },
+            SubmitVerdict::NotSent { rejection: None },
+        ] {
+            let answer = after_collision(
+                verdict.clone(),
+                |_| unreachable!("nothing to wait for"),
+                || unreachable!("nothing to resend"),
+            );
+            assert_eq!(answer, verdict);
+        }
     }
 
     /// Before building: this app's previous operation for the account lands
@@ -1295,6 +1626,227 @@ mod tests {
         assert_eq!(usable(None), None);
     }
 
+    const LOCAL: &str = "0x7df211eddc000000000000000000000000000000000000000000000000000000";
+
+    /// What one run of the last steps did, against a fake relay.
+    struct Posted {
+        outcome: Result<Submitted, SubmitFailure>,
+        posts: u32,
+        bumps: u32,
+    }
+
+    fn post_after(
+        clearance: bool,
+        still_asked: bool,
+        verdict: SubmitVerdict,
+        order: &std::cell::RefCell<Vec<&'static str>>,
+    ) -> Posted {
+        let posts = std::cell::Cell::new(0);
+        let bumps = std::cell::Cell::new(0);
+        let before_post = |hash: &str, block: Option<u64>| {
+            assert_eq!(hash, LOCAL);
+            assert_eq!(block, Some(48_487_620));
+            order.borrow_mut().push("written ahead");
+            clearance
+        };
+        let asked = || {
+            order.borrow_mut().push("asker checked");
+            still_asked
+        };
+        let outcome = clear_and_post(
+            LOCAL,
+            Some(48_487_620),
+            &before_post,
+            &asked,
+            || {
+                order.borrow_mut().push("POST");
+                posts.set(posts.get() + 1);
+                verdict
+            },
+            |_| bumps.set(bumps.get() + 1),
+        );
+        Posted {
+            outcome,
+            posts: posts.get(),
+            bumps: bumps.get(),
+        }
+    }
+
+    /// Spec 082 RJ1 (G34): nothing is POSTed before the core's word that the
+    /// record is on disk, and the page's check comes after it, right before
+    /// the POST. Accepted still moves the nonce (RA5), once.
+    #[test]
+    fn nothing_is_posted_before_the_record_is_written() {
+        let order = std::cell::RefCell::new(Vec::new());
+        let run = post_after(
+            true,
+            true,
+            SubmitVerdict::Accepted {
+                user_op_hash: LOCAL.to_owned(),
+            },
+            &order,
+        );
+        assert_eq!(
+            *order.borrow(),
+            vec!["written ahead", "asker checked", "POST"]
+        );
+        assert_eq!(run.posts, 1);
+        assert_eq!(
+            run.bumps, 1,
+            "RA5: the nonce moves for an op the relay holds"
+        );
+        assert_eq!(
+            run.outcome,
+            Ok(Submitted {
+                user_op_hash: LOCAL.to_owned(),
+                maybe_sent: false,
+                submit_block: Some(48_487_620),
+            })
+        );
+
+        // A lost reply keeps nonce N: at most one op with it can land.
+        let order = std::cell::RefCell::new(Vec::new());
+        let maybe = post_after(
+            true,
+            true,
+            SubmitVerdict::MaybeSent {
+                user_op_hash: LOCAL.to_owned(),
+            },
+            &order,
+        );
+        assert_eq!((maybe.posts, maybe.bumps), (1, 0));
+        assert!(maybe.outcome.is_ok_and(|op| op.maybe_sent));
+    }
+
+    /// No clearance in time: not one POST, and the failure says nothing was
+    /// sent — the dApp's "relay unreachable; nothing was sent", Send's
+    /// "failed, try again" (it may: nothing left).
+    #[test]
+    fn no_clearance_means_no_post() {
+        let order = std::cell::RefCell::new(Vec::new());
+        let run = post_after(
+            false,
+            true,
+            SubmitVerdict::Accepted {
+                user_op_hash: LOCAL.to_owned(),
+            },
+            &order,
+        );
+        assert_eq!((run.posts, run.bumps), (0, 0));
+        assert_eq!(run.outcome, Err(SubmitFailure::NotSent));
+        assert_eq!(*order.borrow(), vec!["written ahead"]);
+
+        // The page left after the record was written: still nothing sent.
+        let order = std::cell::RefCell::new(Vec::new());
+        let gone = post_after(
+            true,
+            false,
+            SubmitVerdict::Accepted {
+                user_op_hash: LOCAL.to_owned(),
+            },
+            &order,
+        );
+        assert_eq!((gone.posts, gone.bumps), (0, 0));
+        assert_eq!(gone.outcome, Err(SubmitFailure::AskerGone));
+    }
+
+    /// RJ3: the relay's refusal is a refusal, apart from "unavailable" and
+    /// "underfunded", which keep their own ways.
+    #[test]
+    fn a_relay_rejection_is_a_refusal() {
+        let order = std::cell::RefCell::new(Vec::new());
+        let refused = post_after(
+            true,
+            true,
+            SubmitVerdict::NotSent {
+                rejection: Some(RelayRejection::Other("AA23 reverted".to_owned())),
+            },
+            &order,
+        );
+        assert_eq!(
+            refused.outcome,
+            Err(SubmitFailure::Refused("AA23 reverted".to_owned()))
+        );
+        assert_eq!(refused.bumps, 0);
+        let unavailable = post_after(
+            true,
+            true,
+            SubmitVerdict::NotSent {
+                rejection: Some(RelayRejection::RelayerUnavailable),
+            },
+            &order,
+        );
+        assert_eq!(unavailable.outcome, Err(SubmitFailure::RelayerUnavailable));
+        let never = post_after(
+            true,
+            true,
+            SubmitVerdict::NotSent { rejection: None },
+            &order,
+        );
+        assert_eq!(never.outcome, Err(SubmitFailure::NotSent));
+    }
+
+    /// The clearance is for one hash, is not lost when it comes before the
+    /// wait, and is consumed: a second attempt at the same hash (S5 and both
+    /// DX9 runs shared one) waits for its own record.
+    #[test]
+    fn a_clearance_is_for_one_hash_and_one_attempt() {
+        let clearance = Clearance::default();
+        clearance.arm(LOCAL);
+        clearance.clear("0xsomebody-else");
+        assert!(
+            !clearance.wait(std::time::Duration::ZERO),
+            "another op's word"
+        );
+
+        clearance.arm(LOCAL);
+        clearance.clear(&LOCAL.to_uppercase().replace("0X", "0x"));
+        assert!(
+            clearance.wait(std::time::Duration::ZERO),
+            "cleared before the wait began"
+        );
+        clearance.arm(LOCAL);
+        assert!(
+            !clearance.wait(std::time::Duration::from_millis(20)),
+            "the last attempt's word is spent"
+        );
+
+        // Across threads, the way the host and the worker meet.
+        let clearance = std::sync::Arc::new(Clearance::default());
+        let from_host = std::sync::Arc::clone(&clearance);
+        let started = std::time::Instant::now();
+        let cleared = clearance.write_ahead(LOCAL, move || {
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                from_host.clear(LOCAL);
+            });
+        });
+        assert!(cleared);
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    /// RJ19: a relay estimate that says the call reverts reads as such, and
+    /// one that simply got no answer does not.
+    #[test]
+    fn a_failed_estimate_is_read_by_the_core() {
+        let reverts = relay::EstimateError {
+            message: "UserOperation reverted during simulation with reason: AA23".to_owned(),
+            error_json: Some(
+                r#"{"code":-32500,"message":"UserOperation reverted during simulation with reason: AA23 reverted"}"#
+                    .to_owned(),
+            ),
+        };
+        assert!(matches!(
+            reverts.classified(),
+            EstimateFailure::Reverts { .. }
+        ));
+        let lost = relay::EstimateError {
+            message: "gas estimation unreachable".to_owned(),
+            error_json: None,
+        };
+        assert_eq!(lost.classified(), EstimateFailure::Unavailable);
+    }
+
     #[test]
     fn the_failure_vocabulary_maps_onto_the_core_s() {
         assert_eq!(
@@ -1305,18 +1857,119 @@ mod tests {
             SendSubmitFailure::from(SubmitFailure::Other(String::new())),
             SendSubmitFailure::Other { message: None }
         );
+        // Spec 082 RA10: "the relay was never reached" reaches the send
+        // machine as its generic failure, carrying the fixed sentence the
+        // dApp is told — never the pool's text.
         assert_eq!(
-            classify_rejection("The gas relayer is unavailable right now.".to_owned()),
-            SubmitFailure::RelayerUnavailable
+            SendSubmitFailure::from(SubmitFailure::NotSent),
+            SendSubmitFailure::Other {
+                message: Some(NOT_SENT_DAPP_DETAIL.to_owned())
+            }
         );
-        assert_eq!(
-            classify_rejection("dedicated bundler gas account is short".to_owned()),
-            SubmitFailure::BundlerUnderfunded
+    }
+
+    /// Spec 082 RA9 (T051): the Touch ID prompt is bracketed by the two edges
+    /// the sheet words its stage from — "started" before the prompt opens,
+    /// "signed" only after it came back with a signature, and no "signed" for
+    /// a prompt the person dismissed.
+    #[test]
+    fn the_passkey_is_bracketed_by_the_ceremony_edges() {
+        let log = std::cell::RefCell::new(Vec::<&str>::new());
+        let edges = |edge: CeremonyEdge| {
+            log.borrow_mut().push(match edge {
+                CeremonyEdge::Started => "started",
+                CeremonyEdge::Signed => "signed",
+            });
+        };
+        let assertion = Assertion {
+            credential_id: "cred0".to_owned(),
+            signature_der_hex: String::new(),
+            authenticator_data_hex: String::new(),
+            client_data_json_hex: String::new(),
+            user_id_hex: None,
+            authenticator_attachment: String::new(),
+            signer_origin: None,
+        };
+        let mut touch = |_: &[u8]| {
+            log.borrow_mut().push("touch id");
+            Ok(assertion.clone())
+        };
+        let signed = Signer::Passkey(&mut touch).sign(
+            &[7; 32],
+            100,
+            "0xsafe",
+            &[],
+            None,
+            &edges,
+            &always_asked,
         );
-        assert!(matches!(
-            classify_rejection("AA25 invalid account nonce".to_owned()),
-            SubmitFailure::Other(_)
-        ));
+        assert!(signed.is_ok());
+        assert_eq!(log.take(), vec!["started", "touch id", "signed"]);
+
+        let mut dismissed = |_: &[u8]| {
+            log.borrow_mut().push("touch id");
+            Err(PasskeyFailure {
+                kind: FailureKind::Cancelled,
+                message: None,
+            })
+        };
+        let declined = Signer::Passkey(&mut dismissed).sign(
+            &[7; 32],
+            100,
+            "0xsafe",
+            &[],
+            None,
+            &edges,
+            &always_asked,
+        );
+        assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
+        assert_eq!(log.take(), vec!["started", "touch id"]);
+    }
+
+    /// Spec 082 RB2 (money rule): nothing is signed for a page that has gone.
+    /// Asked before the prompt opens — a gone page gets no prompt at all —
+    /// and again when it answers: a page that left while Touch ID was up gets
+    /// its signature dropped, so the relay POST that follows never happens.
+    #[test]
+    fn a_page_that_left_gets_nothing_signed() {
+        let log = std::cell::RefCell::new(Vec::<&str>::new());
+        let edges = |edge: CeremonyEdge| {
+            log.borrow_mut().push(match edge {
+                CeremonyEdge::Started => "started",
+                CeremonyEdge::Signed => "signed",
+            });
+        };
+        let assertion = Assertion {
+            credential_id: "cred0".to_owned(),
+            signature_der_hex: String::new(),
+            authenticator_data_hex: String::new(),
+            client_data_json_hex: String::new(),
+            user_id_hex: None,
+            authenticator_attachment: String::new(),
+            signer_origin: None,
+        };
+        let here = std::cell::Cell::new(false);
+        let asked = || here.get();
+        let mut touch = |_: &[u8]| {
+            log.borrow_mut().push("touch id");
+            Ok(assertion.clone())
+        };
+        let gone =
+            Signer::Passkey(&mut touch).sign(&[7; 32], 100, "0xsafe", &[], None, &edges, &asked);
+        assert_eq!(gone.err(), Some(SubmitFailure::AskerGone));
+        assert!(log.take().is_empty(), "no prompt for a page that is gone");
+
+        // Here when the prompt opened, gone by the time it answered.
+        here.set(true);
+        let mut leaves = |_: &[u8]| {
+            log.borrow_mut().push("touch id");
+            here.set(false);
+            Ok(assertion.clone())
+        };
+        let left =
+            Signer::Passkey(&mut leaves).sign(&[7; 32], 100, "0xsafe", &[], None, &edges, &asked);
+        assert_eq!(left.err(), Some(SubmitFailure::AskerGone));
+        assert_eq!(log.take(), vec!["started", "touch id"]);
     }
 
     #[test]
@@ -1435,6 +2088,10 @@ mod tests {
         let answering = answers_once(&channel, move || {
             page_result(&signing_key(7), &credential, &signed_over)
         });
+        // Spec 082 RA9: the page is a ceremony like a passkey's — the sheet
+        // hears it open, then hears it answer, in that order.
+        let heard = std::cell::RefCell::new(Vec::new());
+        let edges = |edge: CeremonyEdge| heard.borrow_mut().push(edge);
         let signed = {
             let mut signer = Signer::TrustedSigner {
                 ask: &ask,
@@ -1442,9 +2099,21 @@ mod tests {
                 channel: &channel,
                 only: None,
             };
-            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
+            signer.sign(
+                &digest,
+                100,
+                &op.sender,
+                &keys,
+                Some((&op, &inner)),
+                &edges,
+                &always_asked,
+            )
         };
         let _ = answering.join();
+        assert_eq!(
+            heard.take(),
+            vec![CeremonyEdge::Started, CeremonyEdge::Signed]
+        );
         let assertion = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));
         let signature = envelope(&assertion, &keys).unwrap_or_else(|e| unreachable!("{e:?}"));
         // The second key signed, so its own proxy verifies — not the shared
@@ -1468,9 +2137,20 @@ mod tests {
                 channel: &channel,
                 only: None,
             };
-            signer.sign(&digest, 100, &op.sender, &keys, Some((&op, &inner)))
+            signer.sign(
+                &digest,
+                100,
+                &op.sender,
+                &keys,
+                Some((&op, &inner)),
+                &edges,
+                &always_asked,
+            )
         };
         let _ = declining.join();
+        // Opened, never signed: no "done" edge for a ceremony that returned
+        // nothing.
+        assert_eq!(heard.take(), vec![CeremonyEdge::Started]);
         assert_eq!(declined.err(), Some(SubmitFailure::PasskeyCancelled));
         assert_eq!(
             channel.ended(),
@@ -1516,6 +2196,8 @@ mod tests {
                     channel: &channel,
                     only: Some(&keys[1].credential_id),
                 },
+                &quiet,
+                &always_asked,
             );
             let _ = answering.join();
             (signed, channel.ended())
@@ -1577,6 +2259,8 @@ mod tests {
                 channel: &channel,
                 only: None,
             },
+            &quiet,
+            &always_asked,
         );
         let _ = answering.join();
         let signature = signed.unwrap_or_else(|failure| unreachable!("{failure:?}"));

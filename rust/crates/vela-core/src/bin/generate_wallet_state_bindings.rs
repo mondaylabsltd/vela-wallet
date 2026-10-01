@@ -16,7 +16,8 @@ use vela_core::app::approval_guard::{
     Event as GuardEvent, GuardOperation, GuardShellResult, GuardView,
 };
 use vela_core::app::balance_dashboard::{
-    BalanceOperation, BalanceShellResult, BalanceView, Event as BalanceEvent,
+    BalanceOperation, BalanceShellResult, BalanceView, Event as BalanceEvent, ReadSlot, StableRef,
+    TokenRef,
 };
 use vela_core::app::batch_import::{
     BatchOperation, BatchShellResult, BatchView, Event as BatchImportEvent,
@@ -70,12 +71,14 @@ use vela_core::app::session::{
 use vela_core::app::sign_pref::{
     Event as SignPrefEvent, SignPrefOperation, SignPrefShellResult, SignPrefView,
 };
-use vela_core::app::sign_request::{Event as SignEvent, SignOperation, SignShellResult, SignView};
+use vela_core::app::sign_request::{
+    Event as SignEvent, SignEnding, SignEndingState, SignOperation, SignShellResult, SignView,
+};
 use vela_core::app::token_trust::{
     Event as TrustEvent, TrustOperation, TrustShellResult, TrustView,
 };
 use vela_core::app::tx_tracker::{
-    Event as TrackEvent, TrackOperation, TrackShellResult, TrackView,
+    Event as TrackEvent, TrackOperation, TrackShellResult, TrackStatusAnswer, TrackView,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -198,6 +201,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     SendOperation::export_all(&config)?;
     SendShellResult::export_all(&config)?;
     SendView::export_all(&config)?;
+
+    // Not machine wire types: the JSON the wasm kernels answer in (spec 082,
+    // contract §12). No view or event reaches them, so each is a root of its
+    // own — otherwise the web would copy these shapes by hand.
+    SignEnding::export_all(&config)?; // signEndingOf, signEndingState's input
+    SignEndingState::export_all(&config)?; // signEndingState
+    TrackStatusAnswer::export_all(&config)?; // parseUserOpStatus
+    StableRef::export_all(&config)?; // balanceReadPlan's inputs
+    TokenRef::export_all(&config)?;
+    ReadSlot::export_all(&config)?; // balanceReadPlan
 
     println!("wallet-state bindings written to {}", out_dir.display());
     Ok(())

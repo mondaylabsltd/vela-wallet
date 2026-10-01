@@ -225,6 +225,9 @@ impl Machine for BalanceDashboard {
                                 tokens,
                             });
                         });
+                    // Counted while it reads: a "network came back" joins it
+                    // rather than starting a second round beside it (G53).
+                    let _reading = RoundGuard::enter();
                     let (tokens, failed) = balances::fetch_all_streaming(&address, &arrived);
                     // A chain that did not answer keeps what the last round
                     // knew it held; it is still reported as failed below.
@@ -330,15 +333,65 @@ static TICKING: AtomicBool = AtomicBool::new(false);
 /// page on its next frame — which is the same frame the change caused.
 static INVALIDATED: AtomicBool = AtomicBool::new(false);
 
+/// The network came back (spec 082 RE3) — a reason to read again that a
+/// round already reading satisfies, unlike [`INVALIDATED`], whose change (a
+/// token added, holdings moved by a landing) a round begun before it may
+/// have missed.
+static NETWORK_BACK: AtomicBool = AtomicBool::new(false);
+/// Balance rounds reading right now.
+static ROUNDS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Counts one round while it reads; the drop un-counts it on any exit.
+struct RoundGuard(());
+
+impl RoundGuard {
+    fn enter() -> Self {
+        ROUNDS.fetch_add(1, Ordering::SeqCst);
+        Self(())
+    }
+}
+
+impl Drop for RoundGuard {
+    fn drop(&mut self) {
+        ROUNDS.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 /// "What you are showing is out of date." Cheap, idempotent, and safe to call
 /// from an operation.
 pub fn invalidate() {
     INVALIDATED.store(true, Ordering::SeqCst);
 }
 
-/// Drain the flag. `true` means somebody should force a read.
+/// The network came back: read again — unless a round is already reading,
+/// which is that read (spec 082 RJ14, G53). Every "came back" used to force
+/// a second round beside the one out, and with the flap the pool carried two
+/// or three rounds at once: the relaunch the device pass read as "24 networks
+/// unavailable" over an empty list while one chain was faulted.
+pub fn network_back() {
+    NETWORK_BACK.store(true, Ordering::SeqCst);
+}
+
+/// Drain the flags. `true` means somebody should force a read.
 pub fn take_invalidation() -> bool {
-    INVALIDATED.swap(false, Ordering::SeqCst)
+    let changed = INVALIDATED.swap(false, Ordering::SeqCst);
+    let back = NETWORK_BACK.swap(false, Ordering::SeqCst);
+    if back && !changed && ROUNDS.load(Ordering::SeqCst) > 0 {
+        crate::diag::vlog!(
+            "balances",
+            "network back: the round already reading covers it"
+        );
+        return false;
+    }
+    changed || back
+}
+
+/// The flag is process-wide: the tests that raise and drain it take turns.
+#[cfg(test)]
+pub fn invalidation_turn() -> std::sync::MutexGuard<'static, ()> {
+    static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    TURN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Boot the hero and keep it honest for the life of the process.
@@ -508,11 +561,40 @@ mod tests {
     /// and the frame after it does not force another.
     #[test]
     fn an_invalidation_is_drained_once() {
+        let _turn = invalidation_turn();
+        let _ = take_invalidation();
         assert!(!take_invalidation(), "nothing to drain");
         invalidate();
         invalidate();
         assert!(take_invalidation(), "one drain reports it");
         assert!(!take_invalidation(), "and the next frame does not re-read");
+    }
+
+    /// Spec 082 RJ14 (G53): the network coming back reads again — unless a
+    /// round is already reading, which is that read. A change the round may
+    /// have missed (a token added, holdings moved) still forces its own.
+    #[test]
+    fn a_network_back_joins_the_round_already_reading() {
+        let _turn = invalidation_turn();
+        let _ = take_invalidation();
+
+        network_back();
+        assert!(take_invalidation(), "nothing reading: read");
+
+        {
+            let _reading = RoundGuard::enter();
+            network_back();
+            assert!(!take_invalidation(), "the round out is the read");
+            assert!(!take_invalidation(), "and it is not owed later either");
+
+            network_back();
+            invalidate();
+            assert!(take_invalidation(), "a change is never folded into it");
+        }
+
+        // The round ended (the guard is gone on any exit): the next one reads.
+        network_back();
+        assert!(take_invalidation());
     }
 
     /// A total written today comes back; one written two days ago does not.

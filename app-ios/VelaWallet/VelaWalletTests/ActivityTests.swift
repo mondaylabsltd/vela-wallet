@@ -11,6 +11,7 @@
 
 import Foundation
 import Testing
+import VelaCore
 @testable import VelaWallet
 
 @MainActor
@@ -232,5 +233,145 @@ struct ActivityTests {
         let padded = tether + String(repeating: "0", count: 64 - tether.count)
         let dynamic = offset + String(repeating: "0", count: 62) + "08" + padded
         #expect(TokenMetadata.decodeString(Data(hexString: dynamic)!) == "USD₮0")
+    }
+}
+
+// MARK: - A dApp's transactions and the empty lines (spec 082 T121, RG1–RG5)
+
+@MainActor
+struct DappActivityRowTests {
+    private let zh = Loc(overrideTag: "zh", preferredLanguages: [])
+    private let me = "0x88cca0eedbf2c4426110bbfc998f048689266894"
+    private let now = Date().timeIntervalSince1970 * 1000
+
+    /// The real feed core, fed the rows this app writes — the dApp's record
+    /// as `SignExecutor.recordRow` stores it, read back through `toWire`.
+    private func feed(_ rows: [[String: Any]], filter: Int? = nil) throws -> FeedViewWire {
+        let core = ActivityFeedCore()
+        var run = BridgeRun()
+        try run.take(core.dispatch(eventJson: CoreJSON.string(["type": "account_switched", "address": me])))
+        if let filter {
+            try run.take(core.dispatch(eventJson: CoreJSON.string(["type": "chain_filter_changed", "chain_id": filter])))
+        }
+        let wire = rows.compactMap(TxRecords.toWire)
+        try run.drain(core) { operation in
+            switch operation["type"] as? String {
+            case "read_tx_store":
+                return CoreJSON.string([
+                    "type": "store_loaded", "now_ms": now,
+                    "read_id": (operation["read_id"] as? NSNumber)?.intValue ?? 0,
+                    "records": wire,
+                ])
+            case "scan_incoming_transfers": return CoreJSON.string(["type": "sync_completed", "new_count": 0])
+            default: return nil
+            }
+        }
+        return try CoreJSON.decode(FeedViewWire.self, from: run.view)
+    }
+
+    private func dappRecord(_ id: String, status: String, value: String = "0x38d7ea4c68000") -> [String: Any] {
+        SignExecutor.recordRow([
+            "record_id": id, "kind": "dapp_tx", "method": "eth_sendTransaction",
+            "params_json": #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"\#(value)"}]"#,
+            "result": "", "from": me, "chain_id": 100, "now_ms": now, "status": status,
+            "user_op_hash": "0x" + String(repeating: "ab", count: 32),
+            "dapp_origin": "http://192.168.50.9:8137",
+            // 083 H2: the site is read from the origin the request came from.
+            "dapp_url": "http://192.168.50.9:8137",
+        ], nativeSymbol: "XDAI")
+    }
+
+    private struct Missing: Error {}
+
+    private func historyFixture() throws -> HistoryModel {
+        guard case .history(let model) = WalletFlowFixtures.build(.a1, loc: zh).base else { throw Missing() }
+        return model
+    }
+
+    private func detailFixture() throws -> TxDetailModel {
+        guard case .txDetail(let model)? = WalletFlowFixtures.build(.a3, loc: zh).sheet else { throw Missing() }
+        return model
+    }
+
+    private func items(_ view: FeedViewWire) -> [FeedItemWire] {
+        view.rows.compactMap { if case .item(let item) = $0 { return item } else { return nil } }
+    }
+
+    /// A pending dApp transaction is a row at once: "dApp 交易", "处理中 · the
+    /// site", its native amount — from the core's kind, status and site.
+    @Test func aPendingDappRowShowsItsSite() throws {
+        let view = try feed([dappRecord("dapp-1-tx", status: "pending")])
+        let item = try #require(items(view).first)
+        #expect(item.kind == .dappTx)
+        #expect(item.status == .pending)
+        #expect(item.site == "192.168.50.9:8137")
+        let row = WalletLive.activityRow(item, loc: zh, hidden: false)
+        #expect(row.kind == .dapp)
+        #expect(row.title == zh.t("history.txLabelDappTx"))
+        #expect(row.subtitle == "\(zh.t("componentsTx.detail.statusPending")) · 192.168.50.9:8137")
+        #expect(row.amount == "\u{2212}0.001")
+
+        // The detail says who asked, and the row's own lifecycle.
+        let detail = FlowsLive.txDetail(
+            item, record: view.transactions.first,
+            on: try detailFixture(), loc: zh
+        )
+        #expect(detail.title == zh.t("history.txLabelDappTx"))
+        #expect(detail.status.text == zh.t("componentsTx.detail.statusPending"))
+        #expect(detail.facts.contains { $0.label == zh.t("componentsUi.signing.siweOrigin") && $0.value == "192.168.50.9:8137" })
+    }
+
+    /// 082 X-FIRST-TAP: every row carries its record's feed id, on the home
+    /// and in History alike, so a tap opens that record — not whichever one
+    /// now sits at the tapped position after the feed moved.
+    @Test func everyRowCarriesItsRecordsId() throws {
+        let view = try feed([
+            dappRecord("dapp-1-tx", status: "pending"),
+            dappRecord("dapp-2-tx", status: "pending", value: "0x0"),
+        ])
+        let rows = WalletLive.activityGroups(view, loc: zh, hidden: false).flatMap(\.rows)
+        let ids = Set(items(view).map(\.id))
+        #expect(rows.count == 2)
+        #expect(Set(rows.compactMap(\.itemId)) == ids, "each row names its own record")
+        for row in rows {
+            let id = try #require(row.itemId)
+            #expect(FlowsLive.items(view).first { $0.id == id } != nil)
+        }
+    }
+
+    /// A failed one says so — never a quiet "done".
+    @Test func aFailedDappRowSaysFailed() throws {
+        // The tracker patches a record `failed` in place; the row is written
+        // pending at submit (`recordRow`).
+        var failedRow = dappRecord("dapp-2-tx", status: "pending", value: "0x0")
+        failedRow["status"] = "failed"
+        let view = try feed([failedRow])
+        let item = try #require(items(view).first)
+        #expect(item.status == .failed)
+        let row = WalletLive.activityRow(item, loc: zh, hidden: false)
+        #expect(row.subtitle.hasPrefix(zh.t("componentsTx.detail.statusFailed") + " · "))
+        #expect(row.amount.isEmpty, "a call that moved no coin shows no amount, not a −0")
+    }
+
+    /// The empty lines are the core's: "no transactions yet" on every
+    /// network, and the network sentence only under a filter.
+    @Test func theEmptyLinesAreTheCores() throws {
+        let all = try feed([])
+        #expect(all.historyEmptyKey == "history.emptyTitle")
+        #expect(all.homeEmptyKey == "home.emptyNoActivity")
+        let history = FlowsLive.history(
+            all, on: try historyFixture(), loc: zh, hidden: false
+        )
+        #expect(history.emptyText == zh.t("history.emptyTitle"))
+        #expect(history.emptyText != zh.t("history.emptyFilter"))
+
+        let filtered = try feed([], filter: 100)
+        #expect(filtered.historyEmptyKey == "history.emptyFilter")
+        let fallback = SectionModel(title: "", action: "", mode: .empty,
+                                    empty: SectionEmptyModel(title: "x", caption: "caption"))
+        let home = WalletLive.homeEmpty(filtered, fallback: fallback, loc: zh)
+        #expect(home.title == zh.t(filtered.homeEmptyKey))
+        if filtered.homeEmptyKey != "home.emptyNoActivity" { #expect(home.caption.isEmpty) }
+        #expect(WalletLive.homeEmpty(all, fallback: fallback, loc: zh).caption == "caption")
     }
 }

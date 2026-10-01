@@ -55,11 +55,17 @@ export const WALLET_FLOW_KEYS = [
 	// -------------------------------------------------------------- activity
 	'history.navTitle',
 	'history.loadingText',
+	'history.emptyTitle',
 	'history.emptyFilter',
 	'history.labelSent',
 	'history.labelReceived',
 	'history.txLabelSent',
 	'history.txLabelReceived',
+	// Spec 082 RG2: a dApp's transaction, and the site that asked for it.
+	'history.txLabelDappTx',
+	'componentsUi.signing.siweOrigin',
+	// Spec 082 RJ16: a dApp call's counterparty that is the contract it went to.
+	'componentsUi.signing.interactingLabel',
 	'history.deleteRecord',
 	'history.toName',
 	'history.fromName',
@@ -313,7 +319,12 @@ export const WALLET_FLOW_KEYS = [
 	'send.txElapsed',
 	'send.txSlowConfirm',
 	'componentsTx.receipt.txHash',
-	'componentsTx.receipt.done'
+	'componentsTx.receipt.done',
+	// Spec 082 RA10: a lost relay reply ("may have been sent") and a provable
+	// "not sent", on the Send receipt as on the signing sheet.
+	'componentsUi.signing.maybeSent',
+	'componentsTx.receipt.userOpHash',
+	'componentsTx.receipt.statusFailed'
 ] as const;
 
 export type WalletFlowKey = (typeof WALLET_FLOW_KEYS)[number];

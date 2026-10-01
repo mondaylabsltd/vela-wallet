@@ -30,6 +30,7 @@ import {
 	invalidateFeeSignals,
 	type TransactionFeeEstimate
 } from '$lib/services/safe-transaction';
+import { DeploymentReadError } from '$lib/services/deployment-read';
 import { createFeeSession, type FeeSession } from './fee-session';
 import { resolveFee } from './send-estimates';
 
@@ -178,6 +179,8 @@ export class FeeQuote {
 	 * that is "displayed = signed" broken in the most direct way available.
 	 */
 	#contextLost = $state(false);
+	/** The lost context was a chain node refusing for load (spec 082 RJ13). */
+	#contextRateLimited = $state(false);
 	/** The key the LIVE request carries, read when the core asks for a simulation. */
 	#publicKey: string | undefined = undefined;
 	/** At most one caller awaits settlement: a new request supersedes the last inside the core. */
@@ -249,6 +252,15 @@ export class FeeQuote {
 	}
 
 	/**
+	 * The lost context's read was refused for load (a public node's rate
+	 * limit), not unanswered — the fee row then says "rate-limited, retrying",
+	 * never "can't reach Vela" (spec 082 RJ13, G48).
+	 */
+	get contextRateLimited(): boolean {
+		return this.#contextRateLimited;
+	}
+
+	/**
 	 * Bumped every time this session is asked to price again.
 	 *
 	 * The speed picker's other rows are priced by separate sessions
@@ -284,10 +296,11 @@ export class FeeQuote {
 		let deployed: boolean;
 		try {
 			deployed = await accountIsDeployed(request.account, request.chainId);
-		} catch {
+		} catch (error) {
 			if (seq !== this.#seq) return this.#supersededOutcome(seq, { kind: 'context_unavailable' });
 			this.#neverReachedCore = true;
 			this.#contextLost = true;
+			this.#contextRateLimited = error instanceof DeploymentReadError && error.rateLimited;
 			this.#publish();
 			this.pending = false;
 			return { kind: 'context_unavailable' };
@@ -470,6 +483,7 @@ export class FeeQuote {
 		this.#lastRequest = request;
 		this.#publicKey = donor.#publicKey;
 		this.#contextLost = donor.#contextLost;
+		this.#contextRateLimited = donor.#contextRateLimited;
 		this.#neverReachedCore = donor.#neverReachedCore;
 		this.#dispatching = false;
 		this.asked = true;
@@ -494,6 +508,7 @@ export class FeeQuote {
 		donor.#latest = IDLE_FEE_VIEW;
 		donor.#publicKey = undefined;
 		donor.#contextLost = false;
+		donor.#contextRateLimited = false;
 		donor.#neverReachedCore = false;
 		donor.#dispatching = false;
 		donor.asked = false;

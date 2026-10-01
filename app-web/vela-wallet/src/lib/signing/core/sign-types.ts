@@ -44,19 +44,119 @@ export interface SignResponder {
 	 * transport sometimes has to act on WHICH refusal this was — a window
 	 * showing a blocked request (spec 081) stays open to explain it, while every
 	 * other answer closes it.
+	 *
+	 * `opHash` rides along with an on-chain request answered by its operation
+	 * hash (a receipt still pending, or an op that may have been sent — spec 082
+	 * RF3): the extension remembers it so the page's later receipt reads for that
+	 * hash can be translated to the real transaction.
 	 */
 	sendResponse(
 		id: string,
 		result?: unknown,
-		error?: { code: number; message: string; kind?: SignErrorKind }
+		error?: { code: number; message: string; kind?: SignErrorKind },
+		opHash?: { chainId: number }
 	): void;
+	/**
+	 * Is the asker still there to be answered (spec 082 RB5)? Asked at the three
+	 * points a request becomes harder to take back — approve, before the passkey
+	 * (`sign`), and between the write-ahead's clearance and the relay POST
+	 * (`submit`). Absent on a transport that cannot lose its asker (the wallet's
+	 * own page): then the answer is always yes.
+	 *
+	 * The `submit` claim carries the operation's hash and chain (spec 082 RJ2):
+	 * from then on a surface that goes before answering gets its page told that
+	 * hash — it may have been sent — never 4900.
+	 */
+	claim?(id: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean>;
+}
+
+/** The three claim points of a request (spec 082 RB5, contract §14). */
+export type ClaimPhase = 'approve' | 'sign' | 'submit';
+
+/**
+ * What a `submit` claim carries (spec 082 RJ2): the operation's hash and
+ * chain, sent after the write-ahead's clearance and right before the POST, so
+ * every request the worker answers by that hash has a durable record behind it.
+ */
+export type SubmitClaim = { opHash: string; chainId: number };
+
+/**
+ * The asker of request `id` was gone when the wallet checked (spec 082 RB5):
+ * nothing was signed or sent, and there is nobody to answer. The executor maps
+ * it to the core's `asker_gone` outcome.
+ */
+export class AskerGoneError extends Error {
+	constructor(readonly phase: ClaimPhase) {
+		super(`The page that asked is gone (${phase})`);
+		this.name = 'AskerGoneError';
+	}
+}
+
+/**
+ * The claim through the transport that owns a request (RB5): its own `claim`
+ * when it has one; a transport that cannot lose its asker — the wallet's own
+ * page — is always live, so nothing changes for it. A claim that throws is
+ * not a yes: a false "no" costs one re-approval, a false "yes" a signature
+ * nobody is there to receive.
+ */
+export async function claimThrough(
+	transport: SignResponder | undefined,
+	id: string,
+	phase: ClaimPhase,
+	submit?: SubmitClaim
+): Promise<boolean> {
+	if (!transport?.claim) return true;
+	try {
+		return await transport.claim(id, phase, submit);
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * The write-ahead's clearance did not come in time (spec 082 RJ1): the
+ * record of the op is not known to be on disk, so nothing was POSTed. The
+ * op was provably not sent; the executor reports it as such.
+ */
+export class WriteAheadTimeoutError extends Error {
+	constructor(readonly userOpHash: string) {
+		super(`The record of ${userOpHash.slice(0, 10)}… was not written in time; nothing was sent`);
+		this.name = 'WriteAheadTimeoutError';
+	}
 }
 
 export interface SignShellPorts {
 	/** The transport that owns a request. `null` when it is already gone. */
 	transportFor(transportId: string): SignResponder | null;
-	/** `onSubmitted(hash)` — dispatches `Event::OpSubmitted` mid-`SignAndSubmit`. */
-	opSubmitted(id: string, userOpHash: string): void;
+	/**
+	 * `onSubmitted(hash)` — dispatches `Event::OpSubmitted` mid-`SignAndSubmit`.
+	 * `maybeSent`: the relay's reply was lost and `userOpHash` is the local hash
+	 * (spec 082 RA2/RA3); `submitBlock`: the head read before the first POST.
+	 */
+	opSubmitted(id: string, userOpHash: string, maybeSent: boolean, submitBlock: number | null): void;
+	/**
+	 * The write-ahead (spec 082 RJ1): the op for request `id` is signed and
+	 * hashed and nothing has been POSTed — dispatches `Event::OpSigned`. The
+	 * core writes the record and answers `ClearToPost` once it is on disk.
+	 */
+	opSigned(id: string, userOpHash: string, submitBlock: number | null): void;
+	/**
+	 * `true` while the asker of request `id` is still there (spec 082 RB5):
+	 * the owning transport's `claim`, or `true` when that transport has none.
+	 * A `submit` claim carries the op's hash and chain (RJ2).
+	 */
+	askerLive(id: string, phase: ClaimPhase, submit?: SubmitClaim): Promise<boolean>;
+	/**
+	 * The passkey (or Trusted Signer) prompt opened / returned a signature for
+	 * request `id` — `CeremonyStarted` / `CeremonyDone` (spec 082 RA9), so the
+	 * sheet's words follow the real stage instead of guessing it.
+	 */
+	ceremony(id: string, stage: 'started' | 'done'): void;
+	/**
+	 * When the person approved request `id` (epoch ms) — the start of the dApp's
+	 * answer window (`dappReceiptWaitMs`, spec 082 RA12). `null` if unknown.
+	 */
+	approvedAtMs(id: string): number | null;
 	/**
 	 * The origin that sent request `id` — what the Trusted Signer's page shows
 	 * as the requester (spec 071). `SignAndSubmit` does not carry it, and the
@@ -85,6 +185,12 @@ export interface SignShellPorts {
 	 * sign path for a React commit to be ahead of.
 	 */
 	switchActiveAccount(index: number): Promise<void>;
+	/**
+	 * A record was written or patched — the Activity feed re-reads the store
+	 * (spec 082 RG3: `ReconcileCompleted{resolved_count: 1}`), so a dApp row
+	 * appears within one poke instead of the next 10–30 s tick.
+	 */
+	recordsWritten(): void;
 }
 
 export type SignRequestSessionOptions = SessionOptions<SignView> & {

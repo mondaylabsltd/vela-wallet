@@ -71,8 +71,12 @@ class SendController(
      */
     private val holdings: HoldingsFeed? = null,
     /** The tracker handoff; the wallet controller binds it (phase 4). */
-    var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
-        VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
+    var onTrackSubmitted: (TrackHandoff) -> Unit = { handoff ->
+        VelaLog.event("send.track", "no tracker bound", "hash" to handoff.userOpHash.take(12))
+    },
+    /** Spec 082 RJ1: the tracker's `Withdrawn`; the wallet controller binds it. */
+    var onTrackWithdrawn: (userOpHash: String, recordIds: List<String>) -> Unit = { hash, _ ->
+        VelaLog.event("send.track", "no tracker bound: withdraw", "hash" to hash.take(12))
     },
 ) {
 
@@ -115,8 +119,18 @@ class SendController(
             dispatch(SendEvent.SigningStarted)
         }
 
-        override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) {
-            onTrackSubmitted(userOpHash, recordIds, chainId)
+        override fun trackSubmitted(handoff: TrackHandoff) {
+            onTrackSubmitted(handoff)
+        }
+
+        // Spec 082 RJ1: signed and hashed, nothing posted — the core writes
+        // the rows ahead and clears the POST once they are on disk.
+        override fun opSigned(userOpHash: String, submitBlock: Long?) {
+            dispatch(SendEvent.OpSigned(user_op_hash = userOpHash, submit_block = submitBlock, now_ms = System.currentTimeMillis().toDouble()))
+        }
+
+        override fun trackWithdrawn(userOpHash: String, recordIds: List<String>) {
+            onTrackWithdrawn(userOpHash, recordIds)
         }
 
         override fun haptic(kind: SendHapticKind) {
@@ -354,6 +368,10 @@ class SendController(
         FeeFailure.CalculationFailed -> SendEstimateFailure.CalculationFailed
         FeeFailure.EstimateFailed -> SendEstimateFailure.EstimateFailed
         FeeFailure.GasQuoteTooHigh -> SendEstimateFailure.GasQuoteTooHigh
+        // The send machine's vocabulary has no word for a chain node that did
+        // not answer (spec 082 RJ13 is the signing sheet's fee row): the quote
+        // could not be had, and asking again is right.
+        is FeeFailure.ChainRead -> SendEstimateFailure.QuoteUnavailable
         // Spec 083 fee: the relay's "this operation fails", as the send
         // screen has always said that refusal.
         FeeFailure.WouldFail -> SendEstimateFailure.EstimateFailed

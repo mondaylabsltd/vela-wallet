@@ -110,10 +110,9 @@ pub fn registry_url() -> String {
 
 /// This module builds no agent of its own: `proxy` is the app's only HTTP
 /// client factory, and every request here walks its candidate chain
-/// (`proxy::with_candidates_for`) so a refused route is retried on the next
-/// one rather than reported as the index being down. See that module's note.
-/// Each call names its url: what the walk learns is kept per host, so a slow
-/// bundler or dApp never moves the index off a route that works (083 W13).
+/// (`proxy::with_routes`): the system's routes for the index's URL, the next
+/// one tried only when a proxy itself could not be reached. See that module's
+/// note.
 use super::proxy::{self, Transport};
 use super::{pool, storage};
 
@@ -138,7 +137,7 @@ fn get_json<T: serde::de::DeserializeOwned>(
     timeout: Duration,
 ) -> Result<T> {
     let url = format!("{}{path}", registry_url());
-    proxy::with_candidates_for(&url, timeout, |agent| agent.get(&url).call())
+    proxy::with_routes(&url, timeout, |agent| agent.get(&url).call())
         .map_err(|failure| classify(label, failure))?
         .body_mut()
         .read_json::<T>()
@@ -154,7 +153,7 @@ fn post_json<T: serde::de::DeserializeOwned>(
     timeout: Duration,
 ) -> Result<T> {
     let url = format!("{}{path}", registry_url());
-    proxy::with_candidates_for(&url, timeout, |agent| agent.post(&url).send_json(&body))
+    proxy::with_routes(&url, timeout, |agent| agent.post(&url).send_json(&body))
         .map_err(|failure| classify(label, failure))?
         .body_mut()
         .read_json::<T>()
@@ -336,7 +335,7 @@ fn perform(request: &LookupRequest) -> LookupAnswer {
         }
         LookupRequest::IndexGet { id, path } => {
             let url = format!("{}{path}", registry_url());
-            match proxy::with_candidates_for(&url, READ_TIMEOUT, |agent| agent.get(&url).call()) {
+            match proxy::with_routes(&url, READ_TIMEOUT, |agent| agent.get(&url).call()) {
                 Ok(mut response) => match response.body_mut().read_to_string() {
                     Ok(body) => LookupAnswer {
                         id: id.clone(),
@@ -638,7 +637,7 @@ fn perform_for_resolve(
         return perform(request);
     };
     let url = format!("{}{path}", registry_url());
-    let outcome = proxy::with_candidates_for(&url, READ_TIMEOUT, |agent| agent.get(&url).call())
+    let outcome = proxy::with_routes(&url, READ_TIMEOUT, |agent| agent.get(&url).call())
         .map_err(|failure| classify(label, failure))
         .and_then(|mut response| {
             response.body_mut().read_to_string().map_err(|error| {
@@ -884,26 +883,18 @@ fn eth_call(url: &str, to: &str, data_hex: &str) -> Result<Vec<u8>> {
         #[serde(default)]
         result: Option<String>,
     }
-    let reply: RpcReply = proxy::agent(READ_TIMEOUT)
-        .post(url)
-        .send_json(serde_json::json!({
+    let reply: RpcReply = proxy::with_routes(url, READ_TIMEOUT, |agent| {
+        agent.post(url).send_json(serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "eth_call",
             "params": [{ "to": to, "data": data_hex }, "latest"],
         }))
-        .map_err(|error| {
-            classify(
-                "Legacy name",
-                Transport {
-                    error,
-                    local: false,
-                },
-            )
-        })?
-        .body_mut()
-        .read_json()
-        .map_err(|error| RegistryError::answered(format!("Legacy name: bad JSON: {error}")))?;
+    })
+    .map_err(|failure| classify("Legacy name", failure))?
+    .body_mut()
+    .read_json()
+    .map_err(|error| RegistryError::answered(format!("Legacy name: bad JSON: {error}")))?;
     let result = reply.result.unwrap_or_default();
     let stripped = result.strip_prefix("0x").unwrap_or(&result);
     vela_core::primitives::from_hex(stripped)
@@ -1237,7 +1228,8 @@ mod tests {
                 "Query",
                 Transport {
                     error: ureq::Error::StatusCode(404),
-                    local: false
+                    local: false,
+                    proxy: None,
                 }
             )
             .network
@@ -1247,7 +1239,8 @@ mod tests {
                 "Query",
                 Transport {
                     error: ureq::Error::HostNotFound,
-                    local: false
+                    local: false,
+                    proxy: None,
                 }
             )
             .network
@@ -1258,6 +1251,7 @@ mod tests {
             Transport {
                 error: ureq::Error::HostNotFound,
                 local: true,
+                proxy: None,
             },
         );
         assert!(local.network && local.local);

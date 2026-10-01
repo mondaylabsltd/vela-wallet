@@ -1,0 +1,8 @@
+07:30:24.815413 [browser] requested host=example.org
+07:30:45.635893 [browser] timeout stalled host=example.org after=20784ms
+07:30:47.761031 [browser] retry #1 host=example.org
+07:31:08.761450 [browser] timeout stalled host=example.org after=20958ms
+07:30:21 CONFIG {"mode": "blackhole", "latency": 0, "bps": 0, "drop": 1.0, "match": "example"}
+07:30:25 HOLE example.org:443
+07:30:47 HOLE example.org:443
+07:31:12 CONFIG {"mode": "pass", "latency": 0, "bps": 0, "drop": 1.0, "match": "example"}

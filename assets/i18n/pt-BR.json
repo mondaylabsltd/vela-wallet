@@ -308,7 +308,6 @@
   "txRemaining": "~{{remaining}}s restantes",
   "txTypicalTime": "A rede {{chainName}} costuma confirmar em ~{{estSecs}}s",
   "txRetryBtn": "Tentar de novo",
-  "txErrorTimeout": "Transação enviada, mas a confirmação expirou. Verifique o histórico mais tarde.",
   "txErrorBundlerLoop": "O saldo da conta de gas continua sendo rejeitado pelo bundler. Tente de novo mais tarde ou aumente o nível de gas.",
   "txErrorBundlerFund": "A conta do bundler precisa de mais gas. Adicione fundos nas Configurações.",
   "txErrorPublicKey": "Chave pública não encontrada para esta conta",
@@ -1141,7 +1140,7 @@
    "statusConfirmed": "Confirmado",
    "statusSubmitted": "Enviado",
    "statusFailed": "Falhou",
-   "failedHint": "A transferência foi revertida on-chain — seus fundos não foram enviados. Uma taxa de rede ainda pode ter sido cobrada. Abra o explorer abaixo para ver o motivo, ou volte e tente de novo.",
+   "failedHint": "A transferência foi revertida on-chain — seus fundos não foram enviados. Uma taxa de rede ainda pode ter sido cobrada.",
    "userOpHash": "Hash da UserOp"
   },
   "detail": {
@@ -1359,7 +1358,7 @@
    "verifiedAbiSummary": "O contrato está verificado no explorador e seus parâmetros decodificam por completo, mas nenhum descritor ERC-7730 lhes dá significado.",
    "verifiedAbiWarning": "Este contrato não tem descritor ERC-7730 — os valores acima são a decodificação direta da ABI verificada on-chain. Confira-os.",
    "bestEffortSummary": "Chamando {{fn}} — lido da assinatura pública da função, não de um descritor verificado.",
-   "simUnavailableWarning": "Não foi possível simular esta transação (o RPC recusou) — a Vela não consegue prever o que ela faria. A menos que você confie totalmente neste site, recuse.",
+   "simUnavailableWarning": "A Vela não conseguiu verificar o que esta transação faz. Revise antes de assinar.",
    "drainSummary": "O site chama isto de resgate gratuito, mas a simulação mostra ativos saindo da sua carteira.",
    "drainWarning": "Saem ativos que o site nunca mencionou — isso se parece muito com um esvaziamento. Recuse.",
    "selectorNotListed": "Não foi possível decodificar — sem descritor ERC-7730 e com seletor não catalogado ({{bytes}} bytes)",
@@ -1408,6 +1407,8 @@
    "selfCallBlockedLegBody": "A etapa {{index}} desta solicitação mudaria quem controla a sua carteira ({{function}}). Assinar uma vez pode entregar a carteira a outra pessoa, então a Vela recusa a solicitação inteira. Nada foi assinado.",
    "selfCallBlockedSafeTx": "Esta solicitação pede que a sua chave autorize uma transação Safe para ser executada depois. A Vela recusa — uma assinatura dessas pode ser usada sem você. Nada foi assinado.",
    "stillConfirming": "Ainda não está na rede. O Vela continua verificando — não envie de novo.",
+   "maybeSent": "Talvez já tenha sido enviada. O Vela continua verificando — não envie de novo.",
+   "refused": "A rede recusou — nada foi enviado.",
    "unknownOutcome": "Ainda sem confirmação após 24 horas.",
    "openSigner": "Confirmar na página de assinatura",
    "signerDown": "A página de assinatura não abriu. Verifique sua conexão."
@@ -1849,7 +1850,9 @@
   "loadOffline": "Conexão instável — a página não abriu.",
   "loadNotFound": "Não foi possível encontrar este site. Confira o endereço.",
   "loadCertificate": "O certificado deste site é inválido, e o Vela o bloqueou.",
+  "loadProxy": "Seu proxy não está respondendo.",
   "loadRetrying": "Tentando de novo…",
-  "chainDown": "Sem conexão com {{chain}} — os dados da página podem estar incompletos."
+  "chainDown": "Sem conexão com {{chain}} — os dados da página podem estar incompletos.",
+  "requestOpen": "Primeiro conclua ou cancele o pedido"
  }
 }

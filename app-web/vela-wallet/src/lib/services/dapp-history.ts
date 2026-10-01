@@ -157,6 +157,38 @@ export interface SigningRecordInput {
 	 * signing sheet re-derives intent live at replay time; this is the recorded copy.
 	 */
 	intent?: string;
+	/**
+	 * The submit's reply was lost and `userOpHash` is the local hash (spec 082
+	 * RA3). Stored with the row so a reload follows it as may-have-been-sent.
+	 */
+	maybeSent?: boolean;
+	/** The head read before the first submit POST (ruling 8); absent = unknown. */
+	submitBlock?: number | null;
+}
+
+/**
+ * The native value a transaction request moves, as hex wei: `value` of an
+ * `eth_sendTransaction`, the SUM over every leg of a `wallet_sendCalls` batch
+ * (its `params[0]` is `{calls}`, not a transaction — reading `.value` there
+ * recorded every batch as moving nothing). Hex or decimal legs, as the submit
+ * path accepts them; anything unreadable counts as zero.
+ */
+function requestedValueHex(method: string, first: Record<string, unknown> | undefined): string {
+	if (method !== 'wallet_sendCalls') {
+		return typeof first?.value === 'string' ? first.value : '0x0';
+	}
+	const calls = Array.isArray(first?.calls) ? (first.calls as Record<string, unknown>[]) : [];
+	let total = 0n;
+	for (const call of calls) {
+		const value = call?.value;
+		if (typeof value !== 'string' || value === '' || value === '0x') continue;
+		try {
+			total += BigInt(value);
+		} catch {
+			/* unreadable — the submit refuses it; the row counts nothing */
+		}
+	}
+	return '0x' + total.toString(16);
 }
 
 /**
@@ -178,7 +210,9 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 		status = 'confirmed',
 		userOpHash = '',
 		assetChanges,
-		intent
+		intent,
+		maybeSent = false,
+		submitBlock = null
 	} = input;
 	const now = Math.floor(nowMs / 1000);
 	const signedContent = extractSignedContent(method, params);
@@ -195,23 +229,25 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 		signedRequest,
 		requestTruncated,
 		assetChanges,
-		intent
+		intent,
+		...(maybeSent ? { maybeSent: true } : {}),
+		...(submitBlock != null ? { submitBlock } : {})
 	};
 
 	if (method === 'eth_sendTransaction' || method === 'wallet_sendCalls') {
-		// Only a single transaction's `to` and `value` are the ones it submitted.
-		// A batch submits its `calls`; a top-level `to`/`value` beside them is
-		// whatever the page wrote, which the sheet never showed — kept, Activity
-		// drew a recipient and an amount that never moved (083 H2 review).
-		const tx = (
-			method === 'eth_sendTransaction' && Array.isArray(params) ? params[0] : undefined
-		) as Record<string, string> | undefined;
+		const first = (Array.isArray(params) ? params[0] : undefined) as
+			Record<string, unknown> | undefined;
+		// A batch names its first leg's recipient, as its sheet does (RC7).
+		const leg =
+			method === 'wallet_sendCalls' && Array.isArray(first?.calls)
+				? (first.calls[0] as Record<string, unknown> | undefined)
+				: first;
 		return {
 			...base,
 			id: `dapp-${nowMs}-tx`,
 			txHash: typeof result === 'string' ? result : '',
-			to: typeof tx?.to === 'string' ? tx.to : '',
-			value: tx?.value ?? '0x0',
+			to: typeof leg?.to === 'string' ? leg.to : '',
+			value: requestedValueHex(method, first),
 			symbol: nativeSymbol(chainId),
 			decimals: 18,
 			type: 'dapp_tx'

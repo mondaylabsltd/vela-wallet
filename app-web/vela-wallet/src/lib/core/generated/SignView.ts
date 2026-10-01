@@ -3,12 +3,31 @@ import type { SignBlockedView } from "./SignBlockedView";
 import type { SignErrorNotice } from "./SignErrorNotice";
 import type { SignFundingView } from "./SignFundingView";
 import type { SignNotice } from "./SignNotice";
+import type { SignPhase } from "./SignPhase";
 import type { SignRequestView } from "./SignRequestView";
 import type { SignSurface } from "./SignSurface";
 import type { SignSwipeAction } from "./SignSwipeAction";
 import type { SignTrackerHandoff } from "./SignTrackerHandoff";
+import type { SignTrackerWithdraw } from "./SignTrackerWithdraw";
 
-export type SignView = { surface: SignSurface, request: SignRequestView | null, is_signing: boolean, is_submitting: boolean, pending_op_hash: string | null, error: SignErrorNotice | null, funding: SignFundingView | null, 
+export type SignView = { surface: SignSurface, request: SignRequestView | null, 
+/**
+ * Kept until every shell reads `phase` (spec 082 RA9).
+ */
+is_signing: boolean, 
+/**
+ * Kept until every shell reads `phase` (spec 082 RA9).
+ */
+is_submitting: boolean, 
+/**
+ * The sheet's words, derived from the pipeline stage and the prompt.
+ */
+phase: SignPhase, pending_op_hash: string | null, 
+/**
+ * The sheet's op may have been sent — its reply was lost (spec 082
+ * RA3): the caption says so, and there is no Retry.
+ */
+pending_op_maybe_sent: boolean, error: SignErrorNotice | null, funding: SignFundingView | null, 
 /**
  * This machine's own approval gate: a reviewable request with the
  * granted account reconciled and no pipeline in flight. The shell must
@@ -18,7 +37,17 @@ confirm_gate_open: boolean,
 /**
  * §12.1.6: the granted-account switch has not acked yet.
  */
-reconcile_pending: boolean, swipe_action: SignSwipeAction, tracker_handoff: SignTrackerHandoff | null, notice: SignNotice | null, global_chain_id: number, 
+reconcile_pending: boolean, swipe_action: SignSwipeAction, tracker_handoff: SignTrackerHandoff | null, 
+/**
+ * A write-ahead record proven never sent (spec 082 RJ1): the shell feeds
+ * it to `tx_tracker::Event::Withdrawn` the moment it appears.
+ */
+tracker_withdraw: SignTrackerWithdraw | null, 
+/**
+ * `error` is the relay refusing the op (spec 082 RJ3): the sheet says
+ * `componentsUi.signing.refused` under `statusFailed`, never "try again".
+ */
+failure_refused: boolean, notice: SignNotice | null, global_chain_id: number, 
 /**
  * Present when the request was refused because it would have changed who
  * controls the account; the sheet shows it and offers only Dismiss.

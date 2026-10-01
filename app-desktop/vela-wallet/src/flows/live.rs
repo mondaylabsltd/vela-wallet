@@ -202,13 +202,14 @@ pub fn assets(
 ///
 /// Rows when there are any; skeletons while the balance core has not ruled
 /// (the feed has nothing yet, and "no transactions" would be a guess); and
-/// once it has, one line — about THIS network when the list is narrowed to
-/// one, because "no transactions" under a filter would read as "none at all".
+/// once it has, one line — the core's `history_empty_key` (spec 082 RG5):
+/// about THIS network when the feed is narrowed to one, because "no
+/// transactions" under a filter would read as "none at all". Which line is
+/// the core's; loading versus empty stays here.
 #[must_use]
 pub fn history_panel(
     view: &FeedView,
     balance_unknown: bool,
-    filter: Option<u32>,
     s: &FlowStrings,
     wallet: &crate::wallet::WalletStrings,
     hidden: bool,
@@ -218,10 +219,7 @@ pub fn history_panel(
     HistoryPanel {
         groups,
         loading: bare && balance_unknown,
-        empty: (bare && !balance_unknown).then(|| match filter {
-            Some(_) => s.history_empty_filter.clone(),
-            None => s.history_empty.clone(),
-        }),
+        empty: (bare && !balance_unknown).then(|| s.history_empty_of(&view.history_empty_key)),
     }
 }
 
@@ -246,7 +244,7 @@ pub fn history(
                 rows: Vec::new(),
             }),
             FeedRow::Item { item } => {
-                let model = crate::wallet::live::activity_row(view, item, wallet, hidden);
+                let model = crate::wallet::live::activity_row(item, wallet, hidden);
                 // A feed that opened with an item rather than a header is not a
                 // shape the core produces, but drawing the row is better than
                 // dropping somebody's transaction over a missing heading.
@@ -341,12 +339,16 @@ pub fn tx_detail(
         _ => None,
     })?;
     let incoming = item.direction == vela_core::app::activity_feed::FeedDirection::In;
-    let record = view.transactions.iter().find(|record| record.id == item.id);
 
     let mut facts = Vec::new();
     // The site that asked, for a dApp's transaction (083 H2) — first, because
     // it is the one fact the person recognises.
-    if let Some(site) = item.dapp.as_ref().and_then(|dapp| dapp.site.as_ref()) {
+    if let Some(site) = item
+        .dapp
+        .as_ref()
+        .and_then(|dapp| dapp.site.as_ref())
+        .or(item.site.as_ref())
+    {
         facts.push(FactRow {
             label: s.detail_app.clone(),
             value: SharedString::from(site.clone()),
@@ -366,9 +368,17 @@ pub fn tx_detail(
         // (083 F3). A plain transfer of the coin keeps "To".
         let called = item.dapp.as_ref().is_some_and(|dapp| dapp.contract_call);
         facts.push(FactRow {
+            // Who the address is, as the core read the call (spec 082 RJ16,
+            // G52): the one the money went to, or the contract a dApp's call
+            // went to — which is not who got anything.
             label: if incoming {
                 s.detail_from.clone()
-            } else if called {
+            } else if called
+                || item.counterparty_role
+                    == vela_core::app::activity_feed::FeedCounterpartyRole::Contract
+            {
+                // A noun on a finished record (083 F3 review), never the
+                // sheet's progressive "Interacting with".
                 s.detail_contract.clone()
             } else {
                 s.detail_to.clone()
@@ -432,7 +442,9 @@ pub fn tx_detail(
         });
     }
 
-    let status = record.map_or(FeedTxStatus::Confirmed, |record| record.status);
+    // Where it stands is the core's (spec 082 RG1): the row's status, which
+    // only the tracker moves off pending.
+    let status = item.status;
     let (breakdown_title, breakdown) = match change_parts(item, s, hidden) {
         (None, _) => detail_parts(item, s),
         changes => changes,
@@ -444,6 +456,9 @@ pub fn tx_detail(
         // moved (083 H2).
         title: match item.dapp.as_ref() {
             Some(dapp) => crate::wallet::live::dapp_title(dapp, wallet),
+            None if item.kind == vela_core::app::activity_feed::FeedTxKind::DappTx => {
+                s.tx_label_dapp.clone()
+            }
             None => SharedString::from(crate::wallet::fill(
                 if incoming {
                     &s.tx_label_received
@@ -2956,6 +2971,23 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
     let held = (hold == Some(SendHoldReason::FeeHold)).then(|| s.tx_held_fees.clone());
     let rejected = (hold == Some(SendHoldReason::FeeRejected)).then(|| s.tx_rejected_fees.clone());
 
+    // Spec 082 RA4/RA10: the relay never had it — nothing was sent, which is
+    // exactly what the generic failure says. Never the fee-rejected words: no
+    // fee was ever refused.
+    if status == Some(SendReceiptStatus::NotSent) {
+        return SendReceipt {
+            stage: ReceiptStage::Failed,
+            progress: None,
+            explorer: None,
+            cta_accent: false,
+            breakdown_title: None,
+            breakdown: Vec::new(),
+            title: s.tx_error_generic.clone(),
+            captions: Vec::new(),
+            hash: None,
+            cta: s.done.clone(),
+        };
+    }
     if status == Some(SendReceiptStatus::Failed) || send.tx_status == SendTxStatus::Error {
         return SendReceipt {
             stage: ReceiptStage::Failed,
@@ -2968,6 +3000,27 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             captions: rejected.into_iter().collect(),
             hash: None,
             cta: s.done.clone(),
+        };
+    }
+    // Spec 082 RA10 (ruling 1): the reply was lost and the payment may be on
+    // its way. Still "submitting", with the one sentence that is true now, the
+    // hash Vela is following, and a way to close — never a retry, which would
+    // be a second payment.
+    if status == Some(SendReceiptStatus::MaybeSent) {
+        return SendReceipt {
+            stage: ReceiptStage::Submitted,
+            progress: None,
+            explorer: None,
+            cta_accent: false,
+            breakdown_title: breakdown_title.clone(),
+            breakdown: breakdown.clone(),
+            title: s.tx_submitting.clone(),
+            captions: vec![s.tx_maybe_sent.clone()],
+            hash: send
+                .user_op_hash
+                .clone()
+                .map(|hash| (s.tx_hash.clone(), hash.into())),
+            cta: s.tx_close_background.clone(),
         };
     }
     if status == Some(SendReceiptStatus::Confirmed) {
@@ -3866,6 +3919,32 @@ mod tests {
         assert!(failed.explorer.is_none() && failed.hash.is_none());
     }
 
+    /// Spec 082 RA10 (ruling 1): a payment whose reply was lost is still
+    /// "submitting", captioned "it may have been sent — don't send it again",
+    /// with a way to close and no retry; one the relay never had is the plain
+    /// failure — never "fees stayed above…", since no fee was refused, even
+    /// when the core still carries a fee reason.
+    #[test]
+    fn a_lost_reply_may_have_been_sent_and_a_never_held_op_was_not_sent() {
+        use vela_core::app::send::{SendHoldReason, SendReceiptStatus};
+        let s = strings();
+        let maybe = receipt_with(SendReceiptStatus::MaybeSent, None);
+        assert_eq!(maybe.stage, ReceiptStage::Submitted);
+        assert_eq!(maybe.title, s.tx_submitting);
+        assert_eq!(maybe.captions, vec![s.tx_maybe_sent.clone()]);
+        assert_eq!(maybe.cta, s.tx_close_background);
+        assert!(maybe.explorer.is_none());
+
+        let not_sent = receipt_with(
+            SendReceiptStatus::NotSent,
+            Some(SendHoldReason::FeeRejected),
+        );
+        assert_eq!(not_sent.stage, ReceiptStage::Failed);
+        assert_eq!(not_sent.title, s.tx_error_generic);
+        assert!(not_sent.captions.is_empty(), "never the fee-rejected words");
+        assert_eq!(not_sent.cta, s.done);
+    }
+
     /// The ring eases toward full and never reaches it by waiting: ~70% at
     /// the chain's usual time, under the 92% ceiling at any length.
     #[test]
@@ -4530,6 +4609,197 @@ mod tests {
     }
 
     /// A transaction's detail, and the row order the listeners are bound in.
+    /// Spec 082 RG2 (T072): a dApp's transaction opens as "dApp
+    /// transaction", with the status the core gave its row and who asked.
+    #[test]
+    fn a_dapp_transaction_detail_names_who_asked() {
+        crate::executor::storage::tests::with_temp_state("flows-dapp-detail", || {
+            use vela_core::app::activity_feed::{
+                ActivityFeed, Event as FeedEvent, FeedDirection, FeedItem, FeedTxKind,
+            };
+            let mut host = CoreHost::<ActivityFeed>::new();
+            let _ = host.dispatch(FeedEvent::AccountSwitched {
+                address: "0xme".to_owned(),
+            });
+            let item = FeedItem {
+                id: "dapp-1-tx".to_owned(),
+                direction: FeedDirection::Out,
+                counterparty: Some("0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141".to_owned()),
+                alias: None,
+                value: Some("0.001".to_owned()),
+                symbol: "xDAI".to_owned(),
+                decimals: Some(18),
+                usd_value: 0.0,
+                chain_id: 100,
+                timestamp: 1_756_000_000.0,
+                day_start_ms: 0.0,
+                tx_hash: None,
+                batch: None,
+                kind: FeedTxKind::DappTx,
+                status: FeedTxStatus::Pending,
+                site: Some("127.0.0.1:8137".to_owned()),
+                counterparty_role: Default::default(),
+                dapp: None,
+            };
+            let view = FeedView {
+                rows: vec![FeedRow::Item { item }],
+                ..host.view()
+            };
+            let s = strings();
+            let detail = tx_detail(
+                &view,
+                "dapp-1-tx",
+                &s,
+                &wallet_strings(),
+                false,
+                "en-US",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("the row exists"));
+            assert_eq!(detail.title, s.tx_label_dapp);
+            assert_eq!(detail.status.text, s.status_pending);
+            let asked = detail
+                .facts
+                .iter()
+                .find(|fact| fact.label == s.detail_app)
+                .unwrap_or_else(|| unreachable!("a Requested by fact"));
+            assert_eq!(asked.value.as_ref(), "127.0.0.1:8137");
+        });
+    }
+
+    /// Spec 082 RJ16 (G52, DX-W3): a relay-refused dApp record for a USDC
+    /// `transfer(0x7687…D141, 10^30)` named the token contract 0xDDAf…7A83
+    /// as 接收方 and offered the explorer for an op that never reached the
+    /// chain (its stored "tx hash" was the op hash). Stored exactly as
+    /// `sign_request::persist_record` writes it and read the executor's way:
+    /// the recipient is the transfer's, and there is nothing to open. A call
+    /// that is not a transfer names its contract, as the contract.
+    #[test]
+    fn a_dapp_record_names_who_got_it_and_offers_no_explorer_without_a_tx() {
+        use vela_core::app::activity_feed::{
+            ActivityFeed, Event as FeedEvent, FeedOperation, FeedShellResult,
+        };
+        const OP: &str = "0xa974c5dd0a00000000000000000000000000000000000000000000000000beef";
+        const USDC: &str = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83";
+        let transfer = format!(
+            "0xa9059cbb{:0>64}{:064x}",
+            "76875e38fc6bc2dedcaed807ce00782db5c0d141",
+            10u128.pow(30)
+        );
+        let row = |id: &str, data: &str| {
+            serde_json::json!({
+                "id": id,
+                "userOpHash": OP,
+                "txHash": OP,
+                "from": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+                "to": USDC,
+                "value": "0x0",
+                "symbol": "xDAI",
+                "decimals": 18,
+                "chainId": 100,
+                "timestamp": 1_756_000_000,
+                "status": "failed",
+                "type": "dapp_tx",
+                "dappOrigin": "http://127.0.0.1:8141",
+                "signedRequest": serde_json::json!([{ "to": USDC, "data": data }]).to_string(),
+                "requestTruncated": false,
+                "maybeSent": false,
+            })
+        };
+        let records: Vec<_> = [
+            row("dapp-transfer", &transfer),
+            row(
+                "dapp-swap",
+                "0x38ed173900000000000000000000000000000000000000000000000000000000000000ff",
+            ),
+        ]
+        .iter()
+        .filter_map(crate::executor::activity_feed::to_record)
+        .collect();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].call_data.as_deref(), Some(transfer.as_str()));
+
+        let mut host = CoreHost::<ActivityFeed>::new();
+        let mut pending = host.dispatch(FeedEvent::AccountSwitched {
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+        });
+        for _ in 0..16 {
+            let Some(next) = pending.pop() else {
+                break;
+            };
+            let result = match &next.operation {
+                FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
+                    records: records.clone(),
+                    now_ms: 1_756_000_000_000.0,
+                    read_id: *read_id,
+                },
+                FeedOperation::ScanIncomingTransfers { .. } => {
+                    FeedShellResult::SyncCompleted { new_count: 0 }
+                }
+                FeedOperation::ResolveRecipientIdentity { addr } => {
+                    FeedShellResult::AliasResolved {
+                        addr: addr.clone(),
+                        name: None,
+                    }
+                }
+                _ => continue,
+            };
+            pending.extend(host.resolve(next.id, result));
+        }
+        let view = host.view();
+        let s = strings();
+        let detail = |id: &str| {
+            tx_detail(
+                &view,
+                id,
+                &s,
+                &wallet_strings(),
+                false,
+                "zh",
+                crate::wallet::live::Money::usd(),
+            )
+            .unwrap_or_else(|| unreachable!("{id} is in the feed"))
+        };
+
+        let refused = detail("dapp-transfer");
+        // The site's own line comes first (083 H2); who it went to is next.
+        let party = |detail: &crate::flows::fixtures::TxDetail| {
+            detail
+                .facts
+                .iter()
+                .find(|fact| fact.label != s.detail_app)
+                .cloned()
+                .unwrap_or_else(|| unreachable!("a party line"))
+        };
+        assert_eq!(refused.status.text, s.status_failed);
+        assert_eq!(
+            party(&refused).label,
+            s.detail_to,
+            "the recipient, not the contract"
+        );
+        assert_eq!(party(&refused).value.as_ref(), "0x7687…D141");
+        assert!(
+            refused.explorer_url.is_none(),
+            "an op hash is not a transaction"
+        );
+        assert!(
+            !refused.facts.iter().any(|fact| fact.label == s.detail_hash),
+            "no hash row for a transaction that never was"
+        );
+
+        let swap = detail("dapp-swap");
+        assert_eq!(
+            party(&swap).label,
+            s.detail_contract,
+            "the contract, as the contract"
+        );
+        assert_eq!(
+            party(&swap).copy.as_deref(),
+            Some(USDC),
+            "the address it went to"
+        );
+    }
+
     #[test]
     fn a_transaction_opens_its_own_detail_and_the_row_order_matches() {
         crate::executor::storage::tests::with_temp_state("flows-tx-detail", || {
@@ -4560,6 +4830,20 @@ mod tests {
                 day_start_ms: today,
                 tx_hash: Some("0xdead".to_owned()),
                 batch: None,
+                kind: if incoming {
+                    vela_core::app::activity_feed::FeedTxKind::Receive
+                } else {
+                    vela_core::app::activity_feed::FeedTxKind::Send
+                },
+                // The row's status is the core's (spec 082 RG1): the stored
+                // record's, which says pending for the sent one.
+                status: if incoming {
+                    vela_core::app::activity_feed::FeedTxStatus::Confirmed
+                } else {
+                    vela_core::app::activity_feed::FeedTxStatus::Pending
+                },
+                site: None,
+                counterparty_role: Default::default(),
                 dapp: None,
             };
             let view = FeedView {
@@ -4597,6 +4881,7 @@ mod tests {
                     intent: None,
                     balance_changes: None,
                     calldata: None,
+                    call_data: None,
                 }],
                 ..host.view()
             };
@@ -4637,8 +4922,8 @@ mod tests {
                 Some("https://gnosisscan.io/tx/0xdead")
             );
 
-            // The sent one, whose stored record says pending — it must NOT
-            // wear the confirmed chip.
+            // The sent one, whose row says pending — it must NOT wear the
+            // confirmed chip.
             let sent = tx_detail(
                 &view,
                 "b",
@@ -4723,6 +5008,10 @@ mod tests {
             day_start_ms: 0.0,
             tx_hash: None,
             batch: None,
+            kind: vela_core::app::activity_feed::FeedTxKind::DappTx,
+            status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+            site: None,
+            counterparty_role: Default::default(),
             dapp: Some(FeedDapp {
                 site: Some("app.uniswap.org".to_owned()),
                 intent: Some("Swap".to_owned()),
@@ -4837,6 +5126,10 @@ mod tests {
                 day_start_ms: 0.0,
                 tx_hash: Some(HASH.to_owned()),
                 batch: None,
+                kind: vela_core::app::activity_feed::FeedTxKind::DappTx,
+                status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+                site: None,
+                counterparty_role: Default::default(),
                 dapp: None,
             },
         };
@@ -4910,6 +5203,16 @@ mod tests {
             day_start_ms: 0.0,
             tx_hash: Some(HASH.to_owned()),
             batch: None,
+            kind: if dapp.is_some() {
+                vela_core::app::activity_feed::FeedTxKind::DappTx
+            } else if incoming {
+                vela_core::app::activity_feed::FeedTxKind::Receive
+            } else {
+                vela_core::app::activity_feed::FeedTxKind::Send
+            },
+            status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+            site: None,
+            counterparty_role: Default::default(),
             dapp,
         };
         let dapp = |contract_call: bool, changes: Vec<FeedDappChange>| FeedDapp {
@@ -5353,14 +5656,23 @@ mod tests {
         };
         let (s, w) = (strings(), wallet_strings());
 
-        let loading = history_panel(&feed, true, None, &s, &w, false);
+        let loading = history_panel(&feed, true, &s, &w, false);
         assert!(loading.loading && loading.empty.is_none());
 
-        let empty = history_panel(&feed, false, None, &s, &w, false);
+        let empty = history_panel(&feed, false, &s, &w, false);
         assert!(!empty.loading);
         assert_eq!(empty.empty, Some(s.history_empty.clone()));
 
-        let narrowed = history_panel(&feed, false, Some(100), &s, &w, false);
+        // Narrowed: the core says which line (spec 082 RG5), from the filter
+        // it was told.
+        let _ = host.dispatch(FeedEvent::ChainFilterChanged {
+            chain_id: Some(100),
+        });
+        let narrowed_feed = FeedView {
+            rows: Vec::new(),
+            ..host.view()
+        };
+        let narrowed = history_panel(&narrowed_feed, false, &s, &w, false);
         assert_eq!(narrowed.empty, Some(s.history_empty_filter.clone()));
         assert_ne!(s.history_empty, s.history_empty_filter);
     }
@@ -5392,6 +5704,10 @@ mod tests {
             day_start_ms: day,
             tx_hash: None,
             batch: None,
+            kind: vela_core::app::activity_feed::FeedTxKind::Receive,
+            status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
+            site: None,
+            counterparty_role: Default::default(),
             dapp: None,
         };
         let view = FeedView {

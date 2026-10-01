@@ -1,0 +1,34 @@
+DX7 desktop (log desk-post-T181.err)
+nonce before 03:48:10 = 49; slide ~03:48:08
+{"mode": "blackhole", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"} flipped at 03:48:18.384
+[vela-wallet] 03:48:18.287 relay: submitting chain=100 op=0x5574bf1c46 initCode=no callData=452B
+[vela-wallet] 03:48:18.359 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=network
+[vela-wallet] 03:48:32.223 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_sendUserOperation outcome=not connected
+[vela-wallet] 03:48:32.224 relay: submit verdict=maybe_sent hash=0x5574bf1c46 attempts=1 in=13936 ms
+[vela-wallet] 03:48:32.224 tracker: op=0x5574bf1c46 handed over chain=100 maybe_sent=true submit_block=Some(48487509)
+[vela-wallet] 03:48:45.726 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=not connected
+[vela-wallet] 03:48:45.734 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=not connected
+[vela-wallet] 03:48:47.454 tracker: op=0x5574bf1c46 find-event chain=100 from=None to=None head=Some(48487515) → head only
+[vela-wallet] 03:48:48.098 tracker: op=0x5574bf1c46 find-event chain=100 from=Some(48487509) to=Some(48487515) head=Some(48487515) → logs
+[vela-wallet] 03:48:48.100 tracker: holdings moved on chain=100; balances re-read
+[vela-wallet] 03:48:59.667 rpc: chain=100 host=vela-relay-cf.getvela.app method=pimlico_getUserOperationStatus outcome=not connected
+[vela-wallet] 03:48:59.960 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=not connected
+[vela-wallet] 03:48:59.975 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=not connected
+[vela-wallet] 03:49:13.840 rpc: chain=100 host=vela-relay-cf.getvela.app method=pimlico_getUserOperationStatus outcome=not connected
+[vela-wallet] 03:49:13.841 tracker: op=0x5574bf1c46 status unavailable
+[vela-wallet] 03:49:16.467 rpc: chain=100 host=vela-relay-cf.getvela.app method=eth_getUserOperationReceipt outcome=not connected
+03:48:14 PASS vela-relay-cf.getvela.app:443 0ms
+03:48:17 PASS vela-relay-cf.getvela.app:443 0ms
+03:48:18 CONFIG {"mode": "blackhole", "latency": 0, "bps": 0, "drop": 1.0, "match": "vela-relay"}
+03:48:18 CUT 2 live tunnels: vela-relay-cf.getvela.app
+03:48:18 HOLE vela-relay-cf.getvela.app:443
+03:48:32 HOLE vela-relay-cf.getvela.app:443
+03:48:32 HOLE vela-relay-cf.getvela.app:443
+03:48:46 HOLE vela-relay-cf.getvela.app:443
+03:48:46 HOLE vela-relay-cf.getvela.app:443
+03:48:46 HOLE vela-relay-cf.getvela.app:443
+03:49:00 HOLE vela-relay-cf.getvela.app:443
+03:49:02 HOLE vela-relay-cf.getvela.app:443
+03:50:00.3 chaos pass (100 s after the fault)
+chain: block 48487511 op 0x5574bf1c46a7ab88da9cf73ea1d4ff56a3ceb02f126411ae493c2385aa04ade6 tx 0xcd4666b8e8528815454689a1f50ac115330c0f03e1b3b6aa9fd9d71480f09a1e nonce 49 success 1; nonce after 50
+page: eth_sendTransaction {ok:true, result:"0xcd4666b8…f09a1e"} (tx hash)
