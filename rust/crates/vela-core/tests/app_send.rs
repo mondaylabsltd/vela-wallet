@@ -154,6 +154,21 @@ fn polygon_usdc(balance: &str) -> SendToken {
     }
 }
 
+/// Polygon's own coin — with [`polygon_usdc`], two holdings on one network.
+fn polygon_pol(balance: &str) -> SendToken {
+    SendToken {
+        network: "polygon".to_owned(),
+        chain_id: 137,
+        symbol: "POL".to_owned(),
+        balance: balance.to_owned(),
+        decimals: 18,
+        token_address: None,
+        price_usd: Some(0.5),
+        logo_urls: vec![],
+        spam: false,
+    }
+}
+
 fn loaded(tokens: Vec<SendToken>) -> Res {
     Res::TokensLoaded {
         tokens: Some(tokens),
@@ -937,7 +952,8 @@ fn progressive_chunks_paint_early_but_never_after_the_load_settled() {
 /// A prefilled recipient (the address book's 转账, a scanned address) is the
 /// recipient from the first frame — before the token list answers, and even
 /// if it never does (spec 028 US5). The web hand-off found the old order: the
-/// form opened on nobody while the fetch was out.
+/// form opened on nobody while the fetch was out. Since issue #312 that frame
+/// is the picker, with the recipient on it (issue #332).
 #[test]
 fn a_prefilled_recipient_is_shown_before_the_tokens_arrive() {
     let mut sut = Sut::new();
@@ -946,15 +962,20 @@ fn a_prefilled_recipient_is_shown_before_the_tokens_arrive() {
         ..SendOpenParams::default()
     }));
     let view = sut.view();
-    assert_eq!(view.stage, SendStage::EnterDetails, "optimistic step");
+    assert_eq!(
+        view.stage,
+        SendStage::SelectToken,
+        "the asset is chosen next"
+    );
     assert_eq!(view.recipient, RECIPIENT, "known before any token is");
     assert!(view.selected_token.is_none());
 
-    // The tokens land: the highest-value one is picked, the recipient stays.
+    // The tokens land: nothing is chosen for the person, the recipient stays.
     sut.resolve(loaded(vec![eth("2"), usdc("5")]));
     let view = sut.view();
     assert_eq!(view.recipient, RECIPIENT);
-    assert!(view.selected_token.is_some());
+    assert!(view.selected_token.is_none());
+    assert_eq!(view.tokens.len(), 2, "every holding is offered");
 }
 
 /// Issue #209: a hand-off from the address book to an account that holds
@@ -969,7 +990,7 @@ fn a_prefilled_recipient_with_nothing_to_send_falls_back_to_the_picker() {
         prefilled_recipient: Some(RECIPIENT.to_owned()),
         ..SendOpenParams::default()
     }));
-    assert_eq!(sut.view().stage, SendStage::EnterDetails, "optimistic step");
+    assert_eq!(sut.view().stage, SendStage::SelectToken);
 
     sut.resolve(loaded(vec![]));
     let view = sut.view();
@@ -1028,28 +1049,33 @@ fn preselected_symbol_and_network_land_on_enter_details() {
     );
 }
 
+/// Issue #312: a scanned plain address used to open the form on the
+/// balance's most valuable token — XDAI on Gnosis for a code a BNB Chain
+/// wallet showed. Which asset to send is the payer's: the recipient lands on
+/// the picker with every holding offered and none chosen, and the name lookup
+/// and the fee read-ahead start as they do for any picker.
 #[test]
-fn prefilled_recipient_quick_send_picks_the_most_valuable_token() {
+fn a_prefilled_recipient_lands_on_the_picker_with_nothing_chosen_for_them() {
     let mut sut = Sut::new();
     sut.dispatch(open_event(SendOpenParams {
         prefilled_recipient: Some(RECIPIENT.to_owned()),
         ..SendOpenParams::default()
     }));
-    let ops = sut.resolve(loaded(vec![usdc("5"), eth("2")]));
+    let ops = sut.resolve(loaded(vec![usdc("5"), eth("2"), polygon_usdc("3")]));
     assert!(
         matches!(
             ops.as_slice(),
-            [Op::ResolveIdentity { .. }, Op::LoadAccountCredential { .. }]
+            [Op::ResolveIdentity { .. }, Op::PrewarmFees { .. }]
         ),
-        "recipient prefill resolves identity and warms a quote (Phase 10): {ops:?}"
+        "the name is looked up for the picker, the fees read ahead: {ops:?}"
     );
     let view = sut.view();
-    assert_eq!(
-        view.selected_token.as_ref().map(|t| t.symbol.as_str()),
-        Some("ETH")
-    );
+    assert_eq!(view.stage, SendStage::SelectToken);
+    assert!(view.selected_token.is_none(), "no asset taken for them");
     assert_eq!(view.recipient, RECIPIENT);
-    assert_eq!(view.stage, SendStage::EnterDetails);
+    assert_eq!(view.tokens.len(), 3, "every network's holdings are offered");
+    assert_eq!(view.request_chain_id, None, "no network was named");
+    assert!(!view.can_change_token, "no form yet");
 }
 
 #[test]
@@ -1170,7 +1196,11 @@ fn locked_native_request_synthesizes_a_zero_balance_placeholder() {
 #[test]
 fn locked_unsupported_chain_offers_add_network_and_retries_after_adding() {
     let mut sut = Sut::new();
-    sut.dispatch(open_event(locked_params(None, None, "999")));
+    sut.dispatch(open_event(locked_params(
+        None,
+        Some("1000000000000000000"),
+        "999",
+    )));
     sut.resolve(loaded(vec![eth("2")]));
     assert_eq!(
         sut.view().lock_error,
@@ -1213,6 +1243,310 @@ fn locked_bad_chain_param_just_ends_resolution_ported_verbatim() {
     let view = sut.view();
     assert_eq!(view.lock_error, None);
     assert!(!view.resolving_lock);
+}
+
+// ===========================================================================
+// A code that names a network, the asset left to the payer (issue #312)
+// ===========================================================================
+
+/// `ethereum:<payee>@137` — a network, no token, no amount.
+fn network_only(chain: &str) -> SendOpenParams {
+    locked_params(None, None, chain)
+}
+
+fn chains_of(view: &SendView) -> Vec<u32> {
+    view.tokens.iter().map(|t| t.chain_id).collect()
+}
+
+/// One holding on the named network is the obvious choice: the form opens
+/// on it, for the payee the code named — and the asset can still be changed,
+/// within that network.
+#[test]
+fn a_code_naming_a_network_where_one_asset_is_held_opens_the_form_on_it() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(network_only("137")));
+    assert_eq!(sut.view().request_chain_id, Some(137));
+    // ETH on Ethereum is worth the most; the code is for Polygon.
+    sut.resolve(loaded(vec![eth("2"), usdc("5"), polygon_usdc("3")]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::EnterDetails);
+    let token = view
+        .selected_token
+        .as_ref()
+        .expect("the one Polygon holding");
+    assert_eq!((token.chain_id, token.symbol.as_str()), (137, "USDC"));
+    assert_eq!(view.recipient, RECIPIENT);
+    assert_eq!(chains_of(&view), vec![137], "only that network is offered");
+    assert!(!view.amount_locked, "the code named no amount");
+    assert!(view.can_change_token);
+}
+
+/// Several holdings there: the picker, narrowed to that network, the payee
+/// on it. A holding on another network cannot be picked even by id.
+#[test]
+fn a_code_naming_a_network_where_several_assets_are_held_offers_only_those() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(network_only("137")));
+    let ops = sut.resolve(loaded(vec![
+        eth("2"),
+        polygon_usdc("3"),
+        usdc("5"),
+        polygon_pol("10"),
+    ]));
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::ResolveIdentity { .. }, Op::PrewarmFees { chain_ids, .. }] if chain_ids == &vec![137]
+        ),
+        "{ops:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken);
+    assert!(view.selected_token.is_none());
+    assert!(view.lock_error.is_none());
+    assert_eq!(view.recipient, RECIPIENT);
+    assert_eq!(chains_of(&view), vec![137, 137]);
+    assert_eq!(view.request_chain_id, Some(137));
+
+    // Another network's holding is not on offer, by any door.
+    assert!(sut
+        .dispatch(Event::SelectToken {
+            token_id: eth("2").id(),
+        })
+        .is_empty());
+    assert!(sut.view().selected_token.is_none());
+
+    let ops = sut.dispatch(Event::SelectToken {
+        token_id: polygon_pol("10").id(),
+    });
+    assert!(matches!(ops.as_slice(), [Op::LoadAccountCredential { .. }]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::EnterDetails);
+    assert_eq!(view.selected_token.map(|t| t.chain_id), Some(137));
+    assert_eq!(view.recipient, RECIPIENT);
+}
+
+/// Nothing held there: the picker says so — the network named, the list
+/// empty — and the send never moves to another chain (issue #264's report).
+#[test]
+fn a_code_naming_a_network_where_nothing_is_held_never_switches_chains() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(network_only("137")));
+    sut.resolve(loaded(vec![eth("2"), usdc("5")]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken);
+    assert!(view.tokens.is_empty(), "nothing on Polygon to offer");
+    assert!(view.selected_token.is_none(), "no placeholder coin either");
+    assert_eq!(view.request_chain_id, Some(137));
+    assert_eq!(view.lock_error, None);
+    assert_eq!(view.recipient, RECIPIENT);
+
+    // A later round of holdings that still has nothing there changes nothing.
+    sut.dispatch(Event::HoldingsUpdated {
+        tokens: vec![eth("3"), usdc("6")],
+    });
+    assert!(sut.view().tokens.is_empty());
+    // One that has something there offers it.
+    sut.dispatch(Event::HoldingsUpdated {
+        tokens: vec![eth("3"), polygon_usdc("1")],
+    });
+    assert_eq!(chains_of(&sut.view()), vec![137]);
+}
+
+/// The same code scanned with Send already open re-opens it on that rule.
+#[test]
+fn a_network_code_scanned_inside_send_offers_that_network_only() {
+    let mut sut = boot(vec![eth("2"), polygon_usdc("3"), polygon_pol("10")]);
+    select_eth(&mut sut);
+    let ops = sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Request {
+            recipient: RECIPIENT.to_owned(),
+            chain_id: Some(137),
+            token_address: None,
+            amount_base_units: None,
+        },
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::FetchTokens { .. }]),
+        "{ops:?}"
+    );
+    sut.resolve(loaded(vec![eth("2"), polygon_usdc("3"), polygon_pol("10")]));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken);
+    assert_eq!(chains_of(&view), vec![137, 137]);
+    assert_eq!(view.recipient, RECIPIENT);
+}
+
+/// A network the wallet lacks is still refused with its way out; once added,
+/// the payer chooses among their holdings there — and holding none, is told
+/// so, rather than handed a zero-balance coin.
+#[test]
+fn a_named_network_the_wallet_lacks_is_refused_then_offered_once_added() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(network_only("999")));
+    sut.resolve(loaded(vec![eth("2")]));
+    assert_eq!(
+        sut.view().lock_error,
+        Some(SendLockError::Network { chain_id: 999 })
+    );
+    sut.dispatch(Event::AddNetworkTapped { chain_id: 999 });
+    sut.resolve(Res::NetworkAdded {
+        outcome: SendAddNetworkOutcome::Added,
+    });
+    let mut with_new_chain = chains();
+    with_new_chain.push(SendChainInfo {
+        chain_id: 999,
+        network: "customnet".to_owned(),
+        native_symbol: "CUST".to_owned(),
+    });
+    sut.resolve(Res::TokensLoaded {
+        tokens: Some(vec![eth("2")]),
+        chains: with_new_chain,
+    });
+    let view = sut.view();
+    assert_eq!(view.lock_error, None);
+    assert_eq!(view.stage, SendStage::SelectToken);
+    assert!(view.tokens.is_empty());
+    assert!(view.selected_token.is_none());
+    assert_eq!(view.request_chain_id, Some(999));
+}
+
+/// A code that names its token or its amount is that request, as before:
+/// locked to it, and its token card does not open a picker.
+#[test]
+fn a_code_naming_its_token_or_amount_stays_that_request() {
+    for params in [
+        locked_params(Some(USDC), None, "1"),
+        locked_params(None, Some("1000000000000000000"), "1"),
+    ] {
+        let mut sut = Sut::new();
+        sut.dispatch(open_event(params));
+        sut.resolve(loaded(vec![eth("2"), usdc("5"), polygon_usdc("3")]));
+        let view = sut.view();
+        assert_eq!(view.request_chain_id, None);
+        assert_eq!(view.stage, SendStage::EnterDetails);
+        assert_eq!(view.selected_token.as_ref().map(|t| t.chain_id), Some(1));
+        assert_eq!(view.tokens.len(), 3, "the list is not narrowed");
+        assert!(!view.can_change_token);
+        assert!(sut.dispatch(Event::ChangeToken).is_empty());
+        assert_eq!(sut.view().stage, SendStage::EnterDetails);
+    }
+}
+
+// ===========================================================================
+// The token card opens the picker (issue #326)
+// ===========================================================================
+
+/// The card changes WHAT is sent, never to whom: a typed recipient stays
+/// (Back would have cleared it), the figure typed for the old coin goes.
+#[test]
+fn the_token_card_opens_the_picker_and_keeps_the_recipient() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    assert!(!sut.view().can_change_token, "no form, no card");
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    assert!(sut.view().can_change_token);
+
+    sut.dispatch(Event::ChangeToken);
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken);
+    assert!(view.selected_token.is_none());
+    assert_eq!(view.amount, "", "a figure in ETH means nothing in USDC");
+    assert_eq!(view.recipient, RECIPIENT, "the payee stays");
+    assert!(!view.can_change_token);
+
+    sut.dispatch(Event::SelectToken {
+        token_id: usdc("5").id(),
+    });
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::EnterDetails);
+    assert_eq!(view.recipient, RECIPIENT);
+    assert_eq!(
+        view.selected_token.map(|t| t.symbol),
+        Some("USDC".to_owned())
+    );
+}
+
+/// A scanned recipient too — the case the report was about.
+#[test]
+fn the_token_card_keeps_a_scanned_recipient() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    sut.dispatch(Event::ScanResolved {
+        scan: SendScan::Text {
+            data: RECIPIENT.to_owned(),
+        },
+    });
+    sut.drop_matching(|op| matches!(op, Op::ResolveIdentity { .. }));
+    select_eth(&mut sut);
+    sut.dispatch(Event::ChangeToken);
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken);
+    assert_eq!(view.recipient, RECIPIENT);
+}
+
+/// Inside a code that named a network, the card's picker is that network's.
+#[test]
+fn the_token_card_of_a_network_code_stays_on_that_network() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(network_only("137")));
+    sut.resolve(loaded(vec![eth("2"), polygon_usdc("3")]));
+    sut.drop_matching(|op| matches!(op, Op::ResolveIdentity { .. }));
+    assert!(sut.view().can_change_token);
+    sut.dispatch(Event::ChangeToken);
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::SelectToken);
+    assert_eq!(chains_of(&view), vec![137]);
+    assert_eq!(view.recipient, RECIPIENT);
+}
+
+/// The words every shell sends and reads for it.
+#[test]
+fn the_token_card_wire() {
+    let event: Option<Event> = serde_json::from_str(r#"{"type":"change_token"}"#).ok();
+    assert!(matches!(event, Some(Event::ChangeToken)));
+    let view = serde_json::to_value(Sut::new().view()).unwrap_or_default();
+    assert_eq!(view["can_change_token"], serde_json::json!(false));
+    assert_eq!(view["request_chain_id"], serde_json::Value::Null);
+}
+
+/// Not in a split (its rows are figures in this coin), not in a sweep (no
+/// one coin), and not while Continue's pre-check is out.
+#[test]
+fn the_token_card_is_inert_where_changing_the_coin_would_lose_something() {
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::EnterSplitMode);
+    assert!(sut.view().split_mode);
+    assert!(!sut.view().can_change_token);
+    assert!(sut.dispatch(Event::ChangeToken).is_empty());
+    assert_eq!(sut.view().stage, SendStage::EnterDetails);
+
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    sut.dispatch(Event::Continue);
+    assert!(sut.view().estimating_gas);
+    assert!(!sut.view().can_change_token);
+    assert!(sut.dispatch(Event::ChangeToken).is_empty());
+    assert_eq!(sut.view().stage, SendStage::EnterDetails);
+
+    let mut sut = boot(vec![eth("2"), usdc("5")]);
+    sut.dispatch(Event::SetMultiNetwork { chain_id: Some(1) });
+    for token in [eth("2"), usdc("5")] {
+        sut.dispatch(Event::ToggleMultiToken {
+            token_id: token.id(),
+        });
+    }
+    sut.dispatch(Event::ConfirmMultiSelection);
+    assert!(sut.view().multi_select_mode);
+    assert_eq!(sut.view().stage, SendStage::EnterDetails);
+    assert!(!sut.view().can_change_token);
 }
 
 // ===========================================================================
@@ -4425,11 +4759,11 @@ fn locked_recipients_are_not_editable_either() {
 /// The owner's report, 2026-09-23: 「扫码到一个地址后无法切换发送资产，只能发送
 /// 里面的默认代币」.
 ///
-/// A scan skips the picker and takes the balance's top token — the person
+/// A scan skipped the picker and took the balance's top token — the person
 /// never chose it — so the only way to a different asset was Back, and Back
 /// threw the scanned address away. They scanned again, landed on the same
-/// token, and read it as "the asset cannot be changed". Now the address
-/// survives and the second token is one tap from the first.
+/// token, and read it as "the asset cannot be changed". The scan now lands on
+/// the picker (issue #312), and the address survives every trip back to it.
 #[test]
 fn a_scanned_recipient_can_change_its_asset_without_being_scanned_again() {
     let mut sut = Sut::new();
@@ -4437,22 +4771,14 @@ fn a_scanned_recipient_can_change_its_asset_without_being_scanned_again() {
         prefilled_recipient: Some(RECIPIENT.to_owned()),
         ..SendOpenParams::default()
     }));
-    // Two tokens, ETH worth more: the quick-send path picks it for the person.
     sut.resolve(loaded(vec![eth("2"), usdc("5")]));
-    sut.drop_matching(|op| {
-        matches!(
-            op,
-            Op::ResolveIdentity { .. } | Op::LoadAccountCredential { .. }
-        )
-    });
+    sut.drop_matching(|op| matches!(op, Op::ResolveIdentity { .. } | Op::PrewarmFees { .. }));
     let view = sut.view();
-    assert_eq!(
-        view.stage,
-        SendStage::EnterDetails,
-        "the picker was skipped"
-    );
+    assert_eq!(view.stage, SendStage::SelectToken, "the person chooses");
     assert_eq!(view.recipient, RECIPIENT);
 
+    select_eth(&mut sut);
+    assert_eq!(sut.view().stage, SendStage::EnterDetails);
     sut.dispatch(Event::Back);
     let view = sut.view();
     assert_eq!(
@@ -4482,14 +4808,9 @@ fn an_unlocked_prefill_still_carries_its_recipient_across_a_token_change() {
         ..SendOpenParams::default()
     }));
     sut.resolve(loaded(vec![eth("2"), usdc("5")]));
-    // The prefill resolved an identity and warmed a quote (Phase 10); neither
-    // is this rule's subject, and a FIFO walk must not answer them by accident.
-    sut.drop_matching(|op| {
-        matches!(
-            op,
-            Op::ResolveIdentity { .. } | Op::LoadAccountCredential { .. }
-        )
-    });
+    // The prefill resolved an identity and read the fees ahead; neither is
+    // this rule's subject, and a FIFO walk must not answer them by accident.
+    sut.drop_matching(|op| matches!(op, Op::ResolveIdentity { .. } | Op::PrewarmFees { .. }));
     select_eth(&mut sut);
     sut.dispatch(Event::Back);
     assert_eq!(

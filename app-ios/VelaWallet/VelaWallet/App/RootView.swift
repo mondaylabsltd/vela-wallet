@@ -2810,6 +2810,7 @@ struct RootView: View {
                     },
                     onPickCta: { sendPickCta() },
                     onMax: { send.tapMax() },
+                    onChangeToken: { send.changeToken() },
                     onDenom: { send.toggleFiatInput() },
                     // 原生 is not a second kind of token to paste an address
                     // for — a native coin arrives with its network. Android

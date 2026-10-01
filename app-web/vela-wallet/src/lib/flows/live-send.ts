@@ -159,7 +159,10 @@ export function visibleSendTokens(
 	send: SendView,
 	filters: { chainFilter?: number | null; classFilter?: SendClassFilter }
 ): SendToken[] {
-	const chain = filters.chainFilter ?? null;
+	// A code that named a network decides which network is on screen (issue
+	// 312): the core lists only that network's holdings, and a sidebar filter
+	// left on another one must not hide them all.
+	const chain = send.request_chain_id ?? filters.chainFilter ?? null;
 	const cls = filters.classFilter ?? 'all';
 	return send.tokens.filter(
 		(token) =>
@@ -414,11 +417,29 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 						: m['send.filterOther'],
 		selected: id === classFilter
 	}));
-	const pill = liveNetworkPill(
-		inputs.chainFilter,
-		m['componentsUi.networkFilter.pillAll'],
-		model.header.pill
-	);
+	// No network pill while a scanned code names the network (issue 312): the
+	// notice below says which one, and a pill that opened the network sheet
+	// there could choose nothing the list would follow.
+	const pill =
+		send.request_chain_id === null
+			? liveNetworkPill(
+					inputs.chainFilter,
+					m['componentsUi.networkFilter.pillAll'],
+					model.header.pill
+				)
+			: undefined;
+	// The network a scanned code named for the payer to choose on (issue 312),
+	// said in the receive card's own words: "BNB Chain payments only". Above an
+	// empty list it is also why the list is empty.
+	const requestNotice =
+		send.request_chain_id === null
+			? undefined
+			: {
+					mark: chainMark(send.request_chain_id),
+					text: fill(m['receive.shareCardNetworkNote'], {
+						network: chainName(send.request_chain_id)
+					})
+				};
 	// An empty list says WHY it is empty (issue 209). The account that holds
 	// nothing is where a hand-off from the address book now lands, and a panel
 	// with a search box and no rows explains itself to nobody; a filter that
@@ -443,7 +464,7 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 			recipient,
 			header: { ...model.header, title: m['send.selectTokenTitle'], pill },
 			filters,
-			notice: undefined,
+			notice: requestNotice,
 			selection: undefined,
 			rows,
 			empty,
@@ -460,12 +481,13 @@ export function liveSendPick(model: SendPickModel, inputs: SendLiveInputs): Send
 		filters,
 		empty,
 		notice:
-			chain === null
+			requestNotice ??
+			(chain === null
 				? undefined
 				: {
 						mark: chainMark(chain),
 						text: fill(m['send.multiSendChainNotice'], { network: chainName(chain) })
-					},
+					}),
 		rows,
 		selection: {
 			selected: visible.map((token) => picked.includes(sendTokenId(token))),
@@ -659,7 +681,10 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 					// `Max` fills the SINGLE amount. In a split there is no single
 					// amount — the button wrote a field nobody could see and changed
 					// nothing on screen — so a split does not offer it.
-					max: split ? undefined : m['send.maxBtn']
+					max: split ? undefined : m['send.maxBtn'],
+					// The card is the way to another asset (issue 326) wherever the
+					// core says the asset is the payer's to change.
+					change: send.can_change_token ? m['send.selectTokenTitle'] : undefined
 				}
 			: undefined,
 		// Split mode is the core's: it decides when one recipient becomes many,

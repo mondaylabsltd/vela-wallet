@@ -406,6 +406,11 @@ export interface SendTokenCardModel {
 	/** "Ethereum · Balance 53.4836". */
 	detail: string;
 	max?: string;
+	/**
+	 * Present when tapping the card goes back to the asset picker (issue 326):
+	 * the core's `can_change_token`, carrying the button's accessible name.
+	 */
+	change?: string;
 }
 
 /** SD2b's recipient card: who, how much, and a way to drop them. */

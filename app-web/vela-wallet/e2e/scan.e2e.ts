@@ -116,6 +116,15 @@ async function openHome(page: Page): Promise<void> {
 	await expect(page.getByText('E2E Wallet').first()).toBeVisible();
 }
 
+/** The asset picker, with the scanned recipient named on it (issue 332). */
+async function expectPickerFor(page: Page, address: string): Promise<void> {
+	await expect(page.getByText(en('send.selectTokenTitle')).first()).toBeVisible({
+		timeout: 30_000
+	});
+	await expect(page.getByText(en('send.toLabel'), { exact: true }).first()).toBeVisible();
+	await expect(page.getByText(shortenAddress(address)).first()).toBeVisible();
+}
+
 /** Open the scanner from the home and wait for the surface to be up. */
 async function openScanner(page: Page): Promise<void> {
 	await page
@@ -139,8 +148,11 @@ test('a code in a chosen image is read, and its address reaches the send form', 
 
 	await pick(page, ALICE);
 
-	// Read, parsed, and handed to the send core — which picks the account's
-	// one token and puts the scanned address where a person can see it.
+	// Read, parsed, and handed to the send core — which opens the asset
+	// picker with the scanned address on it (issues 312 and 332): whom the
+	// money is for is shown first, and what to send is the person's choice.
+	await expectPickerFor(page, ALICE);
+	await page.getByText('ETH', { exact: true }).first().click();
 	const recipient = page.getByRole('textbox', { name: en('send.recipientLabel') });
 	await expect(recipient).toBeVisible({ timeout: 30_000 });
 	await expect(recipient).toHaveValue(ALICE);
@@ -155,6 +167,8 @@ test('going back to change the asset keeps the scanned recipient, and the picker
 	await openHome(page);
 	await openScanner(page);
 	await pick(page, ALICE);
+	await expectPickerFor(page, ALICE);
+	await page.getByText('ETH', { exact: true }).first().click();
 	const recipient = page.getByRole('textbox', { name: en('send.recipientLabel') });
 	await expect(recipient).toHaveValue(ALICE, { timeout: 30_000 });
 
@@ -162,12 +176,61 @@ test('going back to change the asset keeps the scanned recipient, and the picker
 		.getByRole('button', { name: en('receive.a11yBack') })
 		.first()
 		.click();
-	await expect(page.getByText(en('send.selectTokenTitle')).first()).toBeVisible();
-	await expect(page.getByText(en('send.toLabel'), { exact: true }).first()).toBeVisible();
-	await expect(page.getByText(shortenAddress(ALICE)).first()).toBeVisible();
+	await expectPickerFor(page, ALICE);
 
 	await page.getByText('ETH', { exact: true }).first().click();
 	await expect(recipient).toHaveValue(ALICE, { timeout: 30_000 });
+});
+
+test('the token card opens the asset picker and keeps the scanned recipient', async ({ page }) => {
+	// Issue 326: on the form, the token card is the way to another asset — not
+	// only Back — and choosing again keeps whom the money is for.
+	await stubCamera(page, 'NotAllowedError');
+	await openHome(page);
+	await openScanner(page);
+	await pick(page, ALICE);
+	await expectPickerFor(page, ALICE);
+	await page.getByText('ETH', { exact: true }).first().click();
+	const recipient = page.getByRole('textbox', { name: en('send.recipientLabel') });
+	await expect(recipient).toHaveValue(ALICE, { timeout: 30_000 });
+
+	await page.getByRole('button', { name: en('send.selectTokenTitle') }).click();
+	await expectPickerFor(page, ALICE);
+	await page.getByText('ETH', { exact: true }).first().click();
+	await expect(recipient).toHaveValue(ALICE, { timeout: 30_000 });
+});
+
+test('a code that names a network offers only what the payer holds there', async ({ page }) => {
+	// Issue 312: `ethereum:<payee>@<chain>` — the network is the code's, the
+	// asset the payer's. The account holds ETH on Ethereum and nothing else.
+	await stubCamera(page, 'NotAllowedError');
+	await openHome(page);
+
+	// Ethereum: one holding there, so the form opens on it, for them.
+	await openScanner(page);
+	await pick(page, `ethereum:${ALICE}@1`);
+	const recipient = page.getByRole('textbox', { name: en('send.recipientLabel') });
+	await expect(recipient).toHaveValue(ALICE, { timeout: 30_000 });
+	await expect(page.getByText('Ethereum ·').first()).toBeVisible();
+	await page
+		.getByRole('button', { name: en('receive.a11yBack') })
+		.first()
+		.click();
+	await page
+		.getByRole('button', { name: en('receive.a11yBack') })
+		.first()
+		.click();
+
+	// Polygon: nothing held there — said, and never another chain instead.
+	await openScanner(page);
+	await pick(page, `ethereum:${ALICE}@137`);
+	await expectPickerFor(page, ALICE);
+	await expect(
+		page.getByText(en('receive.shareCardNetworkNote').replace('{{network}}', 'Polygon'))
+	).toBeVisible();
+	await expect(page.getByText(en('send.noTokensWithBalance'))).toBeVisible();
+	// No form on another chain's coin opened in its place.
+	await expect(page.getByRole('textbox', { name: en('send.recipientLabel') })).toHaveCount(0);
 });
 
 test('the scanner opened from the send form fills the row it was opened from', async ({ page }) => {

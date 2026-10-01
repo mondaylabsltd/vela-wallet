@@ -377,6 +377,11 @@ data class SendTokenCardModel(
     /** "Ethereum · Balance 53.4836". */
     val detail: String,
     val max: String? = null,
+    /**
+     * Issue #326: present when tapping the card goes back to the asset picker
+     * (the core's `can_change_token`), carrying the control's accessible name.
+     */
+    val change: String? = null,
 )
 
 /** SD2b's split row: who, how much, and a way to drop them. */

@@ -581,20 +581,28 @@ struct TokenHeaderCardView: View {
 
     let token: SendTokenCardModel
     var onMax: () -> Void = {}
+    /// Issue #326: the card's own tap — back to the asset picker.
+    var onChange: (() -> Void)?
 
     var body: some View {
         HStack(spacing: Tokens.Space.s12) {
-            TokenIconView(mark: token.mark)
-            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                Text(verbatim: token.symbol)
-                    .typeRole(Typography.rowTitle.scaled(textScale))
-                    .foregroundStyle(theme.fgBase)
-                Text(verbatim: token.detail)
-                    .typeRole(Typography.rowSub.scaled(textScale))
-                    .foregroundStyle(theme.fgMuted)
-                    .lineLimit(1)
+            // The token, and — where the core allows it — the way to another
+            // one. Max stays its own button beside it: one tap, one meaning.
+            if let change = token.change, let onChange {
+                Button(action: onChange) {
+                    HStack(spacing: Tokens.Space.s12) {
+                        face
+                        LucideIcon(.chevronDown, size: LucideIconSize.checkmark)
+                            .foregroundStyle(theme.fgMuted)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(change)
+                .accessibilityIdentifier("send.tokenCard")
+            } else {
+                face
             }
-            Spacer(minLength: Tokens.Space.s8)
             if let max = token.max {
                 Button(action: onMax) {
                     Text(verbatim: max)
@@ -610,6 +618,23 @@ struct TokenHeaderCardView: View {
         }
         .padding(Tokens.Space.s12)
         .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+    }
+
+    /// The mark, the symbol and where it is held — the card's face.
+    private var face: some View {
+        HStack(spacing: Tokens.Space.s12) {
+            TokenIconView(mark: token.mark)
+            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                Text(verbatim: token.symbol)
+                    .typeRole(Typography.rowTitle.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                Text(verbatim: token.detail)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: Tokens.Space.s8)
+        }
     }
 }
 

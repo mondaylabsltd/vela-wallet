@@ -1036,6 +1036,8 @@ struct SendBindings {
     /// traversal that wrote the sentence, so the button and the words cannot
     /// disagree about what they are offering.
     way_out: Option<flows_live::NoticeWayOut>,
+    /// The core's `can_change_token`: the token card opens the picker (#326).
+    can_change_token: bool,
 }
 
 impl Identity {
@@ -6091,6 +6093,7 @@ impl WalletPage {
             sweeping: self.send_sweeping,
             token_chain_ids: view.tokens.iter().map(|token| token.chain_id).collect(),
             multi_chain_id: view.multi_chain_id,
+            can_change_token: view.can_change_token,
         })
     }
 
@@ -6692,6 +6695,7 @@ impl WalletPage {
             amount_field: None,
             recipient_field: None,
             tap_max: None,
+            change_token: None,
             toggle_denom: None,
             pick_contact_rows: Vec::new(),
             fee_rows: Vec::new(),
@@ -7105,6 +7109,11 @@ impl WalletPage {
                         }),
                     });
                     actions.tap_max = Some(to_host(SendEvent::TapMax));
+                    // The token card goes back to the picker with the payee
+                    // kept (issue #326) — only where the core offers it.
+                    if send.can_change_token {
+                        actions.change_token = Some(to_host(SendEvent::ChangeToken));
+                    }
                     // ⇄: the core owns the swap — whether it is possible, and
                     // what becomes of the figure; the page only says it was
                     // pressed (the web's `toggle_fiat_input`, #197).

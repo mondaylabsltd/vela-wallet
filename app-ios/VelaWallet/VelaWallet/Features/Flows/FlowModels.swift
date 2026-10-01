@@ -403,6 +403,10 @@ struct SendPickModel {
     let rows: [AssetRowModel]
     var selection: SendSelectionModel?
     let cta: SendCtaModel
+    /// What an empty list says once the core has looked — nothing held (on
+    /// the network a scanned code named, issue #312), or nothing matching.
+    /// The web's and Android's line since issue 209.
+    var empty: String?
 }
 
 /// The token card at the top of the send form.
@@ -412,6 +416,9 @@ struct SendTokenCardModel {
     /// "Ethereum · Balance 53.4836".
     let detail: String
     var max: String?
+    /// Issue #326: present when tapping the card goes back to the asset
+    /// picker (the core's `can_change_token`), carrying its accessible name.
+    var change: String?
 }
 
 /// SD2b's split row: who, how much, and a way to drop them.

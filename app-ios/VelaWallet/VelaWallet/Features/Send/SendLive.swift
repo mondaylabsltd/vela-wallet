@@ -64,8 +64,13 @@ enum SendLive {
         // sweep's picking flag, and the chips were drawn in 021 with nothing
         // behind them.
         let shown = view.tokens.filter { matches(classFilter, token: $0) }
+        // Issue #312: no network pill while a scanned code names the network —
+        // the notice says which one, and a pill that opened the network sheet
+        // there could choose nothing the list would follow.
+        var header = model.header
+        if view.requestChainId != nil { header.pill = nil }
         return SendPickModel(
-            header: model.header,
+            header: header,
             recipient: pickRecipient(view, loc: loc),
             searchPlaceholder: model.searchPlaceholder,
             // Exactly one chip lit, and it is the one in force.
@@ -82,7 +87,8 @@ enum SendLive {
             //
             // The core's own `添加该网络` affordance has no drawn home on this
             // client; recorded in results rather than invented.
-            notice: lockNotice(view, loc: loc) ?? (picking && view.multiChainId != nil
+            notice: lockNotice(view, loc: loc) ?? requestNotice(view, loc: loc)
+                ?? (picking && view.multiChainId != nil
                 ? SendNoticeModel(
                     mark: model.notice?.mark
                         ?? TokenMarkModel(
@@ -115,11 +121,31 @@ enum SendLive {
                     // Nothing ticked is nothing to send.
                     accent: !view.multiSelectedIds.isEmpty
                 )
-                : model.cta
+                : model.cta,
+            // An empty list says why, once the core has looked: on a network a
+            // scanned code named, "nothing here" is the answer (issue #312).
+            empty: view.loading ? nil
+                : loc.t(view.tokens.isEmpty ? "send.noTokensWithBalance" : "send.noMatchingTokens")
         )
     }
 
 
+
+    /// Issue #312: the network a scanned code named, in the receive card's own
+    /// words ("BNB Chain payments only"). Above an empty list it is also why
+    /// the list is empty.
+    static func requestNotice(_ view: SendViewWire, loc: Loc) -> SendNoticeModel? {
+        guard let chainId = view.requestChainId else { return nil }
+        let meta = ChainCatalog.meta(chainId)
+        return SendNoticeModel(
+            mark: TokenMarkModel.chain(
+                chainId: chainId, symbol: meta?.nativeSymbol ?? "", color: chainColor(chainId)
+            ),
+            text: loc.t("receive.shareCardNetworkNote", vars: [
+                "network": meta?.displayName ?? "Chain \(chainId)",
+            ])
+        )
+    }
 
     /// Issue #332: the picker's "To" line — the recipient the core already
     /// holds, worded as the confirm page words it, so the person sees whom
@@ -269,7 +295,10 @@ enum SendLive {
                 // figure on the home row are one number, digit for digit. The
                 // core's full precision used to go on this line unrounded.
                 detail: "\(chain) · " + loc.t("send.balanceLabel", vars: ["amount": WalletLive.tokenAmountText(held.balance)]),
-                max: model.token?.max
+                max: model.token?.max,
+                // Issue #326: the card is the way to another asset, where the
+                // core says the asset is the payer's to change.
+                change: view.canChangeToken == true ? loc.t("send.selectTokenTitle") : nil
             )
         }
 
