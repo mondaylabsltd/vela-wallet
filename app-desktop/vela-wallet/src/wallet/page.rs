@@ -18864,6 +18864,32 @@ mod tests {
         assert_ne!(loc.t(CLOSE_HELD_WORDS).as_ref(), CLOSE_HELD_WORDS);
     }
 
+    /// Issue #330 (Android and iOS stranded hidden groups): with Favorites and
+    /// Recent hidden, the Favorites heading — whose Edit opens Manage groups —
+    /// is still drawn on a page with anything on it. Hiding takes the grid
+    /// away, never the heading; the empty start page is the only way past it.
+    #[test]
+    fn a_hidden_favorites_keeps_the_way_to_manage_groups() {
+        // The needles are assembled, so this test's own text never matches.
+        let source = include_str!("page.rs");
+        let find = |needle: &str| {
+            source
+                .find(needle)
+                .unwrap_or_else(|| unreachable!("{needle} is gone"))
+        };
+        let empty = find(&["return column.child(self.", "explore_empty(theme, cx));"].concat());
+        let heading = find(&["let (title_half, ", "edit_half) = section_header_parts("].concat());
+        let edit = find(&["\"explore-favorites", "-edit\")"].concat());
+        let grid = find(&["if !(live_grid && explore_view.", "favorites_hidden) {"].concat());
+        assert!(empty < heading && heading < edit && edit < grid);
+        assert!(
+            !source[empty..edit].contains(&["favorites", "_hidden"].concat()),
+            "nothing hides the heading"
+        );
+        assert!(source[edit..edit + 200].contains(&["this.explore_", "groups = true;"].concat()));
+        assert!(source[grid..grid + 120].contains("column = column.child(grid);"));
+    }
+
     /// Spec 082 G41: every way into the address bar takes the keyboard back
     /// from WebKit — `edit_address` through `focus_address`, and a press in
     /// the open bar before its caret moves. The bar's focus handle is focused
