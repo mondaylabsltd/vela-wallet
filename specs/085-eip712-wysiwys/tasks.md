@@ -31,13 +31,13 @@
 
 ## Phase 4 — Bindings and gates
 
-- [ ] T019 `rust/pkg-web` + wasm asset rebuilt from the final core; `build-web --check`; `sync-wasm`.
-- [ ] T020 iOS xcframework + `vela_core_uniffi.swift` from this tree; VelaWalletTests on a cloned simulator.
-- [ ] T021 Android bindings + `testDebugUnitTest`.
-- [ ] T022 Desktop `cargo test` + clippy.
-- [ ] T023 Web `test:unit`, `check`; extension e2e (isolated).
+- [x] T019 `rust/pkg-web` + wasm asset rebuilt from the final core; `build-web --check`; `sync-wasm`.
+- [x] T020 iOS xcframework + `vela_core_uniffi.swift` from this tree; VelaWalletTests on a cloned simulator (969 passed).
+- [x] T021 Android bindings + `testDebugUnitTest` (802/803; the 1 failure is pre-existing on `main`, see results).
+- [x] T022 Desktop `cargo test` + clippy.
+- [x] T023 Web `test:unit`, `check`; extension e2e (isolated).
 
 ## Phase 5 — Delivery
 
-- [ ] T024 `results.md`; PR to `main` (closes the need for #337).
+- [x] T024 `results.md`; PR to `main` (closes the need for #337).
 - [ ] T025 👤 Owner: deploy `app-web/trusted-signer/dist/`, confirm `/b/8c002ee4…/sign` is 200 + immutable, then move `LAUNCH`.
