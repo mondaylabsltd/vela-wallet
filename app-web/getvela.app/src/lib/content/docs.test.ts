@@ -76,7 +76,7 @@ describe('every docs file has frontmatter a YAML parser can read', () => {
  * does not exist.
  */
 const LOCALIZED = /^\/(docs(\/[a-z0-9-]+)?|about|roadmap|get-started|chain-setup)?(#.*)?$/;
-const ENGLISH_ONLY = /^\/(blog|privacy|terms|registry)(\/|$|#)/;
+const ENGLISH_ONLY = /^\/(blog|privacy|terms|support|delete|registry)(\/|$|#)/;
 
 describe('translated docs keep their links in their own language', () => {
 	for (const file of markdownFiles(DOCS)) {

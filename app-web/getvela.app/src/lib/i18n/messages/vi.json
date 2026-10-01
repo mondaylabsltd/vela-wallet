@@ -33,7 +33,9 @@
 				"chainSetup": "Thiết lập chuỗi",
 				"selfHosting": "Hướng dẫn tự triển khai",
 				"privacy": "Quyền riêng tư",
-				"terms": "Điều khoản"
+				"terms": "Điều khoản",
+				"support": "Hỗ trợ",
+				"deleteData": "Xóa dữ liệu của bạn"
 			}
 		},
 		"language": {

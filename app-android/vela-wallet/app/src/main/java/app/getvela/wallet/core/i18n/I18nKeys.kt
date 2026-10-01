@@ -1072,5 +1072,12 @@ object I18nKeys {
         const val LOAD_PROXY = "explore.loadProxy"
         const val LOAD_OFFLINE = "explore.loadOffline"
         const val LOAD_RETRYING = "explore.loadRetrying"
+
+        /**
+         * Spec 088 FR-004: a page another app asked to open is shown by its
+         * host and opens on this — the /pay page's own "Open in Vela Wallet",
+         * reused rather than a new sentence (the ja + en budget is spent).
+         */
+        const val EXTERNAL_OPEN = "receive.pay.open"
     }
 }

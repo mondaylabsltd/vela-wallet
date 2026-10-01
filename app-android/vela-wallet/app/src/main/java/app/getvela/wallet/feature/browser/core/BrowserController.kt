@@ -45,6 +45,7 @@ import uniffi.vela_core_uniffi.BrowserHistoryCore
 import uniffi.vela_core_uniffi.DappBrowserCore
 import uniffi.vela_core_uniffi.ExploreSitesCore
 import uniffi.vela_core_uniffi.dappBrowserInput
+import uniffi.vela_core_uniffi.dappExternalPageHost
 import uniffi.vela_core_uniffi.dappOriginOf
 
 /** What the engine knows about the document it shows — the platform's facts, not the page's claims. */
@@ -873,6 +874,37 @@ class BrowserController(
 
     /** Address-bar text → what loads: a URL, or a search (the core's rule, every shell's). */
     fun coerceUrl(text: String): String = dappBrowserInput(text).orEmpty()
+
+    /** A page another app or website asked this wallet to open, and the host the person is asked about. */
+    data class ExternalPage(val url: String, val host: String)
+
+    /**
+     * Spec 088 FR-004: `velawallet://open?url=…` waits here for the person.
+     * Nothing loads — and no page meets the provider — until they say yes
+     * to the host on the sheet ([answerExternal]).
+     */
+    val externalPage = MutableStateFlow<ExternalPage?>(null)
+
+    /**
+     * Ask before opening a page from outside. The core decides whether the
+     * link may be opened at all (https, a plain host) and which host to show;
+     * anything else is dropped in silence, like any link this app does not
+     * handle.
+     */
+    fun askToOpen(url: String) {
+        val host = dappExternalPageHost(url) ?: run {
+            VelaLog.event("browser.external", "link refused", "scheme" to url.substringBefore(':').take(12))
+            return
+        }
+        externalPage.value = ExternalPage(url, host)
+    }
+
+    /** The sheet's answer: open the page as asked, or forget it. */
+    fun answerExternal(open: Boolean) {
+        val page = externalPage.value ?: return
+        externalPage.value = null
+        if (open) open(page.url, fromOutside = true)
+    }
 
     /**
      * Opens a page: in the selected tab when it already shows one, as the

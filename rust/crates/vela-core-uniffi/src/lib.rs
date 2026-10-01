@@ -1989,6 +1989,15 @@ pub fn dapp_browser_input(text: String) -> Option<String> {
     vela_core::app::dapp_rpc::browser_input(&text)
 }
 
+/// A page another app or site asked the wallet's browser to open
+/// (`velawallet://open?url=…`, spec 088): the host the person is asked about
+/// before it loads, or `None` when the link is not opened at all (only an
+/// `https` page with a plain host qualifies).
+#[uniffi::export]
+pub fn dapp_external_page_host(url: String) -> Option<String> {
+    vela_core::app::dapp_rpc::external_page_host(&url)
+}
+
 /// A main-frame load failure as every browser shell draws it (spec 079):
 /// `class` is one of `offline | timeout | not_found | refused | certificate |
 /// other | proxy` (`proxy` since spec 082: the proxy itself could not be used,
