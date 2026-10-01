@@ -38,11 +38,20 @@ struct AmountTextField: View {
     let color: Color
     var alignment: NSTextAlignment = .natural
     var identifier: String?
+    /// A field drawn as a well (issue #331, the split row's amount): at least
+    /// this tall, with `room` of its own either side of the text, so the WHOLE
+    /// well — and whatever margin its owner leaves around it — is the field,
+    /// and a tap anywhere on it puts the caret there.
+    var minHeight: CGFloat = 0
+    var room: (leading: CGFloat, trailing: CGFloat) = (0, 0)
+    /// Whether the field is in hand — a well is seen while it is wanted.
+    var onEditing: ((Bool) -> Void)?
 
     var body: some View {
         AmountTextFieldBox(
             text: $text, placeholder: placeholder, font: font,
-            color: UIColor(color), alignment: alignment, identifier: identifier
+            color: UIColor(color), alignment: alignment, identifier: identifier,
+            minHeight: minHeight, room: room, onEditing: onEditing
         )
         // On the text's baseline, as a SwiftUI `TextField` is, so a unit set
         // beside the figure (`HStack(alignment: .firstTextBaseline)`) sits on
@@ -88,11 +97,16 @@ private struct AmountTextFieldBox: UIViewRepresentable {
     let color: UIColor
     let alignment: NSTextAlignment
     let identifier: String?
+    let minHeight: CGFloat
+    let room: (leading: CGFloat, trailing: CGFloat)
+    let onEditing: ((Bool) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
     func makeUIView(context: Context) -> UITextField {
-        let field = UITextField()
+        let field = InsetTextField()
+        field.room = room
+        context.coordinator.onEditing = onEditing
         field.delegate = context.coordinator
         field.keyboardType = .decimalPad
         field.borderStyle = .none
@@ -107,6 +121,7 @@ private struct AmountTextFieldBox: UIViewRepresentable {
 
     func updateUIView(_ field: UITextField, context: Context) {
         context.coordinator.text = $text
+        context.coordinator.onEditing = onEditing
         style(field)
         // A value that did not come from this field: Max, the ⇄ swap, a
         // cleared form. The field's own edits are already here.
@@ -115,7 +130,10 @@ private struct AmountTextFieldBox: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextField, context: Context) -> CGSize? {
         let natural = uiView.intrinsicContentSize
-        return CGSize(width: proposal.width ?? natural.width, height: max(natural.height, ceil(font.lineHeight)))
+        return CGSize(
+            width: proposal.width ?? natural.width,
+            height: max(natural.height, ceil(font.lineHeight), minHeight)
+        )
     }
 
     private func style(_ field: UITextField) {
@@ -131,6 +149,7 @@ private struct AmountTextFieldBox: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextFieldDelegate {
         var text: Binding<String>
+        var onEditing: ((Bool) -> Void)?
 
         init(text: Binding<String>) {
             self.text = text
@@ -154,6 +173,10 @@ private struct AmountTextFieldBox: UIViewRepresentable {
             return false
         }
 
+        func textFieldDidBeginEditing(_ field: UITextField) { onEditing?(true) }
+
+        func textFieldDidEndEditing(_ field: UITextField) { onEditing?(false) }
+
         @objc func edited(_ field: UITextField) {
             report(field.text ?? "")
         }
@@ -162,4 +185,26 @@ private struct AmountTextFieldBox: UIViewRepresentable {
             if text.wrappedValue != value { text.wrappedValue = value }
         }
     }
+}
+
+/// A `UITextField` whose text keeps `room` clear of its edges, so a field
+/// drawn as a well is all field — its padding included.
+private final class InsetTextField: UITextField {
+    var room: (leading: CGFloat, trailing: CGFloat) = (0, 0)
+
+    private func inner(_ bounds: CGRect) -> CGRect {
+        let rtl = effectiveUserInterfaceLayoutDirection == .rightToLeft
+        let left = rtl ? room.trailing : room.leading
+        let right = rtl ? room.leading : room.trailing
+        return CGRect(
+            x: bounds.minX + left, y: bounds.minY,
+            width: max(0, bounds.width - left - right), height: bounds.height
+        )
+    }
+
+    override func textRect(forBounds bounds: CGRect) -> CGRect { inner(bounds) }
+
+    override func editingRect(forBounds bounds: CGRect) -> CGRect { inner(bounds) }
+
+    override func placeholderRect(forBounds bounds: CGRect) -> CGRect { inner(bounds) }
 }
