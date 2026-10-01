@@ -15,9 +15,9 @@ use support::DomainDriver;
 use vela_core::app::dapp_permissions::{
     dapp_spelling, decide_popup_request, granted_to_signed_in, is_connect_method,
     is_insecure_public_origin, is_signing_method, origin_of, resolve_granted, settle_on_close,
-    DappPermissions, DpermGrant,
-    DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome, DpermPopupView,
-    DpermRejectReason as Reason, DpermRespondPayload as Payload, DpermShellResult as Res, Event,
+    DappPermissions, DpermGrant, DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome,
+    DpermPopupView, DpermRejectReason as Reason, DpermRespondPayload as Payload,
+    DpermShellResult as Res, Event,
 };
 
 type Sut = DomainDriver<DappPermissions>;
@@ -465,7 +465,11 @@ fn popup_event_never_answers_a_grant_for_an_account_that_is_not_signed_in() {
         assert!(verdict.granted.is_empty(), "{method}");
     }
     // A signature: refused as not connected, never signed by A1.
-    for method in ["eth_sendTransaction", "personal_sign", "eth_signTypedData_v4"] {
+    for method in [
+        "eth_sendTransaction",
+        "personal_sign",
+        "eth_signTypedData_v4",
+    ] {
         let verdict = ask(&mut sut, popup(method, Some(grant(A1)), Some(A2), None));
         assert_eq!(
             verdict.outcome,
