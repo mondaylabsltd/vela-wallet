@@ -148,6 +148,8 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			emptyCaption: k('home.emptySubtitle'),
 			pending: k('componentsTx.detail.statusPending'),
 			failed: k('componentsTx.detail.statusFailed'),
+			// 087 F04: the corpus's bare "Unknown", for a record nothing settles.
+			unknown: k('componentsUi.signing.intentUnknown'),
 			emptyTitleNetwork: k('home.emptyNoActivityNetwork')
 		},
 		assets: {
