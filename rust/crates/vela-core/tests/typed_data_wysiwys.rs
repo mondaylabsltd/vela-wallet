@@ -1,5 +1,5 @@
 //! What you see is what you sign — typed data (audit 2026-10-01,
-//! `docs/security/2026-10-01-eip712-wysiwys-audit.md`).
+//! `specs/085-eip712-wysiwys/audit.md`).
 //!
 //! The audit's probes, inverted: every reader takes the request's ONE
 //! document, a request with two (in either order), the wrong order, one param

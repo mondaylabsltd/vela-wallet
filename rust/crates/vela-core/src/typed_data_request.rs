@@ -1,7 +1,7 @@
 //! One reading of a typed-data signing request.
 //!
 //! The audit of 2026-10-01 ("what you see is not what you sign",
-//! `docs/security/2026-10-01-eip712-wysiwys-audit.md`) found every reader of
+//! `specs/085-eip712-wysiwys/audit.md`) found every reader of
 //! an `eth_signTypedData*` request picking its own element: the sheet the
 //! first string, the passkey `params[1] ?? params[0]`, the SafeTx guard the
 //! first document that parsed, the approval guard `params[1]` even for the

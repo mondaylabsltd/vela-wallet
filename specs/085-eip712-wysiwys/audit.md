@@ -41,8 +41,10 @@ Method routing: `method.contains("signTypedData")` (`sign_request.rs:701, 760, 8
 `dapp_session.rs:1916`, `extension/lib/protocol.js:97`) — any spelling (`eth_signTypedData_v2`,
 `x_signTypedData_y`) reaches a digest. A one-element v4 (`[typedData]`, no account) is signed.
 
-`app-web/vela-wallet/src/lib/services/approval-guard.ts` (another `params[1] ?? params[0]`) is
-imported by nothing but its own tests — dead code.
+`app-web/vela-wallet/src/lib/services/approval-guard.ts` has another `params[1] ?? params[0]`
+reader. It is live (`dapp-submit.ts` imports `enforceNoUnlimited`), but `enforceNoUnlimited`
+returns at once for every typed-data detection (`locus.type === 'typed-path'`), so this reader has
+no effect on what is signed.
 
 ## 3. The two shapes, client by client
 
