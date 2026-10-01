@@ -89,6 +89,35 @@ test.describe('what a page cannot do', () => {
 		await context.close();
 	});
 
+	/**
+	 * Spec 089: `storage.local` holds each site's grant, the signed-in address
+	 * and the RPC catalog. content.js never reads it, but Chrome opens it to
+	 * content scripts by default — and a content script runs in the renderer of
+	 * every page. The worker closes it to them at start; the isolated world
+	 * itself is asked here, over CDP.
+	 */
+	test('its content script cannot read the wallet’s storage', async () => {
+		const context = await loadExtension();
+		const page = await context.newPage();
+		const cdp = await context.newCDPSession(page);
+		const contexts: { id: number; name: string; auxData?: { type?: string } }[] = [];
+		cdp.on('Runtime.executionContextCreated', (event) => contexts.push(event.context));
+		await cdp.send('Runtime.enable');
+		await page.goto(`http://localhost:${PORT}/`);
+		await expect
+			.poll(() => contexts.some((c) => c.auxData?.type === 'isolated'), { timeout: 10_000 })
+			.toBe(true);
+		const isolated = contexts.filter((c) => c.auxData?.type === 'isolated').at(-1)!;
+		const { result } = await cdp.send('Runtime.evaluate', {
+			contextId: isolated.id,
+			awaitPromise: true,
+			returnByValue: true,
+			expression: `chrome.storage.local.get(null).then(() => 'read', (e) => 'refused: ' + e.message)`
+		});
+		expect(String(result.value)).toMatch(/^refused/);
+		await context.close();
+	});
+
 	test('cannot use the wallet as an open RPC relay', async () => {
 		const context = await loadExtension();
 		const page = await context.newPage();

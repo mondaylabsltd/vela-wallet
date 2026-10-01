@@ -106,6 +106,24 @@ const sessionArea = chrome.storage.session;
 const swlog = createSwLog({ storage: sessionArea });
 
 /**
+ * `storage.local` is for the extension's own pages and this worker only
+ * (spec 089). Chrome opens it to content scripts by default, and content.js
+ * — which runs in the renderer of every page the person visits — never reads
+ * it; but what is there (each site's grant, the signed-in address, the RPC
+ * catalog with any endpoint a person added, provider keys in its URLs
+ * included) would be readable by a renderer that a page managed to take
+ * over. `storage.session` is closed to content scripts already. Asked at
+ * every start, quietly where Chrome has no such setting for this area.
+ */
+try {
+	void Promise.resolve(
+		chrome.storage.local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' })
+	).catch(() => {});
+} catch {
+	/* an older Chrome: content scripts keep the default access, as before */
+}
+
+/**
  * Where requests are answered — cached, because the choice has to be made
  * synchronously (the side panel may only be opened inside the page's user
  * gesture, which the first `await` spends). Read once at start, kept fresh by

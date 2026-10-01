@@ -931,6 +931,25 @@ describe('a request with no gesture, to an idle panel (RB8 EX2 × RJ20 G63)', ()
 	});
 });
 
+describe('storage.local is closed to content scripts (089)', () => {
+	it('asks for TRUSTED_CONTEXTS at start', async () => {
+		const env = makeEnv();
+		const setAccessLevel = vi.fn(async () => {});
+		(env.local as unknown as { setAccessLevel: typeof setAccessLevel }).setAccessLevel =
+			setAccessLevel;
+		await startWorker(env);
+		expect(setAccessLevel).toHaveBeenCalledWith({ accessLevel: 'TRUSTED_CONTEXTS' });
+	});
+
+	it('starts as before on a Chrome without the setting', async () => {
+		const env = makeEnv();
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const { reply } = await env.ask(page, 's:1');
+		expect(reply).toEqual({ accepted: true });
+	});
+});
+
 describe('the page’s own deadline (RB11)', () => {
 	it('an `abandon` settles the record as expired and withdraws the sheet', async () => {
 		const env = makeEnv();
