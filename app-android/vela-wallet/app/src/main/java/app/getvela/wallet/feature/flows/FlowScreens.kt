@@ -807,6 +807,13 @@ fun SendPickBody(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
+        // Whom this is for, above what to send (issue #332): a scanned code or
+        // a contact lands here, and the person confirms the payee while choosing.
+        model.recipient?.let {
+            FactRow(fact = it)
+            HairlineDivider()
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        }
         FlowSearchField(
             placeholder = model.searchPlaceholder,
             value = query,

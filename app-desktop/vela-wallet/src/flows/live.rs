@@ -1452,6 +1452,34 @@ pub fn narrow_send_tokens(view: &mut SendView, chain: Option<u32>, class: SendCl
     });
 }
 
+/// Issue #332: the picker's "To" line — the recipient the core already holds,
+/// worded as the confirm page words it, so the person sees whom they are
+/// paying while they choose what. Nobody held, no line; artwork only for a
+/// real address.
+fn pick_recipient(i: &SendInputs<'_>) -> Option<FactRow> {
+    let address = i.send.recipient.trim();
+    if address.is_empty() {
+        return None;
+    }
+    let name = i
+        .send
+        .recipient_identity
+        .as_ref()
+        .and_then(|identity| identity.name.clone());
+    Some(FactRow {
+        label: i.s.to_label.clone(),
+        mono: name.is_none(),
+        value: name.unwrap_or_else(|| shorten(address)).into(),
+        lead: if crate::flows::eip681::is_hex_address(address) {
+            FactLead::Identicon(address.to_owned().into())
+        } else {
+            FactLead::None
+        },
+        copy: None,
+        note: None,
+    })
+}
+
 /// DSD1L — which token to send, in one of the picker's two modes.
 ///
 /// The rows are the core's holdings, already narrowed (`narrow_send_tokens`);
@@ -1467,6 +1495,7 @@ pub fn narrow_send_tokens(view: &mut SendView, chain: Option<u32>, class: SendCl
 pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> SendPick {
     let s = i.s;
     let mut pick = SendPick {
+        recipient: pick_recipient(i),
         selection: None,
         lock_notice: i
             .send
@@ -1630,6 +1659,54 @@ mod sweep_tests {
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::Gas);
             let lit: Vec<bool> = pick.filters.iter().map(|chip| chip.selected).collect();
             assert_eq!(lit, [false, false, true, false]);
+        });
+    }
+
+    /// Issue #332: a code scanned from the home lands on the picker with the
+    /// address it read, and the picker said nothing of it. It says whom the
+    /// money is for now — as the confirm words it — and nothing when nobody
+    /// is held.
+    #[test]
+    fn the_picker_says_whom_the_money_is_for() {
+        const PAYEE: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+        crate::executor::storage::tests::with_temp_state("send-pick-recipient", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let mut view = view_with(vec![token(1, "ETH", None)], Vec::new(), None);
+
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(pick.recipient.is_none(), "nobody held, no line");
+
+            view.recipient = PAYEE.to_owned();
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let line = pick
+                .recipient
+                .unwrap_or_else(|| unreachable!("the scan said nothing"));
+            assert_eq!(line.label, s.to_label);
+            assert_eq!(line.value.as_ref(), shorten(PAYEE));
+            assert!(line.mono);
+            assert!(matches!(line.lead, FactLead::Identicon(ref seed) if seed.as_ref() == PAYEE));
+
+            // The sweep's picker is about the same person; a resolved name
+            // is what the confirm shows too.
+            view.recipient_identity = Some(vela_core::app::send::SendRecipientIdentity {
+                name: Some("alice.eth".to_owned()),
+                source: None,
+            });
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), true, SendClass::All);
+            let line = pick
+                .recipient
+                .unwrap_or_else(|| unreachable!("the sweep lost them"));
+            assert_eq!(line.value.as_ref(), "alice.eth");
+            assert!(!line.mono);
+
+            // Text that is not an address is shown as read, with no artwork.
+            view.recipient = "hello".to_owned();
+            view.recipient_identity = None;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let line = pick.recipient.unwrap_or_else(|| unreachable!("held"));
+            assert!(matches!(line.lead, FactLead::None));
         });
     }
 

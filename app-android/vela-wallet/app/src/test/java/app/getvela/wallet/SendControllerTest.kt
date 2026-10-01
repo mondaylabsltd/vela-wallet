@@ -153,6 +153,35 @@ class SendControllerTest {
     }
 
     /**
+     * Issue #332, the phone's own order: Home → Scan opens Send on the picker
+     * with the scanner over it, and the code arrives afterwards. The address
+     * it read is the recipient on the picker, the form opens on it once a
+     * token is chosen, and going back to choose another keeps it.
+     */
+    @Test
+    fun `a code scanned from the home is the recipient on the picker and survives back`() {
+        val send = controller()
+        send.open(account = me, display = usd)
+        send.awaitView("the picker lists the holdings") { it.stage == SendStage.SelectToken && it.tokens.size == 3 }
+        send.openScanner()
+        send.scanned("  $PAYEE ")
+
+        val picking = send.awaitView("the picker, with the scanned recipient") {
+            it.stage == SendStage.SelectToken && !it.show_scanner && it.recipient == PAYEE
+        }
+        assertNull(picking.selected_token)
+
+        val pol = picking.tokens.first { it.symbol == "POL" }
+        send.selectToken(app.getvela.wallet.feature.send.SendLive.tokenId(pol))
+        send.awaitView("the form, for them") { it.stage == SendStage.EnterDetails && it.recipient == PAYEE }
+
+        send.back()
+        send.awaitView("back on the picker, still for them") {
+            it.stage == SendStage.SelectToken && it.selected_token == null && it.recipient == PAYEE
+        }
+    }
+
+    /**
      * Spec 082 (T128): what a tracker entry means for the send on screen is
      * the core's one mapping (`sendReceiptOutcomeOf`) — this app's own `when`
      * over four statuses is gone. A lost reply the relay has not shown it
@@ -174,5 +203,6 @@ class SendControllerTest {
 
     private companion object {
         const val ME = "0x576a2cc9e6adc0c95989fa6aa104290aa940c73f"
+        const val PAYEE = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
     }
 }

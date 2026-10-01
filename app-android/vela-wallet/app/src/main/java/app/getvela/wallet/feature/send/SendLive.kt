@@ -165,9 +165,11 @@ object SendLive {
         // core's own token list tells "holds nothing" from "a filter or the
         // search hid everything".
         val empty = s.t(if (view.tokens.isEmpty()) I18nKeys.Flows.NO_TOKENS_WITH_BALANCE else I18nKeys.Flows.NO_MATCHING_TOKENS)
+        val recipient = pickRecipient(view, s)
         if (!sweepPicking) {
             return fallback.copy(
                 header = fallback.header.copy(pill = pill),
+                recipient = recipient,
                 filters = filters,
                 notice = null,
                 selection = null,
@@ -183,6 +185,7 @@ object SendLive {
         val chainName = chain?.let { ctx.chainNames[it] ?: "chain-$it" } ?: ""
         return fallback.copy(
             header = fallback.header.copy(title = s.t(I18nKeys.Flows.MULTI_SEND_TITLE), pill = pill),
+            recipient = recipient,
             filters = filters,
             empty = empty,
             notice = chain?.let {
@@ -202,6 +205,24 @@ object SendLive {
             } else {
                 SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false)
             },
+        )
+    }
+
+    /**
+     * Issue #332: the picker's "To" line — the recipient the core already
+     * holds, worded as the confirm page words it, so the person sees whom they
+     * are paying while they choose what. Nobody held, no line; artwork only for
+     * a real address (the founder's anti-poisoning rule).
+     */
+    internal fun pickRecipient(view: SendView, s: VelaStrings): FactRowModel? {
+        val address = view.recipient.trim()
+        if (address.isEmpty()) return null
+        val name = view.recipient_identity?.name
+        return FactRowModel(
+            label = s.t(I18nKeys.Flows.TO_LABEL),
+            value = name?.let { "$it · ${shortAddress(address)}" } ?: shortAddress(address),
+            lead = if (ADDRESS.matches(address)) FactLead.Identicon(address) else null,
+            mono = name == null,
         )
     }
 

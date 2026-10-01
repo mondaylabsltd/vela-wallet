@@ -66,6 +66,7 @@ enum SendLive {
         let shown = view.tokens.filter { matches(classFilter, token: $0) }
         return SendPickModel(
             header: model.header,
+            recipient: pickRecipient(view, loc: loc),
             searchPlaceholder: model.searchPlaceholder,
             // Exactly one chip lit, and it is the one in force.
             filters: model.filters.map { chip in
@@ -119,6 +120,22 @@ enum SendLive {
     }
 
 
+
+    /// Issue #332: the picker's "To" line — the recipient the core already
+    /// holds, worded as the confirm page words it, so the person sees whom
+    /// they are paying while they choose what. Nobody held, no line; artwork
+    /// only for a real address (the founder's anti-poisoning rule).
+    static func pickRecipient(_ view: SendViewWire, loc: Loc) -> FactRowModel? {
+        let address = view.recipient.trimmingCharacters(in: .whitespaces)
+        guard !address.isEmpty else { return nil }
+        let name = view.recipientIdentity?.name
+        return FactRowModel(
+            label: loc.t("send.toLabel"),
+            value: name.map { "\($0) · \(AddressText.short(address))" } ?? AddressText.short(address),
+            lead: isAddress(address) ? .identicon(address) : nil,
+            mono: name == nil
+        )
+    }
 
     /// Which class a holding belongs to.
     ///

@@ -1518,6 +1518,11 @@ pub struct Model {
     loading: bool,
     selected_token: Option<SendToken>,
     recipient: String,
+    /// The recipient came from OUTSIDE the field — a hand-off, a scan, a pick
+    /// from the book — rather than being typed into it, so it survives the
+    /// trip back to the picker ([`handle_back`]). Typing over it makes it the
+    /// person's own again.
+    recipient_handed_in: bool,
     /// Canonical dot-decimal, exactly as typed/sanitized — **plus the unit it
     /// is counted in**.
     ///
@@ -1960,6 +1965,12 @@ impl App for Send {
                     // would be a dead button.)
                     return Command::done();
                 }
+                // Typed over, a handed-in recipient is the person's own: Back
+                // clears it like any other typing. An echo of the same value
+                // changes nothing.
+                if recipient != model.recipient {
+                    model.recipient_handed_in = false;
+                }
                 model.recipient = recipient;
                 Command::all([
                     sync_identity(model),
@@ -2359,6 +2370,7 @@ fn open(
     // fails must not leave the form open on nobody. `tokens_fetched` still
     // restates it beside the token it picks.
     model.recipient = params.prefilled_recipient.clone().unwrap_or_default();
+    model.recipient_handed_in = params.prefilled_recipient.is_some();
     model.params = params;
     model.loading = true;
     boot_fetch(model)
@@ -3740,15 +3752,23 @@ fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
             }
             render()
         }
-        None => {
-            model.recipient = address;
-            Command::all([
-                sync_identity(model),
-                schedule_form_estimate(model),
-                render(),
-            ])
-        }
+        None => hand_in_recipient(model, address),
     }
+}
+
+/// A recipient that arrived from outside the field — a scan, a pick from the
+/// book — fills the single recipient and is remembered as handed in, so going
+/// back to the picker to change the asset does not throw it away (issue #332:
+/// a scan from the home lands on the picker, and Back from the form used to
+/// clear the address it had just read).
+fn hand_in_recipient(model: &mut Model, address: String) -> Cmd {
+    model.recipient = address;
+    model.recipient_handed_in = true;
+    Command::all([
+        sync_identity(model),
+        schedule_form_estimate(model),
+        render(),
+    ])
 }
 
 fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
@@ -3787,22 +3807,8 @@ fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
             };
             open(model, account, params, display)
         }
-        SendScan::Request { recipient, .. } => {
-            model.recipient = recipient;
-            Command::all([
-                sync_identity(model),
-                schedule_form_estimate(model),
-                render(),
-            ])
-        }
-        SendScan::Text { data } => {
-            model.recipient = data;
-            Command::all([
-                sync_identity(model),
-                schedule_form_estimate(model),
-                render(),
-            ])
-        }
+        SendScan::Request { recipient, .. } => hand_in_recipient(model, recipient),
+        SendScan::Text { data } => hand_in_recipient(model, data),
     }
 }
 
@@ -4849,7 +4855,12 @@ fn handle_back(model: &mut Model) -> Cmd {
                 // A recipient the person TYPED still goes, because there
                 // starting over is theirs to redo and a stale address in an
                 // empty-looking flow is worse than a cleared field.
-                if model.params.prefilled_recipient.is_none() {
+                //
+                // "Handed in" is the recipient's own history, not the open
+                // params: on the phones a home scan opens the picker FIRST and
+                // the code arrives afterwards (`scan_resolved`), so the params
+                // never named it and Back threw the scan away (issue #332).
+                if !model.recipient_handed_in {
                     model.recipient.clear();
                 }
                 model.split_mode = false;

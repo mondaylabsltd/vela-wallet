@@ -402,6 +402,11 @@ pub struct FilterChip {
 
 #[derive(Clone)]
 pub struct SendPick {
+    /// Issue #332: whom the money is for, when the core already holds a
+    /// recipient — a scanned code, a contact handed over. The picker is where
+    /// the person chooses WHAT to send; without this line a scan that worked
+    /// looked exactly like one that had done nothing. The mock has none.
+    pub recipient: Option<FactRow>,
     pub search_placeholder: SharedString,
     /// The class chips. There is no network pill: on the desktop the
     /// sidebar's network filter is the one, and it narrows these rows too.
@@ -1205,6 +1210,7 @@ fn add_token(s: &FlowStrings, native: bool) -> AddToken {
 
 fn send_pick(s: &FlowStrings) -> SendPick {
     SendPick {
+        recipient: None,
         // The mock is the one-token list; the sweep is a live-only state.
         selection: None,
         lock_notice: None,
