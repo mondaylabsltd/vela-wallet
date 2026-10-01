@@ -769,7 +769,7 @@
    "methodHybridBody": "Quét mã và tạo trên thiết bị gần đó",
    "methodHybridTitle": "Điện thoại hoặc máy tính bảng",
    "methodHybridUnavailable": "Sắp có",
-   "methodPlatformBody": "Touch ID hoặc Windows Hello",
+   "methodPlatformBody": "Vân tay, khuôn mặt hoặc khóa màn hình",
    "methodPlatformTitle": "Thiết bị này",
    "methodSecurityKeyBody": "Cắm vào rồi chạm",
    "methodSecurityKeyTitle": "Khoá bảo mật USB",

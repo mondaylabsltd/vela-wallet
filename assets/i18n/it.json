@@ -772,7 +772,7 @@
    "methodHybridBody": "Scansiona un codice e creala su un dispositivo vicino",
    "methodHybridTitle": "Telefono o tablet",
    "methodHybridUnavailable": "Prossimamente",
-   "methodPlatformBody": "Touch ID o Windows Hello",
+   "methodPlatformBody": "Impronta, volto o blocco schermo",
    "methodPlatformTitle": "Questo dispositivo",
    "methodSecurityKeyBody": "Inseriscila e toccala",
    "methodSecurityKeyTitle": "Chiave di sicurezza USB",
