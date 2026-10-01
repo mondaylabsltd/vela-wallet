@@ -30,7 +30,7 @@ use vela_core::l10n::number::format_token_amount;
 
 use crate::flows::FlowStrings;
 use crate::wallet::fill;
-use vela_core::app::batch_import::{BatchRateStatus, BatchUnit, BatchView};
+use vela_core::app::batch_import::{BatchFileFailure, BatchRateStatus, BatchUnit, BatchView};
 use vela_core::app::contacts::ContactsView;
 use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
@@ -3618,7 +3618,13 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
             Some(SendNotice {
                 dismiss: None,
                 title: Some(s.batch_import_failed_title.clone()),
-                body: s.batch_import_failed_body.clone(),
+                // 087: a legacy code page says how to save the file, not
+                // "use a CSV" — which it is.
+                body: if view.file_failure == Some(BatchFileFailure::UnsupportedEncoding) {
+                    s.batch_import_failed_encoding.clone()
+                } else {
+                    s.batch_import_failed_body.clone()
+                },
                 detail: None,
                 action: None,
                 error: true,

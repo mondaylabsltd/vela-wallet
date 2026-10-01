@@ -13,11 +13,17 @@
  * that will never see a spreadsheet.
  */
 
-/** What a picked table carries: text for CSV/TSV, bytes for a workbook. */
+/**
+ * What a picked table carries: its name, its bytes undecoded, and whether it
+ * is a workbook. A CSV/TSV/TXT goes to the `batch_import` core as BYTES, which
+ * the core decodes once (UTF-8, or UTF-16 by its BOM — never a guess), as it
+ * does a contacts file (issue 333). `File.text()` used to decode here and
+ * turned a GBK CSV's Chinese names into U+FFFD without a word (087).
+ */
 export interface PickedTable {
 	name: string;
-	text?: string;
-	bytes?: Uint8Array;
+	bytes: Uint8Array;
+	excel: boolean;
 }
 
 const TABLE_ACCEPT = '.csv,.tsv,.txt,.xlsx,.xlsm,.xlsb,.xls';
@@ -58,11 +64,11 @@ export function pickTable(): Promise<PickedTable | null> {
 			const file = input.files?.[0];
 			if (!file) return done(null);
 			try {
-				if (isExcelName(file.name)) {
-					done({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
-				} else {
-					done({ name: file.name, text: await file.text() });
-				}
+				done({
+					name: file.name,
+					bytes: new Uint8Array(await file.arrayBuffer()),
+					excel: isExcelName(file.name)
+				});
 			} catch {
 				done(null);
 			}
