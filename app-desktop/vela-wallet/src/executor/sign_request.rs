@@ -1282,11 +1282,17 @@ mod tests {
         assert!(digest.is_some());
         let quoted = serde_json::to_string(document).unwrap_or_default();
         assert_eq!(
-            message_hash("eth_signTypedData_v4", &format!(r#"["{account}",{quoted}]"#)),
+            message_hash(
+                "eth_signTypedData_v4",
+                &format!(r#"["{account}",{quoted}]"#)
+            ),
             digest
         );
         assert_eq!(
-            message_hash("eth_signTypedData_v4", &format!(r#"["{account}",{document}]"#)),
+            message_hash(
+                "eth_signTypedData_v4",
+                &format!(r#"["{account}",{document}]"#)
+            ),
             digest,
             "a document sent as an object is the same document"
         );
@@ -1294,9 +1300,18 @@ mod tests {
             message_hash("eth_signTypedData", &format!(r#"[{quoted},"{account}"]"#)),
             digest
         );
-        assert_eq!(message_hash("eth_signTypedData_v4", &format!("[{quoted}]")), None);
-        assert_eq!(message_hash("eth_signTypedData_v4", &format!("[{quoted},{quoted}]")), None);
-        assert_eq!(message_hash("eth_signTypedData", &format!("[{quoted},{quoted}]")), None);
+        assert_eq!(
+            message_hash("eth_signTypedData_v4", &format!("[{quoted}]")),
+            None
+        );
+        assert_eq!(
+            message_hash("eth_signTypedData_v4", &format!("[{quoted},{quoted}]")),
+            None
+        );
+        assert_eq!(
+            message_hash("eth_signTypedData", &format!("[{quoted},{quoted}]")),
+            None
+        );
         assert!(is_message("eth_signTypedData_v4") && is_message("personal_sign"));
         assert!(!is_message("eth_sendTransaction") && !is_message("wallet_sendCalls"));
     }

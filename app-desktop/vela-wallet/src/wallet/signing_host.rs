@@ -2069,9 +2069,17 @@ mod tests {
         for method in ["eth_signTypedData_v4", "eth_signTypedData"] {
             let two = format!("[{doc},{doc}]");
             assert_eq!(typed_data_of(method, &two), "", "{method}");
-            assert_eq!(crate::executor::sign_request::message_hash(method, &two), None, "{method}");
+            assert_eq!(
+                crate::executor::sign_request::message_hash(method, &two),
+                None,
+                "{method}"
+            );
         }
-        assert_eq!(typed_data_of("eth_signTypedData_v4", "[]"), "", "nothing to decode is not a panic");
+        assert_eq!(
+            typed_data_of("eth_signTypedData_v4", "[]"),
+            "",
+            "nothing to decode is not a panic"
+        );
     }
 }
 
