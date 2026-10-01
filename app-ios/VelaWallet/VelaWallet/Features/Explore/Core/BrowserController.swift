@@ -374,7 +374,10 @@ final class BrowserController {
     /// not.
     ///
     /// Spec 082 RE1: the star acts on what the bar names — the page on
-    /// screen, never where a load in flight is going.
+    /// screen, never where a load in flight is going. Under a failure panel
+    /// that is the address that failed, and the engine's title is still the
+    /// page before's: the name is the core's rule (`browserPinnedTitle`) —
+    /// that site's last good title, else its host (issue #329).
     func toggleFavorite() {
         guard let engine = current else { return }
         let url = engine.bar.url
@@ -383,7 +386,7 @@ final class BrowserController {
         if explore.favorites.contains(where: { $0.origin == origin }) {
             removeFavorite(origin: origin)
         } else {
-            addFavorite(url: url, title: engine.title.isEmpty ? nil : engine.title)
+            addFavorite(url: url, title: browserPinnedTitle(url: url, lastGood: engine.lastVisit))
         }
     }
 

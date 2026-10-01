@@ -72,6 +72,11 @@ final class BrowserEngine: NSObject {
     /// The page's own icon, as a URL — recorded for history, never fetched
     /// here (a tile's mark is drawn: see `ExploreLive`).
     private(set) var favicon: String = ""
+    /// The last document that loaded WITHOUT failing — the core's visit
+    /// (`browserLoadVisit`), read from the document itself. What the star
+    /// names a favourite after (`browserPinnedTitle`, issue #329): never the
+    /// page before's title for a site that failed to load.
+    private(set) var lastVisit: BrowserVisit?
     private(set) var canGoBack: Bool = false
     private(set) var canGoForward: Bool = false
     private(set) var loading: Bool = false
@@ -623,6 +628,7 @@ final class BrowserEngine: NSObject {
                       let visit = Self.visit(facts: facts, httpStatus: status)
                 else { return }
                 self.favicon = visit.favicon ?? ""
+                self.lastVisit = visit
                 self.onVisited(visit.url, visit.title ?? "", visit.favicon ?? "")
             }
         }
