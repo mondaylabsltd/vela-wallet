@@ -37,32 +37,42 @@ const grantFor = (address: string): DAppGrant => ({
 });
 
 describe('what a granted origin may see', () => {
-	/** Every case that distinguishes the rule, including the load-bearing one. */
-	const matrix: { name: string; grant: DAppGrant | null; addresses: string[] | null }[] = [
-		{ name: 'no grant at all', grant: null, addresses: [ALICE] },
-		{ name: 'grant, account present', grant: grantFor(ALICE), addresses: [ALICE, BOB] },
-		{ name: 'grant, account gone', grant: grantFor(ALICE), addresses: [BOB] },
-		// The one that matters most: a cold read must not be read as "the account
-		// is gone", or every browser start logs the person out of every dApp.
-		{ name: 'grant, addresses not known yet (null)', grant: grantFor(ALICE), addresses: null },
-		{ name: 'grant, addresses not known yet (empty)', grant: grantFor(ALICE), addresses: [] },
-		{ name: 'grant, different case', grant: grantFor(ALICE.toUpperCase()), addresses: [ALICE] }
+	/**
+	 * Every case that distinguishes the rule (spec 086 #315: a grant is
+	 * answered only for the account the wallet is signed in to).
+	 */
+	const matrix: { name: string; grant: DAppGrant | null; signedIn: string | null }[] = [
+		{ name: 'no grant at all', grant: null, signedIn: ALICE },
+		{ name: 'grant for the signed-in account', grant: grantFor(ALICE), signedIn: ALICE },
+		// The issue itself: the device still holds ALICE, BOB is signed in.
+		{ name: 'grant for another account', grant: grantFor(ALICE), signedIn: BOB },
+		// Signed out: no snapshot, so nobody — never "trust the grant".
+		{ name: 'nobody signed in (null)', grant: grantFor(ALICE), signedIn: null },
+		{ name: 'nobody signed in (empty)', grant: grantFor(ALICE), signedIn: '' },
+		{ name: 'grant, different case', grant: grantFor(ALICE.toUpperCase()), signedIn: ALICE },
+		{ name: 'signed in, different case', grant: grantFor(ALICE), signedIn: ALICE.toUpperCase() }
 	];
 
-	for (const { name, grant, addresses } of matrix) {
+	for (const { name, grant, signedIn } of matrix) {
 		it(`agrees with the core: ${name}`, () => {
 			const fromCore = decidePopupRequest({
 				method: 'eth_accounts',
 				grant: toWireGrant(grant),
-				currentAddresses: addresses,
+				signedIn,
 				pinnedAddress: null
 			}).granted;
-			const fromWorker = resolveGrantedAccounts(toWireGrant(grant), addresses);
+			const fromWorker = resolveGrantedAccounts(toWireGrant(grant), signedIn);
 			expect(fromWorker.map((a: string) => a.toLowerCase())).toEqual(
 				fromCore.map((a) => a.toLowerCase())
 			);
 		});
 	}
+
+	it('never hands out an account that is not the signed-in one (#315)', () => {
+		expect(resolveGrantedAccounts(toWireGrant(grantFor(ALICE)), BOB)).toEqual([]);
+		expect(resolveGrantedAccounts(toWireGrant(grantFor(ALICE)), null)).toEqual([]);
+		expect(resolveGrantedAccounts(toWireGrant(grantFor(ALICE)), ALICE)).toEqual([ALICE]);
+	});
 });
 
 describe('how a torn-down window settles', () => {
