@@ -7837,6 +7837,70 @@ public func FfiConverterTypeIdenticonParams_lower(_ value: IdenticonParams) -> R
 
 
 /**
+ * A key-method row's words (087 F01, F02): the title's corpus key and the
+ * line under it — `line_key` a corpus key to translate, or `line_name` a
+ * product name ("Face ID") drawn as it is; exactly one of the two is set.
+ * See `vela_core::app::method_words`.
+ */
+public struct KeyMethodWords: Equatable, Hashable {
+    public var titleKey: String
+    public var lineKey: String?
+    public var lineName: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(titleKey: String, lineKey: String?, lineName: String?) {
+        self.titleKey = titleKey
+        self.lineKey = lineKey
+        self.lineName = lineName
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension KeyMethodWords: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyMethodWords: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyMethodWords {
+        return
+            try KeyMethodWords(
+                titleKey: FfiConverterString.read(from: &buf), 
+                lineKey: FfiConverterOptionString.read(from: &buf), 
+                lineName: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KeyMethodWords, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.titleKey, into: &buf)
+        FfiConverterOptionString.write(value.lineKey, into: &buf)
+        FfiConverterOptionString.write(value.lineName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyMethodWords_lift(_ buf: RustBuffer) throws -> KeyMethodWords {
+    return try FfiConverterTypeKeyMethodWords.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeyMethodWords_lower(_ value: KeyMethodWords) -> RustBuffer {
+    return FfiConverterTypeKeyMethodWords.lower(value)
+}
+
+
+/**
  * One store write: `value: None` removes the key.
  */
 public struct KeyWrite: Equatable, Hashable {
@@ -12025,6 +12089,30 @@ fileprivate struct FfiConverterOptionTypeCableAdvert: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeKeyMethodWords: FfiConverterRustBuffer {
+    typealias SwiftType = KeyMethodWords?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeKeyMethodWords.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeKeyMethodWords.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeP256PublicKey: FfiConverterRustBuffer {
     typealias SwiftType = P256PublicKey?
 
@@ -13548,6 +13636,24 @@ public func keccak256(data: Data) -> Data  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_keccak256(
         FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+/**
+ * The words of one key-method row in the create or sign-in chooser, decided
+ * once in the core for every shell. All three are wire names: `method`
+ * (`"platform"`, `"hybrid"`, `"security_key"`, `"trusted_signer"`),
+ * `chooser` (`"create"`, `"sign_in"`) and `unlock` — what unlocks a passkey
+ * on this device as far as the shell can tell (`"face_id"`, `"touch_id"`,
+ * `"windows_hello"`, `"other"`). `None` for a name the core does not know.
+ */
+public func keyMethodWords(method: String, chooser: String, unlock: String) -> KeyMethodWords?  {
+    return try!  FfiConverterOptionTypeKeyMethodWords.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_key_method_words(
+        FfiConverterString.lower(method),
+        FfiConverterString.lower(chooser),
+        FfiConverterString.lower(unlock),uniffiCallStatus
     )
 })
 }
@@ -15319,6 +15425,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_keccak256() != 12343) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_key_method_words() != 64849) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_mark_miss_ttl_ms() != 58714) {

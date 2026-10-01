@@ -174,54 +174,32 @@ pub const SIGNIN_ROUTES: [KeyMethod; 4] = [
     KeyMethod::TrustedSigner,
 ];
 
-/// A route's title and its line, as both choosers say them.
-///
-/// ONE mapping, because a create chooser and a sign-in chooser that disagreed
-/// about what a route is called is exactly the drift spec 075 was raised over
-/// — the owner counted the rows on one screen and found three.
+/// A route's title key and its create-chooser line key — the core's words
+/// (`vela_core::app::method_words`, 087 F01/F02), named by key so a test can
+/// check every one resolves. What a row actually draws is [`method_line`].
 #[must_use]
 pub const fn method_words(method: KeyMethod) -> (&'static str, &'static str) {
-    match method {
-        KeyMethod::SecurityKey => (
-            "onboarding.create.methodSecurityKeyTitle",
-            "onboarding.create.methodSecurityKeyBody",
-        ),
-        KeyMethod::Platform => (
-            "onboarding.create.methodPlatformTitle",
-            "onboarding.create.methodPlatformBody",
-        ),
-        KeyMethod::Hybrid => (
-            "onboarding.create.methodHybridTitle",
-            "onboarding.create.methodHybridBody",
-        ),
-        KeyMethod::TrustedSigner => (
-            "componentsUi.signing.trustedSignerTitle",
-            "componentsUi.signing.trustedSignerBody",
-        ),
+    let words = method.words(Chooser::Create, DeviceUnlock::Other);
+    match words.line {
+        MethodLine::Key(key) => (words.title_key, key),
+        // `Other` names no product, so every create line is a key.
+        MethodLine::Name(_) => (words.title_key, "onboarding.create.methodPlatformBody"),
     }
 }
 
-/// Which chooser a route's line is drawn in (083 W16): the phone row says
-/// what the phone is for, and creating a key on it is not signing in with one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Chooser {
-    Create,
-    SignIn,
-}
+/// Which chooser a route's line is drawn in (083 W16) — the core's.
+pub use vela_core::app::method_words::KeyChooser as Chooser;
+use vela_core::app::method_words::{DeviceUnlock, MethodLine};
 
-/// A route's line under its title, as `chooser` and this machine say it.
-///
-/// Two lines are not [`method_words`]' (083 W16): the sign-in sheet's phone
-/// row said "create it on a nearby device", and "this device" offered Touch
-/// ID on Windows and Windows Hello on a Mac.
+/// A route's line under its title, as `chooser` and this machine say it — the
+/// core's rule (087 F01/F02, first fixed here as 083 W16): the sign-in
+/// sheet's phone row scans rather than creates, and "this device" names the
+/// one authenticator this machine has.
 #[must_use]
 pub fn method_line(loc: &Loc, method: KeyMethod, chooser: Chooser) -> SharedString {
-    match (method, chooser, PLATFORM_AUTHENTICATOR) {
-        // Nothing is created by signing in: the phone scans, and a passkey
-        // already on it answers.
-        (KeyMethod::Hybrid, Chooser::SignIn, _) => scan_line(loc),
-        (KeyMethod::Platform, _, Some(name)) => SharedString::from(name),
-        _ => loc.t(method_words(method).1),
+    match method.words(chooser, THIS_DEVICE).line {
+        MethodLine::Key(key) => loc.t(key),
+        MethodLine::Name(name) => SharedString::from(name),
     }
 }
 
@@ -231,19 +209,18 @@ pub fn method_line(loc: &Loc, method: KeyMethod, chooser: Chooser) -> SharedStri
 /// is the touch card's line, which replaces this card once the phone is in.
 #[must_use]
 pub fn scan_line(loc: &Loc) -> SharedString {
-    loc.t("explore.scan")
+    loc.t(vela_core::app::method_words::SCAN_LINE_KEY)
 }
 
-/// The authenticator "this device" reaches here, by its own name (083 W16).
-/// A product name, not copy: all 15 catalogs keep both verbatim in
-/// `onboarding.create.methodPlatformBody`. Linux reaches none, and its greyed
-/// row says why in its own line.
-const PLATFORM_AUTHENTICATOR: Option<&str> = if cfg!(windows) {
-    Some("Windows Hello")
+/// What unlocks a passkey on this machine, for the core to name (083 W16,
+/// 087 F01): Windows Hello on Windows, Touch ID on a Mac. Linux reaches none,
+/// and its greyed row says why in its own line.
+const THIS_DEVICE: DeviceUnlock = if cfg!(windows) {
+    DeviceUnlock::WindowsHello
 } else if cfg!(target_os = "macos") {
-    Some("Touch ID")
+    DeviceUnlock::TouchId
 } else {
-    None
+    DeviceUnlock::Other
 };
 
 /// May this route run on this machine? Only "this device" can answer no: a

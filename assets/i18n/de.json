@@ -769,7 +769,7 @@
    "methodHybridBody": "Code scannen und auf einem Gerät in der Nähe erstellen",
    "methodHybridTitle": "Handy oder Tablet",
    "methodHybridUnavailable": "Demnächst",
-   "methodPlatformBody": "Touch ID oder Windows Hello",
+   "methodPlatformBody": "Fingerabdruck, Gesicht oder Displaysperre",
    "methodPlatformTitle": "Dieses Gerät",
    "methodSecurityKeyBody": "Einstecken und antippen",
    "methodSecurityKeyTitle": "USB-Sicherheitsschlüssel",

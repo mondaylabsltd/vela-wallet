@@ -3636,7 +3636,7 @@ struct RootView: View {
         } else if let payload = onboarding.cableQr {
             // Below touch on purpose: once the phone connects and the ceremony
             // is waiting on ITS sheet, "look at your phone" replaces the QR.
-            CableQrSheet(loc: loc, payload: payload)
+            CableQrSheet(loc: loc, payload: payload, chooser: onboarding.cableQrCreates ? .create : .signIn)
                 .themed(scheme)
         } else if let prompt = onboarding.pending {
             FlowSheet(

@@ -2225,7 +2225,14 @@ fun VelaNavHost(
         UsbTouchIndicator(kind = touch.kind, product = touch.product)
     }
     onboarding.cableQr?.let { payload ->
-        CableQrSheet(payload = payload)
+        CableQrSheet(
+            payload = payload,
+            chooser = if (onboarding.cableQrCreates) {
+                app.getvela.wallet.feature.onboarding.flow.KeyChooser.Create
+            } else {
+                app.getvela.wallet.feature.onboarding.flow.KeyChooser.SignIn
+            },
+        )
     }
     // Spec 071/075: every Trusted Signer sheet, hosted OUTSIDE the NavHost for
     // the same reason the flow sheet is — a create, a sign-in, a send and a

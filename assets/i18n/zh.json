@@ -776,7 +776,7 @@
    "methodHybridBody": "扫码，用附近设备创建",
    "methodHybridTitle": "手机或平板",
    "methodHybridUnavailable": "即将支持",
-   "methodPlatformBody": "Touch ID 或 Windows Hello",
+   "methodPlatformBody": "指纹、面容或屏幕锁",
    "methodPlatformTitle": "这台设备",
    "methodSecurityKeyBody": "插入后轻触",
    "methodSecurityKeyTitle": "USB 安全密钥",
