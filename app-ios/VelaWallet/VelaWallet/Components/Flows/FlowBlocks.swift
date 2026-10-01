@@ -632,10 +632,16 @@ struct TokenHeaderCardView: View {
                 Text(verbatim: token.symbol)
                     .typeRole(Typography.rowTitle.scaled(textScale))
                     .foregroundStyle(theme.fgBase)
+                // Where it is held and how much: the balance is the figure the
+                // amount is typed against, so the line wraps rather than
+                // cutting it (087 F28 — "Gnosis · 余额 0.1…" on an iPhone 11
+                // with a larger text size, the chevron beside it). One line
+                // at the default size; the figure never breaks.
                 Text(verbatim: token.detail)
                     .typeRole(Typography.rowSub.scaled(textScale))
                     .foregroundStyle(theme.fgMuted)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: Tokens.Space.s8)
         }
