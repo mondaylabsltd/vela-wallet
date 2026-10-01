@@ -31,6 +31,16 @@ import Foundation
 /// Risk level for visual treatment.
 enum ClearRisk: String, Decodable {
     case safe, normal, caution, danger
+
+    /// The order risks rise in — "the worst call sets a batch's tone".
+    var rank: Int {
+        switch self {
+        case .safe: 0
+        case .normal: 1
+        case .caution: 2
+        case .danger: 3
+        }
+    }
 }
 
 /// Layout role hint — which slot a field belongs in.
@@ -207,6 +217,8 @@ enum ClearSurface: String, Decodable {
     /// A dApp's plain value transfer — empty calldata (spec 082 RC1): the
     /// same amount card the wallet's own send draws, from `plainSend`.
     case plainSend = "plain_send"
+    /// 089 S1: a batch of two or more calls — every call drawn, from `batch`.
+    case batch
 
     /// A surface this build has never heard of is drawn as the blind
     /// transaction — the most cautious rung — rather than failing the view: a
@@ -230,6 +242,33 @@ struct ClearPlainSendWire: Decodable, Equatable {
     let amount: String
     /// Zero value: "Send · 0 <coin>", no minus sign, a neutral Confirm (RC3).
     let noValue: Bool
+}
+
+/// 089 S1: one call of a batch as the core read it — by the ladder a lone
+/// transaction climbs. `surface` is `clearSign` (from `result`), `plainSend`
+/// (from `plainSend`) or `blindTransaction`; never omitted.
+struct ClearBatchCallWire: Decodable, Equatable {
+    let index: Int
+    let surface: ClearSurface
+    var result: ClearSignResultWire?
+    let plainSend: ClearPlainSendWire?
+    /// The call's target as sent, EIP-55 when it is an address.
+    let to: String?
+    /// What "unable to decode" names.
+    let dataBytes: Int
+    /// The native coin this call moves, exact; `nil` when unreadable.
+    let valueWei: String?
+    let amount: String?
+    var risk: ClearRisk
+}
+
+/// 089 S1: every call of a batch, what it moves in all, and its worst call's risk.
+struct ClearBatchViewWire: Decodable, Equatable {
+    var calls: [ClearBatchCallWire]
+    /// `nil` when any call's value cannot be read exactly — no sum is stated.
+    let totalValueWei: String?
+    let totalAmount: String?
+    var risk: ClearRisk
 }
 
 /// The confirm button's **semantics**. The words stay in the shell, and so
@@ -287,6 +326,9 @@ struct ClearSigningViewWire: Decodable, Equatable {
     /// The plain send card (spec 082 RC1): present exactly when `surface` is
     /// `plainSend`.
     var plainSend: ClearPlainSendWire? = nil
+    /// 089 S1: every call of a batch — present exactly when `surface` is
+    /// `batch`, and then `result` and `plainSend` are `nil`.
+    var batch: ClearBatchViewWire? = nil
 
     static let empty = ClearSigningViewWire(
         resolving: false, resolved: false, result: nil, message: nil,
