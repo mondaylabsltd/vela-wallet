@@ -5168,7 +5168,6 @@ impl WalletPage {
             });
         let recent = self.contacts.recent_activity.clone();
         let view_all = self.contacts.view_all_activity.clone();
-        let edit = self.contacts.edit.clone();
         let delete = self.contacts.delete_contact.clone();
         let delete_name = model.name.clone();
         let send = self.contacts.action_send.clone();
@@ -5230,6 +5229,47 @@ impl WalletPage {
                 }))
         });
 
+        // Edit sits beside what it edits (issue 334): the only Edit used to be
+        // at the panel's foot or in the row's right-click menu. When the
+        // worded name action (issue 191) stands in for it, the pencil steps
+        // aside — one Edit beside the name either way (the web's
+        // `ContactDetailPanel`).
+        let pencil = name_action.is_none().then(|| {
+            // The address is FIXED in the form — it is the key the core stores
+            // under, so changing it would be a delete and an add wearing one
+            // button, and the old contact would quietly survive.
+            let editing = live_address.clone();
+            contacts_components::plain_icon_button(
+                "contact-edit",
+                theme,
+                &mut self.icons,
+                Icon::Pencil,
+            )
+            .on_click(cx.listener(move |this, _, window, cx| {
+                let Some(address) = editing.clone() else {
+                    return;
+                };
+                this.open_edit_contact(&address, window, cx);
+            }))
+        });
+        let name_row = div()
+            .max_w_full()
+            .min_w(px(0.))
+            .flex()
+            .items_center()
+            .gap(px(4.))
+            .child(
+                div()
+                    .min_w(px(0.))
+                    .text_size(theme::text_panel_title())
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(theme.fg_base)
+                    .whitespace_nowrap()
+                    .truncate()
+                    .child(model.name.clone()),
+            )
+            .children(pencil);
+
         let hero = div()
             .flex()
             .items_center()
@@ -5247,15 +5287,7 @@ impl WalletPage {
                     .flex_col()
                     .items_start()
                     .gap(px(8.))
-                    .child(
-                        div()
-                            .text_size(theme::text_panel_title())
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .text_color(theme.fg_base)
-                            .whitespace_nowrap()
-                            .truncate()
-                            .child(model.name.clone()),
-                    )
+                    .child(name_row)
                     .children(name_action)
                     .child(chips),
             );
@@ -5361,33 +5393,15 @@ impl WalletPage {
             ))
         };
 
+        // Delete follows the content, one hairline below it (issue 310). It
+        // was pinned to the panel's foot by a spacer, a window-tall gap away
+        // from the contact it removes.
         let footer = div()
             .flex()
             .items_center()
-            .justify_between()
             .pt(px(14.))
             .border_t_1()
             .border_color(theme.divider)
-            .child({
-                // Edit opens the same sheet with the address FIXED — it is the
-                // key the core stores under, so changing it would be a delete
-                // and an add wearing one button, and the old contact would
-                // quietly survive.
-                let editing = live_address.clone();
-                text_action(
-                    "contact-edit",
-                    theme,
-                    &mut self.icons,
-                    Some(Icon::Pencil),
-                    edit,
-                )
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    let Some(address) = editing.clone() else {
-                        return;
-                    };
-                    this.open_edit_contact(&address, window, cx);
-                }))
-            })
             .child(
                 destructive_text_button("contact-delete", theme, delete).on_click(cx.listener(
                     move |this, _, _, cx| {
@@ -5408,7 +5422,6 @@ impl WalletPage {
             );
 
         div()
-            .h_full()
             .flex()
             .flex_col()
             .gap(px(16.))
@@ -5424,7 +5437,6 @@ impl WalletPage {
             ))
             .child(div().h(px(1.)).bg(theme.divider))
             .child(activity)
-            .child(div().flex_1().min_h(px(0.)))
             .child(footer)
     }
 
@@ -18862,6 +18874,37 @@ mod tests {
         // The words are a corpus key the desktop already resolves.
         let loc = Loc::from_env();
         assert_ne!(loc.t(CLOSE_HELD_WORDS).as_ref(), CLOSE_HELD_WORDS);
+    }
+
+    /// Issues 334 and 310: in DC2 the pencil is built into the name's row,
+    /// and Delete follows the content — no spacer pins the foot to the
+    /// bottom of the column, and the foot carries no second Edit.
+    #[test]
+    fn contact_detail_edit_is_by_the_name_and_delete_follows_the_content() {
+        // The needles are assembled, so this test's own text never matches.
+        let source = include_str!("page.rs");
+        let start = source
+            .find(&["fn contact_", "detail_body("].concat())
+            .unwrap_or_else(|| unreachable!("contact_detail_body is gone"));
+        let rest = &source[start..];
+        let body = &rest[..rest.find("\n    }\n").unwrap_or(rest.len())];
+        let at = |needle: &str| {
+            body.find(needle)
+                .unwrap_or_else(|| unreachable!("{needle} is gone from DC2"))
+        };
+        let pencil = at(&["\"contact-", "edit\""].concat());
+        let name_row = at(&["let name_", "row = div()"].concat());
+        let footer = at(&["let ", "footer = div()"].concat());
+        assert!(pencil < name_row, "the pencil is built for the name's row");
+        assert!(body[name_row..footer].contains(".children(pencil)"));
+        assert!(
+            !body[footer..].contains(&["\"contact-", "edit\""].concat()),
+            "no second Edit at the foot"
+        );
+        assert!(
+            !body.contains(&[".flex_1()", ".min_h(px(0.)))"].concat()),
+            "no spacer between the content and Delete"
+        );
     }
 
     /// Spec 082 G41: every way into the address bar takes the keyboard back
