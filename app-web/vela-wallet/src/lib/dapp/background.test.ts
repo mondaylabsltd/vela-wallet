@@ -931,6 +931,89 @@ describe('a request with no gesture, to an idle panel (RB8 EX2 × RJ20 G63)', ()
 	});
 });
 
+/**
+ * Spec 089: a connected site asking again (`eth_requestAccounts` on load,
+ * ethers v5's `send('eth_requestAccounts')`, a second Connect click) used to
+ * go to a surface that only asked the core and closed — a request window
+ * flashed open and shut, stealing focus, or the side panel opened. The worker
+ * answers it now, from the same rule `eth_accounts` answers with, and opens
+ * nothing; a site that is not granted still gets the panel, synchronously.
+ */
+describe('a connect from a site that is already granted (089)', () => {
+	const ALICE = `0x${'a1'.repeat(20)}`;
+	const seedGrant = (env: Env, origin = 'https://a.example') => {
+		env.local.data[`vela.perm.${origin}`] = {
+			origin,
+			address: ALICE,
+			chainId: 100,
+			grantedAt: 1
+		};
+		env.local.data['vela.ext.cache'] = { address: ALICE, accounts: [{ address: ALICE }] };
+	};
+
+	it('answers eth_requestAccounts at once, with no panel, no window and no record', async () => {
+		const env = makeEnv();
+		seedGrant(env);
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const { reply } = await env.ask(page, 'c:1', 'eth_requestAccounts');
+		await settleAll();
+		expect(reply).toEqual({ result: [ALICE] });
+		expect(env.chrome.sidePanel.open).not.toHaveBeenCalled();
+		expect(env.chrome.windows.create).not.toHaveBeenCalled();
+		expect(reqKeys(env.session)).toEqual([]);
+	});
+
+	it('answers wallet_requestPermissions in the EIP-2255 shape', async () => {
+		const env = makeEnv();
+		seedGrant(env);
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const { reply } = await env.ask(page, 'c:1', 'wallet_requestPermissions');
+		expect(reply).toEqual({ result: [{ parentCapability: 'eth_accounts' }] });
+		expect(env.chrome.sidePanel.open).not.toHaveBeenCalled();
+	});
+
+	it('a site with no grant still opens the panel, synchronously, for a person to decide', async () => {
+		const env = makeEnv();
+		seedGrant(env, 'https://other.example');
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const { reply } = await env.ask(page, 'c:1', 'eth_requestAccounts');
+		await settleAll();
+		expect(reply).toEqual({ accepted: true });
+		expect(env.chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 7 });
+		expect(reqKeys(env.session)).toEqual(['vela.req.7:c:1']);
+	});
+
+	it('follows the storage: a revoked grant asks again, a new grant answers at once', async () => {
+		const env = makeEnv();
+		seedGrant(env);
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const before = env.local.data['vela.perm.https://a.example'];
+		delete env.local.data['vela.perm.https://a.example'];
+		env.emit('storageChanged', { 'vela.perm.https://a.example': { oldValue: before } }, 'local');
+		const asked = await env.ask(page, 'c:1', 'eth_requestAccounts');
+		expect(asked.reply).toEqual({ accepted: true });
+
+		env.local.data['vela.perm.https://a.example'] = before;
+		env.emit('storageChanged', { 'vela.perm.https://a.example': { newValue: before } }, 'local');
+		const again = await env.ask(page, 'c:2', 'eth_requestAccounts');
+		expect(again.reply).toEqual({ result: [ALICE] });
+	});
+
+	it('a signature from a granted site still goes to a person', async () => {
+		const env = makeEnv();
+		seedGrant(env);
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const { reply } = await env.ask(page, 's:1', 'personal_sign');
+		expect(reply).toEqual({ accepted: true });
+		expect(env.chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 7 });
+	});
+});
+
 describe('the page’s own deadline (RB11)', () => {
 	it('an `abandon` settles the record as expired and withdraws the sheet', async () => {
 		const env = makeEnv();

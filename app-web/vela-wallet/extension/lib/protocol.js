@@ -595,6 +595,25 @@ export function resolveGrantedAccounts(grant, snapshotAddresses) {
 }
 
 /**
+ * A connect request (`eth_requestAccounts`, `wallet_requestPermissions`) from
+ * an origin that may already see `accounts` — what `eth_accounts` answers it
+ * (`resolveGrantedAccounts`): its answer, given without asking anyone, or
+ * `null` when a person decides (the consent card).
+ *
+ * **A TWIN of `dapp_permissions::decide_popup_request`'s connect branch**
+ * (a non-empty grant → `Respond`, in `connect_payload`'s shape; none →
+ * `Consent`), here because the worker has to know SYNCHRONOUSLY whether to
+ * open a surface at all (spec 089). `instant.test.ts` drives the real core over
+ * the same matrix and demands the same answers.
+ */
+export function instantConnectAnswer(method, accounts) {
+	if (!Array.isArray(accounts) || accounts.length === 0) return null;
+	if (method === 'wallet_requestPermissions') return [{ parentCapability: 'eth_accounts' }];
+	if (method === 'eth_requestAccounts') return accounts.slice();
+	return null;
+}
+
+/**
  * How a window torn down with an answer still owed settles.
  *
  * A TWIN of `dapp_permissions`' `browser_closed` → `SettleForwarded`, for the

@@ -72,7 +72,7 @@ dist/              build output — gitignored
 | Method                                                                 | Answered by                                                                                    |
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `eth_accounts`, `eth_chainId`, `net_version`, `wallet_getPermissions`  | the wallet's snapshot + the site's grant and chain pick                                        |
-| `eth_requestAccounts`, `wallet_requestPermissions`                     | the side panel (or window): `dapp_permissions`                                                 |
+| `eth_requestAccounts`, `wallet_requestPermissions`                     | granted: the worker (089); else the side panel (or window): `dapp_permissions`                 |
 | `personal_sign`, typed data, `eth_sendTransaction`, `wallet_sendCalls` | the side panel (or window): `sign_request`, on the site's chain                                |
 | `wallet_switchEthereumChain`, `wallet_addEthereumChain`                | the worker, against the catalog the wallet published (`vela.ext.chains`); unknown chain → 4902 |
 | `wallet_watchAsset`                                                    | `false` — tokens are added in the wallet                                                       |

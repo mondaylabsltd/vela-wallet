@@ -21,8 +21,10 @@ import {
 	CONTENT_GRACE_MS,
 	REQUEST_TTL_MS,
 	SETTLE,
+	instantConnectAnswer,
 	resolveGrantedAccounts
 } from '../../../extension/lib/protocol.js';
+import { encode } from './request';
 import { signRequestTtlMs } from '$lib/core/kernels';
 import type { DAppGrant } from './grants';
 
@@ -62,6 +64,31 @@ describe('what a granted origin may see', () => {
 				fromCore.map((a) => a.toLowerCase())
 			);
 		});
+
+		// Spec 089: a connect the worker answers without a surface is answered
+		// exactly as the surface would — `Respond` with the core's payload — and
+		// sent to a person exactly when the core says `Consent`.
+		for (const method of ['eth_requestAccounts', 'wallet_requestPermissions']) {
+			it(`answers ${method} as the core does: ${name}`, () => {
+				const verdict = decidePopupRequest({
+					method,
+					grant: toWireGrant(grant),
+					currentAddresses: addresses,
+					pinnedAddress: null
+				});
+				const fromWorker = instantConnectAnswer(
+					method,
+					resolveGrantedAccounts(toWireGrant(grant), addresses)
+				);
+				const lower = (value: unknown) => JSON.stringify(value).toLowerCase();
+				if (verdict.outcome.type === 'respond') {
+					expect(lower(fromWorker)).toEqual(lower(encode(verdict.outcome.payload)));
+				} else {
+					expect(verdict.outcome.type).toBe('consent');
+					expect(fromWorker).toBeNull();
+				}
+			});
+		}
 	}
 });
 
