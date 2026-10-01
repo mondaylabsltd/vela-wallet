@@ -15,6 +15,7 @@ import {
 	classifyMethod,
 	hostLabel,
 	isWellFormedRequest,
+	isTypedDataV4Params,
 	originOfUrl,
 	parseChainId,
 	pickSignAddress,
@@ -77,6 +78,26 @@ describe('what may reach a screen', () => {
 		const cyclic: Record<string, unknown> = {};
 		cyclic.self = cyclic;
 		expect(isWellFormedRequest({ ...ok, params: [cyclic] })).toBe(false);
+	});
+
+	it('accepts exactly [address, typedData] for v4 and rejects the two-document attack', () => {
+		const address = `0x${'33'.repeat(20)}`;
+		const typedData = {
+			types: { Mail: [{ name: 'contents', type: 'string' }] },
+			primaryType: 'Mail',
+			domain: { name: 'Example', chainId: 1 },
+			message: { contents: 'hello' }
+		};
+		const request = { id: 'typed', method: 'eth_signTypedData_v4', params: [address, typedData] };
+		expect(isTypedDataV4Params(request.params)).toBe(true);
+		expect(isWellFormedRequest(request)).toBe(true);
+		expect(
+			isWellFormedRequest({ ...request, params: [typedData, JSON.stringify(typedData)] })
+		).toBe(false);
+		expect(isWellFormedRequest({ ...request, params: [address, typedData, typedData] })).toBe(
+			false
+		);
+		expect(isWellFormedRequest({ ...request, params: [address, '{broken'] })).toBe(false);
 	});
 });
 
