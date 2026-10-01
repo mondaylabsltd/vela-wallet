@@ -254,6 +254,36 @@ export function isAddressLike(v) {
 	return typeof v === 'string' && ADDR_RE.test(v);
 }
 
+/**
+ * The only accepted EIP-712 v4 request shape.
+ *
+ * A v4 request is `[address, typedData]`: one account and one document.  Do
+ * this at the first untrusted boundary so no downstream selector can mistake
+ * a second document for the account (or preview one document and sign the
+ * other). The wallet's permission core separately proves that `address` is
+ * the account granted to this origin.
+ */
+export function isTypedDataV4Params(params) {
+	if (!Array.isArray(params) || params.length !== 2 || !isAddressLike(params[0])) return false;
+	let typed = params[1];
+	if (typeof typed === 'string') {
+		try {
+			typed = JSON.parse(typed);
+		} catch {
+			return false;
+		}
+	}
+	if (!typed || typeof typed !== 'object' || Array.isArray(typed)) return false;
+	const object = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+	return (
+		object(typed.types) &&
+		typeof typed.primaryType === 'string' &&
+		typed.primaryType.length > 0 &&
+		object(typed.domain) &&
+		object(typed.message)
+	);
+}
+
 /** EIP-1193: minimal lowercase hex, e.g. 1 → "0x1". */
 export function toHexChainId(n) {
 	const num = typeof n === 'string' ? parseInt(n, n.startsWith('0x') ? 16 : 10) : n;
@@ -316,6 +346,7 @@ export function isWellFormedRequest(value) {
 	const objectParams =
 		v.method === 'wallet_watchAsset' && v.params !== null && typeof v.params === 'object';
 	if (!Array.isArray(v.params) && !objectParams) return false;
+	if (v.method === 'eth_signTypedData_v4' && !isTypedDataV4Params(v.params)) return false;
 	try {
 		return JSON.stringify(v.params).length <= MAX_REQUEST_BYTES;
 	} catch {
