@@ -104,7 +104,11 @@ struct QrCardView<Centre: View>: View {
                 // white rather than a theme surface that would flip underneath.
                 .background(Circle().fill(WalletGeometry.qrCard))
         }
-        .frame(width: WalletFlowGeometry.qrCard, height: WalletFlowGeometry.qrCard)
+        // Square, at the measured 344 — or the screen's width where that is
+        // less (issue #321): a fixed 344 ran past the gutters of a 375pt-wide
+        // phone, whose sheet then had to scroll to reach its last button.
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: WalletFlowGeometry.qrCard)
         // White in BOTH appearances: a code is read by a camera, and inverting
         // it in dark mode is the classic way to make one unscannable.
         .background(RoundedRectangle(cornerRadius: Tokens.Radius.r16).fill(WalletGeometry.qrCard))

@@ -299,11 +299,21 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
                     bottom = VelaSpacing.xl4,
                 ),
         ) {
-            SheetTitleRow(title = sheetTitle(sheet), close = sheetClose(sheet)) {
-                dismiss()
+            // The receive code puts its ✕ on its own heading's line (issue
+            // #321): a row holding nothing but the ✕ was the first of the
+            // things that pushed "View on Explorer" off the bottom.
+            if (sheet !is FlowSheet.ReceiveQr) {
+                SheetTitleRow(title = sheetTitle(sheet), close = sheetClose(sheet)) {
+                    dismiss()
+                }
             }
             when (sheet) {
-                is FlowSheet.ReceiveQr -> ReceiveQrBody(model = sheet.model, onSave = { onSaveImage?.invoke() }, onExplorer = { VelaLog.event("flows", "explorer", "host" to sheet.model.explorerUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }); sheet.model.explorerUrl?.let(onOpenUrl) })
+                is FlowSheet.ReceiveQr -> ReceiveQrBody(
+                    model = sheet.model,
+                    close = { SheetCloseButton(label = sheetClose(sheet)) { dismiss() } },
+                    onSave = { onSaveImage?.invoke() },
+                    onExplorer = { VelaLog.event("flows", "explorer", "host" to sheet.model.explorerUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }); sheet.model.explorerUrl?.let(onOpenUrl) },
+                )
                 is FlowSheet.TxDetail -> TxDetailBody(
                     model = sheet.model,
                     onExplorer = { VelaLog.event("flows", "explorer", "host" to sheet.model.explorerUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }); sheet.model.explorerUrl?.let(onOpenUrl) },
@@ -413,19 +423,25 @@ private fun SheetTitleRow(title: String?, close: String, onClose: () -> Unit) {
         } else {
             Spacer(modifier = Modifier.weight(1f))
         }
-        Box(
-            modifier = Modifier
-                .size(VelaSizing.controlSm)
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = VelaIcons.Close,
-                contentDescription = close,
-                tint = colors.fgMuted,
-                modifier = Modifier.size(VelaIconSize.lg),
-            )
-        }
+        SheetCloseButton(label = close, onClose = onClose)
+    }
+}
+
+/** A flow sheet's ✕: the glyph in a control-sized target. */
+@Composable
+private fun SheetCloseButton(label: String, onClose: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(VelaSizing.controlSm)
+            .clickable(onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = VelaIcons.Close,
+            contentDescription = label,
+            tint = VelaTheme.colors.fgMuted,
+            modifier = Modifier.size(VelaIconSize.lg),
+        )
     }
 }
 
