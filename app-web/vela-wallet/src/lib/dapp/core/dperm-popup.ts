@@ -35,9 +35,8 @@ export function decidePopupRequest(question: PopupRequestQuestion): PopupVerdict
 					type: 'popup_request',
 					method: question.method,
 					grant: question.grant,
-					// `[]` and `null` mean the same "not known yet" to the core, and it
-					// is the core that owns the never-log-out-on-a-cold-read rule.
-					current_addresses: question.currentAddresses,
+					// `''` and `null` mean the same "nobody" to the core.
+					signed_in: question.signedIn ? question.signedIn : null,
 					pinned_address: question.pinnedAddress ? question.pinnedAddress : null
 				})
 			)
