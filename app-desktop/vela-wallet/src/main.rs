@@ -519,6 +519,8 @@ mod tests {
 
     /// Spec 082 RJ17 (G68, DX9): ⌘W is bound, to Close Window — the action
     /// whose handler goes through the same RD14 hold as the window's button.
+    /// macOS key equivalents: elsewhere gpui spells ⌘ as `super`.
+    #[cfg(target_os = "macos")]
     #[test]
     fn cmd_w_closes_the_window() {
         let bindings = mac_key_bindings();
