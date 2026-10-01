@@ -24,6 +24,15 @@
 	let { dapp, network, onclose, closeLabel, closeDisabled = false }: Props = $props();
 </script>
 
+<!--
+	A host wraps at its own seams — after a dot or the port's colon (a hyphen
+	already is one) — before it breaks inside a label: "app.uniswap.org." /
+	"secure-…" rather than "app.uniswap.or" / "g.secure-…" (spec 089).
+-->
+{#snippet breakable(text: string)}
+	{#each text.split(/(?<=[.:])/) as part, i (i)}{#if i > 0}<wbr />{/if}{part}{/each}
+{/snippet}
+
 <header class="header">
 	{#if dapp.own}
 		<!-- The wallet asking itself: its own mark, never a letter on a disc. -->
@@ -37,8 +46,8 @@
 		</span>
 	{/if}
 	<span class="who">
-		<span class="name">{dapp.name}</span>
-		{#if dapp.host !== ''}<span class="host">{dapp.host}</span>{/if}
+		<span class="name">{@render breakable(dapp.name)}</span>
+		{#if dapp.host !== ''}<span class="host">{@render breakable(dapp.host)}</span>{/if}
 	</span>
 	<span class="network">
 		<!-- The chain's logo over a drawn dot, which is what shows until it lands. -->
