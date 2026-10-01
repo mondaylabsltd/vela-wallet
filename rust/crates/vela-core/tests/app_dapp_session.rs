@@ -1302,18 +1302,19 @@ fn chain_context_allows_absent_declarations() {
 /// rejection (ported verbatim, walletpair-transport.ts:69-77).
 #[test]
 fn chain_context_checks_typed_data_domains() {
+    // A typed-data request is read as its ONE document (audit 2026-10-01):
+    // the method's two params, a real account, an EIP-712 document.
+    let account = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+    let doc = json!({"types": {"EIP712Domain": []}, "primaryType": "Mail",
+                     "domain": {"chainId": 137}, "message": {}});
     assert_eq!(
-        assert_request_chain_context(
-            "eth_signTypedData_v4",
-            &json!(["0xabc", { "domain": { "chainId": 137 } }]),
-            "eip155:137"
-        ),
+        assert_request_chain_context("eth_signTypedData_v4", &json!([account, doc]), "eip155:137"),
         Ok(())
     );
     assert_eq!(
         assert_request_chain_context(
             "eth_signTypedData_v4",
-            &json!(["0xabc", "{\"domain\":{\"chainId\":137}}"]),
+            &json!([account, doc.to_string()]),
             "eip155:1"
         ),
         Err(DsessChainContextError::ChainMismatch)
@@ -1327,14 +1328,16 @@ fn chain_context_checks_typed_data_domains() {
         Ok(()),
         "unparseable typed data is the signing validator's rejection"
     );
-    // `params[1] ?? params[0]` — a single-element params array falls back.
+    // No fallback any more (audit 2026-10-01): a one-element request is not a
+    // typed-data request — the signing validator refuses it -32602, so the
+    // chain check lets it pass rather than answer it twice.
     assert_eq!(
         assert_request_chain_context(
             "eth_signTypedData",
             &json!([{ "domain": { "chainId": 1 } }]),
             "eip155:2"
         ),
-        Err(DsessChainContextError::ChainMismatch)
+        Ok(())
     );
 }
 

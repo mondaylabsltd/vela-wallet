@@ -1913,28 +1913,18 @@ pub fn assert_request_chain_context(
             .and_then(|first| first.get("chainId"))
             .cloned();
     }
-    if method.contains("signTypedData") {
-        // `params[1] ?? params[0]` — null coalesces to the fallback.
-        let typed = params
-            .get(1)
-            .filter(|value| !value.is_null())
-            .or_else(|| params.get(0));
-        candidate = match typed {
-            Some(Value::String(text)) => match serde_json::from_str::<Value>(text) {
-                Ok(parsed) => parsed
-                    .get("domain")
-                    .and_then(|domain| domain.get("chainId"))
-                    .cloned(),
-                // The signing validator will return a method-specific
-                // invalid-params error.
-                Err(_) => return Ok(()),
-            },
-            Some(other) => other
-                .get("domain")
-                .and_then(|domain| domain.get("chainId"))
-                .cloned(),
-            None => None,
+    if crate::typed_data_request::looks_like_typed_data(method) {
+        // The request's ONE document (audit 2026-10-01). A request that is not
+        // one is refused -32602 by the signing validator, so it is let past
+        // here rather than answered twice.
+        let Ok(read) = crate::typed_data_request::canonical(method, params) else {
+            return Ok(());
         };
+        candidate = read
+            .document
+            .get("domain")
+            .and_then(|domain| domain.get("chainId"))
+            .cloned();
     }
     match candidate {
         None | Some(Value::Null) => Ok(()),

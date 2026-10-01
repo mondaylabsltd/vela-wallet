@@ -40,20 +40,13 @@ pub fn original_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
         preimage.extend_from_slice(&bytes);
         return Some(crate::primitives::keccak256(&preimage));
     }
-    if !method.contains("signTypedData") {
-        return None;
-    }
-    let legacy = method == "eth_signTypedData" || method == "eth_signTypedData_v1";
-    let raw = if legacy {
-        params.first()
-    } else {
-        params
-            .get(1)
-            .filter(|data| !data.is_null())
-            .or(params.first())
-    }?;
-    let json = raw.as_str().map_or_else(|| raw.to_string(), str::to_owned);
-    crate::eip712::hash_typed_data(&json).ok()
+    // Typed data: the digest of the request's ONE document, read strictly
+    // (`typed_data_request`, audit 2026-10-01) — two documents, a missing
+    // account or an unknown method sign nothing.
+    crate::typed_data_request::canonical(method, &Value::Array(params.clone()))
+        .ok()?
+        .digest()
+        .ok()
 }
 
 #[cfg(test)]
@@ -83,23 +76,25 @@ mod tests {
         let expected = crate::eip712::hash_typed_data(TYPED).ok();
         assert!(expected.is_some());
         let as_string = serde_json::to_string(TYPED).unwrap_or_default();
-        let v4 = format!(r#"["0xabc",{as_string}]"#);
+        let account = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let v4 = format!(r#"["{account}",{as_string}]"#);
         assert_eq!(original_hash("eth_signTypedData_v4", &v4), expected);
-        let v4_object = format!(r#"["0xabc",{TYPED}]"#);
+        let v4_object = format!(r#"["{account}",{TYPED}]"#);
         assert_eq!(original_hash("eth_signTypedData_v4", &v4_object), expected);
-        let legacy = format!(r#"[{as_string},"0xabc"]"#);
+        let legacy = format!(r#"[{as_string},"{account}"]"#);
         assert_eq!(
             original_hash("eth_signTypedData", &legacy),
             expected,
             "the legacy name carries the data first"
         );
         assert_eq!(original_hash("eth_signTypedData_v1", &legacy), expected);
+        // Read strictly (audit 2026-10-01): no fallback to another slot, and
+        // two documents sign nothing.
         let missing = format!(r#"[{as_string},null]"#);
-        assert_eq!(
-            original_hash("eth_signTypedData_v3", &missing),
-            expected,
-            "a missing second falls back to the first"
-        );
+        assert_eq!(original_hash("eth_signTypedData_v3", &missing), None);
+        let two = format!(r#"[{as_string},{as_string}]"#);
+        assert_eq!(original_hash("eth_signTypedData_v4", &two), None);
+        assert_eq!(original_hash("eth_signTypedData", &two), None);
         assert_eq!(original_hash("eth_sendTransaction", "[{}]"), None);
     }
 }

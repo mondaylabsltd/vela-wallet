@@ -222,14 +222,19 @@ fn signing_method_classification_matches_ts() {
 
 #[test]
 fn extract_chain_reads_typed_data_tx_and_batch_shapes() {
-    // _v4 order: [address, typedData]; hex string chain.
-    let typed = serde_json::json!(["0x0", r#"{"domain":{"chainId":"0x89"}}"#]);
+    // _v4 order: [address, typedData]; hex string chain. Read as the ONE
+    // document (audit 2026-10-01): a real account, an EIP-712 document.
+    let doc = |chain: serde_json::Value| {
+        serde_json::json!({"types": {"EIP712Domain": []}, "primaryType": "Mail",
+                           "domain": {"chainId": chain}, "message": {}})
+    };
+    let typed = serde_json::json!([ACCT0, doc(serde_json::json!("0x89")).to_string()]);
     assert_eq!(
         extract_request_chain_id("eth_signTypedData_v4", &typed),
         Some(137)
     );
     // unsuffixed order: [typedData, address]; numeric chain.
-    let typed_v1 = serde_json::json!([{ "domain": { "chainId": 137 } }, "0x0"]);
+    let typed_v1 = serde_json::json!([doc(serde_json::json!(137)), ACCT0]);
     assert_eq!(
         extract_request_chain_id("eth_signTypedData", &typed_v1),
         Some(137)
@@ -1227,9 +1232,15 @@ fn unsupported_chain_is_refused_4902_before_any_ui() {
         "never reached the sheet"
     );
 
-    // Embedded chain (typed data domain).
-    let params = r#"["0x0", "{\"domain\":{\"chainId\":999}}"]"#;
-    let ops = sut.dispatch(Arrive::global("req-10", "eth_signTypedData_v4", params).event());
+    // Embedded chain (typed data domain) — a well-formed request, so the
+    // chain is what refuses it.
+    let doc = serde_json::json!({
+        "types": {"EIP712Domain": [{"name": "chainId", "type": "uint256"}],
+                  "Mail": [{"name": "contents", "type": "string"}]},
+        "primaryType": "Mail", "domain": {"chainId": 999}, "message": {"contents": "hi"}
+    });
+    let params = serde_json::json!([ACCT0, doc.to_string()]).to_string();
+    let ops = sut.dispatch(Arrive::global("req-10", "eth_signTypedData_v4", &params).event());
     let (code, kind, _) = response_error(&ops[0]).expect("refusal");
     assert_eq!(
         (code, kind),

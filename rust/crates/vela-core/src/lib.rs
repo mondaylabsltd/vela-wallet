@@ -55,6 +55,7 @@ pub mod safe;
 pub mod sign_message;
 pub mod storage_catalog;
 pub mod trusted_signer;
+pub mod typed_data_request;
 pub mod types;
 /// The Safe ERC-4337 user operation — calldata, initCode, the SafeOp hash,
 /// the WebAuthn signature envelope, the v0.7 wire shape. Pure assembly; the

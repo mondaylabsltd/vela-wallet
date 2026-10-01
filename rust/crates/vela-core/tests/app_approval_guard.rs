@@ -98,7 +98,7 @@ fn erc2612_params(value: &str) -> Value {
         "domain": { "name": "USD Coin", "chainId": 1, "verifyingContract": USDC },
         "message": { "owner": "0xaf5e", "spender": SPENDER, "value": value, "nonce": "0", "deadline": "1750000000" },
     });
-    json!(["0x0", td.to_string()])
+    json!(["0x00000000000000000000000000000000000000a1", td.to_string()])
 }
 
 fn dai_permit_params(allowed: bool) -> Value {
@@ -112,7 +112,7 @@ fn dai_permit_params(allowed: bool) -> Value {
         "domain": { "name": "Dai", "verifyingContract": "0x6b175474e89094c44da98b954eedeac495271d0f" },
         "message": { "holder": "0xaf5e", "spender": SPENDER, "nonce": "0", "expiry": "1750000000", "allowed": allowed },
     });
-    json!(["0x0", td.to_string()])
+    json!(["0x00000000000000000000000000000000000000a1", td.to_string()])
 }
 
 fn permit2_single_params(amount: &str) -> Value {
@@ -125,7 +125,7 @@ fn permit2_single_params(amount: &str) -> Value {
             "spender": SPENDER, "sigDeadline": "1750000000",
         },
     });
-    json!(["0x0", td.to_string()])
+    json!(["0x00000000000000000000000000000000000000a1", td.to_string()])
 }
 
 const TYPED: &str = "eth_signTypedData_v4";

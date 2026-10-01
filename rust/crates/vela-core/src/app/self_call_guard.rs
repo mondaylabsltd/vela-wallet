@@ -343,13 +343,20 @@ pub fn detect_self_call(method: &str, params: Option<&Value>, safe: &str) -> Opt
 /// EIP-1271. No dApp has a legitimate reason to ask, so all of them are
 /// refused.
 fn detect_safe_tx_typed_data(params: &Value) -> Option<SelfCallBlock> {
-    let payload = params.as_array()?.iter().find_map(|entry| match entry {
-        Value::String(raw) => serde_json::from_str::<Value>(raw).ok(),
-        Value::Object(_) => Some(entry.clone()),
-        _ => None,
-    })?;
+    // EVERY element, not the first that parses: `[benign, SafeTx]` signed the
+    // SafeTx past a guard that read the benign one (audit 2026-10-01). A
+    // request carrying a SafeTx anywhere is refused — the Trusted Signer
+    // page's own rule.
+    let any_safe_tx = params.as_array()?.iter().any(|entry| {
+        let parsed = match entry {
+            Value::String(raw) => serde_json::from_str::<Value>(raw).ok(),
+            Value::Object(_) => Some(entry.clone()),
+            _ => None,
+        };
+        parsed.is_some_and(|doc| doc.get("primaryType").and_then(Value::as_str) == Some("SafeTx"))
+    });
 
-    (payload.get("primaryType").and_then(Value::as_str) == Some("SafeTx")).then(|| SelfCallBlock {
+    any_safe_tx.then(|| SelfCallBlock {
         function: SelfCallFunction::SafeTxTypedData,
         selector: String::new(),
         leg_index: None,
