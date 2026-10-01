@@ -226,6 +226,14 @@ pub fn sign_message_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
     vela_core::sign_message::original_hash(method, params_json)
 }
 
+/// The ONE document a typed-data request is read as — what the sheet
+/// decodes, the same bytes `signMessageHash` covers (audit 2026-10-01).
+/// `undefined` when the request is not a valid typed-data request.
+#[wasm_bindgen(js_name = typedDataDocument)]
+pub fn typed_data_document(method: &str, params_json: &str) -> Option<String> {
+    vela_core::typed_data_request::document_json_of(method, params_json)
+}
+
 #[wasm_bindgen(js_name = encodeType)]
 pub fn encode_type(typed_data_json: &str) -> JsResult<String> {
     vela_core::eip712::encode_type(typed_data_json).map_err(err)

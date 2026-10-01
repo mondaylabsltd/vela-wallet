@@ -473,7 +473,7 @@ class SigningController(
                 val call = firstCall(paramsJson)
                 ClearSigningEvent.ResolveTransaction(to = call?.first, data = call?.second, value = call?.third, chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
             }
-            method.contains("signTypedData") -> ClearSigningEvent.ResolveTypedData(typed_data_json = typedDataOf(paramsJson), chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
+            method.contains("signTypedData") -> ClearSigningEvent.ResolveTypedData(typed_data_json = typedDataOf(method, paramsJson), chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
             method == "personal_sign" || method == "eth_sign" -> ClearSigningEvent.MessagePresented(
                 method = if (method == "eth_sign") ClearSignMethod.EthSign else ClearSignMethod.PersonalSign,
                 params = stringParams(paramsJson),
@@ -482,12 +482,16 @@ class SigningController(
             else -> null
         }
 
-        /** `eth_signTypedData_v4`'s payload: `[address, json]` — the JSON is the SECOND parameter. */
-        fun typedDataOf(paramsJson: String): String {
-            val params = runCatching { JSONArray(paramsJson) }.getOrNull() ?: return ""
-            val second = params.opt(1) ?: return ""
-            return if (second is String) second else second.toString()
-        }
+        /**
+         * The ONE document the request is read as — the core's
+         * `typedDataDocument`, the same bytes the passkey's digest covers. The
+         * audit of 2026-10-01: reading `params[1]` here previewed the benign
+         * half of a legacy `[malicious, benign]` while the passkey signed the
+         * malicious one. Empty when the request is not a valid typed-data
+         * request — the core refuses it before a sheet.
+         */
+        fun typedDataOf(method: String, paramsJson: String): String =
+            uniffi.vela_core_uniffi.typedDataDocument(method, paramsJson) ?: ""
 
         fun stringParams(paramsJson: String): List<String> {
             val params = runCatching { JSONArray(paramsJson) }.getOrNull() ?: return emptyList()

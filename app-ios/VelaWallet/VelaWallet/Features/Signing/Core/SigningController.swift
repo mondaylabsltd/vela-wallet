@@ -749,7 +749,7 @@ final class SigningController {
         if method.contains("signTypedData") {
             return [
                 "type": "resolve_typed_data",
-                "typed_data_json": typedDataOf(paramsJson: paramsJson),
+                "typed_data_json": typedDataOf(method: method, paramsJson: paramsJson),
                 "chain_id": chainId,
                 "locale": defaultLocale,
             ]
@@ -782,18 +782,14 @@ final class SigningController {
         ]
     }
 
-    /// `eth_signTypedData_v4`'s payload is `[address, json]` — the JSON is the
-    /// **second** parameter.
-    static func typedDataOf(paramsJson: String) -> String {
-        guard let data = paramsJson.data(using: .utf8),
-              let params = try? JSONSerialization.jsonObject(with: data) as? [Any],
-              params.count > 1
-        else { return "" }
-        if let text = params[1] as? String { return text }
-        guard let encoded = try? JSONSerialization.data(withJSONObject: params[1]),
-              let text = String(data: encoded, encoding: .utf8)
-        else { return "" }
-        return text
+    /// The ONE document the request is read as — the core's
+    /// `typed_data_document`, the same bytes the passkey's digest covers. The
+    /// audit of 2026-10-01: reading `params[1]` here previewed the benign half
+    /// of a legacy `[malicious, benign]` while the passkey signed the
+    /// malicious one. Empty when the request is not a valid typed-data
+    /// request — the core refuses it before a sheet.
+    static func typedDataOf(method: String, paramsJson: String) -> String {
+        typedDataDocument(method: method, paramsJson: paramsJson) ?? ""
     }
 
     static func stringParams(paramsJson: String) -> [String] {

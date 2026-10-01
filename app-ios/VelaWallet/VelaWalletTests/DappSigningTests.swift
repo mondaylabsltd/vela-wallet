@@ -237,16 +237,26 @@ struct SigningAssemblyTests {
         ) == nil)
     }
 
-    /// Typed data is the **second** parameter.
-    @Test func typedDataIsTheSecondParameter() {
-        #expect(SigningController.typedDataOf(
-            paramsJson: #"["0xme","{\"primaryType\":\"Permit\"}"]"#
-        ) == #"{"primaryType":"Permit"}"#)
-        // Some dApps send the object rather than a string.
-        #expect(SigningController.typedDataOf(
-            paramsJson: #"["0xme",{"primaryType":"Permit"}]"#
-        ).contains("Permit"))
-        #expect(SigningController.typedDataOf(paramsJson: "[]").isEmpty)
+    /// The sheet decodes the request's ONE document, where its method carries
+    /// it — the core's reading, the same bytes the passkey signs (audit
+    /// 2026-10-01). Two documents, in either order, give the sheet nothing.
+    @Test func theSheetDecodesTheOneDocumentTheCoreSigns() {
+        let account = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        let doc = #"{"types":{"EIP712Domain":[],"Mail":[{"name":"contents","type":"string"}]},"primaryType":"Mail","domain":{},"message":{"contents":"hi"}}"#
+        let quoted = String(data: try! JSONSerialization.data(withJSONObject: [doc]), encoding: .utf8)!.dropFirst().dropLast()
+        for (method, params) in [
+            ("eth_signTypedData_v4", "[\"\(account)\",\(quoted)]"),
+            ("eth_signTypedData_v3", "[\"\(account)\",\(doc)]"),
+            ("eth_signTypedData", "[\(quoted),\"\(account)\"]"),
+            ("eth_signTypedData_v1", "[\(doc),\"\(account)\"]"),
+        ] {
+            #expect(SigningController.typedDataOf(method: method, paramsJson: params).contains("\"Mail\""), "\(method)")
+        }
+        // The audit's shapes: nothing to show, and nothing is signed either.
+        #expect(SigningController.typedDataOf(method: "eth_signTypedData_v4", paramsJson: "[\(doc),\(doc)]").isEmpty)
+        #expect(SigningController.typedDataOf(method: "eth_signTypedData", paramsJson: "[\(doc),\(doc)]").isEmpty)
+        #expect(SignExecutor.messageHash(method: "eth_signTypedData", paramsJson: "[\(doc),\(doc)]") == nil)
+        #expect(SigningController.typedDataOf(method: "eth_signTypedData_v4", paramsJson: "[]").isEmpty)
     }
 }
 

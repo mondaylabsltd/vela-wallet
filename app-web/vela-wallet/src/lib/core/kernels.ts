@@ -376,6 +376,18 @@ export function matchSelector(calldata: string, signatures: string[]): string | 
 // eip712
 // ---------------------------------------------------------------------------
 
+/**
+ * The ONE document a typed-data request is read as — the core's
+ * `typed_data_request`, the same bytes `signMessageHash` covers: the four
+ * methods, exactly two params, a real account in its slot, one EIP-712
+ * document. `null` when the request is not one (the core refuses it before a
+ * sheet). The audit of 2026-10-01: the sheet previewed the first string while
+ * the passkey signed `params[1] ?? params[0]`.
+ */
+export function typedDataDocument(method: string, paramsJson: string): string | null {
+	return wasm.typedDataDocument(method, paramsJson) ?? null;
+}
+
 export function hashTypedData(typedData: TypedData): Uint8Array {
 	return translated(() => wasm.hashTypedData(JSON.stringify(typedData)));
 }

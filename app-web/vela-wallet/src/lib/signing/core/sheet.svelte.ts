@@ -12,6 +12,7 @@
  * say — and what — is theirs.
  */
 import { loadCore } from '$lib/core/client';
+import { typedDataDocument } from '$lib/core/kernels';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { GuardEvent } from '$lib/core/generated/GuardEvent';
 import type { GuardView } from '$lib/core/generated/GuardView';
@@ -98,11 +99,13 @@ class SigningSheet {
 		// say how digits group, which is a locale fact the shell reads.
 		const locale = toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' });
 		if (request.kind === 'typed_data') {
-			const params = JSON.parse(request.params_json) as unknown[];
-			const typed = params.find((p) => typeof p === 'string' || typeof p === 'object');
+			// The core's ONE document — the bytes the passkey signs. The first
+			// string of the params was the ADDRESS of a well-formed v4, and the
+			// benign half of `[benign, malicious]` (audit 2026-10-01).
+			const typed = typedDataDocument(request.method, request.params_json);
 			this.#clearSession.start({
 				type: 'resolve_typed_data',
-				typed_data_json: typeof typed === 'string' ? typed : JSON.stringify(typed ?? {}),
+				typed_data_json: typed ?? '{}',
 				chain_id: request.chain_id,
 				locale
 			});
