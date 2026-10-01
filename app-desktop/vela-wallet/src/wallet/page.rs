@@ -16052,6 +16052,13 @@ impl WalletPage {
                     field,
                     window,
                 ));
+            } else if let (true, signing_fixtures::Block::Intent { text, tone }) =
+                (model.dapp_own, item)
+            {
+                // The wallet's own request has no figure to lead with — its
+                // intent IS the outcome, so it is the headline rather than the
+                // eyebrow over a hero (issue #314).
+                column = column.child(signing_components::headline(theme, text.clone(), *tone));
             } else {
                 column = column.child(signing_components::block(theme, &mut self.icons, item));
             }
