@@ -23,6 +23,7 @@ import {
 	verifySafeWebAuthn
 } from '$lib/core/kernels';
 import type { TypedData } from '$lib/core/kernels';
+import { clearTypedDataCommitment, requireCommittedTypedData } from '$lib/dapp/typed-data-request';
 /** The account a request is signed for — only its founding credential id is read. */
 export interface SigningAccount {
 	id: string;
@@ -199,7 +200,7 @@ export function assertChainSupported(chainId: number): void {
 export function pickTypedDataParam(method: string, params: unknown[]): unknown {
 	return method === 'eth_signTypedData' || method === 'eth_signTypedData_v1'
 		? params[0]
-		: (params[1] ?? params[0]);
+		: params[1];
 }
 
 export function extractRequestChainId(method: string, params: unknown[]): number | undefined {
@@ -367,26 +368,52 @@ export async function handleSignTypedData(
 	safeAddress: string,
 	chainId: number
 ): Promise<string> {
-	const typedDataRaw = pickTypedDataParam(request.method, request.params);
-	const typedData: TypedData =
-		typeof typedDataRaw === 'string' ? JSON.parse(typedDataRaw) : typedDataRaw;
+	if (request.method !== 'eth_signTypedData_v4') {
+		const typedDataRaw = pickTypedDataParam(request.method, request.params);
+		const typedData: TypedData =
+			typeof typedDataRaw === 'string' ? JSON.parse(typedDataRaw) : typedDataRaw;
+		const effectiveChainId = resolveChainId(
+			chainId,
+			typedData.domain?.chainId as string | number | undefined
+		);
+		assertChainSupported(effectiveChainId);
+		const originalHash = hashTypedData(typedData);
+		const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress);
+		const { assertion, signerAddress } = await signSafeMessage(
+			request,
+			account,
+			safeAddress,
+			effectiveChainId,
+			safeHash
+		);
+		return buildContractSignature(assertion, signerAddress);
+	}
+	try {
+		const canonical = requireCommittedTypedData(
+			request.id,
+			request.origin,
+			request.method,
+			request.params,
+			safeAddress
+		);
+		const effectiveChainId = resolveChainId(
+			chainId,
+			canonical.typedData.domain?.chainId as string | number | undefined
+		);
+		assertChainSupported(effectiveChainId);
 
-	const effectiveChainId = resolveChainId(
-		chainId,
-		typedData.domain?.chainId as string | number | undefined
-	);
-	assertChainSupported(effectiveChainId);
-
-	const originalHash = hashTypedData(typedData);
-	const safeHash = attestedMessageHash(originalHash, effectiveChainId, safeAddress);
-	const { assertion, signerAddress } = await signSafeMessage(
-		request,
-		account,
-		safeAddress,
-		effectiveChainId,
-		safeHash
-	);
-	return buildContractSignature(assertion, signerAddress);
+		const safeHash = attestedMessageHash(canonical.digest, effectiveChainId, safeAddress);
+		const { assertion, signerAddress } = await signSafeMessage(
+			request,
+			account,
+			safeAddress,
+			effectiveChainId,
+			safeHash
+		);
+		return buildContractSignature(assertion, signerAddress);
+	} finally {
+		clearTypedDataCommitment(request.id, request.origin);
+	}
 }
 
 /**

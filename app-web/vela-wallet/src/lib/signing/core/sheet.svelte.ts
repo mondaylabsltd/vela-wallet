@@ -16,6 +16,7 @@ import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import type { GuardEvent } from '$lib/core/generated/GuardEvent';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignRequestView } from '$lib/core/generated/SignRequestView';
+import { clearTypedDataCommitment, commitTypedDataRequest } from '$lib/dapp/typed-data-request';
 import { createApprovalGuardSession, type ApprovalGuardSession } from './guard-session';
 import { createClearSigningSession, type ClearSigningSession } from './clear-session';
 import { toClearLocale } from './clear-types';
@@ -71,6 +72,7 @@ class SigningSheet {
 	#clearSession: ClearSigningSession | null = null;
 	#guardSession: ApprovalGuardSession | null = null;
 	#requestId: string | null = null;
+	#commitment: { id: string; origin: string | undefined } | null = null;
 
 	/**
 	 * A request arrived (or changed). Both machines are rebuilt for it — the
@@ -99,7 +101,19 @@ class SigningSheet {
 		const locale = toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' });
 		if (request.kind === 'typed_data') {
 			const params = JSON.parse(request.params_json) as unknown[];
-			const typed = params.find((p) => typeof p === 'string' || typeof p === 'object');
+			const typed =
+				request.method === 'eth_signTypedData_v4'
+					? commitTypedDataRequest(
+							request.id,
+							request.origin,
+							request.method,
+							params,
+							walletAddress
+						).typedDataJson
+					: params.find((param) => typeof param === 'string' || typeof param === 'object');
+			if (request.method === 'eth_signTypedData_v4') {
+				this.#commitment = { id: request.id, origin: request.origin };
+			}
 			this.#clearSession.start({
 				type: 'resolve_typed_data',
 				typed_data_json: typeof typed === 'string' ? typed : JSON.stringify(typed ?? {}),
@@ -146,6 +160,10 @@ class SigningSheet {
 
 	/** The request is gone: both machines go with it. */
 	dismiss(): void {
+		if (this.#commitment) {
+			clearTypedDataCommitment(this.#commitment.id, this.#commitment.origin);
+			this.#commitment = null;
+		}
 		this.#clearSession?.dispose();
 		this.#guardSession?.dispose();
 		this.#clearSession = null;

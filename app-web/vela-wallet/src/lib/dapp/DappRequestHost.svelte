@@ -32,6 +32,7 @@
 	import { publishExtChains } from '$lib/dapp/core/ext-chains';
 	import { getOriginChain } from '$lib/dapp/grants';
 	import { approve, evaluate, type RequestStage } from '$lib/dapp/request';
+	import { canonicalTypedDataRequest, InvalidTypedDataRequest } from '$lib/dapp/typed-data-request';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import type { RequestMessages } from '$lib/dapp/messages';
@@ -211,6 +212,27 @@
 	 */
 	async function handOffToSigning(incoming: ExtensionRequest, grantedAddress: string) {
 		await signRequest.boot();
+		let params = incoming.params;
+		let requestedAddress: string | null = null;
+		if (incoming.method === 'eth_signTypedData_v4') {
+			try {
+				const canonical = canonicalTypedDataRequest(
+					incoming.method,
+					incoming.params,
+					grantedAddress
+				);
+				params = canonical.params;
+				requestedAddress = canonical.address;
+			} catch (error) {
+				const message =
+					error instanceof InvalidTypedDataRequest ? error.message : 'Invalid typed-data request';
+				owing = null;
+				await answerRequest(incoming.rid, { error: { code: -32602, message } });
+				stage = { kind: 'refused', code: -32602, message };
+				leave();
+				return;
+			}
+		}
 		signRequest.syncNetworks();
 		signRequest.syncAccounts();
 		const transportId = signRequest.registerTransport({
@@ -241,7 +263,7 @@
 			type: 'request_arrived',
 			id: incoming.id,
 			method: incoming.method,
-			params_json: JSON.stringify(incoming.params),
+			params_json: JSON.stringify(params),
 			origin: incoming.origin,
 			transport_id: transportId,
 			dedicated_transport: true,
@@ -253,7 +275,7 @@
 			// Invariant ⑨: the signature is pinned to the GRANT's address, never
 			// to whichever account happens to be active.
 			granted_address: grantedAddress,
-			requested_address: null,
+			requested_address: requestedAddress,
 			request_ts_ms: null,
 			now_ms: Date.now()
 		});
