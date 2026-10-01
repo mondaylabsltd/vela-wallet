@@ -259,6 +259,20 @@ class FlowLiveTest {
         assertTrue(live.rows[0].addressDisplay.endsWith("D141"))
     }
 
+    /**
+     * 087 F13: a receive row's QR button SHOWS that network's code. TalkBack
+     * read it as "扫描二维码" — the scanner's title — on every row.
+     */
+    @Test
+    fun `a receive row's QR button says it shows the code`() {
+        val view = NetView(loaded = true, networks = listOf(row(1, "Ethereum", "ETH"), row(100, "Gnosis", "XDAI")))
+
+        val live = FlowLive.receiveNetworks(listFixture(), view, mine, WalletLive::badge)
+
+        assertTrue(live.rows.all { it.qrLabel == strings.t("componentsUi.funding.showQr") })
+        assertTrue(live.rows.none { it.qrLabel == strings.t(I18nKeys.Flows.SCAN_TITLE) })
+    }
+
     @Test
     fun `the subtitle counts the networks this device has`() {
         val view = NetView(loaded = true, networks = listOf(row(1, "Ethereum", "ETH")))

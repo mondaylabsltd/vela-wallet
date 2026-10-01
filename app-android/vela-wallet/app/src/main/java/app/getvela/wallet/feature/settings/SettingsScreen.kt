@@ -748,7 +748,12 @@ private fun SettingsHomeBody(
         // The two appearance controls are not rows: they are the control
         // itself, shown inline under 语言 (ST1).
         if (section.appearanceControls) {
-            VelaTextScaleSlider(model.textScale.steps, model.textScale.index, onChange = onTextScale)
+            VelaTextScaleSlider(
+                steps = model.textScale.steps,
+                index = model.textScale.index,
+                label = model.textScale.label,
+                onChange = onTextScale,
+            )
             VelaSegmentedControl(
                 label = model.theme.label,
                 segments = model.theme.segments.map { seg ->

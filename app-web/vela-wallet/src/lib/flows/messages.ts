@@ -35,6 +35,8 @@ export const WALLET_FLOW_KEYS = [
 	'receive.request.saveImage',
 	'receive.shareCardHeadline',
 	'receive.shareCardNetworkNote',
+	// 087 F13: a receive row's button that shows its network's code.
+	'componentsUi.funding.showQr',
 
 	// ------------------------------------------------------------------ scan
 	'componentsUi.scanner.title',
