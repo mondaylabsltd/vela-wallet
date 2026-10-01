@@ -830,6 +830,9 @@
 					// 最大 was drawn on the token card and wired to nothing (spec 028
 					// Phase 9, T489); the core's rule fills it fee-aware.
 					max: () => sendSession?.dispatch({ type: 'tap_max' }),
+					// The token card goes back to the picker with the payee kept
+					// (issue 326) — only where the core offers it.
+					changeToken: () => sendSession?.dispatch({ type: 'change_token' }),
 					// ⇄ was the same kind of dead drawing (issue 197): the icon under
 					// the figure had no handler at all, so a person asking to type
 					// the amount in money got nothing back. The core owns the swap —

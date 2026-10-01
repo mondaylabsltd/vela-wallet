@@ -429,6 +429,42 @@ class SendLiveTest {
         assertNull(SendLive.pick(drawn.model, SendView(tokens = listOf(xdai), recipient = "hello"), ctx()).recipient?.lead)
     }
 
+    /**
+     * Issue #312: a code that named a network. The core lists only that
+     * network's holdings; the picker says which network ("BNB Chain payments
+     * only"), and a home filter left on another network does not hide them.
+     */
+    @Test
+    fun `the pick says which network a scanned code named and no filter hides it`() {
+        val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
+        val bnb = xdai.copy(network = "chain-56", chain_id = 56, symbol = "BNB")
+        val named = SendView(tokens = listOf(bnb), recipient = recipient, request_chain_id = 56)
+        val live = SendLive.pick(drawn.model, named, ctx(), chainFilter = 100)
+        assertEquals(listOf("BNB"), live.rows.map { it.ticker })
+        // No pill: a network sheet could choose nothing the list would follow.
+        assertNull(live.header.pill)
+        assertEquals(strings.t(I18nKeys.Flows.SHARE_CARD_NETWORK_NOTE, mapOf("network" to "BNB Chain")), live.notice?.text)
+        assertEquals(listOf(0), SendLive.visibleTokens(named, 100, "all"))
+        // Nothing held there: the notice is why the list is empty.
+        val nothing = SendLive.pick(drawn.model, named.copy(tokens = emptyList()), ctx())
+        assertEquals(strings.t(I18nKeys.Flows.NO_TOKENS_WITH_BALANCE), nothing.empty)
+        assertNotNull(nothing.notice)
+        // No network named, no notice.
+        assertNull(SendLive.pick(drawn.model, SendView(tokens = listOf(xdai)), ctx()).notice)
+    }
+
+    /** Issue #326: the token card is the way to another asset wherever the core says — and only there. */
+    @Test
+    fun `the token card offers another asset only where the core does`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val view = SendView(stage = SendStage.EnterDetails, selected_token = xdai, tokens = listOf(xdai), recipient = recipient)
+        assertEquals(
+            strings.t(I18nKeys.Flows.SELECT_TOKEN_TITLE),
+            SendLive.form(drawn.model, view.copy(can_change_token = true), FeeView(), ctx()).token?.change,
+        )
+        assertNull(SendLive.form(drawn.model, view, FeeView(), ctx()).token?.change)
+    }
+
     /** Issue 231: the web's `unitAdornment` — a sign leads, a code or a ticker follows, nothing defaults to "$". */
     @Test
     fun `the amount's unit sits on the figure`() {

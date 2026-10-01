@@ -894,6 +894,8 @@ fun SendFormBody(
     onFee: () -> Unit = {},
     onDenom: () -> Unit = {},
     onMax: (Int) -> Unit = {},
+    /** Issue #326: the token card — back to the asset picker. */
+    onChangeToken: (() -> Unit)? = null,
     onAddRecipient: () -> Unit = {},
     onContinue: () -> Unit = {},
     onAmountChange: ((String) -> Unit)? = null,
@@ -911,7 +913,7 @@ fun SendFormBody(
     val haptic = rememberVelaHaptic()
     Column(modifier = modifier.fillMaxWidth()) {
         model.token?.let {
-            TokenHeaderCard(token = it, onMax = { onMax(0) })
+            TokenHeaderCard(token = it, onMax = { onMax(0) }, onChange = onChangeToken)
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
         model.sweepSummary?.let {

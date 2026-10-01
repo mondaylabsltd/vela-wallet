@@ -120,6 +120,9 @@ pub struct PanelActions {
     pub recipient_field: Option<AddressField>,
     /// DSD2L, live: the Max chip.
     pub tap_max: Option<Click>,
+    /// DSD2L, live: the token card itself — back to the asset picker with the
+    /// payee kept (issue #326). Bound only where the core offers it.
+    pub change_token: Option<Click>,
     /// DSD2L, live: ⇄ — type the amount in money, or back in the token (#197).
     pub toggle_denom: Option<Click>,
     /// DSD2eL, live: one listener per contact row, in the book's order.
@@ -1534,11 +1537,14 @@ fn send_pick(
     // SD1b's chain lock, in the corpus's own sentence: the first pick names
     // the network and the greying that follows is explained rather than left
     // to be guessed at.
-    if let Some((chain_id, colour, letter, text)) = model
-        .selection
-        .as_ref()
-        .and_then(|selection| selection.notice.clone())
-    {
+    // Issue #312: the network a scanned code named comes first — it is also
+    // why a sweep can only be on that network.
+    if let Some((chain_id, colour, letter, text)) = model.network_notice.clone().or_else(|| {
+        model
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.notice.clone())
+    }) {
         // The web's `NoticeBanner` (078 F-10): raised, padded 8/12, radius 12,
         // 11 on 1.4, with the chain's own logo — the tinted letter only while
         // it loads or where there is none.
@@ -1718,10 +1724,12 @@ fn send_form_parts(
     let live = actions.amount_field.is_some();
     let mut card = token_header_card(
         theme,
+        icons,
         mark,
         symbol.clone(),
         detail.clone(),
         max.clone().filter(|_| !live),
+        actions.change_token.take(),
     );
     if live && let Some(max) = max {
         card = card.child(clickable(

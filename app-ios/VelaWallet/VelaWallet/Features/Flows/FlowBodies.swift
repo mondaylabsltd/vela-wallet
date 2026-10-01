@@ -639,6 +639,15 @@ struct SendPickBody: View {
                     .disabled(dimmed)
                 }
             }
+            // A list with nothing in it says so rather than showing a blank panel.
+            if shown.isEmpty, let empty = model.empty {
+                Text(verbatim: empty)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .padding(.vertical, Tokens.Space.s12)
+            }
             if let selection = model.selection {
                 Button { onSelectAll(shown.map(\.offset)) } label: {
                     Text(verbatim: selection.selectAll)
@@ -677,6 +686,9 @@ struct SendFormBody: View {
     var onFee: () -> Void = {}
     var onDenom: () -> Void = {}
     var onMax: (Int) -> Void = { _ in }
+    /// Issue #326: the token card — back to the asset picker. Absent in the
+    /// gallery, where the card is a picture.
+    var onChangeToken: (() -> Void)?
     var onAddRecipient: () -> Void = {}
     var onContinue: () -> Void = {}
     /// The two live fields. Absent everywhere the form is a picture.
@@ -699,7 +711,7 @@ struct SendFormBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             if let token = model.token {
-                TokenHeaderCardView(token: token, onMax: { onMax(0) })
+                TokenHeaderCardView(token: token, onMax: { onMax(0) }, onChange: onChangeToken)
             }
             if let summary = model.sweepSummary {
                 Text(verbatim: summary)

@@ -973,6 +973,7 @@ fun VelaNavHost(
                                 }
                             },
                             onScanOpen = { send.openScanner() },
+                            onChangeToken = { send.changeToken() },
                             onFilter = { id -> classFilter = id; haptic(VelaHaptic.Select) },
                             onGroup = { index ->
                                 VelaLog.event("send", "group seed", "index" to index, "groups" to contactsBook.groups.size)

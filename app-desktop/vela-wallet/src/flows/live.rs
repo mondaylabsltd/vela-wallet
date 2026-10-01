@@ -1446,10 +1446,26 @@ impl SendClass {
 /// same list. Narrowing only the drawing would hand row 2's click to whatever
 /// token was third before the filter — here, a transfer of the wrong coin.
 pub fn narrow_send_tokens(view: &mut SendView, chain: Option<u32>, class: SendClass) {
+    // Issue #312: a code that named a network decides which network is on
+    // screen — the core lists only its holdings, and a sidebar filter left on
+    // another network must not hide them all.
+    let chain = view.request_chain_id.or(chain);
     view.tokens.retain(|token| {
         chain.is_none_or(|chain| token.chain_id == chain)
             && (class == SendClass::All || SendClass::of(token) == class)
     });
+}
+
+/// A line about one network, above the picker's rows: `template`'s
+/// `{{network}}` filled with its name, and the chain's mark beside it.
+fn chain_notice(chain_id: u32, template: &str) -> (u32, u32, SharedString, SharedString) {
+    let name = crate::executor::custom_tokens::network_name(chain_id);
+    (
+        chain_id,
+        crate::settings::model::chain_tint(u64::from(chain_id)).unwrap_or(0x8A_8F_98),
+        SharedString::from(crate::settings::model::lettermark(&name)),
+        SharedString::from(crate::wallet::fill(template, "network", &name)),
+    )
 }
 
 /// Issue #332: the picker's "To" line — the recipient the core already holds,
@@ -1496,6 +1512,10 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> S
     let s = i.s;
     let mut pick = SendPick {
         recipient: pick_recipient(i),
+        network_notice: i
+            .send
+            .request_chain_id
+            .map(|chain_id| chain_notice(chain_id, &s.share_card_note)),
         selection: None,
         lock_notice: i
             .send
@@ -1547,19 +1567,7 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> S
             .map(|token| chain.is_some_and(|id| token.chain_id != id))
             .collect(),
         select_all: s.select_all_valuable.clone(),
-        notice: chain.map(|chain_id| {
-            let name = crate::executor::custom_tokens::network_name(chain_id);
-            (
-                chain_id,
-                crate::settings::model::chain_tint(u64::from(chain_id)).unwrap_or(0x8A_8F_98),
-                SharedString::from(crate::settings::model::lettermark(&name)),
-                SharedString::from(crate::wallet::fill(
-                    &s.multi_send_chain_notice,
-                    "network",
-                    &name,
-                )),
-            )
-        }),
+        notice: chain.map(|chain_id| chain_notice(chain_id, &s.multi_send_chain_notice)),
     });
     if !picked.is_empty() {
         pick.cta_accent = true;
@@ -1707,6 +1715,46 @@ mod sweep_tests {
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
             let line = pick.recipient.unwrap_or_else(|| unreachable!("held"));
             assert!(matches!(line.lead, FactLead::None));
+        });
+    }
+
+    /// Issue #312: a code that named a network. The core has already narrowed
+    /// the list to it; the picker says which network, and the sidebar's
+    /// filter left on another one does not hide the payer's holdings there.
+    #[test]
+    fn the_picker_says_which_network_a_code_named() {
+        crate::executor::storage::tests::with_temp_state("send-pick-network", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let mut view = view_with(vec![token(56, "BNB", None)], Vec::new(), None);
+            view.request_chain_id = Some(56);
+
+            let mut narrowed = view.clone();
+            narrow_send_tokens(&mut narrowed, Some(100), SendClass::All);
+            assert_eq!(
+                narrowed.tokens.len(),
+                1,
+                "the sidebar's Gnosis hid BNB Chain"
+            );
+
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let (chain_id, _, _, text) = pick
+                .network_notice
+                .unwrap_or_else(|| unreachable!("the named network went unsaid"));
+            assert_eq!(chain_id, 56);
+            let name = crate::executor::custom_tokens::network_name(56);
+            assert_eq!(
+                text.as_ref(),
+                crate::wallet::fill(&s.share_card_note, "network", &name)
+            );
+
+            view.request_chain_id = None;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(
+                pick.network_notice.is_none(),
+                "no network named, nothing said"
+            );
         });
     }
 

@@ -182,6 +182,37 @@ class SendControllerTest {
     }
 
     /**
+     * Issue #312, the phone's order: a code that names a network
+     * (`ethereum:<payee>@137`) offers only what the payer holds THERE — one
+     * holding opens the form on it, never the balance's top coin on another
+     * chain — and the token card (issue #326) goes back to that network's
+     * picker with the payee kept.
+     */
+    @Test
+    fun `a code naming a network offers only that network and the token card keeps it`() {
+        val send = controller()
+        send.open(account = me, display = usd)
+        send.awaitView("the picker lists the holdings") { it.stage == SendStage.SelectToken && it.tokens.size == 3 }
+        send.openScanner()
+        send.scanned("ethereum:$PAYEE@137")
+
+        val form = send.awaitView("the form, on the one Polygon holding") {
+            it.stage == SendStage.EnterDetails && it.selected_token?.chain_id == 137
+        }
+        assertEquals("POL", form.selected_token?.symbol)
+        assertEquals(PAYEE, form.recipient)
+        assertEquals(137, form.request_chain_id)
+        assertEquals(listOf(137), form.tokens.map { it.chain_id })
+        assertEquals(true, form.can_change_token)
+
+        send.changeToken()
+        val picker = send.awaitView("that network's picker, for them") { it.stage == SendStage.SelectToken }
+        assertEquals(listOf(137), picker.tokens.map { it.chain_id })
+        assertEquals(PAYEE, picker.recipient)
+        assertNull(picker.selected_token)
+    }
+
+    /**
      * Spec 082 (T128): what a tracker entry means for the send on screen is
      * the core's one mapping (`sendReceiptOutcomeOf`) — this app's own `when`
      * over four statuses is gone. A lost reply the relay has not shown it
