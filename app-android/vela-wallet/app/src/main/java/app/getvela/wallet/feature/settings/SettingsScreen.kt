@@ -721,7 +721,6 @@ private fun SettingsHomeBody(
     onSegment: (String, String) -> Unit = { _, _ -> },
     onTextScale: (Int) -> Unit = {},
 ) {
-    val colors = VelaTheme.colors
     VelaAccountRow(model.account) { onOpenOverlay(SettingsOverlay.Accounts) }
 
     // Under the account it belongs to (spec 062): which keys, then their backup.
@@ -766,23 +765,23 @@ private fun SettingsHomeBody(
         }
     }
 
-    Text(
-        text = model.signOutLabel,
-        color = colors.fgMuted,
-        fontFamily = VelaFontFamily,
-        fontSize = VelaTextSize.lg,
-        textAlign = TextAlign.Center,
-        modifier = Modifier
-            .fillMaxWidth()
-            // ASKS THE CORE. The session machine answers with its own sheet —
-            // the one carrying the pending-upload warning and a way back out —
-            // and that sheet IS the confirmation. Raising ST3 in front of it
-            // made leaving a wallet three taps and two sheets saying the same
-            // sentence (founder, 2026-09-16); ST3/ST3b stay the fixture boards
-            // they always were, reachable from a seeded overlay.
-            .clickable { onSignOut() }
-            .padding(top = VelaSpacing.xl4, bottom = VelaSpacing.xl3),
+    // Issue #322: Sign Out is a settings ROW — the glyph, the title and the
+    // chevron its neighbours carry — not centred grey text, which read as a
+    // caption under About rather than something to tap.
+    //
+    // It ASKS THE CORE. The session machine answers with its own sheet — the
+    // one carrying the pending-upload warning and a way back out — and that
+    // sheet IS the confirmation. Raising ST3 in front of it made leaving a
+    // wallet three taps and two sheets saying the same sentence (founder,
+    // 2026-09-16); ST3/ST3b stay the fixture boards they always were,
+    // reachable from a seeded overlay.
+    Spacer(modifier = Modifier.height(VelaSpacing.xl3))
+    VelaSettingsRow(
+        row = SettingsRowModel(id = "sign-out", title = model.signOutLabel, icon = SettingsIcon.LogOut),
+        divider = false,
+        onClick = { onSignOut() },
     )
+    Spacer(modifier = Modifier.height(VelaSpacing.xl3))
     VelaDangerCard(model.eraseTitle, model.eraseSubtitle) {
         onOpenOverlay(SettingsOverlay.EraseDevice)
     }

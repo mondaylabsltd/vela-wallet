@@ -445,20 +445,22 @@ struct SettingsScreen: View {
             }
         }
 
-        Text(model.signOutLabel)
-            .typeRole(Typography.fieldLabel)
-            .foregroundStyle(theme.fgMuted)
-            .frame(maxWidth: .infinity)
-            .padding(.top, Tokens.Space.s32)
-            .padding(.bottom, Tokens.Space.s24)
-            .contentShape(Rectangle())
-            // ASKS THE CORE. The session machine answers with its own sheet —
-            // the one carrying the pending-upload warning and a way back out —
-            // and that sheet IS the confirmation. Raising ST3 in front of it
-            // made leaving a wallet three taps and two sheets saying the same
-            // sentence (founder, 2026-09-16); ST3/ST3b stay the fixture boards
-            // they always were, reachable from a seeded overlay.
-            .onTapGesture { onSignOut() }
+        // Issue #322: Sign Out is a settings ROW — the glyph, the title and
+        // the chevron its neighbours carry — not centred grey text, which read
+        // as a caption under About rather than something to tap.
+        //
+        // It ASKS THE CORE. The session machine answers with its own sheet —
+        // the one carrying the pending-upload warning and a way back out — and
+        // that sheet IS the confirmation. Raising ST3 in front of it made
+        // leaving a wallet three taps and two sheets saying the same sentence
+        // (founder, 2026-09-16); ST3/ST3b stay the fixture boards they always
+        // were, reachable from a seeded overlay.
+        SettingsRow(
+            row: SettingsRowModel(id: "sign-out", title: model.signOutLabel, icon: .logOut),
+            divider: false,
+            onTap: { _ in onSignOut() }
+        )
+        .padding(.vertical, Tokens.Space.s24)
 
         DangerCard(title: model.eraseTitle, subtitle: model.eraseSubtitle) {
             overlay = .eraseDevice
