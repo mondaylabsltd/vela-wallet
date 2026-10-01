@@ -1,0 +1,53 @@
+[
+ {
+  "check": "panel en app.uniswap.org.secure-wallet-session-verify-login-account.local send",
+  "got": "/private/tmp/claude-501/-Volumes-data-production-vela-wallet/d4a496f4-ab96-4481-916a-65326d48067e/scratchpad/agent089/shots/fix-panel-en-app-send.png (360x765x1)"
+ },
+ {
+  "check": "panel en: connect again",
+  "got": {
+   "again": {
+    "ok": true,
+    "result": [
+     "0xD400866e00B055B20752a826CD5C89b811de130b"
+    ]
+   },
+   "newPages": 0
+  }
+ },
+ {
+  "check": "panel ru localhost send",
+  "got": "/private/tmp/claude-501/-Volumes-data-production-vela-wallet/d4a496f4-ab96-4481-916a-65326d48067e/scratchpad/agent089/shots/fix-panel-ru-localhost-send.png (360x765x1)"
+ },
+ {
+  "check": "panel ru: connect again",
+  "got": {
+   "again": {
+    "ok": true,
+    "result": [
+     "0xD400866e00B055B20752a826CD5C89b811de130b"
+    ]
+   },
+   "newPages": 0
+  }
+ },
+ {
+  "check": "ru sheet font families",
+  "got": [
+   "\"Plus Jakarta Sans\", \"Noto Sans SC\", system-ui, sans-serif",
+   "\"Plus Jakarta Sans\", \"Noto Sans SC\", system-ui, sans-serif",
+   "\"Plus Jakarta Sans\", system-ui, sans-serif",
+   "\"Plus Jakarta Sans\", \"Noto Sans SC\", system-ui, sans-serif",
+   "\"Plus Jakarta Sans\", \"Noto Sans SC\", system-ui, sans-serif",
+   "\"Plus Jakarta Sans\", \"Noto Sans SC\", system-ui, sans-serif"
+  ]
+ },
+ {
+  "check": "batch sheet text (2 calls: 1 wei to 0x4d…, 1 xDAI to 0x9e…)",
+  "got": "L localhost:5186 Gnosis Отправить −0.000000000000000001 xDAI Получатель 0x4D4d4D…4d4d4D 0x4D4d4D4d4d4D4D4d4D4D4D4d4d4d4d4D4D4d4d4D Технические детали Исходные данные вызова [{\"version\":\"2.0.0\",\"from\":\"0xD400866e00B055B20752a826CD5C89b811de130b\",\"chainId\":\"0x64\",\"calls\":[{\"to\":\"0x4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d\",\"value\":\"0x1\",\"data\":\"0x\"},{\"to\":\"0x9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e9e\",\"value\":\"0xde0b6b3a7640000\",\"data\":\"0x\"}]}] Сетевая комиссия 0.00306 xDAI · ≈$9.18 Скорость Быстро Аккаунт подписи Parallel One Проведите для подтверждения · Подтвердить отправку PARALLEL SPACE fixture passkey · test wallet"
+ },
+ {
+  "check": "storage.local.setAccessLevel(TRUSTED_CONTEXTS)",
+  "got": "ok"
+ }
+]
