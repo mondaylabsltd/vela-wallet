@@ -60,6 +60,11 @@
 /// Every entry is a page published at `sign.getvela.app/b/<hash>/sign.html`.
 /// An empty set would open nothing were it enforced — see [`ENFORCE`].
 pub const BUILD_ALLOWED: &[&str] = &[
+    // The preview and the digest read a typed-data request's ONE document by
+    // the same strict reader, and refuse two documents, a missing account or
+    // an unknown method (EIP-712 WYSIWYS audit, 2026-10-01). NOT yet LAUNCH:
+    // the owner deploys it, checks it serves, then moves LAUNCH.
+    "8c002ee4886869375d79d01c81d52f109449d663020bcf4bf03ca8ebbe368658",
     "ec038e11ec6498c922d0935da6009f46b4d43885e119ff0e984b88227433c886",
     // The "self-reported site" warning in plain words (spec 079 T048).
     "e3ef90a6040fe896a34c6b32fcab232417bf1dd70e62d473c88a0bed7dc97d5f",

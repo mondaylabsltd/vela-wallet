@@ -154,6 +154,7 @@ window.VelaCS.i18n.register('en', {
 
   'refuse.ethSign': 'This page does not sign eth_sign. It signs an unreadable hash — the very thing clear signing exists to abolish.',
   'refuse.noSafeOp': 'The transaction digest cannot be derived here yet: it is the Safe 4337 SafeOp hash, which needs the account, the EntryPoint and the module address. **This page will not sign a guessed digest.**',
+  'refuse.typedShape': 'This request does not carry exactly one signed message for one account — what is shown could differ from what would be signed. Not signing.',
   'refuse.unknownMethod': 'No digest can be derived for this method, so it will not be signed.',
   'ui.cannotSign': 'This request cannot be signed here — the reasons are listed above. Closing refuses it.',
   'ui.dragToSign': 'Drag the orange dot all the way right to sign. Closing the page refuses.',
