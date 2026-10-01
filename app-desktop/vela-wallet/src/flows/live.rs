@@ -476,10 +476,14 @@ pub fn tx_detail(
                 // chip. The words are the feed's, which already has them.
                 FeedTxStatus::Pending => s.status_pending.clone(),
                 FeedTxStatus::Failed => s.status_failed.clone(),
+                // 087 F04: pending, and nothing will settle it — not failed.
+                FeedTxStatus::Unknown => s.status_unknown.clone(),
             },
+            // Info keeps the delete quiet (`panels::delete_style`): a record
+            // nothing settles may have been sent, like a pending one.
             tone: match status {
                 FeedTxStatus::Confirmed => StatusTone::Success,
-                FeedTxStatus::Pending => StatusTone::Info,
+                FeedTxStatus::Pending | FeedTxStatus::Unknown => StatusTone::Info,
                 FeedTxStatus::Failed => StatusTone::Error,
             },
         },

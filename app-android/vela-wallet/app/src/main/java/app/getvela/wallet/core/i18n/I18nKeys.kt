@@ -323,6 +323,11 @@ object I18nKeys {
         /** Spec 082 RG2: a row not yet confirmed says so first — "Pending · …" / "Failed · …". */
         const val ROW_PENDING = "componentsTx.detail.statusPending"
         const val ROW_FAILED = "componentsTx.detail.statusFailed"
+        /**
+         * 087 F04: a pending record nothing will ever settle — the corpus's bare
+         * "Unknown" (never "Failed": it may have been sent).
+         */
+        const val ROW_UNKNOWN = "componentsUi.signing.intentUnknown"
         const val DAY_TODAY = "componentsUi.dayGroup.today"
         const val DAY_YESTERDAY = "componentsUi.dayGroup.yesterday"
 
@@ -740,6 +745,8 @@ object I18nKeys {
         const val STATUS_SUCCEEDED = "componentsTx.detail.statusSucceeded"
         /** Spec 082 RG2: a dApp's transaction that failed, on its detail sheet. */
         const val STATUS_FAILED_DETAIL = "componentsTx.detail.statusFailed"
+        /** 087 F04: the detail chip of a record nothing will ever settle. */
+        const val STATUS_UNKNOWN = "componentsUi.signing.intentUnknown"
         /** Spec 082 RG2: the detail's "Requested by" fact — the site that asked. */
         const val REQUESTED_BY = "componentsUi.signing.siweOrigin"
     }
