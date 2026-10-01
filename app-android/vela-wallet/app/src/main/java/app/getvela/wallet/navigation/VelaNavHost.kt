@@ -1135,6 +1135,10 @@ fun VelaNavHost(
                         onOpen = { step, id -> VelaLog.event("flows", "open", "step" to step.name, "id" to id.take(24)); flows.push(step, id) },
                         onOpenUrl = { context.openUrl(it) },
                         onNavigate = { step -> if (step == FlowStep.Chains) chainSheetOpen = true else flows.push(step) },
+                        // Issue #328: a closed sheet takes its own level off the
+                        // stack, so the next row tapped opens its sheet. The
+                        // STACK's state this screen was built for, as iOS passes.
+                        onSheetClosed = { flows.sheetClosed(flowState) },
                         selected = flows.selected,
                         // 删除记录 (spec 058): the feed tombstones the record and
                         // drops the row at once, so the detail has nothing left

@@ -81,16 +81,23 @@ fun FlowHost(
     onSaveImage: (() -> Unit)? = null,
     /** Spec 058: 删除记录 on the open transaction — the local record, not the chain's. */
     onDeleteTx: (() -> Unit)? = null,
+    /**
+     * The person closed the sheet — ×, a drag, a tap on the scrim, Back: every
+     * door ends here. A sheet is a pushed level of the flow, and a host that
+     * does not hear the close keeps that level on top, so the next row's push
+     * is the same step and opens nothing (issue #328).
+     */
+    onSheetClosed: () -> Unit = {},
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx)
+            FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx, onSheetClosed = onSheetClosed)
         }
     } else {
-        FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx)
+        FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx, onSheetClosed = onSheetClosed)
     }
 }
 
@@ -137,6 +144,7 @@ private fun FlowHostContent(
     /** 删除记录 on the open transaction (spec 058). Last, because the two call
      * sites above pass this list positionally. */
     onDeleteTx: (() -> Unit)? = null,
+    onSheetClosed: () -> Unit = {},
 ) {
     Box(modifier = modifier.fillMaxSize().background(VelaTheme.colors.bgBase)) {
         when (val base = model.base) {
@@ -261,7 +269,7 @@ private fun FlowHostContent(
         }
 
         model.sheet?.let { sheet ->
-            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, onOpenUrl = onOpenUrl, onSendToken = onSendToken, onReceiveToken = onReceiveToken, selected = selected, send = send, addToken = addToken, onSaveImage = onSaveImage, onDeleteTx = onDeleteTx)
+            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, onOpenUrl = onOpenUrl, onSendToken = onSendToken, onReceiveToken = onReceiveToken, selected = selected, send = send, addToken = addToken, onSaveImage = onSaveImage, onDeleteTx = onDeleteTx, onSheetClosed = onSheetClosed)
         }
     }
 }
@@ -274,14 +282,17 @@ private fun FlowHostContent(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOpenUrl: (String) -> Unit = {}, onSendToken: ((String) -> Unit)? = null, onReceiveToken: ((String) -> Unit)? = null, selected: String? = null, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null, onSaveImage: (() -> Unit)? = null, onDeleteTx: (() -> Unit)? = null) {
+private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOpenUrl: (String) -> Unit = {}, onSendToken: ((String) -> Unit)? = null, onReceiveToken: ((String) -> Unit)? = null, selected: String? = null, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null, onSaveImage: (() -> Unit)? = null, onDeleteTx: (() -> Unit)? = null, onSheetClosed: () -> Unit = {}) {
     var dismissed by remember(sheet) { mutableStateOf(false) }
     if (dismissed) return
 
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // The one close: the × below and the sheet's own doors (drag, scrim, Back,
+    // through `onDismissRequest`) all come here, and the host hears every one.
     val dismiss = {
         dismissed = true
         send?.onSheetDismissed?.invoke()
+        onSheetClosed()
     }
     VelaModalSheet(
         onDismissRequest = { dismiss() },

@@ -1923,17 +1923,19 @@
 						} else nav.push(to);
 					}}
 					onsheetclose={() => {
-						// The sheet was a pushed step; dismissing it pops the step, so the
-						// next tap on "add by address" pushes a fresh one.
-						if (nav.mobileTop === 't3') {
-							closeAddToken();
-							nav.back();
-						}
+						// The sheet was a pushed step (a token, a transaction, a code,
+						// "add by address"); dismissing it pops the step, so the next tap
+						// on a row pushes a fresh one (issue 328).
+						if (nav.mobileTop === 't3') closeAddToken();
+						if (flowState !== undefined) nav.sheetClosed(flowState);
 						if (sendView?.show_contact_picker)
 							sendSession?.dispatch({ type: 'close_contact_picker' });
 						// The fee-coin sheet closed without a pick: it is closed, not
 						// merely hidden until the next re-render raises it again.
 						if (feeSheetOpen) feeSheetOpen = false;
+						// The import sheet likewise: left open, 导入 found it still open
+						// and opened nothing.
+						if (batchView) closeBatch();
 					}}
 					send={sendActions}
 					batch={batchActions}
