@@ -49,6 +49,7 @@ import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.core.format.NumberFormatKey
 import app.getvela.wallet.core.format.DateFormatKey
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.data.NotificationAsk
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.BuildConfig
 import androidx.compose.runtime.Composable
@@ -865,15 +866,19 @@ fun VelaNavHost(
                 LaunchedEffect(sendClosed) {
                     if (sendClosed && flows.top in SEND_STATES) flows.close()
                 }
-                // The notification permission, asked at the first submit and never at
-                // launch (research D6): a refusal degrades to the in-app receipt.
+                // The notification permission, asked at the first receipt and never at
+                // launch (research D6) — and once per install (087 F14): a refusal
+                // degrades to the in-app receipt, and neither the next send nor a
+                // recreated screen (a language switch) asks again.
                 val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
                 LaunchedEffect(sendView.stage) {
                     if (sendView.stage == SendStage.Receipt && android.os.Build.VERSION.SDK_INT >= 33) {
                         val granted = androidx.core.content.ContextCompat.checkSelfPermission(
                             context, android.Manifest.permission.POST_NOTIFICATIONS,
                         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        if (!granted) askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        if (!granted && NotificationAsk.claim(VelaStore(context))) {
+                            askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
                     }
                 }
                 // A tapped notification opens the wallet on that row.
