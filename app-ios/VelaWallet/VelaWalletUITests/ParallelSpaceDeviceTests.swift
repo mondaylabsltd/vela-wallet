@@ -118,6 +118,74 @@ final class ParallelSpaceDeviceTests: XCTestCase {
         app.terminate()
     }
 
+    // MARK: - Leaving Send (087 F27)
+
+    /// Back out of Send, then 转账 again: a NEW send — never the journey left.
+    ///
+    /// On an iPhone 11 the back arrow only popped the shell's stack: from the
+    /// form it landed on the home, and after a pay link scoped to Base the next
+    /// 转账 came up on 选择代币 · 收款人 0xD400…130b · 仅支持 Base 网络付款.
+    /// Nothing here spends; the form is opened and left.
+    func testLeavingSendEndsTheJourney() throws {
+        let app = launch()
+        let home = app.buttons["收款"]
+        XCTAssertTrue(home.waitForExistence(timeout: 40), "the wallet never opened")
+        settle(4)
+        let back = app.buttons["返回"].firstMatch
+        let picker = app.staticTexts["选择代币"]
+
+        // 转账 → pick → the form.
+        app.buttons["转账"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["xDAI"].waitForExistence(timeout: 40), "the picker never listed xDAI")
+        app.staticTexts["xDAI"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["收款人"].waitForExistence(timeout: 20), "the form never opened")
+        attach(app.screenshot(), named: "f27-1-form")
+
+        // ‹ on the form is the MACHINE's back: the picker, not the home.
+        back.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 10), "Back from the form did not land on the picker")
+        XCTAssertFalse(home.exists, "Back from the form left Send altogether")
+        attach(app.screenshot(), named: "f27-2-back-to-picker")
+
+        // ‹ on the picker ends the journey.
+        back.tap()
+        XCTAssertTrue(home.waitForExistence(timeout: 10), "Back from the picker did not leave Send")
+
+        // A pay link scoped to Base, to 0xD400…130b — then Back until home.
+        let link = "velawallet://pay?to=0xD400866e00B055B20752a826CD5C89b811de130b&chain=8453"
+        app.open(try XCTUnwrap(URL(string: link)))
+        XCTAssertTrue(back.waitForExistence(timeout: 30), "the pay link never opened Send")
+        settle(4)
+        attach(app.screenshot(), named: "f27-3-pay-link")
+        // On the simulator, main's pay link can end in 加载代币失败 — found
+        // here, and not this defect: it is put away, and the Back after it
+        // is what is being tested.
+        let gotIt = app.alerts.buttons["知道了"].firstMatch
+        if gotIt.exists { gotIt.tap() }
+        for _ in 0..<3 where !home.exists {
+            back.tap()
+            _ = home.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(home.exists, "Back never left the pay link's send")
+
+        // The home's 转账: a fresh picker on this wallet's own holdings — not
+        // the pay link's journey, its recipient or its scope.
+        app.buttons["转账"].firstMatch.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 20), "转账 did not open the picker")
+        XCTAssertTrue(app.staticTexts["xDAI"].waitForExistence(timeout: 30),
+                      "the new send is still the pay link's journey: no holdings listed")
+        settle(2)
+        attach(app.screenshot(), named: "f27-4-fresh-send")
+        XCTAssertFalse(hasText(app, containing: "D400"), "the last pay link's recipient came back on a new send")
+        XCTAssertFalse(app.alerts.firstMatch.exists, "the new send opened on the old journey's alert")
+        app.terminate()
+    }
+
+    private func hasText(_ app: XCUIApplication, containing fragment: String) -> Bool {
+        app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", fragment)).count > 0
+            || app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", fragment)).count > 0
+    }
+
     // MARK: - Plumbing
 
     private func launch(openUrl: String? = nil) -> XCUIApplication {

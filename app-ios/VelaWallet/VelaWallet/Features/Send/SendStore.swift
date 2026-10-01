@@ -36,6 +36,11 @@ final class SendStore {
     var isIdle: Bool { core.isIdle }
     /// Whether `Open` has been sent for the journey currently on screen.
     private var entered = false
+    /// How many journeys the CORE has closed — its `back` from the picker, or
+    /// `done`. The flow host watches it and takes the send screens away, so
+    /// the machine's close and the screen's close are one event (087 F27):
+    /// Android's `sendClosed`, counted so that every close is a change.
+    private(set) var closes = 0
     /// Whose money the journey on screen is about (lower-cased) — the only
     /// account whose asset-list rounds it follows.
     private var account: String?
@@ -91,8 +96,45 @@ final class SendStore {
             self?.account = nil
             self?.heardRound = nil
             self?.trustedSignerNotice = nil
+            self?.closes += 1
         }
     }
+
+    /// The person left the journey by a door the core never heard about — a
+    /// 转账 from somewhere else, a pay link, a contact's 转账 — so the next
+    /// `open` starts a NEW journey instead of resuming this one (087 F27).
+    ///
+    /// Only the core's own close re-armed `open` (`ports.closed` above), and
+    /// the guard in `open` then dropped every later 转账 while an abandoned
+    /// journey was alive: a new send came up on the last code's recipient and
+    /// its network scope. Every entry into Send calls this first.
+    ///
+    /// The machine forgets the journey NOW, with an `Open` for nobody — the
+    /// real `Open` waits on the account store, and the screen entering in the
+    /// meantime must not draw the journey just left. Dropped before the
+    /// machine's first boot, when there is nothing to forget.
+    func leave() {
+        core.dispatch(CoreJSON.string([
+            "type": "open",
+            "account": NSNull(),
+            "params": Self.noParams,
+            "display": Self.display(code: "USD", rate: nil, decimals: 2),
+        ]))
+        entered = false
+        account = nil
+        heardRound = nil
+        trustedSignerNotice = nil
+        alert = nil
+    }
+
+    /// An open with nothing handed in. A pay link or a scanned code arrives
+    /// afterwards, through `scanned`, exactly as a code on the form does.
+    private static let noParams: [String: Any] = [
+        "preselected_symbol": NSNull(), "preselected_network": NSNull(),
+        "prefilled_recipient": NSNull(), "prefilled_chain_id": NSNull(),
+        "prefilled_token_address": NSNull(), "prefilled_amount_base": NSNull(),
+        "locked": false, "preselected_multi": NSNull(),
+    ]
 
     /// Open the flow for an account. Idempotent — a second open re-reads the
     /// holdings rather than starting a new machine.
@@ -101,7 +143,8 @@ final class SendStore {
     /// Empty here: 052 opens the flow from the home's 转账 button and nothing
     /// else. The pay-link is 056 and the scanner is 055.
     ///
-    /// **A second call is IGNORED until the flow is left.** `Open` means
+    /// **A second call is IGNORED until the flow is left** — closed by the
+    /// core, or left through `leave()`. `Open` means
     /// "enter the flow" and resets the machine to the picker, so a caller that
     /// fires it again mid-journey throws the person's work away. SwiftUI will
     /// re-run a `.task` whenever the view it is attached to is rebuilt, which
@@ -123,12 +166,7 @@ final class SendStore {
                 "id": accountId, "address": address,
                 "name": name.map { $0 as Any } ?? NSNull(),
             ] as [String: Any],
-            "params": [
-                "preselected_symbol": NSNull(), "preselected_network": NSNull(),
-                "prefilled_recipient": NSNull(), "prefilled_chain_id": NSNull(),
-                "prefilled_token_address": NSNull(), "prefilled_amount_base": NSNull(),
-                "locked": false, "preselected_multi": NSNull(),
-            ] as [String: Any],
+            "params": Self.noParams,
             "display": Self.display(code: displayCode, rate: displayRate, decimals: fiatDecimals),
         ])
         guard !entered else { return }
