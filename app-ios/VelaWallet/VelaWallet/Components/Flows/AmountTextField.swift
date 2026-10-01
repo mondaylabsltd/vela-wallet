@@ -31,6 +31,7 @@ import SwiftUI
 import UIKit
 
 struct AmountTextField: View {
+    @Environment(\.keyboardDone) private var done
     @Binding var text: String
     let placeholder: String
     /// The role's font, already at the person's text size (`scaled`).
@@ -42,7 +43,8 @@ struct AmountTextField: View {
     var body: some View {
         AmountTextFieldBox(
             text: $text, placeholder: placeholder, font: font,
-            color: UIColor(color), alignment: alignment, identifier: identifier
+            color: UIColor(color), alignment: alignment, identifier: identifier,
+            done: done
         )
         // On the text's baseline, as a SwiftUI `TextField` is, so a unit set
         // beside the figure (`HStack(alignment: .firstTextBaseline)`) sits on
@@ -53,6 +55,19 @@ struct AmountTextField: View {
 
     static func baseline(height: CGFloat, font: UIFont) -> CGFloat {
         height / 2 + (font.ascender + font.descender) / 2
+    }
+}
+
+/// The label of the Done bar the app's own keypads carry (087 F28). Set once
+/// at the root, in the app's language; `nil` (the gallery, a test) is no bar.
+private struct KeyboardDoneKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    var keyboardDone: String? {
+        get { self[KeyboardDoneKey.self] }
+        set { self[KeyboardDoneKey.self] = newValue }
     }
 }
 
@@ -88,12 +103,14 @@ private struct AmountTextFieldBox: UIViewRepresentable {
     let color: UIColor
     let alignment: NSTextAlignment
     let identifier: String?
+    let done: String?
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
     func makeUIView(context: Context) -> UITextField {
         let field = UITextField()
         field.delegate = context.coordinator
+        context.coordinator.field = field
         field.keyboardType = .decimalPad
         field.borderStyle = .none
         field.adjustsFontForContentSizeCategory = false
@@ -108,6 +125,7 @@ private struct AmountTextFieldBox: UIViewRepresentable {
     func updateUIView(_ field: UITextField, context: Context) {
         context.coordinator.text = $text
         style(field)
+        context.coordinator.carryDone(done, on: field)
         // A value that did not come from this field: Max, the ⇄ swap, a
         // cleared form. The field's own edits are already here.
         if field.text != text { field.text = text }
@@ -131,9 +149,36 @@ private struct AmountTextFieldBox: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextFieldDelegate {
         var text: Binding<String>
+        weak var field: UITextField?
 
         init(text: Binding<String>) {
             self.text = text
+        }
+
+        /// The decimal pad has no return key, so nothing on it ever put it
+        /// away (087 F28, an iPhone 11): it covered 继续 until the form was
+        /// scrolled by hand. A Done bar above it, as iOS's own number fields
+        /// carry, labelled in the app's language. Rebuilt only when the label
+        /// changes — a new accessory on every render would flicker the bar.
+        func carryDone(_ label: String?, on field: UITextField) {
+            let current = (field.inputAccessoryView as? UIToolbar)?.items?.last?.title
+            guard current != label else { return }
+            guard let label else {
+                field.inputAccessoryView = nil
+                field.reloadInputViews()
+                return
+            }
+            let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
+            let done = UIBarButtonItem(title: label, style: .done, target: self, action: #selector(finish))
+            done.accessibilityIdentifier = "keyboard.done"
+            bar.items = [UIBarButtonItem(systemItem: .flexibleSpace), done]
+            bar.sizeToFit()
+            field.inputAccessoryView = bar
+            field.reloadInputViews()
+        }
+
+        @objc private func finish() {
+            field?.resignFirstResponder()
         }
 
         func textField(

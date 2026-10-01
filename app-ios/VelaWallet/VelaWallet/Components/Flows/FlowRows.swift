@@ -270,6 +270,7 @@ struct RecipientCardView: View {
                             .foregroundStyle(theme.fgBase)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
+                            .submitLabel(.done)
                             .lineLimit(1)
                     } else {
                         Text(verbatim: recipient.name)

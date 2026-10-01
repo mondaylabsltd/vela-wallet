@@ -645,6 +645,9 @@ struct RecipientFieldView: View {
                             .foregroundStyle(theme.fgBase)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
+                            // The return key reads 完成 and puts the keyboard
+                            // away (087 F28) — an address is one line.
+                            .submitLabel(.done)
                             .accessibilityLabel(field.label)
                             // Named, so a test reaches THIS field rather than
                             // whichever one happens to come first in the tree —

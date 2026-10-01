@@ -696,6 +696,9 @@ struct RootView: View {
         // rather than `UiScale.factor` so the dependency is the observation,
         // not the order two statements ran in.
         .environment(\.walletTextScale, preferences.textScale.factor)
+        // The Done bar over every amount keypad (087 F28): a decimal pad has
+        // no return key, and on a phone nothing else put it away.
+        .environment(\.keyboardDone, loc.t("explore.done"))
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
         // A link, from anywhere: the scheme, a universal link, a page.
         .onOpenURL { url in openLink(url) }
