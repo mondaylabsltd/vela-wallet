@@ -74,3 +74,37 @@ cargo clippy -p vela-core --features crux -- -D warnings; -p vela-core-uniffi -p
 npm --prefix scripts run gen:i18n / lint:i18n / verify:i18n   no drift / no new defects / 75,440 comparisons, 0 divergences
 node scripts/check-event-payloads.mjs          11 mismatches (the same, expected until T236)
 Hand-off: evidence/gates/phase-9-handoff.md
+
+Round 2 close-out (merge + bindings), integration worktree vela-wallet-082 at 73c215b8, 2026-09-29 11:25–11:33.
+Merge 8bee0001 = 082-core-h at aecd8066 (42a6209c b29bceef d868a41f c8c80c8c 58777c4c aecd8066 since dab496f6), no conflicts.
+Committed bindings: 420ad668 (ts types, doc comments only), befbb352 (wasm f658912d02cb, 4,186,532 B).
+
+node rust/scripts/gen-core-types.mjs --check      27 / 13 / 371 current
+node rust/scripts/build-web.mjs --check            rust/pkg-web is current (wasm 4186532 bytes)
+app-web/vela-wallet: node scripts/sync-wasm.mjs --check   static/vela_core_bg.f658912d02cb.wasm matches pkg-web
+node rust/scripts/verify-web.mjs                   48,813 conformance cases green (199 skipped), 5 boundary regressions green
+node scripts/check-event-payloads.mjs              0 mismatches · 527 literal dispatch sites · 2 skipped
+bash rust/scripts/check-ios-core-fresh.sh          ok — cf2ea6effb6f7c7a107fb26773203119ab815c6b6265aefb03fdea9e7d5d013f
+  (xcframework 11:07 and dev-fixtures xcframework 11:08 were built after the merge; NOT rebuilt here — the
+  iPhone pass uses this worktree; committed vela_core_uniffi.swift byte-identical to smoke-swift's fresh one)
+bash rust/scripts/build-android.sh                 nothing recompiled; all six .so md5 unchanged (built 11:10–11:14)
+bash rust/scripts/smoke-kotlin.sh                  48,768 cases green; rust/bindings/kotlin regenerated
+bash rust/scripts/build-dev-fixtures.sh --host     rust/bindings/kotlin-dev regenerated
+bash rust/scripts/smoke-swift.sh                   48,768 cases green
+cd rust && cargo test -p vela-core --features i18n-all,crux   passed 2118 failed 0 ignored 0 (53 result lines)
+  --test i18n_residency: runtime JSON ja + en 138,671 of 138,800; resident ja + en 134,651 (no corpus change since 7a86cebc)
+cargo test -p vela-core-uniffi -p vela-core-wasm   25 passed (15 + 10)
+cargo fmt --all -- --check                         clean
+cargo clippy -p vela-core --features crux; -p vela-core --all-targets --features i18n-all,crux;
+  -p vela-core-uniffi -p vela-core-wasm --all-targets   (-D warnings) clean
+cargo check -p vela-core-wasm --target wasm32-unknown-unknown; -p vela-core --target wasm32 --features crux   ok
+
+The shells' host suites against the merged core (no device):
+app-android/vela-wallet: ./gradlew :app:testDebugUnitTest -PvelaSkipRustBuild --no-daemon --no-configuration-cache --rerun --continue
+  863 tests, 11 failed: DappSignMachineTest x3 (:246, :302, :425), SendMachineTest x6 (all from the spy's
+  assert at :150), TrackerMachineTest x1 (:338), SendRefusalsTest x1 (:246 — a real shell defect, see handoff §8.4)
+app-desktop/vela-wallet: cargo test --no-fail-fast
+  759 passed, 1 failed (executor::tracker::tests::a_withdrawn_op_is_forgotten, tracker.rs:988), 49 ignored
+app-web/vela-wallet: npx vitest run (sign/send/tracker files: 9 files)   284 passed (none drives the real sign/send/tracker machine)
+iOS VelaWalletTests: not run (the iPhone pass holds this worktree); static reading in handoff §8.4
+Hand-off: evidence/gates/phase-9-handoff.md §8

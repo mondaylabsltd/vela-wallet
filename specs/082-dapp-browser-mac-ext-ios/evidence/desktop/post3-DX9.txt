@@ -1,0 +1,18 @@
+# post3 DX9 (P0 G34) — close during the submit POST, relaunch: the record is there
+build: 082 @ db03d864 (desktop code as of fb78b7b0), dev-fixtures, proxy 127.0.0.1:8899, chaos mute vela-relay
+nonce before 62, after 63 (one op)
+[vela-wallet] 12:55:58.227 in-band: signing DISPLAYED quote token=native amount=10000000000000000 recipient=0x3e59292e18417f814112f731e7163534c6d2fe3c
+[vela-wallet] 12:55:58.236 tracker: op=0xc94c450f94 handed over chain=100 maybe_sent=true submit_block=Some(48493972) admitted=false
+[vela-wallet] 12:55:58.253 relay: submitting chain=100 op=0xc94c450f94 initCode=no callData=452B
+[vela-wallet] 12:56:12.654 window: close held (submit in flight)
+[vela-wallet] 12:56:13.696 tracker: op=0xc94c450f94 find-event chain=100 from=None to=None head=Some(48493981) → head only
+[vela-wallet] 12:56:14.309 tracker: op=0xc94c450f94 find-event chain=100 from=Some(48493972) to=Some(48493981) head=Some(48493981) → logs
+[vela-wallet] 12:56:14.327 tracker: holdings moved on chain=100; balances re-read
+--- relaunch (relay still muted)
+[vela-wallet] 12:56:40.019 tracker: op=0xc94c450f94 find-event chain=100 from=None to=None head=Some(48493986) → head only
+[vela-wallet] 12:56:43.222 tracker: op=0xc94c450f94 find-event chain=100 from=Some(48493972) to=Some(48493986) head=Some(48493986) → logs
+[vela-wallet] 12:56:43.224 tracker: holdings moved on chain=100; balances re-read
+[vela-wallet] 12:57:10.052 tracker: op=0xc94c450f94 status unavailable
+Activity top row: dApp 交易 · 127.0.0.1:8137 · −0.001 xDAI (confirmed) — post3-dx9-relaunch.jpg
+
+# post3 CLOSE-TAB — ✕ on a background tab (Compound): no load of the closed tab, start page stays (post3-closetab.jpg)
