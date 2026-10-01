@@ -231,6 +231,16 @@ sealed class SignSubmitOutcome {
     @SerialName("receipt_pending")
     data class ReceiptPending(val user_op_hash: String) : SignSubmitOutcome()
 
+    /** 083: included and REVERTED — the page hears the revert, naming the transaction. */
+    @Serializable
+    @SerialName("reverted")
+    data class Reverted(val user_op_hash: String, val tx_hash: String) : SignSubmitOutcome()
+
+    /** 083: the whole wait went by with no transaction — "not confirmed yet", the record stays pending. */
+    @Serializable
+    @SerialName("not_confirmed")
+    data class NotConfirmed(val user_op_hash: String) : SignSubmitOutcome()
+
     @Serializable
     @SerialName("passkey_cancelled")
     data object PasskeyCancelled : SignSubmitOutcome()

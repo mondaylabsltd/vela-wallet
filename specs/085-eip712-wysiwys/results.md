@@ -34,7 +34,7 @@ Redoes PR #337 (web/extension `eth_signTypedData_v4` only; the owner closes it) 
 | signer page | every `samples/*-test.mjs` passes; `single-file-test` 12/12 with Chrome for Testing |
 | web | 1920 unit tests pass; the 3 failures are `extension/package.test.ts`, which checks a built `extension/dist` absent from a fresh worktree |
 | iOS | VelaWalletTests on a cloned iPhone simulator, xcframework built from this tree: 969 tests in 127 suites passed |
-| Android | `testDebugUnitTest`: 803 tests, 802 passed; the 1 failure is pre-existing on `main` (below) |
+| Android | `testDebugUnitTest`: 803 tests, 802 passed; the 1 failure was pre-existing on `main` (below) and is fixed here too |
 
 Pre-existing on `main`, not 085 (085 changes neither file nor the generated mirror):
 
@@ -42,8 +42,8 @@ Pre-existing on `main`, not 085 (085 changes neither file nor the generated mirr
   `FeeFailure::would_fail` is not a `SendEstimateFailure`); `main`'s web CI runs only
   `pnpm run build`, so it is not gated.
 - Android `CoreWireDriftTest.signRequestWiresMatchTheMirrors`: 083 added `SignSubmitOutcome`
-  `not_confirmed` and `reverted` to the core; Android's Kotlin mirror still lacks them. The fix
-  belongs with Android adopting 083's answers (it lands in the 082 merge, PR #338).
+  `not_confirmed` and `reverted` to the core; Android's Kotlin mirror lacked them. The two
+  variants are added here (the same block as the 082 merge, PR #338, so the two merge cleanly).
 
 ## Owner steps
 
