@@ -2180,6 +2180,21 @@ pub fn browser_site_label(title: String, host: String) -> BrowserSiteLabel {
     }
 }
 
+/// The title a page is pinned under as a favourite (spec 086, issue #329):
+/// `last_good`'s title when it is the same site as `url` — the bar's address,
+/// the failed one under a failure panel — else `None`, and the favourite takes
+/// its host. `last_good` is the last visit `browser_load_visit` made: an
+/// engine's error page never is one.
+#[uniffi::export]
+pub fn browser_pinned_title(url: String, last_good: Option<BrowserVisit>) -> Option<String> {
+    let visit = last_good.map(|visit| vela_core::app::browser_load::Visit {
+        url: visit.url,
+        title: visit.title,
+        favicon: visit.favicon,
+    });
+    vela_core::app::browser_load::pinned_title(&url, visit.as_ref())
+}
+
 // -- network health and logo misses (spec 082 RE3, RE10, contract §11) --------
 
 /// The network count so far (spec 082 RE3, RJ14) — the shell keeps it and
