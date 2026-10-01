@@ -76,21 +76,24 @@
 		min-width: 0;
 	}
 
+	/*
+	  Who is asking is never cut short (spec 089). An ellipsis keeps the START
+	  of a host and drops its end — and the end is the registrable domain:
+	  "app.uniswap.org.secure-login.example" read as "app.uniswap.org.se…" in
+	  the 360 px side panel. The name and the host wrap instead, anywhere, so
+	  every character of the origin the browser stated is on screen.
+	*/
 	.name {
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		color: var(--color-fg-base);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 
 	.host {
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: anywhere;
 	}
 
 	.network {
