@@ -136,7 +136,8 @@ function makeEnv() {
 			})
 		},
 		action: { onClicked: on('actionClicked') },
-		i18n: { getUILanguage: () => 'en' }
+		// A Chinese Chrome — the report's (issue 317).
+		i18n: { getUILanguage: () => 'zh-CN' }
 	};
 
 	function portPair(name: string, sender: Record<string, unknown>) {
@@ -928,6 +929,38 @@ describe('a request with no gesture, to an idle panel (RB8 EX2 × RJ20 G63)', ()
 		await settleAll();
 		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
 		expect(env.session.data['vela.req.7:s:1']).toMatchObject({ surface: 'window' });
+	});
+});
+
+describe('where the worker opens a surface (issue 317)', () => {
+	/**
+	 * The worker cannot read the language a person chose (`localStorage` does
+	 * not exist in a service worker). It used to open the request window and
+	 * the wallet tab in Chrome's UI language anyway — on a Chinese Chrome with
+	 * English chosen, a Chinese signing sheet. It opens the doorway now, and the
+	 * doorway picks (`open.js`, `lib/locales.js`).
+	 */
+	it('opens a request window at the doorway, never at a locale page', async () => {
+		const env = makeEnv();
+		env.chrome.sidePanel.open.mockRejectedValueOnce(new Error('no gesture'));
+		await startWorker(env);
+		await env.ask(env.openPage(7, 'doc-a'), 's:1');
+		await settleAll();
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
+		const [{ url }] = env.chrome.windows.create.mock.calls[0] as unknown as [{ url: string }];
+		expect(url).toBe('chrome-extension://ext/open.html?rid=7%3As%3A1');
+	});
+
+	it('opens the wallet tab at the doorway too', async () => {
+		const env = makeEnv();
+		const create = vi.fn(async () => ({}));
+		env.chrome.tabs.create = create;
+		await startWorker(env);
+		env.emit('actionClicked');
+		await settleAll();
+		expect(create).toHaveBeenCalledWith({
+			url: 'chrome-extension://ext/open.html'
+		});
 	});
 });
 

@@ -96,7 +96,7 @@ import {
 	realTxHash,
 	receiptLookupHash
 } from './lib/op-receipt.js';
-import { negotiate, requestPage, walletPage } from './lib/locales.js';
+import { openDoor } from './lib/locales.js';
 
 /** The snapshot the wallet publishes for exactly this purpose. */
 const EXT_CACHE_KEY = 'vela.ext.cache';
@@ -128,13 +128,13 @@ void chrome.storage.local
  * moment it loses focus, and every ceremony this wallet performs hands focus
  * to the platform authenticator's own prompt (spec 027 D34). The toolbar
  * button opens a real tab instead, reusing the one already open.
+ *
+ * Through the doorway, never at a locale page: which locale is the page's to
+ * pick, from the language the person pinned — which a worker cannot read
+ * (`localStorage`), so picking here meant Chrome's language (issue 317).
  */
-function uiLocale() {
-	return negotiate(chrome.i18n?.getUILanguage?.());
-}
-
 async function openWallet() {
-	const url = chrome.runtime.getURL(walletPage(uiLocale()));
+	const url = chrome.runtime.getURL(openDoor());
 	const [existing] = await chrome.tabs.query({ url: chrome.runtime.getURL('') + '*' });
 	if (existing) {
 		await chrome.tabs.update(existing.id, { active: true, url });
@@ -416,11 +416,14 @@ async function openWindows() {
 	}
 }
 
-/** The fallback surface: a dedicated window, not the action popup. */
+/**
+ * The fallback surface: a dedicated window, not the action popup — opened at
+ * the doorway, which picks the person's language (issue 317).
+ */
 async function openRequestWindow(record) {
 	try {
 		const created = await chrome.windows.create({
-			url: chrome.runtime.getURL(requestPage(uiLocale(), record.rid)),
+			url: chrome.runtime.getURL(openDoor(record.rid)),
 			type: 'popup',
 			width: 420,
 			height: 760,
