@@ -757,6 +757,11 @@ pub struct WalletPage {
     held_close: bool,
     /// Spec 082 RF1: the chain whose notice is on screen, for its log lines.
     chain_notice_shown: Option<u32>,
+    /// Spec 083 W15: where the tab on screen begins in WebView2's one
+    /// history, so Back never goes into another tab's pages. macOS reads the
+    /// back list's length instead (`tab_doc`, 082 RJ5).
+    #[cfg(windows)]
+    tab_history: crate::explore::tab_history::TabHistory,
     /// The browser machine (spec 070): every page's requests, the grants,
     /// each site's chain, the signing line. Born the first time anything needs
     /// it — a page's first message, or Settings listing the connected sites —
@@ -775,6 +780,10 @@ pub struct WalletPage {
     /// The whole draft is selected (a click into the bar, or ⌘A / Ctrl+A):
     /// what is typed or pasted next replaces it.
     address_selected: bool,
+    /// What `edit_address` took into the bar. While the draft is still exactly
+    /// this, nobody has typed, and the bar follows the page (083 FR-006).
+    #[cfg(not(target_os = "linux"))]
+    address_opened: Option<String>,
     address_focus: gpui::FocusHandle,
     /// The Wallet column's scroll position, for the bar drawn beside it.
     /// These columns glide (`ui::smooth_scroll`); `render` steps each of them
@@ -1042,6 +1051,29 @@ impl Identity {
     }
 }
 
+/// 083 W14: the account a connect would hand over. It is the core's, which is
+/// the active one unless a switch is landing. Then it is named as the
+/// switcher names it, from the wallet's own list. An address the list does
+/// not have gets no name: the row's address line already says it, and the
+/// short address twice said nothing more.
+fn consent_account(
+    asked_for: Option<&str>,
+    active: &Identity,
+    accounts: &[vela_core::app::session::SessionAccountRow],
+) -> Identity {
+    match asked_for {
+        Some(address) if !address.eq_ignore_ascii_case(&active.address) => Identity {
+            name: accounts
+                .iter()
+                .find(|row| row.account.address.eq_ignore_ascii_case(address))
+                .map(|row| SharedString::from(row.account.name.clone()))
+                .unwrap_or_default(),
+            address: address.to_owned(),
+        },
+        _ => active.clone(),
+    }
+}
+
 impl WalletPage {
     pub fn new(gallery: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut page = Self::with_section(Section::Wallet, gallery, window, cx);
@@ -1290,6 +1322,8 @@ impl WalletPage {
             held_press: 0,
             held_close: false,
             chain_notice_shown: None,
+            #[cfg(windows)]
+            tab_history: crate::explore::tab_history::TabHistory::default(),
             cap_focus: cx.focus_handle(),
             leg_cap_focus: std::collections::HashMap::new(),
             browser_host: None,
@@ -1297,6 +1331,8 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             dapp_requests_armed: false,
             address_draft: None,
+            #[cfg(not(target_os = "linux"))]
+            address_opened: None,
             address_selected: false,
             address_focus: cx.focus_handle(),
             content_scroll: crate::ui::SmoothScroll::new(),
@@ -4394,12 +4430,19 @@ impl WalletPage {
         // over them: the ⋯ menu showed a sliver above the page and nothing
         // else (found verifying 078 E-03). While one is open the page steps
         // aside, as it does for a dialog, and comes back when it closes.
+        // On Windows the page stays: the menu cuts its own hole in the
+        // webview's window instead (spec 083 D2, `webview::cut_out`).
         self.account_switcher
             || self.identicon_viewer.is_some()
-            || matches!(
-                self.menu,
-                Some((ContactsMenu::Site | ContactsMenu::SiteNetwork, _, _))
-            )
+            || (!cfg!(target_os = "windows") && self.site_menu_open())
+    }
+
+    /// A menu that drops over the page: the site's ⋯ and its network picker.
+    fn site_menu_open(&self) -> bool {
+        matches!(
+            self.menu,
+            Some((ContactsMenu::Site | ContactsMenu::SiteNetwork, _, _))
+        )
     }
 
     /// 078 H-02 — every artwork with an address behind it opens this.
@@ -6216,7 +6259,15 @@ impl WalletPage {
                     host.update(cx, |host, cx| host.cancel_qr(cx));
                 }
             };
-            let card = hardware::qr_card(theme, &self.loc, &payload, on_cancel);
+            // A send creates nothing on the phone: the line is the scan, as
+            // under a sign-in and a dApp's signature (083 W19, H1).
+            let card = hardware::qr_card_with(
+                theme,
+                &self.loc,
+                &payload,
+                hardware::scan_line(&self.loc),
+                on_cancel,
+            );
             return Some(scrim("send-qr-scrim").child(card).into_any_element());
         }
         if let Some(waiting) = touch {
@@ -6416,6 +6467,7 @@ impl WalletPage {
                             &feed,
                             id,
                             &self.flow_strings,
+                            &self.strings,
                             hidden,
                             &self.locale,
                             &currency,
@@ -12477,23 +12529,46 @@ impl WalletPage {
                 Go::Reload => {
                     // Over the failure panel, reload is its Retry: the
                     // address that failed, not the page before it.
-                    if self.load.watch.failure.is_some() {
+                    #[cfg(not(target_os = "linux"))]
+                    let engine_down = crate::webview::engine_failure().is_some();
+                    #[cfg(target_os = "linux")]
+                    let engine_down = false;
+                    if engine_down {
+                        // Over the engine's panel, reload starts the engine (083).
+                        #[cfg(not(target_os = "linux"))]
+                        crate::webview::retry_engine();
+                    } else if self.load.watch.failure.is_some() {
                         self.load_retry(cx);
                     } else if self.tab_doc.floor(self.shown_tab.as_deref()).is_some() {
                         // RJ5: only this tab's own page — while it is veiled
                         // the webview holds another tab's.
-                        #[cfg(not(target_os = "linux"))]
+                        #[cfg(windows)]
+                        if crate::webview::reload() {
+                            // What lands is the same page, not one more for
+                            // Back to go through (083 W15).
+                            self.tab_history.reloading();
+                        }
+                        #[cfg(not(any(windows, target_os = "linux")))]
                         crate::webview::reload();
                     }
                 }
                 // RJ5: never past the shown tab's floor, into another tab's
                 // history — the buttons are dark then, and so is this.
                 Go::Back if self.nav_enabled[0] => {
-                    #[cfg(not(target_os = "linux"))]
+                    // 083 W15: never below the tab's first page on WebView2.
+                    #[cfg(windows)]
+                    if self.tab_history.may_go_back() && crate::webview::back() {
+                        self.tab_history.stepped(true);
+                    }
+                    #[cfg(not(any(windows, target_os = "linux")))]
                     crate::webview::back();
                 }
                 Go::Forward if self.nav_enabled[1] => {
-                    #[cfg(not(target_os = "linux"))]
+                    #[cfg(windows)]
+                    if self.tab_history.may_go_forward() && crate::webview::forward() {
+                        self.tab_history.stepped(false);
+                    }
+                    #[cfg(not(any(windows, target_os = "linux")))]
                     crate::webview::forward();
                 }
                 Go::Back | Go::Forward => {}
@@ -12662,6 +12737,31 @@ impl WalletPage {
         self.navigate_to(url);
     }
 
+    /// A document of the tab on screen arrived (083 W15). When it is the
+    /// tab's first page, WebView2 is asked to forget the other tabs' entries
+    /// around it.
+    #[cfg(windows)]
+    fn browser_landed(&mut self) {
+        if let Some(floor) = self.tab_history.landed() {
+            crate::webview::forget_history_behind(floor);
+        }
+    }
+
+    /// Where a page's new window or other-app address goes (083 W6/W7): the
+    /// webview has already decided it may, on a person's gesture.
+    #[cfg(not(target_os = "linux"))]
+    fn browser_leave(&mut self, leave: crate::webview::Leave, cx: &mut Context<Self>) {
+        match leave {
+            crate::webview::Leave::NewTab(url) => {
+                self.browser_go(crate::wallet::browser_host::Go::OpenInNewTab(url), cx);
+            }
+            // A page's address, handed to another program's command line.
+            crate::webview::Leave::External(url) => {
+                crate::executor::opener::open_from_page(&url, cx);
+            }
+        }
+    }
+
     /// The tab whose page the webview is (to) show. A different tab starts
     /// with nothing committed for the bar to name.
     fn show_tab(&mut self, id: Option<String>) {
@@ -12672,6 +12772,10 @@ impl WalletPage {
             self.tab_doc.shown_changed();
             self.nav_enabled[0] = false;
             self.nav_enabled[1] = false;
+            // 083 W15: the engine's entries up to the new tab's first page
+            // belong to the tab left behind (WebView2: forgotten when it lands).
+            #[cfg(windows)]
+            self.tab_history.tab_changed();
         }
         self.shown_tab = id;
     }
@@ -12783,6 +12887,14 @@ impl WalletPage {
         let tabs = if live_tabs {
             let lit = self.lit_tab(&explore_tabs);
             explore_live::tab_models(&explore_tabs, &self.explore, lit.as_deref(), failed_host)
+        } else if self.identity.is_some() {
+            // Signed in, before the core has a tab on record (a fresh profile,
+            // the first page opening): the page's own tab — never the gallery's
+            // demo "Uniswap · Polymarket", which did nothing (083 W9).
+            vec![explore_live::pending_tab(
+                &self.explore,
+                browsing.then_some(self.browser_home.as_str()),
+            )]
         } else {
             explore_fixtures::tabs(&self.explore, browsing)
         };
@@ -13212,6 +13324,10 @@ impl WalletPage {
                 .detach();
             }
         }
+        #[cfg(not(target_os = "linux"))]
+        let engine_failed = live_browser.then(crate::webview::engine_failure).flatten();
+        #[cfg(target_os = "linux")]
+        let engine_failed: Option<crate::explore::engine::EngineFailure> = None;
         let body: gpui::AnyElement = if live_browser && crashed {
             // The renderer is gone and the page with it; the core has already
             // settled what it asked. Said, with the way back — never a blank
@@ -13225,6 +13341,17 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             crate::webview::hide();
             self.load_failed_panel(theme, &failure, &url, cx)
+                .into_any_element()
+        } else if live_browser && self.load.watch.engine_page {
+            // Spec 083 W3: WebView2's own error page is up and its reason is a
+            // moment away. Never on screen: nothing, then Vela's panel.
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::hide();
+            div().flex_1().into_any_element()
+        } else if let Some(failure) = engine_failed {
+            // Spec 083 W1b: the engine itself did not start. Said once, with the
+            // two ways on — never a blank page retried sixty times a second.
+            self.engine_failed_panel(theme, failure, cx)
                 .into_any_element()
         } else if veiled {
             // RJ5: the page background under the hairline until this tab's
@@ -13448,7 +13575,89 @@ impl WalletPage {
             .child(div().pt(px(4.)).child(button))
     }
 
-    /// The renderer behind the page died (spec 070 FR-013; macOS reports it).
+    /// The engine did not start (spec 083 W1b): the load-failed title, the
+    /// site, the platform's code for support, and the two ways on — Retry, and
+    /// the same page in the system browser. A missing runtime puts the system
+    /// browser first: Retry cannot install one.
+    fn engine_failed_panel(
+        &mut self,
+        theme: &Theme,
+        failure: crate::explore::engine::EngineFailure,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let host = vela_core::app::browser_load::host_of(&self.browser_home);
+        let detail = match failure.code() {
+            Some(code) if host.is_empty() => format!("WebView2 {code}"),
+            Some(code) => format!("{host} · WebView2 {code}"),
+            None => host,
+        };
+        let retry = outline_button(
+            ElementId::from("engine-retry"),
+            theme,
+            &mut self.icons,
+            Some(Icon::RefreshCw),
+            self.explore.load_retry.clone(),
+        )
+        .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+            #[cfg(not(target_os = "linux"))]
+            crate::webview::retry_engine();
+            cx.notify();
+        }));
+        let system = outline_button(
+            ElementId::from("engine-open-system"),
+            theme,
+            &mut self.icons,
+            Some(Icon::ExternalLink),
+            self.explore.open_in_system_browser.clone(),
+        )
+        .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+            if !this.browser_home.is_empty() {
+                // A page's address, often: escaped like any other (083).
+                crate::executor::opener::open_from_page(&this.browser_home, cx);
+            }
+        }));
+        let runtime_missing = failure == crate::explore::engine::EngineFailure::RuntimeMissing;
+        let buttons = div().flex().gap(px(12.)).pt(px(4.));
+        let buttons = if runtime_missing {
+            buttons.child(system).child(retry)
+        } else {
+            buttons.child(retry).child(system)
+        };
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(px(12.))
+            .p(px(32.))
+            .child(icon_img(
+                &mut self.icons,
+                Icon::TriangleAlert,
+                false,
+                theme.warning_base,
+                28.,
+            ))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(self.explore.load_failed.clone()),
+            )
+            .child(
+                div()
+                    .max_w(px(360.))
+                    .text_center()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_subtle)
+                    .child(SharedString::from(detail)),
+            )
+            .child(buttons)
+    }
+
+    /// The renderer behind the page died (spec 070 FR-013; macOS and, since
+    /// 083, Windows report it).
     ///
     /// Said, with the way back. The browser machine has already settled what
     /// the page had asked (4900) and closed any sheet it raised; Reload starts
@@ -13492,9 +13701,10 @@ impl WalletPage {
                     Some(Icon::RefreshCw),
                     self.explore.reload.clone(),
                 )
-                .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
-                    #[cfg(not(target_os = "linux"))]
-                    crate::webview::reload();
+                .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                    this.browser_go(crate::wallet::browser_host::Go::Reload, cx);
+                    #[cfg(target_os = "linux")]
+                    let _ = this;
                     cx.notify();
                 })),
             )
@@ -13557,6 +13767,10 @@ impl WalletPage {
                 crate::ui::editor::select_all(&self.address_focus);
             }
             self.address_selected = false;
+            #[cfg(not(target_os = "linux"))]
+            {
+                self.address_opened = Some(current.clone());
+            }
             self.address_draft = Some(current);
         }
         self.focus_address(window, cx);
@@ -13753,6 +13967,20 @@ impl WalletPage {
                 })
                 .detach();
         }));
+        // 083 W6/W7: a person's new window becomes a tab; mailto:/tel: go to
+        // the system. Deferred like the others: this fires from a WebView2
+        // event, or from inside wry's navigation handler.
+        let page = cx.entity().downgrade();
+        let async_cx = cx.to_async();
+        crate::webview::on_leave_to(Box::new(move |leave| {
+            let page = page.clone();
+            async_cx
+                .spawn(async move |cx| {
+                    page.update(cx, |page, cx| page.browser_leave(leave, cx))
+                        .ok();
+                })
+                .detach();
+        }));
     }
 
     /// One string from the page, for the browser machine — which decides
@@ -13791,7 +14019,22 @@ impl WalletPage {
                 // commit — where its Back stops.
                 let back_len = crate::webview::engine().and_then(|engine| engine.back_len);
                 self.tab_doc.committed(self.shown_tab.as_deref(), back_len);
+                #[cfg(windows)]
+                self.browser_landed();
                 self.load.committed(&url);
+                // 083 FR-006: an open bar nobody has typed in follows the page
+                // (a link clicked while the bar was open) — never a stale
+                // address a click would drop a caret into.
+                if let Some(next) = address_follows(
+                    self.address_draft.as_deref(),
+                    self.address_opened.as_deref(),
+                    &url,
+                ) {
+                    crate::ui::editor::sync(&self.address_focus, &next);
+                    crate::ui::editor::select_all(&self.address_focus);
+                    self.address_opened = Some(next.clone());
+                    self.address_draft = Some(next);
+                }
                 // The bar names the shown tab's own document only (RJ5): a
                 // commit of the page a veiled tab is hiding is not its.
                 if !self
@@ -13810,7 +14053,58 @@ impl WalletPage {
                 cx.notify();
                 DbrEvent::LoadFinished { tab, url }
             }
+            crate::webview::Load::ErrorPage(url) => {
+                // Spec 083: not the site arriving — but the document before it
+                // is gone, so the core hears a load begin and the failure's
+                // LoadFinished retires it. It is an entry in the engine's
+                // history all the same (W15).
+                #[cfg(windows)]
+                self.browser_landed();
+                self.load.error_page();
+                cx.notify();
+                DbrEvent::NavigationStarted { tab, url }
+            }
+            crate::webview::Load::Failed {
+                url,
+                status,
+                certificate,
+            } => {
+                let steps = self.load.engine_failed(&url, status, certificate);
+                if !steps.is_empty() {
+                    self.run_load_steps(steps, cx);
+                }
+                cx.notify();
+                DbrEvent::LoadFinished { tab, url }
+            }
             crate::webview::Load::Crashed => DbrEvent::RendererGone { tab },
+            // 083 W15: nothing for the core. The arrows are drawn again from
+            // the engine's history, within the tab on screen.
+            crate::webview::Load::HistoryChanged => {
+                cx.notify();
+                return;
+            }
+            // 083 W15: the tab's own entries, counted on WebView2; on macOS
+            // the back list's own length is read instead (082 RJ5).
+            crate::webview::Load::Pushed => {
+                #[cfg(windows)]
+                self.tab_history.pushed();
+                cx.notify();
+                return;
+            }
+            crate::webview::Load::Popped => {
+                #[cfg(windows)]
+                self.tab_history.popped();
+                cx.notify();
+                return;
+            }
+            crate::webview::Load::HistoryFloor(floor) => {
+                #[cfg(windows)]
+                self.tab_history.engine_answered(floor);
+                #[cfg(not(windows))]
+                let _ = floor;
+                cx.notify();
+                return;
+            }
         };
         let host = self.browser_host(cx);
         host.update(cx, |host, cx| host.dispatch(event, cx));
@@ -13960,6 +14254,12 @@ impl WalletPage {
                 self.tab_doc.floor(self.shown_tab.as_deref()),
                 self.load.watch.failure.is_some(),
             );
+            // 083 W15: on WebView2 the arrows stay within the tab on screen.
+            #[cfg(windows)]
+            let nav = {
+                let [back, forward] = self.tab_history.arrows(crate::webview::history());
+                [nav[0] && back, nav[1] && forward, nav[2]]
+            };
             if nav != self.nav_enabled {
                 self.nav_enabled = nav;
                 cx.notify();
@@ -14235,16 +14535,98 @@ impl WalletPage {
         .map(|receipt| (receipt, host.chain_id))
     }
 
-    /// The column's close — its ✕, Esc, and the receipt's own button. The
-    /// core decides what it answers: a request not yet approved is refused
-    /// (4001); one approved is merely no longer watched, and its answer still
-    /// reaches the page (spec 079 FR-002). An ending on screen just goes.
+    /// What the open request's ceremony waits on the person for, as a card
+    /// for the column (083 W19): the phone's QR, the phone's or the key's own
+    /// prompt, or a phone that stopped — a scan whose window closed with no
+    /// phone, a phone that scanned and never connected, one that dropped once
+    /// asked (H4). `None` when only the request itself does.
+    #[cfg(not(target_os = "linux"))]
+    fn signing_ceremony_card(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Div> {
+        let host = self.signing_host.clone()?;
+        let (qr, touch, stopped, on_chain) = {
+            let read = host.read(cx);
+            (
+                read.qr_showing(),
+                read.touch_waiting(),
+                read.phone_stop,
+                crate::signing::status::on_chain(&read.raw.0),
+            )
+        };
+        let card = if let Some(payload) = qr {
+            let host = host.clone();
+            hardware::qr_card_with(
+                theme,
+                &self.loc,
+                &payload,
+                // The scan. The create card's line ("create it on a nearby
+                // device") is not what a signature asks; what to do on the
+                // phone is the touch card's, once it is in (083 H1 review).
+                hardware::scan_line(&self.loc),
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    host.update(cx, |host, cx| host.cancel_qr(cx));
+                },
+            )
+        } else if let Some(waiting) = touch {
+            let host = host.clone();
+            hardware::touch_card(
+                theme,
+                &self.loc,
+                &waiting,
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    host.update(cx, |host, cx| host.cancel_touch(cx));
+                },
+            )
+        } else if let Some(stop) = stopped {
+            // Nothing was answered: Retry shows a new code, and the close is
+            // the column's own — a refusal, made by the person.
+            let (title, body) = crate::signing::status::phone_stop_words(stop, on_chain);
+            let seconds = crate::ctap::cable::SCAN_TIMEOUT.as_secs_f64();
+            let retry = {
+                let host = host.clone();
+                move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut gpui::App| {
+                    host.update(cx, |host, cx| host.retry(cx));
+                }
+            };
+            let close = cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                this.close_signing_column(cx);
+            });
+            hardware::card(theme)
+                .child(hardware::title(theme, self.loc.t(title)))
+                .child(hardware::body(
+                    theme,
+                    self.loc.t_vars(body, &[("seconds", seconds)]),
+                ))
+                .child(crate::ui::vela_button(
+                    "signing-scan-retry",
+                    crate::ui::ButtonVariant::Primary,
+                    self.loc.t("onboarding.common.retry"),
+                    theme,
+                    retry,
+                ))
+                .child(crate::ui::vela_button(
+                    "signing-scan-close",
+                    crate::ui::ButtonVariant::Secondary,
+                    self.loc.t("onboarding.common.close"),
+                    theme,
+                    close,
+                ))
+        } else {
+            return None;
+        };
+        // A dialog's width; the column is narrower.
+        Some(card.w_full())
+    }
+
+    /// The column's close — its ✕, the receipt's own button, and Esc where
+    /// that answers nothing (083). The core decides what it answers: a request
+    /// not yet approved is refused (4001); one approved is merely no longer
+    /// watched, and its answer still reaches the page (spec 079 FR-002). An
+    /// ending on screen just goes. Over the phone's QR the scan is stopped
+    /// first (`SigningHost::close`).
     fn close_signing_column(&mut self, cx: &mut Context<Self>) {
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.clone() {
-            host.update(cx, |host, cx| {
-                host.dispatch_sign(vela_core::app::sign_request::Event::SwipeDismissed, cx);
-            });
+            host.update(cx, |host, cx| host.close(cx));
         }
         self.dapp_landing = None;
         self.signing_hidden = false;
@@ -14252,6 +14634,21 @@ impl WalletPage {
             self.panel = PanelId::None;
         }
         cx.notify();
+    }
+
+    /// Esc on the signing column (083, the owner's D1). Esc is not the ✕:
+    /// on Windows it is also the key that leaves the address bar, and one
+    /// press refused the page (4001). A request still waiting on the person
+    /// stays; over the QR or a key prompt Esc is that card's Cancel; an
+    /// ending, a failure or an operation already on its way still closes.
+    fn escape_signing_column(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = self.signing_host.clone()
+            && !host.update(cx, |host, cx| host.escape(cx))
+        {
+            return;
+        }
+        self.close_signing_column(cx);
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -14280,7 +14677,15 @@ impl WalletPage {
         cx: &mut Context<Self>,
     ) {
         if self.signing_busy(cx) {
-            self.panel = PanelId::Signing;
+            // Not a column the person closed, while it winds down to its
+            // refusal (083 review) — the row can be pressed again after.
+            let closing = self
+                .signing_host
+                .as_ref()
+                .is_some_and(|host| host.read(cx).closing());
+            if !closing {
+                self.panel = PanelId::Signing;
+            }
             cx.notify();
             return;
         }
@@ -14364,7 +14769,13 @@ impl WalletPage {
                 if self.panel == PanelId::Signing && self.dapp_landing.is_none() {
                     self.panel = PanelId::None;
                 }
-            } else {
+            } else if !host.read(cx).closing() {
+                // An open request is on screen — but not one the person
+                // closed while its signature was still to come: that stays
+                // closed while the ceremony winds down (083 review). The
+                // host's own redraws — the QR coming down, the watch —
+                // reopened it, showing "等待生物识别…" for as long as a
+                // tunnel handshake took, and inviting a second close.
                 self.panel = PanelId::Signing;
             }
         }
@@ -14958,20 +15369,16 @@ impl WalletPage {
     /// made for), or the active one when it names none. Every connected site
     /// follows the account the person picks.
     fn account_row(&mut self, theme: &Theme, address: Option<&str>, cx: &mut Context<Self>) -> Div {
-        let identity = self.identity();
-        let (name, seed, shown) = match address.filter(|address| !address.is_empty()) {
-            Some(address) => (
-                money::account_by_address(address)
-                    .map_or_else(|| identity.name.clone(), |account| account.name.into()),
-                address.to_owned(),
-                SharedString::from(crate::wallet::live::shorten_address(address)),
-            ),
-            None => (
-                identity.name.clone(),
-                identity.address.to_string(),
-                identity.display(),
-            ),
-        };
+        // 083 W14 (owner D4): the account the site would get, as the switcher
+        // names it — an address the wallet has no name for is its address
+        // line alone, never under the active account's name.
+        let accounts = session::view(cx).accounts;
+        let who = consent_account(
+            address.filter(|address| !address.is_empty()),
+            &self.identity(),
+            &accounts,
+        );
+        let (name, seed, shown) = (who.name.clone(), who.address.clone(), who.display());
         div()
             .flex()
             .items_center()
@@ -14983,13 +15390,15 @@ impl WalletPage {
                     .flex_col()
                     .gap(px(2.))
                     .flex_1()
-                    .child(
-                        div()
-                            .text_size(theme::text_row_title())
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(theme.fg_base)
-                            .child(name),
-                    )
+                    .when(!name.is_empty(), |column| {
+                        column.child(
+                            div()
+                                .text_size(theme::text_row_title())
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme.fg_base)
+                                .child(name),
+                        )
+                    })
                     .child(
                         div()
                             .font_family("monospace")
@@ -15177,15 +15586,13 @@ impl WalletPage {
                                 address.eq_ignore_ascii_case(&call.to)
                             });
                         if !named {
-                            let label = if single {
-                                self.signing.label_interacting.clone()
-                            } else {
-                                SharedString::from(format!(
-                                    "{} {}",
-                                    self.signing.label_interacting,
-                                    i + 1
-                                ))
-                            };
+                            // A call with no calldata calls no contract: its
+                            // `to` is who receives the coin (083 W10).
+                            let label = crate::signing::live::tech_destination_label(
+                                &call.data,
+                                (!single).then_some(i + 1),
+                                &self.signing,
+                            );
                             rows.push((label, SharedString::from(call.to.clone()), false));
                         }
                         rows.push((
@@ -15453,6 +15860,18 @@ impl WalletPage {
             let summary = crate::signing::status::summary_of(&model.blocks);
             let header = signing_components::HeaderModel::of(&model);
             self.signing_last = Some((header.clone(), summary.clone()));
+            // 083 W19: what the ceremony is waiting for — the phone's QR, the
+            // "check your phone" prompt, a scan that ran out — drawn IN the
+            // column. A window-wide scrim paints under the dApp page on
+            // Windows, and until 083 nothing drew these here at all.
+            if let Some(card) = self.signing_ceremony_card(theme, cx) {
+                return div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(16.))
+                    .child(signing_components::header_view(theme, &header))
+                    .child(card);
+            }
             if let Some((receipt, chain_id)) = self.open_request_receipt(summary.as_ref(), cx) {
                 let on_close: panels::Click =
                     Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
@@ -17494,7 +17913,9 @@ impl WalletPage {
                     url.clone().map(|url| {
                         Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                             this.menu = None;
-                            cx.open_url(&url);
+                            // The page's own address, handed to another
+                            // program's command line (083).
+                            crate::executor::opener::open_from_page(&url, cx);
                             cx.notify();
                         })) as contacts_components::MenuAction
                     }),
@@ -17877,7 +18298,35 @@ impl WalletPage {
                                 this.menu = None;
                                 cx.notify();
                             }))
-                            .child(card),
+                            .child(card)
+                            // Spec 083 D2 (Windows): measured where it is
+                            // painted — after the page, so this frame's layout
+                            // — and cut out of the webview's window.
+                            .children(
+                                (cfg!(target_os = "windows")
+                                    && matches!(
+                                        kind,
+                                        ContactsMenu::Site | ContactsMenu::SiteNetwork
+                                    ))
+                                .then(|| {
+                                    gpui::canvas(
+                                        |_, _, _| (),
+                                        |bounds, (), window, _| {
+                                            #[cfg(target_os = "windows")]
+                                            crate::webview::cut_out(
+                                                Some(bounds),
+                                                window.scale_factor(),
+                                            );
+                                            #[cfg(not(target_os = "windows"))]
+                                            let _ = (bounds, window);
+                                        },
+                                    )
+                                    .absolute()
+                                    .top_0()
+                                    .left_0()
+                                    .size_full()
+                                }),
+                            ),
                     ),
             )
             .with_priority(1)
@@ -17943,6 +18392,11 @@ impl Render for WalletPage {
             || self.dialog_over_browser()
         {
             crate::webview::hide();
+        }
+        // The menu closed: the webview's window is whole again (083 D2).
+        #[cfg(target_os = "windows")]
+        if !self.site_menu_open() {
+            crate::webview::cut_out(None, 1.0);
         }
         // Typing stops when the address bar loses the keyboard.
         if self.address_draft.is_some() && !self.address_focus.is_focused(window) {
@@ -18157,11 +18611,10 @@ impl Render for WalletPage {
                         this.settings_open_dropdown = None;
                         cx.notify();
                     } else if this.panel != PanelId::None {
-                        // Escape is the ✕: a signing column tells its core,
-                        // as the web's `onclose` does, or the dApp's request
-                        // hangs and every later one is refused as busy.
+                        // A signing column closes only where closing answers
+                        // nothing (083 D1) — a refusal is the ✕'s alone.
                         if this.panel == PanelId::Signing {
-                            this.close_signing_column(cx);
+                            this.escape_signing_column(cx);
                         } else {
                             this.panel = PanelId::None;
                             cx.notify();
@@ -18253,6 +18706,19 @@ const CONTACTS_COPY_HOLD: std::time::Duration = std::time::Duration::from_millis
 /// core's five routes, the Trusted Signer among them (spec 075). A backup with a
 /// sheet of its own would be the one signature a person could not route.
 #[cfg(not(target_os = "linux"))]
+
+/// Spec 083 FR-006: an open bar nobody has typed in follows the page — the
+/// address that committed replaces the one it was opened with. Typed text is
+/// the person's, and an engine page is not a place.
+#[cfg(not(target_os = "linux"))]
+fn address_follows(draft: Option<&str>, opened: Option<&str>, committed: &str) -> Option<String> {
+    (draft.is_some()
+        && draft == opened
+        && draft != Some(committed)
+        && vela_core::app::dapp_permissions::origin_of(committed).is_some())
+    .then(|| committed.to_owned())
+}
+
 fn backup_request(
     address: &str,
     call: &vela_core::registry_backup::BackupCall,
@@ -18434,6 +18900,82 @@ mod tests {
             1,
             "a focus of the bar that skips WebKit"
         );
+    }
+
+    /// Spec 083 FR-006: an open bar nobody typed in follows the page; typed
+    /// text, a closed bar and the engine's blank page do not move it.
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn an_untouched_address_bar_follows_the_page() {
+        let old = "https://pancakeswap.finance/";
+        let next = "https://example.com/";
+        assert_eq!(
+            address_follows(Some(old), Some(old), next).as_deref(),
+            Some(next)
+        );
+        assert_eq!(
+            address_follows(Some("exam"), Some(old), next),
+            None,
+            "typed"
+        );
+        assert_eq!(address_follows(None, None, next), None, "closed");
+        assert_eq!(address_follows(Some(old), Some(old), "about:blank"), None);
+        assert_eq!(
+            address_follows(Some(next), Some(next), next),
+            None,
+            "same page"
+        );
+    }
+
+    /// 083 W14: the connect names the account the site would get. The active
+    /// one is named by its name. Another (a switch landing) is named as the
+    /// switcher names it, and an address the wallet has no name for is its
+    /// address line alone, never the short address twice.
+    #[test]
+    fn consent_account_names_what_the_site_would_get() {
+        let active = Identity {
+            name: "Main".into(),
+            address: "0x14fB1f0000000000000000000000000000D1eA5c".to_owned(),
+        };
+        let row =
+            |index: usize, name: &str, address: &str| vela_core::app::session::SessionAccountRow {
+                index,
+                account: vela_core::app::Account {
+                    id: format!("cred{index}"),
+                    name: name.to_owned(),
+                    address: address.to_owned(),
+                    public_key_hex: "04aa".to_owned(),
+                    created_at_iso: String::new(),
+                    keys: Vec::new(),
+                    signed_in_with: None,
+                },
+            };
+        let accounts = [
+            row(0, "Main", &active.address),
+            row(1, "Savings", "0xA9aE00000000000000000000000000000000002B"),
+        ];
+        let same = consent_account(
+            Some("0x14fb1f0000000000000000000000000000d1ea5c"),
+            &active,
+            &accounts,
+        );
+        assert_eq!(same.name, active.name, "compared ignoring case");
+        assert_eq!(same.address, active.address);
+        assert_eq!(consent_account(None, &active, &accounts).name, active.name);
+        let other = consent_account(
+            Some("0xa9ae00000000000000000000000000000000002b"),
+            &active,
+            &accounts,
+        );
+        assert_eq!(other.name.as_ref(), "Savings", "the switcher's name");
+        assert_eq!(other.address, "0xa9ae00000000000000000000000000000000002b");
+        let unknown = consent_account(
+            Some("0x5E1f000000000000000000000000000000000077"),
+            &active,
+            &accounts,
+        );
+        assert!(unknown.name.is_empty(), "the address line says it once");
+        assert_eq!(unknown.display().as_ref(), "0x5E1f00…000077");
     }
 
     /// **Linux has three destinations, as the web does** (owner call,

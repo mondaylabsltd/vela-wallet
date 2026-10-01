@@ -192,9 +192,16 @@ class RelayClientTest {
         assertEquals(RelayClient.SubmitAnswer.NotSent(null), relay.sendUserOp(100, op, localHash = localHash))
         assertEquals("relay unreachable; nothing was sent", userOpNotSentDetail())
 
+        // The relay already holds THIS op: accepted under its own hash.
+        port.answer("eth_sendUserOperation", error("AA25 invalid account nonce [existingHash:$localHash]"))
+        assertEquals(RelayClient.SubmitAnswer.Accepted(localHash), relay.sendUserOp(100, op, localHash = localHash))
+        // Another op of the account holds the nonce (083): never this one's hash.
         val existing = "0x" + "ef".repeat(32)
         port.answer("eth_sendUserOperation", error("AA25 invalid account nonce [existingHash:$existing]"))
-        assertEquals(RelayClient.SubmitAnswer.Accepted(existing), relay.sendUserOp(100, op, localHash = localHash))
+        assertEquals(
+            RelayClient.SubmitAnswer.NotSent(uniffi.vela_core_uniffi.RelayRejection.NonceHeld(existing)),
+            relay.sendUserOp(100, op, localHash = localHash),
+        )
     }
 
     @Test

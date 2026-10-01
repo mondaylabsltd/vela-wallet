@@ -696,6 +696,16 @@ pub enum TrustSimJudgment {
         delta: String,
         symbol: String,
         decimals: u32,
+        /// The token is one this wallet already trusts — the chain's stables
+        /// or wrapped coin, a token the account holds, the curated table —
+        /// and not merely one whose `symbol()` answered. Always so for an
+        /// inflow (that is what earned it a figure); an OUTFLOW renders on
+        /// metadata alone, so this is what tells a known coin leaving from a
+        /// contract's own claim to be one (083 F1 review: a site's token that
+        /// emits `Transfer(you, …)` and answers "USDC" is `false` here).
+        /// Absent on the wire when `false`, so older readers are unchanged.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        in_trusted_set: bool,
     },
     /// Direction + caution, no attacker-controlled amount rendering
     /// (`tx-simulation.ts:243-256`).
@@ -748,6 +758,7 @@ pub fn judge_delta(
             delta: delta.delta.clone(),
             symbol: m.symbol.clone(),
             decimals: m.decimals,
+            in_trusted_set: trusted,
         },
         _ => unverified,
     }

@@ -890,18 +890,26 @@ impl OnboardingPage {
     }
 
     /// The caBLE QR, while a hybrid ceremony waits for the phone to scan it. It
-    /// clears itself the moment the tunnel is up (the ceremony sets it to
-    /// `None`), before the on-phone touch prompt takes its place.
+    /// clears itself the moment the phone's advert is found (the ceremony sets
+    /// it to `None`), and the phone's card takes its place while the phone
+    /// connects — with a Cancel of its own — then its prompt (083 H5).
     fn qr_prompt(&self, theme: &Theme, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
         let payload = self.channel.qr_showing()?;
         let on_cancel = cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
             this.channel.cancel_qr();
             cx.notify();
         });
-        Some(
-            scrim(theme, "qr-scrim")
-                .child(hardware::qr_card(theme, &self.loc, &payload, on_cancel)),
-        )
+        // 083 W16: the sign-in sheet's own words under a sign-in's code — it
+        // creates nothing.
+        let chooser = if self.creating {
+            hardware::Chooser::Create
+        } else {
+            hardware::Chooser::SignIn
+        };
+        let line = hardware::method_line(&self.loc, vela_core::app::KeyMethod::Hybrid, chooser);
+        Some(scrim(theme, "qr-scrim").child(hardware::qr_card_with(
+            theme, &self.loc, &payload, line, on_cancel,
+        )))
     }
 
     /// The sign-in method picker — the same three methods creating a wallet

@@ -239,8 +239,6 @@ pub struct FlowStrings {
     pub tx_label_received: String,
     /// A dApp's transaction (spec 082 RG2): "dApp 交易".
     pub tx_label_dapp: SharedString,
-    /// "Requested by", over the site that asked for a dApp's transaction.
-    pub detail_requested_by: SharedString,
     pub to_name: String,
     pub from_name: String,
     pub view_on_explorer: SharedString,
@@ -254,9 +252,20 @@ pub struct FlowStrings {
     pub status_failed: SharedString,
     pub detail_from: SharedString,
     pub detail_to: SharedString,
-    /// The contract a dApp's call went to, which is not who got anything
-    /// (spec 082 RJ16, the core's `FeedCounterpartyRole::Contract`).
-    pub detail_interacting: SharedString,
+    /// "App" — the site a dApp's transaction came from (083 H2), the word the
+    /// web's connection detail uses.
+    pub detail_app: SharedString,
+    /// "Contract" — what a dApp's call went to (083 F3): a router is not a
+    /// recipient. The token detail's label for a contract address, in every
+    /// language a noun: the signing sheet's "Interacting with" is progressive
+    /// in several ("Interactuando con", "Đang tương tác với"), which on a
+    /// finished record says the call is still under way (083 F3 review).
+    pub detail_contract: SharedString,
+    /// "Balance changes" over a dApp transaction's lines (083 F1), and
+    /// "Unverified token" for a line with no figure — the signing sheet's
+    /// words, so the detail reads as what was approved.
+    pub detail_changes: SharedString,
+    pub detail_unverified_token: SharedString,
     pub detail_chain: SharedString,
     pub detail_date: SharedString,
     pub detail_hash: SharedString,
@@ -597,7 +606,6 @@ impl FlowStrings {
             tx_label_sent: raw("history.txLabelSent"),
             tx_label_received: raw("history.txLabelReceived"),
             tx_label_dapp: s("history.txLabelDappTx"),
-            detail_requested_by: s("componentsUi.signing.siweOrigin"),
             to_name: raw("history.toName"),
             from_name: raw("history.fromName"),
             view_on_explorer: s("history.viewOnExplorer"),
@@ -607,7 +615,10 @@ impl FlowStrings {
             status_failed: s("componentsTx.detail.statusFailed"),
             detail_from: s("componentsTx.detail.from"),
             detail_to: s("componentsTx.detail.to"),
-            detail_interacting: s("componentsUi.signing.interactingLabel"),
+            detail_app: s("connect.detail.labelApp"),
+            detail_contract: s("tokenDetail.labelContract"),
+            detail_changes: s("componentsUi.signing.balanceChangesTitle"),
+            detail_unverified_token: s("componentsUi.signing.balanceUnverifiedToken"),
             detail_chain: s("componentsTx.detail.labelChain"),
             detail_date: s("componentsTx.detail.labelDate"),
             detail_hash: s("componentsTx.detail.labelHash"),

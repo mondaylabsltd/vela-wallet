@@ -19,6 +19,7 @@
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
+import type { FeedDapp } from '$lib/core/generated/FeedDapp';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { formatDate, groupDigits, numberSeparators } from '$lib/services/locale-format';
@@ -453,14 +454,18 @@ export function liveActivityRow(
 		item.kind === 'receive' ? 'received' : item.kind === 'dapp_tx' ? 'dapp' : 'sent';
 	const received = kind === 'received';
 	const who = item.alias ?? (item.counterparty !== null ? shortenAddress(item.counterparty) : null);
-	// RG2: a dApp row names the site that asked, verbatim; else who it went
-	// to; else the chain.
+	// A dApp's transaction is labelled with the site that asked (083 H2, spec
+	// 082 RG2) — the router it called is an address nobody chose; else who it
+	// went to; else the chain.
+	const site = item.dapp?.site ?? item.site ?? null;
 	const base =
-		kind === 'dapp'
-			? (item.site ?? who ?? chainName(item.chain_id))
-			: who === null
-				? chainName(item.chain_id)
-				: fill(received ? m.activity.fromName : m.activity.toName, { name: who });
+		site !== null
+			? site
+			: kind === 'dapp'
+				? (who ?? chainName(item.chain_id))
+				: who === null
+					? chainName(item.chain_id)
+					: fill(received ? m.activity.fromName : m.activity.toName, { name: who });
 	// A row the tracker has not closed says so first (RG2, RG4): a may-have-
 	// been-sent op reads "Pending · <site>" until the tracker patches it.
 	const subtitle =
@@ -472,24 +477,40 @@ export function liveActivityRow(
 	const amount =
 		item.value === null
 			? String(item.batch?.count ?? '')
-			: `${received ? '+' : '\u2212'}${trimBalance(item.value)}`;
+			: `${received ? '+' : '−'}${trimBalance(item.value)}`;
+	const figureless = item.dapp != null && item.value === null;
 	return {
 		id: item.id,
 		kind,
-		title:
-			kind === 'received'
+		title: item.dapp
+			? dappTitle(item.dapp, m)
+			: kind === 'received'
 				? m.activity.received
 				: kind === 'sent'
 					? m.activity.sent
 					: m.activity.dapp,
 		subtitle,
-		amount: hidden ? MASK : amount,
+		// A dApp call that moved no coin has no figure, and nothing to mask:
+		// "••••" would claim one (083 H2 review).
+		amount: hidden && !figureless ? MASK : amount,
 		unit: item.symbol,
 		positive: received,
-		masked: hidden,
+		masked: hidden && !figureless,
 		badgeColor: chainColor(item.chain_id),
 		badgeLogoUrl: chainLogoURL(item.chain_id)
 	};
+}
+
+/**
+ * What a dApp's transaction did, as a title (083 H2): the intent recorded at
+ * approve time in the reader's words ("Send" for a plain native send,
+ * "Swap"…), the descriptor's own word when there is no translation, and
+ * "Contract interaction" for a call nobody decoded — the signing sheet's
+ * words for the same call, and the desktop's (`wallet/live.rs dapp_title`).
+ */
+export function dappTitle(dapp: FeedDapp, m: WalletMessages): string {
+	const word = dapp.intent_term ? m.activity.intents[dapp.intent_term] : undefined;
+	return word || dapp.intent || m.activity.contractCall;
 }
 
 /** The core emits headers and items already interleaved (invariant ⑥). */

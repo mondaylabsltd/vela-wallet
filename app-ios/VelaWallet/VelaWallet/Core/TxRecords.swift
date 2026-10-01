@@ -193,9 +193,10 @@ enum TxRecords {
             "status": statuses.contains(status ?? "") ? status! : "confirmed",
             "kind": rawKind.map { $0 as Any } ?? NSNull(),
             "usd": (record["usd"] as? String).map { $0 as Any } ?? NSNull(),
-            // The site that asked, for a dApp's transaction (spec 082 RG1):
-            // the core names the row by it. Absent for every other kind.
-            "dapp_origin": (record["dappOrigin"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            // The origin a dApp's request arrived from (spec 082 RG1, 083
+            // H2): the core names the row's site by it. `dappOrigin` may be
+            // the dApp's own name, so never that. Absent for every other kind.
+            "dapp_url": (record["dappUrl"] as? String).flatMap { $0.isEmpty ? nil : $0 }
                 .map { $0 as Any } ?? NSNull(),
             // The call's `data`, for a dApp's transaction (spec 082 RJ16):
             // the core reads from it who the counterparty is — the transfer's

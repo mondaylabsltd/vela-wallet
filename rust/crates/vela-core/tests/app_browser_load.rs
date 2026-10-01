@@ -35,6 +35,53 @@ fn android_codes_map_to_their_class() {
     }
 }
 
+/// Spec 083: WebView2's own error statuses (Windows) map like Android's
+/// codes do — the same person-facing class for the same network fault.
+#[test]
+fn webview2_statuses_map_to_their_class() {
+    for (code, want) in [
+        (0, C::Other), // UNKNOWN
+        (1, C::Certificate),
+        (2, C::Certificate),
+        (3, C::Certificate),
+        (4, C::Certificate),
+        (5, C::Certificate),
+        (6, C::Offline), // SERVER_UNREACHABLE
+        (7, C::Timeout),
+        (8, C::Offline), // ERR_EMPTY_RESPONSE, seen on the device pass
+        (9, C::Offline),
+        (10, C::Offline),
+        (11, C::Offline),
+        (12, C::Refused),
+        (13, C::NotFound),
+        (15, C::Other), // REDIRECT_FAILED
+        (16, C::Other),
+        (17, C::Other),
+        (18, C::Other),
+        (99, C::Other),
+    ] {
+        assert_eq!(
+            class(P::WebView2, code, None),
+            Some(want),
+            "webview2 {code}"
+        );
+    }
+    assert_eq!(
+        class(P::WebView2, 14, None),
+        None,
+        "a replaced navigation is not a failure"
+    );
+    assert_eq!(class(P::WebView2, 8, None), class(P::Android, -1, None));
+    for code in 1..=5 {
+        let failure = classify(P::WebView2, code, None, false);
+        assert!(failure.is_some_and(|f| !f.auto_retry && f.reason_key == "explore.loadCertificate"));
+    }
+    assert_eq!(
+        serde_json::to_string(&P::WebView2).ok().as_deref(),
+        Some("\"webview2\"")
+    );
+}
+
 #[test]
 fn apple_codes_map_to_their_class() {
     let url = Some("NSURLErrorDomain");
@@ -1209,4 +1256,92 @@ fn a_live_load_is_never_replaced() {
         watch.retry_fired_at(due, true, 25_000.),
         RetryAction::EngineStillLoading
     );
+}
+
+// ---------------------------------------------------------------------------
+// Spec 083: WebView2's own error page and its navigation failure (ported from
+// the desktop's load watch when 082 moved the watch into the core)
+// ---------------------------------------------------------------------------
+
+/// Spec 083 W3: WebView2's own error page is not the site arriving; the
+/// navigation's failure puts Vela's panel up at once, with its reason.
+#[test]
+fn an_engine_error_page_is_not_a_commit() {
+    let mut watch = LoadWatch::default();
+    watch.requested(SITE, 0.);
+    watch.error_page();
+    assert!(watch.engine_page && watch.loading && watch.failure.is_none());
+    assert!(watch.engine_failed(SITE, 8, false), "a retry is booked");
+    assert!(!watch.engine_page && !watch.loading);
+    assert_eq!(watch.failure.as_ref().map(|f| f.class), Some(C::Offline));
+    assert!(watch.schedule_retry().is_some());
+}
+
+/// The probe failed first; WebView2's own timeout ~40 s later keeps the
+/// panel and books nothing twice.
+#[test]
+fn the_engines_late_timeout_keeps_the_panel() {
+    let mut watch = LoadWatch::default();
+    let generation = watch.requested(SITE, 0.).unwrap_or_default();
+    watch.watchdog(generation);
+    assert_eq!(
+        watch.probed(generation, Err(probe_code::TIMEOUT)),
+        Probed::Failed
+    );
+    let before = watch.failure.clone();
+    assert!(!watch.engine_failed(SITE, 7, false));
+    assert_eq!(watch.failure, before);
+}
+
+/// A replaced navigation is not a failure; a bad certificate is final.
+#[test]
+fn a_replaced_navigation_changes_nothing_and_a_bad_certificate_is_final() {
+    let mut watch = LoadWatch::default();
+    watch.requested(SITE, 0.);
+    assert!(!watch.engine_failed(SITE, 14, false));
+    assert!(watch.loading && watch.failure.is_none());
+    assert!(watch.engine_failed(SITE, 2, true));
+    assert_eq!(
+        watch.failure.as_ref().map(|f| f.class),
+        Some(C::Certificate)
+    );
+    assert_eq!(watch.schedule_retry(), None, "never retried by itself");
+}
+
+/// A link to a dead host (not a load the wallet asked for) names its own
+/// address, so Retry loads that.
+#[test]
+fn a_failed_link_names_its_own_address() {
+    let mut watch = LoadWatch::default();
+    watch.requested(SITE, 0.);
+    watch.committed(SITE);
+    watch.finished(SITE);
+    assert!(watch.engine_failed("https://dead.example/", 13, false));
+    assert_eq!(watch.url.as_deref(), Some("https://dead.example/"));
+    assert_eq!(watch.failure.as_ref().map(|f| f.class), Some(C::NotFound));
+}
+
+/// Spec 083 FR-005: the bar names the load asked for until a page commits,
+/// and keeps naming it under a failure; never the wallet's blank page.
+#[test]
+fn the_bar_names_the_load_asked_for_until_a_page_commits() {
+    let mut watch = LoadWatch::default();
+    assert_eq!(watch.named_url(), None);
+    let generation = watch.requested(SITE, 0.).unwrap_or_default();
+    assert_eq!(watch.named_url(), Some(SITE));
+    watch.committed(SITE);
+    assert_eq!(watch.named_url(), None, "a page stands for itself now");
+    let generation2 = watch.requested(SITE, 1_000.).unwrap_or_default();
+    assert_ne!(generation, generation2);
+    assert_eq!(watch.watchdog(generation2).as_deref(), Some(SITE));
+    assert_eq!(
+        watch.probed(generation2, Err(probe_code::DNS)),
+        Probed::Failed
+    );
+    assert_eq!(
+        watch.named_url(),
+        Some(SITE),
+        "the failed address stays named"
+    );
+    assert_eq!(watch.requested("about:blank", 2_000.), None);
 }

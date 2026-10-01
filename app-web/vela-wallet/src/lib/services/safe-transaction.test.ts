@@ -45,7 +45,8 @@ import {
 	rpcReadTimeoutMs,
 	userOpEstimateFailure,
 	userOpHash as localUserOpHash,
-	userOpNotSentDetail
+	userOpNotSentDetail,
+	userOpPreviousPendingDetail
 } from '$lib/core/kernels';
 import { PoolFailedError } from './rpc-pool';
 
@@ -580,7 +581,10 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
 	});
 
-	test('[existingHash:] → accepted under the relay’s hash, and the nonce moves on', async () => {
+	// 083 S3b: another operation of the account holds the nonce. Its hash is
+	// never this request's (Uniswap called a swap done when only its approval
+	// had happened): not sent, the core's sentence, and the nonce stays.
+	test('[existingHash:] of another op → not sent, held behind it, the nonce stays', async () => {
 		const existing = '0x' + 'ee'.repeat(32);
 		_seedNonceForTest(SAFE, CHAIN, '0x5');
 		relay(() => ({
@@ -588,10 +592,13 @@ describe('submitting a signed op (spec 082 RA1, RA5)', () => {
 			id: 1,
 			error: { code: -32602, message: `AA25 invalid account nonce [existingHash:${existing}]` }
 		}));
-		const result = await submitSigned(op(), CHAIN, SAFE);
-		expect(result.maybeSent).toBe(false);
-		expect(result.userOpHash).toBe(existing);
-		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x6');
+		const error = await submitSigned(op(), CHAIN, SAFE).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(UserOpNotSentError);
+		expect((error as UserOpNotSentError).rejection).toEqual({
+			nonce_held: { user_op_hash: existing }
+		});
+		expect((error as Error).message).toBe(userOpPreviousPendingDetail());
+		expect(_cachedNonceForTest(SAFE, CHAIN)).toBe('0x5');
 	});
 
 	test('nothing left the device (offline before the call) → not sent, with the fixed detail', async () => {

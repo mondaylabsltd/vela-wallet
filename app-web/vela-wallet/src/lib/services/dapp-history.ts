@@ -132,6 +132,12 @@ export interface SigningRecordInput {
 	from: string;
 	chainId: number;
 	dappOrigin: string;
+	/**
+	 * The origin the request arrived from (the core's `dapp_url`), kept beside
+	 * `dappOrigin` — which holds the dApp's own name when it gave one — so
+	 * Activity names the site from an address the dApp did not choose (083 H2).
+	 */
+	dappUrl?: string;
 	/** Millisecond timestamp; drives both the unique id and the display time. */
 	nowMs: number;
 	/**
@@ -199,6 +205,7 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 		from,
 		chainId,
 		dappOrigin,
+		dappUrl,
 		nowMs,
 		status = 'confirmed',
 		userOpHash = '',
@@ -217,6 +224,7 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 		timestamp: now,
 		status,
 		dappOrigin,
+		...(dappUrl ? { dappUrl } : {}),
 		signedContent,
 		signedRequest,
 		requestTruncated,

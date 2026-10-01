@@ -1584,7 +1584,14 @@ pub fn is_bundler_underfunded(message: String) -> bool {
 pub enum RelayRejection {
     RelayerUnavailable,
     BundlerUnderfunded,
-    Other { message: String },
+    /// Another operation of the account holds the nonce (083): its hash is
+    /// never this request's answer.
+    NonceHeld {
+        user_op_hash: String,
+    },
+    Other {
+        message: String,
+    },
 }
 
 impl From<vela_core::user_op::RelayRejection> for RelayRejection {
@@ -1593,6 +1600,7 @@ impl From<vela_core::user_op::RelayRejection> for RelayRejection {
         match rejection {
             R::RelayerUnavailable => RelayRejection::RelayerUnavailable,
             R::BundlerUnderfunded => RelayRejection::BundlerUnderfunded,
+            R::NonceHeld { user_op_hash } => RelayRejection::NonceHeld { user_op_hash },
             R::Other(message) => RelayRejection::Other { message },
         }
     }
@@ -1702,6 +1710,15 @@ pub fn user_op_submit_step(
 #[uniffi::export]
 pub fn user_op_not_sent_detail() -> String {
     vela_core::user_op::NOT_SENT_DAPP_DETAIL.to_owned()
+}
+
+/// The dApp's `-32603` detail for a request that could not go out behind
+/// another of the account's operations (083, `RelayRejection::NonceHeld`) —
+/// never that operation's hash as this one's answer.
+#[uniffi::export]
+#[must_use]
+pub fn user_op_previous_pending_detail() -> String {
+    vela_core::user_op::PREVIOUS_PENDING_DETAIL.to_owned()
 }
 
 /// The dApp's `-32603` detail when the relay refused the operation (spec 082
@@ -2004,7 +2021,8 @@ impl From<vela_core::app::browser_load::LoadFailure> for BrowserLoadFailure {
 
 /// The platform's raw load error → the one failure every shell shows, or
 /// `None` when it is not a failure (a cancelled navigation). `platform` is
-/// `"android"`, `"apple"` or `"probe"`; `domain` is the `NSError` domain on
+/// `"android"`, `"apple"`, `"probe"` or `"webview2"` (spec 083); `domain` is
+/// the `NSError` domain on
 /// Apple; `certificate` is set when the failure came from a certificate
 /// callback rather than an error code. Apple `kCFErrorDomainCFNetwork`
 /// 306–310, Android -5 and probe code 6 are `proxy`; a proxy that answered
@@ -2591,12 +2609,20 @@ mod tests_082 {
             step(aa25(), 1, true),
             UserOpSubmitStep::MaybeSent { user_op_hash } if user_op_hash == LOCAL
         ));
-        let marker = UserOpSubmitReply::RpcError {
-            error_json: format!(r#"{{"code":-32000,"message":"pending [existingHash:{RELAY}]"}}"#),
+        let marker = |hash: &str| UserOpSubmitReply::RpcError {
+            error_json: format!(r#"{{"code":-32000,"message":"pending [existingHash:{hash}]"}}"#),
         };
+        // This op's own hash: the relay already holds it.
         assert!(matches!(
-            step(marker, 0, false),
-            UserOpSubmitStep::Accepted { user_op_hash } if user_op_hash == RELAY
+            step(marker(LOCAL), 0, false),
+            UserOpSubmitStep::Accepted { user_op_hash } if user_op_hash == LOCAL
+        ));
+        // Another op holds the nonce (083): never this one's hash.
+        assert!(matches!(
+            step(marker(RELAY), 0, false),
+            UserOpSubmitStep::NotSent {
+                rejection: Some(RelayRejection::NonceHeld { user_op_hash })
+            } if user_op_hash == RELAY
         ));
         assert_eq!(
             user_op_not_sent_detail(),

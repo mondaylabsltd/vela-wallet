@@ -29,9 +29,10 @@ use vela_core::app::activity_feed::{
 use vela_core::app::browser_load::{self, address_bar, LoadFailureClass};
 use vela_core::app::clear_signing::{plain_send_of, ClearLocale};
 use vela_core::app::sign_request::{
-    ending_of, ending_state, Event as SignEvent, SignAccountRef, SignApproveOpts, SignEndingState,
-    SignOperation as SignOp, SignRecord, SignRecordKind, SignRecordStatus, SignRequest,
-    SignResponsePayload, SignShellResult as SignRes, SignSubmitOutcome,
+    ending_of, ending_state, not_confirmed_detail, reverted_detail, Event as SignEvent,
+    SignAccountRef, SignApproveOpts, SignEndingState, SignErrorKind, SignOperation as SignOp,
+    SignRecord, SignRecordKind, SignRecordStatus, SignRequest, SignResponsePayload,
+    SignShellResult as SignRes, SignSubmitOutcome,
 };
 use vela_core::app::sim_outcome;
 use vela_core::app::tx_tracker::{
@@ -90,7 +91,10 @@ fn stored(record: &SignRecord) -> FeedTxRecord {
         status: rewire(&record.status),
         kind: Some(rewire(&record.kind)),
         usd: None,
-        dapp_origin: Some(record.dapp_origin.clone()),
+        dapp_url: Some(record.dapp_url.clone()),
+        intent: record.intent.clone(),
+        balance_changes: record.balance_changes.clone(),
+        calldata: None,
         call_data: tx["data"].as_str().map(str::to_owned),
     }
 }
@@ -371,10 +375,12 @@ fn a_lost_reply_the_relay_never_had_is_one_row_pending_then_failed() {
     let payload = answered(&mut sign);
     assert_eq!(
         payload,
-        SignResponsePayload::Ok {
-            result: Some(LOCAL_OP.to_owned())
+        SignResponsePayload::Err {
+            code: -32603,
+            kind: SignErrorKind::SubmitFailed,
+            message: Some(not_confirmed_detail(LOCAL_OP)),
         },
-        "the page's one answer is the op hash"
+        "the page's one answer: not confirmed yet — never the op hash (083, owner ruling 2026-10-01)"
     );
     let ending = ending_of("eth_sendTransaction", &payload, Some(LOCAL_OP)).expect("an ending");
 
@@ -565,7 +571,7 @@ fn accepted_through_the_write_ahead() -> (DomainDriver<SignRequest>, DomainDrive
 /// page's one answer is the tx hash, never "the network refused this
 /// transaction; nothing was sent" for an op that is on chain and spent gas.
 #[test]
-fn an_on_chain_revert_the_relay_calls_rejected_is_answered_its_tx_hash() {
+fn an_on_chain_revert_the_relay_calls_rejected_is_answered_the_revert() {
     let (mut sign, mut tracker) = accepted_through_the_write_ahead();
     let ops = tick(&mut tracker, NOW + 15_400.0);
     assert!(
@@ -632,10 +638,12 @@ fn an_on_chain_revert_the_relay_calls_rejected_is_answered_its_tx_hash() {
         .collect();
     assert_eq!(
         answers,
-        vec![&SignResponsePayload::Ok {
-            result: Some(EVENT_TX.to_owned())
+        vec![&SignResponsePayload::Err {
+            code: -32603,
+            kind: SignErrorKind::SubmitFailed,
+            message: Some(reverted_detail(EVENT_TX)),
         }],
-        "ruling 9: the revert's tx hash"
+        "the revert, naming its transaction — never the hash a site reads as done (083)"
     );
     let ending = ending_of("eth_sendTransaction", answers[0], Some(LOCAL_OP)).expect("an ending");
     assert_eq!(

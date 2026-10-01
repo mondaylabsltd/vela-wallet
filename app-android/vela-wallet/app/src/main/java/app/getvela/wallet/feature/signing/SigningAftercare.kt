@@ -31,6 +31,7 @@ data class SigningAftercare(val chainId: Int, val ending: SignEnding) {
     val userOpHash: String?
         get() = when (val e = ending) {
             is SignEnding.Landed -> e.user_op_hash
+            is SignEnding.Reverted -> e.user_op_hash
             is SignEnding.StillConfirming -> e.user_op_hash
             SignEnding.Signed -> null
         }

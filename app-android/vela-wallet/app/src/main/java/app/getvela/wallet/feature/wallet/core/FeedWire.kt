@@ -87,8 +87,12 @@ data class FeedTxRecord(
     /** `null` = a legacy untyped record, which the core reads as a send. */
     val kind: FeedTxKind? = null,
     val usd: String? = null,
-    /** Spec 082 RG1: the stored `dappOrigin` of a dApp's record. */
-    val dapp_origin: String? = null,
+    /**
+     * Spec 082 RG1 / 083 H2: the origin a dApp's request arrived from, as
+     * stored (`dappUrl`) — never `dappOrigin`, which may hold the dApp's own
+     * name. The core names the row's site from it.
+     */
+    val dapp_url: String? = null,
     /**
      * Spec 082 RJ16: a dApp record's first call `data`, from the stored
      * request — what lets the core tell a token transfer's recipient from the

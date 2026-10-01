@@ -26,7 +26,8 @@ use futures::StreamExt as _;
 use gpui::Context;
 
 use vela_core::app::fee_policy::{
-    Event as FeeEvent, FeeCall, FeeOperation, FeePolicy, FeeShellResult, FeeTier, FeeView,
+    Event as FeeEvent, FeeBalanceChange, FeeCall, FeeOperation, FeePolicy, FeeShellResult, FeeTier,
+    FeeView,
 };
 use vela_core::app::fee_speed::{
     Event as SpeedEvent, FeeSpeed, FeeSpeedView, TierPreviewQuote, TierQuote,
@@ -153,6 +154,11 @@ pub struct SpeedControl {
     /// A speed pass is running; a nested one (an answer that arrived inline)
     /// leaves the final report to it.
     syncing: bool,
+    /// Spec 083 fee: what the operation moves, per asset, as the shell's own
+    /// simulation measured it — with the calls it measured, so it is told
+    /// only to a session pricing those very calls. The fee machine forgets it
+    /// on every new question, so each session is told again after each one.
+    balance_changes: Option<(Vec<FeeCall>, Vec<FeeBalanceChange>)>,
 }
 
 impl Default for SpeedControl {
@@ -178,6 +184,7 @@ impl SpeedControl {
             view,
             last_on_form: None,
             syncing: false,
+            balance_changes: None,
         }
     }
 
@@ -252,6 +259,20 @@ impl SpeedControl {
         self.previews.iter_mut().find(|session| session.key == key)
     }
 
+    /// The measured balance changes for session `key`, when it prices the
+    /// very calls they were measured for (spec 083 fee).
+    fn balance_event(&self, key: u64) -> Option<FeeEvent> {
+        let (calls, changes) = self.balance_changes.as_ref()?;
+        let session = if self.fee.key == key {
+            &self.fee
+        } else {
+            self.previews.iter().find(|session| session.key == key)?
+        };
+        (session.ask.as_ref()?.calls == *calls).then(|| FeeEvent::BalanceChangesMeasured {
+            changes: changes.clone(),
+        })
+    }
+
     fn report_quotes(&mut self) {
         let previews = self
             .previews
@@ -290,6 +311,40 @@ fn dispatch_to<H: SpeedHost>(host: &mut H, key: u64, event: FeeEvent, cx: &mut C
     };
     let pending = session.host.dispatch(event);
     pump(host, key, pending, cx);
+}
+
+/// Ask session `key` its question, then tell it what the operation moves
+/// when that is known (spec 083 fee): the question clears it in the machine.
+fn ask_session<H: SpeedHost>(host: &mut H, key: u64, event: FeeEvent, cx: &mut Context<H>) {
+    dispatch_to(host, key, event, cx);
+    if let Some(event) = host.speed_control().balance_event(key) {
+        dispatch_to(host, key, event, cx);
+    }
+}
+
+/// Spec 083 fee: the shell's own simulation of the operation answered — what
+/// it moves, per asset. Kept for every question about those calls, and told
+/// now to each session already asked one: which fee coins can still pay is
+/// what the operation LEAVES of them (a swap of all of the USDC cannot also
+/// pay its fee in USDC).
+pub fn balance_changes<H: SpeedHost>(
+    host: &mut H,
+    calls: Vec<FeeCall>,
+    changes: Vec<FeeBalanceChange>,
+    cx: &mut Context<H>,
+) {
+    let control = host.speed_control();
+    control.balance_changes = Some((calls, changes));
+    let asked: Vec<u64> = std::iter::once(&control.fee)
+        .chain(control.previews.iter())
+        .filter(|session| !session.reading && session.deployed.is_some())
+        .map(|session| session.key)
+        .collect();
+    for key in asked {
+        if let Some(event) = host.speed_control().balance_event(key) {
+            dispatch_to(host, key, event, cx);
+        }
+    }
 }
 
 /// An answer for the session that asked — found by its key, because it may
@@ -459,7 +514,7 @@ fn ask_in_force<H: SpeedHost>(host: &mut H, ask: QuoteAsk, cx: &mut Context<H>) 
                 Ok(deployed) => {
                     control.fee.deployed = Some(deployed);
                     let key = control.fee.key;
-                    dispatch_to(host, key, ask.event(deployed), cx);
+                    ask_session(host, key, ask.event(deployed), cx);
                 }
             }
         })
@@ -718,7 +773,7 @@ fn sync_previews<H: SpeedHost>(host: &mut H, cx: &mut Context<H>) {
     // Installed first, asked second: an answer that arrives inline finds every
     // session already in place.
     for (key, ask) in started {
-        dispatch_to(host, key, ask.event(deployed), cx);
+        ask_session(host, key, ask.event(deployed), cx);
     }
 }
 
@@ -764,5 +819,156 @@ mod tests {
         };
         assert_eq!(tier, FeeTier::Standard);
         assert!(deployed);
+    }
+
+    /// Spec 083 fee: the simulation's balance changes are told to a session
+    /// pricing the very calls they were measured for — the one in force and
+    /// a preview alike — and to nothing else.
+    #[test]
+    fn balance_changes_reach_only_a_session_pricing_the_measured_calls() {
+        let changes = vec![FeeBalanceChange {
+            token: Some("0xusdc".to_owned()),
+            delta: "-5000000".to_owned(),
+        }];
+        let mut control = SpeedControl::new();
+        control.fee.ask = Some(ask(FeeTier::Fast, "1"));
+        let mut preview = FeeSession::new(7);
+        preview.ask = Some(ask(FeeTier::Slow, "1"));
+        control.previews.push(preview);
+        assert!(control.balance_event(0).is_none(), "nothing measured yet");
+
+        control.balance_changes = Some((ask(FeeTier::Fast, "1").calls, changes.clone()));
+        for key in [0, 7] {
+            match control.balance_event(key) {
+                Some(FeeEvent::BalanceChangesMeasured { changes: told }) => {
+                    assert_eq!(told, changes, "session {key}");
+                }
+                other => unreachable!("session {key}: {other:?}"),
+            }
+        }
+        assert!(control.balance_event(99).is_none(), "no such session");
+
+        control.fee.ask = Some(ask(FeeTier::Fast, "2"));
+        assert!(
+            control.balance_event(0).is_none(),
+            "another operation's changes are not this one's"
+        );
+    }
+
+    /// Spec 083 fee review: the desktop's whole path from the column's own
+    /// simulation to the fee machine, for the device's Max USDC -> ETH swap.
+    /// The deltas `sim::simulate` answers, handed over as `signing_host`
+    /// hands them, told to the session in force right after its question
+    /// (`ask_session`), put the fee leg the relay is asked to simulate in
+    /// ETH; without them the machine picks USDC, the coin the swap drains.
+    #[test]
+    fn the_simulations_deltas_put_a_max_swaps_fee_leg_in_the_chains_coin() {
+        use vela_core::app::fee_policy::{
+            FeeAssetKind, FeeAssetQuote, FeeBundlerQuote, FeeShellResult as Res,
+        };
+        use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
+        const USDC: &str = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+        const ETH_RECIPIENT: &str = "0x1111111111111111111111111111111111111111";
+        const USDC_RECIPIENT: &str = "0x3333333333333333333333333333333333333333";
+        let row = |native: bool, balance: &str, usd: &str| FeeAssetQuote {
+            recipient: if native {
+                ETH_RECIPIENT
+            } else {
+                USDC_RECIPIENT
+            }
+            .to_owned(),
+            asset: if native {
+                FeeAssetKind::Native
+            } else {
+                FeeAssetKind::Erc20
+            },
+            fee_token: (!native).then(|| USDC.to_owned()),
+            balance: balance.to_owned(),
+            decimals: if native { 18 } else { 6 },
+            symbol: if native { "ETH" } else { "USDC" }.to_owned(),
+            usd_balance: usd.to_owned(),
+            usd_price: Some(if native { "1868.70" } else { "1" }.to_owned()),
+            native_usd_floor_price: None,
+        };
+        let swap = QuoteAsk {
+            chain_id: 8453,
+            account: "0x88cc000000000000000000000000000000006894".to_owned(),
+            public_key_available: true,
+            tier: FeeTier::Standard,
+            calls: vec![FeeCall {
+                to: "0x6ff5693b99212da76ad316178a184ab56d299b43".to_owned(),
+                value: "0".to_owned(),
+                data: format!("0x3593564c{}", "ab".repeat(1_200)),
+            }],
+            fee_token: None,
+            auto_fee_token: true,
+        };
+        // The fee leg of the simulation the machine asks for: `None` = ETH.
+        let leg = |measured: bool| {
+            let mut control = SpeedControl::new();
+            control.fee.ask = Some(swap.clone());
+            if measured {
+                let deltas = [
+                    TrustAssetDelta {
+                        kind: TrustDeltaKind::Erc20,
+                        token: Some(USDC.to_owned()),
+                        delta: "-271741".to_owned(),
+                    },
+                    TrustAssetDelta {
+                        kind: TrustDeltaKind::Native,
+                        token: None,
+                        delta: "101000000000000".to_owned(),
+                    },
+                ];
+                control.balance_changes = Some((
+                    swap.calls.clone(),
+                    crate::wallet::signing_host::fee_balance_changes(&deltas),
+                ));
+            }
+            let key = control.fee.key;
+            let mut pending = control.fee.host.dispatch(swap.event(true));
+            if let Some(told) = control.balance_event(key) {
+                pending.extend(control.fee.host.dispatch(told));
+            }
+            let mut asked = None;
+            while let Some(effect) = pending.pop() {
+                let result = match effect.operation {
+                    FeeOperation::FetchGasPrice { .. } => Res::GasPrice {
+                        eth_gas_price: Some("10000000".to_owned()),
+                        base_fee: Some("10000000".to_owned()),
+                        priority_fee: Some("0".to_owned()),
+                    },
+                    FeeOperation::FetchBundlerQuote { .. } => Res::BundlerQuote {
+                        quote: Some(FeeBundlerQuote {
+                            max_fee_per_gas: "20000000".to_owned(),
+                            max_priority_fee_per_gas: None,
+                            network_fee_per_gas: Some("10000000".to_owned()),
+                            relayer_fee_per_gas: Some("10000000".to_owned()),
+                        }),
+                    },
+                    FeeOperation::FetchInBandQuotes { .. } => Res::InBandQuotes {
+                        quotes: Some(vec![
+                            row(true, "480000000000000", "0.90"),
+                            row(false, "271741", "0.27"),
+                        ]),
+                    },
+                    FeeOperation::EstimateUserOpGas { calls, .. } => {
+                        asked = calls.last().cloned();
+                        continue;
+                    }
+                    _ => continue,
+                };
+                pending.extend(control.fee.host.resolve(effect.id, result));
+            }
+            let leg = asked.expect("the relay is asked to simulate the operation");
+            if leg.data == "0x" {
+                assert_eq!(leg.to, ETH_RECIPIENT);
+                None
+            } else {
+                Some(leg.to.to_lowercase())
+            }
+        };
+        assert_eq!(leg(false).as_deref(), Some(USDC), "the calls alone: USDC");
+        assert_eq!(leg(true), None, "the simulation's deltas: ETH");
     }
 }

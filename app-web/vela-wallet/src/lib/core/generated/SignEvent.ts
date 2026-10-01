@@ -20,7 +20,9 @@ requested_address: string | null, request_ts_ms: number | null, now_ms: number, 
 /**
  * The submit's reply was lost and `user_op_hash` is the local hash
  * (spec 082 RA2/RA3): the op is recorded and tracked all the same,
- * and the page will get one Ok answer — never 4900 or -32603.
+ * and the page is answered from the chain — the tx hash once it
+ * lands, the revert, or "not confirmed yet" — never 4900 and never
+ * that hash (owner ruling 2026-10-01).
  */
 maybe_sent: boolean, 
 /**

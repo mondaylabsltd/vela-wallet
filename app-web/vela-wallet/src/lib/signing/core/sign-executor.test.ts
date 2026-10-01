@@ -47,6 +47,7 @@ vi.mock('$lib/services/records', async (importOriginal) => ({
 import { userOpNotSentDetail, userOpWriteAheadWaitMs } from '$lib/core/kernels';
 import {
 	DAppReceiptPendingError,
+	DAppRevertedError,
 	guardedSign,
 	type DAppSubmitHooks
 } from '$lib/services/dapp-submit';
@@ -146,6 +147,45 @@ describe('the op hash an answer carries (RF3)', () => {
 			{ result: '0xOPHASH', opHash: { chainId: 100 } },
 			{ result: '0xtxhash', opHash: undefined }
 		]);
+	});
+});
+
+describe('a batch id and a late receipt (083)', () => {
+	// 083 H2 review: `wallet_sendCalls` resolves with its EIP-5792 batch id —
+	// the op hash — at acceptance, with no receipt wait. As `succeeded` the
+	// core closed the record "confirmed" under that hash (an explorer link to
+	// nothing, never tracked); as `receipt_pending` the page still gets the id
+	// and the tracker settles the record.
+	it('a batch id is receipt_pending with that id, never succeeded', async () => {
+		submit.impl = () => Promise.resolve('0xbatchid');
+		const batch: SignEffect = {
+			...signAndSubmit,
+			operation: {
+				...(signAndSubmit.operation as Extract<
+					SignEffect['operation'],
+					{ type: 'sign_and_submit' }
+				>),
+				method: 'wallet_sendCalls',
+				params_json: '[{"calls":[{"to":"0x0000000000000000000000000000000000000001"}]}]'
+			}
+		};
+		const result = await createSignExecutor(makePorts()).execute(batch);
+		expect(result).toMatchObject({
+			type: 'submit',
+			outcome: { type: 'receipt_pending', user_op_hash: '0xbatchid' }
+		});
+	});
+
+	// 083, owner ruling 2026-10-01: an included op that REVERTED is reported
+	// as such — the core answers the page the revert, never the tx hash a
+	// site would read as done.
+	it('a reverted receipt is reported reverted, with both hashes', async () => {
+		submit.impl = () => Promise.reject(new DAppRevertedError('0xop', '0xtx'));
+		const result = await createSignExecutor(makePorts()).execute(signAndSubmit);
+		expect(result).toMatchObject({
+			type: 'submit',
+			outcome: { type: 'reverted', user_op_hash: '0xop', tx_hash: '0xtx' }
+		});
 	});
 });
 
@@ -345,6 +385,7 @@ describe('the write-ahead (spec 082 RJ1)', () => {
 					status: 'pending',
 					user_op_hash: hash,
 					dapp_origin: 'https://app.example',
+					dapp_url: 'https://app.example',
 					intent: null,
 					maybe_sent: true,
 					submit_block: 7

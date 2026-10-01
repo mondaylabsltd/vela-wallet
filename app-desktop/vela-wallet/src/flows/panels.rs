@@ -818,24 +818,26 @@ fn tx_detail(
     // `AmountHero` padded 12/16, the facts as one hairline-ruled list, and the
     // buttons 16 under it, 8 apart. The column's 12 on both sides of every
     // divider had the rows half as tall again as the web's.
-    let mut col = div()
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .child(
-                    div()
-                        .text_size(theme::text_row_title())
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme.fg_base)
-                        .child(model.title.clone()),
-                )
-                .child(status_chip(theme, &model.status)),
-        )
-        .child(
+    let mut col = div().flex().flex_col().child(
+        div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .child(
+                div()
+                    .text_size(theme::text_row_title())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.fg_base)
+                    .child(model.title.clone()),
+            )
+            .child(status_chip(theme, &model.status)),
+    );
+    // A dApp call that moved no coin has no figure (083 H2 review): no empty
+    // hero keeping its padding, only the hero's own gap above the facts.
+    col = if model.amount.is_empty() && model.fiat.is_empty() {
+        col.child(div().h(px(16.)))
+    } else {
+        col.child(
             div()
                 .flex()
                 .flex_col()
@@ -863,7 +865,8 @@ fn tx_detail(
                         .text_color(theme.fg_subtle)
                         .child(model.fiat.clone()),
                 ),
-        );
+        )
+    };
 
     let mut facts = div()
         .flex()

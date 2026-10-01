@@ -259,14 +259,15 @@ class SignExecutor(
             // §4: the durable record precedes anything the dApp could poll —
             // the core persists it on `OpSubmitted`; the answer waits for it.
             withTimeoutOrNull(5_000) { persisted.first { hash.lowercase() in it } }
-            // The desktop's `await_receipt`: a dApp's `eth_sendTransaction`
-            // resolves to a TX hash — a reverted one too (ruling 9); the op
-            // hash only when the receipt is late — reported as `ReceiptPending`
-            // so the core answers the page but leaves the record pending for
-            // the tracker (issue 262). A lost reply (RA2) waits the same way,
-            // polling the local hash: one answer, never "not sent".
+            // A dApp's `eth_sendTransaction` resolves to a TX hash; a reverted
+            // receipt is the core's revert error (083); a late one is
+            // reported as `ReceiptPending`, which the core answers "not
+            // confirmed yet" and leaves the record pending for the tracker
+            // (issue 262). A lost reply (RA2) waits the same way, polling the
+            // local hash: one answer, never "not sent", never the op hash.
             val wait = receiptWaitMs ?: dappReceiptWaitMs((System.currentTimeMillis() - approvedAt).toDouble()).toLong()
-            afterReceiptWait(hash, awaitReceipt(op.id, op.chain_id, hash, wait))
+            val receipt = awaitReceipt(op.id, op.chain_id, hash, wait)
+            afterReceiptWait(hash, receipt?.txHash, reverted = receipt?.confirmed == false)
         } catch (_: AskerGone) {
             SignSubmitOutcome.AskerGone
         } catch (refused: UserOpSpine.Refused) {
@@ -329,10 +330,15 @@ class SignExecutor(
      * (spec 082 RJ4): the page has its one answer, and polling on would only
      * produce a result the core drops.
      */
-    private suspend fun awaitReceipt(id: String, chainId: Int, userOpHash: String, waitMs: Long): String? = coroutineScope {
+    private suspend fun awaitReceipt(
+        id: String,
+        chainId: Int,
+        userOpHash: String,
+        waitMs: Long,
+    ): RelayClient.ReceiptAnswer.Resolved? = coroutineScope {
         val polled = async { pollReceipt(chainId, userOpHash, waitMs) }
         val answered = async { answeredIds.first { id in it } }
-        val receipt = select<String?> {
+        val receipt = select<RelayClient.ReceiptAnswer.Resolved?> {
             polled.onAwait { it }
             answered.onAwait {
                 VelaLog.event("sign.receipt", "the core answered from the tracker: wait ended", "op" to userOpHash.take(12))
@@ -344,7 +350,7 @@ class SignExecutor(
         receipt
     }
 
-    private suspend fun pollReceipt(chainId: Int, userOpHash: String, waitMs: Long): String? {
+    private suspend fun pollReceipt(chainId: Int, userOpHash: String, waitMs: Long): RelayClient.ReceiptAnswer.Resolved? {
         val deadline = System.currentTimeMillis() + waitMs
         while (true) {
             val remaining = deadline - System.currentTimeMillis()
@@ -355,7 +361,7 @@ class SignExecutor(
             // two-minute wait. The pool's await is cancellable; a late answer
             // is dropped, and the tracker keeps following the operation.
             val answer = withTimeoutOrNull(remaining) { relay.userOpReceipt(chainId, userOpHash) }
-            if (answer is RelayClient.ReceiptAnswer.Resolved) return answer.txHash
+            if (answer is RelayClient.ReceiptAnswer.Resolved) return answer
             val left = deadline - System.currentTimeMillis()
             if (left <= 0) break
             delay(minOf(receiptPollMs, left))
@@ -372,8 +378,19 @@ class SignExecutor(
          * the TX hash; late, `ReceiptPending` with the op hash — never a
          * confirmation of something that may not have landed (issue 262).
          */
-        fun afterReceiptWait(userOpHash: String, receipt: String?): SignSubmitOutcome =
-            if (receipt != null) SignSubmitOutcome.Succeeded(receipt) else SignSubmitOutcome.ReceiptPending(userOpHash)
+        /**
+         * What the receipt wait means for the core: a receipt whose op
+         * executed is its tx hash; one that REVERTED is reported as such —
+         * the core answers the page the revert, never the hash a site reads
+         * as done (083, owner ruling 2026-10-01); none yet is `ReceiptPending`,
+         * which the core answers "not confirmed yet" for a transaction.
+         */
+        fun afterReceiptWait(userOpHash: String, receipt: String?, reverted: Boolean = false): SignSubmitOutcome =
+            when {
+                receipt == null -> SignSubmitOutcome.ReceiptPending(userOpHash)
+                reverted -> SignSubmitOutcome.Reverted(userOpHash, receipt)
+                else -> SignSubmitOutcome.Succeeded(receipt)
+            }
 
         /**
          * What the page's verifier will hash: `personal_sign` is the
@@ -457,6 +474,9 @@ class SignExecutor(
                 .put("status", if (record.status == SignRecordStatus.Confirmed) "confirmed" else "pending")
                 .put("type", kind)
                 .put("dappOrigin", record.dapp_origin)
+                // 083 H2: the origin the request arrived from, which Activity
+                // names the site by.
+                .put("dappUrl", record.dapp_url)
                 .put("signedRequest", if (clipped) record.params_json.take(4096) else record.params_json)
                 .put("requestTruncated", clipped)
                 .apply { record.intent?.let { put("intent", it) } }

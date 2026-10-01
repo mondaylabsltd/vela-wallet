@@ -10666,6 +10666,12 @@ public enum RelayRejection: Equatable, Hashable {
     
     case relayerUnavailable
     case bundlerUnderfunded
+    /**
+     * Another operation of the account holds the nonce (083): its hash is
+     * never this request's answer.
+     */
+    case nonceHeld(userOpHash: String
+    )
     case other(message: String
     )
 
@@ -10693,7 +10699,10 @@ public struct FfiConverterTypeRelayRejection: FfiConverterRustBuffer {
         
         case 2: return .bundlerUnderfunded
         
-        case 3: return .other(message: try FfiConverterString.read(from: &buf)
+        case 3: return .nonceHeld(userOpHash: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .other(message: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -10712,8 +10721,13 @@ public struct FfiConverterTypeRelayRejection: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
         
         
-        case let .other(message):
+        case let .nonceHeld(userOpHash):
             writeInt(&buf, Int32(3))
+            FfiConverterString.write(userOpHash, into: &buf)
+            
+        
+        case let .other(message):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -12806,7 +12820,8 @@ public func browserAddressBar(shown: String?, pending: String?, failed: String?)
 /**
  * The platform's raw load error → the one failure every shell shows, or
  * `None` when it is not a failure (a cancelled navigation). `platform` is
- * `"android"`, `"apple"` or `"probe"`; `domain` is the `NSError` domain on
+ * `"android"`, `"apple"`, `"probe"` or `"webview2"` (spec 083); `domain` is
+ * the `NSError` domain on
  * Apple; `certificate` is set when the failure came from a certificate
  * callback rather than an error code. Apple `kCFErrorDomainCFNetwork`
  * 306–310, Android -5 and probe code 6 are `proxy`; a proxy that answered
@@ -14204,6 +14219,18 @@ public func userOpNotSentDetail() -> String  {
 })
 }
 /**
+ * The dApp's `-32603` detail for a request that could not go out behind
+ * another of the account's operations (083, `RelayRejection::NonceHeld`) —
+ * never that operation's hash as this one's answer.
+ */
+public func userOpPreviousPendingDetail() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_user_op_previous_pending_detail(uniffiCallStatus
+    )
+})
+}
+/**
  * The inner calls' own gas floor (`vela_core::user_op::inner_calls_gas_floor`):
  * `measured` are the shell's `eth_estimateGas` figures for the calls
  * `user_op_calls_to_measure` named, as decimal strings; `call_count` is every
@@ -15059,7 +15086,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_browser_address_bar() != 37746) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_browser_load_classify() != 25895) {
+    if (uniffi_vela_core_uniffi_checksum_func_browser_load_classify() != 57968) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_browser_load_give_up_ms() != 57265) {
@@ -15390,6 +15417,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_not_sent_detail() != 40191) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_user_op_previous_pending_detail() != 10855) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_user_op_raise_call_gas() != 29305) {

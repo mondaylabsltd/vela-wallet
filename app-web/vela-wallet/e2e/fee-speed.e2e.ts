@@ -951,6 +951,18 @@ test('a dApp send reads as a status from the approval, and its landing closes by
 	const { land } = await dappSendArmed(page);
 	const slider = page.getByRole('button', { name: /^Slide to confirm/ });
 
+	// 083 H3: one call, no calldata — the page only moves the chain's own coin.
+	// The sheet says so (what, how much, to whom), exact to the wei, and not
+	// "unable to decode (0 bytes)" in red, which is what it drew before.
+	const sheet = page.getByRole('dialog').filter({ has: slider });
+	await expect(sheet.locator('p.intent')).toHaveText(en('componentsUi.signing.intentSend'));
+	await expect(sheet.getByText('-0.000000000000000001', { exact: true })).toBeVisible();
+	await expect(
+		sheet.getByText(en('componentsUi.signing.recipientLabel'), { exact: true })
+	).toBeVisible();
+	const blindHead = en('componentsUi.signing.blindDecodeWarning').split('{{')[0].trim();
+	await expect(sheet.getByText(blindHead)).toHaveCount(0);
+
 	// From here on, record every frame the sheet draws: a greyed slide must
 	// never appear, and the status must.
 	await page.evaluate(() => {
@@ -1002,6 +1014,18 @@ test('a dApp send reads as a status from the approval, and its landing closes by
 	);
 	expect(seen.dimmedSlide).toBe(false);
 	expect(seen.status.some((text) => text.includes(en('send.txSubmitting')))).toBe(true);
+	// 083 H3: from the approval to the passkey prompt the wallet is preparing
+	// (funding, nonce, estimate) — "Waiting for biometric" only once the prompt
+	// is up (the parallel space's signer still runs inside the ceremony), then
+	// submitting. Frame order, first sight of each.
+	const first = (key: string) => seen.status.findIndex((text) => text.includes(en(key)));
+	expect(first('send.txPreparing'), seen.status.join(' | ')).toBeGreaterThanOrEqual(0);
+	expect(first('send.txSigning'), seen.status.join(' | ')).toBeGreaterThan(
+		first('send.txPreparing')
+	);
+	expect(first('send.txSubmitting'), seen.status.join(' | ')).toBeGreaterThan(
+		first('send.txSigning')
+	);
 });
 
 /**

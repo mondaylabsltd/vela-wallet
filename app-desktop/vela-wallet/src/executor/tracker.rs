@@ -225,6 +225,9 @@ impl Machine for TxTracker {
                             now_ms: now_ms(),
                         },
                         Some(resolution) => {
+                            // Its nonce is spent, however it ended: the
+                            // account's next operation builds on it (083).
+                            crate::executor::user_op::note_landed(&hash);
                             let logs = resolution.logs.clone();
                             remember_receipt(&hash, resolution.sender, resolution.logs);
                             if resolution.confirmed {
@@ -688,9 +691,11 @@ mod tests {
                     status: vela_core::app::sign_request::SignRecordStatus::Pending,
                     user_op_hash: "0xdapp".to_owned(),
                     dapp_origin: "http://127.0.0.1:8137".to_owned(),
+                    dapp_url: "http://127.0.0.1:8137".to_owned(),
                     intent: None,
                     maybe_sent: true,
                     submit_block: None,
+                    balance_changes: None,
                 },
             );
             let mut rows = read_rows();

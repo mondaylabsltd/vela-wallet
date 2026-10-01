@@ -16,12 +16,11 @@ import type { FeeSpeedView } from '$lib/core/generated/FeeSpeedView';
 import type { FeeTier } from '$lib/core/generated/FeeTier';
 import { ClearSigningCore, FeeSpeedCore } from '$lib/core/client';
 import { toClearLocale } from './core/clear-types';
-import { shortenAddress } from '$lib/wallet/identity';
 import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignView } from '$lib/core/generated/SignView';
 import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import { CLEAR_TERMS } from './terms';
-import type { WalletIdentity } from '$lib/wallet/identity';
+import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
 import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
@@ -516,6 +515,8 @@ describe('after the approval the sheet is a status', () => {
 			expect(status?.title).not.toBe(m.status.signing);
 			expect(signingCloseEvent(status)).toBeNull();
 		}
+		expect(m.status.preparing).toBe('Preparing transaction...');
+		expect(m.status.preparing).not.toBe(m.status.signing);
 	});
 
 	it('the passkey prompt is up: "Waiting for biometric…", and the ✕ shut', () => {

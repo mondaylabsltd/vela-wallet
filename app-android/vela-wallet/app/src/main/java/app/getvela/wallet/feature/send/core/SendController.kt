@@ -372,6 +372,9 @@ class SendController(
         // not answer (spec 082 RJ13 is the signing sheet's fee row): the quote
         // could not be had, and asking again is right.
         is FeeFailure.ChainRead -> SendEstimateFailure.QuoteUnavailable
+        // Spec 083 fee: the relay's "this operation fails", as the send
+        // screen has always said that refusal.
+        FeeFailure.WouldFail -> SendEstimateFailure.EstimateFailed
     }
 
     // -- intents ---------------------------------------------------------------------

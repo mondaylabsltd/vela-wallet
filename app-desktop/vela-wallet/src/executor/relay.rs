@@ -36,7 +36,9 @@ use vela_core::app::fee_policy::{
 };
 use vela_core::app::send::{SendTreasuryAsset, SendTreasuryProbe, SendTreasuryStatus};
 use vela_core::app::token_trust::TrustReceiptLog;
-use vela_core::app::tx_tracker::{TrackStatusAnswer, USER_OP_STATUS_METHOD, parse_user_op_status};
+use vela_core::app::tx_tracker::{
+    TrackLifecycle, TrackStatusAnswer, USER_OP_STATUS_METHOD, parse_user_op_status,
+};
 use vela_core::safe::ENTRY_POINT;
 use vela_core::user_op::{
     GasEstimate, SubmitReply, SubmitStep, SubmitVerdict, UserOperation, parse_hex_quantity,
@@ -531,6 +533,14 @@ impl EstimateError {
         }
     }
 
+    /// The relay ANSWERED that the operation fails when it runs — its
+    /// simulation failed, or the execution reverted (spec 083 fee): the fee
+    /// machine's `FeeGasOutcome::Refused`, never "cannot reach Vela".
+    #[must_use]
+    pub fn refuses(&self) -> bool {
+        self.error_json.is_some() && is_simulation_refusal(&self.message)
+    }
+
     /// The core's reading of it (RJ19): `Reverts` only on the relay's own
     /// word, never on a missing answer.
     #[must_use]
@@ -546,6 +556,43 @@ impl std::fmt::Display for EstimateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.message)
     }
+}
+
+/// The relay's error says the operation itself fails when it runs — its
+/// simulation failed, or the execution reverted — rather than that the relay
+/// is busy, limited or broken. Only those words are an answer about the
+/// operation; anything else stays an unexplained failure, asked again on
+/// the growing wait as it always was.
+///
+/// An EntryPoint validation code (`AA10`…`AA3x`: "AA23 reverted (or OOG)",
+/// "AA25 invalid account nonce") is never one of them, whatever words wrap
+/// it. It is the account's own check — its signature, nonce or prefund — and
+/// nothing another fee coin changes; a nonce that moved on can clear by the
+/// next ask. Spec 083 fee review.
+fn is_simulation_refusal(message: &str) -> bool {
+    if names_validation_code(message) {
+        return false;
+    }
+    let message = message.to_ascii_lowercase();
+    message.contains("simulation failed")
+        || message.contains("execution reverted")
+        || message.contains("reverted during simulation")
+}
+
+/// `message` carries an EntryPoint code — `AA` and two digits, standing as a
+/// word of its own (never the inside of an address or of hex data).
+fn names_validation_code(message: &str) -> bool {
+    let bytes = message.as_bytes();
+    bytes.windows(4).enumerate().any(|(at, window)| {
+        window[0] == b'A'
+            && window[1] == b'A'
+            && window[2].is_ascii_digit()
+            && window[3].is_ascii_digit()
+            && (at == 0 || !bytes[at - 1].is_ascii_alphanumeric())
+            && bytes
+                .get(at + 4)
+                .is_none_or(|next| !next.is_ascii_alphanumeric())
+    })
 }
 
 /// `eth_estimateUserOperationGas` — the relay's raw limits, or why not.
@@ -810,7 +857,7 @@ pub struct ReceiptPoll {
     pub resolution: Option<Resolution>,
 }
 
-fn to_trust_log(log: &Value) -> Option<TrustReceiptLog> {
+pub(crate) fn to_trust_log(log: &Value) -> Option<TrustReceiptLog> {
     let address = log.get("address")?.as_str()?;
     let topics = log.get("topics")?.as_array()?;
     Some(TrustReceiptLog {
@@ -933,6 +980,63 @@ pub fn user_op_status(user_op_hash: &str, chain_id: u32) -> Option<TrackStatusAn
         None => vlog!("tracker", "op={} status unavailable", short(user_op_hash)),
     }
     status
+}
+
+/// [`user_op_status`] within `budget` — the dApp's landing wait asks it for
+/// a relay that refused the operation after accepting it (083). The relay's
+/// own method and the core's parser (spec 082 RA7).
+pub fn user_op_status_within(
+    user_op_hash: &str,
+    chain_id: u32,
+    budget: std::time::Duration,
+) -> Option<(TrackLifecycle, Option<String>)> {
+    if user_op_hash.is_empty() {
+        return None;
+    }
+    let body = pool::bundler_call_within(
+        chain_id,
+        USER_OP_STATUS_METHOD,
+        json!([user_op_hash]),
+        budget,
+    )
+    .ok()?;
+    let answer = parse_user_op_status(&body.to_string())?;
+    Some((answer.status, answer.stage))
+}
+
+/// `eth_getUserOperationByHash` within `budget`: the hash of the transaction
+/// that carried the operation, once the bundler reports one (083). `None`
+/// while it is pending — ERC-7769 answers `transactionHash: null` then —
+/// and for an unknown op, an error or a relay that could not be reached.
+/// The relay has answered this method since before 083 (`null` for an
+/// unknown hash, probed 2026-09-28), which is why the landing wait may ask
+/// it when the receipt has not come.
+pub fn user_op_transaction_within(
+    user_op_hash: &str,
+    chain_id: u32,
+    budget: std::time::Duration,
+) -> Option<String> {
+    if user_op_hash.is_empty() {
+        return None;
+    }
+    let body = pool::bundler_call_within(
+        chain_id,
+        "eth_getUserOperationByHash",
+        json!([user_op_hash]),
+        budget,
+    )
+    .ok()?;
+    transaction_of(&body)
+}
+
+/// The bundle transaction an `eth_getUserOperationByHash` answer names.
+fn transaction_of(body: &Value) -> Option<String> {
+    let hash = body.get("result")?.get("transactionHash")?.as_str()?;
+    let digits = hash.strip_prefix("0x")?;
+    (digits.len() == 64
+        && digits.bytes().all(|b| b.is_ascii_hexdigit())
+        && digits.bytes().any(|b| b != b'0'))
+    .then(|| hash.to_owned())
 }
 
 // ---------------------------------------------------------------------------
@@ -1136,6 +1240,53 @@ fn sponsorship_answer(status: u16, text: &str) -> (bool, Option<String>) {
 mod tests {
     use super::*;
 
+    /// Spec 083 fee: the relay's "UserOperation simulation failed" (the
+    /// device log's words) and a revert are answers about the operation; a
+    /// busy or limited relay is not. The words themselves are unchanged for
+    /// the submit, which reads only them.
+    #[test]
+    fn a_failed_simulation_is_an_answer_and_a_busy_relay_is_not() {
+        assert!(is_simulation_refusal("UserOperation simulation failed"));
+        assert!(is_simulation_refusal("execution reverted: STF"));
+        assert!(is_simulation_refusal(
+            "user operation reverted during simulation"
+        ));
+        // The review: an EntryPoint validation code is the account's own
+        // check, retried on the growing wait as before — whatever words wrap
+        // it.
+        assert!(!is_simulation_refusal("AA23 reverted (or OOG)"));
+        assert!(!is_simulation_refusal(
+            "UserOperation reverted during simulation with reason: AA23 reverted"
+        ));
+        assert!(!is_simulation_refusal(
+            "UserOperation simulation failed: AA25 invalid account nonce"
+        ));
+        assert!(!is_simulation_refusal("reverted"), "no operation named");
+        // Hex that happens to hold "AA" and two digits is not a code.
+        assert!(is_simulation_refusal(
+            "execution reverted: 0x08c379a0AA12ff"
+        ));
+        assert!(is_simulation_refusal("execution reverted: to 0x12AA34"));
+        assert!(!is_simulation_refusal("Retry later"));
+        assert!(!is_simulation_refusal("rate limited"));
+        assert!(!is_simulation_refusal("Gas estimation failed"));
+        // The relay's word that it fails is a refusal; no answer never is.
+        let answered = |message: &str| EstimateError {
+            message: message.to_owned(),
+            error_json: Some(json!({ "code": -32500, "message": message }).to_string()),
+        };
+        assert!(answered("UserOperation simulation failed").refuses());
+        assert!(!answered("Gas estimation failed").refuses());
+        assert!(
+            !EstimateError::unanswered("UserOperation simulation failed".to_owned()).refuses(),
+            "no answer is never the relay's word"
+        );
+        assert_eq!(
+            answered("UserOperation simulation failed").to_string(),
+            "UserOperation simulation failed"
+        );
+    }
+
     /// 078 W-05, `recommendedFundingWei`: the shortfall plus half again; an
     /// account already at the threshold is asked for the buffered threshold,
     /// not for nothing.
@@ -1303,15 +1454,26 @@ mod tests {
         assert_eq!(posts, 1);
     }
 
-    /// The relay already holds this operation: accepted, under ITS hash.
+    /// The relay already holds this operation: accepted, under its hash.
+    /// Another operation's hash holds the nonce (083): never this one's.
     #[test]
     fn an_existing_hash_marker_is_accepted() {
-        let error = json!({"error": {"code": -32000, "message": format!("already queued [existingHash:{RELAY}]")}});
+        let error = json!({"error": {"code": -32000, "message": format!("already queued [existingHash:{LOCAL}]")}});
         let (verdict, ..) = run(vec![answered(error)]);
         assert_eq!(
             verdict,
             SubmitVerdict::Accepted {
-                user_op_hash: RELAY.to_owned()
+                user_op_hash: LOCAL.to_owned()
+            }
+        );
+        let error = json!({"error": {"code": -32000, "message": format!("already queued [existingHash:{RELAY}]")}});
+        let (verdict, ..) = run(vec![answered(error)]);
+        assert_eq!(
+            verdict,
+            SubmitVerdict::NotSent {
+                rejection: Some(vela_core::user_op::RelayRejection::NonceHeld {
+                    user_op_hash: RELAY.to_owned()
+                })
             }
         );
         let (verdict, ..) = run(vec![answered(json!({ "result": RELAY }))]);
@@ -1405,6 +1567,27 @@ mod tests {
             SUBMITS_IN_FLIGHT.load(std::sync::atomic::Ordering::SeqCst),
             before
         );
+    }
+
+    /// 083: `eth_getUserOperationByHash` names the bundle transaction only
+    /// once there is one — `null` (pending, ERC-7769) and unknown ops are
+    /// nothing, never a zero hash.
+    #[test]
+    fn the_bundler_names_a_transaction_only_once_there_is_one() {
+        let tx = format!("0x{}", "cd".repeat(32));
+        assert_eq!(
+            transaction_of(&json!({ "result": { "transactionHash": tx, "blockNumber": "0x11" } })),
+            Some(tx)
+        );
+        for body in [
+            json!({ "result": null }),
+            json!({ "result": { "transactionHash": null, "blockNumber": null } }),
+            json!({ "result": { "transactionHash": format!("0x{}", "0".repeat(64)) } }),
+            json!({ "result": { "transactionHash": "0xabc" } }),
+            json!({ "error": { "code": -32601, "message": "method not found" } }),
+        ] {
+            assert_eq!(transaction_of(&body), None, "{body}");
+        }
     }
 
     #[test]

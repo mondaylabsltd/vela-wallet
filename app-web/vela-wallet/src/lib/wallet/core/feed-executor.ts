@@ -67,6 +67,21 @@ function asNumber(value: unknown): number {
 }
 
 /**
+ * A stored `value`. A dApp record keeps the page's own figure, and a page may
+ * send it as a JSON number — which must not read as nothing (083 H2 review).
+ * The number IS the figure the page sent, whatever rounding its own parse did,
+ * so it is written out exactly (`BigInt`), in the digits the core reads —
+ * never `String()`, which turns 1e21 wei into "1e+21". 0.01 of a coin is
+ * 1e16 wei, already past 2^53, so a safe-integer rule would drop the common
+ * case. Anything but a non-negative integer is no figure.
+ */
+function asValue(value: unknown): string {
+	return typeof value === 'number' && Number.isInteger(value) && value >= 0
+		? BigInt(value).toString()
+		: asString(value);
+}
+
+/**
  * One stored record in the core's vocabulary, or `null` when it is not a record
  * this machine can speak about. `kind: null` is the legacy untyped row the core
  * reads as `send`, exactly as `t.type ?? 'send'` does.
@@ -75,6 +90,17 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 	const rawKind = tx.type;
 	if (rawKind !== undefined && !KINDS.includes(rawKind as FeedTxKind)) return null;
 	const timestamp = asNumber(tx.timestamp);
+	// What a dApp's transaction row says beyond its money (083 H2): the origin
+	// it came from and the intent it recorded. `dappUrl` only — `dappOrigin`
+	// holds the dApp's own name when it gave one, and the core names the site
+	// from what it is handed.
+	const dapp =
+		rawKind === 'dapp_tx'
+			? {
+					dapp_url: typeof tx.dappUrl === 'string' && tx.dappUrl !== '' ? tx.dappUrl : null,
+					intent: typeof tx.intent === 'string' && tx.intent !== '' ? tx.intent : null
+				}
+			: {};
 	return {
 		id: asString(tx.id),
 		user_op_hash: asString(tx.userOpHash),
@@ -82,7 +108,7 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 		from: asString(tx.from),
 		to: asString(tx.to),
 		to_name: typeof tx.toName === 'string' ? tx.toName : null,
-		value: asString(tx.value),
+		value: asValue(tx.value),
 		symbol: asString(tx.symbol),
 		decimals: asCount(tx.decimals),
 		logo_urls: Array.isArray(tx.logoUrls) ? tx.logoUrls.map(asString) : null,
@@ -93,9 +119,7 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 		status: STATUSES.includes(tx.status) ? tx.status : 'confirmed',
 		kind: (rawKind as FeedTxKind | undefined) ?? null,
 		usd: typeof tx.usd === 'string' ? tx.usd : null,
-		// The site that asked, for a dApp transaction (spec 082 RG1): the core
-		// names the row's site from it; every other kind carries none.
-		dapp_origin: typeof tx.dappOrigin === 'string' && tx.dappOrigin ? tx.dappOrigin : null,
+		...dapp,
 		// The call's data, for a dApp transaction (spec 082 RJ16): the core
 		// decodes a plain token transfer's real recipient from it, and names
 		// any other call's `to` as the contract it went to.

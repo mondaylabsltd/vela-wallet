@@ -1745,6 +1745,15 @@ pub fn user_op_not_sent_detail() -> String {
     vela_core::user_op::NOT_SENT_DAPP_DETAIL.to_owned()
 }
 
+/// The dApp's `-32603` detail for a request that could not go out behind
+/// another of the account's operations (083, `RelayRejection::NonceHeld`) —
+/// never that operation's hash as this one's answer.
+#[wasm_bindgen(js_name = userOpPreviousPendingDetail)]
+#[must_use]
+pub fn user_op_previous_pending_detail() -> String {
+    vela_core::user_op::PREVIOUS_PENDING_DETAIL.to_owned()
+}
+
 /// The dApp's `-32603` detail for an operation the relay refused (spec 082
 /// RJ3) — a fixed sentence.
 #[wasm_bindgen(js_name = userOpRefusedDappDetail)]
@@ -1925,6 +1934,15 @@ pub fn sign_ending_state(ending_json: &str, entry_json: Option<String>) -> JsRes
 #[must_use]
 pub fn dapp_receipt_wait_ms(elapsed_ms: f64) -> f64 {
     vela_core::app::sign_request::dapp_receipt_wait_ms(elapsed_ms)
+}
+
+/// The page's "not confirmed yet" for an operation that may still land —
+/// `sign_request::not_confirmed_detail` (083). The extension's worker, which
+/// cannot run the core, mirrors it; `protocol.test.ts` pins the mirror here.
+#[wasm_bindgen(js_name = signNotConfirmedDetail)]
+#[must_use]
+pub fn sign_not_confirmed_detail(user_op_hash: &str) -> String {
+    vela_core::app::sign_request::not_confirmed_detail(user_op_hash)
 }
 
 /// A sign request older than this (ms) is never signed —

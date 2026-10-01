@@ -52,6 +52,7 @@ import { enforceNoUnlimited } from './approval-guard';
 import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
 import { findAccountByAddress, findAccountByCredentialId, type SignerAccount } from './accounts';
 import { getAllNetworksSync } from './networks';
+import { resolveChainId } from './chain-id';
 
 /**
  * The stored record for the wallet a request is FOR — by ADDRESS, never by
@@ -248,21 +249,9 @@ function assertNoRequiredCapabilities(payload: {
 	}
 }
 
-/**
- * Resolve the effective chain ID from request context.
- * Priority: request-embedded chainId > fallback (component-level chainId).
- */
-export function resolveChainId(
-	fallback: number,
-	...candidates: (string | number | undefined | null)[]
-): number {
-	for (const c of candidates) {
-		if (c == null) continue;
-		const n = typeof c === 'string' ? (c.startsWith('0x') ? parseInt(c, 16) : parseInt(c, 10)) : c;
-		if (!isNaN(n) && n > 0) return n;
-	}
-	return fallback;
-}
+// The chain a request is submitted on lives in its own module so the signing
+// sheet can read it the same way (083 H3) without importing this one.
+export { resolveChainId };
 
 /**
  * Assert the wallet supports the given chain ID.
@@ -591,11 +580,15 @@ async function answerFor(
 		// G39), and no longer than the core's own answer (`answered`).
 		return await txResult.waitForTxHash(hooks?.receiptWaitMs(), hooks?.answered);
 	} catch (error) {
-		// A landed revert is answered its tx hash (ruling 9). Whatever else the
-		// wait ended on — its window, the core's own answer, a relay out of
-		// reach — leaves the op in flight: the page gets the op hash, and only
-		// the tracker says the relay refused it (spec 082 RJ4, `OpTracked`).
-		if (error instanceof UserOpRevertedError) return error.txHash;
+		// A landed revert is the page's error, naming its transaction — never
+		// the hash a site reads as done (083, owner ruling 2026-10-01). Whatever
+		// else the wait ended on — its window, the core's own answer, a relay
+		// out of reach — leaves the op in flight: the core tells the page it is
+		// not confirmed yet, and only the tracker says the relay refused it
+		// (spec 082 RJ4, `OpTracked`).
+		if (error instanceof UserOpRevertedError) {
+			throw new DAppRevertedError(txResult.userOpHash, error.txHash);
+		}
 		throw new DAppReceiptPendingError(txResult.userOpHash);
 	}
 }
@@ -630,13 +623,29 @@ function txSigner(signer: ChallengeSigner) {
  * The op is on its way (accepted, or may have been sent) but no receipt
  * arrived inside the wait — its window ran out, the relay was out of reach,
  * or the core answered the page first. The op may still land, so this is NOT
- * a failure and NOT a confirmation (issue 262): the page is answered with the
- * op hash and the pending record is left for the tracker.
+ * a failure and NOT a confirmation (issue 262): the core answers the page
+ * "not confirmed yet" (083 — the op hash only as a batch id) and the pending
+ * record is left for the tracker.
  */
 export class DAppReceiptPendingError extends Error {
 	constructor(readonly userOpHash: string) {
 		super(`Transaction ${userOpHash.slice(0, 10)}… submitted; its receipt has not arrived yet.`);
 		this.name = 'DAppReceiptPendingError';
+	}
+}
+
+/**
+ * The op was included and its execution REVERTED (083): the receipt said
+ * `success: false`. The core answers the page one error naming the
+ * transaction ([`reverted_detail`]) and closes the record failed.
+ */
+export class DAppRevertedError extends Error {
+	constructor(
+		readonly userOpHash: string,
+		readonly txHash: string
+	) {
+		super(`Transaction ${txHash.slice(0, 10)}… was included but reverted.`);
+		this.name = 'DAppRevertedError';
 	}
 }
 
@@ -761,6 +770,11 @@ export async function handleDAppRequest(
 /**
  * Handle a wallet_sendCalls request (EIP-5792 batched atomic calls).
  * Executes multiple calls as a single UserOp via the Safe account.
+ *
+ * Resolves with the batch id — the userOpHash — as soon as the relay accepts
+ * the op, without a receipt wait: that id is what `wallet_getCallsStatus`
+ * reads back. It is not a tx hash, so the core-driven path reports it as
+ * `receipt_pending` (`sign-executor.ts`) and the tracker settles the record.
  */
 export async function handleSendCalls(
 	request: DAppRequest,

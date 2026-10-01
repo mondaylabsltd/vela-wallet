@@ -25,6 +25,7 @@ import {
 } from '../../../extension/lib/request-life.js';
 import {
 	ERR,
+	NOT_CONFIRMED_MESSAGE,
 	READ_DROPPED_MESSAGE,
 	REQUEST_TTL_MS,
 	SETTLE,
@@ -264,6 +265,7 @@ describe('a claimed submit that may have been sent (RJ2, G35)', () => {
 	const submitting = (over: Partial<Rec> = {}) =>
 		record({
 			rid: '7:tx',
+			method: 'eth_sendTransaction',
 			state: 'claimed',
 			claimedAt: NOW - 500,
 			phase: 'submit',
@@ -301,17 +303,23 @@ describe('a claimed submit that may have been sent (RJ2, G35)', () => {
 		expect(maybeSentHash(null)).toBeNull();
 	});
 
-	it('the panel closing answers the claimed submit with its hash, and settles the rest', () => {
+	// 083, owner ruling 2026-10-01: never 4900 ("not sent"), never the op
+	// hash as if it were a transaction.
+	const NOT_CONFIRMED = {
+		error: { code: -32603, message: `${NOT_CONFIRMED_MESSAGE} (user operation ${OP})` }
+	};
+
+	it('the panel closing answers the claimed submit "not confirmed yet", and settles the rest', () => {
 		const owed = record({ rid: '7:sign', state: 'claimed', phase: 'sign' } as Partial<Rec>);
 		expect(affectedBy([submitting(), owed], { type: 'surface_closed', caller: PANEL })).toEqual([
-			{ rid: '7:tx', cause: 'surface_closed', answer: { ok: OP } },
+			{ rid: '7:tx', cause: 'surface_closed', answer: NOT_CONFIRMED, opHash: OP },
 			{ rid: '7:sign', cause: 'surface_closed' }
 		]);
 	});
 
 	it('a window closing does the same', () => {
 		expect(affectedBy([submitting()], { type: 'window_removed', windowId: 3 })).toEqual([
-			{ rid: '7:tx', cause: 'surface_closed', answer: { ok: OP } }
+			{ rid: '7:tx', cause: 'surface_closed', answer: NOT_CONFIRMED, opHash: OP }
 		]);
 	});
 
@@ -321,7 +329,7 @@ describe('a claimed submit that may have been sent (RJ2, G35)', () => {
 		]);
 	});
 
-	it('a restarted worker answers it with its hash when its panel is gone or its time is up', () => {
+	it('a restarted worker answers it "not confirmed yet" when its panel is gone or its time is up', () => {
 		const facts = {
 			now: NOW,
 			ttlMs: REQUEST_TTL_MS,
@@ -330,23 +338,26 @@ describe('a claimed submit that may have been sent (RJ2, G35)', () => {
 		};
 		const signOnly = record({ rid: '7:sign', state: 'claimed', phase: 'sign' } as Partial<Rec>);
 		expect(recoveryPlan([submitting(), signOnly], facts)).toEqual([
-			{ rid: '7:tx', action: 'settle', cause: 'surface_closed', answer: { ok: OP } },
+			{ rid: '7:tx', action: 'settle', cause: 'surface_closed', answer: NOT_CONFIRMED, opHash: OP },
 			{ rid: '7:sign', action: 'settle', cause: 'surface_closed' }
 		]);
 		const late = submitting({ claimedAt: NOW - REQUEST_TTL_MS - 1 });
 		expect(recoveryPlan([late], { ...facts, panelWindows: new Set([3]) })).toEqual([
-			{ rid: '7:tx', action: 'settle', cause: 'expired', answer: { ok: OP } }
+			{ rid: '7:tx', action: 'settle', cause: 'expired', answer: NOT_CONFIRMED, opHash: OP }
 		]);
 	});
 
-	it('the surface’s own close settlement (4900) becomes the hash; a real answer goes as given', () => {
+	it('the surface’s own close settlement (4900) becomes "not confirmed yet"; a real answer goes as given', () => {
 		const closing = {
 			error: { code: 4900, message: 'The browser closed before the request finished' }
 		};
 		expect(surfaceAnswer(submitting(), closing)).toEqual({
-			payload: { result: OP },
+			payload: NOT_CONFIRMED,
 			maybeSent: OP
 		});
+		// A batch's id IS the op hash (EIP-5792): a batch still gets it.
+		const batch = submitting({ method: 'wallet_sendCalls' } as Partial<Rec>);
+		expect(surfaceAnswer(batch, closing)).toEqual({ payload: { result: OP }, maybeSent: OP });
 		// Before the hash exists nothing was sent: 4900 is right.
 		const signOnly = record({ state: 'claimed', phase: 'sign' } as Partial<Rec>);
 		expect(surfaceAnswer(signOnly, closing)).toEqual({ payload: closing, maybeSent: null });

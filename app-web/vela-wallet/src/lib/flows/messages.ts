@@ -80,6 +80,9 @@ export const WALLET_FLOW_KEYS = [
 	'componentsTx.detail.labelChain',
 	'componentsTx.detail.labelDate',
 	'componentsTx.detail.labelHash',
+	// 083 H2: the site a dApp's transaction came from — the connection
+	// detail's word for it.
+	'connect.detail.labelApp',
 	'componentsTx.detail.sectionTitle',
 
 	// ---------------------------------------------------------------- assets

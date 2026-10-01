@@ -189,9 +189,11 @@ class FeedExecutor(
                 else -> null
             },
             usd = row.stringOrNull("usd"),
-            // Spec 082 RG1: the site a dApp's record came from — the core names
-            // the row's `site` from it; nothing here decides what it says.
-            dapp_origin = row.stringOrNull("dappOrigin"),
+            // Spec 082 RG1 / 083 H2: the origin a dApp's request came from —
+            // the core names the row's `site` from it; nothing here decides
+            // what it says. `dappOrigin` may be the dApp's own name, so never
+            // that.
+            dapp_url = row.stringOrNull("dappUrl"),
             // Spec 082 RJ16: the stored request's first call `data` — the core
             // tells a token transfer's recipient from the contract a call went
             // to; nothing here decodes it.

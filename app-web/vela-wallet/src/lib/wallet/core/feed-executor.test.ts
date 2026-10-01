@@ -73,6 +73,45 @@ describe('toFeedRecord', () => {
 		expect(legacy).toMatchObject({ kind: null, decimals: 0, timestamp: 0 });
 		expect(toFeedRecord({ ...RECEIVED, type: 'nonsense' as never })).toBeNull();
 	});
+	it("a dApp's transaction hands the core its origin and intent — never the dApp's own name (083 H2)", () => {
+		const dapp: LocalTransaction = {
+			...RECEIVED,
+			from: ME,
+			to: OTHER,
+			type: 'dapp_tx',
+			value: '0x2386f26fc10000',
+			dappOrigin: 'app.uniswap.org',
+			dappUrl: 'https://evil.example',
+			intent: 'Swap'
+		};
+		expect(toFeedRecord(dapp)).toMatchObject({
+			kind: 'dapp_tx',
+			value: '0x2386f26fc10000',
+			dapp_url: 'https://evil.example',
+			intent: 'Swap'
+		});
+		// A record from before `dappUrl`: no site rather than the name.
+		const older = toFeedRecord({ ...dapp, dappUrl: undefined, intent: undefined });
+		expect(older).toMatchObject({ dapp_url: null, intent: null });
+		// Every other kind is unchanged on the wire.
+		expect(toFeedRecord(RECEIVED)).not.toHaveProperty('dapp_url');
+		expect(toFeedRecord({ ...RECEIVED, dappOrigin: 'x' })).not.toHaveProperty('intent');
+	});
+	it('a figure a page sent as a JSON number still reads as that figure (083 H2)', () => {
+		const numeric = { ...RECEIVED, type: 'dapp_tx', value: 10_000_000_000_000_000 };
+		expect(toFeedRecord(numeric as unknown as LocalTransaction)?.value).toBe('10000000000000000');
+		// Past 2^53 and past 1e21 it is still written out digit for digit.
+		const large = { ...numeric, value: 2 ** 70 };
+		expect(toFeedRecord(large as unknown as LocalTransaction)?.value).toBe(
+			'1180591620717411303424'
+		);
+		// Not a whole, non-negative number: no figure.
+		for (const odd of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+			expect(toFeedRecord({ ...numeric, value: odd } as unknown as LocalTransaction)?.value).toBe(
+				''
+			);
+		}
+	});
 });
 
 describe('the store and the scan', () => {
@@ -171,16 +210,20 @@ describe('a dApp transaction in Activity', () => {
 		status: 'pending',
 		type: 'dapp_tx',
 		dappOrigin: 'http://127.0.0.1:8137',
+		dappUrl: 'http://127.0.0.1:8137',
 		maybeSent: true
 	};
 
+	// The site is read from `dappUrl`, the origin the request came from —
+	// never `dappOrigin`, which may hold the dApp's own name (083 H2 review).
 	it('maps the stored site for the core', () => {
 		expect(toFeedRecord(DAPP)).toMatchObject({
 			kind: 'dapp_tx',
 			status: 'pending',
-			dapp_origin: 'http://127.0.0.1:8137'
+			dapp_url: 'http://127.0.0.1:8137'
 		});
-		expect(toFeedRecord(RECEIVED)?.dapp_origin).toBeNull();
+		expect(toFeedRecord({ ...DAPP, dappUrl: undefined })?.dapp_url).toBeNull();
+		expect(toFeedRecord(RECEIVED)?.dapp_url).toBeUndefined();
 	});
 
 	it('a may-have-been-sent op is a Pending row under its local hash, one poke after the write', async () => {

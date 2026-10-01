@@ -251,7 +251,10 @@ export interface SigningMessages {
 	 * as Android's signing receipt says them — never a greyed slide.
 	 */
 	status: {
-		/** `send.txPreparing` — the network work before the passkey (spec 082 RA9). */
+		/**
+		 * `send.txPreparing` — approved, and the passkey not asked yet: the
+		 * funding check, the nonce and the estimate (083 H3, spec 082 RA9).
+		 */
 		preparing: string;
 		/** `send.txSigning` — the passkey prompt is up. */
 		signing: string;

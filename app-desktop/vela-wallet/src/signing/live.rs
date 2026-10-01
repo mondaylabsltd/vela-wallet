@@ -423,12 +423,14 @@ mod sim_block_tests {
                     delta: "-8450000000".to_owned(),
                     symbol: "USDC".to_owned(),
                     decimals: 6,
+                    in_trusted_set: true,
                 },
                 J::Erc20Trusted {
                     token: "0xa0".to_owned(),
                     delta: "2100000000000000000".to_owned(),
                     symbol: "WETH".to_owned(),
                     decimals: 18,
+                    in_trusted_set: true,
                 },
             ],
             None,
@@ -603,6 +605,7 @@ mod sim_block_tests {
                     delta: "-1000000".to_owned(),
                     symbol: "USDC".to_owned(),
                     decimals: 6,
+                    in_trusted_set: true,
                 },
             ],
             None,
@@ -1230,6 +1233,26 @@ fn blind_tx_blocks(facts: &RequestFacts, s: &SigningStrings) -> Vec<Block> {
     out
 }
 
+/// What the technical details call a call's destination (083 W10).
+///
+/// A call with no calldata calls no contract — its `to` is who receives the
+/// coin, so it is the recipient, not "interacting with". `leg` is the call's
+/// 1-based place in a batch, `None` for a lone call. The core's own
+/// `TxPlain` test: calldata empty or `0x`. Its one caller, the page's
+/// technical details, does not exist on Linux (no in-app browser).
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+pub fn tech_destination_label(data: &str, leg: Option<usize>, s: &SigningStrings) -> SharedString {
+    let word = if matches!(data, "" | "0x") {
+        &s.label_recipient
+    } else {
+        &s.label_interacting
+    };
+    match leg {
+        None => word.clone(),
+        Some(leg) => SharedString::from(format!("{word} {leg}")),
+    }
+}
+
 /// The blocks a decoded request draws, in the order they are read.
 ///
 /// Intent first — what this DOES — then what is wrong with it, then the
@@ -1390,6 +1413,9 @@ pub fn fee_model(
         .failed
         .and_then(|failure| s.fee_reason(failure, &crate::flows::live::chain_name(chain_id)));
     let unreachable = reason.is_some();
+    // Spec 083 fee: the relay ANSWERED that the operation fails with the coin
+    // in force. Said in words too, and never as the network's doing.
+    let refused = refused_fee_warning(fee, s);
     // The send screen's formatter, not a second one: two answers about what a
     // transaction costs, on two screens pricing the same operation, is how
     // they start disagreeing. An unpriced fee renders as its "—" rather than
@@ -1403,7 +1429,7 @@ pub fn fee_model(
         tappable: fee.failed.is_some() || fee.options.len() > 1,
         value: if another_tier || (fee.busy && fee.fee.is_none()) {
             s.fee_estimating.clone()
-        } else if unreachable {
+        } else if unreachable || refused.is_some() {
             SharedString::default()
         } else {
             SharedString::from(crate::flows::live::fee_line(
@@ -1455,7 +1481,7 @@ pub fn fee_model(
                     .collect(),
             )
         }),
-        warning: insufficient_gas_warning(fee, s).or(reason),
+        warning: insufficient_gas_warning(fee, s).or(refused).or(reason),
         refresh: Some(s.fee_refresh.clone()),
         refreshing: fee.busy,
         // "From a while ago" is a fact about a number: not over a row with no
@@ -1527,6 +1553,72 @@ pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<Sha
             &[("sym", &selected.symbol)],
         ))
     })
+}
+
+/// Spec 083 fee: the relay simulated the operation with the coin in force
+/// paying its fee and ANSWERED that it fails ([`FeeFailure::WouldFail`]).
+///
+/// The device pass drew this as "无法连接 Vela 服务 — 请检查网络" and asked
+/// again forever: a swap of all of a wallet's USDC, with its fee in USDC. Not
+/// the network, and not something asking again fixes. When the coin in force
+/// has nothing left once the operation has run (the core marks it), it is
+/// Issue #262's sentence — that coin cannot pay the fee; otherwise the
+/// operation as it stands would fail ([`SigningStrings::warn_would_fail`]:
+/// never "you'd still pay gas" — the relay refuses it, nothing is charged).
+/// The core ends a run it refused with every coin on one that had something
+/// left, so a Max sell whose other coins were refused too says "would fail",
+/// not that the coin it drained cannot pay.
+///
+/// [`FeeFailure::WouldFail`]: vela_core::app::fee_policy::FeeFailure::WouldFail
+#[must_use]
+pub fn refused_fee_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedString> {
+    if fee.failed != Some(vela_core::app::fee_policy::FeeFailure::WouldFail) {
+        return None;
+    }
+    Some(
+        match fee
+            .options
+            .iter()
+            .find(|option| option.selected && option.insufficient)
+        {
+            Some(selected) => SharedString::from(crate::signing::fill(
+                &s.warn_insufficient_gas,
+                &[("sym", &selected.symbol)],
+            )),
+            None => s.warn_would_fail.clone(),
+        },
+    )
+}
+
+/// What a tap on the fee row does ([`crate::wallet::signing_host::SigningHost::fee_tapped`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FeeTap {
+    /// Open (or close) the coin list in the sheet.
+    Coins,
+    /// Ask the relay again.
+    Requote,
+    /// One coin and a quote: nothing to do.
+    Nothing,
+}
+
+/// The coin list opens whenever there is another coin to choose — even over
+/// a failed quote (spec 083 fee: after the relay refused the operation with
+/// USDC paying, the ">" did nothing the person could use, and ETH could have
+/// paid). A failure with no other coin to choose — the relay out of reach,
+/// where the core marks every coin as unpriced — is asked again, as before.
+#[must_use]
+pub fn fee_tap(fee: &FeeView) -> FeeTap {
+    let another_coin = fee
+        .options
+        .iter()
+        .any(|option| !option.selected && !option.insufficient);
+    if fee.options.len() > 1 && (fee.failed.is_none() || another_coin) {
+        FeeTap::Coins
+    } else if fee.failed.is_some() {
+        FeeTap::Requote
+    } else {
+        FeeTap::Nothing
+    }
 }
 
 /// Who is asking, and on which chain.
@@ -1924,6 +2016,28 @@ mod tests {
                 .iter()
                 .any(|block| matches!(block, Block::Amount { .. })),
             "the shell invented an amount"
+        );
+    }
+
+    /// 083 W10 review: the technical details name a call's destination by
+    /// what the call does — no calldata is a recipient, anything else is the
+    /// contract being called — and number it inside a batch.
+    #[test]
+    fn a_call_without_calldata_names_its_recipient() {
+        let s = strings();
+        assert_eq!(tech_destination_label("", None, &s), s.label_recipient);
+        assert_eq!(tech_destination_label("0x", None, &s), s.label_recipient);
+        assert_eq!(
+            tech_destination_label("0xa9059cbb", None, &s),
+            s.label_interacting
+        );
+        assert_eq!(
+            tech_destination_label("0x", Some(2), &s),
+            SharedString::from(format!("{} 2", s.label_recipient))
+        );
+        assert_eq!(
+            tech_destination_label("0xdead", Some(1), &s),
+            SharedString::from(format!("{} 1", s.label_interacting))
         );
     }
 
@@ -3089,6 +3203,125 @@ mod fee_tests {
             }
             _ => unreachable!("an open fee row lists its coins"),
         }
+    }
+
+    /// A fee row whose quote the relay refused: the operation fails with the
+    /// coin in force (spec 083 fee).
+    fn refused(options: Vec<FeeOptionView>) -> FeeView {
+        let mut fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        fee.failed = Some(vela_core::app::fee_policy::FeeFailure::WouldFail);
+        fee.options = options;
+        fee
+    }
+
+    /// Spec 083 fee (the device pass: a Max USDC → ETH swap, fee in USDC):
+    /// the relay ANSWERED that the operation fails. The row said "无法连接
+    /// Vela 服务 — 请检查网络" and asked again forever. Now it says the coin
+    /// cannot pay when the operation leaves nothing of it (Issue #262's
+    /// sentence), and otherwise that the transaction would fail — never the
+    /// network sentence, and no dash under a sentence.
+    #[test]
+    fn a_relay_refusal_is_said_as_the_transaction_and_never_the_network() {
+        let s = strings();
+        let clear =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new().view();
+        let row = |fee: &FeeView| match fee_model(
+            &clear,
+            fee,
+            8453,
+            false,
+            &s,
+            "en",
+            None,
+            crate::wallet::live::Money::usd(),
+        ) {
+            FeeModel::OnChain {
+                value,
+                warning,
+                tappable,
+                ..
+            } => (value, warning, tappable),
+            _ => unreachable!("a transaction has a fee row"),
+        };
+        let usdc = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+
+        // The coin in force has nothing left once the swap has run.
+        let drained = refused(vec![
+            option("ETH", None, false, false),
+            option("USDC", Some(usdc), true, true),
+        ]);
+        let (value, warning, tappable) = row(&drained);
+        let warning = warning.unwrap_or_else(|| unreachable!("the row says why"));
+        assert!(warning.contains("USDC"), "{warning}");
+        assert_eq!(
+            warning.as_ref(),
+            crate::signing::fill(&s.warn_insufficient_gas, &[("sym", "USDC")])
+        );
+        assert_ne!(
+            Some(warning.clone()),
+            s.fee_reason(vela_core::app::fee_policy::FeeFailure::EstimateFailed, "")
+        );
+        assert!(value.is_empty(), "the sentence, not a dash: {value}");
+        assert!(tappable, "another coin can be chosen");
+        assert_eq!(
+            refused_fee_warning(&drained, &s),
+            Some(warning),
+            "the same sentence the row draws"
+        );
+
+        // The coin in force still has something left: the operation fails.
+        let failing = refused(vec![
+            option("ETH", None, false, true),
+            option("USDC", Some(usdc), false, false),
+        ]);
+        let (value, warning, _) = row(&failing);
+        assert_eq!(warning, Some(s.warn_would_fail.clone()));
+        assert_ne!(
+            warning,
+            Some(s.warn_will_fail.clone()),
+            "nothing is charged for an operation the relay refused"
+        );
+        assert!(value.is_empty());
+
+        // The network sentence is still the network's.
+        let mut unreachable = refused(Vec::new());
+        unreachable.failed = Some(vela_core::app::fee_policy::FeeFailure::EstimateFailed);
+        // The core's words for it (spec 082 RJ13).
+        assert_eq!(
+            row(&unreachable).1,
+            s.fee_reason(vela_core::app::fee_policy::FeeFailure::EstimateFailed, "")
+        );
+        assert!(refused_fee_warning(&unreachable, &s).is_none());
+    }
+
+    /// Spec 083 fee: the ">" opens the coin list whenever another coin can be
+    /// chosen — over a refused quote too — and a failure with nothing else to
+    /// choose is asked again, as before.
+    #[test]
+    fn the_fee_row_opens_the_coins_whenever_another_can_be_chosen() {
+        let usdc = Some("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+        let one = vec![option("ETH", None, false, true)];
+        let two = || {
+            vec![
+                option("ETH", None, false, false),
+                option("USDC", usdc, true, true),
+            ]
+        };
+        assert_eq!(fee_tap(&quoted(one.clone(), true)), FeeTap::Nothing);
+        assert_eq!(fee_tap(&quoted(two(), true)), FeeTap::Coins);
+        assert_eq!(fee_tap(&refused(two())), FeeTap::Coins, "ETH can pay");
+        assert_eq!(
+            fee_tap(&refused(one)),
+            FeeTap::Requote,
+            "no other coin: ask again"
+        );
+        // The relay out of reach: every coin unpriced, so none to choose.
+        let mut unreachable = refused(vec![
+            option("ETH", None, true, false),
+            option("USDC", usdc, true, true),
+        ]);
+        unreachable.failed = Some(vela_core::app::fee_policy::FeeFailure::EstimateFailed);
+        assert_eq!(fee_tap(&unreachable), FeeTap::Requote);
     }
 
     /// Issue #262: quoted in a coin the wallet cannot pay with, the slide is

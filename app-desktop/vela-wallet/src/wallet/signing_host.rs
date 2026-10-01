@@ -23,6 +23,7 @@
 //! [`WALLET_TRANSPORT`] and have no page to tell.
 
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use futures::StreamExt as _;
 use gpui::Context;
@@ -230,6 +231,66 @@ impl Requoter {
     }
 }
 
+/// The simulation's deltas as the fee machine reads them (spec 083 fee):
+/// what the operation moves of each asset, native or by contract. The fee
+/// machine weighs only its fee coins by them, each by that coin's OWN
+/// `Transfer` logs (the contract that emitted them) or the node's trace of
+/// native value — nothing a site's contract can emit on a coin's behalf.
+pub(crate) fn fee_balance_changes(
+    deltas: &[vela_core::app::token_trust::TrustAssetDelta],
+) -> Vec<vela_core::app::fee_policy::FeeBalanceChange> {
+    use vela_core::app::token_trust::TrustDeltaKind;
+    deltas
+        .iter()
+        .filter_map(|delta| {
+            let token = match delta.kind {
+                TrustDeltaKind::Native => None,
+                // A token move with no contract names no coin: never read as
+                // the native one.
+                TrustDeltaKind::Erc20 => Some(delta.token.clone()?),
+            };
+            Some(vela_core::app::fee_policy::FeeBalanceChange {
+                token,
+                delta: delta.delta.clone(),
+            })
+        })
+        .collect()
+}
+
+/// Where a request stands, as far as closing its column goes (083): the
+/// core's view, where its signature is, and whether a close already waits.
+fn close_facts_of(
+    view: &SignView,
+    signature: crate::signing::status::Signature,
+    closing: bool,
+) -> crate::signing::status::CloseFacts {
+    crate::signing::status::CloseFacts {
+        swipe: view.swipe_action,
+        running: view.is_signing || view.is_submitting,
+        submitted: view.pending_op_hash.is_some(),
+        failed: view.error.is_some(),
+        signature,
+        closing,
+    }
+}
+
+/// The core kept a request open after its pipeline stopped — the ceremony
+/// came back unsigned (dismissed, a QR nobody scanned) — so the form is the
+/// person's again: the sheet up, nothing running, nothing failed, submitted
+/// or answered (083).
+fn back_on_form_of(view: &SignView, responded: bool) -> bool {
+    view.surface == vela_core::app::sign_request::SignSurface::Sheet
+        && !view.is_signing
+        && !view.is_submitting
+        && view.error.is_none()
+        && view.pending_op_hash.is_none()
+        && !responded
+}
+
+/// How often the column looks at its ceremony while a pipeline runs — the
+/// cadence the send and onboarding already poll theirs at (083).
+const CEREMONY_TICK_MS: u64 = 120;
+
 /// The transport id of a request the WALLET made of itself. Its answer has no
 /// page to go to; the column closing is the whole acknowledgement.
 pub const WALLET_TRANSPORT: &str = "wallet";
@@ -310,8 +371,40 @@ pub struct SigningHost {
     /// reading: `facts` is the one reading, and this is the text.
     pub raw: (String, String),
     ctx: SignContext,
-    #[allow(dead_code, reason = "held so the ceremony outlives the request")]
+    /// What the ceremony says to the screen: the phone's QR, the "check your
+    /// phone" or "touch your key" prompt. The column draws them itself (083
+    /// W19) — until 083 nothing read this, so a request signing by phone ran
+    /// a 90 s scan behind "签名中…" with no code on screen to scan.
     channel: Arc<CeremonyChannel>,
+    /// The ceremony watch is running (see [`Self::ensure_watcher`]).
+    watching: bool,
+    /// What the column last drew of the ceremony, so the watch redraws on a
+    /// change rather than eight times a second. The whole touch prompt, not
+    /// whether there is one: a key's "select" becoming "touch", or another
+    /// key's name, is a change too (083 review).
+    ceremony_seen: (
+        crate::signing::status::Signature,
+        Option<String>,
+        Option<crate::ctap::usb::TouchRequest>,
+    ),
+    /// The phone's QR ran its whole window with nobody scanning (083 W19),
+    /// the phone scanned and its connection never came up (H4), or it
+    /// dropped once the phone was asked (H4 review). The request is still
+    /// open — nothing was answered — and the column says which, with Retry,
+    /// until the person chooses.
+    pub phone_stop: Option<sign_executor::PhoneStop>,
+    /// The column was closed while the signature was still to come
+    /// ([`crate::signing::status::ClosePlan::AfterCancel`]): whatever the
+    /// ceremony waits behind is stopped, and the close is made once the core
+    /// has the ceremony back — a refusal (4001) if nothing was signed. Before
+    /// 083 the scan ran on unseen for up to 90 s and the page then got
+    /// "-32603 no phone answered…" (W19); told to the core at once as a
+    /// dismiss, a prompt that came back unsigned answered nothing, ever
+    /// (083 review).
+    close_after_cancel: bool,
+    /// The Trusted Signer's page asked for this approval's signature (083
+    /// W11): once it stops asking, the signature is given.
+    page_asked: bool,
     /// The core asked to close the column.
     pub closed: bool,
     /// What the CHAIN says this request would move, judged by `token_trust`.
@@ -398,8 +491,19 @@ impl SigningHost {
     /// Something on the Trusted Signer's channel changed: hand the browser the
     /// page if a ceremony asked for it, and redraw.
     fn trusted_signer_changed(&mut self, cx: &mut Context<Self>) {
+        // The column was closed before this signature (083 review): its
+        // channel is closed (`close`), so no wait goes on and none starts —
+        // and a page asked for in that breath is not opened either.
+        if self.close_after_cancel {
+            let _unopened = self.ctx.trusted_signer.take_page();
+            cx.notify();
+            return;
+        }
         if let Some(url) = self.ctx.trusted_signer.take_page() {
             cx.open_url(&url);
+        }
+        if self.ctx.trusted_signer.waiting() {
+            self.page_asked = true;
         }
         cx.notify();
     }
@@ -444,6 +548,11 @@ impl SigningHost {
             speed: SpeedControl::new(),
             ctx,
             channel,
+            watching: false,
+            ceremony_seen: Default::default(),
+            phone_stop: None,
+            close_after_cancel: false,
+            page_asked: false,
             closed: false,
             handed_off: None,
             handoff_fed: None,
@@ -643,9 +752,12 @@ impl SigningHost {
     /// the answer may be shown as a number.
     ///
     /// Both halves are blocking — an RPC round trip and a metadata multicall —
-    /// so both happen on the background executor and the result lands back
-    /// here through the entity, the way every other slow answer in this shell
-    /// does.
+    /// so both happen on the background executor and each lands back here
+    /// through the entity, the way every other slow answer in this shell does.
+    /// The fee machine hears what the calls move as soon as the first half
+    /// answers (spec 083 fee review): which coin can pay does not wait on the
+    /// token names, and a quote priced before it arrives costs the relay one
+    /// more simulation (USDC refused, then ETH).
     fn simulate(
         &mut self,
         chain_id: u32,
@@ -654,26 +766,44 @@ impl SigningHost {
         cx: &mut Context<Self>,
     ) {
         cx.spawn(async move |host, cx| {
-            let (judged, notice) = cx
+            let fee_calls = calls.clone();
+            let sim_wallet = wallet.clone();
+            let outcome = cx
                 .background_executor()
-                .spawn(async move {
-                    use vela_core::app::sim_outcome::{SimOutcome, notice};
-                    let outcome = crate::executor::sim::simulate(&wallet, &calls, chain_id);
-                    let notice = notice(&outcome);
-                    match outcome {
-                        SimOutcome::Deltas { deltas } => (
-                            crate::executor::token_trust::judge(&wallet, chain_id, deltas),
-                            notice,
-                        ),
-                        // A revert moves nothing, and a node that could not
-                        // check says nothing about what moves. NOT "nothing
-                        // moves" — the notice is the sentence for each.
-                        _ => (Vec::new(), notice),
-                    }
+                .spawn(async move { crate::executor::sim::simulate(&sim_wallet, &calls, chain_id) })
+                .await;
+            let notice = vela_core::app::sim_outcome::notice(&outcome);
+            let vela_core::app::sim_outcome::SimOutcome::Deltas { deltas } = outcome else {
+                // A revert moves nothing, and a node that could not check says
+                // nothing about what moves. NOT "nothing moves" — the notice is
+                // the sentence for each.
+                host.update(cx, |host, cx| {
+                    host.sim = Vec::new();
+                    host.sim_notice = notice;
+                    cx.notify();
                 })
+                .ok();
+                return;
+            };
+            // Spec 083 fee: what the operation moves decides which coins can
+            // still pay its fee — a swap of all of the USDC cannot also pay
+            // in USDC. Told before the tokens are judged, not after.
+            let changes = fee_balance_changes(&deltas);
+            let told = host.update(cx, |host, cx| {
+                speed_control::balance_changes(host, fee_calls, changes, cx);
+                cx.notify();
+            });
+            if told.is_err() {
+                return;
+            }
+            let judgments = cx
+                .background_executor()
+                .spawn(
+                    async move { crate::executor::token_trust::judge(&wallet, chain_id, deltas) },
+                )
                 .await;
             host.update(cx, |host, cx| {
-                host.sim = judged;
+                host.sim = judgments;
                 host.sim_notice = notice;
                 cx.notify();
             })
@@ -682,17 +812,21 @@ impl SigningHost {
         .detach();
     }
 
-    /// The fee row, tapped: a failed quote is asked again; with more than one
-    /// coin to pay in, the list opens (or closes) here in the sheet — the
-    /// web's `onfee`. One coin and a quote: nothing to choose.
+    /// The fee row, tapped: with another coin to pay in, the list opens (or
+    /// closes) here in the sheet — the web's `onfee` — even over a failed
+    /// quote (spec 083 fee: the relay refused the operation with USDC paying,
+    /// and ETH could pay); a failed quote with nothing else to choose is
+    /// asked again. One coin and a quote: nothing to choose.
     pub fn fee_tapped(&mut self, cx: &mut Context<Self>) {
-        let fee = self.speed.fee_view();
-        if fee.failed.is_some() {
+        use crate::signing::live::{FeeTap, fee_tap};
+        match fee_tap(self.speed.fee_view()) {
+            FeeTap::Coins => {
+                self.fee_open = !self.fee_open;
+                cx.notify();
+            }
             // Measured again for real — the held readings dropped first.
-            speed_control::refresh(self, cx);
-        } else if fee.options.len() > 1 {
-            self.fee_open = !self.fee_open;
-            cx.notify();
+            FeeTap::Requote => speed_control::refresh(self, cx),
+            FeeTap::Nothing => {}
         }
     }
 
@@ -709,11 +843,243 @@ impl SigningHost {
         self.approved = true;
         // The dApp's answer window starts at the tap (spec 082 RA12).
         self.ctx.approved_at_ms = Some(now_ms());
+        self.phone_stop = None;
         // Nothing re-prices under a slide that has gone.
         self.requoter = Requoter::default();
         self.requote_seq += 1;
-        let opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
+        let mut opts = approve_opts(self.speed.fee_view(), &self.clear_view, &self.guard_view);
+        // 083 F1: the lines the sheet drew under "Balance changes" — none when
+        // the simulation reverted or could not run (its notice stood there).
+        opts.balance_changes = approved_changes(&self.sim, self.sim_notice.is_some());
         self.dispatch_sign(SignEvent::ApproveTapped { opts }, cx);
+    }
+
+    // -- the ceremony, in the column (083) -----------------------------------
+
+    /// The phone's QR to draw, while a scan waits for it.
+    pub fn qr_showing(&self) -> Option<String> {
+        self.channel.qr_showing()
+    }
+
+    /// What a key is waiting for — or the phone, from the moment its advert
+    /// is found: connecting, and then its prompt (083 H5).
+    pub fn touch_waiting(&self) -> Option<crate::ctap::usb::TouchRequest> {
+        self.channel.touch_waiting()
+    }
+
+    /// Where this approval's signature stands (083 W11): the Trusted
+    /// Signer's page asking, then the passkey's own two flags. `Given` only
+    /// for a signature that exists — a page that stopped asking because it
+    /// was refused has signed nothing (083 review: the column's close reads
+    /// `Given` as "the operation goes on").
+    pub fn signature(&self) -> crate::signing::status::Signature {
+        use crate::signing::status::Signature;
+        let signer = &self.ctx.trusted_signer;
+        if signer.waiting() {
+            Signature::Asked
+        } else if self.ctx.signature_done.load(Ordering::SeqCst)
+            || (self.page_asked && signer.ended().is_none())
+        {
+            Signature::Given
+        } else if self.ctx.signing_started.load(Ordering::SeqCst) || self.page_asked {
+            Signature::Asked
+        } else {
+            Signature::NotYet
+        }
+    }
+
+    /// The QR card's Cancel: the scan stops, and the request goes back to its
+    /// form, unanswered — the core hears the passkey dismissed.
+    pub fn cancel_qr(&mut self, cx: &mut Context<Self>) {
+        self.channel.cancel_qr();
+        cx.notify();
+    }
+
+    /// The touch card's Cancel, where the prompt offers one.
+    pub fn cancel_touch(&mut self, cx: &mut Context<Self>) {
+        self.channel.cancel_touch();
+        cx.notify();
+    }
+
+    /// The phone card's Retry — a scan that ran out, a connection that never
+    /// came up or one that dropped once the phone was asked (083): the same
+    /// approval again, with a new QR.
+    /// When the sheet could not be approved as it stands now (a quote gone
+    /// stale into a failure), the form comes back instead, to say why.
+    pub fn retry(&mut self, cx: &mut Context<Self>) {
+        self.phone_stop = None;
+        let armed = crate::signing::live::confirm_enabled(
+            &self.view,
+            &self.guard_view,
+            &self.clear_view,
+            self.speed.fee_view(),
+            Some(self.speed.view().tier),
+        );
+        if armed {
+            self.approve(cx);
+        } else {
+            cx.notify();
+        }
+    }
+
+    /// Where this request stands, as far as closing its column goes.
+    fn close_facts(&self) -> crate::signing::status::CloseFacts {
+        close_facts_of(&self.view, self.signature(), self.close_after_cancel)
+    }
+
+    /// A close waits on the ceremony: the column is gone for the person, and
+    /// must not come back while the ceremony winds down (083 review).
+    pub fn closing(&self) -> bool {
+        self.close_after_cancel
+    }
+
+    /// The column's close — its ✕ and the receipt's button. The core decides
+    /// what it answers (a request not yet approved is refused, one already on
+    /// its way is only no longer watched); this decides only WHEN it is told
+    /// ([`crate::signing::status::close_plan`], 083). While the signature is
+    /// still to come the core would take the close as the second — and a
+    /// prompt that then came back unsigned answered the page nothing, ever
+    /// (the review's case: ✕ over "正在准备交易...", then a QR in a column
+    /// nobody drew, 90 s, silence). So the prompt is stopped, or never
+    /// opened, and the close is made once the core has the ceremony back. A
+    /// second close while one waits adds nothing.
+    pub fn close(&mut self, cx: &mut Context<Self>) {
+        use crate::signing::status::{ClosePlan, close_plan};
+        match close_plan(&self.close_facts()) {
+            ClosePlan::Ignore => {}
+            ClosePlan::AfterCancel => {
+                self.close_after_cancel = true;
+                // No passkey prompt opens after this (`around_prompt`)…
+                self.ctx.abandoned.store(true, Ordering::SeqCst);
+                // …nor a Trusted Signer page: its channel is closed rather
+                // than cancelled — an attempt not yet begun clears a cancel
+                // as it starts, while a closed channel refuses it before any
+                // page is asked for, and ends one already waiting. Closed is
+                // what the column's Drop does anyway: this request ends with
+                // this close, refused or on its way.
+                self.ctx.trusted_signer.close();
+                self.stop_prompts();
+                // Watched until the ceremony is back: a QR posted after this
+                // is taken down too.
+                self.ensure_watcher(cx);
+                cx.notify();
+            }
+            ClosePlan::Now => {
+                self.phone_stop = None;
+                self.dispatch_sign(SignEvent::SwipeDismissed, cx);
+            }
+        }
+    }
+
+    /// Whatever the passkey ceremony waits behind, stopped for a close (083
+    /// review): the scan — and a key's exchange, which polls the same flag —
+    /// even before a QR is up; a key's prompt that can be stopped; a PIN or
+    /// wallet question the column never draws. Run again on every watch tick
+    /// while the close waits: a QR posted after it clears the stop flag as it
+    /// goes up. (The Trusted Signer's channel is closed once, in `close`.)
+    fn stop_prompts(&self) {
+        self.channel.cancel_qr();
+        if self
+            .channel
+            .touch_waiting()
+            .is_some_and(|waiting| waiting.cancellable)
+        {
+            self.channel.cancel_touch();
+        }
+        if self.channel.pending_pin().is_some() {
+            self.channel.answer_pin(None);
+        }
+        if self.channel.pending_choice().is_some() {
+            self.channel.answer_choice(None);
+        }
+    }
+
+    /// Esc on the column (083, the owner's D1): never an answer to the page.
+    /// Over the QR or a key prompt it is that card's Cancel — the request
+    /// stays open, back on its form. Otherwise it reports whether the
+    /// column may close: only where closing answers nothing, now
+    /// ([`crate::signing::status::escape_closes`]) — never while a close
+    /// already waits, nor while the signature is still to come (that close
+    /// ends in a refusal too).
+    pub fn escape(&mut self, cx: &mut Context<Self>) -> bool {
+        let plan = crate::signing::status::close_plan(&self.close_facts());
+        if plan == crate::signing::status::ClosePlan::Ignore {
+            return false;
+        }
+        if self.channel.qr_showing().is_some() {
+            self.cancel_qr(cx);
+            return false;
+        }
+        if let Some(waiting) = self.channel.touch_waiting() {
+            if waiting.cancellable {
+                self.cancel_touch(cx);
+            }
+            return false;
+        }
+        crate::signing::status::escape_closes(self.view.swipe_action, plan)
+    }
+
+    /// The ceremony runs on a background thread that cannot wake the column:
+    /// the QR going up, a prompt opening, the signature given. Watched every
+    /// 120 ms (the cadence the send and onboarding use) while a pipeline runs
+    /// and nothing has been submitted, and redrawn only on a change (083).
+    fn ensure_watcher(&mut self, cx: &mut Context<Self>) {
+        if self.watching {
+            return;
+        }
+        self.watching = true;
+        cx.spawn(async move |host, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(CEREMONY_TICK_MS))
+                    .await;
+                let go_on = host
+                    .update(cx, |host, cx| host.watch_ceremony(cx))
+                    .unwrap_or(false);
+                if !go_on {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// One look at the ceremony. Returns whether to keep looking.
+    fn watch_ceremony(&mut self, cx: &mut Context<Self>) -> bool {
+        // A close waits: whatever came up since is stopped too.
+        if self.close_after_cancel {
+            self.stop_prompts();
+        }
+        let seen = (
+            self.signature(),
+            self.channel.qr_showing(),
+            self.channel.touch_waiting(),
+        );
+        if seen != self.ceremony_seen {
+            self.ceremony_seen = seen;
+            cx.notify();
+        }
+        let go_on = self.ceremony_ahead();
+        if !go_on {
+            self.watching = false;
+        }
+        go_on
+    }
+
+    fn pipeline_running(&self) -> bool {
+        self.view.is_signing || self.view.is_submitting
+    }
+
+    /// A pipeline runs on a column still showing it, and nothing has been
+    /// submitted: a prompt may still open.
+    fn ceremony_ahead(&self) -> bool {
+        self.pipeline_running() && !self.closed && self.view.pending_op_hash.is_none()
+    }
+
+    /// Back on the form with the request still open: nothing signing, nothing
+    /// submitted, failed or answered.
+    fn back_on_form(&self) -> bool {
+        back_on_form_of(&self.view, self.responded) && !self.closed
     }
 
     /// The refresh control (spec 079): measure again, now — the held
@@ -891,6 +1257,19 @@ impl SigningHost {
     }
 
     pub fn dispatch_sign(&mut self, event: SignEvent, cx: &mut Context<Self>) {
+        // A pipeline (re)starting has asked for no signature yet — reset
+        // BEFORE the core hands the work to a background thread that may
+        // raise the flags at once (083 W11).
+        if matches!(
+            event,
+            SignEvent::ApproveTapped { .. } | SignEvent::FundingCompleteTapped
+        ) {
+            self.ctx.prompt_reset();
+            self.page_asked = false;
+            // …and a key prompt dismissed last time must not cancel this
+            // one: a ceremony built anew starts undismissed.
+            self.ctx.ceremony = self.channel.ceremony(self.ctx.ceremony.window);
+        }
         let pending = self.sign.dispatch(event);
         self.pump_sign(pending, cx);
     }
@@ -906,8 +1285,23 @@ impl SigningHost {
     }
 
     fn resolve_sign(&mut self, id: u64, result: SignShellResult, cx: &mut Context<Self>) {
+        // The dApp's record is on disk now — opened pending, or closed. The
+        // feed re-reads at once rather than at its next tick, so Activity
+        // shows the operation the moment the site's is on its way (083 H2).
+        //
+        // A re-read and nothing else: `ReconcileCompleted` reads the store
+        // and never celebrates. `FocusTick` would also sweep every chain for
+        // incoming transfers, twice per transaction and once per signature
+        // (083 H2 review).
+        let wrote_record = matches!(
+            result,
+            SignShellResult::RecordPersisted | SignShellResult::RecordUpdated
+        );
         let pending = self.sign.resolve(id, result);
         self.pump_sign(pending, cx);
+        if wrote_record {
+            crate::executor::activity_feed::reconciled(1, cx);
+        }
     }
 
     fn resolve_clear(&mut self, id: u64, result: ClearShellResult, cx: &mut Context<Self>) {
@@ -921,6 +1315,7 @@ impl SigningHost {
     }
 
     fn pump_sign(&mut self, pending: Vec<Pending<SignOperation>>, cx: &mut Context<Self>) {
+        let was_running = self.pipeline_running();
         for effect in pending {
             let id = effect.id;
             match sign_executor::perform(&effect.operation, &self.ctx) {
@@ -1010,7 +1405,35 @@ impl SigningHost {
         self.closed = self.view.surface == vela_core::app::sign_request::SignSurface::Hidden;
         // The tracker may already know how the op just handed over ended.
         self.forward_tracked(cx);
+        // The ceremony came back with no signature — dismissed, a QR nobody
+        // scanned, a phone that never connected — and the core kept the
+        // request, unanswered (083).
+        // The form is the person's again: not approved, and a slide that can
+        // be slid, where the committed knob used to stay stuck at the end.
+        if was_running && self.back_on_form() {
+            self.approved = false;
+            crate::signing::components::reset_slide();
+            if let Some(stop) = self.ctx.take_phone_stop() {
+                self.phone_stop = Some(stop);
+            }
+        }
+        if self.ceremony_ahead() {
+            self.ensure_watcher(cx);
+        }
         cx.notify();
+        // The close that waited, now that the ceremony is back: a refusal if
+        // it came back empty, or — when the phone had already signed — the
+        // ordinary close of an operation on its way.
+        if self.close_after_cancel
+            && crate::signing::status::waited_close_due(
+                self.pipeline_running(),
+                self.view.pending_op_hash.is_some(),
+            )
+        {
+            self.close_after_cancel = false;
+            self.phone_stop = None;
+            self.dispatch_sign(SignEvent::SwipeDismissed, cx);
+        }
     }
 
     /// Spec 082 RJ4 (G37): tell the core what the tracker knows of the op in
@@ -1172,10 +1595,8 @@ impl SigningHost {
 }
 
 impl Drop for SigningHost {
-    /// The column is gone: a Trusted Signer still waiting stops now rather
-    /// than holding a port for five minutes nobody can see.
     fn drop(&mut self) {
-        self.ctx.trusted_signer.close();
+        release(&self.ctx.trusted_signer, &self.channel);
     }
 }
 
@@ -1225,6 +1646,14 @@ fn tracked_event(
         now_ms,
     };
     Some((now, event))
+}
+
+/// The column is gone: a Trusted Signer still waiting stops now rather than
+/// holding a port for five minutes nobody can see — and so does a phone scan,
+/// and a PIN or wallet question nobody can answer (083 W19).
+fn release(trusted_signer: &trusted_signer::Channel, channel: &CeremonyChannel) {
+    trusted_signer.close();
+    channel.close();
 }
 
 /// Every chain this wallet can act on: the built-ins plus whatever was added.
@@ -1284,18 +1713,51 @@ fn approve_opts(fee: &FeeView, clear: &ClearSigningView, guard: &GuardView) -> S
         }),
         fee_collector: None,
         params_override_json: guard.rewritten_params_json.clone(),
-        intent: clear.result.as_ref().map(|result| result.intent.clone()),
+        intent: recorded_intent(clear),
         // The guard showed an unbounded amount and it was kept as the site
         // asked — the submit guard's only waiver, copied from the view that
         // drew it, never decided here.
         unlimited_approved: guard.unlimited_consented,
+        // The simulation is the column's, not these views': `approve` adds
+        // it (`approved_changes`).
+        balance_changes: None,
     }
+}
+
+/// What the record keeps of the sheet's "Balance changes" (083 F1): the
+/// judgments this column drew there (`sim_blocks`), exactly as they stood
+/// when the slide fired — the one account of the operation's money that no
+/// page wrote, and the one Activity shows for it. Nothing when the
+/// simulation could not answer, or had not yet: the sheet showed no lines,
+/// so the record keeps none and the row draws as it always has.
+fn approved_changes(
+    sim: &[vela_core::app::token_trust::TrustSimJudgment],
+    unavailable: bool,
+) -> Option<Vec<vela_core::app::token_trust::TrustSimJudgment>> {
+    (!unavailable && !sim.is_empty()).then(|| sim.to_vec())
+}
+
+/// The intent the record keeps, which Activity shows as the row's title in
+/// the wallet's own voice (083 H2).
+///
+/// Only a reading the sheet did not mark best-effort: a function name
+/// recovered from the public selector database is whatever the contract's
+/// deployer called it, and the sheet showed it under a caution. A plain title
+/// in Activity would drop that caution, so such a call records no intent and
+/// reads "Contract interaction" (083 H2 review). A plain native send has no
+/// reading at all; the core records "Send" for it.
+fn recorded_intent(clear: &ClearSigningView) -> Option<String> {
+    clear
+        .result
+        .as_ref()
+        .filter(|result| result.verified || !result.best_effort)
+        .map(|result| result.intent.clone())
 }
 
 /// The blind rung's two facts: who it goes to, and how many bytes of calldata
 /// nobody could read. Both come from the first leg, like the decode does.
 fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
-    let call = first_call(&request.params_json);
+    let call = first_call(&request.method, &request.params_json);
     let data = call.as_ref().and_then(|c| c.1.clone()).unwrap_or_default();
     crate::signing::live::RequestFacts {
         to: call.and_then(|c| c.0),
@@ -1335,7 +1797,7 @@ pub fn clear_kickoff(
     use vela_core::app::clear_signing::{ClearLocale, ClearSignMethod};
     match method {
         "eth_sendTransaction" | "wallet_sendCalls" => {
-            let call = first_call(params_json);
+            let call = first_call(method, params_json);
             Some(ClearEvent::ResolveTransaction {
                 to: call.as_ref().and_then(|c| c.0.clone()),
                 data: call.as_ref().and_then(|c| c.1.clone()),
@@ -1380,13 +1842,26 @@ fn string_params(params_json: &str) -> Vec<String> {
         .collect()
 }
 
-fn first_call(params_json: &str) -> Option<(Option<String>, Option<String>, Option<String>)> {
+/// The call the decode and the blind rung read: a batch's first leg, or a
+/// transaction's own call — chosen by METHOD, the way the executor's
+/// `calls_of` chooses what gets submitted.
+///
+/// It used to follow a `calls` key whatever the method (083 review): an
+/// `eth_sendTransaction` carrying a stray `"calls":[{…harmless…}]` beside a
+/// malicious top-level call had its headline decoded from the harmless one
+/// while the malicious one was signed. And a `wallet_sendCalls` with no
+/// `calls` is nothing — its envelope is never submitted, so it is not read.
+fn first_call(
+    method: &str,
+    params_json: &str,
+) -> Option<(Option<String>, Option<String>, Option<String>)> {
     let params: serde_json::Value = serde_json::from_str(params_json).ok()?;
     let first = params.get(0)?;
-    let call = first
-        .get("calls")
-        .and_then(|calls| calls.get(0))
-        .unwrap_or(first);
+    let call = if method == "wallet_sendCalls" {
+        first.get("calls")?.get(0)?
+    } else {
+        first
+    };
     let field = |name: &str| {
         call.get(name)
             .and_then(serde_json::Value::as_str)
@@ -1662,6 +2137,76 @@ mod tests {
         );
     }
 
+    /// Spec 083 fee: the simulation's deltas reach the fee machine as what the
+    /// operation moves of each coin — native as `None`, a token by its
+    /// contract — and a token move that names no contract is never read as
+    /// the native coin.
+    #[test]
+    fn the_simulated_deltas_are_the_fee_machines_balance_changes() {
+        use vela_core::app::fee_policy::FeeBalanceChange;
+        use vela_core::app::token_trust::{TrustAssetDelta, TrustDeltaKind};
+        let usdc = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+        let changes = fee_balance_changes(&[
+            TrustAssetDelta {
+                kind: TrustDeltaKind::Erc20,
+                token: Some(usdc.to_owned()),
+                delta: "-271741".to_owned(),
+            },
+            TrustAssetDelta {
+                kind: TrustDeltaKind::Native,
+                token: None,
+                delta: "101000000000000".to_owned(),
+            },
+            TrustAssetDelta {
+                kind: TrustDeltaKind::Erc20,
+                token: None,
+                delta: "-1".to_owned(),
+            },
+        ]);
+        assert_eq!(
+            changes,
+            vec![
+                FeeBalanceChange {
+                    token: Some(usdc.to_owned()),
+                    delta: "-271741".to_owned(),
+                },
+                FeeBalanceChange {
+                    token: None,
+                    delta: "101000000000000".to_owned(),
+                },
+            ]
+        );
+    }
+
+    /// 083 F1: the approve carries exactly the lines the sheet drew under
+    /// "Balance changes" — the outflow with its figure, an unverified inflow
+    /// with none — and nothing when there were none to draw.
+    #[test]
+    fn the_approve_carries_the_balance_changes_the_sheet_drew() {
+        use vela_core::app::token_trust::TrustSimJudgment as J;
+        let drawn = vec![
+            J::Erc20Trusted {
+                token: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_owned(),
+                delta: "-100000".to_owned(),
+                symbol: "USDC".to_owned(),
+                decimals: 6,
+                in_trusted_set: true,
+            },
+            J::Native {
+                delta: "37000000000000".to_owned(),
+            },
+            J::Erc20Unverified {
+                token: Some("0xbad".to_owned()),
+                delta: "1000000000000000000000".to_owned(),
+            },
+        ];
+        assert_eq!(approved_changes(&drawn, false), Some(drawn.clone()));
+        // "Could not check" drew a warning, not lines; nothing measured yet
+        // drew nothing.
+        assert_eq!(approved_changes(&drawn, true), None);
+        assert_eq!(approved_changes(&[], false), None);
+    }
+
     /// Spec 082 RJ13 (G48): a deployment read that got no answer never
     /// reached the core. It is the chain read's failure — rate-limited or
     /// not, from the pool's own signal — and asked again on the same
@@ -1885,13 +2430,65 @@ mod tests {
         );
     }
 
+    /// The record keeps the intent Activity will print as a title, so only a
+    /// reading that is not best-effort: a selector-database name is the
+    /// deployer's word, shown on the sheet under a caution, and Activity has
+    /// no caution to show it under (083 H2 review).
+    #[test]
+    fn only_a_trusted_reading_names_the_recorded_intent() {
+        use vela_core::app::clear_signing::{
+            ClearProvenance, ClearRisk, ClearSignResult, ClearSignType,
+        };
+
+        let fee = crate::core_host::CoreHost::<FeePolicy>::new().view();
+        let guard = crate::core_host::CoreHost::<ApprovalGuard>::new().view();
+        let mut clear = crate::core_host::CoreHost::<ClearSigning>::new().view();
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).intent,
+            None,
+            "nothing read: the core decides (\"Send\" for a plain send)"
+        );
+
+        let reading = |verified: bool, best_effort: bool| ClearSignResult {
+            intent: "Claim".to_owned(),
+            intent_term: None,
+            contract_name: None,
+            owner: None,
+            fields: Vec::new(),
+            risk: ClearRisk::Caution,
+            contract_address: None,
+            verified,
+            provenance: ClearProvenance::Standard,
+            sign_type: ClearSignType::Transaction,
+            partial: false,
+            best_effort,
+            to_own_token: false,
+        };
+        clear.result = Some(reading(false, true));
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).intent,
+            None,
+            "a guessed function name is not recorded"
+        );
+        clear.result = Some(reading(false, false));
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).intent.as_deref(),
+            Some("Claim")
+        );
+        clear.result = Some(reading(true, true));
+        assert_eq!(
+            approve_opts(&fee, &clear, &guard).intent.as_deref(),
+            Some("Claim")
+        );
+    }
+
     /// A transaction decodes from its call — and a BATCH decodes from its
     /// first leg, which is the same thing the phone's sheet shows.
     #[test]
     fn the_decoder_is_handed_the_call_and_not_the_envelope() {
         let single = r#"[{"from":"0xaaa","to":"0xbbb","data":"0xabcd","value":"0x1"}]"#;
         assert_eq!(
-            first_call(single),
+            first_call("eth_sendTransaction", single),
             Some((
                 Some("0xbbb".to_owned()),
                 Some("0xabcd".to_owned()),
@@ -1900,11 +2497,70 @@ mod tests {
         );
 
         let batch = r#"[{"calls":[{"to":"0x1","data":"0xdead"},{"to":"0x2"}]}]"#;
-        let (to, data, value) =
-            first_call(batch).unwrap_or_else(|| unreachable!("a batch has a first leg"));
+        let (to, data, value) = first_call("wallet_sendCalls", batch)
+            .unwrap_or_else(|| unreachable!("a batch has a first leg"));
         assert_eq!(to.as_deref(), Some("0x1"));
         assert_eq!(data.as_deref(), Some("0xdead"));
         assert_eq!(value, None, "an absent value stays absent, never a zero");
+
+        assert_eq!(
+            first_call("wallet_sendCalls", r#"[{"to":"0xbbb","data":"0xabcd"}]"#),
+            None,
+            "a batch with no calls submits nothing, so its envelope is not decoded"
+        );
+    }
+
+    /// 083 review: an `eth_sendTransaction` is decoded from its OWN call.
+    ///
+    /// A stray `calls` key is not a batch for this method — the executor's
+    /// `calls_of` submits the top-level call — so a harmless-looking leg
+    /// beside a malicious call must not become the headline. Checked where
+    /// the decode starts (`clear_kickoff`) and where the blind rung reads its
+    /// facts (`facts_of`), not only in the helper.
+    #[test]
+    fn a_stray_calls_key_does_not_hide_the_signed_call() {
+        const SIGNED: &str = "0x1111111111111111111111111111111111111111";
+        const DECOY: &str = "0x2222222222222222222222222222222222222222";
+        let params = format!(
+            r#"[{{"to":"{SIGNED}","data":"0x095ea7b3ffff","value":"0x0","calls":[{{"to":"{DECOY}","value":"0x1"}}]}}]"#
+        );
+
+        assert_eq!(
+            first_call("eth_sendTransaction", &params),
+            Some((
+                Some(SIGNED.to_owned()),
+                Some("0x095ea7b3ffff".to_owned()),
+                Some("0x0".to_owned())
+            ))
+        );
+        let submitted = crate::executor::sign_request::calls_of("eth_sendTransaction", &params)
+            .unwrap_or_else(|| unreachable!("a transaction has its call"));
+        assert_eq!(submitted.len(), 1);
+        assert_eq!(submitted[0].to, SIGNED, "what the executor signs");
+
+        let Some(ClearEvent::ResolveTransaction { to, data, .. }) =
+            clear_kickoff("eth_sendTransaction", &params, 1, None)
+        else {
+            unreachable!("a transaction starts the decode")
+        };
+        assert_eq!(
+            to.as_deref(),
+            Some(SIGNED),
+            "the decode reads the signed call"
+        );
+        assert_eq!(data.as_deref(), Some("0x095ea7b3ffff"));
+
+        let facts = facts_of(&IncomingRequest {
+            id: "1".to_owned(),
+            method: "eth_sendTransaction".to_owned(),
+            params_json: params,
+            origin: "https://example.com".to_owned(),
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            chain_id: 1,
+            granted_address: None,
+        });
+        assert_eq!(facts.to.as_deref(), Some(SIGNED));
+        assert_eq!(facts.data_bytes, 6);
     }
 
     /// `eth_signTypedData_v4` is `[address, json]`.
@@ -2061,6 +2717,7 @@ mod approve_tests {
             params_override_json: None,
             intent: None,
             unlimited_approved: false,
+            balance_changes: None,
         };
 
         let signed = opts
@@ -2129,6 +2786,399 @@ mod approve_tests {
             opts.quoted_fee.map(|quoted| quoted.amount).as_deref(),
             Some("91000000000000")
         );
+    }
+
+    /// A personal_sign on the machine the column drives, approved as far as
+    /// its signature: `SignAndSubmit` is out, and its id is returned.
+    fn approved_to_its_signature(sign: &mut CoreHost<SignRequest>) -> u64 {
+        let wallet = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        sign.dispatch(SignEvent::NetworksChanged {
+            chain_ids: vec![100],
+        });
+        sign.dispatch(SignEvent::AccountsChanged {
+            accounts: vec![SignAccountRef {
+                address: wallet.to_owned(),
+                credential_id: "cred0".to_owned(),
+            }],
+            active_index: 0,
+        });
+        sign.dispatch(SignEvent::RequestArrived {
+            id: "7".to_owned(),
+            method: "personal_sign".to_owned(),
+            params_json: format!(r#"["0x48656c6c6f","{wallet}"]"#),
+            origin: "https://app.uniswap.org".to_owned(),
+            transport_id: BROWSER_TRANSPORT.to_owned(),
+            dedicated_transport: true,
+            per_request_chain: Some(100),
+            dapp: None,
+            granted_address: None,
+            requested_address: None,
+            request_ts_ms: None,
+            now_ms: 0.0,
+        });
+        let signing = sign.dispatch(SignEvent::ApproveTapped {
+            opts: SignApproveOpts::default(),
+        });
+        match signing.as_slice() {
+            [
+                Pending {
+                    id,
+                    operation: SignOperation::SignAndSubmit { .. },
+                },
+            ] => *id,
+            other => unreachable!("approve signs at once: {}", other.len()),
+        }
+    }
+
+    /// The answers among `ops`, as (id, error code) — `None` for a success.
+    fn answers_in(ops: &[Pending<SignOperation>]) -> Vec<(String, Option<i32>)> {
+        use vela_core::app::sign_request::SignResponsePayload;
+        ops.iter()
+            .filter_map(|pending| match &pending.operation {
+                SignOperation::SendResponse { id, payload, .. } => Some((
+                    id.clone(),
+                    match payload {
+                        SignResponsePayload::Err { code, .. } => Some(*code),
+                        SignResponsePayload::Ok { .. } => None,
+                    },
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// 083 (review): the close while the signature is still to come, against
+    /// the machine the column drives, with the column's own decisions in the
+    /// order it makes them. The close waits (Esc does not close at all), a
+    /// second close adds nothing, the prompt comes back unsigned, and the
+    /// waited close is told: exactly one answer, the person's refusal.
+    #[test]
+    fn a_close_before_the_signature_refuses_exactly_once() {
+        use crate::signing::status::{
+            ClosePlan, Signature, close_plan, escape_closes, waited_close_due,
+        };
+        use vela_core::app::sign_request::{SignSubmitOutcome, SignSurface};
+
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+
+        let plan = close_plan(&close_facts_of(&sign.view(), Signature::NotYet, false));
+        assert_eq!(plan, ClosePlan::AfterCancel, "preparing: the close waits");
+        assert!(
+            !escape_closes(sign.view().swipe_action, plan),
+            "and Esc leaves the request alone (D1)"
+        );
+        let plan = close_plan(&close_facts_of(&sign.view(), Signature::Asked, false));
+        assert_eq!(plan, ClosePlan::AfterCancel, "the QR is up: the same");
+        assert_eq!(
+            close_plan(&close_facts_of(&sign.view(), Signature::Asked, true)),
+            ClosePlan::Ignore,
+            "a second close while the first waits"
+        );
+
+        let view = sign.view();
+        assert!(!waited_close_due(
+            view.is_signing || view.is_submitting,
+            view.pending_op_hash.is_some()
+        ));
+        let back = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::PasskeyCancelled,
+                now_ms: 1.0,
+            },
+        );
+        assert!(answers_in(&back).is_empty(), "the core kept the request");
+        let view = sign.view();
+        assert!(waited_close_due(
+            view.is_signing || view.is_submitting,
+            view.pending_op_hash.is_some()
+        ));
+
+        let refused = sign.dispatch(SignEvent::SwipeDismissed);
+        assert_eq!(answers_in(&refused), vec![("7".to_owned(), Some(4001))]);
+        assert_eq!(sign.view().surface, SignSurface::Hidden);
+        assert!(answers_in(&sign.dispatch(SignEvent::SwipeDismissed)).is_empty());
+    }
+
+    /// 083 (review): once the phone has signed, the close is the ordinary
+    /// one, at once — the operation goes on and the page still gets its
+    /// answer (spec 079 FR-002); nothing is refused. And if the pipeline
+    /// then comes back unsigned after all (a second prompt, dismissed), the
+    /// core's own safety net answers the closed request once: 4001, never
+    /// silence.
+    #[test]
+    fn a_close_after_the_signature_refuses_nothing() {
+        use crate::signing::status::{ClosePlan, Signature, close_plan};
+        use vela_core::app::sign_request::SignSubmitOutcome;
+
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+        assert_eq!(
+            close_plan(&close_facts_of(&sign.view(), Signature::Given, false)),
+            ClosePlan::Now
+        );
+        let dismissed = sign.dispatch(SignEvent::SwipeDismissed);
+        assert!(answers_in(&dismissed).is_empty(), "no refusal");
+
+        let back = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::PasskeyCancelled,
+                now_ms: 1.0,
+            },
+        );
+        assert_eq!(answers_in(&back), vec![("7".to_owned(), Some(4001))]);
+        assert!(answers_in(&sign.dispatch(SignEvent::SwipeDismissed)).is_empty());
+    }
+
+    /// 083: a ceremony that comes back unsigned gives the form back — the
+    /// column then un-approves and resets the slide, which stayed stuck at
+    /// the end — and a failure does not: the page has its answer.
+    #[test]
+    fn only_an_unsigned_ceremony_gives_the_form_back() {
+        use vela_core::app::sign_request::SignSubmitOutcome;
+
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+        assert!(!back_on_form_of(&sign.view(), false), "still signing");
+        let back = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::PasskeyCancelled,
+                now_ms: 1.0,
+            },
+        );
+        assert!(answers_in(&back).is_empty());
+        assert!(back_on_form_of(&sign.view(), false), "the form is back");
+        assert!(sign.view().confirm_gate_open, "and can be approved again");
+
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+        let failed = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::Failed {
+                    message: "the relay said no".to_owned(),
+                    refused: false,
+                },
+                now_ms: 1.0,
+            },
+        );
+        assert_eq!(answers_in(&failed), vec![("7".to_owned(), Some(-32603))]);
+        assert!(
+            !back_on_form_of(&sign.view(), true),
+            "a failure is an answer"
+        );
+        assert!(
+            !back_on_form_of(&sign.view(), false),
+            "…and the core says so on its own"
+        );
+    }
+
+    /// 083 W19: a column that goes away stops what its ceremony waits
+    /// behind — the phone's scan, a PIN question nobody can answer, the
+    /// Trusted Signer's page — instead of leaving a 90 s scan or a blocked
+    /// thread behind a column nobody can see.
+    #[test]
+    fn a_column_that_goes_away_stops_its_ceremony() {
+        let channel = CeremonyChannel::new();
+        let ceremony = channel.ceremony(0);
+        let (signer, _changed) = trusted_signer::Channel::new();
+        (ceremony.qr)(Some("FIDO:/083".to_owned()));
+        assert!(!(ceremony.cancelled)());
+
+        // A PIN question, blocking the ceremony's thread until a screen answers.
+        let pin = Arc::clone(&ceremony.pin);
+        let asking = std::thread::spawn(move || {
+            pin(crate::executor::passkey::PinRequest {
+                product: "YubiKey 5C NFC".to_owned(),
+                device: "hid-1".to_owned(),
+                retries: Some(8),
+                retry: false,
+            })
+        });
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while channel.pending_pin().is_none() && std::time::Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(channel.pending_pin().is_some(), "the question is up");
+
+        release(&signer, &channel);
+
+        assert_eq!(
+            asking.join().ok(),
+            Some(None),
+            "the question is let go, unanswered"
+        );
+        assert_eq!(channel.qr_showing(), None, "the QR comes down");
+        assert!((ceremony.cancelled)(), "and the scan behind it is told");
+        assert!(signer.stopped(), "no Trusted Signer wait goes on or starts");
+    }
+
+    /// A request's context, as the column fixes it when the request opens.
+    fn sign_context() -> SignContext {
+        let account = Account {
+            id: "cred0".to_owned(),
+            name: "savings".to_owned(),
+            address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned(),
+            public_key_hex: "04aa".to_owned(),
+            created_at_iso: String::new(),
+            keys: vec![vela_core::app::AccountKey {
+                credential_id: "cred0".to_owned(),
+                public_key_hex: "04aa".to_owned(),
+                name: String::new(),
+                transports: "hybrid".to_owned(),
+                signer_origin: None,
+            }],
+            signed_in_with: None,
+        };
+        SignContext::new(&account, CeremonyChannel::new().ceremony(0))
+    }
+
+    /// 083 H4 (review): a phone stop, through the column, answers the page
+    /// exactly once. The prompt comes back with the phone's connection gone
+    /// — never up, or dropped once asked — and the executor tells the core a
+    /// dismissal and the column which stop: the core keeps the request, the
+    /// form is back, and the column takes the stop for its card
+    /// (`pump_sign`). The card's 关闭 is the column's close, told at once
+    /// (`close`), and refuses once; a second adds nothing. Its 重试 is the
+    /// approval again (`retry` → `approve` → `dispatch_sign`, which resets
+    /// the prompt): nothing is told the page until that one ends, and then
+    /// its answer is the only one.
+    ///
+    /// Driven the way the tests beside it drive the column: the core machine
+    /// and the column's own decisions, in the order `pump_sign`, `close` and
+    /// `retry` make them — a `SigningHost` is a gpui entity, and this crate
+    /// builds gpui without its test support.
+    #[test]
+    fn a_phone_stop_card_answers_the_page_exactly_once() {
+        use crate::ctap::cable::{HybridError, PHONE_DROPPED};
+        use crate::executor::passkey::PasskeyFailure;
+        use crate::executor::sign_request::{PhoneStop, around_prompt};
+        use crate::signing::status::{ClosePlan, Signature, close_plan};
+        use vela_core::app::FailureKind;
+        use vela_core::app::sign_request::{SignSubmitOutcome, SignSurface};
+
+        let ctx = sign_context();
+        let stops = [
+            (
+                HybridError::Tunnel("cannot reach cable.auth.com".to_owned()).to_string(),
+                PhoneStop::LinkFailed,
+            ),
+            (
+                format!("{PHONE_DROPPED}: the phone stopped answering"),
+                PhoneStop::Dropped,
+            ),
+        ];
+        // The prompt comes back as the phone left it; the pipeline (user_op)
+        // reports a dismissed prompt as `PasskeyCancelled`.
+        let stopped = |sign: &mut CoreHost<SignRequest>, submit: u64, error: &str| {
+            ctx.prompt_reset();
+            let prompt = around_prompt(&ctx, || Err(PasskeyFailure::other(error)));
+            assert!(prompt.is_err_and(|failure| failure.kind == FailureKind::Cancelled));
+            let back = sign.resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: SignSubmitOutcome::PasskeyCancelled,
+                    now_ms: 1.0,
+                },
+            );
+            assert!(answers_in(&back).is_empty(), "the core kept the request");
+            assert!(back_on_form_of(&sign.view(), false), "the form is back");
+        };
+
+        for (error, stop) in &stops {
+            // 关闭.
+            let mut sign = CoreHost::<SignRequest>::new();
+            let submit = approved_to_its_signature(&mut sign);
+            stopped(&mut sign, submit, error);
+            assert_eq!(ctx.take_phone_stop(), Some(*stop), "the card: {error}");
+            assert_eq!(
+                close_plan(&close_facts_of(&sign.view(), Signature::Asked, false)),
+                ClosePlan::Now,
+                "the card's close is told at once"
+            );
+            let refused = sign.dispatch(SignEvent::SwipeDismissed);
+            assert_eq!(answers_in(&refused), vec![("7".to_owned(), Some(4001))]);
+            assert_eq!(sign.view().surface, SignSurface::Hidden);
+            assert!(answers_in(&sign.dispatch(SignEvent::SwipeDismissed)).is_empty());
+
+            // 重试: the approval again, which signs this time.
+            let mut sign = CoreHost::<SignRequest>::new();
+            let submit = approved_to_its_signature(&mut sign);
+            stopped(&mut sign, submit, error);
+            assert!(sign.view().confirm_gate_open, "the slide can go again");
+            // A stop the column had not taken yet is not carried into the
+            // new approval: `dispatch_sign` resets the prompt first.
+            ctx.prompt_reset();
+            assert_eq!(ctx.take_phone_stop(), None, "an approval starts clean");
+            let again = sign.dispatch(SignEvent::ApproveTapped {
+                opts: SignApproveOpts::default(),
+            });
+            assert!(answers_in(&again).is_empty(), "a retry answers nothing");
+            let submit = match again.as_slice() {
+                [
+                    Pending {
+                        id,
+                        operation: SignOperation::SignAndSubmit { .. },
+                    },
+                ] => *id,
+                other => unreachable!("a retry signs at once: {}", other.len()),
+            };
+            // Record, then respond — the core's order.
+            let mut ops = sign.resolve(
+                submit,
+                SignShellResult::Submit {
+                    outcome: SignSubmitOutcome::Succeeded {
+                        result: "0x1626ba7e".to_owned(),
+                    },
+                    now_ms: 2.0,
+                },
+            );
+            let mut answered = answers_in(&ops);
+            while let Some(record) = ops.iter().find_map(|pending| match pending.operation {
+                SignOperation::PersistRecord { .. } => {
+                    Some((pending.id, SignShellResult::RecordPersisted))
+                }
+                SignOperation::UpdateRecord { .. } => {
+                    Some((pending.id, SignShellResult::RecordUpdated))
+                }
+                _ => None,
+            }) {
+                ops = sign.resolve(record.0, record.1);
+                answered.extend(answers_in(&ops));
+            }
+            assert_eq!(answered, vec![("7".to_owned(), None)], "the retry's answer");
+            assert!(answers_in(&sign.dispatch(SignEvent::SwipeDismissed)).is_empty());
+        }
+
+        // The phone hung up while it connected (review): the person's own
+        // cancel on the phone. The form is back with no card — nothing
+        // blames the network — and the column's close from the form refuses
+        // once, as it does after any dismissal.
+        let mut sign = CoreHost::<SignRequest>::new();
+        let submit = approved_to_its_signature(&mut sign);
+        ctx.prompt_reset();
+        let hung_up = around_prompt(&ctx, || {
+            Err(PasskeyFailure::classified(
+                FailureKind::Cancelled,
+                crate::ctap::cable::PHONE_ENDED,
+            ))
+        });
+        assert!(hung_up.is_err_and(|failure| failure.kind == FailureKind::Cancelled));
+        let back = sign.resolve(
+            submit,
+            SignShellResult::Submit {
+                outcome: SignSubmitOutcome::PasskeyCancelled,
+                now_ms: 1.0,
+            },
+        );
+        assert!(answers_in(&back).is_empty(), "the core kept the request");
+        assert!(back_on_form_of(&sign.view(), false), "the form is back");
+        assert_eq!(ctx.take_phone_stop(), None, "no card");
+        let refused = sign.dispatch(SignEvent::SwipeDismissed);
+        assert_eq!(answers_in(&refused), vec![("7".to_owned(), Some(4001))]);
     }
 
     /// An unpriced sheet approves with no quote rather than a zero.

@@ -151,6 +151,15 @@ sealed class FeeGasOutcome {
     @Serializable
     @SerialName("context_unavailable")
     data object ContextUnavailable : FeeGasOutcome()
+
+    /**
+     * Spec 083 fee: the relay ANSWERED that this operation fails. Declared so
+     * the wire matches the core; this shell does not tell a refusal from an
+     * unreachable relay and answers [SimulationFailed] for both, as before.
+     */
+    @Serializable
+    @SerialName("refused")
+    data object Refused : FeeGasOutcome()
 }
 
 /**
@@ -176,6 +185,14 @@ sealed class FeeFailure {
     data object EstimateFailed : FeeFailure() { override val name = "estimate_failed" }
 
     data object GasQuoteTooHigh : FeeFailure() { override val name = "gas_quote_too_high" }
+
+    /**
+     * Spec 083 fee: the relay answered that the operation fails — its answer,
+     * where [FeeGasOutcome.SimulationFailed] is no answer at all. The core
+     * says it only to a shell that reports [FeeGasOutcome.Refused], which
+     * this one does not yet.
+     */
+    data object WouldFail : FeeFailure() { override val name = "would_fail" }
 
     /**
      * A chain read the quote needs (the account's deployment) got no answer
@@ -233,6 +250,7 @@ sealed class FeeFailure {
         /** Every word that crosses as a plain string — what the drift test holds against the mirror. */
         val PLAIN: List<FeeFailure> = listOf(
             MissingPublicKey, FeeTokenUnavailable, QuoteUnavailable, CalculationFailed, EstimateFailed, GasQuoteTooHigh,
+            WouldFail,
         )
     }
 }

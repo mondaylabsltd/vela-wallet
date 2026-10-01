@@ -478,6 +478,7 @@ mod tests {
                     status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
                     site: None,
                     counterparty_role: Default::default(),
+                    dapp: None,
                 },
             }],
             ..host.view()
@@ -557,6 +558,7 @@ mod tests {
                 status: vela_core::app::activity_feed::FeedTxStatus::Confirmed,
                 site: None,
                 counterparty_role: Default::default(),
+                dapp: None,
             },
         };
         let feed = FeedView {

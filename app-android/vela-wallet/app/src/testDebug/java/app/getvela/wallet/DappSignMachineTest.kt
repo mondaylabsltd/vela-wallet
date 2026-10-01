@@ -278,13 +278,14 @@ class DappSignMachineTest {
     }
 
     /**
-     * Spec 082 G21 (owner ruling 1): the relay took the operation and its reply
-     * was lost. The page gets exactly one answer — the LOCAL op hash, never
-     * -32603 — the row is written pending under that hash with `maybeSent`,
-     * and the tracker is handed it as a may-have-been-sent op.
+     * Spec 082 G21: the relay took the operation and its reply was lost. The
+     * page gets exactly one answer — "not confirmed yet", naming the LOCAL op
+     * hash, never that hash as a result (083, owner ruling 2026-10-01) — the
+     * row is written pending under that hash with `maybeSent`, and the
+     * tracker is handed it as a may-have-been-sent op.
      */
     @Test
-    fun `a lost reply answers the local op hash once and hands the tracker a may-have-been-sent op`() = runBlocking<Unit> {
+    fun `a lost reply is answered not confirmed once and hands the tracker a may-have-been-sent op`() = runBlocking<Unit> {
         seedAccount(); scriptRelay(receiptLands = false)
         port.always("eth_sendUserOperation") { events += "relay.send"; app.getvela.wallet.feature.wallet.core.RpcResult.Failed(rateLimited = false, maybeDelivered = true) }
         val c = controller(receiptWaitMs = 600L)
@@ -295,8 +296,7 @@ class DappSignMachineTest {
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         val answered = answers.filter { it.first == "tab-1/r1" }
         assertEquals("exactly one answer", 1, answered.size)
-        val local = answered.single().second.optString("result")
-        assertTrue("an op hash, never an error: ${answered.single().second}", local.matches(Regex("^0x[0-9a-f]{64}$")))
+        val local = notConfirmedOp(answered.single().second)
         withTimeout(10_000) { c.closed.first { it } }
         delay(300)
         val row = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0)
@@ -371,7 +371,7 @@ class DappSignMachineTest {
      * pending, and the tracker (handed the op and the record) settles it.
      */
     @Test
-    fun `a late receipt answers the op hash and leaves the record pending for the tracker`() = runBlocking<Unit> {
+    fun `a late receipt is answered not confirmed and leaves the record pending for the tracker`() = runBlocking<Unit> {
         seedAccount(); scriptRelay(receiptLands = false)
         val c = controller(receiptWaitMs = 600L)
         c.open(transfer())
@@ -380,7 +380,11 @@ class DappSignMachineTest {
         withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
         c.approve()
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
-        assertEquals("the page gets the op hash when the receipt is late", "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", answers.first { it.first == "tab-1/r1" }.second.getString("result"))
+        assertEquals(
+            "the page is told it is not confirmed yet when the receipt is late (083)",
+            "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            notConfirmedOp(answers.first { it.first == "tab-1/r1" }.second),
+        )
         withTimeout(10_000) { c.closed.first { it } }
         // Give any (wrong) confirming patch time to land before looking.
         delay(500)
@@ -419,7 +423,7 @@ class DappSignMachineTest {
         withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
         assertTrue("the row was on disk when the POST left: $events", "relay.saw-record" in events)
         val local = signedOp!!
-        assertEquals("one answer: the op hash (the receipt is late)", local, answers.single { it.first == "tab-1/r1" }.second.getString("result"))
+        assertEquals("one answer: not confirmed yet (the receipt is late)", local, notConfirmedOp(answers.single { it.first == "tab-1/r1" }.second))
         withTimeout(10_000) { c.closed.first { it } }
         withTimeout(10_000) { while (handed.size < 2) delay(20) }
         delay(200)
@@ -722,5 +726,20 @@ class DappSignMachineTest {
         assertTrue(signature.startsWith("0x") && signature.length > 300)
         assertEquals(1, signs)
         withTimeout(10_000) { c.closed.first { it } }
+    }
+
+    /**
+     * The op a "not confirmed yet" answer names (083, owner ruling
+     * 2026-10-01): `-32603` with the core's sentence — never the op hash as a
+     * result.
+     */
+    private fun notConfirmedOp(answer: org.json.JSONObject): String {
+        assertFalse("never the op hash as a result: $answer", answer.has("result"))
+        val error = answer.getJSONObject("error")
+        assertEquals(-32603, error.getInt("code"))
+        val message = error.getString("message")
+        assertTrue(message, message.startsWith("The transaction was submitted but is not confirmed yet"))
+        return Regex("user operation (0x[0-9a-fA-F]{64})").find(message)?.groupValues?.get(1)
+            ?: throw AssertionError("the op is named: $message")
     }
 }

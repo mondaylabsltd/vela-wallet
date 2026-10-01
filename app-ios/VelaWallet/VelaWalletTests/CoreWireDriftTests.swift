@@ -435,7 +435,7 @@ struct CoreWire082Tests {
                         "value": "0x38d7ea4c68000", "symbol": "xDAI", "decimals": 18, "logo_urls": NSNull(),
                         "chain_id": 100, "timestamp": now / 1000, "day_start_ms": now,
                         "status": "pending", "kind": "dapp_tx", "usd": NSNull(),
-                        "dapp_origin": "http://192.168.50.9:8137",
+                        "dapp_url": "http://192.168.50.9:8137",
                     ]],
                 ])
             case "scan_incoming_transfers": return CoreJSON.string(["type": "sync_completed", "new_count": 0])
@@ -449,7 +449,7 @@ struct CoreWire082Tests {
         #expect(item.kind == .dappTx)
         #expect(item.status == .pending)
         #expect(item.site == "192.168.50.9:8137")
-        #expect(view.transactions.first?.dappOrigin == "http://192.168.50.9:8137")
+        #expect(view.transactions.first?.dappUrl == "http://192.168.50.9:8137")
         #expect(view.historyEmptyKey == "history.emptyTitle")
         #expect(view.homeEmptyKey == "home.emptyNoActivity")
     }

@@ -39,6 +39,9 @@ struct SigningAftercare: Equatable {
         /// The receipt arrived inside the wait; the page got this hash. Not
         /// "confirmed" until the tracker says so — it may have reverted.
         case landed(txHash: String, userOpHash: String?)
+        /// Included and reverted (083): the page got the revert, naming the
+        /// transaction.
+        case reverted(txHash: String, userOpHash: String?)
         /// The wait ran out; the page got the operation hash and the tracker
         /// keeps following it.
         case stillConfirming(userOpHash: String)
@@ -49,6 +52,7 @@ struct SigningAftercare: Equatable {
         switch ending {
         case .signed: nil
         case .landed(_, let op): op
+        case .reverted(_, let op): op
         case .stillConfirming(let op): op
         }
     }
@@ -97,6 +101,9 @@ struct SigningAftercare: Equatable {
         case "landed":
             guard let tx = object["tx_hash"] as? String else { return nil }
             return .landed(txHash: tx, userOpHash: object["user_op_hash"] as? String)
+        case "reverted":
+            guard let tx = object["tx_hash"] as? String else { return nil }
+            return .reverted(txHash: tx, userOpHash: object["user_op_hash"] as? String)
         case "still_confirming":
             guard let op = object["user_op_hash"] as? String else { return nil }
             return .stillConfirming(userOpHash: op)

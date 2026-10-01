@@ -339,6 +339,7 @@ pub fn tab_strip_with(
     // jumped up by a few points the moment a page loaded.
     let strip = div()
         .h(px(TAB_STRIP_H))
+        // 083 W15: chrome never gives its height to the page under it.
         .flex_none()
         .flex()
         .items_end()
@@ -556,7 +557,9 @@ pub fn account_chip(
 /// and the two affordances (⋯ and the account chip) are state the page owns.
 /// Back, forward and reload, in that order. `None` leaves them drawn and
 /// inert, which is what the mocks are — a live browser passes three listeners
-/// and the same three buttons start working.
+/// and the same three buttons start working. `history` is whether back and
+/// forward can act (083 W15): an arrow that cannot is drawn disabled, and its
+/// click asks the engine again.
 pub type NavActions = [crate::flows::panels::Click; 3];
 
 /// Which of the three can act — the engine's word (spec 082 RD6) — and
@@ -577,7 +580,8 @@ pub fn toolbar(
 ) -> Div {
     div()
         .h(px(TOOLBAR_H))
-        // Never shrinks (RD8): see `tab_strip_with`.
+        // Never shrinks (RD8, 083 W15): chrome never gives its height to the
+        // page under it; see `tab_strip_with`.
         .flex_none()
         .px(px(20.))
         .flex()
@@ -866,13 +870,21 @@ fn nav_controls(
                 false,
                 enabled && !state.held,
             );
-            match actions.next().filter(|_| enabled) {
-                Some(action) => crate::flows::panels::clickable(
-                    ElementId::from(("browser-nav", i)),
-                    Some(action),
-                    control,
-                )
-                .into_any_element(),
+            let id = ElementId::from(("browser-nav", i));
+            match actions.next() {
+                Some(action) if enabled => {
+                    crate::flows::panels::clickable(id, Some(action), control).into_any_element()
+                }
+                // 083 W15: a dimmed arrow keeps its action and asks again at
+                // the click. On macOS the drawing can be a moment stale after
+                // a page's own `pushState`. No pointer, since it looks like it
+                // cannot act.
+                Some(action) if live && i < 2 => div()
+                    .id(id)
+                    .child(control)
+                    .on_click(move |event, window, cx| action(event, window, cx))
+                    .into_any_element(),
+                Some(_) => control.into_any_element(),
                 None => control.into_any_element(),
             }
         })

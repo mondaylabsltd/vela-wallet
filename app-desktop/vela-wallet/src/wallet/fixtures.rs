@@ -62,6 +62,10 @@ pub struct ActivityRowModel {
     /// "Yesterday", a date — drawn above it on the home (078 H-04). `None`
     /// for every other row, and everywhere else the row is drawn.
     pub day: Option<SharedString>,
+    /// A dApp swap's one coin back, under its figure — "≈ +0.000037 ETH"
+    /// (083 F1): what the wallet's simulation expected when the person
+    /// approved, never a promise. `None` on every other row.
+    pub received: Option<SharedString>,
 }
 
 #[derive(Clone)]
@@ -240,6 +244,7 @@ fn row(
         badge,
         badge_logo: None,
         day: None,
+        received: None,
     }
 }
 

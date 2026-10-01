@@ -530,6 +530,10 @@ final class UserOpSpine {
             throw Refused(failure: .bundlerUnderfunded)
         case .notSent(.other(let text)?):
             throw Refused(failure: .rejected(text.isEmpty ? nil : text))
+        case .notSent(.nonceHeld?):
+            // 083: another operation of the account holds the nonce — its
+            // hash is never this request's; nothing of this one went out.
+            throw Refused(failure: .other(userOpPreviousPendingDetail()))
         }
     }
 

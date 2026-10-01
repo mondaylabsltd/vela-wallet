@@ -121,27 +121,88 @@ pub fn tab_models(
 ) -> Vec<TabModel> {
     view.tabs
         .iter()
-        .map(|tab| TabModel {
-            id: "tab",
-            title: match &failed_host {
-                Some(host) if lit == Some(tab.id.as_str()) => SharedString::from(host.clone()),
-                _ if tab.title.trim().is_empty() => strings.start_page.clone(),
-                _ => SharedString::from(tab.title.clone()),
-            },
-            site: tab.url.as_ref().map(|url| SiteModel {
+        .map(|tab| {
+            // The tab on screen under a failure panel is named as the bar
+            // names it (082 RD5, 083 H8): the site that failed — its letter,
+            // and none of its icons, since nothing of it loaded. After a
+            // certificate error it kept the page before's title and icon.
+            let failed = failed_host
+                .as_deref()
+                .filter(|host| !host.is_empty() && lit == Some(tab.id.as_str()));
+            TabModel {
                 id: "tab",
-                name: SharedString::from(tab.title.clone()),
-                host: SharedString::from(tab.host.clone()),
-                letter: SharedString::from(letter_of(&tab.host)),
-                tint: tint_of(&tab.host),
-                subtitle: None,
-                meta: None,
-                url: None,
-                icon_urls: icons_of(url, None),
-            }),
-            selected: lit == Some(tab.id.as_str()),
+                title: match failed {
+                    Some(host) => SharedString::from(host.to_owned()),
+                    None if tab.title.trim().is_empty() => strings.start_page.clone(),
+                    None => SharedString::from(tab.title.clone()),
+                },
+                site: match failed {
+                    Some(host) => Some(SiteModel {
+                        id: "tab",
+                        name: SharedString::from(host.to_owned()),
+                        host: SharedString::from(host.to_owned()),
+                        letter: SharedString::from(letter_of(host)),
+                        tint: tint_of(host),
+                        subtitle: None,
+                        meta: None,
+                        url: None,
+                        icon_urls: Vec::new(),
+                    }),
+                    None => tab.url.as_ref().map(|url| SiteModel {
+                        id: "tab",
+                        name: SharedString::from(tab.title.clone()),
+                        host: SharedString::from(tab.host.clone()),
+                        letter: SharedString::from(letter_of(&tab.host)),
+                        tint: tint_of(&tab.host),
+                        subtitle: None,
+                        meta: None,
+                        url: None,
+                        icon_urls: icons_of(url, None),
+                    }),
+                },
+                selected: lit == Some(tab.id.as_str()),
+            }
         })
         .collect()
+}
+
+/// The one tab a signed-in person has before the core records any (spec 083
+/// W9): the site being opened, named by its host, or the start page. Until
+/// 083 this gap drew the gallery's demo tabs — "Uniswap · Polymarket" —
+/// neither of which was open or did anything.
+pub fn pending_tab(strings: &ExploreStrings, opening: Option<&str>) -> TabModel {
+    let host = opening
+        .map(vela_core::app::browser_load::host_of)
+        .filter(|host| !host.is_empty());
+    match (opening, host) {
+        (Some(url), Some(host)) => TabModel {
+            id: "tab",
+            title: SharedString::from(host.clone()),
+            site: Some(address_site(&host, icons_of(url, None))),
+            selected: true,
+        },
+        _ => TabModel {
+            id: "tab",
+            title: strings.start_page.clone(),
+            site: None,
+            selected: true,
+        },
+    }
+}
+
+/// A tab's site known by its address alone.
+fn address_site(host: &str, icon_urls: Vec<SharedString>) -> SiteModel {
+    SiteModel {
+        id: "tab",
+        name: SharedString::from(host.to_owned()),
+        letter: SharedString::from(letter_of(host)),
+        tint: tint_of(host),
+        host: SharedString::from(host.to_owned()),
+        subtitle: None,
+        meta: None,
+        url: None,
+        icon_urls,
+    }
 }
 
 /// The origin of the history row a screen row was drawn from.
@@ -330,6 +391,65 @@ mod tests {
         let strings = ExploreStrings::resolve(&crate::loc::Loc::from_env());
         assert!(recent_group(&[], &strings).is_none());
         assert!(recent_group(&[entry("a.example", "A")], &strings).is_some());
+    }
+
+    /// 083 H8: over a failure panel the tab on screen is the address that
+    /// failed — not the title of the page before it — and the tab beside it
+    /// keeps its own.
+    #[test]
+    fn a_failed_load_names_the_tab_on_screen_by_its_host() {
+        let strings = ExploreStrings::resolve(&crate::loc::Loc::from_env());
+        let tab = |id: &str, host: &str, title: &str| vela_core::app::explore_sites::ExploreTab {
+            id: id.to_owned(),
+            url: Some(format!("https://{host}/")),
+            title: title.to_owned(),
+            host: host.to_owned(),
+        };
+        let view = ExploreView {
+            favorites: Vec::new(),
+            groups: Vec::new(),
+            tabs: vec![
+                tab("a", "app.uniswap.org", "Uniswap Interface"),
+                tab("b", "polymarket.com", "Polymarket"),
+            ],
+            selected_tab: Some("a".to_owned()),
+            favorites_hidden: false,
+            recent_hidden: false,
+            favorites_full: false,
+            tabs_full: false,
+            ready: true,
+        };
+        let tabs = tab_models(
+            &view,
+            &strings,
+            Some("a"),
+            Some(crate::diag::host_of("https://expired.badssl.com/path?q=1")),
+        );
+
+        assert_eq!(tabs[0].title, SharedString::from("expired.badssl.com"));
+        let site = tabs[0].site.as_ref();
+        assert_eq!(
+            site.map(|site| site.host.clone()),
+            Some(SharedString::from("expired.badssl.com"))
+        );
+        assert_eq!(
+            site.map(|site| site.letter.clone()),
+            Some(SharedString::from(letter_of("expired.badssl.com")))
+        );
+        assert!(
+            site.is_some_and(|site| site.icon_urls.is_empty()),
+            "nothing of the failed site loaded, its icon included"
+        );
+        assert_eq!(tabs[1].title, SharedString::from("Polymarket"));
+
+        // An address with no host names nothing.
+        let tabs = tab_models(
+            &view,
+            &strings,
+            Some("a"),
+            Some(crate::diag::host_of("https://")),
+        );
+        assert_eq!(tabs[0].title, SharedString::from("Uniswap Interface"));
     }
 }
 

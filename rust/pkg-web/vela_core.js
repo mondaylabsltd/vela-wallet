@@ -4505,6 +4505,28 @@ export function signMessageHash(method, params_json) {
 }
 
 /**
+ * The page's "not confirmed yet" for an operation that may still land —
+ * `sign_request::not_confirmed_detail` (083). The extension's worker, which
+ * cannot run the core, mirrors it; `protocol.test.ts` pins the mirror here.
+ * @param {string} user_op_hash
+ * @returns {string}
+ */
+export function signNotConfirmedDetail(user_op_hash) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(user_op_hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.signNotConfirmedDetail(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * A sign request older than this (ms) is never signed —
  * `sign_request::EXTENSION_REQUEST_TTL_MS`. The extension worker pins its
  * `REQUEST_TTL_MS` to it (RB2).
@@ -4857,6 +4879,25 @@ export function userOpNotSentDetail() {
     let deferred1_1;
     try {
         const ret = wasm.userOpNotSentDetail();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
+ * The dApp's `-32603` detail for a request that could not go out behind
+ * another of the account's operations (083, `RelayRejection::NonceHeld`) —
+ * never that operation's hash as this one's answer.
+ * @returns {string}
+ */
+export function userOpPreviousPendingDetail() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.userOpPreviousPendingDetail();
         deferred1_0 = ret[0];
         deferred1_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);

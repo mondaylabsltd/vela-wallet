@@ -446,6 +446,11 @@ class UserOpSpine(
                     RelayRejection.BundlerUnderfunded -> Failure.BundlerUnderfunded
                     // The relay refused it (RJ3): never "try again".
                     is RelayRejection.Other -> Failure.Rejected(rejection.message.ifBlank { null })
+                    // 083: another operation of the account holds the nonce —
+                    // its hash is never this request's; nothing of this one
+                    // went out.
+                    is RelayRejection.NonceHeld ->
+                        Failure.Other(uniffi.vela_core_uniffi.userOpPreviousPendingDetail())
                 },
             )
         }

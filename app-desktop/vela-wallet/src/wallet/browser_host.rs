@@ -1034,6 +1034,22 @@ impl LoadDriver {
         }
     }
 
+    /// WebView2 put its own error page up (spec 083 W3): not the site
+    /// arriving; the page stays hidden until the failure's reason comes.
+    pub fn error_page(&mut self) {
+        self.watch.error_page();
+    }
+
+    /// WebView2 said the top navigation failed (spec 083): the panel at once,
+    /// with the engine's reason — and its retry, booked once.
+    pub fn engine_failed(&mut self, url: &str, status: i64, certificate: bool) -> Vec<LoadStep> {
+        if self.watch.engine_failed(url, status, certificate) {
+            self.failed()
+        } else {
+            Vec::new()
+        }
+    }
+
     /// [`GIVE_UP_MS`] after the load was asked for.
     pub fn give_up(&mut self, generation: u64) -> Vec<LoadStep> {
         if self.watch.give_up(generation) {

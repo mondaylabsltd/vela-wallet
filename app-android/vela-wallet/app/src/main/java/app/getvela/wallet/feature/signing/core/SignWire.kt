@@ -186,6 +186,8 @@ data class SignRecord(
     val status: SignRecordStatus,
     val user_op_hash: String,
     val dapp_origin: String,
+    /** 083 H2: the origin the request arrived from — what Activity names the site by. */
+    val dapp_url: String = "",
     val intent: String? = null,
     /** Spec 082 RA3/T184: the submit's reply was lost; persisted with the row. */
     val maybe_sent: Boolean = false,
@@ -256,10 +258,24 @@ sealed class SignSubmitOutcome {
     @SerialName("succeeded")
     data class Succeeded(val result: String) : SignSubmitOutcome()
 
-    /** Accepted, but the receipt did not arrive inside the wait: the page gets the op hash, the record stays pending (issue 262). */
+    /**
+     * Accepted, but the receipt did not arrive inside the wait: the record
+     * stays pending (issue 262). For a transaction the core answers the page
+     * "not confirmed yet" (083) — the op hash only as a batch's id.
+     */
     @Serializable
     @SerialName("receipt_pending")
     data class ReceiptPending(val user_op_hash: String) : SignSubmitOutcome()
+
+    /** 083: included and REVERTED — the page hears the revert, naming the transaction. */
+    @Serializable
+    @SerialName("reverted")
+    data class Reverted(val user_op_hash: String, val tx_hash: String) : SignSubmitOutcome()
+
+    /** 083: the whole wait went by with no transaction — "not confirmed yet", the record stays pending. */
+    @Serializable
+    @SerialName("not_confirmed")
+    data class NotConfirmed(val user_op_hash: String) : SignSubmitOutcome()
 
     @Serializable
     @SerialName("passkey_cancelled")
@@ -320,6 +336,11 @@ sealed class SignEnding {
     @Serializable
     @SerialName("landed")
     data class Landed(val tx_hash: String, val user_op_hash: String? = null) : SignEnding()
+
+    /** 083: included and reverted — drawn as reverted at once. */
+    @Serializable
+    @SerialName("reverted")
+    data class Reverted(val tx_hash: String, val user_op_hash: String? = null) : SignEnding()
 
     @Serializable
     @SerialName("still_confirming")

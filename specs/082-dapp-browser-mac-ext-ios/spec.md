@@ -57,6 +57,13 @@ turning the system proxy on and off. Screenshots and log excerpts go in `evidenc
 10. **The desktop says why a tab switch is held**: "请先完成或取消这个请求" in the address bar
     while a connect or signing request is open (plan Q3; `explore.requestOpen`).
 
+**Superseded on 2026-10-01** (the owner, for the merge with `main`, "用 main 的规则"):
+ruling 1's answer to the page and ruling 9 both follow 083 now. A transaction is never answered
+with its op hash: the page waits for the chain, and is told -32603 "not confirmed yet" when the
+shell's wait ends first. A revert is answered -32603 "The transaction was included but reverted
+(tx)". Ruling 1's sheet words ("可能已经发出，请不要重复发送"), the write-ahead and the tracker
+stand.
+
 ## What 082 starts from: 079's leftovers
 
 These are recorded in `specs/079-android-dapp-browser-stability/results.md` ("Not done" and

@@ -173,6 +173,12 @@ pub const BUNDLER_BACKOFF_CAP_MS: u32 = 1_000;
 /// Read RPC timeout — `NET_TIMEOUTS.rpcRead` (`net.ts:25`); `poolRpcCall`
 /// always posts with this shorter timeout (`rpc-pool.ts:765`).
 pub const RPC_READ_TIMEOUT_MS: u32 = 8_000;
+/// How long a read waits on one endpoint before a shell also asks the
+/// endpoint this machine will ask next — hedged reads (spec 083 D3b,
+/// hand-off H6; see [`is_hedged_read`], [`early_verdict`] and
+/// [`RpcPoolView::pending_urls`]). Without it a black-holed node holds every
+/// read for the whole [`RPC_READ_TIMEOUT_MS`] before the next node is asked.
+pub const HEDGE_AFTER_MS: u32 = 1_500;
 /// Bundler JSON-RPC timeout — `NET_TIMEOUTS.bundlerRpc` (`net.ts:27`).
 pub const BUNDLER_RPC_TIMEOUT_MS: u32 = 15_000;
 /// Per-endpoint `eth_chainId` ping timeout — `NET_TIMEOUTS.rpcPing` (`net.ts:29`).
@@ -1047,6 +1053,15 @@ pub struct RpcPoolView {
     /// RPC" banner still reads `failed_chains` only.
     #[serde(default)]
     pub unreached_chains: Vec<u32>,
+    /// Per routed call, the endpoints its current pass has still to try, in
+    /// the order it will try them (the endpoint it is waiting on is already
+    /// off the list). For a shell that asks the next endpoint early — the
+    /// desktop's hedged reads, spec 083 H6 — so the early ask goes where this
+    /// machine goes next, past its cooldowns and 429 back-offs, never around
+    /// them. Shell-local: never serialized, never in the bindings.
+    #[serde(skip)]
+    #[cfg_attr(feature = "bindings", ts(skip))]
+    pub pending_urls: BTreeMap<String, Vec<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1156,6 +1171,14 @@ impl App for RpcPool {
             rate_limited_chains: model.rate_limited_chains.iter().copied().collect(),
             banned: model.bans.values().cloned().collect(),
             unreached_chains: model.unreached_chains.iter().copied().collect(),
+            pending_urls: model
+                .calls
+                .iter()
+                .filter(|(_, session)| !session.queue.is_empty())
+                .map(|(call_id, session)| {
+                    (call_id.clone(), session.queue.iter().cloned().collect())
+                })
+                .collect(),
         }
     }
 }
@@ -1857,6 +1880,155 @@ fn classify_response_error(error: &RpcErrorInfo) -> Route {
     }
 }
 
+/// What one endpoint's outcome means for the route — the four-way
+/// classification, applied.
+fn route_of(kind: RpcKind, method: &str, outcome: &RpcTransportOutcome) -> Route {
+    match outcome {
+        RpcTransportOutcome::Response { error: None } => Route::Success,
+        RpcTransportOutcome::Response { error: Some(error) } => {
+            // The range check MUST come before the permanent/transient checks:
+            // these errors often carry "exceed" or a -32000 code that would
+            // otherwise (wrongly) ban or fail over the endpoint
+            // (`rpc-pool.ts:768-772`). RPC calls only, as in TS. Rate-limit
+            // wording goes first (spec 082 T180): a throttled node is not a
+            // range limit, and the caller must not shrink its window for it.
+            // Nor is it a ban (contract §2): the find-event reads `eth_getLogs`
+            // every tick while an op may have been sent, and "exceeded" would
+            // otherwise ban a throttled node for an hour for every method.
+            if kind == RpcKind::Rpc && method == "eth_getLogs" {
+                if has_rate_limit_wording(error) {
+                    Route::Transient {
+                        rate_limit_signal: true,
+                    }
+                } else if let Some(cap) = get_logs_range_cap(error) {
+                    Route::RangeCap(cap)
+                } else if is_rate_limit_signal(error) {
+                    Route::Transient {
+                        rate_limit_signal: true,
+                    }
+                } else {
+                    classify_response_error(error)
+                }
+            } else if kind == RpcKind::Rpc && is_optional_method(method) {
+                // Spec 082 RG7: plan words or `-32603 "method handler
+                // crashed"` from a node that cannot simulate must not ban it
+                // for `eth_call`, nor raise Arbitrum's notice. Throttling still
+                // fails over, without a ban.
+                if is_rate_limit_signal(error) {
+                    Route::Transient {
+                        rate_limit_signal: true,
+                    }
+                } else {
+                    Route::NotServed
+                }
+            } else {
+                classify_response_error(error)
+            }
+        }
+        RpcTransportOutcome::HttpError {
+            status: 401 | 403 | 404,
+        } => Route::Ban {
+            // The HttpBanError catch never feeds `sawRateLimit` (ported).
+            rate_limit_signal: false,
+        },
+        RpcTransportOutcome::HttpError { status: 429 } => Route::RateLimited429,
+        RpcTransportOutcome::HttpError { .. }
+        | RpcTransportOutcome::NonJson
+        | RpcTransportOutcome::Timeout
+        | RpcTransportOutcome::Network
+        | RpcTransportOutcome::NotConnected => Route::PlainFailure,
+    }
+}
+
+/// The reads a shell may hedge (spec 083 H6). Each answers from chain state
+/// and changes nothing, so asking two nodes costs one request and never a
+/// second effect. Anything that writes — `eth_sendRawTransaction`, which a
+/// dApp's page sends through the same pool — is absent, and so are the
+/// filter methods, whose ids live on one node only.
+const HEDGED_READS: &[&str] = &[
+    "eth_blockNumber",
+    "eth_call",
+    "eth_chainId",
+    "eth_createAccessList",
+    "eth_estimateGas",
+    "eth_feeHistory",
+    "eth_gasPrice",
+    "eth_getBalance",
+    "eth_getBlockByHash",
+    "eth_getBlockByNumber",
+    "eth_getBlockReceipts",
+    "eth_getBlockTransactionCountByHash",
+    "eth_getBlockTransactionCountByNumber",
+    "eth_getCode",
+    "eth_getLogs",
+    "eth_getProof",
+    "eth_getStorageAt",
+    "eth_getTransactionByBlockHashAndIndex",
+    "eth_getTransactionByBlockNumberAndIndex",
+    "eth_getTransactionByHash",
+    "eth_getTransactionCount",
+    "eth_getTransactionReceipt",
+    "eth_maxPriorityFeePerGas",
+    "eth_simulateV1",
+    "eth_syncing",
+    "net_version",
+    "web3_clientVersion",
+];
+
+/// Whether a shell may ask the next endpoint early for this call (spec 083
+/// H6): a read on the list above, through the RPC pool. Never a write, never
+/// a filter, never anything bound for the bundler.
+pub fn is_hedged_read(kind: RpcKind, method: &str) -> bool {
+    kind == RpcKind::Rpc && HEDGED_READS.contains(&method)
+}
+
+/// The verdict an outcome may hand the caller BEFORE this machine reaches
+/// that endpoint in its own order, or `None` when it must wait for it.
+///
+/// For a shell that asks the next endpoint while the current one is still
+/// silent (desktop hedged reads, spec 083 H6). An early answer has to be one
+/// every healthy node gives alike, because it beats the preferred node's
+/// answer rather than following that node's failure: a result, or an
+/// execution revert (code 3, or a message naming the revert) — facts about
+/// chain state. Anything else this machine would still conclude with is a
+/// fact about the NODE that answered: a getLogs range cap, a -32601 "method
+/// not found", a missing trace or simulate method. Handed over early, a
+/// weaker public node's cap or gap would replace the preferred node's real
+/// answer whenever that node was merely slower than the hedge delay; such
+/// an outcome waits, and is this machine's to conclude with only when it
+/// reaches that endpoint — after the endpoints before it have failed.
+///
+/// Always a subset of what [`handle_outcome`] concludes with: an outcome the
+/// machine would ban or fail over (an "execution reverted: … exceeded" that
+/// reads as permanent, say) is never an answer here either.
+pub fn early_verdict(
+    kind: RpcKind,
+    method: &str,
+    url: &str,
+    outcome: &RpcTransportOutcome,
+) -> Option<RpcCallVerdict> {
+    let node_independent = match outcome {
+        RpcTransportOutcome::Response { error: None } => true,
+        RpcTransportOutcome::Response { error: Some(error) } => {
+            error.code == Some(3)
+                || error
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.to_lowercase().contains("revert"))
+        }
+        _ => false,
+    };
+    match route_of(kind, method, outcome) {
+        // A hedged read changes nothing on any node (`HEDGED_READS`), so no
+        // POST of it delivered anything (spec 082 RA1).
+        Route::Success if node_independent => Some(RpcCallVerdict::Respond {
+            url: url.to_owned(),
+            maybe_delivered: false,
+        }),
+        _ => None,
+    }
+}
+
 fn handle_outcome(
     model: &mut Model,
     call_id: &str,
@@ -1885,61 +2057,7 @@ fn handle_outcome(
         }
     }
 
-    let route = match outcome {
-        RpcTransportOutcome::Response { error: None } => Route::Success,
-        RpcTransportOutcome::Response { error: Some(error) } => {
-            // The range check MUST come before the permanent/transient checks:
-            // these errors often carry "exceed" or a -32000 code that would
-            // otherwise (wrongly) ban or fail over the endpoint
-            // (`rpc-pool.ts:768-772`). RPC calls only, as in TS. Rate-limit
-            // wording goes first (spec 082 T180): a throttled node is not a
-            // range limit, and the caller must not shrink its window for it.
-            // Nor is it a ban (contract §2): the find-event reads `eth_getLogs`
-            // every tick while an op may have been sent, and "exceeded" would
-            // otherwise ban a throttled node for an hour for every method.
-            if kind == RpcKind::Rpc && method == "eth_getLogs" {
-                if has_rate_limit_wording(&error) {
-                    Route::Transient {
-                        rate_limit_signal: true,
-                    }
-                } else if let Some(cap) = get_logs_range_cap(&error) {
-                    Route::RangeCap(cap)
-                } else if is_rate_limit_signal(&error) {
-                    Route::Transient {
-                        rate_limit_signal: true,
-                    }
-                } else {
-                    classify_response_error(&error)
-                }
-            } else if kind == RpcKind::Rpc && is_optional_method(&method) {
-                // Spec 082 RG7: plan words or `-32603 "method handler
-                // crashed"` from a node that cannot simulate must not ban it
-                // for `eth_call`, nor raise Arbitrum's notice. Throttling still
-                // fails over, without a ban.
-                if is_rate_limit_signal(&error) {
-                    Route::Transient {
-                        rate_limit_signal: true,
-                    }
-                } else {
-                    Route::NotServed
-                }
-            } else {
-                classify_response_error(&error)
-            }
-        }
-        RpcTransportOutcome::HttpError {
-            status: 401 | 403 | 404,
-        } => Route::Ban {
-            // The HttpBanError catch never feeds `sawRateLimit` (ported).
-            rate_limit_signal: false,
-        },
-        RpcTransportOutcome::HttpError { status: 429 } => Route::RateLimited429,
-        RpcTransportOutcome::HttpError { .. }
-        | RpcTransportOutcome::NonJson
-        | RpcTransportOutcome::Timeout
-        | RpcTransportOutcome::Network
-        | RpcTransportOutcome::NotConnected => Route::PlainFailure,
-    };
+    let route = route_of(kind, &method, &outcome);
     let maybe_delivered = model
         .calls
         .get(call_id)

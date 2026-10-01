@@ -65,32 +65,53 @@ fn a_result_that_is_not_a_hash_may_have_been_sent() {
     }
 }
 
-/// Rule 2: the `[existingHash:…]` marker names the operation the relay already
-/// holds — accepted under that hash, whatever the transport saw.
+/// Rule 2: the `[existingHash:…]` marker, judged by whose it is. This
+/// operation's own hash: the relay already holds it — accepted under it,
+/// whatever the transport saw.
 #[test]
-fn an_existing_hash_marker_is_accepted_with_that_hash() {
+fn an_existing_hash_marker_naming_this_operation_is_accepted() {
     let reply = error(&format!(
-        "operation already pending for this account [existingHash:{RELAY}]"
+        "operation already pending for this account [existingHash:{LOCAL}]"
     ));
     for maybe_delivered in [false, true] {
         assert_eq!(
             submit_step(&reply, 1, maybe_delivered, LOCAL),
             done(SubmitVerdict::Accepted {
-                user_op_hash: RELAY.to_owned()
+                user_op_hash: LOCAL.to_owned()
             })
         );
     }
     // In `data` rather than `message`: the raw JSON is read first.
     let in_data = SubmitReply::Error(
-        serde_json::json!({ "code": -32000, "message": "busy", "data": format!("[existingHash:{RELAY}]") })
+        serde_json::json!({ "code": -32000, "message": "busy", "data": format!("[existingHash:{LOCAL}]") })
             .to_string(),
     );
     assert_eq!(
         submit_step(&in_data, 0, false, LOCAL),
         done(SubmitVerdict::Accepted {
-            user_op_hash: RELAY.to_owned()
+            user_op_hash: LOCAL.to_owned()
         })
     );
+}
+
+/// Rule 2, 083 S3b: another operation's hash holds the nonce. It is never
+/// this request's answer (Uniswap called a swap done when only its approval
+/// had happened): not sent, the nonce held by it — unless an earlier POST
+/// may have delivered this one, which stays "may have been sent".
+#[test]
+fn an_existing_hash_marker_naming_another_operation_is_never_this_ones() {
+    let reply = error(&format!(
+        "operation already pending for this account [existingHash:{RELAY}]"
+    ));
+    assert_eq!(
+        submit_step(&reply, 1, false, LOCAL),
+        done(SubmitVerdict::NotSent {
+            rejection: Some(RelayRejection::NonceHeld {
+                user_op_hash: RELAY.to_owned()
+            })
+        })
+    );
+    assert_eq!(submit_step(&reply, 1, true, LOCAL), maybe_sent());
 }
 
 /// Rule 3: "currently processing" re-POSTs the identical operation after 3 s

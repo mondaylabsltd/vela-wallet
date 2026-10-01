@@ -22,7 +22,7 @@
  * (`opHash`, `chainId`, RJ2), sent right before the relay POST.
  */
 import { isHash32 } from './op-receipt.js';
-import { REQUEST_TTL_MS, SETTLE, settleError } from './protocol.js';
+import { REQUEST_TTL_MS, SETTLE, maybeSentPayload, settleError } from './protocol.js';
 
 /** The record schema this worker writes. */
 export const RECORD_VERSION = 1;
@@ -143,8 +143,9 @@ export function maybeSentHash(record) {
  * — when it is torn down: the panel's page going (`pagehide`), or an in-app
  * navigation off the wallet unmounting the request host while the port stays
  * up. For a claimed submit that carried its operation hash that is surface
- * loss like any other, so the page is told the hash, never 4900 (which a dApp
- * reads as "not sent" and pays again). Every other answer — a result, or a
+ * loss like any other, so the page is told it is not confirmed yet (083; a
+ * batch: its id), never 4900 (which a dApp reads as "not sent" and pays
+ * again). Every other answer — a result, or a
  * real error such as RJ3's "refused; nothing was sent" — goes as the surface
  * gave it.
  *
@@ -157,7 +158,7 @@ export function maybeSentHash(record) {
 export function surfaceAnswer(record, payload) {
 	const hash = maybeSentHash(record);
 	if (hash && payload?.error && payload.error.code === SETTLE.surface_closed.code) {
-		return { payload: { result: hash }, maybeSent: hash };
+		return { payload: maybeSentPayload(record.method, hash), maybeSent: hash };
 	}
 	return { payload, maybeSent: null };
 }
@@ -165,7 +166,9 @@ export function surfaceAnswer(record, payload) {
 /** `{rid, cause}` — plus the answer a may-have-been-sent request is owed. */
 function ending(record, cause) {
 	const hash = maybeSentHash(record);
-	return hash ? { rid: record.rid, cause, answer: { ok: hash } } : { rid: record.rid, cause };
+	return hash
+		? { rid: record.rid, cause, answer: maybeSentPayload(record.method, hash), opHash: hash }
+		: { rid: record.rid, cause };
 }
 
 /**
@@ -196,7 +199,7 @@ export function callerOwns(record, caller) {
  * Returns `[{ rid, action: 'settle', cause, answer? } | { rid, action: 'probe' }]`:
  * a probe asks the page, by `documentId`, whether it still owns the id
  * (`alive`) and keeps the record if it does. A settle carries `answer:
- * {ok: opHash}` for a claimed submit that may have been sent (RJ2): the page
+ * answer, opHash}` for a claimed submit that may have been sent (RJ2: see `maybeSentPayload`): the page
  * is told that hash, not 4900.
  */
 export function recoveryPlan(records, { now, ttlMs = REQUEST_TTL_MS, panelWindows, openWindows }) {
@@ -239,7 +242,7 @@ export function recoveryPlan(records, { now, ttlMs = REQUEST_TTL_MS, panelWindow
  *     request window's request, and every request its panel owed.
  *
  * Returns `[{ rid, cause, answer? }]`. When the SURFACE went (not the page), a
- * claimed submit that may have been sent carries `answer: {ok: opHash}` —
+ * claimed submit that may have been sent carries `answer` (`maybeSentPayload`) and `opHash` —
  * RJ2 supersedes RB10 for those records only.
  */
 export function affectedBy(records, event) {

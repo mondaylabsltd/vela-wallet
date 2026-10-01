@@ -49,6 +49,7 @@ import { deleteTransaction, saveTransaction, updateTransaction } from '$lib/serv
 import { serializeAssetSim } from '$lib/services/sim/tx-simulation';
 import {
 	DAppReceiptPendingError,
+	DAppRevertedError,
 	handleDAppRequest,
 	type DAppSubmitHooks,
 	type SigningAccount
@@ -131,7 +132,10 @@ export function isRelayRefusal(error: unknown): boolean {
 	return (
 		error instanceof UserOpNotSentError &&
 		error.rejection !== null &&
-		error.rejection !== 'relayer_unavailable'
+		error.rejection !== 'relayer_unavailable' &&
+		// Held behind another of the account's operations (083): not this
+		// op's refusal — it may go once that one confirms.
+		!(typeof error.rejection === 'object' && 'nonce_held' in error.rejection)
 	);
 }
 
@@ -366,22 +370,47 @@ export function createSignExecutor(ports: SignShellPorts) {
 						'core',
 						hooks
 					);
-					// EIP-5792's answer IS the op hash (the batch id): remembered like
-					// a late receipt's, for the extension's receipt translation.
-					if (operation.method === 'wallet_sendCalls' && typeof result === 'string') {
-						answeredOps.set(result.toLowerCase(), operation.chain_id);
+					const answer = typeof result === 'string' ? result : String(result ?? '');
+					// EIP-5792: a batch is answered with its id — the op hash — the moment
+					// the relay accepts it, and `wallet_getCallsStatus` reads it back as
+					// one. It is not a receipt. Reported as `succeeded`, the core closed
+					// the record "confirmed" with the op hash for a tx hash — an explorer
+					// link to nothing, never tracked, never failed, and Activity shows it
+					// (083 H2 review). As `receipt_pending` the page gets the same id, the
+					// record lands pending first, and the tracker settles it.
+					if (operation.method === 'wallet_sendCalls' && answer !== '') {
+						// Remembered like a late receipt's, for the extension's receipt
+						// translation (spec 082).
+						answeredOps.set(answer.toLowerCase(), operation.chain_id);
+						return {
+							type: 'submit',
+							outcome: { type: 'receipt_pending', user_op_hash: answer },
+							now_ms: Date.now()
+						};
 					}
 					return {
 						type: 'submit',
-						outcome: {
-							type: 'succeeded',
-							result: typeof result === 'string' ? result : String(result ?? '')
-						},
+						outcome: { type: 'succeeded', result: answer },
 						now_ms: Date.now()
 					};
 				} catch (error) {
 					// Accepted (or may have been sent), receipt late (issue 262, spec 082
-					// RA2): the page gets the op hash, and the tracker alone closes it.
+					// RA2): the core tells the page it is not confirmed yet (083), and the
+					// tracker alone closes it.
+					// Included and reverted (083): the core answers the page the revert
+					// and closes the record failed — never the tx hash a site reads as
+					// done (owner ruling 2026-10-01).
+					if (error instanceof DAppRevertedError) {
+						return {
+							type: 'submit',
+							outcome: {
+								type: 'reverted',
+								user_op_hash: error.userOpHash,
+								tx_hash: error.txHash
+							},
+							now_ms: Date.now()
+						};
+					}
 					if (error instanceof DAppReceiptPendingError) {
 						// Already answered by the core through the tracker (RJ4): this
 						// result is dropped, and no answer will consume the entry.
@@ -443,6 +472,7 @@ export function createSignExecutor(ports: SignShellPorts) {
 					from: record.from,
 					chainId: record.chain_id,
 					dappOrigin: record.dapp_origin,
+					dappUrl: record.dapp_url,
 					nowMs: record.now_ms,
 					status: record.status,
 					userOpHash: record.user_op_hash,

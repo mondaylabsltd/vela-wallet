@@ -270,6 +270,31 @@ export function rpcError(code, message, data) {
 	return e;
 }
 
+/**
+ * What a page is told when the wallet's surface went after a claimed submit
+ * that may have been sent (RJ2): never 4900, which a dApp reads as "not sent"
+ * and pays again, and never the op hash as if it were a transaction — no
+ * node the site asks knows it (083, owner ruling 2026-10-01). The core's
+ * `sign_request::not_confirmed_detail`, mirrored because the worker cannot
+ * run the core; `protocol.test.ts` pins it to `signNotConfirmedDetail`.
+ */
+export const NOT_CONFIRMED_MESSAGE =
+	'The transaction was submitted but is not confirmed yet; it may still complete, so check the wallet before sending it again';
+
+/**
+ * The answer a may-have-been-sent request is owed (RJ2): for a transaction,
+ * `-32603` "not confirmed yet" naming its operation; for a `wallet_sendCalls`
+ * batch, its id — the op hash, by EIP-5792's own terms.
+ *
+ * @param {unknown} method
+ * @param {string} hash
+ */
+export function maybeSentPayload(method, hash) {
+	return method === 'wallet_sendCalls'
+		? { result: hash }
+		: { error: rpcError(-32603, `${NOT_CONFIRMED_MESSAGE} (user operation ${hash})`) };
+}
+
 // ---- method classification (mirrors the app) --------------------------------
 
 /** The single predicate for "this needs a passkey". */

@@ -276,6 +276,8 @@ struct DappActivityRowTests {
             "result": "", "from": me, "chain_id": 100, "now_ms": now, "status": status,
             "user_op_hash": "0x" + String(repeating: "ab", count: 32),
             "dapp_origin": "http://192.168.50.9:8137",
+            // 083 H2: the site is read from the origin the request came from.
+            "dapp_url": "http://192.168.50.9:8137",
         ], nativeSymbol: "XDAI")
     }
 

@@ -15,14 +15,14 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::rpc_pool::{
-    backoff_with_jitter_ms, cooldown_ms, endpoint_score, get_logs_range_cap, is_ban_active,
-    is_log_range_error, is_optional_method, is_permanent_rpc_error, is_rate_limit_signal,
-    is_transient_server_error, may_have_delivered, qualifies_for_perma_ban, record_failure,
-    record_success, select_urls, source_priority, strip_chain_suffix, Event, RpcBanEntry,
-    RpcCallVerdict, RpcEndpointSeed, RpcEndpointStats, RpcErrorInfo, RpcKind, RpcOperation as Op,
-    RpcPool, RpcPoolView, RpcShellResult as Res, RpcSource, RpcTransportOutcome as Out,
-    BUNDLER_RPC_TIMEOUT_MS, OPTIONAL_METHODS, PERMA_BAN_TTL_MS, PING_TIMEOUT_MS, POOL_REFRESH_MS,
-    RPC_READ_TIMEOUT_MS, TEMP_BAN_TTL_MS,
+    backoff_with_jitter_ms, cooldown_ms, early_verdict, endpoint_score, get_logs_range_cap,
+    is_ban_active, is_hedged_read, is_log_range_error, is_optional_method, is_permanent_rpc_error,
+    is_rate_limit_signal, is_transient_server_error, may_have_delivered, qualifies_for_perma_ban,
+    record_failure, record_success, select_urls, source_priority, strip_chain_suffix, Event,
+    RpcBanEntry, RpcCallVerdict, RpcEndpointSeed, RpcEndpointStats, RpcErrorInfo, RpcKind,
+    RpcOperation as Op, RpcPool, RpcPoolView, RpcShellResult as Res, RpcSource,
+    RpcTransportOutcome as Out, BUNDLER_RPC_TIMEOUT_MS, HEDGE_AFTER_MS, OPTIONAL_METHODS,
+    PERMA_BAN_TTL_MS, PING_TIMEOUT_MS, POOL_REFRESH_MS, RPC_READ_TIMEOUT_MS, TEMP_BAN_TTL_MS,
 };
 
 type Sut = DomainDriver<RpcPool>;
@@ -2855,4 +2855,177 @@ fn a_throttled_get_logs_fails_over_without_a_ban() {
         assert!(view.banned.is_empty(), "{error:?}");
         assert!(view.unreached_chains.is_empty(), "{error:?}");
     }
+}
+
+/// Spec 083 H6: the desktop asks the next endpoint when the current one is
+/// slow, and may hand the caller a hedge's answer before the machine reaches
+/// that endpoint — but only an answer every healthy node gives alike (a
+/// result, or an execution revert), and only one the machine would conclude
+/// with itself. A range cap or an unsupported method is a fact about the node
+/// that answered; it waits for the machine's own order, where it follows the
+/// preferred node's failure instead of beating that node's real answer.
+/// Pinned to the machine's routing, outcome by outcome, so the two cannot
+/// drift.
+#[test]
+fn an_early_verdict_is_only_an_answer_every_node_gives_alike() {
+    let cases = [
+        ("eth_call", ok(), true),
+        (
+            "eth_call",
+            rpc_err(Some(3), "execution reverted: ERC20 balance too low"),
+            true,
+        ),
+        (
+            "eth_estimateGas",
+            rpc_err(Some(-32000), "execution reverted"),
+            true,
+        ),
+        // Facts about the node: the machine concludes with them, in its order.
+        (
+            "eth_simulateV1",
+            rpc_err(
+                Some(-32601),
+                "the method eth_simulateV1 does not exist/is not available",
+            ),
+            false,
+        ),
+        (
+            "eth_getLogs",
+            rpc_err(Some(-32000), "block range exceeded: maximum is 500"),
+            false,
+        ),
+        (
+            "eth_getLogs",
+            rpc_err(None, "query returned more than 10000 results"),
+            false,
+        ),
+        // Failures: the sweep's to route.
+        ("eth_call", rpc_err(Some(-32000), "header not found"), false),
+        (
+            "eth_call",
+            rpc_err(None, "unauthorized: api key required"),
+            false,
+        ),
+        (
+            "eth_call",
+            rpc_err(Some(-32000), "block range exceeded: maximum is 500"),
+            false,
+        ),
+        // A revert the machine reads as permanent ("exceeded") is banned and
+        // failed over — never an early answer either.
+        (
+            "eth_call",
+            rpc_err(Some(3), "execution reverted: allowance exceeded"),
+            false,
+        ),
+        ("eth_call", Out::HttpError { status: 403 }, false),
+        ("eth_call", Out::HttpError { status: 429 }, false),
+        ("eth_call", Out::HttpError { status: 502 }, false),
+        ("eth_call", Out::NonJson, false),
+        ("eth_call", Out::Timeout, false),
+        ("eth_call", Out::Network, false),
+    ];
+    let mut concluded = 0;
+    for (index, (method, out, early)) in cases.into_iter().enumerate() {
+        let id = format!("h{index}");
+        let mut sut = Sut::new();
+        sut.dispatch(rpc_call(&id, method, T0));
+        assert_eq!(sut.resolve(config2(T0)), vec![rpc_post(&id, USER, method)]);
+        let ops = sut.resolve(outcome(&id, USER, out.clone(), 40.0, T0 + 10.0));
+        let machine = ops.into_iter().find_map(|op| match op {
+            Op::Conclude { verdict, .. } => Some(verdict),
+            _ => None,
+        });
+        concluded += usize::from(machine.is_some());
+        let verdict = early_verdict(RpcKind::Rpc, method, USER, &out);
+        assert_eq!(verdict.is_some(), early, "{method} {out:?}");
+        if verdict.is_some() {
+            assert_eq!(verdict, machine, "{method} {out:?}");
+        }
+    }
+    assert_eq!(
+        concluded, 6,
+        "the three answers, the unsupported method, the two range caps"
+    );
+}
+
+/// Spec 083 H6: the view names, per call, the endpoints the current pass has
+/// still to try, in the order the machine will try them — so a shell's early
+/// ask goes where the machine goes next. An endpoint cooling down after a
+/// failure is at the back of that list, not at the front of the tiers.
+#[test]
+fn the_view_names_each_calls_remaining_endpoints_in_the_machines_order() {
+    let mut sut = loaded(T0);
+    assert!(
+        sut.view().pending_urls.is_empty(),
+        "no call, nothing pending"
+    );
+
+    sut.dispatch(rpc_call("c1", "eth_call", T0 + 1_000.0));
+    assert_eq!(
+        sut.view().pending_urls.get("c1"),
+        Some(&vec![PUB1.to_owned(), PUB2.to_owned()]),
+        "USER is being asked; the rest of the pass follows"
+    );
+    let ops = sut.resolve(outcome("c1", USER, Out::Timeout, 8_000.0, T0 + 9_000.0));
+    assert_eq!(ops, vec![rpc_post("c1", PUB1, "eth_call")]);
+    assert_eq!(
+        sut.view().pending_urls.get("c1"),
+        Some(&vec![PUB2.to_owned()])
+    );
+    let ops = sut.resolve(outcome("c1", PUB1, ok(), 40.0, T0 + 9_100.0));
+    // USER's timeout may have reached it (spec 082 RA1).
+    assert_eq!(ops, vec![respond_after_loss("c1", PUB1)]);
+    assert!(sut.resolve(Res::Concluded).is_empty());
+    assert!(
+        sut.view().pending_urls.is_empty(),
+        "a concluded call is gone"
+    );
+
+    // USER timed out and cools for 30 s: the next read's pass puts it last,
+    // though its tier is first.
+    let ops = sut.dispatch(rpc_call("c2", "eth_call", T0 + 20_000.0));
+    assert_eq!(ops, vec![rpc_post("c2", PUB1, "eth_call")]);
+    assert_eq!(
+        sut.view().pending_urls.get("c2"),
+        Some(&vec![PUB2.to_owned(), USER.to_owned()])
+    );
+
+    // Shell-local: never on the wire.
+    let wire = serde_json::to_value(sut.view()).unwrap_or_default();
+    assert!(wire.get("pending_urls").is_none(), "{wire}");
+}
+
+/// Spec 083 H6: only reads are hedged — a hedge asks a second node the same
+/// question, so anything that writes, a filter whose id lives on one node,
+/// and anything bound for the bundler is asked once. And a hedge is early:
+/// its delay is well inside the read timeout it exists to cut short.
+#[test]
+fn only_reads_through_the_rpc_pool_are_hedged() {
+    for method in [
+        "eth_call",
+        "eth_getBalance",
+        "eth_getLogs",
+        "eth_estimateGas",
+    ] {
+        assert!(is_hedged_read(RpcKind::Rpc, method), "{method}");
+    }
+    for method in [
+        "eth_sendRawTransaction",
+        "eth_sendTransaction",
+        "eth_newFilter",
+        "eth_getFilterChanges",
+        "eth_uninstallFilter",
+        "eth_subscribe",
+    ] {
+        assert!(!is_hedged_read(RpcKind::Rpc, method), "{method}");
+    }
+    for method in [
+        "eth_call",
+        "eth_getUserOperationReceipt",
+        "eth_sendUserOperation",
+    ] {
+        assert!(!is_hedged_read(RpcKind::Bundler, method), "{method}");
+    }
+    const { assert!(HEDGE_AFTER_MS < RPC_READ_TIMEOUT_MS / 4) };
 }

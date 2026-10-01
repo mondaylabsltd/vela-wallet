@@ -13,15 +13,18 @@ use support::DomainDriver;
 use vela_core::app::fee_policy::{tempo_reimbursement, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use vela_core::app::sign_request::{
     dapp_receipt_wait_ms, ending_of, ending_state, extract_request_chain_id, is_signing_method,
-    method_kind, required_capabilities, sign_account_index, Event, SignAccountRef, SignApproveOpts,
-    SignDappIdentity, SignEnding, SignEndingState, SignErrorKind, SignFundingNeeded,
-    SignFundingPresentation, SignMethodKind, SignNotice, SignOperation as Op, SignPhase,
-    SignQuotedFee, SignRecord, SignRecordClose, SignRecordKind, SignRecordStatus, SignRequest,
-    SignResponsePayload, SignSettledOutcome, SignShellResult as Res, SignSponsorship,
-    SignSubmitOutcome, SignSurface, SignSwipeAction, SignTrackerHandoff, SignTrackerWithdraw,
-    CODE_INTERNAL, CODE_INVALID_PARAMS, CODE_UNAUTHORIZED, CODE_UNSUPPORTED_CAPABILITY,
-    CODE_UNSUPPORTED_CHAIN, CODE_USER_REJECTED, DAPP_TX_ANSWER_WINDOW_MS, EXTENSION_REQUEST_TTL_MS,
+    method_kind, required_capabilities, reverted_detail, reverted_transaction, sign_account_index,
+    Event, SignAccountRef, SignApproveOpts, SignDappIdentity, SignEnding, SignEndingState,
+    SignErrorKind, SignFundingNeeded, SignFundingPresentation, SignMethodKind, SignNotice,
+    SignOperation as Op, SignPhase, SignQuotedFee, SignRecord, SignRecordClose, SignRecordKind,
+    SignRecordStatus, SignRequest, SignResponsePayload, SignSettledOutcome, SignShellResult as Res,
+    SignSponsorship, SignSubmitOutcome, SignSurface, SignSwipeAction, SignTrackerHandoff,
+    SignTrackerWithdraw, CODE_INTERNAL, CODE_INVALID_PARAMS, CODE_UNAUTHORIZED,
+    CODE_UNSUPPORTED_CAPABILITY, CODE_UNSUPPORTED_CHAIN, CODE_USER_REJECTED,
+    DAPP_TX_ANSWER_WINDOW_MS, EXTENSION_REQUEST_TTL_MS, NOT_CONFIRMED_MESSAGE, PAGE_WAIT_CAP_MS,
+    REVERTED_MESSAGE,
 };
+use vela_core::app::token_trust::TrustSimJudgment;
 use vela_core::app::tx_tracker::{TrackEntryView, TrackOutcome, TrackStatus};
 
 type Sut = DomainDriver<SignRequest>;
@@ -200,6 +203,24 @@ fn response_ok(op: &Op) -> Option<(String, Option<String>)> {
         } => Some((transport_id.clone(), result.clone())),
         _ => None,
     }
+}
+
+/// The page was told its transaction is not confirmed yet (083, owner ruling
+/// 2026-10-01): `-32603`, [`NOT_CONFIRMED_MESSAGE`] naming `op` — never `op`
+/// as if it were a transaction hash.
+fn not_confirmed(op: &Op, user_op: &str) -> bool {
+    matches!(op, Op::SendResponse {
+        payload: SignResponsePayload::Err { code: CODE_INTERNAL, message: Some(message), .. },
+        ..
+    } if *message == format!("{NOT_CONFIRMED_MESSAGE} (user operation {user_op})"))
+}
+
+/// The answer in `ops`, as [`ending_of`] reads it for the sheet.
+fn ending_in(ops: &[Op], method: &str, user_op: Option<&str>) -> Option<SignEnding> {
+    ops.iter().find_map(|op| match op {
+        Op::SendResponse { payload, .. } => ending_of(method, payload, user_op),
+        _ => None,
+    })
 }
 
 // ===========================================================================
@@ -593,11 +614,12 @@ fn tx_pending_record_persists_at_submission_and_only_the_tracker_closes_it() {
     assert_eq!(sut.view().surface, SignSurface::Hidden);
 }
 
-/// Issue 262: the receipt wait timed out. The page still gets the op hash,
-/// but the record stays PENDING — no confirming patch — and the tracker (which
+/// Issue 262: the receipt wait timed out. The page is told the transaction is
+/// not confirmed yet — never the op hash (083, owner ruling 2026-10-01) — and
+/// the record stays PENDING — no confirming patch — and the tracker (which
 /// already holds the op) is the only one who may close it.
 #[test]
-fn receipt_timeout_answers_the_op_hash_and_leaves_the_record_pending() {
+fn receipt_timeout_answers_not_confirmed_and_leaves_the_record_pending() {
     let mut sut = boot();
     sut.dispatch(Arrive::global("req-7t", "eth_sendTransaction", &plain_send_params()).event());
     sut.dispatch(approve(SignApproveOpts::default()));
@@ -618,9 +640,13 @@ fn receipt_timeout_answers_the_op_hash_and_leaves_the_record_pending() {
         now_ms: 125_000.0,
     });
     assert_eq!(ops.len(), 1, "only the answer — no record patch: {ops:?}");
+    assert!(not_confirmed(&ops[0], "0xophash"), "{ops:?}");
     assert_eq!(
-        response_ok(&ops[0]),
-        Some((WP.to_owned(), Some("0xophash".to_owned())))
+        ending_in(&ops, "eth_sendTransaction", Some("0xophash")),
+        Some(SignEnding::StillConfirming {
+            user_op_hash: "0xophash".to_owned()
+        }),
+        "the sheet follows the op"
     );
     assert!(
         !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
@@ -665,10 +691,7 @@ fn receipt_timeout_without_op_submitted_persists_pending_then_answers() {
     let handoff = sut.view().tracker_handoff.expect("handoff");
     assert_eq!(handoff.record_ids, vec!["dapp-9000-tx".to_owned()]);
     let ops = sut.resolve(Res::RecordPersisted);
-    assert_eq!(
-        response_ok(&ops[0]),
-        Some((WP.to_owned(), Some("0xophash".to_owned())))
-    );
+    assert!(not_confirmed(&ops[0], "0xophash"), "{ops:?}");
     assert!(!ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })));
     assert_eq!(sut.view().surface, SignSurface::Hidden);
 }
@@ -758,8 +781,9 @@ fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
 /// Spec 082 RA8 (was: sign_request patched the record failed and answered
 /// -32603 — "no eternal pending"). Past `OpSubmitted` the tracker holds the
 /// record and alone closes it: a dropped op's failed receipt patches it
-/// failed there, so nothing is left pending forever. The page gets the op
-/// hash, never a failure it would retry over an op the relay accepted.
+/// failed there, so nothing is left pending forever. The page is told it is
+/// not confirmed yet (083) — never "failed", which it would retry over an op
+/// the relay accepted, and never the op hash.
 #[test]
 fn a_failure_after_the_hand_off_leaves_the_record_to_the_tracker() {
     let mut sut = boot();
@@ -784,10 +808,7 @@ fn a_failure_after_the_hand_off_leaves_the_record_to_the_tracker() {
         now_ms: 7_000.0,
     });
     assert_eq!(ops.len(), 1, "no record patch from here: {ops:?}");
-    assert_eq!(
-        response_ok(&ops[0]),
-        Some((WP.to_owned(), Some("0xop".to_owned())))
-    );
+    assert!(not_confirmed(&ops[0], "0xop"), "{ops:?}");
     let view = sut.view();
     assert!(view.error.is_none());
     assert_eq!(view.surface, SignSurface::Hidden);
@@ -842,6 +863,12 @@ fn f3_f4_request_uses_its_own_chain_and_dapp_identity() {
         matches!(ops.as_slice(), [Op::PersistRecord { record }]
             if record.chain_id == 137 && record.dapp_origin == "app.example"),
         "history carries the request's own chain + identity (F3): {ops:?}"
+    );
+    // Beside the name the dApp gave, the origin it came from — the only one
+    // of the two Activity may call a site (083 H2 review).
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { record }] if record.dapp_url == ORIGIN),
+        "{ops:?}"
     );
 }
 
@@ -1476,6 +1503,267 @@ fn no_second_response_after_a_terminal_error() {
     );
 }
 
+/// Every answer the core asked for in `ops`, as (transport, id, code) — `None`
+/// for a success.
+fn responses(ops: &[Op]) -> Vec<(String, String, Option<i32>)> {
+    ops.iter()
+        .filter_map(|op| match op {
+            Op::SendResponse {
+                transport_id,
+                id,
+                payload,
+            } => Some((
+                transport_id.clone(),
+                id.clone(),
+                match payload {
+                    SignResponsePayload::Err { code, .. } => Some(*code),
+                    SignResponsePayload::Ok { .. } => None,
+                },
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Approve a transaction as far as its signature: the pre-check answered,
+/// `SignAndSubmit` out — the core is `Submitting`, so a close is a dismiss.
+/// Returns every operation asked for on the way.
+fn approve_to_submitting(sut: &mut Sut, id: &str) -> Vec<Op> {
+    let mut ops =
+        sut.dispatch(Arrive::global(id, "eth_sendTransaction", &plain_send_params()).event());
+    ops.extend(sut.dispatch(approve(SignApproveOpts::default())));
+    let submitting = sut.resolve(Res::PreCheck { funding: None });
+    assert!(matches!(submitting.as_slice(), [Op::SignAndSubmit { .. }]));
+    ops.extend(submitting);
+    assert_eq!(sut.view().swipe_action, SignSwipeAction::Dismiss);
+    ops
+}
+
+fn passkey_cancelled() -> Res {
+    Res::Submit {
+        outcome: SignSubmitOutcome::PasskeyCancelled,
+        now_ms: NOW + 1_000.0,
+    }
+}
+
+/// 083 (review): the prompt comes back unsigned, THEN the person closes —
+/// the request is back on its form, so the close is a refusal. Over the whole
+/// run, exactly one answer: that 4001.
+#[test]
+fn a_cancelled_prompt_then_a_close_answers_4001_once() {
+    let mut sut = boot();
+    let mut all = approve_to_submitting(&mut sut, "req-083a");
+
+    let back = sut.resolve(passkey_cancelled());
+    assert!(
+        responses(&back).is_empty(),
+        "the sheet is still up: {back:?}"
+    );
+    assert_eq!(sut.view().swipe_action, SignSwipeAction::Reject);
+    all.extend(back);
+
+    all.extend(sut.dispatch(Event::SwipeDismissed));
+    all.extend(sut.dispatch(Event::SwipeDismissed));
+    all.extend(sut.dispatch(Event::RejectTapped));
+    assert_eq!(
+        responses(&all),
+        vec![(
+            WP.to_owned(),
+            "req-083a".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+}
+
+/// 083 (review): the person closes while the signature is still to come — a
+/// dismiss, since the core is `Submitting` — THEN the prompt comes back
+/// unsigned. This sent nothing, and the page's promise never settled (the
+/// desktop's tab queued every later request behind it). Now, over the whole
+/// run, exactly one answer: a 4001 to the request's own transport, settled as
+/// the person's refusal.
+#[test]
+fn a_close_then_a_cancelled_prompt_answers_4001_once() {
+    let mut sut = boot();
+    let mut all = approve_to_submitting(&mut sut, "req-083b");
+
+    let dismissed = sut.dispatch(Event::SwipeDismissed);
+    assert!(
+        responses(&dismissed).is_empty(),
+        "a dismiss sends nothing yet: {dismissed:?}"
+    );
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    all.extend(dismissed);
+
+    let back = sut.resolve(passkey_cancelled());
+    let (code, kind, transport) = back
+        .iter()
+        .find_map(response_error)
+        .expect("an error answer");
+    assert_eq!(
+        (code, kind, transport.as_str()),
+        (CODE_USER_REJECTED, SignErrorKind::UserRejected, WP)
+    );
+    all.extend(back);
+    all.extend(sut.dispatch(Event::SwipeDismissed));
+    all.extend(sut.dispatch(Event::RejectTapped));
+    assert_eq!(
+        responses(&all),
+        vec![(
+            WP.to_owned(),
+            "req-083b".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+
+    // Settled as the person's refusal: the same rid never signs.
+    sut.dispatch(Arrive::global("req-083b", "eth_sendTransaction", &plain_send_params()).event());
+    assert_eq!(
+        sut.view().notice,
+        Some(SignNotice::AlreadySettled {
+            outcome: SignSettledOutcome::Rejected
+        })
+    );
+}
+
+/// 083 (review): the same, with a newer request on the sheet by the time the
+/// prompt comes back — the refusal goes to the OLD request (F2), and the new
+/// one is untouched and can be approved.
+#[test]
+fn a_dismissed_request_cancelled_under_a_newer_one_answers_only_itself() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-083c", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    assert_eq!(sut.view().swipe_action, SignSwipeAction::Dismiss);
+    sut.dispatch(Event::SwipeDismissed);
+    sut.dispatch(Arrive::extension("rid-083d", "personal_sign", r#"["0xbeef","0x0"]"#, 1).event());
+
+    let ops = sut.resolve(passkey_cancelled());
+    assert_eq!(
+        responses(&ops),
+        vec![(
+            WP.to_owned(),
+            "req-083c".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+    let view = sut.view();
+    assert_eq!(view.request.expect("the newer request").id, "rid-083d");
+    assert!(view.confirm_gate_open, "and it can still be approved");
+}
+
+/// 083 (review): a request replaced on the sheet while its signature was
+/// still to come — no close at all — is off the sheet just the same: nobody
+/// can retry or refuse it any more, so a prompt that comes back unsigned is
+/// its refusal, once, and the newer request is untouched (the rule
+/// `on_sponsorship` already keeps for a superseded pipeline).
+#[test]
+fn a_superseded_request_cancelled_answers_only_itself() {
+    let mut sut = boot();
+    let mut all = approve_to_submitting(&mut sut, "req-083i");
+    all.extend(sut.dispatch(
+        Arrive::extension("rid-083j", "personal_sign", r#"["0xbeef","0x0"]"#, 1).event(),
+    ));
+    assert_eq!(
+        sut.view().request.expect("the newer request").id,
+        "rid-083j"
+    );
+
+    all.extend(sut.resolve(passkey_cancelled()));
+    assert_eq!(
+        responses(&all),
+        vec![(
+            WP.to_owned(),
+            "req-083i".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+    let view = sut.view();
+    assert_eq!(
+        view.request.expect("still the newer request").id,
+        "rid-083j"
+    );
+    assert!(view.confirm_gate_open, "and it can still be approved");
+}
+
+/// 083 (review): a request still on its sheet when the prompt comes back
+/// unsigned is answered nothing — the pre-083 rule every client relies on
+/// (the modal stays open for a retry; `dapp-connection.tsx:808-812`).
+#[test]
+fn a_cancelled_prompt_on_the_sheet_answers_nothing() {
+    let mut sut = boot();
+    let mut all = approve_to_submitting(&mut sut, "req-083k");
+    all.extend(sut.resolve(passkey_cancelled()));
+    assert!(responses(&all).is_empty(), "{all:?}");
+    let view = sut.view();
+    assert_eq!(view.surface, SignSurface::Sheet);
+    assert!(view.confirm_gate_open, "open for a retry");
+}
+
+/// 083 (review): only a request whose page is still there is refused. A page
+/// that went away already has its 4900 from the browser — with or without a
+/// close before it, nothing more is sent — which is what every client did
+/// before 083.
+#[test]
+fn a_page_already_gone_is_not_answered_again() {
+    // Gone while signing, no close.
+    let mut sut = boot();
+    approve_to_submitting(&mut sut, "req-083e");
+    sut.dispatch(Event::TransportDropped {
+        transport_id: WP.to_owned(),
+    });
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    assert!(responses(&sut.resolve(passkey_cancelled())).is_empty());
+
+    // Closed, THEN gone, then the prompt comes back unsigned.
+    let mut sut = boot();
+    approve_to_submitting(&mut sut, "req-083f");
+    sut.dispatch(Event::SwipeDismissed);
+    sut.dispatch(Event::TransportDropped {
+        transport_id: WP.to_owned(),
+    });
+    assert!(responses(&sut.resolve(passkey_cancelled())).is_empty());
+
+    // Another transport dropping is not this page going away.
+    let mut sut = boot();
+    approve_to_submitting(&mut sut, "req-083g");
+    sut.dispatch(Event::SwipeDismissed);
+    sut.dispatch(Event::TransportDropped {
+        transport_id: EXT.to_owned(),
+    });
+    assert_eq!(
+        responses(&sut.resolve(passkey_cancelled())),
+        vec![(
+            WP.to_owned(),
+            "req-083g".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+}
+
+/// 083 (review): a closed request the page sent again is back on the sheet
+/// by the time its old prompt comes back unsigned — it is open for a retry
+/// like any other (nothing sent), and the person's close of THAT sheet is
+/// the one refusal.
+#[test]
+fn a_closed_request_back_on_the_sheet_stays_open() {
+    let mut sut = boot();
+    approve_to_submitting(&mut sut, "req-083h");
+    sut.dispatch(Event::SwipeDismissed);
+    sut.dispatch(Arrive::global("req-083h", "eth_sendTransaction", &plain_send_params()).event());
+    assert_eq!(sut.view().request.expect("back").id, "req-083h");
+
+    assert!(responses(&sut.resolve(passkey_cancelled())).is_empty());
+    assert!(sut.view().confirm_gate_open, "open for a retry");
+    assert_eq!(
+        responses(&sut.dispatch(Event::SwipeDismissed)),
+        vec![(
+            WP.to_owned(),
+            "req-083h".to_owned(),
+            Some(CODE_USER_REJECTED)
+        )]
+    );
+}
+
 #[test]
 fn transport_drop_clears_only_requests_it_owns() {
     // A global request dies with its durable transport…
@@ -1605,6 +1893,49 @@ fn batch_result_records_then_responds_with_the_batch_id() {
     );
 }
 
+/// 083 H2 review: the web answers `wallet_sendCalls` with its EIP-5792 batch
+/// id — the userOpHash — the moment the relay accepts it, and says so
+/// (`ReceiptPending`). The page gets that id, the durable record lands
+/// PENDING under it first, and the tracker is handed the op to settle with
+/// the real tx hash. Reported as `Succeeded`, the record closed "confirmed"
+/// with the op hash as its tx hash — which Activity now shows.
+#[test]
+fn a_batch_answered_at_acceptance_stays_pending_for_the_tracker() {
+    let mut sut = boot();
+    let params = batch_params(
+        &format!(r#"[{{"to":"{SPENDER}","data":"0x","value":"0x1"}}]"#),
+        None,
+    );
+    sut.dispatch(Arrive::global("req-27b", "wallet_sendCalls", &params).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::ReceiptPending {
+            user_op_hash: "0xbatchid".to_owned(),
+        },
+        now_ms: 13_000.0,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { record }]
+            if record.kind == SignRecordKind::DappTx
+                && record.record_id == "dapp-13000-tx"
+                && record.status == SignRecordStatus::Pending
+                && record.user_op_hash == "0xbatchid"
+                && record.result.is_empty()),
+        "pending, under the op hash, with no tx hash: {ops:?}"
+    );
+    let handoff = sut.view().tracker_handoff.expect("the tracker gets the op");
+    assert_eq!(handoff.user_op_hash, "0xbatchid");
+    assert_eq!(handoff.record_ids, vec!["dapp-13000-tx".to_owned()]);
+    let ops = sut.resolve(Res::RecordPersisted);
+    assert_eq!(
+        response_ok(&ops[0]),
+        Some((WP.to_owned(), Some("0xbatchid".to_owned()))),
+        "the page still gets its batch id"
+    );
+    assert!(!ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })));
+}
+
 #[test]
 fn malformed_params_fail_closed_at_approve() {
     let mut sut = boot();
@@ -1686,10 +2017,9 @@ fn a_maybe_sent_op_is_recorded_and_handed_over_under_the_local_hash() {
         now_ms: 125_000.0,
     });
     assert_eq!(ops.len(), 1, "{ops:?}");
-    assert_eq!(
-        response_ok(&ops[0]),
-        Some((WP.to_owned(), Some(LOCAL_OP.to_owned())))
-    );
+    // The page waits for the chain; at the window's end it hears "not
+    // confirmed yet", never the local hash (083, owner ruling 2026-10-01).
+    assert!(not_confirmed(&ops[0], LOCAL_OP), "{ops:?}");
 
     // The rid settled Submitted: a replay never signs twice.
     sut.dispatch(Arrive::global("req-m1", "eth_sendTransaction", &plain_send_params()).event());
@@ -2269,11 +2599,12 @@ fn asker_gone_answers_nothing_and_records_nothing() {
 /// answer the page -32603, show "submit failed" and patch the record failed
 /// from here: the G21 double payment for a may-have-been-sent op (the dApp
 /// reads -32603 as "not sent" and asks again) and a second writer racing the
-/// tracker over an on-chain record. The page now gets exactly one answer, the
-/// op hash (079's still-confirming contract), the rid settles Submitted, the
-/// record is left to the tracker, and the sheet is not an error.
+/// tracker over an on-chain record. The page now gets exactly one answer —
+/// "not confirmed yet" (083; never the op hash, owner ruling 2026-10-01) —
+/// the rid settles Submitted, the record is left to the tracker, and the
+/// sheet is not an error.
 #[test]
-fn after_the_hand_off_a_failure_is_answered_with_the_op_hash() {
+fn after_the_hand_off_a_failure_is_answered_not_confirmed() {
     let failures = [
         SignSubmitOutcome::Failed {
             message: "All bundler endpoints failed".to_owned(),
@@ -2300,13 +2631,13 @@ fn after_the_hand_off_a_failure_is_answered_with_the_op_hash() {
             "{outcome:?}: the tracker alone closes the record: {ops:?}"
         );
         assert!(
-            !ops.iter().any(|op| response_error(op).is_some()),
-            "{outcome:?}: never -32603 over a sent op: {ops:?}"
+            ops.iter().filter_map(response_ok).next().is_none(),
+            "{outcome:?}: never Ok with the op hash: {ops:?}"
         );
         assert_eq!(
-            ops.iter().filter_map(response_ok).collect::<Vec<_>>(),
-            vec![(WP.to_owned(), Some(LOCAL_OP.to_owned()))],
-            "{outcome:?}: one Ok answer, the op hash"
+            ops.iter().filter(|op| not_confirmed(op, LOCAL_OP)).count(),
+            1,
+            "{outcome:?}: one answer, not confirmed yet: {ops:?}"
         );
         let view = sut.view();
         assert!(
@@ -2377,7 +2708,7 @@ fn err_detail(op: &Op) -> Option<(i32, SignErrorKind, Option<String>)> {
     }
 }
 
-fn responses(ops: &[Op]) -> usize {
+fn response_count(ops: &[Op]) -> usize {
     ops.iter()
         .filter(|op| matches!(op, Op::SendResponse { .. }))
         .count()
@@ -2465,7 +2796,7 @@ fn a_quit_after_op_signed_leaves_one_pending_maybe_sent_record() {
         .collect();
     assert_eq!(records.len(), 1);
     assert!(records[0].maybe_sent && records[0].status == SignRecordStatus::Pending);
-    assert_eq!(responses(&ops), 0);
+    assert_eq!(response_count(&ops), 0);
 }
 
 /// A stale or wrong-id `OpSigned`, one before the submit stage, a second
@@ -2582,7 +2913,7 @@ fn not_sent_withdraws_the_record_and_answers_once() {
             record_id: record.record_id.clone()
         }
     );
-    assert_eq!(responses(&ops), 1, "{ops:?}");
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
     let answer = ops.iter().find_map(err_detail);
     assert_eq!(
         answer,
@@ -2622,7 +2953,7 @@ fn a_refused_submit_answers_the_refused_sentence() {
             now_ms: 9_000.0,
         },
     );
-    assert_eq!(responses(&ops), 1);
+    assert_eq!(response_count(&ops), 1);
     assert_eq!(
         ops.iter().find_map(err_detail),
         Some((
@@ -2690,7 +3021,7 @@ fn a_rejection_the_tracker_learns_is_answered_refused_once() {
         .dispatch(op_tracked(TrackStatus::Pending, None, 12_000.0))
         .is_empty());
     let ops = sut.dispatch(op_tracked(TrackStatus::Rejected, None, 20_000.0));
-    assert_eq!(responses(&ops), 1, "{ops:?}");
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
     assert_eq!(
         ops.iter().find_map(err_detail),
         Some((
@@ -2740,7 +3071,7 @@ fn a_not_sent_verdict_the_tracker_proves_is_answered_not_sent_once() {
     written_ahead(&mut sut, "req-t2");
     sut.dispatch(op_submitted("req-t2", LOCAL_OP, true));
     let ops = sut.dispatch(op_tracked(TrackStatus::NotSent, None, 87_000.0));
-    assert_eq!(responses(&ops), 1, "{ops:?}");
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
     assert_eq!(
         ops.iter().find_map(err_detail),
         Some((
@@ -2776,7 +3107,7 @@ fn a_confirmation_the_tracker_finds_is_answered_at_once() {
         ops.iter().filter_map(response_ok).collect::<Vec<_>>(),
         vec![(WP.to_owned(), Some(LANDED_TX.to_owned()))]
     );
-    assert_eq!(responses(&ops), 1);
+    assert_eq!(response_count(&ops), 1);
     assert_eq!(sut.view().surface, SignSurface::Hidden);
     let late = sut.resolve_matching(
         |op| matches!(op, Op::SignAndSubmit { .. }),
@@ -2789,13 +3120,26 @@ fn a_confirmation_the_tracker_finds_is_answered_at_once() {
     );
     assert!(late.is_empty(), "{late:?}");
 
-    // A reverted op (ruling 9) is answered its tx hash too.
+    // A reverted op is answered the revert, naming its transaction — never
+    // the hash a site would read as done (083, owner ruling 2026-10-01).
     let mut reverted = submitting("req-t4");
     reverted.dispatch(op_submitted("req-t4", LOCAL_OP, false));
     let ops = reverted.dispatch(op_tracked(TrackStatus::Dropped, Some(LANDED_TX), 30_000.0));
+    assert!(
+        ops.iter().filter_map(response_ok).next().is_none(),
+        "{ops:?}"
+    );
     assert_eq!(
-        ops.iter().filter_map(response_ok).collect::<Vec<_>>(),
-        vec![(WP.to_owned(), Some(LANDED_TX.to_owned()))]
+        ops.iter().filter_map(err_detail).collect::<Vec<_>>(),
+        vec![(
+            CODE_INTERNAL,
+            SignErrorKind::SubmitFailed,
+            Some(reverted_detail(LANDED_TX))
+        )]
+    );
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
+        "the tracker closed it: {ops:?}"
     );
 }
 
@@ -2815,7 +3159,7 @@ fn a_confirmation_after_the_window_answer_changes_nothing() {
             now_ms: 120_000.0,
         },
     );
-    assert_eq!(responses(&ops), 1);
+    assert_eq!(response_count(&ops), 1);
     assert!(sut
         .dispatch(op_tracked(
             TrackStatus::Confirmed,
@@ -2956,7 +3300,7 @@ fn an_early_tracker_answer_never_strands_a_newer_request_s_account_switch() {
         Some(LANDED_TX),
         30_000.0,
     ));
-    assert_eq!(responses(&ops), 1, "{ops:?}");
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
     sut.resolve_matching(
         |op| matches!(op, Op::SwitchActiveAccount { .. }),
         Res::AccountSwitched,
@@ -2994,7 +3338,7 @@ fn a_not_sent_verdict_never_answers_an_op_the_relay_accepted() {
     written_ahead(&mut maybe, "req-ns2");
     maybe.dispatch(op_submitted("req-ns2", LOCAL_OP, true));
     let ops = maybe.dispatch(op_tracked(TrackStatus::NotSent, None, 87_000.0));
-    assert_eq!(responses(&ops), 1, "{ops:?}");
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
 }
 
 /// A `Landed` ending holds a tx hash — a receipt the shell saw, or the
@@ -3194,7 +3538,7 @@ fn an_adopted_write_ahead_hands_its_record_over() {
     let mut landed = submitting("req-g3");
     let record = written_ahead(&mut landed, "req-g3");
     let ops = landed.resolve_matching(is_submit, submit_ok(LANDED_TX));
-    assert_eq!(responses(&ops), 1, "{ops:?}");
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
     let handoff = handoff_of(&landed);
     assert_eq!(handoff.record_ids, vec![record.record_id]);
     assert!(handoff.admitted && !handoff.maybe_sent, "{handoff:?}");
@@ -3210,8 +3554,635 @@ fn an_adopted_write_ahead_hands_its_record_over() {
             now_ms: 120_000.0,
         },
     );
-    assert_eq!(responses(&ops), 1, "{ops:?}");
+    assert_eq!(response_count(&ops), 1, "{ops:?}");
     let handoff = handoff_of(&pending);
     assert_eq!(handoff.record_ids, vec![record.record_id]);
     assert!(handoff.maybe_sent && !handoff.admitted, "{handoff:?}");
+}
+
+// ===========================================================================
+// 083 — one honest answer for a transaction
+// ===========================================================================
+
+const OP_HASH: &str = "0xabababababababababababababababababababababababababababababababab";
+const TX_HASH: &str = "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd";
+
+/// A transaction approved and accepted by the relay (`OpSubmitted` at
+/// `NOW`, its pending record written) — its page not yet answered.
+fn submitted(id: &str) -> Sut {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global(id, "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    sut.dispatch(Event::OpSubmitted {
+        id: id.to_owned(),
+        user_op_hash: OP_HASH.to_owned(),
+        now_ms: NOW,
+        maybe_sent: false,
+        submit_block: None,
+    });
+    sut.resolve_matching(
+        |op| matches!(op, Op::PersistRecord { .. }),
+        Res::RecordPersisted,
+    );
+    sut
+}
+
+/// One answer the page got: `Ok(result)` or `Err((code, message))`.
+type PageAnswer = Result<Option<String>, (i32, Option<String>)>;
+
+/// Every answer the page got in `ops`: `Ok(result)` or `Err(code, message)`.
+fn answers(ops: &[Op]) -> Vec<PageAnswer> {
+    ops.iter()
+        .filter_map(|op| match op {
+            Op::SendResponse {
+                payload: SignResponsePayload::Ok { result },
+                ..
+            } => Some(Ok(result.clone())),
+            Op::SendResponse {
+                payload: SignResponsePayload::Err { code, message, .. },
+                ..
+            } => Some(Err((*code, message.clone()))),
+            _ => None,
+        })
+        .collect()
+}
+
+/// S2: the op was included and REVERTED. The bundle transaction's own status
+/// is 0x1, so its hash read on the site's node says "done" — Uniswap showed a
+/// swap that moved nothing, and Vela's record said confirmed. The page gets
+/// ONE error instead, the record closes failed, the sheet shows the failure,
+/// and nothing after that answers the page again.
+#[test]
+fn a_reverted_operation_is_answered_one_error_and_its_record_fails() {
+    let mut sut = submitted("req-rv");
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::SignAndSubmit { .. }),
+        Res::Submit {
+            outcome: SignSubmitOutcome::Reverted {
+                user_op_hash: OP_HASH.to_owned(),
+                tx_hash: TX_HASH.to_owned(),
+            },
+            now_ms: NOW + 12_000.0,
+        },
+    );
+    assert_eq!(
+        answers(&ops),
+        vec![Err((
+            CODE_INTERNAL,
+            Some(format!("{REVERTED_MESSAGE} ({TX_HASH})"))
+        ))],
+        "one error, for the developer, naming the transaction: {ops:?}"
+    );
+    assert_eq!(
+        REVERTED_MESSAGE,
+        "The transaction was included but reverted"
+    );
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
+        "the record is the tracker's to close failed (spec 082 RA8): {ops:?}"
+    );
+    assert_eq!(
+        sut.view()
+            .tracker_handoff
+            .map(|handoff| handoff.user_op_hash),
+        Some(OP_HASH.to_owned()),
+        "the tracker holds the op"
+    );
+    assert!(
+        !ops.iter().any(|op| matches!(
+            op,
+            Op::UpdateRecord {
+                close: SignRecordClose::Confirmed { .. },
+                ..
+            }
+        )),
+        "never 已确认: {ops:?}"
+    );
+    // The failure stays on screen as the sheet's ending (spec 082 RA8): the
+    // answer reads as a revert naming its transaction, drawn at once.
+    let ending = ending_in(&ops, "eth_sendTransaction", Some(OP_HASH)).expect("an ending");
+    assert_eq!(
+        ending,
+        SignEnding::Reverted {
+            tx_hash: TX_HASH.to_owned(),
+            user_op_hash: Some(OP_HASH.to_owned()),
+        }
+    );
+    assert_eq!(
+        ending_state(&ending, None),
+        SignEndingState::Reverted {
+            tx_hash: TX_HASH.to_owned()
+        }
+    );
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+
+    // Once: no close of the sheet, nor the page asking again, answers more.
+    sut.resolve(Res::Responded);
+    assert!(answers(&sut.dispatch(Event::RejectTapped)).is_empty());
+    assert!(answers(&sut.dispatch(Event::SwipeDismissed)).is_empty());
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+    let ops =
+        sut.dispatch(Arrive::global("req-rv", "eth_sendTransaction", &plain_send_params()).event());
+    assert!(answers(&ops).is_empty(), "a replay is never re-signed");
+    assert_eq!(
+        sut.view().notice,
+        Some(SignNotice::AlreadySettled {
+            outcome: SignSettledOutcome::Submitted
+        })
+    );
+}
+
+/// A shell that saw no `OpSubmitted` still leaves the record before the
+/// answer — and a reverted op's record ends failed, never confirmed.
+#[test]
+fn a_reverted_operation_without_op_submitted_records_first_then_one_error() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-rv2", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Reverted {
+            user_op_hash: OP_HASH.to_owned(),
+            tx_hash: TX_HASH.to_owned(),
+        },
+        now_ms: 9_000.0,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { record }]
+            if record.status == SignRecordStatus::Pending && record.user_op_hash == OP_HASH),
+        "the record first, and no answer yet: {ops:?}"
+    );
+    let ops = sut.resolve(Res::RecordPersisted);
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
+        "the tracker, handed the op, closes it (spec 082 RA8): {ops:?}"
+    );
+    assert_eq!(
+        answers(&ops),
+        vec![Err((
+            CODE_INTERNAL,
+            Some(format!("{REVERTED_MESSAGE} ({TX_HASH})"))
+        ))]
+    );
+    assert_eq!(
+        sut.view().surface,
+        SignSurface::Hidden,
+        "the ending draws it"
+    );
+}
+
+/// S3: while the operation has not landed the page is not answered at all —
+/// not at 90 s, not when the person closes the column — and when the
+/// transaction hash arrives, minutes later, THAT is the answer: never the
+/// op hash, which no node the site asks will ever know.
+#[test]
+fn no_answer_until_the_transaction_hash_then_that_hash() {
+    let mut sut = submitted("req-slow");
+    assert!(
+        matches!(sut.outstanding().as_slice(), [Op::SignAndSubmit { .. }]),
+        "the pipeline is still out — the page is waiting: {:?}",
+        sut.outstanding()
+    );
+    // Ninety seconds on: the person closes the column. The request goes on.
+    let ops = sut.dispatch(Event::DismissTapped);
+    assert!(answers(&ops).is_empty(), "a close answers nothing: {ops:?}");
+    assert_eq!(sut.view().surface, SignSurface::Hidden);
+
+    // Five minutes in, the relay reports the bundle transaction.
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Succeeded {
+            result: TX_HASH.to_owned(),
+        },
+        now_ms: NOW + 300_000.0,
+    });
+    assert_eq!(answers(&ops), vec![Ok(Some(TX_HASH.to_owned()))], "{ops:?}");
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
+        "the tracker alone closes the record (spec 082 RA8): {ops:?}"
+    );
+}
+
+/// S3: the cap. Ten minutes — the tracker's own "not landing soon" line —
+/// with no transaction: the page hears THAT, as an error, never the op hash
+/// as if it were a transaction. The record stays pending for the tracker (a
+/// timeout is not a failure), and the sheet keeps following the operation,
+/// which may still land; closing it answers nothing more.
+#[test]
+fn at_the_cap_the_page_hears_not_confirmed_never_the_op_hash() {
+    use vela_core::app::tx_tracker::SLOW_POLL_AFTER_MS;
+    assert_eq!(PAGE_WAIT_CAP_MS, SLOW_POLL_AFTER_MS);
+    assert_eq!(PAGE_WAIT_CAP_MS, 600_000.0);
+
+    let mut sut = submitted("req-cap");
+    let ops = sut.resolve_matching(
+        |op| matches!(op, Op::SignAndSubmit { .. }),
+        Res::Submit {
+            outcome: SignSubmitOutcome::NotConfirmed {
+                user_op_hash: OP_HASH.to_owned(),
+            },
+            now_ms: NOW + PAGE_WAIT_CAP_MS,
+        },
+    );
+    assert_eq!(
+        answers(&ops),
+        vec![Err((
+            CODE_INTERNAL,
+            Some(format!(
+                "{NOT_CONFIRMED_MESSAGE} (user operation {OP_HASH})"
+            ))
+        ))],
+        "{ops:?}"
+    );
+    assert!(
+        !ops.iter().any(|op| matches!(op, Op::UpdateRecord { .. })),
+        "the record is the tracker's: {ops:?}"
+    );
+    // Not a failure — it may still land: the sheet hands over to an ending
+    // that follows the operation (spec 082 RA8).
+    assert_eq!(
+        ending_in(&ops, "eth_sendTransaction", Some(OP_HASH)),
+        Some(SignEnding::StillConfirming {
+            user_op_hash: OP_HASH.to_owned()
+        })
+    );
+    let view = sut.view();
+    assert_eq!(view.error, None, "not a failure — it may still land");
+    assert_eq!(view.surface, SignSurface::Hidden);
+    assert_eq!(
+        view.tracker_handoff.map(|handoff| handoff.user_op_hash),
+        Some(OP_HASH.to_owned())
+    );
+    sut.resolve(Res::Responded);
+    assert!(answers(&sut.dispatch(Event::SwipeDismissed)).is_empty());
+}
+
+#[test]
+fn not_confirmed_without_op_submitted_records_pending_then_answers() {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-cap2", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::NotConfirmed {
+            user_op_hash: OP_HASH.to_owned(),
+        },
+        now_ms: 9_000.0,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { record }]
+            if record.status == SignRecordStatus::Pending && record.user_op_hash == OP_HASH),
+        "{ops:?}"
+    );
+    assert_eq!(
+        sut.view().tracker_handoff.map(|handoff| handoff.record_ids),
+        Some(vec!["dapp-9000-tx".to_owned()])
+    );
+    let ops = sut.resolve(Res::RecordPersisted);
+    assert_eq!(ops.len(), 1, "the answer alone — no record patch: {ops:?}");
+    assert!(matches!(
+        answers(&ops).as_slice(),
+        [Err((CODE_INTERNAL, _))]
+    ));
+    assert_eq!(
+        sut.view().surface,
+        SignSurface::Hidden,
+        "the ending follows it"
+    );
+}
+
+/// S3b: the relay refuses because ANOTHER operation of the account holds the
+/// nonce — the approval, still pending, when the swap is submitted. Its hash
+/// is never this request's: a shell used to answer the swap with it, and
+/// Uniswap called the swap done when only the approval had happened. The
+/// core's judgement tells the two apart; the request that could not go out
+/// gets one clear error, and nothing is recorded under the other op.
+#[test]
+fn a_previous_pending_operation_is_never_this_requests_answer() {
+    use vela_core::user_op::{existing_op, ExistingOp};
+    let approval = "0x1111111111111111111111111111111111111111111111111111111111111111";
+    let swap = "0x2222222222222222222222222222222222222222222222222222222222222222";
+    let relay_said = format!("AA25 invalid account nonce [existingHash:{approval}]");
+    assert_eq!(
+        existing_op(&relay_said, swap),
+        Some(ExistingOp::Another(approval.to_owned())),
+        "another operation's hash"
+    );
+    assert_eq!(
+        existing_op(&relay_said, approval),
+        Some(ExistingOp::ThisOne(approval.to_owned())),
+        "…unless it is this very operation, submitted twice"
+    );
+
+    // What the desktop reports for the swap instead (executor `user_op`):
+    // nothing went out, so no `OpSubmitted`, and one error.
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-swap", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Failed {
+            message: "Another transaction from this account was still pending, so this one was not sent. Try again.".to_owned(),
+            refused: false,
+        },
+        now_ms: NOW,
+    });
+    let answered = answers(&ops);
+    assert!(
+        matches!(answered.as_slice(), [Err((CODE_INTERNAL, Some(message)))]
+            if !message.contains(approval)),
+        "{ops:?}"
+    );
+    assert!(
+        !ops.iter()
+            .any(|op| matches!(op, Op::PersistRecord { .. } | Op::UpdateRecord { .. })),
+        "no record under the approval's hash: {ops:?}"
+    );
+    assert_eq!(sut.view().tracker_handoff, None);
+}
+
+// ===========================================================================
+// 083 H2 — the record says what the transaction did
+// ===========================================================================
+
+/// Approve `params` with the sheet's `intent`, submit, and return the intent
+/// the pending record carries.
+fn recorded_intent(id: &str, method: &str, params: &str, intent: Option<&str>) -> Option<String> {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global(id, method, params).event());
+    sut.dispatch(approve(SignApproveOpts {
+        intent: intent.map(str::to_owned),
+        ..SignApproveOpts::default()
+    }));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]),
+        "{ops:?}"
+    );
+    let ops = sut.dispatch(Event::OpSubmitted {
+        id: id.to_owned(),
+        user_op_hash: "0xop".to_owned(),
+        now_ms: 9_000.0,
+        maybe_sent: false,
+        submit_block: None,
+    });
+    match ops.as_slice() {
+        [Op::PersistRecord { record }] => record.intent.clone(),
+        other => panic!("the pending record first: {other:?}"),
+    }
+}
+
+/// A plain native send has no decoded result, so the sheet hands no intent;
+/// the record says "Send" — the word its confirm already read — so Activity
+/// can show "Send 1 ETH" rather than a contract interaction.
+#[test]
+fn a_plain_native_send_records_the_send_intent() {
+    assert_eq!(
+        recorded_intent("req-h2a", "eth_sendTransaction", &plain_send_params(), None),
+        Some("Send".to_owned())
+    );
+}
+
+/// Calldata nobody decoded stays without an intent (the shell reads
+/// "Contract interaction"), and the sheet's own decoded intent always wins.
+#[test]
+fn a_contract_call_records_only_the_sheets_intent() {
+    let call = tx_params("0xdeadbeef");
+    assert_eq!(
+        recorded_intent("req-h2b", "eth_sendTransaction", &call, None),
+        None
+    );
+    assert_eq!(
+        recorded_intent("req-h2c", "eth_sendTransaction", &call, Some("Swap")),
+        Some("Swap".to_owned())
+    );
+    assert_eq!(
+        recorded_intent(
+            "req-h2d",
+            "eth_sendTransaction",
+            &plain_send_params(),
+            Some("Transfer")
+        ),
+        Some("Transfer".to_owned())
+    );
+}
+
+/// 083: the revert's error names its transaction in a form a shell can read
+/// back — and nothing else reads as one.
+#[test]
+fn a_reverted_detail_names_its_transaction() {
+    let detail = reverted_detail(TX_HASH);
+    assert_eq!(detail, format!("{REVERTED_MESSAGE} ({TX_HASH})"));
+    assert_eq!(reverted_transaction(&detail), Some(TX_HASH));
+    assert_eq!(reverted_transaction(REVERTED_MESSAGE), None);
+    assert_eq!(
+        reverted_transaction(&format!("{REVERTED_MESSAGE} ()")),
+        None
+    );
+    assert_eq!(
+        reverted_transaction(&format!("{NOT_CONFIRMED_MESSAGE} (user operation 0xab)")),
+        None
+    );
+}
+
+// ===========================================================================
+// 083 F1 — the record keeps what the sheet's simulation showed
+// ===========================================================================
+
+/// What the sheet drew under "Balance changes" for a 0.1 USDC -> ETH swap.
+fn sheet_changes() -> Vec<TrustSimJudgment> {
+    vec![
+        TrustSimJudgment::Erc20Trusted {
+            token: TOKEN.to_owned(),
+            delta: "-100000".to_owned(),
+            symbol: "USDC".to_owned(),
+            decimals: 6,
+            in_trusted_set: true,
+        },
+        TrustSimJudgment::Native {
+            delta: "37000000000000".to_owned(),
+        },
+    ]
+}
+
+/// Approve `params` carrying `changes` on the slide, submit, and return what
+/// the pending record keeps.
+fn recorded_changes(
+    id: &str,
+    method: &str,
+    params: &str,
+    changes: Option<Vec<TrustSimJudgment>>,
+) -> Option<Vec<TrustSimJudgment>> {
+    let mut sut = boot();
+    sut.dispatch(Arrive::global(id, method, params).event());
+    sut.dispatch(approve(SignApproveOpts {
+        balance_changes: changes,
+        ..SignApproveOpts::default()
+    }));
+    let ops = sut.resolve(Res::PreCheck { funding: None });
+    assert!(
+        matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]),
+        "{ops:?}"
+    );
+    let ops = sut.dispatch(Event::OpSubmitted {
+        id: id.to_owned(),
+        user_op_hash: "0xop".to_owned(),
+        now_ms: 9_000.0,
+        maybe_sent: false,
+        submit_block: None,
+    });
+    match ops.as_slice() {
+        [Op::PersistRecord { record }] => record.balance_changes.clone(),
+        other => panic!("the pending record first: {other:?}"),
+    }
+}
+
+/// The lines the person saw on the slide are the lines the record keeps —
+/// so Activity can say "−0.1 USDC" for a swap it could only call a contract
+/// interaction before.
+#[test]
+fn the_record_keeps_the_balance_changes_the_sheet_showed() {
+    assert_eq!(
+        recorded_changes(
+            "req-f1a",
+            "eth_sendTransaction",
+            &tx_params("0xdeadbeef"),
+            Some(sheet_changes())
+        ),
+        Some(sheet_changes())
+    );
+}
+
+/// A page cannot write them. They ride the approve and nothing else: a
+/// request that carries a `balance_changes` or an `assetChanges` of its own
+/// records none, and with the sheet's, records exactly the sheet's.
+#[test]
+fn a_page_cannot_write_the_records_balance_changes() {
+    let forged = format!(
+        r#"[{{"to":"{TOKEN}","data":"0xdeadbeef","value":"0x0",
+            "balance_changes":[{{"type":"native","delta":"999999999999999999999"}}],
+            "assetChanges":{{"ok":true,"engine":"rpc","changes":[{{"kind":"native","delta":"999"}}]}}}}]"#
+    );
+    assert_eq!(
+        recorded_changes("req-f1b", "eth_sendTransaction", &forged, None),
+        None,
+        "nothing the page sent is a balance change"
+    );
+    assert_eq!(
+        recorded_changes(
+            "req-f1c",
+            "eth_sendTransaction",
+            &forged,
+            Some(sheet_changes())
+        ),
+        Some(sheet_changes()),
+        "the sheet's, not the page's"
+    );
+}
+
+/// An empty list is nothing to keep, and a signature moves nothing — its
+/// record keeps no lines even if a shell handed some over.
+#[test]
+fn a_signature_or_an_empty_list_keeps_no_changes() {
+    assert_eq!(
+        recorded_changes(
+            "req-f1d",
+            "eth_sendTransaction",
+            &tx_params("0xdeadbeef"),
+            Some(Vec::new())
+        ),
+        None
+    );
+
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-f1e", "personal_sign", r#"["0xdead","0x0"]"#).event());
+    let ops = sut.dispatch(approve(SignApproveOpts {
+        balance_changes: Some(sheet_changes()),
+        ..SignApproveOpts::default()
+    }));
+    assert!(matches!(ops.as_slice(), [Op::SignAndSubmit { .. }]));
+    let ops = sut.resolve(Res::Submit {
+        outcome: SignSubmitOutcome::Succeeded {
+            result: "0xsig".to_owned(),
+        },
+        now_ms: 9_000.0,
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::PersistRecord { record }]
+            if record.kind == SignRecordKind::SignMessage && record.balance_changes.is_none()),
+        "{ops:?}"
+    );
+}
+
+/// The records written without an `OpSubmitted` keep them too: a batch
+/// answered at acceptance (persisted pending under its op hash) and a batch
+/// that answered with its result.
+#[test]
+fn every_transaction_record_keeps_the_changes() {
+    let params = batch_params(
+        &format!(r#"[{{"to":"{SPENDER}","data":"0xdeadbeef","value":"0x0"}}]"#),
+        None,
+    );
+    for (id, outcome) in [
+        (
+            "req-f1f",
+            SignSubmitOutcome::ReceiptPending {
+                user_op_hash: "0xbatchid".to_owned(),
+            },
+        ),
+        (
+            "req-f1g",
+            SignSubmitOutcome::Succeeded {
+                result: "0xbatchid".to_owned(),
+            },
+        ),
+    ] {
+        let mut sut = boot();
+        sut.dispatch(Arrive::global(id, "wallet_sendCalls", &params).event());
+        sut.dispatch(approve(SignApproveOpts {
+            balance_changes: Some(sheet_changes()),
+            ..SignApproveOpts::default()
+        }));
+        sut.resolve(Res::PreCheck { funding: None });
+        let ops = sut.resolve(Res::Submit {
+            outcome,
+            now_ms: 13_000.0,
+        });
+        assert!(
+            matches!(ops.as_slice(), [Op::PersistRecord { record }]
+                if record.balance_changes.as_deref() == Some(sheet_changes().as_slice())),
+            "{id}: {ops:?}"
+        );
+    }
+}
+
+/// Optional on the wire both ways: a shell that predates the field approves
+/// as before, and a record without lines carries no key for them.
+#[test]
+fn the_balance_changes_are_optional_on_the_wire() {
+    let opts: SignApproveOpts = serde_json::from_str(
+        r#"{"max_fee_per_gas":null,"bundler_cost_wei":null,"gas_fee_token":null,
+            "quoted_fee":null,"fee_collector":null,"params_override_json":null,"intent":null}"#,
+    )
+    .expect("an older shell's approve");
+    assert_eq!(opts.balance_changes, None);
+    let out = serde_json::to_value(&opts).expect("serializes");
+    assert!(out.get("balance_changes").is_none());
+
+    let mut sut = boot();
+    sut.dispatch(Arrive::global("req-f1h", "eth_sendTransaction", &plain_send_params()).event());
+    sut.dispatch(approve(SignApproveOpts::default()));
+    sut.resolve(Res::PreCheck { funding: None });
+    let ops = sut.dispatch(Event::OpSubmitted {
+        id: "req-f1h".to_owned(),
+        user_op_hash: "0xop".to_owned(),
+        now_ms: 9_000.0,
+        maybe_sent: false,
+        submit_block: None,
+    });
+    let [Op::PersistRecord { record }] = ops.as_slice() else {
+        panic!("the pending record first: {ops:?}");
+    };
+    let out = serde_json::to_value(record).expect("serializes");
+    assert!(out.get("balance_changes").is_none());
 }

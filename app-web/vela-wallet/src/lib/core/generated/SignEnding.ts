@@ -3,4 +3,4 @@
 /**
  * What the answer to a request stands for, before the tracker is asked.
  */
-export type SignEnding = { "type": "signed" } | { "type": "landed", tx_hash: string, user_op_hash: string | null, } | { "type": "still_confirming", user_op_hash: string, };
+export type SignEnding = { "type": "signed" } | { "type": "landed", tx_hash: string, user_op_hash: string | null, } | { "type": "reverted", tx_hash: string, user_op_hash: string | null, } | { "type": "still_confirming", user_op_hash: string, };

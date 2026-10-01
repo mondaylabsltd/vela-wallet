@@ -74,6 +74,9 @@
 //! - `alias_map`/`alias_attempted` survive an account switch (both are
 //!   session-lived refs in TS) — an address→name fact is account-agnostic.
 //! - The web-only `velaSimulateReceipt` dev hook is not ported.
+//! - A dApp's transaction (`dapp_tx`) is a row too (083 H2, 079 D3); the TS
+//!   feed showed only sends and receives, so a stuck dApp swap was visible
+//!   nowhere. Signatures and connections stay out: they move nothing.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -84,6 +87,9 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
+
+use super::clear_signing::ClearTerm;
+use super::token_trust::TrustSimJudgment;
 
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
 pub const TOAST_MS: u32 = 2_800;
@@ -97,8 +103,11 @@ pub const HOME_EMPTY_ALL: &str = "home.emptyNoActivity";
 /// The home Activity with nothing to show on the chosen network.
 pub const HOME_EMPTY_FILTERED: &str = "home.emptyNoActivityNetwork";
 
-/// A dApp transaction's `value` is wei of the chain's native coin.
-pub const NATIVE_DECIMALS: u32 = 18;
+/// The most decimals a dApp row's stored figure is scaled by (083 H2
+/// review). Every client stores 18; a `u128` has 39 digits, so anything past
+/// this could only print a string of zeros — and an unbounded one sizes an
+/// allocation from a number read off the disk.
+pub const MAX_DAPP_DECIMALS: u32 = 36;
 
 /// Symbols treated as ≈ $1 so stablecoin transfers are never shown as $0.00
 /// (`activity.ts:150-152`, verbatim).
@@ -174,15 +183,35 @@ pub struct FeedTxRecord {
     pub kind: Option<FeedTxKind>,
     /// Legacy pre-formatted USD (e.g. `"$1.00"`), as stored.
     pub usd: Option<String>,
-    /// The origin of the site that asked, for a `dapp_tx` record (the stored
-    /// `dappOrigin`, spec 082 RG1). `None` for every other kind, and for a
-    /// shell that predates the field.
-    #[serde(default)]
-    pub dapp_origin: Option<String>,
-    /// The call's `data` hex, for a `dapp_tx` record (spec 082 RJ16) — the
-    /// shells map it from the stored request (`signedRequest`). `None` for
-    /// every other kind, for a plain send, and for a shell that predates it.
-    #[serde(default)]
+    /// `dapp_tx` only (083 H2): the origin the request arrived from, as the
+    /// signing path stored it (`dappUrl`, `SignRecord::dapp_url`). Never
+    /// `dappOrigin`: that holds the dApp's self-declared name when it gave
+    /// one, and a site named from it would be whatever the dApp said it was.
+    /// Absent on every other kind and from a shell that does not map it yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dapp_url: Option<String>,
+    /// `dapp_tx` only (083 H2): the intent recorded at approve time
+    /// (`intent`, e.g. "Swap").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent: Option<String>,
+    /// `dapp_tx` only (083 F1): what the wallet's own simulation said the
+    /// operation moves, as the signing sheet drew it when the person approved
+    /// (`SignRecord::balance_changes`, stored by the shell). The one account
+    /// of a dApp call's money that its page did not write. Absent on every
+    /// other kind, on older rows and from a shell that does not map it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balance_changes: Option<Vec<TrustSimJudgment>>,
+    /// `dapp_tx` only (083 F3): whether the transaction carried calldata, as
+    /// the shell read it off the stored request — `true` makes `to` the
+    /// contract it called (a router, a token), not somebody who received
+    /// anything. `None` when the shell cannot say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calldata: Option<bool>,
+    /// `dapp_tx` only (spec 082 RJ16): the call's `data` hex, which the shells
+    /// map from the stored request (`signedRequest`), so a token `transfer`
+    /// can name who got the tokens. `None` for every other kind, for a plain
+    /// send, and for a shell that does not map it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_data: Option<String>,
 }
 
@@ -307,13 +336,20 @@ pub struct FeedItem {
     /// says "confirmed" or "failed" only when the stored record does.
     #[serde(default = "status_unknown")]
     pub status: FeedTxStatus,
-    /// `DappTx` only: `host[:port]` of the site that asked ([`dapp_site`]).
+    /// `DappTx` only: the site that asked, read from the origin the request
+    /// arrived from (`dapp_url`, never the dApp's own name) — the same value
+    /// as `dapp.site`.
     #[serde(default)]
     pub site: Option<String>,
     /// Whether `counterparty` got the money or is the contract a call went
     /// to (spec 082 RJ16). Always `Recipient` except on a `DappTx` row.
     #[serde(default)]
     pub counterparty_role: FeedCounterpartyRole,
+    /// A dApp transaction's site, intent and what it moved (083 H2); `None`
+    /// on every other row. Its `site` and `contract_call` are the row's own
+    /// [`FeedItem::site`] and [`FeedItem::counterparty_role`], read once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dapp: Option<FeedDapp>,
 }
 
 /// The status of a [`FeedItem`] decoded from before spec 082, which carried
@@ -321,6 +357,84 @@ pub struct FeedItem {
 /// record, and a default must never say money landed or failed.
 fn status_unknown() -> FeedTxStatus {
     FeedTxStatus::Pending
+}
+
+/// What a dApp transaction row says beyond its money (083 H2, 079 D3): which
+/// site asked and what the call did.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeedDapp {
+    /// The site as a person reads it: the host of the origin the request
+    /// arrived from (`app.uniswap.org`, `127.0.0.1`). `None` when the record
+    /// holds no origin that parses as one — never the dApp's own name.
+    pub site: Option<String>,
+    /// The intent recorded at approve time, as the descriptor wrote it
+    /// ("Swap"; "Send" for a plain native transfer). `None` is a call nobody
+    /// decoded, which the shell reads as "Contract interaction".
+    pub intent: Option<String>,
+    /// `intent` as a word the shell can translate
+    /// (`componentsUi.signing.<leaf>`).
+    pub intent_term: Option<ClearTerm>,
+    /// What the operation moved, as the wallet's own simulation measured it
+    /// when the person approved — the signing sheet's "Balance changes"
+    /// lines, in its order (083 F1). Empty for a record that kept none (an
+    /// older row, a shell that does not record them, a simulation that could
+    /// not run) and for an operation that FAILED, which moved nothing: the
+    /// row then draws as it did before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<FeedDappChange>,
+    /// A swap-shaped operation's one inflow — exactly one line out, which is
+    /// the row's figure, and exactly one in, both with a figure, both of a
+    /// coin the wallet trusts. Drawn beside the figure as what the
+    /// simulation EXPECTED: the chain may deliver another amount (slippage).
+    /// `None` otherwise, and always for a failed operation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub received: Option<FeedDappChange>,
+    /// The row's figure is the simulation's expectation, not an amount the
+    /// wallet can vouch for (083 F1 review): an outflow the sheet measured,
+    /// which an exact-output swap may overspend or underspend on chain. The
+    /// shell marks it "≈". `false` for the call's own value and for a
+    /// native outflow equal to it — what the wallet itself submitted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub estimated: bool,
+    /// The transaction carried calldata, so the row's counterparty is the
+    /// contract it called — never labelled a recipient (083 F3). `false` for
+    /// a plain transfer of the chain's coin and for a record that cannot say.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub contract_call: bool,
+}
+
+/// One line of what a dApp transaction moved (083 F1), from the signing
+/// sheet's own simulation — never from anything the page supplied.
+///
+/// The sheet's asymmetry holds here too, because it is the same judgment
+/// (`token_trust`, invariant ⑥): an outflow carries its figure whenever the
+/// token's metadata resolved; an inflow of a token the wallet does not trust
+/// is `verified: false` and carries NO figure — a site can emit any
+/// `Transfer` it likes from a contract it controls.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeedDappChange {
+    /// `out` leaves the account; `in` arrives. An inflow is what the
+    /// simulation expected, which the chain may not deliver to the unit.
+    pub direction: FeedDirection,
+    /// `false` for a token the sheet showed as unverified: the shell names it
+    /// "Unverified token" and draws a direction, never a number.
+    pub verified: bool,
+    /// The coin's symbol — the chain's own for a native line. Empty when
+    /// unverified, or for a native coin the record's chain does not name.
+    pub symbol: String,
+    /// The amount, unsigned, as a human decimal (`"0.1"`). `None` when there
+    /// is no figure to show: unverified, or a stored delta that will not read.
+    pub value: Option<String>,
+    pub decimals: Option<u32>,
+    /// The wallet can vouch for this figure to the unit: a native outflow
+    /// equal to the value the wallet itself submitted. Every other line is
+    /// what the simulation expected — an inflow may arrive short (slippage)
+    /// and an exact-output swap's outflow may differ too, and the wallet
+    /// cannot tell which kind of swap it signed — so the shell marks it "≈".
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub exact: bool,
 }
 
 /// A date header or an item — the grouped feed, in render order
@@ -722,6 +836,8 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 .iter()
                 .filter(|t| match t.kind() {
                     FeedTxKind::Receive => t.to.to_lowercase() == lc,
+                    // 083 H2: a dApp's transaction is this account's money
+                    // moving too — its detail needs the record like a send's.
                     FeedTxKind::Send | FeedTxKind::DappTx => t.from.to_lowercase() == lc,
                     // Message signatures and connects move nothing: never rows.
                     FeedTxKind::SignMessage | FeedTxKind::SignTypedData | FeedTxKind::Connect => {
@@ -955,6 +1071,7 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         status: t.status,
         site: None,
         counterparty_role: FeedCounterpartyRole::Recipient,
+        dapp: None,
     }
 }
 
@@ -978,63 +1095,145 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         status: t.status,
         site: None,
         counterparty_role: FeedCounterpartyRole::Recipient,
+        dapp: None,
     }
 }
 
-/// A transaction a dApp asked for (spec 082 RG1, RG2): out from this account,
-/// to the contract or address it named, with the site that asked.
+/// A dApp's transaction (083 H2, 079 D3). Every client has stored these since
+/// the signing path learned to (`buildSigningRecord`) and the feed dropped
+/// them, so a swap stuck in the relay was visible nowhere. Status needs
+/// nothing here: the tracker settles the record like a send's, and the
+/// detail reads it from the record.
 ///
-/// `value` is the native coin in wei — hex or decimal, as the request carried
-/// it — shown through `fee_policy::from_base_units`; zero, or a value that is
-/// not a number, is no amount at all (`value` `None`, no symbol), so a
-/// contract call never reads as money moving. A pending record under a local
-/// operation hash (a submit whose reply was lost, RG4) is a `Pending` row
-/// like any other until the tracker patches it.
+/// The stored `value` is the call's own wei figure as the page sent it
+/// (`0x…`), scaled here into the human decimal every other row carries. A
+/// call that moves no coin shows no amount rather than "0 ETH" — what it did
+/// to tokens is the intent's to say, not a figure this record holds.
 ///
-/// Round 2 (RJ16, G52): who the row names. A call that is exactly an ERC-20
+/// `decimals` is read off the disk, so it is bounded before it sizes
+/// anything: the scaling pads to `decimals + 1` digits, and a corrupted or
+/// imported row saying four billion would take the feed down on every read
+/// (083 H2 review). Every client writes 18; past [`MAX_DAPP_DECIMALS`] the row
+/// shows no figure rather than a guess.
+///
+/// What the operation moved comes first when the record kept it (083 F1):
+/// the sheet's own simulation, recorded at approve time. Its one outflow is
+/// the row's figure — a swap of 0.1 USDC reads "≈ −0.1 USDC", not nothing —
+/// and a swap-shaped operation's one inflow rides beside it as `received`.
+/// Anything else (no lines kept, two coins out, an outflow the sheet could
+/// not put a number on) leaves the figure to the call's own value, as before.
+///
+/// Two rules keep the page's hand off the figure (083 F1 review):
+/// - only the chain's coin or a token the wallet already trusts can be it. An
+///   outflow renders on the sheet on metadata alone, and a contract a site
+///   deployed can emit `Transfer(you, …)` and answer `symbol()` with "USDC";
+///   on the sheet that overstates a spend, but as Activity's headline — and
+///   priced by its symbol — it would be the site writing the wallet's record.
+///   Such a line stays in the detail, as the sheet drew it.
+/// - a FAILED operation moved nothing, so it keeps none of what the sheet
+///   expected: no figure from it, nothing "≈ back", no lines — the row draws
+///   as before, beside its failed status.
+///
+/// Who the row names (spec 082 RJ16, G52): a call that is exactly an ERC-20
 /// `transfer(address,uint256)` names the transfer's recipient (EIP-55) as the
 /// recipient; any other call names `to` as the contract it went to; no call
 /// data names `to` as the recipient. And an operation hash is never an
 /// explorer link: a `tx_hash` equal to the record's `user_op_hash` (a relay
 /// rejection, a batch id) is no tx hash.
 fn dapp_item(t: &FeedTxRecord) -> FeedItem {
-    let value = native_amount(&t.value);
-    let usd_value = value.as_deref().map_or(0.0, |amount| {
-        usd_value_of(t.usd.as_deref(), &t.symbol, amount)
+    let recorded = if t.status == FeedTxStatus::Failed {
+        Vec::new()
+    } else {
+        recorded_changes(t)
+    };
+    let figured = |line: &&RecordedChange| {
+        line.known
+            && line.change.verified
+            && line.change.value.is_some()
+            && !line.change.symbol.is_empty()
+    };
+    let only = |direction: FeedDirection| {
+        let mut lines = recorded.iter().filter(|l| l.change.direction == direction);
+        match (lines.next(), lines.next()) {
+            (Some(line), None) => Some(line),
+            _ => None,
+        }
+    };
+    let taken = only(FeedDirection::Out).filter(figured);
+    let received = taken
+        .and(only(FeedDirection::In))
+        .filter(figured)
+        .map(|line| line.change.clone());
+    let estimated = taken.is_some_and(|line| !line.change.exact);
+    let (value, symbol, decimals) = match taken {
+        Some(out) => (
+            out.change.value.clone(),
+            out.change.symbol.clone(),
+            out.change.decimals,
+        ),
+        None => {
+            let value = wei(&t.value)
+                .filter(|wei| *wei > 0 && t.decimals <= MAX_DAPP_DECIMALS)
+                .map(|wei| super::fee_policy::from_base_units(wei, t.decimals));
+            let symbol = if value.is_some() {
+                t.symbol.clone()
+            } else {
+                String::new()
+            };
+            let decimals = value.as_ref().map(|_| t.decimals);
+            (value, symbol, decimals)
+        }
+    };
+    let usd_value = value.as_ref().map_or(0.0, |value| {
+        tx_usd_value(&FeedTxRecord {
+            value: value.clone(),
+            symbol: symbol.clone(),
+            ..t.clone()
+        })
     });
+    let intent = t
+        .intent
+        .as_deref()
+        .map(str::trim)
+        .filter(|intent| !intent.is_empty())
+        .map(str::to_owned);
+    // The contract or recipient — and only when it IS an address. A batch
+    // (`wallet_sendCalls`) submits no top-level `to`, so whatever a record
+    // holds there is the page's to write, and the sheet never showed it: text
+    // that is not an address is no counterparty to draw, shorten or look a
+    // name up for (083 H2 review). A contract deployment has none either.
+    let to = Some(t.to.trim())
+        .filter(|to| super::contacts::is_address(to))
+        .map(str::to_owned);
     let call = t
         .call_data
         .as_deref()
         .map(str::trim)
         .filter(|data| !data.is_empty() && *data != "0x" && *data != "0X");
-    let (counterparty, alias, counterparty_role) = match call {
-        None => (
-            non_empty(&t.to),
-            t.to_name.clone(),
-            FeedCounterpartyRole::Recipient,
-        ),
-        Some(data) => match transfer_recipient(data) {
-            Some(recipient) => (Some(recipient), None, FeedCounterpartyRole::Recipient),
-            None => (
-                non_empty(&t.to),
-                t.to_name.clone(),
-                FeedCounterpartyRole::Contract,
-            ),
-        },
+    let recipient = call.and_then(transfer_recipient);
+    let contract_call = recipient.is_none() && (call.is_some() || t.calldata == Some(true));
+    let counterparty_role = if contract_call {
+        FeedCounterpartyRole::Contract
+    } else {
+        FeedCounterpartyRole::Recipient
     };
+    // A stored name belongs to the address it was stored beside (`to`), never
+    // to a recipient read out of the call.
+    let alias = match recipient {
+        Some(_) => None,
+        None => to.as_ref().and(t.to_name.clone()),
+    };
+    let counterparty = recipient.or(to);
+    let site = t.dapp_url.as_deref().and_then(site_of);
     let tx_hash = non_empty(&t.tx_hash)
         .filter(|hash| t.user_op_hash.is_empty() || !hash.eq_ignore_ascii_case(&t.user_op_hash));
     FeedItem {
         id: t.id.clone(),
         direction: FeedDirection::Out,
-        counterparty,
         alias,
-        symbol: if value.is_some() {
-            t.symbol.clone()
-        } else {
-            String::new()
-        },
-        decimals: value.is_some().then_some(NATIVE_DECIMALS),
+        counterparty,
+        symbol,
+        decimals,
         value,
         usd_value,
         chain_id: t.chain_id,
@@ -1044,8 +1243,17 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
         batch: None,
         kind: FeedTxKind::DappTx,
         status: t.status,
-        site: t.dapp_origin.as_deref().and_then(dapp_site),
+        site: site.clone(),
         counterparty_role,
+        dapp: Some(FeedDapp {
+            site,
+            intent_term: intent.as_deref().and_then(ClearTerm::of),
+            intent,
+            received,
+            estimated,
+            changes: recorded.into_iter().map(|line| line.change).collect(),
+            contract_call,
+        }),
     }
 }
 
@@ -1069,6 +1277,178 @@ fn transfer_recipient(data: &str) -> Option<String> {
         return None;
     }
     crate::primitives::checksum_address(&format!("0x{}", &word[24..])).ok()
+}
+
+/// One recorded line, with what the row needs to know of it and the wire
+/// does not carry: whether its coin is one the wallet trusts (the chain's
+/// own, or `TrustSimJudgment::Erc20Trusted::in_trusted_set`).
+struct RecordedChange {
+    change: FeedDappChange,
+    known: bool,
+}
+
+/// The record's balance changes as lines a person reads (083 F1).
+///
+/// Only what the record kept from the approve, and only lines that say
+/// something: a delta that is zero moved nothing, and one that does not even
+/// read as a signed number has no direction to state. The sheet's judgment
+/// is kept as it was made — an unverified line stays figureless here, however
+/// large its delta.
+///
+/// A line is `exact` only when the wallet can vouch for it: the chain's coin
+/// leaving in exactly the amount the transaction itself sent (`value`, which
+/// the wallet submitted). Everything else is the simulation's expectation.
+fn recorded_changes(t: &FeedTxRecord) -> Vec<RecordedChange> {
+    let Some(judgments) = t.balance_changes.as_ref() else {
+        return Vec::new();
+    };
+    // The chain's coin: the record names it (every client stores the native
+    // symbol on a dApp row), else the built-in table.
+    let native = Some(t.symbol.trim())
+        .filter(|symbol| !symbol.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            super::network_admin::BUILTIN_CHAINS
+                .iter()
+                .find(|chain| chain.chain_id == t.chain_id)
+                .map(|chain| chain.native_symbol.to_owned())
+        })
+        .unwrap_or_default();
+    let sent = wei(&t.value);
+    judgments
+        .iter()
+        .filter_map(|judgment| {
+            let (delta, verified, known, symbol, decimals) = match judgment {
+                TrustSimJudgment::Native { delta } => (delta, true, true, native.clone(), Some(18)),
+                TrustSimJudgment::Erc20Trusted {
+                    delta,
+                    symbol,
+                    decimals,
+                    in_trusted_set,
+                    ..
+                } => (
+                    delta,
+                    true,
+                    *in_trusted_set,
+                    symbol.trim().to_owned(),
+                    Some(*decimals),
+                ),
+                TrustSimJudgment::Erc20Unverified { delta, .. } => {
+                    (delta, false, false, String::new(), None)
+                }
+            };
+            let (out, magnitude) = signed_delta(delta)?;
+            // A coin arriving that the wallet does not already trust is the
+            // one line a site fully controls (its own token, any symbol, any
+            // figure): the record draws it as an unverified token whatever
+            // the storing shell judged, so no stored row can say "≈ +1000
+            // USDC" for it. An outflow is of a coin the account holds, which
+            // the trusted set covers.
+            let verified = verified && (known || out);
+            let symbol = if verified { symbol } else { String::new() };
+            let value = magnitude
+                .filter(|_| verified)
+                .zip(decimals.filter(|decimals| *decimals <= MAX_DAPP_DECIMALS))
+                .map(|(magnitude, decimals)| {
+                    super::fee_policy::from_base_units(magnitude, decimals)
+                });
+            // What the wallet itself sent, leaving whole: nothing else is
+            // provable from the record (an exact-output swap's outflow is an
+            // estimate too, and nothing here says which kind was signed).
+            let exact = matches!(judgment, TrustSimJudgment::Native { .. })
+                && out
+                && value.is_some()
+                && magnitude.is_some()
+                && magnitude == sent;
+            Some(RecordedChange {
+                change: FeedDappChange {
+                    direction: if out {
+                        FeedDirection::Out
+                    } else {
+                        FeedDirection::In
+                    },
+                    verified,
+                    symbol,
+                    decimals: value.as_ref().and(decimals),
+                    value,
+                    exact,
+                },
+                known,
+            })
+        })
+        .collect()
+}
+
+/// A signed base-unit delta: whether it leaves the account, and its size
+/// when it fits a `u128`. `None` for text that is not a signed integer, and
+/// for zero — nothing moved.
+fn signed_delta(delta: &str) -> Option<(bool, Option<u128>)> {
+    let delta = delta.trim();
+    let (out, digits) = match delta.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, delta.strip_prefix('+').unwrap_or(delta)),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if digits.bytes().all(|b| b == b'0') {
+        return None;
+    }
+    Some((out, digits.parse::<u128>().ok()))
+}
+
+/// A JSON-RPC quantity — `0x` hex as a page sends it, or decimal digits.
+/// `None` when it is neither, or beyond `u128`: no figure beats a wrong one.
+fn wei(value: &str) -> Option<u128> {
+    let value = value.trim();
+    match value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        Some("") => Some(0),
+        Some(hex) => u128::from_str_radix(hex, 16).ok(),
+        None if !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit()) => {
+            value.parse().ok()
+        }
+        None => None,
+    }
+}
+
+/// The site a record's origin names, as a person reads it (083 H2) — the
+/// same `host[:port]` the browser's address bar shows (spec 082 RG1):
+/// `https://app.uniswap.org` → `app.uniswap.org`, `http://127.0.0.1:5173` →
+/// `127.0.0.1:5173`.
+///
+/// Only an origin — a scheme and a host. A bare word is not one, and a value
+/// that never carried a scheme is a name somebody typed, not an address the
+/// request came from (083 H2 review). An origin that will not parse names
+/// nothing rather than something half-read — and neither does `"null"`, the
+/// origin an opaque page (`data:`, a sandboxed frame) reports.
+fn site_of(origin: &str) -> Option<String> {
+    let origin = origin.trim();
+    if origin.eq_ignore_ascii_case("null") || !origin.contains("://") {
+        return None;
+    }
+    dapp_site(origin)
+}
+
+/// `host[:port]` of an http(s) origin — lower-cased host, default port
+/// dropped, as the browser's address bar names it (spec 082 RG1). `None` for
+/// an origin that is not http(s) or does not parse.
+pub fn dapp_site(origin: &str) -> Option<String> {
+    let origin = super::dapp_permissions::origin_of(origin.trim())?;
+    origin
+        .split_once("://")
+        .map(|(_, host_port)| host_port.to_owned())
+}
+
+/// A wei amount (hex `0x…` or decimal) as a human decimal of the native coin
+/// — the figure a dApp row shows for the call's own value; `None` for zero,
+/// and for anything that is not a whole number that fits.
+pub fn native_amount(value: &str) -> Option<String> {
+    wei(value)
+        .filter(|wei| *wei > 0)
+        .map(|wei| super::fee_policy::from_base_units(wei, 18))
 }
 
 /// `batchSendToActivity`: one row for the whole group, per-line breakdown
@@ -1121,6 +1501,7 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         site: None,
         counterparty_role: FeedCounterpartyRole::Recipient,
         batch: Some(batch),
+        dapp: None,
     })
 }
 
@@ -1285,34 +1666,6 @@ pub fn home_empty_key(chain_filter: Option<u32>) -> &'static str {
         None => HOME_EMPTY_ALL,
         Some(_) => HOME_EMPTY_FILTERED,
     }
-}
-
-/// `host[:port]` of a stored dApp origin — the row's site, verbatim as the
-/// browser named it (lower-cased host, default port dropped). `None` for an
-/// origin that is not http(s) or does not parse.
-pub fn dapp_site(origin: &str) -> Option<String> {
-    let origin = super::dapp_permissions::origin_of(origin.trim())?;
-    origin
-        .split_once("://")
-        .map(|(_, host_port)| host_port.to_owned())
-}
-
-/// A wei amount (hex `0x…` or decimal) as a human decimal of the native coin;
-/// `None` for zero, and for anything that is not a whole number that fits.
-pub fn native_amount(wei: &str) -> Option<String> {
-    let wei = wei.trim();
-    let (digits, radix) = match wei.strip_prefix("0x").or_else(|| wei.strip_prefix("0X")) {
-        Some(hex) => (hex, 16),
-        None => (wei, 10),
-    };
-    if digits.is_empty() || !digits.chars().all(|c| c.is_digit(radix)) {
-        return None;
-    }
-    let value = u128::from_str_radix(digits, radix).ok()?;
-    if value == 0 {
-        return None;
-    }
-    Some(super::fee_policy::from_base_units(value, NATIVE_DECIMALS))
 }
 
 /// `txHash || undefined`.

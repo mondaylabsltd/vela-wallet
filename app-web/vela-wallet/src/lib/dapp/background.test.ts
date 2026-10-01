@@ -11,6 +11,7 @@
  * Chrome starts it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NOT_CONFIRMED_MESSAGE } from '../../../extension/lib/protocol.js';
 
 type Listener = (...args: any[]) => unknown;
 
@@ -566,6 +567,12 @@ describe('Chrome’s panel ✕ (EX6)', () => {
  */
 describe('a claimed submit whose surface went (RJ2, G35)', () => {
 	const OP = `0x${'ab'.repeat(32)}`;
+	// 083, owner ruling 2026-10-01: "not confirmed yet" — never 4900, never
+	// the op hash as if it were a transaction.
+	const NOT_CONFIRMED = {
+		code: -32603,
+		message: `${NOT_CONFIRMED_MESSAGE} (user operation ${OP})`
+	};
 
 	async function submitting(env: Env, panel: ReturnType<Env['panel']>) {
 		const page = env.openPage(7, 'doc-a');
@@ -585,7 +592,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		return page;
 	}
 
-	it('the panel closed after the submit claim: the page gets the op hash once, never 4900', async () => {
+	it('the panel closed after the submit claim: the page is told "not confirmed yet" once, never 4900', async () => {
 		const env = makeEnv();
 		await startWorker(env);
 		const panel = env.panel();
@@ -598,7 +605,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 
 		panel.close();
 		await settleAll();
-		expect(page.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+		expect(page.answers).toEqual([{ id: 'tx:1', result: undefined, error: NOT_CONFIRMED }]);
 		expect(reqKeys(env.session)).toEqual([]);
 		// The page's receipt reads for that hash are translated from now on (RF3).
 		expect(env.local.data[`vela.ext.op.${OP}`]).toMatchObject({ chainId: 100 });
@@ -667,7 +674,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 			error: { code: 4900, message: 'The browser closed before the request finished' }
 		});
 		await settleAll();
-		expect(page.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+		expect(page.answers).toEqual([{ id: 'tx:1', result: undefined, error: NOT_CONFIRMED }]);
 		expect(env.local.data[`vela.ext.op.${OP}`]).toMatchObject({ chainId: 100 });
 		expect(String(env.session.data['vela.sw.log'])).toMatch(/req\.answered .*maybe_sent=1/);
 		panel.close();
@@ -685,7 +692,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 			error: { code: 4900, message: 'The browser closed before the request finished' }
 		});
 		expect(reply).toEqual({ delivered: true });
-		expect(page2.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+		expect(page2.answers).toEqual([{ id: 'tx:1', result: undefined, error: NOT_CONFIRMED }]);
 	});
 
 	it('a real error answer for a claimed submit still goes through (RJ3: refused, nothing sent)', async () => {
@@ -710,7 +717,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		const page = await submitting(env, panel);
 		env.emit('windowRemoved', 3);
 		await settleAll();
-		expect(page.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+		expect(page.answers).toEqual([{ id: 'tx:1', result: undefined, error: NOT_CONFIRMED }]);
 	});
 
 	it('a worker restart with the panel gone: the hash for the claimed submit, 4900 for the rest', async () => {
@@ -754,7 +761,7 @@ describe('a claimed submit whose surface went (RJ2, G35)', () => {
 		// No side panel is up in any window.
 		await startWorker(env);
 		await settleAll();
-		expect(a.answers).toEqual([{ id: 'tx:1', result: OP, error: undefined }]);
+		expect(a.answers).toEqual([{ id: 'tx:1', result: undefined, error: NOT_CONFIRMED }]);
 		expect(b.answers[0].error).toEqual({
 			code: 4900,
 			message: 'The browser closed before the request finished'

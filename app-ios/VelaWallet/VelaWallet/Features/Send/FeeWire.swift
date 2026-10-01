@@ -184,8 +184,9 @@ struct FeeViewWire: Decodable, Equatable {
     /// is true (the core's invariant ⑦).
     let busy: Bool
     /// `missing_public_key` / `fee_token_unavailable` / `quote_unavailable` /
-    /// `calculation_failed` / `estimate_failed` / `gas_quote_too_high` — or,
-    /// since spec 082 (RJ13), the object form `{"chain_read":{"rate_limited":…}}`
+    /// `calculation_failed` / `estimate_failed` / `gas_quote_too_high` /
+    /// `would_fail` (spec 083 fee; not said to this shell yet) — or, since
+    /// spec 082 (RJ13), the object form `{"chain_read":{"rate_limited":…}}`
     /// kept as its JSON text. Either way it is what the core's
     /// `feeRequoteDelayMs` and `feeFailureReasonKey` take back, so this shell
     /// never reads it apart (`FeeFailureText`).

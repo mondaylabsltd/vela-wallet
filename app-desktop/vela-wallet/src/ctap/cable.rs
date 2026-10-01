@@ -32,7 +32,7 @@ use uuid::Uuid;
 use vela_core::cable::conn::CablePort;
 use vela_core::cable::crypto as cable_crypto;
 use vela_core::cable::session::CableInitiator;
-use vela_core::ctap::ceremony::{Cable, TouchAnnouncer};
+use vela_core::ctap::ceremony::{Cable, CableError, TouchAnnouncer, failure_for};
 use vela_core::ctap::hid_cable::PortError;
 
 #[cfg(target_os = "macos")]
@@ -55,21 +55,134 @@ pub enum HybridError {
     Tunnel(String),
     /// The Noise handshake over the tunnel failed.
     Handshake(String),
+    /// The phone closed the tunnel during the handshake: the person cancelled
+    /// on the phone's "connecting" screen. Its answer, not a failure — what a
+    /// tunnel it closes mid-prompt already is (spec 038 finding 18) — and not
+    /// a network to check (083 H4 review).
+    PhoneEnded,
     /// The person dismissed the QR. Not a failure: the same answer as closing
     /// the system's passkey sheet, and reported upward as that.
     Cancelled,
 }
 
+/// [`HybridError::NoAdvert`]'s sentence, shared with the dApp signing path so
+/// it can tell a scan nobody answered from a failure without matching prose
+/// (083 W19) — the way [`TUNNEL_CLOSED`] is shared with the failure mapping.
+pub const NO_ADVERT: &str = "no phone answered the QR within the scan window";
+
+/// How [`HybridError::Tunnel`] and [`HybridError::Handshake`] begin: the phone
+/// was found, and the connection to it never came up. Shared with the dApp
+/// signing path the way [`NO_ADVERT`] is, so it can offer the approval again
+/// rather than fail the request (083 H4).
+pub const PHONE_LINK_FAILED: &str = "the phone connection failed";
+
+/// The phone's own goodbye, however far the ceremony had got: a tunnel it
+/// closed during the handshake ([`HybridError::PhoneEnded`]) or during its
+/// prompt (the passkey executor's failure mapping). Said as the phone's
+/// cancel, never as a connection that failed.
+pub const PHONE_ENDED: &str = "your phone ended the session before signing";
+
 impl std::fmt::Display for HybridError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NoAdvert => write!(f, "no phone answered the QR within the scan window"),
+            Self::NoAdvert => f.write_str(NO_ADVERT),
             Self::Bluetooth(detail) => write!(f, "Bluetooth is unavailable: {detail}"),
             Self::BadAdvert => write!(f, "the phone's advertisement was malformed"),
-            Self::Tunnel(detail) => write!(f, "the relay tunnel would not open: {detail}"),
-            Self::Handshake(detail) => write!(f, "the encrypted channel failed: {detail}"),
+            Self::Tunnel(detail) => write!(
+                f,
+                "{PHONE_LINK_FAILED}: the relay tunnel would not open ({detail})"
+            ),
+            Self::Handshake(detail) => write!(f, "{PHONE_LINK_FAILED}: {detail}"),
+            Self::PhoneEnded => f.write_str(PHONE_ENDED),
             Self::Cancelled => write!(f, "the QR was dismissed"),
         }
+    }
+}
+
+/// A Noise handshake that failed, in words (083 H4). It was the core's error
+/// in Rust's debug form, and a dApp was answered "the encrypted channel failed:
+/// Other(\"caBLE transport: the tunnel closed\")". A tunnel the phone closed
+/// is the person cancelling on the phone while it connected — the phone's
+/// answer, not a connection to retry over a network to check (083 H4 review).
+/// A tunnel the RELAY refused is not the phone's (see [`peer_closed`]): it
+/// stays a connection that failed, said without the core's "caBLE
+/// transport:" in front.
+fn handshake_failed(error: CableError) -> HybridError {
+    let detail = match error {
+        CableError::Other(detail) if detail.contains(TUNNEL_CLOSED) => {
+            return HybridError::PhoneEnded;
+        }
+        CableError::TimedOut => "the phone stopped answering".to_owned(),
+        CableError::Other(detail) => match detail.strip_prefix(CORE_TRANSPORT) {
+            Some(cause) => cause.to_owned(),
+            None => detail,
+        },
+        // Not raised by a handshake, which asks the phone nothing yet; the
+        // ceremony's own sentences if one ever is.
+        other => failure_for(other)
+            .message
+            .unwrap_or_else(|| "the phone refused".to_owned()),
+    };
+    HybridError::Handshake(detail)
+}
+
+/// How a connected phone's transport failure begins: the connection dropped
+/// once the phone had been asked something — its tunnel went silent, or its
+/// socket failed. Shared with the dApp signing path the way
+/// [`PHONE_LINK_FAILED`] is: nothing signed reached anyone (the desktop sends
+/// only what it holds), so the approval can be offered again rather than the
+/// request failed (083 H4 review).
+pub const PHONE_DROPPED: &str = "the phone connection dropped";
+
+/// How the core words a port's failure (`vela_core::cable::conn`, the
+/// `port_to_cable_error` mapping); pinned by a test here.
+const CORE_TRANSPORT: &str = "caBLE transport: ";
+
+/// A connected phone's failure, in words about the phone. The core's
+/// sentence for a silent cable is a USB key's — "The security key stopped
+/// responding. Unplug it and try again." — and a phone that went quiet
+/// mid-prompt was told to the page as that; a socket failure was the OS's
+/// words behind "caBLE transport:". A tunnel the phone closed stays as it
+/// is: that is the phone's own cancel (spec 038 finding 18).
+fn dropped(error: CableError) -> CableError {
+    match error {
+        CableError::TimedOut => {
+            CableError::Other(format!("{PHONE_DROPPED}: the phone stopped answering"))
+        }
+        CableError::Other(detail) if !detail.contains(TUNNEL_CLOSED) => {
+            match detail.strip_prefix(CORE_TRANSPORT) {
+                Some(cause) => CableError::Other(format!("{PHONE_DROPPED}: {cause}")),
+                None => CableError::Other(detail),
+            }
+        }
+        other => other,
+    }
+}
+
+/// The phone, once connected, as the ceremony drives it: the cable the
+/// handshake produced, with its transport failures said as the phone's
+/// connection dropping ([`dropped`]).
+pub struct PhoneCable(pub Box<dyn Cable>);
+
+impl Cable for PhoneCable {
+    fn exchange(
+        &mut self,
+        request: &[u8],
+        touch: Option<vela_core::ctap::ceremony::TouchKind>,
+    ) -> Result<Vec<u8>, CableError> {
+        self.0.exchange(request, touch).map_err(dropped)
+    }
+
+    fn cancel(&mut self) {
+        self.0.cancel();
+    }
+
+    fn product(&self) -> &str {
+        self.0.product()
+    }
+
+    fn path(&self) -> &str {
+        self.0.path()
     }
 }
 
@@ -106,13 +219,27 @@ pub const BLE_CHANNEL_SUPPORTED: bool = cfg!(any(target_os = "macos", target_os 
 const CABLE_SUBPROTOCOL: &str = "fido.cable";
 
 /// How long to scan before giving up. A person has to pick up their phone,
-/// unlock it, and approve the prompt that scanning the QR raised.
-const SCAN_TIMEOUT: Duration = Duration::from_secs(90);
+/// unlock it, and approve the prompt that scanning the QR raised. The signing
+/// column names it when the window closes (083 W19).
+pub(crate) const SCAN_TIMEOUT: Duration = Duration::from_secs(90);
 
 /// A read blocks this long before the tunnel is declared dead — long enough to
 /// cover the person approving on their phone (the CTAP user-presence budget and
 /// then some), short enough that a dropped tunnel does not hang forever.
 const TUNNEL_READ_TIMEOUT: Duration = Duration::from_secs(130);
+
+/// What the tunnel's own upgrade (TLS, WebSocket) and the Noise handshake's
+/// two frames from the phone (its reply, then the post-handshake message) may
+/// take — each a round trip nobody has to act on: the phone answers the
+/// handshake by itself, and the person's approval comes later, with the
+/// request (the W20 log: both frames follow the first at once). A phone that
+/// went away after scanning is known in seconds rather than after the 130 s a
+/// prompt gets, so the column's Cancel, its ✕ and its Retry card come back
+/// promptly (083 H4 review). Pings from the relay do not extend it.
+const HANDSHAKE_READ_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How many frames the handshake reads before the tunnel carries requests.
+const HANDSHAKE_FRAMES: usize = 2;
 
 /// How long to wait for the TCP connection to the tunnel server. Bounded so an
 /// unreachable tunnel — e.g. a network that cannot reach that server at all —
@@ -131,11 +258,40 @@ pub struct WebSocketCablePort {
     /// goodbye frame the client writes on its way out was landing exactly
     /// there (spec 038 finding 18).
     closed_by_peer: bool,
+    /// Frames read so far: the first [`HANDSHAKE_FRAMES`] are the
+    /// handshake's, and wait [`Self::handshake_wait`] at most.
+    frames_read: usize,
+    /// [`HANDSHAKE_READ_TIMEOUT`], but for a test.
+    handshake_wait: Duration,
 }
 
 /// The one sentence a closed tunnel produces, shared with the ceremony's
 /// failure mapping so the sheet can name what happened without matching prose.
+/// It is read as the PHONE's goodbye — a cancel — so a close that is the
+/// relay's own refusal does not say it ([`peer_closed`]).
 pub const TUNNEL_CLOSED: &str = "the tunnel closed";
+
+/// How a close the relay itself sent reads: it would not carry this
+/// connection, and the phone never had a say.
+const RELAY_REFUSED: &str = "the relay refused the tunnel";
+
+/// A close from the other end of the tunnel, as the port reports it. Most
+/// are the phone leaving — the relay closes the pair when one leg goes —
+/// and read as its cancel ([`TUNNEL_CLOSED`]). A policy close (1008) is the
+/// relay refusing the connection: Apple's cable.auth.com sent exactly that,
+/// right after the first handshake frame, for tunnel ids it would not route
+/// (the W20 log, `evidence/after/w20-iphone-cable-log.txt`). Read as the
+/// phone's cancel, it went quietly back to the form as if the person had
+/// declined on the phone; it is a connection that never came up, to be
+/// offered again (083 H4 review).
+fn peer_closed(frame: Option<&tungstenite::protocol::CloseFrame<'_>>) -> PortError {
+    match frame {
+        Some(frame) if frame.code == tungstenite::protocol::frame::coding::CloseCode::Policy => {
+            PortError::Io(format!("{RELAY_REFUSED} ({})", frame.reason))
+        }
+        _ => PortError::Io(TUNNEL_CLOSED.to_owned()),
+    }
+}
 
 impl WebSocketCablePort {
     /// Open the tunnel at `url` (`wss://…/cable/connect/<routing>/<tunnel>`),
@@ -181,9 +337,11 @@ impl WebSocketCablePort {
                     .map_err(|error| HybridError::Tunnel(format!("cannot reach {host}: {error}")))?
             }
         };
-        // A bounded read so a phone that never answers frees the thread instead
-        // of blocking it until the process exits.
-        let _ = stream.set_read_timeout(Some(TUNNEL_READ_TIMEOUT));
+        // A bounded read so a relay that never answers frees the thread instead
+        // of blocking it until the process exits — the upgrade is a round trip
+        // with nobody to wait for, so it gets the handshake's budget; each
+        // frame read sets its own after that.
+        let _ = stream.set_read_timeout(Some(HANDSHAKE_READ_TIMEOUT));
 
         log("socket connected; TLS + WebSocket handshake…");
         let (ws, _response) = tungstenite::client_tls(request, stream)
@@ -193,7 +351,38 @@ impl WebSocketCablePort {
         Ok(Self {
             ws,
             closed_by_peer: false,
+            frames_read: 0,
+            handshake_wait: HANDSHAKE_READ_TIMEOUT,
         })
+    }
+
+    /// How long the socket's next read may block.
+    fn read_timeout(&self, wait: Duration) {
+        let socket = match self.ws.get_ref() {
+            MaybeTlsStream::Plain(socket) => socket,
+            MaybeTlsStream::Rustls(tls) => &tls.sock,
+            _ => return,
+        };
+        let _ = socket.set_read_timeout(Some(wait));
+    }
+}
+
+/// A tunnel failure, as the port reports it. A read that ran out of time is
+/// [`PortError::TimedOut`] — the phone went silent — and not an I/O error in
+/// the OS's words: on Windows it was "IO error: A connection attempt failed
+/// because the connected party did not properly respond… (os error 10060)",
+/// and the "stopped answering" readings never applied there (083 H4 review).
+fn port_error(error: tungstenite::Error) -> PortError {
+    match error {
+        tungstenite::Error::Io(io)
+            if matches!(
+                io.kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+            ) =>
+        {
+            PortError::TimedOut
+        }
+        other => PortError::Io(other.to_string()),
     }
 }
 
@@ -209,20 +398,37 @@ impl CablePort for WebSocketCablePort {
         log(&format!("→ tunnel frame ({} bytes)", frame.len()));
         self.ws
             .send(Message::Binary(frame.to_vec().into()))
-            .map_err(|error| PortError::Io(error.to_string()))
+            .map_err(port_error)
     }
 
     fn read_frame(&mut self) -> Result<Vec<u8>, PortError> {
+        // The handshake's frames have a deadline of their own, which a ping
+        // does not move; a request's reply waits for the person.
+        let deadline = (self.frames_read < HANDSHAKE_FRAMES)
+            .then(|| std::time::Instant::now() + self.handshake_wait);
         loop {
+            let wait = match deadline {
+                Some(deadline) => {
+                    let left = deadline.saturating_duration_since(std::time::Instant::now());
+                    if left.is_zero() {
+                        log("← no handshake frame in time: the phone stopped answering");
+                        return Err(PortError::TimedOut);
+                    }
+                    left
+                }
+                None => TUNNEL_READ_TIMEOUT,
+            };
+            self.read_timeout(wait);
             match self.ws.read() {
                 Ok(Message::Binary(bytes)) => {
                     log(&format!("← tunnel frame ({} bytes)", bytes.len()));
+                    self.frames_read += 1;
                     return Ok(bytes.to_vec());
                 }
                 Ok(Message::Close(frame)) => {
                     log(&format!("← tunnel CLOSE {frame:?}"));
                     self.closed_by_peer = true;
-                    return Err(PortError::Io(TUNNEL_CLOSED.to_owned()));
+                    return Err(peer_closed(frame.as_ref()));
                 }
                 // The relay keeps the pair alive with pings and kills BOTH legs
                 // when one stops answering — and the phone-side selector can
@@ -247,7 +453,7 @@ impl CablePort for WebSocketCablePort {
                     log(&format!(
                         "← tunnel read error (peer/relay dropped?): {error}"
                     ));
-                    return Err(PortError::Io(error.to_string()));
+                    return Err(port_error(error));
                 }
             }
         }
@@ -266,18 +472,53 @@ impl CablePort for WebSocketCablePort {
 ///
 /// The QR must already be on screen (the caller shows [`CableInitiator::qr_payload`]);
 /// scanning it is what makes the phone start advertising, so nothing here can
-/// happen until it is.
+/// happen until it is. `found` is called the moment its advert decrypts: the
+/// phone has scanned, and the tunnel and the handshake can take seconds more.
+/// The cable comes back as a [`PhoneCable`], whatever channel it runs on.
 pub fn establish_hybrid(
     session: &CableInitiator,
     product: String,
     ephemeral_seed: &[u8],
     on_touch: Option<TouchAnnouncer>,
+    found: &dyn Fn(),
+    cancelled: &(dyn Fn() -> bool + Send + Sync),
+) -> Result<Box<dyn Cable>, HybridError> {
+    let cable = connect_phone(session, product, ephemeral_seed, on_touch, found, cancelled)?;
+    Ok(Box::new(PhoneCable(cable)))
+}
+
+/// Whether the ceremony is still wanted between the connection's steps: a
+/// dismissal — the QR's Cancel, the connecting card's, a column's close —
+/// stops it before the phone is asked for anything more. Nothing inside a
+/// step polls it (a socket read that ran out of time leaves a Windows socket
+/// in an indeterminate state, so the reads are bounded rather than polled —
+/// [`HANDSHAKE_READ_TIMEOUT`]); what the person sees stops at once anyway —
+/// the card comes down as it is pressed.
+fn still_wanted(cancelled: &(dyn Fn() -> bool + Send + Sync)) -> Result<(), HybridError> {
+    if cancelled() {
+        log("dismissed while the phone connected; stopping");
+        return Err(HybridError::Cancelled);
+    }
+    Ok(())
+}
+
+/// [`establish_hybrid`]'s steps, on whichever channel the advert chooses.
+fn connect_phone(
+    session: &CableInitiator,
+    product: String,
+    ephemeral_seed: &[u8],
+    on_touch: Option<TouchAnnouncer>,
+    found: &dyn Fn(),
     cancelled: &(dyn Fn() -> bool + Send + Sync),
 ) -> Result<Box<dyn Cable>, HybridError> {
     // 1. Find the authenticator by its BLE proximity advert.
     log("scanning for the phone's Bluetooth advert…");
     let hit = scan_for_advert(session.eid_key(), cancelled)?;
     log("advert found; decrypted");
+    // The scan races the dismissal and can win it in the same instant: a QR
+    // just cancelled neither raises the phone's card nor opens a tunnel.
+    still_wanted(cancelled)?;
+    found();
 
     // 2. The advert chooses the channel: a PSM means the CTAP 2.3 local BLE
     //    channel (direct L2CAP, no tunnel — the GFW-proof path); no PSM means
@@ -287,13 +528,28 @@ pub fn establish_hybrid(
         log(&format!(
             "advert offers the BLE channel (PSM {psm}); connecting L2CAP CoC — no tunnel"
         ));
-        let port = l2cap::L2capCablePort::connect(&hit.peripheral, psm)?;
-        log("L2CAP channel open; starting Noise handshake");
-        let cable = session
-            .establish(port, &hit.plaintext, ephemeral_seed, product, on_touch)
-            .map_err(|error| HybridError::Handshake(format!("{error:?}")))?;
-        log("handshake complete; channel is up (BLE)");
-        return Ok(Box::new(cable));
+        // As on Linux, below: a CoC that would not open is not the end of the
+        // ceremony — the advert still names the tunnel, and a dual-channel
+        // phone is reachable there. It was the end: a Bluetooth error, told
+        // as "Bluetooth is unavailable" to a person whose phone had just been
+        // found, and not offered again (083 H4 review). A BLE-only phone
+        // fails one step later as a connection that never came up — which
+        // is what it is, and can be tried again. Each CoreBluetooth step is
+        // bounded (`l2cap::STEP_TIMEOUT`).
+        match l2cap::L2capCablePort::connect(&hit.peripheral, psm) {
+            Ok(port) => {
+                still_wanted(cancelled)?;
+                log("L2CAP channel open; starting Noise handshake");
+                let cable = session
+                    .establish(port, &hit.plaintext, ephemeral_seed, product, on_touch)
+                    .map_err(handshake_failed)?;
+                log("handshake complete; channel is up (BLE)");
+                return Ok(Box::new(cable));
+            }
+            Err(error) => log(&format!(
+                "the BLE channel would not open ({error}); using the tunnel instead"
+            )),
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -314,10 +570,11 @@ pub fn establish_hybrid(
                 // reached in seconds rather than on the kernel's own schedule.
                 match l2cap_linux::L2capCablePort::connect(address, random, psm) {
                     Ok(port) => {
+                        still_wanted(cancelled)?;
                         log("L2CAP channel open; starting Noise handshake");
                         let cable = session
                             .establish(port, &hit.plaintext, ephemeral_seed, product, on_touch)
-                            .map_err(|error| HybridError::Handshake(format!("{error:?}")))?;
+                            .map_err(handshake_failed)?;
                         log("handshake complete; channel is up (BLE)");
                         return Ok(Box::new(cable));
                     }
@@ -357,10 +614,11 @@ pub fn establish_hybrid(
         .ok_or(HybridError::BadAdvert)?;
     log(&format!("opening tunnel: {url}"));
     let port = WebSocketCablePort::connect(&url)?;
+    still_wanted(cancelled)?;
     log("tunnel open; starting Noise handshake");
     let cable = session
         .establish(port, &hit.plaintext, ephemeral_seed, product, on_touch)
-        .map_err(|error| HybridError::Handshake(format!("{error:?}")))?;
+        .map_err(handshake_failed)?;
     log("handshake complete; channel is up (WebSocket)");
     Ok(Box::new(cable))
 }
@@ -668,11 +926,14 @@ fn scan_for_advert(
         .map_err(|error| HybridError::Bluetooth(error.to_string()))?;
 
     runtime.block_on(async move {
-        // The scan is the ONLY open-ended wait in a hybrid ceremony — ninety
-        // seconds for a phone that may never come — and for as long as it had no
-        // way out, neither did the person: the QR sat over the whole window
-        // with nothing to press, and changing one's mind meant quitting the app
-        // (founder, 2026-09-19). So it races a cancellation the screen can set.
+        // The scan is the long wait before the phone is asked anything —
+        // ninety seconds for a phone that may never come — and for as long as
+        // it had no way out, neither did the person: the QR sat over the whole
+        // window with nothing to press, and changing one's mind meant quitting
+        // the app (founder, 2026-09-19). So it races a cancellation the screen
+        // can set. (The connection after it is bounded in seconds —
+        // `HANDSHAKE_READ_TIMEOUT` — and the card over it has a Cancel too:
+        // 083 H4 review.)
         let dismissed = async {
             while !cancelled() {
                 tokio::time::sleep(CANCEL_POLL).await;
@@ -799,5 +1060,337 @@ async fn scan_loop(eid_key: &[u8]) -> Result<AdvertHit, HybridError> {
         }
     }
 
-    Err(HybridError::NoAdvert)
+    // The adapter's event stream ended before the window did — the radio
+    // went away, or the stack dropped the scan. Not `NoAdvert`: that one is
+    // the window elapsing, which the dApp column now names as a 90-second
+    // timeout with Retry (083 W19); this is Bluetooth failing, and says so.
+    Err(HybridError::Bluetooth(SCAN_STREAM_ENDED.to_owned()))
+}
+
+/// Why a scan stopped short of its window: the adapter stopped reporting.
+pub(crate) const SCAN_STREAM_ENDED: &str = "the scan stopped before any phone answered";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 083 H4: a handshake the phone hung up on is a sentence that says the
+    /// phone's connection failed — not the core's error in Rust's debug form,
+    /// which a dApp was answered verbatim.
+    #[test]
+    fn a_failed_handshake_is_a_sentence() {
+        assert_eq!(
+            handshake_failed(CableError::Other("caBLE Noise failure: Decrypt".to_owned()))
+                .to_string(),
+            "the phone connection failed: caBLE Noise failure: Decrypt"
+        );
+        assert_eq!(
+            handshake_failed(CableError::TimedOut).to_string(),
+            "the phone connection failed: the phone stopped answering"
+        );
+        let tunnel = HybridError::Tunnel("cannot reach cable.ua5v.com".to_owned()).to_string();
+        assert!(tunnel.starts_with(PHONE_LINK_FAILED), "{tunnel}");
+        for other in [HybridError::NoAdvert, HybridError::BadAdvert] {
+            assert!(!other.to_string().starts_with(PHONE_LINK_FAILED));
+        }
+    }
+
+    /// 083 H4 review: a tunnel the phone closed while it connected is the
+    /// person cancelling on the phone — its answer, in the words a tunnel it
+    /// closes mid-prompt gets — and not a connection that failed, which the
+    /// column would offer again with "check your network".
+    #[test]
+    fn a_phone_that_hangs_up_while_connecting_has_answered() {
+        let closed = handshake_failed(CableError::Other(format!(
+            "caBLE transport: {TUNNEL_CLOSED}"
+        )));
+        assert!(matches!(closed, HybridError::PhoneEnded), "{closed:?}");
+        assert_eq!(closed.to_string(), PHONE_ENDED);
+        assert!(!closed.to_string().starts_with(PHONE_LINK_FAILED));
+    }
+
+    /// A relay on loopback that takes the desktop's first handshake frame and
+    /// closes the tunnel with `close`; the handshake's failure, as the
+    /// connection reports it.
+    fn closed_after_the_first_frame(
+        close: Option<tungstenite::protocol::CloseFrame<'static>>,
+    ) -> HybridError {
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback");
+        let address = listener.local_addr().expect("an address");
+        let relay = std::thread::spawn(move || {
+            let Ok((stream, _)) = listener.accept() else {
+                return;
+            };
+            let Ok(mut ws) = tungstenite::accept(stream) else {
+                return;
+            };
+            if ws.read().is_err() {
+                return;
+            }
+            let _ = ws.close(close);
+            // Until the desktop has gone.
+            while ws.read().is_ok() {}
+        });
+        let stream = TcpStream::connect(address).expect("the relay answers");
+        let (ws, _) =
+            tungstenite::client_tls(format!("ws://{address}/cable"), stream).expect("upgraded");
+        let port = WebSocketCablePort {
+            ws,
+            closed_by_peer: false,
+            frames_read: 0,
+            handshake_wait: Duration::from_secs(5),
+        };
+        let session = CableInitiator::new(&[7; 32], &[9; 16]).expect("a session");
+        let failure = match session.establish(port, &[0; 16], &[5; 32], "phone".to_owned(), None) {
+            Err(error) => handshake_failed(error),
+            Ok(_) => unreachable!("a closed tunnel shakes no hands"),
+        };
+        let _ = relay.join();
+        failure
+    }
+
+    /// 083 H4 review: a policy close is the relay refusing the tunnel — what
+    /// Apple's relay did to lower-case tunnel ids (W20), right after the first
+    /// handshake frame — and not the phone's cancel: a connection that never
+    /// came up, which the column offers again. Any other close while the
+    /// phone connects is still the phone hanging up.
+    #[test]
+    fn a_relay_that_refuses_the_tunnel_is_not_the_phone_hanging_up() {
+        use tungstenite::protocol::CloseFrame;
+        use tungstenite::protocol::frame::coding::CloseCode;
+
+        let refused = closed_after_the_first_frame(Some(CloseFrame {
+            code: CloseCode::Policy,
+            reason: "Policy violation".into(),
+        }));
+        assert!(
+            matches!(
+                &refused,
+                HybridError::Handshake(detail)
+                    if detail == "the relay refused the tunnel (Policy violation)"
+            ),
+            "{refused:?}"
+        );
+        assert!(refused.to_string().starts_with(PHONE_LINK_FAILED));
+
+        for close in [
+            Some(CloseFrame {
+                code: CloseCode::Normal,
+                reason: "".into(),
+            }),
+            Some(CloseFrame {
+                code: CloseCode::Away,
+                reason: "".into(),
+            }),
+            None,
+        ] {
+            let hung_up = closed_after_the_first_frame(close.clone());
+            assert!(
+                matches!(hung_up, HybridError::PhoneEnded),
+                "{close:?}: {hung_up:?}"
+            );
+        }
+
+        // Once the phone was asked, the same refusal is its connection
+        // dropping — offered again — and not its cancel.
+        assert!(matches!(
+            dropped(CableError::Other(format!(
+                "{CORE_TRANSPORT}{RELAY_REFUSED} (Policy violation)"
+            ))),
+            CableError::Other(detail)
+                if detail == "the phone connection dropped: the relay refused the tunnel (Policy violation)"
+        ));
+    }
+
+    /// 083 H4 review: a dismissal stops the connection between its steps —
+    /// the scan's hit, the opened channel — before the phone is asked for
+    /// anything more.
+    #[test]
+    fn a_dismissal_stops_the_connection_between_its_steps() {
+        assert!(still_wanted(&|| false).is_ok());
+        assert!(matches!(
+            still_wanted(&|| true),
+            Err(HybridError::Cancelled)
+        ));
+    }
+
+    /// 083 H4 review: a tunnel read that ran out of time is the phone going
+    /// silent, on every desktop — on Windows it was the OS's "(os error
+    /// 10060)" sentence, and nothing that reads "stopped answering" applied.
+    #[test]
+    fn a_read_that_ran_out_of_time_is_the_phone_going_silent() {
+        use std::io::{Error, ErrorKind};
+        for kind in [ErrorKind::TimedOut, ErrorKind::WouldBlock] {
+            assert!(matches!(
+                port_error(tungstenite::Error::Io(Error::from(kind))),
+                PortError::TimedOut
+            ));
+        }
+        #[cfg(windows)]
+        assert!(
+            matches!(
+                port_error(tungstenite::Error::Io(Error::from_raw_os_error(10060))),
+                PortError::TimedOut
+            ),
+            "WSAETIMEDOUT, what a socket read timeout is on Windows"
+        );
+        assert!(matches!(
+            port_error(tungstenite::Error::Io(Error::from(
+                ErrorKind::ConnectionReset
+            ))),
+            PortError::Io(_)
+        ));
+        assert!(matches!(
+            port_error(tungstenite::Error::ConnectionClosed),
+            PortError::Io(_)
+        ));
+    }
+
+    /// 083 H4 review: the handshake's frames come from the phone with nobody
+    /// touching it, so a phone that went away after scanning is known in the
+    /// handshake's budget — not the 130 s a prompt gets — however often the
+    /// relay pings to keep the pair alive.
+    #[test]
+    fn the_handshake_does_not_wait_as_long_as_a_prompt() {
+        use std::net::TcpListener;
+        use std::time::Instant;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback");
+        let address = listener.local_addr().expect("an address");
+        // A relay that keeps the pair alive and never passes a frame on.
+        let relay = std::thread::spawn(move || {
+            let Ok((stream, _)) = listener.accept() else {
+                return;
+            };
+            let Ok(mut ws) = tungstenite::accept(stream) else {
+                return;
+            };
+            for _ in 0..80 {
+                if ws.send(Message::Ping(Vec::new())).is_err() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        });
+        let stream = TcpStream::connect(address).expect("the relay answers");
+        let (ws, _) =
+            tungstenite::client_tls(format!("ws://{address}/cable"), stream).expect("upgraded");
+        let mut port = WebSocketCablePort {
+            ws,
+            closed_by_peer: false,
+            frames_read: 0,
+            handshake_wait: Duration::from_millis(300),
+        };
+
+        let started = Instant::now();
+        let silent = port.read_frame();
+        let waited = started.elapsed();
+        assert!(matches!(silent, Err(PortError::TimedOut)));
+        assert!(
+            waited >= Duration::from_millis(250) && waited < Duration::from_millis(1500),
+            "the pings did not keep it waiting: {waited:?}"
+        );
+        assert!(matches!(
+            handshake_failed(CableError::TimedOut),
+            HybridError::Handshake(detail) if detail == "the phone stopped answering"
+        ));
+        drop(port);
+        let _ = relay.join();
+    }
+
+    /// A port that is gone before the first frame.
+    struct Gone;
+    impl CablePort for Gone {
+        fn write_frame(&mut self, _frame: &[u8]) -> Result<(), PortError> {
+            Err(PortError::Io("connection reset".to_owned()))
+        }
+        fn read_frame(&mut self) -> Result<Vec<u8>, PortError> {
+            Err(PortError::Io("connection reset".to_owned()))
+        }
+        fn channel(&self) -> &str {
+            "WebSocket"
+        }
+    }
+
+    /// A connected phone that fails every exchange with `error`.
+    struct Failing(fn() -> CableError);
+    impl Cable for Failing {
+        fn exchange(
+            &mut self,
+            _request: &[u8],
+            _touch: Option<vela_core::ctap::ceremony::TouchKind>,
+        ) -> Result<Vec<u8>, CableError> {
+            Err((self.0)())
+        }
+        fn cancel(&mut self) {}
+        fn product(&self) -> &str {
+            "your phone"
+        }
+        fn path(&self) -> &str {
+            "WebSocket"
+        }
+    }
+
+    /// 083 H4 review: a connected phone whose connection drops mid-prompt is
+    /// said as the phone's connection dropping — not the core's sentence for
+    /// a USB key ("The security key stopped responding. Unplug it…"), nor
+    /// the OS's words behind "caBLE transport:" — and a tunnel the phone
+    /// closed is still the phone's own cancel.
+    #[test]
+    fn a_connected_phone_that_drops_says_so() {
+        // The core's own words for a failed port, pinned: the mapping below
+        // reads them.
+        let session = CableInitiator::new(&[7; 32], &[9; 16]).expect("a session");
+        let transport = match session.establish(Gone, &[0; 16], &[5; 32], "phone".to_owned(), None)
+        {
+            Err(CableError::Other(detail)) => detail,
+            Err(other) => unreachable!("{other:?}"),
+            Ok(_) => unreachable!("a gone port shakes no hands"),
+        };
+        assert_eq!(transport, format!("{CORE_TRANSPORT}connection reset"));
+
+        let mut timed_out = PhoneCable(Box::new(Failing(|| CableError::TimedOut)));
+        let silent = failure_for(
+            timed_out
+                .exchange(
+                    &[0x02],
+                    Some(vela_core::ctap::ceremony::TouchKind::Presence),
+                )
+                .expect_err("silent"),
+        );
+        let words = silent.message.unwrap_or_default();
+        assert_eq!(
+            words,
+            "the phone connection dropped: the phone stopped answering"
+        );
+        assert!(!words.contains("security key"), "{words}");
+
+        let reset = match dropped(CableError::Other(transport)) {
+            CableError::Other(detail) => detail,
+            other => unreachable!("{other:?}"),
+        };
+        assert_eq!(reset, "the phone connection dropped: connection reset");
+
+        // The phone's own cancel, a garbled frame and the phone's CTAP
+        // answer are left as they were.
+        let closed = format!("{CORE_TRANSPORT}{TUNNEL_CLOSED}");
+        assert!(matches!(
+            dropped(CableError::Other(closed.clone())),
+            CableError::Other(detail) if detail == closed
+        ));
+        let garbled = "caBLE Noise failure: Decrypt".to_owned();
+        assert!(matches!(
+            dropped(CableError::Other(garbled.clone())),
+            CableError::Other(detail) if detail == garbled
+        ));
+        assert!(matches!(
+            dropped(CableError::Ctap(
+                vela_core::ctap::commands::Status::NoCredentials
+            )),
+            CableError::Ctap(_)
+        ));
+        assert!(!PHONE_DROPPED.starts_with(PHONE_LINK_FAILED));
+    }
 }

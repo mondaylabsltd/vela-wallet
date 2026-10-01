@@ -1338,7 +1338,8 @@ class CoreWireDriftTest {
             .map { member ->
                 splitTopLevel(member, ',')
                     .mapNotNull { field ->
-                        val name = field.substringBefore(':', "").trim().trim('"')
+                        // ts-rs writes an optional field (`skip_serializing_if`) as `name?:`.
+                        val name = field.substringBefore(':', "").trim().trim('"').removeSuffix("?")
                         val type = field.substringAfter(':', "").trim()
                         if (name.isEmpty() || type.isEmpty()) null else name to type.trim('"')
                     }

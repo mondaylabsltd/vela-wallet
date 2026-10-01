@@ -4,4 +4,4 @@
  * Why there is no quote. One variant per distinct user-facing message in the
  * TS sources; the shell maps them to its i18n keys.
  */
-export type FeeFailure = "missing_public_key" | "fee_token_unavailable" | "quote_unavailable" | "calculation_failed" | "estimate_failed" | "gas_quote_too_high" | { "chain_read": { rate_limited: boolean, } };
+export type FeeFailure = "missing_public_key" | "fee_token_unavailable" | "quote_unavailable" | "calculation_failed" | "estimate_failed" | "gas_quote_too_high" | { "chain_read": { rate_limited: boolean, } } | "would_fail";

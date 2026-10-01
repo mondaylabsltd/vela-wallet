@@ -40,7 +40,10 @@
 		<StatusChip chip={model.status} />
 	</p>
 
-	<AmountHero amount={model.amount} fiat={model.fiat} positive={model.positive} />
+	<!-- A dApp call that moved no coin has no figure (083 H2): no empty hero. -->
+	{#if model.amount !== '' || model.fiat !== ''}
+		<AmountHero amount={model.amount} fiat={model.fiat} positive={model.positive} />
+	{/if}
 
 	<ul>
 		{#each model.facts as fact, i (fact.label)}

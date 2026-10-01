@@ -614,6 +614,7 @@ final class RelayClient {
         case nil: return "none"
         case .relayerUnavailable: return "relayer_unavailable"
         case .bundlerUnderfunded: return "bundler_underfunded"
+        case .nonceHeld: return "nonce_held"
         case .other: return "other"
         }
     }

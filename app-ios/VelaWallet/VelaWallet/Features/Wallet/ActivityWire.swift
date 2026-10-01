@@ -93,9 +93,9 @@ struct FeedTxRecordWire: Decodable, Equatable {
     /// `nil` = a legacy untyped record, which the core reads as `send`.
     let kind: FeedTxKindWire?
     let usd: String?
-    /// The origin of the site that asked, for a `dapp_tx` record (spec 082
-    /// RG1); `nil` for every other kind.
-    var dappOrigin: String? = nil
+    /// The origin a `dapp_tx` request arrived from (spec 082 RG1, 083 H2);
+    /// `nil` for every other kind.
+    var dappUrl: String? = nil
     /// The call's `data`, for a `dapp_tx` record (spec 082 RJ16) — what the
     /// core reads the counterparty from.
     var callData: String? = nil

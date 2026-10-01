@@ -815,12 +815,11 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
                         .child(row.subtitle.clone()),
                 ),
         )
-        .child(
-            div()
+        .child({
+            let figure = div()
                 .flex()
                 .items_center()
                 .gap(px(4.))
-                .flex_none()
                 .child(
                     div()
                         .text_size(theme::text_amount())
@@ -833,8 +832,28 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
                         .text_size(theme::text_unit())
                         .text_color(theme.fg_subtle)
                         .child(row.unit.clone()),
-                ),
-        )
+                );
+            // A dApp swap's coin back sits under its figure, in the
+            // subtitle's quiet voice (083 F1): expected, not landed. The
+            // title and subtitle already make the row two lines tall.
+            match &row.received {
+                Some(received) => div()
+                    .flex()
+                    .flex_col()
+                    .items_end()
+                    .gap(px(2.))
+                    .flex_none()
+                    .child(figure)
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_muted)
+                            .whitespace_nowrap()
+                            .child(received.clone()),
+                    ),
+                None => figure.flex_none(),
+            }
+        })
 }
 
 fn token_glyph(theme: &Theme, ticker: &str) -> Div {

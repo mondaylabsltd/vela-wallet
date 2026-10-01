@@ -8,7 +8,8 @@
 //! live here, and every shell draws the same panel with the same words:
 //!
 //! - [`classify`] — the platform's raw error (Android `WebViewClient.ERROR_*`,
-//!   Apple `NSURLErrorDomain` / `kCFErrorDomainCFNetwork`, or the desktop's
+//!   Apple `NSURLErrorDomain` / `kCFErrorDomainCFNetwork`, WebView2's
+//!   `COREWEBVIEW2_WEB_ERROR_STATUS` on Windows (spec 083), or the desktop's
 //!   own probe) → one class, the corpus key of its sentence, and whether
 //!   retrying can help. A cancelled navigation is not a failure. A proxy that
 //!   could not be used is said to be the proxy (spec 082, RD9).
@@ -45,6 +46,11 @@ pub enum LoadPlatform {
     /// The desktop's own reachability probe (see [`probe_code`]); wry reports
     /// no load failures of its own.
     Probe,
+    /// WebView2's `COREWEBVIEW2_WEB_ERROR_STATUS` (Windows, spec 083): read
+    /// straight from WebView2, because wry drops it — and Edge's own error
+    /// page then arrived as a commit and took Vela's panel down.
+    #[serde(rename = "webview2")]
+    WebView2,
 }
 
 /// What went wrong, as a person would tell it.
@@ -175,6 +181,27 @@ pub fn classify(
                 _ => LoadFailureClass::Other,
             },
             Some(_) => LoadFailureClass::Other,
+        },
+        LoadPlatform::WebView2 => match code {
+            // OPERATION_CANCELED: a navigation replaced by another, a
+            // download, `window.stop()` — not the page failing.
+            14 => return None,
+            // HOST_NAME_NOT_RESOLVED
+            13 => LoadFailureClass::NotFound,
+            // CANNOT_CONNECT (as Android's ERROR_CONNECT)
+            12 => LoadFailureClass::Refused,
+            // TIMEOUT
+            7 => LoadFailureClass::Timeout,
+            // SERVER_UNREACHABLE, ERROR_HTTP_INVALID_SERVER_RESPONSE (how
+            // `net::ERR_EMPTY_RESPONSE` arrives, as Android's -1),
+            // CONNECTION_ABORTED, CONNECTION_RESET, DISCONNECTED
+            6 | 8 | 9 | 10 | 11 => LoadFailureClass::Offline,
+            // CERTIFICATE_COMMON_NAME_IS_INCORRECT, _EXPIRED,
+            // CLIENT_CERTIFICATE_CONTAINS_ERRORS, _REVOKED, _IS_INVALID
+            1..=5 => LoadFailureClass::Certificate,
+            // UNKNOWN, REDIRECT_FAILED, UNEXPECTED_ERROR, the two
+            // credential statuses, and anything newer
+            _ => LoadFailureClass::Other,
         },
         LoadPlatform::Probe => match code {
             probe_code::DNS => LoadFailureClass::NotFound,
@@ -489,6 +516,9 @@ pub struct LoadWatch {
     /// or a `*_at` call) — how old the engine's load is when an attempt falls
     /// due (RJ9).
     pub clock_ms: f64,
+    /// WebView2 is showing its own error page, and its `NavigationCompleted`
+    /// — which says why — is a moment away (spec 083). The page stays hidden.
+    pub engine_page: bool,
 }
 
 /// What a probe's answer means for the load.
@@ -535,6 +565,7 @@ impl LoadWatch {
         self.own_request = None;
         self.clock_ms = self.clock_ms.max(now_ms);
         self.generation += 1;
+        self.engine_page = false;
         self.probing = false;
         self.committed = false;
         self.retry_due = false;
@@ -578,6 +609,7 @@ impl LoadWatch {
         if self.ignores(url) {
             return;
         }
+        self.engine_page = false;
         self.loading = false;
         self.committed = true;
         self.probing = false;
@@ -593,6 +625,7 @@ impl LoadWatch {
         if self.ignores(url) {
             return;
         }
+        self.engine_page = false;
         self.committed = false;
         self.loading = false;
         self.probing = false;
@@ -742,6 +775,47 @@ impl LoadWatch {
         }
         self.fail(Some(stalled()));
         true
+    }
+
+    /// The engine put its own error page up (spec 083, WebView2): not a
+    /// commit — Vela's panel never gives way to it.
+    pub fn error_page(&mut self) {
+        self.engine_page = true;
+    }
+
+    /// WebView2 said the top navigation failed (spec 083): the panel at once,
+    /// with the engine's reason, instead of after the watchdog and probe.
+    /// Returns whether to book a retry — not for a navigation a newer one
+    /// replaced, nor for a failure already on the panel (the probe got there
+    /// first and booked it; WebView2's own timeout comes ~40 s later). A
+    /// failure the wallet did not ask for (a link) names its own address, so
+    /// Retry loads that.
+    pub fn engine_failed(&mut self, url: &str, status: i64, certificate: bool) -> bool {
+        self.engine_page = false;
+        let Some(failure) = classify(LoadPlatform::WebView2, status, None, certificate) else {
+            return false;
+        };
+        if !is_web_url(url) || (!self.loading && self.failure.is_some()) {
+            return false;
+        }
+        if !self.loading {
+            self.generation += 1;
+            self.url = Some(url.to_owned());
+            self.attempt = 0;
+        }
+        self.committed = false;
+        self.fail(Some(failure));
+        true
+    }
+
+    /// The address the bar names while no page stands for it (spec 083
+    /// FR-005/FR-006): a load the wallet asked for that has not committed, or
+    /// one that failed, under its panel. `None` once a page commits.
+    #[must_use]
+    pub fn named_url(&self) -> Option<&str> {
+        self.url
+            .as_deref()
+            .filter(|_| self.loading || self.failure.is_some())
     }
 
     fn fail(&mut self, failure: Option<LoadFailure>) {

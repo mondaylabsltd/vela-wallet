@@ -1075,6 +1075,13 @@ export function signInRoute(account_json: string): string | undefined;
 export function signMessageHash(method: string, params_json: string): Uint8Array | undefined;
 
 /**
+ * The page's "not confirmed yet" for an operation that may still land —
+ * `sign_request::not_confirmed_detail` (083). The extension's worker, which
+ * cannot run the core, mirrors it; `protocol.test.ts` pins the mirror here.
+ */
+export function signNotConfirmedDetail(user_op_hash: string): string;
+
+/**
  * A sign request older than this (ms) is never signed —
  * `sign_request::EXTENSION_REQUEST_TTL_MS`. The extension worker pins its
  * `REQUEST_TTL_MS` to it (RB2).
@@ -1194,6 +1201,13 @@ export function userOpHash(op_json: string, chain_id: bigint): string;
  * relay refusal to quote (RA10) — a fixed sentence, never the pool's text.
  */
 export function userOpNotSentDetail(): string;
+
+/**
+ * The dApp's `-32603` detail for a request that could not go out behind
+ * another of the account's operations (083, `RelayRejection::NonceHeld`) —
+ * never that operation's hash as this one's answer.
+ */
+export function userOpPreviousPendingDetail(): string;
 
 /**
  * The dApp's `-32603` detail for an operation the relay refused (spec 082
@@ -1485,6 +1499,7 @@ export interface InitOutput {
     readonly signEndingState: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly signInRoute: (a: number, b: number) => [number, number];
     readonly signMessageHash: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly signNotConfirmedDetail: (a: number, b: number) => [number, number];
     readonly signRequestTtlMs: () => number;
     readonly signprefcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly signprefcore_new: () => number;
@@ -1520,6 +1535,7 @@ export interface InitOutput {
     readonly userOpEventTopic: () => [number, number];
     readonly userOpHash: (a: number, b: number, c: bigint) => [number, number, number, number];
     readonly userOpNotSentDetail: () => [number, number];
+    readonly userOpPreviousPendingDetail: () => [number, number];
     readonly userOpRefusedDappDetail: () => [number, number];
     readonly userOpStatusMethod: () => [number, number];
     readonly userOpSubmitStep: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];

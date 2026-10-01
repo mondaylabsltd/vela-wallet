@@ -10,7 +10,7 @@
 // worker's constants can be pinned to the core's own numbers (spec 082 §13).
 import '$lib/i18n/wasm-init.server';
 import { describe, expect, it } from 'vitest';
-import { rpcCooldownMs, rpcReadTimeoutMs } from '$lib/core/kernels';
+import { rpcCooldownMs, rpcReadTimeoutMs, signNotConfirmedDetail } from '$lib/core/kernels';
 import {
 	ENDPOINTS_KEY,
 	ERR,
@@ -28,6 +28,7 @@ import {
 	classifyMethod,
 	hostLabel,
 	isWellFormedRequest,
+	maybeSentPayload,
 	originOfUrl,
 	parseChainId,
 	pickSignAddress,
@@ -180,6 +181,14 @@ describe('the worker’s chain reads (spec 082 RF2, G20, G33)', () => {
 		expect(READ_TIMEOUT_MS).toBe(rpcReadTimeoutMs());
 		expect(READ_TIMEOUT_MS).toBe(8_000);
 	});
+	it('a lost claimed submit is told the core\'s "not confirmed yet"; a batch, its id (RJ2, 083)', () => {
+		const op = `0x${'ab'.repeat(32)}`;
+		expect(maybeSentPayload('eth_sendTransaction', op)).toEqual({
+			error: { code: -32603, message: signNotConfirmedDetail(op) }
+		});
+		expect(maybeSentPayload('wallet_sendCalls', op)).toEqual({ result: op });
+	});
+
 
 	it('cools a failing endpoint exactly as the core’s pool does', () => {
 		for (let n = 1; n <= 5; n += 1) expect(cooldownMs(n), `n=${n}`).toBe(rpcCooldownMs(n));

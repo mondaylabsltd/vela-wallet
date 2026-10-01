@@ -74,6 +74,11 @@ pub struct WalletStrings {
     /// "处理中 · …", "失败 · …".
     pub status_pending: SharedString,
     pub status_failed: SharedString,
+    /// A dApp transaction's title (083 H2): its decoded intent in the
+    /// reader's words — the signing sheet's own (`componentsUi.signing.<leaf>`)
+    /// — else "Contract interaction", as the sheet called it.
+    pub terms: std::collections::HashMap<vela_core::app::clear_signing::ClearTerm, SharedString>,
+    pub intent_contract_call: SharedString,
     pub today: SharedString,
     pub yesterday: SharedString,
     /// Templates carrying `{{name}}`.
@@ -173,6 +178,10 @@ impl WalletStrings {
             label_dapp: s("history.txLabelDappTx"),
             status_pending: s("componentsTx.detail.statusPending"),
             status_failed: s("componentsTx.detail.statusFailed"),
+            terms: vela_core::app::clear_signing::ClearTerm::all()
+                .map(|term| (term, s(&format!("componentsUi.signing.{}", term.leaf()))))
+                .collect(),
+            intent_contract_call: s("componentsUi.signing.intentContractCall"),
             today: s("componentsUi.dayGroup.today"),
             yesterday: s("componentsUi.dayGroup.yesterday"),
             to_name: raw("history.toName"),

@@ -290,25 +290,25 @@ async function settle(rid, cause) {
 
 /**
  * End a request whose surface went after it was claimed for submit with its
- * operation hash (RJ2): it may have been sent, so the page is told that hash
- * — once, as the answer the surface would have given for a lost relay reply
- * (ruling 1 + RA2) — and its receipt reads for it are translated from now on
- * (RF3). The wallet's own record of it, written before the POST, is what the
- * tracker resumes on the next boot.
+ * operation hash (RJ2): it may have been sent, so the page is told so, once —
+ * "not confirmed yet" (083, owner ruling 2026-10-01; a batch: its id) — and
+ * its receipt reads for the hash are translated from now on (RF3). The
+ * wallet's own record of it, written before the POST, is what the tracker
+ * resumes on the next boot.
  */
-async function answerMaybeSent(rid, cause, opHash) {
+async function answerMaybeSent(rid, cause, payload, opHash) {
 	const record = records.get(rid);
 	if (!record) return false;
 	records.delete(rid);
 	await unpersist(rid);
 	const owner = ownerOf(record);
 	postTo(owner, { type: 'withdrawn', rid, cause });
-	const delivered = await deliver(record, { result: opHash });
+	const delivered = await deliver(record, payload);
 	void swlog.log('req.answered', {
 		cause,
 		maybe_sent: 1,
 		delivered,
-		outcome: 'ok',
+		outcome: payload.error ? 'not_confirmed' : 'ok',
 		tab: record.tabId
 	});
 	void rememberOp(opHash, { chainId: record.chainId });
@@ -321,12 +321,12 @@ async function answerMaybeSent(rid, cause, opHash) {
 
 /**
  * One request ended by a browser event or a recovery step: `{rid, cause}` is
- * settled 4900; `{rid, cause, answer: {ok}}` — a claimed submit that may have
- * been sent — is answered with its hash (RJ2).
+ * settled 4900; `{rid, cause, answer, opHash}` — a claimed submit that may
+ * have been sent — is answered `answer` (RJ2, `maybeSentPayload`).
  */
 function end(step) {
 	return step.answer
-		? answerMaybeSent(step.rid, step.cause, step.answer.ok)
+		? answerMaybeSent(step.rid, step.cause, step.answer, step.opHash)
 		: settle(step.rid, step.cause);
 }
 

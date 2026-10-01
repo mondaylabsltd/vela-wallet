@@ -210,6 +210,40 @@ describe('liveTxDetail', () => {
 		expect(detail.amount).not.toContain('1.25');
 		expect(detail.fiat).not.toContain('2');
 	});
+
+	// 083 H2: a dApp's transaction opens to what it did and where it came
+	// from — the intent as the title rather than "Sent" and an empty coin, the
+	// site as the first fact, then the contract — and a call that moved no
+	// coin has no figure: no lone "−", no "≈ $0.00".
+	it("a dApp's call names its site and intent, and no figure it never moved", () => {
+		const call = item('d', {
+			direction: 'out',
+			value: null,
+			symbol: '',
+			decimals: null,
+			usd_value: 0,
+			tx_hash: null,
+			status: 'pending',
+			dapp: { site: 'app.uniswap.org', intent: 'Swap', intent_term: 'intentSwap' }
+		});
+		const detail = liveTxDetail(call, ctx);
+		expect(detail.title).toBe(m.activity.intents.intentSwap);
+		expect(detail.facts.map((f) => f.label).slice(0, 2)).toEqual([
+			fm['connect.detail.labelApp'],
+			fm['componentsTx.detail.to']
+		]);
+		expect(detail.facts[0].value).toBe('app.uniswap.org');
+		expect(detail.amount).toBe('');
+		expect(detail.fiat).toBe('');
+		expect(liveTxDetail(call, { ...ctx, hidden: true }).amount).toBe('');
+
+		const undecoded = liveTxDetail(
+			item('e', { ...call, dapp: { site: null, intent: null, intent_term: null } }),
+			ctx
+		);
+		expect(undecoded.title).toBe(m.activity.contractCall);
+		expect(undecoded.facts[0].label).toBe(fm['componentsTx.detail.to']);
+	});
 });
 
 /**

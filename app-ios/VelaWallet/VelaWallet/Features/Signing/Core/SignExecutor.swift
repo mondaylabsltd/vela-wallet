@@ -332,12 +332,15 @@ final class SignExecutor {
                 chainId: chainId, userOpHash: hash, waitMs: receiptWaitMs(elapsed)
             )
             if let receipt, !receipt.confirmed {
-                // Landed and reverted: the page still gets its tx hash (ruling
-                // 9); the tracker, polling the same receipt, closes the record
-                // failed and the sheet says so. Nothing here patches it.
+                // Landed and reverted: the page hears the revert, naming the
+                // transaction — never the hash a site reads as done (083,
+                // owner ruling 2026-10-01). The tracker, polling the same
+                // receipt, closes the record failed. Nothing here patches it.
                 VelaLog.failure(.sign, kind: "reverted", "hash=\(VelaLog.short(hash)) tx=\(VelaLog.short(receipt.txHash))")
             }
-            return Self.afterReceiptWait(userOpHash: hash, receipt: receipt?.txHash)
+            return Self.afterReceiptWait(
+                userOpHash: hash, receipt: receipt?.txHash, reverted: receipt?.confirmed == false
+            )
         } catch let refused as UserOpSpine.Refused {
             switch refused.failure {
             case .passkeyCancelled:
@@ -527,13 +530,22 @@ final class SignExecutor {
     /// What the receipt wait means for the core.
     ///
     /// In time: `succeeded` with the TX hash — a dApp's `eth_sendTransaction`
-    /// resolves to a tx hash. Late: `receipt_pending` with the op hash — the
-    /// core still answers the page with it, but leaves the record PENDING for
-    /// the tracker to settle. A late receipt is not a confirmation (issue 262:
-    /// an op that never landed was recorded "confirmed").
-    static func afterReceiptWait(userOpHash: String, receipt: String?) -> [String: Any] {
-        if let txHash = receipt { return ["type": "succeeded", "result": txHash] }
-        return ["type": "receipt_pending", "user_op_hash": userOpHash]
+    /// resolves to a tx hash — or `reverted` when the receipt says the op
+    /// reverted (083: the core answers the page the revert). Late:
+    /// `receipt_pending` with the op hash — the core answers a transaction
+    /// "not confirmed yet" and leaves the record PENDING for the tracker. A
+    /// late receipt is not a confirmation (issue 262: an op that never landed
+    /// was recorded "confirmed").
+    static func afterReceiptWait(
+        userOpHash: String, receipt: String?, reverted: Bool = false
+    ) -> [String: Any] {
+        guard let txHash = receipt else {
+            return ["type": "receipt_pending", "user_op_hash": userOpHash]
+        }
+        if reverted {
+            return ["type": "reverted", "user_op_hash": userOpHash, "tx_hash": txHash]
+        }
+        return ["type": "succeeded", "result": txHash]
     }
 
     /// What the page's verifier will hash.
@@ -641,6 +653,9 @@ final class SignExecutor {
             "status": (record["status"] as? String) == "confirmed" ? "confirmed" : "pending",
             "type": kind,
             "dappOrigin": record["dapp_origin"] as? String ?? "",
+            // 083 H2: the origin the request arrived from — what Activity
+            // names the site by.
+            "dappUrl": record["dapp_url"] as? String ?? "",
             "signedRequest": clipped ? String(paramsJson.prefix(4096)) : paramsJson,
             "requestTruncated": clipped,
         ]

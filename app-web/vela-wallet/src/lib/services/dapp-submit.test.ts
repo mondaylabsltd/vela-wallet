@@ -167,13 +167,19 @@ describe('one answer for an on-chain request (spec 082 RA2, RA8, RA9)', () => {
 		expect(waitFor).toHaveBeenCalledWith(108_000, undefined);
 	});
 
-	it('revert inside the wait: Ok(tx hash), not -32603', async () => {
+	// 083, owner ruling 2026-10-01 (superseding ruling 9): a revert is the
+	// page's error naming its transaction, never the tx hash a site reads as
+	// done — reported to the core as `reverted`.
+	it('revert inside the wait: the revert, with both hashes — never Ok(tx hash)', async () => {
 		submitsWith({
 			waitForTxHash: async () => {
 				throw new UserOpRevertedError(TX);
 			}
 		});
-		await expect(run(vi.fn(), hooks([]))).resolves.toBe(TX);
+		await expect(run(vi.fn(), hooks([]))).rejects.toMatchObject({
+			name: 'DAppRevertedError',
+			txHash: TX
+		});
 	});
 
 	it('the ceremony order: claim, prompt up, signature, claim again, then the POST', async () => {

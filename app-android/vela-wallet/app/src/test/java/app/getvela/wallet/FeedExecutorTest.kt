@@ -372,7 +372,7 @@ class FeedExecutorTest {
                 params_json = """[{"to":"0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141","value":"0x38d7ea4c68000"}]""",
                 result = "", from = me, chain_id = 100, now_ms = System.currentTimeMillis().toDouble(),
                 status = app.getvela.wallet.feature.signing.core.SignRecordStatus.Pending, user_op_hash = op,
-                dapp_origin = "https://app.uniswap.org", maybe_sent = true,
+                dapp_origin = "https://app.uniswap.org", dapp_url = "https://app.uniswap.org", maybe_sent = true,
             )
             assertTrue(feed.writeRecords(listOf(app.getvela.wallet.feature.signing.core.SignExecutor.recordRow(record, "XDAI"))))
             host.dispatch(app.getvela.wallet.feature.wallet.core.FeedEvent.ReconcileCompleted(1), app.getvela.wallet.feature.wallet.core.FeedEvent.serializer())
@@ -397,12 +397,14 @@ class FeedExecutorTest {
 
     @Test
     fun `a dApp record's origin crosses to the core`() = runBlocking {
-        write(storedRow(type = "dapp_tx").put("dappOrigin", "https://app.uniswap.org"))
+        // 083 H2: the origin the request arrived from (`dappUrl`) — never
+        // `dappOrigin`, which may be the dApp's own name.
+        write(storedRow(type = "dapp_tx").put("dappOrigin", "Uniswap").put("dappUrl", "https://app.uniswap.org"))
         val record = (executor().perform(FeedOperation.ReadTxStore("0x1111", 1)) as FeedShellResult.StoreLoaded).records.single()
         assertEquals(FeedTxKind.DappTx, record.kind)
-        assertEquals("https://app.uniswap.org", record.dapp_origin)
+        assertEquals("https://app.uniswap.org", record.dapp_url)
         write(storedRow(type = "send"))
-        assertNull((executor().perform(FeedOperation.ReadTxStore("0x1111", 2)) as FeedShellResult.StoreLoaded).records.single().dapp_origin)
+        assertNull((executor().perform(FeedOperation.ReadTxStore("0x1111", 2)) as FeedShellResult.StoreLoaded).records.single().dapp_url)
     }
     // -- spec 082 round 2 (RJ1, RJ16) ------------------------------------------
 
@@ -477,6 +479,7 @@ class FeedExecutorTest {
                     result = "", from = me, chain_id = 100, now_ms = System.currentTimeMillis().toDouble(),
                     status = app.getvela.wallet.feature.signing.core.SignRecordStatus.Pending, user_op_hash = op,
                     dapp_origin = "http://127.0.0.1:8137",
+                    dapp_url = "http://127.0.0.1:8137",
                 ),
                 "XDAI",
             ).put("txHash", op)

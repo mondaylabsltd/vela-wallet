@@ -72,19 +72,24 @@ struct SubmitVerdictTests {
         #expect(verdict == .notSent(rejection: .other(message: "Transaction nonce mismatch. Please try again.")))
     }
 
-    /// The marker names the op already pending for this nonce — the SAME
-    /// op. It is searched in the raw error first: the translator replaces an
-    /// AA25 sentence wholesale and the marker would go with it.
+    /// The marker names the op already pending for this nonce. When it is
+    /// THIS op (a retried POST that had arrived) it is accepted; another op's
+    /// hash is never this request's (083): not sent, the nonce held by it. It
+    /// is searched in the raw error first: the translator replaces an AA25
+    /// sentence wholesale and the marker would go with it.
     @Test func theExistingHashMarkerIsAccepted() async {
-        let port = ScriptedRelayPort()
-        let marked = "0x" + String(repeating: "ab", count: 32)
-        port.detailed["eth_sendUserOperation"] = [answer(
-            .rpcError(code: -32521, message: "AA25 invalid account nonce [existingHash:\(marked)]"),
-            delivered: false,
-            held: #"{"code":-32521,"message":"AA25 invalid account nonce [existingHash:\#(marked)]"}"#
-        )]
-        let verdict = await client(port).sendUserOp(chainId: 100, opJson: "{}", localHash: local)
-        #expect(verdict == .accepted(userOpHash: marked))
+        func verdict(marking marked: String) async -> RelayClient.SubmitVerdict {
+            let port = ScriptedRelayPort()
+            port.detailed["eth_sendUserOperation"] = [answer(
+                .rpcError(code: -32521, message: "AA25 invalid account nonce [existingHash:\(marked)]"),
+                delivered: false,
+                held: #"{"code":-32521,"message":"AA25 invalid account nonce [existingHash:\#(marked)]"}"#
+            )]
+            return await client(port).sendUserOp(chainId: 100, opJson: "{}", localHash: local)
+        }
+        #expect(await verdict(marking: local) == .accepted(userOpHash: local))
+        let another = "0x" + String(repeating: "ab", count: 32)
+        #expect(await verdict(marking: another) == .notSent(rejection: .nonceHeld(userOpHash: another)))
     }
 
     /// The relay's hash wins over the local one.

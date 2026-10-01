@@ -1179,8 +1179,9 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             logs,
         } => {
             // One rule, then the ordinary path: a Safe `ExecutionFailure`
-            // inside a "successful" UserOp is a failed payment (#D1).
-            let result = if safe_execution_failed(&logs) {
+            // inside a "successful" UserOp is a failed payment (#D1) — inside
+            // THIS op's execution, not a bundle neighbour's (083).
+            let result = if op_execution_failed(&logs, &user_op_hash) {
                 TrackShellResult::ReceiptFailed {
                     user_op_hash,
                     tx_hash,
@@ -1935,6 +1936,72 @@ pub fn safe_execution_failed(logs: &[super::token_trust::TrustReceiptLog]) -> bo
     })
 }
 
+/// How `user_op_hash` ended, by the logs of the bundle transaction that
+/// carried it (083): `Some(true)` executed; `Some(false)` when the
+/// EntryPoint's `UserOperationEvent` for it says `success: false`, or when a
+/// Safe `ExecutionFailure` was logged inside the op's OWN execution (#D1).
+/// `None` when the logs carry no EntryPoint event for the op.
+///
+/// A bundle holds several operations, so only the op's own execution logs
+/// count: the EntryPoint (v0.7) validates every op, emits `BeforeExecution`,
+/// then runs each op and closes it with its `UserOperationEvent` — the logs
+/// since the previous boundary are that op's. Only the EntryPoint's own logs
+/// are boundaries; any contract can emit a look-alike.
+pub fn user_op_outcome_in_logs(
+    logs: &[super::token_trust::TrustReceiptLog],
+    user_op_hash: &str,
+) -> Option<bool> {
+    let hex = |bytes: &[u8]| crate::primitives::to_hex(&crate::primitives::keccak256(bytes), true);
+    let event = hex(USER_OPERATION_EVENT.as_bytes());
+    let before_execution = hex(b"BeforeExecution()");
+    let mut execution_failed = false;
+    for log in logs {
+        let names = |index: usize, want: &str| {
+            log.topics
+                .get(index)
+                .is_some_and(|value| value.eq_ignore_ascii_case(want))
+        };
+        let from_entry_point = log.address.eq_ignore_ascii_case(crate::safe::ENTRY_POINT);
+        if from_entry_point && names(0, &before_execution) {
+            execution_failed = false;
+        } else if from_entry_point && names(0, &event) {
+            if names(1, user_op_hash) {
+                // Unindexed: nonce, success, actualGasCost, actualGasUsed.
+                let data = log.data.strip_prefix("0x")?;
+                let success = data.get(64..128)?.bytes().any(|digit| digit != b'0');
+                return Some(success && !execution_failed);
+            }
+            execution_failed = false;
+        } else if names(0, SAFE_EXECUTION_FAILURE_TOPIC) {
+            execution_failed = true;
+        }
+    }
+    None
+}
+
+/// Did THIS operation fail inside a receipt the relay called a success?
+/// Scoped to the op's own execution when the logs carry its
+/// `UserOperationEvent` — another account's `ExecutionFailure` in the same
+/// bundle is not ours, and calling our swap failed would invite the user to
+/// send it twice (083). Logs without that event (a relay that returns only
+/// the op's own) are read whole, as [`safe_execution_failed`] always did.
+pub fn op_execution_failed(
+    logs: &[super::token_trust::TrustReceiptLog],
+    user_op_hash: &str,
+) -> bool {
+    match user_op_outcome_in_logs(logs, user_op_hash) {
+        Some(executed) => !executed,
+        None => safe_execution_failed(logs),
+    }
+}
+
+/// The EntryPoint's word on how one operation inside a bundle ended:
+/// `UserOperationEvent(bytes32 indexed userOpHash, address indexed sender,
+/// address indexed paymaster, uint256 nonce, bool success, uint256
+/// actualGasCost, uint256 actualGasUsed)`.
+const USER_OPERATION_EVENT: &str =
+    "UserOperationEvent(bytes32,address,address,uint256,bool,uint256,uint256)";
+
 fn clock_of(result: &TrackShellResult) -> Option<f64> {
     match result {
         TrackShellResult::Clock { now_ms }
@@ -2088,5 +2155,86 @@ mod execution_failure {
         assert!(!safe_execution_failed(std::slice::from_ref(&transfer)));
         assert!(safe_execution_failed(&[transfer, failure]));
         assert!(!safe_execution_failed(&[]));
+    }
+
+    /// 083: a bundle carries other accounts' operations. Only the logs of
+    /// THIS op's execution — since the last EntryPoint boundary — can fail
+    /// it; a neighbour's `ExecutionFailure` cannot, and an impostor's
+    /// look-alike event is no boundary.
+    #[test]
+    fn only_the_operations_own_execution_can_fail_it() {
+        let entry_point = crate::safe::ENTRY_POINT.to_lowercase();
+        let hex =
+            |bytes: &[u8]| crate::primitives::to_hex(&crate::primitives::keccak256(bytes), true);
+        let event_topic = hex(USER_OPERATION_EVENT.as_bytes());
+        assert_eq!(
+            event_topic,
+            "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f"
+        );
+        let ours = format!("0x{}", "ab".repeat(32));
+        let theirs = format!("0x{}", "ef".repeat(32));
+        let word = |value: u8| format!("{value:064x}");
+        let log = |address: &str, topics: Vec<String>, data: String| TrustReceiptLog {
+            address: address.to_owned(),
+            topics,
+            data,
+        };
+        let event = |op: &str, address: &str, success: u8| {
+            log(
+                address,
+                vec![event_topic.clone(), op.to_owned(), word(1), word(0)],
+                format!("0x{}{}{}{}", word(7), word(success), word(9), word(9)),
+            )
+        };
+        let before_execution = log(&entry_point, vec![hex(b"BeforeExecution()")], "0x".into());
+        let failure = log(
+            "0x88cca0eedbf2c4426110bbfc998f048689266894",
+            vec![SAFE_EXECUTION_FAILURE_TOPIC.to_owned()],
+            format!("0x{}{}", word(1), word(0)),
+        );
+
+        let neighbour_failed = [
+            failure.clone(), // validation-phase noise, before execution
+            before_execution,
+            failure.clone(),
+            event(&theirs, &entry_point, 1),
+            event(&ours, &entry_point, 1),
+        ];
+        assert_eq!(
+            user_op_outcome_in_logs(&neighbour_failed, &theirs),
+            Some(false)
+        );
+        assert_eq!(
+            user_op_outcome_in_logs(&neighbour_failed, &ours),
+            Some(true)
+        );
+        assert!(op_execution_failed(&neighbour_failed, &theirs));
+        assert!(
+            !op_execution_failed(&neighbour_failed, &ours),
+            "another op's failure is not this one's"
+        );
+        assert!(
+            safe_execution_failed(&neighbour_failed),
+            "the whole-bundle rule would have failed it"
+        );
+
+        let reverted = [event(&ours, &entry_point, 0)];
+        assert!(op_execution_failed(&reverted, &ours));
+        let capitals = format!("0x{}", "AB".repeat(32));
+        assert_eq!(
+            user_op_outcome_in_logs(&[event(&ours, crate::safe::ENTRY_POINT, 1)], &capitals),
+            Some(true),
+            "hex case is not identity"
+        );
+
+        // No event for the op: the logs are read whole, as before.
+        let impostor = [
+            failure.clone(),
+            event(&ours, "0x1111111111111111111111111111111111111111", 1),
+        ];
+        assert_eq!(user_op_outcome_in_logs(&impostor, &ours), None);
+        assert!(op_execution_failed(&impostor, &ours));
+        assert!(op_execution_failed(std::slice::from_ref(&failure), &ours));
+        assert!(!op_execution_failed(&[], &ours));
     }
 }

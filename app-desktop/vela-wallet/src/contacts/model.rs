@@ -23,18 +23,13 @@ pub struct ContactRowModel {
 
 /// `0x1234…abcd`, the shortening the mocks draw.
 ///
-/// Kept here rather than in `live.rs` because the fixture adapter needs it too:
-/// a live row and a mock row must shorten identically, or the seam shows.
+/// Named here because the fixture adapter needs it too: a live row and a mock
+/// row must shorten identically, or the seam shows. It is the wallet's one
+/// shortening (`wallet::live::shorten_address`), which counts characters
+/// rather than bytes (083 H2 review), so every surface draws the same one.
 #[must_use]
 pub fn shorten(address: &str) -> SharedString {
-    if address.len() <= 14 {
-        return SharedString::from(address.to_owned());
-    }
-    SharedString::from(format!(
-        "{}…{}",
-        &address[..6],
-        &address[address.len() - 4..]
-    ))
+    SharedString::from(crate::wallet::live::shorten_address(address))
 }
 
 // The A–Z rule used to live here, ASCII-only: 阿豪 filed under `#`. It went to

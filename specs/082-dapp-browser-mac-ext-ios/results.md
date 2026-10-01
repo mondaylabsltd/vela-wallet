@@ -64,14 +64,7 @@ superseded. Only dust (0.001 xDAI + ~0.01 fee) moved.
 
 ## 6. Open — not done in 082
 
-1. **Merge with `main` (083/084, PRs up to #335): 204 conflicting files, and two owner rulings that
-   contradict each other** — needs the owner before the merge:
-   - lost relay reply: 082 ruling 1 answers the **op hash** within 120 s; 083 (ddb52da8) never
-     answers an op hash and keeps the page waiting for the real transaction;
-   - on-chain revert: 082 ruling 9 answers the **tx hash**; 083 answers **-32603 "included but
-     reverted (tx)"**.
-   Several other 083 fixes overlap 082's (dApp tx in 活动, plain coin send, tab close reload, Back
-   floor, hash fits the column, "would fail … still pay gas", the bar after Enter).
+1. ~~Merge with `main`~~ — **merged 2026-10-01**, see §8.
 2. **Shared core rules found on the iPhone, not yet in the core** (FR-020, all four clients):
    the chain notice waits for the end of the first pass (155 s with 19 Gnosis endpoints);
    NSURLError -1200 behind a proxy is classed as a certificate error; a never-landed dApp record
@@ -104,3 +97,25 @@ superseded. Only dust (0.001 xDAI + ~0.01 fee) moved.
   in a device pass (DX-W3/EX-W3/IX7 rows).
 
 The iPhone runs this branch's Debug build, back on the owner's wallet (`VELA_PARALLEL_SPACE=0`).
+
+## 8. The merge with `main` (083/084), 2026-10-01
+
+The owner's rulings for it: "用 main 的规则" on both contradictions (spec.md, under the rulings).
+Every feature of both sides is kept; where both built the same thing, one implementation stays.
+
+| Area | Kept | How |
+|---|---|---|
+| dApp answers | 083's rule, 082's machinery | the core reads a transaction's `ReceiptPending` (and a failure after `OpSubmitted`) as `NotConfirmed`; a tracker `Dropped` with a tx is answered `reverted_detail`; `ending_of` reads both errors (new `SignEnding::Reverted`) so 082's endings draw them; the tracker alone closes records (RA8) |
+| Wait | both | the desktop waits 083's 10 min (`landing.rs`, now stoppable by the tracker's answer); phones, web and extension keep the 120 s window |
+| Relay `[existingHash]` | 083's rule in the core | `submit_step` judges the hash: this op's → accepted; another op's → `NotSent{NonceHeld}` (or may-have-been-sent after a delivered POST). The desktop then waits for that op and sends again (083); the phones and web fail clearly (`PREVIOUS_PENDING_DETAIL`) |
+| Activity | both | `FeedItem` keeps 082's kind/status/site/role and 083's `dapp` block; the site comes only from `dapp_url`, as the address bar names it (host[:port]); token transfers name their recipient (RJ16) |
+| Extension | both | a lost claimed submit answers the core's "not confirmed yet" (`maybeSentPayload`, pinned to `signNotConfirmedDetail`); a batch keeps its id |
+| Desktop proxy | 082's | system routes incl. PAC, no Direct fallback (ruling 3); 083's per-host candidate list (W13) is not needed without a fallback |
+| Desktop pool | both | 082's routed answers (delivery bit, health) carry 083's hedged reads |
+| Desktop browser | 082's, with 083's Windows parts | engine failure panel (W1b), WebView2 error page (W3, in the core's `LoadWatch`), per-tab history on WebView2 (W15), new windows (W6/W7), the open bar following the page (FR-006), the pending tab (W9), failed tab naming (H8), the consent's account naming (W14) |
+| Sheet | 082's phases and plain-send card | 083's desktop close rules (Esc, close while a signature is due), phone-stop words, off-chain failure caption, "would fail" fee warning |
+| Probes | retired | `Probe083ActivityTest.kt` / `Probe083ReceiptsTest.kt` asserted main's PREDICTED-BAD Android behaviour that this merge fixes |
+
+Windows code cannot be built on the Mac: the merge dispatches `desktop-windows-packages` on the
+branch to type-check it.
+

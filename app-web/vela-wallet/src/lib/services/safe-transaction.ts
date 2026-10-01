@@ -44,6 +44,7 @@ import {
 	userOpHash as localUserOpHash,
 	userOpEstimateFailure,
 	userOpNotSentDetail,
+	userOpPreviousPendingDetail,
 	userOpSubmitStep,
 	type RelayRejection,
 	type SubmitReply
@@ -3443,7 +3444,14 @@ async function submitUserOp(
 			case 'not_sent':
 				throw new UserOpNotSentError(
 					verdict.rejection,
-					verdict.rejection === null ? userOpNotSentDetail() : relayMessage
+					verdict.rejection === null
+						? userOpNotSentDetail()
+						: typeof verdict.rejection === 'object' && 'nonce_held' in verdict.rejection
+							? // Another operation of the account holds the nonce (083): its
+								// hash is never this request's, nor is the relay's sentence
+								// carrying it.
+								userOpPreviousPendingDetail()
+							: relayMessage
 				);
 		}
 	}
@@ -3548,8 +3556,9 @@ export class UserOpNotSentError extends Error {
 
 /**
  * The op landed and REVERTED — gas was spent, the call did not happen (spec
- * 082 RA8). Not "dropped, try again": the chain has a transaction, and a dApp
- * is answered its hash (ruling 9); the tracker marks the record failed.
+ * 082 RA8). Not "dropped, try again": the chain has a transaction. A dApp is
+ * answered the revert, naming it (083, owner ruling 2026-10-01); the tracker
+ * marks the record failed.
  */
 export class UserOpRevertedError extends Error {
 	constructor(readonly txHash: string) {

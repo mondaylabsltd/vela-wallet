@@ -889,7 +889,11 @@ export type SubmitReply =
 	| 'no_answer';
 
 /** Why the relay refused an op it never queued (`RelayRejection`). */
-export type RelayRejection = 'relayer_unavailable' | 'bundler_underfunded' | { other: string };
+export type RelayRejection =
+	| 'relayer_unavailable'
+	| 'bundler_underfunded'
+	| { nonce_held: { user_op_hash: string } }
+	| { other: string };
 
 /** The end of one submit (`SubmitVerdict`). Hand-written: no ts-rs type exists. */
 export type SubmitVerdict =
@@ -924,6 +928,14 @@ export function userOpSubmitStep(
 /** The dApp's `-32603` detail for an op that was not sent and has no refusal to quote (RA10). */
 export function userOpNotSentDetail(): string {
 	return wasm.userOpNotSentDetail();
+}
+
+/**
+ * The core's sentence for a request that could not go out behind another of
+ * the account's operations (083, `nonce_held`) — never that operation's hash.
+ */
+export function userOpPreviousPendingDetail(): string {
+	return wasm.userOpPreviousPendingDetail();
 }
 
 /**
@@ -1020,6 +1032,15 @@ export function signEndingState(
 /** How long the dApp's receipt wait may still run, `elapsedMs` after approval (RA12). */
 export function dappReceiptWaitMs(elapsedMs: number): number {
 	return wasm.dappReceiptWaitMs(elapsedMs);
+}
+
+/**
+ * The page's "not confirmed yet" for an operation that may still land —
+ * `sign_request::not_confirmed_detail` (083). The extension's worker mirrors
+ * it (`maybeSentPayload`); `protocol.test.ts` pins the mirror here.
+ */
+export function signNotConfirmedDetail(userOpHash: string): string {
+	return wasm.signNotConfirmedDetail(userOpHash);
 }
 
 /** The extension's request lifetime — the core's `EXTENSION_REQUEST_TTL_MS` (RB11). */
