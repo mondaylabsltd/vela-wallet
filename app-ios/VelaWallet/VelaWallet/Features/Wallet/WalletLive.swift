@@ -77,6 +77,7 @@ enum WalletLive {
         let display = Display.from(currency)
         copy.balance = balance(view, display: display, fallback: model.balance, loc: loc)
         copy.assetRows = assetRows(view, display: display)
+        copy.assetsSection = assetsSection(view, rows: copy.assetRows, fallback: model.assetsSection)
         if let feed {
             copy.activityGroups = activityGroups(feed, loc: loc, hidden: view.hidden)
             copy.activitySection = section(copy.activityGroups, read: feedRead,
@@ -112,6 +113,24 @@ enum WalletLive {
             action: fallback.action,
             mode: !groups.isEmpty ? .rows : (read ? .empty : .loading),
             empty: empty ?? fallback.empty
+        )
+    }
+
+    /// The assets section, kept as drawn except for its mode (087 F03).
+    ///
+    /// The drawn home's mode stayed `.rows` whatever the core said, so an
+    /// account holding nothing showed 资产 over a blank area. The same three
+    /// states as the web's `assetsMode` and the desktop's `assets_strip_empty`:
+    /// rows when there are rows, the skeleton while the first read is out or
+    /// the balance is unknown — "nothing here" is a claim, never made before
+    /// anybody looked — and the drawn empty state (存入您的第一笔资产) once the
+    /// core has looked and found nothing.
+    static func assetsSection(_ view: BalanceViewWire, rows: [AssetRowModel], fallback: SectionModel) -> SectionModel {
+        SectionModel(
+            title: fallback.title,
+            action: fallback.action,
+            mode: !rows.isEmpty ? .rows : (view.holdingsLoading || view.balanceUnknown ? .loading : .empty),
+            empty: fallback.empty
         )
     }
 

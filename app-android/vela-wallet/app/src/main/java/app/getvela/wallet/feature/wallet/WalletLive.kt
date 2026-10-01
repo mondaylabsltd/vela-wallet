@@ -96,7 +96,11 @@ object WalletLive {
                     // A network filtered down to nothing reads as the empty
                     // state, not as a list still loading or a blank one.
                     chainFilter != null && view.tokens.isNotEmpty() -> SectionMode.Empty
-                    view.holdings_loading -> SectionMode.Loading
+                    // "Nothing here" is a claim: not while the first read is
+                    // out, and not while the balance cannot be read at all —
+                    // the web's `assetsMode`, the desktop's and the iPhone's
+                    // (087 F03).
+                    view.holdings_loading || view.balance_unknown -> SectionMode.Loading
                     else -> SectionMode.Empty
                 },
             ),
