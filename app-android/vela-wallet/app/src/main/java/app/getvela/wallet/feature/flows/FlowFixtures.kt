@@ -139,7 +139,7 @@ object FlowFixtures {
                 badgeColor = n.color,
                 addressDisplay = WalletFixtures.ADDRESS_DISPLAY,
                 copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS),
-                qrLabel = s.t(I18nKeys.Flows.SCAN_TITLE),
+                qrLabel = s.t(I18nKeys.Flows.SHOW_QR),
             )
         },
     )
