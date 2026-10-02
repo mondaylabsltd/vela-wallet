@@ -973,6 +973,7 @@ fun VelaNavHost(
                                 }
                             },
                             onScanOpen = { send.openScanner() },
+                            onChangeToken = { send.changeToken() },
                             onFilter = { id -> classFilter = id; haptic(VelaHaptic.Select) },
                             onGroup = { index ->
                                 VelaLog.event("send", "group seed", "index" to index, "groups" to contactsBook.groups.size)
@@ -2184,6 +2185,16 @@ fun VelaNavHost(
     // an answer nobody can give.
     // Spec 047 D10: the last run's crash, or a core fault, raised once.
     CrashSheet(strings = LocalVelaStrings.current, version = BuildConfig.VERSION_NAME)
+    // Spec 088 FR-004: a page another app asked to open waits for the person —
+    // hosted out here for the same reason: a link can arrive on any screen.
+    val externalPage by application.container.browser.externalPage.collectAsStateWithLifecycle()
+    externalPage?.let { page ->
+        app.getvela.wallet.feature.browser.ExternalPageSheet(
+            page = page,
+            strings = LocalVelaStrings.current,
+            onAnswer = application.container.browser::answerExternal,
+        )
+    }
     onboarding.pending?.let { prompt ->
         FlowSheet(
             kind = prompt.kind,
@@ -2214,7 +2225,14 @@ fun VelaNavHost(
         UsbTouchIndicator(kind = touch.kind, product = touch.product)
     }
     onboarding.cableQr?.let { payload ->
-        CableQrSheet(payload = payload)
+        CableQrSheet(
+            payload = payload,
+            chooser = if (onboarding.cableQrCreates) {
+                app.getvela.wallet.feature.onboarding.flow.KeyChooser.Create
+            } else {
+                app.getvela.wallet.feature.onboarding.flow.KeyChooser.SignIn
+            },
+        )
     }
     // Spec 071/075: every Trusted Signer sheet, hosted OUTSIDE the NavHost for
     // the same reason the flow sheet is — a create, a sign-in, a send and a

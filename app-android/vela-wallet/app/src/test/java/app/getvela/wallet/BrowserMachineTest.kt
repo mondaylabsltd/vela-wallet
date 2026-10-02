@@ -97,9 +97,33 @@ class BrowserMachineTest {
     fun `the page gets the core's script, one per host, with the bridge for Android`() {
         val script = dappProviderScript("android")
         assertTrue(script.startsWith("(function () {"))
+        // Spec 088 FR-004: only a secure context (https, or http on loopback) is offered the wallet.
+        assertTrue("no provider off a secure context", script.contains("!window.isSecureContext) return;"))
         assertTrue("the Android bridge posts through the message listener", script.contains("VelaHost.postMessage(s)"))
         assertTrue("the provider itself is in it", script.contains("eip6963:announceProvider"))
         assertFalse("no module syntax survives", script.lines().any { it.trimStart().startsWith("import ") || it.trimStart().startsWith("export ") })
+    }
+
+    /**
+     * Spec 088 FR-004: the listener cannot be limited to "any https origin"
+     * (WebView's origin rules have no such pattern), so the bridge object is in
+     * every page — and the core reads nothing a page off a secure context sends.
+     */
+    @Test
+    fun `a page off a secure context is never answered`() = runBlocking<Unit> {
+        val h = host(FakeStore())
+        withTimeout(10_000) { h.view.first { it.ready } }
+        for ((i, insecure) in listOf("http://dapp.example", "http://192.168.1.4:8137", "http://127.0.0.1.evil.com").withIndex()) {
+            page(h, "tab-$i", JSONObject().put("t", "hello").put("doc", "d$i"), from = insecure)
+            page(h, "tab-$i", JSONObject().put("t", "req").put("doc", "d$i").put("id", "x$i").put("method", "eth_chainId").put("params", JSONArray()), from = insecure)
+            page(h, "tab-$i", JSONObject().put("t", "req").put("doc", "d$i").put("id", "c$i").put("method", "eth_requestAccounts").put("params", JSONArray()), from = insecure)
+        }
+        // The same request from the loopback test page IS answered — so silence above is the rule, not a slow core.
+        hello(h, "tab-ok", "ok")
+        ask(h, "tab-ok", "ok", "q-ok", "eth_chainId")
+        answerFor("q-ok")
+        assertTrue("nothing delivered to an insecure page: $delivered", delivered.all { it.first == "tab-ok" })
+        assertNull(h.view.value.consent)
     }
 
     @Test

@@ -47,6 +47,8 @@
 		pickFeeToken(index: number): void;
 		/** 最大 — the core's `tap_max`: the whole balance, net of the fee it estimates. */
 		max(): void;
+		/** The token card — the core's `change_token`: back to the picker, payee kept. */
+		changeToken(): void;
 		/**
 		 * ⇄ — the core's `toggle_fiat_input`: type the amount in the token or in
 		 * the display currency. Drawn since 021 and wired to nothing until now
@@ -249,6 +251,7 @@
 				onspeedpick={send?.pickSpeed ? (id) => send.pickSpeed?.(id) : undefined}
 				ondenom={send ? () => send.toggleDenom() : undefined}
 				onmax={send ? () => send.max() : undefined}
+				onchangeToken={send ? () => send.changeToken() : undefined}
 				onrecipientAction={(id) => {
 					// The split form's three pills (Phase 10): a blank row, the book
 					// into a new row, the importer sheet. Live, the first two are the
