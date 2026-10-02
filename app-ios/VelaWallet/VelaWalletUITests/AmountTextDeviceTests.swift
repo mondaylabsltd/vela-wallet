@@ -65,9 +65,10 @@ final class AmountTextDeviceTests: XCTestCase {
             // The picker's own row: the home's asset list has an xDAI line
             // too, and a tap on it behind the picker opens nothing.
             let row = app.buttons.matching(NSPredicate(
-                // The combined label's separator follows the system language:
-                // "," in English, "，" once the app declares zh-Hans (spec 095).
-                format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "xDAI,", "xDAI，"
+                // The combined label's separator follows the locale ("," in
+                // English, "，" or "、" under zh-Hans), so the row is the button
+                // that names both the coin and its network.
+                format: "label BEGINSWITH %@ AND label CONTAINS %@", "xDAI", "Gnosis"
             )).firstMatch
             tap(row, "the picker's xDAI row", timeout: 30)
         }
