@@ -192,6 +192,8 @@ pub struct SigningStrings {
     pub status_signing: SharedString,
     pub status_submitted: SharedString,
     pub error_generic: SharedString,
+    /// Spec 096 F8: `send.txRetryBtn` — a failure that sent nothing, again.
+    pub retry: SharedString,
     /// What a message signature that failed says in its place (083 H4): it
     /// was never a transaction, and nothing went on chain.
     pub error_off_chain: SharedString,
@@ -436,6 +438,7 @@ impl SigningStrings {
             // wallet, one way of saying "it did not go out, your funds are
             // safe" — and no raw relay text on a screen (SC-305).
             error_generic: loc.t("send.txErrorGeneric"),
+            retry: loc.t("send.txRetryBtn"),
             error_off_chain: loc.t("connect.detail.offChainNote"),
             error_network: loc.t("send.lock.netNotFound"),
             blocked_title: s("selfCallBlockedTitle"),
@@ -657,6 +660,8 @@ mod tests {
         ] {
             assert!(!text.contains("componentsTx"), "echoed a key: {text}");
         }
+        // Spec 096 F8: the failure's "Try again" is Send's own button.
+        assert!(!s.retry.contains("txRetryBtn"), "echoed a key: {}", s.retry);
     }
 
     /// Spec 079: the status words after an approval are the send receipt's

@@ -14911,6 +14911,18 @@ impl WalletPage {
     /// watched, and its answer still reaches the page (spec 079 FR-002). An
     /// ending on screen just goes. Over the phone's QR the scan is stopped
     /// first (`SigningHost::close`).
+    /// "Try again" on a failure that sent nothing (spec 096 F8): the core
+    /// takes the request back to review, still unanswered.
+    fn retry_signing(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = self.signing_host.clone() {
+            host.update(cx, |host, cx| {
+                host.dispatch_sign(vela_core::app::sign_request::Event::RetryTapped, cx);
+            });
+        }
+        cx.notify();
+    }
+
     fn close_signing_column(&mut self, cx: &mut Context<Self>) {
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.clone() {
@@ -17450,13 +17462,31 @@ impl WalletPage {
         } else {
             crate::flows::components::ghost_button(theme, receipt.cta.clone())
         };
-        body = body.child(
-            div().mt(px(8.)).w_full().child(
-                cta.id("dapp-receipt-done")
-                    .cursor_pointer()
-                    .on_click(on_cta),
-            ),
-        );
+        let done = cta
+            .id("dapp-receipt-done")
+            .cursor_pointer()
+            .on_click(on_cta);
+        // Spec 096 F8: a failure that sent nothing — Done answers the page,
+        // Try again (the accent) takes the request back to review.
+        let row = match receipt.retry.clone() {
+            Some(label) => div()
+                .flex()
+                .gap(px(12.))
+                .child(div().flex_1().child(done))
+                .child(
+                    div().flex_1().child(
+                        crate::flows::components::accent_button(theme, label)
+                            .rounded_full()
+                            .id("dapp-receipt-retry")
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.retry_signing(cx);
+                            })),
+                    ),
+                ),
+            None => div().child(done),
+        };
+        body = body.child(div().mt(px(8.)).w_full().child(row));
         match header {
             Some(header) => div()
                 .flex()
