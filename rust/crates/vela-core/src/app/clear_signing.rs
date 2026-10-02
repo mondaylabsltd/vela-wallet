@@ -1023,10 +1023,11 @@ pub struct ClearBlindTyped {
 /// (`SigningSheet.tsx:407-487`).
 ///
 /// The full order is `typed permit → editable approval → LOADING → CLEAR SIGN →
-/// batch → ETH_SIGN → MESSAGE → BLIND TYPED → PLAIN SEND | BLIND TX`; the two
-/// approval surfaces and the batch list belong to `approval_guard`, so the
-/// sheet interleaves exactly two verdicts and decides nothing itself.
-/// Everything upper-cased above is decided here.
+/// BATCH → ETH_SIGN → MESSAGE → BLIND TYPED → PLAIN SEND | BLIND TX`; the two
+/// approval surfaces and a batch call's cap card belong to `approval_guard`,
+/// so the sheet interleaves exactly two verdicts and decides nothing itself.
+/// Everything upper-cased above is decided here — since 089, what EVERY call
+/// of a batch does, too.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearSurface"))]
@@ -1050,6 +1051,61 @@ pub enum ClearSurface {
     /// blind rung. A request whose `to` or `value` cannot be read exactly
     /// stays [`Self::BlindTransaction`].
     PlainSend,
+    /// An EIP-5792 batch of two or more calls (089 S1). Drawn from
+    /// [`ClearSigningView::batch`]: a headline that names the batch — never
+    /// call 1 alone — and every call as its own row. A batch of ONE call is
+    /// that call's own surface, exactly as `ResolveTransaction` reads it.
+    Batch,
+}
+
+/// One call of an EIP-5792 batch, read for the sheet (089 S1).
+///
+/// The sheet used to describe `calls[0]` and sign them all: `[1 wei → A,
+/// 1 xDAI → B]` read "Send 0.000…1 xDAI to A". Every call is read here by the
+/// same ladder a lone transaction climbs, so each row says what its own call
+/// does.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearBatchCall"))]
+pub struct ClearBatchCall {
+    /// 1-based place in the batch — the number the step's title says, and the
+    /// one a self-call refusal names ("step 2").
+    pub index: u32,
+    /// How this call reads: [`ClearSurface::ClearSign`] (from `result`),
+    /// [`ClearSurface::PlainSend`] (from `plain_send`) or
+    /// [`ClearSurface::BlindTransaction`] — never omitted, never loading.
+    pub surface: ClearSurface,
+    pub result: Option<ClearSignResult>,
+    pub plain_send: Option<ClearPlainSend>,
+    /// The call's target as sent — EIP-55 when it is an address. `None` for a
+    /// create.
+    pub to: Option<String>,
+    /// The calldata's length in bytes — what "unable to decode" names.
+    pub data_bytes: u32,
+    /// The native coin this call moves in wei, exact (the plain send's RC4
+    /// reading); `None` when its value cannot be read exactly.
+    pub value_wei: Option<String>,
+    /// `value_wei` as the plain send card writes it (RC5).
+    pub amount: Option<String>,
+    /// Graded once: a decoded call's own risk (danger when it burns a token),
+    /// a plain send normal, a call nobody could read caution.
+    pub risk: ClearRisk,
+}
+
+/// An EIP-5792 batch, every call of it (089 S1). `Some` exactly when
+/// [`ClearSigningView::surface`] is [`ClearSurface::Batch`].
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearBatchView"))]
+pub struct ClearBatchView {
+    /// Every call, in the order they execute.
+    pub calls: Vec<ClearBatchCall>,
+    /// The native coin the whole batch moves, summed over every call, in wei;
+    /// `None` when any call's value cannot be read exactly.
+    pub total_value_wei: Option<String>,
+    /// `total_value_wei` as the plain send card writes an amount.
+    pub total_amount: Option<String>,
+    /// The highest risk of any call: the headline's tone. A batch is as
+    /// dangerous as its worst call, wherever that call sits.
+    pub risk: ClearRisk,
 }
 
 /// What a plain native send moves, for the [`ClearSurface::PlainSend`] card
@@ -1113,6 +1169,19 @@ pub enum Event {
         to: Option<String>,
         data: Option<String>,
         value: Option<String>,
+        chain_id: u32,
+        #[serde(default)]
+        locale: ClearLocale,
+    },
+    /// `wallet_sendCalls` (EIP-5792) needs resolution — EVERY call of it
+    /// (089 S1). `params_json` is the request's params, verbatim and
+    /// untrusted; the calls are `params[0].calls`, each field read as
+    /// `ResolveTransaction` is told it (RC6): absent or `null` is not given, a
+    /// string as written, anything else as its JSON text. One call reads
+    /// exactly as `ResolveTransaction`; two or more read call by call, and
+    /// the view carries every one ([`ClearSigningView::batch`]).
+    ResolveBatch {
+        params_json: String,
         chain_id: u32,
         #[serde(default)]
         locale: ClearLocale,
@@ -1343,10 +1412,48 @@ enum ReqKind {
     Typed,
     PersonalSign,
     EthSign,
+    /// A `wallet_sendCalls` of two or more calls, every one of them read
+    /// ([`Model::batch`]).
+    Batch,
+}
+
+/// One call of a batch as the request carried it (RC6 text).
+#[derive(Clone, Debug, Default)]
+struct CallInput {
+    to: Option<String>,
+    data: Option<String>,
+    value: Option<String>,
+}
+
+/// What one call of a batch concluded as — the single-call reading, kept.
+#[derive(Clone, Debug)]
+struct CallOutcome {
+    kind: ReqKind,
+    result: Option<ClearSignResult>,
+    plain_send: Option<ClearPlainSend>,
+}
+
+/// An EIP-5792 batch being read call by call (089 S1). The calls resolve in
+/// order through the ONE single-call ladder, so a batch can never be read by
+/// rules a lone transaction is not; each concluded reading moves into `done`.
+#[derive(Clone, Debug)]
+struct BatchRun {
+    chain_id: u32,
+    locale: ClearLocale,
+    calls: Vec<CallInput>,
+    done: Vec<CallOutcome>,
+}
+
+impl BatchRun {
+    fn pending(&self) -> bool {
+        self.done.len() < self.calls.len()
+    }
 }
 
 #[derive(Default)]
 pub struct Model {
+    /// The batch being read, or read (089 S1). `None` for every other request.
+    batch: Option<BatchRun>,
     /// The in-flight resolution — `Some` IS the "resolving" flag the sheet
     /// uses to hold the loading view (never flash blind, invariant ⑦).
     run: Option<Run>,
@@ -1418,6 +1525,11 @@ pub struct ClearSigningView {
     /// is [`ClearSurface::PlainSend`].
     #[serde(default)]
     pub plain_send: Option<ClearPlainSend>,
+    /// Every call of a batch (089 S1). `Some` exactly when [`Self::surface`]
+    /// is [`ClearSurface::Batch`]; `result` and `plain_send` are then `None`,
+    /// so nothing that reads them can describe the batch by its first call.
+    #[serde(default)]
+    pub batch: Option<ClearBatchView>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1441,12 +1553,23 @@ impl App for ClearSigning {
                 value,
                 chain_id,
                 locale,
-            } => start_tx(model, to, data, value, chain_id, locale),
+            } => {
+                model.batch = None;
+                start_tx(model, to, data, value, chain_id, locale)
+            }
+            Event::ResolveBatch {
+                params_json,
+                chain_id,
+                locale,
+            } => start_batch(model, &params_json, chain_id, locale),
             Event::ResolveTypedData {
                 typed_data_json,
                 chain_id,
                 locale,
-            } => start_typed(model, &typed_data_json, chain_id, locale),
+            } => {
+                model.batch = None;
+                start_typed(model, &typed_data_json, chain_id, locale)
+            }
             Event::MessagePresented {
                 method,
                 params,
@@ -1454,6 +1577,7 @@ impl App for ClearSigning {
             } => {
                 // A new message request supersedes any in-flight resolution.
                 model.attempt += 1;
+                model.batch = None;
                 model.run = None;
                 model.resolved = false;
                 model.result = None;
@@ -1477,6 +1601,7 @@ impl App for ClearSigning {
             }
             Event::Cleared => {
                 model.attempt += 1;
+                model.batch = None;
                 model.run = None;
                 model.resolved = false;
                 model.result = None;
@@ -1495,7 +1620,9 @@ impl App for ClearSigning {
                 if attempt != model.attempt {
                     return Command::done();
                 }
-                accept(model, result)
+                let command = accept(model, result);
+                // A batch call that just concluded hands over to the next.
+                continue_batch(model, command)
             }
         }
     }
@@ -1503,32 +1630,9 @@ impl App for ClearSigning {
     fn view(&self, model: &Model) -> ClearSigningView {
         let surface = surface_of(model);
         ClearSigningView {
-            resolving: model.run.is_some(),
+            resolving: model.run.is_some() || model.batch.as_ref().is_some_and(BatchRun::pending),
             resolved: model.resolved,
-            // The burn verdict is graded HERE, on the finished result, so every
-            // builder — descriptor, typed data, best-effort, deploy — is covered
-            // by one rule and a future fifth builder cannot forget it. The word
-            // "verified" is graded in the same breath and for the same reason:
-            // it is a reading of `provenance`, never a claim a builder makes.
-            result: model.result.clone().map(|mut r| {
-                r.to_own_token = to_own_token(&r);
-                r.verified = r.provenance.is_verified();
-                // The words the shells can translate, graded here for the
-                // same reason: one rule over every builder's output. A detail
-                // field is the raw decode (parameter names, type words) and
-                // stays as decoded rather than half-translated.
-                r.intent_term = ClearTerm::of(&r.intent);
-                for field in &mut r.fields {
-                    field.label_term = (!field.detail)
-                        .then(|| ClearTerm::of(&field.label))
-                        .flatten();
-                    field.value_term = field
-                        .warning
-                        .then(|| ClearTerm::of_value(&field.value))
-                        .flatten();
-                }
-                r
-            }),
+            result: model.result.clone().map(project_result),
             message: model.message.clone(),
             surface,
             confirm: confirm_of(model),
@@ -1543,18 +1647,49 @@ impl App for ClearSigning {
                 .plain_send
                 .clone()
                 .filter(|_| surface == ClearSurface::PlainSend),
+            batch: batch_view(model).filter(|_| surface == ClearSurface::Batch),
         }
     }
 }
 
+/// A finished result as the shells receive it.
+///
+/// The burn verdict is graded HERE, on the finished result, so every builder —
+/// descriptor, typed data, best-effort, deploy — is covered by one rule and a
+/// future fifth builder cannot forget it. The word "verified" is graded in the
+/// same breath and for the same reason: it is a reading of `provenance`, never
+/// a claim a builder makes. A batch's calls go through this same projection.
+fn project_result(mut r: ClearSignResult) -> ClearSignResult {
+    r.to_own_token = to_own_token(&r);
+    r.verified = r.provenance.is_verified();
+    // The words the shells can translate, graded here for the same reason:
+    // one rule over every builder's output. A detail field is the raw decode
+    // (parameter names, type words) and stays as decoded rather than
+    // half-translated.
+    r.intent_term = ClearTerm::of(&r.intent);
+    for field in &mut r.fields {
+        field.label_term = (!field.detail)
+            .then(|| ClearTerm::of(&field.label))
+            .flatten();
+        field.value_term = field
+            .warning
+            .then(|| ClearTerm::of_value(&field.value))
+            .flatten();
+    }
+    r
+}
+
 /// The dispatch verdict (⑨). Resolution ALWAYS outranks a blind surface — the
 /// sheet must never flash a red "Unknown" that a descriptor is about to replace.
+/// A batch holds the loading view until its LAST call is read: a sheet that
+/// showed call 1 while call 2 resolved would be the 089 defect for a moment.
 fn surface_of(model: &Model) -> ClearSurface {
-    if model.run.is_some() {
+    if model.run.is_some() || model.batch.as_ref().is_some_and(BatchRun::pending) {
         return ClearSurface::Loading;
     }
     match model.kind {
         ReqKind::None => ClearSurface::None,
+        ReqKind::Batch => ClearSurface::Batch,
         ReqKind::EthSign => ClearSurface::EthSign,
         ReqKind::PersonalSign => ClearSurface::MessageSign,
         // Empty calldata is a plain send whatever the recipient (082 RC2) —
@@ -1602,9 +1737,205 @@ fn confirm_of(model: &Model) -> ClearConfirm {
             _ => ClearConfirm::Confirm,
         },
         // Blind contract call, `eth_sign`, nothing presented: a neutral
-        // "Confirm", never "Approve".
-        ReqKind::TxCall | ReqKind::EthSign | ReqKind::None => ClearConfirm::Confirm,
+        // "Confirm", never "Approve". A batch too: no one call's verb may
+        // stand for all of them (089 S1).
+        ReqKind::TxCall | ReqKind::EthSign | ReqKind::None | ReqKind::Batch => {
+            ClearConfirm::Confirm
+        }
     }
+}
+
+// ---------------------------------------------------------------------------
+// EIP-5792 batches (089 S1)
+// ---------------------------------------------------------------------------
+
+/// A call field as `ResolveTransaction` is told it (RC6): absent or `null` is
+/// not given, a string as written, any other value as its JSON text — which
+/// the plain-send reading refuses rather than calling a calm zero.
+fn call_field(call: &Value, name: &str) -> Option<String> {
+    match call.get(name)? {
+        Value::Null => None,
+        Value::String(text) => Some(text.clone()),
+        other => Some(other.to_string()),
+    }
+}
+
+/// `params[0].calls`, every one of them, in order. A call that is not an
+/// object reads as a call with nothing given — a blind row, never a dropped one.
+fn batch_calls(params_json: &str) -> Vec<CallInput> {
+    serde_json::from_str::<Value>(params_json)
+        .ok()
+        .and_then(|params| params.get(0)?.get("calls")?.as_array().cloned())
+        .unwrap_or_default()
+        .iter()
+        .map(|call| CallInput {
+            to: call_field(call, "to"),
+            data: call_field(call, "data"),
+            value: call_field(call, "value"),
+        })
+        .collect()
+}
+
+fn start_batch(
+    model: &mut Model,
+    params_json: &str,
+    chain_id: u32,
+    locale: ClearLocale,
+) -> Command<ClearSigningEffect, Event> {
+    let mut calls = batch_calls(params_json);
+    if calls.len() < 2 {
+        // One call (or none) is that call, read exactly as a lone transaction
+        // is: the sheet a one-call batch draws does not change.
+        model.batch = None;
+        let call = calls.pop().unwrap_or_default();
+        return start_tx(model, call.to, call.data, call.value, chain_id, locale);
+    }
+    let first = calls[0].clone();
+    model.batch = Some(BatchRun {
+        chain_id,
+        locale,
+        calls,
+        done: Vec::new(),
+    });
+    let command = start_tx(model, first.to, first.data, first.value, chain_id, locale);
+    continue_batch(model, command)
+}
+
+/// Hand a batch on from a call that has concluded to the next, until every
+/// call is read. A call that concludes at once (a plain send, a deployment)
+/// hands on in the same breath; one that asks the shell something waits for
+/// its answer, which comes back through `ShellCompleted` and lands here again.
+fn continue_batch(
+    model: &mut Model,
+    mut command: Command<ClearSigningEffect, Event>,
+) -> Command<ClearSigningEffect, Event> {
+    loop {
+        if model.run.is_some() || !model.resolved {
+            return command;
+        }
+        let Some(batch) = model.batch.as_mut() else {
+            return command;
+        };
+        if !batch.pending() {
+            return command;
+        }
+        batch.done.push(CallOutcome {
+            kind: model.kind,
+            result: model.result.take(),
+            plain_send: model.plain_send.take(),
+        });
+        let next = batch.done.len();
+        let Some(call) = batch.calls.get(next).cloned() else {
+            // Every call is read: the batch is the sheet.
+            model.kind = ReqKind::Batch;
+            return command;
+        };
+        let (chain_id, locale) = (batch.chain_id, batch.locale);
+        command = command.and(start_tx(
+            model, call.to, call.data, call.value, chain_id, locale,
+        ));
+    }
+}
+
+/// The order risks rise in, for "the worst call decides".
+fn risk_rank(risk: ClearRisk) -> u8 {
+    match risk {
+        ClearRisk::Safe => 0,
+        ClearRisk::Normal => 1,
+        ClearRisk::Caution => 2,
+        ClearRisk::Danger => 3,
+    }
+}
+
+/// One concluded call as its row reads.
+fn batch_call_view(
+    index: usize,
+    outcome: &CallOutcome,
+    input: &CallInput,
+    locale: &ClearLocale,
+) -> ClearBatchCall {
+    let result = outcome.result.clone().map(project_result);
+    let plain_send = outcome
+        .plain_send
+        .clone()
+        .filter(|_| outcome.kind == ReqKind::TxPlain);
+    let (surface, risk) = match (&result, &plain_send) {
+        (Some(result), _) => (
+            ClearSurface::ClearSign,
+            // A burn is the danger the shells warn of; the call's row and the
+            // headline say so in the same tone.
+            if result.to_own_token {
+                ClearRisk::Danger
+            } else {
+                result.risk
+            },
+        ),
+        (None, Some(_)) => (ClearSurface::PlainSend, ClearRisk::Normal),
+        (None, None) => (ClearSurface::BlindTransaction, ClearRisk::Caution),
+    };
+    let to = input
+        .to
+        .as_deref()
+        .map(str::trim)
+        .filter(|to| !to.is_empty())
+        .map(|to| {
+            if is_hex_address_shape(to) {
+                primitives::checksum_address(to).unwrap_or_else(|_| to.to_owned())
+            } else {
+                to.to_owned()
+            }
+        });
+    let data = input.data.as_deref().map(str::trim).unwrap_or_default();
+    let data = data
+        .strip_prefix("0x")
+        .or_else(|| data.strip_prefix("0X"))
+        .unwrap_or(data);
+    let value_wei = plain_value_wei(input.value.as_deref());
+    ClearBatchCall {
+        index: u32::try_from(index + 1).unwrap_or(u32::MAX),
+        surface,
+        result,
+        plain_send,
+        to,
+        // Hex, two characters a byte; an odd tail rounds DOWN.
+        data_bytes: u32::try_from(data.len() / 2).unwrap_or(u32::MAX),
+        amount: value_wei
+            .as_deref()
+            .map(|wei| exact_native_amount(wei, locale)),
+        value_wei,
+        risk,
+    }
+}
+
+/// The batch as the sheet draws it, once every call is read.
+fn batch_view(model: &Model) -> Option<ClearBatchView> {
+    if model.kind != ReqKind::Batch {
+        return None;
+    }
+    let batch = model.batch.as_ref().filter(|batch| !batch.pending())?;
+    let calls: Vec<ClearBatchCall> = batch
+        .done
+        .iter()
+        .zip(&batch.calls)
+        .enumerate()
+        .map(|(index, (outcome, input))| batch_call_view(index, outcome, input, &batch.locale))
+        .collect();
+    let total_value_wei = calls.iter().try_fold("0".to_owned(), |sum, call| {
+        call.value_wei.as_deref().map(|wei| dec_add(&sum, wei))
+    });
+    let risk = calls
+        .iter()
+        .map(|call| call.risk)
+        .max_by_key(|risk| risk_rank(*risk))
+        .unwrap_or(ClearRisk::Normal);
+    Some(ClearBatchView {
+        total_amount: total_value_wei
+            .as_deref()
+            .map(|wei| exact_native_amount(wei, &batch.locale)),
+        total_value_wei,
+        calls,
+        risk,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -5361,6 +5692,30 @@ fn hex_to_dec(body: &str) -> Option<String> {
         digits.pop();
     }
     Some(digits.iter().rev().map(|d| char::from(b'0' + d)).collect())
+}
+
+/// `a + b` over non-negative decimal strings — a batch's total value. Exact at
+/// any width: the sum of several `uint256` values may not fit one.
+fn dec_add(a: &str, b: &str) -> String {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let mut out: Vec<u8> = Vec::with_capacity(a.len().max(b.len()) + 1);
+    let mut carry = 0u8;
+    let (mut i, mut j) = (a.len(), b.len());
+    while i > 0 || j > 0 || carry > 0 {
+        let mut digit = carry;
+        if i > 0 {
+            i -= 1;
+            digit += a[i].saturating_sub(b'0');
+        }
+        if j > 0 {
+            j -= 1;
+            digit += b[j].saturating_sub(b'0');
+        }
+        out.push(b'0' + digit % 10);
+        carry = digit / 10;
+    }
+    out.reverse();
+    dec_normalize(&String::from_utf8(out).unwrap_or_default())
 }
 
 fn dec_normalize(s: &str) -> String {

@@ -95,6 +95,15 @@ struct ReceiveTests {
         #expect(live.subtitle.contains(String(ChainCatalog.chains.count)))
     }
 
+    /// 087 F13: each row's QR button SHOWS that network's code — VoiceOver
+    /// read "扫描二维码", the scanner's title, on every row.
+    @Test func eachRowsQrButtonSaysItShowsTheCode() {
+        let live = FlowsLive.receiveList(golden, on: baseList, loc: loc)
+        #expect(!live.rows.isEmpty)
+        #expect(live.rows.allSatisfy { $0.qrLabel == loc.t("componentsUi.funding.showQr") })
+        #expect(live.rows.allSatisfy { $0.qrLabel != loc.t("componentsUi.scanner.title") })
+    }
+
     @Test func theQrSheetCarriesTheAddressAndItsCode() {
         let live = FlowsLive.receiveQr(golden, name: "我", chain: nil, on: baseQr, loc: loc)
         #expect(live.account.identiconSeed == golden)

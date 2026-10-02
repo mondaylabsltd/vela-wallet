@@ -50,14 +50,20 @@ export function extensionId(): string {
  * proves the panel passes `'panel'` and drives it with `sidePanelView`.
  */
 export async function loadExtension(
-	options: { viewport?: { width: number; height: number }; surface?: 'window' | 'panel' } = {}
+	options: {
+		viewport?: { width: number; height: number };
+		surface?: 'window' | 'panel';
+		/** More Chrome switches for this browser only (e.g. `--host-resolver-rules`). */
+		args?: string[];
+	} = {}
 ): Promise<BrowserContext> {
 	const context = await chromium.launchPersistentContext('', {
 		headless: false,
 		args: [
 			'--headless=new',
 			`--disable-extensions-except=${EXTENSION_DIST}`,
-			`--load-extension=${EXTENSION_DIST}`
+			`--load-extension=${EXTENSION_DIST}`,
+			...(options.args ?? [])
 		],
 		...(options.viewport ? { viewport: options.viewport } : {})
 	});

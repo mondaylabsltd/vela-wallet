@@ -16,6 +16,8 @@
 //
 
 import Foundation
+import LocalAuthentication
+import VelaCore
 
 /// The transient status line under the create form.
 func statusKeyToI18n(_ status: StatusKey) -> String {
@@ -68,20 +70,48 @@ func progressFor(_ status: StatusKey?) -> ProgressPosition? {
     }
 }
 
-/// A method's title and caption in the add-key picker.
+/// Which chooser a key-method row is drawn in — the core's `KeyChooser` wire
+/// names. The sign-in chooser's phone row creates nothing (087 F02).
+enum KeyChooser: String {
+    case create
+    case signIn = "sign_in"
+}
+
+/// What unlocks a passkey on this device, as the core's `DeviceUnlock` wire
+/// name (087 F01): an iPhone 11 read "Touch ID or Windows Hello" under 这台设备.
+/// Read once — the hardware does not change under a running app. A device
+/// with no biometrics answers `other`, and the core draws the family line.
+enum ThisDevice {
+    static let unlock: String = {
+        let context = LAContext()
+        // `biometryType` is only filled in by this call, whatever it answers.
+        _ = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        switch context.biometryType {
+        case .faceID: return "face_id"
+        case .touchID: return "touch_id"
+        default: return "other"
+        }
+    }()
+}
+
+/// A method's title and line, in the person's words, as the core decides them
+/// for `chooser` on this device (`keyMethodWords`, 087 F01/F02) — so the
+/// create picker, the sign-in sheet and the QR card cannot disagree.
 ///
-/// The Trusted Signer's two lines come from `componentsUi.signing.*` rather
-/// than from `onboarding.create.*`: they are the SAME two sentences the
-/// signing sheet's "Sign with" shows, and the route is one thing whether a
-/// person meets it while creating a wallet or while spending from it (spec
-/// 075). Minting a second pair would let the two drift.
-func methodCopy(_ method: KeyMethod) -> (title: String, body: String) {
-    switch method {
-    case .platform: (I18nKeys.Create.methodPlatformTitle, I18nKeys.Create.methodPlatformBody)
-    case .hybrid: (I18nKeys.Create.methodHybridTitle, I18nKeys.Create.methodHybridBody)
-    case .securityKey: (I18nKeys.Create.methodSecurityKeyTitle, I18nKeys.Create.methodSecurityKeyBody)
-    case .trustedSigner: (I18nKeys.TrustedSigner.title, I18nKeys.TrustedSigner.body)
+/// The line is a corpus key, or the authenticator's own product name ("Face
+/// ID"), which is drawn as it is. The Trusted Signer's two lines are the
+/// signing sheet's own (spec 075) — the core names them.
+func methodCopy(
+    _ method: KeyMethod,
+    chooser: KeyChooser,
+    loc: Loc,
+    unlock: String = ThisDevice.unlock
+) -> (title: String, body: String) {
+    guard let words = keyMethodWords(method: method.rawValue, chooser: chooser.rawValue, unlock: unlock) else {
+        return (method.rawValue, "")
     }
+    let body = words.lineName ?? words.lineKey.map { loc.t($0) } ?? ""
+    return (loc.t(words.titleKey), body)
 }
 
 /// The provider line under a key's name, when the AAGUID catalog cannot name

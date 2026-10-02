@@ -189,7 +189,7 @@ struct WalletHomeModel {
     // and `WalletLive` swaps it the way it already swaps the balance.
     var activitySection: SectionModel
     var activityGroups: [ActivityGroupModel]
-    let assetsSection: SectionModel
+    var assetsSection: SectionModel
     var assetRows: [AssetRowModel]
     let tabs: TabsModel
     var sheet: ChainSheetModel?

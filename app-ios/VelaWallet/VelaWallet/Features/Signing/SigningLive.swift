@@ -124,20 +124,30 @@ enum SigningLive {
     /// `cappedApproval`. The confirm is left alone: `confirmLabel` switches on
     /// its English intent and falls back to the term.
     static func localizedTerms(_ clear: ClearSigningViewWire, loc: Loc) -> ClearSigningViewWire {
-        guard var result = clear.result else { return clear }
         func word(_ term: String?, _ text: String) -> String {
             guard let term else { return text }
             let key = "componentsUi.signing.\(term)"
             let translated = loc.t(key)
             return translated == key || translated.isEmpty ? text : translated
         }
-        result.intent = word(result.intentTerm, result.intent)
-        for index in result.fields.indices {
-            result.fields[index].label = word(result.fields[index].labelTerm, result.fields[index].label)
-            result.fields[index].value = word(result.fields[index].valueTerm, result.fields[index].value)
+        func localize(_ result: ClearSignResultWire) -> ClearSignResultWire {
+            var result = result
+            result.intent = word(result.intentTerm, result.intent)
+            for index in result.fields.indices {
+                result.fields[index].label = word(result.fields[index].labelTerm, result.fields[index].label)
+                result.fields[index].value = word(result.fields[index].valueTerm, result.fields[index].value)
+            }
+            return result
         }
         var next = clear
-        next.result = result
+        next.result = clear.result.map(localize)
+        // 089 S1: every call of a batch, in the words a lone call gets.
+        if var batch = clear.batch {
+            for index in batch.calls.indices {
+                batch.calls[index].result = batch.calls[index].result.map(localize)
+            }
+            next.batch = batch
+        }
         return next
     }
 
@@ -147,16 +157,34 @@ enum SigningLive {
     /// finite choice for an unlimited approve (a cap, or revoke), "Unlimited"
     /// in red would describe bytes that are no longer the ones being signed.
     static func cappedApproval(_ clear: ClearSigningViewWire, guard guardView: GuardViewWire) -> ClearSigningViewWire {
-        guard let result = clear.result, let cap = capText(guardView) else { return clear }
+        // 089 S1: each call's "Unlimited" is replaced by ITS OWN leg's cap —
+        // the guard's legs are the calls, in order.
+        if var batch = clear.batch {
+            for index in batch.calls.indices {
+                guard let result = batch.calls[index].result,
+                      let cap = capText(guardView, leg: index) else { continue }
+                let shown = result.capped(to: cap)
+                batch.calls[index].result = shown
+                // Capped, the call is what its decode now says — unless it burns.
+                if batch.calls[index].risk == .danger, shown.risk != .danger, !shown.toOwnToken {
+                    batch.calls[index].risk = shown.risk
+                }
+            }
+            batch.risk = batch.calls.map(\.risk).max { $0.rank < $1.rank } ?? batch.risk
+            var next = clear
+            next.batch = batch
+            return next
+        }
+        guard let result = clear.result, let cap = capText(guardView, leg: 0) else { return clear }
         var next = clear
         next.result = result.capped(to: cap)
         return next
     }
 
     /// The guard's finite choice on an unlimited request, as the cap row prints
-    /// it — the single approval's, or a batch's FIRST leg's: a bundle decodes
-    /// from its first leg, so that is the line the decode's "Unlimited" sits on.
-    private static func capText(_ guardView: GuardViewWire) -> String? {
+    /// it — the single approval's, or batch leg `leg`'s: each call of a batch
+    /// carries its own decode, so each "Unlimited" takes its own leg's cap.
+    private static func capText(_ guardView: GuardViewWire, leg legIndex: Int) -> String? {
         let detected: GuardDetectedApprovalWire?
         let editor: GuardEditorViewWire?
         let meta: GuardTokenMetaViewWire
@@ -164,7 +192,8 @@ enum SigningLive {
         case .approvalEditor:
             (detected, editor, meta) = (guardView.detected, guardView.editor, guardView.meta)
         case .batch:
-            guard let leg = guardView.batch?.legs.first else { return nil }
+            guard let legs = guardView.batch?.legs, legs.indices.contains(legIndex) else { return nil }
+            let leg = legs[legIndex]
             (detected, editor, meta) = (leg.approval, leg.editor, leg.meta)
         default:
             return nil
@@ -197,7 +226,9 @@ enum SigningLive {
             localizedTerms(localizedOwnBackup(rawClear, own: own, loc: loc), loc: loc),
             guard: guardView
         )
-        let facts = SigningController.firstCall(paramsJson: request.paramsJson)
+        let facts = SigningController.firstCall(paramsJson: request.paramsJson, method: request.method)
+        // 089 S1: a batch's technical details are the whole batch, never call 1's calldata.
+        let wholeBatch = clear.surface == .batch
         let dataBytes = (facts?.data.map { $0.hasPrefix("0x") ? $0.dropFirst(2) : $0[...] }?.count ?? 0) / 2
 
         // Spec 081: a refused request gets the refusal and nothing else. The
@@ -209,6 +240,21 @@ enum SigningLive {
         // last attempt on the page signed nothing, which is the one thing a
         // person does need on a refused card as much as on a live one.
         let refused = sign.blocked != nil
+        // Only a TRANSACTION has balances to change. A message moves nothing,
+        // and a balance block on a signature would answer a question nobody
+        // asked.
+        let balances = balanceBlocks(isTransaction: facts != nil, context: context)
+        // Issue #314: on the wallet's own request a simulation that moves
+        // nothing only confirms what the wallet itself wrote — a technical
+        // fact, folded with the others, not a bordered card weighing as much as
+        // the outcome. Anything else it has to say (a revert, a node that could
+        // not check, a balance that would move) stays on the sheet.
+        let quietSim: SigningRow? = {
+            guard own, !refused, balances.count == 1,
+                  case .balances(_, let rows, let note, _) = balances[0], rows.isEmpty
+            else { return nil }
+            return SigningRow(label: s(loc, "simResultLabel"), value: note ?? s(loc, "simResultNoChange"))
+        }()
         let blocks = refused
             ? statusBlocks(sign: sign, loc: loc)
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
@@ -216,10 +262,7 @@ enum SigningLive {
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
                 + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
                               dataBytes: dataBytes, context: context)
-                // Only a TRANSACTION has balances to change. A message moves
-                // nothing, and a balance block on a signature would answer a
-                // question nobody asked.
-                + balanceBlocks(isTransaction: facts != nil, context: context)
+                + (quietSim == nil ? balances : [])
                 + guardBlocks(guardView, loc: loc)
 
         var model = SigningModel(
@@ -241,10 +284,14 @@ enum SigningLive {
                     : clear.result.map { (label: s(loc, "techFunction"), signature: $0.intent) },
                 params: [],
                 identities: [],
-                simResult: nil,
-                raw: !refused && dataBytes > 0
-                    ? facts?.data.map { (label: s(loc, "techRawData"), hex: $0) } ?? nil
-                    : nil,
+                simResult: quietSim,
+                raw: refused
+                    ? nil
+                    : wholeBatch
+                        ? (label: s(loc, "techRawData"), hex: request.paramsJson)
+                        : dataBytes > 0
+                            ? facts?.data.map { (label: s(loc, "techRawData"), hex: $0) } ?? nil
+                            : nil,
                 copyLabel: fallback.tech.copyLabel,
                 explorerLabel: fallback.tech.explorerLabel
             ),
@@ -819,7 +866,87 @@ enum SigningLive {
             return blindTransactionBlocks(to: to, dataBytes: dataBytes, loc: loc)
         case .blindTransaction:
             return blindTransactionBlocks(to: to, dataBytes: dataBytes, loc: loc)
+        case .batch:
+            // 089 S1: every call of a batch, never call 1 alone.
+            return clear.batch.map { batchBlocks($0, context: context) } ?? []
         }
+    }
+
+    /// 089 S1: a batch as the sheet draws it — "Batch", how many transactions
+    /// are signed together, then EVERY call as its own card (the drawn CS26),
+    /// the coin the whole batch moves, and every flag any call raised, said
+    /// once. The headline is never call 1's: `[1 wei → A, 1 xDAI → B]` read
+    /// "Send 0.000…1 xDAI" and signed both. The guard's per-call cap cards and
+    /// its unlimited sentence follow (`guardBlocks`).
+    static func batchBlocks(_ batch: ClearBatchViewWire, context: Context) -> [SigningBlock] {
+        let loc = context.loc
+        var blocks: [SigningBlock] = [
+            .intent(text: s(loc, "batchIntent"), tone: tone(of: batch.risk)),
+            .sentence(text: s(loc, "batchSubtitle", ["count": String(batch.calls.count)]), tone: .accent),
+        ]
+        blocks += batch.calls.map { batchCallCard($0, context: context) }
+        if let total = batch.totalAmount, batch.totalValueWei != "0" {
+            blocks.append(.rows([SigningRow(
+                label: loc.t("send.splitTotalLabel"), value: "−\(total) \(context.nativeSymbol)"
+            )]))
+        }
+        let results = batch.calls.compactMap(\.result)
+        if results.contains(where: \.toOwnToken) {
+            blocks.append(.warning(tone: .danger, text: s(loc, "tokenToContractWarning")))
+        }
+        if results.contains(where: \.bestEffort) {
+            blocks.append(.warning(tone: .caution, text: s(loc, "bestEffortWarning")))
+        }
+        if results.contains(where: \.partial) {
+            blocks.append(.warning(tone: .caution, text: s(loc, "partialWarning")))
+        }
+        if results.contains(where: { $0.provenance == .fetched }) {
+            blocks.append(.warning(tone: .caution, text: s(loc, "descriptorFetchedWarning")))
+        }
+        if results.contains(where: { $0.fields.contains(where: \.unverified) }) {
+            blocks.append(.warning(tone: .caution, text: s(loc, "unverifiedWarning")))
+        }
+        if results.contains(where: { $0.fields.contains(where: \.expired) }) {
+            blocks.append(.warning(tone: .caution, text: a(loc, "expired")))
+        }
+        return blocks
+    }
+
+    /// 089 S1: one call of a batch, as its own card — the words its call would
+    /// get alone. A decoded call is its intent and its fields, then the coin it
+    /// moves and whom it calls; a plain send is "Send", the exact amount and
+    /// the recipient; a call nobody could read says so in its title, with whom
+    /// it calls and what coin it moves.
+    private static func batchCallCard(_ call: ClearBatchCallWire, context: Context) -> SigningBlock {
+        let loc = context.loc
+        func step(_ action: String) -> String {
+            s(loc, "batchStep", ["index": String(call.index), "action": action])
+        }
+        let tone = tone(of: call.risk)
+        // What the call moves of the chain's own coin, and whom it calls:
+        // inside a batch nothing else on the sheet says it for this call.
+        var coin: [SigningRow] = []
+        if let amount = call.amount, call.valueWei != "0" {
+            coin.append(SigningRow(label: s(loc, "labelAmount"), value: "−\(amount) \(context.nativeSymbol)"))
+        }
+        let target = call.to.map { [SigningRow(label: s(loc, "interactingLabel"), value: $0, mono: true)] } ?? []
+        if call.surface == .clearSign, let result = call.result {
+            return .card(title: step(result.intent),
+                         rows: result.fields.filter { !$0.detail }.map { row(of: $0) } + coin + target,
+                         tone: tone)
+        }
+        if call.surface == .plainSend, let plain = call.plainSend {
+            return .card(title: step(s(loc, "intentSend")), rows: [
+                SigningRow(label: s(loc, "labelAmount"),
+                           value: "\(plain.noValue ? "" : "−")\(plain.amount) \(context.nativeSymbol)"),
+                SigningRow(label: s(loc, "recipientLabel"), value: plain.to, mono: true),
+            ], tone: tone)
+        }
+        return .card(
+            title: step(s(loc, "blindDecodeWarning", ["bytes": String(call.dataBytes)])),
+            rows: target + coin,
+            tone: tone
+        )
     }
 
     private static func blindTransactionBlocks(to: String?, dataBytes: Int, loc: Loc) -> [SigningBlock] {

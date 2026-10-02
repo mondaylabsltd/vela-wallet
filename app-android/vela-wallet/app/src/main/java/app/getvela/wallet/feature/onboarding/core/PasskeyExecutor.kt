@@ -83,9 +83,10 @@ class PasskeyExecutor(
     /**
      * Show (or clear, with `null`) the caBLE QR. The ViewModel renders it; the
      * ceremony calls this the moment the payload is ready and again to clear it,
-     * exactly as the desktop shows its QR card.
+     * exactly as the desktop shows its QR card. The flag says whether the phone
+     * is to CREATE a key (087 F02: a sign-in's card must not say "create").
      */
-    private val showQr: (String?) -> Unit = {},
+    private val showQr: (String?, Boolean) -> Unit = { _, _ -> },
     /**
      * What to tell the person when the system's passkey sheet never appears
      * (see [awaitingSelector]). The shell owns the words; this class has no
@@ -732,11 +733,11 @@ class PasskeyExecutor(
             FailureKind.Other,
             "Could not start sign in with your phone.",
         )
-        showQr(qr)
+        showQr(qr, !forGet)
         return try {
             body(session)
         } finally {
-            showQr(null)
+            showQr(null, false)
         }
     }
 
