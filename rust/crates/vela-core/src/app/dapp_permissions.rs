@@ -27,7 +27,9 @@
 //!   value), the store writes ([`DpermOperation::WriteGrant`],
 //!   [`DpermOperation::RemoveGrant`]) and the two pure rules that read it,
 //!   [`resolve_granted`] and [`should_drop_grant`], which `dapp_browser` and the
-//!   shells import from here so the rules exist once;
+//!   shells import from here so the rules exist once, and the extension's
+//!   [`granted_to_signed_in`] (a grant is answered only for the signed-in
+//!   account, spec 086, issue 315);
 //! - **the web request window's entries** — a one-shot window with no tab, no
 //!   document and no navigation, which owns its own grant I/O and its own
 //!   transport: it asks [`Event::PopupRequest`] for a verdict, states
@@ -35,8 +37,9 @@
 //!   [`Event::PopupAccountSwitch`] when the wallet changes account, and reads
 //!   [`settle_on_close`] for the code a still-pending request is settled with;
 //! - **the origin-security helpers** — [`is_insecure_public_origin`] with its
-//!   fully-anchored IP exemptions, and [`origin_of`]. Both are imported by
-//!   `dapp_browser` / `dapp_rpc`; neither is re-implemented there.
+//!   fully-anchored IP exemptions, [`is_secure_context`] (who is offered the
+//!   wallet at all, spec 088) and [`origin_of`]. All are imported by
+//!   `dapp_browser` / `dapp_rpc`; none is re-implemented there.
 //!
 //! Ported line by line from:
 //!
@@ -59,8 +62,8 @@
 //! machine writes into a grant or answers a site with goes through
 //! [`dapp_spelling`] (EIP-55), so the connect answer and a later
 //! `accountsChanged` name the same account the same way. Comparisons stay
-//! case-insensitive ([`resolve_granted`] is unchanged: its JavaScript twin in
-//! the extension's worker cannot checksum).
+//! case-insensitive ([`resolve_granted`] and [`granted_to_signed_in`]: the
+//! latter's JavaScript twin in the extension's worker cannot checksum).
 //!
 //! Quirks kept verbatim: `grantedAt` never participates in any decision (grants
 //! have no TTL — open question in the inventory); an account switch re-pins a
@@ -216,8 +219,8 @@ pub enum DpermPopupOutcome {
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct DpermPopupView {
     pub outcome: DpermPopupOutcome,
-    /// [`resolve_granted`]'s answer for this origin — exposed so the window
-    /// never re-derives the load-bearing cold-read rule (invariant ②) itself.
+    /// [`granted_to_signed_in`]'s answer for this origin — exposed so the
+    /// window never re-derives which account a site may see itself.
     pub granted: Vec<String>,
 }
 
@@ -292,9 +295,11 @@ pub enum Event {
         /// The stored `vela.perm.<origin>` value — `None` when absent or
         /// unreadable (`getGrant`'s catch).
         grant: Option<DpermGrant>,
-        /// Every wallet address. `None`/empty = not known yet (cold load), and
-        /// [`resolve_granted`] must NOT log the origin out on that.
-        current_addresses: Option<Vec<String>>,
+        /// The account signed in on this device right now (`SessionView`'s
+        /// address, read once the session has settled). `None` — or empty —
+        /// when nobody is. A grant for any other account is not answered
+        /// ([`granted_to_signed_in`], spec 086, issue 315).
+        signed_in: Option<String>,
         /// `peer.request.address`, the address the request pins itself to.
         /// The shell maps the TS empty string to `None`. Ignored when
         /// `params_json` is given: the core then reads the address itself.
@@ -409,7 +414,7 @@ impl App for DappPermissions {
             Event::PopupRequest {
                 method,
                 grant,
-                current_addresses,
+                signed_in,
                 pinned_address,
                 origin,
                 params_json,
@@ -417,7 +422,7 @@ impl App for DappPermissions {
                 model,
                 &method,
                 grant.as_ref(),
-                current_addresses.as_deref(),
+                signed_in.as_deref(),
                 PopupFacts {
                     pinned_address: pinned_address.as_deref(),
                     origin: origin.as_deref(),
@@ -463,14 +468,17 @@ impl App for DappPermissions {
 /// The request window's one question, answered on the view.
 ///
 /// Both halves of the answer come from the pure policy below — nothing is
-/// re-decided here: [`resolve_granted`] says what this origin may see (and
-/// refuses to log it out on a cold read, invariant ②), [`decide_popup_request`]
-/// says what to do about it. The three rules the window exists to enforce are
-/// therefore stated once, in Rust:
+/// re-decided here: [`granted_to_signed_in`] says what this origin may see,
+/// [`decide_popup_request`] says what to do about it. The rules the window
+/// exists to enforce are therefore stated once, in Rust:
 ///
 /// - a never-connected origin gets no address — 4100, not a forward;
-/// - the forward is pinned to the GRANT's address, never the wallet's active
-///   account (invariant ⑨);
+/// - a grant for an account that is not the signed-in one is no grant: the
+///   site is asked again, and the person connects the account they are in
+///   (spec 086, issue 315);
+/// - the forward is pinned to the GRANT's address, never re-pointed at some
+///   other account (invariant ⑨) — which, by the rule above, is the signed-in
+///   account;
 /// - a request pinning some other address is refused 4100 — never a silent
 ///   swap of the signer for one the dApp did not ask for; the address a
 ///   request names is read by the core's own rule when the params come with
@@ -481,13 +489,13 @@ fn popup_request(
     model: &mut Model,
     method: &str,
     grant: Option<&DpermGrant>,
-    current_addresses: Option<&[String]>,
+    signed_in: Option<&str>,
     facts: PopupFacts<'_>,
 ) -> Command<DpermEffect, Event> {
     // The window answers in the one spelling too, whatever case the stored
     // grant was written in before 082 (RG10). Only the case changes: the match
     // above is case-insensitive and stays so.
-    let granted: Vec<String> = resolve_granted(grant, current_addresses)
+    let granted: Vec<String> = granted_to_signed_in(grant, signed_in)
         .iter()
         .map(|address| dapp_spelling(address))
         .collect();
@@ -704,6 +712,45 @@ pub fn resolve_granted(
     }
 }
 
+/// The accounts the EXTENSION may tell an origin: its grant, while — and only
+/// while — the grant's account is the one signed in (spec 086, issue 315).
+///
+/// - No grant → `[]`.
+/// - Nobody signed in (`None`, or empty) → `[]`: signing out of a wallet ends
+///   what every site may learn of it. The grants themselves stay (signing back
+///   in lines them back up, `session.rs`); they are only not answered.
+/// - Grant for the signed-in account → `[address]` (any case matches; the
+///   grant is returned as stored).
+/// - Grant for ANY other account → `[]`, even one the device still holds. The
+///   site is asked again, and the person connects the account they are in.
+///
+/// Why the extension asks this and not [`resolve_granted`]: an in-app browser
+/// re-pins every grant to the active account inside its own machine, on every
+/// change and on its first load (`dapp_browser::reconcile_grants`), so for it
+/// "held" and "signed in" coincide. The extension's two answerers — the
+/// service worker and the request surface — read grants another document
+/// wrote, and that document's re-pin is a moment that can be missed (a sign-in
+/// in a fresh document, a side panel open across a switch). A grant answered
+/// for any HELD account then handed a site the previous account (issue 315). Asking
+/// "is this the signed-in account?" holds whatever was missed.
+///
+/// There is no cold read here: the worker reads a snapshot the wallet keeps
+/// in persistent storage (absent = nobody is signed in, `ext_cache`'s own
+/// RemoveSnapshot on logout), and the surface asks once its session has
+/// settled. The service worker's twin (`resolveGrantedAccounts` in
+/// `extension/lib/protocol.js`) is pinned to this function by
+/// `instant.test.ts`.
+pub fn granted_to_signed_in(grant: Option<&DpermGrant>, signed_in: Option<&str>) -> Vec<String> {
+    match (grant, signed_in) {
+        (Some(grant), Some(active))
+            if !active.is_empty() && grant.address.eq_ignore_ascii_case(active) =>
+        {
+            vec![grant.address.clone()]
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// Whether a grant should be dropped: ONLY when the account list is known
 /// (present + non-empty) and no longer contains the granted address. Never on
 /// a cold/empty read — that would revoke every dApp on app launch.
@@ -803,6 +850,46 @@ pub fn is_insecure_public_origin(origin: &str) -> bool {
         None => true,
         Some((scheme, host, _)) => scheme == "http" && !is_loopback_or_private_host(&host),
     }
+}
+
+/// Whether a page at `origin` is offered the wallet at all (spec 088 FR-004):
+/// `https`, or `http` on this device's own loopback — the web platform's
+/// "secure context", the same pair the Trusted Signer page is held to.
+///
+/// Narrower than [`is_insecure_public_origin`] on purpose: a private-LAN
+/// `http` page is reachable by anyone on the same network, so it may load,
+/// but it gets no provider. A dApp under development is served on loopback
+/// (`adb reverse`, the simulator) or over https. The in-app browsers ask this
+/// once, in [`super::dapp_browser`], before any page message is read; the
+/// injected script checks `window.isSecureContext`, the platform's own
+/// spelling of the same rule.
+///
+/// Loopback is EXACT: `localhost`, a `*.localhost` name (RFC 6761 reserves
+/// them for loopback), a full `127.x.y.z` dotted quad, or `[::1]` — never
+/// `127.0.0.1.evil.com`.
+pub fn is_secure_context(origin: &str) -> bool {
+    match parse_origin(origin) {
+        Some((scheme, _, _)) if scheme == "https" => true,
+        Some((scheme, host, _)) if scheme == "http" => is_loopback_host(&host),
+        _ => false,
+    }
+}
+
+/// `localhost`, `*.localhost`, `127.0.0.0/8` as a full dotted quad, `[::1]`.
+fn is_loopback_host(host: &str) -> bool {
+    let h = host.to_ascii_lowercase();
+    if h == "localhost" || h.ends_with(".localhost") || h == "[::1]" {
+        return true;
+    }
+    let parts: Vec<&str> = h.split('.').collect();
+    parts.len() == 4
+        && parts[0] == "127"
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part.len() <= 3
+                && part.bytes().all(|b| b.is_ascii_digit())
+                && part.parse::<u16>().is_ok_and(|n| n <= 255)
+        })
 }
 
 /// A loopback / private-LAN / link-local host — the ONLY http origins exempt

@@ -8,8 +8,10 @@
  *
  * The rules this reaches, all the core's:
  *   - a never-connected origin gets no address (4100), it gets a consent card;
- *   - a signature is pinned to the GRANT's address, never to whichever account
- *     happens to be active;
+ *   - a grant for an account that is not the signed-in one is no grant: the
+ *     site is asked again (spec 086, issue 315);
+ *   - a signature is pinned to the GRANT's address, never re-pointed at
+ *     another account;
  *   - a request naming any other address — a transaction's `from` included —
  *     is refused, not silently re-signed (spec 089);
  *   - a public plain-http origin is not asked to sign for (spec 089).
@@ -24,9 +26,16 @@ import { answerRequest, type ExtensionRequest } from './transport';
 import { AskerGoneError } from '$lib/signing/core/sign-types';
 import type { PopupVerdict } from './core/dperm-types';
 
-/** The wallet facts the core is seeded with — observed, never judged. */
+/**
+ * The wallet facts the core is seeded with — observed, never judged, and read
+ * from a SETTLED session (`session.settled()`): mid-restore the address is
+ * empty, which the core reads as "nobody is signed in".
+ */
 export interface WalletFacts {
-	/** The ACTIVE account's derived address (`SessionView.address`). */
+	/**
+	 * The ACTIVE account's derived address (`SessionView.address`) — the one
+	 * signed in, `''` when nobody is.
+	 */
 	activeAddress: string;
 	/** Every derived address, or `null` when storage has not been read yet. */
 	addresses: string[] | null;
@@ -64,7 +73,7 @@ export async function evaluate(
 	const verdict: PopupVerdict = decidePopupRequest({
 		method: request.method,
 		grant: toWireGrant(grant),
-		currentAddresses: wallet.addresses,
+		signedIn: wallet.activeAddress || null,
 		pinnedAddress: null,
 		// The core reads the address the request names from its params, by the
 		// rule every in-app browser's sign gate reads (`requested_address`), and

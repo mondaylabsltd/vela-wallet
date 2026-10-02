@@ -8,10 +8,12 @@ export type DpermEvent = { "type": "popup_request", method: string,
  */
 grant: DpermGrant | null, 
 /**
- * Every wallet address. `None`/empty = not known yet (cold load), and
- * [`resolve_granted`] must NOT log the origin out on that.
+ * The account signed in on this device right now (`SessionView`'s
+ * address, read once the session has settled). `None` — or empty —
+ * when nobody is. A grant for any other account is not answered
+ * ([`granted_to_signed_in`], spec 086, issue 315).
  */
-current_addresses: Array<string> | null, 
+signed_in: string | null, 
 /**
  * `peer.request.address`, the address the request pins itself to.
  * The shell maps the TS empty string to `None`. Ignored when

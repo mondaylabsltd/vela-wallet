@@ -33,7 +33,9 @@
 				"chainSetup": "Configurer une chaîne",
 				"selfHosting": "Guide d'auto-hébergement",
 				"privacy": "Confidentialité",
-				"terms": "Conditions"
+				"terms": "Conditions",
+				"support": "Assistance",
+				"deleteData": "Supprimer vos données"
 			}
 		},
 		"language": {

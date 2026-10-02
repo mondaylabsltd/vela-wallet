@@ -39,6 +39,9 @@ class Session {
 	fault = $state<string | null>(null);
 	#loop: EffectLoop<SessionEvent> | null = null;
 	#booted: Promise<void> | null = null;
+	/** `settled()` callers waiting for the restore to answer. */
+	#waiting: (() => void)[] = [];
+	#watching = false;
 
 	/**
 	 * Read storage and settle on a route. Idempotent — every screen that needs
@@ -46,6 +49,7 @@ class Session {
 	 */
 	boot(): Promise<void> {
 		if (this.#booted) return this.#booted;
+		this.#followOtherDocuments();
 		this.#booted = (async () => {
 			await loadOnboardingCore();
 			this.#loop = createJsonWasmShell<
@@ -56,6 +60,7 @@ class Session {
 			>(new SessionCore(), {
 				onView: (view) => {
 					this.view = view;
+					if (!view.loading) this.#release();
 				},
 				execute: (effect) => executeSession(effect),
 				toFailure: sessionFailure,
@@ -65,11 +70,67 @@ class Session {
 				onError: (error) => {
 					console.error('[session] core fault:', error);
 					this.fault = error instanceof Error ? error.message : String(error);
+					this.#release();
 				}
 			});
 			this.#loop.start({ type: 'boot' });
 		})();
 		return this.#booted;
+	}
+
+	/**
+	 * The session once the core has ruled on who is signed in — never the
+	 * restore's in-between `loading` view. A question about WHICH account (a
+	 * dApp's, spec 086, issue 315) asked mid-restore would read "nobody". A
+	 * core fault answers with the view as it stands.
+	 */
+	async settled(): Promise<SessionView> {
+		await this.boot();
+		if (this.view.loading && this.fault === null) {
+			await new Promise<void>((resolve) => this.#waiting.push(resolve));
+		}
+		return this.view;
+	}
+
+	#release(): void {
+		const waiting = this.#waiting;
+		this.#waiting = [];
+		for (const resolve of waiting) resolve();
+	}
+
+	/**
+	 * Another document of this origin signed in, switched account or signed
+	 * out: read the session again (spec 086, issue 315).
+	 *
+	 * Every page restores the session ONCE, so a second document — the
+	 * extension's side panel beside a wallet tab, two wallet tabs — kept the
+	 * account it booted with after the person switched in the other one. The
+	 * panel then answered a dApp, and published the worker's snapshot, as an
+	 * account the person had left. `storage` fires in every OTHER document of
+	 * the origin when one writes, and only on a real change.
+	 */
+	#followOtherDocuments(): void {
+		if (this.#watching || typeof window === 'undefined') return;
+		this.#watching = true;
+		window.addEventListener('storage', (event) => {
+			if (
+				event.key !== null &&
+				event.key !== STORAGE_KEYS.accounts &&
+				event.key !== STORAGE_KEYS.activeAccountIndex
+			) {
+				return;
+			}
+			void this.#restart();
+		});
+	}
+
+	/** A fresh core over what storage says now. */
+	async #restart(): Promise<void> {
+		this.#loop?.dispose();
+		this.#loop = null;
+		this.#booted = null;
+		this.fault = null;
+		await this.boot();
 	}
 
 	/** Onboarding's exit. The core persists; this only forwards. */
@@ -85,12 +146,8 @@ class Session {
 		} catch {
 			// Nothing to clear where there is no storage.
 		}
-		this.#loop?.dispose();
-		this.#loop = null;
-		this.#booted = null;
-		this.fault = null;
 		this.view = BOOTING;
-		await this.boot();
+		await this.#restart();
 	}
 
 	accountEstablished(mode: CompletionMode): void {

@@ -250,6 +250,9 @@ pub struct FlowStrings {
     /// word about the same state.
     pub status_pending: SharedString,
     pub status_failed: SharedString,
+    /// A pending record nothing will settle (087 F04) — "Unknown", never
+    /// "Failed": it may have been sent.
+    pub status_unknown: SharedString,
     pub detail_from: SharedString,
     pub detail_to: SharedString,
     /// "App" — the site a dApp's transaction came from (083 H2), the word the
@@ -613,6 +616,7 @@ impl FlowStrings {
             status_confirmed: s("componentsTx.receipt.statusConfirmed"),
             status_pending: s("componentsTx.detail.statusPending"),
             status_failed: s("componentsTx.detail.statusFailed"),
+            status_unknown: s("componentsUi.signing.intentUnknown"),
             detail_from: s("componentsTx.detail.from"),
             detail_to: s("componentsTx.detail.to"),
             detail_app: s("connect.detail.labelApp"),

@@ -61,7 +61,8 @@ kind: FeedTxKind,
 /**
  * The record's lifecycle; a folded batch carries its first line's. The
  * tracker is the only thing that moves a record off `Pending`, so a row
- * says "confirmed" or "failed" only when the stored record does.
+ * says "confirmed" or "failed" only when the stored record does — and
+ * `Unknown` when it is pending and nothing will ever settle it (087 F04).
  */
 status: FeedTxStatus, 
 /**

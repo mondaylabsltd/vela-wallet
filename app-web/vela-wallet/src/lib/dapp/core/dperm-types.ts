@@ -26,10 +26,11 @@ export interface PopupRequestQuestion {
 	/** The stored `vela.perm.<origin>` value, or `null` when there is none. */
 	grant: DpermGrant | null;
 	/**
-	 * Every wallet address. `null` (or empty) means "not known yet" — the core
-	 * must NOT log the origin out on a transient empty read.
+	 * The account the session settled on (`SessionView.address`), or `null`
+	 * when nobody is signed in. A grant for any other account is not answered
+	 * (`granted_to_signed_in`, spec 086, issue 315).
 	 */
-	currentAddresses: string[] | null;
+	signedIn: string | null;
 	/**
 	 * The address the request pinned, if any. The empty string is "no pin".
 	 * Ignored by the core when `paramsJson` is given (spec 089).
