@@ -1259,7 +1259,8 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
  * (`null` when nothing may be recorded — a best-effort guess, a batch with no
  * shared verb), and `token_meta` the guard's token as it resolved, so the
  * record can say "100 USDC" rather than a bare number. Whether a token that
- * has not resolved counts is the core's to say, not this side's.
+ * has not resolved counts is the core's to say, not this side's. Spec 097:
+ * `reading` is `clear_signing`'s `record_reading`, verbatim.
  */
 export function approveOptsOf(
 	fee: FeeView | null | undefined,
@@ -1284,6 +1285,9 @@ export function approveOptsOf(
 		params_override_json: guard.rewritten_params_json,
 		intent: clear.record_intent ?? null,
 		unlimited_approved: guard.unlimited_consented,
-		token_meta: guard.meta
+		token_meta: guard.meta,
+		// Spec 097: what the reading named — the contract and the coins — kept
+		// with the record so Activity names them as this sheet did.
+		reading: clear.record_reading ?? null
 	};
 }

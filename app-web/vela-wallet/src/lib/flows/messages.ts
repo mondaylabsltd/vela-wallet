@@ -111,6 +111,10 @@ export const WALLET_FLOW_KEYS = [
 	'connect.detail.contentMessage',
 	'connect.detail.contentMissing',
 	'componentsUi.signing.typeLabel',
+	// Spec 097 N4: why a dApp row failed — the words its request ended with
+	// (`send.txErrorGeneric` is listed with the send flow's words).
+	'componentsTx.receipt.failedHint',
+	'componentsUi.signing.refused',
 
 	// ---------------------------------------------------------------- assets
 	'assets.sectionTitle',

@@ -1961,6 +1961,24 @@ describe('what the approve carries (spec 093)', () => {
 		// The guard's placeholder token is handed over as it is; whether an
 		// unresolved token counts is the core's to say.
 		expect(opts.token_meta).toEqual(INITIAL_GUARD_VIEW.meta);
+		expect(opts.reading).toBeNull();
+	});
+
+	it("the record's reading is the core's record_reading, verbatim (097)", () => {
+		const reading = {
+			address: '0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01',
+			name: 'NativeOrderFactory',
+			owner: '1inch',
+			tokens: [
+				{ address: '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', symbol: 'USDC', decimals: 18 }
+			]
+		};
+		const opts = approveOptsOf(
+			null,
+			{ ...INITIAL_CLEAR_VIEW, record_reading: reading },
+			INITIAL_GUARD_VIEW
+		);
+		expect(opts.reading).toBe(reading);
 	});
 });
 
@@ -1973,7 +1991,11 @@ describe('the readable part says what the call does (096)', () => {
 	const BNB = { ...OPEN_SIGN, request: { ...REQUEST, chain_id: 56 } };
 
 	it('still reading: "Loading…", never the cap prompt, and the slide stays shut (F7)', () => {
-		const loading: ClearSigningView = { ...INITIAL_CLEAR_VIEW, resolving: true, surface: 'loading' };
+		const loading: ClearSigningView = {
+			...INITIAL_CLEAR_VIEW,
+			resolving: true,
+			surface: 'loading'
+		};
 		const model = buildSigningModel(inputs({ clear: loading }))!;
 		expect(model.blocks).toEqual([{ kind: 'sentence', text: m.loading, tone: 'neutral' }]);
 		expect(model.blocks.some((b) => JSON.stringify(b).includes(m.chipCustom))).toBe(false);
@@ -1991,7 +2013,12 @@ describe('the readable part says what the call does (096)', () => {
 				...DECODED.result!,
 				intent: 'Supply',
 				fields: [
-					field({ label: 'On behalf of', value: '0x88cca0...266894', role: 'generic', address: '0x88' })
+					field({
+						label: 'On behalf of',
+						value: '0x88cca0...266894',
+						role: 'generic',
+						address: '0x88'
+					})
 				]
 			},
 			native_value: { value_wei: '3000000000000000', amount: '0.003' }
@@ -2025,7 +2052,7 @@ describe('the readable part says what the call does (096)', () => {
 		]);
 	});
 
-	it("an order whose terms are off chain says so, alone and in a batch (F5)", () => {
+	it('an order whose terms are off chain says so, alone and in a batch (F5)', () => {
 		const order: ClearSigningView = {
 			...DECODED,
 			result: { ...DECODED.result!, intent: 'Swap', terms_off_chain: true }

@@ -9,6 +9,7 @@ import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
 import { chainName } from '$lib/services/networks';
 import { preferences } from '$lib/services/preferences.svelte';
+import type { LocalTransaction } from '$lib/services/transactions-model';
 import { feedItemsThroughCore } from './core/feed-through-core';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';
 import { dayLabel, liveActivityGroups, liveActivityRow } from './live';
@@ -26,6 +27,7 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		symbol: 'ETH',
 		decimals: 18,
 		usd_value: 4500,
+		priced: true,
 		chain_id: 1,
 		timestamp: 1_700_000_000,
 		day_start_ms: 0,
@@ -418,6 +420,101 @@ describe('liveActivityRow', () => {
 		});
 		const zhRows = items.map((it) => liveActivityRow(it, zh, false).title);
 		expect(zhRows).toEqual(['在 app.uniswap.org 登录', '在 Uniswap 授权签名', '在 Uniswap 兑换']);
+	}, 30_000);
+
+	// Spec 097: the second real-money pass's rows, as this shell stores them
+	// once the tracker has closed them, read and worded by the REAL core.
+	it('through the core: a borrow states what the receipt proved came in; titles name protocols', async () => {
+		const SAFE = '0x88cca0eedbf2c4426110bbfc998f048689266894';
+		const USDC_BSC = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
+		const TX = '0xcb06d01b11ad36eee3f47cb9848edc50ae749d379ac32148e4d55e90d741c5ee';
+		const dapp = (id: string, at: number, extra: Partial<LocalTransaction>): LocalTransaction => ({
+			id,
+			userOpHash: '0x' + id.length.toString(16).padStart(64, '0'),
+			txHash: '',
+			from: SAFE,
+			to: '',
+			value: '0x0',
+			symbol: 'BNB',
+			decimals: 18,
+			chainId: 56,
+			timestamp: at,
+			status: 'confirmed',
+			type: 'dapp_tx',
+			...extra
+		});
+		const records: LocalTransaction[] = [
+			dapp('dapp-1-tx', NOW_S - 300, {
+				txHash: TX,
+				to: '0x6807dc923806fe8fd134338eabca509979a7e0cb',
+				dappUrl: 'https://app.aave.com',
+				intent: 'Borrow',
+				dappSummary: {
+					action: 'call',
+					calls: 1,
+					contract: '0x6807dc923806fe8fd134338eabca509979a7e0cb'
+				},
+				settlement: {
+					moved: [
+						{ token: '0xcdbbed5606d9c5c98eeedd67933991dc17f0c68d', delta: '300000000000000001' },
+						{ token: USDC_BSC, delta: '300000000000000000' }
+					]
+				}
+			}),
+			{
+				id: 'rx-1',
+				userOpHash: '',
+				txHash: TX,
+				from: '0x6807dc923806fe8fd134338eabca509979a7e0cb',
+				to: SAFE,
+				value: '0.3',
+				symbol: 'USDC',
+				decimals: 18,
+				chainId: 56,
+				timestamp: NOW_S - 290,
+				status: 'confirmed',
+				type: 'receive'
+			},
+			dapp('dapp-2-tx', NOW_S - 200, {
+				txHash: '0x' + 'af'.repeat(32),
+				to: '0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01',
+				value: '0xaa87bee538000',
+				dappUrl: 'https://1inch.com',
+				intent: 'create order',
+				dappSummary: {
+					action: 'call',
+					calls: 1,
+					contract: '0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01',
+					contract_name: 'NativeOrderFactory',
+					owner: '1inch'
+				},
+				settlement: { moved: [] }
+			}),
+			dapp('dapp-3-tx', NOW_S - 100, {
+				to: '0x6807dc923806fe8fd134338eabca509979a7e0cb',
+				status: 'failed',
+				dappUrl: 'https://app.aave.com',
+				intent: 'Withdraw',
+				dappSummary: {
+					action: 'call',
+					calls: 1,
+					contract: '0x6807dc923806fe8fd134338eabca509979a7e0cb'
+				},
+				settlement: { failure: 'refused' }
+			})
+		];
+		const items = await feedItemsThroughCore(records, SAFE, NOW_S * 1000);
+		const rows = items.map((it) => liveActivityRow(it, m, false));
+		expect(
+			rows.map((row) => [row.title, row.subtitle, row.amount, row.unit, row.received])
+		).toEqual([
+			['Withdraw on Aave', 'Failed · app.aave.com · BNB Chain', '', '', undefined],
+			['Create order on 1inch', '1inch.com · BNB Chain', '\u22120.003', 'BNB', undefined],
+			// The scan's "Received" folds into the borrow, and still shows.
+			['Borrow on Aave', 'app.aave.com · BNB Chain', '', '', { amount: '+0.3', unit: 'USDC' }]
+		]);
+		expect(items[0].dapp?.failure).toBe('refused');
+		expect(items[1].priced).toBe(false);
 	}, 30_000);
 });
 

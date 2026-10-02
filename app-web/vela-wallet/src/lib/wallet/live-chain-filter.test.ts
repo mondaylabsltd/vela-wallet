@@ -66,6 +66,7 @@ function item(id: string, chain_id: number): FeedItem {
 		symbol: 'ETH',
 		decimals: 18,
 		usd_value: 100,
+		priced: true,
 		chain_id,
 		timestamp: 1_700_000_000,
 		day_start_ms: 0,

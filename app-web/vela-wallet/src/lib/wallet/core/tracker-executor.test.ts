@@ -38,6 +38,7 @@ vi.mock('$lib/services/rpc-adapter', () => ({
 }));
 
 import { createTxTrackerExecutor, trackerLogLines } from './tracker-executor';
+import { updateTransactions } from '$lib/services/records';
 import { pollUserOpStatus } from '$lib/services/tx-reconciler';
 import type { TrackEntryView } from '$lib/core/generated/TrackEntryView';
 
@@ -297,5 +298,57 @@ describe('tracker log lines (spec 082 G61)', () => {
 			log.mockRestore();
 		}
 		expect(lines).toContain(`tracker: ${OP.slice(0, 10)} not_found`);
+	});
+});
+
+/**
+ * Spec 097: the closing patch carries how the operation ended — what its own
+ * receipt proved it moved, or why it failed — and the records keep it
+ * verbatim, beside the status, for the feed to hand back.
+ */
+describe('update_tx_records keeps the settlement with the records (097)', () => {
+	it('writes the settlement beside the status; a patch with none writes none', async () => {
+		const p = ports();
+		const executor = createTxTrackerExecutor(p);
+		const update = vi.mocked(updateTransactions);
+		update.mockClear();
+		const settlement = {
+			moved: [{ token: '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', delta: '300000000000000000' }]
+		};
+		await executor.execute({
+			id: 1,
+			operation: {
+				type: 'update_tx_records',
+				ids: ['dapp-1-tx'],
+				patch: { status: 'confirmed', tx_hash: '0x' + 'cb'.repeat(32), settlement }
+			}
+		});
+		expect(update).toHaveBeenLastCalledWith(['dapp-1-tx'], {
+			status: 'confirmed',
+			txHash: '0x' + 'cb'.repeat(32),
+			settlement
+		});
+		await executor.execute({
+			id: 2,
+			operation: {
+				type: 'update_tx_records',
+				ids: ['dapp-2-tx'],
+				patch: { status: 'failed', tx_hash: null, settlement: { failure: 'refused' } }
+			}
+		});
+		expect(update).toHaveBeenLastCalledWith(['dapp-2-tx'], {
+			status: 'failed',
+			settlement: { failure: 'refused' }
+		});
+		await executor.execute({
+			id: 3,
+			operation: {
+				type: 'update_tx_records',
+				ids: ['send-1'],
+				patch: { status: 'confirmed', tx_hash: '0x01' }
+			}
+		});
+		expect(update).toHaveBeenLastCalledWith(['send-1'], { status: 'confirmed', txHash: '0x01' });
+		expect(p.feedReconciled).toHaveBeenCalledTimes(3);
 	});
 });

@@ -256,6 +256,7 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		symbol: 'xDAI',
 		decimals: 18,
 		usd_value: 1.5,
+		priced: true,
 		chain_id: 100,
 		timestamp: Math.floor(NOW / 1000),
 		day_start_ms,

@@ -10,6 +10,7 @@
 
 import type { DappSummary } from '$lib/core/generated/DappSummary';
 import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
+import type { TrackSettlement } from '$lib/core/generated/TrackSettlement';
 
 export type TransactionType =
 	'send' | 'receive' | 'dapp_tx' | 'sign_message' | 'sign_typed_data' | 'connect';
@@ -66,6 +67,13 @@ export interface LocalTransaction {
 	balanceChanges?: TrustSimJudgment[];
 	/** Opaque to this feature; carried so a stored record survives a rewrite. */
 	assetSim?: unknown;
+	/**
+	 * How the operation ended, as the tracker proved it — the closing patch's
+	 * `settlement`, stored verbatim and handed back to the feed untouched
+	 * (spec 097): what its receipt proves it moved, or why it failed. Absent
+	 * on records closed before 097.
+	 */
+	settlement?: TrackSettlement;
 	/**
 	 * The submit's reply was lost: `userOpHash` is the locally computed hash and
 	 * the op MAY have been sent (spec 082 RA3/RA4). Kept with the row so a reload

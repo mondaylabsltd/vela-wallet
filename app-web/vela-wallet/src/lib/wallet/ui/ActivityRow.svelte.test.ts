@@ -29,6 +29,17 @@ describe('ActivityRow', () => {
 		expect(screen.container.textContent).toContain('app.uniswap.org');
 	});
 
+	it('draws what came back on its own when nothing left (097 N5)', () => {
+		const screen = render(ActivityRow, {
+			props: { row: row({ received: { amount: '+0.3', unit: 'USDC' } }) }
+		});
+		const cells = screen.container.querySelectorAll('.amount');
+		expect(cells).toHaveLength(1);
+		expect(cells[0].classList.contains('back')).toBe(true);
+		expect(cells[0].textContent).toContain('+0.3');
+		expect(cells[0].textContent).toContain('USDC');
+	});
+
 	it('keeps the amount cell for a row with one', () => {
 		const screen = render(ActivityRow, {
 			props: { row: row({ kind: 'sent', amount: '−0.01', unit: 'xDAI' }) }
