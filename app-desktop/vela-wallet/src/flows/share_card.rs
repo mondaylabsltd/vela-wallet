@@ -836,6 +836,23 @@ mod tests {
         );
     }
 
+    /// Spec 090: the saved card's code is whatever the screen's is — with
+    /// "include network" on, the EIP-681 URI — and a camera reads it back
+    /// through the network's disc in the middle.
+    #[test]
+    fn the_card_encodes_the_network_uri_the_screen_shows() {
+        let uri = format!("ethereum:{ADDRESS}@100");
+        let png = render_png(&ShareCard {
+            payload: &uri,
+            ..card()
+        })
+        .unwrap_or_else(|| unreachable!("the card did not rasterise"));
+        assert_eq!(
+            crate::executor::qr::decode_first(&png).as_deref(),
+            Some(uri.as_str())
+        );
+    }
+
     /// A logo that is not an image leaves the disc, not a hole.
     #[test]
     fn a_broken_logo_falls_back_to_the_disc() {

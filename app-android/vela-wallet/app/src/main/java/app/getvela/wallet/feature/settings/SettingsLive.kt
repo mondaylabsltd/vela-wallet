@@ -585,8 +585,12 @@ object SettingsLive {
             timeSheet = timeSheet,
             theme = model.theme.copy(selected = theme),
             textScale = model.textScale.copy(steps = TextScaleLevel.entries.size, index = prefs.textScale.ordinal),
-        )
+        ).let { withDebugMode(it, prefs.debugMode) }
     }
+
+    /** Spec 091: About's debug-mode switch as the preferences hold it — not drawn until revealed. */
+    fun withDebugMode(model: SettingsScreenModel, mode: app.getvela.wallet.core.data.DebugMode): SettingsScreenModel =
+        model.copy(about = model.about.copy(debugMode = model.about.debugMode.copy(mode = mode)))
 
     /** The storage page from the device's own keys (spec 047 D4). */
     fun withStorage(model: SettingsScreenModel, report: DeviceStorage.Report, strings: VelaStrings): SettingsScreenModel {

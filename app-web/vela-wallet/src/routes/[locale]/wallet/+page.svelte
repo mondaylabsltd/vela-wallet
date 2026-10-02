@@ -68,11 +68,17 @@
 		createReceiveWatchSession,
 		type ReceiveWatchSession
 	} from '$lib/flows/core/receive-watch';
+	import {
+		createPaymentRequestSession,
+		type PaymentRequestSession
+	} from '$lib/flows/core/payment-request';
+	import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
 	import { loadCore } from '$lib/core/client';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
 	import { withLiveWallet, withLiveWalletDesktop } from '$lib/wallet/live';
 	import {
+		receiveAssetPicked,
 		receiveNetworks,
 		visibleBalanceTokens,
 		withLiveDesktopFlow,
@@ -104,7 +110,7 @@
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { feeKey } from '$lib/flows/core/send-estimates';
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
-	import { isHexAddress, parseEIP681 } from '$lib/services/eip681';
+	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
 	import { startTxTracker, trackSubmitted } from '$lib/wallet/core/tracker-resident';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
@@ -1370,6 +1376,42 @@
 		};
 	});
 
+	/**
+	 * The `payment_request` core, exactly while a receive screen is up (spec
+	 * 090): it decides what the code says and owns the "include network"
+	 * switch. Each visit is its own session — its `start` turns the switch
+	 * back off, so the first code shown is the one every wallet reads.
+	 */
+	let payView = $state<PaymentRequestView | null>(null);
+	let paySession: PaymentRequestSession | null = null;
+	$effect(() => {
+		const address = identity?.address;
+		if (!receiving || address === undefined) return;
+		let disposed = false;
+		void loadCore().then(() => {
+			if (disposed) return;
+			paySession = createPaymentRequestSession({
+				onView: (view) => (payView = view),
+				onError: (error) => console.error('[payment_request] core fault:', error)
+			});
+			paySession.start({
+				type: 'start',
+				account: address,
+				recipient: address,
+				base_url: payLinkBase()
+			});
+		});
+		return () => {
+			disposed = true;
+			paySession?.dispose();
+			paySession = null;
+			payView = null;
+		};
+	});
+	function includeNetwork(include: boolean): void {
+		paySession?.dispatch({ type: 'include_network_changed', include });
+	}
+
 	// Page visibility stands in for app focus (research D12): a hidden tab
 	// pauses the pollers, a returning one refreshes by the core's rules.
 	onMount(() => {
@@ -1422,6 +1464,7 @@
 		identity: identity ?? undefined,
 		fm: data.flowMessages,
 		receiveChainId: selectedReceiveChainId,
+		pay: payView ?? undefined,
 		emptyCopy: data.flows.t4.base.kind === 'assets' ? data.flows.t4.base.model.empty : undefined,
 		send: sendInputs,
 		batch: batchInputs,
@@ -1432,6 +1475,25 @@
 				: undefined
 	});
 
+	/**
+	 * Which asset the code on screen is about, told to the core whenever it
+	 * differs from the core's — the core can only put in the code the network
+	 * it was told. R3/DR3 is a held token's own code; the rest a network's.
+	 */
+	const receiveAsset = $derived(
+		receiveAssetPicked(
+			{ selectedToken: liveInputs.selectedToken, receiveChainId: selectedReceiveChainId },
+			flowState === 'r3' || desktopFlow === 'dr3'
+		)
+	);
+	$effect(() => {
+		const view = payView;
+		const event = receiveAsset;
+		if (view === null || paySession === null) return;
+		if (view.asset.chain_id === event.chain_id && view.asset.token_address === event.token_address)
+			return;
+		paySession.dispatch(event);
+	});
 	/**
 	 * The browser's Back unwinds the flow stack before it leaves the wallet.
 	 * `FlowNav` pushed a history entry for every step, so each `popstate` here
@@ -1835,6 +1897,7 @@
 		send={sendActions}
 		batch={batchActions}
 		ondeletetx={deleteSelectedTx}
+		onincludenetwork={includeNetwork}
 	/>
 {/snippet}
 
@@ -1944,6 +2007,7 @@
 					addToken={addTokenActions}
 					ondeletetx={deleteSelectedTx}
 					onchains={() => (chainSheetOpen = true)}
+					onincludenetwork={includeNetwork}
 				/>
 			{:else}
 				<WalletHome

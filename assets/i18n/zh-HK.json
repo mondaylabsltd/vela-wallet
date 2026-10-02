@@ -487,7 +487,9 @@
   "qrTitleNetwork": "用呢個地址收 {{network}} 上面嘅資產",
   "qrTitleAsset": "用呢個地址收 {{network}} 上面嘅 {{symbol}}",
   "shareCardNetworkNote": "淨係收 {{network}} 網絡嘅付款",
-  "tokenContract": "代幣合約"
+  "tokenContract": "代幣合約",
+  "includeNetwork": "附上網絡資料",
+  "includeNetworkHint": "有啲錢包讀唔到。對方掃唔到就熄咗佢。"
  },
  "assets": {
   "sectionTitle": "資產",
@@ -1031,7 +1033,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "用心打造。你的密鑰，你的資產。",
-  "sectionLinks": "連結"
+  "sectionLinks": "連結",
+  "debugMode": "除錯模式",
+  "debugModeBody": "畀本地網絡上嘅 http 網頁用個錢包。只係開發用。",
+  "debugModeRevealed": "而家可以用除錯模式喇"
  },
  "clearSigning": {
   "title": "清晰簽署測試",

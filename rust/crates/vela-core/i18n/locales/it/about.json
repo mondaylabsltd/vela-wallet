@@ -18,6 +18,9 @@
     "linkGitHub": "GitHub",
     "linkSafeWallet": "Safe Wallet",
     "footer": "Realizzato con cura. Le tue chiavi, le tue cripto.",
-    "sectionLinks": "Link"
+    "sectionLinks": "Link",
+    "debugMode": "Modalità debug",
+    "debugModeBody": "Consente alle pagine http della tua rete locale di usare il wallet. Solo per lo sviluppo.",
+    "debugModeRevealed": "La modalità debug è ora disponibile"
   }
 }

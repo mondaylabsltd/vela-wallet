@@ -479,6 +479,7 @@ class AppContainer(private val app: Application) {
             feed = wallet.feedExecutor,
             relay = relay,
             debuggable = BuildConfig.DEBUG,
+            debugMode = preferences.view.value.debugMode.on,
         ).also { controller ->
             // The core forwards one signature at a time: the four signing
             // machines are born for it, answer it, and die with it.
@@ -497,6 +498,12 @@ class AppContainer(private val app: Application) {
             // The chains a page may switch to are the wallet's networks, live.
             follow.launch {
                 settings.networks.collect { view -> controller.networksChanged(view.networks.map { it.chain_id.toInt() }) }
+            }
+            // Spec 091: Settings' debug mode, live — revealed, switched, or
+            // hidden again by an erase, it is the preferences' to store and
+            // reaches the core's page gate and every open tab from here.
+            follow.launch {
+                preferences.view.collect { view -> controller.debugModeChanged(view.debugMode.on) }
             }
         }
     }

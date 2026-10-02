@@ -490,7 +490,9 @@
   "qrTitleNetwork": "Usa esta dirección para recibir activos en {{network}}",
   "qrTitleAsset": "Usa esta dirección para recibir {{symbol}} en {{network}}",
   "shareCardNetworkNote": "Solo pagos en {{network}}",
-  "tokenContract": "Contrato del token"
+  "tokenContract": "Contrato del token",
+  "includeNetwork": "Incluir red",
+  "includeNetworkHint": "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo."
  },
  "assets": {
   "sectionTitle": "Activos",
@@ -1034,7 +1036,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Hecho con cariño. Tus llaves, tus monedas.",
-  "sectionLinks": "Enlaces"
+  "sectionLinks": "Enlaces",
+  "debugMode": "Modo de depuración",
+  "debugModeBody": "Permite que las páginas http de tu red local usen la billetera. Solo para desarrollo.",
+  "debugModeRevealed": "El modo de depuración ya está disponible"
  },
  "clearSigning": {
   "title": "Prueba de Clear Signing",

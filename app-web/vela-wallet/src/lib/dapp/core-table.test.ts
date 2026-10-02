@@ -17,7 +17,11 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { dappProviderScript, dappRpcClassify } from '../../../../../rust/pkg-web/vela_core.js';
+import {
+	dappOffersWallet,
+	dappProviderScript,
+	dappRpcClassify
+} from '../../../../../rust/pkg-web/vela_core.js';
 import {
 	BUNDLER_METHODS,
 	CHANNEL,
@@ -115,7 +119,7 @@ describe('the provider has one home', () => {
 
 	it('is what every in-app browser injects', () => {
 		for (const host of ['android', 'ios', 'desktop']) {
-			const script = dappProviderScript(host);
+			const script = dappProviderScript(host, false);
 			expect(script).toContain(provider.trim().slice(-200));
 			// Top frame only, and only a secure context (https, or http on
 			// loopback) gets a provider at all (spec 088 FR-004).
@@ -124,6 +128,12 @@ describe('the provider has one home', () => {
 					'(function () {\n\tif (window.top !== window || !window.isSecureContext) return;'
 				)
 			).toBe(true);
+			// Debug mode (spec 091) changes the gate and nothing else.
+			const debug = dappProviderScript(host, true);
+			expect(debug).toContain(provider.trim().slice(-200));
+			expect(debug.split(' return;\n').slice(1).join(' return;\n')).toBe(
+				script.split(' return;\n').slice(1).join(' return;\n')
+			);
 		}
 	});
 });
@@ -189,5 +199,136 @@ describe('the provider keeps one spelling of an account', () => {
 		push('accountsChanged', [SPELLED]);
 		push('accountsChanged', [SPELLED.toLowerCase()]);
 		expect(heard).toHaveLength(1);
+	});
+});
+
+/**
+ * Spec 091: with debug mode on, the injected script tests the page's host in
+ * JavaScript — a test the CORE writes out of its own tables. Here it runs, as
+ * a WebView runs it, against the core's rule (`dappOffersWallet`) on a table
+ * of hosts: the script installs the bridge (its hello reaches the host)
+ * exactly where the machine's gate lets the page in.
+ *
+ * What the page sees is what the platform reports: `location` and the frame
+ * origin are both the URL parser's normalised spelling, so each origin goes
+ * through `new URL` first, and one the parser refuses is no page at all.
+ * `window.isSecureContext` is the platform's own answer; it is stood in for by
+ * the core's spec-088 rule, which is what spec 088 holds it to.
+ */
+describe('debug mode: the script and the gate offer the wallet to the same pages', () => {
+	const ORIGINS = [
+		// Secure contexts.
+		'https://dapp.example',
+		'https://192.168.1.5:3000',
+		'http://localhost:5173',
+		'http://dev.localhost',
+		'http://127.0.0.1:8137',
+		'http://127.12.0.9',
+		'http://[::1]:3000',
+		// This device's network: offered in debug mode only.
+		'http://192.168.1.5:3000',
+		'http://192.168.0.1',
+		'http://10.0.0.1',
+		'http://10.255.255.255',
+		'http://172.16.0.1',
+		'http://172.31.255.255',
+		'http://169.254.1.1',
+		'http://foo.local',
+		'http://FOO.LOCAL:8080',
+		'http://printer.office.local',
+		'http://[fd00::1]',
+		'http://[fd00::1]:3000',
+		'http://[fc12:3456::1]',
+		'http://[fdff:ffff::1]',
+		'http://[fe80::2]',
+		'http://[FE80::1]',
+		// Shorthand the URL parser normalises before anyone sees it.
+		'http://192.168.1',
+		'http://0x7f.1',
+		'http://10.1',
+		// Public: never.
+		'http://dapp.example',
+		'http://10.0.0.1.evil.com',
+		'http://192.168.1.5.nip.io',
+		'http://127.0.0.1.evil.com',
+		'http://localhost.evil.com',
+		'http://foo.local.evil.com',
+		'http://local',
+		'http://localhostx',
+		'http://172.15.0.1',
+		'http://172.32.0.1',
+		'http://192.169.0.1',
+		'http://169.253.0.1',
+		'http://11.0.0.1',
+		'http://8.8.8.8',
+		'http://1.1.1.1',
+		'http://[2001:db8::1]',
+		'http://[fe81::1]',
+		'http://[fec0::1]',
+		'http://[fb00::1]',
+		'http://[fe00::1]',
+		'http://[::ffff:192.168.1.5]',
+		'http://[::]',
+		'http://0.0.0.0',
+		// Refused by the parser: not a page.
+		'http://999.1.1.1',
+		'http://[fd00::1'
+	];
+
+	/** Run the injected script in a page at `url`; `true` when it said hello. */
+	function installs(script: string, url: URL, secure: boolean): boolean {
+		const posts: { t?: string }[] = [];
+		const location = { href: url.href, protocol: url.protocol, hostname: url.hostname, origin: url.origin };
+		const win: Record<string, unknown> = {
+			location,
+			isSecureContext: secure,
+			crypto: { randomUUID: () => 'doc-1' },
+			ipc: { postMessage: (s: string) => posts.push(JSON.parse(s)) },
+			addEventListener: () => {},
+			dispatchEvent: () => true,
+			postMessage: () => {}
+		};
+		win.top = win;
+		runInNewContext(script, {
+			window: win,
+			location,
+			document: { documentElement: { setAttribute: () => {} } },
+			Event: class {},
+			CustomEvent: class {},
+			console: { log: () => {}, error: () => {} }
+		});
+		return posts.some((post) => post.t === 'hello');
+	}
+
+	for (const debugMode of [false, true]) {
+		it(`debug mode ${debugMode ? 'on' : 'off'}`, () => {
+			const script = dappProviderScript('desktop', debugMode);
+			let pages = 0;
+			for (const origin of ORIGINS) {
+				let url: URL;
+				try {
+					url = new URL(origin);
+				} catch {
+					continue;
+				}
+				pages += 1;
+				const secure = dappOffersWallet(url.origin, false);
+				expect(installs(script, url, secure), `${origin} (${url.origin})`).toBe(
+					dappOffersWallet(url.origin, debugMode)
+				);
+			}
+			expect(pages).toBe(ORIGINS.length - 2);
+		});
+	}
+
+	it('offers what the ruling says, and only that', () => {
+		const offered = (origin: string) => dappOffersWallet(new URL(origin).origin, true);
+		for (const lan of ['http://192.168.1.5:3000', 'http://[fd00::1]', 'http://foo.local']) {
+			expect(offered(lan), lan).toBe(true);
+			expect(dappOffersWallet(new URL(lan).origin, false), lan).toBe(false);
+		}
+		for (const pub of ['http://10.0.0.1.evil.com', 'http://dapp.example', 'http://8.8.8.8']) {
+			expect(offered(pub), pub).toBe(false);
+		}
 	});
 });

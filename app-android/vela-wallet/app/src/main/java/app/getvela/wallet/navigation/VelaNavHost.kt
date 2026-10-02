@@ -1216,6 +1216,8 @@ fun VelaNavHost(
                         // stack, so the next row tapped opens its sheet. The
                         // STACK's state this screen was built for, as iOS passes.
                         onSheetClosed = { flows.sheetClosed(flowState) },
+                        // Spec 090: the switch asks the core, which decides what the code says.
+                        onIncludeNetwork = { wallet.includeNetwork(it) },
                         selected = flows.selected,
                         // 删除记录 (spec 058): the feed tombstones the record and
                         // drops the row at once, so the detail has nothing left
@@ -1258,7 +1260,7 @@ fun VelaNavHost(
                         },
                         onSaveImage = {
                             val drawn = (FlowFixtures.build(FlowState.R4, strings).base as? FlowBase.Share)?.model
-                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id, networks.networks.firstOrNull { it.chain_id.toInt() == request.asset.chain_id }?.native_symbol)
+                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id, networks.networks.firstOrNull { it.chain_id.toInt() == request.asset.chain_id }?.native_symbol, code = request.qr_value)
                         },
                         addToken = AddTokenCallbacks(
                             onInput = { wallet.addTokenInput(it.trim()) },
@@ -1994,6 +1996,9 @@ fun VelaNavHost(
                             }
                         },
                         onTextScale = { index -> TextScaleLevel.entries.getOrNull(index)?.let { application.container.preferences.setTextScale(it) } },
+                        // Spec 091: stored with the preferences; the browser follows them (the container).
+                        onDebugModeRevealed = { application.container.preferences.revealDebugMode() },
+                        onDebugMode = { on -> application.container.preferences.setDebugMode(on) },
                         onStorageClear = { itemId ->
                             scope.launch {
                                 when {
@@ -2039,6 +2044,9 @@ fun VelaNavHost(
                                 // merge detail.
                                 application.container.browser.revokeAll()
                                 val left = DeviceStorage.eraseDevice(context, VelaStore(context))
+                                // Spec 091: the debug-mode key went with the rest —
+                                // About hides the switch again, and the browser follows.
+                                application.container.preferences.reloadDebugMode()
                                 if (left.isEmpty()) {
                                     eraseFailed = null
                                     application.container.session.signOut()

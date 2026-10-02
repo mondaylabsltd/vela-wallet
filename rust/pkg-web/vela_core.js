@@ -3213,19 +3213,36 @@ export function create2Address(deployer_hex, salt, init_code_hash) {
 }
 
 /**
+ * Whether a page at `origin` is offered the wallet (spec 091) — the rule
+ * the in-app browsers' gate follows, exported so the web suite can hold the
+ * injected script's host test to it.
+ * @param {string} origin
+ * @param {boolean} debug_mode
+ * @returns {boolean}
+ */
+export function dappOffersWallet(origin, debug_mode) {
+    const ptr0 = passStringToWasm0(origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.dappOffersWallet(ptr0, len0, debug_mode);
+    return ret !== 0;
+}
+
+/**
  * The document-start script an in-app browser injects, for `host`
- * (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
- * the real bridge in a real browser.
+ * (`"android"` / `"ios"` / `"desktop"`) and Settings' debug mode (spec 091)
+ * — exported so the web suite can run the real bridge in a real browser,
+ * and the debug script's host test against [`dapp_offers_wallet`].
  * @param {string} host
+ * @param {boolean} debug_mode
  * @returns {string}
  */
-export function dappProviderScript(host) {
+export function dappProviderScript(host, debug_mode) {
     let deferred2_0;
     let deferred2_1;
     try {
         const ptr0 = passStringToWasm0(host, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.dappProviderScript(ptr0, len0);
+        const ret = wasm.dappProviderScript(ptr0, len0, debug_mode);
         deferred2_0 = ret[0];
         deferred2_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);

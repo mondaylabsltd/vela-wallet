@@ -18,6 +18,9 @@
     "linkGitHub": "GitHub",
     "linkSafeWallet": "Safe Wallet",
     "footer": "Feito com cuidado. Suas chaves, suas moedas.",
-    "sectionLinks": "Links"
+    "sectionLinks": "Links",
+    "debugMode": "Modo de depuração",
+    "debugModeBody": "Permite que páginas http da sua rede local usem a carteira. Só para desenvolvimento.",
+    "debugModeRevealed": "O modo de depuração já está disponível"
   }
 }

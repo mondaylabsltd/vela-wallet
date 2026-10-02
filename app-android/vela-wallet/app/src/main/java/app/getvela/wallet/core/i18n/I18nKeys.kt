@@ -477,6 +477,9 @@ object I18nKeys {
         const val RECEIVE_SAVE_IMAGE = "receive.request.saveImage"
         const val SHARE_CARD_HEADLINE = "receive.shareCardHeadline"
         const val SHARE_CARD_NETWORK_NOTE = "receive.shareCardNetworkNote"
+        /** Spec 090: the receive code's opt-in "include network" switch and its hint. */
+        const val RECEIVE_INCLUDE_NETWORK = "receive.includeNetwork"
+        const val RECEIVE_INCLUDE_NETWORK_HINT = "receive.includeNetworkHint"
 
         // Scan.
         const val SCAN_TITLE = "componentsUi.scanner.title"
@@ -963,6 +966,10 @@ object I18nKeys {
         const val ABOUT_SIGNER_VALUE = "about.techSignerValue"
         const val ABOUT_NETWORKS_LABEL = "about.techNetworksLabel"
         const val ABOUT_NETWORKS_VALUE = "about.techNetworksValue"
+        /** Spec 091: the hidden developer switch, its one line, and the notice when it appears. */
+        const val ABOUT_DEBUG_MODE = "about.debugMode"
+        const val ABOUT_DEBUG_MODE_BODY = "about.debugModeBody"
+        const val ABOUT_DEBUG_MODE_REVEALED = "about.debugModeRevealed"
         const val ABOUT_LINK_WEBSITE = "about.linkWebsite"
         const val ABOUT_LINK_GITHUB = "about.linkGitHub"
         const val ABOUT_LINK_SAFE = "about.linkSafeWallet"

@@ -487,7 +487,9 @@
   "qrTitleNetwork": "Dùng địa chỉ này để nhận tài sản trên {{network}}",
   "qrTitleAsset": "Dùng địa chỉ này để nhận {{symbol}} trên {{network}}",
   "shareCardNetworkNote": "Chỉ thanh toán trên {{network}}",
-  "tokenContract": "Hợp đồng token"
+  "tokenContract": "Hợp đồng token",
+  "includeNetwork": "Kèm thông tin mạng",
+  "includeNetworkHint": "Một số ví không đọc được mã này. Nếu bên kia không quét được, hãy tắt đi."
  },
  "assets": {
   "sectionTitle": "Tài sản",
@@ -1031,7 +1033,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Được tạo ra bằng tấm lòng. Khóa của bạn, coin của bạn.",
-  "sectionLinks": "Liên kết"
+  "sectionLinks": "Liên kết",
+  "debugMode": "Chế độ gỡ lỗi",
+  "debugModeBody": "Cho phép các trang http trong mạng cục bộ của bạn dùng ví. Chỉ dành cho phát triển.",
+  "debugModeRevealed": "Chế độ gỡ lỗi đã sẵn sàng"
  },
  "clearSigning": {
   "title": "Kiểm thử Clear Signing",

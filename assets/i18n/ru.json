@@ -493,7 +493,9 @@
   "qrTitleNetwork": "Используйте этот адрес для получения активов в сети {{network}}",
   "qrTitleAsset": "Используйте этот адрес для получения {{symbol}} в сети {{network}}",
   "shareCardNetworkNote": "Только платежи в сети {{network}}",
-  "tokenContract": "Контракт токена"
+  "tokenContract": "Контракт токена",
+  "includeNetwork": "Указать сеть",
+  "includeNetworkHint": "Некоторые кошельки не читают такой код. Если не сканируется — выключите."
  },
  "assets": {
   "sectionTitle": "Активы",
@@ -1037,7 +1039,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Сделано с заботой. Ваши ключи — ваши монеты.",
-  "sectionLinks": "Ссылки"
+  "sectionLinks": "Ссылки",
+  "debugMode": "Режим отладки",
+  "debugModeBody": "Даёт http-страницам в вашей локальной сети доступ к кошельку. Только для разработки.",
+  "debugModeRevealed": "Режим отладки теперь доступен"
  },
  "clearSigning": {
   "title": "Тест Clear Signing",

@@ -52,7 +52,7 @@ test('the code on the receive screen decodes to this wallet’s address', async 
 		.click();
 	// Each network row carries two buttons — copy the address, and show its
 	// code. The second is the one a person points a camera at.
-	const showCode = page.getByRole('button', { name: en('componentsUi.scanner.title') }).first();
+	const showCode = page.getByRole('button', { name: en('componentsUi.funding.showQr') }).first();
 	await expect(showCode).toBeVisible({ timeout: 20_000 });
 	await showCode.click();
 	// The code is a sheet over the list; wait for it rather than for a duration.
@@ -95,7 +95,7 @@ test('every network is listed, the tapped one is the code’s, and the image sav
 		.first()
 		.click();
 
-	const showCode = page.getByRole('button', { name: en('componentsUi.scanner.title') });
+	const showCode = page.getByRole('button', { name: en('componentsUi.funding.showQr') });
 	await expect(showCode.first()).toBeVisible({ timeout: 20_000 });
 	const rows = await showCode.count();
 	expect(rows, 'one row per network the wallet knows').toBe(CHAINS.length);
@@ -115,3 +115,83 @@ test('every network is listed, the tapped one is the code’s, and the image sav
 	]);
 	expect(download.suggestedFilename()).toMatch(/^vela-0x.*\.png$/);
 });
+
+/** The code the open sheet draws, decoded the way a camera would read it. */
+async function readCode(page: import('@playwright/test').Page): Promise<string | null> {
+	const drawn = await page
+		.locator('svg[role="img"] path')
+		.first()
+		.evaluate((node) => {
+			const svg = node.closest('svg')!;
+			const box = svg.getAttribute('viewBox')!.split(' ');
+			return { path: node.getAttribute('d') ?? '', modules: Number(box[2]) };
+		});
+	const { pixels, side } = rasterise(drawn.path, drawn.modules);
+	return jsQR(pixels, side, side)?.data ?? null;
+}
+
+/**
+ * Spec 090: the "include network" switch under the code. Off by default — the
+ * bare address every wallet reads. On, the code names the network on screen
+ * (`ethereum:<address>@<chain>`, the core's value) and the calm hint appears
+ * under the switch; off again, both go. The two states are attached as
+ * screenshots for review.
+ */
+for (const viewport of [
+	{ width: 390, height: 844 },
+	{ width: 1440, height: 900 }
+]) {
+	test.describe(`at ${viewport.width}px`, () => {
+		test.use({ viewport });
+
+		test('include network: the code names the network, and the hint says some wallets cannot read it', async ({
+			page
+		}, testInfo) => {
+			await seedSignedIn(page);
+			await denyOffOrigin(page);
+			await page.goto('/en/wallet');
+			await expect(page.getByText('E2E Wallet').first()).toBeVisible();
+			// The screenshots are of the sheet, not of the launch animation's
+			// dissolve over it.
+			await expect
+				.poll(() => page.evaluate(() => document.documentElement.dataset.launch ?? null))
+				.toBeNull();
+			await page
+				.getByRole('button', { name: en('componentsUi.dock.receive') })
+				.first()
+				.click();
+			const showCode = page.getByRole('button', { name: en('componentsUi.funding.showQr') });
+			await expect(showCode.first()).toBeVisible({ timeout: 20_000 });
+			// The second network, so the chain in the code is not a default.
+			await showCode.nth(1).click();
+
+			const toggle = page.getByRole('switch', { name: en('receive.includeNetwork') });
+			const hint = page.getByText(en('receive.includeNetworkHint'));
+			await expect(toggle).toHaveAttribute('aria-checked', 'false', { timeout: 20_000 });
+			await expect(hint).toHaveCount(0);
+			expect(await readCode(page)).toBe(TEST_ACCOUNT_ADDRESS);
+			await page.waitForTimeout(500); // the sheet's own entrance, for the picture
+			await testInfo.attach(`web-${viewport.width}-switch-off`, {
+				body: await page.screenshot(),
+				contentType: 'image/png'
+			});
+
+			await toggle.click();
+			await expect(toggle).toHaveAttribute('aria-checked', 'true');
+			await expect(hint).toBeVisible();
+			await expect
+				.poll(() => readCode(page))
+				.toBe(`ethereum:${TEST_ACCOUNT_ADDRESS}@${CHAINS[1]!.chainId}`);
+			await page.waitForTimeout(500); // the track's colour transition, for the picture
+			await testInfo.attach(`web-${viewport.width}-switch-on`, {
+				body: await page.screenshot(),
+				contentType: 'image/png'
+			});
+
+			await toggle.click();
+			await expect(toggle).toHaveAttribute('aria-checked', 'false');
+			await expect(hint).toHaveCount(0);
+			await expect.poll(() => readCode(page)).toBe(TEST_ACCOUNT_ADDRESS);
+		});
+	});
+}

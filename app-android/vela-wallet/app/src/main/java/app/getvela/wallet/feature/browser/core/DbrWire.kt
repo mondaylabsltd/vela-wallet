@@ -159,6 +159,11 @@ sealed class DbrEvent {
     @SerialName("accounts_updated")
     data class AccountsUpdated(val addresses: List<String>? = null) : DbrEvent()
 
+    /** Settings' debug mode (spec 091), stated at start and on every change. */
+    @Serializable
+    @SerialName("debug_mode_changed")
+    data class DebugModeChanged(val on: Boolean) : DbrEvent()
+
     @Serializable
     @SerialName("account_switched")
     data class AccountSwitched(val address: String, val now_ms: Double) : DbrEvent()

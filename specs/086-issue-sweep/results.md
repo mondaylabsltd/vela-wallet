@@ -21,8 +21,8 @@ Status 2026-10-01 night: **all 16 issues have PRs** (#341–#350, #371–#374). 
 
 ## Decisions taken (to confirm with the owner)
 
-- **#333:** GBK and other legacy encodings are refused, not decoded. A GBK decode silently mis-reads Shift_JIS, EUC-KR, Big5 and cp1252, which covers four of our locales.
-- **#312:** Vela's own Receive QR stays a bare address (#208 was closed as "not supported"). So a Vela network QR shows recipient-first with all assets. Making it `ethereum:addr@chain` is a one-line follow-up.
+- **#333:** GBK and other legacy encodings are refused, not decoded. A GBK decode silently mis-reads Shift_JIS, EUC-KR, Big5 and cp1252, which covers four of our locales. **Owner ruling 2026-10-02: refusing non-UTF-8 (e.g. GBK) files is kept.**
+- **#312:** Vela's own Receive QR stays a bare address (#208 was closed as "not supported"). So a Vela network QR shows recipient-first with all assets. Making it `ethereum:addr@chain` is a one-line follow-up. **Owner ruling 2026-10-02: ERC-681 opt-in, default bare address → spec 090** (`specs/090-receive-network-qr`).
 - **i18n budget:** ja+en is at 138,798 / 138,800 after #350.
 
 ## Merge order and conflicts

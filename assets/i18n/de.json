@@ -487,7 +487,9 @@
   "qrTitleNetwork": "Mit dieser Adresse Werte auf {{network}} empfangen",
   "qrTitleAsset": "Mit dieser Adresse {{symbol}} auf {{network}} empfangen",
   "shareCardNetworkNote": "Nur Zahlungen über {{network}}",
-  "tokenContract": "Token-Vertrag"
+  "tokenContract": "Token-Vertrag",
+  "includeNetwork": "Netzwerk mitsenden",
+  "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus."
  },
  "assets": {
   "sectionTitle": "Assets",
@@ -1031,7 +1033,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins.",
-  "sectionLinks": "Links"
+  "sectionLinks": "Links",
+  "debugMode": "Debug-Modus",
+  "debugModeBody": "Lässt http-Seiten in deinem lokalen Netzwerk die Wallet nutzen. Nur für die Entwicklung.",
+  "debugModeRevealed": "Der Debug-Modus ist jetzt verfügbar"
  },
  "clearSigning": {
   "title": "Clear-Signing-Test",

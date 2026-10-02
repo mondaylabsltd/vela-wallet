@@ -125,9 +125,21 @@
 		batch?: BatchActions;
 		/** The open transaction's delete (spec 028 Phase 8). Absent in the gallery. */
 		ondeletetx?: () => void;
+		/** Spec 090: the receive code's "include network" switch. Absent in the gallery. */
+		onincludenetwork?: (include: boolean) => void;
 	}
 
-	let { model, onback, onclose, onnavigate, addToken, send, batch, ondeletetx }: Props = $props();
+	let {
+		model,
+		onback,
+		onclose,
+		onnavigate,
+		addToken,
+		send,
+		batch,
+		ondeletetx,
+		onincludenetwork
+	}: Props = $props();
 
 	const body = $derived(model.body);
 	const go = (to: string, index?: number) => onnavigate?.(to, index);
@@ -144,7 +156,7 @@
 	{#if body.kind === 'receive-list'}
 		<ReceiveList model={body.model} chrome={false} onqr={(i) => go('receive-qr', i)} />
 	{:else if body.kind === 'receive-qr'}
-		<ReceiveQr model={body.model} />
+		<ReceiveQr model={body.model} {onincludenetwork} />
 	{:else if body.kind === 'history'}
 		<History model={body.model} onselect={(g, r) => go('tx-detail', g * 100 + r)} />
 	{:else if body.kind === 'tx-detail'}

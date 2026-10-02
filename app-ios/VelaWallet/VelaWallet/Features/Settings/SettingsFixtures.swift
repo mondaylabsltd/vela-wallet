@@ -500,7 +500,12 @@ enum SettingsFixtures {
                                  mono: true, external: true,
                                  link: "https://safe.global"),
             ],
-            footer: loc.t(k.aboutFooter)
+            footer: loc.t(k.aboutFooter),
+            debugMode: DebugModeModel(
+                title: loc.t(k.aboutDebugMode),
+                body: loc.t(k.aboutDebugModeBody),
+                revealedNotice: loc.t(k.aboutDebugModeRevealed)
+            )
         )
     }
 
@@ -810,7 +815,7 @@ enum SettingsFixtures {
         default: loc.t(k.title)
         }
 
-        let model = SettingsScreenModel(
+        let model = SettingsScreenModel(SettingsScreenContent(
             state: state,
             title: loc.t(k.title),
             page: form.page,
@@ -872,7 +877,7 @@ enum SettingsFixtures {
             indexDown: indexDown(loc),
             backdropTitle: backdropTitle,
             closeLabel: loc.t(k.close)
-        )
+        ))
         // SR6 is drawn through the live builder, from a view shaped like the
         // core's: what the gallery shows is what a session would.
         return SettingsLive.withUnreachable(unreachableView, display: .usd, on: model, loc: loc)

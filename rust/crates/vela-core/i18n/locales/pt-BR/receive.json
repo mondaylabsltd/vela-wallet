@@ -73,6 +73,8 @@
     "qrTitleNetwork": "Use este endereço para receber ativos na {{network}}",
     "qrTitleAsset": "Use este endereço para receber {{symbol}} na {{network}}",
     "shareCardNetworkNote": "Somente pagamentos na {{network}}",
-    "tokenContract": "Contrato do token"
+    "tokenContract": "Contrato do token",
+    "includeNetwork": "Incluir rede",
+    "includeNetworkHint": "Algumas carteiras não leem este código. Se a outra pessoa não conseguir, desative."
   }
 }

@@ -73,6 +73,8 @@
     "qrTitleNetwork": "Dùng địa chỉ này để nhận tài sản trên {{network}}",
     "qrTitleAsset": "Dùng địa chỉ này để nhận {{symbol}} trên {{network}}",
     "shareCardNetworkNote": "Chỉ thanh toán trên {{network}}",
-    "tokenContract": "Hợp đồng token"
+    "tokenContract": "Hợp đồng token",
+    "includeNetwork": "Kèm thông tin mạng",
+    "includeNetworkHint": "Một số ví không đọc được mã này. Nếu bên kia không quét được, hãy tắt đi."
   }
 }

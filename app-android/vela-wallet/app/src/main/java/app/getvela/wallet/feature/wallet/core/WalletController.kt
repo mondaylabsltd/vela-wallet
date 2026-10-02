@@ -407,6 +407,13 @@ class WalletController(
             PaymentRequestEvent.serializer(),
         )
 
+    /** Spec 090: the "include network" switch — the core decides what the code then says. */
+    fun includeNetwork(include: Boolean) =
+        requestHost.dispatch(
+            PaymentRequestEvent.IncludeNetworkChanged(include),
+            PaymentRequestEvent.serializer(),
+        )
+
     /** The warning gate's confirm. */
     fun acknowledgeReceive() =
         requestHost.dispatch(PaymentRequestEvent.Acknowledge, PaymentRequestEvent.serializer())

@@ -487,7 +487,9 @@
   "qrTitleNetwork": "用這個位址接收 {{network}} 上的資產",
   "qrTitleAsset": "用這個位址接收 {{network}} 上的 {{symbol}}",
   "shareCardNetworkNote": "僅支援 {{network}} 網路付款",
-  "tokenContract": "代幣合約"
+  "tokenContract": "代幣合約",
+  "includeNetwork": "附帶網路資訊",
+  "includeNetworkHint": "部分錢包無法辨識。對方掃不出來時請關閉。"
  },
  "assets": {
   "sectionTitle": "資產",
@@ -1031,7 +1033,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "用心打造。您的金鑰，您的幣。",
-  "sectionLinks": "連結"
+  "sectionLinks": "連結",
+  "debugMode": "除錯模式",
+  "debugModeBody": "讓區域網路上的 http 網頁使用錢包。僅供開發使用。",
+  "debugModeRevealed": "現在可以使用除錯模式了"
  },
  "clearSigning": {
   "title": "清晰簽署測試",

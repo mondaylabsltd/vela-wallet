@@ -470,13 +470,23 @@ for (let i = 1; i < PATHS.length; i++) {
 //   file that is not UTF-8 (a GBK CSV from Excel on Chinese Windows) is refused
 //   with how to save it, where every shell used to import its names as U+FFFD.
 //   Same branches: 1785 + 1 = 1786.
-// 1792 (092, 2026-10-02): the home line over networks the wallet cannot reach
+// 1788 (spec 090, 2026-10-02): + `receive.includeNetwork` and
+//   `receive.includeNetworkHint` — the receive code's opt-in "include network"
+//   switch (ERC-681) and the calm line under it: some wallets cannot read
+//   that code. Same branches: 1786 + 2 = 1788.
+// 1791 (091, 2026-10-02): + `about.{debugMode,debugModeBody,debugModeRevealed}`
+//   — the hidden developer switch in About (seven taps on the version reveal
+//   it): its name, the one line saying what it does and that it is for
+//   development only, and the notice when it appears. The ja + en residency
+//   budget moves to 139,800 (owner, 2026-10-02). Same branches: 1788 + 3 = 1791.
+// 1797 (092, 2026-10-02): the home line over networks the wallet cannot reach
 //   says so without "RPC" (`assets.unreachable{One,Many}`), and the list behind
 //   it names them all under that same line (`assets.unreachable{Body,None}`), each with what was
 //   last read there (`assets.{lastSeen,lastSeenUnpriced,lastSeenEmpty,notReadYet}`);
-//   − `assets.rpcUnavailable{Single,Multiple}`. Same branches: 1786 + 8 − 2 = 1792.
-if (PATHS.length !== 1792) fail(`expected 1792 paths (1703 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1703) fail(`expected 1703 leaf paths, got ${leafSet.size}`);
+//   − `assets.rpcUnavailable{Single,Multiple}`. The ja + en residency budget
+//   moves to 140,800 (owner, 2026-10-02). Same branches: 1791 + 8 − 2 = 1797.
+if (PATHS.length !== 1797) fail(`expected 1797 paths (1708 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1708) fail(`expected 1708 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

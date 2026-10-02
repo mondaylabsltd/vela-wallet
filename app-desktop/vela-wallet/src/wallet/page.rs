@@ -709,6 +709,12 @@ pub struct WalletPage {
     /// copies, so an older copy's timer never clears a newer one's tick.
     copied: Option<SharedString>,
     copied_press: u64,
+    /// Spec 091: the taps on About's version so far (the core's count), and
+    /// the notice that debug mode is now available — `notice_press` counts
+    /// them as `copied_press` counts copies.
+    version_taps: vela_core::prefs::VersionTaps,
+    debug_notice: bool,
+    notice_press: u64,
     /// Which favourite the open tile menu is about.
     menu_origin: Option<String>,
     /// The explore name dialog: renaming a tile, or naming a new group.
@@ -1316,6 +1322,9 @@ impl WalletPage {
             },
             copied: None,
             copied_press: 0,
+            version_taps: vela_core::prefs::VersionTaps::default(),
+            debug_notice: false,
+            notice_press: 0,
             menu_origin: None,
             explore_groups: false,
             explore_form: None,
@@ -3187,6 +3196,8 @@ impl WalletPage {
                 // a first launch's: the preferences, the formats, a saved
                 // index endpoint, the endpoint pools.
                 crate::executor::preferences::load();
+                // Debug mode is hidden again, and off (spec 091).
+                self.follow_debug_mode(cx);
                 format_prefs::reload();
                 crate::executor::registry::set_registry_url("");
                 crate::executor::pool::refresh(None);
@@ -5840,6 +5851,10 @@ impl WalletPage {
             );
         match (receiving, self.money_watch.receiving.is_some()) {
             (true, false) => {
+                // A receive visit is a request session too (spec 090): its
+                // `Start` turns the "include network" switch back off, so the
+                // code shown first is always the one every wallet reads.
+                resident::forget::<PaymentRequest>(cx);
                 resident::forget::<ReceiveWatch>(cx);
                 let watch = resident::resident::<ReceiveWatch>(cx);
                 self.money_watch.deposits = 0;
@@ -5859,6 +5874,54 @@ impl WalletPage {
             }
             _ => {}
         }
+        if receiving {
+            self.keep_receive_asset(cx);
+        }
+    }
+
+    /// Tell `payment_request` which network's code is on screen (spec 090).
+    ///
+    /// With "include network" on, the code names that chain — and the core
+    /// can only name the one it was told. The panel is drawn from
+    /// `receive_chain` / `receive_token`, so the machine follows those, here,
+    /// once per change: three doors set them (a row, the sidebar filter, a
+    /// token's 收款) and a pick sent from each would be three chances to miss.
+    fn keep_receive_asset(&mut self, cx: &mut Context<Self>) {
+        let token = match self.flows.last() {
+            Some(FlowPanel::Dr3) => self.receive_token.clone(),
+            _ => None,
+        };
+        let chain_id = token.as_ref().map_or(self.receive_chain, |t| t.chain_id);
+        let token_address = token.as_ref().and_then(|t| t.token_address.clone());
+        let pay = resident::resident::<PaymentRequest>(cx);
+        let shown = pay.read(cx).view().asset;
+        if shown.chain_id == chain_id && shown.token_address == token_address {
+            return;
+        }
+        let network_name = flows_live::chain_name(chain_id);
+        let (symbol, decimals) = match &token {
+            Some(token) => (token.symbol.clone(), token.decimals),
+            // A network's code asks for that chain's own coin.
+            None => (
+                flows_live::receivable_chains()
+                    .into_iter()
+                    .find(|(id, _)| *id == chain_id)
+                    .map_or_else(|| network_name.clone(), |(_, symbol)| symbol),
+                18,
+            ),
+        };
+        pay.update(cx, |resident, cx| {
+            resident.dispatch(
+                vela_core::app::payment_request::Event::AssetPicked {
+                    chain_id,
+                    token_address,
+                    symbol,
+                    decimals,
+                    network_name,
+                },
+                cx,
+            );
+        });
     }
 
     /// Open a flow from the wallet home (spec 021 SC-002).
@@ -6698,6 +6761,19 @@ impl WalletPage {
             })) as panels::Click),
             save_image: Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                 this.save_share_card(cx);
+            })) as panels::Click),
+            // Spec 090: the switch flips what the CORE says it is — the
+            // machine decides what the code then encodes.
+            include_network: Some(Box::new(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                let pay = resident::resident::<PaymentRequest>(cx);
+                let include = !pay.read(cx).view().include_network;
+                pay.update(cx, |resident, cx| {
+                    resident.dispatch(
+                        vela_core::app::payment_request::Event::IncludeNetworkChanged { include },
+                        cx,
+                    );
+                });
+                cx.notify();
             })) as panels::Click),
             open_qr_rows: Vec::new(),
             open_tx: bind(FlowStep::TxDetail, cx),
@@ -11447,10 +11523,21 @@ impl WalletPage {
                                     .child(s.about_tagline.clone()),
                             )
                             .child(
+                                // Spec 091: the hidden entry — in a developer
+                                // build seven quick taps reveal debug mode (the
+                                // core's rule; a release build never reveals).
+                                // Nothing marks it as a control; where there is
+                                // no browser (Linux) there is nothing to reveal.
                                 div()
+                                    .id("about-version")
                                     .font_family(theme::font_mono())
                                     .text_size(theme::text_row_sub())
                                     .text_color(theme.fg_subtle)
+                                    .when(Section::Explore.available(), |el| {
+                                        el.on_click(
+                                            cx.listener(|this, _, _, cx| this.version_tapped(cx)),
+                                        )
+                                    })
                                     .child(settings_fixtures::about_version(s, live)),
                             ),
                     ),
@@ -11492,6 +11579,19 @@ impl WalletPage {
                 mono,
                 false,
                 None,
+            ));
+        }
+        // Spec 091: once revealed, the switch stays here, so it can be turned
+        // off again.
+        let debug_mode = crate::executor::preferences::debug_mode();
+        if debug_mode.revealed() && Section::Explore.available() {
+            col = col.child(crate::settings::components::toggle_row(
+                "about-debug-mode",
+                theme,
+                self.settings.about_debug_mode.clone(),
+                self.settings.about_debug_mode_body.clone(),
+                debug_mode.is_on(),
+                cx.listener(|this, _, _, cx| this.toggle_debug_mode(cx)),
             ));
         }
         col = col.child(
@@ -14346,6 +14446,84 @@ impl WalletPage {
     #[cfg(target_os = "linux")]
     fn load_retry(&mut self, cx: &mut Context<Self>) {
         cx.notify();
+    }
+
+    /// Spec 091: one tap on About's version. The count and the rule are the
+    /// core's (`prefs::version_tapped`): in a developer build seven quick taps
+    /// reveal the debug-mode switch — stored off — once, with a notice; in a
+    /// release build nothing ever does.
+    fn version_tapped(&mut self, cx: &mut Context<Self>) {
+        let (taps, revealed) = vela_core::prefs::version_tapped(
+            self.version_taps,
+            crate::executor::now_ms(),
+            crate::executor::preferences::debug_mode(),
+            crate::executor::preferences::DEVELOPER_BUILD,
+        );
+        self.version_taps = taps;
+        if !revealed {
+            return;
+        }
+        crate::executor::preferences::set_debug_mode(false);
+        self.follow_debug_mode(cx);
+        self.debug_notice = true;
+        self.notice_press += 1;
+        let press = self.notice_press;
+        cx.notify();
+        cx.spawn(async move |page, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(2))
+                .await;
+            let _ = page.update(cx, |this, cx| {
+                if this.notice_press == press {
+                    this.debug_notice = false;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Spec 091: the switch in About.
+    fn toggle_debug_mode(&mut self, cx: &mut Context<Self>) {
+        let on = !crate::executor::preferences::debug_mode().is_on();
+        crate::executor::preferences::set_debug_mode(on);
+        self.follow_debug_mode(cx);
+        cx.notify();
+    }
+
+    /// Settings' debug mode, to the browser — its machine and its webview —
+    /// whenever the preference changes (spec 091).
+    fn follow_debug_mode(&mut self, cx: &mut Context<Self>) {
+        let host = self.browser_host(cx);
+        host.update(cx, BrowserHost::follow_debug_mode);
+    }
+
+    /// Spec 091: "Debug mode is now available", centred 32 above the bottom
+    /// for two seconds after the seventh tap — the contacts toast's pill.
+    fn debug_notice_toast(&self, theme: &Theme) -> Option<Div> {
+        if !self.debug_notice || self.section != Section::Settings {
+            return None;
+        }
+        Some(
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .bottom(px(32.))
+                .flex()
+                .justify_center()
+                .child(
+                    div()
+                        .px(px(16.))
+                        .py(px(8.))
+                        .rounded_full()
+                        .bg(theme.fg_base)
+                        .text_color(theme.bg_base)
+                        .text_size(theme::text_label())
+                        .shadow(crate::ui::dialog::shadow_lg())
+                        .child(self.settings.about_debug_mode_revealed.clone()),
+                ),
+        )
     }
 
     /// The browser machine, born the first time anything needs it, and the
@@ -18649,6 +18827,9 @@ impl Render for WalletPage {
             root = root.child(toast);
         }
         if let Some(toast) = self.contacts_toast(&theme) {
+            root = root.child(toast);
+        }
+        if let Some(toast) = self.debug_notice_toast(&theme) {
             root = root.child(toast);
         }
         // A report that ended while the person was elsewhere (078 round 3).

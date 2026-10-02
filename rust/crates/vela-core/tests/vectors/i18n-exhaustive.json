@@ -19,6 +19,9 @@
   "it"
  ],
  "keys": [
+  "about.debugMode",
+  "about.debugModeBody",
+  "about.debugModeRevealed",
   "about.footer",
   "about.linkGitHub",
   "about.linkSafeWallet",
@@ -1245,6 +1248,8 @@
   "receive.addressLabel",
   "receive.copied",
   "receive.copyRequestLink",
+  "receive.includeNetwork",
+  "receive.includeNetworkHint",
   "receive.listeningForDeposits",
   "receive.modeAddress",
   "receive.modeRequest",
@@ -1725,6 +1730,9 @@
  ],
  "values": {
   "en": [
+   "Debug mode",
+   "Lets http pages on your local network use the wallet. For development only.",
+   "Debug mode is now available",
    "Built with care. Your keys, your coins.",
    "GitHub",
    "Safe Wallet",
@@ -2951,6 +2959,8 @@
    "Your receive address",
    "Copied",
    "Copy payment link",
+   "Include network",
+   "Some wallets can't read this code. If theirs can't, switch it off.",
    "Listening for deposits",
    "Address",
    "Request",
@@ -3430,6 +3440,9 @@
    "View on Explorer"
   ],
   "zh": [
+   "调试模式",
+   "让局域网内的 http 网页使用钱包。仅供开发使用。",
+   "调试模式已可用",
    "用心构建。您的密钥，您的资产。",
    "GitHub",
    "Safe Wallet",
@@ -4656,6 +4669,8 @@
    "你的收款地址",
    "已复制",
    "复制收款链接",
+   "附带网络信息",
+   "部分钱包无法识别。对方扫不出来时请关掉。",
    "监听收款中",
    "地址",
    "收款请求",
@@ -5135,6 +5150,9 @@
    "在浏览器中查看"
   ],
   "zh-TW": [
+   "除錯模式",
+   "讓區域網路上的 http 網頁使用錢包。僅供開發使用。",
+   "現在可以使用除錯模式了",
    "用心打造。您的金鑰，您的幣。",
    "GitHub",
    "Safe Wallet",
@@ -6361,6 +6379,8 @@
    "你的收款地址",
    "已複製",
    "複製收款連結",
+   "附帶網路資訊",
+   "部分錢包無法辨識。對方掃不出來時請關閉。",
    "正在監聽入帳",
    "地址",
    "收款請求",
@@ -6840,6 +6860,9 @@
    "在區塊鏈瀏覽器查看"
   ],
   "zh-HK": [
+   "除錯模式",
+   "畀本地網絡上嘅 http 網頁用個錢包。只係開發用。",
+   "而家可以用除錯模式喇",
    "用心打造。你的密鑰，你的資產。",
    "GitHub",
    "Safe Wallet",
@@ -8066,6 +8089,8 @@
    "你的收款地址",
    "已複製",
    "複製付款連結",
+   "附上網絡資料",
+   "有啲錢包讀唔到。對方掃唔到就熄咗佢。",
    "正在等候存款",
    "地址",
    "收款",
@@ -8545,6 +8570,9 @@
    "在區塊鏈瀏覽器中查看"
   ],
   "ja": [
+   "デバッグモード",
+   "ローカルネットワーク上の http ページでウォレットを使えるようにします。開発専用です。",
+   "デバッグモードが使えるようになりました",
    "心を込めて作りました。鍵もコインも、あなたのもの。",
    "GitHub",
    "Safe Wallet",
@@ -9771,6 +9799,8 @@
    "受け取りアドレス",
    "コピーしました",
    "支払いリンクをコピー",
+   "ネットワーク情報を含める",
+   "読み取れないウォレットもあります。相手が読み取れないときはオフにしてください。",
    "入金を待機中",
    "アドレス",
    "リクエスト",
@@ -10250,6 +10280,9 @@
    "エクスプローラーで表示"
   ],
   "ko": [
+   "디버그 모드",
+   "로컬 네트워크의 http 페이지에서 지갑을 쓸 수 있게 합니다. 개발 전용입니다.",
+   "이제 디버그 모드를 쓸 수 있습니다",
    "정성껏 만들었습니다. 내 키, 내 코인.",
    "GitHub",
    "Safe Wallet",
@@ -11476,6 +11509,8 @@
    "받기 주소",
    "복사됨",
    "결제 링크 복사",
+   "네트워크 정보 포함",
+   "일부 지갑은 이 코드를 읽지 못해요. 상대가 스캔하지 못하면 꺼 주세요.",
    "입금 대기 중",
    "주소",
    "요청",
@@ -11955,6 +11990,9 @@
    "탐색기에서 보기"
   ],
   "vi": [
+   "Chế độ gỡ lỗi",
+   "Cho phép các trang http trong mạng cục bộ của bạn dùng ví. Chỉ dành cho phát triển.",
+   "Chế độ gỡ lỗi đã sẵn sàng",
    "Được tạo ra bằng tấm lòng. Khóa của bạn, coin của bạn.",
    "GitHub",
    "Safe Wallet",
@@ -13181,6 +13219,8 @@
    "Địa chỉ nhận của bạn",
    "Đã sao chép",
    "Sao chép liên kết thanh toán",
+   "Kèm thông tin mạng",
+   "Một số ví không đọc được mã này. Nếu bên kia không quét được, hãy tắt đi.",
    "Đang chờ khoản nạp",
    "Địa chỉ",
    "Yêu cầu",
@@ -13660,6 +13700,9 @@
    "Xem trên Explorer"
   ],
   "id": [
+   "Mode debug",
+   "Izinkan halaman http di jaringan lokal Anda memakai dompet. Hanya untuk pengembangan.",
+   "Mode debug kini tersedia",
    "Dibuat dengan sepenuh hati. Kunci Anda, koin Anda.",
    "GitHub",
    "Safe Wallet",
@@ -14886,6 +14929,8 @@
    "Alamat penerimaan Anda",
    "Disalin",
    "Salin tautan pembayaran",
+   "Sertakan jaringan",
+   "Beberapa dompet tidak bisa membaca kode ini. Jika pengirim tidak bisa memindai, matikan.",
    "Memantau deposit",
    "Alamat",
    "Minta",
@@ -15365,6 +15410,9 @@
    "Lihat di Explorer"
   ],
   "tr": [
+   "Hata ayıklama modu",
+   "Yerel ağınızdaki http sayfalarının cüzdanı kullanmasına izin verir. Yalnızca geliştirme için.",
+   "Hata ayıklama modu artık kullanılabilir",
    "Özenle yapıldı. Anahtarlarınız, paranız.",
    "GitHub",
    "Safe Wallet",
@@ -16591,6 +16639,8 @@
    "Alma adresiniz",
    "Kopyalandı",
    "Ödeme bağlantısını kopyala",
+   "Ağ bilgisini ekle",
+   "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın.",
    "Gelen transferler dinleniyor",
    "Adres",
    "İstek",
@@ -17070,6 +17120,9 @@
    "Blok Gezgininde Görüntüle"
   ],
   "es-MX": [
+   "Modo de depuración",
+   "Permite que las páginas http de tu red local usen la billetera. Solo para desarrollo.",
+   "El modo de depuración ya está disponible",
    "Hecho con cariño. Tus llaves, tus monedas.",
    "GitHub",
    "Safe Wallet",
@@ -18296,6 +18349,8 @@
    "Tu dirección para recibir",
    "Copiado",
    "Copiar enlace de pago",
+   "Incluir red",
+   "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo.",
    "Esperando depósitos",
    "Dirección",
    "Solicitud",
@@ -18775,6 +18830,9 @@
    "Ver en el explorador"
   ],
   "pt-BR": [
+   "Modo de depuração",
+   "Permite que páginas http da sua rede local usem a carteira. Só para desenvolvimento.",
+   "O modo de depuração já está disponível",
    "Feito com cuidado. Suas chaves, suas moedas.",
    "GitHub",
    "Safe Wallet",
@@ -20001,6 +20059,8 @@
    "Seu endereço de recebimento",
    "Copiado",
    "Copiar link de pagamento",
+   "Incluir rede",
+   "Algumas carteiras não leem este código. Se a outra pessoa não conseguir, desative.",
    "Aguardando depósitos",
    "Endereço",
    "Cobrança",
@@ -20480,6 +20540,9 @@
    "Ver no Explorer"
   ],
   "fr": [
+   "Mode débogage",
+   "Permet aux pages http de votre réseau local d’utiliser le portefeuille. Réservé au développement.",
+   "Le mode débogage est maintenant disponible",
    "Conçu avec soin. Vos clés, vos cryptos.",
    "GitHub",
    "Safe Wallet",
@@ -21706,6 +21769,8 @@
    "Votre adresse de réception",
    "Copié",
    "Copier le lien de paiement",
+   "Inclure le réseau",
+   "Certains portefeuilles ne lisent pas ce code. Si votre interlocuteur n'y arrive pas, désactivez-le.",
    "À l'écoute des dépôts",
    "Adresse",
    "Demande",
@@ -22185,6 +22250,9 @@
    "Voir sur l'explorateur"
   ],
   "de": [
+   "Debug-Modus",
+   "Lässt http-Seiten in deinem lokalen Netzwerk die Wallet nutzen. Nur für die Entwicklung.",
+   "Der Debug-Modus ist jetzt verfügbar",
    "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins.",
    "GitHub",
    "Safe Wallet",
@@ -23411,6 +23479,8 @@
    "Ihre Empfangsadresse",
    "Kopiert",
    "Zahlungslink kopieren",
+   "Netzwerk mitsenden",
+   "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus.",
    "Warten auf Eingänge",
    "Adresse",
    "Anfrage",
@@ -23890,6 +23960,9 @@
    "Im Explorer ansehen"
   ],
   "ru": [
+   "Режим отладки",
+   "Даёт http-страницам в вашей локальной сети доступ к кошельку. Только для разработки.",
+   "Режим отладки теперь доступен",
    "Сделано с заботой. Ваши ключи — ваши монеты.",
    "GitHub",
    "Safe Wallet",
@@ -25116,6 +25189,8 @@
    "Ваш адрес для получения",
    "Скопировано",
    "Скопировать ссылку для оплаты",
+   "Указать сеть",
+   "Некоторые кошельки не читают такой код. Если не сканируется — выключите.",
    "Ожидание поступлений",
    "Адрес",
    "Запрос",
@@ -25595,6 +25670,9 @@
    "Открыть в обозревателе"
   ],
   "it": [
+   "Modalità debug",
+   "Consente alle pagine http della tua rete locale di usare il wallet. Solo per lo sviluppo.",
+   "La modalità debug è ora disponibile",
    "Realizzato con cura. Le tue chiavi, le tue cripto.",
    "GitHub",
    "Safe Wallet",
@@ -26821,6 +26899,8 @@
    "Il tuo indirizzo di ricezione",
    "Copiato",
    "Copia link di pagamento",
+   "Includi la rete",
+   "Alcuni wallet non leggono questo codice. Se l'altra persona non ci riesce, disattivalo.",
    "In ascolto dei depositi",
    "Indirizzo",
    "Richiesta",

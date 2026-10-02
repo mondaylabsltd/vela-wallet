@@ -714,11 +714,19 @@ export function computeWebauthnSignerAddress(x: Uint8Array, y: Uint8Array): stri
 export function create2Address(deployer_hex: string, salt: Uint8Array, init_code_hash: Uint8Array): string;
 
 /**
- * The document-start script an in-app browser injects, for `host`
- * (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
- * the real bridge in a real browser.
+ * Whether a page at `origin` is offered the wallet (spec 091) — the rule
+ * the in-app browsers' gate follows, exported so the web suite can hold the
+ * injected script's host test to it.
  */
-export function dappProviderScript(host: string): string;
+export function dappOffersWallet(origin: string, debug_mode: boolean): boolean;
+
+/**
+ * The document-start script an in-app browser injects, for `host`
+ * (`"android"` / `"ios"` / `"desktop"`) and Settings' debug mode (spec 091)
+ * — exported so the web suite can run the real bridge in a real browser,
+ * and the debug script's host test against [`dapp_offers_wallet`].
+ */
+export function dappProviderScript(host: string, debug_mode: boolean): string;
 
 /**
  * How long to wait for the receipt when the submit answered `elapsed_ms`
@@ -1385,7 +1393,8 @@ export interface InitOutput {
     readonly createwalletcore_new: () => number;
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
-    readonly dappProviderScript: (a: number, b: number) => [number, number];
+    readonly dappOffersWallet: (a: number, b: number, c: number) => number;
+    readonly dappProviderScript: (a: number, b: number, c: number) => [number, number];
     readonly dappReceiptWaitMs: (a: number) => number;
     readonly dappRpcClassify: (a: number, b: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];

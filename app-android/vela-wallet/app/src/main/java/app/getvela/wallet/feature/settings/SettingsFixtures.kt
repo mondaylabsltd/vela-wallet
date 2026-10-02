@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.data.DebugMode
 import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.UnreachableNetwork
@@ -599,7 +600,7 @@ object SettingsFixtures {
         )
     }
 
-    private fun about(s: VelaStrings): AboutModel = AboutModel(
+    private fun about(s: VelaStrings, state: SettingsScreenState): AboutModel = AboutModel(
         title = s.t(I18nKeys.SettingsUi.ABOUT_TITLE),
         tagline = s.t(I18nKeys.SettingsUi.ABOUT_TAGLINE),
         version = s.t(
@@ -655,6 +656,13 @@ object SettingsFixtures {
             ),
         ),
         footer = s.t(I18nKeys.SettingsUi.ABOUT_FOOTER),
+        debugMode = DebugModeRowModel(
+            title = s.t(I18nKeys.SettingsUi.ABOUT_DEBUG_MODE),
+            body = s.t(I18nKeys.SettingsUi.ABOUT_DEBUG_MODE_BODY),
+            revealedNotice = s.t(I18nKeys.SettingsUi.ABOUT_DEBUG_MODE_REVEALED),
+            // ST14B: revealed and on — the switch in both of its looks is a tap apart.
+            mode = if (state == SettingsScreenState.ST14B) DebugMode.On else DebugMode.Hidden,
+        ),
     )
 
     // --- Overlays ------------------------------------------------------------
@@ -971,7 +979,7 @@ object SettingsFixtures {
         SettingsScreenState.ST13 -> Shape(SettingsPage.Storage, SettingsOverlay.None)
         SettingsScreenState.ST13B ->
             Shape(SettingsPage.Storage, SettingsOverlay.ClearCaches, backdrop = "storage")
-        SettingsScreenState.ST14 -> Shape(SettingsPage.About, SettingsOverlay.None)
+        SettingsScreenState.ST14, SettingsScreenState.ST14B -> Shape(SettingsPage.About, SettingsOverlay.None)
         SettingsScreenState.ST15 -> Shape(SettingsPage.Home, SettingsOverlay.Feedback)
         SettingsScreenState.ST16 -> Shape(SettingsPage.Home, SettingsOverlay.EraseDevice)
         SettingsScreenState.SR1 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
@@ -1056,7 +1064,7 @@ object SettingsFixtures {
             rpcProviders = rpcProviders(s),
             endpoints = endpoints(s),
             storage = storage(s),
-            about = about(s),
+            about = about(s, state),
             accountsSheet = accountsSheet(s),
             signOutSheet = signOutSheet(s, warned = state == SettingsScreenState.ST3B),
             languageSheet = languageSheet(s, "zh"),

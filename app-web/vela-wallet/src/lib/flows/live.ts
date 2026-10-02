@@ -25,6 +25,8 @@ import {
 } from '$lib/services/networks';
 import { chainLogoURL } from '$lib/services/tokens-model';
 import type { BalanceToken } from '$lib/core/generated/BalanceToken';
+import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
+import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
 import { balanceTokenMark, chainMark, tokenMarkFor } from './marks';
 import { chainColor, MASK } from '$lib/wallet/fixtures';
 import type {
@@ -116,6 +118,12 @@ export interface FlowsLiveInputs {
 	chainFilter?: number | null;
 	/** The held token a detail screen is about (the page's `selectedAssetId`). */
 	selectedToken?: BalanceToken;
+	/**
+	 * The `payment_request` core's view while a receive screen is up (spec
+	 * 090): what the code says and the "include network" switch. Absent, the
+	 * code is the bare address and no switch is drawn.
+	 */
+	pay?: PaymentRequestView;
 }
 
 /** The networks the receive list walks, in the order the page indexes them. */
@@ -218,6 +226,38 @@ function liveReceiveList(model: ReceiveListModel, inputs: FlowsLiveInputs): Rece
 }
 
 /**
+ * What a receive code is about: a held token's own code (R3) names that token
+ * and its chain; a network's code (R2) names the tapped row or the filter's
+ * chain. One answer for the code below and for the route that tells the
+ * `payment_request` core (spec 090) — two would be two chances to disagree.
+ */
+function receiveSubject(
+	inputs: Pick<FlowsLiveInputs, 'selectedToken' | 'receiveChainId'>,
+	tokenCode: boolean
+): { chainId: number; token: BalanceToken | undefined } {
+	const token = tokenCode ? inputs.selectedToken : undefined;
+	const chainId = token?.chain_id ?? inputs.receiveChainId ?? receiveNetworks()[0]?.chainId ?? 1;
+	return { chainId, token };
+}
+
+/** The core's `asset_picked` for the code on screen (spec 090). */
+export function receiveAssetPicked(
+	inputs: Pick<FlowsLiveInputs, 'selectedToken' | 'receiveChainId'>,
+	tokenCode: boolean
+): Extract<PaymentRequestEvent, { type: 'asset_picked' }> {
+	const { chainId, token } = receiveSubject(inputs, tokenCode);
+	return {
+		type: 'asset_picked',
+		chain_id: chainId,
+		token_address: token?.token_address ?? null,
+		// A network's code asks for that chain's own coin.
+		symbol: token?.symbol ?? nativeSymbol(chainId),
+		decimals: token?.decimals ?? 18,
+		network_name: chainName(chainId)
+	};
+}
+
+/**
  * The QR screen, about the network that was actually chosen (spec 028 Phase 9,
  * T482). Until this phase the tapped row's index fell off the flow stack and
  * every code said "Ethereum" with an ETH mark. R3 — the asset variant, told
@@ -227,8 +267,7 @@ function liveReceiveList(model: ReceiveListModel, inputs: FlowsLiveInputs): Rece
 function liveReceiveQr(model: ReceiveQrModel, inputs: FlowsLiveInputs): ReceiveQrModel {
 	const identity = inputs.identity;
 	if (identity === undefined) return model;
-	const token = model.contract === undefined ? undefined : inputs.selectedToken;
-	const chainId = token?.chain_id ?? inputs.receiveChainId ?? receiveNetworks()[0]?.chainId ?? 1;
+	const { chainId, token } = receiveSubject(inputs, model.contract !== undefined);
 	const network = chainName(chainId);
 	const fm = inputs.fm;
 	const title =
@@ -237,13 +276,33 @@ function liveReceiveQr(model: ReceiveQrModel, inputs: FlowsLiveInputs): ReceiveQ
 			: token === undefined
 				? fill(fm['receive.qrTitleNetwork'], { network })
 				: fill(fm['receive.qrTitleAsset'], { symbol: token.symbol, network });
+	// What the code says is the core's (spec 090): the bare address, or with
+	// "include network" on, `ethereum:<address>@<chain>`. Its answer is used
+	// only once it is about THIS screen — the asset the route told it is the
+	// one drawn here; until then (the core still loading, a pick in flight)
+	// the code is the bare address, which every wallet reads.
+	const pay = inputs.pay;
+	const current =
+		pay !== undefined &&
+		pay.qr_value !== '' &&
+		pay.asset.chain_id === chainId &&
+		pay.asset.token_address === (token?.token_address ?? null);
+	const value = current ? pay.qr_value : identity.address;
 	return {
 		...model,
 		title,
 		// The code is the ADDRESS, encoded (spec 028 T411). Until now this screen
 		// drew 021's placeholder pattern, which never encoded anything — a person
 		// showed it to a friend and no money arrived.
-		code: encodeQr(identity.address),
+		code: encodeQr(value),
+		network:
+			current && pay.network_switch && fm !== undefined
+				? {
+						label: fm['receive.includeNetwork'],
+						on: pay.include_network,
+						hint: pay.network_hint ? fm['receive.includeNetworkHint'] : undefined
+					}
+				: undefined,
 		contract:
 			model.contract === undefined || token === undefined
 				? model.contract
@@ -269,7 +328,8 @@ function liveReceiveQr(model: ReceiveQrModel, inputs: FlowsLiveInputs): ReceiveQ
 				? undefined
 				: {
 						headline: fm['receive.shareCardHeadline'],
-						code: encodeShareQr(identity.address),
+						// The picture encodes exactly what the screen does (spec 090).
+						code: encodeShareQr(value),
 						name: identity.name,
 						lines: addressLines(identity.address),
 						networkNote: fill(fm['receive.shareCardNetworkNote'], { network }),
