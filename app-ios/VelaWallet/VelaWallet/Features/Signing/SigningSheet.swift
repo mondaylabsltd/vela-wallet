@@ -45,6 +45,8 @@ struct SigningSheet: View {
     var onExplorer: () -> Void = {}
     /// Spec 079: the fee row's refresh — measure again.
     var onRefreshFee: (() -> Void)?
+    /// Spec 096 F8: the failed receipt's Try again.
+    var onRetry: (() -> Void)?
 
     @State private var techOverride: Bool?
 
@@ -80,9 +82,20 @@ struct SigningSheet: View {
             SendReceiptBody(model: receipt, onExplorer: onExplorer)
                 .padding(.top, Tokens.Space.s16)
             if let onClose {
-                VelaButton(title: receipt.cta, kind: receipt.ctaAccent ? .primary : .secondary,
-                           action: onClose)
-                    .accessibilityIdentifier("signing.receipt.cta")
+                // Spec 096 F8: a failure that sent nothing — Done answers the
+                // page, Try again (the primary) goes back to review.
+                if let retry = receipt.retry, let onRetry {
+                    HStack(spacing: Tokens.Space.s12) {
+                        VelaButton(title: receipt.cta, kind: .secondary, action: onClose)
+                            .accessibilityIdentifier("signing.receipt.cta")
+                        VelaButton(title: retry, kind: .primary, action: onRetry)
+                            .accessibilityIdentifier("signing.receipt.retry")
+                    }
+                } else {
+                    VelaButton(title: receipt.cta, kind: receipt.ctaAccent ? .primary : .secondary,
+                               action: onClose)
+                        .accessibilityIdentifier("signing.receipt.cta")
+                }
             }
         }
         .padding(.bottom, Tokens.Space.s16)

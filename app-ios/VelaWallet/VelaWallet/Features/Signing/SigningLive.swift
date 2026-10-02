@@ -490,13 +490,16 @@ enum SigningLive {
         // refusal says so and never "try again" (RJ3, `failure_refused`).
         if let error = sign.error, error.kind != .userRejected,
            sign.pendingOpHash != nil || error.kind == .submitFailed {
+            // Spec 096 F8: the core holds the page's answer until this closes;
+            // a failure that sent nothing may be tried again.
             return SendReceiptModel(
                 header: header, stage: .failed,
                 title: loc.t("componentsTx.receipt.statusFailed"),
                 captions: [
                     summary, sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"),
                 ].compactMap { $0 },
-                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: !sign.failureRetryable,
+                retry: sign.failureRetryable ? loc.t("send.txRetryBtn") : nil
             )
         }
         if let op = sign.pendingOpHash {

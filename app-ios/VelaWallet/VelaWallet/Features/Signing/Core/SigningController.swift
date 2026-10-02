@@ -602,6 +602,9 @@ final class SigningController {
 
     func reject() { dispatchSign(["type": "reject_tapped"]) }
     func dismiss() { dispatchSign(["type": "dismiss_tapped"]) }
+    /// Spec 096 F8: Try again on a failure that sent nothing — the core takes
+    /// the request back to review, still unanswered.
+    func retry() { dispatchSign(["type": "retry_tapped"]) }
 
     /// The sheet's ✕ — since spec 079 its only close (no swipe, owner ruling).
     ///

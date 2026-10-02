@@ -46,6 +46,42 @@ struct SignRequestReadingTests {
         #expect(SignExecutor.callsOf(method: "eth_sendTransaction", paramsJson: "not json") == nil)
     }
 
+    /// Spec 096 F1: the core's value table, through this shell's reading —
+    /// PancakeSwap's `0xaa87bee538000` is 0.003 BNB; `"0x"` is zero (this
+    /// shell refused it); decimal text, bare hex and a JSON number are
+    /// refused (this shell read a number as ZERO); a batch with one bad leg
+    /// is refused whole (this shell dropped the leg and sent the rest).
+    @Test func aCallValueIsTheCoresReading() {
+        let table: [(String, String?)] = [
+            (#""0xaa87bee538000""#, "3000000000000000"),
+            (#""0xAA87BEE538000""#, "3000000000000000"),
+            (#""0x""#, "0"),
+            (#""""#, "0"),
+            ("null", "0"),
+            (#""0""#, "0"),
+            ("0", "0"),
+            (#""0x\#(String(repeating: "f", count: 64))""#,
+             "115792089237316195423570985008687907853269984665640564039457584007913129639935"),
+            (#""0x1\#(String(repeating: "0", count: 64))""#, nil),
+            (#""1000""#, nil),
+            (#""aa87bee538000""#, nil),
+            ("1000", nil),
+            (#""0X1f""#, nil),
+        ]
+        for (value, wei) in table {
+            let calls = SignExecutor.callsOf(
+                method: "eth_sendTransaction",
+                paramsJson: #"[{"to":"0x13f4EA83D0bd40E75C8222255bc855a974568Dd4","value":\#(value),"data":"0x3593564c"}]"#
+            )
+            #expect(calls?.first?.value == wei, "\(value)")
+        }
+        let batch = SignExecutor.callsOf(
+            method: "wallet_sendCalls",
+            paramsJson: #"[{"calls":[{"to":"0xa","value":"0x1"},{"to":"0xb","value":"1"}]}]"#
+        )
+        #expect(batch == nil, "every leg or none")
+    }
+
     /// An odd-length hex value is still a number.
     ///
     /// A dApp writes `0x1`. A decoder that needs whole bytes and is handed one
