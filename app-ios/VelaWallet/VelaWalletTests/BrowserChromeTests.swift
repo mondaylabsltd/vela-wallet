@@ -255,21 +255,34 @@ struct BrowserChromeTests {
     /// loads. It is the page moving: the load it started ends there, or the
     /// Stop row, the watchdog and the pending page stay up for good and the
     /// bar stops following the page (082 review). Real WebKit, no network.
-    @Test func aSameDocumentArrivalEndsItsLoad() async throws {
+    ///
+    /// Every wait here ends on the engine's own state, never on the clock
+    /// (`Waits.swift`). It runs as the suite starts: its page waits for
+    /// WebKit's GPU, Networking and WebContent processes to launch, and every
+    /// step of the load is a turn of the one main actor the whole suite
+    /// shares. On the three-core runner the launches alone took
+    /// 5–30 s ("took 29.7 seconds to launch", CI on PR #351), and the 30 s
+    /// deadline this setup had for the commit failed main and three PRs in a
+    /// row. A wait for what never comes is the time limit's to report.
+    @Test(.timeLimit(.minutes(10)))
+    func aSameDocumentArrivalEndsItsLoad() async throws {
         let engine = BrowserEngine(id: "tab-\(UUID().uuidString)")
         defer { engine.tearDown() }
+        // The local page has no host that could fall silent, so while WebKit
+        // comes up the watchdog is told it is answering: on a starved main
+        // actor its 20 s budget can run out between WebKit's policy questions,
+        // and its `stopLoading` would end the setup's own load for good.
+        let webKitProgress = engine.reportedProgress
+        engine.reportedProgress = { 1 }
         engine.webView.loadHTMLString("<html><body>page</body></html>", baseURL: URL(string: "https://app.test/")!)
-        // Generous: with the whole suite running, WebKit's content process
-        // can take many seconds to come up. No network is involved.
-        let loaded = Date().addingTimeInterval(30)
-        while Date() < loaded, engine.committedURL == nil || engine.loading {
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        }
+        await Wait.until { engine.committedURL == "https://app.test/" && !engine.loading }
         try #require(engine.committedURL == "https://app.test/", "the local page never committed")
+        engine.reportedProgress = webKitProgress
 
+        // WebKit moves to the fragment and loads nothing: the engine ends the
+        // load it started. If it never did, the time limit says so.
         engine.load("https://app.test/#pool")
-        let moved = Date().addingTimeInterval(15)
-        while Date() < moved, engine.loading { try? await Task.sleep(nanoseconds: 20_000_000) }
+        await Wait.until { !engine.loading }
         #expect(!engine.loading, "a fragment is not a load that never ends")
         #expect(engine.pendingURL == nil)
         #expect(!engine.watchdogArmed)
