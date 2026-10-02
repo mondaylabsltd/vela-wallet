@@ -160,6 +160,12 @@ describe('fixture canon (zh mock verbatim)', () => {
 		]);
 		// The point of the screen: every row is the SAME address.
 		expect(new Set(m.base.model.rows.map((r) => r.addressDisplay)).size).toBe(1);
+		// 087 F13: each row's QR button SHOWS that network's code — it is not
+		// the scanner, whose title it used to borrow.
+		expect(m.base.model.rows.every((r) => r.qrLabel === '显示二维码')).toBe(true);
+		expect(m.base.model.rows.some((r) => r.qrLabel === zh['componentsUi.scanner.title'])).toBe(
+			false
+		);
 	});
 
 	it('r2 titles the network and r3 the asset, and only r3 has a contract', () => {

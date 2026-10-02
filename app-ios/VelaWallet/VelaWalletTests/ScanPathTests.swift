@@ -66,6 +66,42 @@ struct ScanPathTests {
         ]))
     }
 
+    /// Issue #332 (the phones' order): Home → Scan opens Send on the picker
+    /// with the scanner over it, and the code arrives afterwards. The address
+    /// it read is the recipient the picker now SAYS — it used to show no sign
+    /// of it, so a scan that worked read as one that had done nothing.
+    @Test func aCodeScannedOntoThePickerIsDrawnAsTheRecipient() throws {
+        let loc = Loc(overrideTag: "en", preferredLanguages: [])
+        let core = SendCore()
+        _ = try core.dispatch(eventJson: CoreJSON.string(["type": "open_scanner"]))
+        let resolved = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "scan_resolved", "scan": Eip681.scan(of: me),
+        ]))
+        let wire = try CoreJSON.decode(SendViewWire.self, from: try view(from: resolved))
+        #expect(!wire.showScanner)
+        #expect(wire.stage == .selectToken, "the asset is chosen next")
+        #expect(wire.recipient == me)
+
+        guard case .sendPick(let drawn) = WalletFlowFixtures.build(.sd1, loc: loc).base else {
+            Issue.record("SD1 is not the picker")
+            return
+        }
+        let live = SendLive.pick(wire, on: drawn, loc: loc)
+        let line = try #require(live.recipient, "the picker showed no sign of the scan")
+        #expect(line.label == loc.t("send.toLabel"))
+        #expect(line.value == AddressText.short(me))
+        #expect(line.mono)
+        if case .identicon(let seed)? = line.lead {
+            #expect(seed == me)
+        } else {
+            Issue.record("a real address earns its artwork")
+        }
+
+        // Nobody held, no line.
+        let empty = try CoreJSON.decode(SendViewWire.self, from: try CoreJSON.object(SendCore().view()))
+        #expect(SendLive.pick(empty, on: drawn, loc: loc).recipient == nil)
+    }
+
     /// The scanner's flag is the CORE's. A shell that pushed its own screen
     /// would show a viewfinder the machine does not know is open — and the
     /// close would then not close it.
@@ -157,6 +193,73 @@ struct ScanLockTests {
     /// gets the slot it always had.
     @Test func aQuietPickerSaysNothing() {
         #expect(SendLive.lockNotice(view([:]), loc: loc) == nil)
+    }
+}
+
+// MARK: - A code that names a network, and the token card (issues #312, #326)
+
+@MainActor
+struct ScanNetworkAndTokenCardTests {
+
+    private let loc = Loc(overrideTag: "en", preferredLanguages: [])
+
+    private func view(_ patch: [String: Any]) -> SendViewWire {
+        var object = try! CoreJSON.object(SendCore().view())
+        for (key, value) in patch { object[key] = value }
+        return try! CoreJSON.decode(SendViewWire.self, from: object)
+    }
+
+    private let bnb: [String: Any] = [
+        "network": "chain-56", "chain_id": 56, "symbol": "BNB", "balance": "1",
+        "decimals": 18, "token_address": NSNull(), "price_usd": 600.0,
+        "logo_urls": [], "spam": false,
+    ]
+
+    /// Issue #312: the picker says which network the scanned code named, in
+    /// the receive card's own words — and above an empty list, that is why.
+    @Test func thePickerSaysWhichNetworkTheCodeNamed() throws {
+        guard case .sendPick(let drawn) = WalletFlowFixtures.build(.sd1, loc: loc).base else {
+            Issue.record("SD1 is not the picker")
+            return
+        }
+        let named = view(["request_chain_id": 56, "tokens": [bnb]])
+        // No pill: a network sheet could choose nothing the list would follow.
+        #expect(SendLive.pick(named, on: drawn, loc: loc).header.pill == nil)
+        let notice = try #require(SendLive.pick(named, on: drawn, loc: loc).notice)
+        #expect(notice.text == loc.t("receive.shareCardNetworkNote", vars: ["network": "BNB Chain"]))
+
+        let nothing = view(["request_chain_id": 56, "tokens": []])
+        #expect(SendLive.pick(nothing, on: drawn, loc: loc).rows.isEmpty)
+        #expect(SendLive.pick(nothing, on: drawn, loc: loc).notice != nil)
+        #expect(SendLive.pick(nothing, on: drawn, loc: loc).empty == loc.t("send.noTokensWithBalance"))
+        // Not while the core is still looking.
+        #expect(SendLive.pick(view(["request_chain_id": 56, "tokens": [], "loading": true]), on: drawn, loc: loc).empty == nil)
+
+        #expect(SendLive.pick(view([:]), on: drawn, loc: loc).notice == nil, "no network named, nothing said")
+    }
+
+    /// Issue #326: the token card is the way to another asset wherever the
+    /// core says — and only there.
+    @Test func theTokenCardOffersAnotherAssetOnlyWhereTheCoreDoes() {
+        guard case .sendForm(let drawn) = WalletFlowFixtures.build(.sd2, loc: loc).base else {
+            Issue.record("SD2 is not the form")
+            return
+        }
+        let open = view(["stage": "enter_details", "selected_token": bnb, "can_change_token": true])
+        #expect(SendLive.form(open, fee: nil, display: .usd, on: drawn, loc: loc).token?.change
+            == loc.t("send.selectTokenTitle"))
+        let fixed = view(["stage": "enter_details", "selected_token": bnb, "can_change_token": false])
+        #expect(SendLive.form(fixed, fee: nil, display: .usd, on: drawn, loc: loc).token?.change == nil)
+    }
+
+    /// The event the card sends is one the core reads.
+    @Test func theCoreTakesTheTokenCardsEvent() throws {
+        let core = SendCore()
+        let answer = try core.dispatch(eventJson: CoreJSON.string(["type": "change_token"]))
+        let object = try CoreJSON.object(answer)["view"] as? [String: Any] ?? [:]
+        let wire = try CoreJSON.decode(SendViewWire.self, from: object)
+        #expect(wire.canChangeToken == false, "no form, nothing to change")
+        #expect(wire.requestChainId == nil)
     }
 }
 

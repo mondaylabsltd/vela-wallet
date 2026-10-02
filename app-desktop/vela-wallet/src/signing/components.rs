@@ -179,6 +179,21 @@ pub fn header_view(theme: &Theme, model: &HeaderModel) -> Div {
         )
 }
 
+/// The intent as the sheet's headline (issue #314): a request with no figure
+/// to lead with — the wallet's own — leads with what it does. The base ink
+/// unless its tone is a warning.
+pub fn headline(theme: &Theme, text: SharedString, tone: Tone) -> Div {
+    div()
+        .text_size(theme::text_panel_title())
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(if matches!(tone, Tone::Caution | Tone::Danger) {
+            tone_color(theme, tone)
+        } else {
+            theme.fg_base
+        })
+        .child(text)
+}
+
 /// One block, rendered.
 /// One block, with the allowance chips ARMED.
 ///

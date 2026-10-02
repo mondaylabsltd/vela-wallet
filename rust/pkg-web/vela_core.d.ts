@@ -850,6 +850,13 @@ export function identiconSvgCircular(seed: string): string;
 export function keccak256(data: Uint8Array): Uint8Array;
 
 /**
+ * A key-method row's words as JSON (`{title_key, line_key, line_name}`), or
+ * `null` for a wire name the core does not know (087 F01, F02). See
+ * `vela_core::app::method_words`.
+ */
+export function keyMethodWords(method: string, chooser: string, unlock: string): string | undefined;
+
+/**
  * How long a logo that did not load stays failed, ms — `undefined` for the
  * session (asking again will not help), a number for a miss that may heal
  * (RE10). The web's `<img onerror>` has no status: `markMissTtlMs("unknown")`.
@@ -1444,6 +1451,7 @@ export interface InitOutput {
     readonly identiconSvg: (a: number, b: number) => [number, number, number, number];
     readonly identiconSvgCircular: (a: number, b: number) => [number, number, number, number];
     readonly keccak256: (a: number, b: number) => [number, number];
+    readonly keyMethodWords: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly logincore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly logincore_new: () => number;
     readonly logincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];

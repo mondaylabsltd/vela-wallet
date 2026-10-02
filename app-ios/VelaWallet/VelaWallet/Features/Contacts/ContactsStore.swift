@@ -137,16 +137,26 @@ final class ContactsStore {
         ]))
     }
 
-    /// A picked file, as text. The core sniffs JSON from CSV, refuses a bad
-    /// file before ANY write, and applies existing-wins.
-    func importFile(content: String, filename: String?, intoGroup: String? = nil) {
-        core.dispatch(CoreJSON.string([
+    /// A picked file, as its BYTES. The core decodes them (issue 333), sniffs
+    /// JSON from CSV, refuses a bad file before ANY write, and applies
+    /// existing-wins.
+    func importFile(bytes: Data, filename: String?, intoGroup: String? = nil) {
+        core.dispatch(Self.importEvent(bytes: bytes, filename: filename, intoGroup: intoGroup, nowMs: Self.nowMs))
+    }
+
+    /// The `import_file` event: the bytes as the core's `Vec<u8>`, one number
+    /// each, never decoded here. `String(decoding:as: UTF8.self)` used to
+    /// decode them, and it turns bytes that are not UTF-8 into U+FFFD without
+    /// a word — a GBK CSV from Excel imported every Chinese name as
+    /// `jxjjx����`.
+    nonisolated static func importEvent(bytes: Data, filename: String?, intoGroup: String?, nowMs: Double) -> String {
+        CoreJSON.string([
             "type": "import_file",
-            "content": content,
+            "bytes": bytes.map { Int($0) },
             "filename": filename.map { $0 as Any } ?? NSNull(),
             "into_group": intoGroup.map { $0 as Any } ?? NSNull(),
-            "now_ms": Self.nowMs,
-        ]))
+            "now_ms": nowMs,
+        ])
     }
 
     /// The report (or the refusal) was read.

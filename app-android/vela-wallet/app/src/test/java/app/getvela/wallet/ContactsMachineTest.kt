@@ -25,6 +25,7 @@ import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.contacts.core.ContactExportScope
 import app.getvela.wallet.feature.contacts.core.ContactFileFormat
 import app.getvela.wallet.feature.contacts.core.ContactGroupInput
+import app.getvela.wallet.feature.contacts.core.ContactImportFailure
 import org.junit.Test
 
 /**
@@ -213,6 +214,8 @@ class ContactsMachineTest {
 
     private val alice = "0x1111111111111111111111111111111111111111"
     private val bob = "0x2222222222222222222222222222222222222222"
+    private val carol = "0x3333333333333333333333333333333333333333"
+    private val dave = "0x4444444444444444444444444444444444444444"
 
     @Test
     fun theStarFlipsAndPersists() {
@@ -247,7 +250,7 @@ class ContactsMachineTest {
         host.settle { it.export == null }
 
         // Existing wins: the same file back changes nothing and says so.
-        host.send(ContactEvent.ImportFile(content = exported.content, filename = exported.filename, into_group = null, now_ms = 1_725_000_003_000.0))
+        host.send(ContactEvent.ImportFile.of(exported.content.toByteArray(), filename = exported.filename, intoGroup = null, nowMs = 1_725_000_003_000.0))
         val reported = host.settle { it.last_import != null }
         assertEquals(0, reported.last_import!!.added)
         assertEquals(1, reported.last_import!!.skipped)
@@ -255,10 +258,47 @@ class ContactsMachineTest {
         host.send(ContactEvent.ImportAcknowledged)
         host.settle { it.last_import == null }
 
-        host.send(ContactEvent.ImportFile(content = "not json, not a table", filename = "x.txt", into_group = null, now_ms = 1_725_000_004_000.0))
+        host.send(ContactEvent.ImportFile.of("not json, not a table".toByteArray(), filename = "x.txt", intoGroup = null, nowMs = 1_725_000_004_000.0))
         assertTrue(host.settle { it.import_failure != null }.import_failure != null)
         host.send(ContactEvent.ImportAcknowledged)
         host.settle { it.import_failure == null }
+    }
+
+    /**
+     * Issue 333, on the real core: the picked file's BYTES cross the wire as
+     * 0–255 (a Kotlin `Byte` is signed, and every non-ASCII byte is ≥ 0x80),
+     * a GBK CSV from Excel is refused instead of importing `jxjjx����`, and
+     * the same names as UTF-16 (by its BOM) or UTF-8 land exactly.
+     */
+    @Test
+    fun aLegacyEncodedFileIsRefusedAndUnicodeNamesLandExactly() {
+        val host = host(FakeStore())
+        host.send(ContactEvent.AccountSwitched(null))
+        host.settle { it.loaded }
+
+        val gbk = "address,name\r\n$alice,jxjjx".toByteArray() +
+            byteArrayOf(0xB2.toByte(), 0xE2.toByte(), 0xCA.toByte(), 0xD4.toByte()) // 测试
+        host.send(ContactEvent.ImportFile.of(gbk, filename = "excel.csv", intoGroup = null, nowMs = 1_725_000_005_000.0))
+        val refused = host.settle { it.import_failure != null }
+        assertEquals(ContactImportFailure.UnsupportedEncoding, refused.import_failure)
+        assertTrue("nothing was written", refused.contacts.isEmpty())
+        host.send(ContactEvent.ImportAcknowledged)
+        host.settle { it.import_failure == null }
+
+        val names = listOf("jxjjx测试", "Иван Петров", "Zoë 🦊")
+        val csv = "address,name\r\n$alice,${names[0]}\r\n$bob,${names[1]}\r\n$carol,${names[2]}\r\n"
+        val utf16 = byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + csv.toByteArray(Charsets.UTF_16LE)
+        host.send(ContactEvent.ImportFile.of(utf16, filename = "unicode.csv", intoGroup = null, nowMs = 1_725_000_006_000.0))
+        val imported = host.settle { it.last_import != null }
+        assertEquals(3, imported.last_import!!.added)
+        assertEquals(names, listOf(alice, bob, carol).map { a -> imported.contacts.first { it.address == a }.name })
+        host.send(ContactEvent.ImportAcknowledged)
+        host.settle { it.last_import == null }
+
+        val utf8 = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + "address,name\n$dave,张小明\n".toByteArray()
+        host.send(ContactEvent.ImportFile.of(utf8, filename = "utf8.csv", intoGroup = null, nowMs = 1_725_000_007_000.0))
+        val more = host.settle { it.last_import != null }
+        assertEquals("张小明", more.contacts.first { it.address == dave }.name)
     }
 
     @Test

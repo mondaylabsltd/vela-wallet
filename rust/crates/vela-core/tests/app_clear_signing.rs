@@ -607,9 +607,9 @@ fn plain_send_amount_uses_the_locale_marks() {
     }
 }
 
-/// 082 RC7 — `wallet_sendCalls` has no special case: the shells read
-/// `calls[0]` into the same `ResolveTransaction`, so a first leg with no
-/// data is a plain send like any other.
+/// 082 RC7 — a call with no data is a plain send wherever it sits. Since 089
+/// the shells hand a batch over whole (`ResolveBatch`), and every call of it
+/// is read by this same rule; this pins the single-call reading they share.
 #[test]
 fn a_wallet_send_calls_whose_first_leg_has_no_data_is_a_plain_send() {
     let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000));
@@ -623,8 +623,7 @@ fn a_wallet_send_calls_whose_first_leg_has_no_data_is_a_plain_send() {
             { "to": USDC, "data": transfer, "value": "0x0" },
         ],
     }]);
-    // What every shell's first-call reader does (RC6): the fields as text,
-    // an absent one as `None`.
+    // The RC6 reading of one call: the fields as text, an absent one `None`.
     let first = &params[0]["calls"][0];
     let field = |name: &str| first.get(name).and_then(|v| v.as_str()).map(str::to_owned);
     let mut sut = Sut::new();
@@ -2959,4 +2958,402 @@ fn a_struct_in_a_best_effort_decode_is_summarised_not_object_object() {
     );
     let labels: Vec<&str> = result.fields.iter().map(|f| f.label.as_str()).collect();
     assert_eq!(labels, vec!["Record", "Records"]);
+}
+
+// ---------------------------------------------------------------------------
+// EIP-5792 batches — every call on the sheet (089 S1)
+// ---------------------------------------------------------------------------
+
+use vela_core::app::clear_signing::{ClearBatchCall, ClearBatchView};
+use vela_core::primitives::checksum_address;
+
+/// A `wallet_sendCalls` request's params, as the dApp sent them.
+fn batch_params(calls: serde_json::Value, chain_id: u32) -> String {
+    json!([{
+        "version": "2.0.0",
+        "chainId": format!("0x{chain_id:x}"),
+        "from": SPENDER,
+        "atomicRequired": true,
+        "calls": calls,
+    }])
+    .to_string()
+}
+
+fn resolve_batch(calls: serde_json::Value, chain_id: u32) -> Event {
+    Event::ResolveBatch {
+        params_json: batch_params(calls, chain_id),
+        chain_id,
+        locale: ClearLocale::default(),
+    }
+}
+
+/// The shell that knows nothing: no descriptor, no selector, every probe
+/// reverts, every timer fires. Whatever it asks, the core gets the least.
+fn answer_knowing_nothing(op: &Op) -> Res {
+    match op {
+        Op::Now => Res::Clock { now_ms: NOW },
+        Op::HttpGet { path } => Res::DescriptorFetched {
+            path: path.clone(),
+            json: None,
+        },
+        Op::RpcEthCall {
+            chain_id,
+            to,
+            probe,
+            ..
+        } => Res::RpcAnswer {
+            probe: *probe,
+            chain_id: *chain_id,
+            to: to.clone(),
+            result: None,
+            rpc_error: true,
+        },
+        Op::SelectorDbLookup { .. } => Res::SelectorCandidates { sigs: vec![] },
+        Op::Timer { token, .. } => Res::TimedOut { token: *token },
+    }
+}
+
+/// Answer everything outstanding until the core asks nothing more.
+fn drain(sut: &mut Sut) {
+    for _ in 0..500 {
+        let Some(op) = sut.outstanding().first().cloned() else {
+            return;
+        };
+        sut.resolve(answer_knowing_nothing(&op));
+    }
+    panic!("the request never finished reading");
+}
+
+fn eip55(address: &str) -> String {
+    checksum_address(address).expect("an address")
+}
+
+fn batch_of(view: &ClearSigningView) -> &ClearBatchView {
+    view.batch.as_ref().expect("the batch view")
+}
+
+fn plain(call: &ClearBatchCall) -> &ClearPlainSend {
+    call.plain_send.as_ref().expect("a plain send row")
+}
+
+/// THE defect: `[1 wei → A, 1 xDAI → B]` read "Send 0.000…1 xDAI to A" and
+/// signed both. Every call is its own row, the total is the sum, and nothing
+/// a shell reads as "the" request describes call 1 alone.
+#[test]
+fn a_two_call_batch_carries_both_calls_and_their_total() {
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(resolve_batch(
+        json!([
+            { "to": VITALIK, "value": "0x1" },
+            { "to": SPENDER, "value": "0xde0b6b3a7640000" },
+        ]),
+        100,
+    ));
+    assert!(ops.is_empty(), "two plain sends ask the shell nothing");
+
+    let view = sut.view();
+    assert_eq!(view.surface, ClearSurface::Batch);
+    assert!(!view.resolving);
+    assert!(view.resolved);
+    assert_eq!(view.result, None, "no single result stands for the batch");
+    assert_eq!(view.plain_send, None, "nor does call 1's plain send");
+    assert_eq!(view.confirm, ClearConfirm::Confirm, "no one call's verb");
+
+    let batch = batch_of(&view);
+    assert_eq!(batch.calls.len(), 2);
+    let (a, b) = (&batch.calls[0], &batch.calls[1]);
+    assert_eq!((a.index, b.index), (1, 2));
+    assert_eq!(a.surface, ClearSurface::PlainSend);
+    assert_eq!(plain(a).to, VITALIK_EIP55);
+    assert_eq!(plain(a).amount, "0.000000000000000001");
+    assert_eq!(b.surface, ClearSurface::PlainSend);
+    assert_eq!(plain(b).to, eip55(SPENDER));
+    assert_eq!(plain(b).amount, "1");
+    assert_eq!(b.value_wei.as_deref(), Some("1000000000000000000"));
+    assert_eq!(b.amount.as_deref(), Some("1"));
+    assert_eq!(
+        batch.total_value_wei.as_deref(),
+        Some("1000000000000000001")
+    );
+    assert_eq!(batch.total_amount.as_deref(), Some("1.000000000000000001"));
+    assert_eq!(batch.risk, ClearRisk::Normal);
+}
+
+/// Three calls — a decoded transfer, a call nobody can read, a plain send —
+/// each read by the ladder a lone transaction climbs, in order. The one that
+/// cannot be decoded is a row that says so, never a dropped one.
+#[test]
+fn a_three_call_batch_reads_decodable_and_undecodable_calls_alike() {
+    let mut sut = Sut::new();
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    let unknown = format!("0xdeadbeef{}", pad_u128(7));
+    let ops = sut.dispatch(resolve_batch(
+        json!([
+            { "to": USDC, "data": transfer, "value": "0x0" },
+            { "to": UNKNOWN_TOKEN, "data": unknown, "value": "0x2386f26fc10000" },
+            { "to": VITALIK, "data": "0x" },
+        ]),
+        1,
+    ));
+    assert_eq!(ops, vec![Op::Now], "call 1 starts the way a lone one does");
+    drain(&mut sut);
+
+    let view = sut.view();
+    assert_eq!(view.surface, ClearSurface::Batch);
+    let batch = batch_of(&view);
+    assert_eq!(batch.calls.len(), 3);
+
+    let send = &batch.calls[0];
+    assert_eq!(send.surface, ClearSurface::ClearSign);
+    let result = send.result.as_ref().expect("call 1 decoded");
+    assert_eq!(result.intent, "Send");
+    assert_eq!(
+        result.intent_term,
+        Some(ClearTerm::IntentSend),
+        "projected like a lone result"
+    );
+    assert_eq!(result.fields[0].value, "1,000 USDC");
+    assert_eq!(result.fields[1].address.as_deref(), Some(VITALIK));
+
+    let blind = &batch.calls[1];
+    assert_eq!(blind.surface, ClearSurface::BlindTransaction);
+    assert_eq!(blind.result, None);
+    assert_eq!(blind.to.as_deref(), Some(eip55(UNKNOWN_TOKEN).as_str()));
+    assert_eq!(blind.data_bytes, 36, "selector + one word");
+    assert_eq!(
+        blind.amount.as_deref(),
+        Some("0.01"),
+        "its value is still said"
+    );
+    assert_eq!(blind.risk, ClearRisk::Caution);
+
+    let zero = &batch.calls[2];
+    assert_eq!(zero.surface, ClearSurface::PlainSend);
+    assert!(plain(zero).no_value);
+
+    assert_eq!(batch.total_amount.as_deref(), Some("0.01"));
+    assert_eq!(
+        batch.risk,
+        ClearRisk::Caution,
+        "the worst call sets the tone"
+    );
+}
+
+/// While any call is still being read the sheet holds its loading view: a
+/// view that showed call 1 while call 2 resolved WAS the 089 defect, for as
+/// long as call 2 took.
+#[test]
+fn a_batch_never_shows_its_first_call_while_a_later_one_resolves() {
+    let mut sut = Sut::new();
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    sut.dispatch(resolve_batch(
+        json!([
+            { "to": VITALIK, "value": "0x1" },
+            { "to": USDC, "data": transfer },
+        ]),
+        1,
+    ));
+    // Call 1 concluded at once; call 2 is asking the clock.
+    assert_eq!(sut.outstanding(), vec![Op::Now]);
+    for _ in 0..2 {
+        let view = sut.view();
+        assert_eq!(view.surface, ClearSurface::Loading);
+        assert!(view.resolving);
+        assert_eq!(view.result, None);
+        assert_eq!(view.plain_send, None, "call 1's card is not the sheet");
+        assert_eq!(view.batch, None);
+        let op = sut.outstanding()[0].clone();
+        sut.resolve(answer_knowing_nothing(&op));
+    }
+    assert!(sut.outstanding().is_empty());
+    let view = sut.view();
+    assert_eq!(view.surface, ClearSurface::Batch);
+    assert_eq!(
+        batch_of(&view).calls[1]
+            .result
+            .as_ref()
+            .map(|r| r.intent.as_str()),
+        Some("Send")
+    );
+}
+
+/// A batch whose SECOND call is an unlimited approve: that call reads danger
+/// with its "Unlimited" flagged, and so does the batch — the headline is as
+/// dangerous as its worst call, wherever it sits.
+#[test]
+fn a_batch_whose_second_call_is_an_unlimited_approve_reads_danger() {
+    let mut sut = Sut::new();
+    let approve = format!("0x095ea7b3{}{}", pad(SPENDER), "f".repeat(64));
+    sut.dispatch(resolve_batch(
+        json!([
+            { "to": VITALIK, "value": "0x1" },
+            { "to": USDC, "data": approve, "value": "0x0" },
+        ]),
+        1,
+    ));
+    drain(&mut sut);
+    let view = sut.view();
+    let batch = batch_of(&view);
+    assert_eq!(batch.calls[0].risk, ClearRisk::Normal);
+    let call = &batch.calls[1];
+    let result = call.result.as_ref().expect("call 2 decoded");
+    assert_eq!(result.intent, "Approve");
+    assert_eq!(result.risk, ClearRisk::Danger);
+    assert!(result.fields[0].warning);
+    assert_eq!(result.fields[0].value_term, Some(ClearTerm::ValueUnlimited));
+    assert_eq!(call.risk, ClearRisk::Danger);
+    assert_eq!(batch.risk, ClearRisk::Danger);
+}
+
+/// A later call that sends a token to its own contract burns it: the call and
+/// the batch read danger, the same verdict a lone transfer gets.
+#[test]
+fn a_burn_in_a_later_call_is_the_batchs_danger() {
+    let mut sut = Sut::new();
+    let burn = format!("0xa9059cbb{}{}", pad(USDC), pad_u128(1_000_000));
+    sut.dispatch(resolve_batch(
+        json!([
+            { "to": VITALIK, "value": "0x1" },
+            { "to": USDC, "data": burn },
+        ]),
+        1,
+    ));
+    drain(&mut sut);
+    let view = sut.view();
+    let batch = batch_of(&view);
+    let call = &batch.calls[1];
+    assert!(call.result.as_ref().expect("decoded").to_own_token);
+    assert_eq!(call.risk, ClearRisk::Danger);
+    assert_eq!(batch.risk, ClearRisk::Danger);
+}
+
+/// A batch of ONE call is that call: the same view `ResolveTransaction`
+/// gives, so a one-call batch renders exactly as it did.
+#[test]
+fn a_one_call_batch_reads_exactly_as_the_lone_transaction() {
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    for (to, data, value) in [
+        (USDC, Some(transfer.as_str()), Some("0x0")),
+        (VITALIK, None, Some("0x38d7ea4c68000")),
+        (UNKNOWN_TOKEN, Some("0xdeadbeef"), None),
+    ] {
+        let mut call = json!({ "to": to });
+        if let Some(data) = data {
+            call["data"] = json!(data);
+        }
+        if let Some(value) = value {
+            call["value"] = json!(value);
+        }
+        let mut batch = Sut::new();
+        batch.dispatch(resolve_batch(json!([call]), 1));
+        drain(&mut batch);
+
+        let mut lone = Sut::new();
+        lone.dispatch(Event::ResolveTransaction {
+            to: Some(to.to_owned()),
+            data: data.map(str::to_owned),
+            value: value.map(str::to_owned),
+            chain_id: 1,
+            locale: ClearLocale::default(),
+        });
+        drain(&mut lone);
+
+        let view = batch.view();
+        assert_ne!(view.surface, ClearSurface::Batch, "{to}");
+        assert_eq!(view.batch, None, "{to}");
+        assert_eq!(view, lone.view(), "{to}");
+    }
+}
+
+/// A call that is not even an object, or whose value cannot be read exactly,
+/// is still a row: blind, with no figure — and the batch total, which would
+/// be a sum missing a term, is not stated at all.
+#[test]
+fn an_unreadable_call_is_a_blind_row_and_leaves_no_total() {
+    let mut sut = Sut::new();
+    sut.dispatch(resolve_batch(
+        json!([
+            { "to": VITALIK, "value": "0x1" },
+            "not a call",
+            { "to": VITALIK, "value": 1000 },
+        ]),
+        100,
+    ));
+    drain(&mut sut);
+    let view = sut.view();
+    let batch = batch_of(&view);
+    assert_eq!(batch.calls.len(), 3, "never omitted");
+    assert_eq!(batch.calls[1].surface, ClearSurface::BlindTransaction);
+    assert_eq!(batch.calls[1].to, None);
+    assert_eq!(batch.calls[2].surface, ClearSurface::BlindTransaction);
+    assert_eq!(
+        batch.calls[2].value_wei, None,
+        "a JSON number is not a hex value"
+    );
+    assert_eq!(batch.calls[2].amount, None);
+    assert_eq!(batch.total_value_wei, None);
+    assert_eq!(batch.total_amount, None);
+}
+
+/// Every later request replaces the batch, and a superseded batch's late
+/// answers never land on the request that replaced it.
+#[test]
+fn a_batch_is_replaced_by_every_later_request() {
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000_000));
+    let mut sut = Sut::new();
+    sut.dispatch(resolve_batch(
+        json!([{ "to": VITALIK, "value": "0x1" }, { "to": VITALIK, "value": "0x2" }]),
+        100,
+    ));
+    assert_eq!(sut.view().surface, ClearSurface::Batch);
+    sut.dispatch(plain_tx(Some(VITALIK), None, Some("0x3")));
+    let view = sut.view();
+    assert_eq!(view.surface, ClearSurface::PlainSend);
+    assert_eq!(view.batch, None);
+
+    // A batch still reading call 2 is superseded by a lone send; call 2's
+    // answers arrive late and change nothing.
+    let mut sut = Sut::new();
+    sut.dispatch(resolve_batch(
+        json!([{ "to": VITALIK, "value": "0x1" }, { "to": USDC, "data": transfer }]),
+        1,
+    ));
+    let stale = sut.outstanding();
+    assert_eq!(stale, vec![Op::Now]);
+    sut.dispatch(plain_tx(Some(VITALIK), None, Some("0x3")));
+    sut.resolve(Res::Clock { now_ms: NOW });
+    let view = sut.view();
+    assert_eq!(view.surface, ClearSurface::PlainSend);
+    assert_eq!(
+        view.plain_send.expect("the lone send").amount,
+        "0.000000000000000003"
+    );
+    assert_eq!(view.batch, None);
+
+    sut.dispatch(Event::Cleared);
+    assert_eq!(sut.view().surface, ClearSurface::None);
+}
+
+/// The batch view is additive on the wire: a view without it still parses.
+#[test]
+fn the_batch_view_is_serde_additive() {
+    let view: ClearSigningView = serde_json::from_value(json!({
+        "resolving": false,
+        "resolved": true,
+        "result": null,
+        "message": null,
+        "surface": "plain_send",
+        "confirm": { "type": "confirm" },
+        "blind_typed": null,
+        "danger_haptic": false,
+    }))
+    .expect("an older view parses");
+    assert_eq!(view.batch, None);
+    let event: Event = serde_json::from_value(json!({
+        "type": "resolve_batch",
+        "params_json": "[]",
+        "chain_id": 1,
+    }))
+    .expect("the batch event's locale defaults");
+    assert!(matches!(event, Event::ResolveBatch { chain_id: 1, .. }));
 }

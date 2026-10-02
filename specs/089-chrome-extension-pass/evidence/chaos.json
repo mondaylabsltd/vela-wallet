@@ -1,0 +1,90 @@
+[
+ {
+  "check": "baseline read",
+  "got": {
+   "ms": 637,
+   "value": {
+    "ok": true,
+    "result": "0x2e48a59"
+   }
+  }
+ },
+ {
+  "check": "latency 3.5s: read",
+  "got": {
+   "ms": 4140,
+   "value": {
+    "ok": true,
+    "result": "0x2e48a5a"
+   }
+  }
+ },
+ {
+  "check": "blackhole: first read",
+  "got": {
+   "ms": 24208,
+   "value": {
+    "ok": false,
+    "code": -32603,
+    "message": "Vela could not reach a node for chain Gnosis (100)"
+   }
+  }
+ },
+ {
+  "check": "blackhole: second read (endpoints cooling)",
+  "got": {
+   "ms": 5809,
+   "value": {
+    "ok": false,
+    "code": -32603,
+    "message": "Vela could not reach a node for chain Gnosis (100)"
+   }
+  }
+ },
+ {
+  "check": "blackhole: eth_chainId still instant",
+  "got": {
+   "ms": 3,
+   "value": {
+    "ok": true,
+    "result": "0x64"
+   }
+  }
+ },
+ {
+  "check": "blackhole: eth_accounts still instant",
+  "got": {
+   "ms": 4,
+   "value": {
+    "ok": true,
+    "result": [
+     "0xD400866e00B055B20752a826CD5C89b811de130b"
+    ]
+   }
+  }
+ },
+ {
+  "check": "drop: send sheet text",
+  "got": "L localhost:5186 Gnosis Send −0.000001 xDAI Recipient 0x4D4d4D…4d4d4D 0x4D4d4D4d4d4D4D4d4D4D4D4d4d4d4d4D4D4d4d4D Technical details Network fee Estimating... Speed Fast Signing account Parallel One Slide to confirm · Confirm send PARALLEL SPACE fixture passkey · test wallet"
+ },
+ {
+  "check": "back online: read",
+  "got": {
+   "ms": 670,
+   "value": {
+    "ok": true,
+    "result": "0x2e48a65"
+   }
+  }
+ },
+ {
+  "check": "back online: read again",
+  "got": {
+   "ms": 276,
+   "value": {
+    "ok": true,
+    "result": "0x2e48a65"
+   }
+  }
+ }
+]

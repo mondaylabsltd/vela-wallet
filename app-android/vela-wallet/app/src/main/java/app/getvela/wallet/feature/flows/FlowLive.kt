@@ -231,9 +231,10 @@ object FlowLive {
         )
         val counterparty = item.counterparty.orEmpty()
         // Spec 082 RJ16: the core names a tx hash only when it is one — an op
-        // hash is never an explorer link.
+        // hash is never an explorer link. 087 F05: and without one there is no
+        // hash row at all — the record's own id is not a hash, and copying it
+        // handed a tester `dapp-17905…-tx` as one.
         val txHash = item.tx_hash?.takeIf { it.isNotBlank() }
-        val hash = txHash ?: item.id
         val dapp = item.kind == FeedTxKind.DappTx
         // Spec 043 phase 4 (device-found): the notification's deep link opened
         // this sheet with the fixture's title, status, counterparty, network,
@@ -267,15 +268,17 @@ object FlowLive {
                 add(FactRowModel(label = strings.t(I18nKeys.Flows.REQUESTED_BY), value = site))
             }
             add(FactRowModel(label = strings.t(I18nKeys.Flows.DETAIL_DATE), value = detailDate(item.timestamp, strings)))
-            add(
-                FactRowModel(
-                    label = strings.t(I18nKeys.Flows.DETAIL_HASH),
-                    value = if (hash.length > 16) "${hash.take(10)}…${hash.takeLast(6)}" else hash,
-                    mono = true,
-                    copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
-                    copyValue = hash,
-                ),
-            )
+            txHash?.let { hash ->
+                add(
+                    FactRowModel(
+                        label = strings.t(I18nKeys.Flows.DETAIL_HASH),
+                        value = if (hash.length > 16) "${hash.take(10)}…${hash.takeLast(6)}" else hash,
+                        mono = true,
+                        copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
+                        copyValue = hash,
+                    ),
+                )
+            }
         }
         return fallback.copy(
             explorerUrl = txHash?.let { tx -> explorers[item.chain_id]?.let { "${it.trimEnd('/')}/tx/$tx" } },
@@ -292,6 +295,8 @@ object FlowLive {
                 FeedTxStatus.Pending -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_PENDING), StatusTone.Warning)
                 FeedTxStatus.Failed -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_FAILED_DETAIL), StatusTone.Error)
                 FeedTxStatus.Confirmed -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_CONFIRMED), StatusTone.Success)
+                // 087 F04: pending, and nothing will settle it — not failed.
+                FeedTxStatus.Unknown -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_UNKNOWN), StatusTone.Info)
             },
             // A dApp's call that moved no coin of ours has no amount (RG2).
             amount = if (amount.isBlank()) "" else "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim(),
@@ -309,8 +314,9 @@ object FlowLive {
             // The chain keeps the transaction; this is the wallet forgetting
             // it, which is why the sentence is "delete record" (spec 058).
             deleteLabel = strings.t(I18nKeys.Flows.DELETE_RECORD),
-            // Spec 082 RJ18: while it may still land, deleting it is quiet.
-            deleteQuiet = item.status == FeedTxStatus.Pending,
+            // Spec 082 RJ18: while it may still land, deleting it is quiet —
+            // and a record nothing settles (087 F04) may have been sent too.
+            deleteQuiet = item.status == FeedTxStatus.Pending || item.status == FeedTxStatus.Unknown,
         )
     }
 

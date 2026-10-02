@@ -243,3 +243,38 @@ describe('the signing fee row (spec 079 US2)', () => {
 		await view.screen.unmount();
 	});
 });
+
+// Issue 314: the wallet's own key backup read like a newspaper — its intent
+// was the small grey eyebrow a figure stands under, over a sheet with no
+// figure. The wallet's own request leads with its intent as the headline; a
+// site's sheet keeps the eyebrow its 33 drawn scenarios were built around.
+describe('the intent', () => {
+	const backup = (own: boolean) =>
+		model({
+			dapp: { name: 'Vela Wallet', host: '', letter: 'V', tint: 'var(--color-fg-muted)', own },
+			blocks: [
+				{ kind: 'intent', text: 'Back up public keys', tone: 'success' },
+				{ kind: 'rows', rows: [{ label: 'Public keys', value: '1' }] }
+			]
+		});
+	const intent = (sheet: HTMLElement) => sheet.querySelector<HTMLElement>('.intent')!;
+	const size = (el: HTMLElement) => parseFloat(getComputedStyle(el).fontSize);
+
+	it('leads the wallet’s own request as its headline, in the base ink', async () => {
+		const own = await drawn({ model: backup(true) });
+		const lead = intent(own.sheet);
+		expect(lead.classList.contains('lead')).toBe(true);
+		const headline = size(lead);
+		const probe = document.createElement('span');
+		probe.style.color = 'var(--color-fg-base)';
+		document.body.appendChild(probe);
+		expect(getComputedStyle(lead).color).toBe(getComputedStyle(probe).color);
+		probe.remove();
+		await own.screen.unmount();
+
+		const site = await drawn({ model: backup(false) });
+		expect(intent(site.sheet).classList.contains('lead')).toBe(false);
+		expect(size(intent(site.sheet))).toBeLessThan(headline);
+		await site.screen.unmount();
+	});
+});

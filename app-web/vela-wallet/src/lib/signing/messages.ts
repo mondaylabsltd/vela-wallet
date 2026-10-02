@@ -271,6 +271,8 @@ export interface SigningMessages {
 	byteSize: string;
 	safeInnerCall: string;
 	batchStep: string;
+	/** 089 S1: the native coin a whole batch moves (`send.splitTotalLabel`). */
+	labelTotal: string;
 	expiredValue: string;
 	sentToTokenContract: string;
 }

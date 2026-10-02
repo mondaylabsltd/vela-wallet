@@ -50,14 +50,7 @@ export async function executeBatchOperation(effect: BatchEffect): Promise<BatchS
 		case 'pick_file': {
 			const picked = await pickTable();
 			if (!picked) return { type: 'file_pick_cancelled' };
-			if (picked.text != null) {
-				return {
-					type: 'file_picked',
-					name: picked.name,
-					content: { type: 'text', text: picked.text }
-				};
-			}
-			if (picked.bytes) {
+			if (picked.excel) {
 				// Excel only: ~1MB of SheetJS stays off the startup path (lazy import
 				// inside `readWorkbookMatrix`), and the core parses the matrix.
 				return {
@@ -66,7 +59,13 @@ export async function executeBatchOperation(effect: BatchEffect): Promise<BatchS
 					content: { type: 'matrix', rows: toStringMatrix(await readWorkbookMatrix(picked.bytes)) }
 				};
 			}
-			return { type: 'file_pick_failed' };
+			// A text table's bytes, undecoded — the core decodes and parses
+			// them (087, issue 333's twin).
+			return {
+				type: 'file_picked',
+				name: picked.name,
+				content: { type: 'bytes', bytes: Array.from(picked.bytes) }
+			};
 		}
 		case 'save_template_file':
 			await saveTextFile(operation.name, operation.contents, operation.mime);

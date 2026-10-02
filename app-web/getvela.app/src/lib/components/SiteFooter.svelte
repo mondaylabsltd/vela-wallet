@@ -57,6 +57,7 @@
 			</div>
 			<div class="col">
 				<h3>{m.chrome.footer.columns.community}</h3>
+				<a href="/support" hreflang="en">{m.chrome.footer.links.support}</a>
 				<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
 					>GitHub</a
 				>
@@ -71,6 +72,7 @@
 				<h3>{m.chrome.footer.columns.legal}</h3>
 				<a href="/privacy" hreflang="en">{m.chrome.footer.links.privacy}</a>
 				<a href="/terms" hreflang="en">{m.chrome.footer.links.terms}</a>
+				<a href="/delete" hreflang="en">{m.chrome.footer.links.deleteData}</a>
 			</div>
 		</nav>
 	</div>

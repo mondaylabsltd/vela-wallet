@@ -59,10 +59,17 @@
 		color: var(--color-fg-base);
 	}
 
+	/*
+	  The whole address, always (spec 089): forty hex digits have no break
+	  opportunity, so at the side panel's 360 px the line ran past the sheet's
+	  padding and its LAST characters — the ones a person checks against
+	  address poisoning — were clipped. It wraps anywhere instead.
+	*/
 	.address {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
+		overflow-wrap: anywhere;
 	}
 
 	.badge {
