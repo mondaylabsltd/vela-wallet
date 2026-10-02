@@ -1180,6 +1180,7 @@ mod tests {
             record.summary = Some(vela_core::app::dapp_activity::summarize(
                 &record.method,
                 &params,
+                record.chain_id,
                 &record.dapp_url,
                 None,
             ));
@@ -3125,6 +3126,7 @@ mod tests {
             record.summary = Some(summarize(
                 &record.method,
                 &serde_json::from_str(&record.params_json).unwrap_or(Value::Null),
+                record.chain_id,
                 &record.dapp_url,
                 None,
             ));

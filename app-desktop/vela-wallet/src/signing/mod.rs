@@ -229,6 +229,9 @@ pub struct SigningStrings {
     /// (`specs/081-audit-product-gaps/pending-corpus/descriptor-provenance.json`);
     /// until then `t` echoes it, as it does any missing key.
     pub warn_descriptor_fetched: SharedString,
+    /// Spec 096 F5: the call signs an order whose amounts live off chain (a
+    /// CoW pre-signature) — the core's `terms_off_chain`.
+    pub warn_order_terms: SharedString,
     pub warn_sim_unavailable: SharedString,
     /// The two words the simulated balance block needs beyond its title: what
     /// an unverified inflow is called (never its amount — a site can emit any
@@ -475,6 +478,7 @@ impl SigningStrings {
             warn_verified_abi: s("verifiedAbiWarning"),
             warn_partial: s("partialWarning"),
             warn_descriptor_fetched: s("descriptorFetchedWarning"),
+            warn_order_terms: s("warnOrderTerms"),
             warn_sim_unavailable: s("simUnavailableWarning"),
             balance_unverified_token: s("balanceUnverifiedToken"),
             sim_no_change: s("simResultNoChange"),

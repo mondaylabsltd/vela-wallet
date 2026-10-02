@@ -2455,6 +2455,7 @@ mod tests {
             partial: false,
             best_effort: true,
             to_own_token: false,
+            terms_off_chain: false,
         });
         clear.record_intent = None;
         assert_eq!(approve_opts(&fee, &clear, &guard).intent, None);
