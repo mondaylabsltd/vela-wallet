@@ -24,9 +24,9 @@ the switch, store the choice, and give the new script to their WebViews.
 
 | Principle | How this plan keeps it |
 |---|---|
-| Rules decided once in vela-core | `offers_wallet` (who), `private_host_js` (the same host rule, written as JS by the core), `prefs::DebugMode` (stored spelling), `prefs::version_tapped` (7 taps, 1 s gap). |
+| Rules decided once in vela-core | `offers_wallet` (who), `private_host_js` (the same host rule, written as JS by the core), `prefs::debug_mode` (stored spelling, developer builds only), `prefs::version_tapped` (7 taps, 1 s gap, developer builds only). |
 | Shells only draw | Shells feed taps, store what the core says, show the row, and swap the script. None of them tests a host. |
-| Parity | iOS, Android and desktop get the entry, the switch and the wiring. The web wallet has no in-app browser. The extension never closed LAN http (D7). Linux desktop has no browser, so no entry (D6). |
+| Parity | iOS, Android and desktop get the entry, the switch and the wiring, in developer builds (D8). The web wallet has no in-app browser. The extension never closed LAN http (D7). Linux desktop has no browser, so no entry (D6). |
 | Stable in an unstable environment | Turning debug mode off withdraws the wallet at once: open requests are answered 4900, and nothing is left hanging on a sheet. |
 | Minimal, no duplication | The private-host rule moves from code to tables in place. The off script is byte-identical to spec 088. There is one toggle-row component per shell. |
 
@@ -65,11 +65,28 @@ the switch, store the choice, and give the new script to their WebViews.
   gate. Spec 088 changed only `provider_script`, which the extension does not use (it bundles
   `provider/inpage.js` directly). So the extension already offers the wallet to LAN http pages. As before, a
   signature from public http is refused by `popup_origin_refusal` (spec 089). No switch is needed there.
-- **D8 Android cleartext (finding).** The release build has no network security config and targets SDK 36, so
-  the WebView refuses all cleartext http (`ERR_CLEARTEXT_NOT_PERMITTED`; 088 audit A11/A16, 083 hand-off
-  A-9). The debug build allows only `127.0.0.1` and `localhost`. On Android a LAN http page therefore does not
-  load at all, debug mode or not. A network security config cannot express IP ranges, so enabling it means
-  `base-config cleartextTrafficPermitted="true"`. That is an owner decision, left open (results.md).
+- **D8 Developer builds only (second ruling, 2026-10-02).** The rule takes the shell's build fact:
+  - `prefs::debug_mode(entries, developer_build)` is the only reading of `vela.debugMode`, and it is hidden
+    outside a developer build. The shared `prefs::read` / `PrefsRecord` no longer carries the mode, so no
+    shell can read it ungated.
+  - `version_tapped(…, developer_build)` counts nothing outside one.
+  - The shells pass the fact and nothing else: Android `BuildConfig.DEBUG`, iOS `#if DEBUG`, desktop
+    `cfg!(feature = "dev-fixtures")`. These are the builds that carry the parallel space (the desktop flag is
+    the compile-time half of `parallel_space::active`).
+  - A store build's mode is therefore always off. Its browser gets `DebugModeChanged { on: false }` and the
+    spec-088 script, byte for byte.
+- **D9 Android cleartext.** The release build has no network security config and targets SDK 36, so it refuses
+  all cleartext (`ERR_CLEARTEXT_NOT_PERMITTED`; 088 audit A11/A16, 083 hand-off A-9).
+  - Release stays exactly that way.
+  - A network security config cannot express IP ranges, so only the debug source set's config gets
+    `<base-config cleartextTrafficPermitted="true"/>`, and it keeps its loopback entries for the cable-served
+    test dApp.
+  - `CleartextPolicyTest` pins both: nothing in `main` or `release` grants cleartext, targetSdk is ≥ 28, and
+    the debug config allows it.
+- **D10 iOS.** `Info.plist` already allows web-content loads and local networking
+  (`NSAllowsArbitraryLoadsInWebContent`, `NSAllowsLocalNetworking`, `NSLocalNetworkUsageDescription`, spec 088)
+  for every configuration, so a Debug build loads a LAN http page with no new key. This spec leaves
+  `Info.plist` byte-identical to `main`.
 
 ## Files
 
@@ -81,5 +98,5 @@ the switch, store the choice, and give the new script to their WebViews.
 - iOS: `Core/Preferences.swift`, `Features/Explore/Core/{ProviderBridge,BrowserEngine,BrowserController}.swift`,
   `Features/Settings/*`, `App/RootView.swift`, tests.
 - Android: `core/data/Preferences.kt`, `feature/browser/core/{ProviderBridge,BrowserController}.kt`,
-  `feature/settings/*`, tests.
+  `feature/settings/*`, `src/debug/res/xml/network_security_config.xml`, tests (incl. `CleartextPolicyTest`).
 - Web test: `app-web/vela-wallet/src/lib/dapp/core-table.test.ts`.

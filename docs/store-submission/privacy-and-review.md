@@ -231,7 +231,8 @@ Creating a wallet writes a **permanent, pseudonymous public record** to a regist
 | **Background refresh** for a pending transaction | After a send, checks whether it confirmed and shows a **local** notification. Not an analytics or advertising tracker; no push service. | iOS `UIBackgroundModes = fetch`, `BGTaskSchedulerPermittedIdentifiers = app.getvela.VelaWallet.tracker` (`Info.plist:113-120`), `Features/Send/TrackerStore.swift:242`; Android WorkManager `feature/wallet/core/TrackerWork.kt:35-60`, `POST_NOTIFICATIONS` `AndroidManifest.xml:43`. |
 | **Trusted Signer** (optional key method) | Opens Vela's signing page `sign.getvela.app` in the system browser view (SFSafariViewController / Custom Tab), which decodes the request itself before the passkey signs; the answer returns through `velawallet://sign-result`. | iOS `Features/Signing/TrustedSigner/TrustedSigner.swift:14-20`; Android `SignResultActivity` (`AndroidManifest.xml:185-198`). |
 | **Erase This Device** | Settings → deletes everything the app stored on the device (§1, Account deletion). | iOS `Features/Settings/SettingsScreen.swift:464`; Android `feature/settings/SettingsScreen.kt:780`. |
-| **Debug mode** (developer setting, hidden until revealed) | Settings → About: tapping the version 7 times reveals a "Debug mode" switch (off). With it on, the in-app browser also offers the wallet to `http` pages on the device's own local network (private IP ranges, `.local`) — for testing a dApp under development. Public `http` pages never get the wallet, on or off. | Rule: core `dapp_permissions::offers_wallet`; spec 091. iOS `Features/Settings/` (About); Android `feature/settings/SettingsScreen.kt` (About). |
+
+Not in store builds: Settings' debug mode (spec 091) exists only in developer builds (Android `debug`, iOS `Debug`, desktop `dev-fixtures`), so a store build has no hidden feature.
 
 ---
 

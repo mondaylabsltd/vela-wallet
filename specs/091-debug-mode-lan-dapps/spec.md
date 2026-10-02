@@ -7,11 +7,16 @@ and exact loopback are secure contexts). The owner: "consider supporting injecti
 chose a **hidden entry**. In Settings → About, tapping the version 7 times reveals a "debug mode"
 (zh 「调试模式」) switch, like Android's developer options. Ordinary users never see it.
 
+**Second ruling, same day:** "正式版应该都是禁止的吧，只有调试开发的时候能就行". Store builds forbid it
+entirely. Debug mode exists only in developer builds, the ones that carry the parallel space: the Android
+`debug` variant, the iOS `Debug` configuration, and the desktop's `dev-fixtures` builds. A store build reveals
+nothing on taps, draws no row, ignores any stored value, and offers the wallet exactly as spec 088 does.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — A developer reveals the switch (Priority: P1)
 
-A developer opens Settings → About and taps the version line 7 times in a quick run. A short notice says debug
+In a developer build, a developer opens Settings → About and taps the version line 7 times in a quick run. A short notice says debug
 mode is now available, and a "Debug mode" row with a switch appears in About. The row stays there across
 launches, so the switch can be turned off again. Nobody who has not done this sees it.
 
@@ -27,10 +32,13 @@ Relaunch the app, and the row is still there with the switch where it was left.
 4. **Given** the row is revealed, **When** the version is tapped again, **Then** nothing happens.
 5. **Given** the device is erased (Settings → Storage → erase), **When** About opens, **Then** the row is
    hidden again, and debug mode is off.
+6. **Given** a store (release) build, **When** the version is tapped any number of times, or `vela.debugMode`
+   is stored `on` (left by a developer build), **Then** nothing is revealed, no row is drawn, and debug mode
+   is off. The browser behaves exactly as in spec 088.
 
 ### User Story 2 — With debug mode on, a LAN http dApp gets the wallet (Priority: P1)
 
-With the switch on, the in-app dApp browser (iOS, Android, desktop) offers the wallet to `http` pages on the
+In a developer build with the switch on, the in-app dApp browser (iOS, Android, desktop) offers the wallet to `http` pages on the
 device's own network: RFC 1918 IPv4 (`10/8`, `172.16/12`, `192.168/16`), link-local (`169.254/16`), `.local`
 names, IPv6 unique-local (`fc00::/7`) and link-local (`fe80:`). Hosts are matched exactly, never by a name
 that only starts with digits.
@@ -81,10 +89,18 @@ that only starts with digits.
 - **FR-004** The setting is stored with the other preferences: `vela.debugMode`, `off` / `on`, absent = hidden
   (`prefs::DebugMode`). The 7-tap rule is the core's (`prefs::version_tapped`: 7 taps, each ≤ 1,000 ms after
   the one before).
+- **FR-004a** Developer builds only (second ruling). The core reads the setting and counts taps with the
+  shell's build fact: `prefs::debug_mode(entries, developer_build)` and `version_tapped(…, developer_build)`.
+  Outside a developer build, the mode is always hidden (off) and no tap reveals. Each shell passes only that
+  fact: Android `BuildConfig.DEBUG`, iOS `#if DEBUG`, desktop `cfg!(feature = "dev-fixtures")`. The last is
+  the same compile-time gate as `parallel_space::active`.
+- **FR-004b** Android cleartext: the release build stays as it is, with no network security config, so all
+  cleartext is refused. Only the debug source set's config allows cleartext (`base-config`), so a LAN http
+  page can load in a debug build. A source-set test pins both.
 - **FR-005** Every in-app browser follows FR-001 to FR-003. When the setting changes, each open tab installs the
   new script for its next document (iOS `WKUserScript`, Android `addDocumentStartJavaScript`). The desktop
   rebuilds its one webview.
-- **FR-006** The hidden entry and the switch are on iOS, Android and desktop. The switch's description is one
+- **FR-006** The hidden entry and the switch are on iOS, Android and desktop (developer builds). The switch's description is one
   short line: what it does, and that it is for development only. Copy is in the corpus, in all 15 locales.
 - **FR-007** Web and the Chrome extension: the web wallet has no in-app browser, and the extension never
   stopped offering the wallet to LAN http pages (088 did not touch it). So neither gets the switch. See
@@ -98,3 +114,5 @@ that only starts with digits.
 - **SC-002** The generated JS host test agrees with the Rust rule on every host in the table (web suite).
 - **SC-003** Each shell: tests for its wiring (script per mode, swap on change, stored setting, tap → reveal),
   and a screenshot of About with the switch revealed.
+- **SC-004** Both build kinds are tested in the core and in each shell: a store build never reveals, and
+  reads a stored `on` as off.

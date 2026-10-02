@@ -10,8 +10,8 @@ the wallet, US3 = the setting changes while a page is open.
 - [x] T002 [US2] `private_host_js()`: the same tables written as a JS host test (`dapp_permissions.rs`) — `dapp_rpc::tests::the_scripts_host_test_is_the_cores_tables`
 - [x] T003 [US2] `provider_script(host, debug_mode)`: off = spec 088 byte for byte, on = secure context or `http:` + the host test (`dapp_rpc.rs`) — `dapp_rpc::tests::script_is_one_classic_script_per_host`
 - [x] T004 [US2][US3] `Event::DebugModeChanged`; the gate asks `offers_wallet`; off retires documents no longer offered; tab view shows no connection where not offered (`dapp_browser.rs`) — `tests/app_dapp_browser.rs`: `debug_mode_offers_the_wallet_to_a_lan_page`, `debug_mode_never_offers_the_wallet_to_public_http`, `without_debug_mode_a_lan_page_is_not_answered`, `turning_debug_mode_off_withdraws_the_wallet_from_an_open_lan_page`, `turning_debug_mode_on_applies_from_the_next_document`
-- [x] T005 [US1] `prefs::DebugMode` (`vela.debugMode`: hidden/off/on) and `version_tapped` (7 taps, ≤ 1,000 ms gap) (`src/prefs.rs`) — `prefs::tests::{debug_mode_reads_hidden_until_revealed, seven_quick_taps_reveal_the_switch, a_slow_tap_starts_the_count_again, once_revealed_nothing_counts}`
-- [x] T006 [P] Bindings: UniFFI `dapp_provider_script(host, debug_mode)`, `dapp_offers_wallet`, `PrefsRecord.debug_mode`, `prefs_debug_mode_value`, `prefs_version_tapped`; wasm `dappProviderScript(host, debugMode)`, `dappOffersWallet`, `prefsRead().debugMode`
+- [x] T005 [US1] `prefs::DebugMode` (`vela.debugMode`: hidden/off/on), `debug_mode(entries, developer_build)` and `version_tapped(…, developer_build)` (7 taps, ≤ 1,000 ms gap; nothing outside a developer build) (`src/prefs.rs`) — `prefs::tests::{debug_mode_reads_hidden_until_revealed, a_store_build_has_no_debug_mode_whatever_is_stored, seven_quick_taps_reveal_the_switch, a_store_build_never_reveals_the_switch, a_slow_tap_starts_the_count_again, once_revealed_nothing_counts}`
+- [x] T006 [P] Bindings: UniFFI `dapp_provider_script(host, debug_mode)`, `dapp_offers_wallet`, `prefs_debug_mode(entries, developer_build)`, `prefs_debug_mode_value`, `prefs_version_tapped(…, developer_build)`; wasm `dappProviderScript(host, debugMode)`, `dappOffersWallet` (the mode is not in `PrefsRecord` / `prefsRead`, so nothing reads it ungated)
 - [x] T007 [US1] Corpus `about.{debugMode,debugModeBody,debugModeRevealed}` × 15 locales; `gen-i18n` count 1789; SC-005 budget 139,800 — gen/lint/verify i18n, `dump:vectors`, `i18n_residency`
 - [x] T008 [P] Regenerated: `rust/pkg-web`, `assets/wasm`, TS mirrors (`DbrEvent.ts`), Swift bindings — `build-web --check`, `gen-onboarding-types --check`
 - [x] T009 [US2] Web: the generated script runs in a VM against `dappOffersWallet` on ~50 origins, both modes (`app-web/vela-wallet/src/lib/dapp/core-table.test.ts`)
@@ -37,7 +37,15 @@ the wallet, US3 = the setting changes while a page is open.
 - [x] T020 [US1] About: hidden entry, `VelaSwitchRow`, the page's notice bar (now draws a notice with no action); gallery ST14B (`feature/settings/*`)
 - [x] T021 Tests — `BrowserMachineTest` (scripts per mode; two fake WebViews against the real core), `PreferencesTest`, `SettingsFixturesTest` (ST14B), `SettingsLiveTest`; full suite 917 passed
 
-## Phase 5 — Docs
+## Phase 5 — Developer builds only (second ruling, 2026-10-02)
+
+- [x] T024 [US1] Core: the build fact gates the reading and the taps (T005, T006); `PrefsRecord.debug_mode` removed
+- [x] T025 [P] Desktop: `preferences::DEVELOPER_BUILD = cfg!(feature = "dev-fixtures")` — `cargo test` 883 and `cargo test --features dev-fixtures` 887, the debug-mode tests asserting each build's answer
+- [x] T026 [P] iOS: `DebugMode.developerBuild` (`#if DEBUG`), injected into `Preferences` and `VersionTapCounter` — `DebugModeTests.aReleaseBuildHasNoDebugModeWhateverIsStored`; `Info.plist` unchanged from `main`; Debug app host loads a LAN http page with the provider (temporary probe test, see results)
+- [x] T027 [P] Android: `Preferences(developerBuild = BuildConfig.DEBUG)`, `VersionTapCounter(developerBuild = …)` — `PreferencesTest` "a release build has no debug mode…"; debug-only cleartext (`src/debug/res/xml/network_security_config.xml`) — `CleartextPolicyTest` (release grants none, debug allows)
+- [x] T028 Store doc §3b: the row replaced by one line — debug mode exists only in developer builds
+
+## Phase 6 — Docs
 
 - [x] T022 `specs/088-store-readiness/results.md`: owner ruling 2026-10-02 → spec 091
 - [x] T023 `docs/dapp-browser/ARCHITECTURE.md` (who is offered the wallet); `docs/store-submission/privacy-and-review.md` §3b (the hidden debug mode, Apple 2.3.1(a)); iOS `Info.plist` comment

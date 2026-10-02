@@ -140,10 +140,11 @@ filtering. The rule also reaches the desktop and web in-app browsers through the
 loopback for dev". A loopback test dApp still signs (`a_loopback_test_dapp_may_sign`). A
 real phone testing a dApp served from the Mac needs https or `adb reverse`.
 
-**Owner ruling 2026-10-02:** LAN http dApps get the wallet only in the hidden debug mode →
-[spec 091](../091-debug-mode-lan-dapps/spec.md). Seven taps on the version in Settings → About reveal
-the switch. With it on, the core's `offers_wallet(origin, debug_mode)` adds http on the device's own
-network. Off, the default, this section holds unchanged.
+**Owner rulings 2026-10-02:** LAN http dApps get the wallet only in the hidden debug mode →
+[spec 091](../091-debug-mode-lan-dapps/spec.md), and only in developer builds ("正式版应该都是禁止的吧，
+只有调试开发的时候能就行"). In a developer build, seven taps on the version in Settings → About reveal
+the switch, and with it on the core's `offers_wallet(origin, debug_mode)` adds http on the device's own
+network. A store build has no such mode, so this section holds there unchanged, byte for byte.
 
 ### Shells
 
