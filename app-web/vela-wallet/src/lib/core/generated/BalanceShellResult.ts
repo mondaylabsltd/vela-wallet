@@ -8,4 +8,12 @@ import type { BalanceToken } from "./BalanceToken";
  * time-bearing variant carries `now_ms` (epoch milliseconds, f64) — the core
  * has no clock.
  */
-export type BalanceShellResult = { "type": "fetch_settled", address: string, pull: boolean, tokens: Array<BalanceToken>, failed_chain_ids: Array<number>, rate_limited_chain_ids: Array<number>, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, } | { "type": "account_assets_fetched", address: string, tokens: Array<BalanceToken> | null, } | { "type": "cached_total_loaded", address: string, usd: number | null, } | { "type": "cached_balances_loaded", balances: Array<BalanceCacheEntry>, } | { "type": "balance_cache_written" } | { "type": "retry_elapsed", timer_id: number, } | { "type": "privacy_written" };
+export type BalanceShellResult = { "type": "fetch_settled", address: string, pull: boolean, tokens: Array<BalanceToken>, failed_chain_ids: Array<number>, rate_limited_chain_ids: Array<number>, 
+/**
+ * Every chain this round asked (spec 092). Those not in
+ * `failed_chain_ids` answered — holding something or nothing — which
+ * is how a network that later goes quiet is "nothing when last read"
+ * rather than "not read yet". Empty from a shell that does not say:
+ * then only a chain with tokens counts as having answered.
+ */
+read_chain_ids: Array<number>, now_ms: number, } | { "type": "fetch_errored", address: string, pull: boolean, } | { "type": "account_assets_fetched", address: string, tokens: Array<BalanceToken> | null, } | { "type": "cached_total_loaded", address: string, usd: number | null, } | { "type": "cached_balances_loaded", balances: Array<BalanceCacheEntry>, } | { "type": "balance_cache_written" } | { "type": "retry_elapsed", timer_id: number, } | { "type": "privacy_written" };
