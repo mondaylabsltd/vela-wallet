@@ -12,7 +12,7 @@
  */
 
 import type { KeyMethod } from '../generated/KeyMethod';
-import { SELECTOR_UNRESPONSIVE } from './passkey';
+import { SELECTOR_UNRESPONSIVE, SITE_ACCESS_WITHHELD } from './passkey';
 import type { PromptKind } from '../generated/PromptKind';
 import type { StatusKey } from '../generated/StatusKey';
 import type { SubmitLabel } from '../generated/SubmitLabel';
@@ -233,7 +233,14 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 			// The platform's own words. Opaque by nature — it goes straight into
 			// the bug report, and inventing friendlier text here would lose the
 			// detail that makes the report worth filing.
-			return { title: t('onboarding.create.alertErrorTitle'), message: kind.detail };
+			return {
+				title: t('onboarding.create.alertErrorTitle'),
+				// Except the one refusal a person can undo in one click (spec 094 S2).
+				message:
+					kind.detail === SITE_ACCESS_WITHHELD
+						? t('onboarding.common.siteAccessBody')
+						: kind.detail
+			};
 		case 'recover_offer':
 			return {
 				title: t('onboarding.login.recoverOfferTitle'),
@@ -256,7 +263,9 @@ export function promptCopy(kind: PromptKind, t: Translate): PromptCopy {
 				message:
 					kind.detail === SELECTOR_UNRESPONSIVE
 						? t('onboarding.login.alertSelectorUnresponsive')
-						: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
+						: kind.detail === SITE_ACCESS_WITHHELD
+							? t('onboarding.common.siteAccessBody')
+							: t('onboarding.login.alertSignInFailedBody', { message: kind.detail })
 			};
 		default:
 			return unreachable(kind);

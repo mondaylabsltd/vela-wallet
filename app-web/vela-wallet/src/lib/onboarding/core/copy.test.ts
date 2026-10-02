@@ -49,3 +49,24 @@ describe('methodCopy', () => {
 		expect(keyMethodWords('carrier_pigeon', 'create', 'other')).toBeUndefined();
 	});
 });
+
+/**
+ * Spec 094 S2: a passkey ceremony the extension could not run because the
+ * person limited its site access is said in the corpus's plain words and
+ * points at the one-click grant — never Chrome's raw `SecurityError` text.
+ */
+describe('a ceremony Chrome refused for limited site access', () => {
+	it('reads as the plain sentence on both prompts', async () => {
+		const { promptCopy } = await import('./copy');
+		const { SITE_ACCESS_WITHHELD } = await import('./passkey');
+		const t = (key: string) => key;
+		expect(promptCopy({ type: 'create_failed', detail: SITE_ACCESS_WITHHELD }, t).message).toBe(
+			'onboarding.common.siteAccessBody'
+		);
+		expect(promptCopy({ type: 'sign_in_failed', detail: SITE_ACCESS_WITHHELD }, t).message).toBe(
+			'onboarding.common.siteAccessBody'
+		);
+		// Anything else still carries the platform's own words, for the report.
+		expect(promptCopy({ type: 'create_failed', detail: 'boom' }, t).message).toBe('boom');
+	});
+});

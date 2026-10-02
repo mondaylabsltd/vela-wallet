@@ -1060,6 +1060,11 @@ export function signRequestTtlMs(): number {
 	return wasm.signRequestTtlMs();
 }
 
+/** The bound on one whole fee quote — the core's `QUOTE_DEADLINE_MS` (spec 094 S9). */
+export function feeQuoteDeadlineMs(): number {
+	return wasm.feeQuoteDeadlineMs();
+}
+
 /** One endpoint's read budget — the core's `RPC_READ_TIMEOUT_MS` (RF2). */
 export function rpcReadTimeoutMs(): number {
 	return wasm.rpcReadTimeoutMs();

@@ -39,6 +39,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import type { RequestMessages } from '$lib/dapp/messages';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
+	import { focusOwnWindow, openInBrowserTab } from '$lib/extension/open-tab';
 	import {
 		answerRequest,
 		readRequest,
@@ -68,6 +69,8 @@
 	 * transaction is landing before it leaves.
 	 */
 	const HANDOFF_GRACE_MS = 6000;
+	/** How long an answered request window waits for the worker before closing itself. */
+	const WINDOW_CLOSE_BACKSTOP_MS = 5000;
 
 	let request = $state<ExtensionRequest | null>(null);
 	let stage = $state<RequestStage>({ kind: 'loading' });
@@ -155,7 +158,7 @@
 				// A window with no live request has nothing to show: it closes,
 				// rather than hard-coding a sentence the corpus does not have.
 				stage = { kind: 'loading' };
-				leave();
+				leave(true);
 				return;
 			}
 			request = incoming;
@@ -326,17 +329,24 @@
 	 * one at a time, so the page's single fee session is only ever asked about
 	 * one operation (026's one-owner rule).
 	 */
-	function leave(): void {
-		setTimeout(() => {
-			if (mode === 'window') {
-				window.close();
-				return;
-			}
-			// Never over a landing: a person watching their transaction is not
-			// interrupted by the next request. It waits, and this runs again when
-			// the receipt is dismissed.
-			if (!landing) void take();
-		}, 400);
+	function leave(nothingOwed = false): void {
+		setTimeout(
+			() => {
+				if (mode === 'window') {
+					window.close();
+					return;
+				}
+				// Never over a landing: a person watching their transaction is not
+				// interrupted by the next request. It waits, and this runs again when
+				// the receipt is dismissed.
+				if (!landing) void take();
+			},
+			// A window whose request was answered or withdrawn: the WORKER closes
+			// it, or hands it to the next request of the same site (spec 094 S7)
+			// — closing it from here first would end that request too. Only a
+			// backstop then; a window that found no request closes at once.
+			mode === 'window' && !nothingOwed ? WINDOW_CLOSE_BACKSTOP_MS : 400
+		);
 	}
 
 	async function onConnect(): Promise<void> {
@@ -378,6 +388,33 @@
 		if (rid) await rejectRequest(rid);
 		if (mode === 'panel') busy = false;
 		leave();
+	}
+
+	/**
+	 * Nobody is signed in to this wallet (spec 094 S5) — the session machine's
+	 * own route, the one that sends the PANEL to the welcome. The window cannot
+	 * go there: it IS the request, and leaving it would answer the page. So it
+	 * says so and opens the welcome in a tab; the session follows the other
+	 * document's sign-in (`storage`), and the card turns into the consent with a
+	 * live Connect. Before this, Connect asked the core to grant nobody, which
+	 * threw, and the button did nothing at all.
+	 */
+	const needsWallet = $derived(
+		mode === 'window' && !session.view.loading && session.view.allowed_route !== 'wallet'
+	);
+
+	let wasWaitingForWallet = false;
+	$effect(() => {
+		// Signed in elsewhere while this window waited: bring it forward.
+		if (needsWallet) wasWaitingForWallet = true;
+		else if (wasWaitingForWallet) {
+			wasWaitingForWallet = false;
+			void focusOwnWindow();
+		}
+	});
+
+	function openOnboarding(create: boolean): void {
+		void openInBrowserTab(create ? `${locale}/create.html` : `${locale}.html`);
 	}
 
 	/** The consent card's own words, shared by both shapes. */
@@ -435,7 +472,21 @@
 	{/if}
 {:else if showWindowChrome}
 	<main>
-		{#if stage.kind === 'consent' && request}
+		{#if stage.kind === 'consent' && request && needsWallet}
+			<h1>{cardTitle}</h1>
+			<p class="body">{m.noWallet}</p>
+			<div class="stack">
+				<Button variant="primary" shape="rounded" onclick={() => openOnboarding(true)}>
+					{m.createWallet}
+				</Button>
+				<Button variant="secondary" shape="rounded" onclick={() => openOnboarding(false)}>
+					{m.haveWallet}
+				</Button>
+				<Button variant="secondary" shape="rounded" disabled={busy} onclick={onCancel}>
+					{m.cancel}
+				</Button>
+			</div>
+		{:else if stage.kind === 'consent' && request}
 			<h1>{cardTitle}</h1>
 			<p class="body">{m.body}</p>
 			{@render actions()}
@@ -497,5 +548,11 @@
 	}
 	.actions > :global(*) {
 		flex: 1;
+	}
+	.stack {
+		margin-top: auto;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-md);
 	}
 </style>

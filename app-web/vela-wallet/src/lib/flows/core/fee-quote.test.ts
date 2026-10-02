@@ -24,6 +24,8 @@ vi.mock('$lib/services/safe-transaction', () => ({
 	accountIsDeployed: seams.deployed
 }));
 vi.mock('$lib/core/client', () => ({ loadCore: vi.fn(async () => {}) }));
+// The core's bound on a whole quote (`fee_policy::QUOTE_DEADLINE_MS`).
+vi.mock('$lib/core/kernels', () => ({ feeQuoteDeadlineMs: () => 15_000 }));
 vi.mock('./send-estimates', () => ({ resolveFee: () => null }));
 vi.mock('./fee-session', () => ({
 	createFeeSession: (options: { onView: (view: unknown) => void }) => {
@@ -88,6 +90,26 @@ describe('FeeQuote.requote — the refresh measures again (issue 212)', () => {
 		expect(seams.invalidate.mock.invocationCallOrder[0]).toBeLessThan(
 			seams.start.mock.invocationCallOrder[0]
 		);
+	});
+});
+
+describe('FeeQuote — the deployment read is bounded by the core’s quote deadline (spec 094 S9)', () => {
+	it('a read that hangs past it is a lost context, which the retry can ask again', async () => {
+		vi.useFakeTimers();
+		try {
+			seams.deployed.mockImplementationOnce(() => new Promise<boolean>(() => {}));
+			const quote = new FeeQuote();
+			const outcome = quote.requestQuote(REQUEST);
+			await vi.advanceTimersByTimeAsync(14_999);
+			expect(seams.start).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(1);
+			expect(await outcome).toEqual({ kind: 'context_unavailable' });
+			// The lost-context path the sheet draws as a failure, and retries.
+			expect(quote.contextLost).toBe(true);
+			expect(quote.pending).toBe(false);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });
 
