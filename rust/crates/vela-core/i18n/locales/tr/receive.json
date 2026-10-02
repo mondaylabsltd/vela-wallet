@@ -73,6 +73,8 @@
     "qrTitleNetwork": "{{network}} üzerindeki varlıkları bu adresle alın",
     "qrTitleAsset": "{{network}} üzerindeki {{symbol}} varlığını bu adresle alın",
     "shareCardNetworkNote": "Yalnızca {{network}} ödemeleri",
-    "tokenContract": "Token sözleşmesi"
+    "tokenContract": "Token sözleşmesi",
+    "includeNetwork": "Ağ bilgisini ekle",
+    "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın."
   }
 }

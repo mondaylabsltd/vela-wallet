@@ -9,6 +9,12 @@
 //!   shareable pay-link, QR value and copy payload. The copy payload in
 //!   request mode is the pay-link — a web page that bridges to any wallet —
 //!   never the raw `ethereum:` URI.
+//! - the **network switch** (spec 090): address mode's code is the bare
+//!   address by default, because every wallet can scan that. The person may
+//!   switch on "include network", and the code becomes
+//!   `ethereum:<address>@<chain>` for the network on screen — which many
+//!   wallets cannot read, so a calm hint rides with it. Copy stays the bare
+//!   address either way: people paste addresses.
 //! - the **`/pay` validator**: the untrusted landing-page query → a typed
 //!   `PayRequest` or the invalid surface. Strict on purpose (research.md D8):
 //!   today's page crashes on `amount=1e18` (BigInt SyntaxError mid-render)
@@ -162,6 +168,12 @@ pub enum Event {
     AmountChanged {
         text: String,
     },
+    /// The "include network" switch under an address-mode code (spec 090).
+    /// Session-scoped: every `Start` turns it back off, so a code somebody
+    /// shows tomorrow is the one every wallet can read.
+    IncludeNetworkChanged {
+        include: bool,
+    },
     /// The warning gate's confirm button.
     Acknowledge,
     /// `/pay` landing-page session: the raw query, entirely untrusted.
@@ -214,6 +226,7 @@ pub struct Model {
     mode: Mode,
     asset: Asset,
     amount: String,
+    include_network: bool,
     // /pay
     pay: PayParse,
     attempt: u64,
@@ -238,11 +251,22 @@ pub struct PaymentRequestView {
     pub eip681_uri: String,
     pub pay_link: String,
     /// The QR's content: the built URI in request mode (bare recipient until
-    /// one is built), the bare recipient in address mode.
+    /// one is built); in address mode the bare recipient, or
+    /// `ethereum:<recipient>@<chain>` while the network switch is on (spec
+    /// 090). The share image encodes this same value.
     pub qr_value: String,
-    /// What the copy button copies: pay-link in request mode, address
-    /// otherwise (FR-015).
+    /// What the copy button copies: pay-link in request mode, the bare
+    /// address otherwise (FR-015) — with or without the network switch.
     pub copy_payload: String,
+    /// Spec 090: whether the "include network" switch is offered — address
+    /// mode with a recipient. A request's code always names its network.
+    pub network_switch: bool,
+    /// The switch's position. Off by default: a bare address is the code
+    /// every wallet can scan.
+    pub include_network: bool,
+    /// The calm line under the switch ("some wallets can't read this
+    /// code"), shown exactly while the address code carries the network.
+    pub network_hint: bool,
     /// Drives `summaryAmount` vs `summaryOpen` — the words stay in the shell.
     pub has_amount: bool,
     // /pay
@@ -274,11 +298,16 @@ impl App for PaymentRequest {
                 model.account = account.clone();
                 model.recipient = recipient;
                 model.base_url = base_url;
+                model.include_network = false;
                 model.gate = Gate::Loading;
                 request(model, PaymentRequestOperation::ReadAck { account })
             }
             Event::ModeChanged { mode } => {
                 model.mode = mode;
+                render()
+            }
+            Event::IncludeNetworkChanged { include } => {
+                model.include_network = include;
                 render()
             }
             Event::AssetPicked {
@@ -374,8 +403,14 @@ impl App for PaymentRequest {
             )
         };
 
+        let network_switch = !is_request && !model.recipient.is_empty();
+        let network_hint = network_switch && model.include_network;
         let qr_value = if is_request && !eip681_uri.is_empty() {
             eip681_uri.clone()
+        } else if network_hint {
+            // No token, no amount: "pay me on this network" — the shape the
+            // scanner reads as the network alone (issue #312).
+            build_eip681(&model.recipient, model.asset.chain_id, None, 0, "")
         } else {
             model.recipient.clone()
         };
@@ -403,6 +438,9 @@ impl App for PaymentRequest {
             pay_link,
             qr_value,
             copy_payload,
+            network_switch,
+            include_network: model.include_network,
+            network_hint,
             has_amount: has_positive_amount(&model.amount),
             pay_valid,
             pay,

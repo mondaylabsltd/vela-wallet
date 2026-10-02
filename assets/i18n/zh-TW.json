@@ -487,7 +487,9 @@
   "qrTitleNetwork": "用這個位址接收 {{network}} 上的資產",
   "qrTitleAsset": "用這個位址接收 {{network}} 上的 {{symbol}}",
   "shareCardNetworkNote": "僅支援 {{network}} 網路付款",
-  "tokenContract": "代幣合約"
+  "tokenContract": "代幣合約",
+  "includeNetwork": "附帶網路資訊",
+  "includeNetworkHint": "部分錢包無法辨識。對方掃不出來時請關閉。"
  },
  "assets": {
   "sectionTitle": "資產",

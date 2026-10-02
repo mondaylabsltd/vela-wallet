@@ -10,6 +10,9 @@ use support::DomainDriver;
 use vela_core::app::payment_request::{
     Event, Mode, PaymentRequest, PaymentRequestOperation as Op, PaymentRequestShellResult as Res,
 };
+use vela_core::app::send::{
+    Event as SendEvent, Send, SendAccountRef, SendDisplayContext, SendOpenParams,
+};
 
 type Sut = DomainDriver<PaymentRequest>;
 
@@ -417,4 +420,163 @@ fn build_then_parse_round_trips() {
     assert!(built
         .eip681_uri
         .ends_with(&format!("uint256={}", parsed.amount_base.unwrap())));
+}
+
+// ---------------------------------------------------------------------------
+// The network switch (spec 090)
+// ---------------------------------------------------------------------------
+
+/// Gnosis' own coin — what a network row asks for.
+fn pick_gnosis(sut: &mut Sut) {
+    sut.dispatch(Event::AssetPicked {
+        chain_id: 100,
+        token_address: None,
+        symbol: "XDAI".to_owned(),
+        decimals: 18,
+        network_name: "Gnosis".to_owned(),
+    });
+}
+
+fn include_network(sut: &mut Sut, include: bool) {
+    sut.dispatch(Event::IncludeNetworkChanged { include });
+}
+
+/// Off by default: the code is the bare address every wallet can scan, and
+/// the switch is offered with nothing under it.
+#[test]
+fn network_switch_is_offered_off_and_the_code_stays_bare() {
+    let mut sut = acknowledged();
+    pick_gnosis(&mut sut);
+    let view = sut.view();
+    assert!(view.network_switch);
+    assert!(!view.include_network);
+    assert!(!view.network_hint);
+    assert_eq!(view.qr_value, ADDR);
+}
+
+/// On: the code names the network on screen — `ethereum:<address>@<chain>`,
+/// no token, no amount — and the hint rides under the switch. Copy stays the
+/// bare address: people paste addresses.
+#[test]
+fn including_the_network_encodes_the_chain_on_screen() {
+    let mut sut = acknowledged();
+    pick_gnosis(&mut sut);
+    include_network(&mut sut, true);
+    let view = sut.view();
+    assert_eq!(view.qr_value, format!("ethereum:{ADDR}@100"));
+    assert!(view.include_network);
+    assert!(view.network_hint);
+    assert_eq!(view.copy_payload, ADDR);
+}
+
+/// A token's own code names its NETWORK, not the token: a wallet that reads
+/// the URI opens a send on that chain and the payer picks the coin.
+#[test]
+fn a_token_code_with_the_network_names_only_the_chain() {
+    let mut sut = acknowledged();
+    pick_usdc(&mut sut);
+    include_network(&mut sut, true);
+    assert_eq!(sut.view().qr_value, format!("ethereum:{ADDR}@8453"));
+}
+
+/// The chain follows the pick while the switch stays where the person left
+/// it; off again is the bare address with no hint.
+#[test]
+fn the_switch_follows_the_network_and_turns_back_off() {
+    let mut sut = acknowledged();
+    pick_gnosis(&mut sut);
+    include_network(&mut sut, true);
+    pick_usdc(&mut sut);
+    assert_eq!(sut.view().qr_value, format!("ethereum:{ADDR}@8453"));
+    include_network(&mut sut, false);
+    let view = sut.view();
+    assert_eq!(view.qr_value, ADDR);
+    assert!(!view.network_hint);
+    assert_eq!(view.copy_payload, ADDR);
+}
+
+/// Session-scoped: opening the receive flow again starts from the code every
+/// wallet can read.
+#[test]
+fn a_new_session_starts_with_the_switch_off() {
+    let mut sut = acknowledged();
+    include_network(&mut sut, true);
+    sut.dispatch(Event::Start {
+        account: ADDR.to_owned(),
+        recipient: ADDR.to_owned(),
+        base_url: BASE_URL.to_owned(),
+    });
+    let view = sut.view();
+    assert!(!view.include_network);
+    assert_eq!(view.qr_value, ADDR);
+}
+
+/// A request's code always names its network, so request mode offers no
+/// switch and draws no hint — whatever address mode left behind.
+#[test]
+fn request_mode_has_no_network_switch() {
+    let mut sut = acknowledged();
+    include_network(&mut sut, true);
+    sut.dispatch(Event::ModeChanged {
+        mode: Mode::Request,
+    });
+    let view = sut.view();
+    assert!(!view.network_switch);
+    assert!(!view.network_hint);
+    assert_eq!(view.qr_value, format!("ethereum:{ADDR}@1"));
+}
+
+/// Before a session there is no address to put in any code.
+#[test]
+fn no_switch_before_a_recipient() {
+    let sut = Sut::new();
+    let view = sut.view();
+    assert!(!view.network_switch);
+    assert!(!view.network_hint);
+    assert!(view.qr_value.is_empty());
+}
+
+/// Round trip: the code the receive screen draws, read back by Vela's own
+/// scanner, opens Send to the same address on the same network (issue #312).
+///
+/// The tokenizing half is the grammar every shell's `parseEIP681` implements
+/// (`ethereum:<target>@<chain>`); each shell's own test runs its real parser on
+/// this same core value. What the core decides — that a chain with no token
+/// and no amount is "pay me on this network" — runs for real below.
+#[test]
+fn the_network_code_round_trips_through_the_scanner() {
+    let mut sut = acknowledged();
+    pick_gnosis(&mut sut);
+    include_network(&mut sut, true);
+    let code = sut.view().qr_value;
+
+    let (recipient, chain) = code
+        .strip_prefix("ethereum:")
+        .and_then(|rest| rest.split_once('@'))
+        .expect("an EIP-681 URI");
+    assert_eq!(recipient, ADDR);
+    assert!(chain.bytes().all(|b| b.is_ascii_digit()), "{chain}");
+
+    let mut send = DomainDriver::<Send>::new();
+    send.dispatch(SendEvent::Open {
+        account: Some(SendAccountRef {
+            id: "cred-1".to_owned(),
+            address: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            name: None,
+        }),
+        params: SendOpenParams {
+            prefilled_recipient: Some(recipient.to_owned()),
+            prefilled_chain_id: Some(chain.to_owned()),
+            locked: true,
+            ..SendOpenParams::default()
+        },
+        display: SendDisplayContext {
+            code: "USD".to_owned(),
+            rate: Some(1.0),
+            fiat_decimals: 2,
+        },
+    });
+    let view = send.view();
+    assert_eq!(view.recipient, ADDR);
+    assert_eq!(view.request_chain_id, Some(100));
 }
