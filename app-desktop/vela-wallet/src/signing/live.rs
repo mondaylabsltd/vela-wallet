@@ -1665,8 +1665,10 @@ fn row_of(field: &ClearSignField, s: &SigningStrings) -> crate::signing::fixture
         value,
         tone,
         // Addresses and raw values read as monospace; a decoded amount does
-        // not. The core says which is which by carrying an address.
-        field.address.is_some(),
+        // not. The core says which is which by carrying an address — and a
+        // contract it names ("PancakeSwap Permit2", 096 F5) is a name, set
+        // in the text face.
+        field.address.is_some() && field.value.starts_with("0x"),
     )
 }
 

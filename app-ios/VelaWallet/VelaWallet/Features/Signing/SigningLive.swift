@@ -1055,7 +1055,9 @@ enum SigningLive {
             label: field.label,
             value: field.value,
             valueTone: field.warning ? .danger : (field.unverified || field.expired ? .caution : .neutral),
-            mono: field.address != nil
+            // An address reads as monospace; a contract the core names
+            // ("PancakeSwap Permit2", 096 F5) is a name, in the text face.
+            mono: field.address != nil && field.value.hasPrefix("0x")
         )
     }
 

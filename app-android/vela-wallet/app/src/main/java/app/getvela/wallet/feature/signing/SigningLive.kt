@@ -947,7 +947,9 @@ object SigningLive {
             field.unverified || field.expired -> SigningTone.Caution
             else -> SigningTone.Neutral
         },
-        mono = field.address != null,
+        // An address reads as monospace; a contract the core names
+        // ("PancakeSwap Permit2", 096 F5) is a name, in the text face.
+        mono = field.address != null && field.value.startsWith("0x"),
     )
 
     private fun messageBlocks(message: ClearMessageView, s: VelaStrings, origin: String? = null): List<SigningBlock> = buildList {

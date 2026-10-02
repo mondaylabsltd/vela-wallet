@@ -145,7 +145,9 @@ function fieldRow(field: ClearSignField): KeyValueRow {
 		label: field.label,
 		value: field.value,
 		valueTone: field.warning ? 'danger' : field.unverified ? 'caution' : undefined,
-		mono: field.address !== null || field.token_address !== null
+		// An address reads as monospace; a contract the core names
+		// ("PancakeSwap Permit2", 096 F5) is a name, in the text face.
+		mono: (field.address !== null && field.value.startsWith('0x')) || field.token_address !== null
 	};
 }
 
