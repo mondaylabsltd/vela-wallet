@@ -21,11 +21,14 @@ const NATIVE_DECIMALS = 18;
 
 /** Chains whose multicall rejects, standing in for an RPC outage. */
 const down = new Set<number>();
+/** Chains whose wire never answers at all — a connection held open (spec 092). */
+const stalled = new Set<number>();
 /** Raw native balance each healthy chain reports. */
 const balances = new Map<number, bigint>();
 
 vi.mock('./rpc-pool', () => ({
 	poolRpcCall: async (_method: string, _params: unknown[], chainId: number) => {
+		if (stalled.has(chainId)) return new Promise(() => {});
 		if (down.has(chainId)) return { error: { message: 'every endpoint failed' } };
 		const raw = balances.get(chainId) ?? 0n;
 		return { result: '0x' + raw.toString(16).padStart(64, '0') };
@@ -75,6 +78,7 @@ vi.mock('./native-price', () => ({
 }));
 
 import { carryOverUnansweredChains, clearTokenCache, fetchTokens } from './wallet-api';
+import { balanceChainReadDeadlineMs } from '$lib/core/kernels';
 import { tokenChainId, type APIToken } from './tokens-model';
 import { networkId } from './networks';
 
@@ -94,8 +98,36 @@ function chainIdsOf(tokens: APIToken[]): number[] {
 beforeEach(() => {
 	clearTokenCache();
 	down.clear();
+	stalled.clear();
 	balances.clear();
 	vi.spyOn(console, 'log').mockImplementation(() => {});
+});
+
+describe('a chain whose connection is held open (spec 092)', () => {
+	it('is failed at the core’s deadline, and the chains that answered still land', async () => {
+		vi.useFakeTimers();
+		try {
+			balances.set(ARBITRUM, ONE);
+			stalled.add(GNOSIS);
+			let failed: number[] = [];
+			let settled = false;
+			const round = fetchTokens(ADDRESS, {
+				forceRefresh: true,
+				onFailedChains: (ids) => (failed = ids)
+			}).then((tokens) => {
+				settled = true;
+				return tokens;
+			});
+			await vi.advanceTimersByTimeAsync(balanceChainReadDeadlineMs() - 1);
+			expect(settled).toBe(false);
+			await vi.advanceTimersByTimeAsync(1);
+			const tokens = await round;
+			expect(failed).toContain(GNOSIS);
+			expect(chainIdsOf(tokens)).toEqual([ARBITRUM]);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
 });
 
 describe('holdings on a chain that did not answer', () => {

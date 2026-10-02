@@ -20,7 +20,7 @@ import { getAllNetworksSync, networkId, chainName, nativeSymbol } from './networ
 import { loadCustomTokens } from './records';
 import { poolRpcCall, getFailedRpcChains } from './rpc-pool';
 import { priceShouldNull } from './fault-injection';
-import { balanceReadPlan } from '$lib/core/kernels';
+import { balanceChainReadDeadlineMs, balanceReadPlan } from '$lib/core/kernels';
 import { fetchChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
 // The platform seam for the native-coin price rules (spec 017 wave C): web
 // resolves to `native-price.web.ts` and the CORE decides; iOS/Android resolve
@@ -371,7 +371,8 @@ async function fetchAllChainTokens(
 	// Cap each chain so one dead/slow RPC can't hold the whole fetch (a chain
 	// with no healthy endpoint can otherwise burn ~60s on sequential failover).
 	// A capped-out chain contributes nothing this round and is retried next time.
-	const PER_CHAIN_TIMEOUT_MS = 18_000;
+	// The cap is the core's (spec 092), the same on every shell.
+	const PER_CHAIN_TIMEOUT_MS = balanceChainReadDeadlineMs();
 	await Promise.allSettled(
 		networks.map((net) => {
 			const chainTokensP: Promise<ChainOutcome> = queryChainAssets(
