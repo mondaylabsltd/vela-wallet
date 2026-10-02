@@ -1,0 +1,17 @@
+[
+ {
+  "check": "worker tab visibility",
+  "got": {
+   "manifestPermissions": [
+    "storage",
+    "sidePanel"
+   ],
+   "ownTabsFound": [],
+   "allTabUrls": [
+    "(no url)",
+    "(no url)",
+    "http://localhost:5186/"
+   ]
+  }
+ }
+]

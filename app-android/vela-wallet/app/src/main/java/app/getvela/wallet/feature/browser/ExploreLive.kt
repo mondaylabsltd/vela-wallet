@@ -190,13 +190,18 @@ object ExploreLive {
             // No CTA: there is no curated list behind "browse", and a button
             // that goes nowhere is worse than none (spec 070).
             empty = if (populated) null else ExploreEmptyCopy(strings.t("explore.startTitle"), strings.t("explore.startHint"), ""),
-            favorites = if (favorites.isEmpty() || view.favorites_hidden) {
+            // The Favorites heading stays on any page with something on it —
+            // no favourites yet, or Favorites hidden: its Edit is the way to
+            // Manage groups, and with every group hidden the page was left with
+            // the search field alone and no way back (issue #330). Hidden, it
+            // loses its tiles, not its heading — the desktop's rule (078 W-11).
+            favorites = if (!populated) {
                 null
             } else {
                 FavoritesSection(
                     title = strings.t("explore.favorites"),
                     action = strings.t("explore.edit"),
-                    tiles = favorites.map { TileModel.Site(it) } + TileModel.Add(strings.t("explore.add")),
+                    tiles = if (view.favorites_hidden) emptyList() else favorites.map { TileModel.Site(it) } + TileModel.Add(strings.t("explore.add")),
                 )
             },
             groups = groups,

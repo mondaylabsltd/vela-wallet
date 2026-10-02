@@ -652,6 +652,28 @@ pub fn icon_button(
         .child(icon_img(icons, icon, false, theme.fg_muted, GLYPH_MD))
 }
 
+/// Plain icon button (DESIGN-LANGUAGE §7): no box, a 44 target, the panel
+/// close's hover wash — DC2's pencil beside the name (issue 334), the web's
+/// `ContactDetailPanel` `.edit`.
+pub fn plain_icon_button(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    icons: &mut IconCache,
+    icon: Icon,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .size(px(theme::WALLET_CONTROL_H))
+        .flex_none()
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .hover(|el| el.bg(theme.bg_sunken))
+        .child(icon_img(icons, icon, false, theme.fg_base, GLYPH_MD))
+}
+
 /// Destructive text action (DC2 footer 删除联系人).
 pub fn destructive_text_button(
     id: impl Into<ElementId>,
@@ -668,7 +690,7 @@ pub fn destructive_text_button(
         .child(label)
 }
 
-/// Quiet text action with a leading glyph (DC2 footer 编辑, DC2 查看全部往来).
+/// Quiet text action with an optional leading glyph (DC2 查看全部往来).
 pub fn text_action(
     id: impl Into<ElementId>,
     theme: &Theme,

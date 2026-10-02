@@ -268,13 +268,20 @@ object SigningLive {
         // transaction that will never be signed, and reading them invites the
         // question "so why can't I?" — which the sentence above already answers.
         val refused = sign.blocked != null
-        val blocks =
-            if (refused) statusBlocks(sign, s)
-            else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
-                simBlocks(sim, ctx) + guardBlocks(guard, s)
         // The wallet's own request (the key backup) is not a site: its own mark
         // and name, and no host — "getvela.app" under a letter read as a stranger.
         val own = request.transportId == WALLET_TRANSPORT
+        val sims = simBlocks(sim, ctx)
+        // Issue #314: on the wallet's own request a simulation that moves
+        // nothing only confirms what the wallet itself wrote — a technical
+        // fact, folded with the others, not a bordered card weighing as much as
+        // the outcome. Anything else it has to say (a revert, a node that could
+        // not check, a balance that would move) stays on the sheet.
+        val quietSim = (sims.singleOrNull() as? SigningBlock.Balances)?.takeIf { own && it.rows.isEmpty() }
+        val blocks =
+            if (refused) statusBlocks(sign, s)
+            else statusBlocks(sign, s, ctx.trustedSignerWaiting) + blocks(clear, facts?.first, dataBytes, ctx) +
+                (if (quietSim != null) emptyList() else sims) + guardBlocks(guard, s)
         // Spec 082 RE7: the name and whether the host is said again are the
         // core's (`browserSiteLabel`); a request carries no page title, so a
         // site is named by its host, once.
@@ -299,7 +306,7 @@ object SigningLive {
                 signature = if (refused) null else clear.result?.intent,
                 params = emptyList(),
                 identities = emptyList(),
-                simResult = null,
+                simResult = quietSim?.takeIf { !refused }?.let { SigningRow(s.s("simResultLabel"), it.note ?: s.s("simResultNoChange")) },
                 rawLabel = if (!refused && (dataBytes > 0 || wholeBatch)) s.s("techRawData") else null,
                 rawHex = when {
                     refused -> null

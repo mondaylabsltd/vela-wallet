@@ -507,6 +507,71 @@ struct SigningLiveTests {
         #expect(SimDeltas.deltaText("0", decimals: 18) == nil)
     }
 
+    /// Issue #314: the wallet's own key backup leads with its outcome. Its
+    /// intent is the headline (the sheet draws `dappOwn` that way) and a
+    /// simulation that moves nothing is folded into the technical details —
+    /// it was a bordered "Balance changes" card weighing as much as the
+    /// outcome. A dApp's sheet keeps the card, and a simulation with something
+    /// to say is never folded away, not even on the wallet's own.
+    @Test func theWalletsOwnBackupFoldsASimulationThatMovesNothing() throws {
+        let registry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
+        let result = try CoreJSON.decode(ClearSignResultWire.self, from: [
+            "intent": "Back up public keys", "contract_name": "Vela passkey registry", "fields": [
+                ["label": "Registered as", "value": "Me", "format": "raw", "warning": false,
+                 "unverified": false, "role": "generic", "detail": false, "expired": false],
+                ["label": "Address", "value": "0x88cca0…266894", "format": "addressName", "warning": false,
+                 "unverified": false, "role": "generic", "detail": false, "expired": false,
+                 "address": "0x88cca0eedbf2c4426110bbfc998f048689266894"],
+                ["label": "Public keys", "value": "1", "format": "raw", "warning": false,
+                 "unverified": false, "role": "generic", "detail": false, "expired": false],
+            ],
+            "risk": "safe", "contract_address": registry, "verified": true, "provenance": "built_in",
+            "sign_type": "transaction", "partial": false, "best_effort": false, "to_own_token": false,
+        ])
+        let backup = clear(surface: .clearSign, result: result)
+        let params = #"[{"to":"0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9","data":"0xcd438f9b","value":"0x0"}]"#
+        func sheet(transport: String, simulation: SigningController.Simulation, judgments: [[String: Any]] = []) throws -> SigningModel {
+            var ctx = context()
+            ctx.sim = try CoreJSON.decode(TrustSimViewWire.self, from: ["ready": true, "judgments": judgments])
+            ctx.simulation = simulation
+            return SigningLive.model(
+                fallback: SigningFixtures.build(.cs1, loc: loc),
+                request: SigningController.Incoming(
+                    id: "r", method: "eth_sendTransaction", paramsJson: params,
+                    origin: "https://getvela.app", transportId: transport, chainId: 1
+                ),
+                sign: .empty, clear: backup, guard: .empty, fee: nil, context: ctx
+            )
+        }
+        func hasBalances(_ model: SigningModel) -> Bool {
+            model.blocks.contains { if case .balances = $0 { return true } else { return false } }
+        }
+
+        let own = try sheet(transport: SigningLive.walletTransport, simulation: .answered)
+        #expect(own.dappOwn)
+        #expect(!hasBalances(own), "the no-change card is still on the sheet")
+        #expect(own.tech.simResult?.label == loc.t("componentsUi.signing.simResultLabel"))
+        #expect(own.tech.simResult?.value == loc.t("componentsUi.signing.balanceNoAssetsMove"))
+
+        let dapp = try sheet(transport: "tab-1", simulation: .answered)
+        #expect(hasBalances(dapp), "a dApp keeps its balance card")
+        #expect(dapp.tech.simResult == nil)
+
+        let reverts = try sheet(
+            transport: SigningLive.walletTransport,
+            simulation: .notice(risk: "danger", key: "componentsUi.signing.simWillFail", reason: nil)
+        )
+        #expect(reverts.blocks.contains { if case .warning(.danger, _) = $0 { return true } else { return false } },
+                "a revert is never folded away")
+        #expect(reverts.tech.simResult == nil)
+        let moves = try sheet(
+            transport: SigningLive.walletTransport, simulation: .answered,
+            judgments: [["type": "native", "delta": "-1000000000000000"]]
+        )
+        #expect(hasBalances(moves), "a balance that would move stays on the sheet")
+        #expect(moves.tech.simResult == nil)
+    }
+
     /// The REAL core's reading of a batch, kicked off as the sheet kicks it off.
     private func resolvedBatch(_ paramsJson: String) throws -> ClearSigningViewWire {
         let event = try #require(SigningController.clearKickoff(

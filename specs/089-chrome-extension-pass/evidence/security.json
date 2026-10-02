@@ -1,0 +1,36 @@
+[
+ {
+  "check": "popup flood: 12 eth_requestAccounts without a gesture → windows opened",
+  "got": {
+   "opened": 12,
+   "openNow": 12
+  }
+ },
+ {
+  "check": "cross-origin iframe: provider in frame? requests reach the wallet?",
+  "got": {
+   "frame": "{\"providerInFrame\":false,\"tries\":[\"parent-req\",\"parent-res\"]}",
+   "windowOpened": false
+  }
+ },
+ {
+  "check": "page probes of the extension",
+  "got": {
+   "chromeRuntimeInPage": false,
+   "fetch inpage.js": 200,
+   "fetch manifest.json": "blocked",
+   "fetch en/request.html": "blocked",
+   "fetch background.js": "blocked",
+   "fetch content.js": "blocked",
+   "extFrameReadable": false
+  }
+ },
+ {
+  "check": "long host: window heading text",
+  "got": "Connect to app.uniswap.org.secure-wallet-session-verify-login-account.localhost:5187"
+ },
+ {
+  "check": "IDN host heading",
+  "got": "Connect to xn--pp-8kc.localhost:5187"
+ }
+]

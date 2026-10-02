@@ -478,6 +478,11 @@ object I18nKeys {
 
         // Scan.
         const val SCAN_TITLE = "componentsUi.scanner.title"
+        /**
+         * 087 F13: the receive row's button SHOWS that network's QR code — it
+         * was labelled "扫描二维码" (scan), the scanner's title.
+         */
+        const val SHOW_QR = "componentsUi.funding.showQr"
         const val SCAN_HINT = "componentsUi.scanner.hint"
         const val SCAN_GALLERY = "componentsUi.scanner.gallery"
         const val SCAN_FROM_GALLERY = "componentsUi.scanner.fromGallery"

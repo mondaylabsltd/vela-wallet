@@ -11,22 +11,16 @@
  *
  * The locale is the wallet's PINNED language when there is one (spec 082 G59:
  * 简体中文 pinned in the panel's Settings, and the reopened panel was English),
- * else Chrome's UI language — `panelLocale`. This page shares the wallet's
- * origin, so it reads the same `localStorage` the preferences store writes.
+ * else Chrome's UI language — `surfaceLocale`, the rule every surface opens
+ * by (the request window and the wallet tab go through `open.html`, issue
+ * 317). This page shares the wallet's origin, so it reads the same
+ * `localStorage` the preferences store writes.
  *
  * Bundled by build.mjs like the other page-side scripts. Runs in an extension
  * page, so `chrome.*` is available.
  */
 /* global chrome */
-import { LANGUAGE_KEY, panelLocale, walletPage } from './lib/locales.js';
+import { pinnedLanguage, surfaceLocale, walletPage } from './lib/locales.js';
 
-function pinnedLanguage() {
-	try {
-		return localStorage.getItem(LANGUAGE_KEY);
-	} catch {
-		return null; // storage denied — Chrome's language decides
-	}
-}
-
-const locale = panelLocale(pinnedLanguage(), chrome.i18n?.getUILanguage?.());
+const locale = surfaceLocale(pinnedLanguage(), chrome.i18n?.getUILanguage?.());
 location.replace(`${chrome.runtime.getURL(walletPage(locale))}?panel`);

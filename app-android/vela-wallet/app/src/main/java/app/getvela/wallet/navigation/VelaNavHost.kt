@@ -49,6 +49,7 @@ import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.core.format.NumberFormatKey
 import app.getvela.wallet.core.format.DateFormatKey
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.data.NotificationAsk
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.BuildConfig
 import androidx.compose.runtime.Composable
@@ -865,15 +866,19 @@ fun VelaNavHost(
                 LaunchedEffect(sendClosed) {
                     if (sendClosed && flows.top in SEND_STATES) flows.close()
                 }
-                // The notification permission, asked at the first submit and never at
-                // launch (research D6): a refusal degrades to the in-app receipt.
+                // The notification permission, asked at the first receipt and never at
+                // launch (research D6) — and once per install (087 F14): a refusal
+                // degrades to the in-app receipt, and neither the next send nor a
+                // recreated screen (a language switch) asks again.
                 val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
                 LaunchedEffect(sendView.stage) {
                     if (sendView.stage == SendStage.Receipt && android.os.Build.VERSION.SDK_INT >= 33) {
                         val granted = androidx.core.content.ContextCompat.checkSelfPermission(
                             context, android.Manifest.permission.POST_NOTIFICATIONS,
                         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        if (!granted) askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        if (!granted && NotificationAsk.claim(VelaStore(context))) {
+                            askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
                     }
                 }
                 // A tapped notification opens the wallet on that row.
@@ -1136,6 +1141,10 @@ fun VelaNavHost(
                         onOpen = { step, id -> VelaLog.event("flows", "open", "step" to step.name, "id" to id.take(24)); flows.push(step, id) },
                         onOpenUrl = { context.openUrl(it) },
                         onNavigate = { step -> if (step == FlowStep.Chains) chainSheetOpen = true else flows.push(step) },
+                        // Issue #328: a closed sheet takes its own level off the
+                        // stack, so the next row tapped opens its sheet. The
+                        // STACK's state this screen was built for, as iOS passes.
+                        onSheetClosed = { flows.sheetClosed(flowState) },
                         selected = flows.selected,
                         // 删除记录 (spec 058): the feed tombstones the record and
                         // drops the row at once, so the detail has nothing left

@@ -144,7 +144,8 @@ function makeEnv() {
 			})
 		},
 		action: { onClicked: on('actionClicked') },
-		i18n: { getUILanguage: () => 'en' }
+		// A Chinese Chrome — the report's (issue 317).
+		i18n: { getUILanguage: () => 'zh-CN' }
 	};
 
 	function portPair(name: string, sender: Record<string, unknown>) {
@@ -937,6 +938,115 @@ describe('a request with no gesture, to an idle panel (RB8 EX2 × RJ20 G63)', ()
 		await settleAll();
 		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
 		expect(env.session.data['vela.req.7:s:1']).toMatchObject({ surface: 'window' });
+	});
+});
+
+describe('storage.local is closed to content scripts (089)', () => {
+	it('asks for TRUSTED_CONTEXTS at start', async () => {
+		const env = makeEnv();
+		const setAccessLevel = vi.fn(async () => {});
+		(env.local as unknown as { setAccessLevel: typeof setAccessLevel }).setAccessLevel =
+			setAccessLevel;
+		await startWorker(env);
+		expect(setAccessLevel).toHaveBeenCalledWith({ accessLevel: 'TRUSTED_CONTEXTS' });
+	});
+
+	it('starts as before on a Chrome without the setting', async () => {
+		const env = makeEnv();
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a');
+		const { reply } = await env.ask(page, 's:1');
+		expect(reply).toEqual({ accepted: true });
+	});
+});
+
+/**
+ * Spec 089: the toolbar's "open the wallet" reused the first tab of the
+ * extension's origin — and a request window is one, in a popup. With no
+ * wallet tab open it navigated the pending request away (4900) and left the
+ * wallet in a 420 px popup. Only a normal window's tab is reused now.
+ */
+describe('the toolbar button (089)', () => {
+	function withTabs(env: Env, tabs: { id: number; windowId: number; url: string; type: string }[]) {
+		env.chrome.tabs.query = vi.fn(async (q: { url?: string; windowType?: string }) =>
+			tabs.filter(
+				(t) =>
+					(!q.url || t.url.startsWith(q.url.replace(/\*$/, ''))) &&
+					(!q.windowType || t.type === q.windowType)
+			)
+		) as any;
+		env.chrome.tabs.update = vi.fn(async () => ({})) as any;
+		env.chrome.tabs.create = vi.fn(async () => ({})) as any;
+	}
+
+	it('never takes a request window: it opens a tab of its own', async () => {
+		const env = makeEnv();
+		withTabs(env, [
+			{
+				id: 40,
+				windowId: 101,
+				url: 'chrome-extension://ext/en/request.html?rid=7:1',
+				type: 'popup'
+			}
+		]);
+		await startWorker(env);
+		env.emit('actionClicked');
+		await settleAll();
+		expect(env.chrome.tabs.update).not.toHaveBeenCalled();
+		expect(env.chrome.tabs.create).toHaveBeenCalledTimes(1);
+	});
+
+	it('reuses the wallet tab a normal window has', async () => {
+		const env = makeEnv();
+		withTabs(env, [
+			{
+				id: 40,
+				windowId: 101,
+				url: 'chrome-extension://ext/en/request.html?rid=7:1',
+				type: 'popup'
+			},
+			{ id: 41, windowId: 3, url: 'chrome-extension://ext/en/wallet.html', type: 'normal' }
+		]);
+		await startWorker(env);
+		env.emit('actionClicked');
+		await settleAll();
+		expect(env.chrome.tabs.update).toHaveBeenCalledWith(
+			41,
+			expect.objectContaining({ active: true })
+		);
+		expect(env.chrome.tabs.create).not.toHaveBeenCalled();
+	});
+});
+
+describe('where the worker opens a surface (issue 317)', () => {
+	/**
+	 * The worker cannot read the language a person chose (`localStorage` does
+	 * not exist in a service worker). It used to open the request window and
+	 * the wallet tab in Chrome's UI language anyway — on a Chinese Chrome with
+	 * English chosen, a Chinese signing sheet. It opens the doorway now, and the
+	 * doorway picks (`open.js`, `lib/locales.js`).
+	 */
+	it('opens a request window at the doorway, never at a locale page', async () => {
+		const env = makeEnv();
+		env.chrome.sidePanel.open.mockRejectedValueOnce(new Error('no gesture'));
+		await startWorker(env);
+		await env.ask(env.openPage(7, 'doc-a'), 's:1');
+		await settleAll();
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
+		const [{ url }] = env.chrome.windows.create.mock.calls[0] as unknown as [{ url: string }];
+		expect(url).toBe('chrome-extension://ext/open.html?rid=7%3As%3A1');
+	});
+
+	it('opens the wallet tab at the doorway too', async () => {
+		const env = makeEnv();
+		const create = vi.fn(async () => ({}));
+		env.chrome.tabs.create = create;
+		await startWorker(env);
+		env.emit('actionClicked');
+		await settleAll();
+		expect(create).toHaveBeenCalledWith({
+			url: 'chrome-extension://ext/open.html'
+		});
 	});
 });
 

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="color-scheme" content="dark light" />
+		<title>Vela</title>
+		<!--
+			The doorway of every surface the WORKER opens (spec 086, issue 317): the
+			request window (`?rid=…`) and the wallet tab. Every page is prerendered
+			per locale, and the worker cannot read the language the person pinned,
+			so it opens this, and open.js picks the locale the same way the side
+			panel's doorway does. No inline script: MV3 extension pages refuse it
+			(constraint 2 in README).
+		-->
+		<script src="open.js"></script>
+	</head>
+	<body></body>
+</html>

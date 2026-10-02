@@ -411,6 +411,62 @@ class SigningLiveTest {
     }
 
     /**
+     * Issue #314: the wallet's own key backup leads with its outcome. Its
+     * intent is the headline (the sheet draws `dappOwn` that way) and a
+     * simulation that moves nothing is folded into the technical details — it
+     * was a bordered "Balance changes · No asset changes" card weighing as much
+     * as the outcome. A dApp's sheet keeps the card, and a simulation that has
+     * something to say is never folded away, not even on the wallet's own.
+     */
+    @Test
+    fun `the wallet's own backup folds a simulation that moves nothing into the technical details`() {
+        val registry = "0x94fd1a891eb6c5f340622baf2f3a0cb70a941ea9"
+        val call = org.json.JSONObject().put("to", registry).put("data", "0xcd438f9b").put("value", "0x0")
+        val params = org.json.JSONArray().put(call).toString()
+        val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "eth_sendTransaction", SignMethodKind.Transaction, params, "https://getvela.app", null, 1, null), confirm_gate_open = true)
+        val backup = ClearSigningView(
+            resolved = true,
+            surface = ClearSurface.ClearSign,
+            result = ClearSignResult(
+                intent = "Back up public keys",
+                contract_name = "Vela passkey registry",
+                fields = listOf(
+                    ClearSignField("Registered as", "Parallel space"),
+                    ClearSignField("Address", "0x88cCA0Ee…266894", format = "addressName", address = founder.lowercase()),
+                    ClearSignField("Public keys", "1"),
+                ),
+                risk = ClearRisk.Safe,
+                contract_address = registry,
+                verified = true,
+                provenance = ClearProvenance.BuiltIn,
+            ),
+        )
+        val own = IncomingRequest("r1", "eth_sendTransaction", params, "https://getvela.app", SigningLive.WALLET_TRANSPORT, 1)
+        val nothingMoves = SigningController.SimOutcome.Ready(emptyList())
+        fun sheet(request: IncomingRequest, sim: SigningController.SimOutcome) =
+            SigningLive.model(drawn, request, sign, backup, GuardView(), FeeView(confirm_fee_ready = true), ctx, sim)
+
+        val ownSheet = sheet(own, nothingMoves)
+        assertTrue(ownSheet.dappOwn)
+        assertEquals(strings.t("settingsModals.backup.intent"), (ownSheet.blocks.first() as SigningBlock.Intent).text)
+        assertTrue("the no-change card is still on the sheet", ownSheet.blocks.none { it is SigningBlock.Balances })
+        assertEquals(strings.t("componentsUi.signing.simResultLabel"), ownSheet.tech.simResult?.label)
+        assertEquals(strings.t("componentsUi.signing.simResultNoChange"), ownSheet.tech.simResult?.value)
+        assertFalse(ownSheet.tech.isEmpty)
+
+        val dappSheet = sheet(request(params), nothingMoves)
+        assertTrue("a dApp keeps its balance card", dappSheet.blocks.any { it is SigningBlock.Balances })
+        assertNull(dappSheet.tech.simResult)
+
+        val reverts = sheet(own, SigningController.SimOutcome.Notice(ClearRisk.Danger, "componentsUi.signing.simWillFail"))
+        assertTrue("a revert is never folded away", reverts.blocks.any { it is SigningBlock.Warning && it.tone == SigningTone.Danger })
+        assertNull(reverts.tech.simResult)
+        val moves = sheet(own, SigningController.SimOutcome.Ready(listOf(TrustSimJudgment.Native("-1000000000000000"))))
+        assertTrue("a balance that would move stays on the sheet", moves.blocks.any { it is SigningBlock.Balances })
+        assertNull(moves.tech.simResult)
+    }
+
+    /**
      * Spec 082 RJ15 (G49): a signed amount is the core's (`formatSignedTokenAmount`)
      * — a dust delta is written exactly, never `−0`, the minus is U+2212, and a
      * zero is not drawn at all.

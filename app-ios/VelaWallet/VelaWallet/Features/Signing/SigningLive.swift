@@ -240,6 +240,21 @@ enum SigningLive {
         // last attempt on the page signed nothing, which is the one thing a
         // person does need on a refused card as much as on a live one.
         let refused = sign.blocked != nil
+        // Only a TRANSACTION has balances to change. A message moves nothing,
+        // and a balance block on a signature would answer a question nobody
+        // asked.
+        let balances = balanceBlocks(isTransaction: facts != nil, context: context)
+        // Issue #314: on the wallet's own request a simulation that moves
+        // nothing only confirms what the wallet itself wrote — a technical
+        // fact, folded with the others, not a bordered card weighing as much as
+        // the outcome. Anything else it has to say (a revert, a node that could
+        // not check, a balance that would move) stays on the sheet.
+        let quietSim: SigningRow? = {
+            guard own, !refused, balances.count == 1,
+                  case .balances(_, let rows, let note, _) = balances[0], rows.isEmpty
+            else { return nil }
+            return SigningRow(label: s(loc, "simResultLabel"), value: note ?? s(loc, "simResultNoChange"))
+        }()
         let blocks = refused
             ? statusBlocks(sign: sign, loc: loc)
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
@@ -247,10 +262,7 @@ enum SigningLive {
                 + trustedSignerBlocks(context.trustedSignerNotice, loc: loc)
                 + self.blocks(clear: clear, to: facts?.to, valueHex: facts?.value,
                               dataBytes: dataBytes, context: context)
-                // Only a TRANSACTION has balances to change. A message moves
-                // nothing, and a balance block on a signature would answer a
-                // question nobody asked.
-                + balanceBlocks(isTransaction: facts != nil, context: context)
+                + (quietSim == nil ? balances : [])
                 + guardBlocks(guardView, loc: loc)
 
         var model = SigningModel(
@@ -272,7 +284,7 @@ enum SigningLive {
                     : clear.result.map { (label: s(loc, "techFunction"), signature: $0.intent) },
                 params: [],
                 identities: [],
-                simResult: nil,
+                simResult: quietSim,
                 raw: refused
                     ? nil
                     : wholeBatch

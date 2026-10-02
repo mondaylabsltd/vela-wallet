@@ -65,6 +65,40 @@ class ExploreMachineTest {
     }
 
     /**
+     * Issue #330, after a restart: both system groups hidden come back hidden
+     * from the store, and the start page still draws the way to Manage groups.
+     */
+    @Test
+    fun `every group hidden survives a restart, and Manage groups stays reachable`() = runBlocking {
+        val h = explore()
+        withTimeout(10_000) { h.view.first { it.ready } }
+        h.dispatch(ExploreEvent.FavoriteAdded("https://app.uniswap.org/", "Uniswap", 1.0e12), ExploreEvent.serializer())
+        h.dispatch(ExploreEvent.SystemGroupHiddenSet(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Favorites, true), ExploreEvent.serializer())
+        h.dispatch(ExploreEvent.SystemGroupHiddenSet(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Recent, true), ExploreEvent.serializer())
+        withTimeout(10_000) { h.view.first { it.favorites_hidden && it.recent_hidden } }
+        // The bytes trail the view (see the test below): wait for the write.
+        withTimeout(10_000) {
+            while (
+                store.values[ExploreExecutor.KEY]
+                    ?.let { runCatching { Wire.json.decodeFromString(ExploreDoc.serializer(), it) }.getOrNull() }
+                    ?.hidden_system?.size != 2
+            ) kotlinx.coroutines.delay(20)
+        }
+
+        // "Process death": a second host over the same store.
+        val again = withTimeout(10_000) { explore().view.first { it.ready } }
+        assertTrue(again.favorites_hidden && again.recent_hidden)
+        val strings = run {
+            val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
+            app.getvela.wallet.core.i18n.I18nRuntime { tag -> java.io.File(root, "assets/i18n/$tag.json").readBytes() }.apply { initialize("en") }
+        }
+        val fallback = app.getvela.wallet.feature.explore.ExploreFixtures.buildState(app.getvela.wallet.feature.explore.ExploreScreenState.E2, strings)
+        val page = app.getvela.wallet.feature.browser.ExploreLive.home(fallback, again, BhistView(), null, strings)
+        assertEquals(strings.t("explore.edit"), page.favorites?.action)
+        assertTrue(page.favorites!!.tiles.isEmpty())
+    }
+
+    /**
      * Issue #329: app.uniswap.org, starred while it had failed to load, was
      * pinned as "网页无法打开" — the WebView's error page's title. The star now
      * names a favourite by the core's rule (`browserPinnedTitle` over the last

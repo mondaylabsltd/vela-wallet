@@ -28,7 +28,8 @@
  *   - a request that ends without a decision answers 4900, never 4001 and
  *     never Chrome's own error text (RB6) — except a claimed submit whose
  *     claim carried the operation hash: that one may have been sent, and its
- *     page is told the hash when its surface goes (RJ2), never 4900.
+ *     page is told "not confirmed yet" when its surface goes (RJ2, 083; a
+ *     batch: its id), never 4900.
  *
  * The rules are pure functions in `lib/request-life.js`; this file performs
  * them and logs every step through `lib/swlog.js` (RB14).
@@ -98,7 +99,7 @@ import {
 	realTxHash,
 	receiptLookupHash
 } from './lib/op-receipt.js';
-import { negotiate, requestPage, walletPage } from './lib/locales.js';
+import { openDoor } from './lib/locales.js';
 
 /** The snapshot the wallet publishes for exactly this purpose. */
 const EXT_CACHE_KEY = 'vela.ext.cache';
@@ -106,6 +107,24 @@ const EXT_CACHE_KEY = 'vela.ext.cache';
 /** `storage.session`: the ledger, the endpoint memory and the log. */
 const sessionArea = chrome.storage.session;
 const swlog = createSwLog({ storage: sessionArea });
+
+/**
+ * `storage.local` is for the extension's own pages and this worker only
+ * (spec 089). Chrome opens it to content scripts by default, and content.js
+ * — which runs in the renderer of every page the person visits — never reads
+ * it; but what is there (each site's grant, the signed-in address, the RPC
+ * catalog with any endpoint a person added, provider keys in its URLs
+ * included) would be readable by a renderer that a page managed to take
+ * over. `storage.session` is closed to content scripts already. Asked at
+ * every start, quietly where Chrome has no such setting for this area.
+ */
+try {
+	void Promise.resolve(
+		chrome.storage.local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' })
+	).catch(() => {});
+} catch {
+	/* an older Chrome: content scripts keep the default access, as before */
+}
 
 /**
  * Where requests are answered — cached, because the choice has to be made
@@ -193,14 +212,21 @@ function instantConnect(method, origin) {
  * moment it loses focus, and every ceremony this wallet performs hands focus
  * to the platform authenticator's own prompt (spec 027 D34). The toolbar
  * button opens a real tab instead, reusing the one already open.
+ *
+ * Through the doorway, never at a locale page: which locale is the page's to
+ * pick, from the language the person pinned — which a worker cannot read
+ * (`localStorage`), so picking here meant Chrome's language (issue 317).
  */
-function uiLocale() {
-	return negotiate(chrome.i18n?.getUILanguage?.());
-}
-
 async function openWallet() {
-	const url = chrome.runtime.getURL(walletPage(uiLocale()));
-	const [existing] = await chrome.tabs.query({ url: chrome.runtime.getURL('') + '*' });
+	const url = chrome.runtime.getURL(openDoor());
+	// A NORMAL window's tab only (spec 089): a request window is a popup of
+	// this origin too, and with no wallet tab open it was the one reused — the
+	// toolbar navigated the pending request away (answered 4900) and left the
+	// wallet in a 420 px popup.
+	const [existing] = await chrome.tabs.query({
+		url: chrome.runtime.getURL('') + '*',
+		windowType: 'normal'
+	});
 	if (existing) {
 		await chrome.tabs.update(existing.id, { active: true, url });
 		await chrome.windows.update(existing.windowId, { focused: true });
@@ -398,7 +424,8 @@ function end(step) {
 /**
  * The surface's answer, delivered to the page by its document. A surface's own
  * close settlement (4900) for a claimed submit that carried its hash is surface
- * loss: the page is told the hash instead (RJ2, `surfaceAnswer`).
+ * loss: the page is told "not confirmed yet" instead (RJ2, 083,
+ * `surfaceAnswer`).
  */
 async function answer(rid, given, opHash, caller) {
 	const record = records.get(rid);
@@ -481,11 +508,14 @@ async function openWindows() {
 	}
 }
 
-/** The fallback surface: a dedicated window, not the action popup. */
+/**
+ * The fallback surface: a dedicated window, not the action popup — opened at
+ * the doorway, which picks the person's language (issue 317).
+ */
 async function openRequestWindow(record) {
 	try {
 		const created = await chrome.windows.create({
-			url: chrome.runtime.getURL(requestPage(uiLocale(), record.rid)),
+			url: chrome.runtime.getURL(openDoor(record.rid)),
 			type: 'popup',
 			width: 420,
 			height: 760,

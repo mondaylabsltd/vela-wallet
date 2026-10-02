@@ -53,6 +53,40 @@ enum SendLive {
         }
     }
 
+    /// The drawn states the send machine owns. Anything else is still a
+    /// drawing.
+    static let flowStates: Set<FlowStateId> = [
+        .sd1, .sd1b, .sd2, .sd2b, .sd2c, .sd2d, .sd2e, .sd2f, .sd3, .sd3b, .sd3c, .sd4a, .sd4b, .sd4c,
+    ]
+
+    /// What the header's back arrow asks of the send machine (087 F27).
+    enum Back: Equatable {
+        /// `back`: the core steps back — confirm → form, form → picker (a
+        /// recipient handed in survives that, #332) — and from the picker it
+        /// closes the journey itself.
+        case step
+        /// `done`: nothing in this journey lies behind the screen — a receipt,
+        /// or a request still resolving or one this wallet cannot honour,
+        /// which are drawn AS the picker. The core closes the journey.
+        case leave
+    }
+
+    /// The arrow, by the core's stage — never by the shell's stack.
+    ///
+    /// The arrow popped the shell's `FlowNav` and the machine never heard it:
+    /// from the form it dropped the person on the home (the stack holds `.sd1`
+    /// for the whole journey), and the next 转账 resumed the abandoned journey
+    /// — the last code's recipient and network scope on a new send. The lock
+    /// stages leave rather than step: their `back` moves the machine between
+    /// steps the person cannot see, and the same screen would need a second
+    /// tap.
+    static func back(_ view: SendViewWire) -> Back {
+        switch view.stage {
+        case .selectToken, .enterDetails, .confirm: return .step
+        case .receipt, .lockResolving, .lockError: return .leave
+        }
+    }
+
     // MARK: - SD1, the token picker
 
     static func pick(

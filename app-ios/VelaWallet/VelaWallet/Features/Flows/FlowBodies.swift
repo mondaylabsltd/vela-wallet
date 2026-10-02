@@ -10,6 +10,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - Receive
 
@@ -95,15 +96,24 @@ struct ReceiveQrBody: View {
     let model: ReceiveQrModel
     var onSave: () -> Void = {}
     var onExplorer: () -> Void = {}
+    /// The sheet's ✕, drawn at the end of the heading's line (issue #321).
+    /// Absent, the heading has the line to itself.
+    var onClose: (() -> Void)?
 
     @State private var copied: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s8) {
-            Text(verbatim: model.title)
-                .typeRole(Typography.rowTitle.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: Tokens.Space.s8) {
+                Text(verbatim: model.title)
+                    .typeRole(Typography.rowTitle.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let onClose {
+                    FlowSheetCloseButton(label: model.closeLabel, action: onClose)
+                }
+            }
 
             if let contract = model.contract {
                 HStack(spacing: Tokens.Space.s4) {
@@ -831,6 +841,35 @@ struct SendFormBody: View {
                 .disabled(ctaDisabled)
                 .opacity(ctaDisabled ? Tokens.Opacity.disabled : 1)
                 .padding(.top, Tokens.Space.s4)
+                .id(Self.continueId)
+        }
+        // A split's rows are typed into one by one, top to bottom, and pulling
+        // the page down to its button would hide the row being typed.
+        .modifier(KeepsInViewAboveKeyboard(target: Self.continueId, enabled: model.mode != .split))
+    }
+
+    /// 继续, as the page scrolls to it.
+    static let continueId = "send.form.continue"
+}
+
+/// The keyboard came up: scroll `target` to just above it (087 F28).
+///
+/// On an iPhone 11 the amount's decimal pad sat over 继续 until the form was
+/// scrolled by hand. The page already makes room for the keyboard; this uses
+/// it, once per showing, so the button the person is filling the form in for
+/// is in sight while they type.
+struct KeepsInViewAboveKeyboard: ViewModifier {
+    let target: String
+    var enabled = true
+
+    func body(content: Content) -> some View {
+        ScrollViewReader { proxy in
+            content.onReceive(
+                NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)
+            ) { _ in
+                guard enabled else { return }
+                withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .bottom) }
+            }
         }
     }
 }
