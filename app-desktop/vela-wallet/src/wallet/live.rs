@@ -2655,7 +2655,8 @@ pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> 
 /// the reader's words and joined " · " — a status in the feed's status words
 /// ("处理中 · …": a pending or failed operation must never read like one
 /// that landed), whom a transfer went to or came from (a name, else the
-/// short address), a site verbatim, a network by its name.
+/// short address), a site verbatim, a network by its name, a day as the
+/// history's headers say it.
 pub(crate) fn subtitle_text(lines: &[FeedLine], s: &WalletStrings) -> SharedString {
     let parts: Vec<String> = lines
         .iter()
@@ -2679,6 +2680,11 @@ pub(crate) fn subtitle_text(lines: &[FeedLine], s: &WalletStrings) -> SharedStri
             )),
             FeedLine::Site { site } => Some(site.clone()),
             FeedLine::Network { chain_id } => Some(crate::flows::live::chain_name(*chain_id)),
+            // A contact's rows have no day headers: the day is on the line,
+            // worded as the history's headers word it.
+            FeedLine::Day { day_start_ms } => Some(
+                crate::flows::live::day_word(*day_start_ms, &s.today, &s.yesterday).to_string(),
+            ),
         })
         .collect();
     SharedString::from(parts.join(" · "))

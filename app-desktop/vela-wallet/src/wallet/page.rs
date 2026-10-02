@@ -958,6 +958,9 @@ pub struct WalletPage {
     /// The address the core was last asked to inspect, so opening a panel that
     /// redraws every frame asks once.
     inspected_contact: Option<String>,
+    /// The contact whose page the feed was last told is open (spec 093,
+    /// `ContactFilterChanged`) — told again only when it changes.
+    feed_contact: Option<String>,
     /// The accounts the switcher last announced. `None` = it is not on screen,
     /// and the core has been told so.
     switcher_addresses: Option<Vec<String>>,
@@ -1404,6 +1407,7 @@ impl WalletPage {
             group: None,
             contact: 0,
             inspected_contact: None,
+            feed_contact: None,
             switcher_addresses: None,
             removing_account: None,
             account_switcher: false,
@@ -4314,7 +4318,6 @@ impl WalletPage {
             self.contact,
             &feed,
             &self.strings,
-            &self.flow_strings,
             self.contact_all_activity,
             hidden,
         )
@@ -4502,6 +4505,22 @@ impl WalletPage {
             vela_core::app::balance_dashboard::Event::SwitcherClosed,
             cx,
         );
+    }
+
+    /// Tell the feed whose contact page is open, when that changes (spec
+    /// 093): another contact, or `None` once the page closes. The page's
+    /// 最近往来 is the core's `contact_rows` for that address.
+    fn sync_feed_contact(&mut self, cx: &mut Context<Self>) {
+        let open = if self.panel == PanelId::ContactDetail {
+            self.selected_contact_address(cx)
+                .map(|address| address.to_string())
+        } else {
+            None
+        };
+        if self.feed_contact != open {
+            self.feed_contact.clone_from(&open);
+            crate::executor::activity_feed::contact_changed(open, cx);
+        }
     }
 
     /// Tell the feed what the hero is doing about privacy, when it changes.
@@ -18424,6 +18443,10 @@ impl Render for WalletPage {
             self.identity.is_some() && self.section == Section::Wallet,
             crate::onboarding::native_window_handle(window),
         );
+        // …and which contact's page is open, for its 最近往来 (spec 093).
+        if self.identity.is_some() {
+            self.sync_feed_contact(cx);
+        }
         let theme = Theme::of(self.theme_mode());
         // A survived panic (spec 038): the failure sheet, "Something went
         // wrong", with the report behind the disclosure.

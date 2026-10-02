@@ -306,13 +306,24 @@ pub fn history_ids(view: &FeedView) -> Vec<String> {
 /// function the executor stamps records with — asking two different questions
 /// about which day it is here is how a row lands under the wrong heading.
 pub(crate) fn day_label(day_start_ms: f64, s: &FlowStrings) -> SharedString {
-    let today = crate::executor::day_start_ms(crate::executor::now_ms());
+    day_word(day_start_ms, &s.today, &s.yesterday)
+}
+
+/// [`day_label`] with its two words given — for a surface that holds the
+/// wallet's strings rather than the flows' (a contact's rows say their day on
+/// their second line, `FeedLine::Day`). The same corpus words, the same rule.
+pub(crate) fn day_word(
+    day_start_ms: f64,
+    today: &SharedString,
+    yesterday: &SharedString,
+) -> SharedString {
+    let now = crate::executor::day_start_ms(crate::executor::now_ms());
     const DAY_MS: f64 = 86_400_000.0;
-    if (day_start_ms - today).abs() < DAY_MS / 2.0 {
-        return s.today.clone();
+    if (day_start_ms - now).abs() < DAY_MS / 2.0 {
+        return today.clone();
     }
-    if (day_start_ms - (today - DAY_MS)).abs() < DAY_MS / 2.0 {
-        return s.yesterday.clone();
+    if (day_start_ms - (now - DAY_MS)).abs() < DAY_MS / 2.0 {
+        return yesterday.clone();
     }
     #[allow(clippy::cast_possible_truncation, reason = "an epoch in ms")]
     let civil = Civil::from_unix_millis(day_start_ms as i64, 0);
@@ -709,44 +720,23 @@ pub fn technical_lines(
     dapp.technical
         .iter()
         .map(|fact| match fact {
+            // The core's text for what the record kept (typed data as its
+            // document, a message as its words, call data as its params);
+            // nothing kept says so.
             FeedFact::Content { content } => {
-                let text = request.map(str::trim).filter(|text| !text.is_empty());
+                let text = request.and_then(|request| {
+                    vela_core::app::dapp_activity::request_display(*content, request)
+                });
                 TechnicalLine::Text {
                     label: content_label(*content, s),
-                    text: text.map_or_else(
-                        || s.content_missing.clone(),
-                        |text| SharedString::from(readable_request(text)),
-                    ),
                     missing: text.is_none(),
+                    text: text.map_or_else(|| s.content_missing.clone(), SharedString::from),
                 }
             }
             // Nothing here is a balance: hashes and names, never masked.
             other => TechnicalLine::Fact(dapp_fact(other, item, dapp, s, wallet, false, locale)),
         })
         .collect()
-}
-
-/// The stored request as text a person can read: JSON laid out over lines
-/// when it parses, verbatim when it does not (a record from before 093 may
-/// hold a clipped request that no longer does). Typed data travels as a JSON
-/// document inside a string (`eth_signTypedData_v4`); it is laid out as the
-/// document it is, rather than as one line of escaped quotes.
-fn readable_request(text: &str) -> String {
-    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(text) else {
-        return text.to_owned();
-    };
-    if let serde_json::Value::Array(params) = &mut value {
-        for param in params.iter_mut() {
-            if let Some(document) = param
-                .as_str()
-                .and_then(|inner| serde_json::from_str::<serde_json::Value>(inner).ok())
-                .filter(serde_json::Value::is_object)
-            {
-                *param = document;
-            }
-        }
-    }
-    serde_json::to_string_pretty(&value).unwrap_or_else(|_| text.to_owned())
 }
 
 /// Opens a dApp record's "Technical details" on a detail already built for
@@ -5595,7 +5585,9 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
         };
-        let kept = lines_with(Some(r#"["0xme","{\"primaryType\":\"PermitSingle\"}"]"#));
+        let kept = lines_with(Some(
+            r#"["0x88cCA0EeDbF2C4426110bbFc998F048689266894","{\"primaryType\":\"PermitSingle\"}"]"#,
+        ));
         assert_eq!(
             kept[0],
             ("操作".to_owned(), "结构化数据签名".to_owned(), false)
@@ -5634,6 +5626,36 @@ mod tests {
             .map(|fact| fact.label.as_ref())
             .collect();
         assert_eq!(labels, vec!["应用", "网络", "日期"]);
+
+        // A message's content is the core's reading of it: its words, not
+        // its hex.
+        let mut opened = sign_in.clone();
+        open_technical(
+            &mut opened,
+            &view,
+            "dapp-3-siwe",
+            Some(r#"["0x48656c6c6f2c20776f726c64","0x88cCA0EeDbF2C4426110bbFc998F048689266894"]"#),
+            &s,
+            &w,
+            "zh-CN",
+        );
+        let message = opened
+            .technical
+            .and_then(|technical| technical.lines)
+            .unwrap_or_default()
+            .into_iter()
+            .find_map(|line| match line {
+                crate::flows::fixtures::TechnicalLine::Text {
+                    label,
+                    text,
+                    missing,
+                } => Some((label.to_string(), text.to_string(), missing)),
+                crate::flows::fixtures::TechnicalLine::Fact(_) => None,
+            });
+        assert_eq!(
+            message,
+            Some(("消息".to_owned(), "Hello, world".to_owned(), false))
+        );
     }
 
     /// 083 F2: every transaction's hash fits the panel — shortened like the

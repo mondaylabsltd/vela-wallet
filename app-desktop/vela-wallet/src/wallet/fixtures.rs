@@ -625,6 +625,15 @@ pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed:
 pub fn core_feed(
     records: Vec<vela_core::app::activity_feed::FeedTxRecord>,
 ) -> vela_core::app::activity_feed::FeedView {
+    core_feed_host(records).view()
+}
+
+/// [`core_feed`]'s machine itself, for a test that tells it more (a contact
+/// page opening).
+#[cfg(test)]
+pub fn core_feed_host(
+    records: Vec<vela_core::app::activity_feed::FeedTxRecord>,
+) -> crate::core_host::CoreHost<vela_core::app::activity_feed::ActivityFeed> {
     use vela_core::app::activity_feed::{
         ActivityFeed, Event as FeedEvent, FeedOperation, FeedShellResult,
     };
@@ -657,7 +666,7 @@ pub fn core_feed(
         };
         pending.extend(host.resolve(next.id, result));
     }
-    host.view()
+    host
 }
 
 #[cfg(test)]

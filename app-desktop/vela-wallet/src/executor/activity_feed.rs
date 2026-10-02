@@ -618,6 +618,16 @@ pub fn reconciled(resolved_count: u32, cx: &mut App) {
     });
 }
 
+/// Tell the feed whose contact page is open (spec 093) — `None` once it
+/// closes. The core then lists what passed between the account and that
+/// address (`FeedView::contact_rows`); the page draws those rows and filters
+/// nothing itself.
+pub fn contact_changed(address: Option<String>, cx: &mut App) {
+    resident::resident::<ActivityFeed>(cx).update(cx, |resident, cx| {
+        resident.dispatch(Event::ContactFilterChanged { address }, cx);
+    });
+}
+
 /// Tell the feed what the balance hero is doing about privacy.
 ///
 /// The core suppresses the toast while balances are hidden (invariant ④), and
