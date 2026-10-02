@@ -330,6 +330,12 @@ object I18nKeys {
          * "Unknown" (never "Failed": it may have been sent).
          */
         const val ROW_UNKNOWN = "componentsUi.signing.intentUnknown"
+        /** Spec 093: a dApp row's title — "{{intent}} on {{place}}" (the core picks both). */
+        const val DAPP_ROW_TITLE = "history.dappRowTitle"
+        /** Spec 093: the headline verb is the core's `ClearTerm` leaf under this prefix (`intentSwap`, `permitIntent`…). */
+        const val SIGNING_TERM_PREFIX = "componentsUi.signing."
+        /** Spec 093: an unlimited allowance, where a figure would be. */
+        const val UNLIMITED = "componentsUi.signingApprove.unlimitedValue"
         const val DAY_TODAY = "componentsUi.dayGroup.today"
         const val DAY_YESTERDAY = "componentsUi.dayGroup.yesterday"
 
@@ -521,6 +527,31 @@ object I18nKeys {
         const val DETAIL_DATE = "componentsTx.detail.labelDate"
         const val DETAIL_HASH = "componentsTx.detail.labelHash"
         const val DETAIL_SECTION_TITLE = "componentsTx.detail.sectionTitle"
+
+        // Spec 093: a dApp interaction's detail — every word an existing key.
+        const val OFF_CHAIN_NOTE = "connect.detail.offChainNote"
+        const val DETAIL_APP = "connect.detail.labelApp"
+        /** The contract a dApp's call went to — the noun (083 F3 review), not "Interacting with". */
+        const val DAPP_CONTRACT = "tokenDetail.labelContract"
+        const val DETAIL_SPENDER = "componentsUi.signing.labelSpender"
+        const val SPENDING_CAP = "componentsUi.signingApprove.spendingCap"
+        const val EXPIRES = "componentsUi.signingApprove.expiresLabel"
+        const val NO_EXPIRY = "componentsUi.signingApprove.noExpiry"
+        const val UNLIMITED = "componentsUi.signingApprove.unlimitedValue"
+        const val BALANCE_CHANGES = "componentsUi.signing.balanceChangesTitle"
+        const val UNVERIFIED_TOKEN = "componentsUi.signing.balanceUnverifiedToken"
+        const val TECHNICAL = "componentsUi.signing.advancedToggle"
+        const val OPERATION = "componentsTx.detail.labelOperation"
+        const val OP_CONTRACT = "componentsTx.detail.opContractInteraction"
+        const val OP_BATCH = "componentsUi.signing.batchSubtitle"
+        const val OP_SIGNATURE = "componentsTx.detail.opSignature"
+        const val OP_TYPED_DATA = "componentsTx.detail.opTypedDataSignature"
+        const val CONTENT_CALL_DATA = "connect.detail.contentCallData"
+        const val CONTENT_TYPED_DATA = "connect.detail.contentTypedData"
+        const val CONTENT_MESSAGE = "connect.detail.contentMessage"
+        const val CONTENT_MISSING = "connect.detail.contentMissing"
+        const val TYPE = "componentsUi.signing.typeLabel"
+        const val USER_OP_HASH = "componentsTx.receipt.userOpHash"
 
         // Assets.
         const val ASSETS_TITLE = "assets.sectionTitle"

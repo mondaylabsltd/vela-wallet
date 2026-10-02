@@ -927,6 +927,11 @@ pub struct WalletPage {
     /// then closes rather than showing a stale detail over a row that no
     /// longer exists.
     tx_detail: Option<String>,
+    /// DA2L, live: the dApp record whose "Technical details" are open
+    /// (spec 093), with the request read from the store when they were
+    /// opened — `None` (or another record's id) is collapsed. Read on the
+    /// tap, never before: the stored request is what the section is for.
+    tx_technical: Option<(String, Option<String>)>,
     /// DR2L, live: WHICH network's QR the receive flow stepped into.
     ///
     /// The mock never needed this — every fixture row opened the same picture.
@@ -965,6 +970,9 @@ pub struct WalletPage {
     /// The address the core was last asked to inspect, so opening a panel that
     /// redraws every frame asks once.
     inspected_contact: Option<String>,
+    /// The contact whose page the feed was last told is open (spec 093,
+    /// `ContactFilterChanged`) — told again only when it changes.
+    feed_contact: Option<String>,
     /// The accounts the switcher last announced. `None` = it is not on screen,
     /// and the core has been told so.
     switcher_addresses: Option<Vec<String>>,
@@ -1283,6 +1291,7 @@ impl WalletPage {
             chain_filter: None,
             feed_privacy: None,
             tx_detail: None,
+            tx_technical: None,
             asset_detail: None,
             add_token_focus: cx.focus_handle(),
             add_token_native: false,
@@ -1414,6 +1423,7 @@ impl WalletPage {
             group: None,
             contact: 0,
             inspected_contact: None,
+            feed_contact: None,
             switcher_addresses: None,
             removing_account: None,
             account_switcher: false,
@@ -3798,6 +3808,7 @@ impl WalletPage {
                         let id = home_tx_ids.get(i).cloned();
                         cx.listener(move |this, _, _, cx| {
                             this.tx_detail = id.clone();
+                            this.tx_technical = None;
                             this.enter_flow(FlowEntry::TxDetail, cx);
                             cx.notify();
                         })
@@ -4328,7 +4339,6 @@ impl WalletPage {
             self.contact,
             &feed,
             &self.strings,
-            &self.flow_strings,
             self.contact_all_activity,
             hidden,
         )
@@ -4516,6 +4526,22 @@ impl WalletPage {
             vela_core::app::balance_dashboard::Event::SwitcherClosed,
             cx,
         );
+    }
+
+    /// Tell the feed whose contact page is open, when that changes (spec
+    /// 093): another contact, or `None` once the page closes. The page's
+    /// 最近往来 is the core's `contact_rows` for that address.
+    fn sync_feed_contact(&mut self, cx: &mut Context<Self>) {
+        let open = if self.panel == PanelId::ContactDetail {
+            self.selected_contact_address(cx)
+                .map(|address| address.to_string())
+        } else {
+            None
+        };
+        if self.feed_contact != open {
+            self.feed_contact.clone_from(&open);
+            crate::executor::activity_feed::contact_changed(open, cx);
+        }
     }
 
     /// Tell the feed what the hero is doing about privacy, when it changes.
@@ -6562,7 +6588,7 @@ impl WalletPage {
                 self.tx_detail
                     .as_ref()
                     .and_then(|id| {
-                        flows_live::tx_detail(
+                        let mut detail = flows_live::tx_detail(
                             &feed,
                             id,
                             &self.flow_strings,
@@ -6570,7 +6596,22 @@ impl WalletPage {
                             hidden,
                             &self.locale,
                             &currency,
-                        )
+                        )?;
+                        // Open only for the record it was opened on (spec 093).
+                        if let Some((_, request)) =
+                            self.tx_technical.as_ref().filter(|(open, _)| open == id)
+                        {
+                            flows_live::open_technical(
+                                &mut detail,
+                                &feed,
+                                id,
+                                request.as_deref(),
+                                &self.flow_strings,
+                                &self.strings,
+                                &self.locale,
+                            );
+                        }
+                        Some(detail)
                     })
                     .map_or_else(
                         // The record is gone. The mock is not a substitute for
@@ -6787,6 +6828,7 @@ impl WalletPage {
             open_add_token: bind(FlowStep::AddToken, cx),
             open_receive: None,
             delete_tx: None,
+            toggle_technical: None,
             open_scan: bind(FlowStep::Scan, cx),
             add_recipient: bind(FlowStep::AddRecipient, cx),
             open_batch_import: bind(FlowStep::BatchImport, cx),
@@ -6852,6 +6894,7 @@ impl WalletPage {
                 .map(|id| -> panels::Click {
                     Box::new(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                         this.tx_detail = Some(id.clone());
+                        this.tx_technical = None;
                         this.push_step(FlowStep::TxDetail);
                         cx.notify();
                     }))
@@ -6866,6 +6909,25 @@ impl WalletPage {
             actions.open_receive = Some(Box::new(cx.listener(
                 |this, _: &gpui::ClickEvent, _, cx| {
                     this.enter_flow(FlowEntry::Receive, cx);
+                    cx.notify();
+                },
+            )));
+        }
+
+        // DA2L, live: a dApp record's "Technical details" (spec 093). Opening
+        // them is what reads the stored request, by the record's id — once,
+        // on the tap; folding them forgets it.
+        if live && matches!(panel, FlowPanel::Da2 | FlowPanel::Da3) {
+            actions.toggle_technical = Some(Box::new(cx.listener(
+                |this, _: &gpui::ClickEvent, _, cx| {
+                    let Some(id) = this.tx_detail.clone() else {
+                        return;
+                    };
+                    this.tx_technical = flows_live::technical_toggled(
+                        this.tx_technical.take(),
+                        id,
+                        crate::executor::activity_feed::stored_request,
+                    );
                     cx.notify();
                 },
             )));
@@ -7754,6 +7816,7 @@ impl WalletPage {
                         let Some(id) = id.clone() else { return };
                         this.asset_detail = None;
                         this.tx_detail = Some(id);
+                        this.tx_technical = None;
                         this.enter_flow(FlowEntry::TxDetail, cx);
                         cx.notify();
                     })),
@@ -18702,6 +18765,10 @@ impl Render for WalletPage {
             self.identity.is_some() && self.section == Section::Wallet,
             crate::onboarding::native_window_handle(window),
         );
+        // …and which contact's page is open, for its 最近往来 (spec 093).
+        if self.identity.is_some() {
+            self.sync_feed_contact(cx);
+        }
         let theme = Theme::of(self.theme_mode());
         // A survived panic (spec 038): the failure sheet, "Something went
         // wrong", with the report behind the disclosure.

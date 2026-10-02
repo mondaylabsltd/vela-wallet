@@ -29,6 +29,7 @@ import type { FeeView } from '$lib/core/generated/FeeView';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
 import type { GuardEditorView } from '$lib/core/generated/GuardEditorView';
 import type { GuardView } from '$lib/core/generated/GuardView';
+import type { SignApproveOpts } from '$lib/core/generated/SignApproveOpts';
 import type { SignView } from '$lib/core/generated/SignView';
 import {
 	feeAmountText,
@@ -1171,5 +1172,48 @@ export function buildSigningModel(raw: SigningLiveInputs): SigningModel | null {
 		closeLabel: m.close,
 		...(status ? { status } : {}),
 		panelTitle: m.panelTitle
+	};
+}
+
+/**
+ * What the approve carries — every field a copy of a machine's view, none
+ * decided here.
+ *
+ * The fee is the one this sheet DISPLAYED (`fee_policy`'s view), signed
+ * verbatim — amount, recipient and the speed it was priced at (spec 069). The
+ * params override is the GUARD's rewrite: the capped approval, not the
+ * requested one (passing the original would defeat the never-unlimited
+ * mandate at the last step), and `unlimited_approved` its one waiver.
+ *
+ * Spec 093: the intent the record keeps is `clear_signing`'s `record_intent`
+ * (`null` when nothing may be recorded — a best-effort guess, a batch with no
+ * shared verb), and `token_meta` the guard's token as it resolved, so the
+ * record can say "100 USDC" rather than a bare number. Whether a token that
+ * has not resolved counts is the core's to say, not this side's.
+ */
+export function approveOptsOf(
+	fee: FeeView | null | undefined,
+	clear: ClearSigningView,
+	guard: GuardView
+): SignApproveOpts {
+	const quote = fee?.fee ?? null;
+	return {
+		max_fee_per_gas: quote ? quote.max_fee_per_gas : null,
+		bundler_cost_wei: null,
+		gas_fee_token: fee?.fee_token ?? null,
+		// No recipient, no in-band quote: the core's own rule.
+		quoted_fee:
+			quote && quote.fee_recipient
+				? {
+						amount: quote.fee_asset.type === 'erc20' ? quote.fee_asset.amount : quote.total_wei,
+						recipient: quote.fee_recipient,
+						tier: quote.tier
+					}
+				: null,
+		fee_collector: null,
+		params_override_json: guard.rewritten_params_json,
+		intent: clear.record_intent ?? null,
+		unlimited_approved: guard.unlimited_consented,
+		token_meta: guard.meta
 	};
 }

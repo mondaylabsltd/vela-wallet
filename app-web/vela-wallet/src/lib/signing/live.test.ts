@@ -27,6 +27,7 @@ import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
 import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
 import { fill } from '$lib/wallet/messages';
 import {
+	approveOptsOf,
 	buildSigningModel,
 	calldataBytes,
 	cappedApproval,
@@ -1608,8 +1609,21 @@ describe('a batch shows every call (089 S1)', () => {
 
 	/** A batch view as the core hands it: [plain send, approve(MAX), unreadable]. */
 	const APPROVE_FIELDS = [
-		field({ value: 'Unlimited', format: 'tokenAmount', warning: true, usd_value: null, label_term: 'labelAmount', value_term: 'valueUnlimited' }),
-		field({ label: 'Spender', value: '0x1111', role: 'spender', address: '0x1111', label_term: 'labelSpender' })
+		field({
+			value: 'Unlimited',
+			format: 'tokenAmount',
+			warning: true,
+			usd_value: null,
+			label_term: 'labelAmount',
+			value_term: 'valueUnlimited'
+		}),
+		field({
+			label: 'Spender',
+			value: '0x1111',
+			role: 'spender',
+			address: '0x1111',
+			label_term: 'labelSpender'
+		})
 	];
 	const BATCH: ClearSigningView = {
 		...INITIAL_CLEAR_VIEW,
@@ -1769,5 +1783,67 @@ describe('a batch shows every call (089 S1)', () => {
 		expect(model.blocks.some((b) => b.kind === 'warning' && b.text === m.warnUnlimited)).toBe(
 			false
 		);
+	});
+});
+
+/**
+ * Spec 093: the approve copies two more answers, decides neither. The intent a
+ * record keeps is `clear_signing`'s `record_intent` — "Send" for a plain send,
+ * nothing at all when the core says nothing may be recorded — and the token is
+ * the guard's view of it, verbatim.
+ */
+describe('what the approve carries (spec 093)', () => {
+	function plainSendView(): ClearSigningView {
+		const core = new ClearSigningCore();
+		try {
+			core.dispatch(
+				JSON.stringify({
+					type: 'resolve_transaction',
+					to: '0x1111111111111111111111111111111111111111',
+					data: null,
+					value: '0x38d7ea4c68000',
+					chain_id: 100,
+					locale: toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })
+				})
+			);
+			return JSON.parse(core.view()) as ClearSigningView;
+		} finally {
+			core.free();
+		}
+	}
+
+	it("the record's intent is the core's record_intent; the token is the guard's meta", () => {
+		const clear = plainSendView();
+		expect(clear.record_intent).toBe('Send');
+		const meta = { symbol: 'USDC', decimals: 6, verified: true, loading: false };
+		const guard: GuardView = {
+			...INITIAL_GUARD_VIEW,
+			meta,
+			rewritten_params_json: '[{"to":"0x1"}]',
+			unlimited_consented: true
+		};
+		const opts = approveOptsOf(QUOTED_FEE, clear, guard);
+		expect(opts).toMatchObject({
+			intent: 'Send',
+			token_meta: meta,
+			params_override_json: '[{"to":"0x1"}]',
+			unlimited_approved: true,
+			max_fee_per_gas: '1',
+			quoted_fee: null
+		});
+		expect(opts.token_meta).toBe(guard.meta);
+	});
+
+	it('nothing recorded when the core says nothing may be — never a shell guess', () => {
+		const opts = approveOptsOf(
+			null,
+			{ ...INITIAL_CLEAR_VIEW, record_intent: null },
+			INITIAL_GUARD_VIEW
+		);
+		expect(opts.intent).toBeNull();
+		expect(opts.max_fee_per_gas).toBeNull();
+		// The guard's placeholder token is handed over as it is; whether an
+		// unresolved token counts is the core's to say.
+		expect(opts.token_meta).toEqual(INITIAL_GUARD_VIEW.meta);
 	});
 });

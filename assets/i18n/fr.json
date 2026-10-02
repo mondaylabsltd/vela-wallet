@@ -603,7 +603,8 @@
   "labelSent": "Envoyé",
   "labelReceived": "Reçu",
   "toName": "À {{name}}",
-  "fromName": "De {{name}}"
+  "fromName": "De {{name}}",
+  "dappRowTitle": "{{intent}} sur {{place}}"
  },
  "onboarding": {
   "welcome": {

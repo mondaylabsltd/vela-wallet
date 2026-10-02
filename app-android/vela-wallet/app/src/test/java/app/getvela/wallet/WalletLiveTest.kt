@@ -14,6 +14,7 @@ import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedDirection
 import app.getvela.wallet.feature.wallet.core.FeedItem
+import app.getvela.wallet.feature.wallet.core.FeedLine
 import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import java.io.File
@@ -400,6 +401,10 @@ class WalletLiveTest {
         chain_id = 137,
         timestamp = dayStart / 1000.0 + 3600,
         day_start_ms = dayStart.toDouble(),
+        // The second line as the core words a transfer (spec 093): the person, by name or address.
+        subtitle = listOf(
+            counterparty?.let { if (received) FeedLine.From(it, alias) else FeedLine.To(it, alias) } ?: FeedLine.Network(137),
+        ),
     )
 
     private fun midnight(daysAgo: Int, now: Long): Long {
@@ -500,7 +505,11 @@ class WalletLiveTest {
         val now = System.currentTimeMillis()
         val today = midnight(0, now)
         val call = item("d", received = false, value = null, symbol = "", dayStart = today)
-            .copy(kind = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx, site = "app.uniswap.org")
+            .copy(
+                kind = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx,
+                site = "app.uniswap.org",
+                subtitle = listOf(FeedLine.Site("app.uniswap.org"), FeedLine.Network(137)),
+            )
         val feed = FeedView(
             rows = listOf(
                 FeedRow.Header("day-$today", today.toDouble(), today / 1000.0),
@@ -509,12 +518,12 @@ class WalletLiveTest {
             ),
         )
 
-        val rows = WalletLive.activity(feed, strings, now).single().rows
+        val rows = WalletLive.activity(feed, strings, now, chains).single().rows
 
         assertEquals("", rows[0].amount)
         assertEquals("", rows[0].unit)
         assertFalse(rows[0].hasFigure)
-        assertTrue(rows[0].subtitle.endsWith("app.uniswap.org"))
+        assertEquals("the core's parts, worded and joined", "app.uniswap.org · Polygon", rows[0].subtitle)
         assertTrue(rows[1].hasFigure)
     }
 

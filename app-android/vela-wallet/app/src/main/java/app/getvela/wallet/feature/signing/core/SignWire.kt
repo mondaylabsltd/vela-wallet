@@ -169,8 +169,13 @@ data class SignApproveOpts(
     val quoted_fee: SignQuotedFee? = null,
     val fee_collector: String? = null,
     val params_override_json: String? = null,
+    /** Spec 093: `ClearSigningView.record_intent`, copied — never decided here. */
     val intent: String? = null,
     val unlimited_approved: Boolean = false,
+    /** 083 F1: the sheet's simulation judgments, exactly as drawn under "Balance changes". */
+    val balance_changes: List<app.getvela.wallet.feature.wallet.core.TrustSimJudgment>? = null,
+    /** Spec 093: the approval surface's token (`GuardView.meta`), copied verbatim. */
+    val token_meta: GuardTokenMetaView? = null,
 )
 
 @Serializable
@@ -193,6 +198,14 @@ data class SignRecord(
     val maybe_sent: Boolean = false,
     /** The head read before the first submit POST (`u64` → `Long`), persisted likewise. */
     val submit_block: Long? = null,
+    /** 083 F1: what the sheet's simulation said it moves — stored verbatim (`balanceChanges`). */
+    val balance_changes: List<app.getvela.wallet.feature.wallet.core.TrustSimJudgment>? = null,
+    /** Spec 093: what the request was — stored verbatim (`dappSummary`). */
+    val summary: app.getvela.wallet.feature.wallet.core.DappSummary? = null,
+    /** Spec 093: the request as the record keeps it (≤ 8 KB, cut by the core) — stored as `signedRequest`. */
+    val stored_request: String = "",
+    /** [stored_request] is shorter than the request was (`requestTruncated`). */
+    val request_truncated: Boolean = false,
 )
 
 @Serializable

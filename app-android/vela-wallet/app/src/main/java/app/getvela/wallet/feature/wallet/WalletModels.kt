@@ -84,6 +84,10 @@ data class ActivityRowModel(
      * badge was ALWAYS the dot — a colour nobody can read as a network.
      */
     val badgeLogoUrl: String? = null,
+    /** Spec 093: the figure is an unlimited allowance — drawn in the danger tone. */
+    val danger: Boolean = false,
+    /** 083 F1 / spec 093: a swap's one coin back ("≈ +0.03 ETH"), drawn under the figure. */
+    val received: String? = null,
 ) {
     /**
      * Whether the row has a figure to draw (087 F11). A dApp call that moved

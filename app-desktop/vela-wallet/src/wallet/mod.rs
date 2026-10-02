@@ -92,6 +92,12 @@ pub struct WalletStrings {
     /// — else "Contract interaction", as the sheet called it.
     pub terms: std::collections::HashMap<vela_core::app::clear_signing::ClearTerm, SharedString>,
     pub intent_contract_call: SharedString,
+    /// A dApp row's title (spec 093): template carrying `{{intent}}` (the
+    /// verb) and `{{place}}` (where — the core's protocol or site).
+    pub dapp_row_title: String,
+    /// An allowance with no limit (spec 093), drawn in the danger tone where
+    /// a figure would be — the signing sheet's own word.
+    pub unlimited_value: SharedString,
     pub today: SharedString,
     pub yesterday: SharedString,
     /// Templates carrying `{{name}}`.
@@ -208,6 +214,8 @@ impl WalletStrings {
                 .map(|term| (term, s(&format!("componentsUi.signing.{}", term.leaf()))))
                 .collect(),
             intent_contract_call: s("componentsUi.signing.intentContractCall"),
+            dapp_row_title: raw("history.dappRowTitle"),
+            unlimited_value: s("componentsUi.signingApprove.unlimitedValue"),
             today: s("componentsUi.dayGroup.today"),
             yesterday: s("componentsUi.dayGroup.yesterday"),
             to_name: raw("history.toName"),
@@ -304,6 +312,14 @@ mod tests {
             assert_ne!(value, key, "`{key}` echoed the key");
         }
         assert!(s.to_name.contains("{{name}}"), "toName must be a template");
+        assert!(
+            s.dapp_row_title.contains("{{intent}}") && s.dapp_row_title.contains("{{place}}"),
+            "dappRowTitle must carry both vars (spec 093)"
+        );
+        assert_ne!(
+            s.unlimited_value.as_ref(),
+            "componentsUi.signingApprove.unlimitedValue"
+        );
         assert!(
             s.toast_received.contains("{{amount}}") && s.toast_received.contains("{{token}}"),
             "toastReceived must carry both vars: a celebration that names one              of them is a sentence with a hole in it"

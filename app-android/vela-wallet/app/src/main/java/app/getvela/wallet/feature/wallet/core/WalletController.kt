@@ -769,9 +769,16 @@ class WalletController(
     fun filterChain(chainId: Int?) =
         feedHost.dispatch(FeedEvent.ChainFilterChanged(chainId), FeedEvent.serializer())
 
+    /** Spec 093: a contact's page opened (its address) or closed (`null`); the feed then carries its rows. */
+    fun filterContact(address: String?) =
+        feedHost.dispatch(FeedEvent.ContactFilterChanged(address), FeedEvent.serializer())
+
     /** Remove one row: optimistic in the core, persisted by the executor. */
     fun deleteActivity(id: String) =
         feedHost.dispatch(FeedEvent.DeleteRequested(id), FeedEvent.serializer())
+
+    /** Spec 093: a dApp record's stored request, read by id when its technical details open. */
+    suspend fun storedRequest(id: String): String? = feedExecutor.storedRequest(id)
 
     private companion object {
         /**

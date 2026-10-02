@@ -105,9 +105,10 @@ pub(crate) fn to_record(row: &Value) -> Option<FeedTxRecord> {
                 _ => None,
             }),
         usd: optional("usd"),
-        // A dApp transaction's origin and decoded intent, which the core turns
-        // into the row's label (083 H2). Both are what `persist_record` in the
-        // sign executor writes, in the bytes every client writes them.
+        // A dApp interaction's origin and recorded intent — a transaction's
+        // or, since spec 093, a signature's — which the core turns into the
+        // row's title (083 H2). Both are what `persist_record` in the sign
+        // executor writes, in the bytes every client writes them.
         //
         // The site is read from `dappUrl`, the origin the request came from;
         // `dappOrigin` is a dApp's self-declared name on the clients that
@@ -128,6 +129,13 @@ pub(crate) fn to_record(row: &Value) -> Option<FeedTxRecord> {
         // row names — a token transfer's recipient or the contract — is the
         // core's reading of it.
         call_data: first_call_data(row),
+        // What the request was (spec 093): the core's own summary, stored
+        // verbatim at approve time and handed back untouched. One that will
+        // not read as the core's shape is no summary — the core then reads
+        // the row by its kind, as it reads a record from before 093.
+        summary: row
+            .get("dappSummary")
+            .and_then(|summary| serde_json::from_value(summary.clone()).ok()),
     })
 }
 
@@ -390,6 +398,27 @@ fn native_symbol(chain_id: u32) -> String {
         )
 }
 
+/// One record's stored request (spec 093), for its detail's "Technical
+/// details" — read from the store by record id, and only when that section is
+/// opened. This shell keeps the params array as text (`signedRequest`, as the
+/// core cut it); a row the web wrote keeps `{ method, params }`, whose
+/// `params` is the same thing. `None` when the record kept none.
+pub(crate) fn stored_request(id: &str) -> Option<String> {
+    let Ok(Some(Value::Array(rows))) = storage::read_value(TX_KEY) else {
+        return None;
+    };
+    let row = rows
+        .iter()
+        .find(|row| row.get("id").and_then(Value::as_str) == Some(id))?;
+    let text = match row.get("signedRequest")? {
+        Value::String(text) => text.clone(),
+        Value::Null => return None,
+        Value::Object(request) => request.get("params")?.to_string(),
+        other => other.to_string(),
+    };
+    (!text.trim().is_empty()).then_some(text)
+}
+
 /// Every stored row, as the core reads it. Crate-visible so the sign
 /// executor's test can prove the row it writes is the one Activity draws
 /// (083 H2).
@@ -589,6 +618,16 @@ pub fn reconciled(resolved_count: u32, cx: &mut App) {
     });
 }
 
+/// Tell the feed whose contact page is open (spec 093) — `None` once it
+/// closes. The core then lists what passed between the account and that
+/// address (`FeedView::contact_rows`); the page draws those rows and filters
+/// nothing itself.
+pub fn contact_changed(address: Option<String>, cx: &mut App) {
+    resident::resident::<ActivityFeed>(cx).update(cx, |resident, cx| {
+        resident.dispatch(Event::ContactFilterChanged { address }, cx);
+    });
+}
+
 /// Tell the feed what the balance hero is doing about privacy.
 ///
 /// The core suppresses the toast while balances are hidden (invariant ④), and
@@ -775,6 +814,87 @@ mod tests {
                 Some("http://127.0.0.1:5173")
             );
             assert_eq!(records[1].intent, None);
+        });
+    }
+
+    /// Spec 093: a dApp row's `dappSummary` — a transaction's or a
+    /// signature's — goes back to the core exactly as it was stored, and one
+    /// that is not the core's shape is no summary rather than a guess (the
+    /// core then reads the row by its kind). A signature's origin is mapped
+    /// like a transaction's.
+    #[test]
+    fn a_dapp_rows_summary_reads_back_verbatim_or_not_at_all() {
+        use vela_core::app::dapp_activity::{DappAction, DappSummary};
+        storage::tests::with_temp_state("feed-dapp-summary", || {
+            seed(json!([
+                {
+                    "id": "permit", "timestamp": 1_759_100_000, "chainId": 1,
+                    "type": "sign_typed_data", "txHash": "",
+                    "dappUrl": "https://app.uniswap.org",
+                    "dappSummary": {
+                        "action": "permit",
+                        "contract": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+                        "spender": "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+                        "token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                        "symbol": "USDC", "decimals": 6, "unlimited": true,
+                        "primary_type": "PermitSingle"
+                    }
+                },
+                {
+                    "id": "odd", "timestamp": 1_759_000_000, "chainId": 1,
+                    "type": "sign_message", "dappUrl": "https://app.uniswap.org",
+                    "dappSummary": { "action": "teleport" }
+                },
+                { "id": "old", "timestamp": 1_758_000_000, "chainId": 1, "type": "dapp_tx" }
+            ]));
+            let records = read_records();
+            assert_eq!(
+                records[0].summary,
+                Some(DappSummary {
+                    action: DappAction::Permit,
+                    contract: Some("0x000000000022d473030f116ddee9f6b43ac78ba3".to_owned()),
+                    spender: Some("0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad".to_owned()),
+                    token: Some("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_owned()),
+                    symbol: Some("USDC".to_owned()),
+                    decimals: Some(6),
+                    unlimited: true,
+                    primary_type: Some("PermitSingle".to_owned()),
+                    ..DappSummary::default()
+                })
+            );
+            assert_eq!(records[0].kind, Some(FeedTxKind::SignTypedData));
+            assert_eq!(
+                records[0].dapp_url.as_deref(),
+                Some("https://app.uniswap.org")
+            );
+            assert_eq!(records[1].summary, None, "not the core's shape");
+            assert_eq!(records[2].summary, None, "a record from before 093");
+        });
+    }
+
+    /// Spec 093: the technical section reads a record's stored request by
+    /// its id — this shell's text as it was kept, the params of a row the web
+    /// wrote — and nothing for a record that kept none or is gone.
+    #[test]
+    fn a_records_stored_request_is_read_by_its_id() {
+        storage::tests::with_temp_state("feed-stored-request", || {
+            seed(json!([
+                { "id": "desk", "timestamp": 1, "chainId": 1, "type": "sign_message",
+                  "signedRequest": r#"["0x48656c6c6f","0xme"]"# },
+                { "id": "web", "timestamp": 1, "chainId": 1, "type": "dapp_tx",
+                  "signedRequest": { "method": "eth_sendTransaction", "params": [{ "to": "0xr" }] } },
+                { "id": "none", "timestamp": 1, "chainId": 1, "type": "sign_message",
+                  "signedRequest": "" },
+                { "id": "old", "timestamp": 1, "chainId": 1, "type": "dapp_tx" }
+            ]));
+            assert_eq!(
+                stored_request("desk").as_deref(),
+                Some(r#"["0x48656c6c6f","0xme"]"#)
+            );
+            assert_eq!(stored_request("web").as_deref(), Some(r#"[{"to":"0xr"}]"#));
+            assert_eq!(stored_request("none"), None);
+            assert_eq!(stored_request("old"), None);
+            assert_eq!(stored_request("gone"), None);
         });
     }
 

@@ -308,14 +308,22 @@ class ContactsLiveTest {
         assertNull(detail.activity.empty)
     }
 
-    /** Payments to THIS person, and only to this person. */
+    /**
+     * Payments to THIS person: the core's `contact_rows` (spec 093 — the feed
+     * filters by address, on every network), drawn in its order; the page no
+     * longer picks rows out of Activity itself, so Activity's own rows are
+     * not what it shows.
+     */
     @Test
     fun `the activity block shows this contact's own transactions`() {
         val alice = contact("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Alice")
         val feed = feedWith(
-            feedItem("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "50"),
             feedItem("0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "70"),
-            feedItem("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "20"),
+        ).copy(
+            contact_rows = listOf(
+                feedItem("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "50").item,
+                feedItem("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "20").item,
+            ),
         )
 
         val detail = ContactsLive.detail(
@@ -330,12 +338,27 @@ class ContactsLiveTest {
         assertEquals(listOf("−50", "−20"), detail.activity.rows.map { it.amount })
     }
 
-    /** An address is an identity; a name is a label two contacts can share. */
+    /**
+     * An address is an identity; a name is a label two contacts can share.
+     * The core's rows are this person's when their address is — in any
+     * spelling — and rows it still holds for another page are not drawn here.
+     */
     @Test
     fun `matching is by address, not by name`() {
         val alice = contact("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Alice")
         // Same capitalisation difference a real address book produces.
-        val feed = feedWith(feedItem("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "50"))
+        val feed = FeedView(contact_rows = listOf(feedItem("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "50").item))
+        val stale = FeedView(contact_rows = listOf(feedItem("0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "50").item))
+        assertTrue(
+            "another page's rows",
+            ContactsLive.detail(
+                fallback = ContactsFixtures.buildMobileState(ContactsScreenState.C2, strings).detail!!,
+                contact = alice,
+                view = ContactsView(contacts = listOf(alice)),
+                feed = stale,
+                strings = strings,
+            ).activity.rows.isEmpty(),
+        )
 
         val detail = ContactsLive.detail(
             fallback = ContactsFixtures.buildMobileState(ContactsScreenState.C2, strings).detail!!,

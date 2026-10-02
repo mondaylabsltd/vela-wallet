@@ -1474,7 +1474,7 @@ private struct RelayerSheetBody: View {
 
 /// A text-only button that still answers the finger: dims and gives a press
 /// haptic, like every other button here (the founder's rule), with no box.
-private struct PlainTextButtonStyle: ButtonStyle {
+struct PlainTextButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? Interaction.pressedOpacity : 1)

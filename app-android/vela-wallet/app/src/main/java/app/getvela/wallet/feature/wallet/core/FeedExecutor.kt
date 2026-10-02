@@ -1,10 +1,12 @@
 package app.getvela.wallet.feature.wallet.core
 
+import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.diagnostics.VelaLog
 import java.util.Calendar
 import java.util.TimeZone
 import kotlinx.coroutines.delay
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -156,6 +158,9 @@ class FeedExecutor(
     private fun record(row: JSONObject): FeedTxRecord? {
         val id = row.optString("id").ifBlank { return null }
         val timestamp = row.numberOrNull("timestamp") ?: return null
+        // A dApp's transaction or signature (spec 093): its own fields cross
+        // to the core; nothing here reads what they say.
+        val dapp = row.optString("type") in DAPP_TYPES
         return FeedTxRecord(
             id = id,
             user_op_hash = row.optString("userOpHash"),
@@ -191,14 +196,52 @@ class FeedExecutor(
             usd = row.stringOrNull("usd"),
             // Spec 082 RG1 / 083 H2: the origin a dApp's request came from —
             // the core names the row's `site` from it; nothing here decides
-            // what it says. `dappOrigin` may be the dApp's own name, so never
-            // that.
-            dapp_url = row.stringOrNull("dappUrl"),
+            // what it says. A record from before 083 has no `dappUrl`; this
+            // client never sent a dApp's own name, so its `dappOrigin` is the
+            // origin too (spec 093) — the fallback is safe HERE, not on web.
+            dapp_url = if (dapp) row.stringOrNull("dappUrl") ?: row.stringOrNull("dappOrigin") else null,
             // Spec 082 RJ16: the stored request's first call `data` — the core
             // tells a token transfer's recipient from the contract a call went
             // to; nothing here decodes it.
             call_data = callData(row),
+            intent = if (dapp) row.stringOrNull("intent") else null,
+            balance_changes = if (dapp) balanceChanges(row) else null,
+            summary = if (dapp) summary(row) else null,
         )
+    }
+
+    /**
+     * Spec 093: the summary the core built at approve time, as stored. One
+     * that does not read (written by a newer build) is absent: the core then
+     * reads the record by its kind, as it reads one from before 093.
+     */
+    private fun summary(row: JSONObject): DappSummary? {
+        val stored = row.optJSONObject("dappSummary") ?: return null
+        return runCatching { Wire.json.decodeFromString(DappSummary.serializer(), stored.toString()) }.getOrNull()
+    }
+
+    /**
+     * 083 F1: the sheet's simulation judgments, as stored — all of them or
+     * none: a list with a line left out would say something it did not.
+     */
+    private fun balanceChanges(row: JSONObject): List<TrustSimJudgment>? {
+        val stored = row.optJSONArray("balanceChanges") ?: return null
+        return runCatching { Wire.json.decodeFromString(JUDGMENTS, stored.toString()) }.getOrNull()
+    }
+
+    /**
+     * Spec 093: the request a dApp record kept (`signedRequest`, as the core
+     * cut it), read by id — only when somebody opens its technical details.
+     * `null` when there is no such record or it kept none.
+     */
+    suspend fun storedRequest(id: String): String? {
+        val raw = runCatching { store.read(KeyValueStore.Keys.TRANSACTIONS) }.getOrNull() ?: return null
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return null
+        for (index in 0 until array.length()) {
+            val row = array.optJSONObject(index) ?: continue
+            if (row.optString("id") == id) return row.stringOrNull("signedRequest")
+        }
+        return null
     }
 
     /**
@@ -404,5 +447,10 @@ class FeedExecutor(
     private companion object {
         /** The newest 200 records, the same cap the Expo store applied. */
         const val TX_CAP = 200
+
+        /** A dApp's record: a transaction or a signature (the Expo spellings too). */
+        val DAPP_TYPES = setOf("dapp_tx", "dappTx", "sign_message", "signMessage", "sign_typed_data", "signTypedData")
+
+        val JUDGMENTS = ListSerializer(TrustSimJudgment.serializer())
     }
 }

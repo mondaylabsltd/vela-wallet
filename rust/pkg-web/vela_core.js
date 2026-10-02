@@ -3264,6 +3264,32 @@ export function dappReceiptWaitMs(elapsed_ms) {
 }
 
 /**
+ * A dApp record's stored request as Technical details shows it (spec 093):
+ * typed data pretty-printed, a message as its text (or its hex), call data
+ * pretty-printed — `dapp_activity::request_display`. `content` is the
+ * detail's `content` word (`"call_data"`, `"typed_data"`, `"message"`);
+ * `stored_request` the params' JSON text as the record kept it. `undefined`
+ * when the record kept nothing, or for a content word this build does not
+ * know.
+ * @param {string} content
+ * @param {string} stored_request
+ * @returns {string | undefined}
+ */
+export function dappRequestDisplay(content, stored_request) {
+    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(stored_request, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.dappRequestDisplay(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
+}
+
+/**
  * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
  * @param {string} method
  * @returns {string}

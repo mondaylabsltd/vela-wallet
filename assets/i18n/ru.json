@@ -606,7 +606,8 @@
   "labelSent": "Отправлено",
   "labelReceived": "Получено",
   "toName": "на {{name}}",
-  "fromName": "от {{name}}"
+  "fromName": "от {{name}}",
+  "dappRowTitle": "{{intent}} в {{place}}"
  },
  "onboarding": {
   "welcome": {

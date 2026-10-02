@@ -7,7 +7,7 @@
 use gpui::SharedString;
 
 use vela_core::app::activity_feed::{
-    FeedDirection, FeedItem, FeedRow, FeedTxKind, FeedTxStatus, FeedView,
+    FeedAllowance, FeedDirection, FeedItem, FeedLine, FeedRow, FeedTxKind, FeedTxStatus, FeedView,
 };
 use vela_core::app::balance_dashboard::{
     BalanceNotice, BalanceToken, BalanceView, UNREACHABLE_MANY, UNREACHABLE_ONE,
@@ -652,7 +652,7 @@ mod tests {
     }
 
     use vela_core::app::activity_feed::{
-        ActivityFeed, Event as FeedEvent, FeedItem, FeedRow, FeedView,
+        ActivityFeed, Event as FeedEvent, FeedItem, FeedLine, FeedRow, FeedView,
     };
 
     fn feed_with(
@@ -704,6 +704,7 @@ mod tests {
             balance_changes: None,
             calldata: None,
             call_data: None,
+            summary: None,
         };
 
         let mut host = CoreHost::<ActivityFeed>::new();
@@ -827,6 +828,31 @@ mod tests {
             site: None,
             counterparty_role: Default::default(),
             dapp: None,
+            subtitle: Vec::new(),
+        }
+    }
+
+    /// A dApp row's half as the core builds it, for a row drawn by hand:
+    /// `site` and the recorded intent, nothing granted, no place.
+    fn dapp_of(
+        site: Option<&str>,
+        intent: Option<&str>,
+        intent_term: Option<vela_core::app::clear_signing::ClearTerm>,
+    ) -> vela_core::app::activity_feed::FeedDapp {
+        vela_core::app::activity_feed::FeedDapp {
+            site: site.map(str::to_owned),
+            intent: intent.map(str::to_owned),
+            intent_term,
+            changes: Vec::new(),
+            received: None,
+            estimated: false,
+            contract_call: false,
+            action: vela_core::app::dapp_activity::DappAction::Call,
+            place: None,
+            allowance: None,
+            off_chain: false,
+            facts: Vec::new(),
+            technical: Vec::new(),
         }
     }
 
@@ -836,39 +862,7 @@ mod tests {
 
     /// The feed core over `records`, loaded the way the executor answers it.
     fn feed_of(records: Vec<vela_core::app::activity_feed::FeedTxRecord>) -> FeedView {
-        use vela_core::app::activity_feed::{FeedOperation, FeedShellResult};
-        let mut host = CoreHost::<ActivityFeed>::new();
-        let mut pending = host.dispatch(FeedEvent::AccountSwitched {
-            address: "0xme".to_owned(),
-        });
-        for _ in 0..16 {
-            let Some(next) = pending.pop() else {
-                break;
-            };
-            let result = match &next.operation {
-                FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
-                    records: records.clone(),
-                    now_ms: 1_756_000_000_000.0,
-                    read_id: *read_id,
-                },
-                FeedOperation::ScanIncomingTransfers { .. } => {
-                    FeedShellResult::SyncCompleted { new_count: 0 }
-                }
-                FeedOperation::ResolveRecipientIdentity { addr } => {
-                    FeedShellResult::AliasResolved {
-                        addr: addr.clone(),
-                        name: None,
-                    }
-                }
-                FeedOperation::Timer { .. } => continue,
-                FeedOperation::DeleteTxRecord { id } => {
-                    FeedShellResult::DeleteCommitted { id: id.clone() }
-                }
-                FeedOperation::Haptic => FeedShellResult::HapticPlayed,
-            };
-            pending.extend(host.resolve(next.id, result));
-        }
-        host.view()
+        crate::wallet::fixtures::core_feed(records)
     }
 
     /// A dApp's transaction as `sign_request::persist_record` stores it.
@@ -898,16 +892,25 @@ mod tests {
             balance_changes: None,
             calldata: None,
             call_data: None,
+            summary: None,
         }
     }
 
-    /// Spec 082 L-D3 (T072, RG1–RG2): a dApp's transaction is in Activity,
-    /// titled "dApp transaction", its subtitle the site that asked under its
-    /// status — "处理中 · 127.0.0.1:8137" — and a failed one says so.
+    /// Spec 082 L-D3 (T072, RG1–RG2), spec 093: a dApp's transaction is in
+    /// Activity, titled by what it did where — a call nobody decoded, at the
+    /// site that asked, "Contract interaction on 127.0.0.1:8137" — and its
+    /// second line is the core's: the status of one that has not landed, then
+    /// the network ("处理中 · Gnosis"); the site is already in the title.
     #[test]
     fn a_dapp_transaction_is_a_row_with_its_site_and_status() {
         use vela_core::app::activity_feed::FeedTxStatus;
         let s = strings();
+        let title = crate::wallet::fill(
+            &crate::wallet::fill(&s.dapp_row_title, "place", "127.0.0.1:8137"),
+            "intent",
+            &s.intent_contract_call,
+        );
+        let gnosis = crate::flows::live::chain_name(100);
         for (status, word) in [
             (FeedTxStatus::Pending, s.status_pending.clone()),
             (FeedTxStatus::Failed, s.status_failed.clone()),
@@ -917,19 +920,116 @@ mod tests {
             assert_eq!(rows.len(), 1, "{status:?}: the row is in Activity");
             let row = &rows[0];
             assert!(matches!(row.kind, ActivityKind::Dapp));
-            // Titled by what it did (083 H2): no intent was recorded.
-            assert_eq!(row.title, s.intent_contract_call);
+            assert_eq!(row.title.as_ref(), title);
             assert_eq!(
                 row.subtitle.as_ref(),
-                format!("{word} · 127.0.0.1:8137"),
+                format!("{word} · {gnosis}"),
                 "{status:?}"
             );
             assert_eq!(row.amount.as_ref(), "\u{2212}0.001");
         }
-        // Confirmed: the site alone.
+        // Confirmed: the network alone.
         let view = feed_of(vec![dapp_record("dapp-2-tx", FeedTxStatus::Confirmed)]);
         let rows = activity_rows(&view, &s, &flow_strings(), false);
-        assert_eq!(rows[0].subtitle.as_ref(), "127.0.0.1:8137");
+        assert_eq!(rows[0].subtitle.as_ref(), gnosis);
+    }
+
+    /// Spec 093, the three rows through the REAL feed core, in Chinese: a
+    /// swap on Uniswap says what left and what came back, a permit says it
+    /// granted an unlimited allowance — in the danger tone, and never masked:
+    /// it is a risk, not a balance — and a sign-in is a row with no figure.
+    /// Where the title names a protocol, the site is on the second line.
+    #[test]
+    fn the_cores_dapp_rows_are_drawn_in_its_words() {
+        let loc = crate::loc::Loc::for_language("zh");
+        let s = WalletStrings::resolve(&loc);
+        let flow = crate::flows::FlowStrings::resolve(&loc);
+        let view = feed_of(crate::wallet::fixtures::dapp_activity_records(
+            1_756_000_000.0,
+        ));
+        let ethereum = crate::flows::live::chain_name(1);
+        for hidden in [false, true] {
+            let rows = activity_rows(&view, &s, &flow, hidden);
+            assert_eq!(rows.len(), 3, "a signature is a row too");
+            let drawn: Vec<(&str, &str)> = rows
+                .iter()
+                .map(|row| (row.title.as_ref(), row.subtitle.as_ref()))
+                .collect();
+            assert_eq!(
+                drawn,
+                vec![
+                    (
+                        "在 Uniswap 兑换",
+                        format!("app.uniswap.org · {ethereum}").as_str()
+                    ),
+                    (
+                        "在 Uniswap 授权签名",
+                        format!("app.uniswap.org · {ethereum}").as_str()
+                    ),
+                    ("在 app.uniswap.org 登录", ethereum.as_str()),
+                ]
+            );
+            assert!(rows.iter().all(|row| row.kind == ActivityKind::Dapp));
+            // The swap: what left and what was expected back.
+            assert_eq!(rows[0].unit.as_ref(), "USDC");
+            assert!(!rows[0].danger);
+            // The permit: the allowance, unlimited, in the danger tone.
+            assert_eq!(
+                (rows[1].amount.as_ref(), rows[1].unit.as_ref()),
+                ("无限额", "USDC")
+            );
+            assert!(rows[1].danger);
+            // The sign-in moved nothing and granted nothing.
+            assert_eq!((rows[2].amount.as_ref(), rows[2].unit.as_ref()), ("", ""));
+            assert!(!rows[2].danger);
+            if hidden {
+                assert_eq!(rows[0].amount.as_ref(), crate::wallet::fixtures::MASK);
+            } else {
+                assert_eq!(rows[0].amount.as_ref(), "≈ \u{2212}100");
+                assert_eq!(
+                    rows[0].received.as_ref().map(AsRef::as_ref),
+                    Some("≈ +0.03 ETH")
+                );
+            }
+        }
+    }
+
+    /// Spec 093: a finite allowance reads as its figure and its token, masked
+    /// like any figure when balances are hidden; an unlimited one reads the
+    /// sheet's own word, and is never masked.
+    #[test]
+    fn an_allowance_is_its_figure_or_the_unlimited_word() {
+        use vela_core::app::activity_feed::FeedAllowance;
+        let s = strings();
+        let finite = FeedAllowance {
+            symbol: "USDC".to_owned(),
+            value: Some("100".to_owned()),
+            decimals: Some(6),
+            unlimited: false,
+            token: None,
+        };
+        assert_eq!(allowance_text(&finite, &s, false).as_ref(), "100 USDC");
+        assert_eq!(
+            allowance_text(&finite, &s, true).to_string(),
+            format!("{} USDC", crate::wallet::fixtures::MASK)
+        );
+        let unlimited = FeedAllowance {
+            value: None,
+            decimals: None,
+            unlimited: true,
+            ..finite
+        };
+        for hidden in [false, true] {
+            assert_eq!(
+                allowance_text(&unlimited, &s, hidden).to_string(),
+                format!("{} USDC", s.unlimited_value)
+            );
+        }
+        let nameless = FeedAllowance {
+            symbol: String::new(),
+            ..unlimited
+        };
+        assert_eq!(allowance_text(&nameless, &s, false), s.unlimited_value);
     }
 
     /// 087 F04/F05, through the real core: a dApp record from an older build
@@ -946,8 +1046,12 @@ mod tests {
         let view = feed_of(vec![legacy]);
         let rows = activity_rows(&view, &s, &flow_strings(), false);
         assert_eq!(
-            rows[0].subtitle.as_ref(),
-            format!("{} · 127.0.0.1:8137", s.status_unknown)
+            rows[0].subtitle.to_string(),
+            format!(
+                "{} · {}",
+                s.status_unknown,
+                crate::flows::live::chain_name(100)
+            )
         );
         assert_ne!(s.status_unknown, s.status_pending);
         assert_ne!(s.status_unknown, s.status_failed);
@@ -963,9 +1067,13 @@ mod tests {
             super::Money::usd(),
         )
         .unwrap_or_else(|| unreachable!("the row exists"));
-        assert_eq!(detail.status.text, flows.status_unknown);
+        let chip = detail
+            .status
+            .as_ref()
+            .unwrap_or_else(|| unreachable!("a transaction wears a chip"));
+        assert_eq!(chip.text, flows.status_unknown);
         assert!(matches!(
-            crate::flows::panels::delete_style(&detail.status),
+            crate::flows::panels::delete_style(chip),
             crate::flows::panels::DeleteStyle::Quiet
         ));
         assert!(
@@ -983,22 +1091,68 @@ mod tests {
         assert!(detail.delete_label.is_some());
     }
 
-    /// With no site the recipient names it, and with neither the chain.
+    /// Spec 093: every part of the core's second line, in the reader's
+    /// words — a status in the feed's status words, whom a transfer went to
+    /// or came from (a name, else the short address), a site verbatim, a
+    /// network by its name — joined " · ", in the core's order. A confirmed
+    /// status (which the core never sends) says nothing.
     #[test]
-    fn a_dapp_row_without_a_site_falls_back_to_recipient_then_chain() {
+    fn every_part_of_the_second_line_is_worded_here() {
+        use vela_core::app::activity_feed::{FeedLine, FeedTxStatus};
         let s = strings();
-        let mut dapp = item("d", false, None, "");
-        dapp.kind = vela_core::app::activity_feed::FeedTxKind::DappTx;
+        let address = "0xAbCdEf0000000000000000000000000000000001".to_owned();
+        let line = |lines: Vec<FeedLine>| subtitle_text(&lines, &s).to_string();
         assert_eq!(
-            activity_row(&dapp, &s, false).subtitle.as_ref(),
-            "0xAbCd…0001"
+            line(vec![
+                FeedLine::Status {
+                    status: FeedTxStatus::Pending
+                },
+                FeedLine::Site {
+                    site: "app.uniswap.org".to_owned()
+                },
+                FeedLine::Network { chain_id: 100 },
+            ]),
+            format!(
+                "{} · app.uniswap.org · {}",
+                s.status_pending,
+                crate::flows::live::chain_name(100)
+            )
         );
-        dapp.counterparty = None;
         assert_eq!(
-            activity_row(&dapp, &s, false).subtitle.as_ref(),
-            crate::flows::live::chain_name(100)
+            line(vec![
+                FeedLine::Status {
+                    status: FeedTxStatus::Unknown
+                },
+                FeedLine::To {
+                    address: address.clone(),
+                    name: None
+                },
+            ]),
+            format!(
+                "{} · {}",
+                s.status_unknown,
+                crate::wallet::fill(&s.to_name, "name", "0xAbCd…0001")
+            )
         );
-        assert_eq!(activity_row(&dapp, &s, false).amount.as_ref(), "");
+        assert_eq!(
+            line(vec![FeedLine::From {
+                address: address.clone(),
+                name: Some("Alice".to_owned())
+            }]),
+            crate::wallet::fill(&s.from_name, "name", "Alice")
+        );
+        assert_eq!(
+            line(vec![
+                FeedLine::Status {
+                    status: FeedTxStatus::Failed
+                },
+                FeedLine::Status {
+                    status: FeedTxStatus::Confirmed
+                },
+            ]),
+            s.status_failed.to_string()
+        );
+        assert_eq!(line(Vec::new()), "");
     }
 
     /// Spec 082 RD10 / RG5 (T073): the home's Activity — rows, skeletons
@@ -1099,34 +1253,33 @@ mod tests {
         assert!(rows[1].positive);
     }
 
-    /// A dApp's call (083 H2): titled by what it did — the sheet's words, and
-    /// "Contract interaction" for a call nobody decoded — labelled with the
-    /// site that asked, and with no figure when it moved no coin. Without a
-    /// site it says who it went to, like a send.
+    /// A dApp's row (083 H2, spec 093): titled by the core's headline verb in
+    /// the sheet's words — the descriptor's text when the wallet has no word
+    /// for it — "on" the place the core named, or the verb alone when it
+    /// named none; with no figure when it moved no coin.
     #[test]
-    fn a_dapp_call_is_titled_by_its_intent_and_labelled_with_its_site() {
-        use vela_core::app::activity_feed::FeedDapp;
+    fn a_dapp_row_is_titled_by_its_verb_and_its_place() {
         use vela_core::app::clear_signing::ClearTerm;
 
-        let dapp = |id: &str, site: Option<&str>, intent: Option<&str>| {
-            let mut row = item(id, false, None, "");
-            row.decimals = None;
-            row.dapp = Some(FeedDapp {
-                site: site.map(str::to_owned),
-                intent: intent.map(str::to_owned),
-                intent_term: intent.and_then(ClearTerm::of),
-                changes: Vec::new(),
-                received: None,
-                estimated: false,
-                contract_call: false,
-            });
-            FeedRow::Item { item: row }
-        };
+        let dapp =
+            |id: &str, place: Option<&str>, intent: Option<&str>, term: Option<ClearTerm>| {
+                let mut row = item(id, false, None, "");
+                row.decimals = None;
+                let mut dapp = dapp_of(Some("app.uniswap.org"), intent, term);
+                dapp.place = place.map(str::to_owned);
+                row.dapp = Some(dapp);
+                FeedRow::Item { item: row }
+            };
         let view = feed_with(
             vec![
-                dapp("blind", Some("app.uniswap.org"), None),
-                dapp("swap", Some("app.uniswap.org"), Some("Swap")),
-                dapp("odd", None, Some("Frobnicate")),
+                dapp("blind", None, None, Some(ClearTerm::IntentContractCall)),
+                dapp(
+                    "swap",
+                    Some("Uniswap"),
+                    Some("Swap"),
+                    Some(ClearTerm::IntentSwap),
+                ),
+                dapp("odd", Some("app.uniswap.org"), Some("Frobnicate"), None),
             ],
             Vec::new(),
         );
@@ -1137,17 +1290,31 @@ mod tests {
             &crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env()),
             false,
         );
+        let on = |place: &str, verb: &str| {
+            crate::wallet::fill(
+                &crate::wallet::fill(&s.dapp_row_title, "place", place),
+                "intent",
+                verb,
+            )
+        };
         assert_eq!(rows[0].title, s.intent_contract_call);
-        assert_eq!(rows[0].subtitle.as_ref(), "app.uniswap.org");
         assert_eq!(rows[0].amount.as_ref(), "", "no coin moved, no figure");
         assert_eq!(rows[0].unit.as_ref(), "");
-        assert_eq!(Some(&rows[1].title), s.terms.get(&ClearTerm::IntentSwap));
+        let swap = s
+            .terms
+            .get(&ClearTerm::IntentSwap)
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(rows[1].title.to_string(), on("Uniswap", &swap));
         // A descriptor's word with no translation is still better than none.
-        assert_eq!(rows[2].title.as_ref(), "Frobnicate");
         assert_eq!(
-            rows[2].subtitle.to_string(),
-            crate::wallet::fill(&s.to_name, "name", "0xAbCd…0001")
+            rows[2].title.to_string(),
+            on("app.uniswap.org", "Frobnicate")
         );
+        // Every headline word the core can name has a word here.
+        for term in ClearTerm::HEADLINES {
+            assert!(s.terms.contains_key(&term), "{term:?}");
+        }
     }
 
     /// A counterparty that is not ASCII is drawn, never a crash (083 H2
@@ -1157,21 +1324,21 @@ mod tests {
     /// own half of the promise, for whatever else reaches it.
     #[test]
     fn a_counterparty_that_is_not_ascii_is_drawn_not_a_crash() {
-        use vela_core::app::activity_feed::FeedDapp;
-
         let row = |id: &str, to: &str, site: Option<&str>| {
             let mut row = item(id, false, None, "");
             row.decimals = None;
             row.counterparty = Some(to.to_owned());
-            row.dapp = Some(FeedDapp {
-                site: site.map(str::to_owned),
-                intent: None,
-                intent_term: None,
-                changes: Vec::new(),
-                received: None,
-                estimated: false,
-                contract_call: false,
-            });
+            row.dapp = Some(dapp_of(site, None, None));
+            // The second line as the core would word a recipient it named.
+            row.subtitle = match site {
+                Some(site) => vec![FeedLine::Site {
+                    site: site.to_owned(),
+                }],
+                None => vec![FeedLine::To {
+                    address: to.to_owned(),
+                    name: None,
+                }],
+            };
             FeedRow::Item { item: row }
         };
         let view = feed_with(
@@ -1211,19 +1378,9 @@ mod tests {
     /// review). A figure beside it is still masked.
     #[test]
     fn a_row_with_no_figure_is_not_masked() {
-        use vela_core::app::activity_feed::FeedDapp;
-
         let mut call = item("call", false, None, "");
         call.decimals = None;
-        call.dapp = Some(FeedDapp {
-            site: Some("app.uniswap.org".to_owned()),
-            intent: Some("Swap".to_owned()),
-            intent_term: None,
-            changes: Vec::new(),
-            received: None,
-            estimated: false,
-            contract_call: false,
-        });
+        call.dapp = Some(dapp_of(Some("app.uniswap.org"), Some("Swap"), None));
         let mut send = item("send", false, Some("0.01"), "xDAI");
         send.dapp = call.dapp.clone();
         let view = feed_with(
@@ -1259,10 +1416,6 @@ mod tests {
         let mut swap = item("swap", false, Some("0.1"), "USDC");
         swap.decimals = Some(6);
         swap.dapp = Some(FeedDapp {
-            site: Some("app.uniswap.org".to_owned()),
-            intent: None,
-            intent_term: None,
-            changes: Vec::new(),
             received: Some(FeedDappChange {
                 direction: FeedDirection::In,
                 verified: true,
@@ -1273,6 +1426,7 @@ mod tests {
             }),
             estimated: true,
             contract_call: true,
+            ..dapp_of(Some("app.uniswap.org"), None, None)
         });
         let mut call = swap.clone();
         call.id = "call".to_owned();
@@ -1289,7 +1443,6 @@ mod tests {
         let flow = crate::flows::FlowStrings::resolve(&crate::loc::Loc::from_env());
         let rows = activity_rows(&view, &s, &flow, false);
         assert_eq!(rows[0].title, s.intent_contract_call);
-        assert_eq!(rows[0].subtitle.as_ref(), "app.uniswap.org");
         assert_eq!(
             (rows[0].amount.as_ref(), rows[0].unit.as_ref()),
             ("≈ \u{2212}0.1", "USDC")
@@ -1766,6 +1919,7 @@ mod tests {
                         site: None,
                         counterparty_role: Default::default(),
                         dapp: None,
+                        subtitle: Vec::new(),
                     },
                 }],
                 ..host.view()
@@ -2545,24 +2699,24 @@ pub fn home_activity(
     }
 }
 
-/// One feed item as a row (spec 082 RG1, RG2) — everything it says is the
-/// core's: what it is (`FeedItem.kind`), where it stands
-/// (`FeedItem.status`) and, for a dApp's transaction, the site that asked
-/// (`FeedItem.site`). The desktop's own record lookup is gone.
-///
-/// The subtitle is who it was with — for a dApp's transaction the site
-/// verbatim, else the recipient, else the chain — and a row that is not
-/// confirmed leads with its status, "处理中 · 127.0.0.1:8137": a pending or
-/// failed transaction must never read like one that landed.
+/// One feed item as a row (spec 082 RG1, RG2; spec 093) — everything it says
+/// is the core's: what it is (`FeedItem.kind`; a row with `dapp` is a dApp's
+/// transaction or signature), its title (`dapp_title`), its second line
+/// (`FeedItem.subtitle`, worded by `subtitle_text`) and its figure — the
+/// money it moved, or the allowance a grant states. The desktop's own
+/// subtitle rule is gone.
 pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> ActivityRowModel {
     let incoming = item.direction == FeedDirection::In;
-    let kind = match item.kind {
-        FeedTxKind::DappTx => ActivityKind::Dapp,
-        FeedTxKind::Receive => ActivityKind::Received,
-        FeedTxKind::Send => ActivityKind::Sent,
-        // Signatures and connections never become rows (the core's
-        // `accept()`); should one arrive, it is drawn by its direction.
-        FeedTxKind::SignMessage | FeedTxKind::SignTypedData | FeedTxKind::Connect => {
+    let kind = match (item.dapp.is_some(), item.kind) {
+        (true, _)
+        | (false, FeedTxKind::DappTx | FeedTxKind::SignMessage | FeedTxKind::SignTypedData) => {
+            ActivityKind::Dapp
+        }
+        (false, FeedTxKind::Receive) => ActivityKind::Received,
+        (false, FeedTxKind::Send) => ActivityKind::Sent,
+        // Connections never become rows (the core's `accept()`); should one
+        // arrive, it is drawn by its direction.
+        (false, FeedTxKind::Connect) => {
             if incoming {
                 ActivityKind::Received
             } else {
@@ -2570,43 +2724,25 @@ pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> 
             }
         }
     };
-
-    // Who it was with: the resolved alias if the core has one, else a shortened
-    // address, else nothing — a batch row has no single counterparty.
-    let who = item
-        .alias
-        .clone()
-        .or_else(|| item.counterparty.as_ref().map(|a| shorten_address(a)));
-    // A dApp's transaction is labelled with the site that asked (083 H2,
-    // spec 082 RG2) — the router it called is an address nobody chose.
-    let site = item
-        .dapp
-        .as_ref()
-        .and_then(|dapp| dapp.site.clone())
-        .or_else(|| item.site.clone());
-    let with = match (kind, site) {
-        (_, Some(site)) => site,
-        (ActivityKind::Dapp, None) => {
-            who.unwrap_or_else(|| crate::flows::live::chain_name(item.chain_id))
-        }
-        _ => who.map_or_else(String::new, |name| {
-            crate::wallet::fill(
-                if incoming { &s.from_name } else { &s.to_name },
-                "name",
-                &name,
-            )
-        }),
-    };
-    let status = match item.status {
-        FeedTxStatus::Confirmed => None,
-        FeedTxStatus::Pending => Some(&s.status_pending),
-        FeedTxStatus::Failed => Some(&s.status_failed),
-        FeedTxStatus::Unknown => Some(&s.status_unknown),
-    };
-    let subtitle = match (status, with.is_empty()) {
-        (None, _) => SharedString::from(with),
-        (Some(status), true) => status.clone(),
-        (Some(status), false) => SharedString::from(format!("{status} · {with}")),
+    // A grant states its allowance where a figure would be (spec 093) — the
+    // core sends one only on a row that moved no money of its own.
+    let allowance = item.dapp.as_ref().and_then(|dapp| dapp.allowance.as_ref());
+    let (amount, unit) = match allowance {
+        Some(allowance) => allowance_figure(allowance, s, hidden),
+        // Privacy masks the FIGURE and keeps the unit — H5's rule, and the
+        // same mask the hero uses, because a leak in one surface defeats it
+        // everywhere (the core's invariant ④ on the balance side). A row with
+        // no figure has nothing to mask, and "••••" would claim one.
+        None => (
+            if moved_nothing(item) {
+                SharedString::from("")
+            } else if hidden {
+                SharedString::from(crate::wallet::fixtures::MASK)
+            } else {
+                amount_text(item, incoming)
+            },
+            SharedString::from(item.symbol.clone()),
+        ),
     };
 
     ActivityRowModel {
@@ -2617,24 +2753,16 @@ pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> 
             (ActivityKind::Received, None) => s.label_received.clone(),
             (ActivityKind::Dapp, None) => s.label_dapp.clone(),
         },
-        subtitle,
+        subtitle: subtitle_text(&item.subtitle, s),
         // The chain this happened on, drawn as its logo where the endpoint has
         // one (§8.3; issue 201): the badge used to be a colour, and a colour
         // is not a network anyone can name.
         badge_logo: crate::marks::chain_logo_url(item.chain_id),
-        // Privacy masks the FIGURE and keeps the unit — H5's rule, and the same
-        // mask the hero uses, because a leak in one surface defeats it
-        // everywhere (the core's invariant ④ on the balance side). A row with
-        // no figure has nothing to mask, and "••••" would claim one.
-        amount: if moved_nothing(item) {
-            SharedString::from("")
-        } else if hidden {
-            SharedString::from(crate::wallet::fixtures::MASK)
-        } else {
-            amount_text(item, incoming)
-        },
-        unit: SharedString::from(item.symbol.clone()),
+        amount,
+        unit,
         positive: incoming,
+        // An allowance with no limit is the one standing risk a row states.
+        danger: allowance.is_some_and(|allowance| allowance.unlimited),
         badge: badge(item.chain_id),
         day: None,
         // A swap's one coin back, beside what left (083 F1) — the sheet's
@@ -2651,6 +2779,86 @@ pub(crate) fn activity_row(item: &FeedItem, s: &WalletStrings, hidden: bool) -> 
                 ))
             }),
     }
+}
+
+/// A row's second line (spec 093): the core's parts, in its order, each in
+/// the reader's words and joined " · " — a status in the feed's status words
+/// ("处理中 · …": a pending or failed operation must never read like one
+/// that landed), whom a transfer went to or came from (a name, else the
+/// short address), a site verbatim, a network by its name, a day as the
+/// history's headers say it.
+pub(crate) fn subtitle_text(lines: &[FeedLine], s: &WalletStrings) -> SharedString {
+    let parts: Vec<String> = lines
+        .iter()
+        .filter_map(|line| match line {
+            FeedLine::Status { status } => match status {
+                FeedTxStatus::Pending => Some(s.status_pending.to_string()),
+                FeedTxStatus::Failed => Some(s.status_failed.to_string()),
+                FeedTxStatus::Unknown => Some(s.status_unknown.to_string()),
+                // The core never says it: a confirmed row leads with nothing.
+                FeedTxStatus::Confirmed => None,
+            },
+            FeedLine::To { address, name } => Some(crate::wallet::fill(
+                &s.to_name,
+                "name",
+                &name.clone().unwrap_or_else(|| shorten_address(address)),
+            )),
+            FeedLine::From { address, name } => Some(crate::wallet::fill(
+                &s.from_name,
+                "name",
+                &name.clone().unwrap_or_else(|| shorten_address(address)),
+            )),
+            FeedLine::Site { site } => Some(site.clone()),
+            FeedLine::Network { chain_id } => Some(crate::flows::live::chain_name(*chain_id)),
+            // A contact's rows have no day headers: the day is on the line,
+            // worded as the history's headers word it.
+            FeedLine::Day { day_start_ms } => Some(
+                crate::flows::live::day_word(*day_start_ms, &s.today, &s.yesterday).to_string(),
+            ),
+        })
+        .collect();
+    SharedString::from(parts.join(" · "))
+}
+
+/// A grant's allowance as a figure and its unit (spec 093): the sheet's own
+/// "Unlimited" — never masked, it is a standing risk and not a balance — or
+/// the cap in the person's number format, masked like any figure when
+/// balances are hidden. The unit is the token's symbol (empty when nobody
+/// could name it).
+pub(crate) fn allowance_figure(
+    allowance: &FeedAllowance,
+    s: &WalletStrings,
+    hidden: bool,
+) -> (SharedString, SharedString) {
+    let figure = if allowance.unlimited {
+        s.unlimited_value.clone()
+    } else if hidden {
+        SharedString::from(crate::wallet::fixtures::MASK)
+    } else {
+        let value = allowance.value.as_deref().unwrap_or_default();
+        SharedString::from(value.parse::<f64>().map_or_else(
+            |_| value.to_owned(),
+            |amount| {
+                format_token_amount(
+                    amount,
+                    crate::executor::format_prefs::current().number,
+                    false,
+                )
+            },
+        ))
+    };
+    (figure, SharedString::from(allowance.symbol.clone()))
+}
+
+/// [`allowance_figure`] as one phrase — "无限额 USDC", "100 USDC" — for the
+/// detail's header and its spending-cap fact.
+pub(crate) fn allowance_text(
+    allowance: &FeedAllowance,
+    s: &WalletStrings,
+    hidden: bool,
+) -> SharedString {
+    let (figure, unit) = allowance_figure(allowance, s, hidden);
+    SharedString::from(format!("{figure} {unit}").trim().to_owned())
 }
 
 /// One of a dApp transaction's balance changes as a figure (083 F1), in the
@@ -2691,19 +2899,30 @@ pub(crate) fn change_figure(
     }
 }
 
-/// What a dApp's transaction did, as a title (083 H2): the intent recorded at
-/// approve time in the reader's words ("发送" for a plain native send,
-/// "兑换"…), the descriptor's own word when there is no translation, and
-/// "合约交互" for a call nobody decoded — the signing sheet's words for the
-/// same call.
+/// What a dApp interaction did and where, as a title (083 H2, spec 093):
+/// the core's headline verb in the reader's words — the signing sheet's own
+/// (`componentsUi.signing.<intent_term>`), else the descriptor's text — and,
+/// when the core names a place (a protocol it knows, else the site),
+/// "{verb} on {place}" (`history.dappRowTitle`; 「在 Uniswap 兑换」).
 pub(crate) fn dapp_title(
     dapp: &vela_core::app::activity_feed::FeedDapp,
     s: &WalletStrings,
 ) -> SharedString {
-    dapp.intent_term
+    let verb = dapp
+        .intent_term
         .and_then(|term| s.terms.get(&term).cloned())
         .or_else(|| dapp.intent.clone().map(SharedString::from))
-        .unwrap_or_else(|| s.intent_contract_call.clone())
+        .unwrap_or_else(|| s.intent_contract_call.clone());
+    match dapp.place.as_deref() {
+        // The place first: a host or a built-in protocol name carries no
+        // braces, while a descriptor's verb is text somebody else wrote.
+        Some(place) => SharedString::from(crate::wallet::fill(
+            &crate::wallet::fill(&s.dapp_row_title, "place", place),
+            "intent",
+            &verb,
+        )),
+        None => verb,
+    }
 }
 
 /// `+120` / `−2`. The minus is U+2212, not a hyphen — the mocks use it and it

@@ -128,9 +128,11 @@
 		liveTxDetail,
 		shownTxDetailStateDesktop,
 		shownTxDetailStateMobile,
+		storedRequestJson,
 		withLiveTxDetailDesktop,
 		withLiveTxDetailMobile
 	} from '$lib/wallet/live-detail';
+	import { activityFeedTx } from '$lib/wallet/core/feed-resident';
 	import type { PageProps } from './$types';
 
 	/** The sidebar's copy of the rule in `destinations.ts`: three rows, not four. */
@@ -208,7 +210,10 @@
 					wm: data.walletMessages,
 					currency: currency.view,
 					hidden: balance.view.hidden,
-					identicon: identiconSvgForClient
+					identicon: identiconSvgForClient,
+					// Spec 093: a dApp record's stored request, read from the store's
+					// rows by id when its "Technical details" open — never before.
+					storedRequest: (id) => storedRequestJson(activityFeedTx(id))
 				})
 	);
 

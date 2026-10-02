@@ -1947,6 +1947,20 @@ pub fn sign_ending_state(ending_json: &str, entry_json: Option<String>) -> JsRes
     sign_ending_state_inner(ending_json, entry_json.as_deref()).map_err(err)
 }
 
+/// A dApp record's stored request as Technical details shows it (spec 093):
+/// typed data pretty-printed, a message as its text (or its hex), call data
+/// pretty-printed — `dapp_activity::request_display`. `content` is the
+/// detail's `content` word (`"call_data"`, `"typed_data"`, `"message"`);
+/// `stored_request` the params' JSON text as the record kept it. `undefined`
+/// when the record kept nothing, or for a content word this build does not
+/// know.
+#[wasm_bindgen(js_name = dappRequestDisplay)]
+#[must_use]
+pub fn dapp_request_display(content: &str, stored_request: &str) -> Option<String> {
+    let content = serde_json::from_value(serde_json::Value::String(content.to_owned())).ok()?;
+    vela_core::app::dapp_activity::request_display(content, stored_request)
+}
+
 /// How long to wait for the receipt when the submit answered `elapsed_ms`
 /// after the approve tap: what is left of the 120 s answer window, never less
 /// than 10 s — `sign_request::dapp_receipt_wait_ms` (RA12).
@@ -2096,6 +2110,21 @@ pub fn balance_read_plan(
 mod core_082_exports {
     use super::*;
     use serde_json::{json, Value};
+
+    /// Spec 093: the stored request's display is the core's, by content word.
+    #[test]
+    fn the_request_display_is_the_core_s() {
+        assert_eq!(
+            dapp_request_display(
+                "message",
+                r#"["0x68656c6c6f","0x1111111111111111111111111111111111111111"]"#
+            )
+            .as_deref(),
+            Some("hello")
+        );
+        assert_eq!(dapp_request_display("call_data", ""), None);
+        assert_eq!(dapp_request_display("haiku", "[]"), None);
+    }
 
     /// Round 2 (T196): the new exports answer the core's own values.
     #[test]

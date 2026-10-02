@@ -54,6 +54,7 @@ import app.getvela.wallet.core.data.NotificationAsk
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.BuildConfig
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -1230,6 +1231,9 @@ fun VelaNavHost(
                                 flows.back()
                             }
                         },
+                        // Spec 093: a dApp record's stored request, read from the
+                        // store only when its technical details are opened.
+                        onLoadRequest = { id -> wallet.storedRequest(id) },
                         onReceiveNetwork = { index ->
                             networks.networks.getOrNull(index)?.let { row ->
                                 pendingReceiveAsset = ReceiveAssetPick(row.chain_id.toInt(), null, row.native_symbol, 18, row.display_name)
@@ -1585,6 +1589,9 @@ fun VelaNavHost(
                 val selected = openContact?.let { address ->
                     book.contacts.firstOrNull { it.address == address }
                 }
+                // Collected, not read once: the contact's rows arrive after the
+                // page tells the feed whose they are.
+                val contactFeed by application.container.wallet.feed.collectAsStateWithLifecycle()
                 val listModel = ContactsLive.home(labels, book, query, emptyState)
                 val model = if (selected != null) {
                     listModel.copy(
@@ -1592,10 +1599,11 @@ fun VelaNavHost(
                             fallback = detailLabels,
                             contact = selected,
                             view = book,
-                            // The activity this device holds, filtered to this
-                            // person by the page itself.
-                            feed = application.container.wallet.feed.value,
+                            // Spec 093: the feed's rows for this person — the
+                            // core filters them (`contact_filter_changed` below).
+                            feed = contactFeed,
                             strings = strings,
+                            chainNames = application.container.settings.networks.value.networks.associate { it.chain_id.toInt() to it.display_name },
                         ),
                         deleteConfirm = if (confirmingDelete) {
                             // Named after the contact on screen: a confirmation that
@@ -1613,6 +1621,12 @@ fun VelaNavHost(
                     listModel
                 }
 
+                // Spec 093: the feed carries the open contact's rows while the
+                // page is up — told the address on open, `null` on close or leave.
+                DisposableEffect(openContact) {
+                    application.container.wallet.filterContact(openContact)
+                    onDispose { application.container.wallet.filterContact(null) }
+                }
                 // Spec 045 US7: opening a contact asks the core about the address —
                 // the parallel space's chain, Gnosis, is where this wallet pays.
                 LaunchedEffect(openContact) {

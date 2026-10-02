@@ -1198,38 +1198,6 @@ struct InheritedArmTests {
     @Test func anUnwrittenStoreIsNotAnEmptyHistory() {
         #expect(ContactsExecutor.sendHistory(store: store()) == nil)
     }
-
-    /// A contact's page shows what passed between the two of you, both ways.
-    @Test func aContactsActivityIsThisDevicesOwnRecord() {
-        let loc = Loc(overrideTag: "zh", preferredLanguages: [])
-        let them = "0x031d7D57c99CAF891e1C250554691Fd12D84772b"
-        let rows = ContactsLive.activityRows(
-            with: them,
-            records: [
-                [
-                    "id": "a", "from": golden, "to": them, "value": "0.0001",
-                    "symbol": "XDAI", "chainId": 100,
-                    "timestamp": Date().timeIntervalSince1970, "type": "send",
-                ],
-                [
-                    "id": "b", "from": them, "to": golden, "value": "5",
-                    "symbol": "XDAI", "chainId": 100,
-                    "timestamp": Date().timeIntervalSince1970, "type": "receive",
-                ],
-                [
-                    "id": "c", "from": golden, "to": router, "value": "1",
-                    "symbol": "XDAI", "chainId": 100,
-                    "timestamp": Date().timeIntervalSince1970, "type": "send",
-                ],
-            ],
-            loc: loc
-        )
-        #expect(rows.count == 2, "somebody else's transfer reached this page")
-        #expect(rows.first?.amount == "−0.0001")
-        #expect(rows.first?.positive == false)
-        #expect(rows.last?.amount == "+5")
-        #expect(rows.last?.positive == true)
-    }
 }
 
 // MARK: - The fee quote's inner-call measurement (issue 262 follow-up)

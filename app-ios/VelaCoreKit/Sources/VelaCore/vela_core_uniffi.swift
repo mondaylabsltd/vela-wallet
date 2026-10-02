@@ -13460,6 +13460,23 @@ public func dappReceiptWaitMs(elapsedMs: Double) -> Double  {
     )
 })
 }
+/**
+ * A dApp record's stored request as Technical details shows it (spec 093):
+ * typed data pretty-printed, a message as its text (or its hex), call data
+ * pretty-printed. `content` is the detail's `content` word (`"call_data"`,
+ * `"typed_data"`, `"message"`); `stored_request` the params' JSON text as the
+ * record kept it. `None` when the record kept nothing, or for a content word
+ * this build does not know. One rule for every client's detail.
+ */
+public func dappRequestDisplay(content: String, storedRequest: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_request_display(
+        FfiConverterString.lower(content),
+        FfiConverterString.lower(storedRequest),uniffiCallStatus
+    )
+})
+}
 public func decodeCalldata(sig: String, calldata: Data)throws  -> AbiValue  {
     return try  FfiConverterTypeAbiValue_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
         uniffiCallStatus in
@@ -15610,6 +15627,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_receipt_wait_ms() != 43354) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_request_display() != 13467) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_decode_calldata() != 44581) {

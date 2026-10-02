@@ -812,7 +812,7 @@ enum SigningLive {
         case .native(let delta):
             guard let text = SimDeltas.deltaText(delta, decimals: 18) else { return nil }
             return BalanceDeltaRow(symbol: context.nativeSymbol, delta: text, tone: tone)
-        case .erc20Trusted(_, let delta, let symbol, let decimals):
+        case .erc20Trusted(_, let delta, let symbol, let decimals, _):
             guard let text = SimDeltas.deltaText(delta, decimals: decimals) else { return nil }
             return BalanceDeltaRow(symbol: symbol, delta: text, tone: tone)
         case .erc20Unverified:

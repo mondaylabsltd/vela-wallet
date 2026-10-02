@@ -380,14 +380,23 @@ struct AmountHeroView: View {
     let fiat: String
     var positive = false
     var centred = false
+    /// An unlimited allowance — a risk, drawn in the danger tone (spec 093).
+    var danger = false
+    /// A swap's coin back, under the figure (spec 093).
+    var received: String? = nil
 
     var body: some View {
         VStack(alignment: centred ? .center : .leading, spacing: Tokens.Space.s2) {
             Text(verbatim: amount)
                 .typeRole(Typography.display.scaled(textScale))
-                .foregroundStyle(positive ? theme.successBase : theme.fgBase)
+                .foregroundStyle(danger ? theme.errorBase : (positive ? theme.successBase : theme.fgBase))
                 .minimumScaleFactor(WalletGeometry.heroMinScale)
                 .lineLimit(1)
+            if let received {
+                Text(verbatim: received)
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(theme.successBase)
+            }
             Text(verbatim: fiat)
                 .typeRole(Typography.body.scaled(textScale))
                 .foregroundStyle(theme.fgSubtle)

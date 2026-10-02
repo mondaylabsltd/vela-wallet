@@ -736,6 +736,17 @@ export function dappProviderScript(host: string, debug_mode: boolean): string;
 export function dappReceiptWaitMs(elapsed_ms: number): number;
 
 /**
+ * A dApp record's stored request as Technical details shows it (spec 093):
+ * typed data pretty-printed, a message as its text (or its hex), call data
+ * pretty-printed — `dapp_activity::request_display`. `content` is the
+ * detail's `content` word (`"call_data"`, `"typed_data"`, `"message"`);
+ * `stored_request` the params' JSON text as the record kept it. `undefined`
+ * when the record kept nothing, or for a content word this build does not
+ * know.
+ */
+export function dappRequestDisplay(content: string, stored_request: string): string | undefined;
+
+/**
  * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
  */
 export function dappRpcClassify(method: string): string;
@@ -1396,6 +1407,7 @@ export interface InitOutput {
     readonly dappOffersWallet: (a: number, b: number, c: number) => number;
     readonly dappProviderScript: (a: number, b: number, c: number) => [number, number];
     readonly dappReceiptWaitMs: (a: number) => number;
+    readonly dappRequestDisplay: (a: number, b: number, c: number, d: number) => [number, number];
     readonly dappRpcClassify: (a: number, b: number) => [number, number];
     readonly dapppermissionscore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly dapppermissionscore_new: () => number;

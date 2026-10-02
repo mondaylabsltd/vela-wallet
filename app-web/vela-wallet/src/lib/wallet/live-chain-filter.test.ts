@@ -74,7 +74,8 @@ function item(id: string, chain_id: number): FeedItem {
 		kind: 'receive',
 		status: 'confirmed',
 		site: null,
-		counterparty_role: 'recipient'
+		counterparty_role: 'recipient',
+		subtitle: [{ type: 'from', address: '0x' + 'b1'.repeat(20), name: null }]
 	};
 }
 
@@ -86,6 +87,7 @@ const FEED: FeedView = {
 	toast: null,
 	history_empty_key: 'history.emptyTitle',
 	home_empty_key: 'home.emptyNoActivity',
+	contact_rows: [],
 	rows: [
 		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
 		{ type: 'item', item: item('a', 1) },

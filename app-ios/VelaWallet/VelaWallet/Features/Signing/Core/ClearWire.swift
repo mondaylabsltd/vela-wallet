@@ -329,6 +329,11 @@ struct ClearSigningViewWire: Decodable, Equatable {
     /// 089 S1: every call of a batch — present exactly when `surface` is
     /// `batch`, and then `result` and `plainSend` are `nil`.
     var batch: ClearBatchViewWire? = nil
+    /// The verb the request's record keeps — what Activity titles it with
+    /// (spec 093). The core decides it (no best-effort guess; a batch's one
+    /// shared verb); the approve copies it as `intent`. `nil` when nothing
+    /// may be recorded.
+    var recordIntent: String? = nil
 
     static let empty = ClearSigningViewWire(
         resolving: false, resolved: false, result: nil, message: nil,

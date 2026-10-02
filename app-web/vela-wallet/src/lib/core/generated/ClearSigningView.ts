@@ -45,4 +45,18 @@ plain_send: ClearPlainSend | null,
  * is [`ClearSurface::Batch`]; `result` and `plain_send` are then `None`,
  * so nothing that reads them can describe the batch by its first call.
  */
-batch: ClearBatchView | null, };
+batch: ClearBatchView | null, 
+/**
+ * The intent the request's record keeps — the verb Activity titles it
+ * with (spec 093). The shell copies it to
+ * [`super::sign_request::SignApproveOpts::intent`] and decides nothing.
+ *
+ * A decoded reading's intent — unless the reading is best effort: a
+ * function name recovered from the public selector database is whatever
+ * the contract's deployer called it, and the sheet showed it under a
+ * caution a plain Activity title would drop (083 H2 review). "Send" for
+ * a plain send. A batch's one verb once the approvals that serve it are
+ * set aside ([`batch_headline`]). `None` for everything else — the record
+ * then reads by what the request is.
+ */
+record_intent: string | null, };

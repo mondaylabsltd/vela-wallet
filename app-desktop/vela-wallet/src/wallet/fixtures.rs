@@ -66,6 +66,9 @@ pub struct ActivityRowModel {
     /// (083 F1): what the wallet's simulation expected when the person
     /// approved, never a promise. `None` on every other row.
     pub received: Option<SharedString>,
+    /// The figure is an unlimited allowance a dApp was granted (spec 093):
+    /// drawn in the danger tone.
+    pub danger: bool,
 }
 
 #[derive(Clone)]
@@ -291,6 +294,7 @@ fn row(
         badge_logo: None,
         day: None,
         received: None,
+        danger: false,
     }
 }
 
@@ -555,6 +559,160 @@ pub fn receive_network_detail(s: &WalletStrings) -> SharedString {
 /// D2 warning-card footnote: `同一地址，通用于全部 8 个网络`.
 pub fn receive_networks_line(s: &WalletStrings) -> SharedString {
     fill(&s.networks_line, "count", &NETWORK_COUNT.to_string()).into()
+}
+
+/// Spec 093's three dApp interactions as the store hands them to the feed —
+/// a swap on Uniswap, a Permit2 permit with no limit, a Sign-In with
+/// Ethereum — each carrying the summary the signing core wrote at approve
+/// time. Newest first: the swap at `now_sec`, the permit a minute before it,
+/// the sign-in a minute before that. Fed to the REAL feed core by the
+/// row-mapping and detail tests (and by the screenshot harness), so every
+/// word the rows say is the core's.
+#[cfg(test)]
+pub fn dapp_activity_records(now_sec: f64) -> Vec<vela_core::app::activity_feed::FeedTxRecord> {
+    use vela_core::app::activity_feed::{FeedTxKind, FeedTxRecord, FeedTxStatus};
+    use vela_core::app::dapp_activity::{DappAction, DappSummary};
+    use vela_core::app::token_trust::TrustSimJudgment;
+
+    const ROUTER: &str = "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad";
+    const PERMIT2: &str = "0x000000000022d473030f116ddee9f6b43ac78ba3";
+    const USDC: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+    let record = |id: &str, kind: FeedTxKind, at: f64, summary: DappSummary| FeedTxRecord {
+        id: id.to_owned(),
+        user_op_hash: String::new(),
+        tx_hash: String::new(),
+        from: "0xme".to_owned(),
+        to: String::new(),
+        to_name: None,
+        value: "0".to_owned(),
+        symbol: String::new(),
+        decimals: 0,
+        logo_urls: None,
+        chain_id: 1,
+        timestamp: at,
+        day_start_ms: crate::executor::day_start_ms(at * 1000.0),
+        status: FeedTxStatus::Confirmed,
+        kind: Some(kind),
+        usd: None,
+        dapp_url: Some("https://app.uniswap.org".to_owned()),
+        intent: None,
+        balance_changes: None,
+        calldata: None,
+        call_data: None,
+        summary: Some(summary),
+    };
+    let swap = FeedTxRecord {
+        user_op_hash: "0x5c1e3fa0b2d4c6e8f0a1b3c5d7e9f1a3b5c7d9e1f3a5b7c9d1e3f5a7b9c1d3e5"
+            .to_owned(),
+        tx_hash: "0x9f2c4e5d6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f".to_owned(),
+        to: ROUTER.to_owned(),
+        value: "0x0".to_owned(),
+        symbol: "ETH".to_owned(),
+        decimals: 18,
+        intent: Some("Swap".to_owned()),
+        balance_changes: Some(vec![
+            TrustSimJudgment::Erc20Trusted {
+                token: USDC.to_owned(),
+                delta: "-100000000".to_owned(),
+                symbol: "USDC".to_owned(),
+                decimals: 6,
+                in_trusted_set: true,
+            },
+            TrustSimJudgment::Native {
+                delta: "30000000000000000".to_owned(),
+            },
+        ]),
+        calldata: Some(true),
+        call_data: Some("0x3593564c".to_owned()),
+        ..record(
+            "dapp-1-swap",
+            FeedTxKind::DappTx,
+            now_sec,
+            DappSummary {
+                action: DappAction::Call,
+                calls: 1,
+                contract: Some(ROUTER.to_owned()),
+                ..DappSummary::default()
+            },
+        )
+    };
+    let permit = record(
+        "dapp-2-permit",
+        FeedTxKind::SignTypedData,
+        now_sec - 60.0,
+        DappSummary {
+            action: DappAction::Permit,
+            contract: Some(PERMIT2.to_owned()),
+            spender: Some(ROUTER.to_owned()),
+            token: Some(USDC.to_owned()),
+            symbol: Some("USDC".to_owned()),
+            decimals: Some(6),
+            unlimited: true,
+            primary_type: Some("PermitSingle".to_owned()),
+            ..DappSummary::default()
+        },
+    );
+    let sign_in = record(
+        "dapp-3-siwe",
+        FeedTxKind::SignMessage,
+        now_sec - 120.0,
+        DappSummary {
+            action: DappAction::SignIn,
+            signin_domain: Some("app.uniswap.org".to_owned()),
+            ..DappSummary::default()
+        },
+    );
+    vec![swap, permit, sign_in]
+}
+
+/// The REAL feed core over `records`, loaded the way the executor answers it
+/// for the account `0xme` — what Activity draws from those records.
+#[cfg(test)]
+pub fn core_feed(
+    records: Vec<vela_core::app::activity_feed::FeedTxRecord>,
+) -> vela_core::app::activity_feed::FeedView {
+    core_feed_host(records).view()
+}
+
+/// [`core_feed`]'s machine itself, for a test that tells it more (a contact
+/// page opening).
+#[cfg(test)]
+pub fn core_feed_host(
+    records: Vec<vela_core::app::activity_feed::FeedTxRecord>,
+) -> crate::core_host::CoreHost<vela_core::app::activity_feed::ActivityFeed> {
+    use vela_core::app::activity_feed::{
+        ActivityFeed, Event as FeedEvent, FeedOperation, FeedShellResult,
+    };
+    let mut host = crate::core_host::CoreHost::<ActivityFeed>::new();
+    let mut pending = host.dispatch(FeedEvent::AccountSwitched {
+        address: "0xme".to_owned(),
+    });
+    for _ in 0..16 {
+        let Some(next) = pending.pop() else {
+            break;
+        };
+        let result = match &next.operation {
+            FeedOperation::ReadTxStore { read_id, .. } => FeedShellResult::StoreLoaded {
+                records: records.clone(),
+                now_ms: 1_756_000_000_000.0,
+                read_id: *read_id,
+            },
+            FeedOperation::ScanIncomingTransfers { .. } => {
+                FeedShellResult::SyncCompleted { new_count: 0 }
+            }
+            FeedOperation::ResolveRecipientIdentity { addr } => FeedShellResult::AliasResolved {
+                addr: addr.clone(),
+                name: None,
+            },
+            FeedOperation::Timer { .. } => continue,
+            FeedOperation::DeleteTxRecord { id } => {
+                FeedShellResult::DeleteCommitted { id: id.clone() }
+            }
+            FeedOperation::Haptic => FeedShellResult::HapticPlayed,
+        };
+        pending.extend(host.resolve(next.id, result));
+    }
+    host
 }
 
 #[cfg(test)]

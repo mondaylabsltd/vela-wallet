@@ -603,7 +603,8 @@
   "labelSent": "Enviado",
   "labelReceived": "Recebido",
   "toName": "Para {{name}}",
-  "fromName": "De {{name}}"
+  "fromName": "De {{name}}",
+  "dappRowTitle": "{{intent}} em {{place}}"
  },
  "onboarding": {
   "welcome": {

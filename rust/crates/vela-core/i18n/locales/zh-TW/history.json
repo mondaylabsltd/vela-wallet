@@ -19,6 +19,7 @@
     "labelSent": "已發送",
     "labelReceived": "已收到",
     "toName": "至 {{name}}",
-    "fromName": "來自 {{name}}"
+    "fromName": "來自 {{name}}",
+    "dappRowTitle": "在 {{place}} {{intent}}"
   }
 }

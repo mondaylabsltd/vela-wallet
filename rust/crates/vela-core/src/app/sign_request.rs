@@ -306,6 +306,13 @@ pub struct SignApproveOpts {
     /// and the row draws as before.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub balance_changes: Option<Vec<TrustSimJudgment>>,
+    /// The approval surface's token, as it resolved (`GuardView::meta`),
+    /// copied verbatim (spec 093): what lets the record say "100 USDC"
+    /// rather than a bare number. Read only once it resolved; `None` (no
+    /// approval on the sheet, a shell that predates it) names the token from
+    /// the built-in table, or not at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_meta: Option<super::approval_guard::GuardTokenMetaView>,
 }
 
 /// Bundler gas-account funding facts (`FundingNeeded`), amounts as decimal
@@ -443,6 +450,20 @@ pub struct SignRecord {
     /// before.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub balance_changes: Option<Vec<TrustSimJudgment>>,
+    /// What the request was, as Activity states it (spec 093) — built once,
+    /// at approve time, from the FULL final params. The shell stores it
+    /// verbatim with the record (`dappSummary`) and hands it back to the
+    /// feed untouched. `None` only on a record from before 093.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<super::dapp_activity::DappSummary>,
+    /// The request as the record keeps it: `params_json`, at most
+    /// [`super::dapp_activity::STORED_REQUEST_MAX_BYTES`] (spec 093). Every
+    /// shell stores this, never its own cut of `params_json`.
+    #[serde(default)]
+    pub stored_request: String,
+    /// `stored_request` is shorter than the request was.
+    #[serde(default)]
+    pub request_truncated: bool,
 }
 
 /// The in-place patch closing a pending record — same id, never a second
@@ -534,6 +555,10 @@ pub struct SignTrackerWithdraw {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "SignOperation"))]
+// `PersistRecord` carries the whole record (spec 093 put its summary on it).
+// Boxing it would buy an allocation per operation and change nothing a shell
+// sees — this is a wire type whose JSON shape the generated TypeScript pins.
+#[allow(clippy::large_enum_variant)]
 pub enum SignOperation {
     /// Answer the transport that OWNS the request (F2) — never a shared ref.
     SendResponse {
@@ -1300,6 +1325,8 @@ struct Inflight {
     intent: Option<String>,
     /// The approve's `balance_changes`, for a transaction only (083 F1).
     balance_changes: Option<Vec<TrustSimJudgment>>,
+    /// What the request was, for Activity (spec 093), from the final params.
+    summary: super::dapp_activity::DappSummary,
     max_fee_per_gas: Option<String>,
     gas_fee_token: Option<String>,
     quoted_fee: Option<SignQuotedFee>,
@@ -2422,6 +2449,16 @@ fn approve_with(
             )
         });
 
+    // What Activity will say the request was (spec 093): read here, once,
+    // from the WHOLE final params — before any shell clips what it stores —
+    // against the origin the row will name.
+    let summary = super::dapp_activity::summarize(
+        &pending.method,
+        &parsed,
+        &pending.origin,
+        opts.token_meta.as_ref(),
+    );
+
     model.inflight = Some(Inflight {
         id: pending.id.clone(),
         transport_id: pending.transport_id.clone(),
@@ -2435,6 +2472,7 @@ fn approve_with(
         record_url: pending.origin.clone(),
         intent,
         balance_changes,
+        summary,
         max_fee_per_gas: opts.max_fee_per_gas.clone(),
         gas_fee_token: opts.gas_fee_token.clone(),
         // The tier the shell copied from the displayed estimate, filtered to
@@ -2821,6 +2859,34 @@ fn pending_tx_record(
         maybe_sent,
         submit_block,
         balance_changes: fl.balance_changes.clone(),
+        ..kept_request(fl)
+    }
+}
+
+/// The record's spec-093 fields for `fl`: its summary and its request as
+/// stored. The rest of a [`SignRecord`] is the caller's.
+fn kept_request(fl: &Inflight) -> SignRecord {
+    let (stored_request, request_truncated) = super::dapp_activity::stored_request(&fl.params_json);
+    SignRecord {
+        record_id: String::new(),
+        kind: SignRecordKind::DappTx,
+        method: String::new(),
+        params_json: String::new(),
+        result: String::new(),
+        from: String::new(),
+        chain_id: 0,
+        now_ms: 0.0,
+        status: SignRecordStatus::Pending,
+        user_op_hash: String::new(),
+        dapp_origin: String::new(),
+        dapp_url: String::new(),
+        intent: None,
+        maybe_sent: false,
+        submit_block: None,
+        balance_changes: None,
+        summary: Some(fl.summary.clone()),
+        stored_request,
+        request_truncated,
     }
 }
 
@@ -3400,7 +3466,15 @@ fn on_submit_outcome(
                     kind,
                     method: fl.method.clone(),
                     params_json: fl.params_json.clone(),
-                    result: result.clone(),
+                    // A signature stays with the page that asked for it
+                    // (spec 093): the disk keeps that it was given, never the
+                    // signature itself. A batch's result is its id, which the
+                    // tracker follows.
+                    result: if kind == SignRecordKind::DappTx {
+                        result.clone()
+                    } else {
+                        String::new()
+                    },
                     from: fl.address.clone(),
                     chain_id: fl.chain_id,
                     now_ms,
@@ -3412,6 +3486,7 @@ fn on_submit_outcome(
                     maybe_sent: false,
                     submit_block: None,
                     balance_changes: fl.balance_changes.clone(),
+                    ..kept_request(fl)
                 };
                 if let Some(inner) = model.inflight.as_mut() {
                     inner.record_id = Some(record.record_id.clone());
@@ -3564,6 +3639,7 @@ fn persist_pending_then(
         maybe_sent: false,
         submit_block: None,
         balance_changes: fl.balance_changes.clone(),
+        ..kept_request(fl)
     };
     model.tracker_handoff = Some(SignTrackerHandoff {
         user_op_hash: user_op_hash.clone(),

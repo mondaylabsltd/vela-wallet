@@ -1768,7 +1768,10 @@ struct RootView: View {
                 // may (spec 017, invariant ⑤).
                 simDeltas: { [trust] address, chainId, deltas in
                     trust.simDeltasComputed(address: address, chainId: chainId, deltas: deltas)
-                }
+                },
+                // The same judged view the sheet draws (`signingContext`),
+                // read at the slide for the record (spec 093).
+                simView: { [trust] in trust.trust?.sim }
             )
         )
         signing = controller
@@ -1882,9 +1885,11 @@ struct RootView: View {
                             model: ContactsLive.detail(
                                 contact, view: view,
                                 // This device's own record of what passed
-                                // between the two of you — the same store the
-                                // feed reads, narrowed to one address.
-                                records: TxRecords.load(store: shelf), loc: loc,
+                                // between the two of you — the feed's own
+                                // rows, narrowed by the core to this address
+                                // (`contact_filter_changed`, spec 093).
+                                rows: activity.feed?.contactRows ?? [],
+                                hidden: wallet.balance?.hidden ?? false, loc: loc,
                                 form: contactForm(), groupPick: groupPick
                             ),
                             onBack: { contactsRoute = nil },
@@ -1950,6 +1955,9 @@ struct RootView: View {
                         // address: is it a contract, and has this wallet ever
                         // paid it. The answer lands in `view.recipient`.
                         .task(id: contact.address) {
+                            // The feed narrows its rows to this person while
+                            // the page is up, and lets go when it leaves.
+                            activity.contactFilter(contact.address)
                             contacts.inspect(
                                 address: contact.address,
                                 // The chain the page in front is on, because
@@ -1959,6 +1967,7 @@ struct RootView: View {
                                 chainId: browser.currentTab?.chainId ?? 100
                             )
                         }
+                        .onDisappear { activity.contactFilter(nil) }
                     } else {
                         contactsHome(view)
                     }
@@ -2399,7 +2408,10 @@ struct RootView: View {
             model.sheet = .txDetail(FlowsLive.txDetail(
                 item,
                 record: feed.transactions.first { $0.id == item.id },
-                on: detail, loc: loc
+                on: detail, loc: loc,
+                // The request a dApp record kept, read only when its
+                // technical details are opened (spec 093).
+                readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) }
             ))
         }
         if case .tokenDetail(let detail)? = model.sheet,
