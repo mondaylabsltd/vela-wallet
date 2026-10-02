@@ -48,6 +48,76 @@ Branch `091-debug-mode-lan-dapps`, from `origin/main` @ `ec033f231`. Nothing pus
   `place` rebuilds it, as the dead-engine path does). It is compiled and tested on macOS only. The app crate
   cannot be cross-checked for Windows (`check-windows.sh` header).
 
+## Device crash: opening 设置 overflowed the main-thread stack (iOS Debug, fixed)
+
+The lead's device pass (iPhone 11, Debug build of `a10c0bad5`) crashed every time 设置 was tapped:
+SIGSEGV in the stack guard, 89 frames, under `SettingsLive.withAccounts` ← `RootView.settingsModel`. The
+main thread there has 1,008 KB of stack (from the crash report's VM regions). The same path had already
+crashed once on 2026-10-01, before this branch ("Thread stack size exceeded"). This spec's 56 bytes were
+the last straw, not the cause.
+
+**Cause.**
+- `SettingsScreenModel` was a 4.4 KB value. The live builder passes it through ~20
+  `model = SettingsLive.with…(…, on: model)` steps, and unoptimised code gives every temporary its own slot.
+- `RootView.settingsModel` alone took a **231,792 B** frame, and each step's own frame took 18–37 KB.
+- SwiftUI's generic body frames, which allocate the body value with this model inside it, took the rest of
+  the stack.
+
+**Sizes** (`MemoryLayout<…>.size`, arm64; main = this branch minus the 56 B `DebugModeModel`):
+
+| Type | main | branch before fix | after fix |
+|---|---|---|---|
+| `SettingsScreenModel` | 4,360 | 4,416 | **8** (one pointer) |
+| `AboutModel` | 96 | 152 | 152 |
+| `SettingsScreen` (the view) | ~5,400 (not measured: the model's 56 B plus two optional closures and a `@State` less) | 5,528 | **1,120** |
+| `ExploreHomeModel` / `FlowScreenModel` / `SendViewWire` / `SigningModel` / `ContactsScene` / `WalletHomeModel` | unchanged | 1,984 / 1,280 / 1,130 / 1,010 / 705 / 536 | unchanged |
+
+**Frames on the crash path** (prologue stack allocation in the device arm64 Debug binary, bytes):
+
+| Function | before | after |
+|---|---|---|
+| `RootView.settingsModel(_:)` | 231,792 | 7,600 |
+| `SettingsLive.withAccounts` | 36,272 | 2,816 |
+| `RootView.content(router:)` | 11,776 | 7,360 |
+| `RootView.settingsScreen(_:)` | 7,600 | 3,184 |
+| `RootView.signedInOrWelcome.getter` | 28,592 | 28,592 |
+| `RootView.rescueModel(_:)` | 45,136 | 912 |
+| other `SettingsLive.with…` | 18–37 K each | 0.8–5.4 K each |
+| **the app's frames on the crash path, summed** | **322,592** | **56,112** |
+
+**Fix.** `SettingsScreenModel` is now copy-on-write: one pointer to a `SettingsScreenContent` held in a
+`final class`.
+- `@dynamicMemberLookup` keeps every read and write (`model.about.debugMode.title = …`) as it was.
+- A write copies the content only when another value shares it, so value semantics hold (tested).
+- No conformance changed. The model was never `Equatable`, so SwiftUI's diffing of the view is unaffected.
+- No call site changed except the one fixture constructor.
+
+**Guards** (`ScreenModelStackTests`):
+- `theSettingsModelIsOnePointer`: the model is one pointer, and a copy is untouched by a write to the
+  original.
+- `everyScreenModelStaysUnderTheBudget`: 2 KB per screen model; `SettingsScreen` ≤ 4 KB.
+- `theSettingsBuilderFitsItsStackBudget`: RootView's unconditional settings steps, in its order and shape,
+  run on a thread whose 8 MB stack the test allocates, paints and reads back. They must use ≤ 64 KB.
+  - Before the fix this test **fails** at 202,880 B, and the two size tests fail at 4,416 B and 5,528 B.
+  - After the fix it passes, at 27,744–37,648 B (28,000 B in the full-suite run).
+  - A painted stack gives a number in the failure instead of a crashed test process. I chose that over a
+    512 KB thread, which would only fail by crashing.
+- `theOtherScreenBuildersFitTheirBudget`: every state of the signing, flow, wallet-home and Explore fixture
+  builders, against 128 KB each.
+
+**Other big screens** (worst state, simulator arm64 Debug; nothing near the crash level, but the next to
+watch):
+
+| Path | Measure |
+|---|---|
+| Signing: `RootView.signingModel` runs `SigningFixtures.build(.cs1)` as the fallback on every sheet | 85–91 KB of stack (frame 76,896 B) |
+| Send flow: `RootView.flowModel` frame 47,680 B + `WalletFlowFixtures.build` | 68–74 KB; about 150 KB of the app's frames on the deepest path |
+| Wallet home | 29–37 KB |
+| Explore | 27–31 KB |
+
+`RootView.signedInOrWelcome.getter` keeps a 28,592 B frame on every tab. If signing or flow grows, box
+`SigningModel` / `FlowScreenModel` the same way.
+
 ## The rule (core)
 
 - `dapp_permissions::offers_wallet(origin, debug_mode)`:
@@ -169,7 +239,7 @@ script installs the provider only when debug mode is on. Log:
 | desktop `cargo fmt --check` / `cargo clippy --all-targets` | clean / no new warnings |
 | desktop `cargo test` (as CI) / `cargo test --features dev-fixtures` | 883 passed, 49 ignored / 887 passed, 50 ignored |
 | Android `:app:testDebugUnitTest` | 920 tests in 106 suites, 0 failed |
-| iOS `VelaWalletTests` (own simulator clone, deleted) | 1115 tests in 142 suites passed |
+| iOS `VelaWalletTests` (own simulator clone, deleted) | 1119 tests in 143 suites passed (after the stack fix) |
 | `check-native-reachability` / `check-event-payloads` / `check-dead-controls` | ok / 0 mismatches / 0 |
 
 ## Screenshots

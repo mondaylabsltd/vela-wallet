@@ -814,7 +814,7 @@ enum SettingsFixtures {
         default: loc.t(k.title)
         }
 
-        return SettingsScreenModel(
+        return SettingsScreenModel(SettingsScreenContent(
             state: state,
             title: loc.t(k.title),
             page: form.page,
@@ -876,6 +876,6 @@ enum SettingsFixtures {
             indexDown: indexDown(loc),
             backdropTitle: backdropTitle,
             closeLabel: loc.t(k.close)
-        )
+        ))
     }
 }

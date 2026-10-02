@@ -563,7 +563,51 @@ struct WalletKeyRowModel: Identifiable {
     let key: CreateKeyRow
 }
 
+/// The settings screen's model: every page, sheet and rescue of it, by
+/// value — through one pointer.
+///
+/// **Copy-on-write, on purpose** (spec 091, device-found 2026-10-02). Inline,
+/// these fields came to 4.4 KB, and the screen's live builder hands the model
+/// through some twenty `SettingsLive.with…` steps. An unoptimised (Debug)
+/// build gives every temporary of every step its own stack slot, so
+/// `RootView.settingsModel` alone took a 226 KB frame; with SwiftUI's generic
+/// body frames — which allocate the whole body value, this model included,
+/// several times over — opening 设置 overflowed the iPhone's 1 MB main-thread
+/// stack (SIGSEGV). The simulator's larger stack hid it.
+///
+/// So the fields live in `SettingsScreenContent` behind one reference.
+/// Reads go straight through (`model.about`, `model.sections`), a write
+/// copies the content first only when another value still shares it, and
+/// the model is exactly the value it was. `ScreenModelStackTests` holds the
+/// size and the builder's stack to a budget.
+@dynamicMemberLookup
 struct SettingsScreenModel {
+    private final class Storage {
+        var content: SettingsScreenContent
+        init(_ content: SettingsScreenContent) { self.content = content }
+    }
+
+    private var storage: Storage
+
+    init(_ content: SettingsScreenContent) {
+        storage = Storage(content)
+    }
+
+    subscript<Value>(dynamicMember keyPath: KeyPath<SettingsScreenContent, Value>) -> Value {
+        storage.content[keyPath: keyPath]
+    }
+
+    subscript<Value>(dynamicMember keyPath: WritableKeyPath<SettingsScreenContent, Value>) -> Value {
+        get { storage.content[keyPath: keyPath] }
+        set {
+            if !isKnownUniquelyReferenced(&storage) { storage = Storage(storage.content) }
+            storage.content[keyPath: keyPath] = newValue
+        }
+    }
+}
+
+/// What `SettingsScreenModel` holds.
+struct SettingsScreenContent {
     let state: SettingsStateId
     let title: String
     /// Which page it OPENS on. A `var` because a screen elsewhere can send
@@ -634,7 +678,9 @@ struct SettingsScreenModel {
     /// Scrim title behind a rescue sheet — "钱包", "转账", "设备存储".
     let backdropTitle: String
     let closeLabel: String
+}
 
+extension SettingsScreenModel {
     /// The signed-in identity, swapped over the fixture account (spec 019's
     /// rule: a fixture name over a real address tells somebody they are signed
     /// in as a stranger).
@@ -646,7 +692,7 @@ struct SettingsScreenModel {
         // Only the ACTIVE row: the other two are fixtures, and there is no
         // honest way to make them real without an account list the core does
         // not expose yet.
-        copy.accountsSheet.rows = accountsSheet.rows.enumerated().map { index, row in
+        copy.accountsSheet.rows = self.accountsSheet.rows.enumerated().map { index, row in
             guard index == 0 else { return row }
             var updated = row
             updated.name = name

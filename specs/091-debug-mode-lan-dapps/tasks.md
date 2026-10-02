@@ -45,7 +45,12 @@ the wallet, US3 = the setting changes while a page is open.
 - [x] T027 [P] Android: `Preferences(developerBuild = BuildConfig.DEBUG)`, `VersionTapCounter(developerBuild = …)` — `PreferencesTest` "a release build has no debug mode…"; debug-only cleartext (`src/debug/res/xml/network_security_config.xml`) — `CleartextPolicyTest` (release grants none, debug allows)
 - [x] T028 Store doc §3b: the row replaced by one line — debug mode exists only in developer builds
 
-## Phase 6 — Docs
+## Phase 6 — iOS device crash: opening 设置 overflowed the main stack (Debug)
+
+- [x] T029 `SettingsScreenModel` copy-on-write (one pointer over `SettingsScreenContent`, `@dynamicMemberLookup`) (`Features/Settings/SettingsModels.swift`, `SettingsFixtures.swift`) — `RootView.settingsModel` frame 231,792 → 7,600 B; crash path 322,592 → 56,112 B
+- [x] T030 Guards: `ScreenModelStackTests` (model is one pointer and still a value; screen-model size budget; the settings builder's stack ≤ 64 KB on a painted thread stack — fails before at 202,880 B; the other builders ≤ 128 KB)
+
+## Phase 7 — Docs
 
 - [x] T022 `specs/088-store-readiness/results.md`: owner ruling 2026-10-02 → spec 091
 - [x] T023 `docs/dapp-browser/ARCHITECTURE.md` (who is offered the wallet); `docs/store-submission/privacy-and-review.md` §3b (the hidden debug mode, Apple 2.3.1(a)); iOS `Info.plist` comment
