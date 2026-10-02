@@ -351,9 +351,19 @@ sealed class FeedFact {
     @SerialName("network")
     data class Network(val chain_id: Int) : FeedFact()
 
+    /** The contract a call went to (`tokenDetail.labelContract`), with its built-in name when the wallet knows it. */
     @Serializable
     @SerialName("contract")
     data class Contract(val address: String, val name: String? = null) : FeedFact()
+
+    /**
+     * Who got the money (`componentsTx.detail.to`): a plain send's recipient,
+     * or the one a token `transfer` names; [name] is the row's name for them.
+     * A call states this or [Contract], never both.
+     */
+    @Serializable
+    @SerialName("recipient")
+    data class Recipient(val address: String, val name: String? = null) : FeedFact()
 
     @Serializable
     @SerialName("spender")

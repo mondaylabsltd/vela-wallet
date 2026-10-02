@@ -526,6 +526,8 @@ object I18nKeys {
         // Spec 093: a dApp interaction's detail — every word an existing key.
         const val OFF_CHAIN_NOTE = "connect.detail.offChainNote"
         const val DETAIL_APP = "connect.detail.labelApp"
+        /** The contract a dApp's call went to — the noun (083 F3 review), not "Interacting with". */
+        const val DAPP_CONTRACT = "tokenDetail.labelContract"
         const val DETAIL_SPENDER = "componentsUi.signing.labelSpender"
         const val SPENDING_CAP = "componentsUi.signingApprove.spendingCap"
         const val EXPIRES = "componentsUi.signingApprove.expiresLabel"

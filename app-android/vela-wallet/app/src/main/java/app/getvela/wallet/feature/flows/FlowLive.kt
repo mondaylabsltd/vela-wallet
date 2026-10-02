@@ -393,7 +393,9 @@ object FlowLive {
                 lead = FactLead.Token(WalletLive.chainMark(fact.chain_id, name)),
             )
         }
-        is FeedFact.Contract -> party(strings.t(I18nKeys.Flows.DETAIL_CONTRACT), fact.address, fact.name, strings)
+        // 083 F3 review: the noun "Contract" — the call's target is not somebody it paid.
+        is FeedFact.Contract -> party(strings.t(I18nKeys.Flows.DAPP_CONTRACT), fact.address, fact.name, strings)
+        is FeedFact.Recipient -> party(strings.t(I18nKeys.Flows.DETAIL_TO), fact.address, fact.name, strings)
         is FeedFact.Spender -> party(strings.t(I18nKeys.Flows.DETAIL_SPENDER), fact.address, fact.name, strings)
         is FeedFact.SpendingCap -> FactRowModel(
             label = strings.t(I18nKeys.Flows.SPENDING_CAP),
@@ -445,7 +447,7 @@ object FlowLive {
         else -> null
     }
 
-    /** A contract or a spender: its built-in name, else the short address — copyable either way. */
+    /** A contract, a recipient or a spender: its name, else the short address — copyable either way. */
     private fun party(label: String, address: String, name: String?, strings: VelaStrings) = FactRowModel(
         label = label,
         value = name ?: shortAddress(address),

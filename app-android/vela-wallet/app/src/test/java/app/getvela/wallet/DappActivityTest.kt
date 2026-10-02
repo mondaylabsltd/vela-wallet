@@ -248,6 +248,52 @@ class DappActivityTest {
         assertNull(feed.storedRequest("nobody"))
     }
 
+    /**
+     * A request whose very shape was past the core's 8 KB keeps nothing
+     * (`stored_request` is ""): the store reads no request for it, and the
+     * opened section says the content was not recorded.
+     */
+    @Test
+    fun `a request the core kept nothing of reads as content not recorded`() = runBlocking {
+        val (view, feed) = realFeed(listOf(swapRecord().copy(stored_request = "", request_truncated = true))) { view ->
+            view.rows.any { it is FeedRow.Item }
+        }
+        assertNull("nothing kept is nothing to show", feed.storedRequest("dapp-swap"))
+        val fallback = (FlowFixtures.build(FlowState.A2, en).sheet as FlowSheet.TxDetail).model
+        val content = FlowLive.txDetail(fallback, view, "dapp-swap", en, chains)!!.technical!!.lines.filterIsInstance<TxTechnicalLine.Content>().single()
+        assertEquals(en.t(I18nKeys.Flows.CONTENT_MISSING), content.missing)
+    }
+
+    /**
+     * Who got the money (core ebe50807b): a dApp's token transfer names its
+     * recipient — "To", by the row's name for them, copyable — and no
+     * contract; a plain send of the coin names its recipient too.
+     */
+    @Test
+    fun `a dApp's payment names who got the money, never the contract as well`() = runBlocking {
+        val alice = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
+        val transfer = "0xa9059cbb" + "0".repeat(24) + alice.removePrefix("0x").lowercase() + "0".repeat(58) + "0f4240"
+        fun call(id: String, params: String, contract: String, tx: String) = swapRecord().copy(
+            record_id = id, params_json = params, stored_request = params, intent = null, balance_changes = null,
+            result = tx, user_op_hash = "",
+            summary = DappSummary(action = DappAction.Call, calls = 1, contract = contract.lowercase()),
+        )
+        val paid = call("dapp-paid", "[{\"to\":\"$USDC\",\"value\":\"0x0\",\"data\":\"$transfer\"}]", USDC, "0x" + "d1".repeat(32))
+        val sent = call("dapp-sent", "[{\"to\":\"$alice\",\"value\":\"0x38d7ea4c68000\"}]", alice, "0x" + "d2".repeat(32))
+        val (view, _) = realFeed(listOf(paid, sent), ownAccounts = listOf(FeedExecutor.FeedOwnAccount(alice, "Alice"))) { view ->
+            view.rows.filterIsInstance<FeedRow.Item>().count { row -> row.item.dapp?.facts?.any { it is FeedFact.Recipient && it.name == "Alice" } == true } == 2
+        }
+        val fallback = (FlowFixtures.build(FlowState.A2, en).sheet as FlowSheet.TxDetail).model
+        for (id in listOf("dapp-paid", "dapp-sent")) {
+            val detail = FlowLive.txDetail(fallback, view, id, en, chains)!!
+            val to = detail.facts.single { it.label == en.t(I18nKeys.Flows.DETAIL_TO) }
+            assertEquals("the row's name for them", "Alice", to.value)
+            assertTrue(to.copyValue.equals(alice, ignoreCase = true))
+            assertTrue("copyable", to.copy != null)
+            assertFalse("a call states the recipient or the contract, never both", detail.facts.any { it.label == en.t(I18nKeys.Flows.DAPP_CONTRACT) })
+        }
+    }
+
     // -- the rows and the detail, on the real feed ---------------------------------------
 
     /**
@@ -341,7 +387,9 @@ class DappActivityTest {
         assertEquals("≈ +0.03 ETH", swap.received)
         val changes = swap.facts.single { it.label == en.t(I18nKeys.Flows.BALANCE_CHANGES) }
         assertEquals(listOf("≈ −100 USDC", "≈ +0.03 ETH"), listOf(changes.value) + changes.lines)
-        assertEquals("Uniswap Universal Router", swap.facts.single { it.label == en.t(I18nKeys.Flows.DETAIL_CONTRACT) }.value)
+        // 083 F3 review: the call's target is "Contract", the noun — and a swap names no recipient.
+        assertEquals("Uniswap Universal Router", swap.facts.single { it.label == en.t(I18nKeys.Flows.DAPP_CONTRACT) }.value)
+        assertFalse(swap.facts.any { it.label == en.t(I18nKeys.Flows.DETAIL_TO) })
         assertEquals("https://etherscan.io/tx/$SWAP_TX", swap.explorerUrl)
         val swapTechnical = swap.technical!!.lines.filterIsInstance<TxTechnicalLine.Fact>().map { it.fact }
         assertEquals(SWAP_TX, swapTechnical.single { it.label == en.t(I18nKeys.Flows.DETAIL_HASH) }.copyValue)
@@ -388,7 +436,7 @@ class DappActivityTest {
     fun `every word the dApp rows use is in the corpus`() {
         val keys = listOf(
             I18nKeys.Wallet.DAPP_ROW_TITLE, I18nKeys.Wallet.UNLIMITED, I18nKeys.Wallet.TO_NAME, I18nKeys.Wallet.FROM_NAME,
-            I18nKeys.Flows.OFF_CHAIN_NOTE, I18nKeys.Flows.DETAIL_APP, I18nKeys.Flows.DETAIL_SPENDER, I18nKeys.Flows.SPENDING_CAP,
+            I18nKeys.Flows.OFF_CHAIN_NOTE, I18nKeys.Flows.DETAIL_APP, I18nKeys.Flows.DAPP_CONTRACT, I18nKeys.Flows.DETAIL_TO, I18nKeys.Flows.DETAIL_SPENDER, I18nKeys.Flows.SPENDING_CAP,
             I18nKeys.Flows.EXPIRES, I18nKeys.Flows.NO_EXPIRY, I18nKeys.Flows.UNLIMITED, I18nKeys.Flows.BALANCE_CHANGES,
             I18nKeys.Flows.UNVERIFIED_TOKEN, I18nKeys.Flows.TECHNICAL, I18nKeys.Flows.OPERATION, I18nKeys.Flows.OP_CONTRACT,
             I18nKeys.Flows.OP_BATCH, I18nKeys.Flows.OP_SIGNATURE, I18nKeys.Flows.OP_TYPED_DATA, I18nKeys.Flows.CONTENT_CALL_DATA,
@@ -437,9 +485,18 @@ class DappActivityTest {
         val usdc = GuardTokenMetaView(symbol = "USDC", decimals = 6, verified = true, loading = false)
         val permit = signedByCore("eth_signTypedData_v4", permitParams(), SignApproveOpts(token_meta = usdc, unlimited_approved = true))
         val siwe = signedByCore("personal_sign", siweParams(), SignApproveOpts())
+        return realFeed(listOf(swapRecord(), permit, siwe)) { view -> view.rows.count { it is FeedRow.Item } == 3 }
+    }
+
+    /** [records] as the row builder stores them, read by the REAL feed until [ready]. */
+    private suspend fun realFeed(
+        records: List<SignRecord>,
+        ownAccounts: List<FeedExecutor.FeedOwnAccount> = emptyList(),
+        ready: (FeedView) -> Boolean,
+    ): Pair<FeedView, FeedExecutor> {
         val store = FakeStore()
-        val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
-        assertTrue(feed.writeRecords(listOf(swapRecord(), permit, siwe).map { SignExecutor.recordRow(it, "ETH") }))
+        val feed = FeedExecutor(store = store, ownAccounts = { ownAccounts })
+        assertTrue(feed.writeRecords(records.map { SignExecutor.recordRow(it, "ETH") }))
         val host = CoreHost(
             bridge = ActivityFeedCore().asBridge(),
             scope = scope,
@@ -451,9 +508,7 @@ class DappActivityTest {
         )
         host.dispatch(FeedEvent.AccountSwitched(ME), FeedEvent.serializer())
         host.dispatch(FeedEvent.ReconcileCompleted(1), FeedEvent.serializer())
-        val view = withTimeout(20_000) {
-            host.view.first { view -> view.rows.count { it is FeedRow.Item } == 3 }
-        }
+        val view = withTimeout(20_000) { host.view.first(ready) }
         return view to feed
     }
 
