@@ -45,7 +45,7 @@
 	import type { ContactExportScope } from '$lib/core/generated/ContactExportScope';
 	import type { ContactFileFormat } from '$lib/core/generated/ContactFileFormat';
 	import { flowHandoffQuery, type FlowHandoff } from '$lib/flows/contact-handoff';
-	import { pickTextFile, saveTextFile } from '$lib/services/file-io';
+	import { pickFile, saveTextFile } from '$lib/services/file-io';
 	import { preferences } from '$lib/services/preferences.svelte';
 	import { session } from '$lib/session/core/session.svelte';
 	import AccountSwitcher from '$lib/session/ui/AccountSwitcher.svelte';
@@ -255,13 +255,14 @@
 	});
 
 	async function importBook(intoGroup: string | undefined): Promise<void> {
-		const file = await pickTextFile('.json,.csv,.txt');
+		const file = await pickFile('.json,.csv,.txt');
 		if (file === null) return;
-		// The core sniffs the format, parses, and rules (existing-wins; a bad
-		// file is refused before any write). The report lands in the view.
+		// The core decodes the bytes (issue 333), sniffs the format, parses,
+		// and rules (existing-wins; a bad file is refused before any write).
+		// The report lands in the view.
 		contacts.dispatch({
 			type: 'import_file',
-			content: file.text,
+			bytes: Array.from(file.bytes),
 			filename: file.name,
 			into_group: intoGroup ?? null,
 			now_ms: Date.now()

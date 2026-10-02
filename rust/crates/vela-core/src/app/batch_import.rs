@@ -127,9 +127,10 @@ pub enum BatchOperation {
     /// refuse. Status drives the loading/failed hints so an empty mirror is
     /// never unexplained.
     FetchUsdFiatRate { code: String },
-    /// Open the table picker. Text files come back as text (parsed in core);
-    /// Excel workbooks are flattened by the shell's lazy SheetJS into a cell
-    /// matrix (`recipient-table.ts:294-302` stays shell-side).
+    /// Open the table picker. Text files come back as their BYTES, which the
+    /// core decodes and parses; Excel workbooks are flattened by the shell's
+    /// lazy SheetJS into a cell matrix (`recipient-table.ts:294-302` stays
+    /// shell-side).
     PickFile,
     /// Save the CSV template (`saveTextFile` semantics).
     SaveTemplateFile {
@@ -144,11 +145,31 @@ pub enum BatchOperation {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "BatchFileContent"))]
 pub enum BatchFileContent {
-    /// CSV / TSV / TXT — the pure text path, interpreted in core.
-    Text { text: String },
+    /// CSV / TSV / TXT, as the file's bytes, undecoded. The core decodes them
+    /// once, as the contacts import does (`contacts_io::decode_text`: UTF-8,
+    /// or UTF-16 by its byte-order mark, never a guess), then interprets the
+    /// text. The shells used to decode for themselves, and three did it
+    /// leniently: a payroll CSV Excel saved in GBK turned every Chinese name
+    /// into U+FFFD without a word (issue 333's twin, 087).
+    Bytes { bytes: Vec<u8> },
     /// A workbook's first sheet as an array-of-arrays (SheetJS `header: 1`,
     /// `defval: ''` — column positions stay stable).
     Matrix { rows: Vec<Vec<String>> },
+}
+
+/// Why a picked file was not read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum BatchFileFailure {
+    /// The picker or the read failed, or the workbook would not open — the
+    /// sheet names the kinds of file it reads (`send.batchImportFailedBody`).
+    Unreadable,
+    /// Text in an encoding this core does not read faithfully — not UTF-8,
+    /// nor UTF-16 marked by its byte-order mark (a spreadsheet saved in a
+    /// legacy code page). The sheet says how to save it
+    /// (`contacts.importFailEncoding`, the contacts import's own sentence).
+    UnsupportedEncoding,
 }
 
 /// What the shell observed.
@@ -1144,7 +1165,7 @@ pub struct Model {
     file_parsed: Option<BatchParseResult>,
     file_name: Option<String>,
     busy: bool,
-    file_error: bool,
+    file_failure: Option<BatchFileFailure>,
     template_saved: bool,
     /// The last rate the shell answered, tagged with its currency. Only
     /// usable while `code` still equals [`Model::fiat_code`].
@@ -1208,6 +1229,10 @@ pub struct BatchView {
     pub busy: bool,
     /// A picked file could not be read — the shell shows the alert copy.
     pub file_error: bool,
+    /// Why, when `file_error`: the alert's second line says what to do about
+    /// it (087, issue 333's twin). `None` otherwise.
+    #[serde(default)]
+    pub file_failure: Option<BatchFileFailure>,
     pub template_saved: bool,
     /// `!!token.priceUsd && token.priceUsd > 0` — drives which rate hints
     /// show and the default unit.
@@ -1289,7 +1314,7 @@ impl App for BatchImport {
                 model.file_parsed = None;
                 model.file_name = None;
                 model.busy = false;
-                model.file_error = false;
+                model.file_failure = None;
                 model.template_saved = false;
                 model.usd_fiat_rate = None;
                 model.rate_status = BatchRateStatus::Loading;
@@ -1345,7 +1370,7 @@ impl App for BatchImport {
                     return Command::done();
                 }
                 model.busy = true;
-                model.file_error = false;
+                model.file_failure = None;
                 request(model, BatchOperation::PickFile)
             }
             Event::SaveTemplateRequested => {
@@ -1415,6 +1440,7 @@ impl App for BatchImport {
                 file_name: None,
                 busy: false,
                 file_error: false,
+                file_failure: None,
                 template_saved: false,
                 priced: false,
                 rate_status: BatchRateStatus::Loading,
@@ -1441,7 +1467,8 @@ impl App for BatchImport {
             raw_text: model.raw_text.clone(),
             file_name: model.file_name.clone(),
             busy: model.busy,
-            file_error: model.file_error,
+            file_error: model.file_failure.is_some(),
+            file_failure: model.file_failure,
             template_saved: model.template_saved,
             priced: token.price_usd.is_some_and(|p| p > 0.0),
             rate_status: model.rate_status,
@@ -1501,10 +1528,22 @@ fn accept(model: &mut Model, result: BatchShellResult) -> Command<BatchEffect, E
             model.busy = false;
             model.file_name = Some(name);
             match content {
-                BatchFileContent::Text { text } => {
-                    // Text files flow through the same pure parser as paste.
-                    model.raw_text = text;
-                    model.file_parsed = None;
+                BatchFileContent::Bytes { bytes } => {
+                    match super::contacts_io::decode_text(&bytes) {
+                        // Text files flow through the same pure parser as paste.
+                        Ok(text) => {
+                            model.raw_text = text;
+                            model.file_parsed = None;
+                        }
+                        // Refused, never guessed: the picked file replaces what
+                        // was there, so the sheet says why it holds nothing rather
+                        // than showing the previous file's rows under this name.
+                        Err(_) => {
+                            model.raw_text.clear();
+                            model.file_parsed = None;
+                            model.file_failure = Some(BatchFileFailure::UnsupportedEncoding);
+                        }
+                    }
                 }
                 BatchFileContent::Matrix { rows } => {
                     model.raw_text.clear();
@@ -1525,7 +1564,7 @@ fn accept(model: &mut Model, result: BatchShellResult) -> Command<BatchEffect, E
                 return Command::done();
             }
             model.busy = false;
-            model.file_error = true;
+            model.file_failure = Some(BatchFileFailure::Unreadable);
             render()
         }
         BatchShellResult::TemplateSaved => {

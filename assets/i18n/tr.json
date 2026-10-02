@@ -112,7 +112,7 @@
    "subtitle": "Vela'nın burada sakladığı her şeyi sil",
    "desc": "Vela'nın bu cihazda sakladığı her şey silinir. Yedeği yoktur ve geri alınamaz.",
    "loses": "Kaybedecekleriniz: işlem geçmişi, kişiler ve gruplar, gezinme geçmişi, dApp izinleri, özel tokenlar ve ağlar, RPC ve uç nokta ayarları ve tüm tercihler.",
-   "keeps": "Cüzdanı kaybetmezsiniz. Silme işlemi geçiş anahtarlarınıza ulaşmaz — onları bu uygulama değil, geçiş anahtarı sağlayıcınız (Face ID / parmak izi, bir parola yöneticisi ya da bir güvenlik anahtarı) saklar. “Zaten bir cüzdanım var” seçeneğini seçin, aynı adres geçmişi olmadan geri gelir.",
+   "keeps": "Cüzdan kalır: geçiş anahtarlarınızı bu uygulama değil, geçiş anahtarı sağlayıcınız saklar — yeniden giriş yapın, aynı adres geri gelir. Silinmeyenler: Vela Relay gönderilen işlemleri 14 güne kadar, anahtar dizini kayıtları 30 güne kadar saklar; zincirdeki açık anahtar kaydı kalıcıdır ve kimse silemez.",
    "confirm": "Her Şeyi Sil",
    "cancel": "İptal",
    "failed": "Temizleme tamamlanmadı. Bu cihazda hâlâ veri var ve oturumunuz açık — lütfen tekrar deneyin."
@@ -1760,6 +1760,7 @@
   "importDoneInvalid": "Geçersiz adresli {{invalid}} satır atlandı.",
   "importFailTitle": "İçe aktarma başarısız",
   "importFailBody": "Bir JSON veya CSV kişi dosyası kullanın.",
+  "importFailEncoding": "Dosyayı UTF-8 olarak kaydedin (Excel: CSV UTF-8) ve yeniden deneyin.",
   "manage": "Yönet",
   "sectionContacts": "Kişiler",
   "countPeople": "{{count}}",

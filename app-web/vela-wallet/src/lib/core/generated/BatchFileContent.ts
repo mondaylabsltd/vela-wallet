@@ -3,4 +3,4 @@
 /**
  * A picked file's content, already shaped for the core.
  */
-export type BatchFileContent = { "type": "text", text: string, } | { "type": "matrix", rows: Array<Array<string>>, };
+export type BatchFileContent = { "type": "bytes", bytes: Array<number>, } | { "type": "matrix", rows: Array<Array<string>>, };

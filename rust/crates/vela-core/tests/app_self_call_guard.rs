@@ -13,7 +13,7 @@ use support::DomainDriver;
 use vela_core::app::self_call_guard::{detect_self_call, SelfCallFunction};
 use vela_core::app::sign_request::{
     Event, SignAccountRef, SignApproveOpts, SignDappIdentity, SignErrorKind, SignOperation as Op,
-    SignRequest, SignResponsePayload, SignSurface, CODE_INTERNAL,
+    SignRequest, SignResponsePayload, SignShellResult, SignSurface, CODE_INTERNAL,
 };
 
 type Sut = DomainDriver<SignRequest>;
@@ -349,4 +349,107 @@ fn an_ordinary_request_still_opens_normally() {
     assert_eq!(view.surface, SignSurface::Sheet);
     assert!(view.confirm_gate_open, "a normal request is signable");
     assert!(view.blocked.is_none());
+}
+
+// ---------------------------------------------------------------------------
+// 089 S1 — every guard reads every call of a batch, not just the first
+// ---------------------------------------------------------------------------
+
+/// `execTransaction(to, value, data, operation, …)` — a SafeTx executed
+/// against the account itself, its inner call `inner_to`/`inner_data`.
+fn exec_transaction_calldata(inner_to: &str, inner_data: &str) -> String {
+    let body = inner_data.trim_start_matches("0x");
+    let padded = format!("{body:0<width$}", width = body.len().div_ceil(64) * 64);
+    format!(
+        "0x6a761202{}{}{}{}{}{}{}{}{}{}{}{}",
+        word_addr(inner_to),
+        word_num(0),
+        word_num(32 * 10), // data offset: after the ten head words
+        word_num(0),       // operation: call
+        word_num(0),
+        word_num(0),
+        word_num(0),
+        word_addr("0x0"),
+        word_addr("0x0"),
+        word_num(32 * 10 + 32 + padded.len() as u64 / 2), // signatures offset
+        word_num((body.len() / 2) as u64),
+        padded,
+    )
+}
+
+/// A batch whose SECOND call rewrites who controls the account opens refused
+/// — the benign first call is no cover.
+#[test]
+fn a_batch_whose_second_call_is_a_self_call_opens_refused() {
+    let mut sut = boot();
+    arrive(
+        &mut sut,
+        "wallet_sendCalls",
+        &batch(vec![
+            json!({ "to": OTHER, "value": "0x1" }),
+            json!({ "to": SAFE, "data": add_owner_calldata() }),
+        ]),
+    );
+    let view = sut.view();
+    assert!(!view.confirm_gate_open, "nothing to confirm");
+    let blocked = view.blocked.expect("refused");
+    assert_eq!(blocked.function, "addOwnerWithThreshold");
+    assert_eq!(blocked.leg_index, Some(2), "names the step it hid in");
+}
+
+/// A SafeTx executed against the account, as the THIRD call: refused, and
+/// the step is named.
+#[test]
+fn a_batch_whose_third_call_executes_a_safe_tx_on_the_account_is_refused() {
+    let calls = vec![
+        json!({ "to": OTHER, "value": "0x1" }),
+        json!({ "to": OTHER, "data": format!("0xa9059cbb{}{}", word_addr(OTHER), word_num(1)) }),
+        json!({ "to": SAFE, "data": exec_transaction_calldata(OTHER, "0x") }),
+    ];
+    let block = detect_self_call("wallet_sendCalls", Some(&batch(calls)), SAFE).expect("blocked");
+    assert_eq!(block.function, SelfCallFunction::ExecTransaction);
+    assert_eq!(block.leg_index, Some(3));
+}
+
+/// The submit chokepoint reads every call of the params it is handed, so a
+/// shell that rewrote a batch cannot slip a self-call into its last call.
+#[test]
+fn a_rewritten_batch_with_a_self_call_in_a_later_call_is_never_signed() {
+    let mut sut = boot();
+    arrive(
+        &mut sut,
+        "wallet_sendCalls",
+        &batch(vec![
+            json!({ "to": OTHER, "value": "0x1" }),
+            json!({ "to": OTHER, "value": "0x2" }),
+        ]),
+    );
+    assert!(sut.view().confirm_gate_open, "an ordinary batch opens");
+    let rewritten = batch(vec![
+        json!({ "to": OTHER, "value": "0x1" }),
+        json!({ "to": SAFE, "data": enable_module_calldata() }),
+    ]);
+    sut.dispatch(Event::ApproveTapped {
+        opts: SignApproveOpts {
+            params_override_json: Some(rewritten.to_string()),
+            ..SignApproveOpts::default()
+        },
+    });
+    // The funding pre-check comes first; the chokepoint follows it.
+    let ops = sut.resolve(SignShellResult::PreCheck { funding: None });
+    assert!(
+        !sut.outstanding()
+            .iter()
+            .chain(ops.iter())
+            .any(|op| matches!(op, Op::SignAndSubmit { .. })),
+        "a self-call in a later call is never signed"
+    );
+    assert!(
+        ops.iter().any(|op| matches!(
+            op,
+            Op::SendResponse { payload: SignResponsePayload::Err { kind, .. }, .. }
+                if *kind == SignErrorKind::SelfCallBlocked
+        )),
+        "refused by the self-call chokepoint, and answered so: {ops:?}"
+    );
 }

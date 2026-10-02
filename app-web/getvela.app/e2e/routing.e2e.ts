@@ -22,6 +22,8 @@ const ENGLISH_PAGES = [
 	'/blog/hello-world',
 	'/privacy',
 	'/terms',
+	'/support',
+	'/delete',
 	'/registry',
 	'/sitemap.xml',
 	'/blog/rss.xml'
@@ -79,6 +81,8 @@ const MUST_404 = [
 	'/ja/blog',
 	'/ja/privacy',
 	'/ja/terms',
+	'/ja/support',
+	'/ja/delete',
 	'/ja/registry'
 ];
 

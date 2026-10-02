@@ -26,11 +26,21 @@ class BatchExecutorTest {
     }
 
     @Test
-    fun `a csv arrives as text, an xlsx as a matrix, a cancel as cancelled`() = runBlocking<Unit> {
+    fun `a csv arrives as its bytes, an xlsx as a matrix, a cancel as cancelled`() = runBlocking<Unit> {
         val csv = BatchExecutor({ null }, { FakePorts(PickedDocument("two-rows.csv", "name,address,amount\nA,0x11,1\n".toByteArray())) })
         val text = csv.perform(BatchOperation.PickFile) as BatchShellResult.FilePicked
         assertEquals("two-rows.csv", text.name)
-        assertTrue((text.content as BatchFileContent.Text).text.startsWith("name,address"))
+        assertEquals(
+            "name,address,amount\nA,0x11,1\n".toByteArray().map { it.toInt() },
+            (text.content as BatchFileContent.Bytes).bytes,
+        )
+
+        // 087: never decoded here — a GBK name's bytes reach the core as they
+        // are (0–255), for the core to refuse rather than garble.
+        val gbk = byteArrayOf(0xD5.toByte(), 0xC5.toByte(), 0xC8.toByte(), 0xFD.toByte())
+        val legacy = BatchExecutor({ null }, { FakePorts(PickedDocument("gbk.csv", gbk)) })
+            .perform(BatchOperation.PickFile) as BatchShellResult.FilePicked
+        assertEquals(listOf(0xD5, 0xC5, 0xC8, 0xFD), (legacy.content as BatchFileContent.Bytes).bytes)
 
         val out = ByteArrayOutputStream()
         ZipOutputStream(out).use { zip ->

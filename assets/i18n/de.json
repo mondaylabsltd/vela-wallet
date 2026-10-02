@@ -112,7 +112,7 @@
    "subtitle": "Löscht alles, was Vela hier gespeichert hat",
    "desc": "Alles, was Vela auf diesem Gerät gespeichert hat, wird gelöscht. Es gibt keine Sicherung und kein Zurück.",
    "loses": "Sie verlieren: Transaktionsverlauf, Kontakte und Gruppen, Browserverlauf, dApp-Berechtigungen, eigene Token und Netzwerke, RPC- und Endpunkt-Einstellungen sowie sämtliche Präferenzen.",
-   "keeps": "Die Wallet verlieren Sie nicht. Das Löschen kommt an Ihre Passkeys nicht heran — sie liegen bei Ihrem Passkey-Anbieter (Face ID / Fingerabdruck, einem Passwortmanager oder einem Sicherheitsschlüssel), nicht in dieser App. Wählen Sie „Ich habe bereits eine Wallet“, und dieselbe Adresse kommt zurück, nur ohne Verlauf.",
+   "keeps": "Die Wallet bleibt: Ihre Passkeys liegen bei Ihrem Passkey-Anbieter, nicht in dieser App — melden Sie sich wieder an, und dieselbe Adresse kommt zurück. Nicht gelöscht wird: Vela Relay speichert gesendete Transaktionen bis zu 14 Tage, der Schlüsselindex Registrierungen bis zu 30 Tage, und der Public-Key-Eintrag auf der Chain ist dauerhaft – niemand kann ihn löschen.",
    "confirm": "Alles löschen",
    "cancel": "Abbrechen",
    "failed": "Das Löschen wurde nicht abgeschlossen. Auf diesem Gerät liegen noch Daten und Sie sind weiterhin angemeldet — bitte erneut versuchen."
@@ -1760,6 +1760,7 @@
   "importDoneInvalid": "{{invalid}} mit ungültiger Adresse übersprungen.",
   "importFailTitle": "Import fehlgeschlagen",
   "importFailBody": "Verwenden Sie eine JSON- oder CSV-Kontaktdatei.",
+  "importFailEncoding": "Speichern Sie die Datei als UTF-8 (Excel: CSV UTF-8) und versuchen Sie es erneut.",
   "manage": "Verwalten",
   "sectionContacts": "Kontakte",
   "countPeople": "{{count}}",

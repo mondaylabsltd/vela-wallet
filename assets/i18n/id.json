@@ -112,7 +112,7 @@
    "subtitle": "Hapus semua yang disimpan Vela di sini",
    "desc": "Semua yang disimpan Vela di perangkat ini akan dihapus. Tidak ada cadangan dan tidak bisa dibatalkan.",
    "loses": "Anda kehilangan: riwayat transaksi, kontak dan grup, riwayat penjelajahan, izin dApp, token dan jaringan khusus, pengaturan RPC dan endpoint, serta semua preferensi.",
-   "keeps": "Dompetnya tidak hilang. Penghapusan tidak menyentuh passkey Anda — passkey disimpan oleh penyedia passkey Anda (Face ID / sidik jari, pengelola kata sandi, atau kunci keamanan), bukan oleh aplikasi ini. Pilih “Saya sudah punya dompet” dan alamat yang sama kembali, hanya tanpa riwayat.",
+   "keeps": "Dompet tetap ada: passkey Anda disimpan oleh penyedia passkey, bukan aplikasi ini — masuk lagi dan alamat yang sama kembali. Yang tidak terhapus: Vela Relay menyimpan transaksi terkirim hingga 14 hari, indeks kunci menyimpan pendaftaran hingga 30 hari, dan catatan kunci publik di chain bersifat permanen; tidak ada yang bisa menghapusnya.",
    "confirm": "Hapus Semuanya",
    "cancel": "Batal",
    "failed": "Penghapusan tidak selesai. Sebagian data masih ada di perangkat ini dan Anda masih masuk — coba lagi."
@@ -1760,6 +1760,7 @@
   "importDoneInvalid": "{{invalid}} baris dengan alamat tidak valid dilewati.",
   "importFailTitle": "Impor gagal",
   "importFailBody": "Gunakan berkas kontak JSON atau CSV.",
+  "importFailEncoding": "Simpan berkas sebagai UTF-8 (Excel: CSV UTF-8), lalu coba lagi.",
   "manage": "Kelola",
   "sectionContacts": "Kontak",
   "countPeople": "{{count}}",

@@ -235,6 +235,7 @@ private fun FlowHostContent(
                     // token's maximum — so there is no row for this event to
                     // carry and `TapMax` is the whole answer.
                     onMax = { if (send != null) send.onMax() },
+                    onChangeToken = send?.onChangeToken,
                     onDenom = { if (send != null) send.onDenom() },
                     onAmountChange = send?.onAmountChange,
                     onRecipientChange = send?.onRecipientChange,
@@ -462,6 +463,8 @@ class SendCallbacks(
     val onFillEmpty: ((String) -> Unit)? = null,
     // Spec 046 US3 — the scanner: the form's scan icon, and the live surface's needs.
     val onScanOpen: (() -> Unit)? = null,
+    /** Issue #326: the form's token card — back to the asset picker, the payee kept. */
+    val onChangeToken: (() -> Unit)? = null,
     /** Spec 048: the SD1 class chips — 全部 / 稳定币 / Gas 币 / 其他. */
     val onFilter: (String) -> Unit = {},
     /** Spec 048: a group row in the recipient picker — the whole group as split rows. */

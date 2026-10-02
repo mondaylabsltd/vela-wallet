@@ -73,9 +73,9 @@ describe('the alternate set advertises what exists (FR-018, FR-021)', () => {
 });
 
 describe('English-only pages stay English-only (R5)', () => {
-	it('lists blog and the legal pages, and nothing localized', () => {
+	it('lists blog, the legal pages and support, and nothing localized', () => {
 		const paths = ENGLISH_ONLY_PAGES.map((p) => p.path);
-		expect(paths).toEqual(['/blog', '/privacy', '/terms']);
+		expect(paths).toEqual(['/blog', '/privacy', '/terms', '/support', '/delete']);
 	});
 
 	it('does not overlap the localized set — one page, one owner', () => {
