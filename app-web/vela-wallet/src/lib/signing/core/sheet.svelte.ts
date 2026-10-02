@@ -19,6 +19,7 @@ import type { GuardView } from '$lib/core/generated/GuardView';
 import type { SignRequestView } from '$lib/core/generated/SignRequestView';
 import { createApprovalGuardSession, type ApprovalGuardSession } from './guard-session';
 import { createClearSigningSession, type ClearSigningSession } from './clear-session';
+import { resolvedFormatKeys } from '$lib/services/locale-format';
 import { toClearLocale } from './clear-types';
 import { txKickoff } from './tx-params';
 
@@ -84,9 +85,12 @@ class SigningSheet {
 			onError: (error) => console.error('[approval_guard] core fault:', error)
 		});
 
-		// The person's own presets. The core owns WHICH number is shown; these
-		// say how digits group, which is a locale fact the shell reads.
-		const locale = toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' });
+		// The person's own presets (Settings → Region format) and this device's
+		// zone. The core owns WHICH number is shown; these say how digits group
+		// and how a deadline is written, which are locale facts the shell reads.
+		// Spec 097 E: this passed fixed presets, so every web and extension
+		// sheet wrote dates as ISO and 24 h whatever the person had chosen.
+		const locale = toClearLocale(resolvedFormatKeys());
 		if (request.kind === 'typed_data') {
 			// The core's ONE document — the bytes the passkey signs. The first
 			// string of the params was the ADDRESS of a well-formed v4, and the
