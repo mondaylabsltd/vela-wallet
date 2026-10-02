@@ -373,6 +373,32 @@ export function landingToRaise(
 }
 
 /**
+ * What Done on a landing tells the sheet machine (spec 097 N4).
+ *
+ * - `dismiss_tapped` — the core still shows the landing's request WITH a
+ *   failure: a refusal (or "nothing was sent") the tracker reached after
+ *   "Submitted". The core holds that answer while it shows — the rule of 096
+ *   F8 — and this Done is the close that sends it, once. Before 097 the
+ *   answer went with the verdict and the extension worker closed the window
+ *   over the words; leaving the request behind now would answer the page the
+ *   window's generic settlement instead, when the window goes.
+ * - `hide` — the request is still on the core's sheet with its answer still
+ *   out and nothing failed (a lost reply's landing, G37): its sheet waits
+ *   hidden for that answer, which the pipeline sends.
+ * - `null` — the request is over; nothing to tell.
+ *
+ * `view` is the core's `SignView` (its request and error); `landingRequest`
+ * the request the landing was raised for.
+ */
+export function landingCloseAction(
+	view: { request: { id: string } | null; error: unknown },
+	landingRequest: string | null
+): 'dismiss_tapped' | 'hide' | null {
+	if (landingRequest === null || view.request?.id !== landingRequest) return null;
+	return view.error !== null && view.error !== undefined ? 'dismiss_tapped' : 'hide';
+}
+
+/**
  * How much of the ring is drawn, 0–1, from when the chain accepted it and how
  * long this chain usually takes.
  *

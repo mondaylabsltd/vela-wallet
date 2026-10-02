@@ -2270,6 +2270,10 @@ mod tests {
     /// the core once per change — and a Rejected one is answered -32603
     /// "refused", once, the late receipt wait's own result dropped (DX-W3:
     /// the page got ok + op hash 100 s after the relay had rejected it).
+    ///
+    /// Spec 097 N4: the refusal stays on the column in its own words — the
+    /// receipt says Failed and "refused", Done only — and the page hears it
+    /// when the person closes it, not under the words.
     #[test]
     fn the_tracker_s_verdict_answers_the_page_once() {
         use vela_core::app::sign_request::{
@@ -2349,21 +2353,39 @@ mod tests {
         let rejected = [entry(TrackStatus::Rejected)];
         let (_, verdict) = tracked_event(OP, &rejected, Some(&fed), 20_000.0)
             .unwrap_or_else(|| unreachable!("a change is told"));
-        let told: Vec<_> = host
-            .dispatch(verdict)
-            .into_iter()
-            .filter_map(|op| match op.operation {
-                SignOperation::SendResponse { payload, .. } => Some(payload),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(told.len(), 1, "{told:?}");
-        assert!(matches!(
-            &told[0],
-            SignResponsePayload::Err { code: -32603, message: Some(message), .. }
-                if message == vela_core::user_op::REFUSED_DAPP_DETAIL
-        ));
-        // The receipt wait's own late result can answer nothing more.
+        let answers = |ops: Vec<Pending<SignOperation>>| -> Vec<SignResponsePayload> {
+            ops.into_iter()
+                .filter_map(|op| match op.operation {
+                    SignOperation::SendResponse { payload, .. } => Some(payload),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert!(
+            answers(host.dispatch(verdict)).is_empty(),
+            "held while the column says it (097 N4)"
+        );
+        // What the column draws: the receipt, failed, refused, Done only.
+        let view = host.view();
+        assert_eq!(
+            view.surface,
+            vela_core::app::sign_request::SignSurface::Sheet
+        );
+        assert!(!back_on_form_of(&view, false), "a failure is not the form");
+        let s = crate::signing::SigningStrings::resolve(&crate::loc::Loc::from_env());
+        let clock = crate::signing::status::Clock {
+            now_ms: 20_000.0,
+            typical_s: Some(5),
+            chain_name: "Gnosis".to_owned(),
+            seen_submitted_ms: None,
+        };
+        let receipt = crate::signing::status::approved(&view, true, None, None, &clock, &s)
+            .unwrap_or_else(|| unreachable!("the refusal is drawn"));
+        assert_eq!(receipt.stage, crate::flows::fixtures::ReceiptStage::Failed);
+        assert_eq!(receipt.captions, vec![s.refused.clone()]);
+        assert_eq!(receipt.cta, s.receipt_done);
+        assert_eq!(receipt.retry, None, "the rid went out: never tried again");
+        // The receipt wait's own late result can answer nothing.
         let late: Vec<_> = host
             .resolve(
                 submit,
@@ -2377,7 +2399,16 @@ mod tests {
             .into_iter()
             .filter(|op| matches!(op.operation, SignOperation::SendResponse { .. }))
             .collect();
-        assert!(late.is_empty(), "one answer only");
+        assert!(late.is_empty(), "nothing under the words");
+        // Done: the one answer, the refusal's.
+        let told = answers(host.dispatch(SignEvent::SwipeDismissed));
+        assert_eq!(told.len(), 1, "{told:?}");
+        assert!(matches!(
+            &told[0],
+            SignResponsePayload::Err { code: -32603, message: Some(message), .. }
+                if message == vela_core::user_op::REFUSED_DAPP_DETAIL
+        ));
+        assert!(answers(host.dispatch(SignEvent::SwipeDismissed)).is_empty());
     }
 
     /// Invariant ⑨: the capped params are the ones that get signed.

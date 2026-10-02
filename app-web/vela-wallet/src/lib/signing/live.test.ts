@@ -6,7 +6,11 @@
  * never-unlimited mandate reaches the screen as a DISABLED chip plus a shut
  * slider — not as a warning somebody can slide past.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import type { ClearOperation } from '$lib/core/generated/ClearOperation';
+import type { ClearShellResult } from '$lib/core/generated/ClearShellResult';
+import type { ClearSigningEvent } from '$lib/core/generated/ClearSigningEvent';
 import type { ClearProvenance } from '$lib/core/generated/ClearProvenance';
 import type { ClearSignField } from '$lib/core/generated/ClearSignField';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
@@ -2118,5 +2122,221 @@ describe('the readable part says what the call does (096)', () => {
 		expect(zh.terms.valueAll).toBe('全部');
 		expect(zh.terms.labelOrder).toBe('订单');
 		expect(zh.warnOrderTerms).toContain('订单');
+	});
+});
+
+/**
+ * Spec 097 part A: the pass's own requests, read by the REAL core and drawn —
+ * so what the sheet says is what the core decided. The scripted shell answers
+ * as the pass's did: the descriptor service serves the native order's
+ * descriptor, the chain names WBNB and USDC (unless it is down).
+ */
+describe('the sheet never states the false or the unknown as certain (097)', () => {
+	const FIXTURES = '../../rust/crates/vela-core/tests/fixtures/dapp097';
+	const WALLET = '0x88cca0eedbf2c4426110bbfc998f048689266894';
+	const BNB = { ...OPEN_SIGN, request: { ...REQUEST, chain_id: 56 } };
+	const TOKENS: Record<string, string> = {
+		'0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c': 'WBNB',
+		'0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': 'USDC'
+	};
+	const DESCRIPTORS: Record<string, string> = {
+		'/erc7730/calldata/eip155-56/0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01.json':
+			'calldata-eip155-56-0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01.json'
+	};
+	const fixture = (name: string) =>
+		JSON.parse(readFileSync(`${FIXTURES}/${name}`, 'utf8')) as {
+			method: string;
+			params: unknown[];
+		};
+	const word = (n: number) => '0x' + n.toString(16).padStart(64, '0');
+	const abiString = (text: string) => {
+		const body = Buffer.from(text, 'utf8').toString('hex').padEnd(64, '0');
+		return word(32) + word(text.length).slice(2) + body;
+	};
+
+	function answer(op: ClearOperation, chainDown: boolean): ClearShellResult {
+		switch (op.type) {
+			case 'now':
+				return { type: 'clock', now_ms: 1_790_957_000_000 };
+			case 'http_get': {
+				const file = DESCRIPTORS[op.path];
+				return {
+					type: 'descriptor_fetched',
+					path: op.path,
+					json: file ? readFileSync(`${FIXTURES}/descriptors/${file}`, 'utf8') : null
+				};
+			}
+			case 'rpc_eth_call': {
+				const symbol = chainDown ? undefined : TOKENS[op.to.toLowerCase()];
+				const result =
+					symbol === undefined ? null : op.probe === 'decimals' ? word(18) : abiString(symbol);
+				return {
+					type: 'rpc_answer',
+					probe: op.probe,
+					chain_id: op.chain_id,
+					to: op.to,
+					result,
+					rpc_error: result === null
+				};
+			}
+			case 'selector_db_lookup':
+				return { type: 'selector_candidates', sigs: [] };
+			case 'timer':
+				return { type: 'timed_out', token: op.token };
+		}
+	}
+
+	/** What the real core reads one of the pass's requests as. */
+	function read(name: string, chainDown = false): ClearSigningView {
+		const request = fixture(name);
+		const locale = toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' });
+		const event: ClearSigningEvent =
+			request.method === 'eth_signTypedData_v4'
+				? {
+						type: 'resolve_typed_data',
+						typed_data_json: request.params[1] as string,
+						chain_id: 56,
+						locale
+					}
+				: request.method === 'wallet_sendCalls'
+					? {
+							type: 'resolve_batch',
+							params_json: JSON.stringify(request.params),
+							chain_id: 56,
+							locale
+						}
+					: (() => {
+							const tx = request.params[0] as Record<string, string | undefined>;
+							return {
+								type: 'resolve_transaction' as const,
+								to: tx.to ?? null,
+								data: tx.data ?? null,
+								value: tx.value ?? null,
+								chain_id: 56,
+								locale
+							};
+						})();
+		const core = new ClearSigningCore();
+		try {
+			type Out = { effects: { id: number; operation: ClearOperation }[] };
+			let queue = (JSON.parse(core.dispatch(JSON.stringify(event))) as Out).effects;
+			for (let turn = 0; turn < 300 && queue.length > 0; turn++) {
+				const [effect, ...rest] = queue;
+				const next = JSON.parse(
+					core.resolve_effect(
+						BigInt(effect.id),
+						JSON.stringify(answer(effect.operation, chainDown))
+					)
+				) as Out;
+				queue = [...rest, ...next.effects];
+			}
+			const view = JSON.parse(core.view()) as ClearSigningView;
+			expect(view.resolving).toBe(false);
+			return localizedTerms(view, m);
+		} finally {
+			core.free();
+		}
+	}
+
+	it('a single swap says its received amount is a minimum (N3)', () => {
+		for (const name of ['pancakeswap-bnb-swap.json', 'uniswap-bnb-swap.json']) {
+			const model = buildSigningModel(inputs({ sign: BNB, clear: read(name) }))!;
+			const swap = model.blocks.find((b) => b.kind === 'swap');
+			expect(swap, name).toMatchObject({
+				pay: { sign: '\u2212', value: '0.003 BNB' },
+				receive: { sign: '+', caption: m.terms.labelYouReceiveMin }
+			});
+			// What is paid is exact: no caption on it.
+			expect(swap?.kind === 'swap' && swap.pay.caption).toBeUndefined();
+		}
+	});
+
+	it('a 1inch order names where its proceeds go, the coin that arrives, its minimum and its expiry (N6)', () => {
+		const clear = read('oneinch-order.json');
+		const model = buildSigningModel(inputs({ sign: BNB, clear }))!;
+		expect(model.blocks).toContainEqual({
+			kind: 'swap',
+			pay: {
+				sign: '\u2212',
+				value: '1.16 USDC',
+				symbol: '',
+				fiat: '≈ $1.16',
+				caption: undefined,
+				tone: 'neutral'
+			},
+			receive: {
+				sign: '+',
+				value: '0.001430509396956033 BNB',
+				symbol: '',
+				fiat: undefined,
+				caption: m.terms.labelYouReceiveMin,
+				tone: 'success'
+			}
+		});
+		// The zero receiver is the maker: the account itself, short and full.
+		expect(model.blocks).toContainEqual({
+			kind: 'party',
+			label: m.terms.labelRecipient,
+			name: '0x88cca0...266894',
+			address: WALLET,
+			badge: undefined
+		});
+		expect(JSON.stringify(model.blocks)).toContain(
+			JSON.stringify({ label: m.terms.labelValidUntil, value: '2026-10-03, 00:42', mono: false })
+		);
+		expect(JSON.stringify(model.blocks)).not.toContain('0x00000000');
+	});
+
+	it('the native order reads its beneficiary as the account, and an unscaled amount as unknown (N1)', () => {
+		const read_ = read('oneinch-native-order.json');
+		const model = buildSigningModel(inputs({ sign: BNB, clear: read_ }))!;
+		expect(model.blocks).toContainEqual({
+			kind: 'party',
+			label: 'Beneficiary',
+			name: '0x88cca0...266894',
+			address: WALLET,
+			badge: undefined
+		});
+		expect(model.blocks.find((b) => b.kind === 'swap')).toMatchObject({
+			receive: { value: '2.418146082462759045 USDC', tone: 'success' }
+		});
+		expect(model.blocks).not.toContainEqual({
+			kind: 'warning',
+			tone: 'caution',
+			text: m.warnPartial
+		});
+
+		// The chain is down: no figure, a caution, and the reading says it is incomplete.
+		const down = buildSigningModel(
+			inputs({ sign: BNB, clear: read('oneinch-native-order.json', true) })
+		)!;
+		expect(down.blocks.find((b) => b.kind === 'swap')).toMatchObject({
+			receive: { sign: '', value: '\u2014 0x8ac7...', tone: 'caution' }
+		});
+		expect(down.blocks).toContainEqual({ kind: 'warning', tone: 'caution', text: m.warnPartial });
+		expect(down.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'caution',
+			text: m.warnUnverifiedAmount
+		});
+		expect(m.warnPartial).not.toBe(m.warnBestEffort);
+	});
+
+	it('an Aave borrow is money coming in (N2)', () => {
+		const model = buildSigningModel(inputs({ sign: BNB, clear: read('aave-borrow.json') }))!;
+		expect(model.blocks[1]).toMatchObject({
+			kind: 'amount',
+			line: { sign: '+', value: '0.3 USDC', tone: 'success' }
+		});
+	});
+
+	it('a batch call on a token names it, with its address beside a name the chain gave (N8)', () => {
+		const model = buildSigningModel(
+			inputs({ sign: BNB, clear: read('pancakeswap-usdc-batch.json') })
+		)!;
+		const cards = model.blocks.filter((b) => b.kind === 'card');
+		expect(JSON.stringify(cards[0])).toContain(
+			JSON.stringify({ label: m.labelInteracting, value: 'USDC (0x8ac76a...cd580d)' })
+		);
 	});
 });

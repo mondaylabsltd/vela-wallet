@@ -32,6 +32,7 @@
 	import {
 		dappReceiptModel,
 		endsOnSignedTick,
+		landingCloseAction,
 		landingFor,
 		handoffLands,
 		landingToRaise,
@@ -309,10 +310,12 @@
 
 	/** The landing goes: Done, or a landed transaction's own beat. */
 	function closeLanding(): void {
+		const action = landingCloseAction(signRequest.view, landingRequest);
+		// Spec 097 N4: a refusal after "Submitted" is held by the core while
+		// it shows; this Done is the close that answers the page, once.
+		if (action === 'dismiss_tapped') signRequest.dispatch({ type: 'dismiss_tapped' });
 		// Its request still unanswered: its sheet does not come back (G37).
-		if (landingRequest !== null && signRequest.view.request?.id === landingRequest) {
-			settledRequest = landingRequest;
-		}
+		else if (action === 'hide') settledRequest = landingRequest;
 		landingRequest = null;
 		landing = null;
 		unsubscribeTracker?.();

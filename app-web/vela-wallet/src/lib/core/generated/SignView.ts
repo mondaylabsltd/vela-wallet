@@ -52,7 +52,9 @@ failure_refused: boolean,
  * The failure on the sheet sent nothing, was not a refusal, and its
  * answer is still held (spec 096 F8): the sheet offers "Try again"
  * (`send.txRetryBtn` → [`Event::RetryTapped`]) beside its close, which
- * answers the page the failure.
+ * answers the page the failure. Never for a request whose operation
+ * reached the relay — a verdict after the submit (spec 097 N4) has only
+ * the close.
  */
 failure_retryable: boolean, notice: SignNotice | null, global_chain_id: number, 
 /**

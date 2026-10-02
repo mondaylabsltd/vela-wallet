@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	handoffLands,
 	autoCloseAfterMs,
+	landingCloseAction,
 	dappReceiptModel,
 	endsOnSignedTick,
 	landingFor,
@@ -398,5 +399,24 @@ describe('the write-ahead hand-off raises no landing while its POST is out (spec
 		expect(handoffLands(handoff(false, true), null)).toBe(true);
 		expect(handoffLands(handoff(true, false), OP.toUpperCase().replace('0X', '0x'))).toBe(true);
 		expect(handoffLands(handoff(false, false), null)).toBe(true);
+	});
+});
+
+describe('what Done on a landing tells the sheet machine (spec 097 N4)', () => {
+	const request = { id: 'tx:1' };
+	const refused = { kind: 'submit_failed', detail: 'refused' };
+
+	it('a failure the core holds for the landing’s request: the close that answers it', () => {
+		expect(landingCloseAction({ request, error: refused }, 'tx:1')).toBe('dismiss_tapped');
+	});
+
+	it('its answer still out and nothing failed: the sheet waits hidden for it (G37)', () => {
+		expect(landingCloseAction({ request, error: null }, 'tx:1')).toBe('hide');
+	});
+
+	it('a request already over, or another one on the sheet: nothing to tell', () => {
+		expect(landingCloseAction({ request: null, error: null }, 'tx:1')).toBeNull();
+		expect(landingCloseAction({ request: { id: 'tx:2' }, error: refused }, 'tx:1')).toBeNull();
+		expect(landingCloseAction({ request, error: refused }, null)).toBeNull();
 	});
 });

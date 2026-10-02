@@ -50,6 +50,8 @@ import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.feature.signing.core.ClearOperation
 import app.getvela.wallet.feature.signing.core.ClearShellResult
 import app.getvela.wallet.feature.signing.core.ClearSigningEvent
+import app.getvela.wallet.feature.signing.core.ClearLocale
+import app.getvela.wallet.feature.signing.core.ClearProbe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -239,6 +241,108 @@ class SigningLiveTest {
         assertEquals("CoW Protocol", named.value)
         assertFalse("a name is not monospace", named.mono)
         assertTrue(cards[1].rows.single { it.label == interacting }.mono)
+    }
+
+    // Spec 097 (part A): nothing false or unknown stated as certain.
+
+    /**
+     * The REAL core reading one of the 097 pass's requests, its shell
+     * scripted: the chain names WBNB and USDC on BNB Chain unless [chainDown],
+     * nothing else answers. The event is dispatched as given — at UTC, so a
+     * date reads against the chain's clock.
+     */
+    private fun passReading(event: ClearSigningEvent, chainDown: Boolean = false): ClearSigningView = runBlocking {
+        val symbols = mapOf(
+            "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c" to "WBNB",
+            "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d" to "USDC",
+        )
+        fun word(n: Int) = "0x" + n.toString(16).padStart(64, '0')
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val host = CoreHost(
+                bridge = ClearSigningCore().asBridge(), scope = scope, initial = ClearSigningView(), serializer = ClearSigningView.serializer(),
+                perform = JsonShell.perform(ClearOperation.serializer(), ClearShellResult.serializer()) { op ->
+                    when (op) {
+                        is ClearOperation.HttpGet -> ClearShellResult.DescriptorFetched(op.path, null)
+                        is ClearOperation.RpcEthCall -> {
+                            val symbol = symbols[op.to.lowercase()]?.takeUnless { chainDown }
+                            val result = symbol?.let {
+                                if (op.probe == ClearProbe.Decimals) word(18)
+                                else word(32) + word(it.length).drop(2) + it.toByteArray().joinToString("") { b -> "%02x".format(b) }.padEnd(64, '0')
+                            }
+                            ClearShellResult.RpcAnswer(op.probe, op.chain_id, op.to, result, result == null)
+                        }
+                        is ClearOperation.SelectorDbLookup -> ClearShellResult.SelectorCandidates()
+                        is ClearOperation.Timer -> ClearShellResult.TimedOut(op.token)
+                        ClearOperation.Now -> ClearShellResult.Clock(1.790957e12)
+                    }
+                },
+                escapedFailure = JsonShell.escapedFailure(ClearOperation.serializer(), ClearShellResult.serializer(), fallback = ClearShellResult.Clock(1.0e12)) { ClearShellResult.Clock(1.0e12) },
+            )
+            host.dispatch(event, ClearSigningEvent.serializer())
+            withTimeout(10_000) { host.view.first { it.resolved && !it.resolving } }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    private val utc = ClearLocale(tz_offset_minutes = 0)
+
+    /** The 1inch order the 097 pass signed (USDC → BNB), verbatim. */
+    private val oneInchOrder = """{"types":{"Order":[{"name":"salt","type":"uint256"},{"name":"maker","type":"address"},{"name":"receiver","type":"address"},{"name":"makerAsset","type":"address"},{"name":"takerAsset","type":"address"},{"name":"makingAmount","type":"uint256"},{"name":"takingAmount","type":"uint256"},{"name":"makerTraits","type":"uint256"}],"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},{"name":"chainId","type":"uint256"},{"name":"verifyingContract","type":"address"}]},"domain":{"name":"1inch Aggregation Router","version":"6","chainId":56,"verifyingContract":"0x111111125421ca6dc452d289314280a0f8842a65"},"primaryType":"Order","message":{"salt":"33701748006248133072184610391074722838607073826819837756152271511067157162131","maker":"0x88cca0eedbf2c4426110bbfc998f048689266894","receiver":"0x0000000000000000000000000000000000000000","makerAsset":"0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d","takerAsset":"0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c","makingAmount":"1160000000000000000","takingAmount":"1430509396956033","makerTraits":"62645329528782394789705396186445553993653435352530577117757868129563663400960"}}"""
+
+    /**
+     * N6 (and N3 on this shell — the minimum is said by its row's label): the
+     * pass's 1inch order reads as the swap it signs — the zero receiver is the
+     * account itself, BNB arrives (the unwrap flag), and the expiry
+     * `makerTraits` encodes is said: 16:42 UTC on 2026-10-02.
+     */
+    @Test
+    fun `a 1inch order says where its proceeds go, the coin that arrives and until when (097 N6)`() {
+        val read = passReading(ClearSigningEvent.ResolveTypedData(typed_data_json = oneInchOrder, chain_id = 56, locale = utc))
+        assertEquals(ClearSurface.ClearSign, read.surface)
+        val params = org.json.JSONArray().put("0x88cca0eedbf2c4426110bbfc998f048689266894").put(oneInchOrder).toString()
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        val rows = rowsOf(SigningLive.model(drawn, request(params).copy(method = "eth_signTypedData_v4"), sign, read, GuardView(), FeeView(confirm_fee_ready = true), bnb).blocks)
+        fun value(key: String) = rows.firstOrNull { it.label == strings.t("componentsUi.signing.$key") }?.value
+        assertEquals(rows.toString(), "1.16 USDC", value("labelYouPay"))
+        assertEquals(rows.toString(), "0.001430509396956033 BNB", value("labelYouReceiveMin"))
+        assertEquals(rows.toString(), "0x88cca0...266894", value("labelRecipient"))
+        assertEquals(rows.toString(), "2026-10-02, 16:42", value("labelValidUntil"))
+        assertTrue(rows.none { "0x00000000" in it.value })
+    }
+
+    /**
+     * N1 + N8: an amount the chain never scaled is no figure and the reading
+     * says it is incomplete; a batch call on USDC names the token, with its
+     * address beside a name only the chain gave.
+     */
+    @Test
+    fun `an unscaled amount is incomplete and a token target is named (097 N1, N8)`() {
+        val borrow = passReading(
+            ClearSigningEvent.ResolveTransaction(
+                to = "0x6807dc923806fe8fd134338eabca509979a7e0cb",
+                data = "0xa415bcad0000000000000000000000008ac76a51cc950d9822d68b83fe1ad97b32cd580d0000000000000000000000000000000000000000000000000429d069189e00000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+                value = "0x0", chain_id = 56, locale = utc,
+            ),
+            chainDown = true,
+        )
+        val sign = SignView(surface = SignSurface.Sheet, confirm_gate_open = true)
+        val params = """[{"to":"0x6807dc923806fe8fd134338eabca509979a7e0cb","data":"0xa415bcad"}]"""
+        val blocks = SigningLive.model(drawn, request(params), sign, borrow, GuardView(), FeeView(confirm_fee_ready = true), bnb).blocks
+        val amount = rowsOf(blocks).first { it.label == strings.t("componentsUi.signing.intentBorrow") }
+        assertTrue("no figure: $amount", amount.value.startsWith("\u2014"))
+        assertEquals(SigningTone.Caution, amount.valueTone)
+        assertTrue(blocks.any { it is SigningBlock.Warning && it.text == strings.t("componentsUi.signing.partialWarning") })
+
+        val usdc = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
+        val approve = "0x095ea7b300000000000000000000000031c2f6fcff4f8759b3bd5bf0e1084a055615c7680000000000000000000000000000000000000000000000001018f0e6fdc80000"
+        val batchParams = """[{"chainId":"0x38","calls":[{"to":"$usdc","data":"$approve"},{"to":"0x7777777777777777777777777777777777777777","value":"0x1"}]}]"""
+        val batch = passReading(ClearSigningEvent.ResolveBatch(params_json = batchParams, chain_id = 56, locale = utc))
+        val cards = SigningLive.model(drawn, request(batchParams).copy(method = "wallet_sendCalls"), sign, batch, GuardView(), FeeView(confirm_fee_ready = true), bnb)
+            .blocks.filterIsInstance<SigningBlock.Card>()
+        val interacting = strings.t("componentsUi.signing.interactingLabel")
+        assertEquals("USDC (0x8ac76a...cd580d)", cards[0].rows.single { it.label == interacting }.value)
     }
 
     /** F7: every machine says yes and the request is still being read — the slide stays shut, under "Loading…". */
