@@ -1006,6 +1006,16 @@ pub fn i18n_plural_suffixes(locale: String) -> Vec<String> {
     vela_core::i18n::plural_suffixes(&locale)
 }
 
+/// The Apple localization codes for the shipped locales, in their order
+/// (spec 095) — what the iPhone app's `CFBundleLocalizations` must list.
+#[uniffi::export]
+pub fn i18n_apple_localizations() -> Vec<String> {
+    vela_core::i18n::apple_localizations()
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
 #[uniffi::export]
 pub fn i18n_plural_suffix_legacy(count: f64) -> String {
     vela_core::i18n::plural_suffix_legacy(count)

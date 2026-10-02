@@ -202,6 +202,26 @@ fn normalize_posix_tag(raw: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Spec 095: the Mac bundle declares exactly the corpus's locales, as the
+    /// core names them for Apple — no more (a language the app cannot speak),
+    /// no fewer (one the store would not list).
+    #[test]
+    fn the_bundle_declares_the_corpus_locales() {
+        let plist = include_str!("../packaging/macos/Info.plist.in");
+        let key = plist
+            .find("<key>CFBundleLocalizations</key>")
+            .unwrap_or_else(|| unreachable!("Info.plist.in declares no localizations"));
+        let array = &plist[key..];
+        let array = &array[..array.find("</array>").unwrap_or(array.len())];
+        let declared: Vec<&str> = array
+            .split("<string>")
+            .skip(1)
+            .filter_map(|rest| rest.split("</string>").next())
+            .collect();
+        assert_eq!(declared, vela_core::i18n::apple_localizations());
+        assert!(plist.contains("<key>CFBundleDevelopmentRegion</key> <string>en</string>"));
+    }
+
     /// Every key the welcome screen renders, including the 13 added by spec 007.
     const WELCOME_KEYS: [&str; 16] = [
         "onboarding.welcome.desktopTagline",

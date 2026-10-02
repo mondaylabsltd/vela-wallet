@@ -13537,6 +13537,17 @@ public func hashTypedData(typedDataJson: String)throws  -> Data  {
 })
 }
 /**
+ * The Apple localization codes for the shipped locales, in their order
+ * (spec 095) — what the iPhone app's `CFBundleLocalizations` must list.
+ */
+public func i18nAppleLocalizations() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_i18n_apple_localizations(uniffiCallStatus
+    )
+})
+}
+/**
  * Interpolate a template in isolation, without a key lookup.
  */
 public func i18nInterpolate(template: String, opts: TOptions)throws  -> String  {
@@ -15472,6 +15483,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_hash_typed_data() != 2552) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_i18n_apple_localizations() != 29020) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_interpolate() != 21333) {

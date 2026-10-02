@@ -47,8 +47,9 @@ const CORPUS_BYTES: usize = 990_499;
 /// owner the same day: 「同意呀，i18n_residency 可以增加预算」.
 ///
 /// 2026-10-02: the owner raised it to 140,800 for the beta-readiness
-/// branches, which each make this identical edit.
-const SC005_BUDGET: usize = 140_800;
+/// branches, which each make this identical edit; later the same day, to
+/// 141,800.
+const SC005_BUDGET: usize = 141_800;
 
 fn engine_with(active: &str) -> I18n {
     let en = match Catalog::embedded("en") {

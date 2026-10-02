@@ -66,6 +66,35 @@ pub fn endonym(tag: &str) -> &str {
     }
 }
 
+/// The localization code an Apple bundle declares for a shipped locale, in
+/// `CFBundleLocalizations` (spec 095): the Mac and iPhone apps list exactly
+/// [`SUPPORTED`], so the system's own UI (open/save panels, share sheets, the
+/// menu items AppKit adds) speaks the person's language and the App Store
+/// lists the 15 languages. Apple names the Chinese scripts, not the regions,
+/// except Hong Kong: `zh` → `zh-Hans`, `zh-TW` → `zh-Hant`, `zh-HK` stays.
+/// The rest are already Apple's codes.
+///
+/// Declaring these changes no wallet string: the app's language is still the
+/// corpus's, chosen by the person or followed from the system.
+#[must_use]
+pub fn apple_localization(tag: &str) -> &str {
+    match tag {
+        "zh" => "zh-Hans",
+        "zh-TW" => "zh-Hant",
+        other => other,
+    }
+}
+
+/// [`SUPPORTED`] as Apple localization codes, in [`SUPPORTED`] order — the
+/// list both Apple bundles declare.
+#[must_use]
+pub fn apple_localizations() -> Vec<&'static str> {
+    SUPPORTED
+        .iter()
+        .map(|tag| apple_localization(tag))
+        .collect()
+}
+
 /// Text direction of a locale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dir {
@@ -510,7 +539,27 @@ fn ordinal_category(locale: &str, count: f64) -> super::plural::Category {
 
 #[cfg(test)]
 mod endonym_tests {
-    use super::{endonym, SUPPORTED};
+    use super::{apple_localizations, endonym, SUPPORTED};
+
+    /// Spec 095: one Apple code per shipped locale, all distinct, Chinese by
+    /// script (Hong Kong by region, as Apple lists it).
+    #[test]
+    fn every_supported_locale_has_one_apple_code() {
+        let codes = apple_localizations();
+        assert_eq!(codes.len(), SUPPORTED.len());
+        let mut seen: Vec<&str> = Vec::new();
+        for code in &codes {
+            assert!(!seen.contains(code), "{code} declared twice");
+            seen.push(code);
+        }
+        assert_eq!(
+            codes,
+            [
+                "en", "zh-Hans", "zh-Hant", "zh-HK", "ja", "ko", "vi", "id", "tr", "es-MX",
+                "pt-BR", "fr", "de", "ru", "it"
+            ]
+        );
+    }
 
     /// Every shipped locale names itself, in its own script — and no two name
     /// themselves the same, which is what a picker needs to be usable.
