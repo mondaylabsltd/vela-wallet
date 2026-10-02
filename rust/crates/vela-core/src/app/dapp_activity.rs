@@ -22,13 +22,14 @@ use serde_json::Value;
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
+use super::activity_feed::FeedDappContent;
 use super::approval_guard::{
     detect_approval, detect_calldata_approval, GuardApprovalKind, GuardDetectedApproval,
     GuardTokenMetaView,
 };
 use super::clear_signing::{
-    analyze_message, known_contract, known_token_decimals, known_token_symbol, ClearSignMethod,
-    ClearSiweBinding,
+    analyze_message, known_contract, known_token_decimals, known_token_symbol, readable_message,
+    ClearSignMethod, ClearSiweBinding,
 };
 
 /// The most of a request a record keeps on the disk (spec 093): 8 KB of the
@@ -407,6 +408,64 @@ pub fn stored_request(params_json: &str) -> (String, bool) {
     (String::new(), true)
 }
 
+/// A record's stored request as Technical details shows it (spec 093), by
+/// what it holds ([`FeedDappContent`], the detail's `content` line): typed
+/// data as its document, pretty-printed; a message as its text (hex decoded
+/// as UTF-8 when it is text, else the hex itself); call data as the params,
+/// pretty-printed. `stored_request` is the params' JSON text exactly as the
+/// record kept it ([`stored_request`]). `None` when the record kept nothing.
+///
+/// Read when the section opens, never with the feed: the text can be 8 KB.
+#[must_use]
+pub fn request_display(content: FeedDappContent, stored_request: &str) -> Option<String> {
+    let text = stored_request.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let Ok(params) = serde_json::from_str::<Value>(text) else {
+        // Not JSON (cut by an older build): shown as kept.
+        return Some(text.to_owned());
+    };
+    let list = params.as_array().map(Vec::as_slice).unwrap_or_default();
+    let shown = match content {
+        FeedDappContent::Message => message_payload(list).map(readable_message),
+        FeedDappContent::TypedData => typed_document(list),
+        FeedDappContent::CallData => None,
+    };
+    Some(shown.unwrap_or_else(|| pretty(&params)))
+}
+
+/// The signed payload of a message request: `personal_sign` carries it
+/// first, `eth_sign` second (after the account) — the one whose first
+/// param is an address and whose second is not.
+fn message_payload(params: &[Value]) -> Option<&str> {
+    let first = params.first()?.as_str()?;
+    match params.get(1).and_then(Value::as_str) {
+        Some(second) if address_of(first).is_some() && address_of(second).is_none() => Some(second),
+        _ => Some(first),
+    }
+}
+
+/// The one typed-data document among the params (an object, or a string
+/// holding one), pretty-printed; a document that no longer parses (clipped)
+/// as the text it is.
+fn typed_document(params: &[Value]) -> Option<String> {
+    params.iter().find_map(|param| match param {
+        Value::Object(_) => Some(pretty(param)),
+        Value::String(text) if address_of(text).is_none() => Some(
+            serde_json::from_str::<Value>(text)
+                .ok()
+                .filter(Value::is_object)
+                .map_or_else(|| text.clone(), |document| pretty(&document)),
+        ),
+        _ => None,
+    })
+}
+
+fn pretty(value: &Value) -> String {
+    serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
+}
+
 /// Every string in `value` cut to at most `cap` bytes.
 fn clip_strings(value: &Value, cap: usize) -> Value {
     match value {
@@ -483,6 +542,49 @@ mod tests {
             stored_request(&json!([many]).to_string()),
             (String::new(), true)
         );
+    }
+
+    #[test]
+    fn a_message_reads_as_its_text_or_its_hex() {
+        use super::FeedDappContent::{CallData, Message, TypedData};
+        let hello = json!([
+            "0x48656c6c6f2c20e4b896e7958c",
+            "0x1111111111111111111111111111111111111111"
+        ]);
+        assert_eq!(
+            request_display(Message, &hello.to_string()).as_deref(),
+            Some("Hello, 世界")
+        );
+        let hash = format!("0x{}", "ab".repeat(32));
+        let eth_sign = json!(["0x1111111111111111111111111111111111111111", hash]);
+        assert_eq!(
+            request_display(Message, &eth_sign.to_string()),
+            Some(hash.clone()),
+            "eth_sign signs its second param; bytes that are not text stay hex"
+        );
+        let typed = json!({"primaryType": "Mail", "types": {}, "domain": {}, "message": {"a": 1}});
+        let shown = request_display(
+            TypedData,
+            &json!([
+                "0x1111111111111111111111111111111111111111",
+                typed.to_string()
+            ])
+            .to_string(),
+        )
+        .unwrap_or_default();
+        assert!(
+            shown.contains("\n  \"message\": {"),
+            "pretty, not escaped: {shown}"
+        );
+        assert!(!shown.contains("\\\""));
+        let clipped = request_display(
+            TypedData,
+            r#"["0x1111111111111111111111111111111111111111","{\"types\":{"]"#,
+        );
+        assert_eq!(clipped.as_deref(), Some(r#"{"types":{"#));
+        let call = request_display(CallData, r#"[{"to":"0x1","data":"0x12"}]"#).unwrap_or_default();
+        assert!(call.contains("\"data\": \"0x12\""));
+        assert_eq!(request_display(CallData, "  "), None);
     }
 
     #[test]

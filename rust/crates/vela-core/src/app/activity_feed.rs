@@ -435,7 +435,7 @@ pub struct FeedItem {
 }
 
 /// One part of a row's second line (spec 093).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub enum FeedLine {
@@ -458,6 +458,10 @@ pub enum FeedLine {
     Site { site: String },
     /// The network, by its chain id; the shell names it.
     Network { chain_id: u32 },
+    /// The day, by its local-midnight key — "Today", "Yesterday" or a date,
+    /// worded as the shell words a date header. Only on a contact's rows
+    /// ([`FeedView::contact_rows`]), which have no headers.
+    Day { day_start_ms: f64 },
 }
 
 /// The status of a [`FeedItem`] decoded from before spec 082, which carried
@@ -815,6 +819,10 @@ pub enum Event {
     PrivacyChanged { hidden: bool },
     /// The network chip filter (`selectedChainId`); `None` = all chains.
     ChainFilterChanged { chain_id: Option<u32> },
+    /// A contact's page opened (`Some`) or closed (`None`): the view then
+    /// carries what passed between the account and that address
+    /// ([`FeedView::contact_rows`]).
+    ContactFilterChanged { address: Option<String> },
     /// Optimistic per-row delete: tombstone + instant removal + storage write.
     DeleteRequested { id: String },
     #[serde(skip)]
@@ -892,6 +900,8 @@ pub struct Model {
     /// (invariant ⑦).
     alias_attempted: BTreeSet<String>,
     chain_filter: Option<u32>,
+    /// The contact whose page is open, lower-cased.
+    contact_filter: Option<String>,
     privacy_hidden: bool,
     /// Bumped ONLY on account switch — any in-flight answer for a previous
     /// account is stale and dropped.
@@ -924,6 +934,14 @@ pub struct FeedView {
     /// [`HOME_EMPTY_FILTERED`], chosen the same way.
     #[serde(default)]
     pub home_empty_key: String,
+    /// What passed between the account and the contact whose page is open
+    /// (spec 093; [`Event::ContactFilterChanged`]): every row, on every
+    /// network, whose counterparty is that address — the same items Activity
+    /// draws, worded the same, newest first. Their second line is the status
+    /// a row not yet settled has, the network and the day (no headers here;
+    /// "to Alice" on Alice's page is noise). Empty when no contact is open.
+    #[serde(default)]
+    pub contact_rows: Vec<FeedItem>,
 }
 
 // ---------------------------------------------------------------------------
@@ -975,6 +993,12 @@ impl App for ActivityFeed {
                 model.chain_filter = chain_id;
                 render()
             }
+            Event::ContactFilterChanged { address } => {
+                model.contact_filter = address
+                    .map(|address| address.trim().to_lowercase())
+                    .filter(|address| !address.is_empty());
+                render()
+            }
             Event::DeleteRequested { id } => {
                 // Optimistic remove + tombstone until the write settles, so a
                 // concurrent reload can't repaint the just-deleted row
@@ -1016,28 +1040,30 @@ impl App for ActivityFeed {
                 });
                 last_day = Some(item.day_start_ms);
             }
-            let mut out = item.clone();
-            if let Some(addr) = &out.counterparty {
-                // Resolved name wins over the stored one — the
-                // `aliasMap.get(...) ?? item.alias` precedence.
-                if let Some(name) = model.alias_map.get(&addr.to_lowercase()) {
-                    out.alias = Some(name.clone());
-                }
-            }
-            // After the overlay: the second line, and the detail's recipient,
-            // name whom the row does.
-            if let (Some(dapp), Some(party)) = (out.dapp.as_mut(), out.counterparty.as_deref()) {
-                for fact in &mut dapp.facts {
-                    if let FeedFact::Recipient { address, name } = fact {
-                        if address.eq_ignore_ascii_case(party) {
-                            name.clone_from(&out.alias);
-                        }
-                    }
-                }
-            }
+            let mut out = presented(model, item);
             out.subtitle = subtitle_of(&out);
             rows.push(FeedRow::Item { item: out });
         }
+
+        let contact_rows = model
+            .contact_filter
+            .as_deref()
+            .map_or_else(Vec::new, |contact| {
+                model
+                    .items
+                    .iter()
+                    .filter(|item| {
+                        item.counterparty
+                            .as_deref()
+                            .is_some_and(|party| party.eq_ignore_ascii_case(contact))
+                    })
+                    .map(|item| {
+                        let mut out = presented(model, item);
+                        out.subtitle = contact_subtitle_of(&out);
+                        out
+                    })
+                    .collect()
+            });
 
         // Toast suppressed while privacy is on (invariant ④) — the state
         // still exists (haptic fired, glow shows), only the number-bearing
@@ -1062,8 +1088,31 @@ impl App for ActivityFeed {
             toast,
             history_empty_key: history_empty_key(model.chain_filter).to_owned(),
             home_empty_key: home_empty_key(model.chain_filter).to_owned(),
+            contact_rows,
         }
     }
+}
+
+/// An item as the view hands it out: the resolved name over the stored one —
+/// the `aliasMap.get(...) ?? item.alias` precedence — and the detail's
+/// recipient named the same.
+fn presented(model: &Model, item: &FeedItem) -> FeedItem {
+    let mut out = item.clone();
+    if let Some(addr) = &out.counterparty {
+        if let Some(name) = model.alias_map.get(&addr.to_lowercase()) {
+            out.alias = Some(name.clone());
+        }
+    }
+    if let (Some(dapp), Some(party)) = (out.dapp.as_mut(), out.counterparty.as_deref()) {
+        for fact in &mut dapp.facts {
+            if let FeedFact::Recipient { address, name } = fact {
+                if address.eq_ignore_ascii_case(party) {
+                    name.clone_from(&out.alias);
+                }
+            }
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -1898,6 +1947,22 @@ fn allowance_of(summary: &DappSummary) -> Option<FeedAllowance> {
         unlimited: summary.unlimited,
         token: summary.token.clone(),
     })
+}
+
+/// A contact's row's second line (spec 093): where a row not yet settled
+/// stands, the network, the day — never whom it went to, which is the page.
+fn contact_subtitle_of(item: &FeedItem) -> Vec<FeedLine> {
+    let mut lines: Vec<FeedLine> = subtitle_of(item)
+        .into_iter()
+        .filter(|line| matches!(line, FeedLine::Status { .. }))
+        .collect();
+    lines.push(FeedLine::Network {
+        chain_id: item.chain_id,
+    });
+    lines.push(FeedLine::Day {
+        day_start_ms: item.day_start_ms,
+    });
+    lines
 }
 
 /// A row's second line (spec 093), after the name overlay.

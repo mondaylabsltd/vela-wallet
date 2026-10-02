@@ -2960,3 +2960,69 @@ fn the_detail_names_who_got_the_money() {
     let (address, _) = party(&rows[1]).expect("the transfer's recipient");
     assert_eq!(Some(address), rows[1].counterparty.clone());
 }
+
+/// A contact's page draws what passed between the account and that address
+/// from the same items Activity does (spec 093): a send, a receipt, and a
+/// dApp's token transfer that paid them — titled by its verb, never "Sent" —
+/// on every network whatever the home's filter, each second line its status
+/// (when not settled), network and day. A signature pays nobody: never there.
+#[test]
+fn a_contacts_rows_are_the_feeds_items_for_that_address() {
+    let mut to_founder = send("s-f", "0xU9", FOUNDER, "2", RECENT);
+    to_founder.status = FeedTxStatus::Pending;
+    to_founder.day_start_ms = day_of(RECENT);
+    let mut from_founder = recv("r-f", FOUNDER, "3", "USDT", 280_000.0);
+    from_founder.chain_id = 1;
+    let mut dapp_paid = dapp_tx_h2(
+        "d-f",
+        "0x2222222222222222222222222222222222222222",
+        "0x0",
+        Some("Send"),
+        270_000.0,
+    );
+    dapp_paid.status = FeedTxStatus::Confirmed;
+    dapp_paid.call_data = Some(transfer_to_founder());
+    let other = send("s-o", "0xU8", "0xCafe", "1", 260_000.0);
+    let mut signature = base("m-f", 250_000.0);
+    signature.kind = Some(FeedTxKind::SignMessage);
+    signature.from = ADDR.to_owned();
+    signature.to = FOUNDER.to_owned();
+
+    let mut sut = boot(vec![to_founder, from_founder, dapp_paid, other, signature]);
+    assert!(sut.view().contact_rows.is_empty(), "no contact open");
+    sut.dispatch(Event::ChainFilterChanged {
+        chain_id: Some(8453),
+    });
+    sut.dispatch(Event::ContactFilterChanged {
+        address: Some(FOUNDER.to_uppercase().replacen("0X", "0x", 1)),
+    });
+    let rows = sut.view().contact_rows;
+    let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+    assert_eq!(ids, vec!["s-f", "r-f", "d-f"]);
+    assert_eq!(
+        rows[0].subtitle,
+        vec![
+            FeedLine::Status {
+                status: FeedTxStatus::Pending
+            },
+            FeedLine::Network { chain_id: 8453 },
+            FeedLine::Day {
+                day_start_ms: day_of(RECENT)
+            },
+        ]
+    );
+    assert_eq!(
+        rows[1].subtitle,
+        vec![
+            FeedLine::Network { chain_id: 1 },
+            FeedLine::Day {
+                day_start_ms: day_of(280_000.0)
+            },
+        ]
+    );
+    let dapp = rows[2].dapp.clone().expect("the dApp's transfer");
+    assert_eq!(dapp.intent_term, Some(ClearTerm::IntentSend));
+
+    sut.dispatch(Event::ContactFilterChanged { address: None });
+    assert!(sut.view().contact_rows.is_empty());
+}

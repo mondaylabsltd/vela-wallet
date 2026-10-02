@@ -1911,6 +1911,18 @@ pub fn sign_ending_state(
     )
 }
 
+/// A dApp record's stored request as Technical details shows it (spec 093):
+/// typed data pretty-printed, a message as its text (or its hex), call data
+/// pretty-printed. `content` is the detail's `content` word (`"call_data"`,
+/// `"typed_data"`, `"message"`); `stored_request` the params' JSON text as the
+/// record kept it. `None` when the record kept nothing, or for a content word
+/// this build does not know. One rule for every client's detail.
+#[uniffi::export]
+pub fn dapp_request_display(content: String, stored_request: String) -> Option<String> {
+    let content = serde_json::from_value(serde_json::Value::String(content)).ok()?;
+    vela_core::app::dapp_activity::request_display(content, &stored_request)
+}
+
 /// How long to wait for the receipt when the submit answered `elapsed_ms`
 /// after the approve tap: what is left of the 120 s answer window, never less
 /// than 10 s (RA12). One number for every client's dApp wait.
@@ -2559,6 +2571,27 @@ mod tests_082 {
     /// The two Gnosis operations the core pins (T011): their `handleOps`
     /// calldata and the EntryPoint's own `userOpHash`.
     const FIXTURE: &str = include_str!("../../vela-core/tests/fixtures/userop-hash-gnosis.json");
+
+    /// Spec 093: the stored request's display is the core's, by content word.
+    #[test]
+    fn the_request_display_is_the_core_s() {
+        assert_eq!(
+            dapp_request_display(
+                "message".to_owned(),
+                r#"["0x68656c6c6f","0x1111111111111111111111111111111111111111"]"#.to_owned()
+            )
+            .as_deref(),
+            Some("hello")
+        );
+        assert_eq!(
+            dapp_request_display("call_data".to_owned(), String::new()),
+            None
+        );
+        assert_eq!(
+            dapp_request_display("haiku".to_owned(), "[]".to_owned()),
+            None
+        );
+    }
 
     fn halves(word: &[u8]) -> (u128, u128) {
         let mut high = [0u8; 16];

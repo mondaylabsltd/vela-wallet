@@ -4975,6 +4975,17 @@ fn decode_personal_message(payload: &str) -> Decoded {
     Decoded::Text(decoded.into_owned())
 }
 
+/// A signed message as a person reads it (spec 093): its text when it is
+/// text — hex decoded as UTF-8 by the sheet's own rule — else the payload
+/// itself, whole (a hash, or bytes that are not text). Never a shortened
+/// preview: this is the record of what was signed.
+pub(crate) fn readable_message(payload: &str) -> String {
+    match decode_personal_message(payload) {
+        Decoded::Text(text) => text,
+        Decoded::Binary(_) => payload.to_owned(),
+    }
+}
+
 /// A char that marks a payload as binary: C0 (minus tab/LF/CR), DEL, C1, or
 /// U+FFFD (`decode-sign-message.ts:25-30`).
 fn is_binary_char(c: char) -> bool {
