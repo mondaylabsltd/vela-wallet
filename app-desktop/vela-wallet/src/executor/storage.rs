@@ -646,7 +646,10 @@ pub(crate) mod tests {
             None => assert_eq!(Some(dir), dirs::home_dir()),
         }
         #[cfg(target_os = "macos")]
-        assert!(dirs::download_dir().is_some(), "macOS always has a Downloads folder");
+        assert!(
+            dirs::download_dir().is_some(),
+            "macOS always has a Downloads folder"
+        );
     }
 
     /// The raw view the shared rules read: a string as itself, a record as its
