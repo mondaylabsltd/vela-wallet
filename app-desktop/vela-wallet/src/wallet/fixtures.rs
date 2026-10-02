@@ -148,6 +148,52 @@ pub fn balance_default(s: &WalletStrings) -> BalanceModel {
     }
 }
 
+/// Spec 092's gallery state (DSR6): the core's view with three networks out
+/// of reach — one last seen holding $4,500, one last seen empty, one never
+/// read — drawn through the same live builders as a session.
+#[must_use]
+pub fn unreachable_view() -> vela_core::app::balance_dashboard::BalanceView {
+    use vela_core::app::balance_dashboard::{
+        BalanceSwitcherView, BalanceView, LAST_SEEN, LAST_SEEN_EMPTY, LastKnown, NOT_READ_YET,
+        UNREACHABLE_MANY, UnreachableNetwork,
+    };
+    let row =
+        |chain_id: u32, last_known: LastKnown, usd: Option<f64>, key: &str| UnreachableNetwork {
+            chain_id,
+            last_known,
+            last_seen_usd: usd,
+            line_key: key.to_owned(),
+        };
+    BalanceView {
+        address: Some(ADDRESS_FULL.to_owned()),
+        display_total_usd: Some(4_500.0),
+        balance_unknown: false,
+        balance_partial: true,
+        unreachable: false,
+        notice: None,
+        hidden: false,
+        refreshing: false,
+        last_refreshed_at_ms: None,
+        tokens: Vec::new(),
+        unpriced_tokens: Vec::new(),
+        failed_chain_ids: vec![1, 56, 137],
+        rate_limited_chain_ids: Vec::new(),
+        unreachable_networks: vec![
+            row(1, LastKnown::Held, Some(4_500.0), LAST_SEEN),
+            row(56, LastKnown::Empty, None, LAST_SEEN_EMPTY),
+            row(137, LastKnown::NotRead, None, NOT_READ_YET),
+        ],
+        unreachable_key: Some(UNREACHABLE_MANY.to_owned()),
+        holdings_loading: false,
+        cached_total_usd: Some(4_500.0),
+        switcher: BalanceSwitcherView {
+            open: false,
+            loading: false,
+            balances: Vec::new(),
+        },
+    }
+}
+
 /// Component-board balance variants (gallery Components tab).
 pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
     vec![

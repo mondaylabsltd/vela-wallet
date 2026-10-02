@@ -461,6 +461,8 @@ enum GalleryTab {
     Dst7,
     Dst8,
     Dsr1,
+    /// Spec 092 — the hero's "can't reach" line and the list it opens.
+    Dsr6,
     Components,
     ContactsComponents,
     Identicons,
@@ -469,7 +471,7 @@ enum GalleryTab {
 impl GalleryTab {
     /// The chip strip, in order. One array so the bar and the inventory test
     /// can never disagree about which states the gallery exposes.
-    const ALL: [(GalleryTab, &'static str); 23] = [
+    const ALL: [(GalleryTab, &'static str); 24] = [
         (GalleryTab::D1, "D1"),
         (GalleryTab::D1b, "D1b"),
         (GalleryTab::D2, "D2"),
@@ -490,6 +492,7 @@ impl GalleryTab {
         (GalleryTab::Dst7, "DST7"),
         (GalleryTab::Dst8, "DST8"),
         (GalleryTab::Dsr1, "DSR1"),
+        (GalleryTab::Dsr6, "DSR6"),
         (GalleryTab::Components, "Components"),
         (GalleryTab::ContactsComponents, "Contacts"),
         (GalleryTab::Identicons, "Identicons"),
@@ -666,6 +669,9 @@ pub struct WalletPage {
     contacts_query: String,
     /// SR3, the balance breakdown the hero's status line opens (078 H-03).
     balance_detail_open: bool,
+    /// Spec 092: the list of networks the wallet cannot reach, which the
+    /// hero's status line opens while any is.
+    unreachable_open: bool,
     contacts_query_focus: gpui::FocusHandle,
     /// Spec 032: the send journey's two machines, alive while the flow is
     /// open and discarded with it — a second send starts from a fresh
@@ -1289,6 +1295,7 @@ impl WalletPage {
             signing_background: Vec::new(),
             contacts_query: String::new(),
             balance_detail_open: false,
+            unreachable_open: false,
             contacts_query_focus: cx.focus_handle(),
             send_host: None,
             send_background: Vec::new(),
@@ -3478,7 +3485,10 @@ impl WalletPage {
         } else if self.balance_detail_open {
             self.balance_detail_open = false;
         } else if self.settings_dialog.is_some() {
+            // An RPC editor opened from the unreachable list closes back to it.
             self.close_settings_dialog(cx);
+        } else if self.unreachable_open {
+            self.close_unreachable(cx);
         } else {
             return false;
         }
@@ -4630,6 +4640,15 @@ impl WalletPage {
     /// the app showing somebody a stranger's money and calling it theirs.
     fn balance_model(&mut self, cx: &mut Context<Self>) -> fixtures::BalanceModel {
         if self.identity.is_none() {
+            if self.tab == GalleryTab::Dsr6 {
+                let money = self.money(cx);
+                return wallet_live::balance(
+                    &fixtures::unreachable_view(),
+                    &self.strings,
+                    &self.locale,
+                    &money,
+                );
+            }
             return fixtures::balance_default(&self.strings);
         }
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
@@ -7774,6 +7793,7 @@ impl WalletPage {
         // core, because the drawing has none — and cleared by every other chip,
         // so a toast cannot leak onto the state next door.
         self.celebrating = tab == GalleryTab::D1b;
+        self.unreachable_open = tab == GalleryTab::Dsr6;
         self.contact = 0;
         self.contacts_empty = tab == GalleryTab::Dc3;
         self.group = match tab {
@@ -8520,12 +8540,18 @@ impl WalletPage {
         //
         // Live since 031, and this is SC-003's visible half: the fetch reports
         // an unreachable chain separately from an empty one, the core turns
-        // that into `banner_chain_ids` (failed MINUS rate-limited), and this is
-        // where the person finally sees it. A correct verdict nobody is shown
-        // is, from the chair in front of the screen, no verdict.
+        // that into `unreachable_networks` (failed MINUS rate-limited, spec
+        // 092's order), and this is where the person finally sees it. A
+        // correct verdict nobody is shown is, from the chair in front of the
+        // screen, no verdict.
         let live = self.identity.is_some().then(|| {
             let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-            (wallet_live::unreachable_chips(&view), view.banner_chain_ids)
+            let ids: Vec<u32> = view
+                .unreachable_networks
+                .iter()
+                .map(|network| network.chain_id)
+                .collect();
+            (wallet_live::unreachable_chips(&view), ids)
         });
         let banner_chain_ids = live
             .as_ref()
@@ -16607,18 +16633,136 @@ impl WalletPage {
     }
 
     /// The hero's status line, pressed (078 H-03) — the web's `openRescue`:
-    /// an unreachable chain opens ITS RPC editor, the first of them when
-    /// several are down; anything else opens the breakdown.
+    /// networks the wallet cannot reach open their list (spec 092 — every one,
+    /// each with its RPC editor); anything else opens the breakdown.
     fn open_balance_status(&mut self, cx: &mut Context<Self>) {
         let view = resident::resident::<BalanceDashboard>(cx).read(cx).view();
-        match view.banner_chain_ids.first() {
-            Some(&chain_id) => {
-                self.settings_fix_chain = Some(chain_id);
-                self.settings_dialog = Some(SettingsDialog::FixRpc);
-            }
-            None => self.balance_detail_open = true,
+        if view.unreachable_networks.is_empty() {
+            self.balance_detail_open = true;
+        } else {
+            self.unreachable_open = true;
+            // Read every chain again while the list is open: one that has come
+            // back leaves it (and the hero's count) on the next settle.
+            crate::executor::balance_dashboard::dispatch(
+                vela_core::app::balance_dashboard::Event::UnreachableListOpened,
+                cx,
+            );
         }
         cx.notify();
+    }
+
+    /// The unreachable list closed: its re-reads stop.
+    fn close_unreachable(&mut self, cx: &mut Context<Self>) {
+        self.unreachable_open = false;
+        if self.identity.is_some() {
+            crate::executor::balance_dashboard::dispatch(
+                vela_core::app::balance_dashboard::Event::UnreachableListClosed,
+                cx,
+            );
+        }
+        cx.notify();
+    }
+
+    /// Spec 092, the list the hero's "can't reach" line opens (the web's
+    /// `UnreachableBody`), in the desktop's dialog: every network the core
+    /// lists, in its order, with what was last read there and its RPC editor.
+    /// Drawn from the live view, so a network that comes back leaves it.
+    fn unreachable_dialog(
+        &mut self,
+        theme: &Theme,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::AnyElement> {
+        if !self.unreachable_open {
+            return None;
+        }
+        // The gallery's DSR6 draws the fixture view through the same builders.
+        let view = if self.identity.is_some() {
+            resident::resident::<BalanceDashboard>(cx).read(cx).view()
+        } else {
+            fixtures::unreachable_view()
+        };
+        let money = self.money(cx);
+        let list = wallet_live::unreachable_list(&view, &self.strings, &self.locale, &money);
+        let mut body = div().flex().flex_col();
+        if let Some(summary) = list.summary.clone() {
+            body = body.child(
+                div()
+                    .mb(px(8.))
+                    .text_size(theme::text_row_sub())
+                    .line_height(gpui::relative(1.4))
+                    .text_color(theme.fg_subtle)
+                    .child(summary),
+            );
+        }
+        for row in &list.rows {
+            let chain_id = row.chain_id;
+            let fix = div()
+                .id(("unreachable-fix", chain_id as usize))
+                .flex_none()
+                .cursor_pointer()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.info_base)
+                .active(|el| el.opacity(0.6))
+                .child(self.strings.unreachable_fix.clone())
+                .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                    // Its RPC editor opens over the list; closing it comes back.
+                    this.settings_fix_chain = Some(chain_id);
+                    this.settings_dialog = Some(SettingsDialog::FixRpc);
+                    cx.notify();
+                }));
+            body = body.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(12.))
+                    .py(px(12.))
+                    .border_b_1()
+                    .border_color(theme.border_card)
+                    .child(chain_logo_mark(
+                        u64::from(chain_id),
+                        crate::settings::model::lettermark(&row.name),
+                        crate::settings::model::chain_tint(u64::from(chain_id))
+                            .unwrap_or(0x8A_8F_98),
+                        32.,
+                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .flex_1()
+                            .min_w(px(0.))
+                            .child(
+                                div()
+                                    .text_size(theme::text_row_title())
+                                    .text_color(theme.fg_base)
+                                    .child(row.name.clone()),
+                            )
+                            .child(
+                                div()
+                                    .text_size(theme::text_label())
+                                    .text_color(theme.fg_subtle)
+                                    .child(row.line.clone()),
+                            ),
+                    )
+                    .child(fix),
+            );
+        }
+        Some(
+            crate::ui::dialog::dialog(
+                "unreachable",
+                theme,
+                window,
+                list.title,
+                None,
+                self.dialog_close_icon(theme),
+                body.pb(px(8.)),
+                &self.dialog_scroll("unreachable"),
+                Self::closer(cx, |this, cx| this.close_unreachable(cx)),
+            )
+            .into_any_element(),
+        )
     }
 
     /// SR3, the balance by network (`settings/ui/BalanceDetailBody.svelte`)
@@ -18488,6 +18632,7 @@ impl Render for WalletPage {
         let explore_groups = self.explore_groups_dialog(&theme, window, cx);
         let contact_qr = self.contact_qr_dialog(&theme, window, cx);
         let balance_detail = self.balance_detail_dialog(&theme, window, cx);
+        let unreachable = self.unreachable_dialog(&theme, window, cx);
         let mut root = div()
             .size_full()
             .font_family(theme::font_ui())
@@ -18520,6 +18665,10 @@ impl Render for WalletPage {
         }
         if let Some(menu) = menu {
             root = root.child(menu);
+        }
+        // Under the settings dialog: a row's RPC editor opens over the list.
+        if let Some(unreachable) = unreachable {
+            root = root.child(unreachable);
         }
         // Over everything, including the anchored menu: it is the one dialog
         // whose answer changes which screen the app is on.
@@ -19291,6 +19440,7 @@ mod tests {
                 "DST7",
                 "DST8",
                 "DSR1",
+                "DSR6",
                 "Components",
                 "Contacts",
                 "Identicons",

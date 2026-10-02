@@ -697,18 +697,14 @@ pub fn banner_text(s: &SettingsStrings) -> SharedString {
     unavailable_text(s, &names)
 }
 
-/// The banner's headline: "World Chain RPC unavailable" for one network —
-/// "1 networks" is not a sentence — and "{{count}} networks RPC unavailable"
-/// for more.
+/// The banner's headline — the home's line (spec 092): "Can't reach World
+/// Chain right now" for one network — "1 networks" is not a sentence — and
+/// "Can't reach {{n}} networks right now" for more.
 #[must_use]
 pub fn unavailable_text(s: &SettingsStrings, names: &[SharedString]) -> SharedString {
     SharedString::from(match names {
         [one] => fill(&s.wizard_no_rpc, "name", one),
-        many => fill(
-            &s.rpc_unavailable_multiple,
-            "count",
-            &many.len().to_string(),
-        ),
+        many => fill(&s.unreachable_many, "n", &many.len().to_string()),
     })
 }
 

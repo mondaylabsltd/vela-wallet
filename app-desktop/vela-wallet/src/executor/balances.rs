@@ -86,6 +86,12 @@ const NATIVE_CHAINLINK_FEEDS: &[(u32, &str)] = &[
     (100, "0x678df3415fc31947dA4324eC63212874be5a82f8"),
 ];
 
+/// The chains a round asks, by id (spec 092's `read_chain_ids`): one that
+/// answered holding nothing is "nothing when last read", not "not read yet".
+pub fn chain_ids() -> Vec<u32> {
+    chains().into_iter().map(|(chain_id, _)| chain_id).collect()
+}
+
 /// Every chain the wallet reads for. The built-ins plus whatever the person
 /// added — a custom network nobody reads is a network nobody has.
 fn chains() -> Vec<(u32, String)> {
