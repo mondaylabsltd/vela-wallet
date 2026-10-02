@@ -8,15 +8,35 @@ export type DpermEvent = { "type": "popup_request", method: string,
  */
 grant: DpermGrant | null, 
 /**
- * Every wallet address. `None`/empty = not known yet (cold load), and
- * [`resolve_granted`] must NOT log the origin out on that.
+ * The account signed in on this device right now (`SessionView`'s
+ * address, read once the session has settled). `None` — or empty —
+ * when nobody is. A grant for any other account is not answered
+ * ([`granted_to_signed_in`], spec 086, issue 315).
  */
-current_addresses: Array<string> | null, 
+signed_in: string | null, 
 /**
  * `peer.request.address`, the address the request pins itself to.
- * The shell maps the TS empty string to `None`.
+ * The shell maps the TS empty string to `None`. Ignored when
+ * `params_json` is given: the core then reads the address itself.
  */
-pinned_address: string | null, } | { "type": "popup_approved", origin: string, 
+pinned_address: string | null, 
+/**
+ * The asking page's origin — the browser's fact, never the page's
+ * claim. A signature asked for by a public plain-http origin is
+ * refused ([`DpermRejectReason::InsecureOrigin`]), as every in-app
+ * browser refuses it (spec 089). `None`: no origin rule is asked.
+ */
+origin: string | null, 
+/**
+ * The request's params, as JSON. When given, the address the request
+ * names is read from them by [`super::dapp_rpc::requested_address`] —
+ * a transaction's `from`, `personal_sign`'s second param, typed
+ * data's account — the rule every in-app browser's sign gate reads
+ * (spec 089). The window's own by-shape guess never saw a
+ * transaction's `from`, so a transaction naming another account was
+ * signed by the granted one instead of refused.
+ */
+params_json: string | null, } | { "type": "popup_approved", origin: string, 
 /**
  * The request this window is answering — `Respond` carries it back.
  */

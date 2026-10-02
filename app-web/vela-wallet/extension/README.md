@@ -72,7 +72,7 @@ dist/              build output — gitignored
 | Method                                                                 | Answered by                                                                                    |
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `eth_accounts`, `eth_chainId`, `net_version`, `wallet_getPermissions`  | the wallet's snapshot + the site's grant and chain pick                                        |
-| `eth_requestAccounts`, `wallet_requestPermissions`                     | the side panel (or window): `dapp_permissions`                                                 |
+| `eth_requestAccounts`, `wallet_requestPermissions`                     | granted: the worker (089); else the side panel (or window): `dapp_permissions`                 |
 | `personal_sign`, typed data, `eth_sendTransaction`, `wallet_sendCalls` | the side panel (or window): `sign_request`, on the site's chain                                |
 | `wallet_switchEthereumChain`, `wallet_addEthereumChain`                | the worker, against the catalog the wallet published (`vela.ext.chains`); unknown chain → 4902 |
 | `wallet_watchAsset`                                                    | `false` — tokens are added in the wallet                                                       |
@@ -81,4 +81,10 @@ dist/              build output — gitignored
 
 The page hears `accountsChanged` / `chainChanged` / `disconnect` when the
 site's grant or chain pick changes in storage — on connect, when the wallet
-switches accounts (the core re-pins the grant), on revoke, on a switch.
+switches accounts (the core re-pins the grant), on revoke, on a switch — and
+`accountsChanged` when the wallet signs out or back in (its snapshot).
+
+A grant is answered only while its account is the one the wallet is signed in
+to (`granted_to_signed_in`, spec 086, issue 315): `eth_accounts` reads the
+snapshot's `address`, and no snapshot — the wallet removes it on sign-out —
+is nobody.

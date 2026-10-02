@@ -155,6 +155,24 @@ describe('liveActivityRow', () => {
 		);
 	});
 
+	// 087 F04: the core says `unknown` for a pending record nothing will
+	// settle (no op hash past its grace, or past the tracker's 24 h).
+	it('a record nothing will settle says Unknown first — never Pending for ever, never Failed', () => {
+		const row = liveActivityRow(
+			item({
+				id: 'dapp-1790500000796-tx',
+				direction: 'out',
+				kind: 'dapp_tx',
+				status: 'unknown',
+				site: 'app.uniswap.org'
+			}),
+			m,
+			false
+		);
+		expect(m.activity.unknown).toBe('Unknown');
+		expect(row.subtitle).toBe(`${m.activity.unknown} · app.uniswap.org`);
+	});
+
 	it('a may-have-been-sent op is a Pending dApp row under its local hash (RG4)', () => {
 		const LOCAL = '0x' + 'ab'.repeat(32);
 		const row = liveActivityRow(

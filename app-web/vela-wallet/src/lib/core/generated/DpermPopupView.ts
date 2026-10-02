@@ -6,7 +6,7 @@ import type { DpermPopupOutcome } from "./DpermPopupOutcome";
  */
 export type DpermPopupView = { outcome: DpermPopupOutcome, 
 /**
- * [`resolve_granted`]'s answer for this origin — exposed so the window
- * never re-derives the load-bearing cold-read rule (invariant ②) itself.
+ * [`granted_to_signed_in`]'s answer for this origin — exposed so the
+ * window never re-derives which account a site may see itself.
  */
 granted: Array<string>, };

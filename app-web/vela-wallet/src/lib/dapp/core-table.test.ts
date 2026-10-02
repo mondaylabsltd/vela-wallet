@@ -117,7 +117,13 @@ describe('the provider has one home', () => {
 		for (const host of ['android', 'ios', 'desktop']) {
 			const script = dappProviderScript(host);
 			expect(script).toContain(provider.trim().slice(-200));
-			expect(script.startsWith('(function () {\n\tif (window.top !== window) return;')).toBe(true);
+			// Top frame only, and only a secure context (https, or http on
+			// loopback) gets a provider at all (spec 088 FR-004).
+			expect(
+				script.startsWith(
+					'(function () {\n\tif (window.top !== window || !window.isSecureContext) return;'
+				)
+			).toBe(true);
 		}
 	});
 });

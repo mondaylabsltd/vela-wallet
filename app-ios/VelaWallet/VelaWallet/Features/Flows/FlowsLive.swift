@@ -302,7 +302,9 @@ enum FlowsLive {
             // the web places it — a swipe on a feed row is a gesture nobody
             // drew and a destructive one to discover by accident.
             deleteLabel: loc.t("history.deleteRecord"),
-            deleteQuiet: item.status == .pending
+            // RJ18: quiet while it may still land — and a record nothing
+            // settles (087 F04) may have been sent too.
+            deleteQuiet: item.status == .pending || item.status == .unknown
         )
     }
 
@@ -314,6 +316,9 @@ enum FlowsLive {
             StatusChipModel(text: loc.t("componentsTx.detail.statusPending"), tone: .warning)
         case .failed:
             StatusChipModel(text: loc.t("componentsTx.detail.statusFailed"), tone: .error)
+        case .unknown:
+            // 087 F04: pending, and nothing will settle it — not failed.
+            StatusChipModel(text: loc.t("componentsUi.signing.intentUnknown"), tone: .info)
         }
     }
 

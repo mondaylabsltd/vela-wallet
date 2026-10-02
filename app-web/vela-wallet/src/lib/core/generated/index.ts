@@ -27,6 +27,8 @@ export * from './BhistEvent';
 export * from './BhistOperation';
 export * from './BhistShellResult';
 export * from './BhistView';
+export * from './ClearBatchCall';
+export * from './ClearBatchView';
 export * from './ClearBlindField';
 export * from './ClearBlindTyped';
 export * from './ClearConfirm';
