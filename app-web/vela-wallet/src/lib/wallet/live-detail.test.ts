@@ -274,6 +274,27 @@ describe('the status a transaction detail reports (issue 211, spec 082 RG1)', ()
 		expect(detail.status.tone).toBe('error');
 	});
 
+	it('a record nothing will settle reads Unknown, draws no hash and keeps a quiet delete (087 F04/F05)', () => {
+		const detail = liveTxDetail(
+			item('dapp-1790500000796-tx', {
+				direction: 'out',
+				kind: 'dapp_tx',
+				status: 'unknown',
+				tx_hash: null
+			}),
+			ctx
+		);
+		expect(detail.status).toEqual({ text: 'Unknown', tone: 'info' });
+		expect(detail.status.text).toBe(fm['componentsUi.signing.intentUnknown']);
+		expect(detail.facts.map((fact) => fact.label)).not.toContain(
+			fm['componentsTx.detail.labelHash']
+		);
+		expect(JSON.stringify(detail.facts)).not.toContain('dapp-1790500000796-tx');
+		expect(detail.explorerUrl).toBeUndefined();
+		expect(detail.deleteLabel).toBe(fm['history.deleteRecord']);
+		expect(detail.deleteQuiet).toBe(true);
+	});
+
 	it('a settled one still reads Confirmed', () => {
 		expect(liveTxDetail(item('a'), ctx).status.text).toBe(
 			fm['componentsTx.receipt.statusConfirmed']

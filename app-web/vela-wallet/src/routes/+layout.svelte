@@ -105,12 +105,14 @@
 	});
 
 	/**
-	 * Spec 082 RJ20 (G58): in the extension, a connected site follows the
-	 * active account from EVERY screen — a switch made in Settings (切换账户)
-	 * reached no site while this lived in the wallet page — and grants written
-	 * before 082 get the core's EIP-55 spelling at boot, whichever screen the
-	 * wallet opens on. Both are the dApp channel's code, so they are loaded
-	 * only inside the extension: Welcome never carries them (`budgets.e2e.ts`).
+	 * Spec 082 RJ20 (G58): in the extension, the worker's snapshot and every
+	 * connected site follow the signed-in account from EVERY screen — a switch
+	 * made in Settings (切换账户) reached no site while this lived in the
+	 * wallet page — and from the first session this document settles on (spec
+	 * 086, issue 315). Grants written before 082 get the core's EIP-55
+	 * spelling at boot, whichever screen the wallet opens on. Both are the dApp
+	 * channel's code, so they are loaded only inside the extension: Welcome
+	 * never carries them (`budgets.e2e.ts`).
 	 */
 	onMount(() => {
 		if (!inExtension()) return;
@@ -121,7 +123,7 @@
 			void follow.normalizeGrantSpelling();
 			stop = $effect.root(() => {
 				$effect(() => {
-					void follow.sessionFollower.note(session.view);
+					void follow.sessionFollower.note(session.view, { locale: page.params.locale });
 				});
 			});
 		});

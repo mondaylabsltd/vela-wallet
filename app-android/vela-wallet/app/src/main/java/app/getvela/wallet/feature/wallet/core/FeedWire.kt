@@ -42,6 +42,12 @@ enum class FeedTxStatus {
     @SerialName("confirmed") Confirmed,
 
     @SerialName("failed") Failed,
+
+    /**
+     * 087 F04: a pending record nothing will ever settle (no operation hash
+     * past the core's grace, or past the tracker's 24 h). Only a row says it.
+     */
+    @SerialName("unknown") Unknown,
 }
 
 @Serializable

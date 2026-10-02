@@ -1020,22 +1020,41 @@ fn signing_needs_a_grant() {
     assert_eq!(error_code(&answer), 4100);
 }
 
+/// Spec 088 FR-004: the wallet is offered only to a secure context — https,
+/// or http on this device's loopback. Anywhere else the script stays silent, so
+/// a message can only be a page calling the bridge by hand: nothing it sends is
+/// adopted, answered, forwarded or shown — not even with a stored grant, and
+/// not on a private LAN (reachable by anyone on that network).
 #[test]
-fn signing_on_public_http_is_refused() {
-    let site = "http://dapp.example";
-    let mut sut = connected(site);
-    hello(&mut sut, "t1", "d1", site);
-    let answer = only_answer(&ask(
-        &mut sut,
-        "t1",
-        "d1",
-        site,
-        "1",
-        "personal_sign",
-        json!(["0x00", A1]),
-    ));
-    assert_eq!(error_code(&answer), 4100);
-    let local = "http://192.168.1.4:8137";
+fn a_page_off_a_secure_context_is_never_answered() {
+    for site in [
+        "http://dapp.example",
+        "http://192.168.1.4:8137",
+        "http://127.0.0.1.evil.com",
+    ] {
+        let mut sut = connected(site);
+        assert!(hello(&mut sut, "t1", "d1", site).is_empty(), "{site}");
+        for method in [
+            "eth_requestAccounts",
+            "eth_accounts",
+            "eth_chainId",
+            "personal_sign",
+        ] {
+            let ops = ask(&mut sut, "t1", "d1", site, "1", method, json!(["0x00", A1]));
+            assert!(ops.is_empty(), "{site} {method}: {ops:?}");
+        }
+        let view = sut.view();
+        assert!(view.signing.is_none(), "{site}");
+        assert!(
+            view.tabs.iter().all(|t| t.connected_address.is_none()),
+            "{site}"
+        );
+    }
+}
+
+#[test]
+fn a_loopback_test_dapp_may_sign() {
+    let local = "http://127.0.0.1:8137";
     let mut sut = connected(local);
     hello(&mut sut, "t1", "d1", local);
     let ops = ask(
@@ -1047,7 +1066,7 @@ fn signing_on_public_http_is_refused() {
         "personal_sign",
         json!(["0x00", A1]),
     );
-    assert!(forwarded(&ops).is_some(), "a LAN test dApp may sign");
+    assert!(forwarded(&ops).is_some(), "a loopback test dApp may sign");
 }
 
 #[test]
@@ -1658,7 +1677,12 @@ fn a_navigation_in_one_tab_leaves_another_tabs_requests_alone() {
 fn tab_views_tell_the_truth_about_the_lock_and_the_connection() {
     let mut sut = connected(DAPP);
     hello(&mut sut, "t1", "d1", DAPP);
-    hello(&mut sut, "t2", "d2", "http://insecure.example");
+    // An insecure page never says hello to the wallet (spec 088); its tab is
+    // known from the navigation alone, and the lock says so.
+    sut.dispatch(Event::NavigationStarted {
+        tab: "t2".to_owned(),
+        url: "http://insecure.example/".to_owned(),
+    });
     let view = sut.view();
     let t1 = view.tabs.iter().find(|t| t.tab == "t1").unwrap();
     assert!(t1.secure);

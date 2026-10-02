@@ -12921,6 +12921,22 @@ public func browserLoadVisit(url: String, title: String, icon: String?, mainFram
 })
 }
 /**
+ * The title a page is pinned under as a favourite (spec 086, issue #329):
+ * `last_good`'s title when it is the same site as `url` — the bar's address,
+ * the failed one under a failure panel — else `None`, and the favourite takes
+ * its host. `last_good` is the last visit `browser_load_visit` made: an
+ * engine's error page never is one.
+ */
+public func browserPinnedTitle(url: String, lastGood: BrowserVisit?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_browser_pinned_title(
+        FfiConverterString.lower(url),
+        FfiConverterOptionTypeBrowserVisit.lower(lastGood),uniffiCallStatus
+    )
+})
+}
+/**
  * A name that is its host is said once (RE7): an empty title, or one equal to
  * the host ignoring ASCII case, → the host alone; otherwise the title over
  * the host. Recents, the signing header and the consent sheet.
@@ -13059,6 +13075,20 @@ public func dappBrowserInput(text: String) -> String?  {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_dapp_browser_input(
         FfiConverterString.lower(text),uniffiCallStatus
+    )
+})
+}
+/**
+ * A page another app or site asked the wallet's browser to open
+ * (`velawallet://open?url=…`, spec 088): the host the person is asked about
+ * before it loads, or `None` when the link is not opened at all (only an
+ * `https` page with a plain host qualifies).
+ */
+public func dappExternalPageHost(url: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_external_page_host(
+        FfiConverterString.lower(url),uniffiCallStatus
     )
 })
 }
@@ -15123,6 +15153,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_browser_load_visit() != 23241) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_browser_pinned_title() != 57380) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_browser_site_label() != 36058) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15163,6 +15196,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_browser_input() != 24918) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_external_page_host() != 27454) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_is_signing_method() != 50448) {
