@@ -307,6 +307,26 @@ export function exactAmount(amount: string): string {
 // Sections
 // ---------------------------------------------------------------------------
 
+/**
+ * Spec 092: the line over the networks the wallet cannot reach — the home's
+ * status line and the title of the list it opens. The core chooses the
+ * sentence (`unreachable_key`: one network named, several counted); this only
+ * fills it. `undefined` when every network answered.
+ */
+export function unreachableLine(
+	view: Pick<BalanceView, 'unreachable_networks' | 'unreachable_key'>,
+	words: { unreachableOne: string; unreachableMany: string }
+): string | undefined {
+	const first = view.unreachable_networks[0];
+	if (view.unreachable_key === 'assets.unreachableOne' && first !== undefined) {
+		return fill(words.unreachableOne, { name: chainName(first.chain_id) });
+	}
+	if (view.unreachable_key === 'assets.unreachableMany') {
+		return fill(words.unreachableMany, { n: view.unreachable_networks.length });
+	}
+	return undefined;
+}
+
 export function liveBalance(
 	view: BalanceView,
 	currency: CurrencyView,
@@ -351,21 +371,14 @@ export function liveBalance(
 		total === 0 && !view.balance_unknown && !view.balance_partial && view.tokens.length === 0;
 	const onCache = view.display_total_usd === null && view.cached_total_usd !== null;
 
-	// One status line, most actionable first. `banner_chain_ids` is already
-	// failed MINUS rate-limited — the core's exclusion (a rate limit heals on
-	// its own; the balance quietly stays on cache, no nag) — so a chain here
-	// really is unreachable and the person can fix its RPC (the Expo
-	// `RpcTroubleBanner`, worded with its corpus). Then the core's notice.
-	const banner = view.banner_chain_ids;
+	// One status line, most actionable first: the networks the wallet cannot
+	// reach (spec 092 — every one, held or not; a rate limit heals on its own
+	// and is never listed), then the core's notice.
+	const unreachable = unreachableLine(view, m.assets);
 	const status: BalanceModel['status'] =
-		banner.length === 1
-			? {
-					kind: 'warning',
-					text: fill(m.assets.rpcUnavailableSingle, { name: chainName(banner[0]) })
-				}
-			: banner.length > 1
-				? { kind: 'warning', text: fill(m.assets.rpcUnavailableMultiple, { count: banner.length }) }
-				: view.refreshing || onCache || view.notice === 'still_updating'
+		unreachable !== undefined
+			? { kind: 'warning', text: unreachable }
+			: view.refreshing || onCache || view.notice === 'still_updating'
 					? { kind: 'refreshing', text: m.balance.stale }
 					: view.notice === 'unpriced'
 						? { kind: 'warning', text: m.balance.unpriced }

@@ -2863,6 +2863,17 @@ export function attestSafeOpHash(op_json, calls_json, chain_id) {
 }
 
 /**
+ * How long one chain's balance read may take before the round gives up on
+ * it and counts that chain failed, ms (spec 092) —
+ * `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+ * @returns {number}
+ */
+export function balanceChainReadDeadlineMs() {
+    const ret = wasm.balanceChainReadDeadlineMs();
+    return ret >>> 0;
+}
+
+/**
  * Which balances one chain's read covers, in order —
  * `balance_dashboard::read_plan` (RE9): the native coin, the registry
  * stablecoins, the wrapped native, the person's own tokens, each contract

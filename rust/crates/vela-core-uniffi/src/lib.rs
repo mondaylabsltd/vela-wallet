@@ -2138,6 +2138,15 @@ pub fn browser_site_letter(host: String) -> String {
     vela_core::app::browser_load::site_letter(&host)
 }
 
+// -- balance rounds (spec 092) --
+
+/// How long one chain's balance read may take before the round gives up on
+/// it and counts that chain failed — `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+#[uniffi::export]
+pub fn balance_chain_read_deadline_ms() -> u32 {
+    vela_core::app::balance_dashboard::CHAIN_READ_DEADLINE_MS
+}
+
 // -- page loads, the address bar, a site named once (spec 082, contract §10) --
 
 /// A load that has not committed by now is given up on, on every client,
@@ -2988,6 +2997,7 @@ mod tests_082 {
             "the network refused this transaction; nothing was sent"
         );
         assert_eq!(user_op_write_ahead_wait_ms(), 5_000);
+        assert_eq!(balance_chain_read_deadline_ms(), 18_000);
         let reverts = user_op_estimate_failure(
             r#"{"code":-32500,"message":"UserOperation simulation failed","data":"Safe execution failed: the target call in executeUserOp reverted"}"#.into(),
         );

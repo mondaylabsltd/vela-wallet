@@ -388,29 +388,41 @@ object WalletLive {
 
     /**
      * The one line under the hero, most actionable first (the web's
-     * `liveBalance`). `banner_chain_ids` is already failed MINUS rate-limited —
-     * the core's exclusion: a rate limit heals on its own, so the balance
-     * quietly stays on cache with no "fix your RPC" nag — so a chain named here
-     * really is unreachable and the person can fix its RPC. Then the refresh
-     * (or the cached figure standing in for the live one), then the core's
-     * notice.
+     * `liveBalance`): the networks the wallet cannot reach (spec 092 — every
+     * one, held or not; a rate limit heals on its own and is never listed),
+     * said without "RPC" — the line opens their list. Then the refresh (or the
+     * cached figure standing in for the live one), then the core's notice.
      */
     internal fun balanceStatus(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): BalanceStatusModel? {
-        val banner = view.banner_chain_ids
         val onCache = view.display_total_usd == null && view.cached_total_usd != null
+        val unreachable = unreachableLine(view, strings, chainNames)
         return when {
-            banner.size == 1 -> BalanceStatusModel(
-                BalanceStatusKind.Warning,
-                strings.t(I18nKeys.Wallet.RPC_UNAVAILABLE_SINGLE, mapOf("name" to (chainNames[banner[0]] ?: banner[0].toString()))),
-            )
-            banner.size > 1 -> BalanceStatusModel(
-                BalanceStatusKind.Warning,
-                strings.t(I18nKeys.SettingsUi.RPC_UNAVAILABLE_MULTIPLE, mapOf("count" to banner.size.toString())),
-            )
+            unreachable != null -> BalanceStatusModel(BalanceStatusKind.Warning, unreachable)
             view.refreshing || onCache || view.notice == BalanceNotice.StillUpdating ->
                 BalanceStatusModel(BalanceStatusKind.Refreshing, strings.t(I18nKeys.Wallet.BALANCE_STALE))
             view.notice == BalanceNotice.Unpriced ->
                 BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.Wallet.BALANCE_UNPRICED))
+            else -> null
+        }
+    }
+
+    /**
+     * The line over the networks the wallet cannot reach (spec 092) — the
+     * hero's status line and the title of the list it opens. The core chooses
+     * the sentence (`unreachable_key`: one network named, several counted);
+     * this only fills it. `null` when every network answered.
+     */
+    fun unreachableLine(view: BalanceView, strings: VelaStrings, chainNames: Map<Int, String>): String? {
+        val first = view.unreachable_networks.firstOrNull() ?: return null
+        return when (view.unreachable_key) {
+            I18nKeys.Wallet.UNREACHABLE_ONE -> strings.t(
+                I18nKeys.Wallet.UNREACHABLE_ONE,
+                mapOf("name" to (chainNames[first.chain_id] ?: first.chain_id.toString())),
+            )
+            I18nKeys.Wallet.UNREACHABLE_MANY -> strings.t(
+                I18nKeys.Wallet.UNREACHABLE_MANY,
+                mapOf("n" to view.unreachable_networks.size.toString()),
+            )
             else -> null
         }
     }

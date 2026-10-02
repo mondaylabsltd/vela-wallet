@@ -349,19 +349,25 @@ class WalletLiveTest {
     }
 
     /**
-     * The chain that is down is named — from `banner_chain_ids`, which the core
-     * already cut to failed MINUS rate-limited. A chain that is only
+     * The chain that is down is named — from `unreachable_networks`, which the
+     * core already cut to failed MINUS rate-limited, and in the sentence the
+     * core chose (spec 092: no "RPC" on the home). A chain that is only
      * rate-limited is not in it, so the hero never nags to swap an RPC that
      * will heal on its own; the balance just says it is updating.
      */
     @Test
     fun `a failing chain is named, a rate-limited one is not`() {
-        val one = home(BalanceView(display_total_usd = 4.5, failed_chain_ids = listOf(137), banner_chain_ids = listOf(137))).balance.status
+        fun down(vararg ids: Int) = ids.map { app.getvela.wallet.feature.wallet.core.UnreachableNetwork(it, "not_read", null, "assets.notReadYet") }
+        val one = home(
+            BalanceView(display_total_usd = 4.5, failed_chain_ids = listOf(137), unreachable_networks = down(137), unreachable_key = "assets.unreachableOne"),
+        ).balance.status
         assertEquals(BalanceStatusKind.Warning, one?.kind)
-        assertEquals("Polygon RPC unavailable", one?.text)
+        assertEquals("Can't reach Polygon right now", one?.text)
 
-        val two = home(BalanceView(display_total_usd = 4.5, banner_chain_ids = listOf(137, 42161))).balance.status
-        assertEquals("2 networks RPC unavailable", two?.text)
+        val two = home(
+            BalanceView(display_total_usd = 4.5, unreachable_networks = down(137, 42161), unreachable_key = "assets.unreachableMany"),
+        ).balance.status
+        assertEquals("Can't reach 2 networks right now", two?.text)
 
         val limited = home(
             BalanceView(display_total_usd = 4.5, refreshing = true, failed_chain_ids = listOf(137), rate_limited_chain_ids = listOf(137)),

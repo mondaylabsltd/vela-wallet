@@ -2,6 +2,7 @@
 import type { BalanceNotice } from "./BalanceNotice";
 import type { BalanceSwitcherView } from "./BalanceSwitcherView";
 import type { BalanceToken } from "./BalanceToken";
+import type { UnreachableNetwork } from "./UnreachableNetwork";
 
 export type BalanceView = { address: string | null, 
 /**
@@ -36,11 +37,20 @@ tokens: Array<BalanceToken>,
  */
 unpriced_tokens: Array<BalanceToken>, failed_chain_ids: Array<number>, rate_limited_chain_ids: Array<number>, 
 /**
- * Failed minus rate-limited (invariant ⑦): a rate limit lifts on its
- * own, so the "fix your RPC" banner must never nag for it — the balance
- * quietly stays on cache (`HomeScreen.tsx:133-139`).
+ * Every network the last read could not reach (spec 092): failed minus
+ * rate-limited (invariant ⑦ — a rate limit lifts on its own, so it is
+ * never offered an RPC fix; the balance quietly stays on cache). ALL of
+ * them, held or not: while a network cannot be read nobody knows what it
+ * holds now. Ordered: those last seen holding something first, by that
+ * worth, then the rest in the wallet's network order.
  */
-banner_chain_ids: Array<number>, 
+unreachable_networks: Array<UnreachableNetwork>, 
+/**
+ * The corpus key of the home line over them: [`UNREACHABLE_ONE`]
+ * (`{{name}}` = the one network) or [`UNREACHABLE_MANY`] (`{{n}}` = how many);
+ * `None` when every network answered.
+ */
+unreachable_key: string | null, 
 /**
  * `tokens.length === 0 && (cachedTotal ?? 0) > 0` (`HomeScreen.tsx:271`).
  */

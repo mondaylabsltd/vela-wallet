@@ -1,5 +1,12 @@
 package app.getvela.wallet.feature.settings
 
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.components.VelaLabelBesideValue
 import androidx.compose.foundation.layout.navigationBarsPadding
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
@@ -73,7 +80,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import app.getvela.wallet.core.data.DebugMode
 import app.getvela.wallet.feature.settings.components.VelaSwitchRow
 import uniffi.vela_core_uniffi.VersionTaps
@@ -1385,15 +1391,23 @@ private fun IndexDownScreen(model: IndexDownModel, modifier: Modifier = Modifier
     }
 }
 
-/** Every overlay the phone draws as a bottom sheet. */
+/**
+ * Every overlay the phone draws as a bottom sheet — ONE host whose content
+ * swaps, never a sheet stacked on a sheet. Internal since spec 092: the home
+ * hosts its status-line rescues (SR6's list, a row's SR2, SR3) over the
+ * wallet with the same bodies, instead of sending the person to Settings.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("LongMethod")
-private fun SettingsSheet(
+internal fun SettingsSheet(
     model: SettingsScreenModel,
     overlay: SettingsOverlay,
+    /** A swipe down, the scrim or Back — Material has hidden the sheet already. */
     onDismiss: () -> Unit,
     onSignOut: () -> Unit,
+    /** The sheet's own ✕. The same as [onDismiss] unless a host steps back instead (spec 092). */
+    onClose: () -> Unit = onDismiss,
     onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
     storageConfirm: ConfirmSheetModel? = null,
     onConfirmStorage: () -> Unit = {},
@@ -1408,6 +1422,7 @@ private fun SettingsSheet(
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
+    onUnreachableFix: (Int) -> Unit = {},
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
@@ -1442,7 +1457,7 @@ private fun SettingsSheet(
       val sheetScroll = rememberScrollState()
       CompositionLocalProvider(
           LocalSheetScroll provides sheetScroll,
-          LocalSheetClose provides SheetClose(model.closeLabel, onDismiss),
+          LocalSheetClose provides SheetClose(model.closeLabel, onClose),
           LocalSheetBodyMax provides maxSheetHeight - VelaSpacing.xl3,
       ) {
         Box(modifier = Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)) {
@@ -1515,6 +1530,7 @@ private fun SettingsSheet(
                 SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub, onOpen = onOpenLink, onDone = onDismiss, onOpened = onFeedbackOpened, onClosed = onFeedbackClosed)
                 SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onRpcFixPrimary, onRpcFixField)
                 SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail, onBalanceRetry)
+                SettingsOverlay.Unreachable -> UnreachableSheetBody(model.unreachable, onUnreachableFix)
                 SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onRelayerRetry)
                 SettingsOverlay.None -> Unit
             }
@@ -2495,6 +2511,72 @@ private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) 
         BalanceDetailSection(model.sectionUnpriced, top = VelaSpacing.xl)
         model.unpriced.forEach { row -> BalanceDetailRow(row, onRetry) }
     }
+}
+
+/**
+ * SR6 (spec 092): every network the wallet cannot reach, one row each — what
+ * was last read there, and the network's RPC fix. The rows follow the live
+ * view, so one that comes back leaves while the sheet is open.
+ */
+@Composable
+private fun UnreachableSheetBody(model: UnreachableModel, onFix: (Int) -> Unit) {
+    val colors = VelaTheme.colors
+    SheetTitle(model.title)
+    model.summary?.let { summary ->
+        Text(
+            text = summary,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier.padding(bottom = VelaSpacing.md),
+        )
+    }
+    model.rows.forEach { row ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    val y = size.height - VelaBorder.hairline.toPx() / 2
+                    drawLine(colors.borderBase, Offset(0f, y), Offset(size.width, y), VelaBorder.hairline.toPx())
+                }
+                .padding(vertical = VelaSpacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            VelaChainMark(row.mark)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = row.name, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
+                Text(text = row.line, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+            }
+            UnreachableFixAction(row.action) { onFix(row.chainId) }
+        }
+    }
+}
+
+/** A row's 修复: a text action that still answers the finger — it gives and buzzes. */
+@Composable
+private fun UnreachableFixAction(label: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val haptic = rememberVelaHaptic()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) VelaMotion.pressScaleButton else 1f,
+        animationSpec = VelaMotion.pressSpring,
+        label = "unreachableFixPress",
+    )
+    Text(
+        text = label,
+        color = VelaTheme.colors.infoBase,
+        fontFamily = VelaFontFamily,
+        fontSize = VelaTextSize.base,
+        modifier = Modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clickable(interactionSource = interaction, indication = null) {
+                haptic(VelaHaptic.Press)
+                onClick()
+            }
+            .padding(VelaSpacing.sm),
+    )
 }
 
 @Composable

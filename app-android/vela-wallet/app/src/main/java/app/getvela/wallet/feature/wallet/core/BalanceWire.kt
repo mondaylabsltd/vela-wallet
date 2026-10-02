@@ -61,6 +61,18 @@ data class BalanceSwitcherView(
     val balances: List<BalanceCacheEntry> = emptyList(),
 )
 
+/** One network the last read could not reach, and what was last read there (spec 092). */
+@Serializable
+data class UnreachableNetwork(
+    val chain_id: Int,
+    /** `held` / `empty` / `not_read`. */
+    val last_known: String = "not_read",
+    /** The worth of what it last held, USD; `null` when nothing priced was held, or while hidden. */
+    val last_seen_usd: Double? = null,
+    /** The corpus key of the row's line; `assets.lastSeen` fills `{{amount}}`. */
+    val line_key: String = "",
+)
+
 /**
  * `BalanceView`.
  *
@@ -93,7 +105,14 @@ data class BalanceView(
     val unpriced_tokens: List<BalanceToken> = emptyList(),
     val failed_chain_ids: List<Int> = emptyList(),
     val rate_limited_chain_ids: List<Int> = emptyList(),
-    val banner_chain_ids: List<Int> = emptyList(),
+    /**
+     * Every network the wallet cannot reach (spec 092): failed minus
+     * rate-limited, held or not — while one cannot be read nobody knows what it
+     * holds now. In the core's order: last seen holding something first.
+     */
+    val unreachable_networks: List<UnreachableNetwork> = emptyList(),
+    /** The corpus key of the home line over them; `null` when every network answered. */
+    val unreachable_key: String? = null,
     val holdings_loading: Boolean = false,
     val cached_total_usd: Double? = null,
     val switcher: BalanceSwitcherView = BalanceSwitcherView(),
@@ -138,6 +157,15 @@ sealed class BalanceEvent {
     @Serializable
     @SerialName("fix_chain_resolved")
     data class FixChainResolved(val chain_id: Int) : BalanceEvent()
+
+    /** Spec 092: the unreachable list is on screen — read again, and keep re-reading while it is. */
+    @Serializable
+    @SerialName("unreachable_list_opened")
+    data object UnreachableListOpened : BalanceEvent()
+
+    @Serializable
+    @SerialName("unreachable_list_closed")
+    data object UnreachableListClosed : BalanceEvent()
 
     @Serializable
     @SerialName("switcher_opened")
@@ -205,6 +233,8 @@ sealed class BalanceShellResult {
         val tokens: List<BalanceToken> = emptyList(),
         val failed_chain_ids: List<Int> = emptyList(),
         val rate_limited_chain_ids: List<Int> = emptyList(),
+        /** Spec 092: every chain this round asked — one that answered empty is not "not read yet". */
+        val read_chain_ids: List<Int> = emptyList(),
         val now_ms: Double,
     ) : BalanceShellResult()
 

@@ -91,6 +91,12 @@ struct RootView: View {
     @State private var groupNameDraft = ""
     /// The rescue the hero's status line opened, and what it is about.
     @State private var rescue: SettingsOverlay?
+    /// A step inside the open rescue sheet — SR6's row opening its network's
+    /// SR2 (spec 092). The sheet's CONTENT swaps; presenting a second sheet
+    /// over a dismissing one fails silently on iOS (see `SettingsSheet`).
+    @State private var rescueStep: SettingsOverlay?
+    /// SR6 is up, so the balance core is re-reading for it.
+    @State private var unreachableListOpen = false
     @State private var rescueChain: Int?
     @State private var rpcDraft = ""
     /// Which history row opened the transaction sheet, and which assets row
@@ -1203,15 +1209,24 @@ struct RootView: View {
                     // which is what SR2 and SR3 are drawn as. The settings
                     // route would put the settings list behind a sentence
                     // about the screen somebody was actually on.
-                    .sheet(item: $rescue) { overlay in
+                    .sheet(item: $rescue, onDismiss: rescueDismissed) { overlay in
+                        let shown = rescueStep ?? overlay
                         SettingsSheet(
-                            model: rescueModel(overlay),
-                            overlay: overlay,
-                            onDismiss: { rescue = nil },
+                            model: rescueModel(shown),
+                            overlay: shown,
+                            // SR2 opened from SR6 steps back to the list; the
+                            // list itself, or any other rescue, closes.
+                            onDismiss: {
+                                if rescueStep != nil { rescueStep = nil } else { rescue = nil }
+                            },
                             onSignOut: {},
                             rpcDraft: $rpcDraft,
                             onCommitRpc: { commitRescueRpc() },
-                            onRetryChain: { _ in wallet.refresh(pull: true) }
+                            onRetryChain: { _ in wallet.refresh(pull: true) },
+                            onFixChain: { chainId in
+                                openRpcFix(chainId)
+                                rescueStep = .rpcFix
+                            }
                         )
                         .themed(scheme)
                     }
@@ -2146,23 +2161,43 @@ struct RootView: View {
     /// and the honest answer is the breakdown showing which chains are still
     /// out. Reaching for the RPC sheet there would offer a fix for a problem
     /// that is not the person's to fix (invariant ④).
+    ///
+    /// Spec 092 (finding F08): networks the wallet cannot reach open SR6, the
+    /// list of ALL of them — it used to open the first one's RPC fix and leave
+    /// the others unseen. Each row opens its own SR2.
     private func openRescue() {
-        let failed = wallet.balance?.bannerChainIds ?? []
-        if let chainId = failed.first {
-            rescueChain = chainId
-            // By CHAIN ID, not by row id: a row's id is a slug ("gnosis") and
-            // what failed is a chain number.
-            rpcDraft = settings.networkAdmin?.networks
-                .first { $0.chainId == chainId }?.rpcUrl ?? ""
-            // The chain's card, opened in the core — its edit and its save
-            // act on an open card only, so without this the sheet's 保存
-            // reached nothing.
-            settings.expandNetwork(chainId: chainId)
-            rescue = .rpcFix
+        rescueStep = nil
+        rescueChain = nil
+        if !(wallet.balance?.unreachableNetworks.isEmpty ?? true) {
+            rescue = .unreachable
+            // Read every chain again while the list is open: one that has come
+            // back leaves it (and the hero's count) on the next settle.
+            unreachableListOpen = true
+            wallet.unreachableListOpened()
         } else {
-            rescueChain = nil
             rescue = .balanceDetail
         }
+    }
+
+    /// The rescue sheet went, however it went (✕, a swipe): SR6's re-reads stop.
+    private func rescueDismissed() {
+        if unreachableListOpen {
+            unreachableListOpen = false
+            wallet.unreachableListClosed()
+        }
+        rescueStep = nil
+    }
+
+    /// SR2 for one chain — what is stored for it, its card open in the core.
+    private func openRpcFix(_ chainId: Int) {
+        rescueChain = chainId
+        // By CHAIN ID, not by row id: a row's id is a slug ("gnosis") and
+        // what failed is a chain number.
+        rpcDraft = settings.networkAdmin?.networks
+            .first { $0.chainId == chainId }?.rpcUrl ?? ""
+        // The chain's card, opened in the core — its edit and its save act on
+        // an open card only, so without this the sheet's 保存 reached nothing.
+        settings.expandNetwork(chainId: chainId)
     }
 
     /// The rescue sheet's model: the settings page's, with this device's chains
@@ -2170,11 +2205,9 @@ struct RootView: View {
     private func rescueModel(_ overlay: SettingsOverlay) -> SettingsScreenModel {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
-            model = SettingsLive.withBalanceDetail(
-                balance,
-                display: WalletLive.Display.from(settings.currency),
-                on: model, loc: loc
-            )
+            let display = WalletLive.Display.from(settings.currency)
+            model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc)
+            model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc)
         }
         if let chainId = rescueChain {
             model = SettingsLive.withRpcFix(chainId: chainId, endpoint: rpcDraft,

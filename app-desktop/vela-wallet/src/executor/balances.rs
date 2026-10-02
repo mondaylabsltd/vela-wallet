@@ -86,6 +86,12 @@ const NATIVE_CHAINLINK_FEEDS: &[(u32, &str)] = &[
     (100, "0x678df3415fc31947dA4324eC63212874be5a82f8"),
 ];
 
+/// The chains a round asks, by id (spec 092's `read_chain_ids`): one that
+/// answered holding nothing is "nothing when last read", not "not read yet".
+pub fn chain_ids() -> Vec<u32> {
+    chains().into_iter().map(|(chain_id, _)| chain_id).collect()
+}
+
 /// Every chain the wallet reads for. The built-ins plus whatever the person
 /// added — a custom network nobody reads is a network nobody has.
 fn chains() -> Vec<(u32, String)> {
@@ -736,11 +742,14 @@ pub fn fetch_all_streaming(
         }
     }
 
-    // Past the web's per-chain limit (`wallet-api.ts`, 18 s) a chain is
-    // unreachable for this round: one whose endpoints are all dead used to
-    // hold the settle — the cache write, the failed-chain notice, the
-    // incoming-transfer scan — for as long as the pool kept trying.
-    const CHAIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(18);
+    // Past the core's per-chain limit (`CHAIN_READ_DEADLINE_MS`, 18 s — spec
+    // 092 made it the one rule every shell reads) a chain is unreachable for
+    // this round: one whose endpoints are all dead used to hold the settle —
+    // the cache write, the failed-chain notice, the incoming-transfer scan —
+    // for as long as the pool kept trying.
+    let chain_deadline = std::time::Duration::from_millis(u64::from(
+        vela_core::app::balance_dashboard::CHAIN_READ_DEADLINE_MS,
+    ));
     // Set at the settle. A chain still out then may finish later; it must
     // not report after the core has been given the whole picture.
     // A lock, not a flag: the check and the report happen under it, so a
@@ -795,9 +804,35 @@ pub fn fetch_all_streaming(
     }
     drop(tx);
 
+    let (mut tokens, mut failed) = collect_chain_answers(&rx, out, chain_deadline);
+    if let Ok(mut settled) = settled.lock() {
+        *settled = true;
+    }
+    inform_token_trust(address, &tokens);
+    // Deterministic order: the core sorts for display, but a stable input makes
+    // a test's failure readable.
+    tokens.sort_by(|a, b| {
+        a.chain_id
+            .cmp(&b.chain_id)
+            .then_with(|| a.token_address.is_some().cmp(&b.token_address.is_some()))
+            .then_with(|| a.symbol.cmp(&b.symbol))
+    });
+    failed.sort_unstable();
+    (tokens, failed)
+}
+
+/// Each chain's answer, until `budget` runs out (spec 092): a chain that
+/// answered nothing usable, or nothing at all in time, is failed for this
+/// round, and every answer that did arrive still lands. A connection held
+/// open must never keep the round from settling.
+fn collect_chain_answers(
+    rx: &std::sync::mpsc::Receiver<(u32, Option<Vec<BalanceToken>>)>,
+    mut out: Vec<u32>,
+    budget: std::time::Duration,
+) -> (Vec<BalanceToken>, Vec<u32>) {
     let mut tokens = Vec::new();
     let mut failed = Vec::new();
-    let deadline = std::time::Instant::now() + CHAIN_DEADLINE;
+    let deadline = std::time::Instant::now() + budget;
     while !out.is_empty() {
         let left = deadline.saturating_duration_since(std::time::Instant::now());
         match rx.recv_timeout(left) {
@@ -817,25 +852,39 @@ pub fn fetch_all_streaming(
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
     }
-    if let Ok(mut settled) = settled.lock() {
-        *settled = true;
-    }
-    inform_token_trust(address, &tokens);
-    // Deterministic order: the core sorts for display, but a stable input makes
-    // a test's failure readable.
-    tokens.sort_by(|a, b| {
-        a.chain_id
-            .cmp(&b.chain_id)
-            .then_with(|| a.token_address.is_some().cmp(&b.token_address.is_some()))
-            .then_with(|| a.symbol.cmp(&b.symbol))
-    });
-    failed.sort_unstable();
     (tokens, failed)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 092: a chain whose read never answers (a connection held open)
+    /// is failed when the budget runs out, and the chain that answered still
+    /// lands — the round settles instead of waiting on the silent one.
+    #[test]
+    fn a_chain_that_never_answers_is_failed_at_the_deadline_and_the_rest_land() {
+        let (tx, rx) = std::sync::mpsc::channel::<(u32, Option<Vec<BalanceToken>>)>();
+        let answered = BalanceToken {
+            chain_id: 1,
+            symbol: "ETH".to_owned(),
+            name: "Ether".to_owned(),
+            balance: "1".to_owned(),
+            decimals: 18,
+            token_address: None,
+            price_usd: None,
+            spam: false,
+        };
+        let _ = tx.send((1, Some(vec![answered.clone()])));
+        // Chain 56's worker is still holding its sender: it never answers.
+        let started = std::time::Instant::now();
+        let (tokens, failed) =
+            collect_chain_answers(&rx, vec![1, 56], std::time::Duration::from_millis(150));
+        assert_eq!(tokens, vec![answered]);
+        assert_eq!(failed, vec![56]);
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        drop(tx);
+    }
 
     /// Every built-in chain is read, and a custom network joins them.
     #[test]

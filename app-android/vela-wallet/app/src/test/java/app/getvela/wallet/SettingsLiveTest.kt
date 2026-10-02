@@ -331,6 +331,50 @@ class SettingsLiveTest {
     }
 
     /** The balance-by-network sheet, from the balance core's view. */
+    /**
+     * Spec 092: SR6 lists every network the core lists, in its order, each
+     * with what was last read there — the worth in the display currency,
+     * masked while hidden — under the home's own line; once none is left it
+     * says so.
+     */
+    @Test
+    fun theUnreachableListIsTheCoresOrderAndLines() {
+        fun net(id: Int, key: String, usd: Double? = null) =
+            app.getvela.wallet.feature.wallet.core.UnreachableNetwork(id, if (usd == null) "not_read" else "held", usd, key)
+        val names = mapOf(1 to "Ethereum", 56 to "BNB Chain", 137 to "Polygon")
+        val usd = CurrencyView("USD", 1.0, true)
+        val view = BalanceView(
+            unreachable_networks = listOf(
+                net(1, I18nKeys.SettingsUi.LAST_SEEN, 4500.0),
+                net(56, I18nKeys.SettingsUi.LAST_SEEN_EMPTY),
+                net(137, I18nKeys.SettingsUi.NOT_READ_YET),
+            ),
+            unreachable_key = I18nKeys.Wallet.UNREACHABLE_MANY,
+        )
+        val list = SettingsLive.unreachable(view, usd, names, strings)
+        assertEquals("Can't reach 3 networks right now", list.title)
+        assertEquals(strings.t(I18nKeys.SettingsUi.UNREACHABLE_BODY), list.summary)
+        assertEquals(listOf(1, 56, 137), list.rows.map { it.chainId })
+        assertEquals("Last seen ${WalletLive.Money.of(usd).fiat(4500.0)}", list.rows[0].line)
+        assertEquals("Held nothing when last read", list.rows[1].line)
+        assertEquals("Not read yet", list.rows[2].line)
+        assertTrue(list.rows.all { it.action == strings.t(I18nKeys.SettingsUi.RPC_FIX) })
+
+        // Hidden: the worth is masked, the network stays.
+        val hidden = SettingsLive.unreachable(
+            view.copy(hidden = true, unreachable_networks = listOf(net(1, I18nKeys.SettingsUi.LAST_SEEN))),
+            usd, names, strings,
+        )
+        assertEquals(1, hidden.rows.size)
+        assertFalse(hidden.rows[0].line.contains("4,500"))
+
+        // Every network back: the title says so, and nothing is listed.
+        val none = SettingsLive.unreachable(BalanceView(), usd, names, strings)
+        assertEquals(strings.t(I18nKeys.SettingsUi.UNREACHABLE_NONE), none.title)
+        assertNull(none.summary)
+        assertTrue(none.rows.isEmpty())
+    }
+
     @Test
     fun theBalanceDetailIsTheViewsChainsNotTheFixtures() {
         val view = BalanceView(
@@ -343,7 +387,7 @@ class SettingsLiveTest {
             unpriced_tokens = listOf(BalanceToken(8453, "ODD", "Odd", balance = "1.23456789", decimals = 18, token_address = "0xodd")),
             failed_chain_ids = listOf(100, 137),
             rate_limited_chain_ids = listOf(137),
-            banner_chain_ids = listOf(100),
+            unreachable_networks = listOf(app.getvela.wallet.feature.wallet.core.UnreachableNetwork(100)),
             display_total_usd = 3017.5,
         )
         val names = mapOf(1 to "Ethereum", 10 to "Optimism", 100 to "Gnosis", 137 to "Polygon", 8453 to "Base")

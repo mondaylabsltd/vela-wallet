@@ -1118,7 +1118,8 @@ enum SettingsLive {
             BalanceDetailRowModel(id: String(id), mark: row(id), name: chainName(id),
                                   status: loc.t(k.balanceDetailRetrying), tone: .neutral)
         }
-        for id in balance.bannerChainIds where !pending.contains(where: { $0.id == String(id) }) {
+        for id in balance.unreachableNetworks.map(\.chainId)
+        where !pending.contains(where: { $0.id == String(id) }) {
             pending.append(BalanceDetailRowModel(
                 id: String(id), mark: row(id), name: chainName(id),
                 status: loc.t(k.balanceDetailFailed), tone: .error,
@@ -1156,6 +1157,44 @@ enum SettingsLive {
             pending: pending,
             sectionDone: model.balanceDetail.sectionDone,
             done: done
+        )
+        return live
+    }
+
+    /// SR6 (spec 092) — the list the hero's "can't reach" line opens: every
+    /// network the core lists, in its order, each with what was last read
+    /// there (its worth in the display currency, masked while hidden) and its
+    /// RPC fix. Built from the live view on every render, so a network that
+    /// comes back leaves the open sheet; the title is the hero's own line.
+    static func withUnreachable(
+        _ balance: BalanceViewWire,
+        display: WalletLive.Display,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        let k = I18nKeys.SettingsUi.self
+        let rows = balance.unreachableNetworks.map { network -> UnreachableRowModel in
+            let name = ChainCatalog.meta(network.chainId)?.displayName
+                ?? chainMeta(loc, network.chainId)
+            let amount = balance.hidden || network.lastSeenUsd == nil
+                ? "••••"
+                : display.glyph + Formats.number((network.lastSeenUsd ?? 0) * display.rate,
+                                                 minimumFractionDigits: 2,
+                                                 maximumFractionDigits: 2)
+            return UnreachableRowModel(
+                id: String(network.chainId),
+                chainId: network.chainId,
+                mark: mark(chainId: network.chainId, name: name),
+                name: name,
+                line: loc.t(network.lineKey, vars: ["amount": amount]),
+                action: loc.t(k.rpcFix)
+            )
+        }
+        var live = model
+        live.unreachable = UnreachableModel(
+            title: WalletLive.unreachableLine(balance, loc: loc) ?? loc.t(k.unreachableNone),
+            summary: rows.isEmpty ? nil : loc.t(k.unreachableBody),
+            rows: rows
         )
         return live
     }

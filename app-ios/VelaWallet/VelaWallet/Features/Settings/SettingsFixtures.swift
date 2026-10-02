@@ -667,7 +667,7 @@ enum SettingsFixtures {
     private static func rpcBanner(_ loc: Loc) -> RpcBannerModel {
         let k = I18nKeys.SettingsUi.self
         return RpcBannerModel(
-            text: loc.t(k.rpcUnavailableMultiple, vars: ["count": "2"]),
+            text: loc.t(k.unreachableMany, vars: ["n": "2"]),
             chips: ["polygon", "gnosis"].map { id in
                 RpcBannerChipModel(id: id, mark: mark(id), name: canon(id).name,
                                    action: loc.t(k.rpcFix))
@@ -796,6 +796,7 @@ enum SettingsFixtures {
         case .sr3: Shape(page: .home, overlay: .balanceDetail, rescue: true, backdrop: "wallet")
         case .sr4: Shape(page: .home, overlay: .relayer, rescue: true, backdrop: "send")
         case .sr5: Shape(page: .home, overlay: .none, rescue: true)
+        case .sr6: Shape(page: .home, overlay: .unreachable, rescue: true, backdrop: "wallet")
         }
     }
 
@@ -814,7 +815,7 @@ enum SettingsFixtures {
         default: loc.t(k.title)
         }
 
-        return SettingsScreenModel(SettingsScreenContent(
+        let model = SettingsScreenModel(SettingsScreenContent(
             state: state,
             title: loc.t(k.title),
             page: form.page,
@@ -877,5 +878,29 @@ enum SettingsFixtures {
             backdropTitle: backdropTitle,
             closeLabel: loc.t(k.close)
         ))
+        // SR6 is drawn through the live builder, from a view shaped like the
+        // core's: what the gallery shows is what a session would.
+        return SettingsLive.withUnreachable(unreachableView, display: .usd, on: model, loc: loc)
     }
+
+    /// Spec 092's three cases in the core's order: last seen holding $4,500,
+    /// last seen empty, never read.
+    static let unreachableView = BalanceViewWire(
+        address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+        displayTotalUsd: 4_500, balanceUnknown: false, balancePartial: true,
+        notice: nil, hidden: false, refreshing: false, lastRefreshedAtMs: nil,
+        tokens: [], unpricedTokens: [], failedChainIds: [1, 56, 137],
+        rateLimitedChainIds: [],
+        unreachableNetworks: [
+            UnreachableNetworkWire(chainId: 1, lastKnown: "held", lastSeenUsd: 4_500,
+                                   lineKey: I18nKeys.SettingsUi.lastSeen),
+            UnreachableNetworkWire(chainId: 56, lastKnown: "empty", lastSeenUsd: nil,
+                                   lineKey: I18nKeys.SettingsUi.lastSeenEmpty),
+            UnreachableNetworkWire(chainId: 137, lastKnown: "not_read", lastSeenUsd: nil,
+                                   lineKey: I18nKeys.SettingsUi.notReadYet),
+        ],
+        unreachableKey: I18nKeys.SettingsUi.unreachableMany,
+        holdingsLoading: false, cachedTotalUsd: 4_500,
+        switcher: BalanceSwitcherViewWire(open: false, loading: false, balances: [])
+    )
 }

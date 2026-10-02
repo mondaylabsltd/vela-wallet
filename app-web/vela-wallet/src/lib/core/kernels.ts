@@ -1060,6 +1060,14 @@ export function signRequestTtlMs(): number {
 	return wasm.signRequestTtlMs();
 }
 
+/**
+ * How long one chain's balance read may take before the round counts it failed
+ * — the core's `CHAIN_READ_DEADLINE_MS` (spec 092), the same on every shell.
+ */
+export function balanceChainReadDeadlineMs(): number {
+	return wasm.balanceChainReadDeadlineMs();
+}
+
 /** One endpoint's read budget — the core's `RPC_READ_TIMEOUT_MS` (RF2). */
 export function rpcReadTimeoutMs(): number {
 	return wasm.rpcReadTimeoutMs();

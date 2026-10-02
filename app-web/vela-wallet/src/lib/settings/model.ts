@@ -610,6 +610,26 @@ export interface RpcFixModel {
 	report?: string;
 }
 
+/**
+ * Spec 092: every network the wallet cannot reach, in the core's order, each
+ * with what was last read there and its RPC fix.
+ */
+export interface UnreachableModel {
+	/** The home's own line ("Can't reach 3 networks right now"), live. */
+	title: string;
+	/** Absent once every network has come back. */
+	summary?: string;
+	rows: {
+		id: string;
+		chainId: number;
+		mark: ChainMarkModel;
+		name: string;
+		/** "Last seen $1,234.50", "Not read yet", … */
+		line: string;
+		action: string;
+	}[];
+}
+
 /** SR3: the quiet rate-limited balance breakdown. */
 export interface BalanceDetailModel {
 	title: string;
