@@ -1035,6 +1035,107 @@ struct SigningLiveTests {
         #expect(target?.mono == false, "a name is not monospace")
     }
 
+    // MARK: - Spec 097 (part A): nothing false or unknown stated as certain
+
+    /// The 1inch order the 097 pass signed (USDC → BNB), verbatim.
+    private static let oneInchOrder = #"{"types":{"Order":[{"name":"salt","type":"uint256"},{"name":"maker","type":"address"},{"name":"receiver","type":"address"},{"name":"makerAsset","type":"address"},{"name":"takerAsset","type":"address"},{"name":"makingAmount","type":"uint256"},{"name":"takingAmount","type":"uint256"},{"name":"makerTraits","type":"uint256"}],"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},{"name":"chainId","type":"uint256"},{"name":"verifyingContract","type":"address"}]},"domain":{"name":"1inch Aggregation Router","version":"6","chainId":56,"verifyingContract":"0x111111125421ca6dc452d289314280a0f8842a65"},"primaryType":"Order","message":{"salt":"33701748006248133072184610391074722838607073826819837756152271511067157162131","maker":"0x88cca0eedbf2c4426110bbfc998f048689266894","receiver":"0x0000000000000000000000000000000000000000","makerAsset":"0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d","takerAsset":"0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c","makingAmount":"1160000000000000000","takingAmount":"1430509396956033","makerTraits":"62645329528782394789705396186445553993653435352530577117757868129563663400960"}}"#
+
+    /// UTC, ISO dates, a 24-hour clock: a date read against the chain's clock.
+    private static let utcLocale: [String: Any] = [
+        "number_format": "comma_dot", "date_format": "iso", "time_format": "h24", "tz_offset_minutes": 0,
+    ]
+
+    /// The REAL core reading one request, the 097 pass's shell scripted: the
+    /// chain names WBNB and USDC on BNB Chain (unless it is down), nothing else
+    /// answers.
+    private func readPassRequest(_ event: [String: Any], chainDown: Bool = false) throws -> ClearSigningViewWire {
+        let symbols = [
+            "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c": "WBNB",
+            "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": "USDC",
+        ]
+        let word = { (n: Int) -> String in
+            let hex = String(n, radix: 16)
+            return "0x" + String(repeating: "0", count: 64 - hex.count) + hex
+        }
+        let core = ClearSigningCore()
+        var result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string(event)))
+        var queue = result["effects"] as? [[String: Any]] ?? []
+        var asked = 0
+        while !queue.isEmpty, asked < 200 {
+            let effect = queue.removeFirst()
+            asked += 1
+            guard let id = (effect["id"] as? NSNumber)?.uint64Value,
+                  let op = effect["operation"] as? [String: Any] else { continue }
+            let answer: [String: Any]
+            switch op["type"] as? String {
+            case "now": answer = ["type": "clock", "now_ms": 1_790_957_000_000.0]
+            case "http_get": answer = ["type": "descriptor_fetched", "path": op["path"] ?? "", "json": NSNull()]
+            case "rpc_eth_call":
+                let symbol = chainDown ? nil : symbols[((op["to"] as? String) ?? "").lowercased()]
+                let value: Any = symbol.map { symbol -> String in
+                    if (op["probe"] as? String) == "decimals" { return word(18) }
+                    let body = symbol.utf8.map { String(format: "%02x", $0) }.joined()
+                    return word(32) + String(word(symbol.utf8.count).dropFirst(2))
+                        + body.padding(toLength: 64, withPad: "0", startingAt: 0)
+                } ?? NSNull()
+                answer = ["type": "rpc_answer", "probe": op["probe"] ?? "", "chain_id": op["chain_id"] ?? 56,
+                          "to": op["to"] ?? "", "result": value, "rpc_error": symbol == nil]
+            case "selector_db_lookup": answer = ["type": "selector_candidates", "sigs": [String]()]
+            case "timer": answer = ["type": "timed_out", "token": op["token"] ?? 0]
+            default: continue
+            }
+            result = try CoreJSON.object(core.resolveEffect(effectId: id, resultJson: CoreJSON.string(answer)))
+            queue += result["effects"] as? [[String: Any]] ?? []
+        }
+        return try CoreJSON.decode(ClearSigningViewWire.self, from: result["view"] as? [String: Any] ?? [:])
+    }
+
+    /// N6 (and N3 on this shell — the minimum is said by its row's label): the
+    /// pass's 1inch order reads as the swap it signs. The zero receiver is the
+    /// account itself, BNB arrives (the unwrap flag), the minimum says so, and
+    /// the expiry `makerTraits` encodes is said — 16:42 UTC on 2026-10-02.
+    @Test func aOneInchOrderSaysWhereItsProceedsGoAndUntilWhen() throws {
+        let view = try readPassRequest([
+            "type": "resolve_typed_data", "typed_data_json": Self.oneInchOrder,
+            "chain_id": 56, "locale": Self.utcLocale,
+        ])
+        #expect(view.surface == .clearSign)
+        let drawn = rows(SigningLive.blocks(clear: view, to: nil, valueHex: nil, dataBytes: 0, context: bnbContext()))
+        let value = { (key: String) in drawn.first { $0.label == loc.t("componentsUi.signing.\(key)") }?.value }
+        #expect(value("labelYouPay") == "1.16 USDC", "\(drawn)")
+        #expect(value("labelYouReceiveMin") == "0.001430509396956033 BNB", "\(drawn)")
+        #expect(value("labelRecipient") == "0x88cca0...266894", "\(drawn)")
+        #expect(value("labelValidUntil") == "2026-10-02, 16:42", "\(drawn)")
+        #expect(!drawn.contains { $0.value.contains("0x00000000") })
+    }
+
+    /// N1 + N8: an amount the chain never scaled is no figure and the reading
+    /// says it is incomplete; a batch call on USDC names the token, with its
+    /// address beside a name only the chain gave.
+    @Test func anUnscaledAmountIsIncompleteAndATokenTargetIsNamed() throws {
+        let borrow = try readPassRequest([
+            "type": "resolve_transaction", "to": "0x6807dc923806fe8fd134338eabca509979a7e0cb",
+            "data": "0xa415bcad0000000000000000000000008ac76a51cc950d9822d68b83fe1ad97b32cd580d0000000000000000000000000000000000000000000000000429d069189e00000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000088cca0eedbf2c4426110bbfc998f048689266894",
+            "value": "0x0", "chain_id": 56, "locale": Self.utcLocale,
+        ], chainDown: true)
+        let drawn = SigningLive.blocks(clear: borrow, to: nil, valueHex: nil, dataBytes: 164, context: bnbContext())
+        let amount = rows(drawn).first { $0.label == loc.t("componentsUi.signing.intentBorrow") }
+        #expect(amount?.value.hasPrefix("\u{2014}") == true, "no figure: \(String(describing: amount))")
+        #expect(amount?.valueTone == .caution)
+        let partial = loc.t("componentsUi.signing.partialWarning")
+        #expect(drawn.contains { if case .warning(.caution, let text) = $0 { return text == partial } else { return false } })
+
+        let usdc = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
+        let approve = "0x095ea7b300000000000000000000000031c2f6fcff4f8759b3bd5bf0e1084a055615c7680000000000000000000000000000000000000000000000001018f0e6fdc80000"
+        let batch = try readPassRequest([
+            "type": "resolve_batch", "chain_id": 56, "locale": Self.utcLocale,
+            "params_json": #"[{"chainId":"0x38","calls":[{"to":"\#(usdc)","data":"\#(approve)"},{"to":"0x7777777777777777777777777777777777777777","value":"0x1"}]}]"#,
+        ])
+        let target = cards(SigningLive.blocks(clear: batch, to: nil, valueHex: nil, dataBytes: 0, context: bnbContext()))[0]
+            .rows.first { $0.label == loc.t("componentsUi.signing.interactingLabel") }
+        #expect(target?.value == "USDC (0x8ac76a...cd580d)")
+    }
+
     /// F7: every machine says yes and the request is still being read — the
     /// slide stays shut, under "Loading…".
     @Test func theSlideWaitsForTheReading() {
