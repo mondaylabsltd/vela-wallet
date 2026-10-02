@@ -513,6 +513,10 @@ data class SendView(
     val tokens: List<SendToken> = emptyList(),
     val selected_token: SendToken? = null,
     val recipient: String = "",
+    /** Issue #312: the network a scanned code named for the payer to choose on; `tokens` holds only its holdings. */
+    val request_chain_id: Int? = null,
+    /** Issue #326: the form's token card opens the asset picker. */
+    val can_change_token: Boolean = false,
     val amount: String = "",
     /** The figure's OWN unit: `null` = token units, else that fiat code. */
     val amount_fiat_code: String? = null,
@@ -941,6 +945,11 @@ sealed class SendEvent {
     @Serializable
     @SerialName("back")
     data object Back : SendEvent()
+
+    /** Issue #326: the form's token card — back to the picker, the payee kept. */
+    @Serializable
+    @SerialName("change_token")
+    data object ChangeToken : SendEvent()
 
     @Serializable
     @SerialName("edit_amount")

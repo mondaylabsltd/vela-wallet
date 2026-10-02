@@ -38,8 +38,8 @@ struct ProviderScriptTests {
         #expect(script.contains("window.webkit.messageHandlers.\(ProviderBridge.handlerName).postMessage(s)"))
         #expect(!script.contains("window.ipc.postMessage"), "that is the desktop's transport")
         #expect(!script.contains("(s) => VelaHost.postMessage"), "that is Android's transport")
-        #expect(script.hasPrefix("(function () {\n\tif (window.top !== window) return;"),
-                "a subframe gets no provider, rather than one that can never be answered")
+        #expect(script.hasPrefix("(function () {\n\tif (window.top !== window || !window.isSecureContext) return;"),
+                "a subframe gets no provider, rather than one that can never be answered — nor does a page off a secure context (spec 088)")
         #expect(script.contains("__velaDeliver"))
         #expect(script.contains("t: 'hello'"), "every document says hello before its own scripts run")
         #expect(script.contains("eip6963:announceProvider"), "the provider itself is in there")

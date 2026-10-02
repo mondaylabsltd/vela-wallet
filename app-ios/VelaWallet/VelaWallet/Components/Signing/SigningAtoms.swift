@@ -128,13 +128,25 @@ struct SigningIntentLabel: View {
 
     let text: String
     let tone: SigningTone
+    /// The sheet's headline rather than the eyebrow over a hero — for a
+    /// request with no figure to lead with (the wallet's own). A headline is
+    /// the base ink unless its tone is a warning.
+    var lead = false
 
     var body: some View {
-        Text(verbatim: text)
-            .typeRole(Typography.label.scaled(textScale))
-            .tracking(Tokens.LetterSpacing.sectionLabel)
-            .foregroundStyle(tone == .neutral ? theme.fgMuted : tone.color(theme))
-            .frame(maxWidth: .infinity, alignment: .leading)
+        if lead {
+            Text(verbatim: text)
+                .typeRole(Typography.title.scaled(textScale))
+                .foregroundStyle(tone == .caution || tone == .danger ? tone.color(theme) : theme.fgBase)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(verbatim: text)
+                .typeRole(Typography.label.scaled(textScale))
+                .tracking(Tokens.LetterSpacing.sectionLabel)
+                .foregroundStyle(tone == .neutral ? theme.fgMuted : tone.color(theme))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
