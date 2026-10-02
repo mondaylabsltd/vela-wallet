@@ -746,7 +746,9 @@ class BalanceMachineTest {
         val h = harness(
             listOf(row(1, "ETH", "Ethereum"), row(56, "BNB", "BNB Chain")),
             stall = { url -> url.contains("chain-56") },
-            chainDeadlineMs = 300,
+            // Long enough that the answering chain lands on a loaded CI box,
+            // short enough to prove the silent one is cut (the settle waits 20 s).
+            chainDeadlineMs = 5_000,
         ) { _, _ -> FakeRpcTransport.body("0x14d1120d7b160000") }
         h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
 

@@ -50,7 +50,8 @@ struct ChainDeadlineTests {
     /// A chain that answers in time is that answer, untouched.
     @Test(.timeLimit(.minutes(1)))
     func anAnswerInTimeIsTheAnswer() async {
-        let result = await TokenReads.bounded(chainId: 1, deadlineMs: 5_000) {
+        // A deadline no loaded runner reaches: this read answers at once.
+        let result = await TokenReads.bounded(chainId: 1, deadlineMs: 60_000) {
             TokenReads.ChainResult(chainId: 1, tokens: [["symbol": "ETH"]], failed: false, rateLimited: false)
         }
         #expect(!result.failed)
@@ -69,7 +70,9 @@ struct ChainDeadlineTests {
                 }
             }
             group.addTask {
-                await TokenReads.bounded(chainId: 1, deadlineMs: 150) {
+                // The answering chain's verdict must not hang on CPU time:
+                // only the silent one is given a short deadline.
+                await TokenReads.bounded(chainId: 1, deadlineMs: 60_000) {
                     TokenReads.ChainResult(chainId: 1, tokens: [["symbol": "ETH"]], failed: false, rateLimited: false)
                 }
             }
