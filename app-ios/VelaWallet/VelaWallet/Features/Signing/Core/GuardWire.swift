@@ -158,6 +158,13 @@ struct GuardTokenMetaViewWire: Decodable, Equatable {
     /// a cap read in the wrong decimals is off by orders of magnitude.
     let verified: Bool
     let loading: Bool
+
+    /// The view as the core wrote it, for the approve's `token_meta` (spec
+    /// 093): copied back verbatim, so the record can say "100 USDC". The core
+    /// reads it only once it resolved.
+    var wire: [String: Any] {
+        ["symbol": symbol, "decimals": decimals, "verified": verified, "loading": loading]
+    }
 }
 
 struct GuardEditorViewWire: Decodable, Equatable {

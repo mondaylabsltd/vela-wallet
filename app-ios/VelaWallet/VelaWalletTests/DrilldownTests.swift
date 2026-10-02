@@ -120,7 +120,7 @@ struct DrilldownTests {
         #expect(live.positive)
         // The STORED figure — re-pricing it today would restate history.
         #expect(live.fiat.contains("$120.00"))
-        #expect(live.status.text == loc.t("componentsTx.detail.statusSucceeded"))
+        #expect(live.status?.text == loc.t("componentsTx.detail.statusSucceeded"))
 
         let labels = live.facts.map(\.label)
         #expect(labels.contains(loc.t("componentsTx.detail.from")))
@@ -138,17 +138,17 @@ struct DrilldownTests {
             item(id: "a", status: .pending), record: record(id: "a", status: .pending),
             on: baseTxDetail, loc: loc
         )
-        #expect(pending.status.text == loc.t("componentsTx.detail.statusPending"))
+        #expect(pending.status?.text == loc.t("componentsTx.detail.statusPending"))
         let failed = FlowsLive.txDetail(
             item(id: "a", status: .failed), record: record(id: "a", status: .failed),
             on: baseTxDetail, loc: loc
         )
-        #expect(failed.status.text == loc.t("componentsTx.detail.statusFailed"))
+        #expect(failed.status?.text == loc.t("componentsTx.detail.statusFailed"))
         // No record behind the row (a folded batch): still the row's own word.
         let batchPending = FlowsLive.txDetail(
             item(id: "b", status: .pending), record: nil, on: baseTxDetail, loc: loc
         )
-        #expect(batchPending.status.text == loc.t("componentsTx.detail.statusPending"))
+        #expect(batchPending.status?.text == loc.t("componentsTx.detail.statusPending"))
     }
 
     /// A row with no stored record behind it — a folded batch — still opens,

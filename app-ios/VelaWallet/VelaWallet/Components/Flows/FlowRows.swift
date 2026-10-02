@@ -117,7 +117,11 @@ struct FactRowView: View {
                 .lineLimit(1)
             Spacer(minLength: Tokens.Space.s8)
             lead
-            value
+            if fact.lines.isEmpty {
+                value
+            } else {
+                lines
+            }
             if let copy = fact.copy {
                 Button {
                     // It copies. Until 058 every fact row on this client — the
@@ -149,9 +153,22 @@ struct FactRowView: View {
         } else {
             text
                 .typeRole(Typography.body.scaled(textScale))
-                .foregroundStyle(theme.fgBase)
+                .foregroundStyle(fact.danger ? theme.errorBase : theme.fgBase)
                 .lineLimit(1)
                 .truncationMode(.middle)
+        }
+    }
+
+    /// Several values under one label (spec 093: a dApp's balance changes),
+    /// each in the signing sheet's own tone.
+    private var lines: some View {
+        VStack(alignment: .trailing, spacing: Tokens.Space.s4) {
+            ForEach(fact.lines) { line in
+                Text(verbatim: "\(line.delta) \(line.symbol)")
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(line.tone == .neutral ? theme.fgBase : line.tone.color(theme))
+                    .lineLimit(1)
+            }
         }
     }
 

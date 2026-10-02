@@ -609,6 +609,13 @@ final class SignExecutor {
     /// transaction, and reading `.value` there recorded every batch as moving
     /// nothing. `maybeSent` / `submitBlock` are kept with the row (spec 082
     /// T183), so a relaunch follows a may-have-been-sent op as one.
+    ///
+    /// Spec 093: the request is stored as the CORE cut it (`stored_request`,
+    /// ≤ 8 KB on a character boundary, `request_truncated`) — never a cut of
+    /// this shell's own — and what Activity says the request was (`summary`)
+    /// and what the sheet showed it moving (`balance_changes`) are kept
+    /// verbatim, for the feed to read back untouched. A signature's `result`
+    /// is empty: the disk keeps that it was given, never the signature.
     static func recordRow(_ record: [String: Any], nativeSymbol: String) -> [String: Any] {
         let paramsJson = record["params_json"] as? String ?? "[]"
         let first = (try? JSONSerialization.jsonObject(
@@ -637,7 +644,6 @@ final class SignExecutor {
             kind = "sign_message"
         }
 
-        let clipped = paramsJson.utf8.count > 4096
         var row: [String: Any] = [
             "id": record["record_id"] as? String ?? "",
             "userOpHash": record["user_op_hash"] as? String ?? "",
@@ -656,10 +662,12 @@ final class SignExecutor {
             // 083 H2: the origin the request arrived from — what Activity
             // names the site by.
             "dappUrl": record["dapp_url"] as? String ?? "",
-            "signedRequest": clipped ? String(paramsJson.prefix(4096)) : paramsJson,
-            "requestTruncated": clipped,
+            "signedRequest": record["stored_request"] as? String ?? "",
+            "requestTruncated": record["request_truncated"] as? Bool ?? false,
         ]
         if let intent = record["intent"] as? String, !intent.isEmpty { row["intent"] = intent }
+        if let summary = record["summary"] as? [String: Any] { row["dappSummary"] = summary }
+        if let changes = record["balance_changes"] as? [[String: Any]] { row["balanceChanges"] = changes }
         if record["maybe_sent"] as? Bool == true { row["maybeSent"] = true }
         if let block = record["submit_block"] as? NSNumber { row["submitBlock"] = block.uint64Value }
         return row

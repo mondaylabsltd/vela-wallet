@@ -173,7 +173,8 @@ enum TxRecords {
         if let rawKind, !kinds.contains(rawKind) { return nil }
         let timestamp = timestamp(record)
         let status = record["status"] as? String
-        return [
+        let dapp = dappKinds.contains(rawKind ?? "")
+        var wire: [String: Any] = [
             "id": string(record["id"]),
             "user_op_hash": string(record["userOpHash"]),
             "tx_hash": string(record["txHash"]),
@@ -194,15 +195,52 @@ enum TxRecords {
             "kind": rawKind.map { $0 as Any } ?? NSNull(),
             "usd": (record["usd"] as? String).map { $0 as Any } ?? NSNull(),
             // The origin a dApp's request arrived from (spec 082 RG1, 083
-            // H2): the core names the row's site by it. `dappOrigin` may be
-            // the dApp's own name, so never that. Absent for every other kind.
-            "dapp_url": (record["dappUrl"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-                .map { $0 as Any } ?? NSNull(),
+            // H2, 093): the core names the row's site by it. Absent for every
+            // other kind.
+            "dapp_url": (dapp ? dappUrl(record) : nil).map { $0 as Any } ?? NSNull(),
             // The call's `data`, for a dApp's transaction (spec 082 RJ16):
             // the core reads from it who the counterparty is — the transfer's
             // recipient, or the contract a call went to.
             "call_data": (rawKind == "dapp_tx" ? callData(record) : nil).map { $0 as Any } ?? NSNull(),
         ]
+        guard dapp else { return wire }
+        // Spec 093: what the record was, as the core wrote it at approve time
+        // — handed back untouched, for the feed to word. Only a value of the
+        // shape the core wrote is passed: anything else is absent, so one
+        // malformed record never stops the whole feed from reading.
+        if let intent = record["intent"] as? String, !intent.isEmpty { wire["intent"] = intent }
+        if let summary = record["dappSummary"] as? [String: Any] { wire["summary"] = summary }
+        if let changes = record["balanceChanges"] as? [[String: Any]] { wire["balance_changes"] = changes }
+        return wire
+    }
+
+    /// The kinds a dApp asked for: a transaction or a signature (spec 093).
+    static let dappKinds: Set<String> = ["dapp_tx", "sign_message", "sign_typed_data"]
+
+    /// The origin a dApp's request arrived from: `dappUrl`, else — on a
+    /// record written before 083 stored it — `dappOrigin`. This shell has
+    /// only ever written the browser-observed origin there (the signing
+    /// machine is told `dapp: null`), never a dApp's own name, so the old
+    /// record names the same site.
+    static func dappUrl(_ record: [String: Any]) -> String? {
+        for key in ["dappUrl", "dappOrigin"] {
+            if let url = (record[key] as? String)?.trimmingCharacters(in: .whitespaces), !url.isEmpty {
+                return url
+            }
+        }
+        return nil
+    }
+
+    /// The request a dApp record stored (`signedRequest`, the core's cut of
+    /// it), by record id — read only when the detail's technical section is
+    /// opened. `nil` when the record kept none.
+    @MainActor
+    static func storedRequest(id: String, store: VelaStore) -> String? {
+        guard let record = load(store: store).first(where: { ($0["id"] as? String) == id }),
+              let text = record["signedRequest"] as? String,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return text
     }
 
     /// The first call's `data` of the request a `dapp_tx` row stored

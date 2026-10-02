@@ -224,7 +224,12 @@ struct ActivityRowTests {
         FeedItemWire(
             id: id, direction: direction, counterparty: counterparty, alias: alias,
             value: value, symbol: symbol, decimals: 6, usdValue: 120, chainId: 1,
-            timestamp: timestamp, dayStartMs: dayStartMs, txHash: "0xabc", batch: nil
+            timestamp: timestamp, dayStartMs: dayStartMs, txHash: "0xabc", batch: nil,
+            // The core's second line for a transfer (spec 093): whom it came
+            // from or went to.
+            subtitle: counterparty.map { address in
+                [direction == .in ? .from(address: address, name: alias) : .to(address: address, name: alias)]
+            } ?? [.network(chainId: 1)]
         )
     }
 

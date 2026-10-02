@@ -1759,7 +1759,10 @@ struct RootView: View {
                 // may (spec 017, invariant ⑤).
                 simDeltas: { [trust] address, chainId, deltas in
                     trust.simDeltasComputed(address: address, chainId: chainId, deltas: deltas)
-                }
+                },
+                // The same judged view the sheet draws (`signingContext`),
+                // read at the slide for the record (spec 093).
+                simView: { [trust] in trust.trust?.sim }
             )
         )
         signing = controller
@@ -2375,7 +2378,10 @@ struct RootView: View {
             model.sheet = .txDetail(FlowsLive.txDetail(
                 item,
                 record: feed.transactions.first { $0.id == item.id },
-                on: detail, loc: loc
+                on: detail, loc: loc,
+                // The request a dApp record kept, read only when its
+                // technical details are opened (spec 093).
+                readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) }
             ))
         }
         if case .tokenDetail(let detail)? = model.sheet,
