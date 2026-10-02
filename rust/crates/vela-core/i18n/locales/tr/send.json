@@ -157,6 +157,7 @@
     "txBackgroundHint": "Bu sayfayı kapatsanız da işlem devam eder",
     "txCloseBackground": "Kapat · çalışmaya devam",
     "txSubmittedTitle": "Ağa gönderildi",
-    "txConfirmedTitle": "{{amount}} {{symbol}} gönderildi"
+    "txConfirmedTitle": "{{amount}} {{symbol}} gönderildi",
+    "recipientTokenContract": "Bu bir token sözleşmesi adresi. Buraya gönderilen varlıklar genellikle geri alınamaz."
   }
 }

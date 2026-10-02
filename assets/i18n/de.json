@@ -411,7 +411,8 @@
   "txBackgroundHint": "Diese Seite zu schließen hält die Transaktion nicht an",
   "txCloseBackground": "Schließen · weiterlaufen lassen",
   "txSubmittedTitle": "An das Netzwerk gesendet",
-  "txConfirmedTitle": "{{amount}} {{symbol}} gesendet"
+  "txConfirmedTitle": "{{amount}} {{symbol}} gesendet",
+  "recipientTokenContract": "Das ist die Adresse eines Token-Contracts. Hierhin gesendete Guthaben lassen sich meist nicht zurückholen."
  },
  "receive": {
   "title": "Empfangen",
@@ -1503,7 +1504,8 @@
    "feeToken": "Gebühren-Token",
    "paidWith": "Mit {{symbol}} bezahlt",
    "rowBalance": "Guthaben",
-   "rowSpend": "Gesch. Kosten"
+   "rowSpend": "Gesch. Kosten",
+   "feeCoinSpent": "Diese Transaktion verwendet auch Ihr {{sym}}. Bleibt zu wenig für die Gebühr übrig, schlägt sie fehl."
   },
   "dock": {
    "receive": "Empfangen",

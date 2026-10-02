@@ -418,7 +418,8 @@
   "txBackgroundHint": "Closing this page keeps the transaction running",
   "txCloseBackground": "Close · keep running",
   "txSubmittedTitle": "Submitted to the network",
-  "txConfirmedTitle": "Sent {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Sent {{amount}} {{symbol}}",
+  "recipientTokenContract": "This is a token contract address. Assets sent here usually can't be recovered."
  },
  "receive": {
   "title": "Receive",
@@ -1516,7 +1517,8 @@
    "feeToken": "Fee token",
    "paidWith": "Paid with {{symbol}}",
    "rowBalance": "Balance",
-   "rowSpend": "Est. cost"
+   "rowSpend": "Est. cost",
+   "feeCoinSpent": "This transaction also uses your {{sym}}. If too little is left for the fee, it will fail."
   },
   "dock": {
    "receive": "Receive",

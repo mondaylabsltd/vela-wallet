@@ -287,7 +287,8 @@
       "feeToken": "費用代幣",
       "paidWith": "以 {{symbol}} 支付",
       "rowBalance": "餘額",
-      "rowSpend": "預估費用"
+      "rowSpend": "預估費用",
+      "feeCoinSpent": "呢筆交易都會用到你嘅 {{sym}}，剩低嘅唔夠俾網絡費用，交易就會失敗。"
     },
     "dock": {
       "receive": "收款",

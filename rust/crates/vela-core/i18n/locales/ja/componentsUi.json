@@ -326,7 +326,8 @@
       "feeToken": "手数料トークン",
       "paidWith": "{{symbol}} で支払い",
       "rowBalance": "残高",
-      "rowSpend": "推定コスト"
+      "rowSpend": "推定コスト",
+      "feeCoinSpent": "この取引では {{sym}} も使われます。手数料の分が残らないと、取引は失敗します。"
     },
     "dock": {
       "receive": "受け取る",

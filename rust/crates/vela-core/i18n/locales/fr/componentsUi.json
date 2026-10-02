@@ -326,7 +326,8 @@
       "feeToken": "Token de frais",
       "paidWith": "Payé en {{symbol}}",
       "rowBalance": "Solde",
-      "rowSpend": "Coût estim."
+      "rowSpend": "Coût estim.",
+      "feeCoinSpent": "Cette transaction utilise aussi vos {{sym}}. S'il n'en reste pas assez pour les frais, elle échouera."
     },
     "dock": {
       "receive": "Recevoir",

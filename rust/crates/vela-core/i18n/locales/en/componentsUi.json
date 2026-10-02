@@ -329,7 +329,8 @@
       "feeToken": "Fee token",
       "paidWith": "Paid with {{symbol}}",
       "rowBalance": "Balance",
-      "rowSpend": "Est. cost"
+      "rowSpend": "Est. cost",
+      "feeCoinSpent": "This transaction also uses your {{sym}}. If too little is left for the fee, it will fail."
     },
     "dock": {
       "receive": "Receive",

@@ -157,6 +157,7 @@
     "txBackgroundHint": "이 페이지를 닫아도 거래는 계속 진행됩니다",
     "txCloseBackground": "닫기 · 계속 진행",
     "txSubmittedTitle": "네트워크에 제출됨",
-    "txConfirmedTitle": "{{amount}} {{symbol}} 전송 완료"
+    "txConfirmedTitle": "{{amount}} {{symbol}} 전송 완료",
+    "recipientTokenContract": "토큰 컨트랙트 주소입니다. 이 주소로 보낸 자산은 대개 되찾을 수 없습니다."
   }
 }

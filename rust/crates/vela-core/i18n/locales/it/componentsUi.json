@@ -326,7 +326,8 @@
       "feeToken": "Token di commissione",
       "paidWith": "Pagato con {{symbol}}",
       "rowBalance": "Saldo",
-      "rowSpend": "Costo stim."
+      "rowSpend": "Costo stim.",
+      "feeCoinSpent": "Questa transazione usa anche i tuoi {{sym}}. Se non ne resta abbastanza per la commissione, non andrà a buon fine."
     },
     "dock": {
       "receive": "Ricevi",

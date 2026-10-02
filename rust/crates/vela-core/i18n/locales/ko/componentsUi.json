@@ -326,7 +326,8 @@
       "feeToken": "수수료 토큰",
       "paidWith": "{{symbol}}(으)로 결제",
       "rowBalance": "잔액",
-      "rowSpend": "예상 비용"
+      "rowSpend": "예상 비용",
+      "feeCoinSpent": "이 거래는 {{sym}}도 사용합니다. 수수료를 낼 만큼 남지 않으면 거래가 실패합니다."
     },
     "dock": {
       "receive": "받기",

@@ -326,7 +326,8 @@
       "feeToken": "Token da taxa",
       "paidWith": "Pago com {{symbol}}",
       "rowBalance": "Saldo",
-      "rowSpend": "Custo est."
+      "rowSpend": "Custo est.",
+      "feeCoinSpent": "Esta transação também usa seu {{sym}}. Se não sobrar o suficiente para a taxa, ela vai falhar."
     },
     "dock": {
       "receive": "Receber",

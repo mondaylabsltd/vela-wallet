@@ -326,7 +326,8 @@
       "feeToken": "Token trả phí",
       "paidWith": "Trả bằng {{symbol}}",
       "rowBalance": "Số dư",
-      "rowSpend": "Chi phí ước tính"
+      "rowSpend": "Chi phí ước tính",
+      "feeCoinSpent": "Giao dịch này cũng dùng {{sym}} của bạn. Nếu phần còn lại không đủ trả phí, giao dịch sẽ thất bại."
     },
     "dock": {
       "receive": "Nhận",

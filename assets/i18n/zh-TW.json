@@ -411,7 +411,8 @@
   "txBackgroundHint": "關閉此頁，交易會在背景繼續",
   "txCloseBackground": "關閉 · 背景繼續",
   "txSubmittedTitle": "交易已提交至網路",
-  "txConfirmedTitle": "已發送 {{amount}} {{symbol}}"
+  "txConfirmedTitle": "已發送 {{amount}} {{symbol}}",
+  "recipientTokenContract": "這是代幣合約地址，轉到這裡的資產通常無法找回。"
  },
  "receive": {
   "title": "收款",
@@ -1464,7 +1465,8 @@
    "feeToken": "手續費代幣",
    "paidWith": "以 {{symbol}} 支付",
    "rowBalance": "餘額",
-   "rowSpend": "預估費用"
+   "rowSpend": "預估費用",
+   "feeCoinSpent": "這筆交易也會用到你的 {{sym}}，剩下的不夠付網路費時，交易會失敗。"
   },
   "dock": {
    "receive": "收款",

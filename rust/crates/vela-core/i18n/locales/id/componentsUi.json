@@ -326,7 +326,8 @@
       "feeToken": "Token biaya",
       "paidWith": "Dibayar dengan {{symbol}}",
       "rowBalance": "Saldo",
-      "rowSpend": "Perkiraan biaya"
+      "rowSpend": "Perkiraan biaya",
+      "feeCoinSpent": "Transaksi ini juga memakai {{sym}} Anda. Jika sisanya tidak cukup untuk biaya, transaksi akan gagal."
     },
     "dock": {
       "receive": "Terima",

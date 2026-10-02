@@ -411,7 +411,8 @@
   "txBackgroundHint": "閂咗呢頁，筆交易都會喺背景繼續行",
   "txCloseBackground": "閂咗 · 背景繼續",
   "txSubmittedTitle": "交易已經交咗上網絡",
-  "txConfirmedTitle": "發咗 {{amount}} {{symbol}}"
+  "txConfirmedTitle": "發咗 {{amount}} {{symbol}}",
+  "recipientTokenContract": "呢個係代幣合約地址，轉咗去呢度嘅資產通常攞唔返。"
  },
  "receive": {
   "title": "收款",
@@ -1464,7 +1465,8 @@
    "feeToken": "費用代幣",
    "paidWith": "以 {{symbol}} 支付",
    "rowBalance": "餘額",
-   "rowSpend": "預估費用"
+   "rowSpend": "預估費用",
+   "feeCoinSpent": "呢筆交易都會用到你嘅 {{sym}}，剩低嘅唔夠俾網絡費用，交易就會失敗。"
   },
   "dock": {
    "receive": "收款",

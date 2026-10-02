@@ -163,6 +163,7 @@
     "txBackgroundHint": "Если закрыть страницу, транзакция продолжится",
     "txCloseBackground": "Закрыть · продолжить в фоне",
     "txSubmittedTitle": "Отправлено в сеть",
-    "txConfirmedTitle": "Отправлено {{amount}} {{symbol}}"
+    "txConfirmedTitle": "Отправлено {{amount}} {{symbol}}",
+    "recipientTokenContract": "Это адрес контракта токена. Отправленное сюда обычно невозможно вернуть."
   }
 }

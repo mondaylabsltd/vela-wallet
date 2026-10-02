@@ -414,7 +414,8 @@
   "txBackgroundHint": "Chiudere questa pagina non ferma la transazione",
   "txCloseBackground": "Chiudi · continua in background",
   "txSubmittedTitle": "Inviata alla rete",
-  "txConfirmedTitle": "Inviati {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Inviati {{amount}} {{symbol}}",
+  "recipientTokenContract": "Questo è l'indirizzo di un contratto token. Ciò che invii qui di solito non si può recuperare."
  },
  "receive": {
   "title": "Ricevi",
@@ -1506,7 +1507,8 @@
    "feeToken": "Token di commissione",
    "paidWith": "Pagato con {{symbol}}",
    "rowBalance": "Saldo",
-   "rowSpend": "Costo stim."
+   "rowSpend": "Costo stim.",
+   "feeCoinSpent": "Questa transazione usa anche i tuoi {{sym}}. Se non ne resta abbastanza per la commissione, non andrà a buon fine."
   },
   "dock": {
    "receive": "Ricevi",

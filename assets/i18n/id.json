@@ -411,7 +411,8 @@
   "txBackgroundHint": "Menutup halaman ini tidak menghentikan transaksi",
   "txCloseBackground": "Tutup · tetap jalan",
   "txSubmittedTitle": "Terkirim ke jaringan",
-  "txConfirmedTitle": "Terkirim {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Terkirim {{amount}} {{symbol}}",
+  "recipientTokenContract": "Ini alamat kontrak token. Aset yang dikirim ke sini biasanya tidak bisa dikembalikan."
  },
  "receive": {
   "title": "Terima",
@@ -1503,7 +1504,8 @@
    "feeToken": "Token biaya",
    "paidWith": "Dibayar dengan {{symbol}}",
    "rowBalance": "Saldo",
-   "rowSpend": "Perkiraan biaya"
+   "rowSpend": "Perkiraan biaya",
+   "feeCoinSpent": "Transaksi ini juga memakai {{sym}} Anda. Jika sisanya tidak cukup untuk biaya, transaksi akan gagal."
   },
   "dock": {
    "receive": "Terima",

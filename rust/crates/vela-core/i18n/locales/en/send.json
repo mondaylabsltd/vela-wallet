@@ -164,6 +164,7 @@
     "txBackgroundHint": "Closing this page keeps the transaction running",
     "txCloseBackground": "Close · keep running",
     "txSubmittedTitle": "Submitted to the network",
-    "txConfirmedTitle": "Sent {{amount}} {{symbol}}"
+    "txConfirmedTitle": "Sent {{amount}} {{symbol}}",
+    "recipientTokenContract": "This is a token contract address. Assets sent here usually can't be recovered."
   }
 }

@@ -411,7 +411,8 @@
   "txBackgroundHint": "このページを閉じても取引はバックグラウンドで続きます",
   "txCloseBackground": "閉じる · バックグラウンドで続行",
   "txSubmittedTitle": "ネットワークに送信しました",
-  "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました"
+  "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました",
+  "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。"
  },
  "receive": {
   "title": "受け取る",
@@ -1503,7 +1504,8 @@
    "feeToken": "手数料トークン",
    "paidWith": "{{symbol}} で支払い",
    "rowBalance": "残高",
-   "rowSpend": "推定コスト"
+   "rowSpend": "推定コスト",
+   "feeCoinSpent": "この取引では {{sym}} も使われます。手数料の分が残らないと、取引は失敗します。"
   },
   "dock": {
    "receive": "受け取る",

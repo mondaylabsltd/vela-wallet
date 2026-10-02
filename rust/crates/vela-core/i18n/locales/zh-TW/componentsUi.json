@@ -287,7 +287,8 @@
       "feeToken": "手續費代幣",
       "paidWith": "以 {{symbol}} 支付",
       "rowBalance": "餘額",
-      "rowSpend": "預估費用"
+      "rowSpend": "預估費用",
+      "feeCoinSpent": "這筆交易也會用到你的 {{sym}}，剩下的不夠付網路費時，交易會失敗。"
     },
     "dock": {
       "receive": "收款",

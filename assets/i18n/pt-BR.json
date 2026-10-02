@@ -414,7 +414,8 @@
   "txBackgroundHint": "Fechar esta página não interrompe a transação",
   "txCloseBackground": "Fechar · continuar em segundo plano",
   "txSubmittedTitle": "Enviada para a rede",
-  "txConfirmedTitle": "Enviou {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Enviou {{amount}} {{symbol}}",
+  "recipientTokenContract": "Este é o endereço de um contrato de token. O que você enviar para cá geralmente não pode ser recuperado."
  },
  "receive": {
   "title": "Receber",
@@ -1506,7 +1507,8 @@
    "feeToken": "Token da taxa",
    "paidWith": "Pago com {{symbol}}",
    "rowBalance": "Saldo",
-   "rowSpend": "Custo est."
+   "rowSpend": "Custo est.",
+   "feeCoinSpent": "Esta transação também usa seu {{sym}}. Se não sobrar o suficiente para a taxa, ela vai falhar."
   },
   "dock": {
    "receive": "Receber",

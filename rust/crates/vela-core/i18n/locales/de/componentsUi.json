@@ -326,7 +326,8 @@
       "feeToken": "Gebühren-Token",
       "paidWith": "Mit {{symbol}} bezahlt",
       "rowBalance": "Guthaben",
-      "rowSpend": "Gesch. Kosten"
+      "rowSpend": "Gesch. Kosten",
+      "feeCoinSpent": "Diese Transaktion verwendet auch Ihr {{sym}}. Bleibt zu wenig für die Gebühr übrig, schlägt sie fehl."
     },
     "dock": {
       "receive": "Empfangen",

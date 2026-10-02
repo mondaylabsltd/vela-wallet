@@ -414,7 +414,8 @@
   "txBackgroundHint": "Si cierras esta página la transacción sigue su curso",
   "txCloseBackground": "Cerrar · seguir en segundo plano",
   "txSubmittedTitle": "Enviada a la red",
-  "txConfirmedTitle": "Enviaste {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Enviaste {{amount}} {{symbol}}",
+  "recipientTokenContract": "Esta es la dirección de un contrato de token. Lo que envíes aquí normalmente no se puede recuperar."
  },
  "receive": {
   "title": "Recibir",
@@ -1506,7 +1507,8 @@
    "feeToken": "Token de comisión",
    "paidWith": "Pagado con {{symbol}}",
    "rowBalance": "Saldo",
-   "rowSpend": "Costo est."
+   "rowSpend": "Costo est.",
+   "feeCoinSpent": "Esta transacción también usa tu {{sym}}. Si no queda suficiente para la comisión, fallará."
   },
   "dock": {
    "receive": "Recibir",

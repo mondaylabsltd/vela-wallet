@@ -326,7 +326,8 @@
       "feeToken": "Ücret token'ı",
       "paidWith": "{{symbol}} ile ödendi",
       "rowBalance": "Bakiye",
-      "rowSpend": "Tahmini maliyet"
+      "rowSpend": "Tahmini maliyet",
+      "feeCoinSpent": "Bu işlem {{sym}} bakiyenizi de kullanıyor. Ücret için yeterli kalmazsa işlem başarısız olur."
     },
     "dock": {
       "receive": "Al",

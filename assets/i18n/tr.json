@@ -411,7 +411,8 @@
   "txBackgroundHint": "Bu sayfayı kapatsanız da işlem devam eder",
   "txCloseBackground": "Kapat · çalışmaya devam",
   "txSubmittedTitle": "Ağa gönderildi",
-  "txConfirmedTitle": "{{amount}} {{symbol}} gönderildi"
+  "txConfirmedTitle": "{{amount}} {{symbol}} gönderildi",
+  "recipientTokenContract": "Bu bir token sözleşmesi adresi. Buraya gönderilen varlıklar genellikle geri alınamaz."
  },
  "receive": {
   "title": "Al",
@@ -1503,7 +1504,8 @@
    "feeToken": "Ücret token'ı",
    "paidWith": "{{symbol}} ile ödendi",
    "rowBalance": "Bakiye",
-   "rowSpend": "Tahmini maliyet"
+   "rowSpend": "Tahmini maliyet",
+   "feeCoinSpent": "Bu işlem {{sym}} bakiyenizi de kullanıyor. Ücret için yeterli kalmazsa işlem başarısız olur."
   },
   "dock": {
    "receive": "Al",

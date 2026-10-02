@@ -414,7 +414,8 @@
   "txBackgroundHint": "Fermer cette page n’interrompt pas la transaction",
   "txCloseBackground": "Fermer · continuer en arrière-plan",
   "txSubmittedTitle": "Envoyée au réseau",
-  "txConfirmedTitle": "{{amount}} {{symbol}} envoyés"
+  "txConfirmedTitle": "{{amount}} {{symbol}} envoyés",
+  "recipientTokenContract": "Ceci est l'adresse d'un contrat de token. Ce que vous envoyez ici est généralement perdu."
  },
  "receive": {
   "title": "Recevoir",
@@ -1506,7 +1507,8 @@
    "feeToken": "Token de frais",
    "paidWith": "Payé en {{symbol}}",
    "rowBalance": "Solde",
-   "rowSpend": "Coût estim."
+   "rowSpend": "Coût estim.",
+   "feeCoinSpent": "Cette transaction utilise aussi vos {{sym}}. S'il n'en reste pas assez pour les frais, elle échouera."
   },
   "dock": {
    "receive": "Recevoir",

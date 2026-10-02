@@ -417,7 +417,8 @@
   "txBackgroundHint": "Если закрыть страницу, транзакция продолжится",
   "txCloseBackground": "Закрыть · продолжить в фоне",
   "txSubmittedTitle": "Отправлено в сеть",
-  "txConfirmedTitle": "Отправлено {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Отправлено {{amount}} {{symbol}}",
+  "recipientTokenContract": "Это адрес контракта токена. Отправленное сюда обычно невозможно вернуть."
  },
  "receive": {
   "title": "Получить",
@@ -1509,7 +1510,8 @@
    "feeToken": "Токен комиссии",
    "paidWith": "Оплачено в {{symbol}}",
    "rowBalance": "Баланс",
-   "rowSpend": "Прибл. стоимость"
+   "rowSpend": "Прибл. стоимость",
+   "feeCoinSpent": "Эта транзакция тоже расходует ваши {{sym}}. Если на комиссию останется мало, она не пройдёт."
   },
   "dock": {
    "receive": "Получить",
