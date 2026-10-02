@@ -18,6 +18,7 @@ import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -478,6 +479,34 @@ class WalletLiveTest {
             "42 characters of hex in a list row tells nobody anything",
             rows[1].subtitle.length < 30,
         )
+    }
+
+    /**
+     * 087 F11: a dApp call that moved no coin of ours ("dApp 交易 · 处理中 ·
+     * <site>") has no figure, and its row draws no amount cell — the empty
+     * cell took half the row and printed a lone " ". A row with a figure keeps it.
+     */
+    @Test
+    fun `a row with no figure draws no amount cell`() {
+        val now = System.currentTimeMillis()
+        val today = midnight(0, now)
+        val call = item("d", received = false, value = null, symbol = "", dayStart = today)
+            .copy(kind = app.getvela.wallet.feature.wallet.core.FeedTxKind.DappTx, site = "app.uniswap.org")
+        val feed = FeedView(
+            rows = listOf(
+                FeedRow.Header("day-$today", today.toDouble(), today / 1000.0),
+                FeedRow.Item(call),
+                FeedRow.Item(item("s", received = false, value = "1.5", dayStart = today)),
+            ),
+        )
+
+        val rows = WalletLive.activity(feed, strings, now).single().rows
+
+        assertEquals("", rows[0].amount)
+        assertEquals("", rows[0].unit)
+        assertFalse(rows[0].hasFigure)
+        assertTrue(rows[0].subtitle.endsWith("app.uniswap.org"))
+        assertTrue(rows[1].hasFigure)
     }
 
     /** A header with nothing under it is not a day — it is a gap in the list. */

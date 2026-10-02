@@ -134,17 +134,46 @@ struct FlowFixturesTests {
         // namespaces are corpus paths, which is what this checks.
         let namespaces = ["onboarding.", "componentsUi.signing."]
         let corpus = { (key: String) in namespaces.contains { key.hasPrefix($0) } }
+        let loc = Loc(overrideTag: "zh", preferredLanguages: [])
         for method in KeyMethod.allCases {
             #expect(corpus(providerLineFor(method)))
-            let copy = methodCopy(method)
-            #expect(corpus(copy.title))
-            #expect(corpus(copy.body))
-            // …and the words are really there, in a real catalog.
-            let loc = Loc(overrideTag: "zh", preferredLanguages: [])
-            #expect(loc.t(copy.title) != copy.title, "\(copy.title) has no zh translation")
-            #expect(loc.t(copy.body) != copy.body, "\(copy.body) has no zh translation")
+            // The core's words, resolved: never a bare key, never empty.
+            for chooser in [KeyChooser.create, .signIn] {
+                for unlock in ["face_id", "touch_id", "other"] {
+                    let copy = methodCopy(method, chooser: chooser, loc: loc, unlock: unlock)
+                    for line in [copy.title, copy.body] {
+                        #expect(!line.isEmpty, "\(method) \(chooser) \(unlock)")
+                        #expect(!corpus(line), "\(method) \(chooser) \(unlock) drew its key: \(line)")
+                    }
+                }
+            }
         }
-        #expect(methodCopy(.trustedSigner).title == "componentsUi.signing.trustedSignerTitle")
+        #expect(methodCopy(.trustedSigner, chooser: .create, loc: loc).title == loc.t("componentsUi.signing.trustedSignerTitle"))
+    }
+
+    /// 087 F01: 这台设备 names what unlocks a passkey on THIS device — an
+    /// iPhone 11 read "Touch ID 或 Windows Hello". Face ID and Touch ID are
+    /// product names, drawn as they are; a device with neither reads the
+    /// corpus's family line, never another platform's product.
+    @Test func thisDeviceNamesItsOwnAuthenticator() {
+        let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+        for chooser in [KeyChooser.create, .signIn] {
+            #expect(methodCopy(.platform, chooser: chooser, loc: loc, unlock: "face_id").body == "Face ID")
+            #expect(methodCopy(.platform, chooser: chooser, loc: loc, unlock: "touch_id").body == "Touch ID")
+            let other = methodCopy(.platform, chooser: chooser, loc: loc, unlock: "other").body
+            #expect(other == loc.t("onboarding.create.methodPlatformBody"))
+            #expect(!other.contains("Windows Hello"))
+        }
+        #expect(["face_id", "touch_id", "other"].contains(ThisDevice.unlock))
+    }
+
+    /// 087 F02: the sign-in sheet's 手机或平板 scans — it never says create;
+    /// the create picker keeps "create it on a nearby device".
+    @Test func theSignInPhoneRowNeverSaysCreate() {
+        let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+        #expect(methodCopy(.hybrid, chooser: .signIn, loc: loc).body == loc.t("explore.scan"))
+        #expect(methodCopy(.hybrid, chooser: .create, loc: loc).body == loc.t("onboarding.create.methodHybridBody"))
+        #expect(!methodCopy(.hybrid, chooser: .signIn, loc: loc).body.contains("创建"))
     }
 
     /// Issue #207: a key row's badge claims only what somebody verified, and

@@ -468,12 +468,16 @@ export function liveActivityRow(
 					: fill(received ? m.activity.fromName : m.activity.toName, { name: who });
 	// A row the tracker has not closed says so first (RG2, RG4): a may-have-
 	// been-sent op reads "Pending · <site>" until the tracker patches it.
-	const subtitle =
+	// 087 F04: one nothing will settle reads "Unknown · <site>".
+	const lead =
 		item.status === 'pending'
-			? `${m.activity.pending} · ${base}`
+			? m.activity.pending
 			: item.status === 'failed'
-				? `${m.activity.failed} · ${base}`
-				: base;
+				? m.activity.failed
+				: item.status === 'unknown'
+					? m.activity.unknown
+					: null;
+	const subtitle = lead === null ? base : `${lead} · ${base}`;
 	const amount =
 		item.value === null
 			? String(item.batch?.count ?? '')

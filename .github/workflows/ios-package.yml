@@ -67,6 +67,10 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The build number is `git rev-list --count HEAD` (spec 088 FR-012),
+          # the same number Android's versionCode takes; a shallow clone counts 1.
+          fetch-depth: 0
       # The image's DEFAULT Xcode is not the one this source compiles under —
       # the same reason ci.yml's `ios` job picks one, and the reason this
       # workflow had never produced an archive. `Core/CoreStore.swift` and
@@ -121,6 +125,7 @@ jobs:
             -archivePath "$RUNNER_TEMP/VelaWallet.xcarchive" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             VELA_GIT_COMMIT="$(git rev-parse --short=7 HEAD)" \
+            CURRENT_PROJECT_VERSION="$(git rev-list --count HEAD)" \
             | tail -20
           # The build setting has been waiting for a value since spec 058, and this
           # workflow never passed one — so every archive said "build 1" (spec 064).

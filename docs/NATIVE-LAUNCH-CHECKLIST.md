@@ -4,7 +4,7 @@ Context (2026-07-01): at the time, the app had only ever been tested as the
 Expo web build, and a cross-platform audit found the native-only defects
 below. **That app was retired in spec 039 (2026-09-11); the native shells
 `app-ios/VelaWallet` and `app-android/vela-wallet` are its successors.**
-Every item was re-read against them (2026-09-23): §A1 is still open and still
+Every item was re-read against them (2026-09-23; §A1 again 2026-10-01, spec 088): §A1's code half is done and its console half is still
 launch-blocking, §A2 still holds, **all of §B is now settled in code**, §C is
 down to one Android-only item, and §D has been rewritten for shells that have
 no React Native in them. This doc is the remainder — things that need your
@@ -36,30 +36,55 @@ Their regression tests (`src/__tests__/polyfills.test.ts`,
 
 ## A. Blockers requiring your Apple / Google accounts
 
-### A1. 🔴 Android release signing + Play App Signing cert (launch-blocking)
-**Problem (still open, re-checked against the current shell):**
-`app-android/vela-wallet/app/build.gradle.kts` declares **no `signingConfigs`
-block and no `signingConfig` on the `release` build type**, so a release build
-falls back to the debug keystore exactly as the old tree did. When you upload the
-`.aab`, **Google Play re-signs it with a Google-managed key** whose SHA-256 is in
-neither entry of `getvela.app/.well-known/assetlinks.json`. Android Credential
-Manager then fails Digital Asset Links verification →
-`createCredential`/`getCredential` throw → **users can't create a wallet or sign
-anything.** Passkeys are the only auth path. The signing-key scheme is still
-undecided (`docs/project-takeover/05-deployment-runbook.md`, "Android 发布").
+### A1. Android release signing + Play App Signing cert (signing in code since spec 088; the console half is yours)
+**Code (done, spec 088, 2026-10-01).** `app-android/vela-wallet/app/build.gradle.kts`
+now has a `release` `signingConfig` read from four values — each an environment
+variable, else a line in the **gitignored** `app-android/vela-wallet/keystore.properties`:
 
-**What you need to do:**
-1. Create a real **upload keystore** and add a `release` `signingConfig` in
-   `app-android/vela-wallet/app/build.gradle.kts` that uses it. (EAS-managed
-   credentials went with the Expo tree in spec 039 — there is no cloud build.)
-2. Enroll in **Play App Signing** (default for new apps). After the first upload,
-   open **Play Console → Test and release → App integrity → App signing key
-   certificate** and copy the **SHA-256**.
-3. Put that SHA-256 (and the upload key's SHA-256) into
-   `app-web/getvela.app/src/routes/.well-known/assetlinks.json/+server.ts`
-   `sha256_cert_fingerprints`. The current `A3:8E:36:FE:…` "Release keystore"
-   value corresponds to no keystore in this repo — replace/augment it.
-4. Redeploy getvela.app, then verify with Google's
+| env | `keystore.properties` |
+|---|---|
+| `VELA_UPLOAD_STORE_FILE` | `storeFile` (absolute, `~/…`, or relative to that file) |
+| `VELA_UPLOAD_STORE_PASSWORD` | `storePassword` |
+| `VELA_UPLOAD_KEY_ALIAS` | `keyAlias` |
+| `VELA_UPLOAD_KEY_PASSWORD` | `keyPassword` |
+
+A release build without all four **fails before compiling**, naming what is
+missing. It is never signed with the debug key and never comes out unsigned by
+accident. (The earlier text here said a release "falls back to the debug
+keystore" — it did not: under AGP it came out **unsigned**.) The one way to an
+unsigned release is to ask for it, `-PvelaUnsignedRelease`, which only CI's
+packaging check does. Debug builds and unit tests read none of this.
+
+**versionCode** (Play needs a higher one on every upload): `-PvelaVersionCode=N`,
+else `VELA_VERSION_CODE`, else `git rev-list --count HEAD` (it only grows along
+`main`). `versionName` stays hand-set per release. iOS: pass the same number as
+`CURRENT_PROJECT_VERSION` on the archive command line (see
+`specs/088-store-readiness/owner-checklist.md`).
+
+**Build the upload bundle:**
+```bash
+cd app-android/vela-wallet
+export VELA_UPLOAD_STORE_FILE=~/.android/vela-release.keystore VELA_UPLOAD_KEY_ALIAS=vela-release
+read -rs VELA_UPLOAD_STORE_PASSWORD; export VELA_UPLOAD_STORE_PASSWORD
+read -rs VELA_UPLOAD_KEY_PASSWORD; export VELA_UPLOAD_KEY_PASSWORD
+./gradlew :app:bundleRelease          # → app/build/outputs/bundle/release/app-release.aab
+jarsigner -verify -verbose:summary -certs app/build/outputs/bundle/release/app-release.aab
+```
+
+**Passkeys still need the console half.** Google Play re-signs what it
+distributes with the **Play app-signing key**, and Credential Manager accepts
+rpId `getvela.app` only for a signing certificate listed in
+`getvela.app/.well-known/assetlinks.json`. Until Play's key is listed, testers
+who install from Play **cannot create a wallet or sign in**.
+1. Enroll in **Play App Signing** (default for new apps) and upload the first
+   AAB. Open **Play Console → Test and release → App integrity → App signing
+   key certificate** and copy the **SHA-256**.
+2. Add it — and the upload key's SHA-256, for builds you install yourself — to
+   `app-web/getvela.app/src/routes/.well-known/assetlinks.json/+server.ts`, in
+   the `app.getvela.wallet` entry's `sha256_cert_fingerprints` (after line 24).
+   Check whether `A3:8E:36:FE:…` ("Release keystore") is your upload key:
+   `keytool -list -v -keystore ~/.android/vela-release.keystore`.
+3. Deploy getvela.app, then verify with Google's
    [Statement List Tester](https://developers.google.com/digital-asset-links/tools/generator)
    or `adb shell pm get-app-links app.getvela.wallet`.
 

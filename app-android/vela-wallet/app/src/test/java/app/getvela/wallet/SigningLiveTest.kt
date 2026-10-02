@@ -73,7 +73,11 @@ class SigningLiveTest {
      * ([SigningController.clearKickoff] and its first-call reader), for one
      * `eth_sendTransaction` whose first call is [call].
      */
-    private fun clearOf(call: org.json.JSONObject): ClearSigningView = runBlocking {
+    private fun clearOf(call: org.json.JSONObject): ClearSigningView =
+        clearOf("eth_sendTransaction", org.json.JSONArray().put(call).toString())
+
+    /** The REAL core, kicked off by [SigningController.clearKickoff] for [method] and [params]. */
+    private fun clearOf(method: String, params: String): ClearSigningView = runBlocking {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         try {
             val host = CoreHost(
@@ -89,9 +93,8 @@ class SigningLiveTest {
                 },
                 escapedFailure = JsonShell.escapedFailure(ClearOperation.serializer(), ClearShellResult.serializer(), fallback = ClearShellResult.Clock(1.0e12)) { ClearShellResult.Clock(1.0e12) },
             )
-            val params = org.json.JSONArray().put(call).toString()
-            host.dispatch(SigningController.clearKickoff("eth_sendTransaction", params, 100, "http://127.0.0.1:8137")!!, ClearSigningEvent.serializer())
-            withTimeout(10_000) { host.view.first { it.resolved } }
+            host.dispatch(SigningController.clearKickoff(method, params, 100, "http://127.0.0.1:8137")!!, ClearSigningEvent.serializer())
+            withTimeout(10_000) { host.view.first { it.resolved && !it.resolving } }
         } finally {
             scope.cancel()
         }
@@ -614,5 +617,112 @@ class SigningLiveTest {
         assertEquals(listOf(zh.t("componentsUi.signing.labelAmount"), "Referral code"), result.fields.map { it.label })
         assertEquals(listOf(zh.t("componentsUi.signing.valueUnlimited"), "abc"), result.fields.map { it.value })
         assertEquals(zh.t("componentsUi.signing.intentApprove"), SigningLive.confirmLabel(clear, zh))
+    }
+
+    // ---------------------------------------------------------------------
+    // 089 S1 — a batch's sheet shows every call
+    // ---------------------------------------------------------------------
+
+    private val other = "0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c"
+
+    private fun batchModel(calls: String, clear: ClearSigningView? = null, guard: GuardView = GuardView()) = run {
+        val params = """[{"version":"2.0.0","chainId":"0x64","calls":$calls}]"""
+        val sign = SignView(surface = SignSurface.Sheet, request = SignRequestView("r1", "wallet_sendCalls", SignMethodKind.Batch, params, "http://127.0.0.1:8137", null, 100, null), confirm_gate_open = true)
+        val incoming = IncomingRequest("r1", "wallet_sendCalls", params, "http://127.0.0.1:8137", "tab-1", 100)
+        SigningLive.model(drawn, incoming, sign, clear ?: clearOf("wallet_sendCalls", params), guard, FeeView(confirm_fee_ready = true), ctx)
+    }
+
+    /**
+     * THE defect: `[1 wei → A, 1 xDAI → B]` read "Send 0.000…1 xDAI to A" and
+     * signed both. The real core, kicked off as the sheet kicks it off, hands
+     * every call; every call is a card; the total is said; the headline is the
+     * batch's, never call 1's "Send".
+     */
+    @Test
+    fun `a two-call batch draws both calls and their total, never call 1 alone`() {
+        val model = batchModel("""[{"to":"$founder","value":"0x1"},{"to":"$other","value":"0xde0b6b3a7640000"}]""")
+        val intent = model.blocks.first() as SigningBlock.Intent
+        assertEquals(strings.t("componentsUi.signing.batchIntent"), intent.text)
+        assertEquals(
+            strings.t("componentsUi.signing.batchSubtitle", mapOf("count" to "2")),
+            (model.blocks[1] as SigningBlock.Sentence).text,
+        )
+        val cards = model.blocks.filterIsInstance<SigningBlock.Card>()
+        assertEquals(2, cards.size)
+        val send = strings.t("componentsUi.signing.intentSend")
+        assertEquals(strings.t("componentsUi.signing.batchStep", mapOf("index" to "1", "action" to send)), cards[0].title)
+        assertEquals("−0.000000000000000001 XDAI", cards[0].rows[0].value)
+        assertEquals(founder.lowercase(), cards[0].rows[1].value.lowercase())
+        assertEquals(strings.t("componentsUi.signing.batchStep", mapOf("index" to "2", "action" to send)), cards[1].title)
+        assertEquals("−1 XDAI", cards[1].rows[0].value)
+        assertEquals(other.lowercase(), cards[1].rows[1].value.lowercase())
+        val total = model.blocks.filterIsInstance<SigningBlock.Rows>().single().rows.single()
+        assertEquals(strings.t("send.splitTotalLabel"), total.label)
+        assertEquals("−1.000000000000000001 XDAI", total.value)
+        assertTrue("no lone Send headline", model.blocks.filterIsInstance<SigningBlock.Intent>().none { it.text == send })
+        assertEquals(strings.t("componentsUi.signing.confirmLabel"), model.confirmAction)
+        assertEquals("the technical details are the whole batch", true, model.tech.rawHex?.contains(other))
+    }
+
+    /**
+     * A call nobody could read is a card that says so (the "unable to decode"
+     * words, its byte count), with whom it calls — never dropped; and a batch
+     * whose SECOND call is an unlimited approve reads danger in that call's
+     * card and in the headline, with the guard's warning under them.
+     */
+    @Test
+    fun `an unreadable call says so, and a second-call unlimited approve warns`() {
+        val approve = ClearSignResult(
+            intent = "Approve", intent_term = "intentApprove", contract_name = null, owner = null,
+            fields = listOf(
+                ClearSignField(label = "Amount", value = "Unlimited", format = "tokenAmount", warning = true, label_term = "labelAmount", value_term = "valueUnlimited"),
+            ),
+            risk = ClearRisk.Danger, contract_address = founder, verified = false, provenance = ClearProvenance.Standard,
+        )
+        val clear = ClearSigningView(
+            resolved = true, surface = ClearSurface.Batch,
+            batch = app.getvela.wallet.feature.signing.core.ClearBatchView(
+                calls = listOf(
+                    app.getvela.wallet.feature.signing.core.ClearBatchCall(index = 1, surface = ClearSurface.BlindTransaction, to = other, data_bytes = 36, value_wei = "0", amount = "0", risk = ClearRisk.Caution),
+                    app.getvela.wallet.feature.signing.core.ClearBatchCall(index = 2, surface = ClearSurface.ClearSign, result = approve, to = founder, data_bytes = 68, value_wei = "0", amount = "0", risk = ClearRisk.Danger),
+                ),
+                total_value_wei = "0", total_amount = "0", risk = ClearRisk.Danger,
+            ),
+        )
+        val guard = GuardView(
+            surface = app.getvela.wallet.feature.signing.core.GuardSurface.Batch,
+            batch = app.getvela.wallet.feature.signing.core.GuardBatchView(any_uncapped = true),
+        )
+        val model = batchModel("""[{"to":"$other","data":"0xdeadbeef"},{"to":"$founder","data":"0x095ea7b3"}]""", clear, guard)
+        assertEquals(SigningTone.Danger, (model.blocks.first() as SigningBlock.Intent).tone)
+        val cards = model.blocks.filterIsInstance<SigningBlock.Card>()
+        val undecoded = strings.t("componentsUi.signing.blindDecodeWarning", mapOf("bytes" to "36"))
+        assertEquals(strings.t("componentsUi.signing.batchStep", mapOf("index" to "1", "action" to undecoded)), cards[0].title)
+        assertEquals(other, cards[0].rows.single().value)
+        assertEquals(SigningTone.Danger, cards[1].tone)
+        assertEquals(strings.t("componentsUi.signing.batchStep", mapOf("index" to "2", "action" to strings.t("componentsUi.signing.intentApprove"))), cards[1].title)
+        assertEquals(strings.t("componentsUi.signing.valueUnlimited"), cards[1].rows[0].value)
+        // …and whom the call goes to: inside a batch nothing else says it for this call.
+        assertEquals(strings.t("componentsUi.signing.interactingLabel"), cards[1].rows[1].label)
+        assertEquals(founder, cards[1].rows[1].value)
+        assertTrue(
+            "the unlimited warning",
+            model.blocks.any { it is SigningBlock.Warning && it.text == strings.t("componentsUi.signing.unlimitedWarning") },
+        )
+        assertTrue("nothing to total", model.blocks.none { it is SigningBlock.Rows })
+    }
+
+    /** The kickoff: a batch goes over whole; a transaction is its own call, never a stray `calls` beside it. */
+    @Test
+    fun `the kickoff hands a batch over whole and reads a transaction from its own call`() {
+        val batch = """[{"calls":[{"to":"$founder","value":"0x1"},{"to":"$other","value":"0x2"}]}]"""
+        assertEquals(
+            ClearSigningEvent.ResolveBatch(params_json = batch, chain_id = 100, locale = (SigningController.clearKickoff("wallet_sendCalls", batch, 100, null) as ClearSigningEvent.ResolveBatch).locale),
+            SigningController.clearKickoff("wallet_sendCalls", batch, 100, null),
+        )
+        val stray = """[{"to":"$founder","data":"0x095ea7b3ffff","calls":[{"to":"$other","value":"0x1"}]}]"""
+        val event = SigningController.clearKickoff("eth_sendTransaction", stray, 100, null) as ClearSigningEvent.ResolveTransaction
+        assertEquals(founder, event.to)
+        assertEquals("0x095ea7b3ffff", event.data)
     }
 }

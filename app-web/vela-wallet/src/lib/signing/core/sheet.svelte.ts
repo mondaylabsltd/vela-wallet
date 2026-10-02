@@ -20,7 +20,7 @@ import type { SignRequestView } from '$lib/core/generated/SignRequestView';
 import { createApprovalGuardSession, type ApprovalGuardSession } from './guard-session';
 import { createClearSigningSession, type ClearSigningSession } from './clear-session';
 import { toClearLocale } from './clear-types';
-import { txParams } from './tx-params';
+import { txKickoff } from './tx-params';
 
 /** The machines' own initial projections — mirrored until their first views land. */
 export const INITIAL_CLEAR_VIEW: ClearSigningView = {
@@ -32,7 +32,8 @@ export const INITIAL_CLEAR_VIEW: ClearSigningView = {
 	confirm: { type: 'confirm' },
 	blind_typed: null,
 	danger_haptic: false,
-	plain_send: null
+	plain_send: null,
+	batch: null
 };
 
 export const INITIAL_GUARD_VIEW: GuardView = {
@@ -102,15 +103,9 @@ class SigningSheet {
 				request_origin: request.origin
 			});
 		} else {
-			const tx = txParams(request.params_json);
-			this.#clearSession.start({
-				type: 'resolve_transaction',
-				to: tx?.to ?? null,
-				data: tx?.data ?? null,
-				value: tx?.value ?? null,
-				chain_id: request.chain_id,
-				locale
-			});
+			this.#clearSession.start(
+				txKickoff(request.method, request.params_json, request.chain_id, locale)
+			);
 		}
 
 		// The guard sees every request: whether one contains an approval — and

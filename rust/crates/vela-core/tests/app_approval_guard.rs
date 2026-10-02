@@ -1690,3 +1690,34 @@ fn leg_needs_choice_matches_the_component_rule() {
     assert!(!leg_needs_choice(Some(&boolean), Some(&GuardChoice::Grant)));
     assert!(!leg_needs_choice(None, None));
 }
+
+/// 089 S1: the guard reads EVERY call of a batch — an unlimited approve as
+/// the SECOND call, behind a harmless send, still mounts its cap card and
+/// raises the batch's unlimited warning; the harmless first call mounts none.
+#[test]
+fn a_batch_whose_second_call_is_an_unlimited_approve_warns() {
+    let mut sut = Sut::new();
+    sut.dispatch(batch_event(vec![
+        json!({ "to": SPENDER, "value": "0x1" }),
+        json!({ "to": USDC, "data": approve_calldata(SPENDER, max_u256()), "value": "0x0" }),
+    ]));
+    let view = sut.view();
+    assert_eq!(view.surface, GuardSurface::Batch);
+    let batch = view.batch.expect("batch");
+    assert_eq!(batch.legs.len(), 2, "one leg per call");
+    assert!(batch.legs[0].approval.is_none() && batch.legs[0].editor.is_none());
+    let leg = &batch.legs[1];
+    assert!(leg.approval.as_ref().is_some_and(|a| a.is_unbounded));
+    assert!(leg.needs_editor, "its cap card is mounted");
+    assert_eq!(
+        leg.choice,
+        Some(GuardChoice::Unlimited),
+        "kept as asked, and said"
+    );
+    assert!(leg.grants_broad);
+    assert!(batch.any_uncapped, "the unlimited warning the sheets draw");
+    assert!(
+        view.unlimited_consented,
+        "seen, so the submit guard may pass it"
+    );
+}

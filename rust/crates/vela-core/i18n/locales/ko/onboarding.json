@@ -174,7 +174,7 @@
       "methodHybridBody": "코드를 스캔해 근처 기기에서 생성",
       "methodHybridTitle": "휴대폰 또는 태블릿",
       "methodHybridUnavailable": "곧 지원",
-      "methodPlatformBody": "Touch ID 또는 Windows Hello",
+      "methodPlatformBody": "지문, 얼굴 또는 화면 잠금",
       "methodPlatformTitle": "이 기기",
       "methodSecurityKeyBody": "꽂고 살짝 터치",
       "methodSecurityKeyTitle": "USB 보안 키",

@@ -77,7 +77,7 @@ fun SignInMethodSheet(
                 // All four routes are live: platform (this device), scan (a
                 // phone over caBLE), a security key, and the Trusted Signer.
                 val available = true
-                val (titleKey, bodyKey) = signInMethodCopy(method)
+                val (title, body) = methodCopy(method, KeyChooser.SignIn, strings)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -88,16 +88,14 @@ fun SignInMethodSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = strings.t(titleKey),
+                            text = title,
                             color = colors.fgBase,
                             fontFamily = VelaFontFamily,
                             fontWeight = VelaFontWeight.semibold,
                             fontSize = VelaTextSize.lg,
                         )
                         Text(
-                            text = strings.t(
-                                if (available) bodyKey else I18nKeys.Create.METHOD_HYBRID_UNAVAILABLE,
-                            ),
+                            text = if (available) body else strings.t(I18nKeys.Create.METHOD_HYBRID_UNAVAILABLE),
                             color = colors.fgMuted,
                             fontFamily = VelaFontFamily,
                             fontSize = VelaTextSize.sm,
@@ -118,9 +116,3 @@ fun SignInMethodSheet(
     }
 }
 
-/**
- * The create picker's copy, reused: the same four methods, the same words —
- * including the Trusted Signer (spec 075), which is a passkey route like the
- * other three and is offered wherever they are.
- */
-internal fun signInMethodCopy(method: KeyMethod): Pair<String, String> = methodCopy(method)
