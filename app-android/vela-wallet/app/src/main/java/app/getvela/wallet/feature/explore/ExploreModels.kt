@@ -159,6 +159,12 @@ data class ConnectionModel(
     val networkLogoUrl: String? = null,
     /** Spec 079: the consent card — its action is the primary one. */
     val primaryAction: Boolean = false,
+    /**
+     * Spec 097 E: the core holds a grant for this site. Not connected (and not
+     * asking), the panel offers nothing that implies access — no account it
+     * sees, no explainer, no Disconnect, no "requests appear here".
+     */
+    val connected: Boolean = true,
 )
 
 @Immutable

@@ -268,8 +268,14 @@ object ExploreLive {
         return fallback.copy(
             site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host), iconUrls = iconsOf(e.url)),
             // Spec 079 (owner): the lock alone says https; "已连接" is a fact about
-            // the connection, not a claim about the site, so it stays.
-            statusLine = strings.t("explore.connectedTag").takeIf { connected }.orEmpty(),
+            // the connection, not a claim about the site, so it stays — and so
+            // does its absence (spec 097 E): "No active connection".
+            statusLine = strings.t(if (connected) "explore.connectedTag" else "home.connEmptyTitle"),
+            connected = connected,
+            // Not connected: no sentence about what the site can see, and no
+            // requests to expect from it.
+            explainer = fallback.explainer.takeIf { connected }.orEmpty(),
+            footnote = fallback.footnote.takeIf { connected }.orEmpty(),
             accountName = identity.accountName.ifBlank { fallback.accountName },
             accountAddress = shortAddress(tab?.connected_address ?: identity.accountAddress),
             accountSeed = tab?.connected_address ?: identity.accountAddress.ifBlank { fallback.accountSeed },
