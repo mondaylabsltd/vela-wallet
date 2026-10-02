@@ -2428,10 +2428,10 @@ fn proven_meta(
                 .map(|(symbol, decimals)| (symbol.to_owned(), decimals, false))
         })
     };
+    // The wallet's own registry, on the record's chain (097 D).
     let built_in = || {
-        super::clear_signing::known_token_symbol(token)
-            .zip(super::clear_signing::known_token_decimals(token))
-            .map(|(symbol, decimals)| (symbol.to_owned(), decimals, true))
+        super::token_registry::registry_token(t.chain_id, token)
+            .map(|known| (known.symbol.to_owned(), known.decimals, true))
     };
     // A coin the wallet trusts by another account is trusted here too.
     let trusted = received().or_else(built_in);

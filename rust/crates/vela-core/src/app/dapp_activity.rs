@@ -28,9 +28,9 @@ use super::approval_guard::{
     GuardTokenMetaView,
 };
 use super::clear_signing::{
-    analyze_message, known_contract, known_token_decimals, known_token_symbol, readable_message,
-    ClearSignMethod, ClearSiweBinding,
+    analyze_message, known_contract, readable_message, ClearSignMethod, ClearSiweBinding,
 };
+use super::token_registry::registry_token;
 
 /// The most of a request a record keeps on the disk (spec 093): 8 KB of the
 /// final params' JSON, measured in UTF-8 bytes. A page chooses a request's
@@ -109,7 +109,8 @@ pub struct DappSummary {
     /// The token an allowance is for. `None` for several tokens at once.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
-    /// The token's symbol, as the sheet resolved it (or the built-in table).
+    /// The token's symbol: the registry's on the request's chain, else as
+    /// the sheet resolved it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -304,7 +305,9 @@ pub fn summarize(
     token_meta: Option<&GuardTokenMetaView>,
 ) -> DappSummary {
     match method {
-        "eth_sendTransaction" => call_summary(params.get(0).unwrap_or(&Value::Null), token_meta),
+        "eth_sendTransaction" => {
+            call_summary(chain_id, params.get(0).unwrap_or(&Value::Null), token_meta)
+        }
         "wallet_sendCalls" => {
             let calls = params
                 .get(0)
@@ -318,7 +321,7 @@ pub fn summarize(
                     ..DappSummary::default()
                 },
                 // One call is that call, as its sheet reads it (089 S1).
-                [only] => call_summary(only, token_meta),
+                [only] => call_summary(chain_id, only, token_meta),
                 calls => batch_summary(chain_id, calls),
             }
         }
@@ -328,7 +331,7 @@ pub fn summarize(
             ..DappSummary::default()
         },
         method if crate::typed_data_request::looks_like_typed_data(method) => {
-            typed_summary(method, params, token_meta)
+            typed_summary(chain_id, method, params, token_meta)
         }
         // Anything else that was signed is recorded as a message
         // (`record_shape`), and says no more than that.
@@ -340,7 +343,7 @@ pub fn summarize(
 }
 
 /// One transaction: an allowance it grants, or the call it makes.
-fn call_summary(tx: &Value, token_meta: Option<&GuardTokenMetaView>) -> DappSummary {
+fn call_summary(chain_id: u32, tx: &Value, token_meta: Option<&GuardTokenMetaView>) -> DappSummary {
     let to = address_in(tx.get("to"));
     let data = tx.get("data").and_then(Value::as_str);
     let base = DappSummary {
@@ -351,6 +354,7 @@ fn call_summary(tx: &Value, token_meta: Option<&GuardTokenMetaView>) -> DappSumm
     };
     match detect_calldata_approval(to.as_deref(), data).filter(is_grant) {
         Some(approval) => with_grant(
+            chain_id,
             DappSummary {
                 action: DappAction::Approve,
                 ..base
@@ -380,8 +384,8 @@ fn batch_summary(chain_id: u32, calls: &[Value]) -> DappSummary {
             let data = call.get("data").and_then(Value::as_str);
             if let Some(approval) = detect_calldata_approval(to.as_deref(), data).filter(is_grant) {
                 // A leg's own token metadata never reaches the approve, so
-                // only the built-in table names its token here.
-                summary = with_grant(summary, &approval, None);
+                // only the registry names its token here.
+                summary = with_grant(chain_id, summary, &approval, None);
             }
         }
     }
@@ -411,6 +415,7 @@ fn message_summary(params: &Value, origin: &str) -> DappSummary {
 /// Typed data: a permit when it grants an allowance (the guard's reading),
 /// else plain structured data — its primary type and verifying contract.
 fn typed_summary(
+    chain_id: u32,
     method: &str,
     params: &Value,
     token_meta: Option<&GuardTokenMetaView>,
@@ -430,6 +435,7 @@ fn typed_summary(
     };
     match detect_approval(method, Some(params)).filter(is_grant) {
         Some(approval) => with_grant(
+            chain_id,
             DappSummary {
                 action: DappAction::Permit,
                 ..base
@@ -447,8 +453,9 @@ fn is_grant(approval: &GuardDetectedApproval) -> bool {
     approval.kind != GuardApprovalKind::DecreaseAllowance
 }
 
-/// The allowance's facts onto `summary`.
+/// The allowance's facts onto `summary`, its token named on `chain_id`.
 fn with_grant(
+    chain_id: u32,
     mut summary: DappSummary,
     approval: &GuardDetectedApproval,
     token_meta: Option<&GuardTokenMetaView>,
@@ -461,17 +468,22 @@ fn with_grant(
         .amount_raw
         .clone()
         .filter(|_| !approval.is_unbounded && !approval.is_boolean_grant);
-    // The sheet's resolved metadata, once it resolved; the built-in table
-    // otherwise. A token nobody could name keeps its address only.
+    // The registry on this chain, as the sheet names it (097 D); else the
+    // sheet's resolved metadata, once it resolved. A token nobody could name
+    // keeps its address only.
+    let known = summary
+        .token
+        .as_deref()
+        .and_then(|token| registry_token(chain_id, token));
     let resolved = token_meta.filter(|meta| meta.verified && !meta.loading);
-    let token = summary.token.as_deref();
-    summary.symbol = resolved
-        .map(|meta| meta.symbol.trim().to_owned())
-        .filter(|symbol| !symbol.is_empty())
-        .or_else(|| token.and_then(known_token_symbol).map(str::to_owned));
-    summary.decimals = resolved
-        .map(|meta| meta.decimals)
-        .or_else(|| token.and_then(known_token_decimals));
+    summary.symbol = known.map(|known| known.symbol.to_owned()).or_else(|| {
+        resolved
+            .map(|meta| meta.symbol.trim().to_owned())
+            .filter(|symbol| !symbol.is_empty())
+    });
+    summary.decimals = known
+        .map(|known| known.decimals)
+        .or_else(|| resolved.map(|meta| meta.decimals));
     summary.expires_at = approval.deadline.as_deref().and_then(readable_deadline);
     summary
 }

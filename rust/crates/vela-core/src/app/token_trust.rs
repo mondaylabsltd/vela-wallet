@@ -70,6 +70,8 @@ use crux_core::macros::effect;
 use crux_core::{render::render, render::RenderOperation, App, Command};
 use serde::{Deserialize, Serialize};
 
+use super::token_registry::registry_token;
+
 #[cfg(feature = "bindings")]
 use ts_rs::TS;
 
@@ -95,37 +97,6 @@ pub const DEFAULT_MONITOR_CHAINS: [u32; 6] = [1, 56, 137, 42_161, 8_453, 100];
 /// Distinct blocks whose timestamps are resolved per chain per poll — the
 /// `slice(0, 25)` cap (`transfer-monitor.ts:172`); the rest fall back to now.
 pub const TIMESTAMP_BLOCK_CAP: usize = 25;
-
-/// Well-known ERC-20 static metadata, verbatim from `services/tokens.ts
-/// KNOWN_TOKENS` (lowercased address → symbol, decimals). NOTE: clear_signing
-/// carries its own private 19-entry copy that has drifted from this 20-entry
-/// TS canon (it lacks Arbitrum USDT); unifying the two tables is follow-up
-/// work — this machine matches the TS source it ports.
-pub const KNOWN_TOKENS: [(&str, &str, u32); 20] = [
-    // ---- Ethereum mainnet ----
-    ("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "USDC", 6),
-    ("0xdac17f958d2ee523a2206206994597c13d831ec7", "USDT", 6),
-    ("0x6b175474e89094c44da98b954eedeac495271d0f", "DAI", 18),
-    ("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "WETH", 18),
-    ("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", "WBTC", 8),
-    ("0x514910771af9ca656af840dff83e8264ecf986ca", "LINK", 18),
-    ("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", "UNI", 18),
-    ("0xae7ab96520de3a18e5e111b5eaab095312d7fe84", "stETH", 18),
-    ("0xbe9895146f7af43049ca1c1ae358b0541ea49704", "cbETH", 18),
-    ("0xae78736cd615f374d3085123a210448e74fc6393", "rETH", 18),
-    ("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0", "wstETH", 18),
-    ("0x5a98fcbea516cf06857215779fd812ca3bef1b32", "LDO", 18),
-    ("0xd533a949740bb3306d119cc777fa900ba034cd52", "CRV", 18),
-    ("0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9", "AAVE", 18),
-    ("0xc00e94cb662c3520282e6f5717214004a7f26888", "COMP", 18),
-    ("0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2", "MKR", 18),
-    // ---- Polygon ----
-    ("0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", "USDC", 6),
-    ("0x2791bca1f2de4661ed88a30c99a7a9449aa84174", "USDC.e", 6),
-    // ---- Arbitrum ----
-    ("0xaf88d065e77c8cc2239327c5edb3a432268e5831", "USDC", 6),
-    ("0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9", "USDT", 6),
-];
 
 // ---------------------------------------------------------------------------
 // Wire value types
@@ -436,16 +407,13 @@ pub fn is_native_log_address(addr: &str) -> bool {
     NATIVE_LOG_ADDRESSES.contains(&lc.as_str())
 }
 
-/// The static well-known table (`tokens.ts knownToken`), case-insensitive.
-pub fn known_token(addr: &str) -> Option<TrustTokenMeta> {
-    let lc = addr.to_lowercase();
-    KNOWN_TOKENS
-        .iter()
-        .find(|(a, _, _)| *a == lc)
-        .map(|(_, symbol, decimals)| TrustTokenMeta {
-            symbol: (*symbol).to_owned(),
-            decimals: *decimals,
-        })
+/// The registry's metadata for `token` on `chain_id` (097 D: one
+/// chain-scoped table, [`registry_token`]), case-insensitive.
+fn registry_meta(chain_id: u32, token: &str) -> Option<TrustTokenMeta> {
+    registry_token(chain_id, token).map(|known| TrustTokenMeta {
+        symbol: known.symbol.to_owned(),
+        decimals: known.decimals,
+    })
 }
 
 /// Decision chain 1 — log → transfer acceptance (`decodeTransferLogs`,
@@ -640,8 +608,8 @@ pub fn auto_add_candidates(logs: &[TrustReceiptLog], from: &str) -> Vec<String> 
 
 /// Decision chain 2 — token → admission (`token-autoadd.ts:39-67`), as a
 /// single predicate: a token is admitted iff it was net-received from
-/// authentic logs AND is not already listed, not held, not curated-known, AND
-/// its symbol resolved on-chain (invariants ⑤⑧).
+/// authentic logs AND is not already listed, not held, not in the registry
+/// on its chain, AND its symbol resolved on-chain (invariants ⑤⑧).
 pub fn admission_allows(
     net_received: bool,
     already_listed: bool,
@@ -696,8 +664,8 @@ pub enum TrustSimJudgment {
         delta: String,
         symbol: String,
         decimals: u32,
-        /// The token is one this wallet already trusts — the chain's stables
-        /// or wrapped coin, a token the account holds, the curated table —
+        /// The token is one this wallet already trusts — the chain's registry
+        /// stables or wrapped coin, a token the account holds —
         /// and not merely one whose `symbol()` answered. Always so for an
         /// inflow (that is what earned it a figure); an OUTFLOW renders on
         /// metadata alone, so this is what tells a known coin leaving from a
@@ -719,10 +687,11 @@ pub enum TrustSimJudgment {
 /// `tx-simulation.ts:257-286`). SENT (negative) renders whenever metadata
 /// resolved — the real token emits its own log, so an outflow can't be
 /// understated. RECEIVED (positive) renders a confident amount only when the
-/// token is trusted: in the chain's trusted set (stables + wrapped + held) or
-/// the curated known table (invariant ⑥). Everything else — no metadata, no
-/// token address, an unparseable delta — is unverified, never an error and
-/// never a default (invariant ⑦).
+/// token is in the chain's trusted set (invariant ⑥) — the caller's verdict:
+/// the chain's registry stables and wrapped coin (the service's, or this
+/// build's [`registry_token`]) and the tokens the account holds. Everything
+/// else — no metadata, no token address, an unparseable delta — is
+/// unverified, never an error and never a default (invariant ⑦).
 pub fn judge_delta(
     delta: &TrustAssetDelta,
     meta: Option<&TrustTokenMeta>,
@@ -746,7 +715,7 @@ pub fn judge_delta(
     let Some(received) = parse_delta_positive(&delta.delta) else {
         return unverified;
     };
-    let trusted = in_trusted_set || known_token(token).is_some();
+    let trusted = in_trusted_set;
     // ERC-20 `decimals` is a uint8: metadata claiming more is not readable
     // metadata (082 review) — the amount at that width is no amount.
     let readable = |m: &TrustTokenMeta| {
@@ -1106,9 +1075,11 @@ fn sim_requested(
             continue;
         };
         let lc = token.to_lowercase();
-        // `resolveTokenMetadata` consults the known table, then its caches;
+        // `resolveTokenMetadata` consults the registry, then its caches;
         // only real misses go on-chain (`token-metadata.ts:58-74`).
-        if known_token(&lc).is_none() && !model.meta.contains_key(&(chain_id, lc.clone())) {
+        if registry_token(chain_id, &lc).is_none()
+            && !model.meta.contains_key(&(chain_id, lc.clone()))
+        {
             needed.insert(lc);
         }
     }
@@ -1422,8 +1393,8 @@ fn on_block_timestamp(
 }
 
 /// Tokens among `transfers` whose metadata is still a true unknown: not in
-/// the known table, not carried by a custom-token record, no cache entry
-/// (not even a negative memo).
+/// the registry on their chain, not carried by a custom-token record, no
+/// cache entry (not even a negative memo).
 fn meta_needed_for_scan(
     model: &Model,
     chain_id: u32,
@@ -1443,11 +1414,11 @@ fn meta_needed_for_scan(
     needed
 }
 
-/// Metadata for a scanned token: the known table, then the user's own custom
-/// record (a listed token carries its symbol/decimals — `buildTokenIndex`
-/// territory), then the resolved cache.
+/// Metadata for a scanned token: the registry on its chain, then the user's
+/// own custom record (a listed token carries its symbol/decimals —
+/// `buildTokenIndex` territory), then the resolved cache.
 fn scan_meta_of(model: &Model, chain_id: u32, token: &str) -> Option<TrustTokenMeta> {
-    if let Some(known) = known_token(token) {
+    if let Some(known) = registry_meta(chain_id, token) {
         return Some(known);
     }
     if let Some(custom) = model
@@ -1639,7 +1610,7 @@ fn on_auto_add_customs(
         .collect();
     let held = held_for(model, &address, chain_id);
     // The admission filter (`token-autoadd.ts:54-56`): skip anything already
-    // visible — listed, held, or curated-known.
+    // visible — listed, held, or in the registry on this chain.
     let fresh: Vec<String> = received
         .into_iter()
         .filter(|addr| {
@@ -1647,7 +1618,7 @@ fn on_auto_add_customs(
                 true, // net-received by construction of `received`
                 listed.contains(addr),
                 held.contains(addr),
-                known_token(addr).is_some(),
+                registry_token(chain_id, addr).is_some(),
                 Some("pending"), // the symbol gate applies after resolution
             )
         })
@@ -1784,7 +1755,7 @@ fn judge_session(model: &Model, session: &SimSession) -> Vec<TrustSimJudgment> {
                 None => (None, false),
                 Some(token) => {
                     let lc = token.to_lowercase();
-                    let meta = known_token(&lc).or_else(|| {
+                    let meta = registry_meta(session.chain_id, &lc).or_else(|| {
                         model
                             .meta
                             .get(&(session.chain_id, lc.clone()))
@@ -1793,7 +1764,8 @@ fn judge_session(model: &Model, session: &SimSession) -> Vec<TrustSimJudgment> {
                     });
                     let trusted = registry.is_some_and(|r| {
                         r.stables.contains(&lc) || r.wrapped.as_deref() == Some(lc.as_str())
-                    }) || held.contains(&lc);
+                    }) || registry_token(session.chain_id, &lc).is_some()
+                        || held.contains(&lc);
                     (meta, trusted)
                 }
             };

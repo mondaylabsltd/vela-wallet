@@ -76,6 +76,7 @@ pub mod shell;
 pub mod sign_pref;
 pub mod sign_request;
 pub mod sim_outcome;
+pub mod token_registry;
 pub mod token_trust;
 pub mod tx_tracker;
 
