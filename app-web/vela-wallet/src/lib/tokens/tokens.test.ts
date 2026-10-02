@@ -24,6 +24,19 @@ describe('drift gate', () => {
 		expect(committed).toBe(generateTs());
 	});
 
+	/**
+	 * Spec 089: a family var that names one face leaves what that face lacks to
+	 * the browser's DEFAULT font — Times. ru's signing hero ("Без лимита") was
+	 * drawn in it. docs/design-system.md: the platform's own sans, never a serif.
+	 */
+	it('every font family falls back to a generic sans or mono, never the default serif', () => {
+		const families = [...generateCss().matchAll(/^\t(--font-[\w-]+): ([^;]+);/gm)];
+		expect(families.length).toBeGreaterThan(0);
+		for (const [, name, value] of families) {
+			expect(value, name).toMatch(name === '--font-mono' ? /, monospace$/ : /, sans-serif$/);
+		}
+	});
+
 	it('light and dark define the same color paths (generator asserts, we re-check the emission)', () => {
 		const css = generateCss();
 		const darkVars = [...css.matchAll(/^\t(--color-[\w-]+):/gm)].map((m) => m[1]);

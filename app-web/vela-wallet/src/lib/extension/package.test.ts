@@ -131,4 +131,19 @@ describe('the packaged pages', () => {
 		const artifacts = readdirSync(DIST).filter((name) => /^vela_core_bg\..*\.wasm$/.test(name));
 		expect(artifacts).toHaveLength(1);
 	});
+
+	it('ships both doorways, each with its script beside it (issue 317)', () => {
+		// The worker opens the request window and the wallet tab at `open.html`,
+		// which picks the person's language; the side panel enters at
+		// `panel.html`. A doorway missing from the package is a window that
+		// opens on "file not found".
+		for (const [page, script] of [
+			['panel.html', 'panel.js'],
+			['open.html', 'open.js']
+		]) {
+			expect(existsSync(join(DIST, page)), page).toBe(true);
+			expect(existsSync(join(DIST, script)), script).toBe(true);
+			expect(readFileSync(join(DIST, page), 'utf8')).toContain(`<script src="${script}"></script>`);
+		}
+	});
 });

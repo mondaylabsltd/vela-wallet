@@ -963,7 +963,7 @@ therefore waits for the Phase 2 checkpoint, and T046 re-runs after it before any
 - [x] T141 [US4] Put the new hash at the front of `BUILD_ALLOWED` in `rust/crates/vela-core/src/trusted_signer/integrity.rs`; `LAUNCH` is unchanged; (after T140 and T047).
   - Then re-run T046 (pkg-web, xcframework, `.so`).
   - Proof: `cd rust && cargo test -p vela-core --test trusted_signer`, the integrity `--check`, and `check-ios-core-fresh.sh` ok.
-- [ ] T142 [US4] Owner step (outward-facing): deploy `TS/dist/` from the 082 tree to sign.getvela.app; (after T141).
+- [x] T142 [US4] Owner step (outward-facing): deploy `TS/dist/` from the 082 tree to sign.getvela.app; (after T141). Superseded: `0ba8ee8c…` (082 + 085 in one page) was deployed instead and verified 2026-10-01, and `LAUNCH` moved to it.
   - Verify `curl -I https://sign.getvela.app/b/<hash>/sign` → 200 with the `immutable` header.
   - Then move `LAUNCH` (`integrity.rs:135`) to that hash and rebuild the wasm and native bindings (T046).
   - Proof: the curl output in `EV/signer/deploy.txt`; `check-ios-core-fresh.sh` ok.

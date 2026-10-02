@@ -1240,6 +1240,10 @@ pub enum Event {
     },
     Continue,
     Back,
+    /// The form's token card (issue 326): back to the asset picker to choose
+    /// another asset, keeping whoever the form is for — typed, scanned or
+    /// handed over. Offered only where [`SendView::can_change_token`] says.
+    ChangeToken,
     /// "Edit amount" — the recovery from a blocked confirmation.
     EditAmount,
     /// Fee-asset chip (`setGasFeeToken`); the embedded fee card re-quotes and
@@ -1518,6 +1522,15 @@ pub struct Model {
     loading: bool,
     selected_token: Option<SendToken>,
     recipient: String,
+    /// The recipient came from OUTSIDE the field — a hand-off, a scan, a pick
+    /// from the book — rather than being typed into it, so it survives the
+    /// trip back to the picker ([`handle_back`]). Typing over it makes it the
+    /// person's own again.
+    recipient_handed_in: bool,
+    /// The network a payment request named while leaving the asset to the
+    /// payer (`ethereum:<payee>@<chain>`, no token, no amount — issue #312).
+    /// Only holdings on it are listed, offered or selectable.
+    request_chain: Option<u32>,
     /// Canonical dot-decimal, exactly as typed/sanitized — **plus the unit it
     /// is counted in**.
     ///
@@ -1769,6 +1782,16 @@ pub struct SendView {
     pub tokens: Vec<SendToken>,
     pub selected_token: Option<SendToken>,
     pub recipient: String,
+    /// The network the scanned code or link named for the payer to choose an
+    /// asset on (issue 312). While set, `tokens` holds only that network's
+    /// holdings — empty when the payer has nothing there — and the picker says
+    /// which network it is; a shell's own network filter does not apply.
+    pub request_chain_id: Option<u32>,
+    /// The form's token card opens the asset picker (issue 326): a single
+    /// send whose token is the payer's to choose — not a request that named
+    /// its token or amount, not a split or a sweep, not while Continue's
+    /// pre-check is out.
+    pub can_change_token: bool,
     pub amount: String,
     /// The unit `amount` is counted in: `None` = the selected token's own
     /// units, `Some(code)` = that fiat currency.
@@ -1960,6 +1983,12 @@ impl App for Send {
                     // would be a dead button.)
                     return Command::done();
                 }
+                // Typed over, a handed-in recipient is the person's own: Back
+                // clears it like any other typing. An echo of the same value
+                // changes nothing.
+                if recipient != model.recipient {
+                    model.recipient_handed_in = false;
+                }
                 model.recipient = recipient;
                 Command::all([
                     sync_identity(model),
@@ -2014,6 +2043,7 @@ impl App for Send {
             Event::AddNetworkTapped { chain_id } => add_network(model, chain_id),
             Event::Continue => handle_continue(model),
             Event::Back => handle_back(model),
+            Event::ChangeToken => change_token(model),
             Event::EditAmount => edit_amount(model),
             Event::ChooseFeeToken { token } => {
                 model.gas_fee_token = token;
@@ -2236,6 +2266,8 @@ impl App for Send {
             tokens: model.tokens.clone(),
             selected_token: model.selected_token.clone(),
             recipient: model.recipient.clone(),
+            request_chain_id: model.request_chain,
+            can_change_token: can_change_token(model),
             amount: model.amount.value().to_owned(),
             // Derived, not stored: the view's unit and the figure's unit are
             // the same fact, so they cannot drift apart.
@@ -2323,10 +2355,35 @@ fn alert(model: &mut Model, kind: SendAlertKind) -> Cmd {
 // Boot & tokens
 // ---------------------------------------------------------------------------
 
+/// A hand-off that names the TOKEN steps to the form before the list
+/// answers. A recipient alone does not (issue #312): which asset to send is the
+/// payer's to choose, on the picker, with the recipient already shown there
+/// (issue #332) — the form used to open on the balance's top token on
+/// whatever chain it was, which for a code from a BNB Chain wallet was XDAI on
+/// Gnosis.
 fn has_preselection(params: &SendOpenParams) -> bool {
-    params.prefilled_recipient.is_some()
-        || params.preselected_multi.is_some()
+    params.preselected_multi.is_some()
         || (params.preselected_symbol.is_some() && params.preselected_network.is_some())
+}
+
+/// The network a locked request names while leaving the asset open: a chain,
+/// and neither a token nor an amount (`ethereum:<payee>@<chain>`). That is the
+/// shape of a "pay me on this network" code, and an amount-less native request
+/// cannot be told apart from it — so it is read the way the payer can act on
+/// it: any of their holdings on that network, never a coin they do not hold
+/// on it, and never another network (issue #312). A request that names a
+/// token or an amount stays exactly that request.
+fn request_network(params: &SendOpenParams) -> Option<u32> {
+    if !params.locked
+        || params.prefilled_token_address.is_some()
+        || params.prefilled_amount_base.is_some()
+    {
+        return None;
+    }
+    params
+        .prefilled_chain_id
+        .as_deref()
+        .and_then(parse_int_prefix)
 }
 
 fn open(
@@ -2355,10 +2412,11 @@ fn open(
     model.resolving_lock = params.locked;
     // A prefilled recipient IS the recipient from the first frame (spec 028
     // US5): a hand-off from the address book, or a scanned address, must not
-    // wait on the token list to show who the money is for — and a fetch that
-    // fails must not leave the form open on nobody. `tokens_fetched` still
-    // restates it beside the token it picks.
+    // wait on the token list to show who the money is for. The picker shows
+    // it while the list loads (issue #332), and keeps it if the load fails.
     model.recipient = params.prefilled_recipient.clone().unwrap_or_default();
+    model.recipient_handed_in = params.prefilled_recipient.is_some();
+    model.request_chain = request_network(&params);
     model.params = params;
     model.loading = true;
     boot_fetch(model)
@@ -2409,13 +2467,25 @@ fn non_zero_sorted(tokens: &[SendToken]) -> Vec<SendToken> {
     list
 }
 
+/// What the picker lists: the non-zero holdings, highest value first — and,
+/// when a request named a network for the payer to choose on, only that
+/// network's (issue #312). Every reader of `model.tokens` (the list, a pick,
+/// a sweep, the fee read-ahead) sees the same narrowing.
+fn offered_tokens(model: &Model, tokens: &[SendToken]) -> Vec<SendToken> {
+    let mut list = non_zero_sorted(tokens);
+    if let Some(chain_id) = model.request_chain {
+        list.retain(|token| token.chain_id == chain_id);
+    }
+    list
+}
+
 fn tokens_partial(model: &mut Model, tokens: Vec<SendToken>) -> Cmd {
     let tokens = with_display_symbols(tokens);
     // Progressive display only, and only while a load is actually running.
     if model.flights.tokens.is_none() {
         return Command::done();
     }
-    model.tokens = non_zero_sorted(&tokens);
+    model.tokens = offered_tokens(model, &tokens);
     model.loading = false;
     render()
 }
@@ -2437,7 +2507,7 @@ fn holdings_updated(model: &mut Model, tokens: Vec<SendToken>) -> Cmd {
     if matches!(model.flights.tokens, Some((_, TokensPurpose::Initial))) {
         return Command::done();
     }
-    model.tokens = non_zero_sorted(&tokens);
+    model.tokens = offered_tokens(model, &tokens);
     if model.step != SendStep::EnterDetails {
         return render();
     }
@@ -2491,7 +2561,7 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
             TokensPurpose::Refresh => render(),
         };
     };
-    model.tokens = non_zero_sorted(&full);
+    model.tokens = offered_tokens(model, &full);
     model.loading = false;
     if purpose == TokensPurpose::Refresh {
         // A refresh answers the same question an asset-list update does.
@@ -2544,16 +2614,12 @@ fn tokens_loaded(model: &mut Model, tokens: Option<Vec<SendToken>>, purpose: Tok
         return picker_without_a_token(model);
     }
 
-    if let Some(prefilled) = model.params.prefilled_recipient.clone() {
-        if let Some(first) = model.tokens.first().cloned() {
-            // Quick-send from scan: highest-value token, prefilled recipient.
-            model.selected_token = Some(first);
-            model.recipient = prefilled;
-            model.step = SendStep::EnterDetails;
-            // The warm quote first; the form's own (payee-aware) quote is
-            // armed by its landing, once an amount is typed.
-            return Command::all([sync_identity(model), warm_estimate_start(model)]);
-        }
+    // A recipient handed in without a token — a scanned address, a contact —
+    // lands on the picker with the recipient on it: the asset is the payer's
+    // to choose (issue #312). The old quick-send took the balance's top token
+    // for them, on whichever chain it lived.
+    if model.params.prefilled_recipient.is_some() {
+        return Command::all([sync_identity(model), picker_without_a_token(model)]);
     }
     picker_without_a_token(model)
 }
@@ -2623,6 +2689,22 @@ fn resolve_locked_request(model: &mut Model, full: &[SendToken]) -> Cmd {
         model.lock_error = Some(SendLockError::Network { chain_id });
         model.resolving_lock = false;
         return render();
+    }
+
+    // A network named with the asset left open (issue #312): what the payer
+    // holds there, and only there. One holding is the obvious choice and opens
+    // the form on it; several are the picker's, narrowed to that network; none
+    // is the same picker, empty, saying which network it is — never a coin
+    // they do not hold, and never another network.
+    if model.request_chain.is_some() {
+        model.lock_error = None;
+        model.resolving_lock = false;
+        if let [only] = model.tokens.as_slice() {
+            let only = only.clone();
+            return finish_lock_resolution(model, only);
+        }
+        model.step = SendStep::SelectToken;
+        return Command::all([sync_identity(model), prewarm_fees(model), render()]);
     }
 
     let want_addr = model
@@ -3740,15 +3822,23 @@ fn apply_picked_address(model: &mut Model, address: String) -> Cmd {
             }
             render()
         }
-        None => {
-            model.recipient = address;
-            Command::all([
-                sync_identity(model),
-                schedule_form_estimate(model),
-                render(),
-            ])
-        }
+        None => hand_in_recipient(model, address),
     }
+}
+
+/// A recipient that arrived from outside the field — a scan, a pick from the
+/// book — fills the single recipient and is remembered as handed in, so going
+/// back to the picker to change the asset does not throw it away (issue #332:
+/// a scan from the home lands on the picker, and Back from the form used to
+/// clear the address it had just read).
+fn hand_in_recipient(model: &mut Model, address: String) -> Cmd {
+    model.recipient = address;
+    model.recipient_handed_in = true;
+    Command::all([
+        sync_identity(model),
+        schedule_form_estimate(model),
+        render(),
+    ])
 }
 
 fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
@@ -3787,22 +3877,8 @@ fn scan_resolved(model: &mut Model, scan: SendScan) -> Cmd {
             };
             open(model, account, params, display)
         }
-        SendScan::Request { recipient, .. } => {
-            model.recipient = recipient;
-            Command::all([
-                sync_identity(model),
-                schedule_form_estimate(model),
-                render(),
-            ])
-        }
-        SendScan::Text { data } => {
-            model.recipient = data;
-            Command::all([
-                sync_identity(model),
-                schedule_form_estimate(model),
-                render(),
-            ])
-        }
+        SendScan::Request { recipient, .. } => hand_in_recipient(model, recipient),
+        SendScan::Text { data } => hand_in_recipient(model, data),
     }
 }
 
@@ -4834,32 +4910,75 @@ fn handle_back(model: &mut Model) -> Cmd {
             if model.multi_select_mode {
                 // Back to the picker, preserving the multiSelect selection.
                 model.step = SendStep::SelectToken;
-            } else {
-                model.selected_token = None;
-                model.max_fill = None;
-                model.amount = DenominatedAmount::token("");
-                // A recipient HANDED IN — a scan, a contact, a payment request
-                // — survives the trip back to the picker (owner, 2026-09-23).
-                // The person never chose that token: the quick-send path took
-                // the balance's top one for them, so the only way to change it
-                // was to go back, and going back threw away the scan. They
-                // scanned again, saw the same token, and read the screen as
-                // "the asset cannot be changed".
-                //
-                // A recipient the person TYPED still goes, because there
-                // starting over is theirs to redo and a stale address in an
-                // empty-looking flow is worse than a cleared field.
-                if model.params.prefilled_recipient.is_none() {
-                    model.recipient.clear();
-                }
-                model.split_mode = false;
-                model.recipients.clear();
-                model.step = SendStep::SelectToken;
+                return render();
             }
-            render()
+            // A recipient HANDED IN — a scan, a contact, a payment request —
+            // survives the trip back to the picker (owner, 2026-09-23): going
+            // back is how a person changes the asset, and it used to throw
+            // the scan away.
+            //
+            // A recipient the person TYPED still goes, because there starting
+            // over is theirs to redo and a stale address in an empty-looking
+            // flow is worse than a cleared field.
+            //
+            // "Handed in" is the recipient's own history, not the open params:
+            // on the phones a home scan opens the picker FIRST and the code
+            // arrives afterwards (`scan_resolved`), so the params never named
+            // it and Back threw the scan away (issue #332).
+            let keep_recipient = model.recipient_handed_in;
+            back_to_picker(model, keep_recipient)
         }
         SendStep::SelectToken => fire(model, SendOperation::Close),
     }
+}
+
+/// The single form, left for the asset picker: the token and the figure typed
+/// for it go (a figure means nothing in another coin), the split rows go, and
+/// the recipient stays when `keep_recipient` says so.
+fn back_to_picker(model: &mut Model, keep_recipient: bool) -> Cmd {
+    model.selected_token = None;
+    model.max_fill = None;
+    model.amount = DenominatedAmount::token("");
+    if !keep_recipient {
+        model.recipient.clear();
+    }
+    model.split_mode = false;
+    model.recipients.clear();
+    model.step = SendStep::SelectToken;
+    render()
+}
+
+/// Whether the form's token card opens the picker (issue #326). The token is
+/// the payer's to change on a single send — including one whose request named
+/// only a network, where the picker stays on that network. Not where a request
+/// named the token or the amount, not in a split (its rows are figures in this
+/// token) or a sweep (no one token), and not while Continue is out: its
+/// pre-check would answer for a token the form no longer has. The form's own
+/// background quotes are another matter — they are guarded by token and chain
+/// on arrival, exactly as they are for Back.
+fn can_change_token(model: &Model) -> bool {
+    model.step == SendStep::EnterDetails
+        && model.selected_token.is_some()
+        && model.lock_error.is_none()
+        && (!model.params.locked || model.request_chain.is_some())
+        && !model.split_mode
+        && !model.multi_select_mode
+        && !model.estimating_gas
+        && !matches!(
+            model.pipeline,
+            Pipeline::ContinueCredential { .. } | Pipeline::PreCheck { .. }
+        )
+}
+
+/// The token card (issue #326): to the picker, keeping whoever the form is
+/// for — this is a change of WHAT is sent, not of whom to. Back kept only a
+/// handed-in recipient; the card keeps a typed one too, because nothing about
+/// changing the coin says the person meant to change the payee.
+fn change_token(model: &mut Model) -> Cmd {
+    if !can_change_token(model) {
+        return Command::done();
+    }
+    back_to_picker(model, true)
 }
 
 fn fee_updated(model: &mut Model, estimate: FeeEstimateView) -> Cmd {

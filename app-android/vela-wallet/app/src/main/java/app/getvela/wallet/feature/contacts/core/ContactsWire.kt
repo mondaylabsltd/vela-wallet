@@ -82,6 +82,11 @@ sealed class ContactImportFailure {
     @Serializable
     @SerialName("unknown_group")
     data object UnknownGroup : ContactImportFailure()
+
+    /** Not UTF-8, nor UTF-16 by its BOM — a legacy code page (issue 333). */
+    @Serializable
+    @SerialName("unsupported_encoding")
+    data object UnsupportedEncoding : ContactImportFailure()
 }
 
 /**
@@ -300,15 +305,24 @@ sealed class ContactEvent {
     @SerialName("inspect_recipient")
     data class InspectRecipient(val chain_id: Int, val address: String) : ContactEvent()
 
-    /** A picked file's text; the core parses JSON or CSV and existing wins. */
+    /**
+     * A picked file's BYTES; the core decodes them (issue 333), parses JSON or
+     * CSV, and existing wins. Build it with [of]: the wire is the core's
+     * `Vec<u8>`, 0–255, and a Kotlin `Byte` is signed.
+     */
     @Serializable
     @SerialName("import_file")
     data class ImportFile(
-        val content: String,
+        val bytes: List<Int>,
         val filename: String? = null,
         val into_group: String? = null,
         val now_ms: Double,
-    ) : ContactEvent()
+    ) : ContactEvent() {
+        companion object {
+            fun of(bytes: ByteArray, filename: String?, intoGroup: String?, nowMs: Double) =
+                ImportFile(bytes.map { it.toInt() and 0xFF }, filename, intoGroup, nowMs)
+        }
+    }
 
     @Serializable
     @SerialName("import_acknowledged")

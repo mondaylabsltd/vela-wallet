@@ -28,7 +28,8 @@
  *   - a request that ends without a decision answers 4900, never 4001 and
  *     never Chrome's own error text (RB6) — except a claimed submit whose
  *     claim carried the operation hash: that one may have been sent, and its
- *     page is told the hash when its surface goes (RJ2), never 4900.
+ *     page is told "not confirmed yet" when its surface goes (RJ2, 083; a
+ *     batch: its id), never 4900.
  *
  * The rules are pure functions in `lib/request-life.js`; this file performs
  * them and logs every step through `lib/swlog.js` (RB14).
@@ -64,6 +65,7 @@ import {
 	classifyMethod,
 	endpointAnswered,
 	endpointFailed,
+	instantConnectAnswer,
 	isWellFormedRequest,
 	orderEndpoints,
 	originOfUrl,
@@ -71,6 +73,7 @@ import {
 	readFailureKind,
 	resolveGrantedAccounts,
 	rpcError,
+	signedInChangeEvent,
 	switchChainParam,
 	toHexChainId,
 	unreachableChainMessage
@@ -96,7 +99,7 @@ import {
 	realTxHash,
 	receiptLookupHash
 } from './lib/op-receipt.js';
-import { negotiate, requestPage, walletPage } from './lib/locales.js';
+import { openDoor } from './lib/locales.js';
 
 /** The snapshot the wallet publishes for exactly this purpose. */
 const EXT_CACHE_KEY = 'vela.ext.cache';
@@ -119,6 +122,69 @@ void chrome.storage.local
 	})
 	.catch(() => {});
 
+/**
+ * The grants and the wallet's snapshot, mirrored in memory for the one answer
+ * that has to be decided SYNCHRONOUSLY too: whether a connect request needs a
+ * person at all (spec 089). An origin already granted is answered here, the
+ * way the surface would answer it — and before 089 it was not: every connect
+ * went to a surface that only asked the core and closed, so each time a
+ * connected site asked again a request window flashed open and shut (stealing
+ * focus) or the side panel opened. Whether to open the panel cannot wait for a
+ * storage read (the gesture would be spent), so this is read at start and kept
+ * fresh by the storage listener below. `null` until the first read lands (or
+ * when storage is denied): a connect then goes to a surface, as before, and
+ * the surface answers it the same way.
+ */
+let grantMirror = null;
+let grantedLoading = false;
+let grantedStale = false;
+
+async function loadGranted() {
+	grantedLoading = true;
+	do {
+		grantedStale = false;
+		try {
+			const all = await chrome.storage.local.get(null);
+			const grants = new Map();
+			for (const [key, value] of Object.entries(all)) {
+				if (key.startsWith(PERM_PREFIX)) grants.set(key.slice(PERM_PREFIX.length), value);
+			}
+			grantMirror = { grants, snapshot: all[EXT_CACHE_KEY] ?? null };
+		} catch {
+			grantMirror = null;
+		}
+		// A grant or the snapshot changed while it was being read: read again.
+	} while (grantedStale);
+	grantedLoading = false;
+}
+const grantsLoaded = loadGranted();
+
+/** One storage change, into the mirror. */
+function noteGrantedChange(key, value) {
+	if (key !== EXT_CACHE_KEY && !key.startsWith(PERM_PREFIX)) return;
+	if (grantedLoading) {
+		grantedStale = true;
+		return;
+	}
+	if (!grantMirror) return;
+	if (key === EXT_CACHE_KEY) grantMirror.snapshot = value ?? null;
+	else if (value === undefined) grantMirror.grants.delete(key.slice(PERM_PREFIX.length));
+	else grantMirror.grants.set(key.slice(PERM_PREFIX.length), value);
+}
+
+/**
+ * The answer to a connect request from `origin` when nobody needs to be asked
+ * (`instantConnectAnswer`), from the mirror; `null` when a person decides — or
+ * when the mirror is not loaded yet.
+ */
+function instantConnect(method, origin) {
+	if (!grantMirror) return null;
+	return instantConnectAnswer(
+		method,
+		grantedAccounts(grantMirror.grants.get(origin) ?? null, grantMirror.snapshot)
+	);
+}
+
 // ---------------------------------------------------------------------------
 // The doorway
 // ---------------------------------------------------------------------------
@@ -128,14 +194,21 @@ void chrome.storage.local
  * moment it loses focus, and every ceremony this wallet performs hands focus
  * to the platform authenticator's own prompt (spec 027 D34). The toolbar
  * button opens a real tab instead, reusing the one already open.
+ *
+ * Through the doorway, never at a locale page: which locale is the page's to
+ * pick, from the language the person pinned — which a worker cannot read
+ * (`localStorage`), so picking here meant Chrome's language (issue 317).
  */
-function uiLocale() {
-	return negotiate(chrome.i18n?.getUILanguage?.());
-}
-
 async function openWallet() {
-	const url = chrome.runtime.getURL(walletPage(uiLocale()));
-	const [existing] = await chrome.tabs.query({ url: chrome.runtime.getURL('') + '*' });
+	const url = chrome.runtime.getURL(openDoor());
+	// A NORMAL window's tab only (spec 089): a request window is a popup of
+	// this origin too, and with no wallet tab open it was the one reused — the
+	// toolbar navigated the pending request away (answered 4900) and left the
+	// wallet in a 420 px popup.
+	const [existing] = await chrome.tabs.query({
+		url: chrome.runtime.getURL('') + '*',
+		windowType: 'normal'
+	});
 	if (existing) {
 		await chrome.tabs.update(existing.id, { active: true, url });
 		await chrome.windows.update(existing.windowId, { focused: true });
@@ -333,7 +406,8 @@ function end(step) {
 /**
  * The surface's answer, delivered to the page by its document. A surface's own
  * close settlement (4900) for a claimed submit that carried its hash is surface
- * loss: the page is told the hash instead (RJ2, `surfaceAnswer`).
+ * loss: the page is told "not confirmed yet" instead (RJ2, 083,
+ * `surfaceAnswer`).
  */
 async function answer(rid, given, opHash, caller) {
 	const record = records.get(rid);
@@ -416,11 +490,14 @@ async function openWindows() {
 	}
 }
 
-/** The fallback surface: a dedicated window, not the action popup. */
+/**
+ * The fallback surface: a dedicated window, not the action popup — opened at
+ * the doorway, which picks the person's language (issue 317).
+ */
 async function openRequestWindow(record) {
 	try {
 		const created = await chrome.windows.create({
-			url: chrome.runtime.getURL(requestPage(uiLocale(), record.rid)),
+			url: chrome.runtime.getURL(openDoor(record.rid)),
 			type: 'popup',
 			width: 420,
 			height: 760,
@@ -565,8 +642,13 @@ async function resume() {
 
 /** Resolves once the ledger is in memory; every request path waits for it. */
 const loaded = recover();
-/** Resolves once every record found at start was resumed or settled. */
-export const ready = loaded.then(resume).catch(() => {});
+/**
+ * Resolves once every record found at start was resumed or settled, and the
+ * grants are mirrored (`grantMirror`).
+ */
+export const ready = Promise.all([loaded.then(resume), grantsLoaded])
+	.then(() => {})
+	.catch(() => {});
 
 // ---------------------------------------------------------------------------
 // The page's port and the surface's port
@@ -762,19 +844,36 @@ function chainOf(origin, all) {
 
 const NOT_OPENED = () => rpcError(ERR.UNAUTHORIZED, 'Vela has not been opened in this browser yet');
 
+/** The account the wallet's snapshot says is signed in; `null` with no snapshot. */
+function signedInOf(snapshot) {
+	return snapshot && typeof snapshot === 'object' && typeof snapshot.address === 'string'
+		? snapshot.address
+		: null;
+}
+
+/**
+ * The accounts an origin may see — its grant, combined with the wallet's
+ * snapshot by `resolveGrantedAccounts` (a pinned twin of the core's rule, see
+ * `lib/protocol.js`). The ONE place the worker says it: `eth_accounts` and an
+ * already-granted connect (`instantConnect`, spec 089) both read it, so the
+ * two can never tell a site different things.
+ */
+function grantedAccounts(grant, snapshot) {
+	// Issue #315: a grant is answered only while its account is the signed-in
+	// one — `resolveGrantedAccounts` is the core's `granted_to_signed_in`, pinned.
+	return resolveGrantedAccounts(grant, signedInOf(snapshot));
+}
+
 /**
  * What an origin may be told without asking anyone — from state the CORE
- * authored, combined by `resolveGrantedAccounts` (a pinned twin of the core's
- * rule, see `lib/protocol.js`).
+ * authored (`grantedAccounts`: the grant, only while its account is the one
+ * the wallet is signed in to).
  */
 async function answerFromSnapshot(method, origin) {
 	const all = await readLocal([PERM_PREFIX + origin, CHAIN_PREFIX + origin, EXT_CACHE_KEY]);
 	const grant = all[PERM_PREFIX + origin] ?? null;
 	const snapshot = all[EXT_CACHE_KEY] ?? null;
-	const addresses = Array.isArray(snapshot?.accounts)
-		? snapshot.accounts.map((a) => a?.address).filter((a) => typeof a === 'string')
-		: null;
-	const accounts = resolveGrantedAccounts(grant, addresses);
+	const accounts = grantedAccounts(grant, snapshot);
 	const chainId = chainOf(origin, all);
 
 	switch (method) {
@@ -989,15 +1088,35 @@ async function broadcast(origin, event, data) {
 }
 
 /**
- * A grant or a chain pick changed in storage — announce it. The grant is the
- * core's; what each change means to the page is the core's `DpermPageEvent`
- * vocabulary, mirrored here.
+ * The wallet signed in, out, or to another account (its snapshot's address
+ * changed): tell each granted origin what it may see now — `signedInChangeEvent`
+ * says what, from the same twin rule `eth_accounts` answers with.
+ */
+async function announceSignedIn(before, after) {
+	const was = signedInOf(before);
+	const now = signedInOf(after);
+	if ((was ?? '').toLowerCase() === (now ?? '').toLowerCase()) return;
+	const all = await readLocal(null);
+	for (const [key, grant] of Object.entries(all)) {
+		if (!key.startsWith(PERM_PREFIX)) continue;
+		const accounts = signedInChangeEvent(grant, was, now);
+		if (accounts) void broadcast(key.slice(PERM_PREFIX.length), 'accountsChanged', accounts);
+	}
+}
+
+/**
+ * A grant, a chain pick or the signed-in account changed in storage —
+ * announce it. The grant is the core's; what each change means to the page
+ * (`accountsChanged`, `disconnect`, `chainChanged`) is mirrored here.
  */
 chrome.storage.onChanged.addListener((changes, area) => {
 	if (area !== 'local') return;
 	for (const [key, change] of Object.entries(changes)) {
+		noteGrantedChange(key, change.newValue);
 		if (key === SURFACE_KEY) {
 			surfacePreference = change.newValue === 'window' ? 'window' : 'panel';
+		} else if (key === EXT_CACHE_KEY) {
+			void announceSignedIn(change.oldValue, change.newValue);
 		} else if (key.startsWith(PERM_PREFIX)) {
 			const origin = key.slice(PERM_PREFIX.length);
 			const before = change.oldValue?.address;
@@ -1062,8 +1181,19 @@ function route(request, sender, reply) {
 		case 'read':
 			void forwardRead(request.method, request.params, origin).then(reply);
 			return;
+		case 'connect': {
+			// Already granted to the account the wallet is in: answered here,
+			// exactly as the surface would answer it (spec 089) — no window
+			// flashes open and shut, no panel opens.
+			const result = instantConnect(request.method, origin);
+			if (result) {
+				reply({ result });
+				void swlog.log('req.answered', { cause: 'granted', outcome: 'ok', tab: tabId });
+				return;
+			}
+			break;
+		}
 		case 'sign':
-		case 'connect':
 			break;
 		default:
 			reply({ error: rpcError(ERR.UNSUPPORTED_METHOD, `Vela does not support ${request.method}`) });

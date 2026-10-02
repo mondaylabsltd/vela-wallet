@@ -7,7 +7,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -392,6 +395,15 @@ fun RecipientCard(
             var typed by remember(recipient.id) { mutableStateOf(recipient.amountValue) }
             val sent = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.amountValue) } }
             LaunchedEffect(recipient.amountValue) { if (recipient.amountValue !in sent) typed = recipient.amountValue }
+            // Issue #331: the field is a WELL (the web's `.amount-well`), a full
+            // control's height, and the whole box is the target. It was the
+            // bare figure: a line ~20dp tall whose "0" sat 8dp from the ✕, and
+            // the ✕'s 48dp touch target took every tap just above, below or
+            // right of the figure — the recipient vanished instead of the
+            // keyboard opening. The well is seen while it is wanted (empty, or
+            // in hand), as on the web, so a filled row at rest reads as drawn.
+            var focused by remember(recipient.id) { mutableStateOf(false) }
+            val well = typed.isEmpty() || focused
             BasicTextField(
                 value = typed,
                 onValueChange = { next ->
@@ -408,9 +420,18 @@ fun RecipientCard(
                 textStyle = amountStyle,
                 cursorBrush = SolidColor(colors.accentBase),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.width(96.dp).semantics { contentDescription = "recipient-amount-${recipient.ordinal}" },
+                modifier = Modifier
+                    .width(96.dp)
+                    .heightIn(min = VelaSizing.hitTarget)
+                    .onFocusChanged { focused = it.isFocused }
+                    .semantics { contentDescription = "recipient-amount-${recipient.ordinal}" },
                 decorationBox = { inner ->
-                    Box(contentAlignment = Alignment.CenterEnd) {
+                    Box(
+                        modifier = Modifier
+                            .background(if (well) colors.bgBase else Color.Transparent, RoundedCornerShape(VelaRadius.md))
+                            .padding(horizontal = VelaSpacing.md),
+                        contentAlignment = Alignment.CenterEnd,
+                    ) {
                         if (typed.isEmpty()) Text(text = "0", style = amountStyle.copy(color = colors.fgSubtle))
                         inner()
                     }
@@ -419,14 +440,16 @@ fun RecipientCard(
         } else {
             Text(text = recipient.amount, style = amountStyle, maxLines = 1)
         }
-        Spacer(modifier = Modifier.width(VelaSpacing.md))
-        Icon(
-            imageVector = VelaIcons.Close,
-            contentDescription = recipient.removeLabel,
+        // The way to drop the row is the flows' icon button, a gap away from
+        // the amount: its touch target (48dp once Compose grows the 36dp box)
+        // ends short of the field's, so no tap meant for the amount removes
+        // the recipient (issue #331).
+        Spacer(modifier = Modifier.width(VelaSpacing.lg))
+        FlowIconButton(
+            icon = VelaIcons.Close,
+            label = recipient.removeLabel,
             tint = colors.fgSubtle,
-            modifier = Modifier
-                .size(VelaIconSize.md)
-                .clickable(onClick = onRemove),
+            onClick = onRemove,
         )
     }
 }

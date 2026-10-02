@@ -249,6 +249,17 @@ struct BatchImportTests {
             both, view: sendView(), on: sheetModel(loc: loc), loc: loc
         )
         #expect(model.note?.contains(loc.t("send.batchImportFailedBody")) == true)
+
+        // 087: a file in a legacy code page says how to save it — the
+        // contacts import's sentence — not "use a CSV", which it is.
+        var legacy = both
+        legacy.fileFailure = .unsupportedEncoding
+        let refused = SendLive.batchImport(
+            legacy, view: sendView(), on: sheetModel(loc: loc), loc: loc
+        )
+        #expect(refused.note?.contains(loc.t("contacts.importFailEncoding")) == true)
+        #expect(refused.note?.contains(loc.t("send.batchImportFailedBody")) == false)
+        #expect(refused.noteIsError)
     }
 
     private func sheetModel(loc: Loc) -> BatchImportModel {

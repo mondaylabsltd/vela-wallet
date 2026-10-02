@@ -466,8 +466,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   back and try again" is wrong after a revert (RJ6). The zh / zh-TW
 //   `send.txBackgroundHint` gain their comma (0 B of ja + en). Net ≈ −58 B of
 //   ja + en, SC-005 unraised. Same branches: 1784 + 1 = 1785.
-if (PATHS.length !== 1785) fail(`expected 1785 paths (1696 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1696) fail(`expected 1696 leaf paths, got ${leafSet.size}`);
+// 1786 (issue 333, 2026-10-01): + `contacts.importFailEncoding` — a contact
+//   file that is not UTF-8 (a GBK CSV from Excel on Chinese Windows) is refused
+//   with how to save it, where every shell used to import its names as U+FFFD.
+//   Same branches: 1785 + 1 = 1786.
+if (PATHS.length !== 1786) fail(`expected 1786 paths (1697 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1697) fail(`expected 1697 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

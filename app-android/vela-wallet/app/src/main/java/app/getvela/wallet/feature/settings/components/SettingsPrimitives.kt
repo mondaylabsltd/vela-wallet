@@ -60,8 +60,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -115,6 +121,7 @@ fun settingsIcon(icon: SettingsIcon): ImageVector = when (icon) {
     SettingsIcon.Moon -> VelaIcons.Moon
     SettingsIcon.Monitor -> VelaIcons.Monitor
     SettingsIcon.Upload -> VelaIcons.Upload
+    SettingsIcon.LogOut -> VelaIcons.LogOut
     SettingsIcon.BrandX -> VelaIcons.BrandX
     SettingsIcon.BrandTelegram -> VelaIcons.BrandTelegram
     SettingsIcon.BrandDiscord -> VelaIcons.BrandDiscord
@@ -508,9 +515,21 @@ fun VelaSegmentedControl(
  * centre. The first version laid the dots out `SpaceBetween` but measured a
  * touch in equal slots, so near either end a touch could land one stop off
  * from the dot it was nearest.
+ *
+ * 087 F09: TalkBack read the track as "text-scale-slider" and each dot as
+ * "text-scale-0"…"text-scale-5" — test ids worn as accessible names. The track
+ * is ONE slider now, named by [label] (文字大小), stating its step ("3/6") and
+ * adjustable by swipe or volume key; the dots carry no words. The ids stay as
+ * test tags, which no screen reader speaks.
  */
 @Composable
-fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, onChange: (Int) -> Unit = {}) {
+fun VelaTextScaleSlider(
+    steps: Int,
+    index: Int,
+    label: String,
+    modifier: Modifier = Modifier,
+    onChange: (Int) -> Unit = {},
+) {
     val colors = VelaTheme.colors
     val haptic = rememberVelaHaptic()
     val reduceMotion = rememberReducedMotion()
@@ -574,12 +593,33 @@ fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, o
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.bold,
             fontSize = VelaTextSize.base,
+            // The ends are a picture of small and large, not words to read.
+            modifier = Modifier.clearAndSetSemantics {},
         )
         Box(
             modifier = Modifier
                 .weight(1f)
                 .height(VelaIconSize.xl2)
-                .semantics { contentDescription = "text-scale-slider" },
+                .testTag("text-scale-slider")
+                .semantics {
+                    contentDescription = label
+                    stateDescription = "${shown + 1}/$steps"
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        current = shown.toFloat(),
+                        range = 0f..(steps - 1).coerceAtLeast(0).toFloat(),
+                        steps = (steps - 2).coerceAtLeast(0),
+                    )
+                    // Swipe up/down (or the volume keys) moves one step, as a
+                    // tap on a dot does: stored at once, with the detent.
+                    setProgress { target ->
+                        val next = target.roundToInt().coerceIn(0, (steps - 1).coerceAtLeast(0))
+                        if (next != currentIndex.value) {
+                            haptic(VelaHaptic.Detent)
+                            change.value(next)
+                        }
+                        true
+                    }
+                },
         ) {
             // The width is read through state, not a gesture key, so a re-layout
             // never restarts the pointerInput mid-drag.
@@ -675,7 +715,7 @@ fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, o
                         modifier = Modifier
                             .offset { placed(i.toFloat(), VelaIconSize.lg) }
                             .size(VelaIconSize.lg)
-                            .semantics { contentDescription = "text-scale-$i" },
+                            .testTag("text-scale-$i"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
@@ -717,6 +757,7 @@ fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, o
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.bold,
             fontSize = VelaTextSize.xl2,
+            modifier = Modifier.clearAndSetSemantics {},
         )
     }
 }

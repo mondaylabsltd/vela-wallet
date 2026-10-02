@@ -351,6 +351,13 @@ data class SendCtaModel(val label: String, val accent: Boolean)
 @Immutable
 data class SendPickModel(
     val header: FlowHeaderModel,
+    /**
+     * Issue #332: whom the money is for, when the core already holds a
+     * recipient — a code scanned from the home, a contact handed over. The
+     * picker is where the person chooses WHAT to send; without this line a
+     * scan that worked looked exactly like one that had done nothing.
+     */
+    val recipient: FactRowModel? = null,
     val searchPlaceholder: String,
     val filters: List<FilterChipModel>,
     /** SD1b: the chain lock, once the first token pins the network. */
@@ -370,6 +377,11 @@ data class SendTokenCardModel(
     /** "Ethereum · Balance 53.4836". */
     val detail: String,
     val max: String? = null,
+    /**
+     * Issue #326: present when tapping the card goes back to the asset picker
+     * (the core's `can_change_token`), carrying the control's accessible name.
+     */
+    val change: String? = null,
 )
 
 /** SD2b's split row: who, how much, and a way to drop them. */
