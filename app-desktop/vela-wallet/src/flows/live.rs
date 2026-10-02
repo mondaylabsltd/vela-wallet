@@ -30,7 +30,7 @@ use vela_core::l10n::number::format_token_amount;
 
 use crate::flows::FlowStrings;
 use crate::wallet::fill;
-use vela_core::app::batch_import::{BatchRateStatus, BatchUnit, BatchView};
+use vela_core::app::batch_import::{BatchFileFailure, BatchRateStatus, BatchUnit, BatchView};
 use vela_core::app::contacts::ContactsView;
 use vela_core::app::fee_policy::{FeeAssetView, FeeEstimateView, FeeTier, FeeView};
 use vela_core::app::fee_speed::FeeSpeedView;
@@ -476,10 +476,14 @@ pub fn tx_detail(
                 // chip. The words are the feed's, which already has them.
                 FeedTxStatus::Pending => s.status_pending.clone(),
                 FeedTxStatus::Failed => s.status_failed.clone(),
+                // 087 F04: pending, and nothing will settle it — not failed.
+                FeedTxStatus::Unknown => s.status_unknown.clone(),
             },
+            // Info keeps the delete quiet (`panels::delete_style`): a record
+            // nothing settles may have been sent, like a pending one.
             tone: match status {
                 FeedTxStatus::Confirmed => StatusTone::Success,
-                FeedTxStatus::Pending => StatusTone::Info,
+                FeedTxStatus::Pending | FeedTxStatus::Unknown => StatusTone::Info,
                 FeedTxStatus::Failed => StatusTone::Error,
             },
         },
@@ -1446,10 +1450,54 @@ impl SendClass {
 /// same list. Narrowing only the drawing would hand row 2's click to whatever
 /// token was third before the filter — here, a transfer of the wrong coin.
 pub fn narrow_send_tokens(view: &mut SendView, chain: Option<u32>, class: SendClass) {
+    // Issue #312: a code that named a network decides which network is on
+    // screen — the core lists only its holdings, and a sidebar filter left on
+    // another network must not hide them all.
+    let chain = view.request_chain_id.or(chain);
     view.tokens.retain(|token| {
         chain.is_none_or(|chain| token.chain_id == chain)
             && (class == SendClass::All || SendClass::of(token) == class)
     });
+}
+
+/// A line about one network, above the picker's rows: `template`'s
+/// `{{network}}` filled with its name, and the chain's mark beside it.
+fn chain_notice(chain_id: u32, template: &str) -> (u32, u32, SharedString, SharedString) {
+    let name = crate::executor::custom_tokens::network_name(chain_id);
+    (
+        chain_id,
+        crate::settings::model::chain_tint(u64::from(chain_id)).unwrap_or(0x8A_8F_98),
+        SharedString::from(crate::settings::model::lettermark(&name)),
+        SharedString::from(crate::wallet::fill(template, "network", &name)),
+    )
+}
+
+/// Issue #332: the picker's "To" line — the recipient the core already holds,
+/// worded as the confirm page words it, so the person sees whom they are
+/// paying while they choose what. Nobody held, no line; artwork only for a
+/// real address.
+fn pick_recipient(i: &SendInputs<'_>) -> Option<FactRow> {
+    let address = i.send.recipient.trim();
+    if address.is_empty() {
+        return None;
+    }
+    let name = i
+        .send
+        .recipient_identity
+        .as_ref()
+        .and_then(|identity| identity.name.clone());
+    Some(FactRow {
+        label: i.s.to_label.clone(),
+        mono: name.is_none(),
+        value: name.unwrap_or_else(|| shorten(address)).into(),
+        lead: if crate::flows::eip681::is_hex_address(address) {
+            FactLead::Identicon(address.to_owned().into())
+        } else {
+            FactLead::None
+        },
+        copy: None,
+        note: None,
+    })
 }
 
 /// DSD1L — which token to send, in one of the picker's two modes.
@@ -1467,6 +1515,11 @@ pub fn narrow_send_tokens(view: &mut SendView, chain: Option<u32>, class: SendCl
 pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> SendPick {
     let s = i.s;
     let mut pick = SendPick {
+        recipient: pick_recipient(i),
+        network_notice: i
+            .send
+            .request_chain_id
+            .map(|chain_id| chain_notice(chain_id, &s.share_card_note)),
         selection: None,
         lock_notice: i
             .send
@@ -1518,19 +1571,7 @@ pub fn send_pick_with(i: &SendInputs<'_>, sweeping: bool, class: SendClass) -> S
             .map(|token| chain.is_some_and(|id| token.chain_id != id))
             .collect(),
         select_all: s.select_all_valuable.clone(),
-        notice: chain.map(|chain_id| {
-            let name = crate::executor::custom_tokens::network_name(chain_id);
-            (
-                chain_id,
-                crate::settings::model::chain_tint(u64::from(chain_id)).unwrap_or(0x8A_8F_98),
-                SharedString::from(crate::settings::model::lettermark(&name)),
-                SharedString::from(crate::wallet::fill(
-                    &s.multi_send_chain_notice,
-                    "network",
-                    &name,
-                )),
-            )
-        }),
+        notice: chain.map(|chain_id| chain_notice(chain_id, &s.multi_send_chain_notice)),
     });
     if !picked.is_empty() {
         pick.cta_accent = true;
@@ -1630,6 +1671,94 @@ mod sweep_tests {
             let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::Gas);
             let lit: Vec<bool> = pick.filters.iter().map(|chip| chip.selected).collect();
             assert_eq!(lit, [false, false, true, false]);
+        });
+    }
+
+    /// Issue #332: a code scanned from the home lands on the picker with the
+    /// address it read, and the picker said nothing of it. It says whom the
+    /// money is for now — as the confirm words it — and nothing when nobody
+    /// is held.
+    #[test]
+    fn the_picker_says_whom_the_money_is_for() {
+        const PAYEE: &str = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141";
+        crate::executor::storage::tests::with_temp_state("send-pick-recipient", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let mut view = view_with(vec![token(1, "ETH", None)], Vec::new(), None);
+
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(pick.recipient.is_none(), "nobody held, no line");
+
+            view.recipient = PAYEE.to_owned();
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let line = pick
+                .recipient
+                .unwrap_or_else(|| unreachable!("the scan said nothing"));
+            assert_eq!(line.label, s.to_label);
+            assert_eq!(line.value.as_ref(), shorten(PAYEE));
+            assert!(line.mono);
+            assert!(matches!(line.lead, FactLead::Identicon(ref seed) if seed.as_ref() == PAYEE));
+
+            // The sweep's picker is about the same person; a resolved name
+            // is what the confirm shows too.
+            view.recipient_identity = Some(vela_core::app::send::SendRecipientIdentity {
+                name: Some("alice.eth".to_owned()),
+                source: None,
+            });
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), true, SendClass::All);
+            let line = pick
+                .recipient
+                .unwrap_or_else(|| unreachable!("the sweep lost them"));
+            assert_eq!(line.value.as_ref(), "alice.eth");
+            assert!(!line.mono);
+
+            // Text that is not an address is shown as read, with no artwork.
+            view.recipient = "hello".to_owned();
+            view.recipient_identity = None;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let line = pick.recipient.unwrap_or_else(|| unreachable!("held"));
+            assert!(matches!(line.lead, FactLead::None));
+        });
+    }
+
+    /// Issue #312: a code that named a network. The core has already narrowed
+    /// the list to it; the picker says which network, and the sidebar's
+    /// filter left on another one does not hide the payer's holdings there.
+    #[test]
+    fn the_picker_says_which_network_a_code_named() {
+        crate::executor::storage::tests::with_temp_state("send-pick-network", || {
+            let s = FlowStrings::resolve(&crate::loc::Loc::from_env());
+            let wallet = crate::wallet::WalletStrings::resolve(&crate::loc::Loc::from_env());
+            let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+            let mut view = view_with(vec![token(56, "BNB", None)], Vec::new(), None);
+            view.request_chain_id = Some(56);
+
+            let mut narrowed = view.clone();
+            narrow_send_tokens(&mut narrowed, Some(100), SendClass::All);
+            assert_eq!(
+                narrowed.tokens.len(),
+                1,
+                "the sidebar's Gnosis hid BNB Chain"
+            );
+
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            let (chain_id, _, _, text) = pick
+                .network_notice
+                .unwrap_or_else(|| unreachable!("the named network went unsaid"));
+            assert_eq!(chain_id, 56);
+            let name = crate::executor::custom_tokens::network_name(56);
+            assert_eq!(
+                text.as_ref(),
+                crate::wallet::fill(&s.share_card_note, "network", &name)
+            );
+
+            view.request_chain_id = None;
+            let pick = send_pick_with(&inputs(&view, &fee, &s, &wallet), false, SendClass::All);
+            assert!(
+                pick.network_notice.is_none(),
+                "no network named, nothing said"
+            );
         });
     }
 
@@ -3618,7 +3747,13 @@ pub fn batch_import(view: &BatchView, symbol: &str, s: &FlowStrings) -> BatchImp
             Some(SendNotice {
                 dismiss: None,
                 title: Some(s.batch_import_failed_title.clone()),
-                body: s.batch_import_failed_body.clone(),
+                // 087: a legacy code page says how to save the file, not
+                // "use a CSV" — which it is.
+                body: if view.file_failure == Some(BatchFileFailure::UnsupportedEncoding) {
+                    s.batch_import_failed_encoding.clone()
+                } else {
+                    s.batch_import_failed_body.clone()
+                },
                 detail: None,
                 action: None,
                 error: true,

@@ -286,7 +286,12 @@
 	>
 		<div class="methodsSheet">
 			<h2 class="methodsTitle">{strings('onboarding.login.header')}</h2>
-			<AddMethodPicker open={true} {strings} onPick={(method) => void signIn(method)} />
+			<AddMethodPicker
+				open={true}
+				chooser="sign_in"
+				{strings}
+				onPick={(method) => void signIn(method)}
+			/>
 		</div>
 	</BottomSheet>
 {/if}

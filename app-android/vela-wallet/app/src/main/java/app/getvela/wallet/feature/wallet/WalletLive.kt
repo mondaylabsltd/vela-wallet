@@ -96,7 +96,11 @@ object WalletLive {
                     // A network filtered down to nothing reads as the empty
                     // state, not as a list still loading or a blank one.
                     chainFilter != null && view.tokens.isNotEmpty() -> SectionMode.Empty
-                    view.holdings_loading -> SectionMode.Loading
+                    // "Nothing here" is a claim: not while the first read is
+                    // out, and not while the balance cannot be read at all —
+                    // the web's `assetsMode`, the desktop's and the iPhone's
+                    // (087 F03).
+                    view.holdings_loading || view.balance_unknown -> SectionMode.Loading
                     else -> SectionMode.Empty
                 },
             ),
@@ -213,12 +217,14 @@ object WalletLive {
 
     /**
      * Spec 082 RG2: a row whose record is not confirmed says so first —
-     * "Pending · " or "Failed · " — in the detail sheet's words.
+     * "Pending · ", "Failed · " or, for one nothing will settle (087 F04),
+     * "Unknown · " — in the detail sheet's words.
      */
     private fun statusLead(item: FeedItem, strings: VelaStrings): String = when (item.status) {
         FeedTxStatus.Confirmed -> ""
         FeedTxStatus.Pending -> strings.t(I18nKeys.Wallet.ROW_PENDING) + " · "
         FeedTxStatus.Failed -> strings.t(I18nKeys.Wallet.ROW_FAILED) + " · "
+        FeedTxStatus.Unknown -> strings.t(I18nKeys.Wallet.ROW_UNKNOWN) + " · "
     }
 
     /** A dApp's row names the site that asked, else the recipient, else the chain (RG2). */

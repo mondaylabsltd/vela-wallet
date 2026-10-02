@@ -92,6 +92,24 @@ describe('the side panel is the wallet', () => {
 	});
 });
 
+describe('every surface picks its locale by one rule (issue 317)', () => {
+	const worker = readFileSync(join(ROOT, 'extension/background.js'), 'utf8');
+	const panel = readFileSync(join(ROOT, 'extension/panel.js'), 'utf8');
+	const door = readFileSync(join(ROOT, 'extension/open.js'), 'utf8');
+
+	it('the worker opens no locale page itself — it cannot read the language a person chose', () => {
+		expect(worker).not.toMatch(/requestPage\(|walletPage\(|getUILanguage|negotiate\(/);
+		expect(worker).toMatch(/openDoor\(record\.rid\)/);
+		expect(worker).toMatch(/openDoor\(\)/);
+	});
+
+	it('both doorways ask the same rule, with the pinned language', () => {
+		for (const script of [panel, door]) {
+			expect(script).toMatch(/surfaceLocale\(pinnedLanguage\(\), chrome\.i18n/);
+		}
+	});
+});
+
 describe('the panel and the worker spell their shared names alike (spec 082 §13)', () => {
 	// The app bundle must not import the worker's modules, so each name the two
 	// sides share is declared twice — and pinned together here, so a rename

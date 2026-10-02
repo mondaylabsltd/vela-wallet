@@ -27,7 +27,7 @@
 	 */
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import type { AddBlocked } from '$lib/onboarding/generated/AddBlocked';
-	import { methodCopy } from '$lib/onboarding/core/copy';
+	import { methodCopy, type KeyChooser } from '$lib/onboarding/core/copy';
 	import { methodGlyph } from '$lib/onboarding/passkey-icons';
 	import PasskeyMethodIcon from '$lib/ui/onboarding/PasskeyMethodIcon.svelte';
 
@@ -38,9 +38,14 @@
 		blocked?: AddBlocked | null;
 		strings: (key: string, params?: Record<string, string | number>) => string;
 		onPick: (method: KeyMethod) => void;
+		/**
+		 * Creating a key, or finding one (087 F02): the sign-in sheet's phone
+		 * row scans — it creates nothing.
+		 */
+		chooser?: KeyChooser;
 	}
 
-	let { open, allowed, blocked = null, strings, onPick }: Props = $props();
+	let { open, allowed, blocked = null, strings, onPick, chooser = 'create' }: Props = $props();
 
 	const METHODS: KeyMethod[] = ['platform', 'hybrid', 'security_key'];
 
@@ -52,9 +57,7 @@
 	 * core, and a wallet whose only key was minted on a page could otherwise be
 	 * created from a browser that can never sign with it again.
 	 */
-	const offered: KeyMethod[] = $derived(
-		(allowed ?? METHODS).filter((m) => m !== 'trusted_signer')
-	);
+	const offered: KeyMethod[] = $derived((allowed ?? METHODS).filter((m) => m !== 'trusted_signer'));
 
 	/**
 	 * What this wallet's keys belong to, and — when the configured Trusted Signer
@@ -87,7 +90,7 @@
 {#if open}
 	<ul class="methods">
 		{#each METHODS as method (method)}
-			{@const copy = methodCopy(method)}
+			{@const copy = methodCopy(method, chooser)}
 			{@const can = offered.includes(method)}
 			<li>
 				<button

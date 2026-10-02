@@ -52,6 +52,11 @@ export interface WalletMessages {
 		 */
 		pending: string;
 		failed: string;
+		/**
+		 * 087 F04: a pending record nothing will settle (`FeedTxStatus`
+		 * `unknown`) — "Unknown · <site>", never "Failed": it may have been sent.
+		 */
+		unknown: string;
 		/** Spec 082 RG5: the home's empty line under a chain filter (`home_empty_key`). */
 		emptyTitleNetwork: string;
 	};
@@ -161,6 +166,8 @@ export const WALLET_KEYS = [
 	'home.emptySubtitle',
 	'componentsTx.detail.statusPending',
 	'componentsTx.detail.statusFailed',
+	// 087 F04: a pending record nothing will settle.
+	'componentsUi.signing.intentUnknown',
 	'assets.emptyTitle',
 	'assets.emptySubtext',
 	'assets.rpcUnavailableSingle',

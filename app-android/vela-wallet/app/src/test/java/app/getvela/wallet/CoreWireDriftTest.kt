@@ -1105,6 +1105,10 @@ class CoreWireDriftTest {
         assertVariantFields(BatchEvent.serializer(), "BatchImportEvent")
         assertEquals(listOf("fiat", "token"), BatchUnit.serializer().descriptor.elementNames.toList())
         assertEquals(listOf("loading", "ok", "failed"), BatchRateStatus.serializer().descriptor.elementNames.toList())
+        assertEquals(
+            listOf("unreadable", "unsupported_encoding"),
+            app.getvela.wallet.feature.send.core.BatchFileFailure.serializer().descriptor.elementNames.toList(),
+        )
     }
 
     @Test

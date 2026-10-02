@@ -59,6 +59,7 @@ pub mod fee_speed;
 pub mod fee_tier_pref;
 pub mod login;
 pub mod manage_tokens;
+pub mod method_words;
 pub mod money;
 pub mod name_verify;
 pub mod net_health;

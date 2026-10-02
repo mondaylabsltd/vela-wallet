@@ -391,6 +391,11 @@ struct SendCtaModel {
 /// SD1 / SD1b — pick the token, or several of them.
 struct SendPickModel {
     let header: FlowHeaderModel
+    /// Issue #332: whom the money is for, when the core already holds a
+    /// recipient — a code scanned from the home, a contact handed over. The
+    /// picker is where the person chooses WHAT to send; without this line a
+    /// scan that worked looked exactly like one that had done nothing.
+    var recipient: FactRowModel?
     let searchPlaceholder: String
     let filters: [FilterChipModel]
     /// SD1b: the chain lock, once the first token pins the network.
@@ -398,6 +403,10 @@ struct SendPickModel {
     let rows: [AssetRowModel]
     var selection: SendSelectionModel?
     let cta: SendCtaModel
+    /// What an empty list says once the core has looked — nothing held (on
+    /// the network a scanned code named, issue #312), or nothing matching.
+    /// The web's and Android's line since issue 209.
+    var empty: String?
 }
 
 /// The token card at the top of the send form.
@@ -407,6 +416,9 @@ struct SendTokenCardModel {
     /// "Ethereum · Balance 53.4836".
     let detail: String
     var max: String?
+    /// Issue #326: present when tapping the card goes back to the asset
+    /// picker (the core's `can_change_token`), carrying its accessible name.
+    var change: String?
 }
 
 /// SD2b's split row: who, how much, and a way to drop them.

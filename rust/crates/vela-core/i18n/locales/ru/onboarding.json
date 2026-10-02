@@ -174,7 +174,7 @@
       "methodHybridBody": "Отсканируйте код и создайте на устройстве рядом",
       "methodHybridTitle": "Телефон или планшет",
       "methodHybridUnavailable": "Скоро",
-      "methodPlatformBody": "Touch ID или Windows Hello",
+      "methodPlatformBody": "Отпечаток, лицо или блокировка экрана",
       "methodPlatformTitle": "Это устройство",
       "methodSecurityKeyBody": "Вставьте и коснитесь",
       "methodSecurityKeyTitle": "USB-ключ безопасности",

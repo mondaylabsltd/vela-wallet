@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { ClearSigningCore } from '$lib/core/client';
 import type { ClearSigningView } from '$lib/core/generated/ClearSigningView';
 import { toClearLocale } from './clear-types';
-import { txParams } from './tx-params';
+import { txKickoff, txParams } from './tx-params';
 
 const TO = '0x7687C0bC1dD2B9d7e9a5b1b4e1B0cBd8e0C3D141';
 
@@ -54,7 +54,27 @@ describe('the sheet reads a transaction as the submit path sends it (RC6)', () =
 		expect(surfaceFor(params).surface).toBe('blind_transaction');
 	});
 
-	it('a batch is described by its first leg', () => {
+	it('an eth_sendTransaction is its own top-level call — never a stray `calls` beside it', () => {
+		// The submit path sends `params[0]`'s own to/data/value. A harmless
+		// `calls` leg next to a malicious top-level call once had the harmless
+		// one described while the malicious one was signed (083 review).
+		const params = JSON.stringify([
+			{
+				to: TO,
+				data: '0xdeadbeef',
+				calls: [{ to: TO, value: '0x1', data: null }]
+			}
+		]);
+		expect(txParams(params)).toEqual({ to: TO, data: '0xdeadbeef', value: null });
+		const locale = toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' });
+		expect(txKickoff('eth_sendTransaction', params, 100, locale)).toMatchObject({
+			type: 'resolve_transaction',
+			to: TO,
+			data: '0xdeadbeef'
+		});
+	});
+
+	it('a batch goes to the core whole, so every call of it is read (089 S1)', () => {
 		const params = JSON.stringify([
 			{
 				calls: [
@@ -63,6 +83,23 @@ describe('the sheet reads a transaction as the submit path sends it (RC6)', () =
 				]
 			}
 		]);
-		expect(txParams(params)).toEqual({ to: TO, data: null, value: '0x1' });
+		const locale = toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' });
+		expect(txKickoff('wallet_sendCalls', params, 100, locale)).toEqual({
+			type: 'resolve_batch',
+			params_json: params,
+			chain_id: 100,
+			locale
+		});
+		const core = new ClearSigningCore();
+		try {
+			core.dispatch(JSON.stringify(txKickoff('wallet_sendCalls', params, 100, locale)));
+			const view = JSON.parse(core.view()) as ClearSigningView;
+			// Call 1 is a plain send and concluded at once; call 2 is still read,
+			// so the sheet waits — it never shows call 1 as the request.
+			expect(view.surface).toBe('loading');
+			expect(view.plain_send).toBeNull();
+		} finally {
+			core.free();
+		}
 	});
 });

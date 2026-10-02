@@ -83,6 +83,24 @@ class CoreDriver(
     /** Unlimited, so `dispatch` never suspends and never drops: it is called from click handlers. */
     private val inbox = Channel<Turn>(Channel.UNLIMITED)
 
+    /**
+     * Held while an event is numbered AND queued, so an event's number is its
+     * place in the inbox: two threads dispatching at once cannot queue 6 ahead
+     * of 5.
+     */
+    private val numbering = Any()
+    private var dispatched = 0L
+
+    /**
+     * How many events the core has applied. Written by the consumer alone, as it
+     * takes each event and BEFORE that event's view is committed — so a view
+     * committed while this reads `n` is the one event `n` produced, or a later
+     * one. See [dispatchNumbered].
+     */
+    @Volatile
+    var eventsApplied = 0L
+        private set
+
     // Touched only by the consumer below — which is what lets them be plain maps.
     private val running = mutableMapOf<ULong, Job>()
     /** The operation behind each in-flight effect, so a refused answer can be re-answered as its failure (spec 048). */
@@ -101,8 +119,11 @@ class CoreDriver(
                 when (turn) {
                     Turn.Start ->
                         runCatching { JSONObject(bridge.view()) }.onSuccess(::commit).onFailure(onFault)
-                    is Turn.Event ->
+                    is Turn.Event -> {
+                        // Single writer (this loop), so the increment is safe.
+                        eventsApplied += 1
                         runCatching { JSONObject(bridge.dispatch(turn.json)) }.onSuccess(::apply).onFailure(onFault)
+                    }
                     is Turn.Answer -> resolve(turn.id, turn.resultJson)
                 }
             }
@@ -116,7 +137,23 @@ class CoreDriver(
 
     /** Send one event, as the JSON the core's `Event` deserializes from. */
     fun dispatch(eventJson: String) {
+        dispatchNumbered(eventJson)
+    }
+
+    /**
+     * [dispatch], and say which event this is: the core has applied it once
+     * [eventsApplied] reaches the number returned.
+     *
+     * For a caller that will wait for the core's answer to THIS event. Counting
+     * views from the moment of the dispatch is not that: the inbox is first in,
+     * first applied, so answers already queued behind the consumer — the last
+     * question's — are applied, and committed, after the dispatch but BEFORE the
+     * event. Their views are not about it (spec 069's quote wait, the 2026-10-01 CI flake).
+     */
+    fun dispatchNumbered(eventJson: String): Long = synchronized(numbering) {
+        dispatched += 1
         inbox.trySend(Turn.Event(eventJson))
+        dispatched
     }
 
     /**

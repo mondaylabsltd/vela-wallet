@@ -175,7 +175,10 @@ fun SigningSheetContent(
         // the ones nobody has drawn yet, come out of one code path.
         model.blocks.forEach { block ->
             when (block) {
-                is SigningBlock.Intent -> SigningIntent(block.text, block.tone)
+                // Issue #314: the wallet's own request has no figure to lead
+                // with — its intent IS the outcome, so it is the sheet's
+                // headline rather than the eyebrow over a hero.
+                is SigningBlock.Intent -> SigningIntent(block.text, block.tone, lead = model.dappOwn)
                 is SigningBlock.Amount ->
                     SigningAmount(block.line, card = block.card, note = block.note)
 

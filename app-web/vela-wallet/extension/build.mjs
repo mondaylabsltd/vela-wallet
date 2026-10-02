@@ -60,7 +60,7 @@ const APP_DIR = 'app';
  * `vela_core::app::dapp_rpc::provider_script`.
  */
 const PROVIDER = join(HERE, '..', '..', '..', 'rust', 'crates', 'vela-core', 'provider', 'inpage.js');
-const ENTRIES = ['inpage.js', 'content.js', 'background.js', 'panel.js'];
+const ENTRIES = ['inpage.js', 'content.js', 'background.js', 'panel.js', 'open.js'];
 const SOURCES = { 'inpage.js': PROVIDER };
 /** What must NOT be copied verbatim: build inputs and the bundler's own sources. */
 const SKIP_COPY = new Set(['dist', 'build.mjs', 'README.md', 'release-notes.md', 'lib', ...ENTRIES]);

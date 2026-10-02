@@ -198,6 +198,15 @@ export type SignRequestSessionOptions = SessionOptions<SignView> & {
 };
 
 /**
+ * The core's `CHAIN_MISMATCH_MESSAGE` (089, `sign_request.rs`): a request that
+ * names a chain other than the site's is refused -32602 with this detail,
+ * before any sheet. Named in the page's message — the developer's one clue
+ * that the site must switch chains first. Pinned to the real core in
+ * `chain-mismatch.test.ts`.
+ */
+export const CHAIN_MISMATCH_MESSAGE = 'chainId does not match the connected chain';
+
+/**
  * The words for the core's semantic error vocabulary — the core owns the code
  * and the kind, the shell owns the copy (that is the stated contract on
  * `SignErrorKind`). Every string here is the one the TypeScript provider
@@ -223,6 +232,7 @@ export function signErrorMessage(notice: SignErrorNotice): string {
 		case 'invalid_params':
 			// The chain-switch refusal carries no detail; the approve-path ones do.
 			if (detail === undefined) return 'Invalid params: missing chainId';
+			if (detail === CHAIN_MISMATCH_MESSAGE) return `Invalid params: ${CHAIN_MISMATCH_MESSAGE}`;
 			return detail === 'no calls provided' ? 'No calls provided' : 'Invalid params';
 		case 'unsupported_capability':
 			return `Unsupported non-optional capabilities: ${detail ?? ''}`;

@@ -55,6 +55,7 @@
     "importDoneInvalid": "주소가 잘못된 {{invalid}}개는 건너뛰었습니다.",
     "importFailTitle": "가져오기 실패",
     "importFailBody": "JSON 또는 CSV 연락처 파일을 사용하세요.",
+    "importFailEncoding": "파일을 UTF-8(Excel: CSV UTF-8)로 저장한 뒤 다시 시도하세요.",
     "manage": "관리",
     "sectionContacts": "연락처",
     "countPeople": "{{count}}명",
