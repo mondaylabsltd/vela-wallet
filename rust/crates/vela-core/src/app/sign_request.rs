@@ -131,6 +131,16 @@ pub const CODE_INVALID_PARAMS: i32 = -32602;
 /// error takes (`dapp-connection.tsx:886, 943`).
 pub const CODE_INTERNAL: i32 = -32603;
 
+/// What a page is told when its request names a chain other than the one it
+/// would be signed on (089) — a transaction's or a batch's `chainId`, a typed
+/// document's domain `chainId`. Answered [`CODE_INVALID_PARAMS`] with
+/// [`SignErrorKind::InvalidParams`]: the params are wrong for this
+/// connection, which is how MetaMask answers the same request; never 4902
+/// (the chain may well be supported) and never 4901, which says the provider
+/// lost its connection rather than that the request was refused. For the
+/// dApp's developer — EIP-1193 messages are not UI.
+pub const CHAIN_MISMATCH_MESSAGE: &str = "chainId does not match the connected chain";
+
 /// How long a dApp on the phones and the web waits for the answer to an
 /// on-chain request, measured from the approve tap (spec 082 RA12) — the
 /// whole budget, so a slow submit is not followed by a second full wait. The
@@ -925,20 +935,41 @@ fn chain_from_value(v: &Value) -> Option<u32> {
     }
 }
 
-/// `pickTypedDataParam` + `extractRequestChainId` (`use-dapp-signing.ts:124-156`):
-/// the chain a request embeds, or `None`.
-pub fn extract_request_chain_id(method: &str, params: &Value) -> Option<u32> {
+/// The `chainId` a request writes, verbatim — `params[0].chainId` of a
+/// transaction or a batch, the typed document's domain `chainId` — or `None`
+/// when it writes none (absent, or `null`). Raw, so a caller can tell a
+/// request that names no chain from one that names something no chain id
+/// reads as.
+fn embedded_chain_value(method: &str, params: &Value) -> Option<Value> {
     let arr = params.as_array()?;
-    if crate::typed_data_request::looks_like_typed_data(method) {
+    let value = if crate::typed_data_request::looks_like_typed_data(method) {
         // The one document the request is read as (audit 2026-10-01) — a
         // request that is not one carries no chain, and is refused at arrival.
         let read = crate::typed_data_request::canonical(method, params).ok()?;
-        chain_from_value(read.document.get("domain")?.get("chainId")?)
+        read.document.get("domain")?.get("chainId")?.clone()
     } else if method == "eth_sendTransaction" || method == "wallet_sendCalls" {
-        chain_from_value(arr.first()?.get("chainId")?)
+        arr.first()?.get("chainId")?.clone()
     } else {
-        None
-    }
+        return None;
+    };
+    (!value.is_null()).then_some(value)
+}
+
+/// `pickTypedDataParam` + `extractRequestChainId` (`use-dapp-signing.ts:124-156`):
+/// the chain a request embeds, or `None`.
+pub fn extract_request_chain_id(method: &str, params: &Value) -> Option<u32> {
+    chain_from_value(&embedded_chain_value(method, params)?)
+}
+
+/// Whether a request names a chain other than `chain` (089): it writes a
+/// `chainId` ([`extract_request_chain_id`]'s places) that is not `chain`, or
+/// that does not read as a chain at all. A request that names none is on
+/// `chain`. Such a request is refused [`CODE_INVALID_PARAMS`]
+/// ([`CHAIN_MISMATCH_MESSAGE`]) — never signed or sent on `chain`, where
+/// calldata and addresses prepared for another chain mean something else.
+pub fn request_names_other_chain(method: &str, params: &Value, chain: u32) -> bool {
+    embedded_chain_value(method, params)
+        .is_some_and(|value| chain_from_value(&value) != Some(chain))
 }
 
 /// `assertNoRequiredCapabilities` (`use-dapp-signing.ts:66-84`): every
@@ -1993,6 +2024,26 @@ fn on_request_arrived(model: &mut Model, arrival: Arrival) -> Command<SignEffect
             );
             return ops_and_render(model, vec![op]);
         }
+        // 089: the stamped chain is the SITE's chain in the wallet; a request
+        // that names another one was prepared for that other chain. It is
+        // refused before any sheet — never shown and sent on this one (the
+        // in-app path below may switch, because there the wallet's chain IS
+        // the site's; a stamp cannot be switched from here). Mirrors
+        // `dapp_session::assert_request_chain_context` and MetaMask.
+        let names_other = serde_json::from_str::<Value>(&arrival.params_json)
+            .is_ok_and(|params| request_names_other_chain(&arrival.method, &params, cid));
+        if names_other {
+            let op = respond_op(
+                &arrival.transport_id,
+                &arrival.id,
+                err_payload(
+                    CODE_INVALID_PARAMS,
+                    SignErrorKind::InvalidParams,
+                    Some(CHAIN_MISMATCH_MESSAGE.to_owned()),
+                ),
+            );
+            return ops_and_render(model, vec![op]);
+        }
     } else {
         // Ordinary request — auto-switch the global chain to an embedded
         // request chainId (`dapp-connection.tsx:337-349`). A malformed params
@@ -2282,6 +2333,17 @@ fn approve_with(
     let chain_id = pending
         .per_request_chain
         .unwrap_or_else(|| model.global_chain_id());
+
+    // 089, at the chokepoint: what is signed names no chain but the one it is
+    // signed on — whatever the sheet rewrote the params to, on either path.
+    if request_names_other_chain(&pending.method, &parsed, chain_id) {
+        return fail_pending(
+            model,
+            CODE_INVALID_PARAMS,
+            SignErrorKind::InvalidParams,
+            Some(CHAIN_MISMATCH_MESSAGE.to_owned()),
+        );
+    }
 
     if pending.method == "wallet_sendCalls" {
         let payload = parsed.get(0).cloned().unwrap_or(Value::Null);
