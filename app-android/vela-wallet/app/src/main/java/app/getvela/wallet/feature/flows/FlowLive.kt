@@ -84,6 +84,20 @@ object FlowLive {
             identiconSeed = address,
             lines = addressLines(address),
         ),
+        // Spec 090: the code says what the CORE says — the bare address, or
+        // with "include network" on, `ethereum:<address>@<chain>` for the asset
+        // this sheet is drawn from. Before the machine has an answer, the
+        // address, which every wallet reads.
+        code = request.qr_value.ifEmpty { address },
+        network = if (request.network_switch && strings != null) {
+            NetworkSwitchModel(
+                label = strings.t(I18nKeys.Flows.RECEIVE_INCLUDE_NETWORK),
+                isOn = request.include_network,
+                hint = if (request.network_hint) strings.t(I18nKeys.Flows.RECEIVE_INCLUDE_NETWORK_HINT) else null,
+            )
+        } else {
+            null
+        },
     )
 
     /**
@@ -110,8 +124,11 @@ object FlowLive {
         strings: VelaStrings,
         chainId: Int? = null,
         nativeSymbol: String? = null,
+        /** Spec 090: the code the screen shows (the core's `qr_value`); blank = the address. */
+        code: String = "",
     ): ShareCardModel = fallback.copy(
-        code = address,
+        // Exactly what the screen's code says (spec 090).
+        code = code.ifEmpty { address },
         chainLogoUrl = chainId?.let { Marks.chainLogoUrl(it) },
         networkMark = chainId?.let { WalletLive.chainMark(it, nativeSymbol ?: fallback.networkMark.ticker) } ?: fallback.networkMark,
         name = name.ifBlank { shortAddress(address) },
