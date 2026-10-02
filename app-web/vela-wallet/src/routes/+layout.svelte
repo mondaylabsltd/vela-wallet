@@ -26,6 +26,7 @@
 	import { isPanelDocument, panelNeedsWallet, panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { inExtension } from '$lib/dapp/transport';
 	import { session } from '$lib/session/core/session.svelte';
+	import { localeOfPath } from '$lib/i18n/locales';
 
 	let { children } = $props();
 
@@ -50,9 +51,15 @@
 	 */
 	afterNavigate(() => normalizePackagedUrl());
 
-	const parallelHref = $derived(
-		resolve('/[locale]/parallel', { locale: page.params.locale ?? 'en' })
-	);
+	/**
+	 * The locale this document is in — from its path, not `page.params`, which
+	 * a page the packaged extension loads fresh does not have yet: a Japanese
+	 * side panel read 'en' there and was sent to the ENGLISH wallet the moment
+	 * a request was owed, its sheet with it (issue 317, `localeOfPath`).
+	 */
+	const locale = $derived(page.params.locale ?? localeOfPath(page.url.pathname) ?? 'en');
+
+	const parallelHref = $derived(resolve('/[locale]/parallel', { locale }));
 
 	// Spec 012. Client-only by construction: `launching` starts false, so the
 	// prerendered HTML contains no overlay and the page is complete without it
@@ -91,7 +98,7 @@
 	 * that was not reactive first, return while it was null, and never run
 	 * again — a request that arrived on Settings waited for a tap).
 	 */
-	const walletHref = $derived(resolve('/[locale]/wallet', { locale: page.params.locale ?? 'en' }));
+	const walletHref = $derived(resolve('/[locale]/wallet', { locale }));
 	$effect(() => {
 		const needed = panelNeedsWallet({
 			caller: panelSurface.caller,
@@ -105,12 +112,14 @@
 	});
 
 	/**
-	 * Spec 082 RJ20 (G58): in the extension, a connected site follows the
-	 * active account from EVERY screen — a switch made in Settings (切换账户)
-	 * reached no site while this lived in the wallet page — and grants written
-	 * before 082 get the core's EIP-55 spelling at boot, whichever screen the
-	 * wallet opens on. Both are the dApp channel's code, so they are loaded
-	 * only inside the extension: Welcome never carries them (`budgets.e2e.ts`).
+	 * Spec 082 RJ20 (G58): in the extension, the worker's snapshot and every
+	 * connected site follow the signed-in account from EVERY screen — a switch
+	 * made in Settings (切换账户) reached no site while this lived in the
+	 * wallet page — and from the first session this document settles on (spec
+	 * 086, issue 315). Grants written before 082 get the core's EIP-55
+	 * spelling at boot, whichever screen the wallet opens on. Both are the dApp
+	 * channel's code, so they are loaded only inside the extension: Welcome
+	 * never carries them (`budgets.e2e.ts`).
 	 */
 	onMount(() => {
 		if (!inExtension()) return;
@@ -121,13 +130,58 @@
 			void follow.normalizeGrantSpelling();
 			stop = $effect.root(() => {
 				$effect(() => {
-					void follow.sessionFollower.note(session.view);
+					void follow.sessionFollower.note(session.view, { locale: page.params.locale });
 				});
 			});
 		});
 		return () => {
 			gone = true;
 			stop?.();
+		};
+	});
+
+	/**
+	 * Issue 317: the side panel opens in the person's language (its doorway,
+	 * `panel.js`), but a panel already OPEN when the language is changed in the
+	 * wallet tab kept drawing every sheet in the old one. It goes back through
+	 * its doorway — once it owes nothing and shows nothing over the wallet: a
+	 * sheet a person is reading is never redrawn under them, and a request is
+	 * never dropped for it. The rule is the doorways' own
+	 * (`extension/lib/locales.js`), loaded only by a panel that heard a write.
+	 */
+	onMount(() => {
+		if (!isPanelDocument()) return;
+		let retry: ReturnType<typeof setTimeout> | undefined;
+		const chrome = (
+			globalThis as {
+				chrome?: {
+					i18n?: { getUILanguage?: () => string };
+					runtime?: { getURL?: (path: string) => string };
+				};
+			}
+		).chrome;
+		const follow = async (key: string | null) => {
+			const doors = await import('../../extension/lib/locales.js');
+			if (key !== null && key !== doors.LANGUAGE_KEY) return;
+			clearTimeout(retry);
+			const step = doors.panelLanguageStep({
+				pinned: doors.pinnedLanguage(),
+				uiLanguage: chrome?.i18n?.getUILanguage?.(),
+				current: locale,
+				busy:
+					panelSurface.current !== null ||
+					document.querySelector('[role="dialog"], [data-testid="dapp-receipt"]') !== null
+			});
+			if (step === 'wait') retry = setTimeout(() => void follow(null), 2000);
+			else if (step === 'reopen' && chrome?.runtime?.getURL) {
+				location.replace(chrome.runtime.getURL(doors.PANEL_DOOR));
+			}
+		};
+		const heard = (event: StorageEvent) => void follow(event.key);
+		window.addEventListener('storage', heard);
+		return () => {
+			window.removeEventListener('storage', heard);
+			clearTimeout(retry);
 		};
 	});
 

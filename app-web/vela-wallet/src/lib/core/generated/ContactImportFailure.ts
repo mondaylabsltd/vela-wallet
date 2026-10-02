@@ -9,4 +9,4 @@
  * from an empty address book, and the file's mistake would be erased before
  * anyone saw it.
  */
-export type ContactImportFailure = { "type": "malformed_json" } | { "type": "no_address_column" } | { "type": "empty" } | { "type": "unknown_group" };
+export type ContactImportFailure = { "type": "malformed_json" } | { "type": "no_address_column" } | { "type": "empty" } | { "type": "unknown_group" } | { "type": "unsupported_encoding" };

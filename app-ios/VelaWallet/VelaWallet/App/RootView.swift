@@ -696,9 +696,23 @@ struct RootView: View {
         // rather than `UiScale.factor` so the dependency is the observation,
         // not the order two statements ran in.
         .environment(\.walletTextScale, preferences.textScale.factor)
+        // The Done bar over every amount keypad (087 F28): a decimal pad has
+        // no return key, and on a phone nothing else put it away.
+        .environment(\.keyboardDone, loc.t("explore.done"))
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
         // A link, from anywhere: the scheme, a universal link, a page.
         .onOpenURL { url in openLink(url) }
+        // Spec 088 FR-004: a page another app asked to open, waiting for a yes.
+        // Dismissing is "no".
+        .sheet(item: Binding(
+            get: { browser.externalPage },
+            set: { if $0 == nil { browser.answerExternal(false) } }
+        )) { page in
+            ExternalPageSheet(loc: loc, page: page) { open in
+                if browser.answerExternal(open) { section = .explore }
+            }
+            .themed(scheme)
+        }
         // The core's verdict on a `/pay` link. Watched rather than awaited,
         // because a link can arrive before the wallet has finished opening and
         // the answer has to survive that.
@@ -800,8 +814,9 @@ struct RootView: View {
             // request this wallet can honour is 600 lines that already exist.
             paymentRequest.linkOpened(event)
         case .open(let page):
-            section = .explore
-            browser.open(page)
+            // Spec 088 FR-004: a link from outside only ASKS. The sheet shows
+            // the host the core named; nothing loads before the person says yes.
+            browser.askToOpen(page)
         case nil:
             break
         }
@@ -1036,7 +1051,16 @@ struct RootView: View {
                 .onChange(of: batch.view.rateInput) { _, value in
                     if value != batchRate { batchRate = value }
                 }
-                .onChange(of: recipientDraft) { _, value in send.setRecipient(value) }
+                // The machine's recipient, when it changed for its own reasons:
+                // a scanned code, a pick, a cleared form (issue #332). The field
+                // showed only what was typed into it, so a code scanned from the
+                // home reached the core and the form opened on an empty field —
+                // or on the last journey's typing. Every edit reaches the
+                // machine in the edit (`recipientBinding`), so a value the
+                // field just sent is already in the field.
+                .onChange(of: send.view?.recipient) { _, _ in
+                    if let live = send.view?.recipient, live != recipientDraft { recipientDraft = live }
+                }
                 // The machine's figure, when it changed for its own reasons —
                 // Max, the ⇄ swap, a cleared form. Its LIVE value, not the one
                 // this change was raised with: that one can be older than the
@@ -2071,16 +2095,17 @@ struct RootView: View {
         }
     }
 
-    /// 从文件导入 — a picked file's TEXT, straight to the core.
+    /// 从文件导入 — a picked file's BYTES, straight to the core.
     ///
-    /// The shell does not parse it. The core sniffs JSON from CSV, refuses a
-    /// bad file before any write, and applies existing-wins; a shell that
-    /// pre-parsed would be a second, disagreeing reader of the same file.
+    /// The shell does not decode or parse it. The core reads the encoding
+    /// (issue 333), sniffs JSON from CSV, refuses a bad file before any
+    /// write, and applies existing-wins; a shell that pre-decoded would be a
+    /// second, disagreeing reader of the same file.
     private func importContacts(intoGroup: String? = nil) {
         Task {
             guard let picked = await documents.pick(types: DocumentTypes.addressBook) else { return }
             contacts.importFile(
-                content: String(decoding: picked.bytes, as: UTF8.self),
+                bytes: picked.bytes,
                 filename: picked.name,
                 intoGroup: intoGroup
             )
@@ -2587,6 +2612,19 @@ struct RootView: View {
         )
     }
 
+    /// The recipient field, the amount's way: the edit reaches the machine in
+    /// the edit, and the machine's own changes come back through
+    /// `.onChange(of: send.view?.recipient)`.
+    private var recipientBinding: Binding<String> {
+        Binding(
+            get: { recipientDraft },
+            set: { value in
+                recipientDraft = value
+                send.setRecipient(value)
+            }
+        )
+    }
+
     /// Open the flow for the signed-in account. Idempotent.
     ///
     /// The account **id** is the founding credential's, and the session view
@@ -2776,7 +2814,7 @@ struct RootView: View {
                         }
                     },
                     sendAmount: sendStates.contains(state) ? amountBinding : nil,
-                    sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
+                    sendRecipient: sendStates.contains(state) ? recipientBinding : nil,
                     sendRow: splitRows(for: state),
                     sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
                     sendCtaDisabled: sendCtaDisabled(state),
@@ -2788,6 +2826,7 @@ struct RootView: View {
                     },
                     onPickCta: { sendPickCta() },
                     onMax: { send.tapMax() },
+                    onChangeToken: { send.changeToken() },
                     onDenom: { send.toggleFiatInput() },
                     // 原生 is not a second kind of token to paste an address
                     // for — a native coin arrives with its network. Android
@@ -3600,7 +3639,7 @@ struct RootView: View {
         } else if let payload = onboarding.cableQr {
             // Below touch on purpose: once the phone connects and the ceremony
             // is waiting on ITS sheet, "look at your phone" replaces the QR.
-            CableQrSheet(loc: loc, payload: payload)
+            CableQrSheet(loc: loc, payload: payload, chooser: onboarding.cableQrCreates ? .create : .signIn)
                 .themed(scheme)
         } else if let prompt = onboarding.pending {
             FlowSheet(

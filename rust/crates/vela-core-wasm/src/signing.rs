@@ -13,6 +13,15 @@ pub fn sign_in_route(account_json: &str) -> Option<String> {
     vela_core::app::sign_in_route_json(account_json)
 }
 
+/// A key-method row's words as JSON (`{title_key, line_key, line_name}`), or
+/// `null` for a wire name the core does not know (087 F01, F02). See
+/// `vela_core::app::method_words`.
+#[wasm_bindgen(js_name = keyMethodWords)]
+#[must_use]
+pub fn key_method_words(method: &str, chooser: &str, unlock: &str) -> Option<String> {
+    vela_core::app::method_words::method_words_json(method, chooser, unlock)
+}
+
 /// A `FeeFailure` from the page: its wire name (`"quote_unavailable"`), or
 /// for a failure that carries data its JSON text
 /// (`{"chain_read":{"rate_limited":true}}`, spec 082 RJ13).

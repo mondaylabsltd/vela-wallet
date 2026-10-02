@@ -66,6 +66,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -863,8 +864,11 @@ fun TokenHeaderCard(
     token: SendTokenCardModel,
     modifier: Modifier = Modifier,
     onMax: () -> Unit = {},
+    /** Issue #326: the card's own tap — back to the asset picker. */
+    onChange: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
+    val change = token.change?.takeIf { onChange != null }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -872,25 +876,51 @@ fun TokenHeaderCard(
             .padding(VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TokenIcon(mark = token.mark)
-        Spacer(modifier = Modifier.width(VelaSpacing.lg))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = token.symbol,
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.semibold,
-                fontSize = VelaTextSize.lg,
-                maxLines = 1,
-            )
-            Text(
-                text = token.detail,
-                color = colors.fgMuted,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.sm,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        // The token, and — where the core allows it — the way to another one.
+        // Max stays its own control beside it: one tap, one meaning.
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (change != null && onChange != null) {
+                        // The token is still what is read out; the action is
+                        // named as the click's label ("double tap to …").
+                        Modifier.clickable(onClickLabel = change, role = Role.Button, onClick = onChange)
+                    } else {
+                        Modifier
+                    },
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TokenIcon(mark = token.mark)
+            Spacer(modifier = Modifier.width(VelaSpacing.lg))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = token.symbol,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.semibold,
+                    fontSize = VelaTextSize.lg,
+                    maxLines = 1,
+                )
+                Text(
+                    text = token.detail,
+                    color = colors.fgMuted,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (change != null) {
+                Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                Icon(
+                    imageVector = VelaIcons.ChevronDown,
+                    contentDescription = null,
+                    tint = colors.fgMuted,
+                    modifier = Modifier.size(VelaIconSize.sm),
+                )
+            }
         }
         token.max?.let { max ->
             Spacer(modifier = Modifier.width(VelaSpacing.md))

@@ -116,6 +116,9 @@ struct FlowHost: View {
     /// apart, and the shell's own picking flag can.
     var onPickCta: (() -> Void)?
     var onMax: (() -> Void)?
+    /// Issue #326: the form's token card — back to the asset picker, the
+    /// payee kept. Only where the core offers it (`can_change_token`).
+    var onChangeToken: (() -> Void)?
     /// The ⇄ under the amount: type in the display currency instead of the
     /// token, or back. Drawn since 021 and enabled by the core whenever the
     /// token has a price, and `SendStore.toggleFiatInput()` had no caller
@@ -375,6 +378,7 @@ struct FlowHost: View {
                     onFee: { onNavigate(.feeToken) },
                     onDenom: { onDenom?() },
                     onMax: { _ in onMax?() },
+                    onChangeToken: onChangeToken,
                     onAddRecipient: {
                         if let onAddRecipient { onAddRecipient() }
                         else { onNavigate(.addRecipient) }
