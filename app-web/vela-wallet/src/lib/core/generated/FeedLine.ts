@@ -4,4 +4,4 @@ import type { FeedTxStatus } from "./FeedTxStatus";
 /**
  * One part of a row's second line (spec 093).
  */
-export type FeedLine = { "type": "status", status: FeedTxStatus, } | { "type": "to", address: string, name: string | null, } | { "type": "from", address: string, name: string | null, } | { "type": "site", site: string, } | { "type": "network", chain_id: number, };
+export type FeedLine = { "type": "status", status: FeedTxStatus, } | { "type": "to", address: string, name: string | null, } | { "type": "from", address: string, name: string | null, } | { "type": "site", site: string, } | { "type": "network", chain_id: number, } | { "type": "day", day_start_ms: number, };
