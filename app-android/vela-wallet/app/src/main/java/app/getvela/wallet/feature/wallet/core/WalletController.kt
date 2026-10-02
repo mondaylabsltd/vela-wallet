@@ -710,6 +710,18 @@ class WalletController(
         balanceHost.dispatch(BalanceEvent.FixChainResolved(chainId), BalanceEvent.serializer())
     }
 
+    /**
+     * Spec 092: the list of networks the wallet cannot reach is on screen. The
+     * core reads every chain again now and keeps re-reading while it stays
+     * open, so one that has come back leaves it (and the home's count).
+     */
+    fun unreachableListOpened() =
+        balanceHost.dispatch(BalanceEvent.UnreachableListOpened, BalanceEvent.serializer())
+
+    /** That list closed: the re-reads stop. */
+    fun unreachableListClosed() =
+        balanceHost.dispatch(BalanceEvent.UnreachableListClosed, BalanceEvent.serializer())
+
     fun refresh(force: Boolean = false, pull: Boolean = false) =
         balanceHost.dispatch(
             BalanceEvent.RefreshRequested(force = force, pull = pull),

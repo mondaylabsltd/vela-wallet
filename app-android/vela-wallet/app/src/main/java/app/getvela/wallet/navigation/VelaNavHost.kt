@@ -28,6 +28,7 @@ import app.getvela.wallet.core.platform.Clipboard
 import app.getvela.wallet.feature.wallet.components.IdenticonViewerSheet
 import app.getvela.wallet.core.identicon.LocalIdenticonViewer
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import app.getvela.wallet.core.net.NetHealth
 import app.getvela.wallet.feature.wallet.components.AccountSwitcherSheet
@@ -1415,11 +1416,12 @@ fun VelaNavHost(
                             },
                             onToggleVisibility = { wallet.togglePrivacy(); haptic(VelaHaptic.Select) },
                             onStatusClick = {
-                                // Spec 048: the status line's rescue — the RPC fix when a network failed, the per-chain detail otherwise.
-                                // The core's `banner_chain_ids` (failed MINUS rate-limited), the chains the line
-                                // just named: a rate limit heals on its own and never earns the fix sheet.
+                                // Spec 048 + 092 (F08): the status line's rescue — the list of EVERY network
+                                // the wallet cannot reach (the core's `unreachable_networks`, failed MINUS
+                                // rate-limited, each row with its own RPC fix) when any is; the per-chain
+                                // detail otherwise. It used to open the first network's fix and hide the rest.
                                 application.container.pendingSettingsOverlay.value =
-                                    if (balances.banner_chain_ids.isNotEmpty()) SettingsOverlay.RpcFix else SettingsOverlay.BalanceDetail
+                                    if (balances.unreachable_networks.isNotEmpty()) SettingsOverlay.Unreachable else SettingsOverlay.BalanceDetail
                                 navController.push(VelaDestinations.SETTINGS)
                             },
                         )
@@ -1801,8 +1803,8 @@ fun VelaNavHost(
                 val scope = rememberCoroutineScope()
                 val prefs by application.container.preferences.view.collectAsStateWithLifecycle()
                 val poolView by application.container.pool.view.collectAsStateWithLifecycle()
-                // The balance core's view: SR3's per-chain detail, and which chains are
-                // really down (`banner_chain_ids` = failed MINUS rate-limited).
+                // The balance core's view: SR3's per-chain detail, and SR6's networks that
+                // are really down (`unreachable_networks` = failed MINUS rate-limited).
                 val balanceView by application.container.wallet.balances.collectAsStateWithLifecycle()
                 // Spec 048: the network whose detail page is open (its overrides are written for it).
                 var openNetworkId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1825,6 +1827,12 @@ fun VelaNavHost(
                 var rescueChainId by remember { mutableStateOf<Long?>(null) }
                 var rpcDraft by remember { mutableStateOf<String?>(null) }
                 var rpcSaved by remember { mutableStateOf(false) }
+                // SR6 is up (spec 092), so the balance core is re-reading for it — until
+                // the sheet goes, or this route does (Back with the list open).
+                var unreachableListOpen by remember { mutableStateOf(false) }
+                DisposableEffect(Unit) {
+                    onDispose { if (unreachableListOpen) application.container.wallet.unreachableListClosed() }
+                }
                 // The row's override fields are loaded on expand, as the network page does.
                 LaunchedEffect(rescueChainId) { rescueChainId?.let { settings.expandOverride(it) } }
                 val chainNamesNow = remember(networks.networks) { networks.networks.associate { it.chain_id.toInt() to it.display_name } }
@@ -1893,6 +1901,7 @@ fun VelaNavHost(
                     m = SettingsLive.withFeedbackNotice(m, feedbackState.notice)
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
                     m = m.copy(balanceDetail = SettingsLive.balanceDetail(m.balanceDetail, balanceView, currency, chainNamesNow, strings))
+                    m = m.copy(unreachable = SettingsLive.unreachable(balanceView, currency, chainNamesNow, strings))
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, balanceView.switcher, currency, strings)
                     // Spec 048: the network detail is THIS network's, not the fixture's.
                     openNetworkId?.let { id ->
@@ -1912,11 +1921,6 @@ fun VelaNavHost(
                     // Spec 048: the home's status line asked for a rescue sheet.
                     application.container.pendingSettingsOverlay.value?.let { requested ->
                         application.container.pendingSettingsOverlay.value = null
-                        if (requested == SettingsOverlay.RpcFix) {
-                            rescueChainId = application.container.wallet.balances.value.banner_chain_ids.firstOrNull()?.toLong()
-                            rpcDraft = null
-                            rpcSaved = false
-                        }
                         m = m.copy(overlay = requested)
                     }
                     rescueChainId?.let { id ->
@@ -2043,6 +2047,12 @@ fun VelaNavHost(
                                 application.container.wallet.refresh(force = true)
                             }
                         },
+                        // SR6's row (spec 092): SR2 for THAT network, from a clean draft.
+                        onUnreachableFix = { chainId ->
+                            rescueChainId = chainId.toLong()
+                            rpcDraft = null
+                            rpcSaved = false
+                        },
                         onAccountSelect = { index -> settingsHaptic(VelaHaptic.Select); application.container.session.switchAccount(index) },
                         onAccountPrimary = { navController.push(VelaDestinations.CREATE) },
                         onAccountSecondary = { navController.push(VelaDestinations.WELCOME) },
@@ -2153,6 +2163,14 @@ fun VelaNavHost(
                                 application.container.wallet.switcherOpened(sessionView.accounts.map { it.address })
                             } else {
                                 application.container.wallet.switcherClosed()
+                            }
+                            // SR6 (spec 092) re-reads while it — or the SR2 its row opened — is up.
+                            if (shown == SettingsOverlay.Unreachable && !unreachableListOpen) {
+                                unreachableListOpen = true
+                                application.container.wallet.unreachableListOpened()
+                            } else if (shown != SettingsOverlay.Unreachable && shown != SettingsOverlay.RpcFix && unreachableListOpen) {
+                                unreachableListOpen = false
+                                application.container.wallet.unreachableListClosed()
                             }
                         },
                         onPageShown = { shown ->

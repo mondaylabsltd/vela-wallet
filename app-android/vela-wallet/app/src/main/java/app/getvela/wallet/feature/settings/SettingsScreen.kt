@@ -1,5 +1,12 @@
 package app.getvela.wallet.feature.settings
 
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.components.VelaLabelBesideValue
 import androidx.compose.foundation.layout.navigationBarsPadding
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
@@ -238,6 +245,8 @@ data class SettingsActions(
     val onRelayerRetry: () -> Unit = {},
     /** SR3's 立即重试 on a chain that did not answer, by chain id. */
     val onBalanceRetry: (String) -> Unit = {},
+    /** SR6's per-network fix (spec 092), by chain id: the host aims SR2 at it. */
+    val onUnreachableFix: (Int) -> Unit = {},
     val onAccountSelect: (Int) -> Unit = {},
     val onAccountPrimary: () -> Unit = {},
     val onAccountSecondary: () -> Unit = {},
@@ -268,6 +277,8 @@ fun SettingsRoute(
     var pendingRemoval by rememberSaveable { mutableStateOf<String?>(null) }
     var overlay by remember(model.state) { mutableStateOf(model.overlay) }
     LaunchedEffect(overlay) { actions.onOverlayShown(overlay) }
+    // SR2 opened from SR6's row (spec 092): closing it steps back to the list.
+    var fixFromList by remember(model.state) { mutableStateOf(false) }
     // The storage row waiting on an answer, and the warning its group carries
     // (spec 058): 清除 asks before it removes.
     var pendingStorage by remember { mutableStateOf<Pair<StorageItemModel, String>?>(null) }
@@ -322,7 +333,10 @@ fun SettingsRoute(
         onBack = { page = SettingsPage.Home },
         onToggleAdvanced = { advancedOpen = !advancedOpen },
         onOpenOverlay = { overlay = it },
-        onDismissOverlay = { overlay = SettingsOverlay.None },
+        onDismissOverlay = {
+            overlay = if (overlay == SettingsOverlay.RpcFix && fixFromList) SettingsOverlay.Unreachable else SettingsOverlay.None
+            fixFromList = false
+        },
         onSheetSelect = { sheet, id ->
             actions.onSheetSelect(sheet, id)
             // The sheet closes on the pick, before the core has answered. The
@@ -388,6 +402,11 @@ fun SettingsRoute(
         onOpenLink = actions.onOpenLink,
         onRelayerRetry = actions.onRelayerRetry,
         onBalanceRetry = actions.onBalanceRetry,
+        onUnreachableFix = { chainId ->
+            actions.onUnreachableFix(chainId)
+            fixFromList = true
+            overlay = SettingsOverlay.RpcFix
+        },
         onAccountSelect = { index -> actions.onAccountSelect(index); overlay = SettingsOverlay.None },
         onAccountPrimary = actions.onAccountPrimary,
         onAccountSecondary = actions.onAccountSecondary,
@@ -397,7 +416,10 @@ fun SettingsRoute(
             // Done (the probe said ok) is the one that closes it.
             val close = model.rpcFix.restored
             actions.onRpcFixPrimary()
-            if (close) overlay = SettingsOverlay.None
+            if (close) {
+                overlay = if (fixFromList) SettingsOverlay.Unreachable else SettingsOverlay.None
+                fixFromList = false
+            }
         },
         onSignerUrlSave = actions.onSignerUrlSave,
         onSignerUrlReset = actions.onSignerUrlReset,
@@ -509,6 +531,7 @@ fun SettingsScreen(
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
+    onUnreachableFix: (Int) -> Unit = {},
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
@@ -642,6 +665,7 @@ fun SettingsScreen(
                 onOpenLink = onOpenLink,
                 onRelayerRetry = onRelayerRetry,
                 onBalanceRetry = onBalanceRetry,
+                onUnreachableFix = onUnreachableFix,
                 onAccountSelect = onAccountSelect,
                 onAccountPrimary = onAccountPrimary,
                 onAccountSecondary = onAccountSecondary,
@@ -1330,6 +1354,7 @@ private fun SettingsSheet(
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
+    onUnreachableFix: (Int) -> Unit = {},
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
@@ -1437,6 +1462,7 @@ private fun SettingsSheet(
                 SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub, onOpen = onOpenLink, onDone = onDismiss, onOpened = onFeedbackOpened, onClosed = onFeedbackClosed)
                 SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onRpcFixPrimary, onRpcFixField)
                 SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail, onBalanceRetry)
+                SettingsOverlay.Unreachable -> UnreachableSheetBody(model.unreachable, onUnreachableFix)
                 SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onRelayerRetry)
                 SettingsOverlay.None -> Unit
             }
@@ -2417,6 +2443,72 @@ private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) 
         BalanceDetailSection(model.sectionUnpriced, top = VelaSpacing.xl)
         model.unpriced.forEach { row -> BalanceDetailRow(row, onRetry) }
     }
+}
+
+/**
+ * SR6 (spec 092): every network the wallet cannot reach, one row each — what
+ * was last read there, and the network's RPC fix. The rows follow the live
+ * view, so one that comes back leaves while the sheet is open.
+ */
+@Composable
+private fun UnreachableSheetBody(model: UnreachableModel, onFix: (Int) -> Unit) {
+    val colors = VelaTheme.colors
+    SheetTitle(model.title)
+    model.summary?.let { summary ->
+        Text(
+            text = summary,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier.padding(bottom = VelaSpacing.md),
+        )
+    }
+    model.rows.forEach { row ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    val y = size.height - VelaBorder.hairline.toPx() / 2
+                    drawLine(colors.borderBase, Offset(0f, y), Offset(size.width, y), VelaBorder.hairline.toPx())
+                }
+                .padding(vertical = VelaSpacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            VelaChainMark(row.mark)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = row.name, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
+                Text(text = row.line, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+            }
+            UnreachableFixAction(row.action) { onFix(row.chainId) }
+        }
+    }
+}
+
+/** A row's 修复: a text action that still answers the finger — it gives and buzzes. */
+@Composable
+private fun UnreachableFixAction(label: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val haptic = rememberVelaHaptic()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) VelaMotion.pressScaleButton else 1f,
+        animationSpec = VelaMotion.pressSpring,
+        label = "unreachableFixPress",
+    )
+    Text(
+        text = label,
+        color = VelaTheme.colors.infoBase,
+        fontFamily = VelaFontFamily,
+        fontSize = VelaTextSize.base,
+        modifier = Modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clickable(interactionSource = interaction, indication = null) {
+                haptic(VelaHaptic.Press)
+                onClick()
+            }
+            .padding(VelaSpacing.sm),
+    )
 }
 
 @Composable

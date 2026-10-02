@@ -230,7 +230,7 @@ class BalanceMachineTest {
 
     /**
      * Two readings of an unread chain, over the real core: a dead RPC is in
-     * `banner_chain_ids` (the home's status line) and earns SR3's red retry
+     * `unreachable_networks` (the home's status line) and earns SR3's red retry
      * row; a 429 earns neither — it is a grey "retrying" line, because it
      * heals by itself.
      */
@@ -258,7 +258,7 @@ class BalanceMachineTest {
         )
         // The settings page draws no banner (the web has none); the home's
         // status line reads this list, and only the dead chain is on it.
-        assertEquals("only the dead chain earns the banner", listOf(100), view.banner_chain_ids)
+        assertEquals("only the dead chain earns the banner", listOf(100), view.unreachable_networks.map { it.chain_id })
 
         val detail = app.getvela.wallet.feature.settings.SettingsLive.balanceDetail(
             base.balanceDetail,
@@ -661,7 +661,7 @@ class BalanceMachineTest {
      * The hero names the chain that is really down — and only that one.
      *
      * A dead RPC and a rate-limited one both leave a chain unread, but only
-     * the first is the person's to fix: the core's `banner_chain_ids` is failed
+     * the first is the person's to fix: the core's `unreachable_networks` is failed
      * MINUS rate-limited, and the hero's line is worded from it. Then the fix:
      * `FixChainResolved` drops the chain and reads again, so the repaired
      * chain stops being named without waiting for the next throttled refresh
@@ -682,20 +682,53 @@ class BalanceMachineTest {
         h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
 
         val failing = h.host.settle { it.failed_chain_ids.containsAll(listOf(100, 137)) && it.rate_limited_chain_ids.contains(137) }
-        assertEquals("the rate-limited chain never reaches the banner", listOf(100), failing.banner_chain_ids)
+        assertEquals("the rate-limited chain never reaches the banner", listOf(100), failing.unreachable_networks.map { it.chain_id })
+        // Spec 092: Ethereum answered this round, so Gnosis was asked too —
+        // the shell says which chains it read, and nothing was ever read on
+        // Gnosis: "not read yet", not "nothing there".
+        assertEquals("assets.notReadYet", failing.unreachable_networks.single().line_key)
         val strings = app.getvela.wallet.core.i18n.I18nRuntime { tag ->
             java.io.File(System.getProperty("vela.repo.root")!!, "assets/i18n/$tag.json").readBytes()
         }.apply { initialize("en") }
         val line = app.getvela.wallet.feature.wallet.WalletLive.balanceStatus(failing, strings, mapOf(100 to "Gnosis", 137 to "Polygon"))
-        assertEquals("Gnosis RPC unavailable", line?.text)
+        assertEquals("Can't reach Gnosis right now", line?.text)
 
         gnosisDown.set(false)
         h.host.dispatch(BalanceEvent.FixChainResolved(100), BalanceEvent.serializer())
         // The drop is the core's immediate answer; whether the re-read then
         // lands is the pool's cooldown, which this test does not pin.
         val fixed = h.host.settle { !it.failed_chain_ids.contains(100) }
-        assertFalse(fixed.banner_chain_ids.contains(100))
+        assertFalse(fixed.unreachable_networks.any { it.chain_id == 100 })
         assertEquals(null, app.getvela.wallet.feature.wallet.WalletLive.balanceStatus(fixed, strings, emptyMap())?.takeIf { it.text.contains("Gnosis") })
+    }
+
+    /**
+     * Spec 092, over the real core and this executor: a network read once and
+     * then out of reach is listed with what was last read there — the executor says
+     * which chains each round asked, so the core can tell "held something"
+     * and "nothing there" from "not read yet".
+     */
+    @Test
+    fun aNetworkThatGoesQuietIsListedWithWhatItLastHeld() {
+        val gnosisDown = java.util.concurrent.atomic.AtomicBoolean(false)
+        val h = harness(
+            listOf(row(1, "ETH", "Ethereum"), row(100, "XDAI", "Gnosis")),
+        ) { url, _ ->
+            when {
+                url.contains("chain-100") && gnosisDown.get() -> FakeRpcTransport.network()
+                else -> FakeRpcTransport.body("0x14d1120d7b160000")
+            }
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+        h.host.settle { view -> view.last_refreshed_at_ms != null && view.failed_chain_ids.isEmpty() }
+
+        gnosisDown.set(true)
+        h.host.dispatch(BalanceEvent.RefreshRequested(force = true, pull = false), BalanceEvent.serializer())
+        val quiet = h.host.settle { it.unreachable_networks.any { network -> network.chain_id == 100 } }
+        val gnosis = quiet.unreachable_networks.single { it.chain_id == 100 }
+        // Read once (holding something or nothing): never "not read yet".
+        assertTrue(gnosis.last_known, gnosis.last_known == "held" || gnosis.last_known == "empty")
+        assertEquals("assets.unreachableOne", quiet.unreachable_key)
     }
 
     private companion object {

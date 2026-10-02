@@ -157,6 +157,7 @@ class BalanceExecutor(
             // The pool's own verdict, not a guess: a busy chain and a broken
             // one look identical from here without it.
             rate_limited_chain_ids = pool.view.value.rate_limited_chains,
+            read_chain_ids = holdings.read,
             now_ms = now(),
         )
     }
@@ -164,6 +165,8 @@ class BalanceExecutor(
     private class Holdings(
         val tokens: List<BalanceToken>,
         val failed: List<Int>,
+        /** Every chain asked (spec 092): answered empty is not "not read yet". */
+        val read: List<Int> = emptyList(),
     )
 
     /**
@@ -267,6 +270,7 @@ class BalanceExecutor(
         Holdings(
             tokens = results.flatMap { it.tokens },
             failed = results.filterNot { it.answered }.map { it.chainId },
+            read = results.map { it.chainId },
         )
     }
 
