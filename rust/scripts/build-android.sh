@@ -25,10 +25,20 @@ if ! command -v cargo-ndk >/dev/null 2>&1; then
   exit 1
 fi
 
+# 16 KB pages (spec 088 FR-002): Google Play requires every 64-bit library to
+# be 16 KB-aligned (LOAD segments `0x4000` or more). NDK r27 happens to link
+# that way already, but r26 and older default to 4 KB — so say it explicitly
+# instead of depending on which NDK `sort -V | tail -1` picked. 32-bit ARM is
+# outside the rule and keeps its default. Appended, so a caller's own flags
+# for these targets still apply. Check: `llvm-readelf -lW <lib> | grep LOAD`.
+PAGE16K="-C link-arg=-Wl,-z,max-page-size=16384"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="${CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS:-} $PAGE16K"
+export CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS="${CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS:-} $PAGE16K"
+
 # minSdk of the app is 29 (app-android/vela-wallet/app/build.gradle.kts).
 cd "$ROOT/rust"
 cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 29 -o "$OUT" \
-  build --release -p vela-core-uniffi
+  build --release -p vela-core-uniffi ${VELA_CARGO_VERBOSE:+-v}
 
 echo "OK: $(find "$OUT" -name 'libvela_core_uniffi.so' | wc -l | tr -d ' ') ABIs in $OUT"
 

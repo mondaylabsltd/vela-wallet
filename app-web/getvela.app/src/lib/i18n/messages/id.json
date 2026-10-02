@@ -33,7 +33,9 @@
 				"chainSetup": "Penyiapan chain",
 				"selfHosting": "Panduan hosting sendiri",
 				"privacy": "Privasi",
-				"terms": "Ketentuan"
+				"terms": "Ketentuan",
+				"support": "Dukungan",
+				"deleteData": "Hapus data Anda"
 			}
 		},
 		"language": {
