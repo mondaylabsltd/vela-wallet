@@ -140,6 +140,8 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			intents: Object.fromEntries(
 				INTENT_TERMS.map((term) => [term, k(`componentsUi.signing.${term}`)])
 			),
+			dappRowTitle: k('history.dappRowTitle'),
+			unlimited: k('componentsUi.signingApprove.unlimitedValue'),
 			today: k('componentsUi.dayGroup.today'),
 			yesterday: k('componentsUi.dayGroup.yesterday'),
 			toName: k('history.toName'),

@@ -10,14 +10,28 @@
 		amount: string;
 		fiat: string;
 		positive?: boolean;
+		/** Spec 093: an allowance with no limit — the one figure drawn in red. */
+		danger?: boolean;
+		/** Spec 093 / 083 F1: what came back, under what left. */
+		received?: string;
 		align?: 'start' | 'centre';
 	}
 
-	let { amount, fiat, positive = false, align = 'start' }: Props = $props();
+	let {
+		amount,
+		fiat,
+		positive = false,
+		danger = false,
+		received,
+		align = 'start'
+	}: Props = $props();
 </script>
 
 <div class="hero {align}">
-	<p class="amount" class:positive>{amount}</p>
+	<p class="amount" class:positive class:danger>{amount}</p>
+	{#if received !== undefined}
+		<p class="received">{received}</p>
+	{/if}
 	<p class="fiat">{fiat}</p>
 </div>
 
@@ -48,6 +62,18 @@
 	}
 
 	.positive {
+		color: var(--color-success-base);
+	}
+
+	.danger {
+		color: var(--color-error-base);
+	}
+
+	.received {
+		font-family: var(--font-numeric);
+		font-size: calc(var(--text-xl) * var(--text-scale, 1));
+		font-weight: var(--weight-semibold);
+		font-variant-numeric: tabular-nums;
 		color: var(--color-success-base);
 	}
 

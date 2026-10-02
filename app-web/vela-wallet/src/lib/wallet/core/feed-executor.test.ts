@@ -26,7 +26,13 @@ vi.mock('$lib/services/recipient-identity', () => ({
 	resolveRecipientIdentity: (addr: string) => waterfall(addr)
 }));
 
-import { createFeedExecutor, firstCallData, toFeedRecord } from './feed-executor';
+import {
+	createFeedExecutor,
+	firstCallData,
+	storedJudgments,
+	storedSummary,
+	toFeedRecord
+} from './feed-executor';
 
 const effect = (operation: FeedEffect['operation']): FeedEffect => ({ id: 1, operation });
 const ME = '0x14fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d1e';
@@ -365,5 +371,138 @@ describe('the call data behind a dApp record (RJ16)', () => {
 		} finally {
 			core.free();
 		}
+	}, 30_000);
+});
+
+/**
+ * Spec 093: a dApp's signatures are rows too, so the core hears the same about
+ * them as about its transactions — the origin, the recorded intent, the
+ * summary and the sheet's balance changes, each as stored. A summary or a
+ * list of changes that is not the core's own shape is dropped whole (the row
+ * then reads by its kind), never repaired, and never faults the feed.
+ */
+describe('a dApp record’s summary and balance changes (spec 093)', () => {
+	const SUMMARY = {
+		action: 'permit',
+		calls: 0,
+		contract: '0x000000000022d473030f116ddee9f6b43ac78ba3',
+		spender: '0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad',
+		token: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+		symbol: 'USDC',
+		decimals: 6,
+		unlimited: true,
+		primary_type: 'PermitSingle'
+	} as const;
+	const SIGNATURE: LocalTransaction = {
+		id: 'dapp-1-typed',
+		userOpHash: '',
+		txHash: '',
+		from: ME,
+		to: '',
+		value: '0',
+		symbol: '',
+		decimals: 0,
+		chainId: 1,
+		timestamp: 1_700_000_000,
+		status: 'confirmed',
+		type: 'sign_typed_data',
+		dappOrigin: 'Uniswap Interface',
+		dappUrl: 'https://app.uniswap.org',
+		intent: 'Permit',
+		dappSummary: { ...SUMMARY }
+	};
+
+	it('a signature hands the core its origin, intent and summary — never the dApp’s name', () => {
+		expect(toFeedRecord(SIGNATURE)).toMatchObject({
+			kind: 'sign_typed_data',
+			dapp_url: 'https://app.uniswap.org',
+			intent: 'Permit',
+			summary: SUMMARY,
+			balance_changes: null,
+			call_data: null
+		});
+		const message = toFeedRecord({
+			...SIGNATURE,
+			type: 'sign_message',
+			dappUrl: undefined,
+			dappSummary: { action: 'sign_in', calls: 0, signin_domain: 'app.uniswap.org' }
+		});
+		expect(message).toMatchObject({
+			kind: 'sign_message',
+			dapp_url: null,
+			summary: { action: 'sign_in', calls: 0, signin_domain: 'app.uniswap.org' }
+		});
+		// A record from before 093: no summary, read by its kind.
+		expect(toFeedRecord({ ...SIGNATURE, dappSummary: undefined })?.summary).toBeNull();
+		// Transfers say none of it.
+		expect(toFeedRecord(RECEIVED)).not.toHaveProperty('summary');
+	});
+
+	it('a summary of any other shape is dropped whole, never repaired', () => {
+		expect(storedSummary(SUMMARY)).toEqual(SUMMARY);
+		for (const bad of [
+			null,
+			'permit',
+			[SUMMARY],
+			{ ...SUMMARY, action: 'steal' },
+			{ ...SUMMARY, calls: -1 },
+			{ ...SUMMARY, calls: 1.5 },
+			{ ...SUMMARY, decimals: 2 ** 40 },
+			{ ...SUMMARY, unlimited: 'yes' },
+			{ ...SUMMARY, spender: 42 },
+			{ ...SUMMARY, expires_at: Number.NaN }
+		]) {
+			expect(storedSummary(bad), JSON.stringify(bad)).toBeNull();
+		}
+		// Absent optional fields are absent, not invented.
+		expect(storedSummary({ action: 'message' })).toEqual({ action: 'message', calls: 0 });
+	});
+
+	it('balance changes pass as judged; one line of another shape drops them all', () => {
+		const lines = [
+			{ type: 'native', delta: '-1' },
+			{
+				type: 'erc20_trusted',
+				token: '0xa0b8',
+				delta: '5',
+				symbol: 'USDC',
+				decimals: 6,
+				in_trusted_set: true
+			},
+			{ type: 'erc20_unverified', token: null, delta: '7' }
+		];
+		expect(storedJudgments(lines)).toEqual(lines);
+		expect(
+			toFeedRecord({
+				...SIGNATURE,
+				type: 'dapp_tx',
+				balanceChanges: lines as LocalTransaction['balanceChanges']
+			})?.balance_changes
+		).toEqual(lines);
+		for (const bad of [
+			[],
+			'x',
+			[{ type: 'native', delta: 1 }],
+			[{ type: 'erc20_trusted', token: '0x1', delta: '1', symbol: 'X' }],
+			[...lines, { type: 'nft', delta: '1' }]
+		]) {
+			expect(storedJudgments(bad), JSON.stringify(bad)).toBeNull();
+		}
+	});
+
+	it('through the core: a malformed summary still makes a row — by its kind', async () => {
+		const { feedItemsThroughCore } = await import('./feed-through-core');
+		const items = await feedItemsThroughCore(
+			[
+				{ ...SIGNATURE, dappSummary: { action: 'steal' } as never },
+				{ ...SIGNATURE, id: 'dapp-2-typed', timestamp: 1_700_000_001 }
+			],
+			ME,
+			1_700_000_100_000
+		);
+		expect(items.map((it) => [it.id, it.dapp?.intent_term])).toEqual([
+			['dapp-2-typed', 'permitIntent'],
+			['dapp-1-typed', 'typedDataIntent']
+		]);
 	}, 30_000);
 });

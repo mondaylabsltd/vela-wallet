@@ -9,6 +9,11 @@
  * flow overlay only needs to be handed the finished model.
  */
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
+import type { FeedDapp } from '$lib/core/generated/FeedDapp';
+import type { FeedDappChange } from '$lib/core/generated/FeedDappChange';
+import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
+import type { FeedDappOperation } from '$lib/core/generated/FeedDappOperation';
+import type { FeedFact } from '$lib/core/generated/FeedFact';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedTxStatus } from '$lib/core/generated/FeedTxStatus';
 import type { FeedView } from '$lib/core/generated/FeedView';
@@ -21,14 +26,16 @@ import type {
 	FlowScreenModel,
 	FlowStateId,
 	StatusChipModel,
-	TxDetailModel
+	TxDetailModel,
+	TxTechnicalRow
 } from '$lib/flows/model';
 import { chainMeta } from '$lib/services/chains';
-import { formatTime } from '$lib/services/locale-format';
+import { formatDate, formatTime } from '$lib/services/locale-format';
 import { chainName, explorerTxURL } from '$lib/services/networks';
+import type { LocalTransaction } from '$lib/services/transactions-model';
 import { chainColor, MASK } from './fixtures';
 import { shortenAddress } from './identity';
-import { dappTitle, dayLabel, moneyText, trimBalance } from './live';
+import { allowanceFigure, changeFigure, dappTitle, dayLabel, moneyText, trimBalance } from './live';
 import { fill, type WalletMessages } from './messages';
 
 /** The feed item a tap named, by the id the live rows carry. */
@@ -101,6 +108,27 @@ export interface TxDetailContext {
 	hidden: boolean;
 	identicon: (seed: string) => string;
 	now?: number;
+	/**
+	 * Spec 093: the stored request of a dApp record, by record id — asked
+	 * only when its "Technical details" open. Absent: none to show.
+	 */
+	storedRequest?: (id: string) => string | null;
+}
+
+/**
+ * A stored dApp record's request as text (spec 093): the core's cut of it,
+ * which this shell keeps parsed as `signedRequest.params`, written back out.
+ * `null` when the record kept none — an older row, or a request that did not
+ * survive the cut.
+ */
+export function storedRequestText(tx: LocalTransaction | undefined): string | null {
+	const params = tx?.signedRequest?.params;
+	if (!Array.isArray(params) || params.length === 0) return null;
+	try {
+		return JSON.stringify(params, null, 2);
+	} catch {
+		return null;
+	}
 }
 
 /**
@@ -128,24 +156,250 @@ function whenMs(item: FeedItem): number {
 	return item.timestamp < 1e12 ? item.timestamp * 1000 : item.timestamp;
 }
 
+/** The chain fact, with its mark — a transfer's and a dApp record's alike. */
+function chainFact(chainId: number, m: WalletFlowMessages): FactRowModel {
+	const chain = chainMeta(chainId);
+	return {
+		label: m['componentsTx.detail.labelChain'],
+		value: chainName(chainId),
+		lead: {
+			kind: 'token',
+			mark: {
+				ticker: chain?.iconLabel ?? chainName(chainId).slice(0, 3).toUpperCase(),
+				badgeColor: chainColor(chainId)
+			}
+		}
+	};
+}
+
+/** When it happened, in the home's day words and the person's time preset. */
+function dateFact(item: FeedItem, ctx: TxDetailContext): FactRowModel {
+	return {
+		label: ctx.m['componentsTx.detail.labelDate'],
+		value: `${dayLabel(item.day_start_ms, ctx.wm, ctx.now)} ${formatTime(new Date(whenMs(item)))}`
+	};
+}
+
+/** A contract or a spender: its name when the wallet knows one, else the address. */
+function partyFact(
+	label: string,
+	address: string,
+	name: string | null,
+	ctx: TxDetailContext
+): FactRowModel {
+	return {
+		label,
+		value: name ?? shortenAddress(address),
+		lead: { kind: 'identicon', svg: ctx.identicon(address), address },
+		mono: name === null,
+		copy: ctx.m['componentsUi.identiconViewer.copyAddress'],
+		copyValue: address
+	};
+}
+
+/** A hash, shortened for reading and copied whole. */
+function hashFact(label: string, hash: string, m: WalletFlowMessages): FactRowModel {
+	return {
+		label,
+		value: shortenAddress(hash),
+		mono: true,
+		copy: m['componentsUi.identiconViewer.copyAddress'],
+		copyValue: hash
+	};
+}
+
+/** One balance change as a line (083 F1): the figure and its coin, or "Unverified token". */
+function changeLine(change: FeedDappChange, ctx: TxDetailContext): string {
+	if (!change.verified || change.value === null) {
+		return `${changeFigure(change)} ${ctx.m['componentsUi.signing.balanceUnverifiedToken']}`;
+	}
+	return `${ctx.hidden ? MASK : changeFigure(change)} ${change.symbol}`.trim();
+}
+
+/** The detail's facts (spec 093): the core's, in its order, labelled and formatted here. */
+function dappFacts(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): FactRowModel[] {
+	const { m, wm, hidden } = ctx;
+	return dapp.facts.flatMap((fact: FeedFact): FactRowModel[] => {
+		switch (fact.type) {
+			case 'site':
+				return [{ label: m['connect.detail.labelApp'], value: fact.site }];
+			case 'network':
+				return [chainFact(fact.chain_id, m)];
+			case 'contract':
+				return [
+					partyFact(m['componentsUi.signing.interactingLabel'], fact.address, fact.name, ctx)
+				];
+			case 'spender':
+				return [partyFact(m['componentsUi.signing.labelSpender'], fact.address, fact.name, ctx)];
+			case 'spending_cap': {
+				const figure = allowanceFigure(fact.allowance, wm);
+				return [
+					{
+						label: m['componentsUi.signingApprove.spendingCap'],
+						value: hidden && figure.maskable ? MASK : `${figure.amount} ${figure.unit}`.trim(),
+						...(figure.danger ? { tone: 'danger' as const } : {})
+					}
+				];
+			}
+			case 'expires': {
+				const at = fact.at === null ? null : fact.at * 1000;
+				return [
+					{
+						label: m['componentsUi.signingApprove.expiresLabel'],
+						value:
+							at === null
+								? m['componentsUi.signingApprove.noExpiry']
+								: `${formatDate(at)} ${formatTime(new Date(at))}`
+					}
+				];
+			}
+			case 'balance_changes':
+				// The sheet's own lines, one row each; the first carries the title.
+				return (dapp.changes ?? []).map((change, i) => ({
+					label: i === 0 ? m['componentsUi.signing.balanceChangesTitle'] : '',
+					value: changeLine(change, ctx),
+					...(change.direction === 'in' ? { tone: 'success' as const } : {})
+				}));
+			case 'date':
+				return [dateFact(item, ctx)];
+			default:
+				// The technical lines belong to the collapsed section, not here.
+				return [];
+		}
+	});
+}
+
+function operationText(operation: FeedDappOperation, m: WalletFlowMessages): string {
+	switch (operation.type) {
+		case 'contract_interaction':
+			return m['componentsTx.detail.opContractInteraction'];
+		case 'batch':
+			return fill(m['componentsUi.signing.batchSubtitle'], { count: operation.calls });
+		case 'signature':
+			return m['componentsTx.detail.opSignature'];
+		case 'typed_data_signature':
+			return m['componentsTx.detail.opTypedDataSignature'];
+	}
+}
+
+function contentLabel(content: FeedDappContent, m: WalletFlowMessages): string {
+	switch (content) {
+		case 'call_data':
+			return m['connect.detail.contentCallData'];
+		case 'typed_data':
+			return m['connect.detail.contentTypedData'];
+		case 'message':
+			return m['connect.detail.contentMessage'];
+	}
+}
+
+/**
+ * The collapsed "Technical details" (spec 093): the core's lines, worded. The
+ * stored request rides as a reader, not as text — the store is asked for it
+ * when the section opens.
+ */
+function dappTechnical(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxTechnicalRow[] {
+	const { m } = ctx;
+	return dapp.technical.flatMap((fact: FeedFact): TxTechnicalRow[] => {
+		switch (fact.type) {
+			case 'operation':
+				return [
+					{
+						kind: 'fact',
+						fact: {
+							label: m['componentsTx.detail.labelOperation'],
+							value: operationText(fact.operation, m)
+						}
+					}
+				];
+			case 'content':
+				return [
+					{
+						kind: 'content',
+						label: contentLabel(fact.content, m),
+						missing: m['connect.detail.contentMissing'],
+						read: () => ctx.storedRequest?.(item.id) ?? null
+					}
+				];
+			case 'primary_type':
+				return [
+					{
+						kind: 'fact',
+						fact: { label: m['componentsUi.signing.typeLabel'], value: fact.name, mono: true }
+					}
+				];
+			case 'hash':
+				return [
+					{ kind: 'fact', fact: hashFact(m['componentsTx.detail.labelHash'], fact.tx_hash, m) }
+				];
+			case 'user_op_hash':
+				return [
+					{ kind: 'fact', fact: hashFact(m['componentsTx.receipt.userOpHash'], fact.hash, m) }
+				];
+			default:
+				return [];
+		}
+	});
+}
+
+/**
+ * A dApp record as its detail (spec 093): the row's title and figure (or the
+ * allowance it granted), its lifecycle — none for a signature, which says it
+ * was off-chain instead — the core's facts and, collapsed, its technical
+ * lines. Nothing here chooses which facts or in what order.
+ */
+function dappTxDetail(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): TxDetailModel {
+	const { m, wm, currency, hidden } = ctx;
+	const status = item.status;
+	let amount = '';
+	let fiat = '';
+	let danger = false;
+	if (item.value !== null) {
+		const about = dapp.estimated ? '≈ ' : '';
+		const sign = item.direction === 'in' ? '+' : '−';
+		amount = hidden ? MASK : `${about}${sign}${trimBalance(item.value)} ${item.symbol}`.trim();
+		fiat = hidden ? MASK : `≈ ${moneyText(item.usd_value, currency)}`;
+	} else if (dapp.allowance !== null) {
+		const figure = allowanceFigure(dapp.allowance, wm);
+		amount = hidden && figure.maskable ? MASK : `${figure.amount} ${figure.unit}`.trim();
+		danger = figure.danger;
+	}
+	const back = dapp.received ?? null;
+	return {
+		title: dappTitle(dapp, wm),
+		...(dapp.off_chain
+			? { note: m['connect.detail.offChainNote'] }
+			: { status: statusChip(status, m) }),
+		closeLabel: m['componentsUi.identiconViewer.close'],
+		amount,
+		fiat,
+		positive: false,
+		...(danger ? { danger: true } : {}),
+		...(back === null ? {} : { received: changeLine(back, ctx) }),
+		facts: dappFacts(item, dapp, ctx),
+		technical: {
+			key: item.id,
+			title: m['componentsUi.signing.advancedToggle'],
+			rows: dappTechnical(item, dapp, ctx)
+		},
+		viewOnExplorer: m['history.viewOnExplorer'],
+		explorerUrl: item.tx_hash === null ? undefined : explorerTxURL(item.chain_id, item.tx_hash),
+		deleteLabel: m['history.deleteRecord'],
+		deleteQuiet: status === 'pending' || status === 'unknown'
+	};
+}
+
 /** One feed item as the A2 / DA2 detail. */
 export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailModel {
-	const { m, wm, currency, hidden } = ctx;
+	// Spec 093: a dApp's transaction or signature is described by the core.
+	if (item.dapp) return dappTxDetail(item, item.dapp, ctx);
+	const { m, currency, hidden } = ctx;
 	// Spec 082 RG1: the record's lifecycle and what it is are the core's
 	// (`FeedItem.status`, `.kind`); a folded batch carries its first line's.
 	const status = item.status;
 	const received = item.kind === 'receive';
 	const dappTx = item.kind === 'dapp_tx';
-	const chain = chainMeta(item.chain_id);
 	const facts: FactRowModel[] = [];
-
-	// The site that asked, for a dApp's transaction (083 H2) — first, because
-	// it is the one fact the person recognises. The core names it from the
-	// request's origin only, never from the name the dApp gave itself.
-	const site = item.dapp?.site ?? null;
-	if (site !== null) {
-		facts.push({ label: m['connect.detail.labelApp'], value: site });
-	}
 
 	if (item.counterparty !== null) {
 		facts.push({
@@ -169,37 +423,10 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		});
 	}
 
-	// RG2: who asked for a dApp's transaction — the site, as the browser named it.
-	if (dappTx && item.site !== null) {
-		facts.push({ label: m['componentsUi.signing.siweOrigin'], value: item.site });
-	}
-
-	facts.push(
-		{
-			label: m['componentsTx.detail.labelChain'],
-			value: chainName(item.chain_id),
-			lead: {
-				kind: 'token',
-				mark: {
-					ticker: chain?.iconLabel ?? chainName(item.chain_id).slice(0, 3).toUpperCase(),
-					badgeColor: chainColor(item.chain_id)
-				}
-			}
-		},
-		{
-			label: m['componentsTx.detail.labelDate'],
-			value: `${dayLabel(item.day_start_ms, wm, ctx.now)} ${formatTime(new Date(whenMs(item)))}`
-		}
-	);
+	facts.push(chainFact(item.chain_id, m), dateFact(item, ctx));
 
 	if (item.tx_hash !== null) {
-		facts.push({
-			label: m['componentsTx.detail.labelHash'],
-			value: shortenAddress(item.tx_hash),
-			mono: true,
-			copy: m['componentsUi.identiconViewer.copyAddress'],
-			copyValue: item.tx_hash
-		});
+		facts.push(hashFact(m['componentsTx.detail.labelHash'], item.tx_hash, m));
 	}
 
 	// Spec 038 #D2: a folded batch row opens to what it folded — the split's
@@ -236,17 +463,14 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 				: fill(m['send.multiSendSummary'], { n: parts.length, chain: chainName(item.chain_id) });
 
 	const amount = item.value === null ? '' : `${trimBalance(item.value)} `;
-	// A dApp call that moved no coin has no figure (083 H2): no lone "−" and
-	// no "≈ $0.00" where one would be. A mixed batch keeps its reading.
-	const figureless = item.dapp != null && item.value === null;
+	// A dApp record from a core that did not describe it has no figure of its
+	// own to claim (083 H2). A mixed batch keeps its reading.
+	const figureless = dappTx && item.value === null;
 	return {
 		breakdownTitle,
 		breakdown: parts.length > 0 ? parts : undefined,
-		// What a dApp's call did, not "Sent" plus a coin it may never have moved.
-		title: item.dapp
-			? dappTitle(item.dapp, wm)
-			: dappTx
-				? m['history.txLabelDappTx']
+		title: dappTx
+			? m['history.txLabelDappTx']
 			: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
 					symbol: item.symbol
 				}),

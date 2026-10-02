@@ -258,6 +258,7 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		status: 'confirmed',
 		site: null,
 		counterparty_role: 'recipient',
+		subtitle: [],
 		...partial
 	};
 }

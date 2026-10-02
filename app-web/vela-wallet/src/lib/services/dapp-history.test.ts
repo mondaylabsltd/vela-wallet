@@ -13,6 +13,8 @@ describe('buildSigningRecord', () => {
 		const record = buildSigningRecord({
 			method: 'eth_sendTransaction',
 			params: [{ to: TO, value: '0x2386f26fc10000' }],
+			storedRequest: JSON.stringify([{ to: TO, value: '0x2386f26fc10000' }]),
+			requestTruncated: false,
 			result: '0xhash',
 			from: FROM,
 			chainId: 100,
@@ -43,6 +45,8 @@ describe('buildSigningRecord', () => {
 					value: '0xffffffffffffffffffff'
 				}
 			],
+			storedRequest: '[]',
+			requestTruncated: true,
 			result: '0xbatchid',
 			from: FROM,
 			chainId: 100,
@@ -52,5 +56,58 @@ describe('buildSigningRecord', () => {
 		// The batch's own first leg names the recipient (spec 082 RC7) and its
 		// legs the figure — never the page's top-level words beside them.
 		expect(record).toMatchObject({ type: 'dapp_tx', to: TO, value: '0x0' });
+	});
+
+	// Spec 093: what the record keeps of the request is the core's — its cut
+	// (`stored_request`, parsed back into params), whether it was cut, its
+	// summary and the sheet's balance changes — each stored as it came. This
+	// side neither clips nor reads any of it.
+	it("keeps the core's cut of the request, its summary and its balance changes verbatim", () => {
+		const full = [{ to: TO, value: '0x0', data: '0x' + 'ab'.repeat(9000) }];
+		const cut = [{ to: TO, value: '0x0', data: '0x' + 'ab'.repeat(100) }];
+		const summary = { action: 'call' as const, calls: 1, contract: TO.toLowerCase() };
+		const balanceChanges = [{ type: 'native' as const, delta: '-1000' }];
+		const record = buildSigningRecord({
+			method: 'eth_sendTransaction',
+			params: full,
+			storedRequest: JSON.stringify(cut),
+			requestTruncated: true,
+			summary,
+			balanceChanges,
+			result: '0xhash',
+			from: FROM,
+			chainId: 1,
+			dappOrigin: 'Uniswap',
+			dappUrl: 'https://app.uniswap.org',
+			nowMs: 1_757_000_000_000
+		});
+		expect(record.signedRequest).toEqual({ method: 'eth_sendTransaction', params: cut });
+		expect(record.requestTruncated).toBe(true);
+		expect(record.dappSummary).toEqual(summary);
+		expect(record.balanceChanges).toEqual(balanceChanges);
+		expect(record.txHash).toBe('0xhash');
+	});
+
+	it('a signature keeps no result, and a stored request that will not read is none', () => {
+		const record = buildSigningRecord({
+			method: 'personal_sign',
+			params: ['0x48656c6c6f', FROM],
+			storedRequest: 'not json',
+			requestTruncated: true,
+			summary: { action: 'message', calls: 0 },
+			result: '',
+			from: FROM,
+			chainId: 1,
+			dappOrigin: 'https://app.uniswap.org',
+			dappUrl: 'https://app.uniswap.org',
+			nowMs: 1_757_000_000_000
+		});
+		expect(record).toMatchObject({ type: 'sign_message', txHash: '', requestTruncated: true });
+		expect(record.signedRequest).toEqual({ method: 'personal_sign', params: [] });
+		expect(record.dappSummary).toEqual({ action: 'message', calls: 0 });
+		// No simulation, no stored lines — not an empty list.
+		expect(record).not.toHaveProperty('balanceChanges');
+		// What the message said is still the Connections list's.
+		expect(record.signedContent).toBe('Hello');
 	});
 });

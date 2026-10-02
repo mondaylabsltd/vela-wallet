@@ -42,7 +42,7 @@
 				><Identicon svg={fact.lead.svg} size="row" address={fact.lead.address} /></span
 			>
 		{/if}
-		<span class="value" class:mono={fact.mono}>{fact.value}</span>
+		<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
 		{#if fact.copy !== undefined}
 			<button type="button" aria-label={fact.copy} class:copied onclick={oncopy}>
 				<Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
@@ -106,6 +106,15 @@
 
 	.mono {
 		font-family: var(--font-mono);
+	}
+
+	/* Spec 093: an unlimited allowance reads in red; what came back, in green. */
+	.value[data-tone='danger'] {
+		color: var(--color-error-base);
+	}
+
+	.value[data-tone='success'] {
+		color: var(--color-success-base);
 	}
 
 	button {

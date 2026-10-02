@@ -73,7 +73,8 @@ function item(id: string, chain_id: number): FeedItem {
 		kind: 'receive',
 		status: 'confirmed',
 		site: null,
-		counterparty_role: 'recipient'
+		counterparty_role: 'recipient',
+		subtitle: [{ type: 'from', address: '0x' + 'b1'.repeat(20), name: null }]
 	};
 }
 

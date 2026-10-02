@@ -34,10 +34,15 @@ export interface WalletMessages {
 		 */
 		contractCall: string;
 		/**
-		 * A dApp's transaction's recorded intent in the reader's words, keyed
-		 * by `ClearTerm` (`INTENT_TERMS`) — the words the signing sheet used.
+		 * A dApp row's headline verb in the reader's words, keyed by
+		 * `ClearTerm` (`INTENT_TERMS`) — the recorded intent's word, or the
+		 * wallet's own for what the request is (spec 093).
 		 */
 		intents: Record<string, string>;
+		/** Spec 093: "{{intent}} on {{place}}" — a dApp row's title. */
+		dappRowTitle: string;
+		/** Spec 093: an allowance with no limit, where a figure would be. */
+		unlimited: string;
 		today: string;
 		yesterday: string;
 		/** Template with `{{name}}`. */
@@ -154,9 +159,11 @@ export const WALLET_KEYS = [
 	'history.labelSent',
 	'history.labelReceived',
 	'history.txLabelDappTx',
-	// 083 H2: a dApp's transaction is titled by what it did.
-	'componentsUi.signing.intentContractCall',
+	// 083 H2, spec 093: a dApp row is titled by what it did, and where
+	// (`intentContractCall` and the signatures' verbs are among the terms).
 	...INTENT_TERMS.map((term) => `componentsUi.signing.${term}` as const),
+	'history.dappRowTitle',
+	'componentsUi.signingApprove.unlimitedValue',
 	'componentsUi.dayGroup.today',
 	'componentsUi.dayGroup.yesterday',
 	'history.toName',
