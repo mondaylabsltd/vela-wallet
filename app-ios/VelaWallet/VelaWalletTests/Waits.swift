@@ -19,6 +19,12 @@
 //  a hang, and the hang is the suite's `timeLimit`'s to report, not an
 //  assertion's to half-see. `MainActorLoadTests` reproduces the runner.
 //
+//  The time limit reports it by cancelling the test, so a wait also ends
+//  when its task is cancelled: the assertion after it then says what never
+//  came. A wait that slept through the cancellation would spin — a cancelled
+//  `Task.sleep` throws at once — holding the main actor, and the whole run
+//  would hang instead of failing one test.
+//
 
 import Foundation
 
@@ -27,7 +33,7 @@ enum Wait {
     /// Until `done` holds, or `idle` says nothing is left in flight that could
     /// still make it hold.
     static func until(_ done: () -> Bool, orIdle idle: () -> Bool) async {
-        while !done(), !idle() {
+        while !done(), !idle(), !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 5_000_000)
         }
     }
@@ -35,7 +41,7 @@ enum Wait {
     /// The same, for a condition that has to ask an actor (storage, mostly:
     /// the core shows a value before the write it asked for has landed).
     static func until(_ done: () async -> Bool, orIdle idle: () -> Bool) async {
-        while await !done(), !idle() {
+        while await !done(), !idle(), !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 5_000_000)
         }
     }
@@ -44,7 +50,7 @@ enum Wait {
     /// idleness bounds — a test's own port being called, a task reaching the
     /// point the test holds it at.
     static func until(_ done: () -> Bool) async {
-        while !done() {
+        while !done(), !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 5_000_000)
         }
     }
