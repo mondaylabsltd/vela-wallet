@@ -717,81 +717,31 @@ pub fn after_landing(user_op_hash: String, landing: Option<Landing>) -> SignSubm
     }
 }
 
-/// The calls a request is asking for.
+/// The calls a request is asking for — the core's one reading
+/// (`tx_request::calls_of`, spec 096 F1): every call or none, value in
+/// DECIMAL wei.
 ///
 /// The params are FINAL by the time they reach here (the core's invariant ⑨
-/// caps them), so this only reads them.
+/// caps them, and its arrival made every `value` canonical), so this only
+/// reads them.
 ///
 /// Shared with the host, which prices the SAME calls it will later submit —
 /// two readings of one params array is how a quote ends up describing a
-/// different transaction than the one that gets signed.
+/// different transaction than the one that gets signed. This shell used to
+/// read decimal text as decimal where every other shell read it as hex, and
+/// to drop a batch leg it could not read and send the rest.
 pub fn calls_of(method: &str, params_json: &str) -> Option<Vec<FeeCall>> {
-    let params: Value = serde_json::from_str(params_json).ok()?;
-    let first = params.get(0)?;
-    match method {
-        // EIP-5792: one entry carrying many calls.
-        "wallet_sendCalls" => {
-            let calls: Vec<FeeCall> = first
-                .get("calls")?
-                .as_array()?
-                .iter()
-                .filter_map(fee_call)
-                .collect();
-            // An empty batch is not a batch. It would assemble into a user
-            // operation that does nothing and still costs a fee — and every
-            // call being unreadable produces the same empty vector as a batch
-            // that was empty to begin with, which is why this is checked
-            // AFTER the mapping and not before it.
-            (!calls.is_empty()).then_some(calls)
-        }
-        _ => Some(vec![fee_call(first)?]),
-    }
-}
-
-fn fee_call(raw: &Value) -> Option<FeeCall> {
-    Some(FeeCall {
-        to: raw.get("to")?.as_str()?.to_owned(),
-        value: wei_of(raw.get("value"))?,
-        data: raw
-            .get("data")
-            .and_then(Value::as_str)
-            .unwrap_or("0x")
-            .to_owned(),
-    })
-}
-
-/// A JSON-RPC quantity as wei, or `None` when it is not a number.
-///
-/// **Absent is zero; unreadable is not.** Most contract calls carry no value,
-/// so a missing field is 0 — but a field that is there and cannot be read used
-/// to be priced as 0 too, which puts a wrong fee beside a real transaction.
-/// Refusing it draws no fee instead, and no fee is better than a made-up one.
-///
-/// `"0x"` is zero. Several dApp libraries write it that way, and taking it for
-/// unreadable is what cost the WEB shell its fee and its speed control on a
-/// Uniswap swap (B-4, owner 2026-09-23).
-fn wei_of(value: Option<&Value>) -> Option<String> {
-    let Some(value) = value else {
-        return Some("0".to_owned());
-    };
-    if value.is_null() {
-        return Some("0".to_owned());
-    }
-    if let Some(number) = value.as_u64() {
-        return Some(number.to_string());
-    }
-    let text = value.as_str()?.trim();
-    let digits = text
-        .strip_prefix("0x")
-        .or_else(|| text.strip_prefix("0X"))
-        .map(|hex| (hex, 16))
-        .unwrap_or((text, 10));
-    if digits.0.is_empty() {
-        return Some("0".to_owned());
-    }
-    u128::from_str_radix(digits.0, digits.1)
-        .ok()
-        .map(|wei| wei.to_string())
+    let calls = vela_core::tx_request::calls_of(method, params_json)?;
+    Some(
+        calls
+            .into_iter()
+            .map(|call| FeeCall {
+                to: call.to,
+                value: call.value,
+                data: call.data,
+            })
+            .collect(),
+    )
 }
 
 /// A submit that failed, in the core's vocabulary.
@@ -1033,15 +983,12 @@ fn delete_record(record_id: &str) {
 }
 
 /// The call's value as the record keeps it: a `0x` quantity, read by the
-/// same [`wei_of`] the submit path read it with (083 H2 review).
-///
-/// A page may send `value` as a JSON number. The submit path took that and
-/// moved the coin, but this used to read strings only and stored `"0x0"` —
-/// so Activity showed a real transfer with no figure. Unreadable is `"0x0"`
-/// as absent is: `calls_of` refuses an `eth_sendTransaction` whose value it
-/// cannot read, so no such transaction reaches a record.
+/// core's rule the submit path read it with (`tx_request::value_wei`, spec
+/// 096 F1; 083 H2 review). Unreadable is `"0x0"` as absent is: the core
+/// refuses a request whose value it cannot read at arrival, so no such
+/// transaction reaches a record.
 fn stored_value(value: Option<&Value>) -> String {
-    wei_of(value)
+    vela_core::tx_request::value_wei(value)
         .and_then(|wei| wei.parse::<u128>().ok())
         .map_or_else(|| "0x0".to_owned(), |wei| format!("{wei:#x}"))
 }
@@ -2012,12 +1959,11 @@ mod tests {
                 stored_rows().is_empty(),
                 "no Activity row once the verdict is in"
             );
-            assert_eq!(told.len(), 1, "one answer: {told:?}");
-            assert!(matches!(
-                &told[0],
-                SignResponsePayload::Err { code: -32603, message: Some(message), .. }
-                    if message == NOT_SENT_DAPP_DETAIL
-            ));
+            // Spec 096 F8: held while the sheet shows the failure — nothing
+            // was sent, so it may be tried again — and answered on the close.
+            assert!(told.is_empty(), "held for the sheet: {told:?}");
+            assert!(!host.view().failure_refused);
+            assert!(host.view().failure_retryable);
             assert_eq!(
                 host.view().tracker_withdraw,
                 Some(SignTrackerWithdraw {
@@ -2026,7 +1972,20 @@ mod tests {
                 }),
                 "the tracker forgets it"
             );
-            assert!(!host.view().failure_refused);
+            let told: Vec<SignResponsePayload> = host
+                .dispatch(Event::SwipeDismissed)
+                .iter()
+                .filter_map(|op| match &op.operation {
+                    SignOperation::SendResponse { payload, .. } => Some(payload.clone()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(told.len(), 1, "one answer: {told:?}");
+            assert!(matches!(
+                &told[0],
+                SignResponsePayload::Err { code: -32603, message: Some(message), .. }
+                    if message == NOT_SENT_DAPP_DETAIL
+            ));
         });
     }
 
@@ -2169,7 +2128,18 @@ mod tests {
                     now_ms: 6_000.0,
                 },
             );
-            let told: Vec<_> = settled
+            // Spec 096 F8: held while the sheet says "refused" (no retry: the
+            // same op is refused again), answered on the close.
+            assert!(
+                !settled
+                    .iter()
+                    .any(|op| matches!(op.operation, SignOperation::SendResponse { .. })),
+                "held for the sheet"
+            );
+            assert!(host.view().failure_refused, "the sheet says refused");
+            assert!(!host.view().failure_retryable);
+            let told: Vec<_> = host
+                .dispatch(Event::SwipeDismissed)
                 .iter()
                 .filter_map(|op| match &op.operation {
                     SignOperation::SendResponse { payload, .. } => Some(payload.clone()),
@@ -2182,7 +2152,6 @@ mod tests {
                 SignResponsePayload::Err { code: -32603, message: Some(message), .. }
                     if message == vela_core::user_op::REFUSED_DAPP_DETAIL
             ));
-            assert!(host.view().failure_refused, "the sheet says refused");
         });
     }
 
@@ -2514,16 +2483,17 @@ mod tests {
         });
     }
 
-    /// A page may send `value` as a JSON number, and the submit path moves
-    /// that coin — so the record keeps that figure, as the `0x` quantity every
-    /// other row carries, rather than `"0x0"` (083 H2 review). The record also
-    /// keeps the origin itself beside the name.
+    /// The record keeps the figure the submit moved, as the `0x` quantity
+    /// every other row carries, rather than `"0x0"` (083 H2 review) — read by
+    /// the core's rule, whatever case the page wrote it in (a JSON number no
+    /// longer reaches a record: the core refuses it at arrival, spec 096 F1).
+    /// The record also keeps the origin itself beside the name.
     #[test]
-    fn a_numeric_value_is_recorded_as_the_quantity_it_moved() {
+    fn a_value_is_recorded_as_the_quantity_it_moved() {
         storage::tests::with_temp_state("sign-record-number", || {
             let record = record(
                 SignRecordKind::DappTx,
-                r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":10000000000000000}]"#,
+                r#"[{"to":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","value":"0x2386F26FC10000"}]"#,
             );
             persist_record(&record);
             let rows = match storage::read_value(TX_KEY).ok().flatten() {
@@ -2548,10 +2518,9 @@ mod tests {
             stored_value(Some(&json!("0x2386F26FC10000"))),
             "0x2386f26fc10000"
         );
-        assert_eq!(
-            stored_value(Some(&json!("10000000000000000"))),
-            "0x2386f26fc10000"
-        );
+        // Decimal text is not a quantity by the core's rule (spec 096 F1):
+        // no shell signs it, so no row claims it.
+        assert_eq!(stored_value(Some(&json!("10000000000000000"))), "0x0");
     }
 
     /// The Universal Router the device pass's swaps called (0xd614…9c40).
@@ -3203,11 +3172,16 @@ mod tests {
             assert_eq!(calls[0].value, "0", "{params}");
         }
 
-        // And what is NOT a number draws no fee rather than a made-up one.
+        // And what is NOT a hex quantity draws no fee rather than a made-up
+        // one — decimal text, bare hex and a JSON number included: this shell
+        // read "1000" as decimal where every other read it as hex (spec 096).
         for params in [
             r#"[{"to":"0xbbb","value":"soon"}]"#,
             r#"[{"to":"0xbbb","value":"0xzz"}]"#,
             r#"[{"to":"0xbbb","value":{}}]"#,
+            r#"[{"to":"0xbbb","value":"1000"}]"#,
+            r#"[{"to":"0xbbb","value":"aa87bee538000"}]"#,
+            r#"[{"to":"0xbbb","value":1000}]"#,
         ] {
             assert!(
                 calls_of("eth_sendTransaction", params).is_none(),
@@ -3250,6 +3224,31 @@ mod tests {
         assert!(
             calls_of("wallet_sendCalls", r#"[{"calls":[{"value":"0x1"}]}]"#).is_none(),
             "…and so would a batch whose every call is unreadable"
+        );
+        // Every leg or none: a leg it cannot read is never dropped and the
+        // rest sent — a batch the page never asked for (spec 096).
+        assert!(
+            calls_of(
+                "wallet_sendCalls",
+                r#"[{"calls":[{"to":"0x1","value":"0x1"},{"value":"0x1"}]}]"#
+            )
+            .is_none()
+        );
+    }
+
+    /// Spec 096 F1: PancakeSwap's BNB → USDC — the value every shell must send
+    /// as 0.003 BNB, the core's reading.
+    #[test]
+    fn a_dapp_native_value_is_the_cores_reading() {
+        let swap = r#"[{"to":"0x13f4EA83D0bd40E75C8222255bc855a974568Dd4","value":"0xaa87bee538000","data":"0x3593564c"}]"#;
+        let calls =
+            calls_of("eth_sendTransaction", swap).unwrap_or_else(|| unreachable!("a swap reads"));
+        assert_eq!(calls[0].value, "3000000000000000");
+        let batch = r#"[{"calls":[{"to":"0x1","data":"0x095ea7b3"},{"to":"0x2","value":"0xAA87BEE538000"}]}]"#;
+        let legs = calls_of("wallet_sendCalls", batch).unwrap_or_else(|| unreachable!("reads"));
+        assert_eq!(
+            legs.iter().map(|c| c.value.as_str()).collect::<Vec<_>>(),
+            ["0", "3000000000000000"]
         );
     }
 

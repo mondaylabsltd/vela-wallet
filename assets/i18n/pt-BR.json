@@ -414,7 +414,8 @@
   "txBackgroundHint": "Fechar esta página não interrompe a transação",
   "txCloseBackground": "Fechar · continuar em segundo plano",
   "txSubmittedTitle": "Enviada para a rede",
-  "txConfirmedTitle": "Enviou {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Enviou {{amount}} {{symbol}}",
+  "recipientTokenContract": "Este é o endereço de um contrato de token. O que você enviar para cá geralmente não pode ser recuperado."
  },
  "receive": {
   "title": "Receber",
@@ -732,7 +733,8 @@
    "syncFailedBody": "A carteira foi criada, mas a chave pública não foi enviada — outros dispositivos ainda não conseguem entrar.",
    "copyAddress": "Copiar endereço",
    "copied": "Copiado",
-   "close": "Fechar"
+   "close": "Fechar",
+   "siteAccessBody": "O acesso da Vela aos sites está limitado. Escolha Permitir acesso no topo e tente de novo."
   },
   "create": {
    "accountNameHint": "Este nome é armazenado junto com sua chave pública on-chain para login em vários dispositivos.",
@@ -988,6 +990,11 @@
    "clearAllTitle": "Limpar o histórico?",
    "clearAllBody": "Isso remove todas as dApps abertas recentemente.",
    "a11yDeleteHistory": "Remover do histórico"
+  },
+  "ext": {
+   "installedNote": "Recarregue as abas que já estavam abertas para que os sites encontrem a Vela.",
+   "accessNote": "O acesso aos sites está limitado: os sites não veem a Vela e a passkey não funciona.",
+   "accessAllow": "Permitir acesso"
   }
  },
  "signHandoff": {
@@ -1036,6 +1043,9 @@
   "linkWebsite": "Site",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Política de Privacidade",
+  "linkTerms": "Termos de Serviço",
+  "linkSupport": "Suporte",
   "footer": "Feito com cuidado. Suas chaves, suas moedas.",
   "sectionLinks": "Links",
   "debugMode": "Modo de depuração",
@@ -1509,7 +1519,8 @@
    "feeToken": "Token da taxa",
    "paidWith": "Pago com {{symbol}}",
    "rowBalance": "Saldo",
-   "rowSpend": "Custo est."
+   "rowSpend": "Custo est.",
+   "feeCoinSpent": "Esta transação também usa seu {{sym}}. Se não sobrar o suficiente para a taxa, ela vai falhar."
   },
   "dock": {
    "receive": "Receber",
@@ -1606,6 +1617,25 @@
   },
   "qrPlaceholder": {
    "caption": "Espaço reservado de demonstração · não escaneável"
+  },
+  "appMenu": {
+   "about": "Sobre o Vela Wallet",
+   "hide": "Ocultar Vela Wallet",
+   "hideOthers": "Ocultar Outros",
+   "showAll": "Mostrar Tudo",
+   "quit": "Encerrar Vela Wallet",
+   "edit": "Editar",
+   "undo": "Desfazer",
+   "redo": "Refazer",
+   "cut": "Recortar",
+   "copy": "Copiar",
+   "paste": "Colar",
+   "selectAll": "Selecionar Tudo",
+   "view": "Visualizar",
+   "fullScreen": "Alternar Tela Cheia",
+   "window": "Janela",
+   "minimize": "Minimizar",
+   "closeWindow": "Fechar Janela"
   }
  },
  "settingsModals": {

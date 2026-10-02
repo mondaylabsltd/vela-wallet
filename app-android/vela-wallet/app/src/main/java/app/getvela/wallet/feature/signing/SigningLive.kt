@@ -345,20 +345,22 @@ object SigningLive {
         GuardSurface.None -> emptyList()
         GuardSurface.PermitSign -> buildList {
             guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
+            // An unlimited permit is said like any unlimited approval (spec 094 S8).
+            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
             add(SigningBlock.Warning(SigningTone.Danger, s.a("permitCantCap")))
         }
         GuardSurface.ApprovalEditor -> buildList {
             guard.editor?.let { editor -> add(allowanceBlock(editor, guard.meta, guard.increase_total, guard.decimals_unverified, guard.expired, s)) }
             guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
-            // Kept as the site asked (2026-09-26) — allowed, never unsaid.
-            if (guard.editor?.choice == GuardChoice.Unlimited) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+            // Kept as the site asked (2026-09-26) — allowed, never unsaid; the core decides when (094 S8).
+            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
         }
         GuardSurface.Batch -> buildList {
             guard.batch?.legs?.forEachIndexed { index, leg ->
                 leg.editor?.let { editor -> add(allowanceBlock(editor, leg.meta, null, false, false, s, prefix = "#${index + 1} ", leg = index)) }
                 leg.approval?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
             }
-            if (guard.batch?.any_uncapped == true) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
         }
     }
 
@@ -491,7 +493,10 @@ object SigningLive {
                     // sent" — never "try again": it would be refused again.
                     captions = listOfNotNull(summary, failureWords(sign, s)),
                     cta = s.t(I18nKeys.Flows.DONE),
-                    ctaAccent = true,
+                    // Spec 096 F8: the core holds the page's answer until this
+                    // closes; a failure that sent nothing may be tried again.
+                    ctaAccent = !sign.failure_retryable,
+                    retry = if (sign.failure_retryable) s.t(I18nKeys.Flows.TX_RETRY) else null,
                 )
             // Spec 082 RA10: the relay's reply was lost. "Submitting…", it may
             // have been sent, Vela keeps checking — the op hash, and a close
@@ -1091,6 +1096,11 @@ object SigningLive {
             tappable = fee.failed != null || choosable,
             warning = when {
                 short -> ctx.strings.t("send.warnInsufficientGas", mapOf("sym" to selected!!.symbol))
+                // Spec 096 F2: the person chose a coin the transaction itself
+                // spends (the PancakeSwap USDC swap, fee in USDC); the core
+                // flags it, said under the fee while that coin pays.
+                !fee.busy && fee.failed == null && selected?.spent_by_operation == true ->
+                    ctx.strings.t("componentsUi.gas.feeCoinSpent", mapOf("sym" to selected.symbol))
                 // Spec 079: why there is no fee, and that it will be asked
                 // again — in the core's words (spec 082 RJ13): the relay's
                 // failure, or the chain's node (rate-limited, or out of reach,

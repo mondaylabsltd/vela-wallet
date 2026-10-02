@@ -604,6 +604,11 @@ struct CoreWireRoundTwoTests {
         #expect(!withdraw.recordIds.isEmpty)
         #expect(run.pending.contains { $0["type"] as? String == "delete_record" }, "\(run.pending)")
         #expect(SignExecutor.operations.contains("delete_record"))
+        // Spec 096 F8: held while the sheet says refused — no "try again" —
+        // and answered, once, when it is closed.
+        #expect(!view.failureRetryable)
+        #expect(!run.pending.contains { $0["type"] as? String == "send_response" }, "\(run.pending)")
+        try run.take(core.dispatch(eventJson: CoreJSON.string(["type": "swipe_dismissed"])))
         // The page is answered the core's fixed refusal, once.
         let answer = try #require(run.pending.first { $0["type"] as? String == "send_response" })
         let payload = try #require(answer["payload"] as? [String: Any])

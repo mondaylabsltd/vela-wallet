@@ -684,8 +684,8 @@ impl SendHost {
             }
             BatchOperation::SaveTemplateFile { name, contents, .. } => {
                 // The save dialog opens where a person keeps their files, not
-                // where this app keeps its state.
-                let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+                // where this app keeps its state (spec 095: Downloads).
+                let directory = crate::executor::storage::save_panel_dir();
                 let target = cx.prompt_for_new_path(&directory, Some(&name));
                 cx.spawn(async move |host, cx| {
                     let result = match target.await {
@@ -2018,6 +2018,7 @@ mod tests {
             amount: Some("10000000000000000".to_owned()),
             insufficient,
             selected: symbol == "xDAI",
+            spent_by_operation: false,
         };
         let fee = FeeView {
             options: vec![option("xDAI", false), option("USDC", true)],

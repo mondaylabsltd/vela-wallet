@@ -411,7 +411,8 @@
   "txBackgroundHint": "このページを閉じても取引はバックグラウンドで続きます",
   "txCloseBackground": "閉じる · バックグラウンドで続行",
   "txSubmittedTitle": "ネットワークに送信しました",
-  "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました"
+  "txConfirmedTitle": "{{amount}} {{symbol}} を送金しました",
+  "recipientTokenContract": "これはトークンのコントラクトアドレスです。ここに送った資産は、通常取り戻せません。"
  },
  "receive": {
   "title": "受け取る",
@@ -729,7 +730,8 @@
    "syncFailedBody": "ウォレットは作成されましたが、公開鍵がアップロードされていないため、他の端末ではまだサインインできません。",
    "copyAddress": "アドレスをコピー",
    "copied": "コピーしました",
-   "close": "閉じる"
+   "close": "閉じる",
+   "siteAccessBody": "サイトへのアクセスが制限されています。上部の「アクセスを許可」を選んで、もう一度お試しください。"
   },
   "create": {
    "accountNameHint": "この名前は、端末をまたいだサインインのために公開鍵とともにオンチェーンに保存されます。",
@@ -985,6 +987,11 @@
    "clearAllTitle": "履歴を消去しますか？",
    "clearAllBody": "最近開いた dApp をすべて削除します。",
    "a11yDeleteHistory": "履歴から削除"
+  },
+  "ext": {
+   "installedNote": "開いていたタブを再読み込みすると、サイトから Vela が見つかります。",
+   "accessNote": "サイトへのアクセスが制限されています。Vela が見えず、パスキーも使えません。",
+   "accessAllow": "アクセスを許可"
   }
  },
  "signHandoff": {
@@ -1033,6 +1040,9 @@
   "linkWebsite": "ウェブサイト",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "プライバシーポリシー",
+  "linkTerms": "利用規約",
+  "linkSupport": "サポート",
   "footer": "心を込めて作りました。鍵もコインも、あなたのもの。",
   "sectionLinks": "リンク",
   "debugMode": "デバッグモード",
@@ -1356,7 +1366,7 @@
    "labelYouReceiveMin": "最小受取額",
    "valueUnlimited": "無制限",
    "valueAll": "全額",
-   "warnOrderTerms": "この注文の金額はここに表示されません — 先にサイトでご確認ください。",
+   "warnOrderTerms": "この注文の金額は表示されません — サイトでご確認ください。",
    "simResultLabel": "シミュレーション結果",
    "simResultNoChange": "資産の変動なし",
    "simResultNoOther": "他に変動なし",
@@ -1506,7 +1516,8 @@
    "feeToken": "手数料トークン",
    "paidWith": "{{symbol}} で支払い",
    "rowBalance": "残高",
-   "rowSpend": "推定コスト"
+   "rowSpend": "推定コスト",
+   "feeCoinSpent": "この取引では {{sym}} も使われます。手数料の分が残らないと、取引は失敗します。"
   },
   "dock": {
    "receive": "受け取る",
@@ -1603,6 +1614,25 @@
   },
   "qrPlaceholder": {
    "caption": "デモ用プレースホルダー · スキャン不可"
+  },
+  "appMenu": {
+   "about": "Vela Walletについて",
+   "hide": "Vela Walletを非表示",
+   "hideOthers": "ほかを非表示",
+   "showAll": "すべてを表示",
+   "quit": "Vela Walletを終了",
+   "edit": "編集",
+   "undo": "取り消す",
+   "redo": "やり直す",
+   "cut": "カット",
+   "copy": "コピー",
+   "paste": "ペースト",
+   "selectAll": "すべてを選択",
+   "view": "表示",
+   "fullScreen": "フルスクリーンを切り替え",
+   "window": "ウインドウ",
+   "minimize": "しまう",
+   "closeWindow": "ウインドウを閉じる"
   }
  },
  "settingsModals": {

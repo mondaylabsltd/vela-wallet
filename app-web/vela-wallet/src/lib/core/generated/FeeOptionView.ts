@@ -15,4 +15,18 @@ contract: string | null, decimals: number, balance: string, recipient: string, u
 /**
  * Cost of THIS tx in this coin, or `None` when it cannot be priced.
  */
-amount: string | null, insufficient: boolean, selected: boolean, };
+amount: string | null, insufficient: boolean, selected: boolean, 
+/**
+ * The operation itself may spend this coin by an amount none of its
+ * calls states — it approves it, hands it to Permit2 or a router, or is
+ * made to the coin's own contract — and no simulation has said how much
+ * is left (spec 096 F2). The machine never picks such a coin; a person
+ * may, and the sheet tells them, under the fee, while it is the coin in
+ * force: the fee is paid last, from what the operation leaves, and if
+ * that is too little the relay refuses the whole transaction.
+ *
+ * Never set on the chain's own coin, nor for a plain transfer, whose
+ * amount the fee is already weighed on top of. `#[serde(default)]`: a
+ * reader that predates it reads `false`.
+ */
+spent_by_operation: boolean, };

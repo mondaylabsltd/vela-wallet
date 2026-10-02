@@ -14,6 +14,7 @@
  */
 import {
 	SAFE_PROXY_RUNTIME_CODE,
+	dappRequestCalls,
 	derSignatureToRaw,
 	fromHex,
 	hashTypedData,
@@ -44,12 +45,14 @@ import {
 	signerAddressFor,
 	type BeforePost,
 	type QuotedInBandFee,
+	type SignFn,
 	type SubmitResult,
 	type WalletKeySet,
 	type WalletSigner,
 	UserOpRevertedError
 } from './safe-transaction';
 import { enforceNoUnlimited } from './approval-guard';
+import { toShellCall } from './amount-codec';
 import { assertChallengeSigned, attestedSafeMessageHash } from './sign-attest';
 import { findAccountByAddress, findAccountByCredentialId, type SignerAccount } from './accounts';
 import { getAllNetworksSync } from './networks';
@@ -500,9 +503,7 @@ export async function handleSendTransaction(
 	const effectiveChainId = resolveChainId(chainId, txDict.chainId);
 	assertChainSupported(effectiveChainId);
 
-	const to = txDict.to ?? '';
-	const valueHex = txDict.value ?? '0x0';
-	const dataHex = txDict.data ?? '0x';
+	const [call] = requestCalls(request);
 
 	// Resolve the wallet's FULL key set (multi-key wallets sign with any
 	// founding key; the set also builds an undeployed Safe's initCode). Falls
@@ -525,29 +526,51 @@ export async function handleSendTransaction(
 	const signer = challengeSigner(request, stored, credentials, safeAddress, effectiveChainId);
 	const signFn = guardedSign(txSigner(signer), hooks, true);
 
-	const valueClean = stripHexPrefix(valueHex) || '0';
+	const txResult = await sendOneCall(
+		safeAddress,
+		call,
+		effectiveChainId,
+		publicKeyHex,
+		signFn,
+		maxFeeOverride,
+		gasFeeToken,
+		quotedFee
+	);
 
-	let txResult;
-	if (dataHex === '0x' || dataHex === '') {
-		txResult = await sendNative(
+	return answerFor(txResult, effectiveChainId, onSubmitted, hooks);
+}
+
+/**
+ * The calls a request sends, as the CORE reads them (`tx_request::calls_of`,
+ * spec 096 F1) and in `safe-transaction.ts`'s form: `value` as `0x`-hex,
+ * through the one codec Send's calls take (`toShellCall`). Every reader of
+ * `value` used to be its own — this one stripped the `0x`, and the gas floor
+ * then threw on PancakeSwap's `0xaa87bee538000` before anything was signed.
+ * Throws when the core cannot read them: nothing is guessed or signed.
+ */
+function requestCalls(request: DAppRequest): { to: string; value: string; data: string }[] {
+	const calls = dappRequestCalls(request.method, JSON.stringify(request.params));
+	if (!calls) throw new Error('Invalid transaction params');
+	return calls.map(toShellCall);
+}
+
+/** One call: a plain transfer when it carries no calldata, else a contract call. */
+function sendOneCall(
+	safeAddress: string,
+	call: { to: string; value: string; data: string },
+	chainId: number,
+	publicKeyHex: WalletSigner,
+	signFn: SignFn,
+	maxFeeOverride: bigint | undefined,
+	gasFeeToken: string | null | undefined,
+	quotedFee: QuotedInBandFee | undefined
+): Promise<SubmitResult> {
+	if (call.data === '0x' || call.data === '') {
+		return sendNative(
 			safeAddress,
-			to,
-			valueClean,
-			effectiveChainId,
-			publicKeyHex,
-			signFn,
-			maxFeeOverride,
-			gasFeeToken,
-			quotedFee
-		);
-	} else {
-		const txData = fromHex(stripHexPrefix(dataHex));
-		txResult = await sendContractCall(
-			safeAddress,
-			to,
-			valueClean,
-			txData,
-			effectiveChainId,
+			call.to,
+			call.value,
+			chainId,
 			publicKeyHex,
 			signFn,
 			maxFeeOverride,
@@ -555,8 +578,18 @@ export async function handleSendTransaction(
 			quotedFee
 		);
 	}
-
-	return answerFor(txResult, effectiveChainId, onSubmitted, hooks);
+	return sendContractCall(
+		safeAddress,
+		call.to,
+		call.value,
+		fromHex(stripHexPrefix(call.data)),
+		chainId,
+		publicKeyHex,
+		signFn,
+		maxFeeOverride,
+		gasFeeToken,
+		quotedFee
+	);
 }
 
 /**
@@ -819,6 +852,7 @@ export async function handleSendCalls(
 
 	const calls = payload.calls ?? [];
 	if (calls.length === 0) throw new Error('No calls provided');
+	const legs = requestCalls(request);
 
 	// A batch must not smuggle an unbounded approval past the per-tx guard — check
 	// every leg as if it were a standalone transaction. On the core-driven path the
@@ -851,52 +885,24 @@ export async function handleSendCalls(
 	const signFn = guardedSign(txSigner(signer), hooks, true);
 
 	// Single call → use existing send logic
-	if (calls.length === 1) {
-		const call = calls[0];
-		const to = call.to ?? '';
-		const valueHex = call.value ?? '0x0';
-		const dataHex = call.data ?? '0x';
-		const valueClean = stripHexPrefix(valueHex) || '0';
-
-		let txResult;
-		if (dataHex === '0x' || dataHex === '') {
-			txResult = await sendNative(
-				safeAddress,
-				to,
-				valueClean,
-				effectiveChainId,
-				publicKeyHex,
-				signFn,
-				undefined,
-				gasFeeToken,
-				quotedFee
-			);
-		} else {
-			const txData = fromHex(stripHexPrefix(dataHex));
-			txResult = await sendContractCall(
-				safeAddress,
-				to,
-				valueClean,
-				txData,
-				effectiveChainId,
-				publicKeyHex,
-				signFn,
-				undefined,
-				gasFeeToken,
-				quotedFee
-			);
-		}
+	if (legs.length === 1) {
+		const txResult = await sendOneCall(
+			safeAddress,
+			legs[0],
+			effectiveChainId,
+			publicKeyHex,
+			signFn,
+			undefined,
+			gasFeeToken,
+			quotedFee
+		);
 		return batchIdFor(txResult, effectiveChainId, onSubmitted);
 	}
 
 	// Multiple calls → batch via Safe multiSend
 	const txResult = await sendBatchCalls(
 		safeAddress,
-		calls.map((c) => ({
-			to: c.to,
-			value: stripHexPrefix(c.value ?? '0x0') || '0',
-			data: c.data ?? '0x'
-		})),
+		legs,
 		effectiveChainId,
 		publicKeyHex,
 		signFn,

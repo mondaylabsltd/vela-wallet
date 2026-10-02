@@ -1066,10 +1066,13 @@ fun RecipientField(
         }
         field.note?.let {
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
+            // A token's own contract (spec 096 F12) is a warning, in the
+            // warning tone the confirm's tag uses.
             Text(
                 text = it,
-                color = colors.fgSubtle,
+                color = if (field.noteWarning) colors.warningBase else colors.fgSubtle,
                 fontFamily = VelaFontFamily,
+                fontWeight = if (field.noteWarning) VelaFontWeight.medium else null,
                 fontSize = VelaTextSize.sm,
             )
         }

@@ -418,7 +418,8 @@
   "txBackgroundHint": "Closing this page keeps the transaction running",
   "txCloseBackground": "Close · keep running",
   "txSubmittedTitle": "Submitted to the network",
-  "txConfirmedTitle": "Sent {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Sent {{amount}} {{symbol}}",
+  "recipientTokenContract": "This is a token contract address. Assets sent here usually can't be recovered."
  },
  "receive": {
   "title": "Receive",
@@ -736,7 +737,8 @@
    "syncFailedBody": "Wallet created, but the public key wasn't uploaded — other devices can't sign in yet.",
    "copyAddress": "Copy address",
    "copied": "Copied",
-   "close": "Close"
+   "close": "Close",
+   "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again."
   },
   "create": {
    "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",
@@ -992,6 +994,11 @@
    "clearAllTitle": "Clear history?",
    "clearAllBody": "This removes all recently-opened dApps.",
    "a11yDeleteHistory": "Remove from history"
+  },
+  "ext": {
+   "installedNote": "Reload tabs that were already open so their sites can find Vela.",
+   "accessNote": "Site access is limited, so sites can't find Vela and passkeys won't work.",
+   "accessAllow": "Allow access"
   }
  },
  "signHandoff": {
@@ -1040,6 +1047,9 @@
   "linkWebsite": "Website",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Privacy Policy",
+  "linkTerms": "Terms of Service",
+  "linkSupport": "Support",
   "footer": "Built with care. Your keys, your coins.",
   "sectionLinks": "Links",
   "debugMode": "Debug mode",
@@ -1408,7 +1418,7 @@
    "labelYouReceiveMin": "You receive (min)",
    "valueUnlimited": "Unlimited",
    "valueAll": "All",
-   "warnOrderTerms": "This order's amounts aren't shown here — check them on the site first.",
+   "warnOrderTerms": "This order's amounts aren't shown — check them on the site.",
    "batchSubtitle": "{{count}} transactions, signed together",
    "batchCall": "Contract call",
    "balanceSelfTransfer": "To your own address · balance won't change",
@@ -1519,7 +1529,8 @@
    "feeToken": "Fee token",
    "paidWith": "Paid with {{symbol}}",
    "rowBalance": "Balance",
-   "rowSpend": "Est. cost"
+   "rowSpend": "Est. cost",
+   "feeCoinSpent": "This transaction also uses your {{sym}}. If too little is left for the fee, it will fail."
   },
   "dock": {
    "receive": "Receive",
@@ -1613,6 +1624,25 @@
   },
   "qrPlaceholder": {
    "caption": "Demo placeholder · not scannable"
+  },
+  "appMenu": {
+   "about": "About Vela Wallet",
+   "hide": "Hide Vela Wallet",
+   "hideOthers": "Hide Others",
+   "showAll": "Show All",
+   "quit": "Quit Vela Wallet",
+   "edit": "Edit",
+   "undo": "Undo",
+   "redo": "Redo",
+   "cut": "Cut",
+   "copy": "Copy",
+   "paste": "Paste",
+   "selectAll": "Select All",
+   "view": "View",
+   "fullScreen": "Toggle Full Screen",
+   "window": "Window",
+   "minimize": "Minimize",
+   "closeWindow": "Close Window"
   }
  },
  "settingsModals": {

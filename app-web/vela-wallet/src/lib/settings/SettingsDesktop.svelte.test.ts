@@ -177,7 +177,11 @@ describe('rows that go somewhere, go there', () => {
 		expect(hrefs).toEqual([
 			'https://getvela.app/',
 			'https://github.com/mondaylabsltd/vela-wallet',
-			'https://safe.global/'
+			'https://safe.global/',
+			// Spec 095 (App Review 5.1.1(i)).
+			'https://getvela.app/privacy',
+			'https://getvela.app/terms',
+			'https://getvela.app/support'
 		]);
 	});
 });

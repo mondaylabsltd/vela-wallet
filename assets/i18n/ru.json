@@ -417,7 +417,8 @@
   "txBackgroundHint": "Если закрыть страницу, транзакция продолжится",
   "txCloseBackground": "Закрыть · продолжить в фоне",
   "txSubmittedTitle": "Отправлено в сеть",
-  "txConfirmedTitle": "Отправлено {{amount}} {{symbol}}"
+  "txConfirmedTitle": "Отправлено {{amount}} {{symbol}}",
+  "recipientTokenContract": "Это адрес контракта токена. Отправленное сюда обычно невозможно вернуть."
  },
  "receive": {
   "title": "Получить",
@@ -735,7 +736,8 @@
    "syncFailedBody": "Кошелёк создан, но открытый ключ не загружен — другие устройства пока не могут войти.",
    "copyAddress": "Скопировать адрес",
    "copied": "Скопировано",
-   "close": "Закрыть"
+   "close": "Закрыть",
+   "siteAccessBody": "Доступ Vela к сайтам ограничен. Нажмите «Разрешить доступ» вверху и попробуйте снова."
   },
   "create": {
    "accountNameHint": "Это имя хранится вместе с вашим открытым ключом в сети для входа с разных устройств.",
@@ -991,6 +993,11 @@
    "clearAllTitle": "Очистить историю?",
    "clearAllBody": "Это удалит все недавно открытые dApp.",
    "a11yDeleteHistory": "Удалить из истории"
+  },
+  "ext": {
+   "installedNote": "Перезагрузите уже открытые вкладки, чтобы их сайты нашли Vela.",
+   "accessNote": "Доступ к сайтам ограничен: сайты не видят Vela, а passkey не работает.",
+   "accessAllow": "Разрешить доступ"
   }
  },
  "signHandoff": {
@@ -1039,6 +1046,9 @@
   "linkWebsite": "Сайт",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Политика конфиденциальности",
+  "linkTerms": "Условия использования",
+  "linkSupport": "Поддержка",
   "footer": "Сделано с заботой. Ваши ключи — ваши монеты.",
   "sectionLinks": "Ссылки",
   "debugMode": "Режим отладки",
@@ -1512,7 +1522,8 @@
    "feeToken": "Токен комиссии",
    "paidWith": "Оплачено в {{symbol}}",
    "rowBalance": "Баланс",
-   "rowSpend": "Прибл. стоимость"
+   "rowSpend": "Прибл. стоимость",
+   "feeCoinSpent": "Эта транзакция тоже расходует ваши {{sym}}. Если на комиссию останется мало, она не пройдёт."
   },
   "dock": {
    "receive": "Получить",
@@ -1609,6 +1620,25 @@
   },
   "qrPlaceholder": {
    "caption": "Демонстрационный шаблон · не сканируется"
+  },
+  "appMenu": {
+   "about": "О программе Vela Wallet",
+   "hide": "Скрыть Vela Wallet",
+   "hideOthers": "Скрыть остальные",
+   "showAll": "Показать все",
+   "quit": "Завершить Vela Wallet",
+   "edit": "Правка",
+   "undo": "Отменить",
+   "redo": "Повторить",
+   "cut": "Вырезать",
+   "copy": "Скопировать",
+   "paste": "Вставить",
+   "selectAll": "Выбрать все",
+   "view": "Вид",
+   "fullScreen": "Полноэкранный режим",
+   "window": "Окно",
+   "minimize": "Свернуть",
+   "closeWindow": "Закрыть окно"
   }
  },
  "settingsModals": {

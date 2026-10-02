@@ -157,6 +157,7 @@
     "txBackgroundHint": "Menutup halaman ini tidak menghentikan transaksi",
     "txCloseBackground": "Tutup · tetap jalan",
     "txSubmittedTitle": "Terkirim ke jaringan",
-    "txConfirmedTitle": "Terkirim {{amount}} {{symbol}}"
+    "txConfirmedTitle": "Terkirim {{amount}} {{symbol}}",
+    "recipientTokenContract": "Ini alamat kontrak token. Aset yang dikirim ke sini biasanya tidak bisa dikembalikan."
   }
 }

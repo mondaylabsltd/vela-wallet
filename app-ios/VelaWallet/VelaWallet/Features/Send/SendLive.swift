@@ -385,7 +385,12 @@ enum SendLive {
                 identiconSeed: isAddress(view.recipient) ? view.recipient : "",
                 pickLabel: drawn.pickLabel,
                 scanLabel: drawn.scanLabel,
-                note: view.recipientIdentity?.name ?? drawn.note
+                // A token's own contract (spec 096 F12) is said first, in the
+                // warning tone; else who the core says this is.
+                note: view.recipientIsTokenContract == true
+                    ? loc.t("send.recipientTokenContract")
+                    : view.recipientIdentity?.name ?? drawn.note,
+                noteWarn: view.recipientIsTokenContract == true
             )
         }
 
@@ -992,9 +997,13 @@ enum SendLive {
                 ? loc.t("componentsUi.funding.cancel")
                 : nil,
             repeatNote: confirmRepeatNote(view, loc: loc),
-            // The core's own verdict, resolved on this page only (single recipient).
-            recipientTag: !view.splitMode && view.recipientRisk?.firstTime == true
-                ? loc.t("componentsUi.signing.firstTimeTag") : nil,
+            // The core's own verdicts: a token's own contract (spec 096 F12)
+            // first, else the first time, resolved on this page only (single
+            // recipient).
+            recipientTag: view.recipientIsTokenContract == true
+                ? loc.t("send.recipientTokenContract")
+                : !view.splitMode && view.recipientRisk?.firstTime == true
+                    ? loc.t("componentsUi.signing.firstTimeTag") : nil,
             cta: live.cta
         )
     }

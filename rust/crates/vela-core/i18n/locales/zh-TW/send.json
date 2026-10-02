@@ -157,6 +157,7 @@
     "txBackgroundHint": "關閉此頁，交易會在背景繼續",
     "txCloseBackground": "關閉 · 背景繼續",
     "txSubmittedTitle": "交易已提交至網路",
-    "txConfirmedTitle": "已發送 {{amount}} {{symbol}}"
+    "txConfirmedTitle": "已發送 {{amount}} {{symbol}}",
+    "recipientTokenContract": "這是代幣合約地址，轉到這裡的資產通常無法找回。"
   }
 }

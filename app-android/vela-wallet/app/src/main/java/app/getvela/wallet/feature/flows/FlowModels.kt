@@ -539,6 +539,8 @@ data class RecipientFieldModel(
     val scanLabel: String? = null,
     /** Sweep's "every token goes to the same address". */
     val note: String? = null,
+    /** The note is a warning (spec 096 F12: a token's own contract). */
+    val noteWarning: Boolean = false,
     /** Spec 043: the live address as typed; `null` = a drawn, read-only field. */
     val raw: String? = null,
 )
@@ -758,6 +760,8 @@ data class SendReceiptModel(
     val ctaAccent: Boolean,
     /** Submitted only, and only where the chain has a typical time: the screen's clock runs off this. */
     val eta: ReceiptEtaModel? = null,
+    /** Spec 096 F8: "Try again" beside the button — a dApp request that failed before anything was sent. */
+    val retry: String? = null,
 )
 
 /**

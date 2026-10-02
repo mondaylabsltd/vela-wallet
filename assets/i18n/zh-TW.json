@@ -411,7 +411,8 @@
   "txBackgroundHint": "關閉此頁，交易會在背景繼續",
   "txCloseBackground": "關閉 · 背景繼續",
   "txSubmittedTitle": "交易已提交至網路",
-  "txConfirmedTitle": "已發送 {{amount}} {{symbol}}"
+  "txConfirmedTitle": "已發送 {{amount}} {{symbol}}",
+  "recipientTokenContract": "這是代幣合約地址，轉到這裡的資產通常無法找回。"
  },
  "receive": {
   "title": "收款",
@@ -729,7 +730,8 @@
    "syncFailedBody": "錢包已建立，但公鑰尚未上傳，其他裝置暫時無法登入。",
    "copyAddress": "複製地址",
    "copied": "已複製",
-   "close": "關閉"
+   "close": "關閉",
+   "siteAccessBody": "網站存取權受限。請點選頂端的「允許存取」，然後再試一次。"
   },
   "create": {
    "accountNameHint": "此名稱會連同您的公鑰一起記錄在鏈上，用於跨裝置登入。",
@@ -985,6 +987,11 @@
    "clearAllTitle": "清除記錄？",
    "clearAllBody": "這會移除所有最近開啟的 dApp。",
    "a11yDeleteHistory": "從記錄中移除"
+  },
+  "ext": {
+   "installedNote": "重新載入先前已開啟的分頁，網站才能找到 Vela。",
+   "accessNote": "網站存取權受限：網站找不到 Vela，通行密鑰也無法使用。",
+   "accessAllow": "允許存取"
   }
  },
  "signHandoff": {
@@ -1033,6 +1040,9 @@
   "linkWebsite": "官方網站",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "隱私政策",
+  "linkTerms": "服務條款",
+  "linkSupport": "說明與支援",
   "footer": "用心打造。您的金鑰，您的幣。",
   "sectionLinks": "連結",
   "debugMode": "除錯模式",
@@ -1467,7 +1477,8 @@
    "feeToken": "手續費代幣",
    "paidWith": "以 {{symbol}} 支付",
    "rowBalance": "餘額",
-   "rowSpend": "預估費用"
+   "rowSpend": "預估費用",
+   "feeCoinSpent": "這筆交易也會用到你的 {{sym}}，剩下的不夠付網路費時，交易會失敗。"
   },
   "dock": {
    "receive": "收款",
@@ -1603,6 +1614,25 @@
   },
   "qrPlaceholder": {
    "caption": "示範佔位圖案 · 無法掃描"
+  },
+  "appMenu": {
+   "about": "關於 Vela Wallet",
+   "hide": "隱藏 Vela Wallet",
+   "hideOthers": "隱藏其他",
+   "showAll": "全部顯示",
+   "quit": "結束 Vela Wallet",
+   "edit": "編輯",
+   "undo": "還原",
+   "redo": "重做",
+   "cut": "剪下",
+   "copy": "拷貝",
+   "paste": "貼上",
+   "selectAll": "全選",
+   "view": "顯示方式",
+   "fullScreen": "切換全螢幕",
+   "window": "視窗",
+   "minimize": "縮到最小",
+   "closeWindow": "關閉視窗"
   }
  },
  "settingsModals": {

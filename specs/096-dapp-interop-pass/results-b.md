@@ -103,7 +103,7 @@ Pool`, Activity "Approve on Aave".
 **CoW approve + pre-sign** — before: `2 · Set pre signature (best effort) ·
 Data 0x09e95d9c…bfb9fe · Flag true`. After: `2 · Swap · Order
 0x09e95d9c...6abfb9fe · Valid until 2026-10-02, 22:04` + caution "This order's
-amounts aren't shown here — check them on the site first." · spender "CoW
+amounts aren't shown — check them on the site." · spender "CoW
 Vault Relayer" · target "CoW Protocol"; record "Swap" → "Swap on CoW".
 
 **Sky USDC→USDS (Base)** — before: `1·Approve 0.0349 USDC, Spender

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Example Swap</title>
+		<style>
+			:root {
+				color-scheme: light;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				font:
+					15px/1.45 -apple-system,
+					BlinkMacSystemFont,
+					'Segoe UI',
+					Inter,
+					sans-serif;
+				color: #10131a;
+				background: #f4f5f8;
+				min-height: 100vh;
+			}
+			header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				padding: 18px 28px;
+				border-bottom: 1px solid #e3e6ec;
+				background: #fff;
+			}
+			.brand {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				font-weight: 650;
+				letter-spacing: -0.01em;
+			}
+			.logo {
+				width: 26px;
+				height: 26px;
+				border-radius: 8px;
+				background: linear-gradient(135deg, #5b7cfa, #8a5cf6);
+			}
+			nav {
+				display: flex;
+				gap: 22px;
+				color: #5b6170;
+			}
+			button.connect {
+				border: 0;
+				border-radius: 999px;
+				padding: 9px 16px;
+				background: #10131a;
+				color: #fff;
+				font-weight: 600;
+				cursor: pointer;
+			}
+			button.connect.done {
+				background: #eef0f4;
+				color: #10131a;
+			}
+			main {
+				display: grid;
+				place-items: center;
+				padding: 64px 20px;
+			}
+			.card {
+				width: 100%;
+				max-width: 440px;
+				background: #fff;
+				border: 1px solid #e3e6ec;
+				border-radius: 20px;
+				padding: 18px;
+			}
+			.card h2 {
+				margin: 4px 6px 14px;
+				font-size: 18px;
+			}
+			.field {
+				border: 1px solid #e3e6ec;
+				border-radius: 14px;
+				padding: 14px 16px;
+				margin-bottom: 8px;
+			}
+			.field small {
+				color: #6b7180;
+			}
+			.row {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				margin-top: 6px;
+			}
+			.amount {
+				font-size: 28px;
+				font-weight: 600;
+			}
+			.token {
+				border: 1px solid #e3e6ec;
+				border-radius: 999px;
+				padding: 6px 12px;
+				font-weight: 600;
+			}
+			button.go {
+				width: 100%;
+				margin-top: 10px;
+				border: 0;
+				border-radius: 14px;
+				padding: 14px;
+				background: #5b7cfa;
+				color: #fff;
+				font-size: 16px;
+				font-weight: 650;
+				cursor: pointer;
+			}
+			.note {
+				color: #6b7180;
+				font-size: 13px;
+				text-align: center;
+				margin-top: 12px;
+			}
+		</style>
+	</head>
+	<body>
+		<header>
+			<div class="brand"><span class="logo"></span>Example Swap</div>
+			<nav><span>Swap</span><span>Pools</span><span>Docs</span></nav>
+			<button class="connect" id="connect">Connect wallet</button>
+		</header>
+		<main>
+			<div class="card">
+				<h2>Swap</h2>
+				<div class="field">
+					<small>You pay</small>
+					<div class="row"><span class="amount">250</span><span class="token">USDC</span></div>
+				</div>
+				<div class="field">
+					<small>You receive</small>
+					<div class="row"><span class="amount">0.0912</span><span class="token">ETH</span></div>
+				</div>
+				<button class="go" id="swap">Swap</button>
+				<div class="note">A demo page for the Vela Wallet store listing.</div>
+			</div>
+		</main>
+		<script>
+			const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+			const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+			const ROUTER = '0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af';
+			let account = null;
+			document.getElementById('connect').addEventListener('click', async () => {
+				const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+				account = accounts[0];
+				const b = document.getElementById('connect');
+				b.textContent = account.slice(0, 6) + '…' + account.slice(-4);
+				b.classList.add('done');
+			});
+			window.__permit = async () => {
+				await window.ethereum.request({
+					method: 'wallet_switchEthereumChain',
+					params: [{ chainId: '0x1' }]
+				});
+				const typed = {
+					types: {
+						EIP712Domain: [
+							{ name: 'name', type: 'string' },
+							{ name: 'chainId', type: 'uint256' },
+							{ name: 'verifyingContract', type: 'address' }
+						],
+						PermitSingle: [
+							{ name: 'details', type: 'PermitDetails' },
+							{ name: 'spender', type: 'address' },
+							{ name: 'sigDeadline', type: 'uint256' }
+						],
+						PermitDetails: [
+							{ name: 'token', type: 'address' },
+							{ name: 'amount', type: 'uint160' },
+							{ name: 'expiration', type: 'uint48' },
+							{ name: 'nonce', type: 'uint48' }
+						]
+					},
+					primaryType: 'PermitSingle',
+					domain: { name: 'Permit2', chainId: 1, verifyingContract: PERMIT2 },
+					message: {
+						details: { token: USDC, amount: '250000000', expiration: '1793000000', nonce: '0' },
+						spender: ROUTER,
+						sigDeadline: '1791000000'
+					}
+				};
+				return window.ethereum.request({
+					method: 'eth_signTypedData_v4',
+					params: [account, JSON.stringify(typed)]
+				});
+			};
+			document.getElementById('swap').addEventListener('click', () => window.__permit());
+		</script>
+	</body>
+</html>

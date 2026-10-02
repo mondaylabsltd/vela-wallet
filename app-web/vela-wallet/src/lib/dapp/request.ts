@@ -44,8 +44,12 @@ export interface WalletFacts {
 /** What the window should show once the core has ruled. */
 export type RequestStage =
 	| { kind: 'loading' }
-	/** The core wants a person to decide. */
-	| { kind: 'consent'; origin: string; method: string }
+	/**
+	 * The core wants a person to decide. `address` is the account a Connect
+	 * would share — the core's `consent_address` (spec 096 F11), `null` when
+	 * nobody is signed in.
+	 */
+	| { kind: 'consent'; origin: string; method: string; address: string | null }
 	/** Answered without asking anyone — the origin was already granted. */
 	| { kind: 'done' }
 	/** The core refused, in its own words. */
@@ -100,7 +104,12 @@ export async function evaluate(
 
 		case 'consent':
 		default:
-			return { kind: 'consent', origin: request.origin, method: request.method };
+			return {
+				kind: 'consent',
+				origin: request.origin,
+				method: request.method,
+				address: verdict.consent_address ?? null
+			};
 	}
 }
 

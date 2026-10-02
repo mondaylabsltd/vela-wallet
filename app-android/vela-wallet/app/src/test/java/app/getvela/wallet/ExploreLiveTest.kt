@@ -213,6 +213,41 @@ class ExploreLiveTest {
         }
     }
 
+    /**
+     * Spec 096 F11: the consent names the account and the network the CORE says
+     * a Connect shares — `DbrConsentView.address` and `.chain_id` — not the
+     * session's active account and the front tab's chain.
+     */
+    @Test
+    fun `the consent names the core's account and the asking site's network`() {
+        val active = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        val identity = ExploreLive.Identity(accountName = "Parallel Multi", accountAddress = active, chainName = "BNB Chain", chainId = 1)
+        val asked = ExploreLive.consent(
+            fallback.connection,
+            app.getvela.wallet.feature.browser.core.DbrConsentView(tab = "t2", origin = "https://pancakeswap.finance", address = active.lowercase(), chain_id = 56),
+            strings,
+            identity,
+            secure = true,
+        )
+        assertEquals("Parallel Multi", asked.accountName)
+        assertEquals(ExploreLive.shortAddress(active.lowercase()), asked.accountAddress)
+        assertEquals(active.lowercase(), asked.accountSeed)
+        assertEquals("the asking site's chain, never the front tab's", app.getvela.wallet.core.marks.Marks.chainLogoUrl(56), asked.networkLogoUrl)
+
+        // A grant about to go to another account is named by that account.
+        val other = "0xa9ae000000000000000000000000000000002b2b"
+        val switching = ExploreLive.consent(
+            fallback.connection,
+            app.getvela.wallet.feature.browser.core.DbrConsentView(tab = "t2", origin = "https://pancakeswap.finance", address = other, chain_id = 56),
+            strings,
+            identity,
+            secure = true,
+        )
+        assertEquals(ExploreLive.shortAddress(other), switching.accountAddress)
+        assertEquals(other, switching.accountSeed)
+        assertTrue("never the active account's name", switching.accountName != "Parallel Multi")
+    }
+
     /** Spec 079: the page's chain notice is the pool's verdict — never for a chain merely busy. */
     @Test
     fun `a chain the pool could not reach is named once, and a busy one is not`() {

@@ -1188,29 +1188,32 @@ fn allowance_editor(
     )
 }
 
-/// The sentence an unlimited approval is never sent without.
+/// The guard's sentences under an approval (spec 094 S8).
 ///
-/// The request will go out granting an unbounded allowance as the site asked
-/// — the single approval kept on its Requested chip, or any batch leg left so
-/// (each leg's own card is [`guard_leg_editors`]; this is the sentence under
-/// them). The guard decides; this only says it.
+/// The danger line when the request grants an unbounded allowance as it
+/// stands — the core's [`GuardView::unlimited_warning`]: the single approval
+/// kept on its Requested chip, any batch leg left so (each leg's own card is
+/// [`guard_leg_editors`]; this is the sentence under them), and an off-chain
+/// permit for an unbounded amount. And for every off-chain permit, that its
+/// amount cannot be capped here — the dApp redeems its own struct — which the
+/// phones always said and this shell did not (089 F22: an unlimited Permit2
+/// drew red and said nothing). The guard decides; this only says it.
 #[must_use]
 pub fn guard_warnings(guard: &GuardView, s: &SigningStrings) -> Vec<Block> {
-    let unlimited = match guard.surface {
-        GuardSurface::Batch => guard.batch.as_ref().is_some_and(|batch| batch.any_uncapped),
-        _ => guard
-            .editor
-            .as_ref()
-            .is_some_and(|editor| editor.choice == Some(GuardChoice::Unlimited)),
-    };
-    if unlimited {
-        vec![Block::Warning {
+    let mut blocks = Vec::new();
+    if guard.unlimited_warning {
+        blocks.push(Block::Warning {
             tone: Tone::Danger,
             text: s.warn_unlimited.clone(),
-        }]
-    } else {
-        Vec::new()
+        });
     }
+    if guard.surface == GuardSurface::PermitSign {
+        blocks.push(Block::Warning {
+            tone: Tone::Danger,
+            text: s.warn_permit_cant_cap.clone(),
+        });
+    }
+    blocks
 }
 
 /// What the PIPELINE is doing, under whatever the request is.
@@ -1787,7 +1790,10 @@ pub fn fee_model(
                     .collect(),
             )
         }),
-        warning: insufficient_gas_warning(fee, s).or(refused).or(reason),
+        warning: insufficient_gas_warning(fee, s)
+            .or(refused)
+            .or_else(|| spent_fee_coin_warning(fee, s))
+            .or(reason),
         refresh: Some(s.fee_refresh.clone()),
         refreshing: fee.busy,
         // "From a while ago" is a fact about a number: not over a row with no
@@ -1856,6 +1862,25 @@ pub fn insufficient_gas_warning(fee: &FeeView, s: &SigningStrings) -> Option<Sha
     selected.insufficient.then(|| {
         SharedString::from(crate::signing::fill(
             &s.warn_insufficient_gas,
+            &[("sym", &selected.symbol)],
+        ))
+    })
+}
+
+/// Spec 096 F2: the coin paying is one the transaction itself may spend —
+/// the PancakeSwap USDC swap, its fee in USDC — and nothing has measured how
+/// much of it is left (the core's `spent_by_operation`). The machine never
+/// picks such a coin; the person may, and this says what it risks while it
+/// is the coin in force. A warning, not a gate.
+#[must_use]
+pub fn spent_fee_coin_warning(fee: &FeeView, s: &SigningStrings) -> Option<SharedString> {
+    if fee.busy {
+        return None;
+    }
+    let selected = fee.options.iter().find(|option| option.selected)?;
+    selected.spent_by_operation.then(|| {
+        SharedString::from(crate::signing::fill(
+            &s.warn_fee_coin_spent,
             &[("sym", &selected.symbol)],
         ))
     })
@@ -2719,6 +2744,7 @@ mod tests {
             confirm_allowed: false,
             rewritten_params_json: None,
             unlimited_consented: false,
+            unlimited_warning: false,
             increase_total: None,
             decimals_unverified: false,
             expired: false,
@@ -2760,6 +2786,7 @@ mod tests {
             ..editor_view(None, false, None)
         });
         kept.unlimited_consented = true;
+        kept.unlimited_warning = true;
         let (block, modes) = guard_editor(&kept, &s)
             .unwrap_or_else(|| unreachable!("the editor surface drew nothing"));
 
@@ -2995,11 +3022,38 @@ mod tests {
             any_to_own_token: false,
             all_settled: true,
         });
+        batch.unlimited_warning = true;
         assert_eq!(guard_warnings(&batch, &s).len(), 1);
-        if let Some(view) = batch.batch.as_mut() {
-            view.any_uncapped = false;
-        }
+        batch.unlimited_warning = false;
         assert!(guard_warnings(&batch, &s).is_empty());
+    }
+
+    /// Spec 094 S8: an unlimited off-chain permit is said in the danger tone
+    /// like an ERC-20 approve kept as asked — and every permit says it cannot
+    /// be capped here, which only the phones said before.
+    #[test]
+    fn a_permit_says_it_cannot_be_capped_and_an_unlimited_one_warns() {
+        let s = strings();
+        let mut permit = guard_view(editor_view(None, false, None));
+        permit.surface = GuardSurface::PermitSign;
+        permit.editor = None;
+        let bounded = guard_warnings(&permit, &s);
+        assert_eq!(bounded.len(), 1);
+        assert!(matches!(
+            &bounded[0],
+            Block::Warning { tone: Tone::Danger, text } if *text == s.warn_permit_cant_cap
+        ));
+        permit.unlimited_warning = true;
+        let unlimited = guard_warnings(&permit, &s);
+        assert_eq!(unlimited.len(), 2);
+        assert!(matches!(
+            &unlimited[0],
+            Block::Warning { tone: Tone::Danger, text } if *text == s.warn_unlimited
+        ));
+        assert!(
+            guard_editor(&permit, &s).is_none(),
+            "no cap editor for a permit"
+        );
     }
 
     /// A chosen cap is a number, formatted by the core's own formatter.
@@ -3520,6 +3574,7 @@ mod fee_tests {
             amount: Some("1250000".to_owned()),
             insufficient,
             selected,
+            spent_by_operation: false,
         }
     }
 
@@ -3942,5 +3997,31 @@ mod fee_tests {
         let mut unquoted = broke;
         unquoted.fee = None;
         assert!(insufficient_gas_warning(&unquoted, &s).is_none());
+    }
+
+    /// Spec 096 F2: the person chose a coin the transaction itself spends
+    /// (the PancakeSwap USDC swap, fee in USDC). The core flags it and the
+    /// sheet says so — while that coin pays, and not while it re-measures.
+    #[test]
+    fn a_fee_coin_the_transaction_spends_is_warned() {
+        let s = strings();
+        let usdc = Some("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d");
+        let spent = |selected: bool| FeeOptionView {
+            spent_by_operation: true,
+            ..option("USDC", usdc, false, selected)
+        };
+        let paying = quoted(vec![option("BNB", None, false, false), spent(true)], true);
+        let text = spent_fee_coin_warning(&paying, &s)
+            .unwrap_or_else(|| unreachable!("the coin the swap spends pays, unsaid"));
+        assert!(text.contains("USDC"), "{text}");
+        assert!(!text.contains("{{"), "{text}");
+
+        // Listed, not paying: nothing to say.
+        let in_bnb = quoted(vec![option("BNB", None, false, true), spent(false)], true);
+        assert!(spent_fee_coin_warning(&in_bnb, &s).is_none());
+        // Re-measuring: the verdict is about to be asked again.
+        let mut busy = paying;
+        busy.busy = true;
+        assert!(spent_fee_coin_warning(&busy, &s).is_none());
     }
 }

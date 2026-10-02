@@ -108,6 +108,7 @@
 	import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 	import { WEB_DESTINATIONS } from '$lib/wallet/destinations';
 	import { balance } from '$lib/wallet/core/balance.svelte';
+	import { packagedHref } from '$lib/extension/page-url';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -452,8 +453,10 @@
 			return;
 		}
 		// Nothing of this wallet is left to read, so the session machine's own
-		// view is stale by construction: a full reload is the first run.
-		location.assign(welcome);
+		// view is stale by construction: a full reload is the first run — at
+		// the DOCUMENT the welcome is stored as. In the packaged extension a
+		// route path is no file, and `/en` landed on `chrome-error://` (094 S4).
+		location.assign(packagedHref(welcome));
 	}
 
 	/**

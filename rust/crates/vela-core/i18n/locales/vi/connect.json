@@ -108,6 +108,11 @@
       "clearAllTitle": "Xóa lịch sử?",
       "clearAllBody": "Thao tác này xóa tất cả dApp đã mở gần đây.",
       "a11yDeleteHistory": "Xóa khỏi lịch sử"
+    },
+    "ext": {
+      "installedNote": "Hãy tải lại các thẻ đã mở trước đó để các trang tìm thấy Vela.",
+      "accessNote": "Quyền truy cập trang web bị giới hạn: các trang không thấy Vela và không dùng được passkey.",
+      "accessAllow": "Cho phép truy cập"
     }
   },
   "signHandoff": {

@@ -21,6 +21,8 @@
 		pickLabel: string;
 		scanLabel?: string;
 		note?: string;
+		/** The note is a warning (spec 096 F12), drawn in the warning tone. */
+		noteWarn?: boolean;
 		onpick?: () => void;
 		onscan?: () => void;
 		/**
@@ -39,6 +41,7 @@
 		pickLabel,
 		scanLabel,
 		note,
+		noteWarn = false,
 		onpick,
 		onscan,
 		oninput,
@@ -74,7 +77,7 @@
 			</button>
 		{/if}
 	</div>
-	{#if note !== undefined}<span class="note">{note}</span>{/if}
+	{#if note !== undefined}<span class="note" class:warn={noteWarn}>{note}</span>{/if}
 </div>
 
 <style>
@@ -148,5 +151,10 @@
 	.note {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
+	}
+
+	.note.warn {
+		font-weight: var(--weight-medium);
+		color: var(--color-warning-base);
 	}
 </style>

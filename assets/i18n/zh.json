@@ -418,7 +418,8 @@
   "txBackgroundHint": "关闭此页，交易会在后台继续",
   "txCloseBackground": "关闭 · 后台继续",
   "txSubmittedTitle": "交易已提交至网络",
-  "txConfirmedTitle": "已发送 {{amount}} {{symbol}}"
+  "txConfirmedTitle": "已发送 {{amount}} {{symbol}}",
+  "recipientTokenContract": "这是代币合约地址，转到这里的资产通常无法找回。"
  },
  "receive": {
   "title": "收款",
@@ -736,7 +737,8 @@
    "syncFailedBody": "钱包已创建，但公钥未上传，其他设备暂时无法登录。",
    "copyAddress": "复制地址",
    "copied": "已复制",
-   "close": "关闭"
+   "close": "关闭",
+   "siteAccessBody": "网站访问权限受限。请点按顶部的“允许访问”，然后重试。"
   },
   "create": {
    "accountNameHint": "此名称将与您的公钥一起存储上链，用于跨设备登录。",
@@ -992,6 +994,11 @@
    "clearAllTitle": "清空记录？",
    "clearAllBody": "这会移除所有最近打开的 dApp。",
    "a11yDeleteHistory": "从记录中移除"
+  },
+  "ext": {
+   "installedNote": "重新加载之前已打开的标签页，网站才能找到 Vela。",
+   "accessNote": "网站访问权限受限：网站找不到 Vela，通行密钥也无法使用。",
+   "accessAllow": "允许访问"
   }
  },
  "signHandoff": {
@@ -1040,6 +1047,9 @@
   "linkWebsite": "官网",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "隐私政策",
+  "linkTerms": "服务条款",
+  "linkSupport": "帮助与支持",
   "footer": "用心构建。您的密钥，您的资产。",
   "sectionLinks": "链接",
   "debugMode": "调试模式",
@@ -1477,7 +1487,8 @@
    "feeToken": "手续费币种",
    "paidWith": "用 {{symbol}} 支付",
    "rowBalance": "余额",
-   "rowSpend": "本次消耗"
+   "rowSpend": "本次消耗",
+   "feeCoinSpent": "这笔交易也会用到你的 {{sym}}，剩下的不够付网络费时，交易会失败。"
   },
   "dock": {
    "receive": "收款",
@@ -1613,6 +1624,25 @@
   },
   "qrPlaceholder": {
    "caption": "演示占位图案 · 不可扫描"
+  },
+  "appMenu": {
+   "about": "关于 Vela Wallet",
+   "hide": "隐藏 Vela Wallet",
+   "hideOthers": "隐藏其他",
+   "showAll": "全部显示",
+   "quit": "退出 Vela Wallet",
+   "edit": "编辑",
+   "undo": "撤销",
+   "redo": "重做",
+   "cut": "剪切",
+   "copy": "拷贝",
+   "paste": "粘贴",
+   "selectAll": "全选",
+   "view": "显示",
+   "fullScreen": "切换全屏幕",
+   "window": "窗口",
+   "minimize": "最小化",
+   "closeWindow": "关闭窗口"
   }
  },
  "settingsModals": {

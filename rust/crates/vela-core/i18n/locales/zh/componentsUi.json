@@ -290,7 +290,8 @@
       "feeToken": "手续费币种",
       "paidWith": "用 {{symbol}} 支付",
       "rowBalance": "余额",
-      "rowSpend": "本次消耗"
+      "rowSpend": "本次消耗",
+      "feeCoinSpent": "这笔交易也会用到你的 {{sym}}，剩下的不够付网络费时，交易会失败。"
     },
     "dock": {
       "receive": "收款",
@@ -426,6 +427,25 @@
     },
     "qrPlaceholder": {
       "caption": "演示占位图案 · 不可扫描"
+    },
+    "appMenu": {
+      "about": "关于 Vela Wallet",
+      "hide": "隐藏 Vela Wallet",
+      "hideOthers": "隐藏其他",
+      "showAll": "全部显示",
+      "quit": "退出 Vela Wallet",
+      "edit": "编辑",
+      "undo": "撤销",
+      "redo": "重做",
+      "cut": "剪切",
+      "copy": "拷贝",
+      "paste": "粘贴",
+      "selectAll": "全选",
+      "view": "显示",
+      "fullScreen": "切换全屏幕",
+      "window": "窗口",
+      "minimize": "最小化",
+      "closeWindow": "关闭窗口"
     }
   }
 }

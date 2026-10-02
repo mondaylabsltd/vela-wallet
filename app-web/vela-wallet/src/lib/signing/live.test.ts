@@ -168,7 +168,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '3000',
 					amount: '2100000000000000',
 					insufficient: false,
-					selected: true
+					selected: true,
+					spent_by_operation: false
 				}
 			]
 		};
@@ -208,7 +209,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '3000',
 					amount: '2100000000000000',
 					insufficient: false,
-					selected: true
+					selected: true,
+					spent_by_operation: false
 				},
 				{
 					symbol: 'USDC',
@@ -220,7 +222,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '1',
 					amount: '6300000',
 					insufficient: false,
-					selected: false
+					selected: false,
+					spent_by_operation: false
 				}
 			]
 		};
@@ -246,7 +249,8 @@ describe('the fee the sheet shows', () => {
 					usd_price: '3000',
 					amount: '2100000000000000',
 					insufficient: false,
-					selected: true
+					selected: true,
+					spent_by_operation: false
 				}
 			]
 		};
@@ -267,7 +271,8 @@ describe('the fee the sheet shows', () => {
 			usd_price: '3000',
 			amount: '2100000000000000',
 			insufficient: true,
-			selected: true
+			selected: true,
+			spent_by_operation: false
 		};
 		const usdt = {
 			...eth,
@@ -279,7 +284,8 @@ describe('the fee the sheet shows', () => {
 			usd_price: '1',
 			amount: '6300000',
 			insufficient: false,
-			selected: false
+			selected: false,
+			spent_by_operation: false
 		};
 		const short = { ...QUOTED_FEE, options: [eth, usdt], confirm_fee_ready: false };
 		const model = buildSigningModel(inputs({ fee: short }));
@@ -337,7 +343,8 @@ describe('the fee can be refreshed, and says why it failed', () => {
 		usd_price: '3000',
 		amount: '2100000000000000',
 		insufficient: false,
-		selected: true
+		selected: true,
+		spent_by_operation: false
 	};
 	const failedWith = (failed: FeeView['failed']): FeeView => ({
 		...QUOTED_FEE,
@@ -601,9 +608,38 @@ describe('after the approval the sheet is a status', () => {
 			stage: 'failed',
 			title: m.receipt.failed,
 			captions: [SUMMARY, m.status.failedHint],
-			closable: true
+			closable: true,
+			// Spec 096 F8: a labelled close — the page hears the failure then.
+			actions: { close: m.receipt.done }
 		});
 		expect(signingCloseEvent(failed)).toBe('dismiss_tapped');
+	});
+
+	it('a failure that sent nothing offers Try again beside the close (spec 096 F8)', () => {
+		const retryable = signingStatus(
+			at({
+				error: { kind: 'submit_failed', detail: 'Could not estimate gas' },
+				failure_retryable: true
+			}),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(retryable?.actions).toEqual({ close: m.receipt.done, retry: m.status.retry });
+		expect(retryable?.captions).toEqual([SUMMARY, m.status.failedHint]);
+		// A refusal says so and offers no retry: the same op is refused again.
+		const refused = signingStatus(
+			at({
+				error: { kind: 'submit_failed', detail: 'AA23' },
+				failure_refused: true,
+				failure_retryable: false
+			}),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(refused?.actions).toEqual({ close: m.receipt.done });
+		expect(refused?.captions).toEqual([SUMMARY, m.receipt.refused]);
 	});
 
 	it('an error before any approval is not a status (the form says it)', () => {
@@ -898,6 +934,7 @@ describe('an unlimited approval is kept as asked, and said', () => {
 		surface: 'approval_editor',
 		confirm_allowed: true,
 		unlimited_consented: true,
+		unlimited_warning: true,
 		meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
 		editor: {
 			mode: 'requested',
@@ -931,6 +968,7 @@ describe('an unlimited approval is kept as asked, and said', () => {
 		const capped: GuardView = {
 			...unbounded,
 			unlimited_consented: false,
+			unlimited_warning: false,
 			editor: {
 				...unbounded.editor!,
 				mode: 'balance',
@@ -957,6 +995,7 @@ describe('an unlimited approval is kept as asked, and said', () => {
 			...unbounded,
 			confirm_allowed: false,
 			unlimited_consented: false,
+			unlimited_warning: false,
 			editor: {
 				...unbounded.editor!,
 				mode: 'custom',
@@ -981,6 +1020,41 @@ describe('an unlimited approval is kept as asked, and said', () => {
 		const allowance = model.blocks.find((b) => b.kind === 'allowance');
 		if (allowance?.kind !== 'allowance') throw new Error('kind');
 		expect(allowance.chips.find((c) => c.id === 'balance')?.state).toBe('disabled');
+	});
+});
+
+describe('an off-chain permit says it cannot be capped, and warns when unlimited (spec 094 S8)', () => {
+	const permit = (unlimited: boolean): GuardView => ({
+		...INITIAL_GUARD_VIEW,
+		surface: 'permit_sign',
+		confirm_allowed: true,
+		unlimited_warning: unlimited,
+		meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
+		editor: null
+	});
+
+	it('an unlimited Permit2 gets the danger sentence and the can’t-cap line — no editor', () => {
+		const model = buildSigningModel(inputs({ guard: permit(true) }))!;
+		expect(model.blocks).toContainEqual({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnPermitCantCap
+		});
+		expect(model.blocks.some((b) => b.kind === 'allowance')).toBe(false);
+		expect(model.confirm.enabled).toBe(true);
+	});
+
+	it('a bounded permit only says it cannot be capped', () => {
+		const model = buildSigningModel(inputs({ guard: permit(false) }))!;
+		expect(model.blocks.some((b) => b.kind === 'warning' && b.text === m.warnUnlimited)).toBe(
+			false
+		);
+		expect(model.blocks).toContainEqual({
+			kind: 'warning',
+			tone: 'danger',
+			text: m.warnPermitCantCap
+		});
 	});
 });
 
@@ -1070,6 +1144,7 @@ describe('a capped unlimited approval reads the cap, not the request', () => {
 			...INITIAL_GUARD_VIEW,
 			surface: 'batch',
 			confirm_allowed: true,
+			unlimited_warning: true,
 			batch: {
 				legs: [
 					{
@@ -1231,6 +1306,7 @@ describe('the fee coin can be switched, as it can when sending', () => {
 		amount: '2100000000000000',
 		insufficient: false,
 		selected: true,
+		spent_by_operation: false,
 		...over
 	});
 	const two: FeeView = {
@@ -1251,7 +1327,8 @@ describe('the fee coin can be switched, as it can when sending', () => {
 				balance: '100000000000000',
 				amount: '1270000000000000000',
 				insufficient: true,
-				selected: false
+				selected: false,
+				spent_by_operation: false
 			})
 		]
 	};
@@ -1279,6 +1356,39 @@ describe('the fee coin can be switched, as it can when sending', () => {
 	it('with one coin there is nothing to choose, so nothing opens', () => {
 		const fee = feeOf({ fee: { ...two, options: [option({})] }, feeOpen: true });
 		expect(fee.kind === 'onchain' && fee.selector).toBeUndefined();
+	});
+
+	// Spec 096 F2: the person chose a coin the transaction itself spends (the
+	// PancakeSwap USDC swap, fee in USDC). The core flags it; the sheet says
+	// so under the fee — and only while that coin is the one paying.
+	it('warns when the coin paying is one the transaction spends', () => {
+		const spentUsdc: FeeView = {
+			...two,
+			options: [
+				option({ selected: false }),
+				option({
+					symbol: 'USDC',
+					contract: '0x' + 'a0'.repeat(20),
+					decimals: 6,
+					balance: '42000000',
+					amount: '1270000',
+					selected: true,
+					spent_by_operation: true
+				})
+			]
+		};
+		const fee = feeOf({ fee: spentUsdc });
+		expect(fee).toMatchObject({
+			warning: m.feeCoinSpent.replace('{{sym}}', 'USDC')
+		});
+		const open = feeOf({ fee: spentUsdc, feeOpen: true });
+		expect(open).toMatchObject({ warning: m.feeCoinSpent.replace('{{sym}}', 'USDC') });
+		// The same coin listed but not paying: nothing to say.
+		const inEth: FeeView = {
+			...spentUsdc,
+			options: [option({}), { ...spentUsdc.options[1], selected: false }]
+		};
+		expect(feeOf({ fee: inEth })).not.toHaveProperty('warning', expect.anything());
 	});
 });
 
@@ -1684,6 +1794,8 @@ describe('a batch shows every call (089 S1)', () => {
 		...INITIAL_GUARD_VIEW,
 		surface: 'batch',
 		confirm_allowed: true,
+		// The core's flag follows the leg's choice (`any_uncapped`, spec 094 S8).
+		unlimited_warning: choice?.choice?.type === 'unlimited',
 		batch: {
 			legs: [0, 1, 2].map((index) => ({
 				to: index === 2 ? B : A,

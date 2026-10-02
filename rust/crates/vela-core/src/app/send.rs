@@ -1927,6 +1927,14 @@ pub struct SendView {
     pub treasury_bootstrap: Option<SendTreasuryStatus>,
     pub recipient_identity: Option<SendRecipientIdentity>,
     pub recipient_risk: Option<SendRecipientRisk>,
+    /// The recipient is a token's own contract on the network the money moves
+    /// on (spec 096 F12): the token being sent, or any token in the person's
+    /// list there — the registry's stablecoins and wrapped coin they hold, and
+    /// tokens they added. A token contract almost never has a way to give
+    /// back what is sent to it, so the form and the confirm page say so
+    /// plainly before the slide; it does not block. Not asked of a split's
+    /// rows.
+    pub recipient_is_token_contract: bool,
     pub sim_json: Option<String>,
 }
 
@@ -2318,9 +2326,38 @@ impl App for Send {
             }),
             recipient_identity: model.recipient_identity.clone(),
             recipient_risk: model.recipient_risk.clone(),
+            recipient_is_token_contract: recipient_is_token_contract(model),
             sim_json: model.sim_json.clone(),
         }
     }
+}
+
+/// [`SendView::recipient_is_token_contract`]: the single recipient (a
+/// one-to-one send or a sweep) is, on the selected token's network, the
+/// contract of the token being sent or of any token the person's list
+/// holds there. Compared as addresses, case aside.
+fn recipient_is_token_contract(model: &Model) -> bool {
+    if model.split_mode {
+        return false;
+    }
+    let Some(token) = model.selected_token.as_ref() else {
+        return false;
+    };
+    let recipient = model.recipient.trim();
+    if !is_valid_address(recipient) {
+        return false;
+    }
+    let names_it = |held: &SendToken| {
+        held.token_address
+            .as_deref()
+            .is_some_and(|contract| contract.trim().eq_ignore_ascii_case(recipient))
+    };
+    names_it(token)
+        || model
+            .tokens
+            .iter()
+            .filter(|held| held.chain_id == token.chain_id)
+            .any(names_it)
 }
 
 // ---------------------------------------------------------------------------

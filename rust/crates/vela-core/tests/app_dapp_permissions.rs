@@ -573,6 +573,34 @@ fn popup_event_refuses_an_unconnected_origin() {
     assert_eq!(verdict.outcome, DpermPopupOutcome::Consent);
 }
 
+/// Spec 096 F11: the consent names the account a Connect shares — the one
+/// signed in, which the grant is pinned to — and nothing when it is not a
+/// consent or nobody is signed in.
+#[test]
+fn the_consent_names_the_account_it_would_share() {
+    let mut sut = Sut::new();
+    let lower = A1.to_ascii_lowercase();
+    let verdict = ask(
+        &mut sut,
+        popup("eth_requestAccounts", None, Some(&lower), None),
+    );
+    assert_eq!(verdict.outcome, DpermPopupOutcome::Consent);
+    assert_eq!(
+        verdict.consent_address,
+        Some(vela_core::app::dapp_permissions::dapp_spelling(A1)),
+        "the dApp's spelling, as the grant will answer it"
+    );
+    for signed_in in [None, Some("")] {
+        let verdict = ask(
+            &mut sut,
+            popup("eth_requestAccounts", None, signed_in, None),
+        );
+        assert_eq!(verdict.consent_address, None, "{signed_in:?}");
+    }
+    let verdict = ask(&mut sut, popup("personal_sign", None, Some(A1), None));
+    assert_eq!(verdict.consent_address, None, "a refusal names no account");
+}
+
 /// The forward is pinned to the GRANT's address (invariant ⑨) — which is the
 /// signed-in account, because a grant for any other account is not answered.
 #[test]

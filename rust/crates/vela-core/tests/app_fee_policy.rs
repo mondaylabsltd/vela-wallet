@@ -31,7 +31,53 @@ use vela_core::app::fee_policy::{
     TEMPO_PER_SUBCALL_GAS_EST, TEMPO_SPLIT_SAFETY_BPS, TEMPO_SPLIT_SAFETY_GAS,
 };
 
-type Sut = DomainDriver<FeePolicy>;
+/// The machine, driven as the shell drives it — except that every run's
+/// deadline timer (`StartDeadline`, spec 094) is a shell timer these tests
+/// never let fire: dropped as it is asked for, so each test answers the reads
+/// it is about in order. The deadline's own tests use [`Timed`].
+struct Sut(DomainDriver<FeePolicy>);
+
+fn is_deadline(op: &Op) -> bool {
+    matches!(op, Op::StartDeadline { .. })
+}
+
+impl Sut {
+    fn new() -> Self {
+        Self(DomainDriver::new())
+    }
+    fn quiet(&mut self, ops: Vec<Op>) -> Vec<Op> {
+        self.0.drop_matching(is_deadline);
+        ops.into_iter().filter(|op| !is_deadline(op)).collect()
+    }
+    fn dispatch(&mut self, event: Event) -> Vec<Op> {
+        let ops = self.0.dispatch(event);
+        self.quiet(ops)
+    }
+    fn resolve(&mut self, result: Res) -> Vec<Op> {
+        let ops = self.0.resolve(result);
+        self.quiet(ops)
+    }
+    fn resolve_matching(&mut self, predicate: impl Fn(&Op) -> bool, result: Res) -> Vec<Op> {
+        let ops = self.0.resolve_matching(predicate, result);
+        self.quiet(ops)
+    }
+}
+
+impl std::ops::Deref for Sut {
+    type Target = DomainDriver<FeePolicy>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Sut {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+/// The machine with its deadline timers left in, for the tests of the bound.
+type Timed = DomainDriver<FeePolicy>;
 
 const CHAIN: u32 = 1;
 const TEMPO_CHAIN: u32 = 4_217;
@@ -4028,10 +4074,10 @@ fn a_max_sell_of_the_fee_coin_pays_in_the_chains_coin() {
     assert!(usdc.insufficient, "nothing of it is left to pay from");
 }
 
-/// The coin the machine would pick from the calls alone (the larger
-/// stablecoin) is the one the operation drains. The chain's own coin takes
-/// over before any other stablecoin; only when it cannot pay does the next
-/// coin in the usual order.
+/// The coin the machine would pick from the calls alone (with no ETH to pay
+/// in, the larger stablecoin) is the one the operation drains. The chain's
+/// own coin takes over before any other stablecoin; only when it cannot pay
+/// does the next coin in the usual order.
 #[test]
 fn a_drained_default_coin_gives_way_to_the_chains_coin_first() {
     let drain_usdt = || Event::BalanceChangesMeasured {
@@ -4047,11 +4093,11 @@ fn a_drained_default_coin_gives_way_to_the_chains_coin_first() {
 
     let mut sut = Sut::new();
     sut.dispatch(auto_request(CHAIN, vec![router_call()]));
-    let ops = gather(&mut sut, rows("1000000000000000000"));
+    let ops = gather(&mut sut, rows("0"));
     assert_eq!(
         simulated_leg(&ops).as_deref(),
         Some(USDT),
-        "unmeasured, the larger stablecoin pays"
+        "unmeasured and no ETH, the larger stablecoin pays"
     );
 
     let mut sut = Sut::new();
@@ -4083,7 +4129,9 @@ fn a_drained_default_coin_gives_way_to_the_chains_coin_first() {
 
 /// The simulation can land after the quote. A coin that the swap drains is
 /// moved off at once — locally, at the gas already measured, recipient and
-/// all — and never asked of the relay again.
+/// all — and never asked of the relay again. (No ETH held, and a router call
+/// that names no fee coin, so USDC is the pick until the simulation answers;
+/// the swap's ETH output then pays.)
 #[test]
 fn balance_changes_that_land_after_the_quote_move_the_fee_off_a_drained_coin() {
     let small = FeeCall {
@@ -4093,16 +4141,18 @@ fn balance_changes_that_land_after_the_quote_move_the_fee_off_a_drained_coin() {
     };
     let mut sut = Sut::new();
     sut.dispatch(auto_request(CHAIN, vec![small]));
-    let ops = gather(
-        &mut sut,
-        vec![native_row("1000000000000000000"), usdc_row("5000000")],
-    );
+    let ops = gather(&mut sut, vec![native_row("0"), usdc_row("5000000")]);
     assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC), "USDC first");
     sut.resolve_matching(is_estimate, estimated());
     sut.resolve_matching(is_measure, unmeasured());
     assert_eq!(sut.view().fee_token.as_deref(), Some(USDC));
 
-    let ops = sut.dispatch(max_usdc_swap());
+    let ops = sut.dispatch(Event::BalanceChangesMeasured {
+        changes: vec![
+            change(Some(USDC), "-5000000"),
+            change(None, "1000000000000000000"),
+        ],
+    });
     assert!(ops.is_empty(), "a local switch, nothing asked: {ops:?}");
     let view = sut.view();
     assert_eq!(view.fee_token, None);
@@ -4114,27 +4164,32 @@ fn balance_changes_that_land_after_the_quote_move_the_fee_off_a_drained_coin() {
 }
 
 /// No simulation of its own to read (an RPC without `eth_simulateV1`): the
-/// relay's refusal of the USDC-paid op is the signal. The chain's coin is
-/// simulated next, and it quotes.
+/// relay's refusal of the op paid in the machine's coin is the signal. The
+/// next coin with something left — one the calls do not name — is simulated
+/// next, and it quotes. (Spec 096: the chain's coin is now the first pick
+/// for a contract call, so it is the one refused here.)
 #[test]
-fn a_relay_refusal_of_the_drained_coin_is_retried_in_the_chains_coin() {
+fn a_relay_refusal_of_the_machines_coin_is_retried_in_the_next_coin() {
     let mut sut = Sut::new();
     sut.dispatch(auto_request(CHAIN, vec![router_call()]));
     let ops = gather(
         &mut sut,
         vec![native_row("1000000000000000000"), usdc_row("5000000")],
     );
-    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
+    assert_eq!(simulated_leg(&ops), None, "the chain's coin first");
     let ops = sut.resolve_matching(is_estimate, refused());
     assert_eq!(ops.len(), 1, "one more simulation, nothing else: {ops:?}");
-    assert_eq!(simulated_leg(&ops), None, "…with the native leg");
+    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC), "…with USDC");
     assert!(sut.view().busy, "still estimating — no failure flashes");
     sut.resolve_matching(is_estimate, estimated());
     sut.resolve_matching(is_measure, unmeasured());
     let view = sut.view();
     assert_eq!(view.failed, None);
-    assert_eq!(view.fee_token, None);
-    assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
+    assert_eq!(view.fee_token.as_deref(), Some(USDC));
+    assert!(matches!(
+        view.fee.expect("quoted").fee_asset,
+        FeeAssetView::Erc20 { .. }
+    ));
     assert!(view.confirm_fee_ready);
 }
 
@@ -4261,7 +4316,8 @@ fn an_unanswered_simulation_is_still_the_estimate_failure() {
 }
 
 /// Balance changes that leave the coin enough change nothing: a swap of
-/// 1 USDC of 5 still pays its fee in USDC, the same figure as before.
+/// 1 USDC of 5 still pays its fee in USDC, the same figure as before. (No
+/// ETH held, and a router call that names no fee coin.)
 #[test]
 fn a_swap_that_leaves_enough_of_the_fee_coin_is_priced_as_before() {
     let small = FeeCall {
@@ -4280,10 +4336,7 @@ fn a_swap_that_leaves_enough_of_the_fee_coin_is_priced_as_before() {
                 ],
             });
         }
-        let ops = gather(
-            &mut sut,
-            vec![native_row("1000000000000000000"), usdc_row("5000000")],
-        );
+        let ops = gather(&mut sut, vec![native_row("0"), usdc_row("5000000")]);
         assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
         sut.resolve_matching(is_estimate, estimated());
         sut.resolve_matching(is_measure, unmeasured());
@@ -4377,20 +4430,24 @@ fn two_coins() -> Vec<FeeAssetQuote> {
     vec![native_row("1000000000000000000"), usdc_row("5000000")]
 }
 
-/// Quoted in ETH the way the device's Max swap was without a simulation of
-/// its own: USDC was the machine's pick, the relay refused it, ETH quoted.
-fn quoted_in_eth_after_usdc_was_refused() -> Sut {
+/// Quoted in USDC after a relay refusal, with no simulation of its own: the
+/// chain's coin was the machine's pick for the contract call (spec 096), the
+/// relay refused it, and USDC — which the calls do not name — quoted.
+fn quoted_in_usdc_after_eth_was_refused() -> Sut {
     let mut sut = Sut::new();
     sut.dispatch(auto_request(CHAIN, vec![router_call()]));
     let ops = gather(&mut sut, two_coins());
-    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
-    let ops = sut.resolve_matching(is_estimate, refused());
     assert_eq!(simulated_leg(&ops), None);
+    let ops = sut.resolve_matching(is_estimate, refused());
+    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
     sut.resolve_matching(is_estimate, estimated());
     sut.resolve_matching(is_measure, unmeasured());
     let view = sut.view();
-    assert_eq!(view.fee_token, None);
-    assert_eq!(view.fee.expect("quoted").fee_asset, FeeAssetView::Native);
+    assert_eq!(view.fee_token.as_deref(), Some(USDC));
+    assert!(matches!(
+        view.fee.expect("quoted").fee_asset,
+        FeeAssetView::Erc20 { .. }
+    ));
     sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
     sut
 }
@@ -4408,21 +4465,17 @@ fn coin_matches_quote(view: &vela_core::app::fee_policy::FeeView) -> bool {
     }
 }
 
-/// Review P1: that ETH quote, refreshed. Without the balance changes the
-/// refresh picks USDC afresh, and then the relay cannot be reached. A refresh
-/// keeps the old quote on screen — and now its coin with it: a USDC coin in
-/// force under an ETH quote had the approve sign a USDC transfer of a wei
-/// amount to the ETH row's recipient.
+/// Review P1: that USDC quote, refreshed. The refresh picks the chain's coin
+/// afresh, and then the relay cannot be reached. A refresh keeps the old
+/// quote on screen — and now its coin with it: a coin in force that is not
+/// the quote's had the approve sign a transfer of one coin's amount to the
+/// other row's recipient.
 #[test]
 fn a_refresh_that_fails_keeps_the_coin_of_the_quote_it_keeps() {
-    let mut sut = quoted_in_eth_after_usdc_was_refused();
+    let mut sut = quoted_in_usdc_after_eth_was_refused();
     sut.dispatch(Event::Requote);
     let ops = gather(&mut sut, two_coins());
-    assert_eq!(
-        simulated_leg(&ops).as_deref(),
-        Some(USDC),
-        "the refresh picks USDC afresh"
-    );
+    assert_eq!(simulated_leg(&ops), None, "the refresh picks ETH afresh");
     sut.resolve_matching(
         is_estimate,
         Res::UserOpGas {
@@ -4433,40 +4486,45 @@ fn a_refresh_that_fails_keeps_the_coin_of_the_quote_it_keeps() {
     let view = sut.view();
     assert_eq!(view.failed, None, "a refresh keeps the quote on screen");
     assert!(coin_matches_quote(&view), "{view:?}");
-    assert_eq!(view.fee_token, None);
+    assert_eq!(view.fee_token.as_deref(), Some(USDC));
     let fee = view.fee.clone().expect("the old quote");
-    assert_eq!(fee.fee_asset, FeeAssetView::Native);
-    assert_eq!(fee.fee_recipient.as_deref(), Some(NATIVE_RECIPIENT));
+    assert!(matches!(fee.fee_asset, FeeAssetView::Erc20 { .. }));
+    assert_eq!(fee.fee_recipient.as_deref(), Some(USDC_RECIPIENT));
     assert!(view.confirm_fee_ready);
     let selected = view
         .options
         .iter()
         .find(|option| option.selected)
         .expect("a selected coin");
-    assert!(selected.contract.is_none(), "the ETH row is the one ticked");
+    assert_eq!(
+        selected.contract.as_deref(),
+        Some(USDC),
+        "the USDC row is the one ticked"
+    );
 }
 
 /// Review P2: the same refresh, and the relay refuses the operation with
 /// every coin (a swap whose deadline passed while the sheet was open). The
 /// relay has just said the operation fails, so the old figure is not kept as
-/// one to sign: the row says the operation would fail, on ETH — the coin
-/// that had something left to pay from — and nothing asks again by itself.
+/// one to sign: the row says the operation would fail, on the last coin
+/// tried that had something left to pay from — and nothing asks again by
+/// itself.
 #[test]
 fn a_refresh_the_relay_refuses_with_every_coin_would_fail() {
     use vela_core::app::fee_policy::requote_delay_ms;
-    let mut sut = quoted_in_eth_after_usdc_was_refused();
+    let mut sut = quoted_in_usdc_after_eth_was_refused();
     sut.dispatch(Event::Requote);
     let ops = gather(&mut sut, two_coins());
-    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
+    assert_eq!(simulated_leg(&ops), None);
     let ops = sut.resolve_matching(is_estimate, refused());
-    assert_eq!(simulated_leg(&ops), None, "ETH is tried next");
+    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC), "USDC next");
     assert!(sut.resolve_matching(is_estimate, refused()).is_empty());
     sut.drop_matching(is_measure);
     let view = sut.view();
     assert_eq!(view.failed, Some(FeeFailure::WouldFail));
     assert!(view.fee.is_none(), "the old quote is not one to sign");
     assert!(!view.confirm_fee_ready);
-    assert_eq!(view.fee_token, None, "ends on ETH");
+    assert_eq!(view.fee_token.as_deref(), Some(USDC), "ends on USDC");
     assert!(
         view.options.iter().all(|option| !option.insufficient),
         "{:?}",
@@ -4479,8 +4537,15 @@ fn a_refresh_the_relay_refuses_with_every_coin_would_fail() {
 /// its failure keeps the ETH quote — the coin and the quote agree either way.
 #[test]
 fn a_measured_refresh_that_fails_keeps_the_same_coin() {
-    let mut sut = quoted_in_eth_after_usdc_was_refused();
-    assert!(sut.dispatch(max_usdc_swap()).is_empty(), "already in ETH");
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![router_call()]));
+    sut.dispatch(max_usdc_swap());
+    let ops = gather(&mut sut, two_coins());
+    assert_eq!(simulated_leg(&ops), None);
+    sut.resolve_matching(is_estimate, estimated());
+    sut.resolve_matching(is_measure, unmeasured());
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    assert_eq!(sut.view().fee_token, None, "quoted in ETH");
     sut.dispatch(Event::Requote);
     let ops = gather(&mut sut, two_coins());
     assert_eq!(simulated_leg(&ops), None, "ETH, from the balance changes");
@@ -4497,20 +4562,26 @@ fn a_measured_refresh_that_fails_keeps_the_same_coin() {
     assert!(view.confirm_fee_ready);
 }
 
-/// Review P4: every coin refused, and the simulation then shows the swap
-/// drains the USDC. The run ends on ETH — the last coin tried that had
-/// something left — so the row says the operation would fail rather than
-/// that USDC cannot pay; and the balance changes, told again and again, ask
-/// nothing: the coins that could pay were all refused.
+/// Review P4: every coin that could pay refused — the chain's coin, since
+/// the swap's router names the USDC it spends (spec 096) and the USDC is
+/// never tried — and the simulation then shows the swap drains the USDC.
+/// The run ends on ETH, the coin that had something left, so the row says
+/// the operation would fail rather than that USDC cannot pay; and the
+/// balance changes, told again and again, ask nothing.
 #[test]
 fn when_every_coin_is_refused_the_run_ends_on_one_that_could_have_paid() {
+    let names_usdc = FeeCall {
+        data: format!("{}{}", router_call().data, &USDC[2..]),
+        ..router_call()
+    };
     let mut sut = Sut::new();
-    sut.dispatch(auto_request(CHAIN, vec![router_call()]));
+    sut.dispatch(auto_request(CHAIN, vec![names_usdc]));
     let ops = gather(&mut sut, two_coins());
-    assert_eq!(simulated_leg(&ops).as_deref(), Some(USDC));
-    let ops = sut.resolve_matching(is_estimate, refused());
     assert_eq!(simulated_leg(&ops), None);
-    assert!(sut.resolve_matching(is_estimate, refused()).is_empty());
+    assert!(
+        sut.resolve_matching(is_estimate, refused()).is_empty(),
+        "the USDC the swap spends is not tried"
+    );
     sut.drop_matching(is_measure);
     for _ in 0..3 {
         let ops = sut.dispatch(max_usdc_swap());
@@ -4575,4 +4646,407 @@ fn what_a_swap_brings_in_pays_its_fee_only_at_half() {
     let enough = quote(2 * NATIVE_FEE_WEI);
     assert_eq!(enough.fee_token, None);
     assert!(enough.confirm_fee_ready, "{enough:?}");
+}
+
+// ====================================================================}
+
+// Spec 096 F2 — the machine never pays in a coin the operation may spend
+//
+// The real-dApp pass on BNB Chain: PancakeSwap USDC → BNB, all 2.3417 USDC.
+// The batch approves the USDC to PancakeSwap's Permit2, Permit2-approves the
+// router, and the router swaps it — not one `transfer` in it. With no
+// simulation on the web, the machine weighed USDC by the calls alone, found
+// nothing leaving, picked it (a stablecoin first), and the relay rejected the
+// op. The batch below is that request, byte for byte
+// (`dapp096/logs/req-pcs-usdc2.json`).
+// ===========================================================================
+
+const BSC: u32 = 56;
+const BSC_USDC: &str = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
+const BSC_USDT: &str = "0x55d398326f99059fF775485246999027B3197955";
+/// 0x207f7079df8f2000 — every USDC the wallet held, and every USDC the batch
+/// approves and swaps.
+const ALL_THE_USDC: &str = "2341700000000000000";
+
+/// The three legs of the PancakeSwap USDC → BNB batch.
+fn pancakeswap_usdc_to_bnb() -> Vec<FeeCall> {
+    let leg = |to: &str, data: &str| FeeCall {
+        to: to.to_owned(),
+        value: "0".to_owned(),
+        data: data.to_owned(),
+    };
+    vec![
+        leg(
+            "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+            concat!(
+                "0x095ea7b300000000000000000000000031c2f6fcff4f8759b3bd5bf0e1084a055615c768000000",
+                "000000000000000000000000000000000000000000207f7079df8f2000",
+            ),
+        ),
+        leg(
+            "0x31c2F6fcFf4F8759b3Bd5Bf0e1084A055615c768",
+            concat!(
+                "0x87517c450000000000000000000000008ac76a51cc950d9822d68b83fe1ad97b32cd580d000000",
+                "000000000000000000d9c500dff816a1da21a48a732d3498bf09dc9aeb0000000000000000000000",
+                "00000000000000000000000000207f7079df8f200000000000000000000000000000000000000000",
+                "0000000000000000006ae73b90",
+            ),
+        ),
+        leg(
+            "0xd9C500DfF816a1Da21A48A732d3498Bf09dc9AEB",
+            concat!(
+                "0x3593564c0000000000000000000000000000000000000000000000000000000000000060000000",
+                "00000000000000000000000000000000000000000000000000000000a00000000000000000000000",
+                "00000000000000000000000000000000006abfb33800000000000000000000000000000000000000",
+                "00000000000000000000000002000c00000000000000000000000000000000000000000000000000",
+                "00000000000000000000000000000000000000000000000000000000000000000000000002000000",
+                "00000000000000000000000000000000000000000000000000000000400000000000000000000000",
+                "00000000000000000000000000000000000000016000000000000000000000000000000000000000",
+                "00000000000000000000000100000000000000000000000000000000000000000000000000000000",
+                "0000000002000000000000000000000000000000000000000000000000207f7079df8f2000000000",
+                "000000000000000000000000000000000000000000000a993fd56a9c5a0000000000000000000000",
+                "0000000000000000000000000000000000000000a000000000000000000000000000000000000000",
+                "00000000000000000000000001000000000000000000000000000000000000000000000000000000",
+                "000000002b8ac76a51cc950d9822d68b83fe1ad97b32cd580d000064bb4cdb9cbd36b01bd1cbaebf",
+                "2de08d9173bc095c0000000000000000000000000000000000000000000000000000000000000000",
+                "00000000000000000000000000000000000000004000000000000000000000000088cca0eedbf2c4",
+                "426110bbfc998f048689266894000000000000000000000000000000000000000000000000000a99",
+                "3fd56a9c5a",
+            ),
+        ),
+    ]
+}
+
+fn bnb_row(balance: &str) -> FeeAssetQuote {
+    FeeAssetQuote {
+        symbol: "BNB".to_owned(),
+        usd_balance: "6.00".to_owned(),
+        usd_price: Some("600.00000000".to_owned()),
+        ..native_row(balance)
+    }
+}
+
+/// A BNB Chain stablecoin row: 18 decimals, $1.
+fn bsc_stable_row(token: &str, symbol: &str, balance: &str, usd: &str) -> FeeAssetQuote {
+    FeeAssetQuote {
+        recipient: USDC_RECIPIENT.to_owned(),
+        asset: FeeAssetKind::Erc20,
+        fee_token: Some(token.to_owned()),
+        balance: balance.to_owned(),
+        decimals: 18,
+        symbol: symbol.to_owned(),
+        usd_balance: usd.to_owned(),
+        usd_price: Some("1".to_owned()),
+        native_usd_floor_price: None,
+    }
+}
+
+fn bsc_usdc_row() -> FeeAssetQuote {
+    bsc_stable_row(BSC_USDC, "USDC", ALL_THE_USDC, "2.34")
+}
+
+/// Ask for the batch with nobody choosing the coin; answer the gathering
+/// with `rows`. Returns the operations the gathering ended with.
+fn ask_pancakeswap(sut: &mut Sut, rows: Vec<FeeAssetQuote>) -> Vec<Op> {
+    sut.dispatch(auto_request(BSC, pancakeswap_usdc_to_bnb()));
+    gather(sut, rows)
+}
+
+/// Answer the simulation and the inner calls' measurement.
+fn settle(sut: &mut Sut) {
+    sut.resolve_matching(is_estimate, estimated());
+    sut.resolve_matching(is_measure, unmeasured());
+}
+
+fn option<'a>(
+    view: &'a vela_core::app::fee_policy::FeeView,
+    contract: Option<&str>,
+) -> &'a vela_core::app::fee_policy::FeeOptionView {
+    view.options
+        .iter()
+        .find(|option| match (option.contract.as_deref(), contract) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+            _ => false,
+        })
+        .expect("the coin is listed")
+}
+
+/// The finding itself: BNB can pay, and it does — never the USDC the swap
+/// spends. (The machine used to pick USDC here: a stablecoin first, and the
+/// calls "sent" none of it.)
+#[test]
+fn the_pancakeswap_usdc_swap_never_pays_its_fee_in_the_usdc_it_spends() {
+    let mut sut = Sut::new();
+    let ops = ask_pancakeswap(&mut sut, vec![bnb_row("10000000000000000"), bsc_usdc_row()]);
+    assert_eq!(simulated_leg(&ops), None, "the op is priced with a BNB leg");
+    settle(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.failed, None);
+    assert_eq!(view.fee_token, None, "{view:?}");
+    assert_eq!(
+        view.fee.clone().expect("quoted").fee_asset,
+        FeeAssetView::Native
+    );
+    assert!(view.confirm_fee_ready);
+    let usdc = option(&view, Some(BSC_USDC));
+    assert!(usdc.spent_by_operation, "{usdc:?}");
+    assert!(!usdc.insufficient, "still the person's to choose");
+    assert!(!option(&view, None).spent_by_operation);
+}
+
+/// No BNB to pay with: a stablecoin the batch does not touch pays.
+#[test]
+fn with_no_bnb_a_coin_the_swap_does_not_touch_pays() {
+    let mut sut = Sut::new();
+    let ops = ask_pancakeswap(
+        &mut sut,
+        vec![
+            bnb_row("0"),
+            bsc_usdc_row(),
+            bsc_stable_row(BSC_USDT, "USDT", "5000000000000000000", "5.00"),
+        ],
+    );
+    assert_eq!(
+        simulated_leg(&ops).as_deref(),
+        Some(BSC_USDT.to_lowercase().as_str())
+    );
+    settle(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.fee_token.as_deref(), Some(BSC_USDT));
+    assert!(view.confirm_fee_ready, "{view:?}");
+    assert!(!option(&view, Some(BSC_USDT)).spent_by_operation);
+}
+
+/// Nothing but the USDC the swap spends: the machine does not pay in it.
+/// The coin it was asked for (BNB) stands, short, and says so; the person
+/// may still choose the USDC — and while it is the coin in force, the core
+/// says the operation spends it, for the sheet to warn.
+#[test]
+fn with_nothing_else_the_machine_says_so_and_a_usdc_pick_is_warned() {
+    let mut sut = Sut::new();
+    let ops = ask_pancakeswap(&mut sut, vec![bnb_row("0"), bsc_usdc_row()]);
+    assert_eq!(simulated_leg(&ops), None, "never the USDC");
+    settle(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.failed, None);
+    assert_eq!(view.fee_token, None);
+    assert!(!view.confirm_fee_ready, "BNB cannot pay, and that shows");
+    let bnb = option(&view, None);
+    assert!(bnb.selected && bnb.insufficient, "{bnb:?}");
+    let usdc = option(&view, Some(BSC_USDC));
+    assert!(!usdc.insufficient && usdc.spent_by_operation, "{usdc:?}");
+
+    sut.dispatch(Event::SelectFeeAsset {
+        token: Some(BSC_USDC.to_owned()),
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.fee_token.as_deref(),
+        Some(BSC_USDC),
+        "the person's pick"
+    );
+    assert!(view.confirm_fee_ready, "a warning, not a block");
+    let usdc = option(&view, Some(BSC_USDC));
+    assert!(usdc.selected && usdc.spent_by_operation, "{usdc:?}");
+}
+
+/// A simulation that shows the swap leaves enough of the coin is the proof
+/// the calls cannot give: the machine may pay in it, and nothing warns.
+#[test]
+fn a_simulation_that_leaves_enough_lets_the_machine_pay_in_a_spent_coin() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(BSC, pancakeswap_usdc_to_bnb()));
+    sut.dispatch(Event::BalanceChangesMeasured {
+        changes: vec![change(Some(BSC_USDC), "-1000000000000000000")],
+    });
+    let ops = gather(&mut sut, vec![bnb_row("0"), bsc_usdc_row()]);
+    assert_eq!(
+        simulated_leg(&ops).as_deref(),
+        Some(BSC_USDC.to_lowercase().as_str()),
+        "1.34 USDC is left, the fee is under one"
+    );
+    settle(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.fee_token.as_deref(), Some(BSC_USDC));
+    assert!(view.confirm_fee_ready, "{view:?}");
+    assert!(!option(&view, Some(BSC_USDC)).spent_by_operation);
+}
+
+/// Each leg alone makes the USDC a coin the operation may spend: the
+/// approve is made TO it, Permit2's `approve` names it as an argument, and
+/// the router names it inside its packed swap path.
+#[test]
+fn every_leg_of_the_batch_alone_spends_the_usdc() {
+    for (n, leg) in pancakeswap_usdc_to_bnb().into_iter().enumerate() {
+        let mut sut = Sut::new();
+        sut.dispatch(auto_request(BSC, vec![leg]));
+        let ops = gather(&mut sut, vec![bnb_row("10000000000000000"), bsc_usdc_row()]);
+        assert_eq!(simulated_leg(&ops), None, "leg {n}");
+        settle(&mut sut);
+        assert!(
+            option(&sut.view(), Some(BSC_USDC)).spent_by_operation,
+            "leg {n}"
+        );
+    }
+}
+
+/// A contract call that names no fee coin may still pull one through an
+/// allowance given earlier (a vault's `deposit(amount)` names nothing), so
+/// with nothing simulated the chain's coin pays first — and a stablecoin the
+/// call does not name pays when the chain's coin cannot. Neither is flagged:
+/// nothing in the calls says the operation spends them.
+#[test]
+fn a_contract_call_pays_in_the_chains_coin_first_until_something_measures_it() {
+    let deposit = FeeCall {
+        to: "0x9999999999999999999999999999999999999999".to_owned(),
+        value: "0".to_owned(),
+        // deposit(uint256 assets, address receiver)
+        data: format!("0x6e553f65{:064x}{:0>64}", 1_000_000u128, &ACCOUNT[2..]),
+    };
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![deposit.clone()]));
+    settle_with_contract(&mut sut, two_coins());
+    let view = sut.view();
+    assert_eq!(view.fee_token, None, "{view:?}");
+    assert!(!option(&view, Some(USDC)).spent_by_operation);
+
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![deposit]));
+    settle_with_contract(&mut sut, vec![native_row("0"), usdc_row("5000000")]);
+    assert_eq!(sut.view().fee_token.as_deref(), Some(USDC));
+}
+
+fn settle_with_contract(sut: &mut Sut, rows: Vec<FeeAssetQuote>) {
+    gather(sut, rows);
+    settle(sut);
+}
+
+/// Plain sends keep the rule they had: a transfer states its amount, so a
+/// coin being sent pays its own fee when it holds both — the fee on top of
+/// the amount — and is never flagged; a Max of it cannot.
+#[test]
+fn a_plain_send_still_pays_its_fee_in_the_coin_it_sends_when_that_is_all_there_is() {
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![usdc_transfer(1_000_000)]));
+    settle_with(
+        &mut sut,
+        vec![native_row("0"), usdc_row("5000000")],
+        estimated(),
+    );
+    let view = sut.view();
+    assert_eq!(view.fee_token.as_deref(), Some(USDC), "{view:?}");
+    assert!(view.confirm_fee_ready);
+    assert!(view.options.iter().all(|option| !option.spent_by_operation));
+
+    let mut sut = Sut::new();
+    sut.dispatch(auto_request(CHAIN, vec![usdc_transfer(5_000_000)]));
+    settle_with(
+        &mut sut,
+        vec![native_row("0"), usdc_row("5000000")],
+        estimated(),
+    );
+    let view = sut.view();
+    assert_eq!(
+        view.fee_token, None,
+        "a Max cannot pay its own fee: {view:?}"
+    );
+    assert!(!view.confirm_fee_ready);
+    assert!(view.options.iter().all(|option| !option.spent_by_operation));
+}
+
+// ---------------------------------------------------------------------------
+// The bound on a whole run (spec 094 S9, 089 F06)
+// ---------------------------------------------------------------------------
+
+/// Offline, the run's reads each time out on their own, one after another, and
+/// the row read "Estimating…" far past 15 s with no words. Every run is
+/// bounded now, by a timer the core asks for with its reads.
+#[test]
+fn every_run_asks_for_its_deadline_with_its_reads() {
+    let mut sut = Timed::new();
+    let ops = sut.dispatch(request(CHAIN, vec![]));
+    assert_eq!(
+        ops.last(),
+        Some(&Op::StartDeadline {
+            ms: vela_core::app::fee_policy::QUOTE_DEADLINE_MS
+        })
+    );
+    assert_eq!(vela_core::app::fee_policy::QUOTE_DEADLINE_MS, 15_000);
+}
+
+#[test]
+fn a_run_with_no_chain_price_by_the_deadline_is_a_chain_read_failure() {
+    let mut sut = Timed::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    assert!(sut.view().busy);
+    let ops = sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    assert!(
+        ops.is_empty(),
+        "nothing more is asked by the deadline itself"
+    );
+    let view = sut.view();
+    assert!(!view.busy, "no longer Estimating…");
+    assert_eq!(
+        view.failed,
+        Some(FeeFailure::ChainRead {
+            rate_limited: false
+        })
+    );
+    assert!(!view.confirm_fee_ready);
+    // The reads that come back late belong to a run that is over.
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    let late = sut.resolve(quotes_ok());
+    assert!(late.is_empty(), "a late answer starts nothing");
+    assert!(sut.view().failed.is_some());
+    // …and the failure is one the schedule asks again for.
+    assert!(vela_core::app::fee_policy::requote_delay_ms(
+        FeeFailure::ChainRead {
+            rate_limited: false
+        },
+        1
+    )
+    .is_some());
+}
+
+#[test]
+fn a_run_stuck_on_the_relay_is_a_quote_failure_and_a_retry_starts_over() {
+    let mut sut = Timed::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    // Estimating: the relay's simulation never answers.
+    sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    assert_eq!(sut.view().failed, Some(FeeFailure::QuoteUnavailable));
+    // The schedule's re-ask is a fresh run, with a deadline of its own.
+    let ops = sut.dispatch(Event::Requote);
+    assert!(ops.iter().any(is_deadline));
+    assert!(sut.view().busy);
+}
+
+#[test]
+fn a_priced_quote_ignores_its_deadline_and_a_refresh_keeps_the_one_on_screen() {
+    let mut sut = Timed::new();
+    sut.dispatch(request(CHAIN, vec![]));
+    sut.resolve(gas_ok());
+    sut.resolve(bundler_ok());
+    sut.resolve(quotes_ok());
+    sut.resolve_matching(|op| matches!(op, Op::EstimateUserOpGas { .. }), estimated());
+    assert!(sut.view().fee.is_some());
+    // The first run's deadline fires after it priced: nothing happens.
+    sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    assert!(sut.view().failed.is_none());
+    assert!(sut.view().confirm_fee_ready);
+    // A refresh that hangs keeps the quote it had (`fail` on a refresh).
+    sut.drop_matching(|op| matches!(op, Op::StartTtl { .. }));
+    sut.dispatch(Event::Requote);
+    sut.resolve_matching(is_deadline, Res::DeadlineElapsed);
+    let view = sut.view();
+    assert!(!view.busy);
+    assert!(
+        view.fee.is_some(),
+        "the quote on screen survives a hung refresh"
+    );
 }

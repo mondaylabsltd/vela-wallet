@@ -160,6 +160,7 @@
     "txBackgroundHint": "Fermer cette page n’interrompt pas la transaction",
     "txCloseBackground": "Fermer · continuer en arrière-plan",
     "txSubmittedTitle": "Envoyée au réseau",
-    "txConfirmedTitle": "{{amount}} {{symbol}} envoyés"
+    "txConfirmedTitle": "{{amount}} {{symbol}} envoyés",
+    "recipientTokenContract": "Ceci est l'adresse d'un contrat de token. Ce que vous envoyez ici est généralement perdu."
   }
 }

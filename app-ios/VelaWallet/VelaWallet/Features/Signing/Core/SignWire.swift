@@ -253,6 +253,10 @@ struct SignViewWire: Decodable, Equatable {
     /// `error` is the relay refusing the op (spec 082 RJ3): the sheet says
     /// `componentsUi.signing.refused` under `statusFailed`, never "try again".
     var failureRefused: Bool = false
+    /// Spec 096 F8: the failure on the sheet sent nothing and was no refusal,
+    /// and its answer is still held — the receipt offers Try again
+    /// (`retry_tapped`) beside Done, which answers the page.
+    var failureRetryable: Bool = false
 
     static let empty = SignViewWire(
         surface: .hidden, request: nil, isSigning: false, isSubmitting: false,

@@ -201,8 +201,7 @@ function operationToSign(userOp: UserOperation, innerCalls: MultiSendCall[]): Op
 		},
 		calls: innerCalls.map((call) => ({
 			to: call.to,
-			// MultiSendCall's value is hex, with or without `0x`.
-			value: BigInt('0x' + (stripHexPrefix(call.value) || '0')).toString(),
+			value: callValueWei(call.value).toString(),
 			data: hex(call.data)
 		}))
 	};
@@ -1897,7 +1896,7 @@ export async function innerCallsGasFloor(
 			chainId,
 			sender,
 			call.to,
-			'0x' + BigInt(call.value || '0').toString(16),
+			'0x' + callValueWei(call.value).toString(16),
 			'0x' + toHex(call.data)
 		);
 		if (gas === null) return null;
@@ -2463,11 +2462,22 @@ export function buildExecuteCallData(to: string, value: string, data: Uint8Array
 // MultiSend batching (shared by sendBatchCalls and the Tempo path)
 // ---------------------------------------------------------------------------
 
-/** A single call for MultiSend batching. `value` is a hex string (0x optional). */
+/**
+ * A single call for MultiSend batching. `value` is HEX wei, `0x` optional —
+ * the submit writes it prefixed (`toShellCall`), the estimators strip it — and
+ * empty is zero. Read it ONLY through {@link callValueWei}: `BigInt(value)`
+ * reads bare digits as DECIMAL and throws on bare hex, which is how every dApp
+ * call carrying native coin failed before signing (spec 096 F1).
+ */
 export interface MultiSendCall {
 	to: string;
 	value: string;
 	data: Uint8Array;
+}
+
+/** A {@link MultiSendCall} `value` as wei: hex, `0x` optional, empty = zero. */
+export function callValueWei(value: string): bigint {
+	return BigInt('0x' + (stripHexPrefix(value) || '0'));
 }
 
 /**

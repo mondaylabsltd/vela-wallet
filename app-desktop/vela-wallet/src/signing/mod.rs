@@ -192,6 +192,8 @@ pub struct SigningStrings {
     pub status_signing: SharedString,
     pub status_submitted: SharedString,
     pub error_generic: SharedString,
+    /// Spec 096 F8: `send.txRetryBtn` — a failure that sent nothing, again.
+    pub retry: SharedString,
     /// What a message signature that failed says in its place (083 H4): it
     /// was never a transaction, and nothing went on chain.
     pub error_off_chain: SharedString,
@@ -266,6 +268,9 @@ pub struct SigningStrings {
     /// "Insufficient {{sym}} for gas fees" — the send screen's sentence, said
     /// under the fee row when the coin it was quoted in cannot pay it.
     pub warn_insufficient_gas: SharedString,
+    /// Spec 096 F2: the coin paying is one the transaction itself may spend
+    /// ({{sym}}) — the core's `spent_by_operation`.
+    pub warn_fee_coin_spent: SharedString,
     pub tech_function: SharedString,
     pub tech_raw_data: SharedString,
     pub tech_sim_result: SharedString,
@@ -439,6 +444,7 @@ impl SigningStrings {
             // wallet, one way of saying "it did not go out, your funds are
             // safe" — and no raw relay text on a screen (SC-305).
             error_generic: loc.t("send.txErrorGeneric"),
+            retry: loc.t("send.txRetryBtn"),
             error_off_chain: loc.t("connect.detail.offChainNote"),
             error_network: loc.t("send.lock.netNotFound"),
             blocked_title: s("selfCallBlockedTitle"),
@@ -510,6 +516,7 @@ impl SigningStrings {
             refused: s("refused"),
             open_signer: s("openSigner"),
             warn_insufficient_gas: loc.t("send.warnInsufficientGas"),
+            warn_fee_coin_spent: loc.t("componentsUi.gas.feeCoinSpent"),
             tech_function: s("techFunction"),
             tech_raw_data: s("techRawData"),
             tech_sim_result: s("simResultLabel"),
@@ -661,6 +668,8 @@ mod tests {
         ] {
             assert!(!text.contains("componentsTx"), "echoed a key: {text}");
         }
+        // Spec 096 F8: the failure's "Try again" is Send's own button.
+        assert!(!s.retry.contains("txRetryBtn"), "echoed a key: {}", s.retry);
     }
 
     /// Spec 079: the status words after an approval are the send receipt's

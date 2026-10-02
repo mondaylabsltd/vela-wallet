@@ -492,7 +492,8 @@ impl PipeUtf16 for Vec<u16> {
 /// stand-in, so a verification pass never files a real issue.
 #[must_use]
 pub fn endpoint() -> String {
-    std::env::var("VELA_BUG_REPORT_ENDPOINT").unwrap_or_else(|_| BUG_REPORT_ENDPOINT.to_owned())
+    crate::dev_env::var!("VELA_BUG_REPORT_ENDPOINT")
+        .unwrap_or_else(|| BUG_REPORT_ENDPOINT.to_owned())
 }
 
 /// Send it, or hand back the road that still works. Blocking — call it off

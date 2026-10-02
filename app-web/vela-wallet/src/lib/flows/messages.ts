@@ -198,6 +198,8 @@ export const WALLET_FLOW_KEYS = [
 	'send.recipientPickAria',
 	// The trust line the `send` core resolves for a recipient (spec 026).
 	'componentsUi.signing.firstTimeTag',
+	// Spec 096 F12: the recipient is a token's own contract (`send` core).
+	'send.recipientTokenContract',
 	'send.txErrorGeneric',
 	'send.scanAria',
 	'send.splitTotalLabel',

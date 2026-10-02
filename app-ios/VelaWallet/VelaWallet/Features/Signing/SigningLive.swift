@@ -494,13 +494,16 @@ enum SigningLive {
         // refusal says so and never "try again" (RJ3, `failure_refused`).
         if let error = sign.error, error.kind != .userRejected,
            sign.pendingOpHash != nil || error.kind == .submitFailed {
+            // Spec 096 F8: the core holds the page's answer until this closes;
+            // a failure that sent nothing may be tried again.
             return SendReceiptModel(
                 header: header, stage: .failed,
                 title: loc.t("componentsTx.receipt.statusFailed"),
                 captions: [
                     summary, sign.failureRefused ? s(loc, "refused") : loc.t("send.txErrorGeneric"),
                 ].compactMap { $0 },
-                cta: loc.t("componentsTx.receipt.done"), ctaAccent: true
+                cta: loc.t("componentsTx.receipt.done"), ctaAccent: !sign.failureRetryable,
+                retry: sign.failureRetryable ? loc.t("send.txRetryBtn") : nil
             )
         }
         if let op = sign.pendingOpHash {
@@ -1146,6 +1149,11 @@ enum SigningLive {
                                      name: AddressText.short(detected.spender),
                                      address: detected.spender))
             }
+            // An unlimited permit is said like any unlimited approval (spec
+            // 094 S8) — the core's flag, the same sentence.
+            if guardView.unlimitedWarning {
+                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+            }
             // The dApp submits its own amount on chain, so rewriting would
             // desync the signature and revert their transaction. Saying so is
             // the only honest move.
@@ -1166,8 +1174,9 @@ enum SigningLive {
                                      name: AddressText.short(detected.spender),
                                      address: detected.spender))
             }
-            // Kept as the site asked (2026-09-26) — allowed, never unsaid.
-            if guardView.editor?.choice == .unlimited {
+            // Kept as the site asked (2026-09-26) — allowed, never unsaid. The
+            // core decides when (spec 094 S8).
+            if guardView.unlimitedWarning {
                 blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
             }
             return blocks
@@ -1188,7 +1197,7 @@ enum SigningLive {
                                          address: approval.spender))
                 }
             }
-            if guardView.batch?.anyUncapped == true {
+            if guardView.unlimitedWarning {
                 blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
             }
             return blocks
@@ -1317,6 +1326,12 @@ enum SigningLive {
         if let fee, fee.fee != nil, !fee.busy, fee.failed == nil, !fee.confirmFeeReady,
            let selected = fee.options.first(where: { $0.selected }), selected.insufficient {
             warning = context.loc.t("send.warnInsufficientGas", vars: ["sym": selected.symbol])
+        } else if let fee, !fee.busy, fee.failed == nil,
+                  let selected = fee.options.first(where: { $0.selected }), selected.spentByOperation == true {
+            // Spec 096 F2: the person chose a coin the transaction itself
+            // spends (the PancakeSwap USDC swap, fee in USDC). The core
+            // flags it; said under the fee while that coin is the one paying.
+            warning = context.loc.t("componentsUi.gas.feeCoinSpent", vars: ["sym": selected.symbol])
         } else if let failed = fee?.failed ?? (fee == nil ? context.feeStartFailure : nil),
                   let key = feeFailureReasonKey(failure: failed) {
             // Spec 079: why there is no fee, and that it will be asked again

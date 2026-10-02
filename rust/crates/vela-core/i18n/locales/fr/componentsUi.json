@@ -329,7 +329,8 @@
       "feeToken": "Token de frais",
       "paidWith": "Payé en {{symbol}}",
       "rowBalance": "Solde",
-      "rowSpend": "Coût estim."
+      "rowSpend": "Coût estim.",
+      "feeCoinSpent": "Cette transaction utilise aussi vos {{sym}}. S'il n'en reste pas assez pour les frais, elle échouera."
     },
     "dock": {
       "receive": "Recevoir",
@@ -426,6 +427,25 @@
     },
     "qrPlaceholder": {
       "caption": "Aperçu de démonstration · non scannable"
+    },
+    "appMenu": {
+      "about": "À propos de Vela Wallet",
+      "hide": "Masquer Vela Wallet",
+      "hideOthers": "Masquer les autres",
+      "showAll": "Tout afficher",
+      "quit": "Quitter Vela Wallet",
+      "edit": "Édition",
+      "undo": "Annuler",
+      "redo": "Rétablir",
+      "cut": "Couper",
+      "copy": "Copier",
+      "paste": "Coller",
+      "selectAll": "Tout sélectionner",
+      "view": "Présentation",
+      "fullScreen": "Activer/désactiver le plein écran",
+      "window": "Fenêtre",
+      "minimize": "Placer dans le Dock",
+      "closeWindow": "Fermer la fenêtre"
     }
   }
 }

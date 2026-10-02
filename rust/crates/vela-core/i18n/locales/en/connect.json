@@ -108,6 +108,11 @@
       "clearAllTitle": "Clear history?",
       "clearAllBody": "This removes all recently-opened dApps.",
       "a11yDeleteHistory": "Remove from history"
+    },
+    "ext": {
+      "installedNote": "Reload tabs that were already open so their sites can find Vela.",
+      "accessNote": "Site access is limited, so sites can't find Vela and passkeys won't work.",
+      "accessAllow": "Allow access"
     }
   },
   "signHandoff": {

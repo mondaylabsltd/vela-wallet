@@ -26,7 +26,7 @@ enum NetworkAdminStub {
         reported: @escaping (String) -> Int? = { _ in nil },
         chains: [Int: [String: Any]] = [:],
         asked: @escaping (_ type: String, _ url: String) -> Void = { _, _ in }
-    ) -> ([String: Any]) async -> String {
+    ) -> @MainActor ([String: Any]) async -> String {
         { operation in
             let type = operation["type"] as? String ?? ""
             let url = operation["url"] as? String ?? ""

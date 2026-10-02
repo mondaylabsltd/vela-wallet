@@ -509,7 +509,7 @@ impl GalleryTab {
     /// (data-model.md §Screen states — `dc1`…`dc6`).
     /// The chip `VELA_SETTINGS_STATE` names, if it names one.
     fn from_settings_env() -> Option<GalleryTab> {
-        let want = std::env::var("VELA_SETTINGS_STATE").ok()?;
+        let want = crate::dev_env::var!("VELA_SETTINGS_STATE")?;
         GalleryTab::ALL
             .into_iter()
             .find_map(|(tab, _)| (tab.settings_state()? == want).then_some(tab))
@@ -523,7 +523,7 @@ impl GalleryTab {
     /// click. Same env-pin family, same case-insensitive label match
     /// `FlowPanel::from_env` uses.
     fn from_gallery_env() -> Option<GalleryTab> {
-        let want = std::env::var("VELA_GALLERY_TAB").ok()?;
+        let want = crate::dev_env::var!("VELA_GALLERY_TAB")?;
         GalleryTab::ALL
             .into_iter()
             .find(|(_, label)| label.eq_ignore_ascii_case(want.trim()))
@@ -1117,10 +1117,10 @@ impl WalletPage {
     /// same thing and must not become it — that route has no session behind it
     /// and renders the mocks on purpose.
     pub fn signed_in(identity: Identity, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let section = match std::env::var("VELA_SECTION").as_deref() {
-            Ok("settings") => Section::Settings,
-            Ok("contacts") => Section::Contacts,
-            Ok("explore") => Section::Explore,
+        let section = match crate::dev_env::var!("VELA_SECTION").as_deref() {
+            Some("settings") => Section::Settings,
+            Some("contacts") => Section::Contacts,
+            Some("explore") => Section::Explore,
             _ => Section::Wallet,
         }
         .or_wallet();
@@ -1152,7 +1152,7 @@ impl WalletPage {
         // one Feedback state — or, `autosend`, a REAL send of a report with
         // `VELA_SCREENSHOT_FILES` attached (078 round 3).
         if section == Section::Settings
-            && let Ok(state) = std::env::var("VELA_FEEDBACK_STATE")
+            && let Some(state) = crate::dev_env::var!("VELA_FEEDBACK_STATE")
         {
             page.pin_feedback_state(&state);
         }
@@ -1180,7 +1180,7 @@ impl WalletPage {
         }
         // `VELA_FEEDBACK_STATE` opens the Feedback page in one state, for a
         // screenshot pass that cannot click, drop or paste (078 round 3).
-        if let Ok(state) = std::env::var("VELA_FEEDBACK_STATE") {
+        if let Some(state) = crate::dev_env::var!("VELA_FEEDBACK_STATE") {
             page.pin_feedback_state(&state);
         }
         page
@@ -1319,12 +1319,10 @@ impl WalletPage {
             backup_for: None,
             backup_check: None,
             keys_check: None,
-            // `VELA_KEYS_OPEN=1` (debug builds): the first key row starts open, so
+            // `VELA_KEYS_OPEN=1` (developer builds): the first key row starts open, so
             // the details card can be looked at without a click — the same env-pin
             // family as `VELA_PAGE` / `VELA_THEME`.
-            keys_open: if cfg!(debug_assertions)
-                && std::env::var("VELA_KEYS_OPEN").as_deref() == Ok("1")
-            {
+            keys_open: if crate::dev_env::flag!("VELA_KEYS_OPEN") {
                 std::collections::HashSet::from([0])
             } else {
                 std::collections::HashSet::new()
@@ -1513,7 +1511,7 @@ impl WalletPage {
     /// network's logo is part of the card, so it is fetched here — off the
     /// UI thread, while the dialog is open, with a short timeout after which
     /// the lettered disc stands in. A card that fails to render writes
-    /// nothing. The dialog opens in the home directory for the reason the
+    /// nothing. The dialog opens in Downloads (`storage::save_panel_dir`) for the reason the
     /// contacts export does: `.` is wherever the binary was launched from,
     /// which on a double-click is nowhere useful. `VELA_EXPORT_DIR=<dir>`
     /// answers the dialog with the card's filename in that folder, as the
@@ -1522,10 +1520,10 @@ impl WalletPage {
         let Some(model) = self.receive_share_card(cx) else {
             return;
         };
-        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+        let pinned = crate::dev_env::var_os!("VELA_EXPORT_DIR")
             .map(|dir| std::path::PathBuf::from(dir).join(&model.file_name));
         let target = pinned.is_none().then(|| {
-            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            let directory = crate::executor::storage::save_panel_dir();
             cx.prompt_for_new_path(&directory, Some(&model.file_name))
         });
         let png = cx.background_executor().spawn(async move {
@@ -9295,7 +9293,7 @@ impl WalletPage {
         // app from a shell. A zero-value call to
         // itself on Gnosis; nothing is signed unless somebody slides.
         #[cfg(all(debug_assertions, not(target_os = "linux")))]
-        if std::env::var("VELA_SIGN_PROBE").as_deref() == Ok("1") {
+        if crate::dev_env::flag!("VELA_SIGN_PROBE") {
             self.open_backup_signing(
                 vela_core::registry_backup::BackupCall {
                     chain_id: 100,
@@ -10114,7 +10112,7 @@ impl WalletPage {
         let prefs = crate::executor::preferences::current();
         let pinned = crate::executor::preferences::pinned_language();
         // What "follow the system" follows, by the locale it resolves to.
-        let system_language = vela_core::i18n::resolve_language(&crate::loc::system_tag()).language;
+        let system_language = crate::loc::system_language();
         let page = cx.entity();
 
         let language_value = settings_live::language_value(pinned.as_deref(), &system_language, s);
@@ -10131,6 +10129,8 @@ impl WalletPage {
                         if let Some(word) = settings_live::picked_language(index) {
                             crate::executor::preferences::set_language(word);
                             this.relocalize();
+                            // The menu bar speaks the new language too (spec 095).
+                            crate::app_menu::install(cx);
                         }
                         this.settings_open_dropdown = None;
                         cx.notify();
@@ -12674,7 +12674,7 @@ impl WalletPage {
             return;
         }
         self.browser_url_pinned = true;
-        let Ok(url) = std::env::var("VELA_BROWSER_URL") else {
+        let Some(url) = crate::dev_env::var!("VELA_BROWSER_URL") else {
             return;
         };
         if url.trim().is_empty() {
@@ -14911,6 +14911,18 @@ impl WalletPage {
     /// watched, and its answer still reaches the page (spec 079 FR-002). An
     /// ending on screen just goes. Over the phone's QR the scan is stopped
     /// first (`SigningHost::close`).
+    /// "Try again" on a failure that sent nothing (spec 096 F8): the core
+    /// takes the request back to review, still unanswered.
+    fn retry_signing(&mut self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
+        if let Some(host) = self.signing_host.clone() {
+            host.update(cx, |host, cx| {
+                host.dispatch_sign(vela_core::app::sign_request::Event::RetryTapped, cx);
+            });
+        }
+        cx.notify();
+    }
+
     fn close_signing_column(&mut self, cx: &mut Context<Self>) {
         #[cfg(not(target_os = "linux"))]
         if let Some(host) = self.signing_host.clone() {
@@ -17450,13 +17462,31 @@ impl WalletPage {
         } else {
             crate::flows::components::ghost_button(theme, receipt.cta.clone())
         };
-        body = body.child(
-            div().mt(px(8.)).w_full().child(
-                cta.id("dapp-receipt-done")
-                    .cursor_pointer()
-                    .on_click(on_cta),
-            ),
-        );
+        let done = cta
+            .id("dapp-receipt-done")
+            .cursor_pointer()
+            .on_click(on_cta);
+        // Spec 096 F8: a failure that sent nothing — Done answers the page,
+        // Try again (the accent) takes the request back to review.
+        let row = match receipt.retry.clone() {
+            Some(label) => div()
+                .flex()
+                .gap(px(12.))
+                .child(div().flex_1().child(done))
+                .child(
+                    div().flex_1().child(
+                        crate::flows::components::accent_button(theme, label)
+                            .rounded_full()
+                            .id("dapp-receipt-retry")
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.retry_signing(cx);
+                            })),
+                    ),
+                ),
+            None => div().child(done),
+        };
+        body = body.child(div().mt(px(8.)).w_full().child(row));
         match header {
             Some(header) => div()
                 .flex()
@@ -17807,7 +17837,7 @@ impl WalletPage {
         // file dialog is a system window this app cannot drive, so without it
         // no screenshot pass and no headless run can ever reach the far side
         // of a scan.
-        if let Ok(path) = std::env::var("VELA_SCAN_FILE") {
+        if let Some(path) = crate::dev_env::var!("VELA_SCAN_FILE") {
             self.scan_notice = None;
             match std::fs::read(&path)
                 .ok()
@@ -17951,7 +17981,7 @@ impl WalletPage {
         // `VELA_IMPORT_FILE=<path>` answers the picker — the `VELA_SCAN_FILE`
         // seam, for the same reason: a system file dialog is a window no
         // verification pass can drive.
-        let pinned = std::env::var_os("VELA_IMPORT_FILE").map(std::path::PathBuf::from);
+        let pinned = crate::dev_env::var_os!("VELA_IMPORT_FILE").map(std::path::PathBuf::from);
         let paths = pinned.is_none().then(|| {
             cx.prompt_for_paths(gpui::PathPromptOptions {
                 files: true,
@@ -18093,12 +18123,12 @@ impl WalletPage {
         // `VELA_EXPORT_DIR=<dir>` answers the save dialog with the core's
         // filename in that folder — the `VELA_IMPORT_FILE` seam, the other
         // way.
-        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+        let pinned = crate::dev_env::var_os!("VELA_EXPORT_DIR")
             .map(|dir| std::path::PathBuf::from(dir).join(&file.filename));
         // The save dialog opens where a person keeps their files, not where
         // this app keeps its state.
         let target = pinned.is_none().then(|| {
-            let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+            let directory = crate::executor::storage::save_panel_dir();
             cx.prompt_for_new_path(&directory, Some(&file.filename))
         });
         cx.spawn(async move |page, cx| {

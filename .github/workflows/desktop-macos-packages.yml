@@ -77,6 +77,12 @@ jobs:
         run: |
           sed 's/@VERSION@/0.0.0/g' packaging/macos/Info.plist.in > "$RUNNER_TEMP/Info.plist"
           plutil -lint "$RUNNER_TEMP/Info.plist"
+      - name: The Mac App Store plists must be valid (spec 095)
+        working-directory: app-desktop/vela-wallet/packaging/macos
+        run: |
+          for f in entitlements-mas.plist PrivacyInfo.xcprivacy container-migration.plist; do
+            plutil -lint "$f"
+          done
       - name: The bundle id must match the app id used everywhere else
         # The Linux workflow asserts app.getvela.VelaWallet across five files;
         # CFBundleIdentifier is the sixth place the same id must appear.
@@ -262,6 +268,12 @@ jobs:
             grep -aq "${GITHUB_SHA:0:7}" "$bin" || {
               echo "::error::the $arch binary does not carry commit ${GITHUB_SHA:0:7}"; exit 1; }
           done
+      - name: No private API, no developer switch (spec 095)
+        # The Mac App Store refuses private WindowServer symbols and
+        # selectors, and the owner's rule is that a release exposes no
+        # developer feature. One check, on the binary every package carries.
+        working-directory: app-desktop/vela-wallet
+        run: ./scripts/check-store-binary.sh "dist/macos/universal/Vela Wallet.app/Contents/MacOS/vela-wallet"
       - name: What is about to be published must be what Gatekeeper accepts
         if: steps.credentials.outputs.publishable == 'true'
         working-directory: app-desktop/vela-wallet

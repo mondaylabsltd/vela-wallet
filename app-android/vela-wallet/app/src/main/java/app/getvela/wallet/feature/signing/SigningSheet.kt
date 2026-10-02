@@ -82,6 +82,8 @@ fun SigningSheet(
     onExplorer: () -> Unit = {},
     /** Spec 079: the fee row's refresh. */
     onRefreshFee: (() -> Unit)? = null,
+    /** Spec 096 F8: the failed receipt's Try again. */
+    onRetry: (() -> Unit)? = null,
 ) {
     VelaModalSheet(
         onDismissRequest = onDismiss,
@@ -106,6 +108,7 @@ fun SigningSheet(
             onPickSpeed = onPickSpeed,
             onTrustedSignerReopen = onTrustedSignerReopen,
             onTrustedSignerCancel = onTrustedSignerCancel,
+            onRetry = onRetry,
         )
     }
 }
@@ -131,6 +134,8 @@ fun SigningSheetContent(
     onPickSpeed: (String) -> Unit = {},
     onTrustedSignerReopen: () -> Unit = {},
     onTrustedSignerCancel: () -> Unit = {},
+    /** Spec 096 F8: the failed receipt's Try again. */
+    onRetry: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     var techOverride by remember(model.state) { mutableStateOf<Boolean?>(null) }
@@ -166,6 +171,7 @@ fun SigningSheetContent(
                 model = receipt,
                 onExplorer = onExplorer,
                 onCta = { onClose?.invoke() },
+                onRetry = onRetry,
             )
             return@Column
         }

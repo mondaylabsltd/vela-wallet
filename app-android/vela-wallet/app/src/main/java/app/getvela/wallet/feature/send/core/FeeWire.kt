@@ -269,6 +269,12 @@ data class FeeOptionView(
     val amount: String? = null,
     val insufficient: Boolean = false,
     val selected: Boolean = false,
+    /**
+     * Spec 096 F2: the operation itself may spend this coin by an amount no
+     * call states, and nothing measured what is left (the core's verdict).
+     * The sheet warns while it is the coin paying.
+     */
+    val spent_by_operation: Boolean = false,
 )
 
 @Serializable
@@ -327,6 +333,11 @@ sealed class FeeOperation {
     @Serializable
     @SerialName("start_ttl")
     data class StartTtl(val ms: Int) : FeeOperation()
+
+    /** The core's bound on a whole quote (spec 094 S9): answer [FeeShellResult.DeadlineElapsed] after `ms`. */
+    @Serializable
+    @SerialName("start_deadline")
+    data class StartDeadline(val ms: Int) : FeeOperation()
 }
 
 // -- what the shell observed -------------------------------------------------
@@ -367,6 +378,10 @@ sealed class FeeShellResult {
     @Serializable
     @SerialName("ttl_elapsed")
     data object TtlElapsed : FeeShellResult()
+
+    @Serializable
+    @SerialName("deadline_elapsed")
+    data object DeadlineElapsed : FeeShellResult()
 }
 
 // -- what the shell tells it -------------------------------------------------

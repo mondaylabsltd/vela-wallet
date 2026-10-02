@@ -394,6 +394,25 @@ one. The Windows installer stays unsigned by ruling (SmartScreen asks once; the
 release notes say how to answer); `.rpm`/`.deb` signing is still open — see
 [Before the first public release](#before-the-first-public-release).
 
+### Mac App Store (spec 095)
+
+`./scripts/build-macos-mas.sh` makes the sandboxed, App Store–signed universal
+bundle and its installer `.pkg`, and has Apple validate it; it never uploads.
+The one input is the **Mac App Store Connect** provisioning profile
+(`VELA_MAS_PROFILE=<file>` or `--profile`); `--dev` builds the same sandboxed
+bundle signed with the development profile that lists this Mac. What goes into
+the bundle and why (`packaging/macos/entitlements-mas.plist`,
+`PrivacyInfo.xcprivacy`, `container-migration.plist`), the owner's checklist,
+the listing and review notes are in
+[docs/store-submission/mac-app-store.md](../../docs/store-submission/mac-app-store.md).
+
+`./scripts/check-store-binary.sh <executable>` is the store's gate on any
+release binary: no private WindowServer import, none of gpui's private
+selectors, and none of the developer switches ([Environment pins](#environment-pins)) (CI runs it on every
+macOS package). gpui's macOS backend is vendored for this —
+[`../vendor/gpui_macos`](../vendor/gpui_macos/Cargo.toml) is upstream at the
+pinned commit minus that private API.
+
 ---
 
 ## Build Linux packages
@@ -719,6 +738,12 @@ rebuilds; only the first fetch pays for them. Expect a multi-gigabyte
 
 ## Environment pins
 
+**Developer builds only** (spec 095): every `VELA_*` switch on this page and in
+the code is read through `dev_env::var!`, which a debug build, a test build or
+`--features dev-fixtures` expands into an environment read and a release build
+into nothing — a store or `.dmg` build ignores them, and does not even carry
+their names.
+
 The app follows the system appearance and the system/env locale by default.
 Both can be pinned without touching system settings:
 
@@ -786,7 +811,7 @@ instead of reported upstream — re-verify each after any gpui bump.
   second display has no titlebar, no traffic lights, and no pointer path back
   out. The primary display masks the bug because macOS 26 keeps its menu bar
   visible in fullscreen there. Zed always installs its own menus, which is why
-  upstream never trips over this — [main.rs](src/main.rs) sets ours (and F11 /
+  upstream never trips over this — [app_menu.rs](src/app_menu.rs) sets ours (and F11 /
   ⌃⌘F remain as keyboard exits either way; see
   [onboarding.rs](src/onboarding.rs)).
 - **`hasVisibleWindows` stays true after the last window closes, so gpui's

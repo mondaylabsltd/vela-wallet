@@ -269,6 +269,12 @@ struct SigningFollowsTrackerTests {
                 maybeDelivered: false, heldErrorJson: nil
             )
         })
+        // Spec 096 F8: the sheet says refused, and the page hears it on the
+        // close — the window is not taken away over the words.
+        await Wait.until { run.controller.sign.failureRefused }
+        #expect(run.seen.answers.isEmpty, "held while the sheet shows it")
+        #expect(!run.controller.sign.failureRetryable, "a refusal is not tried again")
+        run.controller.swipeDismissed()
         await Wait.until { !run.seen.answers.isEmpty }
         let answer = try #require(run.seen.answers.first)
         #expect(answer["type"] as? String == "err")
@@ -278,7 +284,7 @@ struct SigningFollowsTrackerTests {
         await Wait.until { !run.seen.withdrawn.isEmpty }
         #expect(run.seen.withdrawn.first?.hash.lowercased() == run.seen.tracked.first?.userOpHash.lowercased())
         await Wait.until { TxRecords.load(store: run.store).isEmpty }
-        #expect(run.controller.sign.failureRefused)
+        #expect(!run.controller.sign.isVisible, "closed by the person, after the words")
         #expect(run.controller.submittedUserOp == nil)
         try await Task.sleep(nanoseconds: 300_000_000)
         #expect(run.seen.answers.count == 1)

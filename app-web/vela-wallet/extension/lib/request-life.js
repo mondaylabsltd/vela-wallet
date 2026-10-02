@@ -14,7 +14,10 @@
  *
  *   { v, rid, id, method, params, origin, tabId, windowId, documentId,
  *     sentAt, at, surface, surfaceWindowId, state, claimedAt?, phase?,
- *     opHash?, chainId? }
+ *     opHash?, chainId?, windowOpening?, queued? }
+ *
+ * `windowOpening` / `queued` are the request WINDOW's queue (spec 094 S7): one
+ * window per site, the requests behind it `queued` until it passes to them.
  *
  * `state` goes `created` → `shown` → `claimed`; the record leaves the ledger
  * when it is answered or settled, never otherwise. `phase` is the last live
@@ -78,6 +81,79 @@ export function nextForWindow(records, windowId) {
 		}
 	}
 	return best;
+}
+
+// ---- one request window per site (spec 094 S7) -------------------------------
+
+/**
+ * Does this record hold its site's request window — opened, or being opened?
+ * A record whose surface is `window` but that has not reached the window yet
+ * holds nothing: the OLDEST request of a site is the one that opens it.
+ */
+export function holdsWindow(record) {
+	return (
+		!!record &&
+		record.surface === 'window' &&
+		record.queued !== true &&
+		(record.surfaceWindowId !== undefined || record.windowOpening === true)
+	);
+}
+
+/**
+ * The request holding `origin`'s window, other than `exceptRid`, or `null`.
+ * A page that fires twelve requests with no click gets one window, which
+ * takes them in turn — not twelve focused popups (089 F03).
+ */
+export function windowHolder(records, origin, exceptRid) {
+	for (const record of records) {
+		if (record && record.rid !== exceptRid && record.origin === origin && holdsWindow(record)) {
+			return record;
+		}
+	}
+	return null;
+}
+
+/** The oldest request queued behind `origin`'s window, or `null`. */
+export function nextQueued(records, origin) {
+	let best = null;
+	for (const record of records) {
+		if (!record || record.queued !== true || record.surface !== 'window') continue;
+		if (record.origin !== origin) continue;
+		if (!best || record.at < best.at || (record.at === best.at && record.rid < best.rid)) {
+			best = record;
+		}
+	}
+	return best;
+}
+
+/**
+ * What a site's queue does when the request holding its window leaves the
+ * ledger (`ended`, ended by `cause`; `records` no longer holds it):
+ *
+ *   - the person closed the window (`surface_closed`) — every request queued
+ *     behind it is settled the same way, so a flood does not raise a window
+ *     per request after each ✕;
+ *   - anything else (an answer, the page leaving, the time running out) — the
+ *     oldest queued request takes the window over.
+ *
+ * Returns `{ settle: rid[], next: record | null }`.
+ */
+export function queueAfter(records, ended, cause) {
+	if (!ended || ended.surface !== 'window' || ended.queued === true)
+		return { settle: [], next: null };
+	const rest = records.filter((record) => record && record.rid !== ended.rid);
+	if (cause === 'surface_closed') {
+		return {
+			settle: rest
+				.filter(
+					(record) =>
+						record.queued === true && record.surface === 'window' && record.origin === ended.origin
+				)
+				.map((record) => record.rid),
+			next: null
+		};
+	}
+	return { settle: [], next: nextQueued(rest, ended.origin) };
 }
 
 /**
@@ -215,6 +291,12 @@ export function recoveryPlan(records, { now, ttlMs = REQUEST_TTL_MS, panelWindow
 		}
 		if (record.surface === 'panel' && panelWindows && !panelWindows.has(record.surfaceWindowId)) {
 			settle(record, 'surface_closed');
+			continue;
+		}
+		// Queued behind its site's window (spec 094 S7): still waiting for one —
+		// kept if its page is, and given a window once the worker is up.
+		if (record.surface === 'window' && record.queued === true) {
+			plan.push({ rid: record.rid, action: 'probe' });
 			continue;
 		}
 		if (

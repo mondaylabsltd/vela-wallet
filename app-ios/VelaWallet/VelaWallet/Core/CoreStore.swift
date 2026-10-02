@@ -70,7 +70,7 @@ final class CoreStore<View: Decodable> {
     ///     leaves the fault reported and nothing else.
     init(
         bridge: CoreBridge,
-        perform: @escaping ([String: Any]) async -> String,
+        perform: @escaping @MainActor ([String: Any]) async -> String,
         onView: @escaping (View) -> Void = { _ in },
         onFault: @escaping (Error) -> Void = { _ in },
         neutralAnswer: (([String: Any]) -> String?)? = nil

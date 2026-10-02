@@ -385,6 +385,8 @@ export const READ_PROXY_METHODS = new Set([
  *   'switch'      → wallet_switchEthereumChain
  *   'addChain'    → wallet_addEthereumChain (a switch, for a chain the wallet has)
  *   'watchAsset'  → wallet_watchAsset (`false`: not added)
+ *   'capabilities'→ wallet_getCapabilities (EIP-5792, spec 094)
+ *   'callsStatus' → wallet_getCallsStatus (EIP-5792, spec 094)
  *   'read'        → a node or bundler read
  *
  * A MIRROR of the core's `dapp_rpc::classify` (spec 070), which the in-app
@@ -408,8 +410,155 @@ export function classifyMethod(method) {
 	if (method === 'wallet_switchEthereumChain') return 'switch';
 	if (method === 'wallet_addEthereumChain') return 'addChain';
 	if (method === 'wallet_watchAsset') return 'watchAsset';
+	if (method === 'wallet_getCapabilities') return 'capabilities';
+	if (method === 'wallet_getCallsStatus') return 'callsStatus';
 	if (READ_PROXY_METHODS.has(method)) return 'read';
 	return 'unsupported';
+}
+
+// ---- EIP-5792: what a batch can be asked after it was sent (spec 094) --------
+//
+// TWINS of `dapp_rpc::calls_status_id`, `calls_status` and `capabilities` —
+// the rules every in-app browser answers with — because the worker cannot run
+// the core. `calls-status.test.ts` drives the real core over the same inputs
+// and demands the same answers.
+
+/** EIP-5792's "Unknown bundle id" — a `wallet_getCallsStatus` for an id this wallet never sent. */
+export const UNKNOWN_BUNDLE_ID = 5730;
+
+const HASH32_RE = /^0x[0-9a-fA-F]{64}$/;
+
+/** The batch id `[id]` names, lower-cased; `null` unless it is one 32-byte hash. */
+export function callsStatusId(params) {
+	const id = Array.isArray(params) ? params[0] : undefined;
+	return typeof id === 'string' && HASH32_RE.test(id) ? id.toLowerCase() : null;
+}
+
+/**
+ * The EIP-5792 status of batch `id` on `chainId`, from the bundler's
+ * `eth_getUserOperationReceipt` result (`null`/`undefined`: not landed) and,
+ * with no receipt, the relay's `pimlico_getUserOperationStatus` result
+ * (`relayStatus`). `success: false` is 500 (atomic: reverted completely); a
+ * landed receipt is 200, with the operation's own logs and status; no receipt
+ * and the relay's refusal before any block (`rejected` naming no transaction —
+ * the tracker's terminal state) is 400 (spec 096 F3); anything else is 100.
+ */
+export function callsStatusResult(id, chainId, userOpReceipt, relayStatus) {
+	const status = {
+		version: '2.0.0',
+		id,
+		chainId: toHexChainId(chainId),
+		status: 100,
+		atomic: true
+	};
+	const found =
+		userOpReceipt && typeof userOpReceipt === 'object' && !Array.isArray(userOpReceipt)
+			? userOpReceipt
+			: null;
+	const receipt = found?.receipt;
+	if (
+		!found ||
+		!receipt ||
+		typeof receipt !== 'object' ||
+		typeof receipt.transactionHash !== 'string'
+	) {
+		if (relayRefused(relayStatus)) status.status = 400;
+		return status;
+	}
+	const succeeded = found.success !== false;
+	const logs = Array.isArray(found.logs)
+		? found.logs
+		: Array.isArray(receipt.logs)
+			? receipt.logs
+			: [];
+	status.status = succeeded ? 200 : 500;
+	status.receipts = [
+		{
+			logs,
+			status: succeeded ? '0x1' : '0x0',
+			blockHash: receipt.blockHash ?? null,
+			blockNumber: receipt.blockNumber ?? null,
+			gasUsed: receipt.gasUsed ?? null,
+			transactionHash: receipt.transactionHash
+		}
+	];
+	return status;
+}
+
+/** The relay's status method, asked when a batch has no receipt (`dapp_rpc::USER_OP_STATUS_METHOD`). */
+export const USER_OP_STATUS_METHOD = 'pimlico_getUserOperationStatus';
+
+const RELAY_LIFECYCLE = new Set([
+	'not_found',
+	'queued',
+	'not_submitted',
+	'submitted',
+	'rejected',
+	'included',
+	'failed'
+]);
+
+/**
+ * The relay refused the operation before any block — `rejected`, naming no
+ * bundle transaction (`dapp_rpc::refused_before_any_block`, read the way
+ * `tx_tracker::parse_user_op_status` reads the answer: the object itself, or a
+ * whole JSON-RPC body's `result`; an unknown status is no answer).
+ */
+function relayRefused(answer) {
+	if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return false;
+	const result = 'status' in answer ? answer : answer.result;
+	if (!result || typeof result !== 'object' || typeof result.status !== 'string') return false;
+	if (!RELAY_LIFECYCLE.has(result.status)) return false;
+	const tx = result.transactionHash;
+	return result.status === 'rejected' && !(typeof tx === 'string' && tx !== '');
+}
+
+/**
+ * `wallet_getCapabilities` `[address, chainIds?]`: `atomic: supported` on each
+ * of the wallet's `chainIds` (those the page names, when it names some), for
+ * an address the site was granted — else `{ error }` (4100; no address -32602).
+ */
+export function capabilitiesResult(params, granted, chainIds) {
+	const list = Array.isArray(params) ? params : [];
+	const address = list[0];
+	if (!isAddressLike(address)) {
+		return { error: rpcError(ERR.INVALID_PARAMS, 'Expected [address, chainIds?]') };
+	}
+	const lower = address.toLowerCase();
+	if (!(granted ?? []).some((g) => typeof g === 'string' && g.toLowerCase() === lower)) {
+		return { error: rpcError(ERR.UNAUTHORIZED, 'The address is not connected to this site') };
+	}
+	const asked = Array.isArray(list[1])
+		? list[1].map((id) => strictChainId(id)).filter((id) => id > 0)
+		: null;
+	const result = {};
+	for (const chain of chainIds) {
+		if (asked && !asked.includes(chain)) continue;
+		result[toHexChainId(chain)] = { atomic: { status: 'supported' } };
+	}
+	return { result };
+}
+
+/**
+ * A chain id as the core's `chain_param` reads one: a positive integer, a
+ * `0x` hex string or a decimal string, all of it digits, within u32 — else 0.
+ */
+function strictChainId(value) {
+	let n = 0;
+	if (typeof value === 'number') n = Number.isInteger(value) ? value : 0;
+	else if (typeof value === 'string' && /^0[xX][0-9a-fA-F]+$/.test(value))
+		n = parseInt(value.slice(2), 16);
+	else if (typeof value === 'string' && /^[0-9]+$/.test(value)) n = Number(value);
+	return n > 0 && n <= 0xffffffff ? n : 0;
+}
+
+/** The chain ids the wallet's catalog (`vela.ext.chains`) holds, in its order. */
+export function catalogChainIds(catalog) {
+	const chains = catalog && typeof catalog === 'object' ? catalog.chains : null;
+	if (!chains || typeof chains !== 'object') return [];
+	return Object.keys(chains)
+		.map((key) => parseChainId(key))
+		.filter((id) => id > 0);
 }
 
 // ---- chain switching and reads (routed in the worker) ----------------------

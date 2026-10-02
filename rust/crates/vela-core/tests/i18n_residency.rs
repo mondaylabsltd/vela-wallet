@@ -46,8 +46,9 @@ const CORPUS_BYTES: usize = 990_499;
 /// to ~1 KB above the new measurement and stays a warning. Approved by the
 /// owner the same day: 「同意呀，i18n_residency 可以增加预算」.
 ///
-/// 2026-10-02: the owner approved 141,800 for the beta round's strings (096's
-/// order-terms warning, "All" and "Order" among them).
+/// 2026-10-02: the owner raised it to 140,800 for the beta-readiness
+/// branches, which each make this identical edit; later the same day, to
+/// 141,800 (096's order-terms warning, "All" and "Order" among them).
 const SC005_BUDGET: usize = 141_800;
 
 fn engine_with(active: &str) -> I18n {

@@ -422,7 +422,12 @@ object SendLive {
             recipients = emptyList(),
             recipientActions = emptyList(),
             summary = null,
-            recipient = recipientModel(view, ctx).copy(note = s.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT)),
+            // A token's own contract (spec 096 F12) is said over "same address".
+            recipient = if (view.recipient_is_token_contract) {
+                recipientModel(view, ctx)
+            } else {
+                recipientModel(view, ctx).copy(note = s.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT))
+            },
             fee = feeRow(fallback.fee, view.fee ?: fee.fee, view.estimating_gas || view.fee_busy || fee.busy, view, fee, ctx, speed),
             speed = speed?.let { speedModel(it, view, ctx) },
             cta = s.t(I18nKeys.Flows.CONTINUE),
@@ -587,6 +592,7 @@ object SendLive {
         pickLabel = ctx.strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
         scanLabel = null,
         note = recipientNote(view, ctx),
+        noteWarning = view.recipient_is_token_contract,
         raw = view.recipient,
     )
 
@@ -596,6 +602,8 @@ object SendLive {
      * matters for a poisoned look-alike.
      */
     internal fun recipientNote(view: SendView, ctx: Context): String? {
+        // Spec 096 F12: a token's own contract, said before anything else.
+        if (view.recipient_is_token_contract) return ctx.strings.t(I18nKeys.Flows.RECIPIENT_TOKEN_CONTRACT)
         val identity = view.recipient_identity
         val name = identity?.name?.takeIf { it.isNotEmpty() }
         if (name != null) return identity.source?.takeIf { it.isNotEmpty() }?.let { "$name · $it" } ?: name
@@ -967,8 +975,14 @@ object SendLive {
             amount = if (split || view.multi_select_mode) "${sentFigure(view.confirm_amount, view)} $symbol".trim() else sentFigure(view.confirm_amount, view),
             amountUnit = if (split || view.multi_select_mode) null else symbol.ifEmpty { null },
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
-            // The core's own verdict, resolved on this page only (single recipient).
-            recipientTag = if (!split && view.recipient_risk?.first_time == true) s.t(I18nKeys.Flows.FIRST_TIME_SEND) else null,
+            // The core's own verdicts: a token's own contract (spec 096 F12)
+            // first, else the first time, resolved on this page only (single
+            // recipient).
+            recipientTag = when {
+                view.recipient_is_token_contract -> s.t(I18nKeys.Flows.RECIPIENT_TOKEN_CONTRACT)
+                !split && view.recipient_risk?.first_time == true -> s.t(I18nKeys.Flows.FIRST_TIME_SEND)
+                else -> null
+            },
             facts = listOf(
                 FactRowModel(label = s.t(I18nKeys.Flows.FROM_LABEL), value = ctx.fromName.ifBlank { shortAddress(ctx.fromAddress) }, lead = FactLead.Identicon(ctx.fromAddress)),
                 // SD3b (spec 038 #D2): a split names its count here and every

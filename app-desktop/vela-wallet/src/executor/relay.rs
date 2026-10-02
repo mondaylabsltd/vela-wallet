@@ -1049,10 +1049,10 @@ fn transaction_of(body: &Value) -> Option<String> {
 
 /// The web's `vela.forceFunding()`, as a seam: `VELA_FORCE_FUNDING=1` reads
 /// every gas account as short and every sponsorship as denied, so the
-/// funding card can be exercised without draining a real account. Debug
+/// funding card can be exercised without draining a real account. Developer
 /// builds only — the web's `fundingShouldForce` is always false in production.
 fn funding_forced() -> bool {
-    cfg!(debug_assertions) && std::env::var_os("VELA_FORCE_FUNDING").is_some()
+    crate::dev_env::var_os!("VELA_FORCE_FUNDING").is_some()
 }
 
 /// `recommendedFundingWei`: lift the gas account to the threshold, plus the

@@ -1,7 +1,7 @@
 ---
 title: Installer Vela
 description: "Toutes les façons d'utiliser Vela — web, extension de navigateur, ordinateur et téléphone —, ce que chacune coûte, ce qu'elle permet, et ce dont votre appareil a besoin."
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -32,7 +32,7 @@ l'une de vos clés.
 
 ## Extension de navigateur
 
-Navigateurs Chromium : Chrome, Edge et Brave (Chrome 116 ou plus récent). Elle
+Navigateurs Chromium : Chrome, Edge et Brave (Chrome 122 ou plus récent). Elle
 place le portefeuille dans la barre d'outils et permet aux dApps de s'y connecter
 directement. Tant qu'elle n'est pas sur le Chrome Web Store :
 

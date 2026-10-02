@@ -192,6 +192,28 @@ class SendLiveTest {
         assertNull(SendLive.confirm(drawn.model, view.copy(recipient_risk = SendRecipientRisk(first_time = false)), ctx()).recipientTag)
     }
 
+    /**
+     * Spec 096 F12: the WBNB-to-the-WBNB-contract send said only "First time
+     * sending here". The core's token-contract verdict goes first, on the
+     * confirm and on the form, where it is drawn as a warning.
+     */
+    @Test
+    fun `a token contract recipient is said before the slide`() {
+        val confirmDrawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val token = SendView(
+            stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(),
+            recipient_risk = SendRecipientRisk(first_time = true), recipient_is_token_contract = true,
+        )
+        assertEquals(strings.t(I18nKeys.Flows.RECIPIENT_TOKEN_CONTRACT), SendLive.confirm(confirmDrawn.model, token, ctx()).recipientTag)
+
+        val formDrawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val field = SendLive.form(formDrawn.model, token.copy(stage = SendStage.EnterDetails), FeeView(), ctx()).recipient!!
+        assertEquals(strings.t(I18nKeys.Flows.RECIPIENT_TOKEN_CONTRACT), field.note)
+        assertTrue(field.noteWarning)
+        val plain = SendLive.form(formDrawn.model, token.copy(stage = SendStage.EnterDetails, recipient_is_token_contract = false), FeeView(), ctx()).recipient!!
+        assertFalse(plain.noteWarning)
+    }
+
     private fun feeOption(symbol: String, contract: String?, usdPrice: String?) = FeeOptionView(
         symbol = symbol, contract = contract, decimals = 18, balance = "1500000000000000000",
         recipient = recipient, usd_balance = "900", usd_price = usdPrice, amount = "91000000000000",

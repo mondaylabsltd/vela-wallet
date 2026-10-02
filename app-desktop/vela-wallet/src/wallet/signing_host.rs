@@ -3002,15 +3002,19 @@ mod approve_tests {
                 now_ms: 1.0,
             },
         );
-        assert_eq!(answers_in(&failed), vec![("7".to_owned(), Some(-32603))]);
+        // Spec 096 F8: the failure is shown, its answer held for the close.
+        assert!(answers_in(&failed).is_empty(), "held while it shows");
         assert!(
             !back_on_form_of(&sign.view(), true),
-            "a failure is an answer"
+            "a failure is not the form"
         );
         assert!(
             !back_on_form_of(&sign.view(), false),
             "…and the core says so on its own"
         );
+        assert!(sign.view().failure_retryable, "nothing was sent");
+        let closed = sign.dispatch(vela_core::app::sign_request::Event::SwipeDismissed);
+        assert_eq!(answers_in(&closed), vec![("7".to_owned(), Some(-32603))]);
     }
 
     /// 083 W19: a column that goes away stops what its ceremony waits

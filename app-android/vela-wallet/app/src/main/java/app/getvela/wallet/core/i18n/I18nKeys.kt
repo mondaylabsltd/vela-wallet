@@ -761,6 +761,8 @@ object I18nKeys {
         const val NO_TOKENS_WITH_BALANCE = "send.noTokensWithBalance"
         const val NO_MATCHING_TOKENS = "send.noMatchingTokens"
         const val FIRST_TIME_SEND = "componentsUi.signing.firstTimeTag"
+        /** Spec 096 F12: the recipient is a token's own contract. */
+        const val RECIPIENT_TOKEN_CONTRACT = "send.recipientTokenContract"
         /** The notification when a verdict lands while the app is away (phase 4). */
         const val TX_CONFIRMED_NOTICE = "componentsTx.receipt.statusConfirmed"
         const val TX_CONFIRMED_NOTICE_BODY = "send.txSubmittedTitle"
@@ -1004,6 +1006,9 @@ object I18nKeys {
         const val ABOUT_LINK_WEBSITE = "about.linkWebsite"
         const val ABOUT_LINK_GITHUB = "about.linkGitHub"
         const val ABOUT_LINK_SAFE = "about.linkSafeWallet"
+        const val ABOUT_LINK_PRIVACY = "about.linkPrivacy"
+        const val ABOUT_LINK_TERMS = "about.linkTerms"
+        const val ABOUT_LINK_SUPPORT = "about.linkSupport"
         const val ABOUT_FOOTER = "about.footer"
 
         // Account switcher + sign out + erase.

@@ -100,7 +100,7 @@ final class SignExecutor {
         /// for THAT write, not for any write (a delete included).
         var recordWritten: (_ recordId: String) -> Void = { _ in }
         /// The session's active-account switch.
-        var switchAccount: (_ index: Int) async -> Bool = { _ in false }
+        var switchAccount: @MainActor (_ index: Int) async -> Bool = { _ in false }
         /// The chain's native symbol, for the record row.
         var nativeSymbol: (_ chainId: Int) -> String = { _ in "" }
         /// Who asked, as the Trusted Signer's page is told it (spec 071): the
@@ -569,34 +569,14 @@ final class SignExecutor {
     ]
 
     /// The calls a request carries: one for `eth_sendTransaction`, many for
-    /// `wallet_sendCalls` — and **an empty batch is not a batch**. Hex value
-    /// on the wire, decimal to the core.
+    /// `wallet_sendCalls` — every one or none, and **an empty batch is not a
+    /// batch**. The core's one reading (`tx_request::calls_of`, spec 096 F1):
+    /// value in decimal to the submit. This shell used to read a JSON number
+    /// as zero, drop a batch leg it could not read and send the rest, and
+    /// refuse `"0x"` — each shell had its own rule, and one request could be
+    /// signed as different amounts.
     static func callsOf(method: String, paramsJson: String) -> [UserOpCall]? {
-        guard let data = paramsJson.data(using: .utf8),
-              let params = try? JSONSerialization.jsonObject(with: data) as? [Any],
-              let first = params.first as? [String: Any]
-        else { return nil }
-
-        if method == "wallet_sendCalls" {
-            guard let raw = first["calls"] as? [[String: Any]] else { return nil }
-            let calls = raw.compactMap(call(from:))
-            return calls.isEmpty ? nil : calls
-        }
-        return call(from: first).map { [$0] }
-    }
-
-    private static func call(from raw: [String: Any]) -> UserOpCall? {
-        guard let to = raw["to"] as? String, !to.isEmpty else { return nil }
-        let valueHex = (raw["value"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "0x0"
-        guard let value = GuardExecutor.decimal(fromWordHex: padded(valueHex)) else { return nil }
-        let dataHex = (raw["data"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "0x"
-        return UserOpCall(to: to, value: value, data: dataHex)
-    }
-
-    /// The decimal converter wants whole bytes; a dApp writes `0x1`.
-    private static func padded(_ hex: String) -> String {
-        let digits = hex.hasPrefix("0x") ? String(hex.dropFirst(2)) : hex
-        return digits.count % 2 == 0 ? "0x" + digits : "0x0" + digits
+        dappRequestCalls(method: method, paramsJson: paramsJson)
     }
 
     /// The feed's row for a dApp's request.

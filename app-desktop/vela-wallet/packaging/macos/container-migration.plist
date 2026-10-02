@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  App Sandbox container migration (spec 095), installed by
+  scripts/build-macos-mas.sh at Contents/Resources/container-migration.plist
+  in the STORE build only.
+
+  The Developer ID (.dmg) build keeps the wallet at
+  ~/Library/Application Support/VelaWallet (executor/storage.rs: dirs'
+  config dir + "VelaWallet"). Sandboxed, the same code resolves that path
+  inside ~/Library/Containers/app.getvela.VelaWallet/Data, which starts empty —
+  a tester moving from the .dmg would look signed out. On the FIRST launch of
+  the sandboxed app (when the system creates its container, and never again)
+  macOS moves the folder below into the container at the same relative path.
+
+  Measured on this layout (2026-10-02, a throwaway sandboxed bundle with its
+  own folder name): the folder is MOVED — nothing is left behind, no symlink.
+  So after a TestFlight install the .dmg copy on the same Mac starts signed
+  out; signing in with the same passkey brings the wallet back there (the
+  addresses come from the keys and the on-chain registry).
+
+  The sandboxed DEVELOPMENT build (build-macos-mas.sh dev) never carries this
+  file: run on a developer's Mac it would move that developer's real wallet.
+-->
+<plist version="1.0">
+<dict>
+    <key>Move</key>
+    <array>
+        <string>${ApplicationSupport}/VelaWallet</string>
+    </array>
+</dict>
+</plist>

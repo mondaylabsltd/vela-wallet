@@ -329,7 +329,8 @@
       "feeToken": "Token di commissione",
       "paidWith": "Pagato con {{symbol}}",
       "rowBalance": "Saldo",
-      "rowSpend": "Costo stim."
+      "rowSpend": "Costo stim.",
+      "feeCoinSpent": "Questa transazione usa anche i tuoi {{sym}}. Se non ne resta abbastanza per la commissione, non andrà a buon fine."
     },
     "dock": {
       "receive": "Ricevi",
@@ -426,6 +427,25 @@
     },
     "qrPlaceholder": {
       "caption": "Segnaposto dimostrativo · non scansionabile"
+    },
+    "appMenu": {
+      "about": "Informazioni su Vela Wallet",
+      "hide": "Nascondi Vela Wallet",
+      "hideOthers": "Nascondi altre",
+      "showAll": "Mostra tutte",
+      "quit": "Esci da Vela Wallet",
+      "edit": "Composizione",
+      "undo": "Annulla",
+      "redo": "Ripeti",
+      "cut": "Taglia",
+      "copy": "Copia",
+      "paste": "Incolla",
+      "selectAll": "Seleziona tutto",
+      "view": "Vista",
+      "fullScreen": "Attiva/disattiva tutto schermo",
+      "window": "Finestra",
+      "minimize": "Contrai",
+      "closeWindow": "Chiudi finestra"
     }
   }
 }

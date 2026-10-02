@@ -4231,7 +4231,6 @@ dependencies = [
 [[package]]
 name = "gpui_macos"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#c97b7c0ea41acf56e9726964eca10c2078e921b0"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -10025,8 +10024,9 @@ dependencies = [
 
 [[package]]
 name = "vela-wallet"
-version = "0.9.5"
+version = "0.9.6"
 dependencies = [
+ "block2 0.5.1",
  "btleplug",
  "calamine",
  "core-foundation 0.10.1",

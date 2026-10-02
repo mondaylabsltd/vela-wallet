@@ -311,6 +311,19 @@ struct SendAssetsParityTests {
         #expect(confirm(sendView(split), on: .sd3b).recipientTag == nil)
     }
 
+    /// Spec 096 F12: the WBNB-to-the-WBNB-contract send said only "First
+    /// time sending here". The core's token-contract verdict goes first.
+    @Test func theConfirmSaysTheRecipientIsATokenContract() {
+        var token: [String: Any] = [
+            "stage": "confirm", "selected_token": xdai, "recipient": Self.alice,
+            "confirm_amount": "1",
+        ]
+        token["recipient_risk"] = ["is_contract": true, "first_time": true]
+        token["recipient_is_token_contract"] = true
+        #expect(confirm(sendView(token), on: .sd3).recipientTag
+            == loc.t("send.recipientTokenContract"))
+    }
+
     /// The web's `hasPriorInteraction`: only a send, a dApp transaction or a
     /// legacy row with no type is a prior send; case does not matter.
     /// An EIP-7702-delegated EOA (`0xef0100 ++ impl`) is a person's wallet, not

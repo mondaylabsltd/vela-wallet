@@ -42,7 +42,11 @@ final class SplitRowTouchDeviceTests: XCTestCase {
         let deadline = Date().addingTimeInterval(30)
         while !form.exists && !picker.exists && Date() < deadline { settle(0.5) }
         if picker.exists {
-            let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "xDAI,")).firstMatch
+            let row = app.buttons.matching(NSPredicate(
+                // The combined label's separator follows the system language:
+                // "," in English, "，" once the app declares zh-Hans (spec 095).
+                format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "xDAI,", "xDAI，"
+            )).firstMatch
             tap(row, "the picker's xDAI row", timeout: 30)
         }
         tap(app.buttons["+  添加收款人"].firstMatch, "+ 添加收款人", timeout: 30)

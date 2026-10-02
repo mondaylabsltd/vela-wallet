@@ -2171,10 +2171,19 @@ fn send_form_parts(
                 .child(card)
                 // The trust line under the field (`RecipientField`'s `.note`,
                 // 078 F-08): who the core says this is, or that it is new.
+                // A token's own contract (spec 096 F12) is a warning, drawn in
+                // the warning tone the confirm's tag uses.
                 .children(model.recipient_note.clone().map(|note| {
                     div()
                         .text_size(theme::text_label())
-                        .text_color(theme.fg_subtle)
+                        .when(model.recipient_note_warn, |d| {
+                            d.font_weight(gpui::FontWeight::MEDIUM)
+                        })
+                        .text_color(if model.recipient_note_warn {
+                            theme.warning_base
+                        } else {
+                            theme.fg_subtle
+                        })
                         .child(note)
                 })),
         );

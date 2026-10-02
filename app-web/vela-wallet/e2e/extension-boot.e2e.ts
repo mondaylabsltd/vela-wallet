@@ -86,4 +86,43 @@ test.describe('the packaged extension', () => {
 		expect(page.url()).toMatch(/\/en\.html$/);
 		await context.close();
 	});
+
+	/**
+	 * Spec 094 S4: Settings → Erase This Device inside the extension landed
+	 * on `chrome-error://chromewebdata/` — its full navigation went to the
+	 * route path `/en`, which is no file in a package. It goes to the
+	 * welcome's DOCUMENT now, and the extension's own storage is clean too.
+	 */
+	test('erasing the device in the extension lands on the welcome, not on a Chrome error', async () => {
+		const context = await loadExtension({ viewport: { width: 420, height: 780 } });
+		await hermetic(context);
+		const id = extensionId();
+		const page = await context.newPage();
+		await page.addInitScript(() => {
+			localStorage.setItem('vela.intro.seen', String(Date.now()));
+			localStorage.setItem('vela.dev.console', '1');
+		});
+		await page.goto(`chrome-extension://${id}/en/parallel.html`);
+		await page.getByRole('button', { name: 'Enter (seed fixture wallet)' }).click();
+		await page.waitForURL(/\/en\/wallet\.html$/, { timeout: 30_000 });
+
+		await page.goto(`chrome-extension://${id}/en/settings.html`);
+		await page.getByText('Erase This Device', { exact: true }).click();
+		await page.getByRole('button', { name: 'Erase Everything' }).click();
+		await page.waitForURL(/\/en\.html$/, { timeout: 30_000 });
+		expect(page.url()).toBe(`chrome-extension://${id}/en.html`);
+		await expect(page.locator('body')).not.toHaveText('');
+		const left = await page.evaluate(async () => {
+			const all = await (
+				window as unknown as {
+					chrome: { storage: { local: { get(k: null): Promise<Record<string, unknown>> } } };
+				}
+			).chrome.storage.local.get(null);
+			return Object.keys(all).filter(
+				(key) => key.startsWith('vela.perm.') || key === 'vela.ext.cache'
+			);
+		});
+		expect(left).toEqual([]);
+		await context.close();
+	});
 });

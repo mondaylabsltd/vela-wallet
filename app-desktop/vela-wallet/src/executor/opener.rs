@@ -12,7 +12,7 @@ use std::io::Write as _;
 /// Open `url` in the platform's handler for it (the browser; the X,
 /// Telegram or Discord app when one claims the link).
 pub fn open(url: &str, cx: &mut gpui::App) {
-    if let Some(log) = std::env::var_os("VELA_OPEN_URL_LOG") {
+    if let Some(log) = crate::dev_env::var_os!("VELA_OPEN_URL_LOG") {
         if let Ok(mut file) = std::fs::OpenOptions::new()
             .create(true)
             .append(true)

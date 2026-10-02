@@ -714,9 +714,12 @@ struct RecipientFieldView: View {
             .padding(Tokens.Space.s12)
             .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
             if let note = field.note {
+                // A token's own contract (spec 096 F12) is a warning, in the
+                // warning tone the confirm's tag uses.
                 Text(verbatim: note)
                     .typeRole(Typography.rowSub.scaled(textScale))
-                    .foregroundStyle(theme.fgSubtle)
+                    .foregroundStyle(field.noteWarn ? theme.warningBase : theme.fgSubtle)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

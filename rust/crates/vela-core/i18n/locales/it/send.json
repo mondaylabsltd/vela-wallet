@@ -160,6 +160,7 @@
     "txBackgroundHint": "Chiudere questa pagina non ferma la transazione",
     "txCloseBackground": "Chiudi · continua in background",
     "txSubmittedTitle": "Inviata alla rete",
-    "txConfirmedTitle": "Inviati {{amount}} {{symbol}}"
+    "txConfirmedTitle": "Inviati {{amount}} {{symbol}}",
+    "recipientTokenContract": "Questo è l'indirizzo di un contratto token. Ciò che invii qui di solito non si può recuperare."
   }
 }

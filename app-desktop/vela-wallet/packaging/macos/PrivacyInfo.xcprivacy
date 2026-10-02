@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Apple's privacy manifest for the Mac App Store bundle (spec 095), installed
+  by scripts/build-macos-mas.sh at Contents/Resources/PrivacyInfo.xcprivacy.
+
+  Collected data: the SAME declarations as the iOS app
+  (app-ios/VelaWallet/VelaWallet/PrivacyInfo.xcprivacy) — one app record,
+  Universal Purchase, one privacy label. The desktop talks to the same
+  services the same way: the relay (address + each operation), the public-key
+  index (address, keys, the name typed, published on Gnosis) and the in-app
+  report (Settings → Send feedback → a PUBLIC GitHub issue, screenshots in R2).
+  The evidence, with file and line for the desktop, is in
+  docs/store-submission/privacy-evidence.md. The reasoning behind each type
+  is in the iOS file's comments; it is not repeated here.
+
+  Required-reason APIs: MEASURED on the universal release binary with
+  `nm -u` and `strings`, then declared (2026-10-02, spec 095):
+
+      _stat _fstat _lstat _fstatat          -> FileTimestamp
+      _mach_absolute_time                   -> SystemBootTime
+      standardUserDefaults (selector)       -> UserDefaults
+
+  Not imported, so not declared: DiskSpace (no statfs/statvfs, no
+  NSURLVolume*Capacity keys), ActiveKeyboards. Re-measure after a gpui or
+  dependency bump; do not edit this from memory.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherFinancialInfo</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherDiagnosticData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCustomerSupport</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePhotosorVideos</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- Rust std's metadata calls (`_stat`, `_fstat`, `_lstat`,
+			     `_fstatat`) behind every std::fs read and write. Two kinds of
+			     file, two reasons:
+			       C617.1 — the wallet's own files in its container
+			         (wallet.json, the logo cache, temporary files);
+			       3B52.1 — a file the person picked in an open panel (a
+			         contacts or batch-import file, a QR image, a feedback
+			         screenshot): files the user specifically granted. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+				<string>3B52.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- `_mach_absolute_time`: the UI framework's frame clock and
+			     animation timing, and elapsed-time measurement inside the app
+			     (timeouts, retry backoff). Never sent anywhere. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- `+[NSUserDefaults standardUserDefaults]`, from the UI framework
+			     (gpui): it writes one key of its own in the app's defaults
+			     (NSAutoFillHeuristicControllerEnabled) and reads the window
+			     tabbing and title-bar double-click preferences so the window
+			     behaves the way the person set macOS up. Nothing read is sent
+			     anywhere or written where another app could read it. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

@@ -562,4 +562,25 @@ jobs:
             -project VelaWallet.xcodeproj \
             -scheme VelaWallet \
             -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
             CODE_SIGNING_ALLOWED=NO
+      # The suite above runs on the NEWEST runtime, and the deployment target is
+      # iOS 17.4. 087 F33: Swift 6.2 builds `nonisolated(nonsending)` function
+      # metadata with an iOS 18 runtime entry point it weak-links with no
+      # fallback, so on iOS 17 attaching a feedback screenshot was a call to
+      # address 0 — while every suite here passed.
+      #
+      # Why a symbol check and not an iOS 17 simulator: macos-15 carries iOS
+      # 18.5, 18.6 and 26.x runtimes and no iOS 17 one (image 20260907), and
+      # iOS 18 has the entry point, so neither catches it. Downloading the 17.5
+      # runtime is ~7 GB plus a second full suite run on every push, on minutes
+      # that bill at ten times Linux. What the crash needs is visible in the
+      # binary — an import of `swift_getExtendedFunctionTypeMetadata` — so this
+      # step reads that instead, and covers every code path, not only the ones
+      # a test happens to walk. The self-test proves the check still bites on
+      # this toolchain. Before a TestFlight build, also run VelaWalletTests on an
+      # iOS 17.5 simulator locally (087 results, F33).
+      - name: Nothing the iOS 17 runtime lacks
+        run: |
+          node app-ios/scripts/check-ios17-function-metadata.mjs --self-test
+          node app-ios/scripts/check-ios17-function-metadata.mjs "$RUNNER_TEMP/dd/Build/Products"

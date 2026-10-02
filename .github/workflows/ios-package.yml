@@ -134,6 +134,11 @@ jobs:
           [ "$stamped" = "$(git rev-parse --short=7 HEAD)" ] || {
             echo "::error::the archive says commit '$stamped', not $(git rev-parse --short=7 HEAD)"; exit 1; }
           test -d "$RUNNER_TEMP/VelaWallet.xcarchive/Products/Applications/VelaWallet.app"
+      # The Release binary is the one iOS 17 users run (deployment target 17.4):
+      # it must not import the iOS 18-only metadata entry point (087 F33; the
+      # reasoning is on ci.yml's "Nothing the iOS 17 runtime lacks").
+      - name: Nothing the iOS 17 runtime lacks
+        run: node app-ios/scripts/check-ios17-function-metadata.mjs "$RUNNER_TEMP/VelaWallet.xcarchive"
       # App Review rejects a binary that calls a required-reason API its privacy
       # manifest does not declare, and this manifest is a plain file inside a
       # folder-synchronised group: nothing in project.pbxproj names it, so
