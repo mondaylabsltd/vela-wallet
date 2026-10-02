@@ -60,15 +60,11 @@ Pre-existing on `main`, not 085 (085 changes neither file nor the generated mirr
 
 ## Owner steps
 
-1. Deploy `app-web/trusted-signer/dist/`. The build to launch is `0ba8ee8c…`, first in
-   `BUILD_ALLOWED`: one page carrying both 085's typed-data reader and 082's site and plain-send
-   fixes. It comes from merging `main` after PR #338, and it replaces both `8c002ee4…` (085 alone)
-   and `82fae7f2…` (082 alone), which stay in the allow-set.
-2. Confirm `https://sign.getvela.app/b/0ba8ee8c…/sign` is 200 with
-   `cache-control: public, max-age=31536000, immutable`.
-3. Then move `LAUNCH` to `0ba8ee8c…` (a one-line follow-up). Until then phones open the current
-   page, and the core's arrival check keeps two documents from ever reaching it.
-4. Close PR #337.
+Done 2026-10-01. The owner deployed `app-web/trusted-signer/dist/` and merged #339, and #337 is closed without merging. Checked from this machine with cache-busting queries:
+
+- `https://sign.getvela.app/b/0ba8ee8c…/sign` returns 200 with `cache-control: public, max-age=31536000, immutable`, and the bytes hash to `0ba8ee8c…`.
+- All 12 builds in `dist/index.json` still serve 200, each hashing to its name. The root `/sign` serves `0ba8ee8c…` too.
+- `LAUNCH` moves to `0ba8ee8c…` in the follow-up PR (branch `signer-launch-0ba8ee8c`).
 
 ## Follow-ups
 

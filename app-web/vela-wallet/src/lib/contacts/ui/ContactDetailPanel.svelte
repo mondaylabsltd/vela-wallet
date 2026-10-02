@@ -13,7 +13,10 @@
 	 */
 	interface Props {
 		detail: ContactDetailModel;
-		/** The footer's two actions. Absent in the gallery, where they are drawn. */
+		/**
+		 * Edit (the pencil beside the name) and Delete (after the content).
+		 * Absent in the gallery, where they are drawn.
+		 */
 		onedit?: () => void;
 		ondelete?: () => void;
 		/** The three pills, the address copy, the chips' `+`, 查看全部往来 (spec 028 US5). */
@@ -24,6 +27,9 @@
 	}
 
 	let { detail, onedit, ondelete, onaction, oncopy, onaddgroup, onactivityall }: Props = $props();
+
+	/** The worded name action replaces the pencil: one Edit beside the name. */
+	const nameAction = $derived(onedit !== undefined ? detail.nameAction : undefined);
 </script>
 
 <div class="panel">
@@ -35,13 +41,30 @@
 			address={detail.contact.addressFull}
 		/>
 		<div class="who">
-			<p class="name">{detail.contact.name}</p>
-			{#if detail.nameAction !== undefined && onedit !== undefined}
+			<!-- Edit sits beside what it edits (issue 334): a click opens this
+			     panel, and the only Edit used to be at the panel's foot or in the
+			     row's right-click menu. The phones' pencil is in the same place in
+			     spirit — the header of the contact's own screen. -->
+			<div class="name-row">
+				<p class="name">{detail.contact.name}</p>
+				{#if nameAction === undefined}
+					<button
+						type="button"
+						class="edit"
+						aria-label={detail.editLabel}
+						title={detail.editLabel}
+						onclick={onedit}
+					>
+						<Icon icon={UTILITY_ICONS.pencil} size="md" />
+					</button>
+				{/if}
+			</div>
+			{#if nameAction !== undefined}
 				<!-- Nobody has named this contact: the way to do it sits where the
-				     missing name is noticed, not only in the footer (issue 191). -->
+				     missing name is noticed, and says so in words (issue 191). -->
 				<button type="button" class="name-action" onclick={onedit}>
 					<Icon icon={UTILITY_ICONS.pencil} size="xs" />
-					<span>{detail.nameAction}</span>
+					<span>{nameAction}</span>
 				</button>
 			{/if}
 			<div class="chips">
@@ -93,12 +116,12 @@
 		{/if}
 	</section>
 
+	<!-- Delete follows the content, one hairline below it (issue 310). It was
+	     pinned to the panel's foot, a screen-tall gap away from the contact it
+	     removes. -->
+	<hr />
 	<footer>
-		<button type="button" class="foot" onclick={onedit}>
-			<Icon icon={UTILITY_ICONS.pencil} size="sm" />
-			<span>{detail.editLabel}</span>
-		</button>
-		<button type="button" class="foot destructive" onclick={ondelete}>{detail.deleteLabel}</button>
+		<button type="button" class="delete" onclick={ondelete}>{detail.deleteLabel}</button>
 	</footer>
 </div>
 
@@ -106,7 +129,6 @@
 	.panel {
 		display: flex;
 		flex-direction: column;
-		height: 100%;
 	}
 
 	.identity {
@@ -122,11 +144,41 @@
 		min-width: 0;
 	}
 
+	.name-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		min-width: 0;
+	}
+
 	.name {
+		min-width: 0;
 		margin: 0;
+		overflow-wrap: anywhere;
 		font-size: calc(var(--text-2xl) * var(--text-scale, 1));
 		font-weight: var(--weight-bold);
 		color: var(--color-fg-base);
+	}
+
+	/* A plain icon button (DESIGN-LANGUAGE §7): no box, a control-md target, drawn
+	   as the phones' header pencil is. A long name wraps; the pencil stays. */
+	.edit {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: var(--size-control-md);
+		height: var(--size-control-md);
+		padding: 0;
+		border: none;
+		border-radius: var(--radius-full);
+		background: none;
+		color: var(--color-fg-base);
+		cursor: pointer;
+	}
+
+	.edit:hover {
+		background: var(--color-bg-sunken);
 	}
 
 	.name-action {
@@ -244,30 +296,23 @@
 
 	footer {
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-top: auto;
-		padding-top: var(--space-3xl);
 	}
 
-	.foot {
+	/* Secondary and set apart by the hairline, but next to the content. */
+	.delete {
 		display: inline-flex;
 		align-items: center;
-		gap: var(--space-md);
-		padding: var(--space-sm);
+		min-height: var(--size-control-md);
+		padding: 0;
 		border: none;
 		background: none;
-		color: var(--color-fg-muted);
+		color: var(--color-error-base);
 		font-family: var(--font-ui);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
 		cursor: pointer;
 	}
 
-	.foot.destructive {
-		color: var(--color-error-base);
-	}
-
-	.foot:hover {
+	.delete:hover {
 		opacity: var(--opacity-hover);
 	}
 </style>

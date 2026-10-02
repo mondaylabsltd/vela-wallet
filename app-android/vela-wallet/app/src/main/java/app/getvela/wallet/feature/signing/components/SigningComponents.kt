@@ -161,15 +161,25 @@ fun SigningHeader(
     }
 }
 
+/**
+ * The intent: the eyebrow over a hero figure — or, as [lead], the sheet's
+ * headline, for a request with no figure to lead with (the wallet's own).
+ * A headline is the base ink unless its tone is a warning.
+ */
 @Composable
-fun SigningIntent(text: String, tone: SigningTone, modifier: Modifier = Modifier) {
+fun SigningIntent(text: String, tone: SigningTone, modifier: Modifier = Modifier, lead: Boolean = false) {
     val colors = VelaTheme.colors
+    val warns = tone == SigningTone.Caution || tone == SigningTone.Danger
     Text(
         text = text,
-        color = if (tone == SigningTone.Neutral) colors.fgMuted else tone.color(colors),
+        color = when {
+            lead && !warns -> colors.fgBase
+            tone == SigningTone.Neutral -> colors.fgMuted
+            else -> tone.color(colors)
+        },
         fontFamily = VelaFontFamily,
         fontWeight = VelaFontWeight.semibold,
-        fontSize = VelaTextSize.base,
+        fontSize = if (lead) VelaTextSize.xl2 else VelaTextSize.base,
         modifier = modifier,
     )
 }

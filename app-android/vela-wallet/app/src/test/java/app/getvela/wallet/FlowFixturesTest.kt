@@ -8,7 +8,6 @@ import app.getvela.wallet.feature.onboarding.flow.FlowFixtures
 import app.getvela.wallet.feature.onboarding.flow.MAX_KEYS
 import app.getvela.wallet.feature.onboarding.flow.PROGRESS_TASKS
 import app.getvela.wallet.feature.onboarding.flow.Screen
-import app.getvela.wallet.feature.onboarding.flow.methodCopy
 import app.getvela.wallet.feature.onboarding.flow.progressFor
 import app.getvela.wallet.feature.onboarding.flow.providerLineFor
 import app.getvela.wallet.feature.onboarding.flow.screenFor
@@ -161,9 +160,6 @@ class FlowFixturesTest {
         KeyMethod.entries.forEach { method ->
             val home = if (method == KeyMethod.TrustedSigner) "componentsUi.signing." else "onboarding."
             assertTrue(providerLineFor(method).startsWith(home))
-            val (title, body) = methodCopy(method)
-            assertTrue("$method title", title.startsWith(home))
-            assertTrue("$method body", body.startsWith(home))
         }
     }
 
@@ -181,13 +177,6 @@ class FlowFixturesTest {
             KeyMethod.entries.map { it.wire },
         )
         assertEquals(KeyMethod.TrustedSigner, KeyMethod.of("trusted_signer"))
-        // The sign-in sheet reuses the create picker's words, method for method.
-        KeyMethod.entries.forEach { method ->
-            assertEquals(
-                methodCopy(method),
-                app.getvela.wallet.feature.onboarding.flow.signInMethodCopy(method),
-            )
-        }
     }
 
     /** The cap fixture sits exactly at the core's `MAX_MULTI_KEYS`, not near it. */

@@ -120,6 +120,8 @@ pub struct SigningStrings {
     pub label_interacting: SharedString,
     pub label_from: SharedString,
     pub label_amount: SharedString,
+    /// 089 S1: what a whole batch moves (`send.splitTotalLabel`).
+    pub label_total: SharedString,
     pub label_deadline: SharedString,
     pub label_min_received: SharedString,
     pub label_pay: SharedString,
@@ -376,6 +378,7 @@ impl SigningStrings {
             label_interacting: s("interactingLabel"),
             label_from: s("labelFrom"),
             label_amount: s("labelAmount"),
+            label_total: loc.t("send.splitTotalLabel"),
             label_deadline: s("labelDeadline"),
             label_min_received: s("labelMinReceived"),
             label_pay: s("labelPay"),

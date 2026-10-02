@@ -409,26 +409,26 @@ private fun AddMethodPicker(
         )
         KeyMethod.entries.forEach { method ->
             val available = method in allowed
-            val (titleKey, bodyKey) = methodCopy(method)
+            val (title, body) = methodCopy(method, KeyChooser.Create, strings)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(enabled = available) { onPick(method) }
                     .padding(vertical = VelaSpacing.lg)
                     .alpha(if (available) 1f else VelaOpacity.disabled)
-                    .semantics { contentDescription = strings.t(titleKey) },
+                    .semantics { contentDescription = title },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = strings.t(titleKey),
+                        text = title,
                         color = colors.fgBase,
                         fontFamily = VelaFontFamily,
                         fontWeight = VelaFontWeight.semibold,
                         fontSize = VelaTextSize.lg,
                     )
                     Text(
-                        text = strings.t(bodyKey),
+                        text = body,
                         color = colors.fgMuted,
                         fontFamily = VelaFontFamily,
                         fontSize = VelaTextSize.sm,

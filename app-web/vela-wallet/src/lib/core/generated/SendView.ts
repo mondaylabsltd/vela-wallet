@@ -22,7 +22,21 @@ export type SendView = { stage: SendStage, loading: boolean, locked: boolean,
 /**
  * The amount is fixed only when the locked request actually named one.
  */
-amount_locked: boolean, lock_error: SendLockError | null, resolving_lock: boolean, adding_network: boolean, add_network_msg: SendAddNetworkMsg | null, tokens: Array<SendToken>, selected_token: SendToken | null, recipient: string, amount: string, 
+amount_locked: boolean, lock_error: SendLockError | null, resolving_lock: boolean, adding_network: boolean, add_network_msg: SendAddNetworkMsg | null, tokens: Array<SendToken>, selected_token: SendToken | null, recipient: string, 
+/**
+ * The network the scanned code or link named for the payer to choose an
+ * asset on (issue 312). While set, `tokens` holds only that network's
+ * holdings — empty when the payer has nothing there — and the picker says
+ * which network it is; a shell's own network filter does not apply.
+ */
+request_chain_id: number | null, 
+/**
+ * The form's token card opens the asset picker (issue 326): a single
+ * send whose token is the payer's to choose — not a request that named
+ * its token or amount, not a split or a sweep, not while Continue's
+ * pre-check is out.
+ */
+can_change_token: boolean, amount: string, 
 /**
  * The unit `amount` is counted in: `None` = the selected token's own
  * units, `Some(code)` = that fiat currency.
