@@ -636,8 +636,17 @@ pub(crate) mod tests {
     #[test]
     fn save_panels_open_in_downloads() {
         let dir = save_panel_dir();
-        assert_eq!(Some(dir.clone()), dirs::download_dir());
-        assert_ne!(Some(dir), dirs::home_dir());
+        match dirs::download_dir() {
+            Some(downloads) => {
+                assert_eq!(dir, downloads);
+                assert_ne!(Some(dir), dirs::home_dir());
+            }
+            // A system with no Downloads folder at all (a bare CI home on
+            // Linux): the home directory, never nowhere.
+            None => assert_eq!(Some(dir), dirs::home_dir()),
+        }
+        #[cfg(target_os = "macos")]
+        assert!(dirs::download_dir().is_some(), "macOS always has a Downloads folder");
     }
 
     /// The raw view the shared rules read: a string as itself, a record as its
