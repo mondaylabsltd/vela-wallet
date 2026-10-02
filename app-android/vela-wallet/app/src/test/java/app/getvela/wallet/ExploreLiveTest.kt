@@ -105,6 +105,44 @@ class ExploreLiveTest {
     }
 
     /**
+     * Issue #329: the star lights for what it pins — the address the bar
+     * names. A first load that failed before anything committed has no engine
+     * origin; the star pinned nothing then, and could not show a pin.
+     */
+    @Test
+    fun `the star follows the failed address the bar names`() {
+        val view = ExploreView(
+            favorites = listOf(uniswap),
+            tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/", "", "app.uniswap.org")),
+            selected_tab = "t1",
+            ready = true,
+        )
+        val failure = uniffi.vela_core_uniffi.BrowserLoadFailure(`class` = "offline", reasonKey = "explore.loadOffline", autoRetry = true)
+        val engine = EngineState(failed = true, failure = failure, failedUrl = "https://app.uniswap.org/")
+        val model = ExploreLive.home(fallback, view, BhistView(), engine, strings)
+        assertEquals("app.uniswap.org", model.browser.host)
+        assertTrue("the failed site is a favourite, and the star says so", model.browser.bookmarked)
+    }
+
+    /**
+     * The wiring the rule needs (issue #329): the star pins what the bar names,
+     * by the core's rule over the tab's last visit — never the engine's title,
+     * which was the WebView's error page's ("网页无法打开") — and the visit is
+     * remembered only from a load the core's visit rule accepted.
+     */
+    @Test
+    fun `the star pins the bar's address under the core's name rule`() {
+        val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
+        val source = File(root, "app-android/vela-wallet/app/src/main/java/app/getvela/wallet/feature/browser/core/BrowserController.kt").readText()
+        val toggle = source.substringAfter("fun toggleFavorite()").substringBefore("fun removeFavorite(")
+        assertTrue(toggle.contains("addressBar().url"))
+        assertTrue(toggle.contains("browserPinnedTitle(url, lastVisits[engine.id])"))
+        assertFalse("never the engine's own title", toggle.contains("state.title"))
+        val visit = source.substringAfter("browserLoadVisit(").substringBefore("scope.launch")
+        assertTrue("the last visit is the core's visit", visit.contains("lastVisits[tab] = visit"))
+    }
+
+    /**
      * Spec 082 RE1 (G28): what the bar names is the core's rule. A fresh tab
      * names nothing — never the drawn fixture's host with an open lock; a
      * load pending in an empty tab names its host with no lock; a load under
@@ -274,8 +312,49 @@ class ExploreLiveTest {
         assertEquals(ExploreLive.tintOf("app.uniswap.org"), ExploreLive.tintOf("app.uniswap.org"))
         assertNotEquals(ExploreLive.tintOf("app.uniswap.org"), ExploreLive.tintOf("polymarket.com"))
         val hidden = ExploreLive.home(fallback, ExploreView(favorites = listOf(uniswap), favorites_hidden = true, recent_hidden = true, ready = true), BhistView(listOf(BhistEntry("https://curve.fi", "https://curve.fi/", "curve.fi", "Curve", "", 1.0))), null, strings)
-        assertNull(hidden.favorites)
+        assertTrue("a hidden Favorites draws no tiles", hidden.favorites!!.tiles.isEmpty())
         assertTrue(hidden.groups.isEmpty())
+    }
+
+    /**
+     * Issue #330: with Favorites and Recent hidden, Explore showed the search
+     * field alone — the Favorites heading's Edit was the only way to Manage
+     * groups, and it went with the hidden section. The heading stays (no
+     * tiles), so hidden groups can always be shown again; and a page with no
+     * favourites yet keeps it too, over its add tile.
+     */
+    @Test
+    fun `with every group hidden, the Favorites heading stays the way to Manage groups`() {
+        val recents = BhistView(listOf(BhistEntry("https://curve.fi", "https://curve.fi/", "curve.fi", "Curve", "", 1.0)))
+        val custom = ExploreGroupView("g1", "交易", hidden = true, sites = listOf(curve))
+        val everyHidden = ExploreLive.home(
+            fallback,
+            ExploreView(favorites = listOf(uniswap), groups = listOf(custom), favorites_hidden = true, recent_hidden = true, ready = true),
+            recents, null, strings,
+        )
+        val heading = everyHidden.favorites!!
+        assertEquals(strings.t("explore.favorites"), heading.title)
+        assertEquals("its Edit opens Manage groups", strings.t("explore.edit"), heading.action)
+        assertTrue(heading.tiles.isEmpty())
+        assertTrue("every group is off the page", everyHidden.groups.isEmpty())
+        assertNull("not the empty start page", everyHidden.empty)
+        // Manage groups still lists every group, each with its eye.
+        assertEquals(listOf("favorites", "recent", "g1"), everyHidden.groupManageSheet.rows.map { it.id })
+        assertTrue(everyHidden.groupManageSheet.rows.all { it.hidden })
+
+        // Only Favorites hidden: Recent's heading offers Clear, never Manage.
+        val favoritesHidden = ExploreLive.home(fallback, ExploreView(favorites = listOf(uniswap), favorites_hidden = true, ready = true), recents, null, strings)
+        assertEquals(strings.t("explore.edit"), favoritesHidden.favorites?.action)
+        assertEquals(listOf("recent"), favoritesHidden.groups.map { it.id })
+
+        // No favourites yet, Recent hidden: the heading stays, over its add tile.
+        val none = ExploreLive.home(fallback, ExploreView(recent_hidden = true, ready = true), recents, null, strings)
+        assertEquals(strings.t("explore.edit"), none.favorites?.action)
+        assertTrue(none.favorites!!.tiles.single() is TileModel.Add)
+
+        // Shown again: the tiles come back under the same heading.
+        val shown = ExploreLive.home(fallback, ExploreView(favorites = listOf(uniswap), ready = true), recents, null, strings)
+        assertEquals(2, shown.favorites!!.tiles.size)
     }
     /**
      * Issue #273: the explore scanner opens web addresses only. A URL opens as

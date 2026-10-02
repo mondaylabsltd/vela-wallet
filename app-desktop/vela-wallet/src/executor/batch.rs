@@ -76,15 +76,18 @@ fn cell_text(cell: &calamine::Data) -> String {
     }
 }
 
-/// Read the table a person picked: text for CSV/TSV/TXT (the core parses
-/// it), a matrix for a workbook. `None` = unreadable, which the host answers
-/// as `FilePickFailed`.
+/// Read the table a person picked: the bytes of a CSV/TSV/TXT, undecoded —
+/// the core decodes them once (UTF-8, or UTF-16 by its BOM, never a guess),
+/// as it does a contacts file (087, issue 333's twin) — or a matrix for a
+/// workbook. `None` = unreadable, which the host answers as `FilePickFailed`.
+/// `read_to_string` used to decode here: strict, so a GBK CSV was refused as
+/// "use a CSV" (which it is), and a UTF-16 one could not be read at all.
 pub fn read_table(path: &Path) -> Option<BatchFileContent> {
     if is_excel(path) {
         return workbook_matrix(path).map(|rows| BatchFileContent::Matrix { rows });
     }
-    let text = std::fs::read_to_string(path).ok()?;
-    Some(BatchFileContent::Text { text })
+    let bytes = std::fs::read(path).ok()?;
+    Some(BatchFileContent::Bytes { bytes })
 }
 
 /// The file's own name, for the sheet's "picked" line.
@@ -111,15 +114,23 @@ mod tests {
         path
     }
 
-    /// Text tables go to the core as text — the delimiter, the header and
-    /// the amount column are its to decide.
+    /// Text tables go to the core as their bytes — the encoding, the
+    /// delimiter, the header and the amount column are its to decide (087).
     #[test]
-    fn a_csv_is_handed_over_as_text() {
+    fn a_csv_is_handed_over_as_its_bytes() {
         let path = temp("payroll.csv", b"address,amount\n0xabc,5000\n");
         match read_table(&path) {
-            Some(BatchFileContent::Text { text }) => assert!(text.starts_with("address,amount")),
+            Some(BatchFileContent::Bytes { bytes }) => {
+                assert_eq!(bytes, b"address,amount\n0xabc,5000\n");
+            }
             other => unreachable!("{other:?}"),
         }
+        // A GBK name is not decoded (or refused) here: its bytes go as they are.
+        let gbk = temp("gbk.csv", &[0xD5, 0xC5, 0xC8, 0xFD]);
+        assert!(matches!(
+            read_table(&gbk),
+            Some(BatchFileContent::Bytes { bytes }) if bytes == [0xD5, 0xC5, 0xC8, 0xFD]
+        ));
         assert_eq!(file_name(&path), "payroll.csv");
         assert!(read_table(Path::new("/nonexistent/vela.csv")).is_none());
     }

@@ -117,6 +117,9 @@ function statusChip(status: FeedTxStatus, m: WalletFlowMessages): StatusChipMode
 			return { text: m['componentsTx.detail.statusFailed'], tone: 'error' };
 		case 'confirmed':
 			return { text: m['componentsTx.receipt.statusConfirmed'], tone: 'success' };
+		// 087 F04: pending, and nothing will settle it — not failed.
+		case 'unknown':
+			return { text: m['componentsUi.signing.intentUnknown'], tone: 'info' };
 	}
 }
 
@@ -262,8 +265,9 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		explorerUrl: item.tx_hash === null ? undefined : explorerTxURL(item.chain_id, item.tx_hash),
 		deleteLabel: m['history.deleteRecord'],
 		// RJ18: on a pending record the delete is quiet — the record is the
-		// trace that stops the same payment being sent twice.
-		deleteQuiet: status === 'pending'
+		// trace that stops the same payment being sent twice. One nothing
+		// settles (087 F04) may have been sent too.
+		deleteQuiet: status === 'pending' || status === 'unknown'
 	};
 }
 

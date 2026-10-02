@@ -228,7 +228,9 @@ function networkRows(m: WalletFlowMessages): NetworkRowModel[] {
 		badgeColor: n.color,
 		addressDisplay: IDENTITY.addressDisplay,
 		copyLabel: m['componentsUi.identiconViewer.copyAddress'],
-		qrLabel: m['componentsUi.scanner.title']
+		// 087 F13: this button SHOWS the network's code — "Scan QR" is the
+		// scanner's title.
+		qrLabel: m['componentsUi.funding.showQr']
 	}));
 }
 

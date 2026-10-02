@@ -4,6 +4,9 @@
  * card never describes one call while another is sent.
  */
 
+import type { ClearLocale } from '$lib/core/generated/ClearLocale';
+import type { ClearSigningEvent } from '$lib/core/generated/ClearSigningEvent';
+
 /** A transaction's three params, as the two machines need them. */
 export interface TxParams {
 	to: string | null;
@@ -29,20 +32,47 @@ export function textOf(value: unknown): string | null {
 }
 
 /**
- * The call the sheet describes: `eth_sendTransaction`'s one transaction, or
- * the FIRST leg of a `wallet_sendCalls` batch (`params[0].calls[0]`) — the
- * rule every rung applies to leg 1 (spec 082 RC7).
+ * The ONE call of an `eth_sendTransaction`: `params[0]`'s own `to`, `data`
+ * and `value` — the fields the submit path sends (`dapp-submit.ts`
+ * `handleSendTransaction`). Never a `calls` key beside them: a stray
+ * `"calls":[{…harmless…}]` next to a malicious top-level call once had the
+ * harmless one described while the malicious one was signed (the desktop's
+ * 083 review, now every shell's rule). A batch is not read here at all —
+ * the core reads every call of it (`resolve_batch`, 089 S1).
  */
 export function txParams(paramsJson: string): TxParams | null {
 	try {
 		const params = JSON.parse(paramsJson) as unknown[];
-		const first = params[0] as Record<string, unknown> | undefined;
-		if (!first || typeof first !== 'object') return null;
-		const calls = (first as { calls?: unknown }).calls;
-		const tx = (Array.isArray(calls) ? calls[0] : first) as Record<string, unknown> | undefined;
+		const tx = params[0] as Record<string, unknown> | undefined;
 		if (!tx || typeof tx !== 'object') return null;
 		return { to: textOf(tx.to), data: textOf(tx.data), value: textOf(tx.value) };
 	} catch {
 		return null;
 	}
+}
+
+/**
+ * What the sheet asks the clear-signing core about an on-chain request,
+ * chosen by METHOD — the way the submit path chooses what it sends. A
+ * `wallet_sendCalls` goes over whole: the core reads EVERY call (089 S1), so
+ * the sheet can never describe call 1 while signing them all.
+ */
+export function txKickoff(
+	method: string,
+	paramsJson: string,
+	chainId: number,
+	locale: ClearLocale
+): ClearSigningEvent {
+	if (method === 'wallet_sendCalls') {
+		return { type: 'resolve_batch', params_json: paramsJson, chain_id: chainId, locale };
+	}
+	const tx = txParams(paramsJson);
+	return {
+		type: 'resolve_transaction',
+		to: tx?.to ?? null,
+		data: tx?.data ?? null,
+		value: tx?.value ?? null,
+		chain_id: chainId,
+		locale
+	};
 }

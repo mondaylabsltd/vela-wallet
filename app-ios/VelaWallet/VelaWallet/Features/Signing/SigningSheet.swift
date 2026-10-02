@@ -135,7 +135,10 @@ struct SigningSheet: View {
     private func blockView(_ block: SigningBlock) -> some View {
         switch block {
         case .intent(let text, let tone):
-            SigningIntentLabel(text: text, tone: tone)
+            // Issue #314: the wallet's own request has no figure to lead with
+            // — its intent IS the outcome, so it is the sheet's headline
+            // rather than the eyebrow over a hero.
+            SigningIntentLabel(text: text, tone: tone, lead: model.dappOwn)
         case .amount(let line, let card, let note):
             SigningAmountView(line: line, card: card, note: note)
         case .swap(let pay, let receive):

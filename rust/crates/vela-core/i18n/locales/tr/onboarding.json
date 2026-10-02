@@ -174,7 +174,7 @@
       "methodHybridBody": "Kodu tarayın, yakındaki cihazda oluşturun",
       "methodHybridTitle": "Telefon veya tablet",
       "methodHybridUnavailable": "Yakında",
-      "methodPlatformBody": "Touch ID veya Windows Hello",
+      "methodPlatformBody": "Parmak izi, yüz veya ekran kilidi",
       "methodPlatformTitle": "Bu cihaz",
       "methodSecurityKeyBody": "Takın ve dokunun",
       "methodSecurityKeyTitle": "USB güvenlik anahtarı",

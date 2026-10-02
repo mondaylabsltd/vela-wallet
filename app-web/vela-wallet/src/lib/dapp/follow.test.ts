@@ -175,40 +175,138 @@ describe('followActiveAccount writes what the core authored', () => {
 		);
 	});
 
+	/** A session view as the root layout hands it over. */
+	const account = (address: string) => ({
+		account: {
+			id: `id-${address.slice(2, 8)}`,
+			name: address.slice(0, 6),
+			address,
+			public_key_hex: '04',
+			created_at_iso: '2025-01-01T00:00:00.000Z',
+			keys: []
+		}
+	});
+	const view = (address: string, held: string[] = [ALICE, BOB], loading = false) => ({
+		loading,
+		has_wallet: held.length > 0,
+		address,
+		active_index: Math.max(
+			0,
+			held.findIndex((a) => a.toLowerCase() === address.toLowerCase())
+		),
+		accounts: held.map(account)
+	});
+	/** A publisher that records who it was told is signed in, and when. */
+	const recording = (log: string[]) => async (facts: { active: { address: string } | null }) => {
+		log.push(`snapshot:${facts.active?.address ?? 'none'}`);
+	};
+
 	/**
 	 * Spec 082 G58: the device pass switched to Parallel Two in Settings →
 	 * 切换账户 and the site kept `eth_accounts` = One. The follow now runs
-	 * from the root layout on every route, with the last address kept in the
+	 * from the root layout on every route, with the last session kept in the
 	 * module — so the switch is seen wherever it is made, and a screen that
-	 * mounts again is not a boot.
+	 * mounts again is not followed twice.
 	 */
 	it('follows a switch made on any screen, once, in the core’s spelling', async () => {
 		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
 		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
-		const follower = new SessionFollower();
-		const view = (address: string, loading = false) => ({
-			loading,
-			address,
-			accounts: [ALICE, BOB].map((a) => ({ account: { address: a } }))
-		});
+		const log: string[] = [];
+		const follower = new SessionFollower(recording(log));
 
-		// Still loading, then the boot: nothing is re-pinned.
-		expect(follower.note(view('', true))).toBeNull();
-		expect(follower.note(view(ALICE))).toBeNull();
+		// Still loading: nothing at all. The boot, on the grant's own account:
+		// the snapshot is published and no grant changes.
+		expect(follower.note(view('', [], true))).toBeNull();
+		expect(await follower.note(view(ALICE))).toEqual({ repinned: [], removed: [] });
 		expect(store.get(PERM_PREFIX + 'https://a.example')).toEqual(
 			grantFor('https://a.example', ALICE)
 		);
 
 		// The switch, made in Settings: the site is re-pinned to BOB, EIP-55.
-		const outcome = await follower.note(view(BOB), NOW);
+		const outcome = await follower.note(view(BOB), { nowMs: NOW });
 		expect(outcome).toEqual({ repinned: ['https://a.example'], removed: [] });
 		expect(store.get(PERM_PREFIX + 'https://a.example')).toMatchObject({
 			address: checksumAddress(BOB)
 		});
+		expect(log).toEqual([`snapshot:${ALICE}`, `snapshot:${BOB}`]);
 
-		// The wallet screen mounting again sees the same account: not a boot, not a switch.
+		// The wallet screen mounting again sees the same session: nothing to follow.
 		expect(follower.note(view(BOB))).toBeNull();
 		expect(follower.note(view(checksumAddress(BOB)))).toBeNull();
+	});
+
+	/**
+	 * Spec 086, issue #315. Signed in to "26" in a document that had never
+	 * seen the previous account — a fresh tab, a panel opened after the
+	 * switch — the follower called the first session "a boot, not a switch"
+	 * and left every grant on the previous account, which the device still
+	 * held. The site kept connecting it. The first session is followed now.
+	 */
+	it('follows the FIRST session a document settles on (#315)', async () => {
+		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
+		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
+		const follower = new SessionFollower(recording([]));
+
+		const outcome = await follower.note(view(BOB), { nowMs: NOW });
+		expect(outcome).toEqual({ repinned: ['https://a.example'], removed: [] });
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toMatchObject({
+			address: checksumAddress(BOB)
+		});
+	});
+
+	it('signed out, publishes and keeps every grant; signed in to another wallet, drops them', async () => {
+		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
+		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
+		const log: string[] = [];
+		const follower = new SessionFollower(recording(log));
+
+		await follower.note(view(ALICE, [ALICE]));
+		// Signed out: the snapshot goes (the worker answers nobody), the grant
+		// stays — signing back in to ALICE lines it back up (`session.rs`).
+		expect(await follower.note(view('', []))).toEqual({ repinned: [], removed: [] });
+		expect(log.at(-1)).toBe('snapshot:none');
+		expect(store.has(PERM_PREFIX + 'https://a.example')).toBe(true);
+
+		// Signed in to BOB alone: ALICE left the device, so her site is cut off
+		// — never handed BOB without asking.
+		const outcome = await follower.note(view(BOB, [BOB]), { nowMs: NOW });
+		expect(outcome).toEqual({ repinned: [], removed: ['https://a.example'] });
+		expect(store.has(PERM_PREFIX + 'https://a.example')).toBe(false);
+	});
+
+	it('publishes who is signed in BEFORE it re-pins, so a told page reads the new account', async () => {
+		const order: string[] = [];
+		const watching = {
+			...local,
+			set: async (items: Record<string, unknown>) => {
+				for (const key of Object.keys(items))
+					order.push(key.startsWith(PERM_PREFIX) ? 'grant' : key);
+				await local.set(items);
+			}
+		};
+		(globalThis as { chrome?: unknown }).chrome = { storage: { local: watching } };
+		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
+		const follower = new SessionFollower(async () => {
+			order.push('snapshot');
+		});
+		await follower.note(view(BOB), { nowMs: NOW });
+		expect(order).toEqual(['snapshot', 'grant']);
+	});
+
+	it('follows sessions one at a time, in the order they were seen', async () => {
+		(globalThis as { chrome?: unknown }).chrome = { storage: { local } };
+		store.set(PERM_PREFIX + 'https://a.example', grantFor('https://a.example', ALICE));
+		const log: string[] = [];
+		const follower = new SessionFollower(recording(log));
+		// A switch and a switch back, faster than either can finish: the last
+		// session seen is where the grant ends.
+		const first = follower.note(view(BOB), { nowMs: NOW });
+		const second = follower.note(view(ALICE), { nowMs: NOW + 1 });
+		await Promise.all([first, second]);
+		expect(log).toEqual([`snapshot:${BOB}`, `snapshot:${ALICE}`]);
+		expect(store.get(PERM_PREFIX + 'https://a.example')).toMatchObject({
+			address: checksumAddress(ALICE)
+		});
 	});
 
 	it('normalises nothing off the extension', async () => {

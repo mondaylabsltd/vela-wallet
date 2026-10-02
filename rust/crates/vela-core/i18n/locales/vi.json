@@ -112,7 +112,7 @@
       "subtitle": "Xoá mọi thứ Vela đã lưu trên máy này",
       "desc": "Mọi thứ Vela đã lưu trên thiết bị này sẽ bị xoá. Không có bản sao lưu và không thể hoàn tác.",
       "loses": "Bạn sẽ mất: lịch sử giao dịch, danh bạ và nhóm, lịch sử duyệt web, quyền của dApp, token và mạng tuỳ chỉnh, cài đặt RPC và điểm cuối, cùng mọi tuỳ chọn.",
-      "keeps": "Bạn không mất ví. Việc xóa không chạm tới passkey của bạn — passkey do nhà cung cấp passkey của bạn giữ (Face ID / vân tay, trình quản lý mật khẩu, hoặc khóa bảo mật), không nằm trong ứng dụng này. Chọn “Tôi đã có ví” và cùng một địa chỉ sẽ trở lại, chỉ là không còn lịch sử.",
+      "keeps": "Ví vẫn còn: passkey do nhà cung cấp passkey của bạn giữ, không nằm trong ứng dụng này — đăng nhập lại và cùng một địa chỉ sẽ trở lại. Không bị xoá: Vela Relay lưu giao dịch đã gửi tối đa 14 ngày, chỉ mục khoá lưu thông tin đăng ký tối đa 30 ngày, và bản ghi khoá công khai trên chain là vĩnh viễn; không ai có thể xoá.",
       "confirm": "Xoá tất cả",
       "cancel": "Hủy",
       "failed": "Việc xoá chưa hoàn tất. Vẫn còn dữ liệu trên thiết bị này và bạn vẫn đang đăng nhập — hãy thử lại."

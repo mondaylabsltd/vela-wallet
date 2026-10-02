@@ -17,7 +17,21 @@
 	  serves the test dApp on 127.0.0.1:8137. `file://` is not an option, because
 	  `dapp_origin_of` gives a file URL no origin at all — every signature would
 	  fail closed and the harness would prove nothing.
+
+	  Spec 088: the wallet itself is offered only to a SECURE CONTEXT — https, or
+	  http on this device's loopback (`dapp_permissions::is_secure_context`, and
+	  `window.isSecureContext` in the injected script). An http page on the
+	  internet or on a LAN loads, with no provider in it.
 	-->
+	<!--
+	  Local network (spec 088, audit I20). The app opens no socket of its own on
+	  the LAN and browses for nothing (no Bonjour), but a person can point it
+	  there: a page typed into 探索, or a self-hosted service address (RPC,
+	  index, relay) on their own network. Either one raises iOS's local-network
+	  prompt, and this is the sentence it shows.
+	-->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Vela reaches your local network only to open a page or a service address on it that you entered yourself.</string>
 	<!--
 	  The build's commit, for 关于 (spec 058). Android reads
 	  `BuildConfig.GIT_COMMIT`, which its Gradle file fills by running git at
@@ -82,11 +96,25 @@
 		</dict>
 	</array>
 	<!--
-	  Export compliance. Vela's encryption is HTTPS/TLS and the OS's own passkey
-	  crypto — standard, exempt, and nothing else. Declaring it here is the same
-	  answer the store-submission notes have carried since 2026-06-30; without
-	  the key App Store Connect asks it again on every single upload, and a
-	  question answered by hand every time is a question answered wrong once.
+	  Export compliance (spec 088, audit I7). The encryption in this app:
+
+	    - HTTPS/TLS, through the OS (URLSession / WebKit);
+	    - the OS's own passkey cryptography (AuthenticationServices);
+	    - AES and AES-GCM inside the Rust core, used ONLY within authentication
+	      protocols: the CTAP2 PIN/UV auth protocol to a security key
+	      (`vela-core/src/ctap/pin_uv.rs`) and the encrypted tunnel of the
+	      "sign in with your phone" passkey ceremony (caBLE / hybrid,
+	      `vela-core/src/cable/`). Both protect the authentication exchange
+	      itself — no user data is encrypted for storage or for confidentiality
+	      in its own right.
+
+	  US EAR Category 5 Part 2, Technical Note 1 to 5A002.a, excludes
+	  cryptography limited to authentication (and the key management behind
+	  it); OS-provided encryption is exempt. So the answer is NO non-exempt
+	  encryption. It is the owner's declaration to sign — get counsel's view
+	  before the production release. Without this key App Store Connect asks on
+	  every upload, and a question answered by hand every time is a question
+	  answered wrong once.
 	-->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
@@ -95,21 +123,17 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Vela saves your receive QR code to your album so you can share it.</string>
 	<!--
-	  Two uses, one sentence — iOS shows this key once, for whichever comes
-	  first, so it has to be true of both:
+	  One use: caBLE "sign in with your phone" (spec 019) — the BLE SCAN that
+	  finds the phone or tablet that scanned our QR code, and the CTAP 2.3
+	  L2CAP channel to it (`HybridCableScanner`, a `CBCentralManager`).
 
-	    - caBLE "sign in with your phone" (spec 019): the BLE SCAN that finds
-	      the phone that scanned our QR, and the CTAP 2.3 L2CAP channel to it;
-	    - the Trusted Signer's nearby channel (spec 075 T041): this phone
-	      ADVERTISING as a GATT peripheral so the signing page open on a
-	      computer in the room can connect to it (PROTOCOL.md §1).
-
-	  The peripheral role is what makes the wording matter: asking for it is
-	  what raises the prompt, and a sentence that only mentioned scanning would
-	  be asking to advertise under cover of a different explanation.
+	  The Trusted Signer's nearby channel — this phone advertising as a GATT
+	  peripheral (spec 075 T041) — was cut on 2026-09-23 (0801564b7), so the
+	  sentence no longer mentions a computer in the room (spec 088): a purpose
+	  string must say what the app does, and nothing it does not.
 	-->
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Vela uses Bluetooth to reach a nearby device you sign with — the phone that scans the code on screen, or a computer running the Trusted Signer in the same room.</string>
+	<string>Vela uses Bluetooth to reach the nearby phone or tablet you sign in with — the one that scans the code on screen.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
