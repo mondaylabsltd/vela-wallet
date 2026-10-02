@@ -13,6 +13,7 @@ import app.getvela.wallet.feature.signing.core.ClearBatchView
 import app.getvela.wallet.feature.signing.core.ClearConfirm
 import app.getvela.wallet.feature.signing.core.ClearDangerClass
 import app.getvela.wallet.feature.signing.core.ClearMessageView
+import app.getvela.wallet.feature.signing.core.ClearNativeValue
 import app.getvela.wallet.feature.signing.core.ClearProvenance
 import app.getvela.wallet.feature.signing.core.ClearRisk
 import app.getvela.wallet.feature.signing.core.ClearSignField
@@ -435,7 +436,10 @@ object SigningLive {
      */
     fun confirmEnabled(sign: SignView, guard: GuardView, fee: FeeView, clear: ClearSigningView, speed: SendLive.SpeedInputs? = null): Boolean {
         val feeReady = offChain(clear) || (fee.confirm_fee_ready && !ofAnotherTier(fee, speed))
-        return sign.confirm_gate_open && guard.confirm_allowed && feeReady && !sign.is_signing && !sign.is_submitting
+        // Spec 096 F7: and the request has been read — a slide that armed
+        // under "Loading…" signed what nobody had been shown yet.
+        val read = !clear.resolving && clear.surface != ClearSurface.Loading
+        return sign.confirm_gate_open && guard.confirm_allowed && feeReady && read && !sign.is_signing && !sign.is_submitting
     }
 
     private fun offChain(clear: ClearSigningView): Boolean =
@@ -807,7 +811,7 @@ object SigningLive {
     private fun blocksBySurface(clear: ClearSigningView, to: String?, dataBytes: Int, s: VelaStrings, ctx: Context): List<SigningBlock> = when (clear.surface) {
         ClearSurface.None -> emptyList()
         ClearSurface.Loading -> listOf(SigningBlock.Sentence(s.s("loading"), SigningTone.Neutral))
-        ClearSurface.ClearSign -> clear.result?.let { resultBlocks(it, s) }.orEmpty()
+        ClearSurface.ClearSign -> clear.result?.let { resultBlocks(it, clear.native_value, ctx) }.orEmpty()
         ClearSurface.EthSign, ClearSurface.MessageSign -> clear.message?.let { messageBlocks(it, s, ctx.origin) }.orEmpty()
         ClearSurface.BlindTypedData -> clear.blind_typed?.let { typed ->
             buildList {
@@ -820,6 +824,8 @@ object SigningLive {
         ClearSurface.BlindTransaction -> buildList {
             add(SigningBlock.Intent(s.s("intentContractCall"), SigningTone.Caution))
             add(SigningBlock.Warning(SigningTone.Caution, s.s("blindDecodeWarning", mapOf("bytes" to dataBytes.toString()))))
+            // Spec 096 F4: nobody could read the call; the coin it sends is known.
+            clear.native_value?.let { add(SigningBlock.Rows(listOf(coinRow(it, ctx)))) }
             to?.let { add(SigningBlock.Party(s.s("interactingLabel"), s.s("unverifiedLabel"), it, PartyBadge(s.s("unverifiedLabel"), SigningTone.Caution))) }
         }
         ClearSurface.PlainSend -> clear.plain_send?.let { plainSendBlocks(it, ctx) }.orEmpty()
@@ -849,6 +855,7 @@ object SigningLive {
         if (results.any { it.best_effort }) add(SigningBlock.Warning(SigningTone.Caution, s.s("bestEffortWarning")))
         if (results.any { it.partial }) add(SigningBlock.Warning(SigningTone.Caution, s.s("partialWarning")))
         if (results.any { it.provenance == ClearProvenance.Fetched }) add(SigningBlock.Warning(SigningTone.Caution, s.s("descriptorFetchedWarning")))
+        if (results.any { it.terms_off_chain }) add(SigningBlock.Warning(SigningTone.Caution, s.s("warnOrderTerms")))
         if (results.any { r -> r.fields.any { it.unverified } }) add(SigningBlock.Warning(SigningTone.Caution, s.s("unverifiedWarning")))
         if (results.any { r -> r.fields.any { it.expired } }) add(SigningBlock.Warning(SigningTone.Caution, s.a("expired")))
     }
@@ -869,7 +876,12 @@ object SigningLive {
         // What the call moves of the chain's own coin, and whom it calls:
         // inside a batch nothing else on the sheet says it for this call.
         val coin = call.amount?.takeIf { call.value_wei != "0" }?.let { listOf(SigningRow(s.s("labelAmount"), "−$it ${ctx.nativeSymbol}")) }.orEmpty()
-        val target = call.to?.let { listOf(SigningRow(s.s("interactingLabel"), it, mono = true)) }.orEmpty()
+        // A contract the wallet knows on this chain is named (096 F5); any
+        // other is its full address.
+        val target = call.to?.let { to ->
+            val name = call.to_name
+            listOf(if (name != null) SigningRow(s.s("interactingLabel"), name) else SigningRow(s.s("interactingLabel"), to, mono = true))
+        }.orEmpty()
         return when {
             call.surface == ClearSurface.ClearSign && result != null ->
                 SigningBlock.Card(step(result.intent), result.fields.filter { !it.detail }.map { rowOf(it, s) } + coin + target, tone)
@@ -892,12 +904,20 @@ object SigningLive {
         ClearRisk.Danger -> SigningTone.Danger
     }
 
-    private fun resultBlocks(result: ClearSignResult, s: VelaStrings): List<SigningBlock> = buildList {
+    private fun resultBlocks(result: ClearSignResult, native: ClearNativeValue?, ctx: Context): List<SigningBlock> = buildList {
+        val s = ctx.strings
         add(SigningBlock.Intent(result.intent, toneOf(result.risk)))
         addAll(warnings(result, s))
-        val rows = result.fields.filter { !it.detail }.map { rowOf(it, s) }
+        // Spec 096 F4: the coin the call sends leads the rows, in a batch
+        // call's own words, when the reading does not say it itself.
+        val coin = native?.let { listOf(coinRow(it, ctx)) }.orEmpty()
+        val rows = coin + result.fields.filter { !it.detail }.map { rowOf(it, s) }
         if (rows.isNotEmpty()) add(SigningBlock.Rows(rows))
     }
+
+    /** "Amount −0.003 BNB" — the core's `native_value`, as a batch call's coin row reads, in the fee row's coin (RC5). */
+    private fun coinRow(native: ClearNativeValue, ctx: Context): SigningRow =
+        SigningRow(ctx.strings.s("labelAmount"), "−${native.amount} ${ctx.nativeSymbol}")
 
     private fun warnings(result: ClearSignResult, s: VelaStrings): List<SigningBlock> = buildList {
         if (result.to_own_token) add(SigningBlock.Warning(SigningTone.Danger, s.s("tokenToContractWarning")))
@@ -912,6 +932,9 @@ object SigningLive {
         if (result.provenance == ClearProvenance.Fetched) {
             add(SigningBlock.Warning(SigningTone.Caution, s.s("descriptorFetchedWarning")))
         }
+        // Spec 096 F5: a CoW pre-signature signs an order whose amounts are
+        // hashed into its id — not on this sheet, and said so.
+        if (result.terms_off_chain) add(SigningBlock.Warning(SigningTone.Caution, s.s("warnOrderTerms")))
         if (result.fields.any { it.unverified }) add(SigningBlock.Warning(SigningTone.Caution, s.s("unverifiedWarning")))
         if (result.fields.any { it.expired }) add(SigningBlock.Warning(SigningTone.Caution, s.a("expired")))
     }
