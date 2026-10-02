@@ -43,7 +43,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Exact, not "22": `gen-i18n.mjs` extracts the day-period and weekday
+          # tables (`datetime_data.rs`) from Node's own ICU, and this job checks
+          # that they still regenerate byte for byte. A floating 22.x moved the
+          # runner to 22.23 (ICU 78.3), whose Korean AM/PM differ from the
+          # committed ICU 78.2 table, and the check failed on every PR. Bump
+          # this together with a regeneration on the same Node.
+          node-version: 22.22.3
           cache: npm
           cache-dependency-path: scripts/package-lock.json
       # The tooling package (i18next, identicons-esm, @noble/*) — scripts/,
