@@ -78,19 +78,22 @@ lib/protocol.js    the message shapes both sides agree on
 lib/locales.js     the packaged locales, and the ONE rule every surface opens by:
                    the pinned language, else Chrome's (the worker never picks)
 build.mjs          assembles the app's client build + these scripts into dist/,
-                   then derives dist-store/ from it; `--zip` zips both
+                   then derives dist-release/ and dist-store/; `--zip` zips them
 dist/              the DEVELOPMENT package: `key` (the e2e computes the id from
                    it) and the parallel space — gitignored
+dist-release/      the GITHUB RELEASE package ("Load unpacked"): `key` kept, so
+                   a tester's id stays the same; no developer pages (owner
+                   ruling 2026-10-02) — gitignored
 dist-store/        the CHROME WEB STORE package: no `key` (the store assigns the
                    id and refuses an upload carrying one), no developer pages
-                   (owner ruling 2026-10-02) — gitignored
+                   — gitignored
 ```
 
-`pnpm package:extension` builds both and writes
-`vela-wallet-extension-<version>.zip` (development) and
-`vela-wallet-extension-<version>-chrome-web-store.zip` (the upload) beside
-`package.json`; `src/lib/extension/package.test.ts` reads both packages. The
-submission sheet is `docs/store-submission/chrome-web-store.md`.
+`pnpm package:extension` builds all three and zips the two release packages
+beside `package.json`: `vela-wallet-extension-<version>.zip` (the GitHub
+release) and `vela-wallet-extension-<version>-chrome-web-store.zip` (the
+upload); `src/lib/extension/package.test.ts` reads all three. The submission
+sheet is `docs/store-submission/chrome-web-store.md`.
 
 A fresh install opens the wallet's welcome in a tab (`runtime.onInstalled`).
 Chrome injects content scripts only into pages loaded after the install, and

@@ -38,6 +38,7 @@ static/vela_core_bg.*.wasm
 # spec 027: the packaged extension is build output; spec 094: the store
 # package beside it, and the zips `build.mjs --zip` writes
 extension/dist
+extension/dist-release
 extension/dist-store
 /vela-wallet-extension-*.zip
 .pw-out*

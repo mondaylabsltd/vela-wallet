@@ -36,6 +36,10 @@ const DIST = process.env.VELA_EXTENSION_DIST
 const STORE_DIST = process.env.VELA_EXTENSION_STORE_DIST
 	? resolve(APP_ROOT, process.env.VELA_EXTENSION_STORE_DIST)
 	: `${DIST}-store`;
+/** The GitHub release's "Load unpacked" package — `key` kept, no developer pages. */
+const RELEASE_DIST = process.env.VELA_EXTENSION_RELEASE_DIST
+	? resolve(APP_ROOT, process.env.VELA_EXTENSION_RELEASE_DIST)
+	: `${DIST}-release`;
 const MANIFEST = join(APP_ROOT, 'extension/manifest.json');
 /** The wasm the app's code names (`WASM_URL`), from the build's own source of it. */
 const WASM_URL_MODULE = join(APP_ROOT, '../../rust/pkg-web/vela_core_wasm_url.js');
@@ -135,6 +139,7 @@ describe('the manifest', () => {
  */
 describe.each([
 	['development', DIST],
+	['release', RELEASE_DIST],
 	['store', STORE_DIST]
 ])('the %s package', (_name, dist) => {
 	const built = pages(dist);
@@ -230,6 +235,26 @@ describe('the development package', () => {
 	});
 });
 
+/** Developer pages: the parallel space, a gallery, the `dev/` tree. */
+const developerFiles = (dist: string) =>
+	files(dist).filter((path) => /(^|\/)(parallel|gallery)(\.|\/)|^dev\//.test(path));
+
+describe('the release package — the GitHub release’s "Load unpacked" (spec 094)', () => {
+	const manifest = () => JSON.parse(readFileSync(join(RELEASE_DIST, 'manifest.json'), 'utf8'));
+
+	it('keeps the pinned id, so a tester’s id stays the same from version to version', () => {
+		expect(manifest().key).toBe(JSON.parse(readFileSync(MANIFEST, 'utf8')).key);
+	});
+
+	it('is otherwise the source manifest, field for field', () => {
+		expect(manifest()).toEqual(JSON.parse(readFileSync(MANIFEST, 'utf8')));
+	});
+
+	it('carries no developer pages (owner ruling 2026-10-02)', () => {
+		expect(developerFiles(RELEASE_DIST)).toEqual([]);
+	});
+});
+
 describe('the store package (spec 094)', () => {
 	const manifest = () => JSON.parse(readFileSync(join(STORE_DIST, 'manifest.json'), 'utf8'));
 
@@ -244,9 +269,6 @@ describe('the store package (spec 094)', () => {
 	});
 
 	it('carries no developer pages — the parallel space or a gallery (owner ruling 2026-10-02)', () => {
-		const developer = files(STORE_DIST).filter((path) =>
-			/(^|\/)(parallel|gallery)(\.|\/)|^dev\//.test(path)
-		);
-		expect(developer).toEqual([]);
+		expect(developerFiles(STORE_DIST)).toEqual([]);
 	});
 });

@@ -24,20 +24,26 @@
  *
  * That package is the DEVELOPMENT one: it keeps the manifest's `key` (the
  * pinned id the e2e computes) and the parallel space (the fixture wallet the
- * e2e and the device pass enter through). Every build also derives the Chrome
- * Web Store package from it (spec 094), beside it — `extension/dist-store`
- * (`<VELA_EXTENSION_DIST>-store`), or `VELA_EXTENSION_STORE_DIST` — so the
- * package test always reads both:
+ * e2e and the device pass enter through). Every build also derives the two
+ * RELEASE packages from it (spec 094), beside it, with no developer pages —
+ * the parallel space goes like the galleries (owner ruling 2026-10-02: release
+ * artefacts carry no developer features):
  *
- *   - no `key`: the store assigns the item's id and refuses a first upload
- *     whose manifest carries one. Nothing in the product depends on the id —
- *     the passkey's relying party is `getvela.app` by host permission;
- *   - no developer pages: the parallel space goes like the galleries (owner
- *     ruling 2026-10-02: release builds carry no developer features).
+ *   - `extension/dist-release` (`<VELA_EXTENSION_DIST>-release`, or
+ *     `VELA_EXTENSION_RELEASE_DIST`) — the GitHub release's "Load unpacked"
+ *     package. It keeps `key`, so a tester's id stays the same from one
+ *     version to the next;
+ *   - `extension/dist-store` (`-store`, or `VELA_EXTENSION_STORE_DIST`) — the
+ *     Chrome Web Store upload, without `key`: the store assigns the item's id
+ *     and refuses a first upload whose manifest carries one. Nothing in the
+ *     product depends on the id — the passkey's relying party is `getvela.app`
+ *     by host permission.
  *
- * `--zip` zips each package's CONTENTS (manifest.json at the root, which is
- * what "Load unpacked" and the Web Store both expect) into the app directory:
- * `vela-wallet-extension-<version>.zip` (development) and
+ * The package test reads all three.
+ *
+ * `--zip` zips the two release packages' CONTENTS (manifest.json at the root,
+ * which is what "Load unpacked" and the Web Store both expect) into the app
+ * directory: `vela-wallet-extension-<version>.zip` (the GitHub release) and
  * `vela-wallet-extension-<version>-chrome-web-store.zip` (the upload).
  *
  * The build is self-sufficient (spec 094 B2): it checks the design tokens and
@@ -98,6 +104,7 @@ const SOURCES = { 'inpage.js': PROVIDER };
 /** What must NOT be copied verbatim: build inputs and the bundler's own sources. */
 const SKIP_COPY = new Set([
 	'dist',
+	'dist-release',
 	'dist-store',
 	'build.mjs',
 	'README.md',
@@ -121,7 +128,10 @@ const storePruned = (name) =>
 /** Files that only make sense to a crawler. */
 const PRUNE_ROOT = ['robots.txt'];
 
-/** Where the store package goes: beside the development one. */
+/** Where the two release packages go: beside the development one. */
+const RELEASE_DIST = process.env.VELA_EXTENSION_RELEASE_DIST
+	? resolve(APP, process.env.VELA_EXTENSION_RELEASE_DIST)
+	: `${DIST}-release`;
 const STORE_DIST = process.env.VELA_EXTENSION_STORE_DIST
 	? resolve(APP, process.env.VELA_EXTENSION_STORE_DIST)
 	: `${DIST}-store`;
@@ -275,18 +285,18 @@ const files = htmlFiles.length;
 log(`package: ${(total / 1e6).toFixed(1)} MB · ${files} pages · ${relative(APP, DIST)}`);
 
 // ---------------------------------------------------------------------------
-// 6. The store package, and the zips (--zip)
+// 6. The release packages, and the zips (--zip)
 // ---------------------------------------------------------------------------
 
 const manifest = JSON.parse(readFileSync(join(DIST, 'manifest.json'), 'utf8'));
 
-/** The development package, minus its `key` and its developer pages. */
-function deriveStorePackage() {
-	rmSync(STORE_DIST, { recursive: true, force: true });
-	cpSync(DIST, STORE_DIST, { recursive: true });
+/** The development package without its developer pages — and, for the store, without `key`. */
+function deriveReleasePackage(target, { keepKey }) {
+	rmSync(target, { recursive: true, force: true });
+	cpSync(DIST, target, { recursive: true });
 	let bytes = 0;
-	for (const entry of readdirSync(STORE_DIST)) {
-		const localeDir = join(STORE_DIST, entry);
+	for (const entry of readdirSync(target)) {
+		const localeDir = join(target, entry);
 		if (!statSync(localeDir).isDirectory()) continue;
 		for (const name of readdirSync(localeDir).filter(storePruned)) {
 			const path = join(localeDir, name);
@@ -294,18 +304,17 @@ function deriveStorePackage() {
 			rmSync(path, { recursive: true, force: true });
 		}
 	}
-	const storeManifest = { ...manifest };
-	delete storeManifest.key;
-	writeFileSync(
-		join(STORE_DIST, 'manifest.json'),
-		JSON.stringify(storeManifest, null, '\t') + '\n'
-	);
+	const released = { ...manifest };
+	if (!keepKey) delete released.key;
+	writeFileSync(join(target, 'manifest.json'), JSON.stringify(released, null, '\t') + '\n');
 	log(
-		`store package: no key, ${(bytes / 1e3).toFixed(0)} kB of developer pages pruned · ` +
-			`${(du(STORE_DIST) / 1e6).toFixed(1)} MB · ${relative(APP, STORE_DIST)}`
+		`${keepKey ? 'release package (key kept)' : 'store package: no key'}, ` +
+			`${(bytes / 1e3).toFixed(0)} kB of developer pages pruned · ` +
+			`${(du(target) / 1e6).toFixed(1)} MB · ${relative(APP, target)}`
 	);
 }
-deriveStorePackage();
+deriveReleasePackage(RELEASE_DIST, { keepKey: true });
+deriveReleasePackage(STORE_DIST, { keepKey: false });
 
 if (ZIP) {
 	const zipInto = (dir, name) => {
@@ -315,6 +324,6 @@ if (ZIP) {
 		execFileSync('zip', ['-qrX', target, '.', '-x', '*.DS_Store'], { cwd: dir, stdio: 'inherit' });
 		log(`zip: ${name} (${(statSync(target).size / 1e6).toFixed(1)} MB)`);
 	};
-	zipInto(DIST, `vela-wallet-extension-${manifest.version}.zip`);
+	zipInto(RELEASE_DIST, `vela-wallet-extension-${manifest.version}.zip`);
 	zipInto(STORE_DIST, `vela-wallet-extension-${manifest.version}-chrome-web-store.zip`);
 }

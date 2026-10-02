@@ -1,9 +1,10 @@
 # The Chrome extension build of the web wallet (app-web/vela-wallet, spec 027):
-# two zips from one build (spec 094) — the development package Chrome loads
-# unpacked (artifact `chrome-extension`, attached to a release; it keeps the
-# manifest `key`, so its id is pinned), and the Chrome Web Store upload
-# (artifact `chrome-web-store`: no `key` — the store assigns the id and refuses
-# a first upload that carries one — and no developer pages).
+# two zips from one build (spec 094), both without developer pages (owner
+# ruling 2026-10-02) — the package Chrome loads unpacked (artifact
+# `chrome-extension`, attached to a release; it keeps the manifest `key`, so a
+# tester's id stays the same), and the Chrome Web Store upload (artifact
+# `chrome-web-store`: no `key` — the store assigns the id and refuses a first
+# upload that carries one).
 #
 # Same shape as the desktop release triad (desktop-*-packages.yml): a tag cuts
 # a release and attaches the package, a manual run builds without releasing,
@@ -90,16 +91,16 @@ jobs:
       # package and zips both.
       - name: Build both packages
         run: pnpm run package:extension
-      # The silent install failures, the store package's manifest (no `key`,
-      # no developer pages) and the wasm the code names — asserted on the two
-      # packages just built.
+      # The silent install failures, the release packages' manifests (`key`
+      # kept / dropped, no developer pages) and the wasm the code names —
+      # asserted on the packages just built.
       - name: The packages keep their measured constraints
         run: npx vitest run --project server src/lib/extension/package.test.ts
       # Spec 064 §3, asserted where it matters: in the package, not in a test beside it.
       - name: The extension says which build it is
         run: |
           version=$(node -p "require('./extension/manifest.json').version")
-          for dist in extension/dist extension/dist-store; do
+          for dist in extension/dist-release extension/dist-store; do
             grep -rqF "${GITHUB_SHA:0:7}" "$dist" || {
               echo "::error::$dist does not carry commit ${GITHUB_SHA:0:7}"; exit 1; }
             if grep -rqF '6ab8f' "$dist"; then
