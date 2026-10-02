@@ -534,27 +534,47 @@ function unnamed(address: string): SendPayee {
 }
 
 /**
- * A payee's name with whose word it is (spec 097 F): "Wallet · Vela User"
- * for the public registry, where anyone can register any name; "bob.eth ·
- * ENS" for a name service; the person's own names as they are. `undefined`
- * when nobody named them. The core decided which is which.
+ * Whose word a payee's name is (spec 097 F): "Vela User" for the public
+ * registry, where anyone can register any name; the service ("ENS") for a
+ * name service; nothing for the person's own names. The core decided which
+ * is which.
  */
+function payeeTag(payee: SendPayee | undefined, m: WalletFlowMessages): string | undefined {
+	const source = payee?.name == null ? null : payee.name_source;
+	if (source?.type === 'registry') return m['send.velaUser'];
+	if (source?.type === 'service') return source.label;
+	return undefined;
+}
+
+/** "Wallet · Vela User", "bob.eth · ENS", "Savings" — a sentence's worth. */
 function payeeName(payee: SendPayee | undefined, m: WalletFlowMessages): string | undefined {
 	if (payee?.name == null) return undefined;
-	const source = payee.name_source;
-	const tag =
-		source?.type === 'registry'
-			? m['send.velaUser']
-			: source?.type === 'service'
-				? source.label
-				: undefined;
+	const tag = payeeTag(payee, m);
 	return tag === undefined ? payee.name : `${payee.name} · ${tag}`;
 }
 
 /**
+ * A named payee's two lines on the page that signs (spec 097 F, S2): the name
+ * alone, which a long one may cut, and under it the line nothing cuts — whose
+ * word the name is, and the short address it stands for ("Vela User ·
+ * 0x14fB…eA5c"). A long registered name can push neither out of sight.
+ * `undefined` when nobody named them: the address is then the whole row.
+ */
+function payeeLines(
+	payee: SendPayee | undefined,
+	address: string,
+	m: WalletFlowMessages
+): { name: string; detail: string } | undefined {
+	if (payee?.name == null) return undefined;
+	const tag = payeeTag(payee, m);
+	const short = shortenAddress(address);
+	return { name: payee.name, detail: tag === undefined ? short : `${tag} · ${short}` };
+}
+
+/**
  * The To row (spec 097 F, S2): a name never stands in for the address on the
- * page that signs — the name over the short address, or the address alone.
- * The identicon opens the full one.
+ * page that signs — the name over its tag and short address, or the address
+ * alone. The identicon opens the full one.
  */
 function payeeFact(
 	label: string,
@@ -562,15 +582,15 @@ function payeeFact(
 	m: WalletFlowMessages,
 	identicon: (seed: string) => string
 ): FactRowModel {
-	const name = payeeName(payee, m);
+	const lines = payeeLines(payee, payee.address, m);
 	return {
 		label,
-		value: name ?? shortenAddress(payee.address),
+		value: lines?.name ?? shortenAddress(payee.address),
 		lead: isHexAddress(payee.address)
 			? { kind: 'identicon', svg: identicon(payee.address), address: payee.address }
 			: undefined,
-		mono: name === undefined,
-		detail: name === undefined ? undefined : shortenAddress(payee.address)
+		mono: lines === undefined,
+		detail: lines?.detail
 	};
 }
 
@@ -1169,13 +1189,13 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		const breakdown = send.recipients.map((draft, index) => {
 			// The core's name for row `index` (spec 097 F) — never instead of
 			// the address it pays.
-			const name = payeeName(send.payees[index], m);
+			const lines = payeeLines(send.payees[index], draft.address, m);
 			return {
 				identiconSvg: draft.address ? identicon(draft.address) : undefined,
 				address: draft.address || undefined,
-				label: name ?? shortenAddress(draft.address),
-				detail: name === undefined ? undefined : shortenAddress(draft.address),
-				mono: name === undefined,
+				label: lines?.name ?? shortenAddress(draft.address),
+				detail: lines?.detail,
+				mono: lines === undefined,
 				value: `${tokenAmountText(draft.amount)} ${symbol}`.trim(),
 				// The form's repeat warning, said again on the page that signs
 				// (issue 203): two lines paying one payee are hardest to spot

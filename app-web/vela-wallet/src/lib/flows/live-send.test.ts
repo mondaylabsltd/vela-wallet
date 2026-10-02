@@ -235,8 +235,8 @@ describe('the token picker', () => {
 			})
 		);
 		expect(named.recipient).toMatchObject({
-			value: 'alice.eth · ENS',
-			detail: shortenAddress(payee),
+			value: 'alice.eth',
+			detail: `ENS · ${shortenAddress(payee)}`,
 			mono: false
 		});
 
@@ -691,8 +691,8 @@ describe('the confirm screen', () => {
 			})
 		);
 		expect(model.facts.find((f) => f.label === m['send.toLabel'])).toMatchObject({
-			value: 'alice.eth · ENS',
-			detail: shortenAddress(address),
+			value: 'alice.eth',
+			detail: `ENS · ${shortenAddress(address)}`,
 			mono: false
 		});
 	});

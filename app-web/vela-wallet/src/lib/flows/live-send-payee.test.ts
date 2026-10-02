@@ -166,9 +166,11 @@ describe('S2 — the page that signs never names the payee without the address',
 		const to = liveSendConfirm(confirmModel(), inputs(view)).facts.find(
 			(fact) => fact.label === m['send.toLabel']
 		);
+		// The name may be cut; the line under it — whose word it is, and the
+		// address — never is.
 		expect(to).toMatchObject({
-			value: 'Wallet · Vela User',
-			detail: shortenAddress(DEV),
+			value: 'Wallet',
+			detail: `Vela User · ${shortenAddress(DEV)}`,
 			mono: false,
 			lead: { kind: 'identicon', address: DEV }
 		});
@@ -209,6 +211,23 @@ describe('S2 — the page that signs never names the payee without the address',
 		expect(to?.detail).toBeUndefined();
 	});
 
+	it('a long registered name cannot push the tag or the address out of sight', () => {
+		const long = 'A'.repeat(64);
+		const view = base({
+			stage: 'confirm',
+			selected_token: XDAI,
+			recipient: DEV,
+			payees: [registry(DEV, long)]
+		});
+		const to = liveSendConfirm(confirmModel(), inputs(view)).facts.find(
+			(fact) => fact.label === m['send.toLabel']
+		);
+		// The name is the line a narrow row may cut; the tag rides with the
+		// address on the line it never does.
+		expect(to?.value).toBe(long);
+		expect(to?.detail).toBe(`Vela User · ${shortenAddress(DEV)}`);
+	});
+
 	it("the sweep's one payee is named the same way (sw-054)", () => {
 		const view = base({
 			stage: 'confirm',
@@ -223,7 +242,7 @@ describe('S2 — the page that signs never names the payee without the address',
 		const to = liveSendConfirm(confirmModel(), inputs(view)).facts.find(
 			(fact) => fact.label === m['send.toLabel']
 		);
-		expect(to).toMatchObject({ value: 'Wallet · Vela User', detail: shortenAddress(DEV) });
+		expect(to).toMatchObject({ value: 'Wallet', detail: `Vela User · ${shortenAddress(DEV)}` });
 	});
 
 	it("a split's rows are named by the core's payees, each over its address, and no To row", () => {
