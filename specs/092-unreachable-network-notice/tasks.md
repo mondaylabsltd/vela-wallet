@@ -21,4 +21,5 @@
 - [x] T022 Screenshots (iOS simulator, desktop gallery, web e2e).
 - [x] T015 Device pass follow-up 1 (iPhone, chaos drop): `rpc_pool` no longer calls a chain rate-limited when its final pass reached no node but a throttling one. Fixed in the core for all shells, with a test.
 - [x] T016 Device pass follow-up 2 (Xiaomi): ✕ on a row's fix returns to the list; swipe, scrim and Back close the whole sheet (iOS behaviour). `WalletRescueSheet`, `WalletRescueTest`, and the instrumented `WalletRescueSheetTest`.
-- [ ] T023 Device check on the Xiaomi and the iPhone (lead): re-run after T015 and T016.
+- [x] T017 Device pass follow-up 3: the per-chain read deadline is the core's (`CHAIN_READ_DEADLINE_MS`) on all four shells; iOS and Android had none. A test per shell with a transport that never answers, plus a simulator `stall` run.
+- [ ] T023 Device check on the Xiaomi and the iPhone (lead): re-run after T015 to T017.

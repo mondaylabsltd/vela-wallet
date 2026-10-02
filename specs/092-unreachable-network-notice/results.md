@@ -31,6 +31,18 @@ None of the four shells already did the right thing: every one opened only the f
 - After the fix, the same simulator run shows 「暂时连不上 BNB Chain」 (`agent092/shots/ios-chaos-{before,after}-fix.png`).
 - The core rule is shared, so web, desktop and Android had the same blind spot and are fixed by the same change.
 
+**A held-open connection kept the round from settling on iOS and Android (lead, follow-up).**
+- Web and desktop gave up on a chain after 18 s; iOS and Android had no limit. A connection held open (chaos `stall`, and a real mode behind a blocking network) makes every POST wait for its 8 s timeout. A chain with 23 endpoints and 3 passes then takes minutes per call, and the round and Home wait on it.
+- The limit is now the core's rule, `balance_dashboard::CHAIN_READ_DEADLINE_MS` = 18 000. It is exported as `balanceChainReadDeadlineMs()` (UniFFI) and as the wasm function of the same name.
+- Every shell reads that one value: web `wallet-api.ts`, desktop `balances.rs`, iOS `TokenReads.bounded` (home round and switcher rows), Android `BalanceExecutor`.
+- A chain past the limit is failed for the round, so it joins the unreachable list. The other chains' answers still land.
+- Tests, one per shell, each with a transport that never answers:
+  - web `wallet-api-chain-outage.test.ts`, fake timers at the core's deadline;
+  - desktop `a_chain_that_never_answers_is_failed_at_the_deadline_and_the_rest_land`;
+  - iOS `ChainDeadlineTests` (4);
+  - Android `aChainThatNeverAnswersIsFailedAtTheDeadlineAndTheRestLand`, with `FakeRpcTransport(stall = …)`.
+- Simulator check: chaos `mode=stall` on every BNB Chain and Polygon host. The round settled 21 s after launch with `chains_failed chains=137,56`, and Home shows 「2 个网络暂时连不上」 (`agent092/shots/ios-stall-after-fix.png`).
+
 **Android: ✕ on a row's fix closed everything.**
 - Before: the wallet route sent the sheet's ✕ AND Material's own dismissal (swipe, scrim, Back) through one callback, "back to the list". Material calls that only after it has already hidden the sheet. Its path therefore left the list open but invisible, which looks like "the whole sheet closed, Home shown". Its re-reads kept running, and the next tap on the Home line changed nothing, because the state was already "list".
 - Now the two ways out are separate, as on the iPhone:
@@ -62,14 +74,14 @@ None of the four shells already did the right thing: every one opened only the f
 
 | Suite | Result |
 |---|---|
-| core `cargo test --workspace` (i18n-all, dev-fixtures) | 2,318 passed, 0 failed (balance_dashboard: 62, of which 10 are new; rpc_pool +1) |
+| core `cargo test --workspace` (i18n-all, dev-fixtures) | 2,318 passed, 0 failed (balance_dashboard: 62, of which 10 are new; rpc_pool +1; the deadline export pinned in the UniFFI and wasm tests) |
 | core clippy `-D warnings` / fmt | clean / clean |
-| web vitest | 170 files, 2,392 passed, 5 skipped |
+| web vitest | 170 files, 2,393 passed, 5 skipped |
 | web `pnpm check` | 0 errors, 0 warnings |
 | web e2e `home-truth.e2e.ts` (chromium, own preview on :4192) | 5 / 5 |
-| desktop `cargo test` | 880 passed, 49 ignored (one pool test re-aimed: a 5xx is a node not reached); clippy has no warning on changed lines; fmt clean |
-| Android `testDebugUnitTest` | 919 passed, 0 failed (after the ✕ fix and the core change); the instrumented `WalletRescueSheetTest` compiles (it runs on a device) |
-| iOS `VelaWalletTests` (own cloned iPhone 16 simulator) | 1,102 tests in 141 suites passed, before and after the core change |
+| desktop `cargo test` | 881 passed, 49 ignored (one pool test re-aimed: a 5xx is a node not reached); clippy has no warning on changed lines; fmt clean |
+| Android `testDebugUnitTest` | 921 passed, 0 failed; the instrumented `WalletRescueSheetTest` compiles (it runs on a device) |
+| iOS `VelaWalletTests` (own cloned iPhone 16 simulator) | 1,106 tests in 142 suites passed |
 | check-native-reachability / check-event-payloads / check-dead-controls | pass / 0 mismatches / 0 dead controls |
 
 ## Screenshots
