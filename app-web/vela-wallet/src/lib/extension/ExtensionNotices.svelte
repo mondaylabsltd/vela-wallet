@@ -71,17 +71,21 @@
 {#if messages && accessLimited}
 	<div class="notice warning" role="status" data-testid="ext-site-access">
 		<p>{messages.accessNote}</p>
-		<Button variant="primary" shape="rounded" loading={asking} onclick={allow}>
-			{messages.accessAllow}
-		</Button>
+		<div class="action">
+			<Button variant="primary" shape="rounded" loading={asking} onclick={allow}>
+				{messages.accessAllow}
+			</Button>
+		</div>
 	</div>
 {/if}
 {#if messages && installed}
 	<div class="notice" role="status" data-testid="ext-installed">
 		<p>{messages.installedNote}</p>
-		<Button variant="secondary" shape="rounded" onclick={dismissInstalled}>
-			{messages.dismiss}
-		</Button>
+		<div class="action">
+			<Button variant="secondary" shape="rounded" onclick={dismissInstalled}>
+				{messages.dismiss}
+			</Button>
+		</div>
 	</div>
 {/if}
 
@@ -93,17 +97,29 @@
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: center;
-		gap: var(--space-sm) var(--space-md);
+		gap: var(--space-xs, 4px) var(--space-md);
 		padding: var(--space-sm) var(--layout-screenPaddingX);
 		border-bottom: var(--border-hairline) solid var(--color-border-base);
 		font-size: var(--text-sm);
 		color: var(--color-fg-muted);
-		text-align: center;
 	}
 	.notice p {
 		margin: 0;
 		flex: 1 1 16rem;
 		max-width: 40rem;
+		text-align: start;
+	}
+	/* The shared Button, at the size of a line of text: a notice's action,
+	   not a page's. */
+	.action {
+		flex: 0 0 auto;
+	}
+	.action :global(.button) {
+		width: auto;
+		min-height: var(--size-control-sm);
+		padding-inline: var(--space-lg);
+		padding-block: var(--space-xs, 4px);
+		font-size: var(--text-sm);
 	}
 	.notice.warning {
 		background: var(--color-warning-soft, var(--color-bg-sunken));
