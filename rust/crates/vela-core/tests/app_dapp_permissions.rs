@@ -14,7 +14,7 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::dapp_permissions::{
     dapp_spelling, decide_popup_request, granted_to_signed_in, is_connect_method,
-    is_insecure_public_origin, is_secure_context, is_signing_method, origin_of,
+    is_insecure_public_origin, is_secure_context, is_signing_method, offers_wallet, origin_of,
     popup_origin_refusal, resolve_granted, settle_on_close, DappPermissions, DpermGrant,
     DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome, DpermPopupView,
     DpermRejectReason as Reason, DpermRespondPayload as Payload, DpermShellResult as Res, Event,
@@ -362,6 +362,85 @@ fn secure_context_is_https_or_exact_loopback() {
         "",
     ] {
         assert!(!is_secure_context(origin), "{origin}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Spec 091 — who is offered the wallet, with Settings' debug mode
+// ---------------------------------------------------------------------------
+
+/// The one rule the gate and the injected script follow. Debug mode adds
+/// http on this device's own network — matched exactly — and nothing else.
+#[test]
+fn offers_wallet_table() {
+    // (origin, offered with debug mode off, offered with it on)
+    let table: &[(&str, bool, bool)] = &[
+        // Secure contexts: always.
+        ("https://dapp.example", true, true),
+        ("https://192.168.1.5:3000", true, true),
+        ("http://localhost:5173", true, true),
+        ("http://dev.localhost", true, true),
+        ("http://127.0.0.1:8137", true, true),
+        ("http://[::1]:3000", true, true),
+        // This device's own network: only in debug mode.
+        ("http://192.168.1.5:3000", false, true),
+        ("http://192.168.0.1", false, true),
+        ("http://10.0.0.1", false, true),
+        ("http://10.255.255.255", false, true),
+        ("http://172.16.0.1", false, true),
+        ("http://172.31.255.255", false, true),
+        ("http://169.254.1.1", false, true),
+        ("http://foo.local", false, true),
+        ("http://FOO.LOCAL:8080", false, true),
+        ("http://[fd00::1]", false, true),
+        ("http://[fd00::1]:3000", false, true),
+        ("http://[fc12:3456::1]", false, true),
+        ("http://[fe80::2]", false, true),
+        // Public http: never, debug mode or not.
+        ("http://dapp.example", false, false),
+        ("http://10.0.0.1.evil.com", false, false),
+        ("http://192.168.1.5.nip.io", false, false),
+        ("http://127.0.0.1.evil.com", false, false),
+        ("http://foo.local.evil.com", false, false),
+        ("http://local", false, false),
+        ("http://172.15.0.1", false, false),
+        ("http://172.32.0.1", false, false),
+        ("http://192.169.0.1", false, false),
+        ("http://169.253.0.1", false, false),
+        ("http://11.0.0.1", false, false),
+        ("http://8.8.8.8", false, false),
+        ("http://999.1.1.1", false, false),
+        ("http://192.168.1", false, false),
+        ("http://192.168.1.5.6", false, false),
+        ("http://[2001:db8::1]", false, false),
+        ("http://[fe81::1]", false, false),
+        ("http://[fd0::1]", false, false),
+        ("http://[::ffff:192.168.1.5]", false, false),
+        // Not a page at all.
+        ("ws://192.168.1.5", false, false),
+        ("ftp://10.0.0.1", false, false),
+        ("file:///etc/hosts", false, false),
+        ("not a url", false, false),
+        ("", false, false),
+    ];
+    for &(origin, off, on) in table {
+        assert_eq!(
+            offers_wallet(origin, false),
+            off,
+            "{origin} without debug mode"
+        );
+        assert_eq!(offers_wallet(origin, true), on, "{origin} in debug mode");
+        // Off is spec 088 to the letter.
+        assert_eq!(
+            offers_wallet(origin, false),
+            is_secure_context(origin),
+            "{origin}"
+        );
+        // What debug mode adds never reaches past the insecure-signing
+        // exemption.
+        if on && !off {
+            assert!(!is_insecure_public_origin(origin), "{origin}");
+        }
     }
 }
 

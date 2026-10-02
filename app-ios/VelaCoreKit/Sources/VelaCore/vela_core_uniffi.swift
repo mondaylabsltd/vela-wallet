@@ -9964,6 +9964,122 @@ public func FfiConverterTypeUserOpEstimateFailure_lower(_ value: UserOpEstimateF
 
 
 /**
+ * One tap's answer: the count to keep, and whether this tap revealed the
+ * debug-mode switch (store `prefs_debug_mode_value(false)` and say so once).
+ */
+public struct VersionTapAnswer: Equatable, Hashable {
+    public var taps: VersionTaps
+    public var revealed: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(taps: VersionTaps, revealed: Bool) {
+        self.taps = taps
+        self.revealed = revealed
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension VersionTapAnswer: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVersionTapAnswer: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionTapAnswer {
+        return
+            try VersionTapAnswer(
+                taps: FfiConverterTypeVersionTaps.read(from: &buf), 
+                revealed: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: VersionTapAnswer, into buf: inout [UInt8]) {
+        FfiConverterTypeVersionTaps.write(value.taps, into: &buf)
+        FfiConverterBool.write(value.revealed, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionTapAnswer_lift(_ buf: RustBuffer) throws -> VersionTapAnswer {
+    return try FfiConverterTypeVersionTapAnswer.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionTapAnswer_lower(_ value: VersionTapAnswer) -> RustBuffer {
+    return FfiConverterTypeVersionTapAnswer.lower(value)
+}
+
+
+/**
+ * The count of taps on About's version so far (spec 091) — kept by the
+ * shell while About is open, handed back with every tap.
+ */
+public struct VersionTaps: Equatable, Hashable {
+    public var count: UInt32
+    public var lastMs: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(count: UInt32, lastMs: Double) {
+        self.count = count
+        self.lastMs = lastMs
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension VersionTaps: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVersionTaps: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VersionTaps {
+        return
+            try VersionTaps(
+                count: FfiConverterUInt32.read(from: &buf), 
+                lastMs: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: VersionTaps, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.count, into: &buf)
+        FfiConverterDouble.write(value.lastMs, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionTaps_lift(_ buf: RustBuffer) throws -> VersionTaps {
+    return try FfiConverterTypeVersionTaps.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVersionTaps_lower(_ value: VersionTaps) -> RustBuffer {
+    return FfiConverterTypeVersionTaps.lower(value)
+}
+
+
+/**
  * One founding key of the wallet — `04‖x‖y` hex — with the credential that owns it.
  */
 public struct WalletKeyRecord: Equatable, Hashable {
@@ -13276,6 +13392,20 @@ public func dappIsSigningMethod(method: String) -> Bool  {
 })
 }
 /**
+ * Whether a page at `origin` is offered the wallet (spec 091): a secure
+ * context, or — with debug mode on — http on this device's own network.
+ * The rule the browser machine's gate and the injected script follow.
+ */
+public func dappOffersWallet(origin: String, debugMode: Bool) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_dapp_offers_wallet(
+        FfiConverterString.lower(origin),
+        FfiConverterBool.lower(debugMode),uniffiCallStatus
+    )
+})
+}
+/**
  * The origin of a page's URL, normalised the way the browser normalises
  * it (spec 044): the key a grant is stored under, and the one fact about
  * a page the shell attaches to every request. `None` for anything that
@@ -13294,12 +13424,15 @@ public func dappOriginOf(url: String) -> String?  {
  * THE provider (`vela-core/provider/inpage.js`, the extension's too) and
  * the one bridge. `host` is `"android"`, `"ios"` or `"desktop"` — the only
  * difference is how the bridge hands a string to native code.
+ * `debug_mode` is Settings' (spec 091): with it on, the script also offers
+ * the wallet to http pages on this device's own network.
  */
-public func dappProviderScript(host: String) -> String  {
+public func dappProviderScript(host: String, debugMode: Bool) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_dapp_provider_script(
-        FfiConverterString.lower(host),uniffiCallStatus
+        FfiConverterString.lower(host),
+        FfiConverterBool.lower(debugMode),uniffiCallStatus
     )
 })
 }
@@ -14927,6 +15060,34 @@ public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  
 })
 }
 /**
+ * Settings' debug mode in force on this build (spec 091): `hidden` (no
+ * switch — and debug mode is off), `off` or `on`. `developer_build` is the
+ * shell's build fact — Android `BuildConfig.DEBUG`, iOS `#if DEBUG`, the
+ * desktop's `dev-fixtures` — and outside one the answer is always `hidden`,
+ * whatever is stored (owner, 2026-10-02: store builds forbid it).
+ */
+public func prefsDebugMode(entries: [String: String], developerBuild: Bool) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_prefs_debug_mode(
+        FfiConverterDictionaryStringString.lower(entries),
+        FfiConverterBool.lower(developerBuild),uniffiCallStatus
+    )
+})
+}
+/**
+ * What to store under `vela.debugMode` for the revealed switch set `on`
+ * or off (spec 091).
+ */
+public func prefsDebugModeValue(on: Bool) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_prefs_debug_mode_value(
+        FfiConverterBool.lower(on),uniffiCallStatus
+    )
+})
+}
+/**
  * The `vela.localePrefs` record for three formats.
  */
 public func prefsLocaleJson(numberFormat: String, dateFormat: String, timeFormat: String) -> String  {
@@ -14969,6 +15130,23 @@ public func prefsTextScaleLevels() -> [TextScaleLevel]  {
     return try!  FfiConverterSequenceTypeTextScaleLevel.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_prefs_text_scale_levels(uniffiCallStatus
+    )
+})
+}
+/**
+ * One tap on the version in About at `now_ms`, with the switch as it stands
+ * (`hidden` | `off` | `on`). The core's rule: seven taps, each within a
+ * second of the one before — and never outside a `developer_build`
+ * (spec 091).
+ */
+public func prefsVersionTapped(taps: VersionTaps, nowMs: Double, debugMode: String, developerBuild: Bool) -> VersionTapAnswer  {
+    return try!  FfiConverterTypeVersionTapAnswer_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_prefs_version_tapped(
+        FfiConverterTypeVersionTaps_lower(taps),
+        FfiConverterDouble.lower(nowMs),
+        FfiConverterString.lower(debugMode),
+        FfiConverterBool.lower(developerBuild),uniffiCallStatus
     )
 })
 }
@@ -15408,10 +15586,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_dapp_is_signing_method() != 50448) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_offers_wallet() != 54718) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_origin_of() != 63765) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_vela_core_uniffi_checksum_func_dapp_provider_script() != 52260) {
+    if (uniffi_vela_core_uniffi_checksum_func_dapp_provider_script() != 4488) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_dapp_receipt_wait_ms() != 43354) {
@@ -15777,6 +15958,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_prefs_debug_mode() != 14685) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_prefs_debug_mode_value() != 24698) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_prefs_locale_json() != 53778) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15787,6 +15974,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_prefs_text_scale_levels() != 49940) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_prefs_version_tapped() != 42869) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_storage_bytes_display() != 9654) {

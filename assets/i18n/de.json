@@ -1027,7 +1027,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins.",
-  "sectionLinks": "Links"
+  "sectionLinks": "Links",
+  "debugMode": "Debug-Modus",
+  "debugModeBody": "Lässt http-Seiten in deinem lokalen Netzwerk die Wallet nutzen. Nur für die Entwicklung.",
+  "debugModeRevealed": "Der Debug-Modus ist jetzt verfügbar"
  },
  "clearSigning": {
   "title": "Clear-Signing-Test",

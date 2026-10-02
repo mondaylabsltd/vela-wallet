@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.settings
 
 import androidx.compose.runtime.Immutable
+import app.getvela.wallet.core.data.DebugMode
 import app.getvela.wallet.feature.wallet.TabsModel
 
 /**
@@ -17,10 +18,13 @@ import app.getvela.wallet.feature.wallet.TabsModel
  * pill, a callout, a URL field and a confirm sheet cover almost all of them.
  */
 
-/** Mobile gallery inventory — one id per mock in `design/settings/`. */
+/**
+ * Mobile gallery inventory — one id per mock in `design/settings/`, and
+ * ST14B (spec 091, no mock): About with the debug-mode switch revealed.
+ */
 enum class SettingsScreenState {
     ST1, ST1B, ST2, ST3, ST3B, ST4, ST5, ST6, ST7, ST8,
-    ST9, ST9B, ST10, ST10B, ST10C, ST11, ST12, ST13, ST13B, ST14, ST15, ST16,
+    ST9, ST9B, ST10, ST10B, ST10C, ST11, ST12, ST13, ST13B, ST14, ST14B, ST15, ST16,
     SR1, SR2, SR2B, SR3, SR4, SR5,
 }
 
@@ -386,6 +390,21 @@ data class AboutModel(
     val rows: List<KeyValueRowModel>,
     val links: List<KeyValueRowModel>,
     val footer: String,
+    val debugMode: DebugModeRowModel,
+)
+
+/**
+ * Spec 091: About's hidden developer switch. Drawn only once revealed
+ * ([DebugMode.revealed]) — seven taps on the version, the core's rule.
+ */
+@Immutable
+data class DebugModeRowModel(
+    val title: String,
+    /** The one line under the title: what it does, and that it is for development only. */
+    val body: String,
+    /** The notice the revealing tap shows, once. */
+    val revealedNotice: String,
+    val mode: DebugMode = DebugMode.Hidden,
 )
 
 @Immutable

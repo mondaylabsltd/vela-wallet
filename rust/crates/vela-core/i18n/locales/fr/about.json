@@ -18,6 +18,9 @@
     "linkGitHub": "GitHub",
     "linkSafeWallet": "Safe Wallet",
     "footer": "Conçu avec soin. Vos clés, vos cryptos.",
-    "sectionLinks": "Liens"
+    "sectionLinks": "Liens",
+    "debugMode": "Mode débogage",
+    "debugModeBody": "Permet aux pages http de votre réseau local d’utiliser le portefeuille. Réservé au développement.",
+    "debugModeRevealed": "Le mode débogage est maintenant disponible"
   }
 }

@@ -115,14 +115,16 @@ private const val SNAPSHOT_WIDTH_PX = 360
 
 /**
  * One tab's engine: a system `WebView` with the core's provider installed
- * (spec 044, rebuilt in 070). Owned by [BrowserController]; composed by
- * `BrowserPage`, which lends it the activity while it is on screen.
+ * (spec 044, rebuilt in 070) for Settings' debug mode (spec 091). Owned by
+ * [BrowserController]; composed by `BrowserPage`, which lends it the activity
+ * while it is on screen.
  */
 @SuppressLint("SetJavaScriptEnabled")
 class BrowserEngine(
     private val appContext: Context,
     val id: String,
     private val listener: Listener,
+    debugMode: Boolean = false,
 ) {
     interface Listener {
         fun pageMessage(tab: String, json: String, sourceOrigin: String, isMainFrame: Boolean)
@@ -172,6 +174,9 @@ class BrowserEngine(
     /** The load in flight is one the page started (a link, a script) — retried by hand only (RE3). */
     private var pageStarted = false
 
+    /** The provider script this WebView carries; `null` when it cannot carry one. */
+    private var provider: ProviderScript? = null
+
     val webView: WebView = WebView(context).apply {
         // MATCH_PARENT, and not for layout's sake: a WebView left at the
         // default WRAP_CONTENT gives Chromium no viewport HEIGHT, and every
@@ -192,8 +197,8 @@ class BrowserEngine(
         settings.mediaPlaybackRequiresUserGesture = true
         // `target=_blank` and `window.open` load here, in the same tab.
         settings.setSupportMultipleWindows(false)
-        val wallet = ProviderBridge.install(this) { json, origin, isMainFrame -> listener.pageMessage(tabId, json, origin, isMainFrame) }
-        _state.value = _state.value.copy(wallet = wallet)
+        provider = ProviderBridge.install(this, debugMode) { json, origin, isMainFrame -> listener.pageMessage(tabId, json, origin, isMainFrame) }
+        _state.value = _state.value.copy(wallet = provider != null)
         webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 // A failed page's panel stays through its retry (spec 079): it
@@ -505,6 +510,12 @@ class BrowserEngine(
     }
 
     fun deliver(json: String) = ProviderBridge.deliver(webView, json)
+
+    /** Settings' debug mode changed (spec 091): this tab's next document gets the script for it. */
+    fun debugModeChanged(on: Boolean) {
+        provider?.swap(on)
+    }
+
     fun destroy() {
         attached = false
         cancelRetry()
@@ -512,6 +523,38 @@ class BrowserEngine(
         (webView.parent as? android.view.ViewGroup)?.removeView(webView)
         webView.stopLoading()
         webView.destroy()
+    }
+}
+
+/**
+ * Settings' debug mode in the in-app browser (spec 091), kept by
+ * [BrowserController]. The core's page gate hears it at start and on every
+ * change (`debug_mode_changed`); every open engine swaps its script
+ * ([ProviderScript]) and a new engine starts with [on].
+ *
+ * A WebView reads its script when a document starts, so the new script
+ * applies to each tab's NEXT document: turned on, a LAN page already open has
+ * no provider until it loads again. Turned off, the wallet is withdrawn at
+ * once all the same — the core retires every open document it no longer
+ * offers (its requests answered 4900, a sheet showing one closed).
+ */
+class BrowserDebugMode(
+    initial: Boolean,
+    private val dispatch: (DbrEvent) -> Unit,
+    private val swapScripts: (on: Boolean) -> Unit,
+) {
+    var on: Boolean = initial
+        private set
+
+    init {
+        dispatch(DbrEvent.DebugModeChanged(initial))
+    }
+
+    fun set(on: Boolean) {
+        if (on == this.on) return
+        this.on = on
+        dispatch(DbrEvent.DebugModeChanged(on))
+        swapScripts(on)
     }
 }
 
@@ -538,6 +581,8 @@ class BrowserController(
     private val relay: RelayClient? = null,
     /** Debug builds expose the engines to Chrome DevTools — the device loop reads a page's own state through it. */
     debuggable: Boolean = false,
+    /** Settings' debug mode at start (spec 091); [debugModeChanged] follows it after. */
+    debugMode: Boolean = false,
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
 ) {
     init {
@@ -641,6 +686,14 @@ class BrowserController(
     init {
         dispatch(DbrEvent.Start)
     }
+
+    /** Settings' debug mode (spec 091) — stated to the core now, before any page message can matter. */
+    private val debug = BrowserDebugMode(debugMode, dispatch = { dispatch(it) }) { on ->
+        engines.values.forEach { it.debugModeChanged(on) }
+    }
+
+    /** Settings' debug mode changed (spec 091). */
+    fun debugModeChanged(on: Boolean) = debug.set(on)
 
     /** Every wallet address and the active one: the core re-pins every grant to it. */
     fun accountsChanged(addresses: List<String>, active: String?) {
@@ -781,6 +834,7 @@ class BrowserController(
     private fun newEngine(tabId: String) = BrowserEngine(
         appContext = context.applicationContext,
         id = tabId,
+        debugMode = debug.on,
         listener = object : BrowserEngine.Listener {
             override fun pageMessage(tab: String, json: String, sourceOrigin: String, isMainFrame: Boolean) =
                 dispatch(DbrEvent.PageMessage(tab = tab, frame_origin = sourceOrigin, is_main_frame = isMainFrame, message_json = json))

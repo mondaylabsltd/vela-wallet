@@ -1999,14 +1999,27 @@ pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
 /// THE provider (`vela-core/provider/inpage.js`, the extension's too) and
 /// the one bridge. `host` is `"android"`, `"ios"` or `"desktop"` — the only
 /// difference is how the bridge hands a string to native code.
+/// `debug_mode` is Settings' (spec 091): with it on, the script also offers
+/// the wallet to http pages on this device's own network.
 #[uniffi::export]
-pub fn dapp_provider_script(host: String) -> String {
+pub fn dapp_provider_script(host: String, debug_mode: bool) -> String {
     use vela_core::app::dapp_rpc::{provider_script, ProviderHost};
-    provider_script(match host.as_str() {
-        "ios" => ProviderHost::Ios,
-        "desktop" => ProviderHost::Desktop,
-        _ => ProviderHost::Android,
-    })
+    provider_script(
+        match host.as_str() {
+            "ios" => ProviderHost::Ios,
+            "desktop" => ProviderHost::Desktop,
+            _ => ProviderHost::Android,
+        },
+        debug_mode,
+    )
+}
+
+/// Whether a page at `origin` is offered the wallet (spec 091): a secure
+/// context, or — with debug mode on — http on this device's own network.
+/// The rule the browser machine's gate and the injected script follow.
+#[uniffi::export]
+pub fn dapp_offers_wallet(origin: String, debug_mode: bool) -> bool {
+    vela_core::app::dapp_permissions::offers_wallet(&origin, debug_mode)
 }
 
 /// Address-bar text → the URL to load: `https://` for a host, `http://` only

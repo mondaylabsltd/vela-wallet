@@ -474,8 +474,13 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `receive.includeNetworkHint` — the receive code's opt-in "include network"
 //   switch (ERC-681) and the calm line under it: some wallets cannot read
 //   that code. Same branches: 1786 + 2 = 1788.
-if (PATHS.length !== 1788) fail(`expected 1788 paths (1699 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1699) fail(`expected 1699 leaf paths, got ${leafSet.size}`);
+// 1791 (091, 2026-10-02): + `about.{debugMode,debugModeBody,debugModeRevealed}`
+//   — the hidden developer switch in About (seven taps on the version reveal
+//   it): its name, the one line saying what it does and that it is for
+//   development only, and the notice when it appears. The ja + en residency
+//   budget moves to 139,800 (owner, 2026-10-02). Same branches: 1788 + 3 = 1791.
+if (PATHS.length !== 1791) fail(`expected 1791 paths (1702 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1702) fail(`expected 1702 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */

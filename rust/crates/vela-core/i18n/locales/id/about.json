@@ -18,6 +18,9 @@
     "linkGitHub": "GitHub",
     "linkSafeWallet": "Safe Wallet",
     "footer": "Dibuat dengan sepenuh hati. Kunci Anda, koin Anda.",
-    "sectionLinks": "Tautan"
+    "sectionLinks": "Tautan",
+    "debugMode": "Mode debug",
+    "debugModeBody": "Izinkan halaman http di jaringan lokal Anda memakai dompet. Hanya untuk pengembangan.",
+    "debugModeRevealed": "Mode debug kini tersedia"
   }
 }

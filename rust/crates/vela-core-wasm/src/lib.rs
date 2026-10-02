@@ -1858,16 +1858,28 @@ pub fn dapp_rpc_classify(method: &str) -> String {
 }
 
 /// The document-start script an in-app browser injects, for `host`
-/// (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
-/// the real bridge in a real browser.
+/// (`"android"` / `"ios"` / `"desktop"`) and Settings' debug mode (spec 091)
+/// — exported so the web suite can run the real bridge in a real browser,
+/// and the debug script's host test against [`dapp_offers_wallet`].
 #[wasm_bindgen(js_name = dappProviderScript)]
-pub fn dapp_provider_script(host: &str) -> String {
+pub fn dapp_provider_script(host: &str, debug_mode: bool) -> String {
     use vela_core::app::dapp_rpc::{provider_script, ProviderHost};
-    provider_script(match host {
-        "ios" => ProviderHost::Ios,
-        "desktop" => ProviderHost::Desktop,
-        _ => ProviderHost::Android,
-    })
+    provider_script(
+        match host {
+            "ios" => ProviderHost::Ios,
+            "desktop" => ProviderHost::Desktop,
+            _ => ProviderHost::Android,
+        },
+        debug_mode,
+    )
+}
+
+/// Whether a page at `origin` is offered the wallet (spec 091) — the rule
+/// the in-app browsers' gate follows, exported so the web suite can hold the
+/// injected script's host test to it.
+#[wasm_bindgen(js_name = dappOffersWallet)]
+pub fn dapp_offers_wallet(origin: &str, debug_mode: bool) -> bool {
+    vela_core::app::dapp_permissions::offers_wallet(origin, debug_mode)
 }
 
 // ---------------------------------------------------------------------------

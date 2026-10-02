@@ -360,6 +360,8 @@ enum SettingsLive {
             steps: TextScaleLevel.allCases.count,
             index: TextScaleLevel.allCases.firstIndex(of: preferences.textScale) ?? 2
         )
+        // About's switch (spec 091): hidden until revealed, then as stored.
+        copy.about.debugMode.mode = preferences.debugMode
         return copy
     }
 
@@ -1420,7 +1422,8 @@ enum SettingsLive {
                     : row
             },
             links: model.about.links,
-            footer: model.about.footer
+            footer: model.about.footer,
+            debugMode: model.about.debugMode
         )
         // The home row names the same version, in the slot the design gives
         // it — the trailing value — and nowhere else. It used to write the

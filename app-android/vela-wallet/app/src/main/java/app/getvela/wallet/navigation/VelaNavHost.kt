@@ -1949,6 +1949,9 @@ fun VelaNavHost(
                             }
                         },
                         onTextScale = { index -> TextScaleLevel.entries.getOrNull(index)?.let { application.container.preferences.setTextScale(it) } },
+                        // Spec 091: stored with the preferences; the browser follows them (the container).
+                        onDebugModeRevealed = { application.container.preferences.revealDebugMode() },
+                        onDebugMode = { on -> application.container.preferences.setDebugMode(on) },
                         onStorageClear = { itemId ->
                             scope.launch {
                                 when {
@@ -1994,6 +1997,9 @@ fun VelaNavHost(
                                 // merge detail.
                                 application.container.browser.revokeAll()
                                 val left = DeviceStorage.eraseDevice(context, VelaStore(context))
+                                // Spec 091: the debug-mode key went with the rest —
+                                // About hides the switch again, and the browser follows.
+                                application.container.preferences.reloadDebugMode()
                                 if (left.isEmpty()) {
                                     eraseFailed = null
                                     application.container.session.signOut()
