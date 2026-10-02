@@ -186,6 +186,11 @@ enum WalletLive {
         fallback: BalanceModel,
         loc: Loc?
     ) -> BalanceStatusModel? {
+        // Spec 092: networks the wallet cannot reach come first — every one,
+        // held or not, said without "RPC"; the line opens their list.
+        if let loc, let line = unreachableLine(view, loc: loc) {
+            return BalanceStatusModel(kind: .warning, text: line)
+        }
         let text = loc?.t("home.balanceStale") ?? fallback.status?.text ?? ""
         if view.balancePartial || !view.failedChainIds.isEmpty {
             return BalanceStatusModel(kind: .warning, text: text)
@@ -194,6 +199,25 @@ enum WalletLive {
             return BalanceStatusModel(kind: .refreshing, text: text)
         }
         return nil
+    }
+
+    /// The line over the networks the wallet cannot reach (spec 092) — the
+    /// hero's status line and the title of the list it opens. The core
+    /// chooses the sentence (`unreachableKey`: one network named, several
+    /// counted); this only fills it. `nil` when every network answered.
+    static func unreachableLine(_ view: BalanceViewWire, loc: Loc) -> String? {
+        let k = I18nKeys.SettingsUi.self
+        guard let first = view.unreachableNetworks.first else { return nil }
+        switch view.unreachableKey {
+        case k.unreachableOne?:
+            let name = ChainCatalog.meta(first.chainId)?.displayName
+                ?? loc.t(I18nKeys.SettingsUi.chainId, vars: ["chainId": String(first.chainId)])
+            return loc.t(k.unreachableOne, vars: ["name": name])
+        case k.unreachableMany?:
+            return loc.t(k.unreachableMany, vars: ["n": String(view.unreachableNetworks.count)])
+        default:
+            return nil
+        }
     }
 
     /// `1234.56` → `("1,234", "56")`. The drawing splits the figure so the

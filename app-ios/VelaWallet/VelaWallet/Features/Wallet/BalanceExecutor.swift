@@ -228,6 +228,9 @@ final class BalanceExecutor {
             // to know its total is a floor rather than a sum.
             "failed_chain_ids": results.filter(\.failed).map(\.chainId),
             "rate_limited_chain_ids": results.filter(\.rateLimited).map(\.chainId),
+            // Spec 092: every chain this round asked, so one that answered
+            // holding nothing is "nothing when last read", not "not read yet".
+            "read_chain_ids": results.map(\.chainId),
             "now_ms": Date().timeIntervalSince1970 * 1000,
         ])
     }

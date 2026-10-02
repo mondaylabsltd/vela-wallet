@@ -78,7 +78,7 @@ struct BrowserChromeTests {
         BalanceViewWire(
             address: me, displayTotalUsd: 1, balanceUnknown: false, balancePartial: false,
             notice: nil, hidden: hidden, refreshing: false, lastRefreshedAtMs: nil, tokens: tokens,
-            unpricedTokens: [], failedChainIds: failed, rateLimitedChainIds: [], bannerChainIds: [],
+            unpricedTokens: [], failedChainIds: failed, rateLimitedChainIds: [],
             holdingsLoading: false, cachedTotalUsd: nil,
             switcher: BalanceSwitcherViewWire(open: false, loading: false, balances: [])
         )

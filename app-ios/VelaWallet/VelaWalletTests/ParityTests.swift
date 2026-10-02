@@ -329,7 +329,10 @@ struct ParityTests {
         let core = BalanceDashboardCore()
         var object = try! CoreJSON.object(core.view())
         object["rate_limited_chain_ids"] = rateLimited
-        object["banner_chain_ids"] = failed
+        object["unreachable_networks"] = failed.map { id in
+            ["chain_id": id, "last_known": "not_read", "last_seen_usd": NSNull(),
+             "line_key": "assets.notReadYet"] as [String: Any]
+        }
         object["hidden"] = hidden
         object["display_total_usd"] = 12.5
         object["tokens"] = [[
@@ -368,6 +371,52 @@ struct ParityTests {
         )
         #expect(model.balanceDetail.done.allSatisfy { ($0.amount ?? "").allSatisfy { $0 == "•" } })
         #expect(model.balanceDetail.summary.contains("••••"))
+    }
+
+    /// Spec 092: SR6 lists every network the core lists, in its order, with
+    /// what was last read there — masked while hidden — under the hero's own
+    /// line, and says so once none is left.
+    @Test func theUnreachableListIsTheCoresOrderAndLines() {
+        let en = Loc(overrideTag: "en", preferredLanguages: [])
+        let model = SettingsLive.withUnreachable(
+            SettingsFixtures.unreachableView, display: .usd,
+            on: SettingsFixtures.build(.sr3, loc: en), loc: en
+        )
+        #expect(model.unreachable.title == "Can't reach 3 networks right now")
+        #expect(model.unreachable.summary == en.t("assets.unreachableBody"))
+        #expect(model.unreachable.rows.map(\.chainId) == [1, 56, 137])
+        #expect(model.unreachable.rows[0].line.hasPrefix("Last seen "))
+        #expect(model.unreachable.rows[0].line.contains("4,500"))
+        #expect(model.unreachable.rows[1].line == "Held nothing when last read")
+        #expect(model.unreachable.rows[2].line == "Not read yet")
+
+        let shown = SettingsFixtures.unreachableView
+        // As the core says it while privacy hides: the worth withheld.
+        let hidden = BalanceViewWire(
+            address: shown.address, displayTotalUsd: nil, balanceUnknown: false,
+            balancePartial: true, notice: nil, hidden: true, refreshing: false,
+            lastRefreshedAtMs: nil, tokens: [], unpricedTokens: [],
+            failedChainIds: shown.failedChainIds, rateLimitedChainIds: [],
+            unreachableNetworks: shown.unreachableNetworks.map {
+                UnreachableNetworkWire(chainId: $0.chainId, lastKnown: $0.lastKnown,
+                                       lastSeenUsd: nil, lineKey: $0.lineKey)
+            },
+            unreachableKey: shown.unreachableKey, holdingsLoading: false,
+            cachedTotalUsd: nil, switcher: shown.switcher
+        )
+        let masked = SettingsLive.withUnreachable(hidden, display: .usd,
+                                                  on: SettingsFixtures.build(.sr3, loc: en), loc: en)
+        #expect(masked.unreachable.rows.count == 3)
+        #expect(!masked.unreachable.rows[0].line.contains("4,500"))
+
+        var back = SettingsFixtures.unreachableView
+        back.unreachableNetworks = []
+        back.unreachableKey = nil
+        let none = SettingsLive.withUnreachable(back, display: .usd,
+                                                on: SettingsFixtures.build(.sr3, loc: en), loc: en)
+        #expect(none.unreachable.title == en.t("assets.unreachableNone"))
+        #expect(none.unreachable.summary == nil)
+        #expect(none.unreachable.rows.isEmpty)
     }
 
     /// The fix names the chain that failed, and shows what is stored for it —

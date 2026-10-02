@@ -45,7 +45,7 @@ struct SendBackTests {
             "price_usd": 1.0, "spam": false
           }],
           "unpriced_tokens": [],
-          "failed_chain_ids": [], "rate_limited_chain_ids": [], "banner_chain_ids": [],
+          "failed_chain_ids": [], "rate_limited_chain_ids": [], "unreachable_networks": [],
           "holdings_loading": false, "cached_total_usd": null,
           "switcher": { "open": false, "loading": false, "balances": [] }
         }
