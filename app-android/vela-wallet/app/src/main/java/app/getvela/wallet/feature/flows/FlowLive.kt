@@ -12,7 +12,13 @@ import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedCounterpartyRole
+import app.getvela.wallet.feature.wallet.core.FeedDapp
+import app.getvela.wallet.feature.wallet.core.FeedDappChange
+import app.getvela.wallet.feature.wallet.core.FeedDappContent
+import app.getvela.wallet.feature.wallet.core.FeedDappOperation
 import app.getvela.wallet.feature.wallet.core.FeedDirection
+import app.getvela.wallet.feature.wallet.core.FeedFact
+import app.getvela.wallet.feature.wallet.core.FeedItem
 import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.FeedTxKind
@@ -224,6 +230,8 @@ object FlowLive {
             .map { it.item }
             .firstOrNull { it.id == id }
             ?: return null
+        // Spec 093: a dApp's transaction or signature opens to the core's facts.
+        item.dapp?.let { dapp -> return dappDetail(fallback, item, dapp, strings, chainNames, explorers, money) }
 
         val received = item.direction == FeedDirection.In
         val amount = Formats.current.plain(
@@ -235,7 +243,9 @@ object FlowLive {
         // hash row at all — the record's own id is not a hash, and copying it
         // handed a tester `dapp-17905…-tx` as one.
         val txHash = item.tx_hash?.takeIf { it.isNotBlank() }
-        val dapp = item.kind == FeedTxKind.DappTx
+        // A dApp record whose payload this build could not read (spec 093:
+        // the core describes every dApp row) — drawn the way it was before.
+        val dapp = item.kind == FeedTxKind.DappTx || item.kind == FeedTxKind.SignMessage || item.kind == FeedTxKind.SignTypedData
         // Spec 043 phase 4 (device-found): the notification's deep link opened
         // this sheet with the fixture's title, status, counterparty, network,
         // date and hash around a live amount. Every line is the item's now.
@@ -291,13 +301,7 @@ object FlowLive {
             // Spec 082 RG1: where the record stands is the core's `status` —
             // the tracker alone moves it — never a guess from whether a hash
             // looks like a transaction's. A failed dApp row can say so now.
-            status = when (item.status) {
-                FeedTxStatus.Pending -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_PENDING), StatusTone.Warning)
-                FeedTxStatus.Failed -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_FAILED_DETAIL), StatusTone.Error)
-                FeedTxStatus.Confirmed -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_CONFIRMED), StatusTone.Success)
-                // 087 F04: pending, and nothing will settle it — not failed.
-                FeedTxStatus.Unknown -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_UNKNOWN), StatusTone.Info)
-            },
+            status = statusChip(item.status, strings),
             // A dApp's call that moved no coin of ours has no amount (RG2).
             amount = if (amount.isBlank()) "" else "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim(),
             positive = received,
@@ -318,6 +322,161 @@ object FlowLive {
             // and a record nothing settles (087 F04) may have been sent too.
             deleteQuiet = item.status == FeedTxStatus.Pending || item.status == FeedTxStatus.Unknown,
         )
+    }
+
+    /**
+     * Spec 093 — a dApp interaction, opened: the row's header (title, and the
+     * money moved or the allowance granted), the core's facts in the core's
+     * order, and a collapsed "Technical details". A transaction keeps its
+     * status chip and its explorer link; a signature has neither — it was
+     * given off-chain and nothing settles it, which the note says instead.
+     * Which lines, and in what order, are the core's (`FeedDapp.facts`,
+     * `.technical`); this labels and formats them.
+     */
+    private fun dappDetail(
+        fallback: TxDetailModel,
+        item: FeedItem,
+        dapp: FeedDapp,
+        strings: VelaStrings,
+        chainNames: Map<Int, String>,
+        explorers: Map<Int, String>,
+        money: WalletLive.Money?,
+    ): TxDetailModel {
+        val txHash = item.tx_hash?.takeIf { it.isNotBlank() }
+        val allowance = dapp.allowance?.takeIf { item.value == null }
+        val amount = when {
+            allowance != null -> listOf(WalletLive.allowanceFigure(allowance, strings), allowance.symbol).filter { it.isNotBlank() }.joinToString(" ")
+            item.value == null -> ""
+            else -> {
+                val digits = Formats.current.plain(item.value.toBigDecimalOrNull()?.stripTrailingZeros()?.toPlainString() ?: item.value)
+                // 083 F1: the simulation's figure says so.
+                "${if (dapp.estimated) "≈ " else ""}−$digits ${item.symbol}".trim()
+            }
+        }
+        return fallback.copy(
+            title = WalletLive.dappTitle(dapp, strings),
+            status = if (dapp.off_chain) null else statusChip(item.status, strings),
+            note = if (dapp.off_chain) strings.t(I18nKeys.Flows.OFF_CHAIN_NOTE) else null,
+            amount = amount,
+            amountDanger = allowance?.unlimited == true,
+            positive = false,
+            received = dapp.received?.let { change -> listOf(WalletLive.changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ") },
+            fiat = if (item.usd_value > 0) "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value))) else "",
+            facts = dapp.facts.mapNotNull { dappFact(it, item, dapp, strings, chainNames) },
+            technical = TxTechnicalModel(
+                title = strings.t(I18nKeys.Flows.TECHNICAL),
+                lines = dapp.technical.mapNotNull { technicalLine(it, item, strings) },
+            ).takeIf { it.lines.isNotEmpty() },
+            explorerUrl = txHash?.let { tx -> explorers[item.chain_id]?.let { "${it.trimEnd('/')}/tx/$tx" } },
+            explorerShown = txHash != null && explorers[item.chain_id] != null,
+            deleteLabel = strings.t(I18nKeys.Flows.DELETE_RECORD),
+            deleteQuiet = item.status == FeedTxStatus.Pending || item.status == FeedTxStatus.Unknown,
+        )
+    }
+
+    /** Where a record stands, as its chip says it (spec 082 RG1; 087 F04: unknown is pending that nothing will settle — not failed). */
+    private fun statusChip(status: FeedTxStatus, strings: VelaStrings): StatusChipModel = when (status) {
+        FeedTxStatus.Pending -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_PENDING), StatusTone.Warning)
+        FeedTxStatus.Failed -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_FAILED_DETAIL), StatusTone.Error)
+        FeedTxStatus.Confirmed -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_CONFIRMED), StatusTone.Success)
+        FeedTxStatus.Unknown -> StatusChipModel(strings.t(I18nKeys.Flows.STATUS_UNKNOWN), StatusTone.Info)
+    }
+
+    /** One of the core's detail facts, labelled and formatted. */
+    private fun dappFact(fact: FeedFact, item: FeedItem, dapp: FeedDapp, strings: VelaStrings, chainNames: Map<Int, String>): FactRowModel? = when (fact) {
+        is FeedFact.Site -> FactRowModel(label = strings.t(I18nKeys.Flows.DETAIL_APP), value = fact.site)
+        is FeedFact.Network -> {
+            val name = chainNames[fact.chain_id] ?: fact.chain_id.toString()
+            FactRowModel(
+                label = strings.t(I18nKeys.Flows.DETAIL_CHAIN),
+                value = name,
+                lead = FactLead.Token(WalletLive.chainMark(fact.chain_id, name)),
+            )
+        }
+        is FeedFact.Contract -> party(strings.t(I18nKeys.Flows.DETAIL_CONTRACT), fact.address, fact.name, strings)
+        is FeedFact.Spender -> party(strings.t(I18nKeys.Flows.DETAIL_SPENDER), fact.address, fact.name, strings)
+        is FeedFact.SpendingCap -> FactRowModel(
+            label = strings.t(I18nKeys.Flows.SPENDING_CAP),
+            value = listOf(WalletLive.allowanceFigure(fact.allowance, strings), fact.allowance.symbol).filter { it.isNotBlank() }.joinToString(" "),
+            danger = fact.allowance.unlimited,
+        )
+        is FeedFact.Expires -> FactRowModel(
+            label = strings.t(I18nKeys.Flows.EXPIRES),
+            value = fact.at?.let { detailDate(it, strings) } ?: strings.t(I18nKeys.Flows.NO_EXPIRY),
+        )
+        is FeedFact.BalanceChanges -> dapp.changes.map(::changeLine).takeIf { it.isNotEmpty() }?.let { lines ->
+            FactRowModel(label = strings.t(I18nKeys.Flows.BALANCE_CHANGES), value = lines.first().resolve(strings), lines = lines.drop(1).map { it.resolve(strings) })
+        }
+        is FeedFact.Date -> FactRowModel(label = strings.t(I18nKeys.Flows.DETAIL_DATE), value = detailDate(fact.timestamp, strings))
+        // A technical line in the facts would be the core's mistake; drawn
+        // where the core put it all the same, never dropped.
+        else -> technicalFact(fact, strings)
+    }
+
+    /** One of the core's technical lines; the stored request stays unread until the section opens. */
+    private fun technicalLine(fact: FeedFact, item: FeedItem, strings: VelaStrings): TxTechnicalLine? = when (fact) {
+        is FeedFact.Content -> TxTechnicalLine.Content(
+            label = strings.t(
+                when (fact.content) {
+                    FeedDappContent.CallData -> I18nKeys.Flows.CONTENT_CALL_DATA
+                    FeedDappContent.TypedData -> I18nKeys.Flows.CONTENT_TYPED_DATA
+                    FeedDappContent.Message -> I18nKeys.Flows.CONTENT_MESSAGE
+                },
+            ),
+            recordId = item.id,
+            missing = strings.t(I18nKeys.Flows.CONTENT_MISSING),
+        )
+        else -> technicalFact(fact, strings)?.let(TxTechnicalLine::Fact)
+    }
+
+    private fun technicalFact(fact: FeedFact, strings: VelaStrings): FactRowModel? = when (fact) {
+        is FeedFact.Operation -> FactRowModel(
+            label = strings.t(I18nKeys.Flows.OPERATION),
+            value = when (val operation = fact.operation) {
+                FeedDappOperation.ContractInteraction -> strings.t(I18nKeys.Flows.OP_CONTRACT)
+                is FeedDappOperation.Batch -> strings.t(I18nKeys.Flows.OP_BATCH, mapOf("count" to operation.calls.toString()))
+                FeedDappOperation.Signature -> strings.t(I18nKeys.Flows.OP_SIGNATURE)
+                FeedDappOperation.TypedDataSignature -> strings.t(I18nKeys.Flows.OP_TYPED_DATA)
+            },
+        )
+        is FeedFact.PrimaryType -> FactRowModel(label = strings.t(I18nKeys.Flows.TYPE), value = fact.name, mono = true)
+        is FeedFact.Hash -> hashFact(strings.t(I18nKeys.Flows.DETAIL_HASH), fact.tx_hash, strings)
+        is FeedFact.UserOpHash -> hashFact(strings.t(I18nKeys.Flows.USER_OP_HASH), fact.hash, strings)
+        else -> null
+    }
+
+    /** A contract or a spender: its built-in name, else the short address — copyable either way. */
+    private fun party(label: String, address: String, name: String?, strings: VelaStrings) = FactRowModel(
+        label = label,
+        value = name ?: shortAddress(address),
+        lead = FactLead.Identicon(address),
+        mono = name == null,
+        copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
+        copyValue = address,
+    )
+
+    private fun hashFact(label: String, hash: String, strings: VelaStrings) = FactRowModel(
+        label = label,
+        value = if (hash.length > 16) "${hash.take(10)}…${hash.takeLast(6)}" else hash,
+        mono = true,
+        copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
+        copyValue = hash,
+    )
+
+    /** A balance-change line: the figure and the coin, or "Unverified token" with its direction only (083 F1). */
+    private fun changeLine(change: FeedDappChange): ChangeLine = ChangeLine(
+        figure = WalletLive.changeFigure(change),
+        symbol = change.symbol.takeIf { change.verified && it.isNotBlank() },
+        unverified = !change.verified,
+    )
+
+    private data class ChangeLine(val figure: String, val symbol: String?, val unverified: Boolean) {
+        fun resolve(strings: VelaStrings): String = when {
+            unverified -> "$figure ${strings.t(I18nKeys.Flows.UNVERIFIED_TOKEN)}"
+            // A native coin the chain table does not name: no guessed ticker.
+            symbol == null -> "$figure —"
+            else -> "$figure $symbol"
+        }
     }
 
     /**
@@ -463,7 +622,7 @@ object FlowLive {
             // token's header, POL on Polygon included. The web's
             // `liveTokenDetail` facts, row for row.
             facts = tokenFacts(token, chainNames, currency, strings),
-            rows = WalletLive.activity(theirs, strings, now).flatMap { it.rows },
+            rows = WalletLive.activity(theirs, strings, now, chainNames).flatMap { it.rows },
         )
     }
 

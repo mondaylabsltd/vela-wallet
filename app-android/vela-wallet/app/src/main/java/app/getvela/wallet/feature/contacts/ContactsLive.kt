@@ -160,6 +160,8 @@ object ContactsLive {
         view: ContactsView,
         feed: FeedView = FeedView(),
         strings: VelaStrings? = null,
+        /** What each network is called — a row's second line may name one (spec 093). */
+        chainNames: Map<Int, String> = emptyMap(),
     ): ContactDetailModel {
         val model = toContactModel(contact)
         // Only the rows whose counterparty IS this person. Matched on the
@@ -177,6 +179,7 @@ object ContactsLive {
                     },
                 ),
                 strings,
+                chainNames = chainNames,
             ).flatMap { it.rows }
         }
         return fallback.copy(

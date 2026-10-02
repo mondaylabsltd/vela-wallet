@@ -754,6 +754,9 @@ class WalletController(
     fun deleteActivity(id: String) =
         feedHost.dispatch(FeedEvent.DeleteRequested(id), FeedEvent.serializer())
 
+    /** Spec 093: a dApp record's stored request, read by id when its technical details open. */
+    suspend fun storedRequest(id: String): String? = feedExecutor.storedRequest(id)
+
     private companion object {
         /**
          * How long a receipt scan waits for the balance read that tells it

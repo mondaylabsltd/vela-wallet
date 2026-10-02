@@ -88,16 +88,18 @@ fun FlowHost(
      * is the same step and opens nothing (issue #328).
      */
     onSheetClosed: () -> Unit = {},
+    /** Spec 093: a dApp record's stored request, by id — read when its technical details open. */
+    onLoadRequest: (suspend (String) -> String?)? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx, onSheetClosed = onSheetClosed)
+            FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx, onSheetClosed = onSheetClosed, onLoadRequest = onLoadRequest)
         }
     } else {
-        FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx, onSheetClosed = onSheetClosed)
+        FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage, onDeleteTx, onSheetClosed = onSheetClosed, onLoadRequest = onLoadRequest)
     }
 }
 
@@ -145,6 +147,7 @@ private fun FlowHostContent(
      * sites above pass this list positionally. */
     onDeleteTx: (() -> Unit)? = null,
     onSheetClosed: () -> Unit = {},
+    onLoadRequest: (suspend (String) -> String?)? = null,
 ) {
     Box(modifier = modifier.fillMaxSize().background(VelaTheme.colors.bgBase)) {
         when (val base = model.base) {
@@ -270,7 +273,7 @@ private fun FlowHostContent(
         }
 
         model.sheet?.let { sheet ->
-            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, onOpenUrl = onOpenUrl, onSendToken = onSendToken, onReceiveToken = onReceiveToken, selected = selected, send = send, addToken = addToken, onSaveImage = onSaveImage, onDeleteTx = onDeleteTx, onSheetClosed = onSheetClosed)
+            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, onOpenUrl = onOpenUrl, onSendToken = onSendToken, onReceiveToken = onReceiveToken, selected = selected, send = send, addToken = addToken, onSaveImage = onSaveImage, onDeleteTx = onDeleteTx, onSheetClosed = onSheetClosed, onLoadRequest = onLoadRequest)
         }
     }
 }
@@ -283,7 +286,7 @@ private fun FlowHostContent(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOpenUrl: (String) -> Unit = {}, onSendToken: ((String) -> Unit)? = null, onReceiveToken: ((String) -> Unit)? = null, selected: String? = null, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null, onSaveImage: (() -> Unit)? = null, onDeleteTx: (() -> Unit)? = null, onSheetClosed: () -> Unit = {}) {
+private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOpenUrl: (String) -> Unit = {}, onSendToken: ((String) -> Unit)? = null, onReceiveToken: ((String) -> Unit)? = null, selected: String? = null, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null, onSaveImage: (() -> Unit)? = null, onDeleteTx: (() -> Unit)? = null, onSheetClosed: () -> Unit = {}, onLoadRequest: (suspend (String) -> String?)? = null) {
     var dismissed by remember(sheet) { mutableStateOf(false) }
     if (dismissed) return
 
@@ -330,6 +333,7 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOp
                     model = sheet.model,
                     onExplorer = { VelaLog.event("flows", "explorer", "host" to sheet.model.explorerUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }); sheet.model.explorerUrl?.let(onOpenUrl) },
                     onDelete = onDeleteTx,
+                    onLoadRequest = onLoadRequest,
                 )
                 is FlowSheet.TokenDetail -> TokenDetailBody(
                     model = sheet.model,

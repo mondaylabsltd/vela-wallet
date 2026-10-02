@@ -15,8 +15,12 @@ import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.core.BalanceNotice
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedAllowance
+import app.getvela.wallet.feature.wallet.core.FeedDapp
+import app.getvela.wallet.feature.wallet.core.FeedDappChange
 import app.getvela.wallet.feature.wallet.core.FeedDirection
 import app.getvela.wallet.feature.wallet.core.FeedItem
+import app.getvela.wallet.feature.wallet.core.FeedLine
 import app.getvela.wallet.feature.wallet.core.FeedRow
 import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.FeedTxKind
@@ -120,7 +124,7 @@ object WalletLive {
         feed: FeedView,
         strings: VelaStrings,
         now: Long = System.currentTimeMillis(),
-        /** A dApp row with no site and no recipient names its chain (RG2). */
+        /** What each network is called, for the core's `network` parts of a row's second line (spec 093). */
         chainNames: Map<Int, String> = emptyMap(),
     ): List<ActivityGroupModel> {
         val groups = mutableListOf<ActivityGroupModel>()
@@ -172,70 +176,103 @@ object WalletLive {
         val received = item.direction == FeedDirection.In
         val batch = item.batch
         // What the row is and where its record stands are the core's (spec
-        // 082 RG1): `kind` and `status`, never a guess from a hash.
-        val dapp = item.kind == FeedTxKind.DappTx
+        // 082 RG1): `kind` and `status`, never a guess from a hash. Spec 093:
+        // a row the core describes as a dApp's (a transaction or a signature)
+        // is a dApp row.
+        val dapp = item.dapp
+        val dappRow = dapp != null || item.kind in DAPP_KINDS
+        // The right column: the money as before; else a grant's allowance.
+        val allowance = dapp?.allowance?.takeIf { item.value == null }
         return ActivityRowModel(
             id = item.id,
             kind = when {
-                dapp -> ActivityKind.Dapp
+                dappRow -> ActivityKind.Dapp
                 item.kind == FeedTxKind.Receive || received -> ActivityKind.Received
                 else -> ActivityKind.Sent
             },
-            title = strings.t(
-                when {
-                    dapp -> I18nKeys.Wallet.LABEL_DAPP_TX
-                    received -> I18nKeys.Wallet.LABEL_RECEIVED
-                    else -> I18nKeys.Wallet.LABEL_SENT
-                },
-            ),
-            subtitle = statusLead(item, strings) + if (dapp) dappSubtitle(item, chainNames) else counterparty(item, strings),
-            amount = signedAmount(item, received),
-            unit = item.symbol.ifBlank { batch?.symbol.orEmpty() },
+            title = when {
+                dapp != null -> dappTitle(dapp, strings)
+                // A dApp payload this build could not read: the plain word.
+                dappRow -> strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
+                received -> strings.t(I18nKeys.Wallet.LABEL_RECEIVED)
+                else -> strings.t(I18nKeys.Wallet.LABEL_SENT)
+            },
+            subtitle = subtitle(item.subtitle, strings, chainNames),
+            amount = when {
+                allowance != null -> allowanceFigure(allowance, strings)
+                // 083 F1: the simulation's figure, not one the wallet can vouch for.
+                dapp?.estimated == true && item.value != null -> "≈ " + signedAmount(item, received)
+                else -> signedAmount(item, received)
+            },
+            unit = allowance?.symbol ?: item.symbol.ifBlank { batch?.symbol.orEmpty() },
             positive = received,
             masked = false,
             badgeColor = badgeColour(item.chain_id),
             badgeLogoUrl = Marks.chainLogoUrl(item.chain_id),
+            danger = allowance?.unlimited == true,
+            received = dapp?.received?.let { change -> listOf(changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ") },
         )
     }
 
     /**
-     * The counterparty line: a resolved name, or a shortened address.
-     *
-     * `alias` is the core's overlay — a resolved identity, falling back to the
-     * name captured when the payment was sent. An address with neither is
-     * shortened rather than shown in full; the whole 42 characters in a list
-     * row is unreadable and tells nobody anything more.
+     * Spec 093: a dApp row's title, in the core's words — the headline verb
+     * (`componentsUi.signing.<intent_term>`, else the recorded text) "on" the
+     * place the core named (`history.dappRowTitle`), or the verb alone.
      */
-    private fun counterparty(item: FeedItem, strings: VelaStrings): String {
-        val received = item.direction == FeedDirection.In
-        val name = item.alias ?: item.counterparty?.let(::shortenAddress) ?: return ""
-        return strings.t(
-            if (received) I18nKeys.Wallet.FROM_NAME else I18nKeys.Wallet.TO_NAME,
-            mapOf("name" to name),
-        )
+    fun dappTitle(dapp: FeedDapp, strings: VelaStrings): String {
+        val verb = dapp.intent_term
+            ?.let { term -> (I18nKeys.Wallet.SIGNING_TERM_PREFIX + term).let { key -> strings.t(key).takeIf { it.isNotBlank() && it != key } } }
+            ?: dapp.intent?.takeIf { it.isNotBlank() }
+            ?: strings.t(I18nKeys.Wallet.LABEL_DAPP_TX)
+        return dapp.place?.takeIf { it.isNotBlank() }
+            ?.let { place -> strings.t(I18nKeys.Wallet.DAPP_ROW_TITLE, mapOf("intent" to verb, "place" to place)) }
+            ?: verb
     }
 
     /**
-     * Spec 082 RG2: a row whose record is not confirmed says so first —
-     * "Pending · ", "Failed · " or, for one nothing will settle (087 F04),
-     * "Unknown · " — in the detail sheet's words.
+     * Spec 093: the row's second line, part by part as the core ordered them,
+     * joined " · ". Status in the detail sheet's words (087 F04 "Unknown" too);
+     * a person by name, else a short address; a site verbatim; a network by
+     * its name on this device.
      */
-    private fun statusLead(item: FeedItem, strings: VelaStrings): String = when (item.status) {
-        FeedTxStatus.Confirmed -> ""
-        FeedTxStatus.Pending -> strings.t(I18nKeys.Wallet.ROW_PENDING) + " · "
-        FeedTxStatus.Failed -> strings.t(I18nKeys.Wallet.ROW_FAILED) + " · "
-        FeedTxStatus.Unknown -> strings.t(I18nKeys.Wallet.ROW_UNKNOWN) + " · "
+    fun subtitle(lines: List<FeedLine>, strings: VelaStrings, chainNames: Map<Int, String>): String =
+        lines.mapNotNull { line ->
+            when (line) {
+                is FeedLine.Status -> when (line.status) {
+                    FeedTxStatus.Confirmed -> null
+                    FeedTxStatus.Pending -> strings.t(I18nKeys.Wallet.ROW_PENDING)
+                    FeedTxStatus.Failed -> strings.t(I18nKeys.Wallet.ROW_FAILED)
+                    FeedTxStatus.Unknown -> strings.t(I18nKeys.Wallet.ROW_UNKNOWN)
+                }
+                is FeedLine.To -> strings.t(I18nKeys.Wallet.TO_NAME, mapOf("name" to (line.name ?: shortenAddress(line.address))))
+                is FeedLine.From -> strings.t(I18nKeys.Wallet.FROM_NAME, mapOf("name" to (line.name ?: shortenAddress(line.address))))
+                is FeedLine.Site -> line.site
+                is FeedLine.Network -> chainNames[line.chain_id] ?: line.chain_id.toString()
+            }?.takeIf { it.isNotBlank() }
+        }.joinToString(" · ")
+
+    /**
+     * Spec 093: an allowance where a figure would be — "Unlimited" (drawn in
+     * the danger tone by the caller), else the cap. The symbol is the unit.
+     */
+    fun allowanceFigure(allowance: FeedAllowance, strings: VelaStrings): String = when {
+        allowance.unlimited -> strings.t(I18nKeys.Wallet.UNLIMITED)
+        else -> allowance.value?.let(::amountText).orEmpty()
     }
 
-    /** A dApp's row names the site that asked, else the recipient, else the chain (RG2). */
-    private fun dappSubtitle(item: FeedItem, chainNames: Map<Int, String>): String =
-        item.site?.takeIf { it.isNotBlank() }
-            ?: item.alias
-            ?: item.counterparty?.takeIf { it.isNotBlank() }?.let(::shortenAddress)
-            ?: chainNames[item.chain_id]
-            ?: ""
+    /**
+     * One balance change as a figure (083 F1): "≈" on everything the wallet
+     * cannot vouch for to the unit; a token the sheet could not verify keeps
+     * its direction and never a number.
+     */
+    fun changeFigure(change: FeedDappChange): String {
+        val sign = if (change.direction == FeedDirection.In) "+" else "−"
+        val value = change.value?.takeIf { change.verified } ?: return sign
+        return (if (change.exact) "" else "≈ ") + sign + amountText(value)
+    }
 
-    private fun shortenAddress(address: String): String =
+    /** `0x1234…abcd`. */
+    fun shortenAddress(address: String): String =
         if (address.length <= 12) address else address.take(6) + "…" + address.takeLast(4)
 
     /**
@@ -247,10 +284,18 @@ object WalletLive {
      */
     private fun signedAmount(item: FeedItem, received: Boolean): String {
         val raw = item.value ?: return item.batch?.count?.toString() ?: ""
-        val parsed = raw.toBigDecimalOrNull() ?: return raw
-        val trimmed = Formats.current.plain(parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString())
+        val trimmed = amountText(raw)
         return if (received) "+$trimmed" else "−$trimmed"
     }
+
+    /** A decimal amount on the row's ladder: six places at most, cut, never rounded, in the person's number format. */
+    private fun amountText(raw: String): String {
+        val parsed = raw.toBigDecimalOrNull() ?: return raw
+        return Formats.current.plain(parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString())
+    }
+
+    /** A dApp's record kinds (spec 093): its transactions and its signatures. */
+    private val DAPP_KINDS = setOf(FeedTxKind.DappTx, FeedTxKind.SignMessage, FeedTxKind.SignTypedData)
 
     /**
      * Every holding as a row.

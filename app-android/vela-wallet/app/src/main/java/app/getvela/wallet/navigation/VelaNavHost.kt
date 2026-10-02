@@ -1157,6 +1157,9 @@ fun VelaNavHost(
                                 flows.back()
                             }
                         },
+                        // Spec 093: a dApp record's stored request, read from the
+                        // store only when its technical details are opened.
+                        onLoadRequest = { id -> wallet.storedRequest(id) },
                         onReceiveNetwork = { index ->
                             networks.networks.getOrNull(index)?.let { row ->
                                 pendingReceiveAsset = ReceiveAssetPick(row.chain_id.toInt(), null, row.native_symbol, 18, row.display_name)
@@ -1523,6 +1526,7 @@ fun VelaNavHost(
                             // person by the page itself.
                             feed = application.container.wallet.feed.value,
                             strings = strings,
+                            chainNames = application.container.settings.networks.value.networks.associate { it.chain_id.toInt() to it.display_name },
                         ),
                         deleteConfirm = if (confirmingDelete) {
                             // Named after the contact on screen: a confirmation that
