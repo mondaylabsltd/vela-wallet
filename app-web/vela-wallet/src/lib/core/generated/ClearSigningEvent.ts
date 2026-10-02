@@ -2,4 +2,4 @@
 import type { ClearLocale } from "./ClearLocale";
 import type { ClearSignMethod } from "./ClearSignMethod";
 
-export type ClearSigningEvent = { "type": "resolve_transaction", to: string | null, data: string | null, value: string | null, chain_id: number, locale: ClearLocale, } | { "type": "resolve_typed_data", typed_data_json: string, chain_id: number, locale: ClearLocale, } | { "type": "message_presented", method: ClearSignMethod, params: Array<string>, request_origin: string | null, } | { "type": "cleared" };
+export type ClearSigningEvent = { "type": "resolve_transaction", to: string | null, data: string | null, value: string | null, chain_id: number, locale: ClearLocale, } | { "type": "resolve_batch", params_json: string, chain_id: number, locale: ClearLocale, } | { "type": "resolve_typed_data", typed_data_json: string, chain_id: number, locale: ClearLocale, } | { "type": "message_presented", method: ClearSignMethod, params: Array<string>, request_origin: string | null, } | { "type": "cleared" };

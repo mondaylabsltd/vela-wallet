@@ -469,12 +469,15 @@ extension WalletLive {
         return ChainCatalog.meta(item.chainId)?.displayName ?? String(item.chainId)
     }
 
-    /// "处理中" / "失败" for a row that is not confirmed; `nil` for one that is.
+    /// "处理中" / "失败" / "未知" for a row that is not confirmed; `nil` for one
+    /// that is. "未知" (087 F04) is a pending record nothing will settle — the
+    /// corpus's bare "Unknown", never "failed": it may have been sent.
     static func statusPrefix(_ status: FeedTxStatusWire, loc: Loc) -> String? {
         switch status {
         case .confirmed: nil
         case .pending: loc.t("componentsTx.detail.statusPending")
         case .failed: loc.t("componentsTx.detail.statusFailed")
+        case .unknown: loc.t("componentsUi.signing.intentUnknown")
         }
     }
 

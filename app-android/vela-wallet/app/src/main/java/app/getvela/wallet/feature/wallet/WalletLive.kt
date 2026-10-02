@@ -217,12 +217,14 @@ object WalletLive {
 
     /**
      * Spec 082 RG2: a row whose record is not confirmed says so first —
-     * "Pending · " or "Failed · " — in the detail sheet's words.
+     * "Pending · ", "Failed · " or, for one nothing will settle (087 F04),
+     * "Unknown · " — in the detail sheet's words.
      */
     private fun statusLead(item: FeedItem, strings: VelaStrings): String = when (item.status) {
         FeedTxStatus.Confirmed -> ""
         FeedTxStatus.Pending -> strings.t(I18nKeys.Wallet.ROW_PENDING) + " · "
         FeedTxStatus.Failed -> strings.t(I18nKeys.Wallet.ROW_FAILED) + " · "
+        FeedTxStatus.Unknown -> strings.t(I18nKeys.Wallet.ROW_UNKNOWN) + " · "
     }
 
     /** A dApp's row names the site that asked, else the recipient, else the chain (RG2). */

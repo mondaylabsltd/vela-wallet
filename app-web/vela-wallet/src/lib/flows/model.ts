@@ -374,6 +374,13 @@ export interface AddTokenModel {
 /** SD1 / SD1b — pick the token, or several of them. */
 export interface SendPickModel {
 	header: FlowHeaderModel;
+	/**
+	 * Who the money is for, when the core already holds a recipient — a scanned
+	 * code, a contact handed over, an address kept across Back (issue 332).
+	 * The picker is where the person chooses WHAT to send; without this line a
+	 * scan that worked looked exactly like one that had done nothing.
+	 */
+	recipient?: FactRowModel;
 	searchPlaceholder: string;
 	filters: { id: string; label: string; selected: boolean }[];
 	/** SD1b: the chain lock, once the first token pins the network. */
@@ -399,6 +406,11 @@ export interface SendTokenCardModel {
 	/** "Ethereum · Balance 53.4836". */
 	detail: string;
 	max?: string;
+	/**
+	 * Present when tapping the card goes back to the asset picker (issue 326):
+	 * the core's `can_change_token`, carrying the button's accessible name.
+	 */
+	change?: string;
 }
 
 /** SD2b's recipient card: who, how much, and a way to drop them. */
