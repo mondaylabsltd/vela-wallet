@@ -80,7 +80,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import app.getvela.wallet.core.data.DebugMode
 import app.getvela.wallet.feature.settings.components.VelaSwitchRow
 import uniffi.vela_core_uniffi.VersionTaps
