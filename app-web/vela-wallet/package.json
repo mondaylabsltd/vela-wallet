@@ -10,6 +10,7 @@
 		"sync:wasm": "node scripts/sync-wasm.mjs",
 		"build": "node scripts/gen-tokens.mjs --check && node scripts/sync-wasm.mjs && wrangler types && vite build",
 		"build:extension": "node extension/build.mjs",
+		"package:extension": "node extension/build.mjs --zip",
 		"preview": "wrangler dev .svelte-kit/cloudflare/_worker.js --port 4173",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "node scripts/gen-tokens.mjs --check && node scripts/sync-wasm.mjs --check && node ../../rust/scripts/gen-core-types.mjs wallet-state session --check && wrangler types && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
