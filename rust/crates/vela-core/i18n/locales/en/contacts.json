@@ -55,6 +55,7 @@
     "importDoneInvalid": "Skipped {{invalid}} with an invalid address.",
     "importFailTitle": "Import failed",
     "importFailBody": "Use a JSON or CSV contacts file.",
+    "importFailEncoding": "Save the file as UTF-8 (Excel: CSV UTF-8) and try again.",
     "manage": "Manage",
     "sectionContacts": "Contacts",
     "countPeople": "{{count}}",

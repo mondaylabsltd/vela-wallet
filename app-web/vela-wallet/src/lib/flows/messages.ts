@@ -75,6 +75,9 @@ export const WALLET_FLOW_KEYS = [
 	// the tracker resolves it, and a refusal is failed (issue 211).
 	'componentsTx.detail.statusPending',
 	'componentsTx.detail.statusFailed',
+	// 087 F04: a pending record nothing will settle reads "Unknown" — never
+	// "Failed" (it may have been sent), never "Pending" for ever.
+	'componentsUi.signing.intentUnknown',
 	'componentsTx.detail.from',
 	'componentsTx.detail.to',
 	'componentsTx.detail.labelChain',
@@ -252,6 +255,9 @@ export const WALLET_FLOW_KEYS = [
 	'send.batchTemplateSaved',
 	'send.batchImportFailedTitle',
 	'send.batchImportFailedBody',
+	// 087: a file in a legacy code page is refused with how to save it — the
+	// contacts import's own sentence.
+	'contacts.importFailEncoding',
 	// The sentences those issues did NOT find waiting (new with them): what the
 	// first choice on the importer is, what token mode does with the sheet's
 	// figures, what importing does to the people already on the form and how to

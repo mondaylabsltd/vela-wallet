@@ -719,10 +719,12 @@ pub struct WalletPage {
     /// One cap field per batch leg — two legs in Custom at once must not share
     /// a focus handle, or typing in one lands in both.
     leg_cap_focus: std::collections::HashMap<u32, FocusHandle>,
-    /// What the open page last called itself, from the bridge's own report.
-    /// The star pins with THIS rather than the host, because the host is what
-    /// a tile falls back to and a page's title is what a person recognises.
-    browser_title: Option<String>,
+    /// The last document that settled as a visit (the core's
+    /// `visit_to_record`): its address and what it called itself. The star
+    /// names a pin after it by the core's rule (`pinned_title`) — only when it
+    /// is the pinned site, so a page still loading, or one that failed, is
+    /// never pinned under the page before's title (issue #329).
+    browser_visit: Option<vela_core::app::browser_load::Visit>,
     /// Spec 079 US3 / 082 RD3–RD7: the page's load — the core's `LoadWatch`,
     /// fed by the wallet's requests, WebKit's own state and the probe.
     load: crate::wallet::browser_host::LoadDriver,
@@ -1034,6 +1036,8 @@ struct SendBindings {
     /// traversal that wrote the sentence, so the button and the words cannot
     /// disagree about what they are offering.
     way_out: Option<flows_live::NoticeWayOut>,
+    /// The core's `can_change_token`: the token card opens the picker (#326).
+    can_change_token: bool,
 }
 
 impl Identity {
@@ -1309,7 +1313,7 @@ impl WalletPage {
             explore_groups: false,
             explore_form: None,
             explore_form_focus: cx.focus_handle(),
-            browser_title: None,
+            browser_visit: None,
             load: crate::wallet::browser_host::LoadDriver::default(),
             shown_tab: None,
             tab_strip: explore_components::TabStripScroll::default(),
@@ -6101,6 +6105,7 @@ impl WalletPage {
             sweeping: self.send_sweeping,
             token_chain_ids: view.tokens.iter().map(|token| token.chain_id).collect(),
             multi_chain_id: view.multi_chain_id,
+            can_change_token: view.can_change_token,
         })
     }
 
@@ -6702,6 +6707,7 @@ impl WalletPage {
             amount_field: None,
             recipient_field: None,
             tap_max: None,
+            change_token: None,
             toggle_denom: None,
             pick_contact_rows: Vec::new(),
             fee_rows: Vec::new(),
@@ -7115,6 +7121,11 @@ impl WalletPage {
                         }),
                     });
                     actions.tap_max = Some(to_host(SendEvent::TapMax));
+                    // The token card goes back to the picker with the payee
+                    // kept (issue #326) — only where the core offers it.
+                    if send.can_change_token {
+                        actions.change_token = Some(to_host(SendEvent::ChangeToken));
+                    }
                     // ⇄: the core owns the swap — whether it is possible, and
                     // what becomes of the figure; the page only says it was
                     // pressed (the web's `toggle_fiat_input`, #197).
@@ -13736,19 +13747,17 @@ impl WalletPage {
         }
         #[cfg(not(target_os = "linux"))]
         if let Some(url) = crate::webview::current_url() {
-            // The page's own title when it has reported one; the host
-            // otherwise. The core keeps whichever arrives until somebody
-            // renames the tile.
-            let title = self
-                .browser_title
-                .clone()
-                .or_else(crate::webview::host)
-                .unwrap_or_default();
+            // The core's rule (issue #329): the site's last good title — the
+            // last visit's, when it is this site — else none, and the core
+            // names the tile by its host. Never the page before's title over
+            // a load still under way, nor over an engine's error page.
+            let title =
+                vela_core::app::browser_load::pinned_title(&url, self.browser_visit.as_ref());
             resident::resident::<ExploreSites>(cx).update(cx, |resident, cx| {
                 resident.dispatch(
                     vela_core::app::explore_sites::Event::FavoriteAdded {
                         url,
-                        title: (!title.is_empty()).then_some(title),
+                        title,
                         now_ms: crate::executor::now_ms(),
                     },
                     cx,
@@ -13933,7 +13942,7 @@ impl WalletPage {
                         if target == MetaTarget::Nobody {
                             return;
                         }
-                        page.browser_title.clone_from(&visit.title);
+                        page.browser_visit = Some(visit.clone());
                         let opened = target == MetaTarget::NewTab;
                         explore.update(cx, |resident, cx| {
                             let event = match target {
@@ -17542,11 +17551,10 @@ impl WalletPage {
         true
     }
 
-    /// Read an address-book backup and hand it to the core.
+    /// Read an address-book backup and hand its BYTES to the core.
     ///
-    /// The shell reads and PARSES; the core applies existing-wins and counts
-    /// what happened. Which of those two halves is which is the reason
-    /// `ImportParsed` takes already-parsed rows rather than a file.
+    /// The shell reads the file; the core decodes it (issue 333), parses it,
+    /// applies existing-wins and counts what happened.
     fn import_contacts(into_group: Option<String>, cx: &mut Context<Self>) {
         // `VELA_IMPORT_FILE=<path>` answers the picker — the `VELA_SCAN_FILE`
         // seam, for the same reason: a system file dialog is a window no
@@ -17580,16 +17588,15 @@ impl WalletPage {
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned());
             // Reading the bytes is the shell's job, and its own way to fail.
-            // Everything ABOUT those bytes — is this JSON, does this CSV have
-            // an address column, is it empty — belongs to the core (028 moved
-            // it into `app/contacts_io.rs`), because a file the web refuses
-            // must not import as "0 contacts added" here.
-            let Ok(content) = std::fs::read_to_string(&path) else {
+            // Everything ABOUT those bytes — which encoding, is this JSON,
+            // does this CSV have an address column, is it empty — belongs to
+            // the core (`app/contacts_io.rs`), because a file the web refuses
+            // must not import as "0 contacts added" here. `read_to_string`
+            // used to decide the encoding here, and refused a UTF-16 file the
+            // core reads (issue 333).
+            let Ok(bytes) = std::fs::read(&path) else {
                 page.update(cx, |this, cx| {
-                    this.import_result = Some((
-                        this.contacts.import_fail_title.clone(),
-                        this.contacts.import_fail_body.clone(),
-                    ));
+                    this.import_result = Some(this.contacts.import_refusal(None));
                     cx.notify();
                 })
                 .ok();
@@ -17600,7 +17607,7 @@ impl WalletPage {
                 let view = resident::resident::<Contacts>(cx).update(cx, |resident, cx| {
                     resident.dispatch(
                         ContactEvent::ImportFile {
-                            content,
+                            bytes,
                             filename,
                             // 导入到本组 names its group; the header's and the
                             // empty book's import are the whole book.
@@ -17615,10 +17622,7 @@ impl WalletPage {
                 // refusal comes FIRST — a file that was rejected wrote
                 // nothing, and "added 0, skipped 0" would describe that as a
                 // successful import of an empty address book.
-                let refused = (
-                    this.contacts.import_fail_title.clone(),
-                    this.contacts.import_fail_body.clone(),
-                );
+                let refused = this.contacts.import_refusal(view.import_failure);
                 this.import_result = Some(match (view.import_failure, view.last_import) {
                     (Some(_), _) => refused,
                     // The COUNTS are the core's — it applied existing-wins and
@@ -18905,6 +18909,50 @@ mod tests {
             !body.contains(&[".flex_1()", ".min_h(px(0.)))"].concat()),
             "no spacer between the content and Delete"
         );
+    }
+
+    /// Issue #330 (Android and iOS stranded hidden groups): with Favorites and
+    /// Recent hidden, the Favorites heading — whose Edit opens Manage groups —
+    /// is still drawn on a page with anything on it. Hiding takes the grid
+    /// away, never the heading; the empty start page is the only way past it.
+    #[test]
+    fn a_hidden_favorites_keeps_the_way_to_manage_groups() {
+        // The needles are assembled, so this test's own text never matches.
+        let source = include_str!("page.rs");
+        let find = |needle: &str| {
+            source
+                .find(needle)
+                .unwrap_or_else(|| unreachable!("{needle} is gone"))
+        };
+        let empty = find(&["return column.child(self.", "explore_empty(theme, cx));"].concat());
+        let heading = find(&["let (title_half, ", "edit_half) = section_header_parts("].concat());
+        let edit = find(&["\"explore-favorites", "-edit\")"].concat());
+        let grid = find(&["if !(live_grid && explore_view.", "favorites_hidden) {"].concat());
+        assert!(empty < heading && heading < edit && edit < grid);
+        assert!(
+            !source[empty..edit].contains(&["favorites", "_hidden"].concat()),
+            "nothing hides the heading"
+        );
+        assert!(source[edit..edit + 200].contains(&["this.explore_", "groups = true;"].concat()));
+        assert!(source[grid..grid + 120].contains("column = column.child(grid);"));
+    }
+
+    /// Issue #329: a pinned page is named by the core's rule over the last
+    /// visit — the site's last good title, else its host — never by the page
+    /// before's title over a load still under way or an engine's error page.
+    #[test]
+    fn a_pin_is_named_by_the_core_rule() {
+        // The needles are assembled, so this test's own text never matches.
+        let source = include_str!("page.rs");
+        let start = source
+            .find(&["fn ", "pin_current_page("].concat())
+            .unwrap_or_else(|| unreachable!("pin_current_page is gone"));
+        let rest = &source[start..];
+        let body = &rest[..rest.find("\n    }\n").unwrap_or(rest.len())];
+        assert!(body.contains(&["pinned_title(&url, self.", "browser_visit.as_ref())"].concat()));
+        // The visit it reads is the core's, kept from the page's own report.
+        assert!(source.contains(&["page.browser_visit = ", "Some(visit.clone());"].concat()));
+        assert!(!source.contains(&["browser_", "title"].concat()));
     }
 
     /// Spec 082 G41: every way into the address bar takes the keyboard back

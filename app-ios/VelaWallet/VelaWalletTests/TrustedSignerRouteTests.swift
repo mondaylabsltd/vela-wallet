@@ -338,10 +338,12 @@ struct TrustedSignerChooserTests {
     /// line in the person's language.
     @Test func theCreateAndSignInChoosersListFourRoutes() {
         #expect(KeyMethod.allCases == [.platform, .hybrid, .securityKey, .trustedSigner])
-        let titles = KeyMethod.allCases.map { loc.t(methodCopy($0).title) }
-        #expect(titles.last == "可信签名器")
-        #expect(Set(titles).count == 4, "two routes share a title")
-        #expect(loc.t(methodCopy(.trustedSigner).body) == "在独立的页面上核对并签名——所见即所签。")
+        for chooser in [KeyChooser.create, .signIn] {
+            let titles = KeyMethod.allCases.map { methodCopy($0, chooser: chooser, loc: loc).title }
+            #expect(titles.last == "可信签名器")
+            #expect(Set(titles).count == 4, "two routes share a title")
+            #expect(methodCopy(.trustedSigner, chooser: chooser, loc: loc).body == "在独立的页面上核对并签名——所见即所签。")
+        }
         // A method that arrives from the core by name resolves to the route.
         #expect(KeyMethod(rawValue: "trusted_signer") == .trustedSigner)
     }

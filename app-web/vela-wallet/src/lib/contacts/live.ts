@@ -496,7 +496,15 @@ export function importReport(
 	view: ContactsView,
 	m: ContactsMessages
 ): { title: string; body: string } | undefined {
-	if (view.import_failure !== null) return { title: m.importFailTitle, body: m.importFailBody };
+	if (view.import_failure !== null) {
+		// A file in a legacy encoding is refused with how to save it (issue
+		// 333); every other refusal says which files the book reads.
+		const encoding = view.import_failure.type === 'unsupported_encoding';
+		return {
+			title: m.importFailTitle,
+			body: encoding ? m.importFailEncoding : m.importFailBody
+		};
+	}
 	const report = view.last_import;
 	if (report === null) return undefined;
 	let body = fill(m.importDoneBody, { added: report.added, skipped: report.skipped });

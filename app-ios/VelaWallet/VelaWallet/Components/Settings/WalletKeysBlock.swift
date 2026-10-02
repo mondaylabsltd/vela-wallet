@@ -251,8 +251,9 @@ struct WalletKeysBlock: View {
 
 /// The pills, left to right, starting a new line when the next one does not
 /// fit — never squeezing the row: a squeezed row gives the key's name one
-/// letter per line (the desktop in Russian, 2026-09-26).
-private struct PillFlow: Layout {
+/// letter per line (the desktop in Russian, 2026-09-26). Also the fix-RPC
+/// sheet's provider chips (087 F07).
+struct PillFlow: Layout {
     let spacing: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

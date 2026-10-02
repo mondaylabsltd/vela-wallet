@@ -47,6 +47,19 @@ struct BatchRecipientWire: Decodable, Equatable {
     let name: String?
 }
 
+/// Why a picked file was not read — the core's `BatchFileFailure`.
+enum BatchFileFailureWire: String, Decodable, Equatable {
+    case unreadable
+    case unsupportedEncoding = "unsupported_encoding"
+
+    /// A reason this build has never heard of reads as unreadable: the
+    /// sheet's general sentence, never a view that fails to decode.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = BatchFileFailureWire(rawValue: raw) ?? .unreadable
+    }
+}
+
 struct BatchViewWire: Decodable, Equatable {
     let opened: Bool
     let unit: BatchUnit
@@ -57,6 +70,9 @@ struct BatchViewWire: Decodable, Equatable {
     /// The file could not be read **at all**. Distinct from rows that failed:
     /// one is "this is not a list", the other is "these lines are wrong".
     let fileError: Bool
+    /// Why, when `fileError` (087): a legacy code page says how to save the
+    /// file; anything else says which files the sheet reads.
+    var fileFailure: BatchFileFailureWire? = nil
     let templateSaved: Bool
     /// Amounts are being read as fiat and converted.
     let priced: Bool
