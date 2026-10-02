@@ -9,6 +9,7 @@ mod ceremony;
 mod contacts;
 mod core_host;
 mod ctap;
+mod dev_env;
 mod diag;
 mod executor;
 mod explore;
@@ -199,12 +200,12 @@ enum RootPage {
 
 impl RootPage {
     fn from_env() -> Self {
-        match std::env::var("VELA_PAGE").as_deref() {
-            Ok("wallet") => Self::Wallet,
-            Ok("contacts") => Self::Contacts,
-            Ok("explore") => Self::Explore,
-            Ok("settings") => Self::Settings,
-            Ok("gallery") => Self::Gallery,
+        match dev_env::var!("VELA_PAGE").as_deref() {
+            Some("wallet") => Self::Wallet,
+            Some("contacts") => Self::Contacts,
+            Some("explore") => Self::Explore,
+            Some("settings") => Self::Settings,
+            Some("gallery") => Self::Gallery,
             _ => Self::Onboarding,
         }
     }
@@ -300,7 +301,7 @@ fn open_window_with<V: gpui::Render + 'static>(
             // `VELA_NO_ACTIVATE=1`: the window opens without taking the
             // keyboard, so a screenshot pass on a machine somebody is using
             // never types into this app what they meant for another.
-            focus: std::env::var_os("VELA_NO_ACTIVATE").is_none(),
+            focus: dev_env::var_os!("VELA_NO_ACTIVATE").is_none(),
             // The card grid does not reflow below the design size (spec 007
             // edge cases): the design size is the minimum.
             window_min_size: Some(size(px(WINDOW_W), px(WINDOW_H))),
@@ -507,7 +508,7 @@ fn main() {
         }
         open_main_window(cx);
 
-        if std::env::var_os("VELA_NO_ACTIVATE").is_none() {
+        if dev_env::var_os!("VELA_NO_ACTIVATE").is_none() {
             cx.activate(true);
         }
     });

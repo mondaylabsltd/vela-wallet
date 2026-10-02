@@ -41,7 +41,7 @@ use crate::theme::{
 
 /// The gallery gate. Same shape as `VELA_THEME` / `VELA_SKIP_LAUNCH_ANIMATION`.
 pub fn gallery_enabled() -> bool {
-    std::env::var("VELA_GALLERY").as_deref() == Ok("1")
+    crate::dev_env::flag!("VELA_GALLERY")
 }
 
 /// The address every Done fixture shows — full 42 chars; display truncates,
@@ -529,8 +529,7 @@ impl GalleryView {
         // the arrow keys OR take a picture, and "launch it once per fixture and
         // see whether it survives a frame" is the only end-to-end check left —
         // `scripts/sweep-gallery.sh` is that loop.
-        let selected = std::env::var("VELA_GALLERY_STATE")
-            .ok()
+        let selected = crate::dev_env::var!("VELA_GALLERY_STATE")
             .and_then(|raw| raw.parse::<usize>().ok())
             .filter(|index| *index < entries.len())
             .unwrap_or(0);

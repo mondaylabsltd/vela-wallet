@@ -81,7 +81,7 @@ impl FlowPanel {
     /// not require clicking three levels down to it, and a headless shell can
     /// screenshot a state it cannot click to.
     pub fn from_env() -> Option<FlowPanel> {
-        let want = std::env::var("VELA_FLOW").ok()?;
+        let want = crate::dev_env::var!("VELA_FLOW")?;
         FlowPanel::ALL
             .iter()
             .find(|(_, label)| label.eq_ignore_ascii_case(want.trim()))

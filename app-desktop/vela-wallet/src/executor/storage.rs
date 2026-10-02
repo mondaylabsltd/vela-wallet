@@ -104,8 +104,7 @@ pub fn path() -> Result<PathBuf> {
 /// `VELA_STATE_DIR`, when set — one reading, so the wallet document and the
 /// browser's profile (spec 083) always move together.
 fn state_dir_override() -> Option<PathBuf> {
-    std::env::var("VELA_STATE_DIR")
-        .ok()
+    crate::dev_env::var!("VELA_STATE_DIR")
         .filter(|dir| !dir.is_empty())
         .map(PathBuf::from)
 }

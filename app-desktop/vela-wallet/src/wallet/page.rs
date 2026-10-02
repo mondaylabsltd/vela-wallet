@@ -506,7 +506,7 @@ impl GalleryTab {
     /// (data-model.md §Screen states — `dc1`…`dc6`).
     /// The chip `VELA_SETTINGS_STATE` names, if it names one.
     fn from_settings_env() -> Option<GalleryTab> {
-        let want = std::env::var("VELA_SETTINGS_STATE").ok()?;
+        let want = crate::dev_env::var!("VELA_SETTINGS_STATE")?;
         GalleryTab::ALL
             .into_iter()
             .find_map(|(tab, _)| (tab.settings_state()? == want).then_some(tab))
@@ -520,7 +520,7 @@ impl GalleryTab {
     /// click. Same env-pin family, same case-insensitive label match
     /// `FlowPanel::from_env` uses.
     fn from_gallery_env() -> Option<GalleryTab> {
-        let want = std::env::var("VELA_GALLERY_TAB").ok()?;
+        let want = crate::dev_env::var!("VELA_GALLERY_TAB")?;
         GalleryTab::ALL
             .into_iter()
             .find(|(_, label)| label.eq_ignore_ascii_case(want.trim()))
@@ -1097,10 +1097,10 @@ impl WalletPage {
     /// same thing and must not become it — that route has no session behind it
     /// and renders the mocks on purpose.
     pub fn signed_in(identity: Identity, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let section = match std::env::var("VELA_SECTION").as_deref() {
-            Ok("settings") => Section::Settings,
-            Ok("contacts") => Section::Contacts,
-            Ok("explore") => Section::Explore,
+        let section = match crate::dev_env::var!("VELA_SECTION").as_deref() {
+            Some("settings") => Section::Settings,
+            Some("contacts") => Section::Contacts,
+            Some("explore") => Section::Explore,
             _ => Section::Wallet,
         }
         .or_wallet();
@@ -1132,7 +1132,7 @@ impl WalletPage {
         // one Feedback state — or, `autosend`, a REAL send of a report with
         // `VELA_SCREENSHOT_FILES` attached (078 round 3).
         if section == Section::Settings
-            && let Ok(state) = std::env::var("VELA_FEEDBACK_STATE")
+            && let Some(state) = crate::dev_env::var!("VELA_FEEDBACK_STATE")
         {
             page.pin_feedback_state(&state);
         }
@@ -1160,7 +1160,7 @@ impl WalletPage {
         }
         // `VELA_FEEDBACK_STATE` opens the Feedback page in one state, for a
         // screenshot pass that cannot click, drop or paste (078 round 3).
-        if let Ok(state) = std::env::var("VELA_FEEDBACK_STATE") {
+        if let Some(state) = crate::dev_env::var!("VELA_FEEDBACK_STATE") {
             page.pin_feedback_state(&state);
         }
         page
@@ -1297,12 +1297,10 @@ impl WalletPage {
             backup_for: None,
             backup_check: None,
             keys_check: None,
-            // `VELA_KEYS_OPEN=1` (debug builds): the first key row starts open, so
+            // `VELA_KEYS_OPEN=1` (developer builds): the first key row starts open, so
             // the details card can be looked at without a click — the same env-pin
             // family as `VELA_PAGE` / `VELA_THEME`.
-            keys_open: if cfg!(debug_assertions)
-                && std::env::var("VELA_KEYS_OPEN").as_deref() == Ok("1")
-            {
+            keys_open: if crate::dev_env::flag!("VELA_KEYS_OPEN") {
                 std::collections::HashSet::from([0])
             } else {
                 std::collections::HashSet::new()
@@ -1496,7 +1494,7 @@ impl WalletPage {
         let Some(model) = self.receive_share_card(cx) else {
             return;
         };
-        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+        let pinned = crate::dev_env::var_os!("VELA_EXPORT_DIR")
             .map(|dir| std::path::PathBuf::from(dir).join(&model.file_name));
         let target = pinned.is_none().then(|| {
             let directory = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
@@ -9195,7 +9193,7 @@ impl WalletPage {
         // app from a shell. A zero-value call to
         // itself on Gnosis; nothing is signed unless somebody slides.
         #[cfg(all(debug_assertions, not(target_os = "linux")))]
-        if std::env::var("VELA_SIGN_PROBE").as_deref() == Ok("1") {
+        if crate::dev_env::flag!("VELA_SIGN_PROBE") {
             self.open_backup_signing(
                 vela_core::registry_backup::BackupCall {
                     chain_id: 100,
@@ -12550,7 +12548,7 @@ impl WalletPage {
             return;
         }
         self.browser_url_pinned = true;
-        let Ok(url) = std::env::var("VELA_BROWSER_URL") else {
+        let Some(url) = crate::dev_env::var!("VELA_BROWSER_URL") else {
             return;
         };
         if url.trim().is_empty() {
@@ -17487,7 +17485,7 @@ impl WalletPage {
         // file dialog is a system window this app cannot drive, so without it
         // no screenshot pass and no headless run can ever reach the far side
         // of a scan.
-        if let Ok(path) = std::env::var("VELA_SCAN_FILE") {
+        if let Some(path) = crate::dev_env::var!("VELA_SCAN_FILE") {
             self.scan_notice = None;
             match std::fs::read(&path)
                 .ok()
@@ -17631,7 +17629,7 @@ impl WalletPage {
         // `VELA_IMPORT_FILE=<path>` answers the picker — the `VELA_SCAN_FILE`
         // seam, for the same reason: a system file dialog is a window no
         // verification pass can drive.
-        let pinned = std::env::var_os("VELA_IMPORT_FILE").map(std::path::PathBuf::from);
+        let pinned = crate::dev_env::var_os!("VELA_IMPORT_FILE").map(std::path::PathBuf::from);
         let paths = pinned.is_none().then(|| {
             cx.prompt_for_paths(gpui::PathPromptOptions {
                 files: true,
@@ -17773,7 +17771,7 @@ impl WalletPage {
         // `VELA_EXPORT_DIR=<dir>` answers the save dialog with the core's
         // filename in that folder — the `VELA_IMPORT_FILE` seam, the other
         // way.
-        let pinned = std::env::var_os("VELA_EXPORT_DIR")
+        let pinned = crate::dev_env::var_os!("VELA_EXPORT_DIR")
             .map(|dir| std::path::PathBuf::from(dir).join(&file.filename));
         // The save dialog opens where a person keeps their files, not where
         // this app keeps its state.

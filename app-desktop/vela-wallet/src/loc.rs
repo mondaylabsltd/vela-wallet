@@ -150,7 +150,7 @@ pub(crate) const LANGUAGES: [&str; 15] = vela_core::i18n::SUPPORTED;
 /// machine's own ([`system_tag`]).
 pub(crate) fn requested_tag() -> String {
     pick_tag(
-        env_tag(&["VELA_LANG"]),
+        pinned_tag(),
         crate::executor::preferences::pinned_language(),
         system_tag,
     )
@@ -162,7 +162,17 @@ pub(crate) fn requested_tag() -> String {
 /// #E3) — the web's `auto` formats read the platform too, never the app's
 /// chosen language.
 pub(crate) fn system_tag() -> String {
-    env_tag(&["VELA_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]).unwrap_or_else(|| "en".to_owned())
+    pinned_tag()
+        .or_else(|| env_tag(&["LC_ALL", "LC_MESSAGES", "LANG"]))
+        .unwrap_or_else(|| "en".to_owned())
+}
+
+/// `VELA_LANG` — a developer build's language pin (spec 095: release builds
+/// do not read it).
+fn pinned_tag() -> Option<String> {
+    crate::dev_env::var!("VELA_LANG")
+        .filter(|v| !v.is_empty())
+        .map(|raw| normalize_posix_tag(&raw))
 }
 
 fn env_tag(keys: &[&str]) -> Option<String> {
