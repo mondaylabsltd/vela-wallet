@@ -40,7 +40,7 @@ fail() { echo "FAIL: $*" >&2; failed=1; }
 private_imports="$(nm -u -arch all "$binary" 2>/dev/null | grep -E '^_+(CGS|SLS)[A-Za-z]' | sort -u || true)"
 if [[ -n "$private_imports" ]]; then
   fail "private WindowServer symbols imported:"
-  sed 's/^/    /' <<<"$private_imports" >&2
+  while IFS= read -r symbol; do echo "    $symbol" >&2; done <<<"$private_imports"
 fi
 
 # 2. Private selectors. grep -c, not grep -q: under pipefail -q exits early
