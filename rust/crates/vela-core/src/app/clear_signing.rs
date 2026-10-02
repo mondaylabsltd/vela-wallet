@@ -730,6 +730,24 @@ pub enum ClearTerm {
     LabelYouReceive,
     LabelYouReceiveMin,
     ValueUnlimited,
+    // The wallet's own headline words (spec 093): what the sheet calls a
+    // request no descriptor names, and what Activity titles it with. Never
+    // matched from a descriptor's text — they are not in `WORDS` — only named
+    // by the rules that pick them (`activity_feed`).
+    /// A signature that lets a spender take tokens (`permitIntent`).
+    PermitIntent,
+    /// A Sign-In with Ethereum message whose domain is the site's own.
+    SignInIntent,
+    /// Any other `personal_sign` message.
+    MessageIntent,
+    /// Structured (EIP-712) data that is not a permit.
+    TypedDataIntent,
+    /// `eth_sign` — an opaque hash.
+    EthSignIntent,
+    /// A batch of calls no one verb describes.
+    BatchIntent,
+    /// A call nobody decoded.
+    IntentContractCall,
 }
 
 impl ClearTerm {
@@ -810,12 +828,25 @@ impl ClearTerm {
             .map(|(_, term)| *term)
     }
 
+    /// The wallet's own headline words (spec 093), which no descriptor text
+    /// maps to.
+    pub const HEADLINES: [ClearTerm; 7] = [
+        Self::PermitIntent,
+        Self::SignInIntent,
+        Self::MessageIntent,
+        Self::TypedDataIntent,
+        Self::EthSignIntent,
+        Self::BatchIntent,
+        Self::IntentContractCall,
+    ];
+
     /// Every term, once — for a shell that resolves the words up front.
     pub fn all() -> impl Iterator<Item = Self> {
         Self::WORDS
             .iter()
             .map(|(_, term)| *term)
             .chain(std::iter::once(Self::ValueUnlimited))
+            .chain(Self::HEADLINES)
     }
 
     /// The key leaf under `componentsUi.signing` — the serialized name.
@@ -1530,6 +1561,19 @@ pub struct ClearSigningView {
     /// so nothing that reads them can describe the batch by its first call.
     #[serde(default)]
     pub batch: Option<ClearBatchView>,
+    /// The intent the request's record keeps — the verb Activity titles it
+    /// with (spec 093). The shell copies it to
+    /// [`super::sign_request::SignApproveOpts::intent`] and decides nothing.
+    ///
+    /// A decoded reading's intent — unless the reading is best effort: a
+    /// function name recovered from the public selector database is whatever
+    /// the contract's deployer called it, and the sheet showed it under a
+    /// caution a plain Activity title would drop (083 H2 review). "Send" for
+    /// a plain send. A batch's one verb once the approvals that serve it are
+    /// set aside ([`batch_headline`]). `None` for everything else — the record
+    /// then reads by what the request is.
+    #[serde(default)]
+    pub record_intent: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1648,8 +1692,67 @@ impl App for ClearSigning {
                 .clone()
                 .filter(|_| surface == ClearSurface::PlainSend),
             batch: batch_view(model).filter(|_| surface == ClearSurface::Batch),
+            record_intent: record_intent_of(model, surface),
         }
     }
+}
+
+/// [`ClearSigningView::record_intent`] for the surface the sheet draws.
+fn record_intent_of(model: &Model, surface: ClearSurface) -> Option<String> {
+    match surface {
+        ClearSurface::ClearSign => model.result.as_ref().and_then(recorded_word),
+        ClearSurface::PlainSend => Some("Send".to_owned()),
+        ClearSurface::Batch => batch_view(model).and_then(|batch| batch_headline(&batch.calls)),
+        _ => None,
+    }
+}
+
+/// A finished reading's intent, when it may stand as a title: not empty, and
+/// not a best-effort guess unless its description is the app's own.
+fn recorded_word(result: &ClearSignResult) -> Option<String> {
+    let intent = result.intent.trim();
+    (!intent.is_empty() && (result.provenance.is_verified() || !result.best_effort))
+        .then(|| intent.to_owned())
+}
+
+/// The one verb a batch's calls share (spec 093) — Activity's title for it.
+///
+/// An approval that comes with something else serves it: `[approve, swap]` is
+/// a swap, whatever it let the router take (the record keeps that allowance
+/// and the detail states it). What remains must be one verb, read from every
+/// call — a call nobody could read, or a best-effort guess, leaves the batch
+/// with none, and it is then titled as a batch. A batch of approvals alone is
+/// titled by the approval.
+pub(crate) fn batch_headline(calls: &[ClearBatchCall]) -> Option<String> {
+    let mut verbs = Vec::with_capacity(calls.len());
+    for call in calls {
+        verbs.push(match call.surface {
+            ClearSurface::ClearSign => call.result.as_ref().and_then(recorded_word)?,
+            ClearSurface::PlainSend => "Send".to_owned(),
+            _ => return None,
+        });
+    }
+    let serves = |verb: &str| {
+        matches!(
+            ClearTerm::of(verb),
+            Some(
+                ClearTerm::IntentApprove
+                    | ClearTerm::IntentApproveNft
+                    | ClearTerm::IntentApproveAllNfts
+                    | ClearTerm::IntentAuthorizeSpending
+            )
+        )
+    };
+    let main: Vec<&String> = verbs.iter().filter(|verb| !serves(verb)).collect();
+    let main = if main.is_empty() {
+        verbs.iter().collect()
+    } else {
+        main
+    };
+    let first = *main.first()?;
+    main.iter()
+        .all(|verb| verb.eq_ignore_ascii_case(first))
+        .then(|| first.clone())
 }
 
 /// A finished result as the shells receive it.
@@ -4787,7 +4890,7 @@ fn js_number_to_string(f: f64) -> String {
 // personal_sign / eth_sign analysis (decode-sign-message.ts + siwe.ts)
 // ---------------------------------------------------------------------------
 
-fn analyze_message(
+pub(crate) fn analyze_message(
     method: ClearSignMethod,
     payload: &str,
     request_origin: Option<&str>,
@@ -5075,7 +5178,7 @@ fn std_key(chain_id: u32, addr: &str) -> String {
     format!("{chain_id}:{}", addr.to_lowercase())
 }
 
-fn known_token_symbol(addr: &str) -> Option<&'static str> {
+pub(crate) fn known_token_symbol(addr: &str) -> Option<&'static str> {
     let lc = addr.to_lowercase();
     KNOWN_TOKENS
         .iter()
@@ -5083,7 +5186,7 @@ fn known_token_symbol(addr: &str) -> Option<&'static str> {
         .map(|(_, s, _)| *s)
 }
 
-fn known_token_decimals(addr: &str) -> Option<u32> {
+pub(crate) fn known_token_decimals(addr: &str) -> Option<u32> {
     let lc = addr.to_lowercase();
     KNOWN_TOKENS
         .iter()
@@ -5091,7 +5194,7 @@ fn known_token_decimals(addr: &str) -> Option<u32> {
         .map(|(_, _, d)| *d)
 }
 
-fn known_contract(addr: &str) -> Option<(&'static str, &'static str)> {
+pub(crate) fn known_contract(addr: &str) -> Option<(&'static str, &'static str)> {
     let lc = addr.to_lowercase();
     KNOWN_CONTRACTS
         .iter()
@@ -6273,8 +6376,7 @@ mod clear_term_tests {
 
     #[test]
     fn every_term_is_a_key_in_every_language() {
-        let mut terms: Vec<ClearTerm> = ClearTerm::WORDS.iter().map(|(_, term)| *term).collect();
-        terms.push(ClearTerm::ValueUnlimited);
+        let terms: Vec<ClearTerm> = ClearTerm::all().collect();
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/i18n/locales");
         let mut checked = 0;
         for entry in std::fs::read_dir(root).unwrap_or_else(|e| unreachable!("locales: {e}")) {
@@ -6304,6 +6406,22 @@ mod clear_term_tests {
             checked += 1;
         }
         assert_eq!(checked, 15, "every language checked");
+    }
+
+    /// The headline words are named by rules, never by a descriptor's text:
+    /// a site's descriptor saying "Sign in" keeps its own words.
+    #[test]
+    fn a_headline_word_is_never_read_from_text() {
+        for term in ClearTerm::HEADLINES {
+            assert!(
+                ClearTerm::WORDS.iter().all(|(_, word)| *word != term),
+                "{term:?} is in WORDS"
+            );
+        }
+        assert_eq!(ClearTerm::of("Sign in"), None);
+        assert_eq!(ClearTerm::IntentContractCall.leaf(), "intentContractCall");
+        assert_eq!(ClearTerm::PermitIntent.leaf(), "permitIntent");
+        assert_eq!(ClearTerm::EthSignIntent.leaf(), "ethSignIntent");
     }
 
     #[test]

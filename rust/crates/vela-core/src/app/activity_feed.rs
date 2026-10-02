@@ -58,9 +58,20 @@
 //! Every [`FeedItem`] says what it is ([`FeedItem::kind`]), where its record
 //! stands ([`FeedItem::status`]) and, for a transaction a dApp asked for,
 //! which site asked ([`FeedItem::site`]); the shells delete their own guesses.
-//! Message signatures and connects never become rows. The empty lines of
-//! History and of the home Activity are corpus keys on [`FeedView`], chosen by
-//! the chain filter.
+//! The empty lines of History and of the home Activity are corpus keys on
+//! [`FeedView`], chosen by the chain filter.
+//!
+//! # Every dApp interaction is a row (spec 093)
+//!
+//! A dApp's transaction AND its signatures are rows; connects are not (the
+//! Connections list holds those). [`FeedDapp`] says all a row and its detail
+//! state, decided here from the record's [`DappSummary`]: the headline verb
+//! ([`FeedDapp::intent_term`]) and where it happened ([`FeedDapp::place`] —
+//! a protocol the wallet knows by address, else the site's host, never the
+//! dApp's own name), the subtitle ([`FeedItem::subtitle`], every row), the
+//! allowance a grant states, the detail's facts and its technical lines. A
+//! swap's "Received" row folds into its dApp row (one operation, one row).
+//! Shells word and format; they decide nothing.
 //!
 //! # Fidelity notes
 //!
@@ -76,7 +87,9 @@
 //! - The web-only `velaSimulateReceipt` dev hook is not ported.
 //! - A dApp's transaction (`dapp_tx`) is a row too (083 H2, 079 D3); the TS
 //!   feed showed only sends and receives, so a stuck dApp swap was visible
-//!   nowhere. Signatures and connections stay out: they move nothing.
+//!   nowhere. Since 093 its signatures are rows as well: a permit moves
+//!   nothing yet lets somebody take tokens, and a person must be able to see
+//!   that they gave one. Connections stay out.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -89,6 +102,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::clear_signing::ClearTerm;
+use super::dapp_activity::{contract_name_of, protocol_of, DappAction, DappSummary};
 use super::token_trust::TrustSimJudgment;
 
 /// Toast lifetime — `setTimeout(() => setReceipt(null), 2800)`.
@@ -134,8 +148,8 @@ pub const STABLE_SYMBOLS: [&str; 15] = [
 /// type is a legacy row and defaults to `send` — which is also the
 /// [`Default`], so a [`FeedItem`] decoded from before spec 082 reads as one.
 ///
-/// A [`FeedItem`] only ever carries `Send`, `Receive` or `DappTx`: message
-/// signatures and connects never become rows.
+/// A [`FeedItem`] carries `Send`, `Receive`, `DappTx`, `SignMessage` or
+/// `SignTypedData` (spec 093): connects never become rows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS))]
@@ -232,11 +246,24 @@ pub struct FeedTxRecord {
     /// send, and for a shell that does not map it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_data: Option<String>,
+    /// A dApp record's summary (spec 093) — `SignRecord::summary`, stored
+    /// verbatim by the shell (`dappSummary`) and handed back untouched.
+    /// `None` on records from before 093, which read by their kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<DappSummary>,
 }
 
 impl FeedTxRecord {
     fn kind(&self) -> FeedTxKind {
         self.kind.unwrap_or_default()
+    }
+}
+
+impl FeedTxKind {
+    /// A signature a dApp asked for: off-chain, nothing settles it.
+    #[must_use]
+    pub fn is_signature(self) -> bool {
+        matches!(self, Self::SignMessage | Self::SignTypedData)
     }
 }
 
@@ -365,11 +392,43 @@ pub struct FeedItem {
     /// to (spec 082 RJ16). Always `Recipient` except on a `DappTx` row.
     #[serde(default)]
     pub counterparty_role: FeedCounterpartyRole,
-    /// A dApp transaction's site, intent and what it moved (083 H2); `None`
-    /// on every other row. Its `site` and `contract_call` are the row's own
-    /// [`FeedItem::site`] and [`FeedItem::counterparty_role`], read once.
+    /// A dApp interaction's site, headline, place and what it moved or
+    /// granted (083 H2, spec 093); `None` on every other row. Its `site` and
+    /// `contract_call` are the row's own [`FeedItem::site`] and
+    /// [`FeedItem::counterparty_role`], read once.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dapp: Option<FeedDapp>,
+    /// The row's second line, in order (spec 093): the shell words each part
+    /// and joins them with " · ". Decided here for every row, so no shell
+    /// keeps its own "status · site/contract/chain" rule.
+    #[serde(default)]
+    pub subtitle: Vec<FeedLine>,
+}
+
+/// One part of a row's second line (spec 093).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeedLine {
+    /// Where a record that is not confirmed stands — pending, failed or
+    /// unknown; never confirmed, and never on a signature, which nothing
+    /// settles.
+    Status { status: FeedTxStatus },
+    /// "To {{name}}" (`history.toName`): `name` when somebody named them,
+    /// else the shell's short form of `address`.
+    To {
+        address: String,
+        name: Option<String>,
+    },
+    /// "From {{name}}" (`history.fromName`).
+    From {
+        address: String,
+        name: Option<String>,
+    },
+    /// A site's `host[:port]`, verbatim.
+    Site { site: String },
+    /// The network, by its chain id; the shell names it.
+    Network { chain_id: u32 },
 }
 
 /// The status of a [`FeedItem`] decoded from before spec 082, which carried
@@ -381,19 +440,22 @@ fn status_unknown() -> FeedTxStatus {
 
 /// What a dApp transaction row says beyond its money (083 H2, 079 D3): which
 /// site asked and what the call did.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(TS))]
 pub struct FeedDapp {
     /// The site as a person reads it: the host of the origin the request
     /// arrived from (`app.uniswap.org`, `127.0.0.1`). `None` when the record
     /// holds no origin that parses as one — never the dApp's own name.
     pub site: Option<String>,
-    /// The intent recorded at approve time, as the descriptor wrote it
-    /// ("Swap"; "Send" for a plain native transfer). `None` is a call nobody
-    /// decoded, which the shell reads as "Contract interaction".
+    /// The headline verb as the descriptor wrote it ("Swap"; "Send" for a
+    /// plain native transfer) — the shell shows this text only when
+    /// `intent_term` is `None`, a word the wallet does not have. `None` when
+    /// the verb is the wallet's own word for what the request is.
     pub intent: Option<String>,
-    /// `intent` as a word the shell can translate
-    /// (`componentsUi.signing.<leaf>`).
+    /// The headline verb, the title's `{{intent}}` (spec 093): a key leaf
+    /// under `componentsUi.signing` — the recorded intent's word, or the
+    /// wallet's own for what the request is (`permitIntent`,
+    /// `signInIntent`, `intentContractCall`…).
     pub intent_term: Option<ClearTerm>,
     /// What the operation moved, as the wallet's own simulation measured it
     /// when the person approved — the signing sheet's "Balance changes"
@@ -407,7 +469,9 @@ pub struct FeedDapp {
     /// the row's figure, and exactly one in, both with a figure, both of a
     /// coin the wallet trusts. Drawn beside the figure as what the
     /// simulation EXPECTED: the chain may deliver another amount (slippage).
-    /// `None` otherwise, and always for a failed operation.
+    /// Once the chain's own "Received" record in the same transaction folds
+    /// into the row (spec 093), it is that record instead, `exact`. `None`
+    /// otherwise, and always for a failed operation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub received: Option<FeedDappChange>,
     /// The row's figure is the simulation's expectation, not an amount the
@@ -422,6 +486,119 @@ pub struct FeedDapp {
     /// a plain transfer of the chain's coin and for a record that cannot say.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub contract_call: bool,
+    /// What the request did (spec 093) — the record's summary, or what its
+    /// kind says on a record from before 093.
+    #[serde(default)]
+    pub action: DappAction,
+    /// Where it happened, the title's `{{place}}` (`history.dappRowTitle`):
+    /// a protocol the wallet knows by the contract's address ("Uniswap"),
+    /// else the site's host. Never the dApp's own name. `None` when there is
+    /// neither — the title is then the verb alone.
+    #[serde(default)]
+    pub place: Option<String>,
+    /// The allowance a grant states, drawn where a figure would be — only on
+    /// an approval or a permit that moved no money of its own.
+    /// [`FeedAllowance::unlimited`] is drawn in the danger tone.
+    #[serde(default)]
+    pub allowance: Option<FeedAllowance>,
+    /// A signature: off-chain, nothing was sent (`connect.detail.offChainNote`)
+    /// — no status chip, no figure, nothing to settle.
+    #[serde(default)]
+    pub off_chain: bool,
+    /// The detail's facts, in order (at most six).
+    #[serde(default)]
+    pub facts: Vec<FeedFact>,
+    /// The detail's collapsed "Technical details", in order.
+    #[serde(default)]
+    pub technical: Vec<FeedFact>,
+}
+
+/// An allowance as Activity states it (spec 093).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct FeedAllowance {
+    /// The token's symbol; empty when nobody could name it.
+    pub symbol: String,
+    /// The cap as a human decimal; `None` when unlimited.
+    pub value: Option<String>,
+    pub decimals: Option<u32>,
+    /// No limit: `componentsUi.signingApprove.unlimitedValue`, danger tone.
+    pub unlimited: bool,
+    /// The token's contract, for copying.
+    pub token: Option<String>,
+}
+
+/// One line of a dApp row's detail (spec 093). The shell labels and formats
+/// each; which lines, and their order, are decided here.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeedFact {
+    /// `connect.detail.labelApp` — the site's host.
+    Site { site: String },
+    /// `componentsTx.detail.labelChain` — the network, by its chain id.
+    Network { chain_id: u32 },
+    /// `componentsUi.signing.interactingLabel` — the contract called, with
+    /// its built-in name when the wallet knows it.
+    Contract {
+        address: String,
+        name: Option<String>,
+    },
+    /// `componentsUi.signing.labelSpender` — who an allowance lets spend.
+    Spender {
+        address: String,
+        name: Option<String>,
+    },
+    /// `componentsUi.signingApprove.spendingCap`.
+    SpendingCap { allowance: FeedAllowance },
+    /// `componentsUi.signingApprove.expiresLabel` — a date (epoch seconds),
+    /// or `None`: `componentsUi.signingApprove.noExpiry`.
+    Expires { at: Option<f64> },
+    /// `componentsUi.signing.balanceChangesTitle` — [`FeedDapp::changes`].
+    BalanceChanges,
+    /// `componentsTx.detail.labelDate` — epoch seconds.
+    Date { timestamp: f64 },
+    /// `componentsTx.detail.labelOperation`.
+    Operation { operation: FeedDappOperation },
+    /// The request as the record kept it, named by what it holds — the shell
+    /// reads the stored text only when the section is opened, and says
+    /// `connect.detail.contentMissing` when the record kept none.
+    Content { content: FeedDappContent },
+    /// `componentsUi.signing.typeLabel` — typed data's primary type.
+    PrimaryType { name: String },
+    /// `componentsTx.detail.labelHash` — the transaction's hash (the
+    /// explorer link's).
+    Hash { tx_hash: String },
+    /// `componentsTx.receipt.userOpHash`.
+    UserOpHash { hash: String },
+}
+
+/// What a dApp record's operation was, as the detail names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeedDappOperation {
+    /// `componentsTx.detail.opContractInteraction`.
+    ContractInteraction,
+    /// `componentsUi.signing.batchSubtitle` ("{{count}} transactions…").
+    Batch { calls: u32 },
+    /// `componentsTx.detail.opSignature`.
+    Signature,
+    /// `componentsTx.detail.opTypedDataSignature`.
+    TypedDataSignature,
+}
+
+/// What a stored request holds (`connect.detail.content*`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum FeedDappContent {
+    /// `contentCallData`.
+    CallData,
+    /// `contentTypedData`.
+    TypedData,
+    /// `contentMessage`.
+    Message,
 }
 
 /// One line of what a dApp transaction moved (083 F1), from the signing
@@ -449,7 +626,8 @@ pub struct FeedDappChange {
     pub value: Option<String>,
     pub decimals: Option<u32>,
     /// The wallet can vouch for this figure to the unit: a native outflow
-    /// equal to the value the wallet itself submitted. Every other line is
+    /// equal to the value the wallet itself submitted, or a receipt the
+    /// chain recorded (spec 093). Every other line is
     /// what the simulation expected — an inflow may arrive short (slippage)
     /// and an exact-output swap's outflow may differ too, and the wallet
     /// cannot tell which kind of swap it signed — so the shell marks it "≈".
@@ -809,6 +987,8 @@ impl App for ActivityFeed {
                     out.alias = Some(name.clone());
                 }
             }
+            // After the overlay: the second line names whom the first does.
+            out.subtitle = subtitle_of(&out);
             rows.push(FeedRow::Item { item: out });
         }
 
@@ -857,12 +1037,15 @@ fn accept(model: &mut Model, result: FeedShellResult) -> Command<FeedEffect, Eve
                 .filter(|t| match t.kind() {
                     FeedTxKind::Receive => t.to.to_lowercase() == lc,
                     // 083 H2: a dApp's transaction is this account's money
-                    // moving too — its detail needs the record like a send's.
-                    FeedTxKind::Send | FeedTxKind::DappTx => t.from.to_lowercase() == lc,
-                    // Message signatures and connects move nothing: never rows.
-                    FeedTxKind::SignMessage | FeedTxKind::SignTypedData | FeedTxKind::Connect => {
-                        false
-                    }
+                    // moving too — its detail needs the record like a send's;
+                    // and so is a signature it gave a site (spec 093).
+                    FeedTxKind::Send
+                    | FeedTxKind::DappTx
+                    | FeedTxKind::SignMessage
+                    | FeedTxKind::SignTypedData => t.from.to_lowercase() == lc,
+                    // A connect grants no money and no signature: the
+                    // Connections list holds it, never Activity.
+                    FeedTxKind::Connect => false,
                 })
                 .cloned()
                 .collect();
@@ -1028,6 +1211,11 @@ fn build_items(records: &[FeedTxRecord], address: &str, now_ms: f64) -> Vec<Feed
         send_groups.entry(&t.user_op_hash).or_default().push(t);
     }
 
+    // A swap's coin coming back is the swap's own (spec 093): a receipt in
+    // the very transaction a dApp row of this account settled under is part
+    // of that row, not a second "Received" beside it.
+    let folded = swap_receipts(records, &lc);
+
     // `item.id` is the list key — guard against legacy duplicate-id records
     // so a row can never render twice, and skip every member of a batch once
     // its grouped row has been emitted (`activity.ts:453-476`).
@@ -1038,6 +1226,11 @@ fn build_items(records: &[FeedTxRecord], address: &str, now_ms: f64) -> Vec<Feed
             continue;
         }
         let item = match t.kind() {
+            FeedTxKind::Receive
+                if t.to.to_lowercase() == lc && folded.contains_key(&tx_key(&t.tx_hash)) =>
+            {
+                None
+            }
             FeedTxKind::Receive if t.to.to_lowercase() == lc => Some(receive_item(t)),
             FeedTxKind::Send if t.from.to_lowercase() == lc => {
                 let group = if t.user_op_hash.is_empty() {
@@ -1055,15 +1248,28 @@ fn build_items(records: &[FeedTxRecord], address: &str, now_ms: f64) -> Vec<Feed
                     _ => Some(send_item(t)),
                 }
             }
-            FeedTxKind::DappTx if t.from.to_lowercase() == lc => Some(dapp_item(t)),
+            FeedTxKind::DappTx if t.from.to_lowercase() == lc => Some(dapp_item(
+                t,
+                dapp_tx_hash(t)
+                    .and_then(|hash| folded.get(&tx_key(&hash)))
+                    .map(Vec::as_slice),
+            )),
+            FeedTxKind::SignMessage | FeedTxKind::SignTypedData if t.from.to_lowercase() == lc => {
+                Some(signature_item(t))
+            }
             _ => None,
         };
         let Some(mut item) = item else {
             continue;
         };
         // A folded batch reads its first line, which is `t` here too: the
-        // group was gathered in this same order.
-        item.status = row_status(t, now_ms);
+        // group was gathered in this same order. A signature has no
+        // lifecycle: it was given, and nothing settles it.
+        item.status = if t.kind().is_signature() {
+            FeedTxStatus::Confirmed
+        } else {
+            row_status(t, now_ms)
+        };
         if let Some(batch) = item.batch.as_mut() {
             batch.status = item.status;
         }
@@ -1124,6 +1330,7 @@ fn receive_item(t: &FeedTxRecord) -> FeedItem {
         site: None,
         counterparty_role: FeedCounterpartyRole::Recipient,
         dapp: None,
+        subtitle: Vec::new(),
     }
 }
 
@@ -1148,6 +1355,7 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
         site: None,
         counterparty_role: FeedCounterpartyRole::Recipient,
         dapp: None,
+        subtitle: Vec::new(),
     }
 }
 
@@ -1192,7 +1400,13 @@ fn send_item(t: &FeedTxRecord) -> FeedItem {
 /// data names `to` as the recipient. And an operation hash is never an
 /// explorer link: a `tx_hash` equal to the record's `user_op_hash` (a relay
 /// rejection, a batch id) is no tx hash.
-fn dapp_item(t: &FeedTxRecord) -> FeedItem {
+///
+/// Spec 093: the row's headline, place, allowance and detail are
+/// [`describe`]'s; `receipts` are this account's "Received" records in the
+/// transaction the row settled under, folded into it — exactly one is the
+/// coin the swap brought back, as the chain recorded it, which beats what the
+/// simulation expected.
+fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
     let recorded = if t.status == FeedTxStatus::Failed {
         Vec::new()
     } else {
@@ -1216,6 +1430,10 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
         .and(only(FeedDirection::In))
         .filter(figured)
         .map(|line| line.change.clone());
+    let received = match receipts {
+        Some([receipt]) if t.status != FeedTxStatus::Failed => Some(receipt_change(receipt)),
+        _ => received,
+    };
     let estimated = taken.is_some_and(|line| !line.change.exact);
     let (value, symbol, decimals) = match taken {
         Some(out) => (
@@ -1243,12 +1461,6 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
             ..t.clone()
         })
     });
-    let intent = t
-        .intent
-        .as_deref()
-        .map(str::trim)
-        .filter(|intent| !intent.is_empty())
-        .map(str::to_owned);
     // The contract or recipient — and only when it IS an address. A batch
     // (`wallet_sendCalls`) submits no top-level `to`, so whatever a record
     // holds there is the page's to write, and the sheet never showed it: text
@@ -1277,8 +1489,15 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
     };
     let counterparty = recipient.or(to);
     let site = t.dapp_url.as_deref().and_then(site_of);
-    let tx_hash = non_empty(&t.tx_hash)
-        .filter(|hash| t.user_op_hash.is_empty() || !hash.eq_ignore_ascii_case(&t.user_op_hash));
+    let tx_hash = dapp_tx_hash(t);
+    let changes: Vec<FeedDappChange> = recorded.into_iter().map(|line| line.change).collect();
+    let described = describe(
+        t,
+        site.as_deref(),
+        tx_hash.as_deref(),
+        value.is_some(),
+        !changes.is_empty(),
+    );
     FeedItem {
         id: t.id.clone(),
         direction: FeedDirection::Out,
@@ -1299,14 +1518,370 @@ fn dapp_item(t: &FeedTxRecord) -> FeedItem {
         counterparty_role,
         dapp: Some(FeedDapp {
             site,
-            intent_term: intent.as_deref().and_then(ClearTerm::of),
-            intent,
             received,
             estimated,
-            changes: recorded.into_iter().map(|line| line.change).collect(),
+            changes,
             contract_call,
+            ..described
+        }),
+        subtitle: Vec::new(),
+    }
+}
+
+/// A signature a dApp asked for (spec 093): a row with no figure, no status
+/// to settle and no hash — a legacy record may hold the signature itself in
+/// `tx_hash`, which is the hash of nothing and never read here. What it
+/// granted, if anything, is [`describe`]'s allowance.
+fn signature_item(t: &FeedTxRecord) -> FeedItem {
+    let site = t.dapp_url.as_deref().and_then(site_of);
+    let described = describe(t, site.as_deref(), None, false, false);
+    FeedItem {
+        id: t.id.clone(),
+        direction: FeedDirection::Out,
+        counterparty: None,
+        alias: None,
+        value: None,
+        symbol: String::new(),
+        decimals: None,
+        usd_value: 0.0,
+        chain_id: t.chain_id,
+        timestamp: t.timestamp,
+        day_start_ms: t.day_start_ms,
+        tx_hash: None,
+        batch: None,
+        kind: t.kind(),
+        status: FeedTxStatus::Confirmed,
+        site: site.clone(),
+        counterparty_role: FeedCounterpartyRole::Recipient,
+        dapp: Some(FeedDapp {
+            site,
+            received: None,
+            estimated: false,
+            changes: Vec::new(),
+            contract_call: false,
+            ..described
+        }),
+        subtitle: Vec::new(),
+    }
+}
+
+/// A dApp record's hash on chain: its `tx_hash`, unless that is the
+/// operation's own hash (a relay rejection, a batch id) — which is no
+/// transaction anybody can look up (spec 082 RJ16).
+fn dapp_tx_hash(t: &FeedTxRecord) -> Option<String> {
+    non_empty(&t.tx_hash)
+        .filter(|hash| t.user_op_hash.is_empty() || !hash.eq_ignore_ascii_case(&t.user_op_hash))
+}
+
+/// A hash as a fold key: trimmed, lower-cased.
+fn tx_key(hash: &str) -> String {
+    hash.trim().to_ascii_lowercase()
+}
+
+/// This account's "Received" records that came in the very transaction one
+/// of its dApp rows settled under (spec 093), by that hash. A failed
+/// operation brought nothing back, so it folds nothing.
+fn swap_receipts<'a>(
+    records: &'a [FeedTxRecord],
+    account: &str,
+) -> BTreeMap<String, Vec<&'a FeedTxRecord>> {
+    let hashes: BTreeSet<String> = records
+        .iter()
+        .filter(|t| {
+            t.kind() == FeedTxKind::DappTx
+                && t.status != FeedTxStatus::Failed
+                && t.from.to_lowercase() == account
+        })
+        .filter_map(dapp_tx_hash)
+        .map(|hash| tx_key(&hash))
+        .collect();
+    let mut folded: BTreeMap<String, Vec<&FeedTxRecord>> = BTreeMap::new();
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    for t in records {
+        let key = tx_key(&t.tx_hash);
+        if t.kind() == FeedTxKind::Receive
+            && t.to.to_lowercase() == account
+            && !key.is_empty()
+            && hashes.contains(&key)
+            && seen.insert(&t.id)
+        {
+            folded.entry(key).or_default().push(t);
+        }
+    }
+    folded
+}
+
+/// A receipt folded into its swap's row, as the chain recorded it: exact, and
+/// of a coin the scan already admitted (`token_trust`).
+fn receipt_change(receipt: &FeedTxRecord) -> FeedDappChange {
+    FeedDappChange {
+        direction: FeedDirection::In,
+        verified: true,
+        symbol: receipt.symbol.clone(),
+        value: Some(receipt.value.clone()),
+        decimals: Some(receipt.decimals),
+        exact: true,
+    }
+}
+
+/// The spec-093 half of a dApp row: what it was, where, what it granted, and
+/// its detail. `figured` says the row already carries money of its own, which
+/// an allowance never displaces.
+fn describe(
+    t: &FeedTxRecord,
+    site: Option<&str>,
+    tx_hash: Option<&str>,
+    figured: bool,
+    has_changes: bool,
+) -> FeedDapp {
+    let summary = t.summary.clone().unwrap_or_else(|| legacy_summary(t));
+    let action = summary.action;
+    let (intent_term, intent) = headline(&summary, t.intent.as_deref());
+    // The contract a call went to: the summary's, else the record's `to` on
+    // a record from before 093 — only ever an address.
+    let contract = summary.contract.clone().or_else(|| {
+        (matches!(action, DappAction::Call))
+            .then(|| t.to.trim())
+            .filter(|to| super::contacts::is_address(to))
+            .map(str::to_lowercase)
+    });
+    let place = place_of(&summary, contract.as_deref(), site);
+    let cap = allowance_of(&summary);
+
+    let mut facts = Vec::new();
+    if let Some(site) = site {
+        facts.push(FeedFact::Site {
+            site: site.to_owned(),
+        });
+    }
+    facts.push(FeedFact::Network {
+        chain_id: t.chain_id,
+    });
+    let contract_fact = |address: &str| FeedFact::Contract {
+        address: address.to_owned(),
+        name: contract_name_of(address).map(str::to_owned),
+    };
+    match action {
+        DappAction::Approve | DappAction::Permit => {
+            if let Some(spender) = &summary.spender {
+                facts.push(FeedFact::Spender {
+                    address: spender.clone(),
+                    name: contract_name_of(spender).map(str::to_owned),
+                });
+            }
+            if let Some(cap) = &cap {
+                facts.push(FeedFact::SpendingCap {
+                    allowance: cap.clone(),
+                });
+            }
+            // A grant that never ends says so: it is the risk to see.
+            if !summary.revoke {
+                facts.push(FeedFact::Expires {
+                    at: summary.expires_at,
+                });
+            }
+        }
+        DappAction::Call | DappAction::TypedData => {
+            if let Some(contract) = &contract {
+                facts.push(contract_fact(contract));
+            }
+        }
+        DappAction::Batch => {
+            if let Some(contract) = &contract {
+                facts.push(contract_fact(contract));
+            }
+            if let Some(cap) = &cap {
+                facts.push(FeedFact::SpendingCap {
+                    allowance: cap.clone(),
+                });
+            }
+        }
+        DappAction::SignIn | DappAction::Message | DappAction::BlindSign => {}
+    }
+    if has_changes {
+        facts.push(FeedFact::BalanceChanges);
+    }
+    facts.push(FeedFact::Date {
+        timestamp: t.timestamp,
+    });
+
+    let (operation, content) = match action {
+        DappAction::Call | DappAction::Approve => (
+            FeedDappOperation::ContractInteraction,
+            FeedDappContent::CallData,
+        ),
+        DappAction::Batch => (
+            FeedDappOperation::Batch {
+                calls: summary.calls,
+            },
+            FeedDappContent::CallData,
+        ),
+        DappAction::Permit | DappAction::TypedData => (
+            FeedDappOperation::TypedDataSignature,
+            FeedDappContent::TypedData,
+        ),
+        DappAction::SignIn | DappAction::Message | DappAction::BlindSign => {
+            (FeedDappOperation::Signature, FeedDappContent::Message)
+        }
+    };
+    let mut technical = vec![
+        FeedFact::Operation { operation },
+        FeedFact::Content { content },
+    ];
+    if let Some(name) = &summary.primary_type {
+        technical.push(FeedFact::PrimaryType { name: name.clone() });
+    }
+    if let Some(tx_hash) = tx_hash {
+        technical.push(FeedFact::Hash {
+            tx_hash: tx_hash.to_owned(),
+        });
+    }
+    let op_hash = t.user_op_hash.trim();
+    if !action.is_signature() && !op_hash.is_empty() {
+        technical.push(FeedFact::UserOpHash {
+            hash: op_hash.to_owned(),
+        });
+    }
+
+    FeedDapp {
+        site: site.map(str::to_owned),
+        intent,
+        intent_term,
+        changes: Vec::new(),
+        received: None,
+        estimated: false,
+        contract_call: false,
+        action,
+        place,
+        allowance: cap.filter(|_| action.grants() && !figured),
+        off_chain: action.is_signature(),
+        facts,
+        technical,
+    }
+}
+
+/// What a record from before 093 was, read from its kind alone.
+fn legacy_summary(t: &FeedTxRecord) -> DappSummary {
+    let action = match t.kind() {
+        FeedTxKind::SignTypedData => DappAction::TypedData,
+        FeedTxKind::SignMessage => DappAction::Message,
+        _ => DappAction::Call,
+    };
+    DappSummary {
+        action,
+        calls: u32::from(action == DappAction::Call),
+        ..DappSummary::default()
+    }
+}
+
+/// The headline verb (spec 093): `(term, text)`.
+///
+/// A transaction reads by the intent recorded when it was approved — a verb
+/// the sheet showed — else by what it is. A signature reads by what it is,
+/// whatever a descriptor called it: a permit is a spending permit, a sign-in
+/// a sign-in, so the row never sounds like money moved. An approval the
+/// person turned into a revoke reads as one.
+fn headline(summary: &DappSummary, recorded: Option<&str>) -> (Option<ClearTerm>, Option<String>) {
+    let recorded = recorded.map(str::trim).filter(|text| !text.is_empty());
+    let own = |term: ClearTerm| (Some(term), None);
+    let recorded_or = |fallback: ClearTerm| match recorded {
+        Some(text) => (ClearTerm::of(text), Some(text.to_owned())),
+        None => own(fallback),
+    };
+    match summary.action {
+        DappAction::Call => recorded_or(ClearTerm::IntentContractCall),
+        DappAction::Batch => recorded_or(ClearTerm::BatchIntent),
+        DappAction::Approve if summary.revoke => own(ClearTerm::IntentRevoke),
+        DappAction::Approve => recorded_or(ClearTerm::IntentApprove),
+        DappAction::Permit => own(ClearTerm::PermitIntent),
+        DappAction::SignIn => own(ClearTerm::SignInIntent),
+        DappAction::Message => own(ClearTerm::MessageIntent),
+        DappAction::TypedData => own(ClearTerm::TypedDataIntent),
+        DappAction::BlindSign => own(ClearTerm::EthSignIntent),
+    }
+}
+
+/// Where it happened (spec 093): the protocol the wallet knows the contract
+/// (or an allowance's spender) by, else the site that asked. A signature
+/// with no contract of its own happened on the site.
+fn place_of(summary: &DappSummary, contract: Option<&str>, site: Option<&str>) -> Option<String> {
+    let spender = summary.spender.as_deref().and_then(protocol_of);
+    let called = contract.and_then(protocol_of);
+    let known = match summary.action {
+        DappAction::Approve | DappAction::Permit => spender,
+        DappAction::Batch => called.or(spender),
+        DappAction::Call | DappAction::TypedData => called,
+        DappAction::SignIn | DappAction::Message | DappAction::BlindSign => None,
+    };
+    known.or(site).map(str::to_owned)
+}
+
+/// The allowance a summary grants, as Activity states it: unlimited, or a
+/// figure in a token whose decimals are known. A revoke grants nothing; a
+/// finite cap nobody can scale states nothing rather than a raw number.
+fn allowance_of(summary: &DappSummary) -> Option<FeedAllowance> {
+    if summary.revoke || summary.spender.is_none() {
+        return None;
+    }
+    let decimals = summary.decimals.filter(|d| *d <= MAX_DAPP_DECIMALS);
+    let value = summary
+        .amount
+        .as_deref()
+        .and_then(|raw| raw.trim().parse::<u128>().ok())
+        .zip(decimals)
+        .map(|(raw, decimals)| super::fee_policy::from_base_units(raw, decimals));
+    if !summary.unlimited && value.is_none() {
+        return None;
+    }
+    Some(FeedAllowance {
+        symbol: summary.symbol.clone().unwrap_or_default(),
+        value: value.filter(|_| !summary.unlimited),
+        decimals: decimals.filter(|_| !summary.unlimited),
+        unlimited: summary.unlimited,
+        token: summary.token.clone(),
+    })
+}
+
+/// A row's second line (spec 093), after the name overlay.
+///
+/// Not confirmed first, so a pending or failed operation is never read as
+/// done (spec 082 RG2) — except a signature, which nothing settles. A dApp
+/// row then names the site when the title named a protocol instead, and the
+/// network; a transfer names whom it went to or came from, else the network.
+fn subtitle_of(item: &FeedItem) -> Vec<FeedLine> {
+    let mut lines = Vec::new();
+    let off_chain = item.dapp.as_ref().is_some_and(|dapp| dapp.off_chain);
+    if item.status != FeedTxStatus::Confirmed && !off_chain {
+        lines.push(FeedLine::Status {
+            status: item.status,
+        });
+    }
+    match (&item.dapp, &item.counterparty) {
+        (Some(dapp), _) => {
+            if let Some(site) = item
+                .site
+                .as_ref()
+                .filter(|site| dapp.place.as_ref() != Some(*site))
+            {
+                lines.push(FeedLine::Site { site: site.clone() });
+            }
+            lines.push(FeedLine::Network {
+                chain_id: item.chain_id,
+            });
+        }
+        (None, Some(address)) => {
+            let address = address.clone();
+            let name = item.alias.clone();
+            lines.push(match item.direction {
+                FeedDirection::In => FeedLine::From { address, name },
+                FeedDirection::Out => FeedLine::To { address, name },
+            });
+        }
+        (None, None) => lines.push(FeedLine::Network {
+            chain_id: item.chain_id,
         }),
     }
+    lines
 }
 
 /// The recipient of call data that is exactly `transfer(address,uint256)`:
@@ -1554,6 +2129,7 @@ fn batch_item(group: &[&FeedTxRecord]) -> Option<FeedItem> {
         counterparty_role: FeedCounterpartyRole::Recipient,
         batch: Some(batch),
         dapp: None,
+        subtitle: Vec::new(),
     })
 }
 
