@@ -3746,16 +3746,12 @@ pub fn ring_progress(elapsed_s: u64, typical_s: u64) -> Option<f32> {
 }
 
 /// The coins a sweep's receipt lists (spec 097 F, S3): every coin the
-/// operation sent, by the core's word for a sweep or by there being several.
-/// Empty for a single send or a split, whose one coin is the title's.
+/// operation sent, when it sent several. Empty for one coin — a single send,
+/// a split, or a sweep whose native line the gas reserve dropped — which the
+/// title names.
 fn sweep_coins(send: &SendView) -> &[SendReceiptCoin] {
     match send.receipt.as_ref() {
-        Some(receipt)
-            if matches!(receipt.kind, Some(SendReceiptKind::MultiSelect))
-                || receipt.coins.len() > 1 =>
-        {
-            &receipt.coins
-        }
+        Some(receipt) if receipt.coins.len() > 1 => &receipt.coins,
         _ => &[],
     }
 }
@@ -7885,6 +7881,17 @@ mod payee_tests {
                 let shown = send_receipt(i);
                 assert_eq!(shown.title.as_ref(), "Sent 0.5 ETH");
                 assert!(shown.breakdown.is_empty(), "one coin is the title's");
+            });
+            // A sweep whose native line the gas reserve dropped sent one coin
+            // too: the title names it, and no "1 assets" list repeats it.
+            if let Some(receipt) = view.receipt.as_mut() {
+                receipt.kind = Some(SendReceiptKind::MultiSelect);
+            }
+            with_en(&view, |i, _| {
+                let shown = send_receipt(i);
+                assert_eq!(shown.title.as_ref(), "Sent 0.5 ETH");
+                assert!(shown.breakdown.is_empty());
+                assert!(shown.breakdown_title.is_none());
             });
         });
     }

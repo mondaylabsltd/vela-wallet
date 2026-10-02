@@ -586,7 +586,10 @@
 				id: '',
 				address: member.address,
 				amount: '',
-				name: member.name ?? member.resolved_name
+				// The person's own word only (spec 097 F): a draft's name is drawn
+				// untagged on the page that signs, so a registry or name-service
+				// name must not ride in as if it were theirs.
+				name: member.name
 			}))
 		});
 	}

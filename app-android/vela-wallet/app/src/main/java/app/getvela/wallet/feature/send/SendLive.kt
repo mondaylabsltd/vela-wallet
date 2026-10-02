@@ -64,7 +64,6 @@ import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeView
 import app.getvela.wallet.feature.send.core.SendNameSource
 import app.getvela.wallet.feature.send.core.SendPayee
-import app.getvela.wallet.feature.send.core.SendReceiptKind
 import app.getvela.wallet.feature.send.core.SendReceiptStatus
 import app.getvela.wallet.feature.send.core.SendStage
 import app.getvela.wallet.feature.send.core.SendToken
@@ -1194,7 +1193,9 @@ object SendLive {
         // them. A sweep lists each — one recipient, N coins; its success
         // screen used to name the first coin alone.
         val coins = receipt?.coins.orEmpty()
-        val sweep = receipt?.kind == SendReceiptKind.MultiSelect || coins.size > 1
+        // Several coins: one coin — a single send, a split, or a sweep whose
+        // native line the gas reserve dropped — is the title's.
+        val sweep = coins.size > 1
         val coinLines = if (sweep) coins.map { coin -> "${sentFigure(coin.amount, view)} ${coin.symbol}".trim() } else emptyList()
         val hash = view.tx_hash?.takeIf { it.isNotBlank() }
         val explorer = token?.let { ctx.explorers[it.chain_id] }?.takeIf { it.isNotBlank() }

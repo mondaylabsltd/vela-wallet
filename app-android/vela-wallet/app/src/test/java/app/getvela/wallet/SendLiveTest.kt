@@ -340,6 +340,20 @@ class SendLiveTest {
         val b = SendLive.receipt((FlowFixtures.build(FlowState.SD4B, strings).base as FlowBase.SendReceipt).model, submitted, c)
         assertEquals("Send tokens", b.header.title)
         assertTrue(b.captions.containsAll(listOf("0.000418 ETH", "0.034929 USDC")))
+
+        // A sweep whose native line the gas reserve dropped sent one coin: the
+        // title names it, and no coin line repeats it.
+        val one = confirmed.copy(
+            receipt = confirmed.receipt!!.copy(
+                transfers = confirmed.receipt!!.transfers.drop(1),
+                coins = coins.drop(1),
+                amount = "0.034929",
+                usd_value = 0.03,
+            ),
+        )
+        val o = SendLive.receipt((FlowFixtures.build(FlowState.SD4C, strings).base as FlowBase.SendReceipt).model, one, c)
+        assertEquals("Sent 0.034929 USDC", o.title)
+        assertEquals(listOf("To Wallet · Base"), o.captions)
     }
 
     /**

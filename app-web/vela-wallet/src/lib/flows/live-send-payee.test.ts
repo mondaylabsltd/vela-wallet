@@ -334,6 +334,24 @@ describe('S3 — the success screen lists every coin the operation sent', () => 
 		expect(model.breakdown?.map((row) => row.label)).toEqual(['ETH', 'USDC']);
 	});
 
+	it('a sweep that sent one coin (its native line dropped for gas) is titled by it, unlisted', () => {
+		const view = sweep('confirmed');
+		const one: SendView = {
+			...view,
+			receipt: {
+				...view.receipt!,
+				coins: view.receipt!.coins.slice(1),
+				amount: '0.034929',
+				usd_value: 0.03
+			}
+		};
+		const model = liveSendReceipt(receiptModel(), inputs(one));
+		expect(model.title).toBe(
+			fill(m['send.txConfirmedTitle'], { amount: '0.034929', symbol: 'USDC' })
+		);
+		expect(model.breakdown).toBeUndefined();
+	});
+
 	it("a split's headline is its total, read off the core", () => {
 		const view: SendView = {
 			...realSend().view(),
