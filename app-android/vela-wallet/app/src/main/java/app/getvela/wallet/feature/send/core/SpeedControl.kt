@@ -258,23 +258,32 @@ class SpeedControl(
             // never delivers that to a collector that missed the `busy` in
             // between (see `CoreHost.commits`).
             //
-            // And only by a commit made AFTER this question was dispatched:
-            // `commits` replays its current value to a new collector, and the
-            // dispatch reaches the core through its inbox a moment later — so
-            // a view still carrying the LAST attempt's `failed` satisfied the
-            // wait at once, and a Max pressed after a failed warm-up was
-            // answered with that stale failure in milliseconds (the full
-            // balance, no fee held back) instead of with its own quote. A
-            // promoted preview is another session and already settled.
+            // And only by a view committed after the core APPLIED this question.
+            // `commits` replays its current value to a new collector, so a view
+            // still carrying the LAST attempt's `failed` once satisfied the wait
+            // at once (a Max after a failed warm-up got the stale failure in
+            // milliseconds). Counting commits from the dispatch was not enough
+            // either: the question queues behind whatever the inbox already
+            // holds, and the warm-up's last answer, applied after the dispatch
+            // but before the question, settled the pre-check's wait with the
+            // warm-up's quote (2026-10-01 CI flake; `CoreHost.dispatchNumbered`).
+            // A promoted preview is another session and already settled.
+            //
+            // The view judged is the view returned. Reading `s.view` again after
+            // the check once handed back the NEXT commit — this question just
+            // begun, `busy` with no fee — which the send read as a failed estimate.
             @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
             val settled = withTimeoutOrNull(timeoutMs) {
                 inForce
-                    .flatMapLatest { s -> s.host.commits.map { commit -> s to commit } }
-                    .first { (s, commit) ->
-                        val view = s.view
-                        (s !== asked.session || commit > asked.commitsAtDispatch) &&
-                            !s.reading && !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
-                    }.first.view
+                    .flatMapLatest { s -> s.host.commits.map { s } }
+                    .map { s ->
+                        // `applied` before the view: then the view is at least the question's own.
+                        val ours = s !== asked.session || s.host.applied(asked.event)
+                        Triple(s, ours, s.view)
+                    }
+                    .first { (s, ours, view) ->
+                        ours && !s.reading && !view.busy && ((view.fee != null && view.fee !== before) || view.failed != null)
+                    }.third
             } ?: return Quoted.TimedOut
             return Quoted.Settled(settled)
         } finally {
@@ -337,13 +346,14 @@ class SpeedControl(
 
     /**
      * A question dispatched: to which session, the estimate it held before, and
-     * its commit count just before the dispatch — or, [chainRead], the
-     * deployment read that kept it from being dispatched at all.
+     * the question's event number there (`CoreHost.dispatchNumbered`) — or,
+     * [chainRead], the deployment read that kept it from being dispatched at
+     * all (no event: `0`).
      */
     private class Asked(
         val session: FeeSession,
         val before: FeeEstimateView?,
-        val commitsAtDispatch: Long,
+        val event: Long,
         val chainRead: FeeFailure.ChainRead? = null,
     )
 
@@ -381,14 +391,14 @@ class SpeedControl(
                     session.deployed = null
                     val failure = FeeFailure.ChainRead(rate_limited = read.rateLimited)
                     session.chainRead.value = failure
-                    Asked(session, session.view.fee, session.host.commits.value, chainRead = failure)
+                    Asked(session, session.view.fee, event = 0, chainRead = failure)
                 }
                 is RelayClient.DeployedRead.Known -> {
                     session.chainRead.value = null
                     session.deployed = read.deployed
-                    val asked = Asked(session, session.view.fee, session.host.commits.value)
-                    session.host.dispatch(ask.event(read.deployed), FeeEvent.serializer())
-                    asked
+                    val before = session.view.fee
+                    val event = session.host.dispatchNumbered(ask.event(read.deployed), FeeEvent.serializer())
+                    Asked(session, before, event)
                 }
             }
         }
