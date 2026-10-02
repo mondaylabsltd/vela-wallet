@@ -931,6 +931,7 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 		warnApproveAll: k('componentsUi.signingApprove.setApprovalAllWarn'),
 		warnPermitCantCap: k('componentsUi.signingApprove.permitCantCap'),
 		warnBestEffort: k('componentsUi.signing.bestEffortWarning'),
+		warnPartial: k('componentsUi.signing.partialWarning'),
 		warnVerifiedAbi: k('componentsUi.signing.verifiedAbiWarning'),
 		warnDescriptorFetched: k('componentsUi.signing.descriptorFetchedWarning'),
 		warnOrderTerms: k('componentsUi.signing.warnOrderTerms'),
