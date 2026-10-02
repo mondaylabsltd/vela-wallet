@@ -29,6 +29,13 @@ edition = "2024"
 publish = false
 license = "Apache-2.0"
 
+# Zed's `[workspace.lints.rust]`, which upstream inherits (its clippy table is
+# not carried: clippy never runs on this crate here). Without it, every
+# `cfg(feature = "cargo-clippy")` in the sources is a warning — this crate is a
+# path dependency, so cargo does not cap its lints the way it does git ones.
+[lints.rust]
+unexpected_cfgs = { level = "allow" }
+
 [lib]
 path = "src/gpui_macos.rs"
 
