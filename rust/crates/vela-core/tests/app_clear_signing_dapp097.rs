@@ -39,13 +39,17 @@ const WBNB: &str = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
 const USDC_BSC: &str = "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d";
 const USDT_BSC: &str = "0x55d398326f99059ff775485246999027b3197955";
 const CURVE_ROUTER: &str = "0xa72c85c258a81761433b4e8da60505fe3dd551cc";
+/// Ethereum's USDC. On BNB Chain these bytes are no token the wallet knows.
+const USDC_ETHEREUM: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
 /// What the chain answers about the tokens these dApps touched:
-/// `(token, decimals, symbol)`, all on BNB Chain.
+/// `(token, decimals, symbol)`, all on BNB Chain. The last is the 097 D
+/// stranger: a contract at Ethereum's USDC address that answers "USDC".
 const TOKENS: &[(&str, u32, &str)] = &[
     (WBNB, 18, "WBNB"),
     (USDC_BSC, 18, "USDC"),
     (USDT_BSC, 18, "USDT"),
+    (USDC_ETHEREUM, 6, "USDC"),
 ];
 
 /// What the descriptor service served in the pass, by path.
@@ -337,16 +341,19 @@ fn oneinch_native_order_reads_its_beneficiary_and_its_token() {
     assert_eq!(receive.role, ClearFieldRole::ReceiveAmount);
 }
 
-/// The same order with the chain silent: the token is known by its address
-/// and nothing else, so its amount is no figure — and the reading says it is
-/// incomplete.
+/// The same order for a token the wallet does not know on BNB Chain, with
+/// the chain silent: the token is known by its address and nothing else, so
+/// its amount is no figure — and the reading says it is incomplete. (097 D:
+/// BNB Chain's USDC itself is the registry's now, so the derived fixture's
+/// order names Ethereum's USDC address, which on this chain is nobody's
+/// word.)
 #[test]
 fn an_amount_whose_token_never_answered_is_unknown_and_incomplete() {
-    let request = fixture("oneinch-native-order.json");
+    let request = fixture("oneinch-native-order-unlisted.json");
     let view = resolve(event_of(&request, 56, beijing()), true);
     let result = view.result.expect("read");
     let receive = field(&result, "Receive amount");
-    assert_eq!(receive.value, format!("{UNKNOWN_AMOUNT} 0x8ac7..."));
+    assert_eq!(receive.value, format!("{UNKNOWN_AMOUNT} 0xa0b8..."));
     assert!(receive.unverified);
     assert_eq!(receive.usd_value, None);
     assert!(
@@ -506,23 +513,26 @@ fn a_oneinch_order_that_fills_in_parts_says_so() {
 // ---------------------------------------------------------------------------
 
 /// Curve's unlimited USDC approve of its BNB-Chain router. Before 097:
-/// "Token USDC · Spender 0xa72c85...51cc". The chain alone named the token,
-/// so its address goes with the name; the router is Curve's.
+/// "Token USDC · Spender 0xa72c85...51cc"; the router is Curve's. 097 A put
+/// the token's address beside "USDC", because the old address-only table
+/// did not know BNB Chain's USDC; it is the wallet's registry stablecoin on
+/// this chain, so it stands alone (097 D).
 #[test]
-fn curve_approve_names_the_router_and_shows_the_tokens_address() {
+fn curve_approve_names_the_router_and_the_registrys_usdc() {
     let view = read("curve-approve.json");
     assert_eq!(
         readable(&view),
         vec![
             "[Approve]",
             "Amount: Unlimited",
-            "Token: USDC (0x8ac76a...cd580d)",
+            "Token: USDC",
             "Spender: Curve Router",
         ]
     );
     let result = view.result.expect("read");
     let token = field(&result, "Token");
-    assert_eq!(token.address.as_deref(), Some(USDC_BSC));
+    assert_eq!(token.address, None);
+    assert_eq!(token.token_address.as_deref(), Some(USDC_BSC));
     assert_eq!(
         field(&result, "Spender").address.as_deref(),
         Some(CURVE_ROUTER)
@@ -569,19 +579,79 @@ fn the_curve_router_is_named_on_bnb_chain_only() {
 }
 
 /// PancakeSwap USDC → BNB, one batch: the approve's target is the USDC
-/// contract. Before 097 "Interacting with" was its forty hex digits.
+/// contract. Before 097 "Interacting with" was its forty hex digits; it is
+/// the registry's USDC on this chain, so its symbol alone (097 D).
 #[test]
-fn a_batch_call_on_a_token_names_the_token_with_its_address() {
+fn a_batch_call_on_a_token_names_the_token() {
     let view = read("pancakeswap-usdc-batch.json");
     let lines = readable(&view);
     for line in [
         "1 · Approve",
-        "Interacting with: USDC (0x8ac76a...cd580d)",
+        "Interacting with: USDC",
         "Interacting with: PancakeSwap Permit2",
         "Interacting with: PancakeSwap Universal Router",
     ] {
         assert!(has(&lines, line), "missing {line:?} in {lines:#?}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// 097 D — the registry is per chain
+// ---------------------------------------------------------------------------
+
+/// BNB Chain's USDC is the registry's there, 18 decimals: the native order
+/// reads its figure with the chain silent, and nothing is incomplete. Before
+/// 097 D the address-only table did not know it, so a node that was down
+/// left "— 0x8ac7..." and "Incomplete".
+#[test]
+fn a_registry_token_reads_with_the_chain_silent() {
+    let request = fixture("oneinch-native-order.json");
+    let view = resolve(event_of(&request, 56, beijing()), true);
+    let result = view.result.expect("read");
+    let receive = field(&result, "Receive amount");
+    assert_eq!(receive.value, "2.418146082462759045 USDC");
+    assert!(!receive.unverified);
+    assert!(!result.partial);
+}
+
+/// Approves at Ethereum's USDC address, on BNB Chain. The registry names
+/// those bytes on Ethereum only: here the token is whatever the contract
+/// says, so its address goes beside its own answer — and with the chain
+/// silent an amount of it is no figure. Before 097 D the address-only table
+/// called it USDC with 6 decimals on every chain.
+#[test]
+fn a_registry_name_holds_on_its_own_chain_only() {
+    let approve = |chain_id: u32, amount: &str| Event::ResolveTransaction {
+        to: Some(USDC_ETHEREUM.to_owned()),
+        data: Some(format!(
+            "0x095ea7b3{:0>64}{amount:0>64}",
+            &CURVE_ROUTER[2..]
+        )),
+        value: Some("0x0".to_owned()),
+        chain_id,
+        locale: beijing(),
+    };
+    let unlimited = "f".repeat(64);
+    let on_bnb = resolve(approve(56, &unlimited), false)
+        .result
+        .expect("read");
+    let token = field(&on_bnb, "Token");
+    assert_eq!(token.value, "USDC (0xa0b869...06eb48)");
+    assert_eq!(token.address.as_deref(), Some(USDC_ETHEREUM));
+
+    let silent = resolve(approve(56, "11b340"), true).result.expect("read");
+    let amount = field(&silent, "Amount");
+    assert!(amount.unverified, "{amount:?}");
+    assert_eq!(amount.value, format!("{UNKNOWN_AMOUNT} 0xa0b8..."));
+    assert!(silent.partial);
+
+    // On Ethereum the same bytes are the registry's USDC: named alone, and
+    // read with no question to the chain.
+    let on_ethereum = resolve(approve(1, &unlimited), true).result.expect("read");
+    assert_eq!(field(&on_ethereum, "Token").value, "USDC");
+    let on_ethereum = resolve(approve(1, "11b340"), true).result.expect("read");
+    assert_eq!(field(&on_ethereum, "Amount").value, "1.16 USDC");
+    assert!(!on_ethereum.partial);
 }
 
 /// Every fixture's readable part, for the results report:

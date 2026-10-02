@@ -2533,8 +2533,10 @@ mod tests {
     }
 
     /// Spec 097 N1/N2/N8: an unscaled amount says so in words and the
-    /// reading says it is incomplete; a borrow is drawn by its own label; a
-    /// batch call on USDC names it with its address.
+    /// reading says it is incomplete (a token the wallet does not know on
+    /// BNB Chain: 097 D made BNB Chain's USDC the registry's); a borrow is
+    /// drawn by its own label; a batch call on the registry's USDC names it
+    /// by its symbol.
     #[test]
     fn the_pass_requests_say_nothing_unknown_as_certain() {
         let s = strings();
@@ -2543,7 +2545,7 @@ mod tests {
             ..RequestFacts::default()
         };
         let down = blocks(
-            &real_pass_reading("oneinch-native-order.json", true),
+            &real_pass_reading("oneinch-native-order-unlisted.json", true),
             &facts,
             &s,
         );
@@ -2575,7 +2577,7 @@ mod tests {
             .find(|row| row.0 == s.label_interacting)
             .cloned()
             .unwrap_or_else(|| unreachable!("a target row"));
-        assert_eq!(target.1, SharedString::from("USDC (0x8ac76a...cd580d)"));
+        assert_eq!(target.1, SharedString::from("USDC"));
     }
 
     /// Spec 096 F7: every machine says yes, and the request is still being

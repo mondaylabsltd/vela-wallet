@@ -316,8 +316,8 @@ fn uniswap_permit_names_its_token_and_its_spender() {
         vec![
             "[Approve]",
             "Amount: Unlimited",
-            // The chain named it, not the registry: its address goes with it (097 N8).
-            "Token: WBNB (0xbb4cdb...bc095c)",
+            // BNB Chain's wrapped coin is the registry's there: no address (097 D).
+            "Token: WBNB",
             "Spender: Uniswap Universal Router",
             "Expires: 2026-11-01, 21:20",
             "Valid until: 2026-10-02, 21:50",
@@ -384,8 +384,8 @@ fn aave_withdraw_all_reads_all_and_names_the_token() {
         vec![
             "[Withdraw]",
             "Withdraw: All",
-            // The chain named it, not the registry: its address goes with it (097 N8).
-            "Token: WBNB (0xbb4cdb...bc095c)",
+            // BNB Chain's wrapped coin is the registry's there: no address (097 D).
+            "Token: WBNB",
             "Recipient: 0x88cca0...266894",
             "record: Some(\"Withdraw\")",
         ]
@@ -404,8 +404,8 @@ fn aave_unlimited_approve_names_token_and_pool() {
         vec![
             "[Approve]",
             "Amount: Unlimited",
-            // The chain named it, not the registry: its address goes with it (097 N8).
-            "Token: WBNB (0xbb4cdb...bc095c)",
+            // BNB Chain's wrapped coin is the registry's there: no address (097 D).
+            "Token: WBNB",
             "Spender: Aave V3 Pool",
             "record: Some(\"Approve\")",
         ]
@@ -650,8 +650,8 @@ fn a_permit2_batch_names_every_token() {
         vec![
             "[Approve]",
             "Amount: Unlimited",
-            // The chain named it, not the registry: its address goes with it (097 N8).
-            "Token: WBNB (0xbb4cdb...bc095c)",
+            // BNB Chain's wrapped coin is the registry's there: no address (097 D).
+            "Token: WBNB",
             "Amount: 5 USDC",
             "Spender: Uniswap Universal Router",
             "Expires: 2026-11-01, 21:20",

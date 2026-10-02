@@ -271,6 +271,9 @@ test.describe('phone width', () => {
 		}
 		// The borrow: nothing left, the USDC it brought in stands alone.
 		await expect(page.getByText('+0.3', { exact: true })).toBeVisible();
+		// The swap leads with the USDC it took: BNB Chain's registry stablecoin,
+		// trusted with no simulation on the sheet (097 D).
+		await expect(page.getByText('−1.16', { exact: true })).toBeVisible();
 		await page.screenshot({ path: `${SHOTS}/activity-phone-en.png`, fullPage: true });
 
 		await open(page, /Borrow on Aave/);
@@ -284,7 +287,8 @@ test.describe('phone width', () => {
 		await open(page, /Swap on PancakeSwap/);
 		sheet = page.getByRole('dialog');
 		await expect(sheet.getByText(en('componentsUi.signing.balanceChangesTitle'))).toBeVisible();
-		await expect(sheet.getByText('−1.16 USDC', { exact: true })).toBeVisible();
+		// The hero and its balance-change line (097 D: the row leads with it).
+		await expect(sheet.getByText('−1.16 USDC', { exact: true })).toHaveCount(2);
 		await page.screenshot({ path: `${SHOTS}/swap-detail-phone-en.png` });
 		await page.keyboard.press('Escape');
 		await page.waitForTimeout(500);

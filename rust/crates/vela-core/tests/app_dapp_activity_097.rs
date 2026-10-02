@@ -31,7 +31,9 @@ use vela_core::app::activity_feed::{
     FeedTxStatus,
 };
 use vela_core::app::clear_signing::ClearTerm;
-use vela_core::app::dapp_activity::{with_approve_facts, DappReading, DappSummary, DappToken};
+use vela_core::app::dapp_activity::{
+    summarize, with_approve_facts, DappReading, DappSummary, DappToken,
+};
 use vela_core::app::sign_request::{
     Event, SignAccountRef, SignApproveOpts, SignOperation as Op, SignQuotedFee, SignRecord,
     SignRequest, SignShellResult as Res, SignSubmitOutcome,
@@ -1150,8 +1152,12 @@ fn the_sheets_reading_names_the_contract_for_the_record() {
 
 /// N5 on a sheet with no simulation (the web's): the coins the sheet's
 /// READING showed name what the receipt proves, in the detail. A name is no
-/// trust: such a coin never leads the row, and one arriving carries no
-/// figure — the site's own contract could have answered "USDT".
+/// trust: a coin the wallet does not know never leads the row, and one
+/// arriving carries no figure — the site's own contract could have answered
+/// any symbol. BNB Chain's USDC and USDT are the wallet's registry coins
+/// there (097 D), so they are trusted whatever the reading says: before
+/// 097 D the web's USDC → BNB swap read only "+0.0015 BNB", and Curve's
+/// USDT arrived with no figure.
 #[test]
 fn the_sheets_reading_names_the_coins_without_a_simulation() {
     let token = |address: &str, symbol: &str| DappToken {
@@ -1173,15 +1179,12 @@ fn the_sheets_reading_names_the_coins_without_a_simulation() {
     );
     let rows = rows_of(vec![stored(&record, Some(&landed(&record, &receipt)))]);
     let dapp = rows[0].dapp.as_ref().expect("a dApp row");
+    assert_eq!(dapp.changes[0], line(FeedDirection::Out, "1.16", "USDC"));
     assert_eq!(
-        dapp.changes[0],
-        line(FeedDirection::Out, "1.16", "USDC"),
-        "named in the detail by the reading"
+        (rows[0].value.as_deref(), rows[0].symbol.as_str()),
+        (Some("1.16"), "USDC"),
+        "the registry's USDC leads the row"
     );
-    // A name is not a trust: only a coin the wallet trusts leads the row (a
-    // site's own token can log `Transfer(you, …)` and answer "USDC"), so
-    // the row states what came back.
-    assert_eq!(rows[0].value, None);
     assert_eq!(
         dapp.received,
         Some(line(FeedDirection::In, "0.001496447240777689", "BNB"))
@@ -1202,6 +1205,106 @@ fn the_sheets_reading_names_the_coins_without_a_simulation() {
     let rows = rows_of(vec![stored(&record, Some(&landed(&record, &receipt)))]);
     let dapp = rows[0].dapp.as_ref().expect("a dApp row");
     assert_eq!(dapp.changes[0], line(FeedDirection::Out, "0.1", "USDC"));
+    assert_eq!(
+        dapp.received,
+        Some(line(FeedDirection::In, "0.100012293602944751", "USDT"))
+    );
+
+    // Aave's aToken is no registry coin: named by the reading, it arrives
+    // with no figure.
+    let receipt = fixture("receipt-aave-supply");
+    let record = record_of(
+        "aave-supply",
+        SignApproveOpts {
+            reading: Some(DappReading {
+                tokens: vec![token(A_BNB_WBNB, "aBnbWBNB")],
+                ..DappReading::default()
+            }),
+            ..SignApproveOpts::default()
+        },
+        &op_hash_of(&receipt),
+    );
+    let rows = rows_of(vec![stored(&record, Some(&landed(&record, &receipt)))]);
+    let dapp = rows[0].dapp.as_ref().expect("a dApp row");
+    assert_eq!(
+        (rows[0].value.as_deref(), rows[0].symbol.as_str()),
+        (Some("0.003"), "BNB")
+    );
     assert_eq!(dapp.changes[1], unverified(FeedDirection::In));
     assert_eq!(dapp.received, None, "named by the reading alone: no figure");
+}
+
+/// 097 D: the registry alone names a swap's coins — a record with neither
+/// the sheet's judgments nor its reading (a client that recorded nothing)
+/// still leads both USDC → BNB swaps with the 1.16 USDC they took.
+#[test]
+fn the_registry_names_the_coins_of_a_record_that_named_none() {
+    for (name, back) in [
+        ("pcs-usdc-bnb", "0.00149903634907156"),
+        ("uni-usdc-bnb", "0.001496447240777689"),
+    ] {
+        let receipt = fixture(&format!("receipt-{name}"));
+        let record = record_of(name, SignApproveOpts::default(), &op_hash_of(&receipt));
+        let rows = rows_of(vec![stored(&record, Some(&landed(&record, &receipt)))]);
+        let dapp = rows[0].dapp.as_ref().expect("a dApp row");
+        assert_eq!(
+            (rows[0].value.as_deref(), rows[0].symbol.as_str()),
+            (Some("1.16"), "USDC"),
+            "{name}"
+        );
+        assert_eq!(rows[0].direction, FeedDirection::Out, "{name}");
+        assert_eq!(
+            dapp.received,
+            Some(line(FeedDirection::In, back, "BNB")),
+            "{name}"
+        );
+        assert!(rows[0].priced, "{name}: USDC at face value");
+    }
+}
+
+/// 097 D: the registry names a token on the record's own chain only. The
+/// same receipt filed under Ethereum moves bytes that are no coin the wallet
+/// knows there: the USDC line has no name and leads nothing.
+#[test]
+fn a_registry_coin_is_named_on_its_own_chain_only() {
+    let receipt = fixture("receipt-uni-usdc-bnb");
+    let record = record_of(
+        "uni-usdc-bnb",
+        SignApproveOpts::default(),
+        &op_hash_of(&receipt),
+    );
+    let mut on_ethereum = stored(&record, Some(&landed(&record, &receipt)));
+    on_ethereum.chain_id = 1;
+    let rows = rows_of(vec![on_ethereum]);
+    let dapp = rows[0].dapp.as_ref().expect("a dApp row");
+    assert_eq!(rows[0].value, None);
+    assert_eq!(dapp.changes[0], unverified(FeedDirection::Out));
+}
+
+/// 097 D: an allowance's token is named by the registry of the request's
+/// chain — BNB Chain's USDC at its 18 decimals there; Ethereum's USDC
+/// address on BNB Chain is nobody's word, so no name and no width.
+#[test]
+fn an_allowance_names_its_token_on_its_own_chain() {
+    let approve = |token: &str| {
+        json!([{
+            "to": token,
+            "data": format!("0x095ea7b3{:0>64}{:0>64}", &CURVE_ROUTER[2..], "11b340"),
+            "value": "0x0",
+        }])
+    };
+    let usdc_ethereum = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+    let on = |chain_id: u32, token: &str| {
+        let summary = summarize(
+            "eth_sendTransaction",
+            &approve(token),
+            chain_id,
+            "https://www.curve.finance",
+            None,
+        );
+        (summary.symbol, summary.decimals)
+    };
+    assert_eq!(on(BSC, USDC), (Some("USDC".to_owned()), Some(18)));
+    assert_eq!(on(BSC, usdc_ethereum), (None, None));
+    assert_eq!(on(1, usdc_ethereum), (Some("USDC".to_owned()), Some(6)));
 }
