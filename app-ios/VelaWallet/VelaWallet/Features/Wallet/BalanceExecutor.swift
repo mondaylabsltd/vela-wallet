@@ -24,6 +24,7 @@
 //
 
 import Foundation
+import VelaCore
 
 @MainActor
 final class BalanceExecutor {
@@ -71,12 +72,23 @@ final class BalanceExecutor {
     /// watch, which tokens are held, and what they were worth. Web gets the
     /// same three facts out of `fetchTokens`' cache.
     private let held: HeldTokens
+    /// How long one chain's read may take before the round counts it failed
+    /// (spec 092). The core's `balanceChainReadDeadlineMs()` in the app; a test
+    /// whose stub answers at once gives one its speed cannot reach, so its
+    /// verdict never depends on how busy the machine is.
+    private let chainDeadlineMs: UInt32
 
-    init(store: VelaStore, pool: RpcPool, held: HeldTokens) {
+    init(
+        store: VelaStore,
+        pool: RpcPool,
+        held: HeldTokens,
+        chainDeadlineMs: UInt32 = balanceChainReadDeadlineMs()
+    ) {
         self.store = store
         self.pool = pool
         self.prices = Prices(pool: pool)
         self.held = held
+        self.chainDeadlineMs = chainDeadlineMs
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -99,9 +111,10 @@ final class BalanceExecutor {
                 let facts = await chainFacts(chainId)
                 let custom = customTokens(chainId: chainId)
                 let pool = pool
+                let deadline = chainDeadlineMs
                 // Bounded like the home's round (spec 092): one held-open
                 // connection must not keep a switcher row from settling.
-                let result = await TokenReads.bounded(chainId: chainId) {
+                let result = await TokenReads.bounded(chainId: chainId, deadlineMs: deadline) {
                     await TokenReads.read(
                         address: address, chainId: chainId,
                         tokens: custom, pool: pool,
@@ -191,12 +204,13 @@ final class BalanceExecutor {
             for chainId in chainIds() {
                 let tokens = customTokens(chainId: chainId)
                 let facts = chainFacts
+                let deadline = chainDeadlineMs
                 group.addTask { [pool] in
                     // Bounded by the core's per-chain deadline (spec 092): a
                     // chain whose connection is held open is failed for this
                     // round, and it can no longer keep the round — and Home —
                     // from settling.
-                    await TokenReads.bounded(chainId: chainId) {
+                    await TokenReads.bounded(chainId: chainId, deadlineMs: deadline) {
                         // The registry's stablecoins and wrapped coin join the
                         // plan (spec 082 RE9) — USDC on Base is counted.
                         let registry = await facts(chainId)

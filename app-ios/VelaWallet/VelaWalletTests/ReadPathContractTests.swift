@@ -15,6 +15,16 @@ import Testing
 struct ReadPathContractTests {
     private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
 
+    /// The executor these contracts read through. Its per-chain deadline is
+    /// one no run reaches: the unbooted pool refuses every call at once, so a
+    /// chain's verdict here is the read's own — never a cut made because a
+    /// loaded machine was slow to get to it (CI #386: on the 3-core runner
+    /// the core's 18 s cut every chain, Tempo included, and "failed" became
+    /// all 24). `ChainDeadlineTests` proves the cut itself.
+    private func makeExecutor(_ store: VelaStore, _ pool: RpcPool) -> BalanceExecutor {
+        BalanceExecutor(store: store, pool: pool, held: HeldTokens(), chainDeadlineMs: .max)
+    }
+
     private func fresh() -> (VelaStore, RpcPool) {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
@@ -31,7 +41,7 @@ struct ReadPathContractTests {
     /// this much" instead of a number that is quietly wrong.
     @Test func anUnreachableChainIsReportedFailedRatherThanEmpty() async {
         let (store, pool) = fresh()
-        let executor = BalanceExecutor(store: store, pool: pool, held: HeldTokens())
+        let executor = makeExecutor(store, pool)
 
         let reply = (try? CoreJSON.object(await executor.perform([
             "type": "fetch_tokens", "address": golden, "force": true, "pull": false,
@@ -61,7 +71,7 @@ struct ReadPathContractTests {
     /// this pins that the shell fills them separately.
     @Test func throttlingIsReportedApartFromFailure() async {
         let (store, pool) = fresh()
-        let executor = BalanceExecutor(store: store, pool: pool, held: HeldTokens())
+        let executor = makeExecutor(store, pool)
         let reply = (try? CoreJSON.object(await executor.perform([
             "type": "fetch_tokens", "address": golden, "pull": false,
         ]))) ?? [:]
@@ -81,7 +91,7 @@ struct ReadPathContractTests {
     /// back to reading a chain by itself.
     @Test func everyCallerFailsClosedThroughTheSamePool() async {
         let (store, pool) = fresh()
-        let balances = BalanceExecutor(store: store, pool: pool, held: HeldTokens())
+        let balances = makeExecutor(store, pool)
         let contacts = ContactsExecutor(store: store, pool: pool)
 
         let fetched = (try? CoreJSON.object(await balances.perform([
