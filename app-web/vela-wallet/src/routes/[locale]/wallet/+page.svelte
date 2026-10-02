@@ -34,8 +34,14 @@
 	import Dialog from '$lib/settings/ui/Dialog.svelte';
 	import RpcFixBody from '$lib/settings/ui/RpcFixBody.svelte';
 	import BalanceDetailBody from '$lib/settings/ui/BalanceDetailBody.svelte';
+	import UnreachableBody from '$lib/settings/ui/UnreachableBody.svelte';
 	import RelayerBody from '$lib/settings/ui/RelayerBody.svelte';
-	import { liveBalanceDetail, liveRelayer, liveRpcFix } from '$lib/settings/live';
+	import {
+		liveBalanceDetail,
+		liveRelayer,
+		liveRpcFix,
+		liveUnreachable
+	} from '$lib/settings/live';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import { session } from '$lib/session/core/session.svelte';
@@ -1602,12 +1608,15 @@
 	//
 	// 023 drew three rescues as settings components and placed them over the
 	// wallet (SR2 RPC fix, SR3 balance detail) and over the send (SR4 relayer
-	// treasury). The balance status line is their door on this route: an
-	// unreachable chain opens its RPC fix, anything else opens the breakdown.
-	// The treasury sheet opens itself, from the send core's probe.
-	type Rescue = 'rpc-fix' | 'balance-detail' | 'relayer';
+	// treasury). The balance status line is their door on this route: networks
+	// the wallet cannot reach open their list (spec 092 — all of them, each with
+	// its RPC fix), anything else opens the breakdown. The treasury sheet opens
+	// itself, from the send core's probe.
+	type Rescue = 'unreachable' | 'rpc-fix' | 'balance-detail' | 'relayer';
 	let rescue = $state<Rescue | null>(null);
 	let rescueChainId = $state<number | null>(null);
+	/** The RPC fix was opened from the list: Done goes back to it. */
+	let fixFromList = $state(false);
 	/** The URL being typed, until it is saved. */
 	let rpcDraft = $state<string | null>(null);
 	/** A save went to the core from this sheet; its probe decides "restored". */
@@ -1626,6 +1635,7 @@
 	const rpcRestored = $derived(
 		rpcSaved && rpcDraft === null && rescueRow?.rpc_health?.type === 'ok'
 	);
+	const unreachableModel = $derived(liveUnreachable(balance.view, currency.view, rm));
 	const balanceDetailModel = $derived(
 		liveBalanceDetail(balance.view, currency.view, rm, data.walletMessages.balance.unpriced)
 	);
@@ -1633,23 +1643,28 @@
 		sendView?.treasury_bootstrap ? liveRelayer(sendView.treasury_bootstrap, rm) : undefined
 	);
 	const rescueTitle = $derived(
-		rescue === 'rpc-fix'
-			? rm.rescue.rpcFixTitle
-			: rescue === 'balance-detail'
-				? rm.balanceDetail.title
-				: rm.relayer.title
+		rescue === 'unreachable'
+			? unreachableModel.title
+			: rescue === 'rpc-fix'
+				? rm.rescue.rpcFixTitle
+				: rescue === 'balance-detail'
+					? rm.balanceDetail.title
+					: rm.relayer.title
 	);
 
 	function openRescue() {
-		const failing = balance.view.banner_chain_ids;
-		if (failing.length > 0) {
-			openRpcFix(failing[0]!);
+		if (balance.view.unreachable_networks.length > 0) {
+			rescue = 'unreachable';
+			// Read every chain again while the list is open: one that has come
+			// back leaves it (and the home's count) on the next settle.
+			balance.unreachableListOpened();
 			return;
 		}
 		rescue = 'balance-detail';
 	}
 
-	function openRpcFix(chainId: number) {
+	function openRpcFix(chainId: number, fromList = false) {
+		fixFromList = fromList;
 		rescueChainId = chainId;
 		rpcDraft = null;
 		rpcSaved = false;
@@ -1662,6 +1677,9 @@
 
 	function closeRescue() {
 		if (rescue === 'relayer') sendSession?.dispatch({ type: 'dismiss_treasury_sheet' });
+		// The list, or a fix opened from it: the list's re-reads stop.
+		if (rescue === 'unreachable' || fixFromList) balance.unreachableListClosed();
+		fixFromList = false;
 		rescue = null;
 	}
 
@@ -1674,7 +1692,9 @@
 			// fetch, and the person just watched the probe succeed.
 			balance.fixChainResolved(rescueChainId);
 			balance.refresh(true);
-			rescue = null;
+			// Opened from the list: back to it, which the core keeps current.
+			rescue = fixFromList ? 'unreachable' : null;
+			fixFromList = false;
 			return;
 		}
 		if (rpcDraft !== null) {
@@ -1976,7 +1996,9 @@
 
 <!-- The rescue sheets (spec 028 Phase 8): a sheet on the phone, a dialog on the desktop. -->
 {#snippet rescueBody()}
-	{#if rescue === 'rpc-fix' && rpcFixModel !== undefined}
+	{#if rescue === 'unreachable'}
+		<UnreachableBody panel={unreachableModel} onfix={(chainId) => openRpcFix(chainId, true)} />
+	{:else if rescue === 'rpc-fix' && rpcFixModel !== undefined}
 		<RpcFixBody
 			panel={rpcFixModel}
 			onprimary={rpcFixPrimary}

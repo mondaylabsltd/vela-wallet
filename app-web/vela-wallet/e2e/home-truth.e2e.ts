@@ -114,14 +114,15 @@ test('an unreachable chain is SAID, never shown as a confident zero (T152 findin
 		route.fulfill({ status: 500, body: 'no' })
 	);
 	await openHome(page);
-	await expect(page.getByText('Ethereum RPC unavailable', { exact: true })).toBeVisible({
+	// Spec 092 (F08): said without "RPC" — a fact, not an alarm.
+	await expect(page.getByText("Can't reach Ethereum right now", { exact: true })).toBeVisible({
 		timeout: 20_000
 	});
 	// Not "Live · listening for payments": a partial zero is not a live zero.
 	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toHaveCount(0);
 });
 
-test('an unreachable chain’s status line opens its RPC fix, and a working URL restores it (spec 028 Phase 8)', async ({
+test('an unreachable chain’s status line opens the list, its row the RPC fix, and a working URL restores it (spec 028 Phase 8, 092)', async ({
 	page
 }) => {
 	// The same dead endpoint as above; the JSON stub still answers any other
@@ -130,10 +131,15 @@ test('an unreachable chain’s status line opens its RPC fix, and a working URL 
 		route.fulfill({ status: 500, body: 'no' })
 	);
 	await openHome(page);
-	await page.getByRole('button', { name: 'Ethereum RPC unavailable' }).click();
+	await page.getByRole('button', { name: "Can't reach Ethereum right now" }).click();
+
+	// The list (spec 092), its one row, and that row's fix.
+	const sheet = page.getByRole('dialog');
+	const list = sheet.getByTestId('unreachable-list');
+	await expect(list.getByText('Ethereum', { exact: true })).toBeVisible();
+	await list.getByRole('button', { name: en('assets.rpcFix') }).click();
 
 	// SR2, for THIS chain, with its stored URL in the field.
-	const sheet = page.getByRole('dialog');
 	await expect(sheet.getByText(en('assets.rpcFixTitle')).first()).toBeVisible();
 	await expect(sheet.getByText('Ethereum', { exact: true })).toBeVisible();
 	await expect(sheet.getByText(en('assets.rpcFixWarning'))).toBeVisible();
@@ -145,12 +151,58 @@ test('an unreachable chain’s status line opens its RPC fix, and a working URL 
 	await sheet.getByRole('button', { name: en('assets.rpcFixSaveBtn') }).click();
 	await expect(sheet.getByText(en('assets.rpcFixRestored'))).toBeVisible({ timeout: 20_000 });
 
-	// Done tells the balance core the chain is back; it reads it and the
-	// status line goes.
+	// Done tells the balance core the chain is back and returns to the list,
+	// which now says every network answers; the status line goes.
 	await sheet.getByRole('button', { name: en('common.done') }).click();
+	await expect(sheet.getByText(en('assets.unreachableNone')).first()).toBeVisible();
+	await expect(list.getByRole('listitem')).toHaveCount(0);
+	await sheet.getByRole('button', { name: en('componentsUi.identiconViewer.close') }).first().click();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
-	await expect(page.getByText('Ethereum RPC unavailable', { exact: true })).toHaveCount(0, {
+	await expect(page.getByText("Can't reach Ethereum right now", { exact: true })).toHaveCount(0, {
 		timeout: 20_000
 	});
 	await expect(page.getByText('$4,500', { exact: true })).toBeVisible({ timeout: 20_000 });
+});
+
+test('every unreachable network is listed with what was last read there, and one that comes back leaves (spec 092)', async ({
+	page
+}, testInfo) => {
+	// BNB Chain and Polygon are down from the start: never read.
+	let bnbDown = true;
+	await page.route(/stub-rpc\.test\/rpc\/(56|137)$/, (route) =>
+		route.request().url().endsWith('/56') && !bnbDown
+			? route.fallback()
+			: route.fulfill({ status: 500, body: 'no' })
+	);
+	await openHome(page);
+	await expect(page.getByText('$4,500', { exact: true })).toBeVisible({ timeout: 20_000 });
+	const line = page.getByRole('button', { name: "Can't reach 2 networks right now" });
+	await expect(line).toBeVisible({ timeout: 30_000 });
+	await page.screenshot({ path: testInfo.outputPath('092-home-notice.png') });
+
+	// Ethereum goes quiet after it was read holding 1.5 ETH. Opening the list
+	// reads every chain again, so it joins — first, with what it last held.
+	await page.route(/stub-rpc\.test\/rpc\/1$/, (route) =>
+		route.fulfill({ status: 500, body: 'no' })
+	);
+	await line.click();
+	const sheet = page.getByRole('dialog');
+	const rows = sheet.getByTestId('unreachable-list').getByRole('listitem');
+	await expect(sheet.getByText("Can't reach 3 networks right now").first()).toBeVisible({
+		timeout: 30_000
+	});
+	await expect(sheet.getByText(en('assets.unreachableBody'))).toBeVisible();
+	await expect(rows).toHaveCount(3);
+	await expect(rows.nth(0)).toContainText('Ethereum');
+	await expect(rows.nth(0)).toContainText('Last seen $4,500');
+	await expect(rows.nth(1)).toContainText('BNB Chain');
+	await expect(rows.nth(1)).toContainText(en('assets.notReadYet'));
+	await expect(rows.nth(2)).toContainText('Polygon');
+	await page.screenshot({ path: testInfo.outputPath('092-list.png') });
+
+	// BNB Chain comes back: it leaves the open list and the count.
+	bnbDown = false;
+	await expect(rows).toHaveCount(2, { timeout: 30_000 });
+	await expect(sheet.getByText("Can't reach 2 networks right now").first()).toBeVisible();
+	await expect(sheet.getByTestId('unreachable-list')).not.toContainText('BNB Chain');
 });

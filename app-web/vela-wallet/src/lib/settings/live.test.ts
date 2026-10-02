@@ -14,6 +14,7 @@ import {
 	liveNetworkRows,
 	liveRelayer,
 	liveRpcProviders,
+	liveUnreachable,
 	withEraseFailure,
 	withLiveFeeSpeed,
 	withLiveFeeSpeedDesktop,
@@ -24,6 +25,9 @@ import { buildDesktopState, buildMobileState } from './fixtures';
 import type { FeeTierPrefView } from '$lib/core/generated/FeeTierPrefView';
 import type { SendTreasuryStatus } from '$lib/core/generated/SendTreasuryStatus';
 import { resolveSettingsMessages } from '$lib/i18n/engine.server';
+import type { BalanceView } from '$lib/core/generated/BalanceView';
+import type { CurrencyView } from '$lib/core/generated/CurrencyView';
+import type { UnreachableNetwork } from '$lib/core/generated/UnreachableNetwork';
 
 const m = resolveSettingsMessages('en');
 
@@ -455,6 +459,93 @@ describe('the relayer bootstrap sheet', () => {
 			expect(panel.address).toBe('0x3e59292e18417f814112f731e7163534c6d2fe3c');
 			expect(panel.primary).toBe(m.relayer.retryBtn);
 		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Spec 092 — every network the wallet cannot reach, in one place
+// ---------------------------------------------------------------------------
+
+describe('the unreachable-networks list (spec 092)', () => {
+	const USD: CurrencyView = { code: 'USD', rate: 1, committed: true };
+	const CNY: CurrencyView = { code: 'CNY', rate: 7, committed: true };
+	const row = (
+		chain_id: number,
+		line_key: string,
+		last_seen_usd: number | null = null
+	): UnreachableNetwork => ({
+		chain_id,
+		last_known: last_seen_usd === null ? 'not_read' : 'held',
+		last_seen_usd,
+		line_key
+	});
+	const view = (
+		networks: UnreachableNetwork[],
+		key: string | null,
+		hidden = false
+	): BalanceView => ({
+		address: '0xabc',
+		display_total_usd: hidden ? null : 10,
+		balance_unknown: false,
+		balance_partial: networks.length > 0,
+		unreachable: false,
+		notice: null,
+		hidden,
+		refreshing: false,
+		last_refreshed_at_ms: 1,
+		tokens: [],
+		unpriced_tokens: [],
+		failed_chain_ids: networks.map((n) => n.chain_id),
+		rate_limited_chain_ids: [],
+		unreachable_networks: networks,
+		unreachable_key: key,
+		holdings_loading: false,
+		cached_total_usd: null,
+		switcher: { open: false, loading: false, balances: [] }
+	});
+	const three = [
+		row(1, 'assets.lastSeen', 4500),
+		row(56, 'assets.lastSeenEmpty'),
+		row(137, 'assets.notReadYet')
+	];
+
+	it('lists every network in the core’s order, each with what was last read there', () => {
+		const panel = liveUnreachable(view(three, 'assets.unreachableMany'), USD, m);
+		expect(panel.title).toBe("Can't reach 3 networks right now");
+		expect(panel.summary).toBe(m.rescue.unreachableBody);
+		expect(panel.rows.map((r) => [r.name, r.line, r.action])).toEqual([
+			['Ethereum', 'Last seen $4,500.00', m.rescue.rpcFix],
+			['BNB Chain', 'Held nothing when last read', m.rescue.rpcFix],
+			['Polygon', 'Not read yet', m.rescue.rpcFix]
+		]);
+		expect(panel.rows.map((r) => r.chainId)).toEqual([1, 56, 137]);
+	});
+
+	it('names the one network, and writes the worth in the display currency', () => {
+		const panel = liveUnreachable(
+			view([row(1, 'assets.lastSeen', 100)], 'assets.unreachableOne'),
+			CNY,
+			m
+		);
+		expect(panel.title).toBe("Can't reach Ethereum right now");
+		expect(panel.rows[0]?.line).toMatch(/700/);
+	});
+
+	it('masks the worth while privacy hides it, and keeps the network', () => {
+		const panel = liveUnreachable(
+			view([row(1, 'assets.lastSeen', null)], 'assets.unreachableOne', true),
+			USD,
+			m
+		);
+		expect(panel.rows).toHaveLength(1);
+		expect(panel.rows[0]?.line).toBe('Last seen ••••');
+	});
+
+	it('says so once every network has come back', () => {
+		const panel = liveUnreachable(view([], null), USD, m);
+		expect(panel.title).toBe(m.rescue.unreachableNone);
+		expect(panel.summary).toBeUndefined();
+		expect(panel.rows).toEqual([]);
 	});
 });
 

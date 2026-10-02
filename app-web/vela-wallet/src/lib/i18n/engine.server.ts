@@ -24,7 +24,7 @@ import type { ExploreMessages } from '$lib/explore/messages';
 import type { RequestMessages } from '$lib/dapp/messages';
 import type { SigningMessages } from '$lib/signing/messages';
 import { CLEAR_TERMS, INTENT_TERMS } from '$lib/signing/terms';
-import type { SettingsMessages } from '$lib/settings/messages';
+import { UNREACHABLE_LINE_KEYS, type SettingsMessages } from '$lib/settings/messages';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
 const CATALOGS = import.meta.glob('../../../../../assets/i18n/*.json', {
@@ -155,8 +155,8 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 		assets: {
 			emptyTitle: k('assets.emptyTitle'),
 			emptyCaption: k('assets.emptySubtext'),
-			rpcUnavailableSingle: k('assets.rpcUnavailableSingle'),
-			rpcUnavailableMultiple: k('assets.rpcUnavailableMultiple')
+			unreachableOne: k('assets.unreachableOne'),
+			unreachableMany: k('assets.unreachableMany')
 		},
 		networkFilter: {
 			pillAll: k('componentsUi.networkFilter.pillAll'),
@@ -587,8 +587,11 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			removeFromViewer: k('componentsUi.bugReport.removeFromViewer')
 		},
 		rescue: {
-			rpcUnavailableSingle: k('assets.rpcUnavailableSingle'),
-			rpcUnavailableMultiple: k('assets.rpcUnavailableMultiple'),
+			unreachableOne: k('assets.unreachableOne'),
+			unreachableMany: k('assets.unreachableMany'),
+			unreachableBody: k('assets.unreachableBody'),
+			unreachableNone: k('assets.unreachableNone'),
+			lines: Object.fromEntries(UNREACHABLE_LINE_KEYS.map((key) => [key, k(key)])),
 			rpcFix: k('assets.rpcFix'),
 			rpcFixTitle: k('assets.rpcFixTitle'),
 			rpcFixWarning: k('assets.rpcFixWarning'),
