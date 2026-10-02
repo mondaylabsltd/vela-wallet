@@ -62,12 +62,12 @@
 pub const BUILD_ALLOWED: &[&str] = &[
     // Both of the next two, in one page: 085's typed-data reader and 082's
     // site and plain-send fixes (the merge of the two branches, 2026-10-01).
-    // NOT yet LAUNCH: the owner deploys it, checks it serves, then moves LAUNCH.
+    // LAUNCH since 2026-10-01: deployed, 200 + immutable, bytes hash to it.
     "0ba8ee8cc9bb7490a1f31d9d2059a93f6796beec6185a8b76e3db0184b290242",
     // The preview and the digest read a typed-data request's ONE document by
     // the same strict reader, and refuse two documents, a missing account or
-    // an unknown method (EIP-712 WYSIWYS audit, 2026-10-01). NOT yet LAUNCH:
-    // the owner deploys it, checks it serves, then moves LAUNCH.
+    // an unknown method (EIP-712 WYSIWYS audit, 2026-10-01). Never LAUNCH:
+    // the merged page above carries it.
     "8c002ee4886869375d79d01c81d52f109449d663020bcf4bf03ca8ebbe368658",
     // The site is named once when its name is its host, and a call with no
     // calldata is a plain send, value 0 included, its value read the way the
@@ -145,7 +145,7 @@ pub const ENFORCE: bool = false;
 /// first without the very network this is about not needing, so it moves to a
 /// new page only after that page is deployed (release: deploy `dist/`, then set
 /// this). Always a member of [`BUILD_ALLOWED`] (tested).
-pub const LAUNCH: &str = "ec038e11ec6498c922d0935da6009f46b4d43885e119ff0e984b88227433c886";
+pub const LAUNCH: &str = "0ba8ee8cc9bb7490a1f31d9d2059a93f6796beec6185a8b76e3db0184b290242";
 
 /// The official page's host. A person may point Settings at their own
 /// deployment; that address is "custom" here, and the rules differ (FR-009).

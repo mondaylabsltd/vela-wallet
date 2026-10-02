@@ -37,8 +37,9 @@
 //!   [`Event::PopupAccountSwitch`] when the wallet changes account, and reads
 //!   [`settle_on_close`] for the code a still-pending request is settled with;
 //! - **the origin-security helpers** — [`is_insecure_public_origin`] with its
-//!   fully-anchored IP exemptions, and [`origin_of`]. Both are imported by
-//!   `dapp_browser` / `dapp_rpc`; neither is re-implemented there.
+//!   fully-anchored IP exemptions, [`is_secure_context`] (who is offered the
+//!   wallet at all, spec 088) and [`origin_of`]. All are imported by
+//!   `dapp_browser` / `dapp_rpc`; none is re-implemented there.
 //!
 //! Ported line by line from:
 //!
@@ -772,6 +773,46 @@ pub fn is_insecure_public_origin(origin: &str) -> bool {
         None => true,
         Some((scheme, host, _)) => scheme == "http" && !is_loopback_or_private_host(&host),
     }
+}
+
+/// Whether a page at `origin` is offered the wallet at all (spec 088 FR-004):
+/// `https`, or `http` on this device's own loopback — the web platform's
+/// "secure context", the same pair the Trusted Signer page is held to.
+///
+/// Narrower than [`is_insecure_public_origin`] on purpose: a private-LAN
+/// `http` page is reachable by anyone on the same network, so it may load,
+/// but it gets no provider. A dApp under development is served on loopback
+/// (`adb reverse`, the simulator) or over https. The in-app browsers ask this
+/// once, in [`super::dapp_browser`], before any page message is read; the
+/// injected script checks `window.isSecureContext`, the platform's own
+/// spelling of the same rule.
+///
+/// Loopback is EXACT: `localhost`, a `*.localhost` name (RFC 6761 reserves
+/// them for loopback), a full `127.x.y.z` dotted quad, or `[::1]` — never
+/// `127.0.0.1.evil.com`.
+pub fn is_secure_context(origin: &str) -> bool {
+    match parse_origin(origin) {
+        Some((scheme, _, _)) if scheme == "https" => true,
+        Some((scheme, host, _)) if scheme == "http" => is_loopback_host(&host),
+        _ => false,
+    }
+}
+
+/// `localhost`, `*.localhost`, `127.0.0.0/8` as a full dotted quad, `[::1]`.
+fn is_loopback_host(host: &str) -> bool {
+    let h = host.to_ascii_lowercase();
+    if h == "localhost" || h.ends_with(".localhost") || h == "[::1]" {
+        return true;
+    }
+    let parts: Vec<&str> = h.split('.').collect();
+    parts.len() == 4
+        && parts[0] == "127"
+        && parts.iter().all(|part| {
+            !part.is_empty()
+                && part.len() <= 3
+                && part.bytes().all(|b| b.is_ascii_digit())
+                && part.parse::<u16>().is_ok_and(|n| n <= 255)
+        })
 }
 
 /// A loopback / private-LAN / link-local host — the ONLY http origins exempt

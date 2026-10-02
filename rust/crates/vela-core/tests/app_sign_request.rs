@@ -13,13 +13,14 @@ use support::DomainDriver;
 use vela_core::app::fee_policy::{tempo_reimbursement, FeeTier, TEMPO_FEE_TOKEN_DECIMALS};
 use vela_core::app::sign_request::{
     dapp_receipt_wait_ms, ending_of, ending_state, extract_request_chain_id, is_signing_method,
-    method_kind, required_capabilities, reverted_detail, reverted_transaction, sign_account_index,
-    Event, SignAccountRef, SignApproveOpts, SignDappIdentity, SignEnding, SignEndingState,
-    SignErrorKind, SignFundingNeeded, SignFundingPresentation, SignMethodKind, SignNotice,
-    SignOperation as Op, SignPhase, SignQuotedFee, SignRecord, SignRecordClose, SignRecordKind,
-    SignRecordStatus, SignRequest, SignResponsePayload, SignSettledOutcome, SignShellResult as Res,
-    SignSponsorship, SignSubmitOutcome, SignSurface, SignSwipeAction, SignTrackerHandoff,
-    SignTrackerWithdraw, CODE_INTERNAL, CODE_INVALID_PARAMS, CODE_UNAUTHORIZED,
+    method_kind, request_names_other_chain, required_capabilities, reverted_detail,
+    reverted_transaction, sign_account_index, Event, SignAccountRef, SignApproveOpts,
+    SignDappIdentity, SignEnding, SignEndingState, SignErrorKind, SignFundingNeeded,
+    SignFundingPresentation, SignMethodKind, SignNotice, SignOperation as Op, SignPhase,
+    SignQuotedFee, SignRecord, SignRecordClose, SignRecordKind, SignRecordStatus, SignRequest,
+    SignResponsePayload, SignSettledOutcome, SignShellResult as Res, SignSponsorship,
+    SignSubmitOutcome, SignSurface, SignSwipeAction, SignTrackerHandoff, SignTrackerWithdraw,
+    CHAIN_MISMATCH_MESSAGE, CODE_INTERNAL, CODE_INVALID_PARAMS, CODE_UNAUTHORIZED,
     CODE_UNSUPPORTED_CAPABILITY, CODE_UNSUPPORTED_CHAIN, CODE_USER_REJECTED,
     DAPP_TX_ANSWER_WINDOW_MS, EXTENSION_REQUEST_TTL_MS, NOT_CONFIRMED_MESSAGE, PAGE_WAIT_CAP_MS,
     REVERTED_MESSAGE,
@@ -981,6 +982,279 @@ fn embedded_request_chain_switches_the_global_chain() {
     let view = sut.view();
     assert_eq!(view.global_chain_id, 137);
     assert_eq!(view.request.expect("request").chain_id, 137);
+}
+
+// ---------------------------------------------------------------------------
+// 089 — a request naming another chain than the site's is refused
+// ---------------------------------------------------------------------------
+
+/// The refusal 089 answers: -32602, `invalid_params`, the constant sentence,
+/// to the request's own transport.
+fn chain_mismatch_refusal(op: &Op) -> bool {
+    matches!(op, Op::SendResponse {
+        transport_id,
+        payload: SignResponsePayload::Err {
+            code: CODE_INVALID_PARAMS,
+            kind: SignErrorKind::InvalidParams,
+            message: Some(message),
+        },
+        ..
+    } if transport_id == EXT && message == CHAIN_MISMATCH_MESSAGE)
+}
+
+fn tx_on(chain: &str) -> String {
+    format!(r#"[{{"to":"{SPENDER}","data":"0x","value":"0x1","chainId":{chain}}}]"#)
+}
+
+fn batch_on(chain: &str) -> String {
+    format!(
+        r#"[{{"version":"2.0.0","chainId":{chain},"calls":[{{"to":"{SPENDER}","data":"0x","value":"0x1"}}]}}]"#
+    )
+}
+
+fn typed_on(chain: serde_json::Value) -> String {
+    let doc = serde_json::json!({
+        "types": {"EIP712Domain": [{"name": "chainId", "type": "uint256"}],
+                  "Mail": [{"name": "contents", "type": "string"}]},
+        "primaryType": "Mail", "domain": {"chainId": chain}, "message": {"contents": "hi"}
+    });
+    serde_json::json!([ACCT0, doc.to_string()]).to_string()
+}
+
+/// Arrive stamped `stamp`, expect the 089 refusal as the ONLY operation, and
+/// no sheet — nothing shown, nothing signable, the global chain untouched.
+fn assert_refused_before_any_sheet(method: &str, params: &str, stamp: u32) {
+    let mut sut = boot();
+    let ops = sut.dispatch(Arrive::extension("rid-89", method, params, stamp).event());
+    assert!(
+        matches!(ops.as_slice(), [op] if chain_mismatch_refusal(op)),
+        "{method} {params} stamped {stamp}: {ops:?}"
+    );
+    let view = sut.view();
+    assert_eq!(view.surface, SignSurface::Hidden, "{method}: never a sheet");
+    assert!(view.request.is_none(), "{method}: nothing pending");
+    assert_eq!(
+        view.global_chain_id, 1,
+        "{method}: the global chain untouched"
+    );
+    assert!(
+        sut.dispatch(approve(SignApproveOpts::default())).is_empty(),
+        "{method}: nothing left to approve"
+    );
+}
+
+#[test]
+fn stamped_chain_1_refuses_a_transaction_for_gnosis_before_any_sheet() {
+    // The reported case: the site is on Ethereum in the wallet, the dApp
+    // prepared its call for Gnosis. Refused whether or not the wallet knows
+    // the named chain — it is the mismatch that refuses, not the chain.
+    assert_refused_before_any_sheet("eth_sendTransaction", &tx_on(r#""0x64""#), 1);
+    assert_refused_before_any_sheet("eth_sendTransaction", &tx_on("100"), 1);
+    assert_refused_before_any_sheet("eth_sendTransaction", &tx_on(r#""0x89""#), 1);
+}
+
+#[test]
+fn stamped_chain_1_refuses_a_batch_for_gnosis_before_any_sheet() {
+    assert_refused_before_any_sheet("wallet_sendCalls", &batch_on(r#""0x64""#), 1);
+    assert_refused_before_any_sheet("wallet_sendCalls", &batch_on(r#""0x89""#), 1);
+}
+
+#[test]
+fn stamped_chain_refuses_typed_data_whose_domain_names_another_chain() {
+    // The Safe's signature is bound to the chain it is signed on; a domain on
+    // another chain would get a signature for neither. MetaMask refuses it
+    // too; the in-app path switches to the domain's chain instead.
+    assert_refused_before_any_sheet("eth_signTypedData_v4", &typed_on(serde_json::json!(137)), 1);
+    assert_refused_before_any_sheet(
+        "eth_signTypedData_v4",
+        &typed_on(serde_json::json!("0x64")),
+        1,
+    );
+}
+
+#[test]
+fn stamped_chain_refuses_a_chain_id_that_reads_as_no_chain() {
+    // A chainId the wallet cannot read is not "no chain": it was meant to be
+    // SOME chain, and there is no telling it is this one.
+    for written in [
+        r#""0x""#,
+        r#""gnosis""#,
+        "0",
+        r#""0x0""#,
+        r#""1x""#,
+        "1.5",
+        "{}",
+    ] {
+        assert_refused_before_any_sheet("eth_sendTransaction", &tx_on(written), 1);
+    }
+}
+
+#[test]
+fn stamped_chain_matching_the_request_proceeds_on_it() {
+    for (method, params) in [
+        ("eth_sendTransaction", tx_on(r#""0x89""#)),
+        ("eth_sendTransaction", tx_on("137")),
+        ("eth_sendTransaction", tx_on(r#""137""#)),
+        ("wallet_sendCalls", batch_on(r#""0x89""#)),
+    ] {
+        let mut sut = boot();
+        sut.dispatch(Arrive::extension("rid-89", method, &params, 137).event());
+        let view = sut.view();
+        assert_eq!(view.surface, SignSurface::Sheet, "{method} {params}");
+        assert_eq!(view.request.expect("request").chain_id, 137);
+        assert_eq!(
+            view.global_chain_id, 1,
+            "a stamp never moves the global chain"
+        );
+        let ops = sut.dispatch(approve(SignApproveOpts::default()));
+        assert!(
+            matches!(
+                ops.as_slice(),
+                [Op::CheckBundlerFunding { chain_id: 137, .. }]
+            ),
+            "{method}: {ops:?}"
+        );
+        let ops = sut.resolve(Res::PreCheck { funding: None });
+        assert!(
+            matches!(ops.as_slice(), [Op::SignAndSubmit { chain_id: 137, .. }]),
+            "{method}: {ops:?}"
+        );
+    }
+
+    // Typed data whose domain is the stamped chain reaches the sheet.
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::extension(
+            "rid-89",
+            "eth_signTypedData_v4",
+            &typed_on(serde_json::json!("0x89")),
+            137,
+        )
+        .event(),
+    );
+    assert_eq!(sut.view().surface, SignSurface::Sheet);
+}
+
+#[test]
+fn stamped_chain_with_no_chain_in_the_request_proceeds_on_the_stamp() {
+    for (method, params) in [
+        ("eth_sendTransaction", plain_send_params()),
+        ("eth_sendTransaction", tx_on("null")),
+        (
+            "wallet_sendCalls",
+            batch_params(&format!(r#"[{{"to":"{SPENDER}","value":"0x1"}}]"#), None),
+        ),
+    ] {
+        let mut sut = boot();
+        sut.dispatch(Arrive::extension("rid-89", method, &params, 137).event());
+        assert_eq!(
+            sut.view().request.expect("request").chain_id,
+            137,
+            "{method}"
+        );
+        sut.dispatch(approve(SignApproveOpts::default()));
+        let ops = sut.resolve(Res::PreCheck { funding: None });
+        assert!(
+            matches!(ops.as_slice(), [Op::SignAndSubmit { chain_id: 137, .. }]),
+            "{method} {params}: {ops:?}"
+        );
+    }
+}
+
+#[test]
+fn in_app_request_naming_another_chain_still_switches_unchanged() {
+    // No stamp: the wallet's chain IS the site's, so the request moves it —
+    // the pre-089 rule, kept — and submits on the chain it named.
+    for (method, params) in [
+        ("eth_sendTransaction", tx_on(r#""0x89""#)),
+        ("wallet_sendCalls", batch_on(r#""0x89""#)),
+    ] {
+        let mut sut = boot();
+        let ops = sut.dispatch(Arrive::global("req-89", method, &params).event());
+        assert!(
+            !ops.iter().any(|op| matches!(op, Op::SendResponse { .. })),
+            "{method}: not refused: {ops:?}"
+        );
+        let view = sut.view();
+        assert_eq!(view.global_chain_id, 137, "{method}");
+        assert_eq!(view.request.expect("request").chain_id, 137, "{method}");
+        sut.dispatch(approve(SignApproveOpts::default()));
+        let ops = sut.resolve(Res::PreCheck { funding: None });
+        assert!(
+            matches!(ops.as_slice(), [Op::SignAndSubmit { chain_id: 137, .. }]),
+            "{method}: {ops:?}"
+        );
+    }
+    // Typed data likewise switches to its domain's chain.
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::global(
+            "req-89t",
+            "eth_signTypedData_v4",
+            &typed_on(serde_json::json!(137)),
+        )
+        .event(),
+    );
+    assert_eq!(sut.view().global_chain_id, 137);
+}
+
+#[test]
+fn approve_refuses_params_rewritten_to_name_another_chain() {
+    // The chokepoint: whatever the sheet hands back is signed on the request's
+    // chain only if it names no other one.
+    let mut sut = boot();
+    sut.dispatch(
+        Arrive::extension("rid-89", "eth_sendTransaction", &tx_on(r#""0x89""#), 137).event(),
+    );
+    let ops = sut.dispatch(approve(opts_with_override(&tx_on(r#""0x1""#))));
+    assert!(
+        matches!(ops.as_slice(), [op] if chain_mismatch_refusal(op)),
+        "refused, nothing pre-checked or signed: {ops:?}"
+    );
+    assert!(
+        sut.dispatch(approve(SignApproveOpts::default())).is_empty(),
+        "answered once"
+    );
+}
+
+#[test]
+fn names_other_chain_reads_every_place_a_request_writes_its_chain() {
+    let parse = |s: &str| serde_json::from_str::<serde_json::Value>(s).expect("json");
+    let tx = parse(&tx_on(r#""0x64""#));
+    assert!(request_names_other_chain("eth_sendTransaction", &tx, 1));
+    assert!(!request_names_other_chain("eth_sendTransaction", &tx, 100));
+    let batch = parse(&batch_on("100"));
+    assert!(request_names_other_chain("wallet_sendCalls", &batch, 1));
+    assert!(!request_names_other_chain("wallet_sendCalls", &batch, 100));
+    let typed = parse(&typed_on(serde_json::json!("0x64")));
+    assert!(request_names_other_chain("eth_signTypedData_v4", &typed, 1));
+    assert!(!request_names_other_chain(
+        "eth_signTypedData_v4",
+        &typed,
+        100
+    ));
+    // Names none: absent, null, a method that carries no chain.
+    assert!(!request_names_other_chain(
+        "eth_sendTransaction",
+        &parse(&plain_send_params()),
+        1
+    ));
+    assert!(!request_names_other_chain(
+        "eth_sendTransaction",
+        &parse(&tx_on("null")),
+        1
+    ));
+    assert!(!request_names_other_chain(
+        "personal_sign",
+        &serde_json::json!([{"chainId": "0x64"}]),
+        1
+    ));
+    // Present but unreadable is another chain.
+    assert!(request_names_other_chain(
+        "eth_sendTransaction",
+        &parse(&tx_on(r#""0x""#)),
+        1
+    ));
 }
 
 #[test]

@@ -1755,7 +1755,8 @@ fn recorded_intent(clear: &ClearSigningView) -> Option<String> {
 }
 
 /// The blind rung's two facts: who it goes to, and how many bytes of calldata
-/// nobody could read. Both come from the first leg, like the decode does.
+/// nobody could read — a lone call's (or a one-call batch's, drawn as that
+/// call). A longer batch names each call's own in its `ClearBatchCall`.
 fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
     let call = first_call(&request.method, &request.params_json);
     let data = call.as_ref().and_then(|c| c.1.clone()).unwrap_or_default();
@@ -1770,9 +1771,8 @@ fn facts_of(request: &IncomingRequest) -> crate::signing::live::RequestFacts {
     }
 }
 
-/// A batch decodes from its first leg today, which is what the phone's sheet
-/// shows too; the per-leg panorama (CS26) is a drawn state nobody has wired.
-/// Which rung of the clear-signing ladder a request climbs.
+/// Which rung of the clear-signing ladder a request climbs. A batch is read
+/// call by call by the core and drawn as the per-call panorama (CS26, 089 S1).
 ///
 /// Four methods, three surfaces — and the fourth, `personal_sign`, was the one
 /// this shell never named. The comment above the old match said "typed data
@@ -1796,7 +1796,14 @@ pub fn clear_kickoff(
 ) -> Option<ClearEvent> {
     use vela_core::app::clear_signing::{ClearLocale, ClearSignMethod};
     match method {
-        "eth_sendTransaction" | "wallet_sendCalls" => {
+        // 089 S1: a batch goes over whole — the core reads EVERY call, so the
+        // sheet can never describe call 1 while signing them all.
+        "wallet_sendCalls" => Some(ClearEvent::ResolveBatch {
+            params_json: params_json.to_owned(),
+            chain_id,
+            locale: ClearLocale::default(),
+        }),
+        "eth_sendTransaction" => {
             let call = first_call(method, params_json);
             Some(ClearEvent::ResolveTransaction {
                 to: call.as_ref().and_then(|c| c.0.clone()),
@@ -2480,8 +2487,9 @@ mod tests {
         );
     }
 
-    /// A transaction decodes from its call — and a BATCH decodes from its
-    /// first leg, which is the same thing the phone's sheet shows.
+    /// A transaction decodes from its call. A batch's first leg is still what
+    /// the blind rung's facts read for a ONE-call batch (drawn as that call);
+    /// the decode itself is handed the whole batch (089 S1, below).
     #[test]
     fn the_decoder_is_handed_the_call_and_not_the_envelope() {
         let single = r#"[{"from":"0xaaa","to":"0xbbb","data":"0xabcd","value":"0x1"}]"#;
@@ -2634,6 +2642,25 @@ mod kickoff_tests {
                 assert_eq!(request_origin.as_deref(), Some("https://app.uniswap.org"));
             }
             other => unreachable!("a message, not {other:?}"),
+        }
+    }
+
+    /// 089 S1: a batch is handed to the core WHOLE, so every call of it is
+    /// read — the decode never starts from call 1 alone.
+    #[test]
+    fn a_batch_is_handed_to_the_decoder_whole() {
+        let params =
+            r#"[{"calls":[{"to":"0x1","value":"0x1"},{"to":"0x2","value":"0xde0b6b3a7640000"}]}]"#;
+        match clear_kickoff("wallet_sendCalls", params, 100, None) {
+            Some(ClearEvent::ResolveBatch {
+                params_json,
+                chain_id,
+                ..
+            }) => {
+                assert_eq!(params_json, params);
+                assert_eq!(chain_id, 100);
+            }
+            other => unreachable!("the whole batch, not {other:?}"),
         }
     }
 
