@@ -350,9 +350,13 @@ enum SigningLive {
         clear: ClearSigningViewWire, speedTier: String? = nil
     ) -> Bool {
         let feeReady = (fee?.confirmFeeReady ?? false) && !feeOfAnotherTier(fee, speedTier: speedTier)
+        // Spec 096 F7: and the request has been read — a slide that armed
+        // under "Loading…" signed what nobody had been shown yet.
+        let read = !clear.resolving && clear.surface != .loading
         return sign.confirmGateOpen
             && guardView.confirmAllowed
             && (isOffChain(clear) || feeReady)
+            && read
             && !sign.isSigning
             && !sign.isSubmitting
     }
@@ -837,7 +841,9 @@ enum SigningLive {
             // one.
             return [.sentence(text: s(loc, "loading"), tone: .neutral)]
         case .clearSign:
-            return clear.result.map { resultBlocks($0, loc: loc) } ?? []
+            return clear.result.map {
+                resultBlocks($0, native: clear.nativeValue, context: context)
+            } ?? []
         case .ethSign, .messageSign:
             return clear.message.map { messageBlocks($0, loc: loc, origin: context.origin) } ?? []
         case .blindTypedData:
@@ -863,9 +869,11 @@ enum SigningLive {
             // `plainSend` is present exactly when the surface is; a view
             // without it is drawn as the blind rung rather than as nothing.
             if let plain = clear.plainSend { return plainSendBlocks(plain, context: context) }
-            return blindTransactionBlocks(to: to, dataBytes: dataBytes, loc: loc)
+            return blindTransactionBlocks(to: to, dataBytes: dataBytes, native: nil, context: context)
         case .blindTransaction:
-            return blindTransactionBlocks(to: to, dataBytes: dataBytes, loc: loc)
+            return blindTransactionBlocks(
+                to: to, dataBytes: dataBytes, native: clear.nativeValue, context: context
+            )
         case .batch:
             // 089 S1: every call of a batch, never call 1 alone.
             return clear.batch.map { batchBlocks($0, context: context) } ?? []
@@ -903,6 +911,9 @@ enum SigningLive {
         if results.contains(where: { $0.provenance == .fetched }) {
             blocks.append(.warning(tone: .caution, text: s(loc, "descriptorFetchedWarning")))
         }
+        if results.contains(where: { $0.termsOffChain == true }) {
+            blocks.append(.warning(tone: .caution, text: s(loc, "warnOrderTerms")))
+        }
         if results.contains(where: { $0.fields.contains(where: \.unverified) }) {
             blocks.append(.warning(tone: .caution, text: s(loc, "unverifiedWarning")))
         }
@@ -929,7 +940,14 @@ enum SigningLive {
         if let amount = call.amount, call.valueWei != "0" {
             coin.append(SigningRow(label: s(loc, "labelAmount"), value: "−\(amount) \(context.nativeSymbol)"))
         }
-        let target = call.to.map { [SigningRow(label: s(loc, "interactingLabel"), value: $0, mono: true)] } ?? []
+        // A contract the wallet knows on this chain is named (096 F5); any
+        // other is its full address.
+        let target = call.to.map { to -> [SigningRow] in
+            if let name = call.toName {
+                return [SigningRow(label: s(loc, "interactingLabel"), value: name)]
+            }
+            return [SigningRow(label: s(loc, "interactingLabel"), value: to, mono: true)]
+        } ?? []
         if call.surface == .clearSign, let result = call.result {
             return .card(title: step(result.intent),
                          rows: result.fields.filter { !$0.detail }.map { row(of: $0) } + coin + target,
@@ -949,12 +967,17 @@ enum SigningLive {
         )
     }
 
-    private static func blindTransactionBlocks(to: String?, dataBytes: Int, loc: Loc) -> [SigningBlock] {
+    private static func blindTransactionBlocks(
+        to: String?, dataBytes: Int, native: ClearNativeValueWire?, context: Context
+    ) -> [SigningBlock] {
+            let loc = context.loc
             var blocks: [SigningBlock] = [
                 .intent(text: s(loc, "intentContractCall"), tone: .caution),
                 .warning(tone: .caution,
                          text: s(loc, "blindDecodeWarning", ["bytes": String(dataBytes)])),
             ]
+            // Spec 096 F4: nobody could read the call; the coin it sends is known.
+            if let native { blocks.append(.rows([coinRow(native, context: context)])) }
             if let to {
                 blocks.append(.party(
                     label: s(loc, "interactingLabel"),
@@ -975,12 +998,24 @@ enum SigningLive {
         }
     }
 
-    private static func resultBlocks(_ result: ClearSignResultWire, loc: Loc) -> [SigningBlock] {
+    private static func resultBlocks(
+        _ result: ClearSignResultWire, native: ClearNativeValueWire?, context: Context
+    ) -> [SigningBlock] {
+        let loc = context.loc
         var blocks: [SigningBlock] = [.intent(text: result.intent, tone: tone(of: result.risk))]
         blocks += warnings(result, loc: loc)
-        let rows = result.fields.filter { !$0.detail }.map { row(of: $0) }
+        // Spec 096 F4: the coin the call sends leads the rows, in a batch
+        // call's own words, when the reading does not say it itself.
+        let coin = native.map { [coinRow($0, context: context)] } ?? []
+        let rows = coin + result.fields.filter { !$0.detail }.map { row(of: $0) }
         if !rows.isEmpty { blocks.append(.rows(rows)) }
         return blocks
+    }
+
+    /// "Amount −0.003 BNB" — the core's `nativeValue`, as a batch call's coin
+    /// row reads, in the coin symbol the fee row uses (RC5).
+    private static func coinRow(_ native: ClearNativeValueWire, context: Context) -> SigningRow {
+        SigningRow(label: s(context.loc, "labelAmount"), value: "−\(native.amount) \(context.nativeSymbol)")
     }
 
     private static func warnings(_ result: ClearSignResultWire, loc: Loc) -> [SigningBlock] {
@@ -1000,6 +1035,11 @@ enum SigningLive {
         // claims nothing to doubt.
         if result.provenance == .fetched {
             blocks.append(.warning(tone: .caution, text: s(loc, "descriptorFetchedWarning")))
+        }
+        // Spec 096 F5: a CoW pre-signature signs an order whose amounts are
+        // hashed into its id — not on this sheet, and said so.
+        if result.termsOffChain == true {
+            blocks.append(.warning(tone: .caution, text: s(loc, "warnOrderTerms")))
         }
         if result.fields.contains(where: \.unverified) {
             blocks.append(.warning(tone: .caution, text: s(loc, "unverifiedWarning")))

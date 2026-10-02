@@ -124,6 +124,15 @@ struct ClearSignResultWire: Decodable, Equatable {
     /// A recipient of this call **is** the contract being called: the token
     /// is being sent to its own contract, which burns it irreversibly.
     let toOwnToken: Bool
+    /// Spec 096 F5: the call signs an order whose amounts live off chain (a
+    /// CoW pre-signature); the sheet says so (`warnOrderTerms`).
+    var termsOffChain: Bool? = nil
+}
+
+/// Spec 096 F4: the chain's own coin a lone call sends, exact.
+struct ClearNativeValueWire: Decodable, Equatable {
+    let valueWei: String
+    let amount: String
 }
 
 enum ClearSignMethod: String, Decodable {
@@ -254,6 +263,9 @@ struct ClearBatchCallWire: Decodable, Equatable {
     let plainSend: ClearPlainSendWire?
     /// The call's target as sent, EIP-55 when it is an address.
     let to: String?
+    /// Spec 096 F5: the target's name, when the wallet itself knows the
+    /// contract on this chain.
+    var toName: String? = nil
     /// What "unable to decode" names.
     let dataBytes: Int
     /// The native coin this call moves, exact; `nil` when unreadable.
@@ -334,6 +346,9 @@ struct ClearSigningViewWire: Decodable, Equatable {
     /// shared verb); the approve copies it as `intent`. `nil` when nothing
     /// may be recorded.
     var recordIntent: String? = nil
+    /// Spec 096 F4: the coin a lone contract call sends, when its reading
+    /// does not say it — on `clearSign` and `blindTransaction` only.
+    var nativeValue: ClearNativeValueWire? = nil
 
     static let empty = ClearSigningViewWire(
         resolving: false, resolved: false, result: nil, message: nil,

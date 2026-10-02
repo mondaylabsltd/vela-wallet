@@ -894,6 +894,141 @@ struct SigningLiveTests {
 
     /// The slide is three machines ANDed — and an **off-chain** signature has
     /// no fee to be ready about.
+    // MARK: - Spec 096 (part B): what you see is what you sign
+
+    /// The REAL core reading one transaction, every question it asks answered
+    /// as a chain with no descriptor service and no selector database would.
+    private func readByTheCore(to: String, data: String, value: String) throws -> ClearSigningViewWire {
+        let core = ClearSigningCore()
+        var result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
+            "type": "resolve_transaction", "to": to, "data": data, "value": value,
+            "chain_id": 56, "locale": SigningController.defaultLocale,
+        ])))
+        var queue = result["effects"] as? [[String: Any]] ?? []
+        var asked = 0
+        while !queue.isEmpty, asked < 100 {
+            let effect = queue.removeFirst()
+            asked += 1
+            guard let id = (effect["id"] as? NSNumber)?.uint64Value,
+                  let op = effect["operation"] as? [String: Any] else { continue }
+            let answer: [String: Any]
+            switch op["type"] as? String {
+            case "now": answer = ["type": "clock", "now_ms": 1_790_947_000_000.0]
+            case "http_get": answer = ["type": "descriptor_fetched", "path": op["path"] ?? "", "json": NSNull()]
+            case "rpc_eth_call":
+                answer = ["type": "rpc_answer", "probe": op["probe"] ?? "", "chain_id": op["chain_id"] ?? 56,
+                          "to": op["to"] ?? "", "result": NSNull(), "rpc_error": true]
+            case "selector_db_lookup": answer = ["type": "selector_candidates", "sigs": [String]()]
+            case "timer": answer = ["type": "timed_out", "token": op["token"] ?? 0]
+            default: continue
+            }
+            result = try CoreJSON.object(core.resolveEffect(effectId: id, resultJson: CoreJSON.string(answer)))
+            queue += result["effects"] as? [[String: Any]] ?? []
+        }
+        return try CoreJSON.decode(ClearSigningViewWire.self, from: result["view"] as? [String: Any] ?? [:])
+    }
+
+    private func bnbContext() -> SigningLive.Context {
+        SigningLive.Context(
+            loc: loc, chainName: "BNB Chain", chainDot: .yellow, nativeSymbol: "BNB",
+            walletName: "Me", walletAddress: "0x88cca0eedbf2c4426110bbfc998f048689266894",
+            origin: "https://app.aave.com"
+        )
+    }
+
+    private func rows(_ blocks: [SigningBlock]) -> [SigningRow] {
+        blocks.flatMap { block -> [SigningRow] in
+            if case .rows(let rows) = block { return rows }
+            return []
+        }
+    }
+
+    /// F4, end to end on the real core: Aave's `depositETH` of 0.003 BNB (the
+    /// 096 pass's own request) reads "Supply · 0.003 BNB" — not "Value 0" — and
+    /// a call nobody could read still says the coin it sends.
+    @Test func theCoinACallSendsIsInTheReadablePart() throws {
+        let deposit = try readByTheCore(
+            to: "0x0c2c95b24529664fe55d4437d7a31175cfe6c4f7",
+            data: "0x474cf53d0000000000000000000000006807dc923806fe8fd134338eabca509979a7e0cb00000000000000000000000088cca0eedbf2c4426110bbfc998f0486892668940000000000000000000000000000000000000000000000000000000000000000",
+            value: "0xaa87bee538000"
+        )
+        #expect(deposit.surface == .clearSign)
+        let drawn = SigningLive.blocks(clear: deposit, to: nil, valueHex: nil, dataBytes: 100, context: bnbContext())
+        let supply = rows(drawn).map { "\($0.label) \($0.value)" }
+        #expect(supply.first == "\(loc.t("componentsUi.signing.intentSupply")) 0.003 BNB", "\(supply)")
+        #expect(!supply.contains { $0.contains("Value") || $0.contains("Number") }, "\(supply)")
+        #expect(deposit.nativeValue == nil, "the reading's own row says it — once")
+
+        let blind = try readByTheCore(
+            to: "0x7777777777777777777777777777777777777777", data: "0xdeadbeef", value: "0xaa87bee538000"
+        )
+        #expect(blind.surface == .blindTransaction)
+        #expect(blind.nativeValue?.amount == "0.003")
+        let coin = rows(SigningLive.blocks(clear: blind, to: nil, valueHex: nil, dataBytes: 4, context: bnbContext()))
+        #expect(coin.first?.label == loc.t("componentsUi.signing.labelAmount"))
+        #expect(coin.first?.value == "\u{2212}0.003 BNB")
+    }
+
+    /// F5: an order whose terms are off chain says so; a known contract is
+    /// named in its batch card.
+    @Test func anOrderSaysItsTermsAreNotShownAndAKnownTargetIsNamed() throws {
+        let order = try CoreJSON.decode(ClearSignResultWire.self, from: [
+            "intent": "Swap", "fields": [
+                ["label": "Order", "value": "0x09e95d9c...6abfb9fe", "format": "raw", "warning": false,
+                 "unverified": false, "role": "generic", "detail": false, "expired": false],
+            ],
+            "risk": "caution", "verified": true, "provenance": "built_in", "sign_type": "transaction",
+            "partial": false, "best_effort": false, "to_own_token": false, "terms_off_chain": true,
+        ])
+        let warning = loc.t("componentsUi.signing.warnOrderTerms")
+        #expect(!warning.contains("warnOrderTerms"), "the corpus has the sentence")
+        let lone = SigningLive.blocks(clear: clear(surface: .clearSign, result: order), to: nil, valueHex: nil,
+                                      dataBytes: 164, context: bnbContext())
+        #expect(lone.contains { if case .warning(.caution, let text) = $0 { return text == warning } else { return false } })
+
+        var batch = try resolvedBatch(#"[{"chainId":"0x64","calls":[{"to":"0x7687c0bc1dd2b9d7e9a5b1b4e1b0cbd8e0c3d141","value":"0x1"},{"to":"0x14fb1fb21751e29f7ec48dc450017552e3d1ea5c","value":"0x1"}]}]"#)
+        var call = try #require(batch.batch?.calls[1])
+        call = ClearBatchCallWire(index: call.index, surface: .clearSign, result: order, plainSend: nil,
+                                  to: "0x9008D19f58AAbD9eD0D60971565AA8510560ab41", toName: "CoW Protocol",
+                                  dataBytes: 164, valueWei: "0", amount: "0", risk: .caution)
+        batch.batch?.calls[1] = call
+        let drawn = SigningLive.blocks(clear: batch, to: nil, valueHex: nil, dataBytes: 0, context: bnbContext())
+        #expect(drawn.contains { if case .warning(.caution, let text) = $0 { return text == warning } else { return false } })
+        let target = cards(drawn)[1].rows.first { $0.label == loc.t("componentsUi.signing.interactingLabel") }
+        #expect(target?.value == "CoW Protocol")
+        #expect(target?.mono == false, "a name is not monospace")
+    }
+
+    /// F7: every machine says yes and the request is still being read — the
+    /// slide stays shut, under "Loading…".
+    @Test func theSlideWaitsForTheReading() {
+        let openGate = SignViewWire(
+            surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
+            pendingOpHash: nil, error: nil, funding: nil, confirmGateOpen: true,
+            reconcilePending: false, swipeAction: .reject, trackerHandoff: nil,
+            notice: nil, globalChainId: 56, blocked: nil
+        )
+        let readyFee = FeeViewWire(
+            busy: false, failed: nil, fee: nil, stale: false, feeToken: nil,
+            options: [], confirmFeeReady: true
+        )
+        let reading = ClearSigningViewWire(
+            resolving: true, resolved: false, result: nil, message: nil,
+            surface: .loading, confirm: .confirm, blindTyped: nil, dangerHaptic: false
+        )
+        #expect(!SigningLive.confirmEnabled(sign: openGate, guard: .empty, fee: readyFee, clear: reading))
+        let drawn = SigningLive.blocks(clear: reading, to: nil, valueHex: nil, dataBytes: 0, context: bnbContext())
+        #expect(drawn.count == 1)
+        if case .sentence(let text, _)? = drawn.first {
+            #expect(text == loc.t("componentsUi.signing.loading"))
+        } else {
+            Issue.record("loading is one neutral sentence")
+        }
+        #expect(SigningLive.confirmEnabled(
+            sign: openGate, guard: .empty, fee: readyFee, clear: clear(surface: .clearSign)
+        ))
+    }
+
     @Test func theSlideOpensOnlyWhenAllThreeMachinesAgree() {
         let openGate = SignViewWire(
             surface: .sheet, request: nil, isSigning: false, isSubmitting: false,
