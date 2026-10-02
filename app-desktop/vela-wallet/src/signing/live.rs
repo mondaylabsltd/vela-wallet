@@ -2038,6 +2038,7 @@ mod tests {
             usd_value: None,
             label_term: None,
             value_term: None,
+            bound: None,
         }
     }
 
@@ -2379,6 +2380,202 @@ mod tests {
             .unwrap_or_else(|| unreachable!("a target row"));
         assert_eq!(target.1, SharedString::from("CoW Protocol"));
         assert!(!target.3, "a name is not monospace");
+    }
+
+    /// Spec 097: one of the pass's own requests (the core's fixture), read
+    /// by the REAL core with the pass's shell scripted — the chain names WBNB
+    /// and USDC unless `chain_down`, the descriptor service serves the native
+    /// order's descriptor, the 4-byte database knows nothing — then
+    /// localized as the sheet does.
+    fn real_pass_reading(name: &str, chain_down: bool) -> ClearSigningView {
+        use vela_core::app::clear_signing::{
+            ClearLocale, ClearOperation as Op, ClearProbe, ClearShellResult as Res, Event,
+        };
+        let core_fixtures = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../rust/crates/vela-core/tests/fixtures/dapp097"
+        );
+        let read = |path: String| {
+            std::fs::read_to_string(&path).unwrap_or_else(|e| unreachable!("{path}: {e}"))
+        };
+        let request: serde_json::Value =
+            serde_json::from_str(&read(format!("{core_fixtures}/{name}")))
+                .unwrap_or_else(|e| unreachable!("{name}: {e}"));
+        let locale = ClearLocale {
+            date_format: vela_core::app::clear_signing::ClearDateFormat::Iso,
+            tz_offset_minutes: 480,
+            ..ClearLocale::default()
+        };
+        let params = &request["params"];
+        let event = match request["method"].as_str() {
+            Some("eth_signTypedData_v4") => Event::ResolveTypedData {
+                typed_data_json: params[1].as_str().unwrap_or_default().to_owned(),
+                chain_id: 56,
+                locale,
+            },
+            Some("wallet_sendCalls") => Event::ResolveBatch {
+                params_json: params.to_string(),
+                chain_id: 56,
+                locale,
+            },
+            _ => {
+                let text = |key: &str| params[0][key].as_str().map(str::to_owned);
+                Event::ResolveTransaction {
+                    to: text("to"),
+                    data: text("data"),
+                    value: text("value"),
+                    chain_id: 56,
+                    locale,
+                }
+            }
+        };
+        let symbol_of = |to: &str| match to.to_lowercase().as_str() {
+            "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c" => Some("WBNB"),
+            "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d" => Some("USDC"),
+            _ => None,
+        };
+        let mut host =
+            crate::core_host::CoreHost::<vela_core::app::clear_signing::ClearSigning>::new();
+        let mut queue = host.dispatch(event);
+        for _ in 0..300 {
+            let Some(pending) = queue.pop() else { break };
+            let answer = match &pending.operation {
+                Op::Now => Res::Clock {
+                    now_ms: 1_790_957_000_000.0,
+                },
+                Op::HttpGet { path } => Res::DescriptorFetched {
+                    path: path.clone(),
+                    json: path
+                        .ends_with("/eip155-56/0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01.json")
+                        .then(|| {
+                            read(format!(
+                                "{core_fixtures}/descriptors/calldata-eip155-56-0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01.json"
+                            ))
+                        }),
+                },
+                Op::RpcEthCall {
+                    chain_id, to, probe, ..
+                } => {
+                    let result = symbol_of(to).filter(|_| !chain_down).map(|symbol| {
+                        if *probe == ClearProbe::Decimals {
+                            format!("0x{:064x}", 18)
+                        } else {
+                            let body: String =
+                                symbol.bytes().map(|b| format!("{b:02x}")).collect();
+                            format!("0x{:064x}{:064x}{body:0<64}", 32, symbol.len())
+                        }
+                    });
+                    Res::RpcAnswer {
+                        probe: *probe,
+                        chain_id: *chain_id,
+                        to: to.clone(),
+                        rpc_error: result.is_none(),
+                        result,
+                    }
+                }
+                Op::SelectorDbLookup { .. } => Res::SelectorCandidates { sigs: Vec::new() },
+                Op::Timer { token, .. } => Res::TimedOut { token: *token },
+            };
+            queue.extend(host.resolve(pending.id, answer));
+        }
+        let view = host.view();
+        assert!(!view.resolving, "{name}: still reading");
+        localized_terms(&view, &strings())
+    }
+
+    fn rows_of(drawn: &[Block]) -> Vec<crate::signing::fixtures::Row> {
+        drawn
+            .iter()
+            .filter_map(|block| match block {
+                Block::Rows(rows) => Some(rows.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    fn term(s: &SigningStrings, term: vela_core::app::clear_signing::ClearTerm) -> SharedString {
+        s.terms.get(&term).cloned().unwrap_or_default()
+    }
+
+    /// Spec 097 N3/N6: the 1inch order the pass signed reads as the swap it
+    /// is — the minimum says so in its own row's label, the coin that
+    /// arrives is BNB, the zero receiver is the account, the expiry is said.
+    #[test]
+    fn a_oneinch_order_reads_its_minimum_coin_receiver_and_expiry() {
+        use vela_core::app::clear_signing::ClearTerm;
+        let s = strings();
+        let facts = RequestFacts {
+            native_symbol: "BNB".to_owned(),
+            ..RequestFacts::default()
+        };
+        let drawn = blocks(&real_pass_reading("oneinch-order.json", false), &facts, &s);
+        let rows = rows_of(&drawn);
+        let row = |label: SharedString| {
+            rows.iter()
+                .find(|row| row.0 == label)
+                .map(|row| row.1.clone())
+                .unwrap_or_else(|| unreachable!("no {label} row in {rows:?}"))
+        };
+        assert_eq!(
+            row(term(&s, ClearTerm::LabelYouReceiveMin)),
+            SharedString::from("0.001430509396956033 BNB")
+        );
+        assert_eq!(
+            row(term(&s, ClearTerm::LabelRecipient)),
+            SharedString::from("0x88cca0...266894")
+        );
+        assert_eq!(
+            row(term(&s, ClearTerm::LabelValidUntil)),
+            SharedString::from("2026-10-03, 00:42")
+        );
+        assert!(!rows.iter().any(|row| row.1.contains("0x00000000")));
+    }
+
+    /// Spec 097 N1/N2/N8: an unscaled amount says so in words and the
+    /// reading says it is incomplete; a borrow is drawn by its own label; a
+    /// batch call on USDC names it with its address.
+    #[test]
+    fn the_pass_requests_say_nothing_unknown_as_certain() {
+        let s = strings();
+        let facts = RequestFacts {
+            native_symbol: "BNB".to_owned(),
+            ..RequestFacts::default()
+        };
+        let down = blocks(
+            &real_pass_reading("oneinch-native-order.json", true),
+            &facts,
+            &s,
+        );
+        assert!(rows_of(&down).iter().any(|row| row.1 == s.amount_unknown));
+        assert!(
+            down.iter().any(
+                |block| matches!(block, Block::Warning { text, .. } if *text == s.warn_partial)
+            )
+        );
+        let up = blocks(
+            &real_pass_reading("oneinch-native-order.json", false),
+            &facts,
+            &s,
+        );
+        assert!(
+            rows_of(&up)
+                .iter()
+                .any(|row| row.0 == "Beneficiary" && row.1 == "0x88cca0...266894")
+        );
+
+        let batch = blocks(
+            &real_pass_reading("pancakeswap-usdc-batch.json", false),
+            &facts,
+            &s,
+        );
+        let target = cards(&batch)[0]
+            .1
+            .iter()
+            .find(|row| row.0 == s.label_interacting)
+            .cloned()
+            .unwrap_or_else(|| unreachable!("a target row"));
+        assert_eq!(target.1, SharedString::from("USDC (0x8ac76a...cd580d)"));
     }
 
     /// Spec 096 F7: every machine says yes, and the request is still being

@@ -264,6 +264,11 @@ const SPARK_PSM3_BASE: &str = "0x1601843c5e9bc251a3272907010afa41fa18347e";
 const UNISWAP_ROUTER_2_1_2: &str = "0xdc264714f68d84cf29bc605589405e78bdbe7c9f";
 /// Aave V3's pool on BNB Chain.
 const AAVE_BNB_POOL: &str = "0x6807dc923806fe8fd134338eabca509979a7e0cb";
+/// Curve's router (`curve-router-ng`) on BNB Chain. The same 20 bytes are
+/// Curve's `crypto_calc` helper on other chains, so the name holds on 56 only.
+const CURVE_ROUTER_BNB: &str = "0xa72c85c258a81761433b4e8da60505fe3dd551cc";
+/// 1inch's Aggregation Router V6 — Limit Order Protocol v4 lives inside it.
+const ONEINCH_ROUTER_V6: &str = "0x111111125421ca6dc452d289314280a0f8842a65";
 
 /// A known contract with no chain list: one deployed at the same address
 /// everywhere it exists (CREATE2, or a deployer that kept its nonce). Every
@@ -365,7 +370,7 @@ const KNOWN_CONTRACTS: &[KnownContract] = &[
     ),
     known(
         ANY_CHAIN,
-        "0x111111125421ca6dc452d289314280a0f8842a65",
+        ONEINCH_ROUTER_V6,
         "1inch Router (V6)",
         "1inch",
         true,
@@ -526,6 +531,9 @@ const KNOWN_CONTRACTS: &[KnownContract] = &[
     ),
     // `spark-address-registry` Base.sol: PSM3 — Spark's, behind app.sky.money.
     known(&[8453], SPARK_PSM3_BASE, "Spark PSM", "Spark", true),
+    // `curvefi/curve-router-ng` README ("BSC") and `curvefi/curve-js`
+    // `src/constants/network_constants.ts` (`ALIASES_BSC.router`), spec 097.
+    known(&[56], CURVE_ROUTER_BNB, "Curve Router", "Curve", true),
 ];
 
 // ---------------------------------------------------------------------------
@@ -703,6 +711,21 @@ pub enum ClearFieldRole {
     Generic,
 }
 
+/// An amount that is a bound, not the figure that moves (spec 097 N3): a
+/// swap's "you receive (min)" is the least the call accepts, an exact-out
+/// swap's "you pay (max)" the most it spends. Wherever an amount is drawn
+/// without its label — web's hero — the shell must still say which it is,
+/// and it reads that here rather than from the words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearAmountBound"))]
+pub enum ClearAmountBound {
+    /// At least this much.
+    Min,
+    /// At most this much.
+    Max,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "bindings", derive(TS), ts(rename = "ClearSignType"))]
@@ -791,6 +814,11 @@ pub struct ClearSignField {
     /// "Unlimited". Projected in [`ClearSigning::view`]; builders write `None`.
     #[serde(default)]
     pub value_term: Option<ClearTerm>,
+    /// The amount is a minimum or a maximum, not the figure that moves (097
+    /// N3). Graded with the roles ([`infer_field_roles`]); `None` for every
+    /// field that is not an amount.
+    #[serde(default)]
+    pub bound: Option<ClearAmountBound>,
 }
 
 /// A word a descriptor puts on the sheet — an intent, a field label, the
@@ -1270,7 +1298,10 @@ pub struct ClearBatchCall {
     pub to: Option<String>,
     /// The target's name, when the wallet itself knows the contract on this
     /// chain (096 F5): the "Interacting with" row reads "PancakeSwap Permit2",
-    /// not forty hex digits. Never a name a descriptor or the dApp supplied.
+    /// not forty hex digits. Or the token it is (097 N8): the registry's
+    /// symbol, else the symbol the token answered with its short address
+    /// beside it ("USDC (0x8ac76a...cd580d)"). Never a name a descriptor or
+    /// the dApp supplied.
     #[serde(default)]
     pub to_name: Option<String>,
     /// The calldata's length in bytes — what "unable to decode" names.
@@ -2163,6 +2194,7 @@ fn risk_rank(risk: ClearRisk) -> u8 {
 
 /// One concluded call as its row reads.
 fn batch_call_view(
+    model: &Model,
     index: usize,
     outcome: &CallOutcome,
     input: &CallInput,
@@ -2206,10 +2238,14 @@ fn batch_call_view(
         .or_else(|| data.strip_prefix("0X"))
         .unwrap_or(data);
     let value_wei = plain_value_wei(input.value.as_deref());
-    let to_name = to
-        .as_deref()
-        .and_then(|to| known_contract(chain_id, to))
-        .map(|known| known.name.to_owned());
+    // A contract the wallet knows on this chain, else a token the reading
+    // named — USDC's own contract under "Interacting with" (097 N8), with
+    // its short address when the registry did not name it.
+    let to_name = to.as_deref().and_then(|to| {
+        known_contract(chain_id, to)
+            .map(|known| known.name.to_owned())
+            .or_else(|| token_name(model, chain_id, to).map(|(name, _)| name))
+    });
     ClearBatchCall {
         index: u32::try_from(index + 1).unwrap_or(u32::MAX),
         surface,
@@ -2239,7 +2275,7 @@ fn batch_view(model: &Model) -> Option<ClearBatchView> {
         .zip(&batch.calls)
         .enumerate()
         .map(|(index, (outcome, input))| {
-            batch_call_view(index, outcome, input, batch.chain_id, &batch.locale)
+            batch_call_view(model, index, outcome, input, batch.chain_id, &batch.locale)
         })
         .collect();
     let total_value_wei = calls.iter().try_fold("0".to_owned(), |sum, call| {
@@ -3445,7 +3481,7 @@ fn finish_calldata(
         // sign, never a half-truth (`clear-signing.ts:587-590`).
         return None;
     }
-    let partial = declared_visible > 0 && fields.len() < declared_visible.div_ceil(2);
+    let partial = incomplete(&fields, declared_visible);
 
     let intent = format
         .get("intent")
@@ -3538,7 +3574,7 @@ fn finish_eip712(
     if fields.is_empty() {
         return None;
     }
-    let partial = declared_visible > 0 && fields.len() < declared_visible.div_ceil(2);
+    let partial = incomplete(&fields, declared_visible);
 
     let primary = typed
         .get("primaryType")
@@ -3602,6 +3638,15 @@ fn verifying_contract(typed: &Value) -> Option<String> {
         .and_then(|d| d.get("verifyingContract"))
         .and_then(Value::as_str)
         .map(str::to_lowercase)
+}
+
+/// The reading is incomplete — the sheet says so (`partial`) — when fewer
+/// than half the fields its descriptor shows resolved, or when an amount on
+/// it could not be scaled (097 N1): an em dash where a figure belongs is a
+/// detail that was not read, whatever else was.
+fn incomplete(fields: &[ClearSignField], declared_visible: usize) -> bool {
+    (declared_visible > 0 && fields.len() < declared_visible.div_ceil(2))
+        || fields.iter().any(|f| f.unverified)
 }
 
 /// `visible !== 'never' && f.label` over the RAW field defs — a `$ref`
@@ -3714,6 +3759,7 @@ fn build_best_effort_fields(tree: &abi::AbiValue, locale: &ClearLocale) -> Vec<C
                 usd_value: None,
                 label_term: None,
                 value_term: None,
+                bound: None,
             }
         })
         .collect()
@@ -3839,6 +3885,7 @@ fn build_registry_backup_result(to: &str, data: &str) -> Option<ClearSignResult>
             usd_value: None,
             label_term: None,
             value_term: None,
+            bound: None,
         };
     let address = call.wallet_address.to_lowercase();
     Some(ClearSignResult {
@@ -3916,6 +3963,7 @@ fn build_deploy_result(to: Option<&str>, data: &str) -> ClearSignResult {
                 usd_value: None,
                 label_term: None,
                 value_term: None,
+                bound: None,
             }]
         })
         .unwrap_or_default();
@@ -4092,6 +4140,10 @@ fn eip712_context(typed: &Value) -> Ctx {
             ("from".to_owned(), Ctx::Str(String::new())),
         ]),
     ));
+    // A 1inch order's terms, read from what the message encodes (097 N6).
+    if let Some(order) = read_oneinch_order(typed) {
+        entries.push(("#order".to_owned(), oneinch_order_context(&order)));
+    }
     Ctx::Map(entries)
 }
 
@@ -4394,6 +4446,7 @@ fn resolve_fields(
             usd_value: formatted.usd_value,
             label_term: None,
             value_term: None,
+            bound: None,
         });
         // "Unlimited" and "All" name no coin: the token they are in is said
         // on the very next row, on every approval and every withdraw-all.
@@ -4420,6 +4473,7 @@ fn token_row(coin: NamedCoin) -> ClearSignField {
         usd_value: None,
         label_term: None,
         value_term: None,
+        bound: None,
     }
 }
 
@@ -4470,9 +4524,7 @@ fn format_token_amount(
     // Token address: path → metadata ref → the EIP-712 verifying contract.
     let mut token_addr: Option<String> = None;
     if let Some(token_path) = params.get("tokenPath").and_then(Value::as_str) {
-        if let Some(Ctx::Str(s)) = resolve_path(token_path, ctx) {
-            token_addr = Some(s);
-        }
+        token_addr = token_ref(resolve_path(token_path, ctx));
     }
     if let Some(token_ref) = params.get("token").and_then(Value::as_str) {
         if let Value::String(s) = resolve_metadata_ref(token_ref, metadata) {
@@ -4541,31 +4593,32 @@ fn format_token_amount(
     // The static table first (it is the TS's and stays authoritative for the
     // nineteen it holds), then what the chain itself answered. Only when both
     // are silent is the token known by its address alone.
-    let known_symbol = token_addr.as_deref().and_then(|addr| {
-        known_token_symbol(addr)
-            .map(str::to_owned)
-            .or_else(|| model.symbol_cache.get(&std_key(chain_id, addr)).cloned())
-    });
+    let known_symbol = token_addr
+        .as_deref()
+        .and_then(|addr| token_symbol(model, chain_id, addr))
+        .map(|(symbol, _)| symbol);
     // The coin a worded amount ("Unlimited", "All") is in — said on its own
-    // row, since the word names none (096 F6).
-    let coin = || match (&token_addr, &known_symbol) {
-        (Some(addr), Some(symbol)) => Some(NamedCoin {
-            label: symbol.clone(),
-            address: None,
-            token_address: Some(addr.clone()),
-        }),
-        (Some(addr), None) => Some(NamedCoin {
-            label: format!("{}...{}", take_chars(addr, 0, 8), last_chars(addr, 6)),
-            address: Some(addr.clone()),
-            token_address: Some(addr.clone()),
-        }),
-        (None, _) if native => Some(NamedCoin {
+    // row, since the word names none (096 F6). Only the registry's symbol
+    // stands alone there (097 N8).
+    let coin = || match &token_addr {
+        Some(addr) => {
+            let name = token_name(model, chain_id, addr);
+            Some(NamedCoin {
+                address: name
+                    .as_ref()
+                    .is_none_or(|(_, registry)| !registry)
+                    .then(|| addr.clone()),
+                label: name.map_or_else(|| short_address(addr), |(label, _)| label),
+                token_address: Some(addr.clone()),
+            })
+        }
+        None if native => Some(NamedCoin {
             label: native_symbol(chain_id).to_owned(),
             address: None,
             token_address: None,
         }),
         // No token reference at all: there is nothing to name.
-        (None, _) => None,
+        None => None,
     };
 
     // Threshold for unlimited approvals. A threshold may be written out or
@@ -4613,8 +4666,14 @@ fn format_token_amount(
     }
 
     // Known decimals → on-chain (prefetched) → 18 + unverified (invariant ①).
-    let (decimals, decimals_verified) =
-        guess_token_decimals(model, chain_id, token_addr.as_deref());
+    // An amount with no token at all — no address the reading could name or
+    // ask, and not the chain's own coin — is as unknown as one whose token
+    // never answered (097 N1: 1inch's native order read "+2.418… tokens",
+    // as sure as any figure, because the 18 here was taken as known).
+    let (decimals, decimals_verified) = match token_addr.as_deref() {
+        Some(addr) => token_decimals(model, chain_id, addr),
+        None => (18, native),
+    };
     let verified = decimals_verified && !token_invalid;
     // An unverified amount is not a small amount. Formatting 1000000 raw units
     // with the 18-decimal fallback printed "0" on a transfer of 1 USDC — a
@@ -4661,12 +4720,23 @@ fn format_token_amount(
 /// An address, by the name the wallet itself knows it by on this chain (096
 /// F5: "Spender PancakeSwap Permit2", never "0x31c2f6...15c768"), else
 /// shortened. The full address always travels in `address`.
+///
+/// A number where the descriptor declares an address is the address it
+/// carries when it fits in 160 bits (097 N1: 1inch's `Address` type is a
+/// `uint256`, and "Beneficiary 78098611...991444" was the account itself).
+/// A larger number is no address: it is shown whole, never cut down to one.
 fn format_address(chain_id: u32, raw: Option<&Ctx>) -> Option<Formatted> {
     let raw = raw?;
     if is_falsy(raw) {
         return None;
     }
-    let addr = js_string(raw);
+    let addr = match raw {
+        Ctx::Num(digits) => match uint_as_address(digits) {
+            Some(addr) => addr,
+            None => return Some(Formatted::plain(digits.clone(), "raw")),
+        },
+        other => js_string(other),
+    };
     if addr.chars().count() < 10 {
         return Some(Formatted::plain(addr, "addressName"));
     }
@@ -4828,9 +4898,7 @@ fn collect_token_addrs(
         let params = def.get("params").cloned().unwrap_or(Value::Null);
         let mut token_addr: Option<String> = None;
         if let Some(token_path) = params.get("tokenPath").and_then(Value::as_str) {
-            if let Some(Ctx::Str(s)) = resolve_path(token_path, ctx) {
-                token_addr = Some(s);
-            }
+            token_addr = token_ref(resolve_path(token_path, ctx));
         }
         if let Some(token_ref) = params.get("token").and_then(Value::as_str) {
             if let Value::String(s) = resolve_metadata_ref(token_ref, metadata) {
@@ -4914,7 +4982,8 @@ fn infer_field_roles(fields: Vec<ClearSignField>, intent: &str) -> Vec<ClearSign
         .into_iter()
         .map(|mut f| {
             let label = f.label.to_lowercase();
-            f.role = if f.format == "tokenAmount" || f.format == "amount" {
+            let amount = f.format == "tokenAmount" || f.format == "amount";
+            f.role = if amount {
                 if contains_any(&label, &["receive", "output", "min", "return", "get"]) {
                     ClearFieldRole::ReceiveAmount
                 } else if contains_any(
@@ -4924,9 +4993,13 @@ fn infer_field_roles(fields: Vec<ClearSignField>, intent: &str) -> Vec<ClearSign
                     ClearFieldRole::SendAmount
                 } else if contains_any(&i, &["withdraw", "redeem", "unstake", "claim"])
                     || contains_any(&label, &["withdraw", "redeem"])
+                    || borrows(&i)
+                    || borrows(&label)
                 {
                     // Withdraw/redeem/unstake/claim bring assets INTO the
-                    // wallet — a receive even when labelled "amount" (F7).
+                    // wallet — a receive even when labelled "amount" (F7). So
+                    // does a borrow: the loan is paid out to the borrower
+                    // (097 N2: Aave's "Borrow −0.3 USDC" read as money out).
                     ClearFieldRole::ReceiveAmount
                 } else {
                     ClearFieldRole::SendAmount
@@ -4934,7 +5007,10 @@ fn infer_field_roles(fields: Vec<ClearSignField>, intent: &str) -> Vec<ClearSign
             } else if f.format == "addressName" {
                 if contains_any(&label, &["spender", "operator"]) {
                     ClearFieldRole::Spender
-                } else if contains_any(&label, &["to", "recipient", "receiver", "destination"]) {
+                } else if contains_any(
+                    &label,
+                    &["to", "recipient", "receiver", "destination", "beneficiary"],
+                ) {
                     ClearFieldRole::Recipient
                 } else {
                     ClearFieldRole::Generic
@@ -4942,9 +5018,30 @@ fn infer_field_roles(fields: Vec<ClearSignField>, intent: &str) -> Vec<ClearSign
             } else {
                 ClearFieldRole::Generic
             };
+            f.bound = amount.then(|| bound_of(&label)).flatten();
             f
         })
         .collect()
+}
+
+/// Borrowing, not paying a loan back: "Repay borrow" (Compound's
+/// `repayBorrow`) still sends.
+fn borrows(text: &str) -> bool {
+    text.contains("borrow") && !text.contains("repay")
+}
+
+/// Whether an amount's label says it is a bound (097 N3): a word "min" or
+/// "minimum" ("You receive (min)", "Minimum to Receive", "Receive minimum"),
+/// or "max"/"maximum" ("You pay (max)", "Max spending amount"). Whole words
+/// only — "administrator" names no minimum.
+fn bound_of(label: &str) -> Option<ClearAmountBound> {
+    label
+        .split(|c: char| !c.is_alphanumeric())
+        .find_map(|word| match word {
+            "min" | "minimum" => Some(ClearAmountBound::Min),
+            "max" | "maximum" => Some(ClearAmountBound::Max),
+            _ => None,
+        })
 }
 
 fn contains_any(haystack: &str, needles: &[&str]) -> bool {
@@ -5609,6 +5706,42 @@ pub(crate) fn known_contract(chain_id: u32, addr: &str) -> Option<&'static Known
         .find(|c| c.address == lc && (c.chains.is_empty() || c.chains.contains(&chain_id)))
 }
 
+/// A token's symbol, and whether it is the registry's (`KNOWN_TOKENS`) or
+/// the token contract's own answer to `symbol()`.
+fn token_symbol(model: &Model, chain_id: u32, addr: &str) -> Option<(String, bool)> {
+    known_token_symbol(addr)
+        .map(|symbol| (symbol.to_owned(), true))
+        .or_else(|| {
+            model
+                .symbol_cache
+                .get(&std_key(chain_id, addr))
+                .map(|symbol| (symbol.clone(), false))
+        })
+}
+
+/// A token by the name the sheet may give it on its own line — a Token row,
+/// a batch call's "Interacting with" (097 N8) — and whether the registry
+/// gave it. The registry's symbol stands alone. A symbol the token's own
+/// contract answered is that contract's word about itself, and any contract
+/// can answer "USDC", so its short address goes beside it. `None` when
+/// nobody named the token.
+fn token_name(model: &Model, chain_id: u32, addr: &str) -> Option<(String, bool)> {
+    let (symbol, registry) = token_symbol(model, chain_id, addr)?;
+    Some(if registry {
+        (symbol, true)
+    } else {
+        (
+            format!("{symbol} ({})", short_address(&addr.to_lowercase())),
+            false,
+        )
+    })
+}
+
+/// `0x88cca0...266894` — the sheet's short form of an address.
+fn short_address(addr: &str) -> String {
+    format!("{}...{}", take_chars(addr, 0, 8), last_chars(addr, 6))
+}
+
 fn native_symbol(chain_id: u32) -> &'static str {
     NATIVE_SYMBOLS
         .iter()
@@ -5617,10 +5750,9 @@ fn native_symbol(chain_id: u32) -> &'static str {
         .unwrap_or("ETH")
 }
 
-fn guess_token_decimals(model: &Model, chain_id: u32, token_addr: Option<&str>) -> (u32, bool) {
-    let Some(addr) = token_addr else {
-        return (18, true); // native currency
-    };
+/// A token's decimals and whether anybody stood behind them: the registry,
+/// else the chain's own answer; else 18, flagged unverified (invariant ①).
+fn token_decimals(model: &Model, chain_id: u32, addr: &str) -> (u32, bool) {
     let lc = addr.to_lowercase();
     if let Some(d) = known_token_decimals(&lc) {
         return (d, true);
@@ -5643,6 +5775,28 @@ fn selector_of(data: &str) -> String {
 
 fn is_hex_address_shape(s: &str) -> bool {
     s.len() == 42 && s.starts_with("0x") && s[2..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The address a decimal number holds, when it fits in 160 bits — lowercased
+/// `0x` and 40 digits (097 N1). `None` for anything wider, or not a number.
+fn uint_as_address(digits: &str) -> Option<String> {
+    let n = alloy_primitives::U256::from_str_radix(digits, 10).ok()?;
+    if n.bit_len() > 160 {
+        return None;
+    }
+    let bytes = n.to_be_bytes::<32>();
+    Some(primitives::to_hex(&bytes[12..], true))
+}
+
+/// The token a descriptor's `tokenPath` points at, as an address: an address
+/// as written, or the address a `uint256` holds (097 N1). Anything else is
+/// no token reference the sheet can name.
+fn token_ref(raw: Option<Ctx>) -> Option<String> {
+    match raw? {
+        Ctx::Str(s) => Some(s),
+        Ctx::Num(digits) => uint_as_address(&digits),
+        _ => None,
+    }
 }
 
 fn is_falsy(v: &Ctx) -> bool {
@@ -6338,6 +6492,7 @@ fn build_cow_presign_result(run: &Run) -> Option<ClearSignResult> {
         usd_value: None,
         label_term: None,
         value_term: None,
+        bound: None,
     };
     let mut fields = vec![field("Order", Formatted::plain(truncate_hex(&uid), "raw"))];
     if let Some(date) = format_date_field(run, Some(&Ctx::Num(valid_to.to_string()))) {
@@ -6493,7 +6648,7 @@ fn local_descriptor(chain_id: u32, addr: &str, data: &str) -> Option<Value> {
                 },
             },
         }),
-        "0x111111125421ca6dc452d289314280a0f8842a65" => json!({
+        ONEINCH_ROUTER_V6 => json!({
             "metadata": { "contractName": "1inch Router", "owner": "1inch" },
             "display": {
                 "formats": {
@@ -6565,11 +6720,137 @@ fn local_typed_descriptor(req: &Req) -> Option<(Value, DescriptorSource)> {
         descriptor["metadata"]["owner"] = json!(permit2.owner);
         return Some((descriptor, DescriptorSource::built_in(true)));
     }
+    // A 1inch order, verified by 1inch's own router (097 N6).
+    let oneinch = verifying_contract(typed)
+        .and_then(|vc| known_contract(req.chain_id(), &vc))
+        .filter(|known| known.address == ONEINCH_ROUTER_V6);
+    if let Some(router) = oneinch {
+        if encode_type != ONEINCH_ORDER_ENCODE_TYPE {
+            return None;
+        }
+        let mut descriptor = oneinch_order_descriptor(&read_oneinch_order(typed)?);
+        descriptor["metadata"]["contractName"] = json!(router.name);
+        descriptor["metadata"]["owner"] = json!(router.owner);
+        return Some((descriptor, DescriptorSource::built_in(true)));
+    }
     // The ERC-2612 permit, on whatever token signs it: the STANDARD's message,
     // so the sheet names no contract and borrows no owner from a descriptor —
     // the token's symbol beside the amount comes from the chain.
     (encode_type == ERC2612_PERMIT_ENCODE_TYPE)
         .then(|| (permit_descriptor(), DescriptorSource::built_in(false)))
+}
+
+// ---------------------------------------------------------------------------
+// 1inch Limit Order Protocol v4 (spec 097 N6): an order's terms, as signed
+// ---------------------------------------------------------------------------
+
+/// The `Order` the 1inch app has a person sign for a limit or Fusion order —
+/// Limit Order Protocol v4, verified by the Aggregation Router V6.
+const ONEINCH_ORDER_ENCODE_TYPE: &str = "Order(uint256 salt,address maker,address receiver,address makerAsset,address takerAsset,uint256 makingAmount,uint256 takingAmount,uint256 makerTraits)";
+
+// `makerTraits`, per 1inch's own `contracts/libraries/MakerTraitsLib.sol`
+// (github.com/1inch/limit-order-protocol, v4 — identical layout from tag
+// 4.0.0 to master 50bd1300): bit 255 `NO_PARTIAL_FILLS_FLAG`, bit 247
+// `UNWRAP_WETH_FLAG`; in the low 200 bits, `uint40 expiration` at offset 80
+// (`_EXPIRATION_OFFSET`, `_EXPIRATION_MASK = type(uint40).max`; 0 = none).
+const MAKER_TRAITS_NO_PARTIAL_FILLS_BIT: usize = 255;
+const MAKER_TRAITS_UNWRAP_WETH_BIT: usize = 247;
+const MAKER_TRAITS_EXPIRATION_OFFSET: usize = 80;
+const MAKER_TRAITS_EXPIRATION_BITS: usize = 40;
+
+/// What a 1inch `Order` commits to beyond its raw fields.
+struct OneInchOrder {
+    /// Who receives what the taker pays: the order's `receiver`, or — when
+    /// that is zero, which the protocol reads as "the maker" — the maker.
+    receiver: String,
+    /// The token the maker receives; [`NATIVE_SENTINEL`] when the order asks
+    /// the protocol to unwrap it, so the chain's own coin arrives (WBNB → BNB).
+    taker_asset: String,
+    /// Unix seconds; 0 when the order never lapses.
+    expiry: u64,
+    /// The order fills whole or not at all, so `takingAmount` is the least
+    /// that comes back for `makingAmount`.
+    whole_fill: bool,
+}
+
+/// The order's terms, when `typed` is exactly LOP v4's `Order`.
+fn read_oneinch_order(typed: &Value) -> Option<OneInchOrder> {
+    if typed.get("primaryType").and_then(Value::as_str) != Some("Order")
+        || build_encode_type("Order", typed.get("types")?) != ONEINCH_ORDER_ENCODE_TYPE
+    {
+        return None;
+    }
+    let message = typed.get("message")?;
+    let address = |key: &str| {
+        message
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|a| is_hex_address_shape(a))
+            .map(str::to_lowercase)
+    };
+    let maker = address("maker")?;
+    let receiver = address("receiver")?;
+    let taker_asset = address("takerAsset")?;
+    let traits = match message.get("makerTraits")? {
+        Value::String(text) => match text.strip_prefix("0x") {
+            Some(hex) => alloy_primitives::U256::from_str_radix(hex, 16).ok()?,
+            None => alloy_primitives::U256::from_str_radix(text, 10).ok()?,
+        },
+        Value::Number(n) => alloy_primitives::U256::from(n.as_u64()?),
+        _ => return None,
+    };
+    let expiry = (traits >> MAKER_TRAITS_EXPIRATION_OFFSET)
+        & ((alloy_primitives::U256::from(1u8) << MAKER_TRAITS_EXPIRATION_BITS)
+            - alloy_primitives::U256::from(1u8));
+    Some(OneInchOrder {
+        receiver: if receiver == format!("0x{}", "0".repeat(40)) {
+            maker
+        } else {
+            receiver
+        },
+        taker_asset: if traits.bit(MAKER_TRAITS_UNWRAP_WETH_BIT) {
+            NATIVE_SENTINEL.to_owned()
+        } else {
+            taker_asset
+        },
+        expiry: expiry.to::<u64>(),
+        whole_fill: traits.bit(MAKER_TRAITS_NO_PARTIAL_FILLS_BIT),
+    })
+}
+
+/// `#order` in an `Order`'s context — what [`oneinch_order_descriptor`] reads.
+fn oneinch_order_context(order: &OneInchOrder) -> Ctx {
+    Ctx::Map(vec![
+        ("receiver".to_owned(), Ctx::Str(order.receiver.clone())),
+        ("takerAsset".to_owned(), Ctx::Str(order.taker_asset.clone())),
+        ("expiry".to_owned(), Ctx::Num(order.expiry.to_string())),
+    ])
+}
+
+/// A 1inch order, read as the swap it is (097 N6): what leaves, what comes
+/// back — a minimum when the order fills only whole; when it may fill in
+/// parts, what leaves is the most and what comes back scales with it —
+/// where it goes, and until when the order stands.
+fn oneinch_order_descriptor(order: &OneInchOrder) -> Value {
+    let (pay, receive) = if order.whole_fill {
+        ("You pay", "You receive (min)")
+    } else {
+        ("You pay (max)", "You receive")
+    };
+    json!({
+        "metadata": { "constants": { "native": NATIVE_SENTINEL } },
+        "display": { "formats": {
+            ONEINCH_ORDER_ENCODE_TYPE: {
+                "intent": "Swap",
+                "fields": [
+                    { "path": "makingAmount", "label": pay, "format": "tokenAmount", "params": { "tokenPath": "makerAsset" } },
+                    { "path": "takingAmount", "label": receive, "format": "tokenAmount", "params": { "tokenPath": "#order.takerAsset", "nativeCurrencyAddress": ["$.metadata.constants.native"] } },
+                    { "path": "#order.receiver", "label": "Recipient", "format": "addressName" },
+                    { "path": "#order.expiry", "label": "Valid until", "format": "date" },
+                ],
+            },
+        } },
+    })
 }
 
 /// `PermitSingle` — an off-chain allowance: a spender, a cap, and the date it
@@ -7233,6 +7514,7 @@ mod to_own_token_tests {
             usd_value: None,
             label_term: None,
             value_term: None,
+            bound: None,
         }
     }
 

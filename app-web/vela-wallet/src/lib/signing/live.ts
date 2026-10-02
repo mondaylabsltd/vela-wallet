@@ -169,11 +169,18 @@ function amountLine(
 	currency: SigningLiveInputs['currency']
 ): AmountLine {
 	return {
-		sign: outgoing ? MINUS : '+',
+		// Spec 097 N1: an amount nobody could scale (the core's em dash) has
+		// no figure to sign — "+— 0x8ac7…" read as a typo, not as unknown.
+		sign: field.unverified ? '' : outgoing ? MINUS : '+',
 		value: field.value,
 		symbol: '',
 		fiat: field.usd_value === null ? undefined : `≈ ${moneyText(field.usd_value, currency)}`,
-		tone: field.warning ? 'danger' : outgoing ? 'neutral' : 'success'
+		// Spec 097 N3: the hero drops the field's label, so an amount the core
+		// marks as a bound keeps it as its caption — "You receive (min)", the
+		// words a batch leg's row already says. The core decides; this draws.
+		caption: field.bound ? field.label : undefined,
+		// Spec 097 N1: an amount nobody could scale is no figure to celebrate.
+		tone: field.warning ? 'danger' : field.unverified ? 'caution' : outgoing ? 'neutral' : 'success'
 	};
 }
 
@@ -449,8 +456,16 @@ function batchBlocks(inputs: SigningLiveInputs, batch: ClearBatchView): Block[] 
 	if (results.some((r) => r.terms_off_chain)) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnOrderTerms });
 	}
-	if (results.some((r) => r.partial || r.best_effort)) {
+	// Spec 097 N1: an incomplete reading says it is incomplete — the phones'
+	// and desktop's line — not that it came from a function signature.
+	if (results.some((r) => r.partial)) {
+		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnPartial });
+	}
+	if (results.some((r) => r.best_effort)) {
 		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
+	}
+	if (results.some((r) => r.fields.some((f) => f.unverified))) {
+		blocks.push({ kind: 'warning', tone: 'caution', text: m.warnUnverifiedAmount });
 	}
 	return blocks;
 }
@@ -546,8 +561,13 @@ function blocksFor(inputs: SigningLiveInputs): Block[] {
 		if (result.terms_off_chain) {
 			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnOrderTerms });
 		}
+		// Spec 097 N1: an incomplete reading — an amount nobody could scale is
+		// one — says so in the other shells' words, and the amount says why.
 		if (result.partial) {
-			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnBestEffort });
+			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnPartial });
+		}
+		if (result.fields.some((f) => f.unverified)) {
+			blocks.push({ kind: 'warning', tone: 'caution', text: m.warnUnverifiedAmount });
 		}
 		if (result.best_effort) {
 			// `summaryBestEffort` carries a `{{fn}}` slot the core hands nothing

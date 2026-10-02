@@ -1,0 +1,15 @@
+{
+ "source": "097 real dApp pass, 2026-10-03 (extension request log r2-152-curve-approve-sheet.json)",
+ "method": "eth_sendTransaction",
+ "origin": "https://www.curve.finance",
+ "chainId": 56,
+ "params": [
+  {
+   "data": "0x095ea7b3000000000000000000000000a72c85c258a81761433b4e8da60505fe3dd551ccffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "from": "0x88cca0eedbf2c4426110bbfc998f048689266894",
+   "gas": "0x11500",
+   "gasPrice": "0x3473bc0",
+   "to": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
+  }
+ ]
+}
