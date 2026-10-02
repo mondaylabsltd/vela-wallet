@@ -313,6 +313,13 @@ pub struct SignApproveOpts {
     /// the built-in table, or not at all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token_meta: Option<super::approval_guard::GuardTokenMetaView>,
+    /// What the sheet's reading named, copied verbatim from
+    /// `ClearSigningView::record_reading` (spec 097 N5, N8): the record keeps
+    /// the contract's name and the coins' names, so Activity says what the
+    /// sheet said. `None` (nothing named, a shell that predates it) names
+    /// them from the built-in table, or not at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reading: Option<super::dapp_activity::DappReading>,
 }
 
 /// Bundler gas-account funding facts (`FundingNeeded`), amounts as decimal
@@ -2530,6 +2537,15 @@ fn approve_with(
         chain_id,
         &pending.origin,
         opts.token_meta.as_ref(),
+    );
+    // Spec 097: what the sheet called the contract, and the fee the wallet
+    // adds in a token — the one `Transfer` of the receipt that is not the
+    // dApp's.
+    let summary = super::dapp_activity::with_approve_facts(
+        summary,
+        opts.reading.as_ref(),
+        opts.gas_fee_token.as_deref(),
+        opts.quoted_fee.as_ref().map(|fee| fee.amount.as_str()),
     );
 
     model.inflight = Some(Inflight {

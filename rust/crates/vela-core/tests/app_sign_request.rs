@@ -779,6 +779,7 @@ fn a_record_left_pending_by_a_late_receipt_is_closed_by_the_tracker() {
             patch: TrackRecordPatch {
                 status: TrackRecordStatus::Confirmed,
                 tx_hash: Some(tx_hash.to_owned()),
+                settlement: None,
             },
         }),
         "the tracker closes the SAME record with the real tx hash: {ops:?}"
@@ -2722,8 +2723,8 @@ fn the_ending_state_is_the_tracker_s() {
 #[test]
 fn a_revert_inside_the_wait_answers_the_tx_hash_and_the_tracker_fails_the_record() {
     use vela_core::app::tx_tracker::{
-        Event as TrackEvent, TrackOperation as TOp, TrackRecordPatch, TrackRecordStatus,
-        TrackShellResult as TRes, TxTracker,
+        Event as TrackEvent, TrackFailure, TrackOperation as TOp, TrackRecordPatch,
+        TrackRecordStatus, TrackSettlement, TrackShellResult as TRes, TxTracker,
     };
     let mut sign = submitting("req-rv");
     sign.dispatch(Event::OpSubmitted {
@@ -2765,6 +2766,10 @@ fn a_revert_inside_the_wait_answers_the_tx_hash_and_the_tracker_fails_the_record
             patch: TrackRecordPatch {
                 status: TrackRecordStatus::Failed,
                 tx_hash: None,
+                settlement: Some(TrackSettlement {
+                    moved: None,
+                    failure: Some(TrackFailure::Reverted),
+                }),
             },
         }
     );

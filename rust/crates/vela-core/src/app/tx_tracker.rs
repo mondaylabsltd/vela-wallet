@@ -462,6 +462,71 @@ pub struct TrackRecordPatch {
     /// Present only on confirmation — a failed patch never writes a hash,
     /// matching `updateTransaction(tx.id, { status: 'failed' })`.
     pub tx_hash: Option<String>,
+    /// How the operation ended (spec 097): the shell stores it with the
+    /// records verbatim (`settlement`) and hands it back to the feed
+    /// untouched (`FeedTxRecord::settlement`). Absent from a shell's wire
+    /// when there is nothing to say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settlement: Option<TrackSettlement>,
+}
+
+/// How an operation ended, as the tracker proved it (spec 097 N4, N5).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct TrackSettlement {
+    /// A confirmed operation whose own receipt logs were read
+    /// ([`proven_moves`]): what it moved for the account, one net line per
+    /// coin — the figures Activity shows for it. `None` when no receipt logs
+    /// were read (the chain's event alone found it, or a shell that sends no
+    /// logs): nothing is claimed either way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moved: Option<Vec<TrackMove>>,
+    /// A failed operation: why.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<TrackFailure>,
+}
+
+/// One coin a landed operation moved for its account, as its receipt proves.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub struct TrackMove {
+    /// The token contract, lower-case; `None` for the chain's own coin.
+    #[serde(default)]
+    pub token: Option<String>,
+    /// Base units, signed, as a decimal string: `-1160000000000000000`
+    /// left the account, `300000000000000000` arrived.
+    pub delta: String,
+}
+
+/// Why an operation failed — the words its request ended with (spec 097 N4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "bindings", derive(TS))]
+pub enum TrackFailure {
+    /// It landed and its execution failed: gas was spent, nothing else moved
+    /// (`componentsTx.receipt.failedHint`).
+    Reverted,
+    /// The relay refused it before any block: nothing was sent
+    /// (`componentsUi.signing.refused`).
+    Refused,
+    /// The relay never had it: nothing was sent (`send.txErrorGeneric`).
+    NotSent,
+}
+
+impl TrackSettlement {
+    fn moved(moved: Option<Vec<TrackMove>>) -> Option<Self> {
+        moved.map(|moved| TrackSettlement {
+            moved: Some(moved),
+            failure: None,
+        })
+    }
+
+    fn failed(failure: TrackFailure) -> Option<Self> {
+        Some(TrackSettlement {
+            moved: None,
+            failure: Some(failure),
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -649,6 +714,9 @@ struct Entry {
     /// settles it — the op's event (landed), or the tx mined without it
     /// (the refusal stands).
     relay_rejected: bool,
+    /// What the confirmed op moved, read from its own receipt logs
+    /// ([`proven_moves`]) — kept for records named after it landed.
+    moved: Option<Vec<TrackMove>>,
 }
 
 /// Where the relay-independent landing check stands for one entry.
@@ -738,6 +806,7 @@ impl Entry {
             from_posting: false,
             grace_from_ms: None,
             relay_rejected: false,
+            moved: None,
         }
     }
 
@@ -1118,10 +1187,12 @@ fn submitted(
         EntryStatus::Confirmed { tx_hash } => Some(TrackRecordPatch {
             status: TrackRecordStatus::Confirmed,
             tx_hash: Some(tx_hash.clone()),
+            settlement: TrackSettlement::moved(entry.moved.clone()),
         }),
         EntryStatus::Failed { .. } => Some(TrackRecordPatch {
             status: TrackRecordStatus::Failed,
             tx_hash: None,
+            settlement: TrackSettlement::failed(TrackFailure::Reverted),
         }),
         _ => None,
     };
@@ -1181,45 +1252,25 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             // One rule, then the ordinary path: a Safe `ExecutionFailure`
             // inside a "successful" UserOp is a failed payment (#D1) — inside
             // THIS op's execution, not a bundle neighbour's (083).
-            let result = if op_execution_failed(&logs, &user_op_hash) {
-                TrackShellResult::ReceiptFailed {
-                    user_op_hash,
-                    tx_hash,
-                    now_ms,
-                }
-            } else {
-                TrackShellResult::Receipt {
-                    user_op_hash,
-                    tx_hash,
-                    now_ms,
-                }
-            };
-            accept(model, result)
+            if op_execution_failed(&logs, &user_op_hash) {
+                return accept(
+                    model,
+                    TrackShellResult::ReceiptFailed {
+                        user_op_hash,
+                        tx_hash,
+                        now_ms,
+                    },
+                );
+            }
+            // What it moved, from these same authentic logs (spec 097 N5).
+            let moved = proven_moves(&logs, &user_op_hash);
+            on_receipt(model, &user_op_hash, tx_hash, now_ms, moved)
         }
         TrackShellResult::Receipt {
             user_op_hash,
             tx_hash,
             now_ms,
-        } => {
-            let key = normalize(&user_op_hash);
-            let Some(entry) = model.entries.get_mut(&key) else {
-                return Command::done();
-            };
-            entry.receipt_in_flight = false;
-            entry.last_receipt_poll_ms = Some(now_ms);
-            entry.saw_clean_response = true;
-            entry.acknowledged = true;
-            if entry.status.is_terminal() {
-                // Already resolved by another path — never double-resolve.
-                return Command::done();
-            }
-            entry.status = EntryStatus::Confirmed {
-                tx_hash: tx_hash.clone(),
-            };
-            let ids = entry.record_ids.clone();
-            let chain_id = entry.chain_id;
-            confirm_records(model.attempt, key, chain_id, ids, tx_hash)
-        }
+        } => on_receipt(model, &user_op_hash, tx_hash, now_ms, None),
         TrackShellResult::ReceiptFailed {
             user_op_hash,
             tx_hash,
@@ -1242,7 +1293,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
             let landed = (!tx_hash.is_empty()).then_some(entry.chain_id);
             entry.status = EntryStatus::Failed { tx_hash };
             let ids = entry.record_ids.clone();
-            fail_records(model.attempt, ids, landed)
+            fail_records(model.attempt, ids, landed, TrackFailure::Reverted)
         }
 
         // -- non-answers ------------------------------------------------------
@@ -1317,7 +1368,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                     // sent, nothing will land. Terminal, immediately (③).
                     entry.acknowledged = true;
                     entry.status = EntryStatus::Rejected;
-                    Some(entry.record_ids.clone())
+                    Some((entry.record_ids.clone(), TrackFailure::Refused))
                 } else if status == TrackLifecycle::NotFound {
                     // Spec 082 RA4: only a may-have-been-sent op the relay has
                     // never shown it holds is ended by `not_found` — a plain
@@ -1342,7 +1393,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                         && entry.find.caught_up()
                     {
                         entry.status = EntryStatus::NotSent;
-                        Some(entry.record_ids.clone())
+                        Some((entry.record_ids.clone(), TrackFailure::NotSent))
                     } else {
                         None
                     }
@@ -1357,7 +1408,7 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
                 }
             };
             match rejected_ids {
-                Some(ids) => fail_records(model.attempt, ids, None),
+                Some((ids, failure)) => fail_records(model.attempt, ids, None, failure),
                 None => run_scheduler(model, now_ms),
             }
         }
@@ -1711,6 +1762,37 @@ fn find_in_log_array(logs: &[serde_json::Value], user_op_hash: &str) -> Option<O
     })
 }
 
+/// A definitive successful receipt for `user_op_hash`: the op confirms, with
+/// what its own logs prove it moved when they were read (`moved`).
+fn on_receipt(
+    model: &mut Model,
+    user_op_hash: &str,
+    tx_hash: String,
+    now_ms: f64,
+    moved: Option<Vec<TrackMove>>,
+) -> Command<TrackEffect, Event> {
+    let key = normalize(user_op_hash);
+    let Some(entry) = model.entries.get_mut(&key) else {
+        return Command::done();
+    };
+    entry.receipt_in_flight = false;
+    entry.last_receipt_poll_ms = Some(now_ms);
+    entry.saw_clean_response = true;
+    entry.acknowledged = true;
+    if entry.status.is_terminal() {
+        // Already resolved by another path — never double-resolve.
+        return Command::done();
+    }
+    entry.status = EntryStatus::Confirmed {
+        tx_hash: tx_hash.clone(),
+    };
+    entry.moved = moved;
+    let ids = entry.record_ids.clone();
+    let chain_id = entry.chain_id;
+    let moved = entry.moved.clone();
+    confirm_records(model.attempt, key, chain_id, ids, tx_hash, moved)
+}
+
 /// A bundle transaction's receipt, read for this op (RJ4). The op's own
 /// logs are the ones after the previous op's `UserOperationEvent` (or the
 /// start) up to its own — how the EntryPoint orders a bundle's execution —
@@ -1755,7 +1837,7 @@ fn on_tx_receipt(
             // stands — nothing landed, so no balance read.
             entry.status = EntryStatus::Rejected;
             let ids = entry.record_ids.clone();
-            return fail_records(attempt, ids, None);
+            return fail_records(attempt, ids, None, TrackFailure::Refused);
         }
         // Mined without this op's event (a replaced bundle): proves nothing.
         return render();
@@ -1779,12 +1861,20 @@ fn on_tx_receipt(
         entry.status = EntryStatus::Confirmed {
             tx_hash: event.tx_hash.clone(),
         };
-        confirm_records(attempt, key, chain_id, ids, event.tx_hash)
+        entry.moved = proven_moves(&own_logs, &key);
+        confirm_records(
+            attempt,
+            key,
+            chain_id,
+            ids,
+            event.tx_hash,
+            entry.moved.clone(),
+        )
     } else {
         entry.status = EntryStatus::Failed {
             tx_hash: event.tx_hash,
         };
-        fail_records(attempt, ids, Some(chain_id))
+        fail_records(attempt, ids, Some(chain_id), TrackFailure::Reverted)
     }
 }
 
@@ -1847,14 +1937,16 @@ fn on_op_event(
                 entry.acknowledged = true;
                 let ids = entry.record_ids.clone();
                 let chain_id = entry.chain_id;
+                // The event alone names no transfer: nothing is claimed
+                // about what moved (`moved: None`), never "nothing moved".
                 return if success {
                     entry.status = EntryStatus::Confirmed {
                         tx_hash: tx_hash.clone(),
                     };
-                    confirm_records(attempt, key, chain_id, ids, tx_hash)
+                    confirm_records(attempt, key, chain_id, ids, tx_hash, None)
                 } else {
                     entry.status = EntryStatus::Failed { tx_hash };
-                    fail_records(attempt, ids, Some(chain_id))
+                    fail_records(attempt, ids, Some(chain_id), TrackFailure::Reverted)
                 };
             }
             Found::Nothing => {
@@ -1934,6 +2026,114 @@ pub fn safe_execution_failed(logs: &[super::token_trust::TrustReceiptLog]) -> bo
             .first()
             .is_some_and(|topic| topic.eq_ignore_ascii_case(SAFE_EXECUTION_FAILURE_TOPIC))
     })
+}
+
+/// keccak256("SafeReceived(address,uint256)") — a Safe's `receive()`: the
+/// chain's own coin arriving, logged by the account itself. Pinned against
+/// the core's own keccak by a test below.
+pub const SAFE_RECEIVED_TOPIC: &str =
+    "0x3d0ce9bfc3ed7d6862dbb28b2dea94561fe714a1b4d019aa8af39730d1ad7c3d";
+
+/// What a landed operation moved for the account that sent it, read from
+/// the op's OWN receipt logs (spec 097 N5) — the figures Activity shows for
+/// it, never a sign-time simulation's.
+///
+/// The account is the `sender` the EntryPoint's own `UserOperationEvent` for
+/// this op names: no such event, no reading (`None`) — logs without it give
+/// nothing to stand on. Only the op's execution counts, as
+/// [`user_op_outcome_in_logs`] scopes it: the logs after the last EntryPoint
+/// boundary (`BeforeExecution`, or the previous op's event) up to its own
+/// event, so a neighbour's swap in the same bundle, or the validation
+/// phase's deposit, is never ours.
+///
+/// Counted: every ERC-20 `Transfer` from or to the account, netted per token
+/// ([`super::token_trust::derive_asset_deltas`]); and the chain's coin
+/// arriving, which the account logs itself (`SafeReceived` emitted BY it —
+/// no other contract can write that log). Not counted: the coin the call
+/// itself sent, which no log states (the record's own `value` does), nor an
+/// EIP-7708 native line, which would state it a second time. A token whose
+/// net is zero moved nothing and has no line.
+pub fn proven_moves(
+    logs: &[super::token_trust::TrustReceiptLog],
+    user_op_hash: &str,
+) -> Option<Vec<TrackMove>> {
+    let hex = |bytes: &[u8]| crate::primitives::to_hex(&crate::primitives::keccak256(bytes), true);
+    let event = hex(USER_OPERATION_EVENT.as_bytes());
+    let before_execution = hex(b"BeforeExecution()");
+    let names = |log: &super::token_trust::TrustReceiptLog, index: usize, want: &str| {
+        log.topics
+            .get(index)
+            .is_some_and(|value| value.eq_ignore_ascii_case(want))
+    };
+    let mut start = 0;
+    let mut found = None;
+    for (index, log) in logs.iter().enumerate() {
+        if !log.address.eq_ignore_ascii_case(crate::safe::ENTRY_POINT) {
+            continue;
+        }
+        if names(log, 0, &before_execution) {
+            start = index + 1;
+        } else if names(log, 0, &event) {
+            if names(log, 1, user_op_hash) {
+                found = Some((index, log.topics.get(2)?));
+                break;
+            }
+            start = index + 1;
+        }
+    }
+    let (end, sender_topic) = found?;
+    let sender = address_of_topic(sender_topic)?;
+    let own = &logs[start..end];
+
+    let mut moved: Vec<TrackMove> = super::token_trust::derive_asset_deltas(own, &sender)
+        .into_iter()
+        .filter(|delta| !delta.is_native)
+        .filter_map(|delta| {
+            Some(TrackMove {
+                token: Some(delta.token?),
+                delta: delta.delta.to_string(),
+            })
+        })
+        .collect();
+    let mut arrived: u128 = 0;
+    for log in own {
+        if log.address.eq_ignore_ascii_case(&sender) && names(log, 0, SAFE_RECEIVED_TOPIC) {
+            let data = log.data.strip_prefix("0x").unwrap_or(&log.data);
+            let word = data.get(..64).unwrap_or(data);
+            // A word that will not read, or a sum past u128, states no
+            // figure: the coin line is left out rather than guessed.
+            match u128::from_str_radix(word, 16)
+                .ok()
+                .and_then(|value| arrived.checked_add(value))
+            {
+                Some(sum) => arrived = sum,
+                None => {
+                    arrived = 0;
+                    break;
+                }
+            }
+        }
+    }
+    if arrived > 0 {
+        moved.push(TrackMove {
+            token: None,
+            delta: arrived.to_string(),
+        });
+    }
+    Some(moved)
+}
+
+/// The address an indexed topic holds: its last 20 bytes, lower-case. `None`
+/// for a topic that is not a 32-byte word with its top 12 bytes zero.
+fn address_of_topic(topic: &str) -> Option<String> {
+    let hex = topic.strip_prefix("0x").unwrap_or(topic);
+    if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    if hex[..24].bytes().any(|b| b != b'0') {
+        return None;
+    }
+    Some(format!("0x{}", hex[24..].to_ascii_lowercase()))
 }
 
 /// How `user_op_hash` ended, by the logs of the bundle transaction that
@@ -2041,10 +2241,14 @@ fn stamp_unstamped(model: &mut Model, now_ms: f64) {
 /// never admitted a may-have-been-sent op (RA4). Timeouts, aborts, age and
 /// unreachable bundlers can never arrive here (①). `landed` names the chain
 /// when the op reached a block (gas spent): the holdings moved (RE8).
+///
+/// `failure` is why, kept with the records (spec 097 N4): the words the
+/// request ended with, which Activity says beside "Failed".
 fn fail_records(
     attempt: u64,
     ids: Vec<String>,
     landed: Option<u32>,
+    failure: TrackFailure,
 ) -> Command<TrackEffect, Event> {
     let mut commands = vec![shell_request(
         attempt,
@@ -2053,6 +2257,7 @@ fn fail_records(
             patch: TrackRecordPatch {
                 status: TrackRecordStatus::Failed,
                 tx_hash: None,
+                settlement: TrackSettlement::failed(failure),
             },
         },
     )];
@@ -2068,13 +2273,16 @@ fn fail_records(
 
 /// A landed op: patch first, notify second — the reconciler's order
 /// (`tx-reconciler.ts:236-240`): flip the records, then hand the authentic
-/// logs to token_trust — and then the balance (spec 082 RE8).
+/// logs to token_trust — and then the balance (spec 082 RE8). `moved` is
+/// what its own receipt logs prove it moved (spec 097 N5), kept with the
+/// records; `None` when no logs were read.
 fn confirm_records(
     attempt: u64,
     user_op_hash: String,
     chain_id: u32,
     ids: Vec<String>,
     tx_hash: String,
+    moved: Option<Vec<TrackMove>>,
 ) -> Command<TrackEffect, Event> {
     Command::all([
         shell_request(
@@ -2084,6 +2292,7 @@ fn confirm_records(
                 patch: TrackRecordPatch {
                     status: TrackRecordStatus::Confirmed,
                     tx_hash: Some(tx_hash.clone()),
+                    settlement: TrackSettlement::moved(moved),
                 },
             },
         ),

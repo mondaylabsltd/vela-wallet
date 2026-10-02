@@ -97,6 +97,7 @@ fn stored(record: &SignRecord) -> FeedTxRecord {
         calldata: None,
         call_data: tx["data"].as_str().map(str::to_owned),
         summary: record.summary.clone(),
+        settlement: None,
     }
 }
 

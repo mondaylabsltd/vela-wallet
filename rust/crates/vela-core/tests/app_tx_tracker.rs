@@ -12,11 +12,11 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::tx_tracker::{
-    parse_user_op_status, receipt_interval_ms, Event, TrackLifecycle, TrackOperation as Op,
-    TrackOutcome, TrackPendingRecord, TrackRecordPatch, TrackRecordStatus, TrackShellResult as Res,
-    TrackStatus, TrackStatusAnswer, TxTracker, ABANDON_AGE_MS, FEE_HOLD_STAGE,
-    FIND_OP_LOOKBACK_BLOCKS, FIND_OP_LOOKBACK_COVERS_MS, FIND_OP_MAX_RANGE,
-    NOT_FOUND_CONFIRMATIONS, NOT_FOUND_GRACE_MS, RECONCILE_MIN_INTERVAL_MS,
+    parse_user_op_status, receipt_interval_ms, Event, TrackFailure, TrackLifecycle,
+    TrackOperation as Op, TrackOutcome, TrackPendingRecord, TrackRecordPatch, TrackRecordStatus,
+    TrackSettlement, TrackShellResult as Res, TrackStatus, TrackStatusAnswer, TxTracker,
+    ABANDON_AGE_MS, FEE_HOLD_STAGE, FIND_OP_LOOKBACK_BLOCKS, FIND_OP_LOOKBACK_COVERS_MS,
+    FIND_OP_MAX_RANGE, NOT_FOUND_CONFIRMATIONS, NOT_FOUND_GRACE_MS, RECONCILE_MIN_INTERVAL_MS,
     SLOWEST_RECEIPT_INTERVAL_MS, SLOW_RECEIPT_INTERVAL_MS, USER_OP_STATUS_METHOD, WAIT_WINDOW_MS,
 };
 use vela_core::safe::ENTRY_POINT;
@@ -64,16 +64,22 @@ fn confirm_patch() -> Op {
         patch: TrackRecordPatch {
             status: TrackRecordStatus::Confirmed,
             tx_hash: Some(TX.to_owned()),
+            settlement: None,
         },
     }
 }
 
-fn fail_patch() -> Op {
+/// The failed patch, with why (spec 097 N4).
+fn fail_patch(failure: TrackFailure) -> Op {
     Op::UpdateTxRecords {
         ids: vec!["rec-1".to_owned()],
         patch: TrackRecordPatch {
             status: TrackRecordStatus::Failed,
             tx_hash: None,
+            settlement: Some(TrackSettlement {
+                moved: None,
+                failure: Some(failure),
+            }),
         },
     }
 }
@@ -250,7 +256,7 @@ fn rejected_marks_failed_and_terminates_immediately() {
         now_ms: T0 + 12_500.0,
         tx_hash: None,
     });
-    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(ops, vec![fail_patch(TrackFailure::Refused)]);
     assert_eq!(entry_status(&sut), TrackStatus::Rejected);
     assert!(!sut.view().entries[0].polling);
 
@@ -272,7 +278,10 @@ fn dropped_receipt_marks_failed_immediately() {
         now_ms: T0 + 3_800.0,
     });
     // It landed and reverted: gas was spent, so the holdings moved (RE8).
-    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::Reverted), holdings_moved()]
+    );
 
     let view = sut.view();
     assert_eq!(view.entries[0].status, TrackStatus::Dropped);
@@ -1030,6 +1039,7 @@ fn event_confirmed() -> Vec<Op> {
             patch: TrackRecordPatch {
                 status: TrackRecordStatus::Confirmed,
                 tx_hash: Some(EVENT_TX.to_owned()),
+                settlement: None,
             },
         },
         Op::NotifyConfirmed {
@@ -1162,7 +1172,11 @@ fn two_not_found_past_the_grace_end_it_as_not_sent() {
     assert_eq!(outcome_of(&sut), TrackOutcome::MaybeSent);
     // 73 s: second — never sent.
     let ops = not_found_at(&mut sut, T0 + 73_000.0, SUBMIT_BLOCK + 14);
-    assert_eq!(ops, vec![fail_patch()], "no HoldingsMoved: nothing landed");
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::NotSent)],
+        "no HoldingsMoved: nothing landed"
+    );
     let view = sut.view();
     assert_eq!(view.entries[0].status, TrackStatus::NotSent);
     assert_eq!(view.entries[0].outcome, TrackOutcome::Final);
@@ -1185,7 +1199,10 @@ fn a_not_found_streak_resets_on_any_other_answer() {
     for at in [T0 + 150_000.0, T0 + 200_000.0] {
         let _ = tick(&mut sut, at);
         let asked = settle_polls(&mut sut, at + 100.0, TrackLifecycle::NotFound);
-        assert!(!asked.contains(&fail_patch()), "{asked:?}");
+        assert!(
+            !asked.contains(&fail_patch(TrackFailure::NotSent)),
+            "{asked:?}"
+        );
     }
     let view = sut.view();
     assert_eq!(view.entries[0].status, TrackStatus::AcceptedNotLanded);
@@ -1318,7 +1335,11 @@ fn holdings_move_only_when_an_op_landed() {
         tx_hash: String::new(),
         now_ms: T0 + 3_800.0,
     });
-    assert_eq!(ops, vec![fail_patch()], "no tx, no landing");
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::Reverted)],
+        "no tx, no landing"
+    );
 
     let mut sut = Sut::new();
     submitted(&mut sut);
@@ -1396,7 +1417,10 @@ fn a_found_event_without_success_is_dropped() {
             Some(SUBMIT_BLOCK + 40),
         ),
     );
-    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::Reverted), holdings_moved()]
+    );
     let view = sut.view();
     assert_eq!(view.entries[0].status, TrackStatus::Dropped);
     assert_eq!(view.entries[0].tx_hash.as_deref(), Some(EVENT_TX));
@@ -1587,7 +1611,7 @@ fn not_sent_waits_for_the_chain_read() {
     assert!(ops.contains(&poll_status()), "{ops:?}");
     scan_to_head(&mut sut, T0 + 85_100.0, SUBMIT_BLOCK + 20);
     let asked = settle_polls(&mut sut, T0 + 85_200.0, TrackLifecycle::NotFound);
-    assert_eq!(asked, vec![fail_patch()]);
+    assert_eq!(asked, vec![fail_patch(TrackFailure::NotSent)]);
     assert_eq!(entry_status(&sut), TrackStatus::NotSent);
 }
 
@@ -1686,7 +1710,7 @@ fn a_new_submit_of_a_never_sent_op_is_tracked_again() {
     assert!(not_found_at(&mut sut, T0 + 30_000.0, SUBMIT_BLOCK + 6).is_empty());
     assert!(not_found_at(&mut sut, T0 + 61_000.0, SUBMIT_BLOCK + 12).is_empty());
     let ops = not_found_at(&mut sut, T0 + 73_000.0, SUBMIT_BLOCK + 14);
-    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(ops, vec![fail_patch(TrackFailure::NotSent)]);
     assert_eq!(entry_status(&sut), TrackStatus::NotSent);
 
     // The old hand-off again: an echo, nothing restarts.
@@ -1739,6 +1763,7 @@ fn a_new_submit_of_a_never_sent_op_is_tracked_again() {
             patch: TrackRecordPatch {
                 status: TrackRecordStatus::Confirmed,
                 tx_hash: Some(TX.to_owned()),
+                settlement: None,
             },
         }),
         "{ops:?}"
@@ -1758,7 +1783,7 @@ fn a_new_submit_of_a_rejected_op_is_tracked_again() {
     assert!(sut.resolve(receipt_pending(T0 + 12_400.0)).is_empty());
     assert_eq!(
         sut.resolve(status(TrackLifecycle::Rejected, T0 + 12_500.0)),
-        vec![fail_patch()]
+        vec![fail_patch(TrackFailure::Refused)]
     );
     assert_eq!(entry_status(&sut), TrackStatus::Rejected);
 
@@ -1886,7 +1911,17 @@ fn an_included_tx_hash_is_confirmed_through_the_chain() {
         is_tx_receipt,
         tx_receipt(T0 + 19_400.0, Some(&bundle_receipt(vec![our_event(true)]))),
     );
-    assert_eq!(ops, event_confirmed(), "another op's failure is not ours");
+    // The whole receipt was read: the op's own logs say it moved nothing
+    // for the account (spec 097) — unlike the event alone, which says
+    // nothing either way.
+    let mut expected = event_confirmed();
+    if let Op::UpdateTxRecords { patch, .. } = &mut expected[0] {
+        patch.settlement = Some(TrackSettlement {
+            moved: Some(Vec::new()),
+            failure: None,
+        });
+    }
+    assert_eq!(ops, expected, "another op's failure is not ours");
     let view = sut.view();
     assert_eq!(view.entries[0].status, TrackStatus::Confirmed);
     assert_eq!(view.entries[0].tx_hash.as_deref(), Some(EVENT_TX));
@@ -1911,7 +1946,10 @@ fn an_execution_failure_in_the_op_s_own_logs_fails_it() {
             Some(&bundle_receipt(vec![failure, our_event(true)])),
         ),
     );
-    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::Reverted), holdings_moved()]
+    );
     assert_eq!(entry_status(&sut), TrackStatus::Dropped);
 
     // The op's event saying `success = false` is a failure too.
@@ -1921,7 +1959,10 @@ fn an_execution_failure_in_the_op_s_own_logs_fails_it() {
         is_tx_receipt,
         tx_receipt(T0 + 13_000.0, Some(&bundle_receipt(vec![our_event(false)]))),
     );
-    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::Reverted), holdings_moved()]
+    );
 }
 
 /// A mined tx without the op's own event (a replaced bundle) proves nothing:
@@ -2097,7 +2138,7 @@ fn a_not_sent_reached_while_the_post_was_out_yields_to_the_relay_taking_it() {
     assert!(not_found_at(&mut sut, T0 + 30_000.0, SUBMIT_BLOCK + 6).is_empty());
     assert!(not_found_at(&mut sut, T0 + 61_000.0, SUBMIT_BLOCK + 12).is_empty());
     let ops = not_found_at(&mut sut, T0 + 73_000.0, SUBMIT_BLOCK + 14);
-    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(ops, vec![fail_patch(TrackFailure::NotSent)]);
     assert_eq!(entry_status(&sut), TrackStatus::NotSent);
 
     // The POST that was still out comes back Accepted.
@@ -2244,7 +2285,7 @@ fn the_grace_counts_from_the_post_s_verdict() {
     }
     assert!(not_found_at(&mut sut, T0 + 141_000.0, SUBMIT_BLOCK + 26).is_empty());
     let ops = not_found_at(&mut sut, T0 + 153_000.0, SUBMIT_BLOCK + 28);
-    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(ops, vec![fail_patch(TrackFailure::NotSent)]);
     assert_eq!(entry_status(&sut), TrackStatus::NotSent);
 }
 
@@ -2297,6 +2338,7 @@ fn records_named_after_a_landing_take_its_patch() {
             patch: TrackRecordPatch {
                 status: TrackRecordStatus::Confirmed,
                 tx_hash: Some(EVENT_TX.to_owned()),
+                settlement: None,
             },
         }),
         "{ops:?}"
@@ -2341,7 +2383,7 @@ fn a_post_after_not_sent_is_tracked_again() {
     assert!(not_found_at(&mut sut, T0 + 61_000.0, SUBMIT_BLOCK + 12).is_empty());
     assert_eq!(
         not_found_at(&mut sut, T0 + 73_000.0, SUBMIT_BLOCK + 14),
-        vec![fail_patch()]
+        vec![fail_patch(TrackFailure::NotSent)]
     );
     let ops = sut.dispatch(posting_hand_off());
     assert_eq!(ops, vec![Op::Now, poll_receipt()], "tracked again");
@@ -2402,7 +2444,10 @@ fn a_rejected_status_naming_the_bundle_tx_is_read_from_the_chain() {
         is_tx_receipt,
         tx_receipt(T0 + 12_900.0, Some(&bundle_receipt(vec![our_event(false)]))),
     );
-    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::Reverted), holdings_moved()]
+    );
     let view = sut.view();
     assert_eq!(view.entries[0].status, TrackStatus::Dropped);
     assert_eq!(view.entries[0].tx_hash.as_deref(), Some(EVENT_TX));
@@ -2421,7 +2466,10 @@ fn a_rejected_status_naming_the_bundle_tx_is_read_from_the_chain() {
             now_ms: T0 + 12_700.0,
         },
     );
-    assert_eq!(ops, vec![fail_patch(), holdings_moved()]);
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::Reverted), holdings_moved()]
+    );
     assert_eq!(entry_status(&sut), TrackStatus::Dropped);
 }
 
@@ -2444,7 +2492,11 @@ fn a_rejected_op_absent_from_its_mined_bundle_is_refused() {
         is_tx_receipt,
         tx_receipt(T0 + 16_200.0, Some(&bundle_receipt(vec![]))),
     );
-    assert_eq!(ops, vec![fail_patch()], "nothing landed: no balance read");
+    assert_eq!(
+        ops,
+        vec![fail_patch(TrackFailure::Refused)],
+        "nothing landed: no balance read"
+    );
     assert_eq!(entry_status(&sut), TrackStatus::Rejected);
 
     // A refusal that names no bundle tx is terminal at once, as before.
@@ -2452,7 +2504,7 @@ fn a_rejected_op_absent_from_its_mined_bundle_is_refused() {
     submitted(&mut sut);
     let _ = tick(&mut sut, T0 + 12_400.0);
     let ops = sut.resolve_matching(is_status, status(TrackLifecycle::Rejected, T0 + 12_600.0));
-    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(ops, vec![fail_patch(TrackFailure::Refused)]);
     assert_eq!(entry_status(&sut), TrackStatus::Rejected);
 }
 
@@ -2530,7 +2582,7 @@ fn a_lookback_that_cannot_reach_the_submit_never_proves_not_sent() {
     scan_to_head(&mut sut, T0 + 300.0, head);
     assert!(settle_polls(&mut sut, T0 + 400.0, TrackLifecycle::NotFound).is_empty());
     let ops = not_found_at(&mut sut, T0 + 400.0 + RECONCILE_MIN_INTERVAL_MS, head + 50);
-    assert_eq!(ops, vec![fail_patch()]);
+    assert_eq!(ops, vec![fail_patch(TrackFailure::NotSent)]);
     assert_eq!(entry_status(&sut), TrackStatus::NotSent);
 }
 
@@ -2622,6 +2674,7 @@ fn a_dapp_operation_lands_on_the_record_the_sign_path_persisted() {
             patch: TrackRecordPatch {
                 status: TrackRecordStatus::Confirmed,
                 tx_hash: Some(TX.to_owned()),
+                settlement: None,
             },
         })
     );
@@ -2655,6 +2708,10 @@ fn a_dropped_dapp_operation_fails_the_record_the_sign_path_persisted() {
                 patch: TrackRecordPatch {
                     status: TrackRecordStatus::Failed,
                     tx_hash: None,
+                    settlement: Some(TrackSettlement {
+                        moved: None,
+                        failure: Some(TrackFailure::Reverted),
+                    }),
                 },
             },
             // Included, so its fee moved (spec 082).

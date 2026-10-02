@@ -67,6 +67,7 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         calldata: None,
         call_data: None,
         summary: None,
+        settlement: None,
     }
 }
 

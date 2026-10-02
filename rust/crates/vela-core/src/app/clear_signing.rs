@@ -174,7 +174,7 @@ const ERC_CALLDATA_FALLBACKS: [&str; 3] = [
 const PERMIT_FALLBACK_PATH: &str = "/erc7730/ercs/eip712-erc2612-permit.json";
 
 /// Uniswap's Permit2, at the same address on every chain it is deployed to.
-const PERMIT2_ADDRESS: &str = "0x000000000022d473030f116ddee9f6b43ac78ba3";
+pub(crate) const PERMIT2_ADDRESS: &str = "0x000000000022d473030f116ddee9f6b43ac78ba3";
 
 /// The `encodeType` strings of the typed messages this build describes itself
 /// (spec 081 FR-008). Comparing the string IS comparing the typehash — it is
@@ -257,7 +257,7 @@ const COW_SETTLEMENT: &str = "0x9008d19f58aabd9ed0d60971565aa8510560ab41";
 /// PancakeSwap's Universal Router.
 const PANCAKE_UNIVERSAL_ROUTER: &str = "0xd9c500dff816a1da21a48a732d3498bf09dc9aeb";
 /// PancakeSwap's own Permit2 deployment (its routers draw through it).
-const PANCAKE_PERMIT2: &str = "0x31c2f6fcff4f8759b3bd5bf0e1084a055615c768";
+pub(crate) const PANCAKE_PERMIT2: &str = "0x31c2f6fcff4f8759b3bd5bf0e1084a055615c768";
 /// Spark's PSM3 on Base — USDC ⇄ USDS ⇄ sUSDS at a fixed rate.
 const SPARK_PSM3_BASE: &str = "0x1601843c5e9bc251a3272907010afa41fa18347e";
 /// Uniswap's Universal Router 2.1.2 on BNB Chain.
@@ -1767,6 +1767,14 @@ pub struct ClearSigningView {
     /// states it (`@.value`).
     #[serde(default)]
     pub native_value: Option<ClearNativeValue>,
+    /// What the reading named, as the record keeps it (spec 097 N5, N8): the
+    /// contract and its owner, and the coins it showed amounts of — Activity
+    /// then names them as the sheet did. The shell copies it to
+    /// [`super::sign_request::SignApproveOpts::reading`] and decides nothing.
+    /// `None` on every surface but [`ClearSurface::ClearSign`] and
+    /// [`ClearSurface::Batch`], and when the reading named nothing.
+    #[serde(default)]
+    pub record_reading: Option<super::dapp_activity::DappReading>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1891,6 +1899,7 @@ impl App for ClearSigning {
             batch: batch_view(model).filter(|_| surface == ClearSurface::Batch),
             record_intent: record_intent_of(model, surface),
             native_value: native_value_of(model, surface),
+            record_reading: record_reading_of(model, surface),
         }
     }
 }
@@ -1903,6 +1912,48 @@ fn native_value_of(model: &Model, surface: ClearSurface) -> Option<ClearNativeVa
         _ => false,
     };
     model.tx_value.clone().filter(|_| unsaid)
+}
+
+/// [`ClearSigningView::record_reading`] for the surface the sheet draws: a
+/// lone call's reading, or every call's of a batch, with the symbols and
+/// decimals the chain answered for their tokens (or the build's table).
+fn record_reading_of(
+    model: &Model,
+    surface: ClearSurface,
+) -> Option<super::dapp_activity::DappReading> {
+    let meta = |token: &str| {
+        let suffix = format!(":{token}");
+        let cached = |cache: &BTreeMap<String, String>| {
+            cache
+                .iter()
+                .find(|(key, _)| key.ends_with(&suffix))
+                .map(|(_, symbol)| symbol.clone())
+        };
+        let symbol =
+            cached(&model.symbol_cache).or_else(|| known_token_symbol(token).map(str::to_owned))?;
+        let decimals = model
+            .decimals_cache
+            .iter()
+            .find(|(key, _)| key.ends_with(&suffix))
+            .map(|(_, decimals)| *decimals)
+            .or_else(|| known_token_decimals(token))?;
+        Some((symbol, decimals))
+    };
+    match surface {
+        ClearSurface::ClearSign => {
+            let result = model.result.as_ref();
+            super::dapp_activity::reading_of(result, result, meta)
+        }
+        ClearSurface::Batch => {
+            let batch = batch_view(model)?;
+            super::dapp_activity::reading_of(
+                None,
+                batch.calls.iter().filter_map(|call| call.result.as_ref()),
+                meta,
+            )
+        }
+        _ => None,
+    }
 }
 
 /// [`ClearSigningView::record_intent`] for the surface the sheet draws.
