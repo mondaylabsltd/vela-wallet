@@ -60,7 +60,10 @@ vi.mock('$lib/services/safe-transaction', () => ({
 }));
 vi.mock('$lib/core/client', () => ({ loadCore: vi.fn(async () => {}) }));
 // The core's bound on a whole quote (`fee_policy::QUOTE_DEADLINE_MS`).
-vi.mock('$lib/core/kernels', () => ({ feeQuoteDeadlineMs: () => 15_000 }));
+vi.mock('$lib/core/kernels', async (importOriginal) => ({
+	...(await importOriginal<typeof import('$lib/core/kernels')>()),
+	feeQuoteDeadlineMs: () => 15_000
+}));
 vi.mock('$lib/flows/core/fee-session', () => ({ createFeeSession: seams.make }));
 vi.mock('$lib/flows/core/send-estimates', () => ({
 	resolveFee: (fee: { total_wei: string } | null) =>
