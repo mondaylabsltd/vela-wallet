@@ -6,10 +6,12 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
@@ -50,15 +52,32 @@ class TrackerWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 
         /** 8 × 15 s ≈ the core's `WAIT_WINDOW_MS`. */
         private const val ROUNDS = 8
-        private const val WORK_NAME = "vela.tracker"
+        internal const val WORK_NAME = "vela.tracker"
 
         /** Enqueue (or replace) the background clock. Idempotent. */
         fun enqueue(context: Context) {
-            val request = OneTimeWorkRequestBuilder<TrackerWorker>()
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .build()
-            WorkManager.getInstance(context).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request)
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, request(Build.VERSION.SDK_INT))
         }
+
+        /**
+         * Expedited only where an expedited job is a JOB (API 31+).
+         *
+         * Below 31 WorkManager runs expedited work as a FOREGROUND SERVICE,
+         * which needs the worker's `getForegroundInfo()` — this one has none,
+         * so on Android 10–11 (minSdk is 29) every background poll died
+         * asking for it (spec 088 FR-005, audit A18). There a plain request is
+         * what runs: it starts at once in the process that just went to the
+         * background, with JobScheduler behind it if that process is gone,
+         * and no notification for a two-minute poll. Losing it costs a delay,
+         * never a verdict — the next resume ticks the tracker again.
+         */
+        internal fun request(sdk: Int): OneTimeWorkRequest =
+            OneTimeWorkRequestBuilder<TrackerWorker>()
+                .apply { if (expedites(sdk)) setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST) }
+                .build()
+
+        internal fun expedites(sdk: Int): Boolean = sdk >= Build.VERSION_CODES.S
     }
 }
 

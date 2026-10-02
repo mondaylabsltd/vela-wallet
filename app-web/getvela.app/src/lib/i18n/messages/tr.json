@@ -33,7 +33,9 @@
 				"chainSetup": "Zincir kurulumu",
 				"selfHosting": "Kendi sunucunuzda barındırma kılavuzu",
 				"privacy": "Gizlilik",
-				"terms": "Koşullar"
+				"terms": "Koşullar",
+				"support": "Destek",
+				"deleteData": "Verilerinizi silin"
 			}
 		},
 		"language": {

@@ -166,6 +166,14 @@ enum I18nKeys {
         static let notDiscoverableBody = "onboarding.common.notDiscoverableBody"
     }
 
+    /// Spec 088 FR-004: a page another app asked to open — the host is data,
+    /// the button is the /pay page's own "Open in Vela Wallet" (reused: the
+    /// ja + en budget is spent), the other is Cancel.
+    enum ExternalPage {
+        static let open = "receive.pay.open"
+        static let cancel = "common.cancel"
+    }
+
     /// Spec 075: the Trusted Signer, where the onboarding surface meets it.
     ///
     /// These live under `componentsUi.signing.*` rather than under

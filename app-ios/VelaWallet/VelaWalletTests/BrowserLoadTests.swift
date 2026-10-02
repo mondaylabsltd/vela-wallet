@@ -242,6 +242,32 @@ struct BrowserLoadTests {
                 "address and title come from the same read as the icon")
     }
 
+    /// Issue #329: a favourite starred while its page had failed was named
+    /// after the page in front — on Android the WebView's error page
+    /// ("网页无法打开"); here, the page before's title, since WebKit keeps the
+    /// old document behind the panel. The name is the core's rule over the
+    /// last visit: that site's last good title, else nothing (its host).
+    @Test func aStarredPageIsNamedByItsSitesLastGoodTitleOnly() throws {
+        let failed = "https://app.uniswap.org/"
+        let before = BrowserEngine.visit(facts: #"{"href":"https://bscscan.com/","title":"BscScan","icon":""}"#, httpStatus: 200)
+        #expect(browserPinnedTitle(url: failed, lastGood: before) == nil, "the page before is another site")
+        #expect(browserPinnedTitle(url: failed, lastGood: nil) == nil, "nothing loaded yet: the host")
+        let errorPage = BrowserEngine.visit(facts: #"{"href":"chrome-error://chromewebdata/","title":"网页无法打开","icon":""}"#, httpStatus: nil)
+        #expect(errorPage == nil, "an engine document is never a visit")
+        let good = BrowserEngine.visit(facts: #"{"href":"https://app.uniswap.org/swap","title":"Uniswap Interface","icon":""}"#, httpStatus: 200)
+        #expect(browserPinnedTitle(url: failed, lastGood: good) == "Uniswap Interface", "the site's last good title")
+
+        // The star asks the rule over the engine's last visit, for the address the bar names.
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("VelaWallet/Features/Explore/Core/BrowserController.swift"),
+            encoding: .utf8
+        )
+        #expect(source.contains("browserPinnedTitle(url: url, lastGood: engine.lastVisit)"))
+        #expect(!source.contains("engine.title.isEmpty ? nil : engine.title"))
+    }
+
     /// A jump within the page is not a load; anything else is.
     @Test func onlyANewDocumentShowsProgress() {
         let here = URL(string: "https://app.uniswap.org/swap")!

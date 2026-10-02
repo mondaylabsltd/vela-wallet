@@ -699,6 +699,17 @@ struct RootView: View {
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
         // A link, from anywhere: the scheme, a universal link, a page.
         .onOpenURL { url in openLink(url) }
+        // Spec 088 FR-004: a page another app asked to open, waiting for a yes.
+        // Dismissing is "no".
+        .sheet(item: Binding(
+            get: { browser.externalPage },
+            set: { if $0 == nil { browser.answerExternal(false) } }
+        )) { page in
+            ExternalPageSheet(loc: loc, page: page) { open in
+                if browser.answerExternal(open) { section = .explore }
+            }
+            .themed(scheme)
+        }
         // The core's verdict on a `/pay` link. Watched rather than awaited,
         // because a link can arrive before the wallet has finished opening and
         // the answer has to survive that.
@@ -800,8 +811,9 @@ struct RootView: View {
             // request this wallet can honour is 600 lines that already exist.
             paymentRequest.linkOpened(event)
         case .open(let page):
-            section = .explore
-            browser.open(page)
+            // Spec 088 FR-004: a link from outside only ASKS. The sheet shows
+            // the host the core named; nothing loads before the person says yes.
+            browser.askToOpen(page)
         case nil:
             break
         }
