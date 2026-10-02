@@ -33,7 +33,9 @@
 				"chainSetup": "チェーンのセットアップ",
 				"selfHosting": "セルフホスティングガイド",
 				"privacy": "プライバシー",
-				"terms": "利用規約"
+				"terms": "利用規約",
+				"support": "サポート",
+				"deleteData": "データの削除"
 			}
 		},
 		"language": {
