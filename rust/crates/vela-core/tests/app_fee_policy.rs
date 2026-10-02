@@ -4953,7 +4953,8 @@ fn a_plain_send_still_pays_its_fee_in_the_coin_it_sends_when_that_is_all_there_i
     );
     assert!(!view.confirm_fee_ready);
     assert!(view.options.iter().all(|option| !option.spent_by_operation));
-=======
+}
+
 // ---------------------------------------------------------------------------
 // The bound on a whole run (spec 094 S9, 089 F06)
 // ---------------------------------------------------------------------------
