@@ -87,19 +87,47 @@ struct ChainDeadlineTests {
     /// The deadline fires while the main actor is held — it never needed it.
     /// (The executor's own round still collects on the main actor; this is
     /// the part that must not.)
+    ///
+    /// Proved by ORDER, never by a stopwatch (CI, spec 096: a loaded runner
+    /// took 5.15 s against the old `< 2.5 s`). The main actor is taken and
+    /// held — not one yield — from before the read starts until the
+    /// deadline's answer has arrived. A deadline that needed the main actor
+    /// could not answer while it is held, so the hold would never end: the
+    /// time limit is the failure, and it lets the hold go, so nothing else in
+    /// the suite hangs behind it.
     @Test(.timeLimit(.minutes(1)))
     func theDeadlineFiresWhileTheMainActorIsHeld() async {
-        let hold = Task { @MainActor in
-            let end = Date().addingTimeInterval(3)
-            while Date() < end {}
+        struct Hold: Sendable {
+            var holding = false
+            var answered = false
+            var abandoned = false
         }
-        let started = Date()
-        let result = await TokenReads.bounded(chainId: 56, deadlineMs: 150) {
-            await withCheckedContinuation { (_: CheckedContinuation<TokenReads.ChainResult, Never>) in }
+        let hold = OSAllocatedUnfairLock(initialState: Hold())
+        // `true` = the answer arrived while this held the main actor.
+        let holder = Task { @MainActor () -> Bool in
+            hold.withLock { $0.holding = true }
+            while true {
+                let now = hold.withLock { $0 }
+                if now.answered { return true }
+                if now.abandoned { return false }
+            }
+        }
+        let result = await withTaskCancellationHandler {
+            // The read starts only once the main actor is held.
+            while !hold.withLock({ $0.holding }), !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000)
+            }
+            let result = await TokenReads.bounded(chainId: 56, deadlineMs: 150) {
+                await withCheckedContinuation { (_: CheckedContinuation<TokenReads.ChainResult, Never>) in }
+            }
+            hold.withLock { $0.answered = true }
+            return result
+        } onCancel: {
+            hold.withLock { $0.abandoned = true }
         }
         #expect(result.failed)
-        #expect(Date().timeIntervalSince(started) < 2.5, "the deadline waited for the main actor")
-        await hold.value
+        let answeredWhileHeld = await holder.value
+        #expect(answeredWhileHeld, "the deadline waited for the main actor")
     }
 
     /// The default is the core's number, not one typed into this client.
