@@ -42,7 +42,14 @@
 				><Identicon svg={fact.lead.svg} size="row" address={fact.lead.address} /></span
 			>
 		{/if}
-		<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+		{#if fact.detail !== undefined}
+			<span class="lines">
+				<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+				<span class="detail">{fact.detail}</span>
+			</span>
+		{:else}
+			<span class="value" class:mono={fact.mono} data-tone={fact.tone}>{fact.value}</span>
+		{/if}
 		{#if fact.copy !== undefined}
 			<button type="button" aria-label={fact.copy} class:copied onclick={oncopy}>
 				<Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
@@ -106,6 +113,26 @@
 
 	.mono {
 		font-family: var(--font-mono);
+	}
+
+	/* A name over the address it stands for (spec 097 F): the name may be cut,
+	   the address under it never is. */
+	.lines {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		min-width: 0;
+	}
+
+	.lines .value {
+		max-width: 100%;
+	}
+
+	.detail {
+		font-family: var(--font-mono);
+		font-size: calc(var(--text-xs) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
+		white-space: nowrap;
 	}
 
 	/* Spec 093: an unlimited allowance reads in red; what came back, in green. */

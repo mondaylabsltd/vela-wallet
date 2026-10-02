@@ -130,6 +130,13 @@ export interface FactRowModel {
 		| { kind: 'identicon'; svg: string; address?: string };
 	/** Renders the value in the mono face (addresses, hashes). */
 	mono?: boolean;
+	/**
+	 * A second line under the value, in the mono face: the short address
+	 * under a NAME (spec 097 F). On the page that signs, a name is a claim and
+	 * the address is what is paid, so the two are drawn together — and on two
+	 * lines, so a long name can never push the address off the row.
+	 */
+	detail?: string;
 	/** Shows a copy affordance and its accessible name. */
 	copy?: string;
 	/** The whole text the affordance copies, when `value` is a shortened form. */
