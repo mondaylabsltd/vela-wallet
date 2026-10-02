@@ -362,21 +362,43 @@ pub fn fact_row(
     } else {
         fact.value.clone()
     };
-    value_side = value_side.child(
-        value
-            .min_w(px(0.))
-            .when(fact.mono, |value| value.truncate())
-            // A value of several lines (a dApp record's balance changes,
-            // spec 093) keeps every line against the right edge.
-            .text_right()
-            .font_weight(gpui::FontWeight::MEDIUM)
-            .text_color(if fact.danger {
-                theme.error_base
-            } else {
-                theme.fg_base
-            })
-            .child(text),
-    );
+    let value = value
+        .min_w(px(0.))
+        // A name with the address under it (spec 097 F) gives way first: it
+        // is cut to one line so the address line below is never pushed out.
+        .when(fact.mono || fact.detail.is_some(), |value| value.truncate())
+        // A value of several lines (a dApp record's balance changes,
+        // spec 093) keeps every line against the right edge.
+        .text_right()
+        .font_weight(gpui::FontWeight::MEDIUM)
+        .text_color(if fact.danger {
+            theme.error_base
+        } else {
+            theme.fg_base
+        })
+        .child(text);
+    value_side = match &fact.detail {
+        None => value_side.child(value),
+        // The short address under a payee's name, muted mono, whole. The
+        // column hugs its lines (the identicon stays beside them) and only
+        // the name gives way when the row is narrow.
+        Some(detail) => value_side.child(
+            div()
+                .min_w(px(0.))
+                .flex()
+                .flex_col()
+                .items_end()
+                .child(value.max_w_full())
+                .child(
+                    div()
+                        .whitespace_nowrap()
+                        .font_family(theme::font_mono())
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(detail.clone()),
+                ),
+        ),
+    };
 
     // `FactRow.svelte`: a 20 box with a 14 glyph in `fg-subtle`, a tick in
     // the success colour for 150 ms after it copies.

@@ -16807,11 +16807,14 @@ impl WalletPage {
                     // reason (`flows/live-send.ts`).
                     let title = match (&send, panel) {
                         // A sweep is several coins: "Send tokens", never the
-                        // first pick's "Send ETH" (the web's `multiSendTitle`).
-                        (Some(_), FlowPanel::Dsd1 | FlowPanel::Dsd2 | FlowPanel::Dsd2b)
-                            if self
-                                .send_views(cx)
-                                .is_some_and(|(view, _)| view.multi_select_mode) =>
+                        // first pick's "Send ETH" (the web's `multiSendTitle`)
+                        // — its receipt too (spec 097 F).
+                        (
+                            Some(_),
+                            FlowPanel::Dsd1 | FlowPanel::Dsd2 | FlowPanel::Dsd2b | FlowPanel::Dsd4,
+                        ) if self
+                            .send_views(cx)
+                            .is_some_and(|(view, _)| view.multi_select_mode) =>
                         {
                             self.flow_strings.multi_send_title.clone()
                         }

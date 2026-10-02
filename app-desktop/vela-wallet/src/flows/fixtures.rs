@@ -156,6 +156,11 @@ pub struct FactRow {
     /// The value in the danger tone — an unlimited spending cap (spec 093),
     /// the one figure on a record that is a standing risk.
     pub danger: bool,
+    /// A second line under the value, in mono and muted: the short address
+    /// under a payee's NAME (spec 097 F, S2). On the page that signs, a name
+    /// is a claim and the address is what is paid, so the name may be cut
+    /// short but this line never is.
+    pub detail: Option<SharedString>,
 }
 
 /// The chip's tone, matching the other three clients' vocabulary.
@@ -775,6 +780,13 @@ pub struct BreakdownRow {
     /// `None` for an asset row, which carries no person.
     pub seed: Option<SharedString>,
     pub label: SharedString,
+    /// The label IS an address (nobody named it), so it is set in mono — said
+    /// by whoever built the row, as the web's `BreakdownRowModel.mono`.
+    pub mono: bool,
+    /// The short address under a NAME (spec 097 F, S2), muted and in mono:
+    /// a row from a spreadsheet can call any address "Alice", so the confirm
+    /// never shows the one without the other.
+    pub detail: Option<SharedString>,
     pub value: SharedString,
 }
 
@@ -905,6 +917,7 @@ fn fact(label: &SharedString, value: impl Into<SharedString>) -> FactRow {
         copy: None,
         note: None,
         danger: false,
+        detail: None,
     }
 }
 
@@ -1124,6 +1137,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             copy: Some(if received { ALICE_FULL } else { HOLD_ON_FULL }.into()),
             note: None,
             danger: false,
+            detail: None,
         },
         FactRow {
             label: s.detail_chain.clone(),
@@ -1133,6 +1147,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             copy: None,
             note: None,
             danger: false,
+            detail: None,
         },
     ];
     // Only an ERC-20 transfer has a contract. DA3L's native coin does not, and
@@ -1148,6 +1163,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             copy: Some(USDT_CONTRACT.into()),
             note: None,
             danger: false,
+            detail: None,
         });
     }
     facts.push(fact(
@@ -1173,6 +1189,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
         ),
         note: None,
         danger: false,
+        detail: None,
     });
 
     TxDetail {
@@ -1606,6 +1623,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 copy: None,
                 note: None,
                 danger: false,
+                detail: None,
             },
             FactRow {
                 label: s.to_label.clone(),
@@ -1615,6 +1633,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 copy: None,
                 note: None,
                 danger: false,
+                detail: None,
             },
             FactRow {
                 label: s.detail_chain.clone(),
@@ -1624,6 +1643,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 copy: None,
                 note: None,
                 danger: false,
+                detail: None,
             },
             fact(&s.est_fee, "~0.0021 ETH · ≈$0.55"),
         ],

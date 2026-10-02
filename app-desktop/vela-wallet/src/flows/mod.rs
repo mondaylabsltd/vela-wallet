@@ -421,6 +421,9 @@ pub struct FlowStrings {
     pub confirm_title: SharedString,
     pub from_label: SharedString,
     pub to_label: SharedString,
+    /// The tag beside a name from the public wallet registry (spec 097 F,
+    /// S2): "Wallet · Vela User" — anyone can register any name there.
+    pub vela_user: SharedString,
     pub est_fee: SharedString,
     pub confirm_send: SharedString,
     pub confirm_total_line: String,
@@ -474,6 +477,9 @@ pub struct FlowStrings {
     // wordings the core chooses between, and the recipient trust line.
     /// Template carrying `{{amount}}` / `{{symbol}}`.
     pub tx_confirmed_title: String,
+    /// "Sent" — the receipt's title for an operation that moved several
+    /// coins, which has no one figure (spec 097 F, S3).
+    pub tx_sent: SharedString,
     pub tx_submitting: SharedString,
     pub tx_preparing: SharedString,
     pub tx_background_hint: SharedString,
@@ -782,6 +788,7 @@ impl FlowStrings {
             confirm_title: s("send.confirmTitle"),
             from_label: s("send.fromLabel"),
             to_label: s("send.toLabel"),
+            vela_user: s("send.velaUser"),
             est_fee: s("send.estFeeLabel"),
             confirm_send: s("send.confirmSendBtn"),
             confirm_total_line: raw("send.confirmTotalLine"),
@@ -812,6 +819,7 @@ impl FlowStrings {
             got_it: s("common.gotIt"),
 
             tx_confirmed_title: raw("send.txConfirmedTitle"),
+            tx_sent: s("componentsTx.detail.sent"),
             tx_submitting: s("send.txSubmitting"),
             tx_preparing: s("send.txPreparingBiometric"),
             tx_background_hint: s("send.txBackgroundHint"),
@@ -914,6 +922,9 @@ mod tests {
             (s.pick_contact_title.as_ref(), "send.pickContactTitle"),
             (s.tx_submitted_title.as_ref(), "send.txSubmittedTitle"),
             (s.tx_maybe_sent.as_ref(), "componentsUi.signing.maybeSent"),
+            (s.vela_user.as_ref(), "send.velaUser"),
+            (s.tx_sent.as_ref(), "componentsTx.detail.sent"),
+            (s.multi_send_title.as_ref(), "send.multiSendTitle"),
             (s.native_alias_title.as_ref(), "addToken.nativeAliasTitle"),
             (s.bad_amount.as_ref(), "send.badAmount"),
             (s.batch_dup.as_ref(), "send.batchDup"),
