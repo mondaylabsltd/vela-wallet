@@ -14,7 +14,7 @@
 - [x] T015 [US3] F07/F11/F15: Chainlist chip wrap, blank amount cell, refused-loopback wording (`fix/087-small-ui`).
 - [x] T016 [US1] Batch-recipient CSV decoding through the core (`fix/087-batch-import-encoding`, on top of #350).
 - [x] T017 [US2] F21: Android browser chrome hidden during a slow first load (`fix/087-browser-chrome-slow-load`).
-- [ ] T018 [US2] F08: the Home RPC notice only when an unreachable network holds the person's assets (owner decision).
+- [x] T018 [US2] F08 — owner ruling 2026-10-02: keep the notice for every unreachable network (holdings are unknowable while it is down); no jargon; tap shows all → spec 092 (`092-unreachable-network-notice`).
 
 ## Phase 3 — Re-verify
 - [x] T020 Integration build (main + every 086/087/088 branch) on both phones; replay each finding.
