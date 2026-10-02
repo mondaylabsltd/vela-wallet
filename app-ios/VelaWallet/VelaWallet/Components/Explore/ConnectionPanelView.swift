@@ -92,32 +92,36 @@ struct ConnectionPanelView: View {
 
             Divider().overlay(theme.borderBase)
 
-            Button(action: onSwitch) {
-                HStack(spacing: Tokens.Space.s12) {
-                    IdenticonAvatar(seed: connection.account.seed,
-                                    size: ExploreGeometry.rowAvatar,
-                                    tappable: false)
-                    VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                        Text(verbatim: connection.account.name)
-                            .typeRole(Typography.rowTitle.scaled(textScale))
-                            .foregroundStyle(theme.fgBase)
-                        Text(verbatim: connection.account.address)
-                            .typeRole(Typography.monoSmall.scaled(textScale))
-                            .foregroundStyle(theme.fgMuted)
+            // The account the site sees — none when it is not connected
+            // (spec 097 E); a site asking is shown the one it would get.
+            if connection.consent != nil || connection.connected {
+                Button(action: onSwitch) {
+                    HStack(spacing: Tokens.Space.s12) {
+                        IdenticonAvatar(seed: connection.account.seed,
+                                        size: ExploreGeometry.rowAvatar,
+                                        tappable: false)
+                        VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                            Text(verbatim: connection.account.name)
+                                .typeRole(Typography.rowTitle.scaled(textScale))
+                                .foregroundStyle(theme.fgBase)
+                            Text(verbatim: connection.account.address)
+                                .typeRole(Typography.monoSmall.scaled(textScale))
+                                .foregroundStyle(theme.fgMuted)
+                        }
+                        Spacer(minLength: Tokens.Space.s12)
+                        HStack(spacing: Tokens.Space.s4) {
+                            Text(verbatim: connection.switchLabel)
+                                .typeRole(Typography.rowSub.scaled(textScale))
+                            LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
+                        }
+                        .foregroundStyle(theme.fgMuted)
                     }
-                    Spacer(minLength: Tokens.Space.s12)
-                    HStack(spacing: Tokens.Space.s4) {
-                        Text(verbatim: connection.switchLabel)
-                            .typeRole(Typography.rowSub.scaled(textScale))
-                        LucideIcon(.chevronRight, size: LucideIconSize.smallChevron)
-                    }
-                    .foregroundStyle(theme.fgMuted)
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+                .buttonStyle(.plain)
 
-            Divider().overlay(theme.borderBase)
+                Divider().overlay(theme.borderBase)
+            }
 
             // The SITE's network (spec 070: per origin, kept across launches).
             // With choices it is a control; a pick moves this site only, and
@@ -194,10 +198,12 @@ struct ConnectionPanelView: View {
                 }
             }
 
-            Text(verbatim: connection.explainer)
-                .typeRole(Typography.rowSub.scaled(textScale))
-                .foregroundStyle(theme.fgMuted)
-                .fixedSize(horizontal: false, vertical: true)
+            if !connection.explainer.isEmpty {
+                Text(verbatim: connection.explainer)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if let consent = connection.consent {
                 // Asking, not connected. The refusal is the outline and the
@@ -228,7 +234,7 @@ struct ConnectionPanelView: View {
                     }
                     .buttonStyle(.plain)
                 }
-            } else {
+            } else if connection.connected {
                 Button(action: onDisconnect) {
                     Text(verbatim: connection.disconnect)
                         .typeRole(Typography.button.scaled(textScale))

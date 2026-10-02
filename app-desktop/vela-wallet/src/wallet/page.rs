@@ -161,6 +161,14 @@ fn gallery_bar_caption_pad(caption: bool) -> f32 {
     if caption { CAPTION_H + 4. - 8. } else { 0. }
 }
 
+/// Whether the Connection column has anything true to say (spec 097 E): the
+/// drawing (no session — the gallery), a site asking to connect, or the page
+/// on screen. Signed in on the start page it has none, and drew the mock's
+/// "app.uniswap.org · Connected" on Gnosis.
+fn connection_column_shown(signed_in: bool, asking: bool, page_on_screen: bool) -> bool {
+    !signed_in || asking || page_on_screen
+}
+
 /// The panel a switch of section leaves (spec 082 RJ18): a signing column
 /// that was only hidden comes back with Explore; anywhere else no panel.
 fn panel_after_switch(destination: Section, signing_kept: bool) -> PanelId {
@@ -4458,16 +4466,52 @@ impl WalletPage {
     /// dialog included. While one is up the page is taken off the screen, not
     /// closed (spec 070): the scrim covers where it was.
     #[cfg(not(target_os = "linux"))]
-    fn dialog_over_browser(&self) -> bool {
+    fn dialog_over_browser(&self, cx: &gpui::App) -> bool {
         // The site menus drop over the page too, and a native view paints
         // over them: the ⋯ menu showed a sliver above the page and nothing
         // else (found verifying 078 E-03). While one is open the page steps
         // aside, as it does for a dialog, and comes back when it closes.
         // On Windows the page stays: the menu cuts its own hole in the
         // webview's window instead (spec 083 D2, `webview::cut_out`).
+        self.dialog_up(cx) || (!cfg!(target_os = "windows") && self.site_menu_open())
+    }
+
+    /// Any centred dialog the page root draws over the window (spec 097 E).
+    /// The list was the switcher and the artwork viewer, so the Connection
+    /// panel's "Disconnect this site?" was painted UNDER the page and could
+    /// not be answered — every dialog is here, whichever screen opens it, so
+    /// the next one cannot be missed the same way.
+    #[cfg(not(target_os = "linux"))]
+    fn dialog_up(&self, cx: &gpui::App) -> bool {
         self.account_switcher
             || self.identicon_viewer.is_some()
-            || (!cfg!(target_os = "windows") && self.site_menu_open())
+            || self.confirm.is_some()
+            || self.settings_dialog.is_some()
+            || self.network_remove.is_some()
+            || self.import_result.is_some()
+            || self.group_form.is_some()
+            || self.pick.is_some()
+            || self.export_scope.is_some()
+            || self.explore_form.is_some()
+            || self.explore_groups
+            || self.contact_qr.is_some()
+            || self.balance_detail_open
+            || self.unreachable_open
+            || self.feedback.viewer_open()
+            || session::view(cx).sign_out.is_some()
+            || self.signing_host.as_ref().is_some_and(|host| {
+                let channel = host.read(cx).trusted_signer();
+                channel.waiting() || channel.ended().is_some()
+            })
+    }
+
+    /// The core holds a grant for the site on screen (spec 097 E).
+    fn site_connected(&self, cx: &gpui::App) -> bool {
+        self.browser_host.as_ref().is_some_and(|host| {
+            host.read(cx)
+                .tab()
+                .is_some_and(|tab| tab.connected_address.is_some())
+        })
     }
 
     /// A menu that drops over the page: the site's ⋯ and its network picker.
@@ -13280,20 +13324,25 @@ impl WalletPage {
                         cx.notify();
                     })),
             )
-            .child(
-                div()
-                    .id("account-chip")
-                    .cursor_pointer()
-                    .child(chip)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.panel = if this.panel == PanelId::Connection {
-                            PanelId::None
-                        } else {
-                            PanelId::Connection
-                        };
-                        cx.notify();
-                    })),
-            );
+            .child({
+                // The chip opens the Connection panel of the page on screen —
+                // on the start page there is none, so it opens nothing (spec
+                // 097 E: it opened the drawing's "app.uniswap.org · Connected").
+                let area = div().id("account-chip").child(chip);
+                if browsing {
+                    area.cursor_pointer()
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.panel = if this.panel == PanelId::Connection {
+                                PanelId::None
+                            } else {
+                                PanelId::Connection
+                            };
+                            cx.notify();
+                        }))
+                } else {
+                    area
+                }
+            });
         let crashed = tab_view.as_ref().is_some_and(|tab| tab.crashed);
         // Spec 079 US3: a load that failed stands where the page was.
         let failed_load = self
@@ -13581,7 +13630,7 @@ impl WalletPage {
             #[cfg(not(target_os = "linux"))]
             {
                 let home = self.browser_home.clone();
-                let covered = self.dialog_over_browser();
+                let covered = self.dialog_over_browser(cx);
                 self.arm_dapp_requests(cx);
                 gpui::canvas(
                     |_, _, _| (),
@@ -15573,8 +15622,19 @@ impl WalletPage {
         // 安全"): the scheme is a lock and only a lock — no "secure site" in
         // words, and no green; "Connected" is a fact about the grant, and is
         // said only when the core has one.
+        //
+        // Spec 097 E: and a site the core holds no grant for says so — "No
+        // active connection" — with nothing that implies access: no account
+        // it sees, no "can see your address", no Disconnect, no "requests
+        // appear here". It said all of those after a disconnect, with only
+        // the status word gone. The network row stays: the page reads its
+        // chain whether or not it is connected.
         let (lock, lock_tint) = explore_components::lock_glyph(theme, secure);
-        let status = connected.then(|| self.explore.connected_tag.clone());
+        let status = Some(if connected {
+            self.explore.connected_tag.clone()
+        } else {
+            self.explore.not_connected.clone()
+        });
         let site_icons = origin
             .as_deref()
             .map(|origin| explore_live::icons_of(origin, None))
@@ -15583,7 +15643,7 @@ impl WalletPage {
         // connection, not merely whichever account is active.
         let granted = live.as_ref().and_then(|tab| tab.connected_address.clone());
         let network_row = self.site_network_row(theme, chain_id, origin.clone(), cx);
-        div()
+        let panel = div()
             .flex()
             .flex_col()
             .gap(px(16.))
@@ -15625,8 +15685,33 @@ impl WalletPage {
                             ),
                     ),
             )
-            .child(row_divider(theme))
-            .child(self.account_row(theme, granted.as_deref(), cx))
+            .child(row_divider(theme));
+        // Not connected: the site and its network, and nothing that implies
+        // access (spec 097 E).
+        if !connected {
+            return panel.child(network_row);
+        }
+        let account_row = self.account_row(theme, granted.as_deref(), cx);
+        let button = outline_button(
+            ElementId::from("disconnect"),
+            theme,
+            &mut self.icons,
+            None,
+            self.explore.disconnect.clone(),
+        );
+        // The site on screen, by name: the core revokes the grant and tells
+        // every open page of that site (`accountsChanged []` and
+        // `disconnect`). The drawing's (no site) arms nothing.
+        let disconnect = match origin {
+            Some(origin) => {
+                button.on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                    this.revoke_site(origin.clone(), cx);
+                }))
+            }
+            None => button,
+        };
+        panel
+            .child(account_row)
             .child(row_divider(theme))
             .child(network_row)
             .child(
@@ -15635,26 +15720,7 @@ impl WalletPage {
                     .text_color(theme.fg_muted)
                     .child(self.explore.connection_explainer.clone()),
             )
-            .child({
-                let button = outline_button(
-                    ElementId::from("disconnect"),
-                    theme,
-                    &mut self.icons,
-                    None,
-                    self.explore.disconnect.clone(),
-                );
-                // The site on screen, by name: the core revokes the grant and
-                // tells every open page of that site (`accountsChanged []` and
-                // `disconnect`). Nothing to revoke, nothing armed.
-                match origin.filter(|_| connected) {
-                    Some(origin) => {
-                        button.on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                            this.revoke_site(origin.clone(), cx);
-                        }))
-                    }
-                    None => button,
-                }
-            })
+            .child(disconnect)
             .child(
                 div()
                     .text_center()
@@ -16761,6 +16827,24 @@ impl WalletPage {
                 let body = self.contact_detail_body(theme, cx);
                 let title = self.contacts.section_contacts.clone();
                 columns.child(self.panel_scaffold(theme, title, body, cx))
+            }
+            // Signed in, nobody asking and no page on screen: there is no
+            // connection to describe, and the drawing's site is not one
+            // (spec 097 E).
+            PanelId::Connection
+                if !connection_column_shown(
+                    self.identity.is_some(),
+                    self.browser_host
+                        .as_ref()
+                        .is_some_and(|host| host.read(cx).view.consent.is_some()),
+                    self.browsing
+                        && self
+                            .browser_host
+                            .as_ref()
+                            .is_some_and(|host| host.read(cx).tab().is_some()),
+                ) =>
+            {
+                columns
             }
             PanelId::Connection => {
                 let body = self.connection_body(theme, cx);
@@ -18326,6 +18410,7 @@ impl WalletPage {
             // gpui window can raise, so Share hands the link over the one way
             // this machine shares everything — the clipboard — and says so.
             ContactsMenu::Site => {
+                let connected = self.site_connected(cx);
                 #[cfg(not(target_os = "linux"))]
                 let url = crate::webview::current_url().filter(|url| url != "about:blank");
                 #[cfg(target_os = "linux")]
@@ -18338,7 +18423,7 @@ impl WalletPage {
                         })) as contacts_components::MenuAction
                     })
                 };
-                vec![
+                let mut actions = vec![
                     Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                         this.menu = None;
                         this.browser_go(crate::wallet::browser_host::Go::Reload, cx);
@@ -18389,7 +18474,13 @@ impl WalletPage {
                         }
                         cx.notify();
                     })) as contacts_components::MenuAction),
-                ]
+                ];
+                // A site with no grant has nothing to disconnect (spec 097 E):
+                // the row is not drawn (`site_menu`), so its action goes too.
+                if !connected {
+                    actions.remove(explore_fixtures::SITE_MENU_DISCONNECT);
+                }
+                actions
             }
             // "Move to a group": the person's own groups, newest last, with
             // "new group" at the top. The index is the position in the SAME
@@ -18683,7 +18774,9 @@ impl WalletPage {
         let model = match kind {
             ContactsMenu::Header => contacts_fixtures::header_dropdown(&self.contacts),
             ContactsMenu::Group => contacts_fixtures::group_context(&self.contacts),
-            ContactsMenu::Site => explore_fixtures::site_menu(&self.explore),
+            ContactsMenu::Site => {
+                explore_fixtures::site_menu(&self.explore, self.site_connected(cx))
+            }
             ContactsMenu::Recent => explore_fixtures::recent_menu(&self.explore),
             ContactsMenu::MoveGroup => explore_fixtures::group_pick_menu(
                 &self.explore,
@@ -18834,7 +18927,7 @@ impl Render for WalletPage {
         // settles its requests.
         #[cfg(not(target_os = "linux"))]
         if !(self.section == Section::Explore && self.browsing && self.identity.is_some())
-            || self.dialog_over_browser()
+            || self.dialog_over_browser(cx)
         {
             crate::webview::hide();
         }
@@ -19291,6 +19384,102 @@ mod tests {
         // Closed by the person (✕, Done): nothing comes back.
         assert!(!keeps_ending(PanelId::None, false));
         assert_eq!(panel_after_switch(Section::Explore, false), PanelId::None);
+    }
+
+    /// Spec 097 E: the Connection column speaks of a real connection or of
+    /// none — never the drawing's "app.uniswap.org · Connected" to somebody
+    /// signed in on the start page.
+    #[test]
+    fn the_connection_column_never_draws_the_mock_for_a_session() {
+        assert!(
+            connection_column_shown(false, false, false),
+            "the gallery's drawing"
+        );
+        assert!(connection_column_shown(true, true, false), "a site asking");
+        assert!(
+            connection_column_shown(true, false, true),
+            "the page on screen"
+        );
+        assert!(
+            !connection_column_shown(true, false, false),
+            "signed in, no page: nothing"
+        );
+    }
+
+    /// Spec 097 E (S3): the webview is a NATIVE view and paints over anything
+    /// gpui draws, so every centred dialog the root draws must take the page
+    /// off the screen while it is up. The Connection panel's "Disconnect this
+    /// site?" (`self.confirm`) was missing and was drawn UNDER the page — the
+    /// person could not answer it. Every dialog the root render builds is
+    /// either in `dialog_up` by the state that raises it, or named here as
+    /// never over the browser.
+    #[test]
+    fn every_dialog_the_root_draws_takes_the_page_off_the_screen() {
+        let source = include_str!("page.rs");
+        let body_of = |name: &str| -> &str {
+            let start = source
+                .find(&["fn ", name, "("].concat())
+                .unwrap_or_else(|| unreachable!("fn {name}"));
+            let rest = &source[start..];
+            let end = rest.find("\n    }\n").unwrap_or(rest.len());
+            &rest[..end]
+        };
+        let up = body_of("dialog_up");
+        // Each dialog, by the state its own body reads to decide it is up.
+        let raised_by = [
+            ("confirm_dialog", "self.confirm"),
+            ("account_switcher_dialog", "self.account_switcher"),
+            ("identicon_viewer_dialog", "self.identicon_viewer"),
+            ("settings_dialog_overlay", "self.settings_dialog"),
+            ("network_remove_dialog", "self.network_remove"),
+            ("import_result_dialog", "self.import_result"),
+            ("group_form_dialog", "self.group_form"),
+            ("pick_dialog", "self.pick"),
+            ("export_format_dialog", "self.export_scope"),
+            ("explore_form_dialog", "self.explore_form"),
+            ("explore_groups_dialog", "self.explore_groups"),
+            ("contact_qr_dialog", "self.contact_qr"),
+            ("balance_detail_dialog", "self.balance_detail_open"),
+            ("unreachable_dialog", "self.unreachable_open"),
+            ("sign_out_dialog", ".sign_out"),
+            ("trusted_signer_prompt", "trusted_signer()"),
+        ];
+        for (dialog, state) in raised_by {
+            assert!(
+                body_of(dialog).contains(state),
+                "{dialog} is raised by {state}"
+            );
+            assert!(
+                up.contains(state),
+                "{dialog} ({state}) takes the page off the screen"
+            );
+        }
+        // Drawn where the browser never is: the send flow's (a Wallet column),
+        // its scanner, the menus (the site's own are `site_menu_open`), toasts,
+        // and the Feedback page's picture viewer (`viewer_open`, listed too).
+        let elsewhere = [
+            "scan_overlay",
+            "receipt_toast",
+            "send_prompts",
+            "menu_overlay",
+            "feedback_viewer",
+            "feedback_toast",
+        ];
+        let render = &source[source
+            .find("let scan = self.scan_overlay(")
+            .unwrap_or_else(|| unreachable!("the root's dialogs"))..];
+        let render = &render[..render.find("let mut root = div()").unwrap_or(0)];
+        for line in render.lines() {
+            let Some(call) = line.split("= self.").nth(1) else {
+                continue;
+            };
+            let name = call.split('(').next().unwrap_or_default();
+            assert!(
+                raised_by.iter().any(|(dialog, _)| *dialog == name) || elsewhere.contains(&name),
+                "{name}: a dialog the root draws must say whether it hides the page"
+            );
+        }
+        assert!(up.contains("self.feedback.viewer_open()"));
     }
 
     /// Spec 082 RJ17 (G68, DX9): a held close says 提交至网络… in the bar

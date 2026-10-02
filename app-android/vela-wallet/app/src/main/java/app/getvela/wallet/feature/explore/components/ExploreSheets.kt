@@ -205,7 +205,10 @@ fun ConnectionPanel(
 
         Divider()
 
-        Row(
+        // The account the site sees — none when it is not connected (spec 097
+        // E); a site asking is shown the one it would get.
+        val access = connection.connected || connection.primaryAction
+        if (access) Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(enabled = onSwitchAccount != null) { onSwitchAccount?.invoke() }
@@ -243,7 +246,7 @@ fun ConnectionPanel(
             }
         }
 
-        Divider()
+        if (access) Divider()
 
         Row(
             modifier = Modifier
@@ -280,14 +283,16 @@ fun ConnectionPanel(
             }
         }
 
-        Text(
-            text = connection.explainer,
-            color = colors.fgMuted,
-            fontFamily = VelaFontFamily,
-            fontSize = VelaTextSize.base,
-        )
+        if (connection.explainer.isNotBlank()) {
+            Text(
+                text = connection.explainer,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.base,
+            )
+        }
 
-        Box(
+        if (access) Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(VelaSizing.controlLg)

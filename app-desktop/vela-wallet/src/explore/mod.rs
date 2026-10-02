@@ -70,6 +70,9 @@ pub struct ExploreStrings {
     pub site_menu: SharedString,
     pub account: SharedString,
     pub connected_tag: SharedString,
+    /// What the Connection panel says of a site the core holds no grant for
+    /// (spec 097 E) — the corpus's "No active connection".
+    pub not_connected: SharedString,
     pub connection_title: SharedString,
     pub switch_account: SharedString,
     pub network: SharedString,
@@ -146,6 +149,7 @@ impl ExploreStrings {
             site_menu: s("explore.siteMenu"),
             account: s("explore.account"),
             connected_tag: s("explore.connectedTag"),
+            not_connected: s("home.connEmptyTitle"),
             connection_title: s("explore.connectionTitle"),
             switch_account: s("explore.switchAccount"),
             network: s("explore.network"),
@@ -197,6 +201,8 @@ mod tests {
             // Spec 082 T058, T060: the two new keys this client shows.
             (s.load_proxy.as_ref(), "explore.loadProxy"),
             (s.request_open.as_ref(), "explore.requestOpen"),
+            // Spec 097 E: a site with no grant says so.
+            (s.not_connected.as_ref(), "home.connEmptyTitle"),
         ] {
             assert_ne!(value, key, "`{key}` echoed the key");
         }

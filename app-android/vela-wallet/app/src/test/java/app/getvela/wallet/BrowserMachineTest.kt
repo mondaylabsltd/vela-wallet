@@ -53,6 +53,9 @@ class BrowserMachineTest {
     private val records = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
     private val reads = java.util.concurrent.CopyOnWriteArrayList<String>()
 
+    /** What a read answers, by method — `"0x10"` unless a test says otherwise. */
+    @Volatile private var readResult: (String) -> Any = { "0x10" }
+
     @After
     fun stop() = scope.cancel()
 
@@ -63,7 +66,7 @@ class BrowserMachineTest {
                 override fun deliver(tab: String, messageJson: String) { delivered += tab to JSONObject(messageJson) }
                 override suspend fun read(chainId: Int, method: String, params: JSONArray, bundler: Boolean): JSONObject? {
                     reads += "$chainId:$method:$bundler"
-                    return JSONObject().put("jsonrpc", "2.0").put("id", 1).put("result", "0x10")
+                    return JSONObject().put("jsonrpc", "2.0").put("id", 1).put("result", readResult(method))
                 }
                 override suspend fun userOpTxHash(chainId: Int, userOpHash: String): String? = null
                 override fun forwardToSigning(operation: DbrOperation.ForwardToSigning) { forwarded += operation }
@@ -354,5 +357,52 @@ class BrowserMachineTest {
         assertEquals(listOf("accountsChanged", "disconnect"), events)
         assertNotNull(h.view.value)
         assertTrue(h.view.value.sites.isEmpty())
+    }
+
+    /**
+     * Spec 097 E (S2): a batch answered with its id — the user operation's
+     * hash, which the signing core now answers the moment the relay takes it
+     * — is a batch this browser knows, with no op named by the sheet (the
+     * answer can come before `rememberUserOp`). `wallet_getCallsStatus` of it
+     * goes to the relay on the chain the batch went to and reads 200 with the
+     * receipt once it landed. Before, the phones answered the TX hash, which
+     * no status lookup knows. The pass's PancakeSwap batch on BNB Chain.
+     */
+    @Test
+    fun `a batch answered with its id reads 200 with its receipt once landed`() = runBlocking<Unit> {
+        val op = "0x8a74fe42e2eac06e4d9fc59c8be722807eb0de072e4e96b2715385b4dd075cc3"
+        val tx = "0x3c8446de48ff3ee143e40c4209068662fe5b5952bcc9dc28049d0b80631fee29"
+        val store = FakeStore(mapOf(BrowserExecutor.grantKey(origin) to """{"origin":"$origin","address":"$safe","chain_id":56,"granted_at_ms":1.0e12}"""))
+        val h = host(store)
+        h.dispatch(DbrEvent.NetworksChanged(listOf(1, 56, 100)), DbrEvent.serializer())
+        withTimeout(10_000) { h.view.first { it.ready } }
+        hello(h, "tab-1", "d1")
+        val calls = JSONArray().put(JSONObject().put("to", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d").put("data", "0x"))
+        ask(h, "tab-1", "d1", "b1", "wallet_sendCalls", JSONArray().put(JSONObject().put("from", safe).put("calls", calls)))
+        withTimeout(10_000) { while (forwarded.isEmpty()) delay(10) }
+        assertEquals(56, forwarded.single().chain_id)
+        h.dispatch(DbrEvent.SigningAnswered("tab-1", "b1", SignResponsePayload.Ok(op), null), DbrEvent.serializer())
+        assertEquals(op, answerFor("b1").second.getString("result"))
+
+        readResult = { method ->
+            when (method) {
+                "eth_getUserOperationReceipt" -> JSONObject()
+                    .put("success", true)
+                    .put("logs", JSONArray())
+                    .put("receipt", JSONObject().put("transactionHash", tx).put("blockNumber", "0x778456d").put("status", "0x1"))
+                else -> JSONObject.NULL
+            }
+        }
+        ask(h, "tab-1", "d1", "s1", "wallet_getCallsStatus", JSONArray().put(op))
+        val status = answerFor("s1").second.getJSONObject("result")
+        assertEquals(200, status.getInt("status"))
+        assertEquals(op, status.getString("id"))
+        assertEquals("0x38", status.getString("chainId"))
+        assertEquals(tx, status.getJSONArray("receipts").getJSONObject(0).getString("transactionHash"))
+        assertTrue(reads.toList().toString(), reads.contains("56:eth_getUserOperationReceipt:true"))
+
+        // The tx hash is no batch id.
+        ask(h, "tab-1", "d1", "s2", "wallet_getCallsStatus", JSONArray().put(tx))
+        assertEquals(5730, answerFor("s2").second.getJSONObject("error").getInt("code"))
     }
 }

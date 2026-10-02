@@ -690,7 +690,9 @@ pub fn message_hash(method: &str, params_json: &str) -> Option<Vec<u8>> {
 /// that is not the answer (083).
 ///
 /// - Executed: `Succeeded` with the TX hash, what `eth_sendTransaction`
-///   resolves to.
+///   resolves to. A `wallet_sendCalls` is answered with its id instead —
+///   the op hash, the moment the relay took it (spec 097 E, the core's rule):
+///   this result then answers nothing.
 /// - Reverted: `Reverted` — the core answers the page an error and closes the
 ///   record failed. The hash stays out of the page's answer: the bundle's
 ///   status is `0x1`, and a site reading it calls the operation done.

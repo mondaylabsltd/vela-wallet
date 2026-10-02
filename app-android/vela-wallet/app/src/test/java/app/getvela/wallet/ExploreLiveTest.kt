@@ -248,6 +248,39 @@ class ExploreLiveTest {
         assertTrue("never the active account's name", switching.accountName != "Parallel Multi")
     }
 
+    /**
+     * Spec 097 E (S3): a site the core holds no grant for — never connected,
+     * or just disconnected — says so, and the panel offers nothing that
+     * implies access: no "can see your address", no Disconnect, no "requests
+     * appear here", no account it sees. The desktop pass found the panel
+     * saying all of it after a disconnect, with only the status word gone.
+     */
+    @Test
+    fun `a site that is not connected says so and offers no access`() {
+        val engine = EngineState(url = "https://app.aave.com/", origin = "https://app.aave.com", host = "app.aave.com", shown = "https://app.aave.com/")
+        val me = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        val identity = ExploreLive.Identity(accountName = "Parallel Multi", accountAddress = me, chainName = "BNB Chain", chainId = 56)
+        val gone = ExploreLive.connection(
+            fallback.connection, engine, strings,
+            DbrTabView(tab = "t1", origin = "https://app.aave.com", connected_address = null, chain_id = 56, secure = true),
+            identity,
+        )
+        assertFalse(gone.connected)
+        assertEquals(strings.t("home.connEmptyTitle"), gone.statusLine)
+        assertEquals("it can see nothing", "", gone.explainer)
+        assertEquals("no requests come from a site with no grant", "", gone.footnote)
+
+        val granted = ExploreLive.connection(
+            fallback.connection, engine, strings,
+            DbrTabView(tab = "t1", origin = "https://app.aave.com", connected_address = me, chain_id = 56, secure = true),
+            identity,
+        )
+        assertTrue(granted.connected)
+        assertEquals(strings.t("explore.connectedTag"), granted.statusLine)
+        assertEquals(strings.t("explore.connectionExplainer"), granted.explainer)
+        assertEquals(strings.t("explore.autoRequestHint"), granted.footnote)
+    }
+
     /** Spec 079: the page's chain notice is the pool's verdict — never for a chain merely busy. */
     @Test
     fun `a chain the pool could not reach is named once, and a busy one is not`() {

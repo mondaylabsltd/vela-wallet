@@ -230,7 +230,8 @@ struct BrowserMemoryTests {
             for connected in [true, false] {
                 let line = ExploreLive.statusLine(secure: secure, connected: connected, host: "x.io", loc: loc())
                 for word in words { #expect(!line.contains(word), "\(line) makes a claim about the site") }
-                #expect(line == (connected ? loc().t("explore.connectedTag") : ""))
+                // Spec 097 E: no grant says so, rather than going blank.
+                #expect(line == loc().t(connected ? "explore.connectedTag" : "home.connEmptyTitle"))
             }
         }
     }
@@ -312,6 +313,38 @@ struct BrowserMemoryTests {
         #expect(panel.site.host == "app.uniswap.org")
         #expect(panel.site.name == "app.uniswap.org", "the host IS the name here — a site's own name is a claim")
         #expect(panel.account.seed == "0x88cca0eedbf2c4426110bbfc998f048689266894")
+    }
+
+    /// Spec 097 E (S3): a site the core holds no grant for — never connected,
+    /// or just disconnected — says so, and the panel offers nothing that
+    /// implies access: no "can see your address", no Disconnect, no "requests
+    /// appear here", no account it sees. The desktop pass found the panel
+    /// saying all of it after a disconnect, with only the status word gone.
+    @Test func aSiteThatIsNotConnectedSaysSoAndOffersNoAccess() {
+        let me = "0x88cca0eedbf2c4426110bbfc998f048689266894"
+        let tab = DbrTabViewWire(tab: "t1", origin: "https://app.aave.com", connectedAddress: nil,
+                                 chainId: 56, secure: true, crashed: false)
+        let panel = ExploreLive.connectionModel(
+            dbr: DbrViewWire(ready: true, consent: nil, tabs: [tab], sites: [], signing: nil, queuedSigning: 0),
+            tab: tab, engine: nil, identity: (name: "Me", address: me), chainIds: [1, 56], loc: loc()
+        )
+        #expect(panel.connected == false)
+        #expect(panel.statusLine == loc().t("home.connEmptyTitle"))
+        #expect(panel.explainer.isEmpty, "it can see nothing")
+        #expect(panel.footnote.isEmpty, "no requests come from a site with no grant")
+        #expect(panel.consent == nil)
+        #expect(panel.networks.map(\.id) == [1, 56], "the network it reads is still the site's to change")
+
+        let connected = DbrTabViewWire(tab: "t1", origin: "https://app.aave.com", connectedAddress: me,
+                                       chainId: 56, secure: true, crashed: false)
+        let granted = ExploreLive.connectionModel(
+            dbr: DbrViewWire(ready: true, consent: nil, tabs: [connected], sites: [], signing: nil, queuedSigning: 0),
+            tab: connected, engine: nil, identity: (name: "Me", address: me), loc: loc()
+        )
+        #expect(granted.connected)
+        #expect(granted.statusLine == loc().t("explore.connectedTag"))
+        #expect(granted.explainer == loc().t("explore.connectionExplainer"))
+        #expect(granted.footnote == loc().t("explore.autoRequestHint"))
     }
 
     // MARK: - Logo misses (spec 082 T120, RE10, W20)

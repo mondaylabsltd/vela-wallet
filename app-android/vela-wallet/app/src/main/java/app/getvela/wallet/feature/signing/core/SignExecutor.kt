@@ -41,7 +41,10 @@ import uniffi.vela_core_uniffi.userOpRefusedDappDetail
  * the final outcome. The page is answered with the user-op hash at once (the web's
  * non-blocking rule after spec 028's finding: blocking on the receipt made
  * `eth_sendTransaction` time out); `eth_getTransactionReceipt` for that
- * hash is translated by the router once the receipt exists.
+ * hash is translated by the router once the receipt exists. A
+ * `wallet_sendCalls` is answered by the core with its id — the op hash — the
+ * moment `OpSubmitted` says the relay took it (spec 097 E); the receipt wait
+ * then ends answered (RJ4), and its result is dropped.
  */
 class SignExecutor(
     private val spine: UserOpSpine,

@@ -187,6 +187,11 @@ pub(super) struct FeedbackDraft {
 }
 
 impl FeedbackDraft {
+    /// A picture is open in the viewer — a dialog over the window.
+    pub(super) fn viewer_open(&self) -> bool {
+        self.viewer.is_some()
+    }
+
     pub(super) fn new(cx: &mut gpui::App) -> Self {
         Self {
             report: Report::default(),

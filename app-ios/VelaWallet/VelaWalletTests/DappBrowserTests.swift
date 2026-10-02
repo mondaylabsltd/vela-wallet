@@ -318,6 +318,50 @@ struct DappBrowserTests {
         #expect(h.answer("t1", id: "s1")?.errorCode == -32002)
     }
 
+    /// Spec 097 E (S2): a batch answered with its id — the user operation's
+    /// hash, which the signing core now answers the moment the relay takes it
+    /// — is a batch this browser knows with no op named by the sheet, and
+    /// `wallet_getCallsStatus` of it goes to the relay on the batch's chain
+    /// and reads 200 with the receipt once it landed. The phones answered the
+    /// TX hash, which no status lookup knows. The pass's PancakeSwap batch.
+    @Test func aBatchAnsweredWithItsIdReads200WithItsReceipt() async {
+        let op = "0x8a74fe42e2eac06e4d9fc59c8be722807eb0de072e4e96b2715385b4dd075cc3"
+        let tx = "0x3c8446de48ff3ee143e40c4209068662fe5b5952bcc9dc28049d0b80631fee29"
+        let h = BrowserHarness(seed: { store in
+            store.writeString("vela.perm.\(dapp)", BrowserHarness.grant(dapp, a1, chain: 56))
+        })
+        await h.boot()
+        h.browser.networksChanged([1, 56, 100])
+        await h.hello("t1", doc: "d1", origin: dapp)
+        await h.ask("t1", doc: "d1", origin: dapp, id: "b1", method: "wallet_sendCalls",
+                    params: [["from": a1, "calls": [["to": a2, "data": "0x"]]]])
+        await h.until { !h.forwards.isEmpty }
+        #expect(h.forwards.first?.chainId == 56)
+        h.browser.signingAnswered(tab: "t1", id: "b1", payload: ["type": "ok", "result": op], userOpHash: nil)
+        await h.until { h.answer("t1", id: "b1") != nil }
+        #expect(h.answer("t1", id: "b1")?.result as? String == op)
+
+        h.readAnswer = ["result": [
+            "success": true, "logs": [Any](),
+            "receipt": ["transactionHash": tx, "blockNumber": "0x778456d", "status": "0x1"],
+        ] as [String: Any]]
+        await h.ask("t1", doc: "d1", origin: dapp, id: "s1", method: "wallet_getCallsStatus", params: [op])
+        await h.until { h.answer("t1", id: "s1") != nil }
+        let status = h.answer("t1", id: "s1")?.result as? [String: Any]
+        #expect((status?["status"] as? NSNumber)?.intValue == 200)
+        #expect(status?["chainId"] as? String == "0x38")
+        let receipt = (status?["receipts"] as? [[String: Any]])?.first
+        #expect(receipt?["transactionHash"] as? String == tx)
+        #expect(h.reads.last?.chainId == 56)
+        #expect(h.reads.last?.method == "eth_getUserOperationReceipt")
+        #expect(h.reads.last?.bundler == true)
+
+        // The tx hash is no batch id.
+        await h.ask("t1", doc: "d1", origin: dapp, id: "s2", method: "wallet_getCallsStatus", params: [tx])
+        await h.until { h.answer("t1", id: "s2") != nil }
+        #expect(h.answer("t1", id: "s2")?.errorCode == 5730)
+    }
+
     /// A page answered with a user-operation hash can ask for its receipt by
     /// that hash: the relay is asked which transaction carried it, and the
     /// node is asked about THAT.

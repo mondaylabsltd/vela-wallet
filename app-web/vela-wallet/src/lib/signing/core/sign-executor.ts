@@ -321,6 +321,8 @@ export function createSignExecutor(ports: SignShellPorts) {
 				const answered = new AbortController();
 				receiptWaits.get(operation.id)?.abort();
 				receiptWaits.set(operation.id, answered);
+				// The relay took this batch: its id's chain is already remembered.
+				let acceptedBatch = false;
 				const hooks: DAppSubmitHooks = {
 					claim: (phase, submit) => ports.askerLive(operation.id, phase, submit),
 					ceremony: (stage) => ports.ceremony(operation.id, stage),
@@ -350,8 +352,17 @@ export function createSignExecutor(ports: SignShellPorts) {
 						// The op on its way — accepted, or may have been sent — is a fact
 						// the core needs BEFORE this promise settles: §4's durable record
 						// and the tracker hand-off are written from it.
-						(hash, maybeSent, submitBlock) =>
-							ports.opSubmitted(operation.id, hash, maybeSent, submitBlock),
+						(hash, maybeSent, submitBlock) => {
+							// A batch's id IS this hash, and the core answers it at once
+							// when the relay accepted it (spec 097 E) — inside this call.
+							// Its chain is known first, so the answer carries it for the
+							// extension's `wallet_getCallsStatus` (RF3).
+							if (operation.method === 'wallet_sendCalls' && !maybeSent) {
+								acceptedBatch = true;
+								answeredOps.set(hash.toLowerCase(), operation.chain_id);
+							}
+							ports.opSubmitted(operation.id, hash, maybeSent, submitBlock);
+						},
 						operation.gas_fee_token,
 						operation.quoted_fee
 							? {
@@ -379,11 +390,12 @@ export function createSignExecutor(ports: SignShellPorts) {
 					// the record "confirmed" with the op hash for a tx hash — an explorer
 					// link to nothing, never tracked, never failed, and Activity shows it
 					// (083 H2 review). As `receipt_pending` the page gets the same id, the
-					// record lands pending first, and the tracker settles it.
+					// record lands pending first, and the tracker settles it. Since 097 E
+					// the core answers an accepted batch at `op_submitted` (its chain
+					// remembered there) and drops this result; one that may only have
+					// been sent is answered from here.
 					if (operation.method === 'wallet_sendCalls' && answer !== '') {
-						// Remembered like a late receipt's, for the extension's receipt
-						// translation (spec 082).
-						answeredOps.set(answer.toLowerCase(), operation.chain_id);
+						if (!acceptedBatch) answeredOps.set(answer.toLowerCase(), operation.chain_id);
 						return {
 							type: 'submit',
 							outcome: { type: 'receipt_pending', user_op_hash: answer },
