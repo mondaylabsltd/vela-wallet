@@ -45,6 +45,8 @@ Every upload must be higher than any earlier one for the same app — check step
    ```
    (Rebuild the core first if `app-ios/VelaCoreKit/Artifacts` is stale:
    `bash rust/scripts/build-ios-xcframework.sh`.)
+   Then, from the repo root, `node app-ios/scripts/check-ios17-function-metadata.mjs ~/Desktop/Vela.xcarchive`
+   must print `OK` — anything else is an archive that crashes on iOS 17 (087 F33).
 4. [ ] **Upload.** Xcode → Window → Organizer → the archive → **Distribute App → App Store
    Connect → Upload**. Or from the terminal, `xcodebuild -exportArchive` with
    `method = app-store-connect`, `destination = upload`, `teamID = F9W689P9NE`,
