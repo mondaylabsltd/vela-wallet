@@ -73,6 +73,8 @@
     "qrTitleNetwork": "Usa esta dirección para recibir activos en {{network}}",
     "qrTitleAsset": "Usa esta dirección para recibir {{symbol}} en {{network}}",
     "shareCardNetworkNote": "Solo pagos en {{network}}",
-    "tokenContract": "Contrato del token"
+    "tokenContract": "Contrato del token",
+    "includeNetwork": "Incluir red",
+    "includeNetworkHint": "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo."
   }
 }

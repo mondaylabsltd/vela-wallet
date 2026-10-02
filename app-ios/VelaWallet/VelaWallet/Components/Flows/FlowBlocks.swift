@@ -380,14 +380,23 @@ struct AmountHeroView: View {
     let fiat: String
     var positive = false
     var centred = false
+    /// An unlimited allowance — a risk, drawn in the danger tone (spec 093).
+    var danger = false
+    /// A swap's coin back, under the figure (spec 093).
+    var received: String? = nil
 
     var body: some View {
         VStack(alignment: centred ? .center : .leading, spacing: Tokens.Space.s2) {
             Text(verbatim: amount)
                 .typeRole(Typography.display.scaled(textScale))
-                .foregroundStyle(positive ? theme.successBase : theme.fgBase)
+                .foregroundStyle(danger ? theme.errorBase : (positive ? theme.successBase : theme.fgBase))
                 .minimumScaleFactor(WalletGeometry.heroMinScale)
                 .lineLimit(1)
+            if let received {
+                Text(verbatim: received)
+                    .typeRole(Typography.body.scaled(textScale))
+                    .foregroundStyle(theme.successBase)
+            }
             Text(verbatim: fiat)
                 .typeRole(Typography.body.scaled(textScale))
                 .foregroundStyle(theme.fgSubtle)
@@ -1089,6 +1098,81 @@ struct ReasonAndFigure: Layout {
                 at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
                 proposal: ProposedViewSize(frame.size)
             )
+        }
+    }
+}
+
+// MARK: - The include-network switch (spec 090)
+
+/// An on/off switch with its label — the receive code's "include network",
+/// the product's one switch, drawn as web and desktop draw it.
+///
+/// The whole row is the target, one haptic per flip (`select`: a choice that
+/// takes effect). A press stretches the thumb toward where it is going — the
+/// shape-deform every pressed control here makes. Monochrome on purpose: the
+/// accent belongs to the one action that moves money, so "on" is the ink
+/// track. `onChange` is `nil` in the gallery, where the switch is a picture.
+struct VelaSwitchRow: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.walletTextScale) private var textScale
+
+    let label: String
+    let isOn: Bool
+    var onChange: ((Bool) -> Void)?
+
+    /// One flip: the haptic, then the other position asked for — the core
+    /// answers with what the switch now is.
+    func flip() {
+        guard let onChange else { return }
+        VelaHaptic.select.play()
+        onChange(!isOn)
+    }
+
+    var body: some View {
+        Button(action: flip) {
+            EmptyView()
+        }
+        .buttonStyle(Style(label: label, isOn: isOn, theme: theme, textScale: textScale))
+        .accessibilityLabel(label)
+        .accessibilityValue(isOn ? "1" : "0")
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityIdentifier("receive.includeNetwork")
+    }
+
+    private struct Style: ButtonStyle {
+        let label: String
+        let isOn: Bool
+        let theme: Theme
+        let textScale: CGFloat
+
+        func makeBody(configuration: Configuration) -> some View {
+            HStack(spacing: Tokens.Space.s12) {
+                Text(verbatim: label)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgBase)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Capsule()
+                    .fill(isOn ? theme.fgBase : theme.borderStrong)
+                    .frame(
+                        width: WalletFlowGeometry.switchTrack.width,
+                        height: WalletFlowGeometry.switchTrack.height
+                    )
+                    .overlay(alignment: isOn ? .trailing : .leading) {
+                        Capsule()
+                            .fill(theme.bgBase)
+                            .frame(
+                                width: configuration.isPressed
+                                    ? WalletFlowGeometry.switchThumbPressed
+                                    : WalletFlowGeometry.switchThumb,
+                                height: WalletFlowGeometry.switchThumb
+                            )
+                            .padding(Tokens.Space.s2)
+                    }
+            }
+            .padding(.vertical, Tokens.Space.s4)
+            .contentShape(Rectangle())
+            .animation(.easeOut(duration: Tokens.Motion.fast), value: isOn)
+            .animation(.easeOut(duration: Tokens.Motion.fast), value: configuration.isPressed)
         }
     }
 }

@@ -490,14 +490,22 @@
   "qrTitleNetwork": "Usa esta dirección para recibir activos en {{network}}",
   "qrTitleAsset": "Usa esta dirección para recibir {{symbol}} en {{network}}",
   "shareCardNetworkNote": "Solo pagos en {{network}}",
-  "tokenContract": "Contrato del token"
+  "tokenContract": "Contrato del token",
+  "includeNetwork": "Incluir red",
+  "includeNetworkHint": "Algunas billeteras no pueden leer este código. Si la otra persona no puede, desactívalo."
  },
  "assets": {
   "sectionTitle": "Activos",
   "addToken": "Agregar",
   "searchPlaceholder": "Buscar tokens...",
-  "rpcUnavailableSingle": "RPC de {{name}} no disponible",
-  "rpcUnavailableMultiple": "RPC no disponible en {{count}} redes",
+  "unreachableOne": "No podemos conectar con {{name}} por ahora",
+  "unreachableMany": "No podemos conectar con {{n}} redes por ahora",
+  "unreachableBody": "Tus activos no se ven afectados; solo no podemos leerlos por ahora.",
+  "unreachableNone": "Todas las redes vuelven a estar disponibles.",
+  "lastSeen": "Última lectura: {{amount}}",
+  "lastSeenUnpriced": "Tenía tokens en la última lectura",
+  "lastSeenEmpty": "Vacía en la última lectura",
+  "notReadYet": "Aún sin leer",
   "rpcFix": "Corregir",
   "emptyTitle": "Deposita tu primer activo",
   "emptySubtext": "Toca aquí para ver tu dirección y recibir tokens",
@@ -595,7 +603,8 @@
   "labelSent": "Enviado",
   "labelReceived": "Recibido",
   "toName": "Para {{name}}",
-  "fromName": "De {{name}}"
+  "fromName": "De {{name}}",
+  "dappRowTitle": "{{intent}} en {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -1034,7 +1043,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Hecho con cariño. Tus llaves, tus monedas.",
-  "sectionLinks": "Enlaces"
+  "sectionLinks": "Enlaces",
+  "debugMode": "Modo de depuración",
+  "debugModeBody": "Permite que las páginas http de tu red local usen la billetera. Solo para desarrollo.",
+  "debugModeRevealed": "El modo de depuración ya está disponible"
  },
  "clearSigning": {
   "title": "Prueba de Clear Signing",

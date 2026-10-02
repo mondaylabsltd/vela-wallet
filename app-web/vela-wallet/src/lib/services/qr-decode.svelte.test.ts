@@ -9,9 +9,21 @@
  * code; this proves the app can read one. Together they are the round trip a
  * person actually performs — someone shows a code, someone else scans it.
  */
-import { describe, expect, it } from 'vitest';
+import jsQR from 'jsqr';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { loadCore, PaymentRequestCore } from '$lib/core/client';
+import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
+import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
 import { encodeQr } from '$lib/wallet/qr';
-import { CAMERA_FRAME_WIDTH, TRANSFORMS, ZBAR_SIZES, decodeImage } from './qr-decode';
+import {
+	CAMERA_FRAME_WIDTH,
+	TRANSFORMS,
+	ZBAR_SIZES,
+	canvasFromFile,
+	decodeImage
+} from './qr-decode';
+import receiveCodeOn from './__fixtures__/receive-code-on.png?url';
+import receiveCodeOff from './__fixtures__/receive-code-off.png?url';
 
 const ADDRESS = '0xD400866e00B055B20752a826CD5C89b811de130b';
 
@@ -80,4 +92,61 @@ describe('the ladder is the one that was measured', () => {
 		TRANSFORMS.BINARIZE(160)(light);
 		expect(light[0]).toBe(255);
 	});
+});
+
+/** The receive code's value, from the real core: the bare address, or the URI for Polygon. */
+function coreCode(includeNetwork: boolean): string {
+	const me = '0x88cCA0EeDbF2C4426110bbFc998F048689266894';
+	const core = new PaymentRequestCore();
+	try {
+		const events: PaymentRequestEvent[] = [
+			{ type: 'start', account: me, recipient: me, base_url: 'https://getvela.app/pay' },
+			{
+				type: 'asset_picked',
+				chain_id: 137,
+				token_address: null,
+				symbol: 'POL',
+				decimals: 18,
+				network_name: 'Polygon'
+			},
+			{ type: 'include_network_changed', include: includeNetwork }
+		];
+		let view: PaymentRequestView | null = null;
+		for (const event of events) {
+			view = (JSON.parse(core.dispatch(JSON.stringify(event))) as { view: PaymentRequestView })
+				.view;
+		}
+		return view!.qr_value;
+	} finally {
+		core.free();
+	}
+}
+
+/**
+ * Spec 090: Vela reads its OWN receive code from a picture — the code cut from
+ * a 1080×2400 Android screenshot (modules ~24 px across), as a person would
+ * pick it from the album after a chat app passed it along.
+ *
+ * jsQR on the picture as it is finds nothing (asserted): its local binarizer
+ * window sits inside one module. `decodeImage` reads it because its own
+ * measured photo ladder shrinks first (zbar at 1200/1000/800/600/400 wide,
+ * then jsQR) — the same cure as the core's `still_qr_sizes`, which Android
+ * climbs; the web needs no second ladder.
+ */
+describe('Vela reads its own receive code from a screenshot (spec 090)', () => {
+	beforeAll(() => loadCore());
+
+	for (const [name, url, includeNetwork] of [
+		['network on', receiveCodeOn, true],
+		['bare address', receiveCodeOff, false]
+	] as const) {
+		it(name, async () => {
+			const canvas = await canvasFromFile(await (await fetch(url)).blob());
+			const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+			expect(
+				jsQR(pixels.data, canvas.width, canvas.height, { inversionAttempts: 'attemptBoth' })
+			).toBeNull();
+			expect(await decodeImage(canvas)).toBe(coreCode(includeNetwork));
+		});
+	}
 });

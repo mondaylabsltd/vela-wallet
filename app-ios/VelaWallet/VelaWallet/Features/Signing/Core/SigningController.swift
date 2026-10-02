@@ -79,6 +79,10 @@ final class SigningController {
         /// — the ONE entrance that may never admit a token (spec 017 ⑤).
         var simDeltas: (_ address: String, _ chainId: Int, _ deltas: [[String: Any]]) -> Void
         = { _, _, _ in }
+        /// The judged simulation the sheet draws its "Balance changes" from
+        /// (`token_trust`'s sim view) — read at the slide, so the record keeps
+        /// the lines the person saw (083 F1, spec 093).
+        var simView: () -> TrustSimViewWire? = { nil }
     }
 
     private(set) var sign: SignViewWire = .empty
@@ -581,8 +585,19 @@ final class SigningController {
         trustedSignerNotice = nil
         approvedAtMs = Date().timeIntervalSince1970 * 1000
         dispatchSign(["type": "approve_tapped", "opts": Self.approveOpts(
-            fee: fee, clear: clear, guard: guardView
+            fee: fee, clear: clear, guard: guardView,
+            balanceChanges: Self.drawnChanges(ports.simView(), simulation: simulation)
         )])
+    }
+
+    /// What the sheet drew under "Balance changes" as the slide fired (083
+    /// F1, spec 093): the core's judgments, exactly as `SigningLive.balanceBlocks`
+    /// gates them — this request's simulation answered, its judgments ready
+    /// and not empty. `nil` otherwise (a notice stood there, or nothing yet),
+    /// and the record keeps none.
+    static func drawnChanges(_ sim: TrustSimViewWire?, simulation: Simulation) -> [TrustSimJudgmentWire]? {
+        guard simulation == .answered, let sim, sim.ready, !sim.judgments.isEmpty else { return nil }
+        return sim.judgments
     }
 
     func reject() { dispatchSign(["type": "reject_tapped"]) }
@@ -960,8 +975,14 @@ final class SigningController {
     /// `params_override_json` is the load-bearing one. When the guard rewrote
     /// an approval, **these** params are what gets signed, submitted and
     /// recorded — never the original request.
+    ///
+    /// Spec 093: the verb the record keeps is the core's `record_intent`, the
+    /// approval surface's token is copied as `token_meta`, and the sheet's
+    /// judged balance changes ride as `balance_changes` — each copied, none
+    /// decided here.
     static func approveOpts(
-        fee: FeeViewWire?, clear: ClearSigningViewWire, guard guardView: GuardViewWire
+        fee: FeeViewWire?, clear: ClearSigningViewWire, guard guardView: GuardViewWire,
+        balanceChanges: [TrustSimJudgmentWire]? = nil
     ) -> [String: Any] {
         [
             "max_fee_per_gas": fee?.fee?.maxFeePerGas as Any? ?? NSNull(),
@@ -974,10 +995,12 @@ final class SigningController {
             "quoted_fee": quotedFee(fee?.fee) as Any? ?? NSNull(),
             "fee_collector": NSNull(),
             "params_override_json": guardView.rewrittenParamsJson as Any? ?? NSNull(),
-            "intent": clear.result?.intent as Any? ?? NSNull(),
+            "intent": clear.recordIntent as Any? ?? NSNull(),
             // The guard showed an unbounded amount and it was kept as the site
             // asked — the submit guard's only waiver, copied, never decided.
             "unlimited_approved": guardView.unlimitedConsented,
+            "token_meta": guardView.meta.wire,
+            "balance_changes": balanceChanges.map { $0.map(\.wire) as Any } ?? NSNull(),
         ]
     }
 

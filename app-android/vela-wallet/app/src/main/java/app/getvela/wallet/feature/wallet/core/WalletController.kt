@@ -407,6 +407,13 @@ class WalletController(
             PaymentRequestEvent.serializer(),
         )
 
+    /** Spec 090: the "include network" switch — the core decides what the code then says. */
+    fun includeNetwork(include: Boolean) =
+        requestHost.dispatch(
+            PaymentRequestEvent.IncludeNetworkChanged(include),
+            PaymentRequestEvent.serializer(),
+        )
+
     /** The warning gate's confirm. */
     fun acknowledgeReceive() =
         requestHost.dispatch(PaymentRequestEvent.Acknowledge, PaymentRequestEvent.serializer())
@@ -710,6 +717,18 @@ class WalletController(
         balanceHost.dispatch(BalanceEvent.FixChainResolved(chainId), BalanceEvent.serializer())
     }
 
+    /**
+     * Spec 092: the list of networks the wallet cannot reach is on screen. The
+     * core reads every chain again now and keeps re-reading while it stays
+     * open, so one that has come back leaves it (and the home's count).
+     */
+    fun unreachableListOpened() =
+        balanceHost.dispatch(BalanceEvent.UnreachableListOpened, BalanceEvent.serializer())
+
+    /** That list closed: the re-reads stop. */
+    fun unreachableListClosed() =
+        balanceHost.dispatch(BalanceEvent.UnreachableListClosed, BalanceEvent.serializer())
+
     fun refresh(force: Boolean = false, pull: Boolean = false) =
         balanceHost.dispatch(
             BalanceEvent.RefreshRequested(force = force, pull = pull),
@@ -750,9 +769,16 @@ class WalletController(
     fun filterChain(chainId: Int?) =
         feedHost.dispatch(FeedEvent.ChainFilterChanged(chainId), FeedEvent.serializer())
 
+    /** Spec 093: a contact's page opened (its address) or closed (`null`); the feed then carries its rows. */
+    fun filterContact(address: String?) =
+        feedHost.dispatch(FeedEvent.ContactFilterChanged(address), FeedEvent.serializer())
+
     /** Remove one row: optimistic in the core, persisted by the executor. */
     fun deleteActivity(id: String) =
         feedHost.dispatch(FeedEvent.DeleteRequested(id), FeedEvent.serializer())
+
+    /** Spec 093: a dApp record's stored request, read by id when its technical details open. */
+    suspend fun storedRequest(id: String): String? = feedExecutor.storedRequest(id)
 
     private companion object {
         /**

@@ -30,7 +30,7 @@ use super::fixtures::{
     AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
     DepositEntry, FeeSpeedModel, FeeTokenPick, FlowBody, HistoryPanel, ReceiveList, ReceiveQr,
     ScanModal, SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone,
-    TxDetail,
+    Technical, TechnicalLine, TxDetail,
 };
 
 /// One prepared click listener. The page builds these from `cx.listener`
@@ -58,6 +58,8 @@ pub struct PanelActions {
     pub acknowledge: Option<Click>,
     /// DR2L: 保存图片 — the share card as a PNG.
     pub save_image: Option<Click>,
+    /// DR2L: the "include network" switch under the code (spec 090).
+    pub include_network: Option<Click>,
     /// DR1L, live: one listener per network row. Empty falls back to `open_qr`.
     pub open_qr_rows: Vec<Click>,
     /// DA1L: a row opens its transaction.
@@ -88,6 +90,9 @@ pub struct PanelActions {
     pub open_receive: Option<Click>,
     /// DA2L, live: removes this record from the feed (the chain keeps it).
     pub delete_tx: Option<Click>,
+    /// DA2L, live: opens or folds a dApp record's "Technical details"
+    /// (spec 093) — opening it is what reads the stored request.
+    pub toggle_technical: Option<Click>,
     /// DSD2eL's scan row — the address that is on a screen, not in the book.
     pub open_scan: Option<Click>,
     /// The panel's own CTA — continue, confirm, done.
@@ -376,6 +381,7 @@ pub fn render(
             identicons,
             actions.acknowledge,
             actions.save_image,
+            actions.include_network,
         ),
         FlowBody::History(model) => {
             history(model, theme, icons, actions.open_tx, actions.open_tx_rows)
@@ -387,6 +393,7 @@ pub fn render(
             identicons,
             actions.copy,
             actions.delete_tx,
+            actions.toggle_technical,
         ),
         FlowBody::Assets(model) => assets(
             model,
@@ -551,6 +558,7 @@ fn receive_qr(
     identicons: &mut IdenticonCache,
     acknowledge: Option<Click>,
     save_image: Option<Click>,
+    include_network: Option<Click>,
 ) -> Div {
     let mut col = column().child(
         div()
@@ -659,6 +667,26 @@ fn receive_qr(
         }),
         model.qr_payload.as_deref(),
     )))
+    // Spec 090: under the code, the switch that makes it name its network,
+    // and — only while it does — the calm line about wallets that can't read
+    // it. Subtle ink, not a warning colour: it is a fact, not a danger.
+    .children(model.network.as_ref().map(|network| {
+        column()
+            .gap(px(4.))
+            .child(super::components::switch_row(
+                theme,
+                "receive-include-network",
+                network.label.clone(),
+                network.on,
+                include_network,
+            ))
+            .children(network.hint.clone().map(|hint| {
+                div()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_subtle)
+                    .child(hint)
+            }))
+    }))
     .child(
         div()
             // Centred 11 subtle, as the web's `.warning` (078 F-11).
@@ -817,6 +845,7 @@ fn tx_detail(
     identicons: &mut IdenticonCache,
     copy: Option<CopyAction>,
     delete_tx: Option<Click>,
+    toggle_technical: Option<Click>,
 ) -> Div {
     // The web's `TxDetail` (078 T065): no gap of its own — the head, the
     // `AmountHero` padded 12/16, the facts as one hairline-ruled list, and the
@@ -834,8 +863,19 @@ fn tx_detail(
                     .text_color(theme.fg_base)
                     .child(model.title.clone()),
             )
-            .child(status_chip(theme, &model.status)),
+            .children(model.status.as_ref().map(|chip| status_chip(theme, chip))),
     );
+    // A signature's note stands where a transaction's chip would (spec 093):
+    // nothing was sent, so there is nothing to settle.
+    if let Some(note) = &model.note {
+        col = col.child(
+            div()
+                .pt(px(4.))
+                .text_size(theme::text_label())
+                .text_color(theme.fg_subtle)
+                .child(note.clone()),
+        );
+    }
     // A dApp call that moved no coin has no figure (083 H2 review): no empty
     // hero keeping its padding, only the hero's own gap above the facts.
     col = if model.amount.is_empty() && model.fiat.is_empty() {
@@ -855,8 +895,11 @@ fn tx_detail(
                         .line_height(gpui::relative(1.2))
                         // Money in is green; money out is plain ink, not red.
                         // Red means something went wrong, and a transfer you
-                        // chose to make did not.
-                        .text_color(if model.positive {
+                        // chose to make did not — or that a grant has no
+                        // limit (spec 093).
+                        .text_color(if model.danger {
+                            theme.error_base
+                        } else if model.positive {
                             theme.success_base
                         } else {
                             theme.fg_base
@@ -891,6 +934,16 @@ fn tx_detail(
         });
     }
     col = col.child(facts);
+    if let Some(technical) = &model.technical {
+        col = col.child(technical_section(
+            technical,
+            theme,
+            icons,
+            identicons,
+            copy.as_ref(),
+            toggle_technical,
+        ));
+    }
     if !model.breakdown.is_empty() {
         col = col.child(div().pt(px(12.)).child(breakdown_list(
             theme,
@@ -921,6 +974,91 @@ fn tx_detail(
     col.child(cta)
 }
 
+/// A dApp record's "Technical details" (spec 093): a quiet disclosure row
+/// under the facts' last hairline, and once opened the core's lines in the
+/// same hairline-ruled list — the stored request as a block of mono text
+/// under its label, since 8 KB of JSON squeezed beside one would be no
+/// reading at all.
+fn technical_section(
+    technical: &Technical,
+    theme: &Theme,
+    icons: &mut IconCache,
+    identicons: &mut IdenticonCache,
+    copy: Option<&CopyAction>,
+    toggle: Option<Click>,
+) -> Div {
+    let open = technical.lines.is_some();
+    let header = div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .py(px(12.))
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(technical.toggle.clone()),
+        )
+        .child(icon_img(
+            icons,
+            if open {
+                Icon::ChevronUp
+            } else {
+                Icon::ChevronDown
+            },
+            false,
+            theme.fg_muted,
+            12.,
+        ));
+    let mut section = div()
+        .flex()
+        .flex_col()
+        .border_t_1()
+        .border_color(theme.divider)
+        .child(clickable("tx-technical", toggle, header));
+    for (i, line) in technical.lines.iter().flatten().enumerate() {
+        let row = match line {
+            TechnicalLine::Fact(fact) => {
+                let button = fact
+                    .copy
+                    .clone()
+                    .zip(copy)
+                    .map(|(text, copy)| copy.button(format!("technical:{i}"), text));
+                fact_row(theme, icons, identicons, fact, button)
+            }
+            TechnicalLine::Text {
+                label,
+                text,
+                missing,
+            } => div()
+                .flex()
+                .flex_col()
+                .gap(px(6.))
+                .py(px(12.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_subtle)
+                        .child(label.clone()),
+                )
+                .child(if *missing {
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(text.clone())
+                } else {
+                    div()
+                        .font_family(theme::font_mono())
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_base)
+                        .child(text.clone())
+                }),
+        };
+        section = section.child(row.border_t_1().border_color(theme.divider));
+    }
+    section
+}
+
 /// What a transaction's detail offers under its facts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TxCta {
@@ -936,10 +1074,13 @@ pub struct TxCta {
 pub fn tx_cta(model: &TxDetail) -> TxCta {
     TxCta {
         explorer: model.explorer_url.is_some(),
-        delete: model
-            .delete_label
-            .as_ref()
-            .map(|_| delete_style(&model.status)),
+        // A signature (no chip) is done, not in flight: the danger delete.
+        delete: model.delete_label.as_ref().map(|_| {
+            model
+                .status
+                .as_ref()
+                .map_or(DeleteStyle::Danger, delete_style)
+        }),
     }
 }
 
@@ -3758,16 +3899,19 @@ mod tests {
     fn detail(tone: StatusTone, explorer_url: Option<&str>) -> TxDetail {
         TxDetail {
             title: "dApp 交易".into(),
-            status: StatusChip {
+            status: Some(StatusChip {
                 text: "处理中".into(),
                 tone,
-            },
+            }),
+            note: None,
             breakdown_title: None,
             breakdown: Vec::new(),
             amount: "−0.001 xDAI".into(),
             fiat: "".into(),
             positive: false,
+            danger: false,
             facts: Vec::new(),
+            technical: None,
             view_on_explorer: "在区块浏览器中查看".into(),
             explorer_url: explorer_url.map(SharedString::from),
             delete_label: Some("删除记录".into()),
@@ -3803,6 +3947,12 @@ mod tests {
         let mut picture = detail(StatusTone::Info, None);
         picture.delete_label = None;
         assert_eq!(tx_cta(&picture).delete, None, "a mock deletes nothing");
+        // A dApp's signature has no chip (spec 093): it was given, nothing
+        // will settle it, so its record is not a "do not send it again"
+        // trace — the delete is the danger one.
+        let mut signature = detail(StatusTone::Info, None);
+        signature.status = None;
+        assert_eq!(tx_cta(&signature).delete, Some(DeleteStyle::Danger));
     }
 
     /// Spec 082 G52 (DX-W3): an op the relay refused never reached the chain

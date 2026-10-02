@@ -799,12 +799,29 @@ const BRIDGE_JS: &str = r#"
 /// The whole document-start script for `host`: the bridge, then the
 /// provider, both skipped in any frame but the top one — an iframe gets no
 /// provider rather than one that can never be answered — and in any page that
-/// is not a secure context (spec 088 FR-004): `https`, or `http` on loopback,
-/// the platform's own reading of [`super::dapp_permissions::is_secure_context`],
-/// which the machine applies again to every message.
-pub fn provider_script(host: ProviderHost) -> String {
+/// is not offered the wallet ([`super::dapp_permissions::offers_wallet`],
+/// which the machine applies again to every message):
+///
+/// - `debug_mode` off: not a secure context (spec 088 FR-004) — `https`, or
+///   `http` on loopback, read as the platform's own `window.isSecureContext`;
+/// - `debug_mode` on (spec 091): that, or `http` on this device's own network,
+///   tested on `location.hostname` by [`super::dapp_permissions::private_host_js`]
+///   — the core's rule written out of the core's tables, never a shell's copy.
+///
+/// A WebView reads the script when a document starts, so a page already open
+/// keeps the one it started with; each shell installs the new script for the
+/// next document when the setting changes (spec 091).
+pub fn provider_script(host: ProviderHost, debug_mode: bool) -> String {
+    let offered = if debug_mode {
+        format!(
+            "!(window.isSecureContext || (location.protocol === 'http:' && ({})(location.hostname)))",
+            super::dapp_permissions::private_host_js()
+        )
+    } else {
+        "!window.isSecureContext".to_owned()
+    };
     format!(
-        "(function () {{\n\tif (window.top !== window || !window.isSecureContext) return;\n{bridge}\n{provider}\n}})();\n",
+        "(function () {{\n\tif (window.top !== window || {offered}) return;\n{bridge}\n{provider}\n}})();\n",
         bridge = BRIDGE_JS.replace("__HOST_POST__", host.post_expression()),
         provider = PROVIDER_JS,
     )
@@ -1073,21 +1090,68 @@ mod tests {
             ProviderHost::Ios,
             ProviderHost::Desktop,
         ] {
-            let script = provider_script(host);
+            for debug_mode in [false, true] {
+                let script = provider_script(host, debug_mode);
+                assert!(!script.contains("__HOST_POST__"));
+                assert!(!script
+                    .lines()
+                    .any(|line| line.trim_start().starts_with("import ")
+                        || line.trim_start().starts_with("export ")));
+                assert!(script.contains("eip6963:announceProvider"));
+                assert!(provider_script(host, debug_mode).ends_with(PROVIDER_JS_TAIL));
+            }
             // Top frame only, and only a secure context (spec 088 FR-004).
-            assert!(script.starts_with(
+            let ordinary = provider_script(host, false);
+            assert!(ordinary.starts_with(
                 "(function () {\n\tif (window.top !== window || !window.isSecureContext) return;"
             ));
-            assert!(!script.contains("__HOST_POST__"));
-            assert!(!script
-                .lines()
-                .any(|line| line.trim_start().starts_with("import ")
-                    || line.trim_start().starts_with("export ")));
-            assert!(script.contains("eip6963:announceProvider"));
+            assert!(
+                !ordinary.contains("location.hostname"),
+                "no host test at all"
+            );
+            // Debug mode (spec 091): a secure context, or http on this
+            // device's network by the core's own host rule.
+            let debug = provider_script(host, true);
+            assert!(debug.starts_with(&format!(
+                "(function () {{\n\tif (window.top !== window || !(window.isSecureContext || \
+                 (location.protocol === 'http:' && ({})(location.hostname)))) return;",
+                crate::app::dapp_permissions::private_host_js()
+            )));
+            // Only the gate differs: the bridge and the provider are the same bytes.
+            assert_eq!(
+                ordinary.split_once(" return;\n").map(|(_, rest)| rest),
+                debug.split_once(" return;\n").map(|(_, rest)| rest),
+            );
         }
-        assert!(provider_script(ProviderHost::Android).contains("VelaHost.postMessage(s)"));
-        assert!(provider_script(ProviderHost::Ios).contains("messageHandlers.VelaHost"));
-        assert!(provider_script(ProviderHost::Desktop).contains("window.ipc.postMessage"));
+        for debug_mode in [false, true] {
+            assert!(provider_script(ProviderHost::Android, debug_mode)
+                .contains("VelaHost.postMessage(s)"));
+            assert!(
+                provider_script(ProviderHost::Ios, debug_mode).contains("messageHandlers.VelaHost")
+            );
+            assert!(provider_script(ProviderHost::Desktop, debug_mode)
+                .contains("window.ipc.postMessage"));
+        }
+    }
+
+    /// The script's last line: the provider, then the closing of the wrapper.
+    const PROVIDER_JS_TAIL: &str = "\n})();\n";
+
+    /// The host test written into the debug script holds the tables, never a
+    /// marker left unreplaced.
+    #[test]
+    fn the_scripts_host_test_is_the_cores_tables() {
+        let js = crate::app::dapp_permissions::private_host_js();
+        assert!(js.starts_with("function (host) {"));
+        assert!(!js.contains("__"), "every table marker replaced: {js}");
+        for table in [
+            r#"["localhost","::1"]"#,
+            r#"[".local"]"#,
+            "[[64512,65023],[65152,65152]]",
+            "[[127,0,255],[10,0,255],[192,168,168],[172,16,31],[169,254,254]]",
+        ] {
+            assert!(js.contains(table), "{table} in {js}");
+        }
     }
 
     /// Spec 094: the provider says nothing in the console of every page.

@@ -111,19 +111,24 @@ struct SignRequestReadingTests {
         #expect(row["timestamp"] as? Int == 1_757_000_000)
     }
 
-    @Test func aTransactionRecordCarriesTheCallAndClipsALongRequest() {
+    /// Spec 093: the request is stored as the CORE cut it — `stored_request`
+    /// and `request_truncated`, verbatim — never a cut of the shell's own;
+    /// the call itself is still read from the whole request.
+    @Test func aTransactionRecordCarriesTheCallAndStoresTheCoresCut() {
         let long = String(repeating: "a", count: 9000)
+        let cut = #"[{"to":"0x76875e","value":"0x38d7ea4c68000","data":"0xaaaa"}]"#
         let row = SignExecutor.recordRow([
             "record_id": "dapp-1-tx", "kind": "dapp_tx", "method": "eth_sendTransaction",
             "params_json": #"[{"to":"0x76875e","value":"0x38d7ea4c68000","data":"0x\#(long)"}]"#,
             "result": "", "from": "0xme", "chain_id": 100, "now_ms": 1_757_000_000_000,
             "status": "pending", "user_op_hash": "0xcf9f", "dapp_origin": "https://x.test",
+            "stored_request": cut, "request_truncated": true,
         ], nativeSymbol: "xDAI")
         #expect(row["type"] as? String == "dapp_tx")
         #expect(row["to"] as? String == "0x76875e")
         #expect(row["symbol"] as? String == "xDAI")
         #expect(row["requestTruncated"] as? Bool == true)
-        #expect((row["signedRequest"] as? String)?.count == 4096)
+        #expect(row["signedRequest"] as? String == cut, "the core's cut, not the shell's")
     }
 }
 

@@ -19,6 +19,7 @@
     "labelSent": "Đã gửi",
     "labelReceived": "Đã nhận",
     "toName": "Đến {{name}}",
-    "fromName": "Từ {{name}}"
+    "fromName": "Từ {{name}}",
+    "dappRowTitle": "{{intent}} trên {{place}}"
   }
 }

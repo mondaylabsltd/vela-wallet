@@ -13,13 +13,14 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::activity_feed::{
-    history_empty_key, home_empty_key, is_stable, tx_usd_value, ActivityFeed, Event, FeedBatchKind,
-    FeedCounterpartyRole, FeedDapp, FeedDappChange, FeedDirection, FeedItem, FeedOperation as Op,
-    FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus, FeedView,
-    HISTORY_EMPTY_ALL, HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED,
-    UNFOLLOWED_AFTER_MS,
+    history_empty_key, home_empty_key, is_stable, tx_usd_value, ActivityFeed, Event, FeedAllowance,
+    FeedBatchKind, FeedCounterpartyRole, FeedDappChange, FeedDappContent, FeedDappOperation,
+    FeedDirection, FeedFact, FeedItem, FeedLine, FeedOperation as Op, FeedRow,
+    FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus, FeedView, HISTORY_EMPTY_ALL,
+    HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED, UNFOLLOWED_AFTER_MS,
 };
 use vela_core::app::clear_signing::ClearTerm;
+use vela_core::app::dapp_activity::{DappAction, DappSummary};
 use vela_core::app::token_trust::TrustSimJudgment;
 use vela_core::app::tx_tracker::ABANDON_AGE_MS;
 
@@ -65,6 +66,7 @@ fn base(id: &str, ts: f64) -> FeedTxRecord {
         balance_changes: None,
         calldata: None,
         call_data: None,
+        summary: None,
     }
 }
 
@@ -368,6 +370,11 @@ fn feed_and_transactions_are_account_scoped() {
     })
     .collect();
 
+    // Somebody else's signature is somebody else's.
+    let mut foreign_signed = base("x9", 235_000.0);
+    foreign_signed.kind = Some(FeedTxKind::SignMessage);
+    foreign_signed.from = OTHER.to_owned();
+
     let mut records = vec![
         ours_send,
         foreign_send,
@@ -376,15 +383,18 @@ fn feed_and_transactions_are_account_scoped() {
         dapp,
         foreign_dapp,
         legacy,
+        foreign_signed,
     ];
     records.extend(signed);
     let mut sut = boot(records);
     drain_aliases(&mut sut);
 
+    // Spec 093: this account's signatures are rows (x0, x1); a connect is
+    // not (x2) — the Connections list holds it.
     let ids: Vec<String> = items(&sut).into_iter().map(|i| i.id).collect();
-    assert_eq!(ids, vec!["s1", "r1", "d1", "l1"]);
+    assert_eq!(ids, vec!["s1", "r1", "d1", "l1", "x0", "x1"]);
     let tx_ids: Vec<String> = sut.view().transactions.into_iter().map(|t| t.id).collect();
-    assert_eq!(tx_ids, vec!["s1", "r1", "d1", "l1"]);
+    assert_eq!(tx_ids, vec!["s1", "r1", "d1", "l1", "x0", "x1"]);
 }
 
 // ---------------------------------------------------------------------------
@@ -609,19 +619,63 @@ fn the_grace_outlasts_every_submit_window() {
     );
 }
 
-/// `personal_sign` (and every other signature) moves nothing: its record is
-/// never a row, even with the dApp's origin on it.
+/// `personal_sign` moves nothing, yet the person gave a site their signature
+/// (spec 093): a row with no figure, no status to settle and no hash — the
+/// signature an older build kept in `txHash` is the hash of nothing, and is
+/// never read. It happened on the site, which the title names, so the
+/// second line names only the network.
 #[test]
-fn a_personal_sign_is_never_a_row() {
+fn a_personal_sign_is_a_row_with_no_figure_status_or_hash() {
     let mut msg = base("dapp-5-msg", 100_000.0);
     msg.kind = Some(FeedTxKind::SignMessage);
     msg.from = ADDR.to_owned();
     msg.value = "0".to_owned();
     msg.symbol = String::new();
+    msg.tx_hash = format!("0x{}", "ab".repeat(65));
     msg.dapp_url = Some("https://app.test".to_owned());
     let sut = boot(vec![msg]);
-    assert!(items(&sut).is_empty());
-    assert!(sut.view().transactions.is_empty());
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.kind, FeedTxKind::SignMessage);
+    assert_eq!(row.status, FeedTxStatus::Confirmed);
+    assert_eq!((row.value.as_deref(), row.symbol.as_str()), (None, ""));
+    assert_eq!(row.tx_hash, None, "a signature is no transaction hash");
+    assert_eq!(row.counterparty, None);
+    let dapp = row.dapp.clone().expect("a dApp row");
+    assert!(dapp.off_chain);
+    assert_eq!(dapp.intent_term, Some(ClearTerm::MessageIntent));
+    assert_eq!(dapp.place.as_deref(), Some("app.test"));
+    assert_eq!(dapp.allowance, None);
+    assert_eq!(
+        row.subtitle,
+        vec![FeedLine::Network { chain_id: 8453 }],
+        "the site is in the title; a signature has no status"
+    );
+    assert_eq!(
+        dapp.facts,
+        vec![
+            FeedFact::Site {
+                site: "app.test".to_owned()
+            },
+            FeedFact::Network { chain_id: 8453 },
+            FeedFact::Date {
+                timestamp: 100_000.0
+            },
+        ]
+    );
+    assert_eq!(
+        dapp.technical,
+        vec![
+            FeedFact::Operation {
+                operation: FeedDappOperation::Signature
+            },
+            FeedFact::Content {
+                content: FeedDappContent::Message
+            },
+        ]
+    );
+    assert_eq!(sut.view().transactions.len(), 1, "the detail reads it");
 }
 
 /// A zero value is no amount (a contract call does not read as money), and
@@ -1614,18 +1668,32 @@ fn a_dapp_native_send_is_a_row_with_its_amount_and_site() {
     assert_eq!(row.decimals, Some(18));
     assert_eq!(row.counterparty.as_deref(), Some(CAFE));
     assert_eq!(row.tx_hash, None, "pending: no hash yet");
+    let dapp = row.dapp.clone().expect("a dApp row");
     assert_eq!(
-        row.dapp,
-        Some(FeedDapp {
-            site: Some("127.0.0.1:5173".to_owned()),
-            intent: Some("Send".to_owned()),
-            intent_term: Some(ClearTerm::IntentSend),
-            changes: Vec::new(),
-            received: None,
-            estimated: false,
-            contract_call: false,
-        })
+        (
+            dapp.site.as_deref(),
+            dapp.intent.as_deref(),
+            dapp.intent_term,
+            dapp.changes.is_empty(),
+            dapp.received,
+            dapp.estimated,
+            dapp.contract_call,
+        ),
+        (
+            Some("127.0.0.1:5173"),
+            Some("Send"),
+            Some(ClearTerm::IntentSend),
+            true,
+            None,
+            false,
+            false,
+        )
     );
+    // Spec 093: a record from before 093 reads as a call, on its site.
+    assert_eq!(dapp.action, DappAction::Call);
+    assert_eq!(dapp.place.as_deref(), Some("127.0.0.1:5173"));
+    assert_eq!(dapp.allowance, None);
+    assert!(!dapp.off_chain);
     // The detail reads the status off the record, which is in the view.
     assert_eq!(sut.view().transactions[0].status, FeedTxStatus::Pending);
 }
@@ -1662,7 +1730,11 @@ fn a_dapp_contract_call_carries_its_intent_and_no_zero_amount() {
     );
     let blind = rows[1].dapp.clone().expect("a dApp row");
     assert_eq!(blind.site.as_deref(), Some("127.0.0.1:5173"));
-    assert_eq!((blind.intent, blind.intent_term), (None, None));
+    // Spec 093: nobody decoded it, so the wallet's own word heads it.
+    assert_eq!(
+        (blind.intent, blind.intent_term),
+        (None, Some(ClearTerm::IntentContractCall))
+    );
 }
 
 /// The site is read from the ORIGIN the request came from, and only from an
@@ -1759,10 +1831,10 @@ fn a_dapp_row_names_no_recipient_that_is_not_an_address() {
     );
 }
 
-/// Signatures and connections move nothing, so they are no row and no
-/// record in the view — the rule the dApp transaction row must not loosen.
+/// Signatures are rows (spec 093); connections stay out — the Connections
+/// list holds them, and a connect grants neither money nor a signature.
 #[test]
-fn signatures_and_connections_stay_out_of_activity() {
+fn signatures_are_rows_and_connections_stay_out() {
     let mut records = Vec::new();
     for (id, kind) in [
         ("m1", FeedTxKind::SignMessage),
@@ -1778,10 +1850,24 @@ fn signatures_and_connections_stay_out_of_activity() {
     }
     records.push(dapp_tx_h2("d1", "0xCafe", "0x1", None, 90_000.0));
     let sut = boot(records);
-    let ids: Vec<String> = items(&sut).into_iter().map(|i| i.id).collect();
-    assert_eq!(ids, vec!["d1"]);
+    let rows = items(&sut);
+    let ids: Vec<&str> = rows.iter().map(|i| i.id.as_str()).collect();
+    assert_eq!(ids, vec!["m1", "t1", "d1"]);
+    // A record from before 093 reads by its kind.
+    let words: Vec<Option<ClearTerm>> = rows
+        .iter()
+        .map(|row| row.dapp.as_ref().and_then(|d| d.intent_term))
+        .collect();
+    assert_eq!(
+        words,
+        vec![
+            Some(ClearTerm::MessageIntent),
+            Some(ClearTerm::TypedDataIntent),
+            Some(ClearTerm::IntentContractCall),
+        ]
+    );
     let tx_ids: Vec<String> = sut.view().transactions.into_iter().map(|t| t.id).collect();
-    assert_eq!(tx_ids, vec!["d1"]);
+    assert_eq!(tx_ids, vec!["m1", "t1", "d1"]);
 }
 
 /// A stored `decimals` sizes the scaling's padding, so a corrupted or
@@ -2012,7 +2098,7 @@ fn a_swap_row_says_what_left_and_what_was_expected_back() {
 
     let dapp = rows[2].dapp.clone().expect("a dApp row");
     assert_eq!(dapp.intent, None, "no title the wallet cannot know");
-    assert_eq!(dapp.intent_term, None);
+    assert_eq!(dapp.intent_term, Some(ClearTerm::IntentContractCall));
     assert_eq!(dapp.site.as_deref(), Some("app.uniswap.org"));
     assert!(dapp.contract_call, "the router is what it called");
     assert_eq!(
@@ -2221,6 +2307,7 @@ fn a_failed_swap_claims_nothing_it_expected() {
     assert_eq!(
         FeedItem {
             status: in_flight.status,
+            subtitle: in_flight.subtitle.clone(),
             ..landed
         },
         in_flight,
@@ -2383,4 +2470,559 @@ fn the_balance_change_fields_are_optional_on_the_wire() {
             ..
         }
     ));
+}
+
+// ---------------------------------------------------------------------------
+// Spec 093 — every dApp interaction is a row, worded by the core
+// ---------------------------------------------------------------------------
+
+const UNIVERSAL_ROUTER: &str = "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad";
+const PANCAKE_ROUTER: &str = "0x13f4ea83d0bd40e75c8222255bc855a974568dd4";
+const USDC_MAINNET: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+const PERMIT2: &str = "0x000000000022d473030f116ddee9f6b43ac78ba3";
+
+/// A record a 093 shell stored: the core's summary beside it.
+fn summarized(mut record: FeedTxRecord, summary: DappSummary) -> FeedTxRecord {
+    record.summary = Some(summary);
+    record
+}
+
+/// A signature a 093 shell stored, from `origin`.
+fn signed(id: &str, kind: FeedTxKind, origin: &str, summary: DappSummary, ts: f64) -> FeedTxRecord {
+    let mut r = base(id, ts);
+    r.kind = Some(kind);
+    r.from = ADDR.to_owned();
+    r.value = "0".to_owned();
+    r.symbol = String::new();
+    r.decimals = 0;
+    r.tx_hash = String::new();
+    r.chain_id = 1;
+    r.dapp_url = Some(origin.to_owned());
+    summarized(r, summary)
+}
+
+/// The place is the protocol the wallet knows the called contract by — the
+/// site then rides the second line — else the site, which the second line
+/// does not repeat. Never the dApp's own name.
+#[test]
+fn the_place_is_the_known_protocol_else_the_site() {
+    let mut on_uniswap = dapp_tx_h2("d-uni", UNIVERSAL_ROUTER, "0x0", Some("Swap"), 200_000.0);
+    on_uniswap.dapp_url = Some("https://app.uniswap.org".to_owned());
+    on_uniswap.status = FeedTxStatus::Confirmed;
+    on_uniswap.call_data = Some("0x3593564c".to_owned());
+    let on_uniswap = summarized(
+        on_uniswap,
+        DappSummary {
+            action: DappAction::Call,
+            calls: 1,
+            contract: Some(UNIVERSAL_ROUTER.to_owned()),
+            ..DappSummary::default()
+        },
+    );
+    let mut unknown = dapp_tx_h2(
+        "d-unknown",
+        "0x7777777777777777777777777777777777777777",
+        "0x0",
+        Some("Swap"),
+        190_000.0,
+    );
+    unknown.dapp_url = Some("https://swap.example:8443".to_owned());
+    // Pending, and young enough to be followed: its status leads the line.
+    unknown.timestamp = RECENT;
+    unknown.day_start_ms = day_of(RECENT);
+    let sut = boot(vec![on_uniswap, unknown]);
+    let mut rows = items(&sut);
+    rows.reverse();
+
+    let uni = rows[0].dapp.clone().expect("a dApp row");
+    assert_eq!(uni.place.as_deref(), Some("Uniswap"));
+    assert_eq!(uni.intent_term, Some(ClearTerm::IntentSwap));
+    assert_eq!(
+        rows[0].subtitle,
+        vec![
+            FeedLine::Site {
+                site: "app.uniswap.org".to_owned()
+            },
+            FeedLine::Network { chain_id: 100 },
+        ]
+    );
+    assert!(uni.facts.contains(&FeedFact::Contract {
+        address: UNIVERSAL_ROUTER.to_owned(),
+        name: Some("Uniswap Universal Router".to_owned()),
+    }));
+
+    let other = rows[1].dapp.clone().expect("a dApp row");
+    assert_eq!(other.place.as_deref(), Some("swap.example:8443"));
+    assert_eq!(
+        rows[1].subtitle,
+        vec![
+            FeedLine::Status {
+                status: FeedTxStatus::Pending
+            },
+            FeedLine::Network { chain_id: 100 },
+        ]
+    );
+}
+
+/// A record from before 093 (no summary) still reads: a transaction by its
+/// recorded intent and its contract, a signature by its kind; with no origin
+/// at all (an old phone record) it names no place, and the title is the verb.
+#[test]
+fn legacy_records_read_by_their_kind() {
+    let mut old_swap = dapp_tx_h2("old-1", PANCAKE_ROUTER, "0x0", Some("Swap"), 300_000.0);
+    old_swap.dapp_url = Some("https://pancakeswap.finance".to_owned());
+    let mut old_typed = base("old-2", 290_000.0);
+    old_typed.kind = Some(FeedTxKind::SignTypedData);
+    old_typed.from = ADDR.to_owned();
+    old_typed.tx_hash = "0xsignature-the-old-build-kept".to_owned();
+    let sut = boot(vec![old_swap, old_typed]);
+    let rows = items(&sut);
+
+    let swap = rows[0].dapp.clone().expect("a dApp row");
+    assert_eq!(swap.action, DappAction::Call);
+    assert_eq!(
+        (swap.intent_term, swap.place.as_deref()),
+        (Some(ClearTerm::IntentSwap), Some("PancakeSwap"))
+    );
+
+    let typed = rows[1].dapp.clone().expect("a dApp row");
+    assert_eq!(typed.action, DappAction::TypedData);
+    assert_eq!(typed.intent_term, Some(ClearTerm::TypedDataIntent));
+    assert_eq!(typed.place, None, "no origin: no place, the verb alone");
+    assert_eq!(rows[1].tx_hash, None);
+    assert_eq!(rows[1].subtitle, vec![FeedLine::Network { chain_id: 8453 }]);
+}
+
+/// A permit is a spending permit on the spender's protocol, with the
+/// allowance where a figure would be: "100 USDC", or unlimited.
+#[test]
+fn a_permit_states_its_allowance_limited_or_not() {
+    let limited = signed(
+        "p-limited",
+        FeedTxKind::SignTypedData,
+        "https://app.uniswap.org",
+        DappSummary {
+            action: DappAction::Permit,
+            contract: Some(USDC_MAINNET.to_owned()),
+            spender: Some(UNIVERSAL_ROUTER.to_owned()),
+            token: Some(USDC_MAINNET.to_owned()),
+            symbol: Some("USDC".to_owned()),
+            decimals: Some(6),
+            amount: Some("100000000".to_owned()),
+            expires_at: Some(1_767_225_600.0),
+            primary_type: Some("Permit".to_owned()),
+            ..DappSummary::default()
+        },
+        200_000.0,
+    );
+    let unlimited = signed(
+        "p-unlimited",
+        FeedTxKind::SignTypedData,
+        "https://evil.example",
+        DappSummary {
+            action: DappAction::Permit,
+            contract: Some(PERMIT2.to_owned()),
+            spender: Some("0x9999999999999999999999999999999999999999".to_owned()),
+            token: Some(USDC_MAINNET.to_owned()),
+            symbol: Some("USDC".to_owned()),
+            decimals: Some(6),
+            unlimited: true,
+            primary_type: Some("PermitSingle".to_owned()),
+            ..DappSummary::default()
+        },
+        190_000.0,
+    );
+    let sut = boot(vec![limited, unlimited]);
+    let rows = items(&sut);
+
+    let first = rows[0].dapp.clone().expect("a dApp row");
+    assert_eq!(first.intent_term, Some(ClearTerm::PermitIntent));
+    assert_eq!(
+        first.place.as_deref(),
+        Some("Uniswap"),
+        "the spender's protocol"
+    );
+    let cap = FeedAllowance {
+        symbol: "USDC".to_owned(),
+        value: Some("100".to_owned()),
+        decimals: Some(6),
+        unlimited: false,
+        token: Some(USDC_MAINNET.to_owned()),
+    };
+    assert_eq!(first.allowance, Some(cap.clone()));
+    assert!(first.off_chain);
+    assert_eq!(rows[0].value, None, "an allowance is no money moved");
+    assert_eq!(
+        rows[0].subtitle,
+        vec![
+            FeedLine::Site {
+                site: "app.uniswap.org".to_owned()
+            },
+            FeedLine::Network { chain_id: 1 },
+        ]
+    );
+    assert_eq!(
+        first.facts,
+        vec![
+            FeedFact::Site {
+                site: "app.uniswap.org".to_owned()
+            },
+            FeedFact::Network { chain_id: 1 },
+            FeedFact::Spender {
+                address: UNIVERSAL_ROUTER.to_owned(),
+                name: Some("Uniswap Universal Router".to_owned()),
+            },
+            FeedFact::SpendingCap { allowance: cap },
+            FeedFact::Expires {
+                at: Some(1_767_225_600.0)
+            },
+            FeedFact::Date {
+                timestamp: 200_000.0
+            },
+        ]
+    );
+    assert!(first.facts.len() <= 6);
+    assert_eq!(
+        first.technical,
+        vec![
+            FeedFact::Operation {
+                operation: FeedDappOperation::TypedDataSignature
+            },
+            FeedFact::Content {
+                content: FeedDappContent::TypedData
+            },
+            FeedFact::PrimaryType {
+                name: "Permit".to_owned()
+            },
+        ]
+    );
+
+    let second = rows[1].dapp.clone().expect("a dApp row");
+    assert_eq!(
+        second.place.as_deref(),
+        Some("evil.example"),
+        "a spender the wallet does not know is no place; Permit2 never is"
+    );
+    let allowance = second.allowance.expect("unlimited is stated");
+    assert!(allowance.unlimited);
+    assert_eq!((allowance.value, allowance.decimals), (None, None));
+    assert!(second.facts.contains(&FeedFact::Expires { at: None }));
+}
+
+/// A sign-in is titled one only when the core matched its domain to the
+/// site; any other message is a message.
+#[test]
+fn a_sign_in_is_named_only_when_its_domain_is_the_site() {
+    let signin = signed(
+        "s-in",
+        FeedTxKind::SignMessage,
+        "https://app.uniswap.org",
+        DappSummary {
+            action: DappAction::SignIn,
+            signin_domain: Some("app.uniswap.org".to_owned()),
+            ..DappSummary::default()
+        },
+        200_000.0,
+    );
+    let mismatched = signed(
+        "s-msg",
+        FeedTxKind::SignMessage,
+        "https://evil.example",
+        DappSummary {
+            action: DappAction::Message,
+            ..DappSummary::default()
+        },
+        190_000.0,
+    );
+    let sut = boot(vec![signin, mismatched]);
+    let rows = items(&sut);
+    let words: Vec<(Option<ClearTerm>, Option<String>)> = rows
+        .iter()
+        .map(|row| {
+            let dapp = row.dapp.clone().expect("a dApp row");
+            (dapp.intent_term, dapp.place)
+        })
+        .collect();
+    assert_eq!(
+        words,
+        vec![
+            (
+                Some(ClearTerm::SignInIntent),
+                Some("app.uniswap.org".to_owned())
+            ),
+            (
+                Some(ClearTerm::MessageIntent),
+                Some("evil.example".to_owned())
+            ),
+        ]
+    );
+}
+
+/// A batch reads by the verb its record kept, else as a batch; the detail
+/// states an unlimited allowance one of its calls granted, whatever the title.
+#[test]
+fn a_batch_reads_by_its_verb_and_states_what_it_granted() {
+    let batch = |id: &str, intent: Option<&str>| {
+        let mut r = dapp_tx_h2(id, "", "0x0", intent, 200_000.0);
+        r.dapp_url = Some("https://app.uniswap.org".to_owned());
+        summarized(
+            r,
+            DappSummary {
+                action: DappAction::Batch,
+                calls: 2,
+                contract: Some(UNIVERSAL_ROUTER.to_owned()),
+                spender: Some(UNIVERSAL_ROUTER.to_owned()),
+                token: Some(USDC_MAINNET.to_owned()),
+                symbol: Some("USDC".to_owned()),
+                decimals: Some(6),
+                unlimited: true,
+                ..DappSummary::default()
+            },
+        )
+    };
+    let sut = boot(vec![batch("b-swap", Some("Swap")), batch("b-none", None)]);
+    let rows = items(&sut);
+    let swap = rows
+        .iter()
+        .find(|row| row.id == "b-swap")
+        .and_then(|row| row.dapp.clone())
+        .expect("the swap batch");
+    assert_eq!(swap.intent_term, Some(ClearTerm::IntentSwap));
+    assert_eq!(swap.place.as_deref(), Some("Uniswap"));
+    assert_eq!(swap.allowance, None, "the title is the swap, not the grant");
+    assert!(swap.facts.iter().any(|fact| matches!(
+        fact,
+        FeedFact::SpendingCap { allowance } if allowance.unlimited
+    )));
+    assert!(swap.technical.contains(&FeedFact::Operation {
+        operation: FeedDappOperation::Batch { calls: 2 }
+    }));
+    let plain = rows
+        .iter()
+        .find(|row| row.id == "b-none")
+        .and_then(|row| row.dapp.clone())
+        .expect("the other batch");
+    assert_eq!(
+        (plain.intent_term, plain.intent),
+        (Some(ClearTerm::BatchIntent), None)
+    );
+}
+
+/// A swap's coin coming back in the same transaction is the swap's own: its
+/// "Received" row folds into the dApp row, which then states the amount the
+/// chain recorded — exact — rather than what the simulation expected. A
+/// receipt in another transaction, or beside a failed swap, stays a row.
+#[test]
+fn a_swaps_receipt_folds_into_its_row() {
+    const HASH: &str = "0xAAAA000000000000000000000000000000000000000000000000000000000001";
+    let mut swapped = swap(
+        "dapp-fold-tx",
+        "0x0",
+        Some(vec![usdc("-100000"), eth("37000000000000")]),
+        100_000.0,
+    );
+    swapped.status = FeedTxStatus::Confirmed;
+    swapped.tx_hash = HASH.to_owned();
+    let mut back = recv("rcv-1", "0xRouter", "0.0000371", "ETH", 100_010.0);
+    back.tx_hash = HASH.to_lowercase();
+    back.chain_id = swapped.chain_id;
+    back.decimals = 18;
+    let unrelated = recv("rcv-2", "0xBob", "5", "USDC", 90_000.0);
+
+    let sut = boot(vec![swapped.clone(), back.clone(), unrelated]);
+    let rows = items(&sut);
+    let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+    assert_eq!(ids, vec!["dapp-fold-tx", "rcv-2"], "one operation, one row");
+    let dapp = rows[0].dapp.clone().expect("a dApp row");
+    assert_eq!(
+        dapp.received,
+        Some(FeedDappChange {
+            direction: FeedDirection::In,
+            verified: true,
+            symbol: "ETH".to_owned(),
+            value: Some("0.0000371".to_owned()),
+            decimals: Some(18),
+            exact: true,
+        })
+    );
+    assert!(
+        sut.view().transactions.iter().any(|t| t.id == "rcv-1"),
+        "the record itself stays"
+    );
+
+    let mut failed = swapped;
+    failed.status = FeedTxStatus::Failed;
+    let sut = boot(vec![failed, back]);
+    let ids: Vec<String> = items(&sut).into_iter().map(|row| row.id).collect();
+    assert_eq!(
+        ids,
+        vec!["rcv-1", "dapp-fold-tx"],
+        "a failed swap folds nothing"
+    );
+}
+
+/// The second line of a transfer is the core's too: whom it went to or came
+/// from (named when somebody named them), else the network; a pending one
+/// says so first.
+#[test]
+fn a_transfer_row_says_whom_and_where_it_stands() {
+    let mut pending = send("s-p", "0xU1", "0xCafe", "1", 300_000.0);
+    pending.status = FeedTxStatus::Pending;
+    pending.timestamp = RECENT;
+    pending.day_start_ms = day_of(RECENT);
+    let received = recv("r-1", "0xBob", "2", "USDT", 280_000.0);
+    let sut = boot(vec![pending, received]);
+    let rows = items(&sut);
+    assert_eq!(
+        rows[0].subtitle,
+        vec![
+            FeedLine::Status {
+                status: FeedTxStatus::Pending
+            },
+            FeedLine::To {
+                address: "0xCafe".to_owned(),
+                name: Some("name-of-0xCafe".to_owned()),
+            },
+        ]
+    );
+    assert_eq!(
+        rows[1].subtitle,
+        vec![FeedLine::From {
+            address: "0xBob".to_owned(),
+            name: None,
+        }]
+    );
+}
+
+/// A stored summary or balance-change list this build cannot read (a newer
+/// build's action, a damaged row) drops to nothing for that record — the
+/// record reads by its kind — and never stops the store from loading.
+#[test]
+fn an_unreadable_stored_summary_never_stops_the_feed() {
+    let record: FeedTxRecord = serde_json::from_value(serde_json::json!({
+        "id": "future", "user_op_hash": "", "tx_hash": "", "from": ADDR, "to": "",
+        "to_name": null, "value": "0", "symbol": "", "decimals": 0, "logo_urls": null,
+        "chain_id": 1, "timestamp": 100_000.0, "day_start_ms": 0.0, "status": "confirmed",
+        "kind": "sign_typed_data", "usd": null, "dapp_url": "https://app.example",
+        "summary": { "action": "teleport", "calls": 0 },
+        "balance_changes": [{ "type": "nft", "delta": "1" }],
+    }))
+    .expect("the record still reads");
+    assert_eq!(
+        (record.summary.clone(), record.balance_changes.clone()),
+        (None, None)
+    );
+    let sut = boot(vec![record]);
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].dapp.as_ref().and_then(|d| d.intent_term),
+        Some(ClearTerm::TypedDataIntent)
+    );
+}
+
+/// The detail names who got the money (spec 082 RJ16) — a plain send's
+/// recipient, by the row's name for them, or the one a token transfer names —
+/// and the contract only for a call that is neither.
+#[test]
+fn the_detail_names_who_got_the_money() {
+    let mut paid = dapp_tx_h2("d-paid", CAFE, "0x2386f26fc10000", Some("Send"), 200_000.0);
+    paid.to_name = Some("Ann".to_owned());
+    let transfer = dapp_tx_h2(
+        "d-transfer",
+        "0x2222222222222222222222222222222222222222",
+        "0x0",
+        Some("Send"),
+        190_000.0,
+    );
+    let transfer = FeedTxRecord {
+        call_data: Some(transfer_to_founder()),
+        ..transfer
+    };
+    let sut = boot(vec![paid, transfer]);
+    let rows = items(&sut);
+    let party = |row: &vela_core::app::activity_feed::FeedItem| {
+        row.dapp
+            .as_ref()
+            .expect("a dApp row")
+            .facts
+            .iter()
+            .find_map(|fact| match fact {
+                FeedFact::Recipient { address, name } => Some((address.clone(), name.clone())),
+                FeedFact::Contract { .. } => panic!("a payment names no contract"),
+                _ => None,
+            })
+    };
+    assert_eq!(
+        party(&rows[0]),
+        Some((CAFE.to_owned(), Some("Ann".to_owned())))
+    );
+    let (address, _) = party(&rows[1]).expect("the transfer's recipient");
+    assert_eq!(Some(address), rows[1].counterparty.clone());
+}
+
+/// A contact's page draws what passed between the account and that address
+/// from the same items Activity does (spec 093): a send, a receipt, and a
+/// dApp's token transfer that paid them — titled by its verb, never "Sent" —
+/// on every network whatever the home's filter, each second line its status
+/// (when not settled), network and day. A signature pays nobody: never there.
+#[test]
+fn a_contacts_rows_are_the_feeds_items_for_that_address() {
+    let mut to_founder = send("s-f", "0xU9", FOUNDER, "2", RECENT);
+    to_founder.status = FeedTxStatus::Pending;
+    to_founder.day_start_ms = day_of(RECENT);
+    let mut from_founder = recv("r-f", FOUNDER, "3", "USDT", 280_000.0);
+    from_founder.chain_id = 1;
+    let mut dapp_paid = dapp_tx_h2(
+        "d-f",
+        "0x2222222222222222222222222222222222222222",
+        "0x0",
+        Some("Send"),
+        270_000.0,
+    );
+    dapp_paid.status = FeedTxStatus::Confirmed;
+    dapp_paid.call_data = Some(transfer_to_founder());
+    let other = send("s-o", "0xU8", "0xCafe", "1", 260_000.0);
+    let mut signature = base("m-f", 250_000.0);
+    signature.kind = Some(FeedTxKind::SignMessage);
+    signature.from = ADDR.to_owned();
+    signature.to = FOUNDER.to_owned();
+
+    let mut sut = boot(vec![to_founder, from_founder, dapp_paid, other, signature]);
+    assert!(sut.view().contact_rows.is_empty(), "no contact open");
+    sut.dispatch(Event::ChainFilterChanged {
+        chain_id: Some(8453),
+    });
+    sut.dispatch(Event::ContactFilterChanged {
+        address: Some(FOUNDER.to_uppercase().replacen("0X", "0x", 1)),
+    });
+    let rows = sut.view().contact_rows;
+    let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+    assert_eq!(ids, vec!["s-f", "r-f", "d-f"]);
+    assert_eq!(
+        rows[0].subtitle,
+        vec![
+            FeedLine::Status {
+                status: FeedTxStatus::Pending
+            },
+            FeedLine::Network { chain_id: 8453 },
+            FeedLine::Day {
+                day_start_ms: day_of(RECENT)
+            },
+        ]
+    );
+    assert_eq!(
+        rows[1].subtitle,
+        vec![
+            FeedLine::Network { chain_id: 1 },
+            FeedLine::Day {
+                day_start_ms: day_of(280_000.0)
+            },
+        ]
+    );
+    let dapp = rows[2].dapp.clone().expect("the dApp's transfer");
+    assert_eq!(dapp.intent_term, Some(ClearTerm::IntentSend));
+
+    sut.dispatch(Event::ContactFilterChanged { address: None });
+    assert!(sut.view().contact_rows.is_empty());
 }

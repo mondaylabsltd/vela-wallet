@@ -98,7 +98,7 @@ struct SimulationSheetTests {
             [["kind": "erc20", "token": usdc, "delta": "-5000000"]],
             meta: (symbol: "USDC", decimals: 6)
         )
-        guard let first = sim.judgments.first, case .erc20Trusted(_, _, let symbol, let decimals) = first
+        guard let first = sim.judgments.first, case .erc20Trusted(_, _, let symbol, let decimals, _) = first
         else {
             Issue.record("a named outflow was not trusted: \(sim)")
             return

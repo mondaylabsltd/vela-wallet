@@ -8,6 +8,9 @@
  * stay declared so a record written elsewhere round-trips untouched.
  */
 
+import type { DappSummary } from '$lib/core/generated/DappSummary';
+import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
+
 export type TransactionType =
 	'send' | 'receive' | 'dapp_tx' | 'sign_message' | 'sign_typed_data' | 'connect';
 
@@ -42,8 +45,25 @@ export interface LocalTransaction {
 	/** USD value at event time, pre-formatted (e.g. "$1.00"). */
 	usd?: string;
 	signedContent?: string;
+	/**
+	 * The request as the record keeps it: the core's `stored_request` (≤ 8 KB,
+	 * spec 093), parsed back into its params — never a cut of this shell's own.
+	 */
 	signedRequest?: { method: string; params: unknown[] };
+	/** The core's `request_truncated`: `signedRequest` is shorter than the request was. */
 	requestTruncated?: boolean;
+	/**
+	 * What the dApp request was, as Activity states it — the core's
+	 * `SignRecord.summary`, stored verbatim and handed back to the feed
+	 * untouched (spec 093). Absent on records from before 093.
+	 */
+	dappSummary?: DappSummary;
+	/**
+	 * What the wallet's own simulation said the operation moves, as the sheet
+	 * drew it when the person approved — the core's `SignRecord.balance_changes`,
+	 * verbatim (083 F1, spec 093). Absent when the sheet recorded none.
+	 */
+	balanceChanges?: TrustSimJudgment[];
 	/** Opaque to this feature; carried so a stored record survives a rewrite. */
 	assetSim?: unknown;
 	/**

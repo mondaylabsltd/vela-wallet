@@ -91,6 +91,12 @@ struct RootView: View {
     @State private var groupNameDraft = ""
     /// The rescue the hero's status line opened, and what it is about.
     @State private var rescue: SettingsOverlay?
+    /// A step inside the open rescue sheet — SR6's row opening its network's
+    /// SR2 (spec 092). The sheet's CONTENT swaps; presenting a second sheet
+    /// over a dismissing one fails silently on iOS (see `SettingsSheet`).
+    @State private var rescueStep: SettingsOverlay?
+    /// SR6 is up, so the balance core is re-reading for it.
+    @State private var unreachableListOpen = false
     @State private var rescueChain: Int?
     @State private var rpcDraft = ""
     /// Which history row opened the transaction sheet, and which assets row
@@ -538,6 +544,11 @@ struct RootView: View {
         Marks.adopt(accounts.loadServiceEndpoints())
         Formats.apply(prefs)
         UiScale.apply(prefs)
+        // Settings' debug mode (spec 091), before the browser boots: its core
+        // hears it right behind `start`, and every tab's script follows it.
+        // An erase builds a new root over the emptied store, so this reads
+        // hidden — off — again.
+        browserController.setDebugMode(prefs.debugMode.isOn)
         _preferences = State(initialValue: prefs)
         _batch = State(initialValue: BatchStore(executor: BatchExecutor(
             fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
@@ -1143,17 +1154,6 @@ struct RootView: View {
                     if state == .r2 || state == .r3 {
                         deposits.open(address: session.view.address)
                     }
-                    // The request machine learns whose address this is when the
-                    // receive flow opens, exactly as Android's `openReceive`
-                    // does. Every question the code sheet asks it — which
-                    // asset, which precision — is answered against this.
-                    if state == .r1 {
-                        paymentRequest.start(
-                            account: session.view.address,
-                            recipient: session.view.address,
-                            baseUrl: Self.payLinkBase
-                        )
-                    }
                 }
                 // Keyed on the DRAWN state, not the derived one.
                 //
@@ -1209,15 +1209,24 @@ struct RootView: View {
                     // which is what SR2 and SR3 are drawn as. The settings
                     // route would put the settings list behind a sentence
                     // about the screen somebody was actually on.
-                    .sheet(item: $rescue) { overlay in
+                    .sheet(item: $rescue, onDismiss: rescueDismissed) { overlay in
+                        let shown = rescueStep ?? overlay
                         SettingsSheet(
-                            model: rescueModel(overlay),
-                            overlay: overlay,
-                            onDismiss: { rescue = nil },
+                            model: rescueModel(shown),
+                            overlay: shown,
+                            // SR2 opened from SR6 steps back to the list; the
+                            // list itself, or any other rescue, closes.
+                            onDismiss: {
+                                if rescueStep != nil { rescueStep = nil } else { rescue = nil }
+                            },
                             onSignOut: {},
                             rpcDraft: $rpcDraft,
                             onCommitRpc: { commitRescueRpc() },
-                            onRetryChain: { _ in wallet.refresh(pull: true) }
+                            onRetryChain: { _ in wallet.refresh(pull: true) },
+                            onFixChain: { chainId in
+                                openRpcFix(chainId)
+                                rescueStep = .rpcFix
+                            }
                         )
                         .themed(scheme)
                     }
@@ -1759,7 +1768,10 @@ struct RootView: View {
                 // may (spec 017, invariant ⑤).
                 simDeltas: { [trust] address, chainId, deltas in
                     trust.simDeltasComputed(address: address, chainId: chainId, deltas: deltas)
-                }
+                },
+                // The same judged view the sheet draws (`signingContext`),
+                // read at the slide for the record (spec 093).
+                simView: { [trust] in trust.trust?.sim }
             )
         )
         signing = controller
@@ -1873,9 +1885,11 @@ struct RootView: View {
                             model: ContactsLive.detail(
                                 contact, view: view,
                                 // This device's own record of what passed
-                                // between the two of you — the same store the
-                                // feed reads, narrowed to one address.
-                                records: TxRecords.load(store: shelf), loc: loc,
+                                // between the two of you — the feed's own
+                                // rows, narrowed by the core to this address
+                                // (`contact_filter_changed`, spec 093).
+                                rows: activity.feed?.contactRows ?? [],
+                                hidden: wallet.balance?.hidden ?? false, loc: loc,
                                 form: contactForm(), groupPick: groupPick
                             ),
                             onBack: { contactsRoute = nil },
@@ -1930,17 +1944,20 @@ struct RootView: View {
                             // pretending to be about the contact.
                             onReceive: {
                                 section = .wallet
-                                flows.enter(.receive)
+                                enterReceive()
                             },
                             onShowQr: {
                                 section = .wallet
-                                flows.enter(.receive)
+                                enterReceive()
                             }
                         )
                         // Opening somebody's page asks the core about their
                         // address: is it a contract, and has this wallet ever
                         // paid it. The answer lands in `view.recipient`.
                         .task(id: contact.address) {
+                            // The feed narrows its rows to this person while
+                            // the page is up, and lets go when it leaves.
+                            activity.contactFilter(contact.address)
                             contacts.inspect(
                                 address: contact.address,
                                 // The chain the page in front is on, because
@@ -1950,6 +1967,7 @@ struct RootView: View {
                                 chainId: browser.currentTab?.chainId ?? 100
                             )
                         }
+                        .onDisappear { activity.contactFilter(nil) }
                     } else {
                         contactsHome(view)
                     }
@@ -2152,23 +2170,43 @@ struct RootView: View {
     /// and the honest answer is the breakdown showing which chains are still
     /// out. Reaching for the RPC sheet there would offer a fix for a problem
     /// that is not the person's to fix (invariant ④).
+    ///
+    /// Spec 092 (finding F08): networks the wallet cannot reach open SR6, the
+    /// list of ALL of them — it used to open the first one's RPC fix and leave
+    /// the others unseen. Each row opens its own SR2.
     private func openRescue() {
-        let failed = wallet.balance?.bannerChainIds ?? []
-        if let chainId = failed.first {
-            rescueChain = chainId
-            // By CHAIN ID, not by row id: a row's id is a slug ("gnosis") and
-            // what failed is a chain number.
-            rpcDraft = settings.networkAdmin?.networks
-                .first { $0.chainId == chainId }?.rpcUrl ?? ""
-            // The chain's card, opened in the core — its edit and its save
-            // act on an open card only, so without this the sheet's 保存
-            // reached nothing.
-            settings.expandNetwork(chainId: chainId)
-            rescue = .rpcFix
+        rescueStep = nil
+        rescueChain = nil
+        if !(wallet.balance?.unreachableNetworks.isEmpty ?? true) {
+            rescue = .unreachable
+            // Read every chain again while the list is open: one that has come
+            // back leaves it (and the hero's count) on the next settle.
+            unreachableListOpen = true
+            wallet.unreachableListOpened()
         } else {
-            rescueChain = nil
             rescue = .balanceDetail
         }
+    }
+
+    /// The rescue sheet went, however it went (✕, a swipe): SR6's re-reads stop.
+    private func rescueDismissed() {
+        if unreachableListOpen {
+            unreachableListOpen = false
+            wallet.unreachableListClosed()
+        }
+        rescueStep = nil
+    }
+
+    /// SR2 for one chain — what is stored for it, its card open in the core.
+    private func openRpcFix(_ chainId: Int) {
+        rescueChain = chainId
+        // By CHAIN ID, not by row id: a row's id is a slug ("gnosis") and
+        // what failed is a chain number.
+        rpcDraft = settings.networkAdmin?.networks
+            .first { $0.chainId == chainId }?.rpcUrl ?? ""
+        // The chain's card, opened in the core — its edit and its save act on
+        // an open card only, so without this the sheet's 保存 reached nothing.
+        settings.expandNetwork(chainId: chainId)
     }
 
     /// The rescue sheet's model: the settings page's, with this device's chains
@@ -2176,11 +2214,9 @@ struct RootView: View {
     private func rescueModel(_ overlay: SettingsOverlay) -> SettingsScreenModel {
         var model = settingsModel(overlay == .rpcFix ? .sr2 : .sr3)
         if let balance = wallet.balance {
-            model = SettingsLive.withBalanceDetail(
-                balance,
-                display: WalletLive.Display.from(settings.currency),
-                on: model, loc: loc
-            )
+            let display = WalletLive.Display.from(settings.currency)
+            model = SettingsLive.withBalanceDetail(balance, display: display, on: model, loc: loc)
+            model = SettingsLive.withUnreachable(balance, display: display, on: model, loc: loc)
         }
         if let chainId = rescueChain {
             model = SettingsLive.withRpcFix(chainId: chainId, endpoint: rpcDraft,
@@ -2230,11 +2266,7 @@ struct RootView: View {
         // The catalog's name, or the chain id in words nobody has to invent —
         // the balance wire carries the TOKEN's name, which is not the network's.
         let network = ChainCatalog.meta(token.chainId)?.displayName ?? String(token.chainId)
-        paymentRequest.start(
-            account: session.view.address,
-            recipient: session.view.address,
-            baseUrl: Self.payLinkBase
-        )
+        startPaymentRequest()
         paymentRequest.pickAsset(
             chainId: token.chainId,
             tokenAddress: token.tokenAddress,
@@ -2353,6 +2385,7 @@ struct RootView: View {
                     ?? (ChainCatalog.chains.indices.contains(receiveNetwork)
                         ? ChainCatalog.chains[receiveNetwork] : nil),
                 asset: asset,
+                pay: paymentRequest.view,
                 on: qr, loc: loc
             ))
         }
@@ -2375,7 +2408,10 @@ struct RootView: View {
             model.sheet = .txDetail(FlowsLive.txDetail(
                 item,
                 record: feed.transactions.first { $0.id == item.id },
-                on: detail, loc: loc
+                on: detail, loc: loc,
+                // The request a dApp record kept, read only when its
+                // technical details are opened (spec 093).
+                readRequest: { [shelf] id in TxRecords.storedRequest(id: id, store: shelf) }
             ))
         }
         if case .tokenDetail(let detail)? = model.sheet,
@@ -2662,7 +2698,33 @@ struct RootView: View {
 
     /// The home's flow buttons. 转账 is a journey of its own, not a push.
     private func enterFlow(_ entry: WalletFlowEntry) {
-        if entry == .send { enterSend() } else { flows.enter(entry) }
+        if entry == .send {
+            enterSend()
+        } else if entry == .receive {
+            enterReceive()
+        } else {
+            flows.enter(entry)
+        }
+    }
+
+    /// Every way into Receive: ONE request session per visit.
+    ///
+    /// The machine learns whose address this is when the flow opens, as
+    /// Android's `openReceive` does — keyed on entering the flow, not on a
+    /// step. Its `start` turns "include network" back off (spec 090), so a
+    /// start on every return to the list (where this used to live) would have
+    /// switched it off behind somebody choosing another network.
+    private func enterReceive() {
+        startPaymentRequest()
+        flows.enter(.receive)
+    }
+
+    private func startPaymentRequest() {
+        paymentRequest.start(
+            account: session.view.address,
+            recipient: session.view.address,
+            baseUrl: Self.payLinkBase
+        )
     }
 
     /// Every way into Send: a NEW journey, whatever the machine still holds.
@@ -2860,6 +2922,9 @@ struct RootView: View {
                         { UIApplication.shared.open(url) }
                     },
                     onSaveCard: session.view.address.isEmpty ? nil : { saveShareCard() },
+                    // Spec 090: the switch asks the core, which decides what
+                    // the code then says.
+                    onIncludeNetwork: { paymentRequest.includeNetwork($0) },
                     // The core's refusal outranks the save alert: one is an
                     // answer to something the person just did with money, the
                     // other is about a picture.
@@ -3058,11 +3123,17 @@ struct RootView: View {
     /// the code on screen is built from, so the image and the screen can never
     /// disagree.
     private func saveShareCard() {
+        // The card is about the asset the CODE is about — the machine's (spec
+        // 090), which a token's 收款 sets without touching `receiveNetwork`;
+        // the row index is the fallback before the machine has one.
+        let pay = paymentRequest.view
         let card = FlowsLive.shareCard(
             session.view.address,
             name: session.view.activeName,
-            chain: ChainCatalog.chains.indices.contains(receiveNetwork)
-                ? ChainCatalog.chains[receiveNetwork] : nil,
+            chain: pay.flatMap { ChainCatalog.meta($0.asset.chainId) }
+                ?? (ChainCatalog.chains.indices.contains(receiveNetwork)
+                    ? ChainCatalog.chains[receiveNetwork] : nil),
+            pay: pay,
             on: drawnShareCard,
             loc: loc
         )
@@ -3304,7 +3375,11 @@ struct RootView: View {
                 return settings.signPref?.signerUrlError == nil
             },
             onResetSignerUrl: { settings.resetSignerUrl() },
-            onOpenLink: { openExternal($0) }
+            onOpenLink: { openExternal($0) },
+            // Settings' hidden debug mode (spec 091): the preference and the
+            // browser are told in one place, so they cannot disagree.
+            onRevealDebugMode: { debugModeChanged { $0.revealDebugMode() } },
+            onDebugMode: { on in debugModeChanged { $0.setDebugMode(on) } }
         )
         // The wallet's own request, over the page that raised it. Settings
         // keeps its pickers on a sheet of its own INSIDE the screen; the row
@@ -3357,6 +3432,15 @@ struct RootView: View {
             // every saved key each time Settings opened was asking about
             // pages nobody was looking at.
         }
+    }
+
+    /// Settings' debug mode (spec 091): seven taps on About's version reveal
+    /// the switch (stored off), and the switch turns it on or off. The browser
+    /// follows what is stored — its core decides which pages that offers the
+    /// wallet, and its tabs' next documents start with the matching script.
+    private func debugModeChanged(_ change: (Preferences) -> Void) {
+        change(preferences)
+        browser.setDebugMode(preferences.debugMode.isOn)
     }
 
     /// A link out of the app — About's rows, "suggest a fix", "Get a key".

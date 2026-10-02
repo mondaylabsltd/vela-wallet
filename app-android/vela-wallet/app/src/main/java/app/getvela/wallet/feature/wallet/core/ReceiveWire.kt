@@ -220,6 +220,11 @@ sealed class PaymentRequestEvent {
     @SerialName("amount_changed")
     data class AmountChanged(val text: String) : PaymentRequestEvent()
 
+    /** Spec 090: the "include network" switch under an address code. */
+    @Serializable
+    @SerialName("include_network_changed")
+    data class IncludeNetworkChanged(val include: Boolean) : PaymentRequestEvent()
+
     @Serializable
     @SerialName("acknowledge")
     data object Acknowledge : PaymentRequestEvent()
@@ -254,6 +259,14 @@ data class PaymentRequestView(
     val qr_value: String = "",
     /** What the copy button copies — a pay link in request mode, else the address. */
     val copy_payload: String = "",
+    /**
+     * Spec 090: the "include network" switch — whether it is offered, its
+     * position, and whether the calm hint under it shows. With it on,
+     * [qr_value] is `ethereum:<address>@<chain>`.
+     */
+    val network_switch: Boolean = false,
+    val include_network: Boolean = false,
+    val network_hint: Boolean = false,
     val has_amount: Boolean = false,
     val pay_valid: Boolean? = null,
     val pay: PayRequest? = null,

@@ -388,7 +388,9 @@ describe('the write-ahead (spec 082 RJ1)', () => {
 					dapp_url: 'https://app.example',
 					intent: null,
 					maybe_sent: true,
-					submit_block: 7
+					submit_block: 7,
+					stored_request: '[{"to":"0x0000000000000000000000000000000000000001","value":"0x1"}]',
+					request_truncated: false
 				}
 			}
 		};
@@ -568,4 +570,113 @@ describe('a relay refusal is said as one (spec 082 RJ3)', () => {
 		// Four submits on real timers take ~2.3 s alone; a loaded runner
 		// crossed the 5 s default (082 close-out).
 	}, 20_000);
+});
+
+/**
+ * Spec 093: the record the store keeps is the core's — its cut of the request,
+ * whether it was cut, its summary and the sheet's balance changes, stored as
+ * they came; a signature's record keeps no result. This side clips nothing.
+ */
+describe('the record persisted (spec 093)', () => {
+	const typed = JSON.stringify({ primaryType: 'PermitSingle', message: { x: 'y'.repeat(20_000) } });
+
+	it("stores the core's stored_request, request_truncated, summary and balance changes verbatim", async () => {
+		store.saveTransaction.mockClear();
+		const executor = createSignExecutor(makePorts());
+		const summary = {
+			action: 'permit' as const,
+			calls: 0,
+			spender: '0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad',
+			symbol: 'USDC',
+			decimals: 6,
+			unlimited: true,
+			primary_type: 'PermitSingle'
+		};
+		await executor.execute({
+			id: 91,
+			operation: {
+				type: 'persist_record',
+				record: {
+					record_id: 'dapp-5-typed',
+					kind: 'sign_typed_data',
+					method: 'eth_signTypedData_v4',
+					// The FULL request — larger than any cut.
+					params_json: JSON.stringify(['0x88cCA0EeDbF2C4426110bbFc998F048689266894', typed]),
+					result: '',
+					from: '0x88cCA0EeDbF2C4426110bbFc998F048689266894',
+					chain_id: 1,
+					now_ms: 5,
+					status: 'confirmed',
+					user_op_hash: '',
+					dapp_origin: 'Uniswap',
+					dapp_url: 'https://app.uniswap.org',
+					intent: null,
+					maybe_sent: false,
+					submit_block: null,
+					summary,
+					stored_request:
+						'["0x88cCA0EeDbF2C4426110bbFc998F048689266894","{\\"primaryType\\":\\"PermitSingle\\"}"]',
+					request_truncated: true
+				}
+			}
+		});
+		const saved = store.saveTransaction.mock.calls.at(-1)![0] as Record<string, unknown>;
+		expect(saved).toMatchObject({
+			id: 'dapp-5-typed',
+			type: 'sign_typed_data',
+			txHash: '',
+			requestTruncated: true,
+			dappSummary: summary,
+			dappUrl: 'https://app.uniswap.org'
+		});
+		expect(saved.signedRequest).toEqual({
+			method: 'eth_signTypedData_v4',
+			params: ['0x88cCA0EeDbF2C4426110bbFc998F048689266894', '{"primaryType":"PermitSingle"}']
+		});
+		expect(JSON.stringify(saved.signedRequest).length).toBeLessThan(typed.length);
+		expect(saved).not.toHaveProperty('balanceChanges');
+	});
+
+	it("a transaction's record keeps the core's result and the sheet's balance changes", async () => {
+		store.saveTransaction.mockClear();
+		const executor = createSignExecutor(makePorts());
+		const changes = [
+			{ type: 'native' as const, delta: '30000000000000000' },
+			{ type: 'erc20_unverified' as const, token: null, delta: '-5' }
+		];
+		await executor.execute({
+			id: 92,
+			operation: {
+				type: 'persist_record',
+				record: {
+					record_id: 'dapp-6-tx',
+					kind: 'dapp_tx',
+					method: 'eth_sendTransaction',
+					params_json: '[{"to":"0x0000000000000000000000000000000000000001","value":"0x1"}]',
+					result: '0x' + 'f1'.repeat(32),
+					from: '0x88cCA0EeDbF2C4426110bbFc998F048689266894',
+					chain_id: 1,
+					now_ms: 6,
+					status: 'confirmed',
+					user_op_hash: OP,
+					dapp_origin: 'https://app.uniswap.org',
+					dapp_url: 'https://app.uniswap.org',
+					intent: 'Swap',
+					maybe_sent: false,
+					submit_block: null,
+					balance_changes: changes,
+					summary: { action: 'call', calls: 1 },
+					stored_request: '[{"to":"0x0000000000000000000000000000000000000001","value":"0x1"}]',
+					request_truncated: false
+				}
+			}
+		});
+		const saved = store.saveTransaction.mock.calls.at(-1)![0] as Record<string, unknown>;
+		expect(saved).toMatchObject({
+			txHash: '0x' + 'f1'.repeat(32),
+			intent: 'Swap',
+			balanceChanges: changes,
+			requestTruncated: false
+		});
+	});
 });

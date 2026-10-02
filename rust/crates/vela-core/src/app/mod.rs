@@ -47,6 +47,7 @@ pub mod contacts;
 pub mod contacts_initials;
 pub mod contacts_io;
 pub mod create_wallet;
+pub mod dapp_activity;
 pub mod dapp_browser;
 pub mod dapp_permissions;
 pub mod dapp_rpc;

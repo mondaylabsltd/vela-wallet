@@ -13,7 +13,7 @@ import { resetEndpointsQuestion } from './questions';
 import { fill } from '$lib/wallet/messages';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
-import { moneyText, trimBalance } from '$lib/wallet/live';
+import { moneyText, trimBalance, unreachableLine } from '$lib/wallet/live';
 import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
 import {
 	formatBytes,
@@ -69,6 +69,7 @@ import type {
 	SettingsHomeModel,
 	StatusPillModel,
 	UrlFieldModel,
+	UnreachableModel,
 	AccountsSheetModel
 } from './model';
 import {
@@ -1275,6 +1276,38 @@ export function liveRpcFix(input: LiveRpcFixInput, m: RescueMessages): RpcFixMod
 }
 
 /**
+ * Spec 092: the list the home's "can't reach" line opens — every network the
+ * core lists, in its order (last seen holding something first), each with
+ * what was last read there. Drawn from the live view, so a network that comes
+ * back leaves it while it is open; the title is the home's own line, and says
+ * so once none is left.
+ */
+export function liveUnreachable(
+	view: BalanceView,
+	currency: CurrencyView,
+	m: RescueMessages
+): UnreachableModel {
+	const rows = view.unreachable_networks;
+	return {
+		title: unreachableLine(view, m.rescue) ?? m.rescue.unreachableNone,
+		summary: rows.length > 0 ? m.rescue.unreachableBody : undefined,
+		rows: rows.map((row) => ({
+			id: String(row.chain_id),
+			chainId: row.chain_id,
+			mark: rescueMark(row.chain_id),
+			name: chainName(row.chain_id),
+			line: fill(m.rescue.lines[row.line_key] ?? '', {
+				amount:
+					view.hidden || row.last_seen_usd === null
+						? MASK
+						: moneyText(row.last_seen_usd, currency)
+			}),
+			action: m.rescue.rpcFix
+		}))
+	};
+}
+
+/**
  * SR3: the balance by network — the chains still being read (rate-limited,
  * quietly retrying) or unreachable (with a retry), and the chains that
  * settled, largest first. The same figures the hero sums.
@@ -1293,7 +1326,7 @@ export function liveBalanceDetail(
 		status: m.balanceDetail.statusRetrying,
 		tone: 'neutral'
 	}));
-	for (const id of view.banner_chain_ids) {
+	for (const { chain_id: id } of view.unreachable_networks) {
 		if (pending.some((row) => row.id === String(id))) continue;
 		pending.push({
 			id: String(id),

@@ -3,11 +3,14 @@ package app.getvela.wallet
 import app.getvela.wallet.core.crux.CoreHost
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
+import app.getvela.wallet.feature.browser.core.BrowserDebugMode
 import app.getvela.wallet.feature.browser.core.BrowserExecutor
 import app.getvela.wallet.feature.browser.core.DbrEvent
 import app.getvela.wallet.feature.browser.core.DbrOperation
 import app.getvela.wallet.feature.browser.core.DbrShellResult
 import app.getvela.wallet.feature.browser.core.DbrView
+import app.getvela.wallet.feature.browser.core.ProviderBridge
+import app.getvela.wallet.feature.browser.core.ProviderScript
 import app.getvela.wallet.feature.signing.core.SignErrorKind
 import app.getvela.wallet.feature.signing.core.SignResponsePayload
 import kotlinx.coroutines.CoroutineScope
@@ -94,14 +97,90 @@ class BrowserMachineTest {
     }
 
     @Test
-    fun `the page gets the core's script, one per host, with the bridge for Android`() {
-        val script = dappProviderScript("android")
-        assertTrue(script.startsWith("(function () {"))
-        // Spec 088 FR-004: only a secure context (https, or http on loopback) is offered the wallet.
-        assertTrue("no provider off a secure context", script.contains("!window.isSecureContext) return;"))
-        assertTrue("the Android bridge posts through the message listener", script.contains("VelaHost.postMessage(s)"))
-        assertTrue("the provider itself is in it", script.contains("eip6963:announceProvider"))
-        assertFalse("no module syntax survives", script.lines().any { it.trimStart().startsWith("import ") || it.trimStart().startsWith("export ") })
+    fun `the page gets the core's script for each debug mode, with the bridge for Android`() {
+        val ordinary = ProviderBridge.script(debugMode = false)
+        val debug = ProviderBridge.script(debugMode = true)
+        assertEquals(dappProviderScript("android", false), ordinary)
+        assertEquals(dappProviderScript("android", true), debug)
+        for (script in listOf(ordinary, debug)) {
+            assertTrue(script.startsWith("(function () {"))
+            assertTrue("the Android bridge posts through the message listener", script.contains("VelaHost.postMessage(s)"))
+            assertTrue("the provider itself is in it", script.contains("eip6963:announceProvider"))
+            assertFalse("no module syntax survives", script.lines().any { it.trimStart().startsWith("import ") || it.trimStart().startsWith("export ") })
+        }
+        // Spec 088 FR-004: debug mode off, only a secure context (https, or http on loopback) is offered the wallet.
+        assertTrue("no provider off a secure context", ordinary.contains("(window.top !== window || !window.isSecureContext) return;"))
+        assertFalse("and no host test at all", ordinary.contains("location.hostname"))
+        // Spec 091: debug mode on, http on this device's own network too — the core's host test, no copy here.
+        assertTrue(debug.contains("window.isSecureContext || (location.protocol === 'http:'"))
+        assertTrue(debug.contains("(location.hostname)"))
+    }
+
+    /** A LAN dApp under development, and what it asks first. */
+    private val lan = "http://192.168.1.5:3000"
+
+    private fun lanAsk(h: CoreHost<DbrView>, tab: String, doc: String, id: String, method: String) =
+        page(h, tab, JSONObject().put("t", "req").put("doc", doc).put("id", id).put("method", method).put("params", JSONArray()), from = lan)
+
+    /**
+     * Spec 091: the controller's debug mode — stated to the core at start and
+     * on every change, and every open tab's document-start script swapped for
+     * its next document. The engines here are [ProviderScript]s over a fake
+     * WebView (the script list `WebViewCompat` keeps); the gate is the REAL core.
+     */
+    @Test
+    fun `debug mode swaps every tab's script and moves the core's gate`() = runBlocking<Unit> {
+        val h = host(FakeStore())
+        withTimeout(10_000) { h.view.first { it.ready } }
+        val webViews = List(2) { mutableListOf<String>() }
+        val engines = webViews.map { scripts -> ProviderScript(debugMode = false) { script -> scripts += script; { scripts.remove(script) } } }
+        val stated = java.util.concurrent.CopyOnWriteArrayList<DbrEvent>()
+        val debug = BrowserDebugMode(initial = false, dispatch = { stated += it; h.dispatch(it, DbrEvent.serializer()) }) { on ->
+            engines.forEach { it.swap(on) }
+        }
+        assertEquals("stated at start", listOf<DbrEvent>(DbrEvent.DebugModeChanged(false)), stated.toList())
+        assertEquals(List(2) { listOf(dappProviderScript("android", false)) }, webViews)
+
+        // Off: a LAN page calling the bridge by hand is never answered.
+        page(h, "tab-lan", JSONObject().put("t", "hello").put("doc", "d0"), from = lan)
+        lanAsk(h, "tab-lan", "d0", "q-off", "eth_chainId")
+
+        debug.set(true)
+        assertEquals(DbrEvent.DebugModeChanged(true), stated.last())
+        assertEquals("one script per WebView, the debug one", List(2) { listOf(dappProviderScript("android", true)) }, webViews)
+        // The same mode again changes nothing.
+        debug.set(true)
+        assertEquals(2, stated.size)
+
+        // On: the page's next document is offered the wallet and answered.
+        page(h, "tab-lan", JSONObject().put("t", "hello").put("doc", "d1"), from = lan)
+        lanAsk(h, "tab-lan", "d1", "q-on", "eth_chainId")
+        assertEquals("tab-lan", answerFor("q-on").first)
+        assertTrue("nothing from before it was on: $delivered", delivered.none { it.second.optString("id") == "q-off" })
+
+        // Off again, with a request open: withdrawn at once — answered 4900 — and the scripts go back.
+        lanAsk(h, "tab-lan", "d1", "c-on", "eth_requestAccounts")
+        withTimeout(10_000) { h.view.first { it.consent != null } }
+        debug.set(false)
+        assertEquals(4900, answerFor("c-on").second.getJSONObject("error").getInt("code"))
+        withTimeout(10_000) { h.view.first { it.consent == null } }
+        assertEquals(List(2) { listOf(dappProviderScript("android", false)) }, webViews)
+        lanAsk(h, "tab-lan", "d1", "q-after", "eth_chainId")
+        hello(h, "tab-ok", "ok")
+        ask(h, "tab-ok", "ok", "q-ok", "eth_chainId")
+        answerFor("q-ok")
+        assertTrue("the page's later messages are ignored", delivered.none { it.second.optString("id") == "q-after" })
+    }
+
+    /** Spec 091: a controller built with debug mode on says so before any page message is read. */
+    @Test
+    fun `debug mode on at start is the core's before the first page message`() = runBlocking<Unit> {
+        val h = host(FakeStore())
+        BrowserDebugMode(initial = true, dispatch = { h.dispatch(it, DbrEvent.serializer()) }) {}
+        withTimeout(10_000) { h.view.first { it.ready } }
+        page(h, "tab-lan", JSONObject().put("t", "hello").put("doc", "d1"), from = lan)
+        lanAsk(h, "tab-lan", "d1", "q1", "eth_chainId")
+        assertEquals("tab-lan", answerFor("q1").first)
     }
 
     /**

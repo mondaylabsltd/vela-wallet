@@ -62,6 +62,58 @@ enum TextScaleLevel: String, CaseIterable {
     }
 }
 
+/// Settings' debug mode (spec 091), in the core's names (`prefsDebugMode`):
+/// `hidden` until About's version is tapped seven times, then the switch,
+/// `off` or `on`. Hidden is off. With it on, the in-app browser offers the
+/// wallet to http pages on this device's own network too — the core's
+/// `dappOffersWallet`, never a rule of this app's.
+///
+/// Debug builds only (owner, 2026-10-02): a Release build is no developer
+/// build, and the core then reads the mode as hidden whatever is stored and
+/// reveals nothing — this app only says which build it is.
+enum DebugMode: String {
+    case hidden, off, on
+
+    /// Whether About draws the switch.
+    var revealed: Bool { self != .hidden }
+    /// Whether debug mode is in force.
+    var isOn: Bool { self == .on }
+
+    /// Whether this is a developer build — the Debug configuration, the one
+    /// that carries the parallel space. The build fact the core is handed.
+    static let developerBuild: Bool = {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }()
+}
+
+/// About's hidden entry (spec 091): the taps on the version so far, kept for
+/// as long as About is shown.
+///
+/// The RULE is the core's (`prefsVersionTapped`): seven taps, each within a
+/// second of the one before; a slower tap starts the count again; once the
+/// switch is revealed nothing counts. This only hands it each tap and keeps
+/// the count it answers.
+struct VersionTapCounter {
+    private(set) var taps = VersionTaps(count: 0, lastMs: 0)
+    /// The build fact (`DebugMode.developerBuild`); a test states it.
+    var developerBuild = DebugMode.developerBuild
+
+    /// One tap at `nowMs`, with the switch as it stands. `true` when this tap
+    /// revealed it — the caller stores `Preferences.revealDebugMode()` and
+    /// says so, once. Never in a Release build: the core's rule.
+    mutating func tap(nowMs: Double, mode: DebugMode) -> Bool {
+        let answer = prefsVersionTapped(
+            taps: taps, nowMs: nowMs, debugMode: mode.rawValue, developerBuild: developerBuild
+        )
+        taps = answer.taps
+        return answer.revealed
+    }
+}
+
 @MainActor
 @Observable
 final class Preferences {
@@ -73,12 +125,17 @@ final class Preferences {
     private(set) var numberFormat: NumberFormatKey = .auto
     private(set) var dateFormat: DateFormatKey = .auto
     private(set) var timeFormat: TimeFormatKey = .auto
+    /// Settings' hidden developer switch (spec 091).
+    private(set) var debugMode: DebugMode = .hidden
 
     private let store: VelaStore
     private var booted = false
+    /// The build fact the core reads debug mode with (spec 091).
+    private let developerBuild: Bool
 
-    init(store: VelaStore) {
+    init(store: VelaStore, developerBuild: Bool = DebugMode.developerBuild) {
         self.store = store
+        self.developerBuild = developerBuild
     }
 
     /// Read what is stored. Idempotent and synchronous — safe to call from
@@ -91,13 +148,21 @@ final class Preferences {
     func boot() {
         guard !booted else { return }
         booted = true
-        let read = prefsRead(entries: Self.entries(store))
+        let entries = Self.entries(store)
+        let read = prefsRead(entries: entries)
         theme = ThemeChoice(rawValue: read.theme) ?? .system
         language = read.language
         textScale = TextScaleLevel(rawValue: read.textScale) ?? .standard
         numberFormat = NumberFormatKey(rawValue: read.numberFormat) ?? .auto
         dateFormat = DateFormatKey(rawValue: read.dateFormat) ?? .auto
         timeFormat = TimeFormatKey(rawValue: read.timeFormat) ?? .auto
+        debugMode = readDebugMode(entries)
+    }
+
+    /// The core's reading of the stored switch for this build: in a Release
+    /// build always hidden, whatever is stored.
+    private func readDebugMode(_ entries: [String: String]) -> DebugMode {
+        DebugMode(rawValue: prefsDebugMode(entries: entries, developerBuild: developerBuild)) ?? .hidden
     }
 
     /// Bring an older shell's spellings to the shared record — once per
@@ -123,6 +188,7 @@ final class Preferences {
             // REMOVES both spellings, so the migration has to see them.
             VelaStore.Key.retiredTrustedSignerTunnel,
             VelaStore.Key.retiredTrustedSignerRelay,
+            VelaStore.Key.debugMode,
         ]
         return keys.reduce(into: [:]) { entries, key in
             if let raw = store.rawValue(key) { entries[key] = raw }
@@ -159,6 +225,27 @@ final class Preferences {
     func setTimeFormat(_ value: TimeFormatKey) {
         timeFormat = value
         writeLocalePrefs()
+    }
+
+    /// Seven taps on About's version revealed the switch (spec 091): it is
+    /// stored, off, and stays in About from now on. Nothing to do once it is
+    /// revealed — a reveal never turns debug mode off.
+    func revealDebugMode() {
+        guard !debugMode.revealed else { return }
+        writeDebugMode(on: false)
+    }
+
+    /// The revealed switch, turned on or off (spec 091).
+    func setDebugMode(_ on: Bool) {
+        writeDebugMode(on: on)
+    }
+
+    /// What is stored is the core's spelling (`prefsDebugModeValue`), and what
+    /// it means is the core's reading of it — never an "on" typed here.
+    private func writeDebugMode(on: Bool) {
+        let stored = prefsDebugModeValue(on: on)
+        store.writeString(VelaStore.Key.debugMode, stored)
+        debugMode = readDebugMode([VelaStore.Key.debugMode: stored])
     }
 
     /// All three together, because they share ONE record — writing a partial

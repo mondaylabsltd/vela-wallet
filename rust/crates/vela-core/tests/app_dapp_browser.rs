@@ -1071,6 +1071,219 @@ fn a_loopback_test_dapp_may_sign() {
     assert!(forwarded(&ops).is_some(), "a loopback test dApp may sign");
 }
 
+// ---------------------------------------------------------------------------
+// Spec 091 — debug mode offers the wallet to this device's own network
+// ---------------------------------------------------------------------------
+
+const LAN: &str = "http://192.168.1.5:3000";
+
+fn debug(sut: &mut Sut, on: bool) -> Vec<Op> {
+    sut.dispatch(Event::DebugModeChanged { on })
+}
+
+/// With debug mode on, an http page on a private network is a page like any
+/// other: it says hello, connects and signs.
+#[test]
+fn debug_mode_offers_the_wallet_to_a_lan_page() {
+    for site in [
+        LAN,
+        "http://10.0.0.1",
+        "http://172.16.0.9:8080",
+        "http://169.254.10.1",
+        "http://foo.local:5173",
+        "http://[fd00::1]:3000",
+        "http://[fe80::2]",
+    ] {
+        let mut sut = connected(site);
+        debug(&mut sut, true);
+        hello(&mut sut, "t1", "d1", site);
+        let answer = only_answer(&ask(
+            &mut sut,
+            "t1",
+            "d1",
+            site,
+            "1",
+            "eth_accounts",
+            json!([]),
+        ));
+        assert_eq!(answer["result"], json!([A1]), "{site}");
+        let ops = ask(
+            &mut sut,
+            "t1",
+            "d1",
+            site,
+            "2",
+            "personal_sign",
+            json!(["0x00", A1]),
+        );
+        assert!(forwarded(&ops).is_some(), "{site} may sign in debug mode");
+        let view = sut.view();
+        let tab = view.tabs.iter().find(|t| t.tab == "t1").unwrap();
+        assert_eq!(tab.connected_address.as_deref(), Some(A1), "{site}");
+    }
+}
+
+/// Public http stays refused exactly as before — debug mode or not — and so
+/// does a public name that only starts like a private address.
+#[test]
+fn debug_mode_never_offers_the_wallet_to_public_http() {
+    for site in [
+        "http://dapp.example",
+        "http://10.0.0.1.evil.com",
+        "http://192.168.1.5.nip.io",
+        "http://172.32.0.1",
+        "http://8.8.8.8",
+        "http://[2001:db8::1]",
+        "http://local",
+        "http://evil.local.example",
+    ] {
+        let mut sut = connected(site);
+        debug(&mut sut, true);
+        assert!(hello(&mut sut, "t1", "d1", site).is_empty(), "{site}");
+        for method in ["eth_requestAccounts", "eth_accounts", "personal_sign"] {
+            let ops = ask(&mut sut, "t1", "d1", site, "1", method, json!(["0x00", A1]));
+            assert!(ops.is_empty(), "{site} {method}: {ops:?}");
+        }
+        assert!(sut
+            .view()
+            .tabs
+            .iter()
+            .all(|t| t.connected_address.is_none()));
+    }
+}
+
+/// Debug mode off — the default — is spec 088 exactly: a LAN page is not
+/// answered, and a LAN site connected earlier shows no connection.
+#[test]
+fn without_debug_mode_a_lan_page_is_not_answered() {
+    let mut sut = connected(LAN);
+    assert!(hello(&mut sut, "t1", "d1", LAN).is_empty());
+    assert!(ask(&mut sut, "t1", "d1", LAN, "1", "eth_accounts", json!([])).is_empty());
+    sut.dispatch(Event::NavigationStarted {
+        tab: "t1".to_owned(),
+        url: format!("{LAN}/"),
+    });
+    let view = sut.view();
+    let tab = view.tabs.iter().find(|t| t.tab == "t1").unwrap();
+    assert_eq!(tab.connected_address, None, "not offered = not connected");
+    // The grant itself stays listed, so it can still be removed.
+    assert_eq!(view.sites.len(), 1);
+}
+
+/// Turning debug mode off while a LAN page is open takes the wallet away at
+/// once: what it had open is answered 4900, its sheet closes, and it is not
+/// heard again. An https tab beside it is untouched.
+#[test]
+fn turning_debug_mode_off_withdraws_the_wallet_from_an_open_lan_page() {
+    let mut sut = booted(vec![
+        DbrStoredSite {
+            origin: LAN.to_owned(),
+            grant: Some(grant(LAN, A1, 100)),
+            chain_id: None,
+        },
+        DbrStoredSite {
+            origin: DAPP.to_owned(),
+            grant: Some(grant(DAPP, A1, 100)),
+            chain_id: None,
+        },
+    ]);
+    debug(&mut sut, true);
+    hello(&mut sut, "lan", "d1", LAN);
+    hello(&mut sut, "web", "w1", DAPP);
+    let ops = ask(
+        &mut sut,
+        "lan",
+        "d1",
+        LAN,
+        "1",
+        "personal_sign",
+        json!(["0x00", A1]),
+    );
+    assert!(forwarded(&ops).is_some());
+    ask(
+        &mut sut,
+        "lan",
+        "d1",
+        LAN,
+        "2",
+        "eth_sendTransaction",
+        json!([{"to":A2}]),
+    );
+    ask(
+        &mut sut,
+        "web",
+        "w1",
+        DAPP,
+        "3",
+        "personal_sign",
+        json!(["0x00", A1]),
+    );
+    assert_eq!(sut.view().queued_signing, 2);
+
+    let ops = debug(&mut sut, false);
+    let settled: Vec<(String, i64)> = delivered(&ops)
+        .iter()
+        .map(|(tab, m)| (tab.clone(), error_code(m)))
+        .collect();
+    assert_eq!(
+        settled,
+        vec![("lan".to_owned(), 4900), ("lan".to_owned(), 4900)],
+        "both of the LAN page's requests, and nothing of the https tab's"
+    );
+    assert!(ops.contains(&Op::CancelSigning {
+        tab: "lan".to_owned(),
+        id: "1".to_owned()
+    }));
+    // The line moves on to the https tab's signature.
+    let next = forwarded(&ops).expect("the https request opens next");
+    assert!(matches!(next, Op::ForwardToSigning { ref tab, .. } if tab == "web"));
+    // The LAN page is not heard again …
+    assert!(ask(&mut sut, "lan", "d1", LAN, "4", "eth_accounts", json!([])).is_empty());
+    assert!(hello(&mut sut, "lan", "d2", LAN).is_empty());
+    let view = sut.view();
+    let lan = view.tabs.iter().find(|t| t.tab == "lan").unwrap();
+    assert_eq!(lan.connected_address, None);
+    // … and the https page still is.
+    let answer = only_answer(&ask(
+        &mut sut,
+        "web",
+        "w1",
+        DAPP,
+        "5",
+        "eth_accounts",
+        json!([]),
+    ));
+    assert_eq!(answer["result"], json!([A1]));
+}
+
+/// Turning it on changes nothing already open: the page's script offered it
+/// nothing, so the next document — a reload — is the first to be heard. And
+/// stating the same mode twice does nothing at all.
+#[test]
+fn turning_debug_mode_on_applies_from_the_next_document() {
+    let mut sut = connected(LAN);
+    hello(&mut sut, "t1", "d1", LAN);
+    assert!(debug(&mut sut, true)
+        .iter()
+        .all(|op| !matches!(op, Op::Deliver { .. })));
+    assert!(debug(&mut sut, true).is_empty(), "no change, no work");
+    hello(&mut sut, "t1", "d2", LAN);
+    let answer = only_answer(&ask(
+        &mut sut,
+        "t1",
+        "d2",
+        LAN,
+        "1",
+        "eth_accounts",
+        json!([]),
+    ));
+    assert_eq!(answer["result"], json!([A1]));
+    // Off again, and nothing was open: nothing to answer.
+    let ops = debug(&mut sut, false);
+    assert!(delivered(&ops).is_empty(), "{ops:?}");
+    assert!(ask(&mut sut, "t1", "d2", LAN, "2", "eth_accounts", json!([])).is_empty());
+}
+
 #[test]
 fn a_signature_is_forwarded_with_the_sites_chain_and_granted_address() {
     let mut sut = connected(DAPP);

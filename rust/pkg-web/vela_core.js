@@ -2863,6 +2863,17 @@ export function attestSafeOpHash(op_json, calls_json, chain_id) {
 }
 
 /**
+ * How long one chain's balance read may take before the round gives up on
+ * it and counts that chain failed, ms (spec 092) —
+ * `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+ * @returns {number}
+ */
+export function balanceChainReadDeadlineMs() {
+    const ret = wasm.balanceChainReadDeadlineMs();
+    return ret >>> 0;
+}
+
+/**
  * Which balances one chain's read covers, in order —
  * `balance_dashboard::read_plan` (RE9): the native coin, the registry
  * stablecoins, the wrapped native, the person's own tokens, each contract
@@ -3202,19 +3213,36 @@ export function create2Address(deployer_hex, salt, init_code_hash) {
 }
 
 /**
+ * Whether a page at `origin` is offered the wallet (spec 091) — the rule
+ * the in-app browsers' gate follows, exported so the web suite can hold the
+ * injected script's host test to it.
+ * @param {string} origin
+ * @param {boolean} debug_mode
+ * @returns {boolean}
+ */
+export function dappOffersWallet(origin, debug_mode) {
+    const ptr0 = passStringToWasm0(origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.dappOffersWallet(ptr0, len0, debug_mode);
+    return ret !== 0;
+}
+
+/**
  * The document-start script an in-app browser injects, for `host`
- * (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
- * the real bridge in a real browser.
+ * (`"android"` / `"ios"` / `"desktop"`) and Settings' debug mode (spec 091)
+ * — exported so the web suite can run the real bridge in a real browser,
+ * and the debug script's host test against [`dapp_offers_wallet`].
  * @param {string} host
+ * @param {boolean} debug_mode
  * @returns {string}
  */
-export function dappProviderScript(host) {
+export function dappProviderScript(host, debug_mode) {
     let deferred2_0;
     let deferred2_1;
     try {
         const ptr0 = passStringToWasm0(host, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.dappProviderScript(ptr0, len0);
+        const ret = wasm.dappProviderScript(ptr0, len0, debug_mode);
         deferred2_0 = ret[0];
         deferred2_1 = ret[1];
         return getStringFromWasm0(ret[0], ret[1]);
@@ -3233,6 +3261,32 @@ export function dappProviderScript(host) {
 export function dappReceiptWaitMs(elapsed_ms) {
     const ret = wasm.dappReceiptWaitMs(elapsed_ms);
     return ret;
+}
+
+/**
+ * A dApp record's stored request as Technical details shows it (spec 093):
+ * typed data pretty-printed, a message as its text (or its hex), call data
+ * pretty-printed — `dapp_activity::request_display`. `content` is the
+ * detail's `content` word (`"call_data"`, `"typed_data"`, `"message"`);
+ * `stored_request` the params' JSON text as the record kept it. `undefined`
+ * when the record kept nothing, or for a content word this build does not
+ * know.
+ * @param {string} content
+ * @param {string} stored_request
+ * @returns {string | undefined}
+ */
+export function dappRequestDisplay(content, stored_request) {
+    const ptr0 = passStringToWasm0(content, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(stored_request, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.dappRequestDisplay(ptr0, len0, ptr1, len1);
+    let v3;
+    if (ret[0] !== 0) {
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v3;
 }
 
 /**

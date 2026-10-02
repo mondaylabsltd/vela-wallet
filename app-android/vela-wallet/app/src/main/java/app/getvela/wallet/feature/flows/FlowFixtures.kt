@@ -179,6 +179,8 @@ object FlowFixtures {
             warning = s.t(I18nKeys.Flows.RECEIVE_WARNING),
             saveImage = s.t(I18nKeys.Flows.RECEIVE_SAVE_IMAGE),
             viewOnExplorer = s.t(I18nKeys.Flows.VIEW_ON_EXPLORER),
+            // Spec 090: drawn off — the bare address every wallet reads.
+            network = NetworkSwitchModel(label = s.t(I18nKeys.Flows.RECEIVE_INCLUDE_NETWORK), isOn = false),
         )
     }
 

@@ -1812,7 +1812,11 @@ fn best_effort_decode_never_blind_signs_silently() {
     });
     assert!(ops.is_empty());
 
-    let result = sut.view().result.expect("best-effort result");
+    let view = sut.view();
+    // Spec 093: a guessed name is no title for Activity — the record keeps
+    // no intent, and the row reads "Contract interaction".
+    assert_eq!(view.record_intent, None);
+    let result = view.result.expect("best-effort result");
     assert_eq!(result.intent, "Mint tokens", "humanized function name");
     assert!(result.best_effort);
     assert_eq!(result.provenance, ClearProvenance::SelectorDb);
@@ -3055,6 +3059,8 @@ fn a_two_call_batch_carries_both_calls_and_their_total() {
     assert_eq!(view.surface, ClearSurface::Batch);
     assert!(!view.resolving);
     assert!(view.resolved);
+    // Spec 093: two sends are a send — the one verb every call shares.
+    assert_eq!(view.record_intent.as_deref(), Some("Send"));
     assert_eq!(view.result, None, "no single result stands for the batch");
     assert_eq!(view.plain_send, None, "nor does call 1's plain send");
     assert_eq!(view.confirm, ClearConfirm::Confirm, "no one call's verb");
@@ -3100,6 +3106,8 @@ fn a_three_call_batch_reads_decodable_and_undecodable_calls_alike() {
 
     let view = sut.view();
     assert_eq!(view.surface, ClearSurface::Batch);
+    // Spec 093: a call nobody could read leaves the batch with no verb.
+    assert_eq!(view.record_intent, None);
     let batch = batch_of(&view);
     assert_eq!(batch.calls.len(), 3);
 
@@ -3356,4 +3364,114 @@ fn the_batch_view_is_serde_additive() {
     }))
     .expect("the batch event's locale defaults");
     assert!(matches!(event, Event::ResolveBatch { chain_id: 1, .. }));
+}
+
+// ---------------------------------------------------------------------------
+// Spec 093 — the intent a dApp record keeps
+// ---------------------------------------------------------------------------
+
+/// A plain send records "Send"; a decoded call its intent; nothing read
+/// records nothing.
+#[test]
+fn the_record_keeps_the_sheets_own_verb() {
+    let mut sut = Sut::new();
+    sut.dispatch(plain_tx(
+        Some(VITALIK),
+        Some("0x"),
+        Some("0x2386f26fc10000"),
+    ));
+    assert_eq!(sut.view().record_intent.as_deref(), Some("Send"));
+
+    let mut sut = Sut::new();
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000));
+    sut.dispatch(plain_tx(Some(USDC), Some(&transfer), Some("0x0")));
+    drain(&mut sut);
+    let view = sut.view();
+    assert_eq!(view.surface, ClearSurface::ClearSign);
+    assert_eq!(view.record_intent.as_deref(), Some("Send"));
+
+    let mut sut = Sut::new();
+    sut.dispatch(Event::MessagePresented {
+        method: ClearSignMethod::PersonalSign,
+        params: vec!["0x68656c6c6f".to_owned()],
+        request_origin: Some("https://app.example".to_owned()),
+    });
+    assert_eq!(
+        sut.view().record_intent,
+        None,
+        "a message is no transaction verb"
+    );
+}
+
+/// An approval that serves the batch's action is set aside: `[approve,
+/// send]` is a send. Approvals alone are an approval.
+#[test]
+fn a_batch_headline_sets_its_approvals_aside() {
+    let approve = format!("0x095ea7b3{}{}", pad(UNIV2), pad_u128(1_000_000));
+    let transfer = format!("0xa9059cbb{}{}", pad(VITALIK), pad_u128(1_000_000));
+    let mut sut = Sut::new();
+    sut.dispatch(resolve_batch(
+        json!([
+            { "to": USDC, "data": approve, "value": "0x0" },
+            { "to": USDC, "data": transfer, "value": "0x0" },
+        ]),
+        1,
+    ));
+    drain(&mut sut);
+    let view = sut.view();
+    let intents: Vec<Option<String>> = batch_of(&view)
+        .calls
+        .iter()
+        .map(|call| call.result.as_ref().map(|r| r.intent.clone()))
+        .collect();
+    assert_eq!(
+        intents,
+        vec![Some("Approve".to_owned()), Some("Send".to_owned())]
+    );
+    assert_eq!(view.record_intent.as_deref(), Some("Send"));
+
+    let mut sut = Sut::new();
+    sut.dispatch(resolve_batch(
+        json!([
+            { "to": USDC, "data": approve, "value": "0x0" },
+            { "to": USDC, "data": approve, "value": "0x0" },
+        ]),
+        1,
+    ));
+    drain(&mut sut);
+    assert_eq!(sut.view().record_intent.as_deref(), Some("Approve"));
+
+    // A token send and a coin send are both a send.
+    let mut sut = Sut::new();
+    sut.dispatch(resolve_batch(
+        json!([
+            { "to": USDC, "data": transfer, "value": "0x0" },
+            { "to": VITALIK, "value": "0x1" },
+            { "to": USDC, "data": approve, "value": "0x0" },
+        ]),
+        1,
+    ));
+    drain(&mut sut);
+    assert_eq!(sut.view().record_intent.as_deref(), Some("Send"));
+
+    // Two different verbs: no one of them is the batch.
+    const WETH: &str = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+    let mut sut = Sut::new();
+    sut.dispatch(resolve_batch(
+        json!([
+            { "to": WETH, "data": "0xd0e30db0", "value": "0x1" },
+            { "to": USDC, "data": transfer, "value": "0x0" },
+        ]),
+        1,
+    ));
+    drain(&mut sut);
+    let view = sut.view();
+    assert_eq!(
+        batch_of(&view).calls[0]
+            .result
+            .as_ref()
+            .map(|r| r.intent.as_str()),
+        Some("Wrap ETH")
+    );
+    assert_eq!(view.record_intent, None);
 }

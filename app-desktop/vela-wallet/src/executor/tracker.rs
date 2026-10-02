@@ -696,6 +696,9 @@ mod tests {
                     maybe_sent: true,
                     submit_block: None,
                     balance_changes: None,
+                    summary: None,
+                    stored_request: String::new(),
+                    request_truncated: false,
                 },
             );
             let mut rows = read_rows();

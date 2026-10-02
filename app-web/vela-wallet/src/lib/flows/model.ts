@@ -141,6 +141,11 @@ export interface FactRowModel {
 	 * together. Drawn by the screens that set it; the row itself ignores it.
 	 */
 	note?: string;
+	/**
+	 * The value's tone (spec 093): `danger` for an allowance with no limit,
+	 * `success` for what an operation brought in. Absent: plain ink.
+	 */
+	tone?: 'success' | 'danger';
 }
 
 export type StatusTone = 'success' | 'warning' | 'error' | 'info';
@@ -201,6 +206,12 @@ export interface ReceiveQrModel {
 	code?: QrCode;
 	/** The mark drawn in the middle of the code — the token, or the network. */
 	centre: TokenMarkModel;
+	/**
+	 * Spec 090: the "include network" switch under the code, as the core's
+	 * `payment_request` offers it — absent where it offers none. `hint` is the
+	 * calm line under it, present exactly while the code names the network.
+	 */
+	network?: { label: string; on: boolean; hint?: string };
 	warning: string;
 	saveImage: string;
 	/** Live only: what 保存图片 produces — R4, about this network or token (T488). */
@@ -249,14 +260,30 @@ export interface HistoryModel {
 
 /** A2 / A3 — one transaction, opened from a history row. */
 export interface TxDetailModel {
-	/** "Received USDT" / "Sent POL". */
+	/** "Received USDT" / "Sent POL" / "Swap on Uniswap". */
 	title: string;
-	status: StatusChipModel;
+	/**
+	 * The record's lifecycle chip. Absent for a signature (spec 093): nothing
+	 * was sent, so nothing settles — `note` says so instead.
+	 */
+	status?: StatusChipModel;
+	/** Spec 093: "Off-chain signature — nothing was sent on-chain." */
+	note?: string;
 	closeLabel: string;
 	amount: string;
 	fiat: string;
 	positive: boolean;
+	/** Spec 093: the figure is an allowance with no limit — the danger tone. */
+	danger?: boolean;
+	/** Spec 093 / 083 F1: what a swap brought back, beside what left. */
+	received?: string;
 	facts: FactRowModel[];
+	/**
+	 * Spec 093: a dApp record's collapsed "Technical details" — the core's
+	 * lines, worded. The stored request is NOT in here: `content.read` fetches
+	 * it from the store when the section is opened, and only then.
+	 */
+	technical?: TxTechnicalModel;
 	viewOnExplorer: string;
 	/**
 	 * Where "view on explorer" leads — live only. Absent, no control is drawn
@@ -279,6 +306,27 @@ export interface TxDetailModel {
 	breakdownTitle?: string;
 	breakdown?: BreakdownRowModel[];
 }
+
+/** A dApp record's "Technical details" (spec 093): the core's lines, in its order. */
+export interface TxTechnicalModel {
+	/**
+	 * The record it belongs to: another record's section starts folded, and
+	 * never shows this one's request.
+	 */
+	key: string;
+	/** "Technical details" — the toggle's words. */
+	title: string;
+	rows: TxTechnicalRow[];
+}
+
+export type TxTechnicalRow =
+	| { kind: 'fact'; fact: FactRowModel }
+	/**
+	 * The stored request (call data, signed data, a message): `read` fetches it
+	 * from the store by record id when the section opens, never before;
+	 * `missing` is what the row says when the record kept none.
+	 */
+	| { kind: 'content'; label: string; missing: string; read: () => string | null };
 
 /* ------------------------------------------------------------------ assets */
 

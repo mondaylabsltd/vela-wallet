@@ -303,6 +303,12 @@ sealed class TrustSimJudgment {
         val delta: String,
         val symbol: String,
         val decimals: Int,
+        /**
+         * A coin the wallet already trusts, not merely one whose `symbol()`
+         * answered. Kept so the judgment reaches the record as the sheet had
+         * it (spec 093: Activity reads an inflow by it).
+         */
+        val in_trusted_set: Boolean = false,
     ) : TrustSimJudgment()
 
     @Serializable

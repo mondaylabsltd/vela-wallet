@@ -487,14 +487,22 @@
   "qrTitleNetwork": "このアドレスで {{network}} 上の資産を受け取れます",
   "qrTitleAsset": "このアドレスで {{network}} 上の {{symbol}} を受け取れます",
   "shareCardNetworkNote": "{{network}} での支払いのみ",
-  "tokenContract": "トークンコントラクト"
+  "tokenContract": "トークンコントラクト",
+  "includeNetwork": "ネットワーク情報を含める",
+  "includeNetworkHint": "読み取れないウォレットもあります。相手が読み取れないときはオフにしてください。"
  },
  "assets": {
   "sectionTitle": "資産",
   "addToken": "追加",
   "searchPlaceholder": "トークンを検索...",
-  "rpcUnavailableSingle": "{{name}} の RPC を利用できません",
-  "rpcUnavailableMultiple": "{{count}} 件のネットワークで RPC を利用できません",
+  "unreachableOne": "現在 {{name}} に接続できません",
+  "unreachableMany": "現在 {{n}} 件のネットワークに接続できません",
+  "unreachableBody": "資産に影響はありません。今は読み取れないだけです。",
+  "unreachableNone": "すべてのネットワークに接続できました。",
+  "lastSeen": "前回の残高 {{amount}}",
+  "lastSeenUnpriced": "前回は資産あり",
+  "lastSeenEmpty": "前回は資産なし",
+  "notReadYet": "未取得",
   "rpcFix": "修復",
   "emptyTitle": "最初の資産を入金しましょう",
   "emptySubtext": "ここをタップしてアドレスを表示し、トークンを受け取りましょう",
@@ -592,7 +600,8 @@
   "labelSent": "送金",
   "labelReceived": "受取",
   "toName": "宛先: {{name}}",
-  "fromName": "差出人: {{name}}"
+  "fromName": "差出人: {{name}}",
+  "dappRowTitle": "{{place}}で{{intent}}"
  },
  "onboarding": {
   "welcome": {
@@ -1031,7 +1040,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "心を込めて作りました。鍵もコインも、あなたのもの。",
-  "sectionLinks": "リンク"
+  "sectionLinks": "リンク",
+  "debugMode": "デバッグモード",
+  "debugModeBody": "ローカルネットワーク上の http ページでウォレットを使えるようにします。開発専用です。",
+  "debugModeRevealed": "デバッグモードが使えるようになりました"
  },
  "clearSigning": {
   "title": "Clear Signing テスト",

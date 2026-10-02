@@ -34,8 +34,14 @@
 	import Dialog from '$lib/settings/ui/Dialog.svelte';
 	import RpcFixBody from '$lib/settings/ui/RpcFixBody.svelte';
 	import BalanceDetailBody from '$lib/settings/ui/BalanceDetailBody.svelte';
+	import UnreachableBody from '$lib/settings/ui/UnreachableBody.svelte';
 	import RelayerBody from '$lib/settings/ui/RelayerBody.svelte';
-	import { liveBalanceDetail, liveRelayer, liveRpcFix } from '$lib/settings/live';
+	import {
+		liveBalanceDetail,
+		liveRelayer,
+		liveRpcFix,
+		liveUnreachable
+	} from '$lib/settings/live';
 	import { networkAdmin } from '$lib/settings/core/network-admin.svelte';
 	import { BREAKPOINT_DESKTOP } from '$lib/tokens/tokens';
 	import { session } from '$lib/session/core/session.svelte';
@@ -62,11 +68,17 @@
 		createReceiveWatchSession,
 		type ReceiveWatchSession
 	} from '$lib/flows/core/receive-watch';
+	import {
+		createPaymentRequestSession,
+		type PaymentRequestSession
+	} from '$lib/flows/core/payment-request';
+	import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
 	import { loadCore } from '$lib/core/client';
 	import { currency } from '$lib/settings/core/currency.svelte';
 	import { feeTierPreference } from '$lib/settings/core/fee-tier.svelte';
 	import { withLiveWallet, withLiveWalletDesktop } from '$lib/wallet/live';
 	import {
+		receiveAssetPicked,
 		receiveNetworks,
 		visibleBalanceTokens,
 		withLiveDesktopFlow,
@@ -98,7 +110,7 @@
 	import { SpeedControl } from '$lib/flows/core/speed-control.svelte';
 	import { feeKey } from '$lib/flows/core/send-estimates';
 	import { scanner, scanNotice } from '$lib/flows/core/scanner.svelte';
-	import { isHexAddress, parseEIP681 } from '$lib/services/eip681';
+	import { isHexAddress, parseEIP681, payLinkBase } from '$lib/services/eip681';
 	import { setSendTrackerSink } from '$lib/flows/core/send-executor';
 	import { startTxTracker, trackSubmitted } from '$lib/wallet/core/tracker-resident';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
@@ -116,9 +128,11 @@
 		liveTxDetail,
 		shownTxDetailStateDesktop,
 		shownTxDetailStateMobile,
+		storedRequestJson,
 		withLiveTxDetailDesktop,
 		withLiveTxDetailMobile
 	} from '$lib/wallet/live-detail';
+	import { activityFeedTx } from '$lib/wallet/core/feed-resident';
 	import type { PageProps } from './$types';
 
 	/** The sidebar's copy of the rule in `destinations.ts`: three rows, not four. */
@@ -196,7 +210,10 @@
 					wm: data.walletMessages,
 					currency: currency.view,
 					hidden: balance.view.hidden,
-					identicon: identiconSvgForClient
+					identicon: identiconSvgForClient,
+					// Spec 093: a dApp record's stored request, read from the store's
+					// rows by id when its "Technical details" open — never before.
+					storedRequest: (id) => storedRequestJson(activityFeedTx(id))
 				})
 	);
 
@@ -1364,6 +1381,42 @@
 		};
 	});
 
+	/**
+	 * The `payment_request` core, exactly while a receive screen is up (spec
+	 * 090): it decides what the code says and owns the "include network"
+	 * switch. Each visit is its own session — its `start` turns the switch
+	 * back off, so the first code shown is the one every wallet reads.
+	 */
+	let payView = $state<PaymentRequestView | null>(null);
+	let paySession: PaymentRequestSession | null = null;
+	$effect(() => {
+		const address = identity?.address;
+		if (!receiving || address === undefined) return;
+		let disposed = false;
+		void loadCore().then(() => {
+			if (disposed) return;
+			paySession = createPaymentRequestSession({
+				onView: (view) => (payView = view),
+				onError: (error) => console.error('[payment_request] core fault:', error)
+			});
+			paySession.start({
+				type: 'start',
+				account: address,
+				recipient: address,
+				base_url: payLinkBase()
+			});
+		});
+		return () => {
+			disposed = true;
+			paySession?.dispose();
+			paySession = null;
+			payView = null;
+		};
+	});
+	function includeNetwork(include: boolean): void {
+		paySession?.dispatch({ type: 'include_network_changed', include });
+	}
+
 	// Page visibility stands in for app focus (research D12): a hidden tab
 	// pauses the pollers, a returning one refreshes by the core's rules.
 	onMount(() => {
@@ -1416,6 +1469,7 @@
 		identity: identity ?? undefined,
 		fm: data.flowMessages,
 		receiveChainId: selectedReceiveChainId,
+		pay: payView ?? undefined,
 		emptyCopy: data.flows.t4.base.kind === 'assets' ? data.flows.t4.base.model.empty : undefined,
 		send: sendInputs,
 		batch: batchInputs,
@@ -1426,6 +1480,25 @@
 				: undefined
 	});
 
+	/**
+	 * Which asset the code on screen is about, told to the core whenever it
+	 * differs from the core's — the core can only put in the code the network
+	 * it was told. R3/DR3 is a held token's own code; the rest a network's.
+	 */
+	const receiveAsset = $derived(
+		receiveAssetPicked(
+			{ selectedToken: liveInputs.selectedToken, receiveChainId: selectedReceiveChainId },
+			flowState === 'r3' || desktopFlow === 'dr3'
+		)
+	);
+	$effect(() => {
+		const view = payView;
+		const event = receiveAsset;
+		if (view === null || paySession === null) return;
+		if (view.asset.chain_id === event.chain_id && view.asset.token_address === event.token_address)
+			return;
+		paySession.dispatch(event);
+	});
 	/**
 	 * The browser's Back unwinds the flow stack before it leaves the wallet.
 	 * `FlowNav` pushed a history entry for every step, so each `popstate` here
@@ -1602,12 +1675,15 @@
 	//
 	// 023 drew three rescues as settings components and placed them over the
 	// wallet (SR2 RPC fix, SR3 balance detail) and over the send (SR4 relayer
-	// treasury). The balance status line is their door on this route: an
-	// unreachable chain opens its RPC fix, anything else opens the breakdown.
-	// The treasury sheet opens itself, from the send core's probe.
-	type Rescue = 'rpc-fix' | 'balance-detail' | 'relayer';
+	// treasury). The balance status line is their door on this route: networks
+	// the wallet cannot reach open their list (spec 092 — all of them, each with
+	// its RPC fix), anything else opens the breakdown. The treasury sheet opens
+	// itself, from the send core's probe.
+	type Rescue = 'unreachable' | 'rpc-fix' | 'balance-detail' | 'relayer';
 	let rescue = $state<Rescue | null>(null);
 	let rescueChainId = $state<number | null>(null);
+	/** The RPC fix was opened from the list: Done goes back to it. */
+	let fixFromList = $state(false);
 	/** The URL being typed, until it is saved. */
 	let rpcDraft = $state<string | null>(null);
 	/** A save went to the core from this sheet; its probe decides "restored". */
@@ -1626,6 +1702,7 @@
 	const rpcRestored = $derived(
 		rpcSaved && rpcDraft === null && rescueRow?.rpc_health?.type === 'ok'
 	);
+	const unreachableModel = $derived(liveUnreachable(balance.view, currency.view, rm));
 	const balanceDetailModel = $derived(
 		liveBalanceDetail(balance.view, currency.view, rm, data.walletMessages.balance.unpriced)
 	);
@@ -1633,23 +1710,28 @@
 		sendView?.treasury_bootstrap ? liveRelayer(sendView.treasury_bootstrap, rm) : undefined
 	);
 	const rescueTitle = $derived(
-		rescue === 'rpc-fix'
-			? rm.rescue.rpcFixTitle
-			: rescue === 'balance-detail'
-				? rm.balanceDetail.title
-				: rm.relayer.title
+		rescue === 'unreachable'
+			? unreachableModel.title
+			: rescue === 'rpc-fix'
+				? rm.rescue.rpcFixTitle
+				: rescue === 'balance-detail'
+					? rm.balanceDetail.title
+					: rm.relayer.title
 	);
 
 	function openRescue() {
-		const failing = balance.view.banner_chain_ids;
-		if (failing.length > 0) {
-			openRpcFix(failing[0]!);
+		if (balance.view.unreachable_networks.length > 0) {
+			rescue = 'unreachable';
+			// Read every chain again while the list is open: one that has come
+			// back leaves it (and the home's count) on the next settle.
+			balance.unreachableListOpened();
 			return;
 		}
 		rescue = 'balance-detail';
 	}
 
-	function openRpcFix(chainId: number) {
+	function openRpcFix(chainId: number, fromList = false) {
+		fixFromList = fromList;
 		rescueChainId = chainId;
 		rpcDraft = null;
 		rpcSaved = false;
@@ -1662,6 +1744,9 @@
 
 	function closeRescue() {
 		if (rescue === 'relayer') sendSession?.dispatch({ type: 'dismiss_treasury_sheet' });
+		// The list, or a fix opened from it: the list's re-reads stop.
+		if (rescue === 'unreachable' || fixFromList) balance.unreachableListClosed();
+		fixFromList = false;
 		rescue = null;
 	}
 
@@ -1674,7 +1759,9 @@
 			// fetch, and the person just watched the probe succeed.
 			balance.fixChainResolved(rescueChainId);
 			balance.refresh(true);
-			rescue = null;
+			// Opened from the list: back to it, which the core keeps current.
+			rescue = fixFromList ? 'unreachable' : null;
+			fixFromList = false;
 			return;
 		}
 		if (rpcDraft !== null) {
@@ -1815,6 +1902,7 @@
 		send={sendActions}
 		batch={batchActions}
 		ondeletetx={deleteSelectedTx}
+		onincludenetwork={includeNetwork}
 	/>
 {/snippet}
 
@@ -1924,6 +2012,7 @@
 					addToken={addTokenActions}
 					ondeletetx={deleteSelectedTx}
 					onchains={() => (chainSheetOpen = true)}
+					onincludenetwork={includeNetwork}
 				/>
 			{:else}
 				<WalletHome
@@ -1976,7 +2065,9 @@
 
 <!-- The rescue sheets (spec 028 Phase 8): a sheet on the phone, a dialog on the desktop. -->
 {#snippet rescueBody()}
-	{#if rescue === 'rpc-fix' && rpcFixModel !== undefined}
+	{#if rescue === 'unreachable'}
+		<UnreachableBody panel={unreachableModel} onfix={(chainId) => openRpcFix(chainId, true)} />
+	{:else if rescue === 'rpc-fix' && rpcFixModel !== undefined}
 		<RpcFixBody
 			panel={rpcFixModel}
 			onprimary={rpcFixPrimary}

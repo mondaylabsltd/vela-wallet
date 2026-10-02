@@ -637,6 +637,13 @@ export function attestSafeMessageHash(original_hash: Uint8Array, chain_id: bigin
 export function attestSafeOpHash(op_json: string, calls_json: string, chain_id: bigint): Uint8Array;
 
 /**
+ * How long one chain's balance read may take before the round gives up on
+ * it and counts that chain failed, ms (spec 092) —
+ * `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+ */
+export function balanceChainReadDeadlineMs(): number;
+
+/**
  * Which balances one chain's read covers, in order —
  * `balance_dashboard::read_plan` (RE9): the native coin, the registry
  * stablecoins, the wrapped native, the person's own tokens, each contract
@@ -707,11 +714,19 @@ export function computeWebauthnSignerAddress(x: Uint8Array, y: Uint8Array): stri
 export function create2Address(deployer_hex: string, salt: Uint8Array, init_code_hash: Uint8Array): string;
 
 /**
- * The document-start script an in-app browser injects, for `host`
- * (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
- * the real bridge in a real browser.
+ * Whether a page at `origin` is offered the wallet (spec 091) — the rule
+ * the in-app browsers' gate follows, exported so the web suite can hold the
+ * injected script's host test to it.
  */
-export function dappProviderScript(host: string): string;
+export function dappOffersWallet(origin: string, debug_mode: boolean): boolean;
+
+/**
+ * The document-start script an in-app browser injects, for `host`
+ * (`"android"` / `"ios"` / `"desktop"`) and Settings' debug mode (spec 091)
+ * — exported so the web suite can run the real bridge in a real browser,
+ * and the debug script's host test against [`dapp_offers_wallet`].
+ */
+export function dappProviderScript(host: string, debug_mode: boolean): string;
 
 /**
  * How long to wait for the receipt when the submit answered `elapsed_ms`
@@ -719,6 +734,17 @@ export function dappProviderScript(host: string): string;
  * than 10 s — `sign_request::dapp_receipt_wait_ms` (RA12).
  */
 export function dappReceiptWaitMs(elapsed_ms: number): number;
+
+/**
+ * A dApp record's stored request as Technical details shows it (spec 093):
+ * typed data pretty-printed, a message as its text (or its hex), call data
+ * pretty-printed — `dapp_activity::request_display`. `content` is the
+ * detail's `content` word (`"call_data"`, `"typed_data"`, `"message"`);
+ * `stored_request` the params' JSON text as the record kept it. `undefined`
+ * when the record kept nothing, or for a content word this build does not
+ * know.
+ */
+export function dappRequestDisplay(content: string, stored_request: string): string | undefined;
 
 /**
  * EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
@@ -1365,6 +1391,7 @@ export interface InitOutput {
     readonly approvalguardcore_view: (a: number) => [number, number, number, number];
     readonly attestSafeMessageHash: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
     readonly attestSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
+    readonly balanceChainReadDeadlineMs: () => number;
     readonly balanceReadPlan: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly balancedashboardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly balancedashboardcore_new: () => number;
@@ -1404,8 +1431,10 @@ export interface InitOutput {
     readonly createwalletcore_new: () => number;
     readonly createwalletcore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly createwalletcore_view: (a: number) => [number, number, number, number];
-    readonly dappProviderScript: (a: number, b: number) => [number, number];
+    readonly dappOffersWallet: (a: number, b: number, c: number) => number;
+    readonly dappProviderScript: (a: number, b: number, c: number) => [number, number];
     readonly dappReceiptWaitMs: (a: number) => number;
+    readonly dappRequestDisplay: (a: number, b: number, c: number, d: number) => [number, number];
     readonly dappRpcCallsStatus: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly dappRpcCallsStatusId: (a: number, b: number) => [number, number];
     readonly dappRpcCapabilities: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];

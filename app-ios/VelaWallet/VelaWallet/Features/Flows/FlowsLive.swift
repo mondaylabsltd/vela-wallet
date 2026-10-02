@@ -25,6 +25,7 @@
 //
 
 import SwiftUI
+import VelaCore
 
 enum FlowsLive {
 
@@ -207,8 +208,12 @@ enum FlowsLive {
         _ item: FeedItemWire,
         record: FeedTxRecordWire?,
         on model: TxDetailModel,
-        loc: Loc
+        loc: Loc,
+        readRequest: @escaping (String) -> String? = { _ in nil }
     ) -> TxDetailModel {
+        if let dapp = item.dapp {
+            return dappDetail(item, dapp: dapp, record: record, on: model, loc: loc, readRequest: readRequest)
+        }
         let incoming = item.direction == .in
         let dapp = item.kind == .dappTx
         let chain = ChainCatalog.meta(item.chainId)
@@ -305,6 +310,189 @@ enum FlowsLive {
             // RJ18: quiet while it may still land — and a record nothing
             // settles (087 F04) may have been sent too.
             deleteQuiet: item.status == .pending || item.status == .unknown
+        )
+    }
+
+    /// A dApp interaction, opened from its row (spec 093) — every line the
+    /// core's, in its order; this only labels and formats them.
+    ///
+    /// The header is the row's: its title and its figure, or the allowance
+    /// it granted. A transaction keeps its status chip and explorer link; a
+    /// signature has no chip — nothing settles it — and says it was off-chain
+    /// instead. "Technical details" is collapsed, and the request the record
+    /// kept is read from the store (`readRequest`, by record id) only when it
+    /// is opened.
+    static func dappDetail(
+        _ item: FeedItemWire,
+        dapp: FeedDappWire,
+        record: FeedTxRecordWire?,
+        on model: TxDetailModel,
+        loc: Loc,
+        readRequest: @escaping (String) -> String?
+    ) -> TxDetailModel {
+        let money = WalletLive.dappFigure(item, dapp: dapp)
+        let allowance = money == nil ? dapp.allowance.flatMap { WalletLive.allowanceText($0, loc: loc) } : nil
+        let amount = money.map { [$0, item.symbol] }
+            ?? allowance.map { [$0.amount, $0.unit] }
+            ?? []
+        let hash = item.txHash ?? ""
+        let technical = dapp.technical.compactMap {
+            technicalLine($0, id: item.id, loc: loc, readRequest: readRequest)
+        }
+        return TxDetailModel(
+            title: WalletLive.dappTitle(dapp, loc: loc),
+            status: dapp.offChain ? nil : status(item.status, loc: loc),
+            closeLabel: model.closeLabel,
+            amount: amount.filter { !$0.isEmpty }.joined(separator: " "),
+            // The STORED figure, as for any transfer — never re-priced.
+            fiat: money == nil ? "" : (record?.usd.map { "≈ \($0)" } ?? ""),
+            positive: false,
+            facts: dapp.facts.compactMap { fact($0, item: item, dapp: dapp, loc: loc) },
+            viewOnExplorer: hash.isEmpty ? nil : model.viewOnExplorer,
+            deleteLabel: loc.t("history.deleteRecord"),
+            deleteQuiet: !dapp.offChain && (item.status == .pending || item.status == .unknown),
+            note: dapp.offChain ? loc.t("connect.detail.offChainNote") : nil,
+            amountDanger: money == nil && allowance?.unlimited == true,
+            received: dapp.received.map { change in
+                [WalletLive.changeFigure(change, hidden: false), change.symbol]
+                    .filter { !$0.isEmpty }.joined(separator: " ")
+            },
+            technical: technical.isEmpty ? nil : TxTechnicalModel(
+                title: loc.t("componentsUi.signing.advancedToggle"), lines: technical
+            )
+        )
+    }
+
+    /// One of the core's detail facts, labelled (spec 093). `nil` for a
+    /// fact this build has never heard of.
+    private static func fact(
+        _ fact: FeedFactWire, item: FeedItemWire, dapp: FeedDappWire, loc: Loc
+    ) -> FactRowModel? {
+        switch fact {
+        case .site(let site):
+            return FactRowModel(label: loc.t("connect.detail.labelApp"), value: site)
+        case .network(let chainId):
+            return chainFact(chainId, loc: loc)
+        case .contract(let address, let name):
+            // A noun — the record is of something done (083 F3 review).
+            return partyFact(loc.t("tokenDetail.labelContract"), address, name, loc: loc)
+        case .recipient(let address, let name):
+            return partyFact(loc.t("componentsTx.detail.to"), address, name, loc: loc)
+        case .spender(let address, let name):
+            return partyFact(loc.t("componentsUi.signing.labelSpender"), address, name, loc: loc)
+        case .spendingCap(let allowance):
+            guard let cap = WalletLive.allowanceText(allowance, loc: loc) else { return nil }
+            return FactRowModel(
+                label: loc.t("componentsUi.signingApprove.spendingCap"),
+                value: [cap.amount, cap.unit].filter { !$0.isEmpty }.joined(separator: " "),
+                danger: cap.unlimited
+            )
+        case .expires(let at):
+            return FactRowModel(
+                label: loc.t("componentsUi.signingApprove.expiresLabel"),
+                value: at.map { Formats.dateTime(Date(timeIntervalSince1970: $0)) }
+                    ?? loc.t("componentsUi.signingApprove.noExpiry")
+            )
+        case .balanceChanges:
+            let lines = dapp.changes.map { change in
+                BalanceDeltaRow(
+                    symbol: change.verified ? change.symbol : loc.t("componentsUi.signing.balanceUnverifiedToken"),
+                    delta: WalletLive.changeFigure(change, hidden: false),
+                    tone: !change.verified ? .caution : (change.direction == .in ? .success : .neutral)
+                )
+            }
+            guard !lines.isEmpty else { return nil }
+            return FactRowModel(label: loc.t("componentsUi.signing.balanceChangesTitle"), value: "", lines: lines)
+        case .date(let seconds):
+            return FactRowModel(label: loc.t("componentsTx.detail.labelDate"), value: timestamp(seconds, loc: loc))
+        default:
+            // Technical lines live under their own disclosure.
+            return nil
+        }
+    }
+
+    /// One of the core's technical lines, labelled (spec 093).
+    private static func technicalLine(
+        _ fact: FeedFactWire, id: String, loc: Loc, readRequest: @escaping (String) -> String?
+    ) -> TxTechnicalLine? {
+        switch fact {
+        case .operation(let operation):
+            let value: String
+            switch operation {
+            case .contractInteraction: value = loc.t("componentsTx.detail.opContractInteraction")
+            case .batch(let calls): value = loc.t("componentsUi.signing.batchSubtitle", vars: ["count": String(calls)])
+            case .signature: value = loc.t("componentsTx.detail.opSignature")
+            case .typedDataSignature: value = loc.t("componentsTx.detail.opTypedDataSignature")
+            case .unknown: return nil
+            }
+            return .fact(FactRowModel(label: loc.t("componentsTx.detail.labelOperation"), value: value))
+        case .content(let content):
+            let label: String
+            switch content {
+            case .callData: label = loc.t("connect.detail.contentCallData")
+            case .typedData: label = loc.t("connect.detail.contentTypedData")
+            case .message: label = loc.t("connect.detail.contentMessage")
+            case .unknown: return nil
+            }
+            // Read when the section opens, and shown as the core words it
+            // (`dappRequestDisplay`): typed data pretty-printed, a message as
+            // its text or hex, call data pretty-printed. Nothing kept → nil.
+            return .content(TxContentModel(
+                label: label, missing: loc.t("connect.detail.contentMissing"),
+                read: {
+                    readRequest(id).flatMap {
+                        dappRequestDisplay(content: content.rawValue, storedRequest: $0)
+                    }
+                }
+            ))
+        case .primaryType(let name):
+            return .fact(FactRowModel(label: loc.t("componentsUi.signing.typeLabel"), value: name, mono: true))
+        case .hash(let txHash):
+            return .fact(hashFact(loc.t("componentsTx.detail.labelHash"), txHash, loc: loc))
+        case .userOpHash(let hash):
+            return .fact(hashFact(loc.t("componentsTx.receipt.userOpHash"), hash, loc: loc))
+        default:
+            return nil
+        }
+    }
+
+    /// The network, with its mark — as the transfer detail draws it.
+    private static func chainFact(_ chainId: Int, loc: Loc) -> FactRowModel {
+        guard let chain = ChainCatalog.meta(chainId) else {
+            return FactRowModel(label: loc.t("componentsTx.detail.labelChain"), value: String(chainId))
+        }
+        return FactRowModel(
+            label: loc.t("componentsTx.detail.labelChain"),
+            value: chain.displayName,
+            lead: .token(TokenMarkModel.chain(
+                chainId: chain.chainId,
+                symbol: chain.nativeSymbol,
+                color: SettingsLive.mark(chainId: chain.chainId, name: chain.displayName).color
+            ))
+        )
+    }
+
+    /// A contract, a recipient or a spender: its name, else its short
+    /// address — copying the ADDRESS either way.
+    private static func partyFact(_ label: String, _ address: String, _ name: String?, loc: Loc) -> FactRowModel {
+        FactRowModel(
+            label: label,
+            value: name ?? AddressText.short(address),
+            lead: .identicon(address),
+            mono: name == nil,
+            copy: loc.t("componentsUi.identiconViewer.copyAddress"),
+            copyValue: address
+        )
+    }
+
+    /// A hash, short and mono, copying the whole of it.
+    private static func hashFact(_ label: String, _ hash: String, loc: Loc) -> FactRowModel {
+        FactRowModel(
+            label: label,
+            value: AddressText.short(hash),
+            mono: true,
+            copy: loc.t("componentsUi.identiconViewer.copyAddress"),
+            copyValue: hash
         )
     }
 
@@ -453,11 +641,30 @@ enum FlowsLive {
     ///
     /// What 058 does add is the **asset**: `payment_request` knows which coin
     /// the code was asked for, and R3 has always been drawn for it.
+    /// What a receive code says (spec 090): the core's `qrValue` — the bare
+    /// address, or with "include network" on `ethereum:<address>@<chain>` —
+    /// once the core's answer is about THIS code's network and token. Until
+    /// then (no session yet, a pick in flight) the bare address, which every
+    /// wallet reads. `current` says which, so the switch is drawn only beside
+    /// a code it describes.
+    static func receiveCode(
+        _ address: String,
+        chainId: Int?,
+        tokenAddress: String?,
+        pay: PaymentRequestViewWire?
+    ) -> (value: String, current: Bool) {
+        guard let pay, !pay.qrValue.isEmpty, let chainId,
+              pay.asset.chainId == chainId, pay.asset.tokenAddress == tokenAddress
+        else { return (address, false) }
+        return (pay.qrValue, true)
+    }
+
     static func receiveQr(
         _ address: String,
         name: String,
         chain: ChainMeta?,
         asset: PaymentRequestAssetWire? = nil,
+        pay: PaymentRequestViewWire? = nil,
         on model: ReceiveQrModel,
         loc: Loc
     ) -> ReceiveQrModel {
@@ -513,7 +720,24 @@ enum FlowsLive {
         // demo pattern, which is why `QrCode` never falls back to it silently:
         // the caller decides, and here an unencodable address is a bug worth
         // seeing rather than a picture worth showing.
-        live.modules = QrCode.modules(address)
+        let code = receiveCode(
+            address,
+            chainId: asset?.chainId ?? chain?.chainId,
+            tokenAddress: asset?.tokenAddress,
+            pay: pay
+        )
+        live.modules = QrCode.modules(code.value)
+        // The switch and its hint are the core's (spec 090), drawn only beside
+        // a code the core's answer is about.
+        if code.current, let pay, pay.networkSwitch {
+            live.network = NetworkSwitchModel(
+                label: loc.t("receive.includeNetwork"),
+                isOn: pay.includeNetwork,
+                hint: pay.networkHint ? loc.t("receive.includeNetworkHint") : nil
+            )
+        } else {
+            live.network = nil
+        }
         return live
     }
 
@@ -529,6 +753,7 @@ enum FlowsLive {
         _ address: String,
         name: String,
         chain: ChainMeta?,
+        pay: PaymentRequestViewWire? = nil,
         on model: ShareCardModel,
         loc: Loc
     ) -> ShareCardModel {
@@ -538,7 +763,14 @@ enum FlowsLive {
         live.lines = AddressText.lines(address)
         live.identiconSeed = address
         // Level H, not the screen's M: the network's logo sits on the code.
-        live.modules = QrCode.shareModules(address)
+        // And exactly what the screen's code says (spec 090) — the core's
+        // value for the asset the card is about.
+        live.modules = QrCode.shareModules(receiveCode(
+            address,
+            chainId: chain?.chainId,
+            tokenAddress: pay?.asset.tokenAddress,
+            pay: pay
+        ).value)
         if let chain {
             live.networkNote = loc.t("receive.shareCardNetworkNote",
                                      vars: ["network": chain.displayName])

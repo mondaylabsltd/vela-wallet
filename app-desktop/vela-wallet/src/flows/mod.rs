@@ -214,6 +214,10 @@ pub struct FlowStrings {
     pub warning_confirm: SharedString,
     pub save_image: SharedString,
     pub share_card_headline: SharedString,
+    /// Spec 090: the "include network" switch under the code, and the calm
+    /// line under it while it is on.
+    pub include_network: SharedString,
+    pub include_network_hint: SharedString,
 
     // Scan.
     pub scan_title: SharedString,
@@ -264,6 +268,13 @@ pub struct FlowStrings {
     /// in several ("Interactuando con", "Đang tương tác với"), which on a
     /// finished record says the call is still under way (083 F3 review).
     pub detail_contract: SharedString,
+    /// A dApp record's other detail facts (spec 093), each labelled by the
+    /// key the core's `FeedFact` names: the spender a grant lets spend, the
+    /// grant's cap and when it ends.
+    pub detail_spender: SharedString,
+    pub detail_spending_cap: SharedString,
+    pub detail_expires: SharedString,
+    pub detail_no_expiry: SharedString,
     /// "Balance changes" over a dApp transaction's lines (083 F1), and
     /// "Unverified token" for a line with no figure — the signing sheet's
     /// words, so the detail reads as what was approved.
@@ -273,6 +284,23 @@ pub struct FlowStrings {
     pub detail_date: SharedString,
     pub detail_hash: SharedString,
     pub detail_section_title: SharedString,
+    /// "Off-chain signature — nothing was sent on-chain": a dApp signature's
+    /// detail, where a transaction's status chip would be (spec 093).
+    pub detail_off_chain: SharedString,
+    /// The collapsed "Technical details" (spec 093) and its lines' words.
+    pub detail_technical: SharedString,
+    pub detail_operation: SharedString,
+    pub op_contract_interaction: SharedString,
+    /// Template carrying `{{count}}`.
+    pub op_batch: String,
+    pub op_signature: SharedString,
+    pub op_typed_data: SharedString,
+    pub content_call_data: SharedString,
+    pub content_typed_data: SharedString,
+    pub content_message: SharedString,
+    pub content_missing: SharedString,
+    pub detail_type: SharedString,
+    pub detail_user_op_hash: SharedString,
 
     // Assets.
     pub assets_title: SharedString,
@@ -593,6 +621,8 @@ impl FlowStrings {
             warning_confirm: s("receive.warningConfirm"),
             save_image: s("receive.request.saveImage"),
             share_card_headline: s("receive.shareCardHeadline"),
+            include_network: s("receive.includeNetwork"),
+            include_network_hint: s("receive.includeNetworkHint"),
 
             scan_title: s("componentsUi.scanner.title"),
             scan_hint: s("componentsUi.scanner.hint"),
@@ -624,12 +654,29 @@ impl FlowStrings {
             detail_to: s("componentsTx.detail.to"),
             detail_app: s("connect.detail.labelApp"),
             detail_contract: s("tokenDetail.labelContract"),
+            detail_spender: s("componentsUi.signing.labelSpender"),
+            detail_spending_cap: s("componentsUi.signingApprove.spendingCap"),
+            detail_expires: s("componentsUi.signingApprove.expiresLabel"),
+            detail_no_expiry: s("componentsUi.signingApprove.noExpiry"),
             detail_changes: s("componentsUi.signing.balanceChangesTitle"),
             detail_unverified_token: s("componentsUi.signing.balanceUnverifiedToken"),
             detail_chain: s("componentsTx.detail.labelChain"),
             detail_date: s("componentsTx.detail.labelDate"),
             detail_hash: s("componentsTx.detail.labelHash"),
             detail_section_title: s("componentsTx.detail.sectionTitle"),
+            detail_off_chain: s("connect.detail.offChainNote"),
+            detail_technical: s("componentsUi.signing.advancedToggle"),
+            detail_operation: s("componentsTx.detail.labelOperation"),
+            op_contract_interaction: s("componentsTx.detail.opContractInteraction"),
+            op_batch: raw("componentsUi.signing.batchSubtitle"),
+            op_signature: s("componentsTx.detail.opSignature"),
+            op_typed_data: s("componentsTx.detail.opTypedDataSignature"),
+            content_call_data: s("connect.detail.contentCallData"),
+            content_typed_data: s("connect.detail.contentTypedData"),
+            content_message: s("connect.detail.contentMessage"),
+            content_missing: s("connect.detail.contentMissing"),
+            detail_type: s("componentsUi.signing.typeLabel"),
+            detail_user_op_hash: s("componentsTx.receipt.userOpHash"),
 
             assets_title: s("assets.sectionTitle"),
             assets_add: s("assets.addToken"),
@@ -844,6 +891,11 @@ mod tests {
                 "receive.searchNetworkPlaceholder",
             ),
             (s.token_contract.as_ref(), "receive.tokenContract"),
+            (s.include_network.as_ref(), "receive.includeNetwork"),
+            (
+                s.include_network_hint.as_ref(),
+                "receive.includeNetworkHint",
+            ),
             (s.add_by_address.as_ref(), "assets.addByAddress"),
             (s.not_showing_title.as_ref(), "assets.notShowingTitle"),
             (s.from_contacts.as_ref(), "send.fromContacts"),

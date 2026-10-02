@@ -50,12 +50,15 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
     /// decimals are the shell's vocabulary.
     case native(delta: String)
     /// Metadata resolved AND (an outflow, or a trusted-set inflow).
-    case erc20Trusted(token: String, delta: String, symbol: String, decimals: Int)
+    /// `inTrustedSet`: the coin is one this wallet already trusts, not merely
+    /// one whose `symbol()` answered — carried so the judgment can be handed
+    /// back to the core verbatim (`wire`), never read here.
+    case erc20Trusted(token: String, delta: String, symbol: String, decimals: Int, inTrustedSet: Bool = false)
     /// Direction and caution, and **no attacker-controlled amount**.
     case erc20Unverified(token: String?, delta: String)
 
     private enum CodingKeys: String, CodingKey {
-        case type, token, delta, symbol, decimals
+        case type, token, delta, symbol, decimals, inTrustedSet
     }
 
     init(from decoder: Decoder) throws {
@@ -70,7 +73,8 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
                 token: try container.decode(String.self, forKey: .token),
                 delta: delta,
                 symbol: try container.decode(String.self, forKey: .symbol),
-                decimals: try container.decode(Int.self, forKey: .decimals)
+                decimals: try container.decode(Int.self, forKey: .decimals),
+                inTrustedSet: try container.decodeIfPresent(Bool.self, forKey: .inTrustedSet) ?? false
             )
         default:
             self = .erc20Unverified(
@@ -87,8 +91,29 @@ enum TrustSimJudgmentWire: Decodable, Equatable {
     var delta: String {
         switch self {
         case .native(let delta): delta
-        case .erc20Trusted(_, let delta, _, _): delta
+        case .erc20Trusted(_, let delta, _, _, _): delta
         case .erc20Unverified(_, let delta): delta
+        }
+    }
+
+    /// The judgment as the core wrote it (`TrustSimJudgment`), for the
+    /// approve's `balance_changes` (083 F1, spec 093): the record keeps the
+    /// sheet's own verdict, and the feed re-reads it — nothing is re-judged
+    /// or re-formatted here.
+    var wire: [String: Any] {
+        switch self {
+        case .native(let delta):
+            return ["type": "native", "delta": delta]
+        case .erc20Trusted(let token, let delta, let symbol, let decimals, let inTrustedSet):
+            var wire: [String: Any] = [
+                "type": "erc20_trusted", "token": token, "delta": delta,
+                "symbol": symbol, "decimals": decimals,
+            ]
+            // Absent when false, as the core writes it.
+            if inTrustedSet { wire["in_trusted_set"] = true }
+            return wire
+        case .erc20Unverified(let token, let delta):
+            return ["type": "erc20_unverified", "token": token.map { $0 as Any } ?? NSNull(), "delta": delta]
         }
     }
 }

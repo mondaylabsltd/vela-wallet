@@ -38,7 +38,12 @@
 //!   the top non-banned bundler endpoint, `/{chainId}` suffix stripped.
 //! - ④ rate-limiting is a transient, self-healing condition — the chain is
 //!   marked `rate_limited` so the UI keeps the cached balance and NEVER shows
-//!   the "swap in your own RPC" banner for it (`:576-630`).
+//!   the "swap in your own RPC" banner for it (`:576-630`). Only a chain
+//!   whose nodes ANSWERED, if only to say "slow down": a final pass in which
+//!   any node could not be reached at all is a failed chain even when another
+//!   node throttled (spec 092 — behind a blocking network, twenty-two dead
+//!   BNB Chain nodes and one public node answering 429 had hidden the chain
+//!   from the "can't reach" list for good).
 //! - ⑤ a `getLogs` range/size cap is request-specific: the endpoint is healthy
 //!   but capped, so the answer goes back to the caller to split the range —
 //!   no failover, no ban, and the endpoint records a *success* (`:484-519`,
@@ -943,6 +948,11 @@ struct CallSession {
     /// Per-pass on purpose — only the final pass classifies the chain
     /// (ported verbatim, see module doc).
     saw_rate_limit: bool,
+    /// Whether any endpoint of the CURRENT pass could not be reached at all
+    /// ([`is_transport_failure`]). Per pass, like `saw_rate_limit`: a final
+    /// pass with one is not "rate-limited" — invariant ④ is for nodes that
+    /// answered (spec 092).
+    saw_unreached: bool,
     /// The verified same-chain RPC URL for `X-Rpc-Url` (bundler calls).
     x_rpc_url: Option<String>,
     state: SessionState,
@@ -1111,6 +1121,7 @@ impl App for RpcPool {
                         pass: 0,
                         queue: VecDeque::new(),
                         saw_rate_limit: false,
+                        saw_unreached: false,
                         x_rpc_url: None,
                         state: SessionState::WaitingPool,
                         maybe_delivered: false,
@@ -1614,6 +1625,7 @@ fn start_pass(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEffec
         // Per-pass on purpose: only the final pass classifies the chain
         // (ported verbatim, see module doc).
         session.saw_rate_limit = false;
+        session.saw_unreached = false;
     }
 
     let mut commands = Vec::new();
@@ -1789,22 +1801,27 @@ fn next_endpoint(model: &mut Model, call_id: &str, now_ms: f64) -> Command<RpcEf
 /// Every endpoint failed every pass — classify the chain (RPC only:
 /// rate-limited → keep cached balances and stay quiet; hard failure → the
 /// fix-your-RPC banner may show) and settle the caller.
+///
+/// Rate-limited means the final pass's nodes answered, if only to throttle:
+/// one node saying 429 while the others could not be reached at all is a
+/// chain that cannot be read, not a busy one (spec 092, invariant ④).
 fn conclude_failed(model: &mut Model, call_id: &str) -> Command<RpcEffect, Event> {
     let Some(session) = model.calls.remove(call_id) else {
         return Command::done();
     };
+    let throttled = session.saw_rate_limit && !session.saw_unreached;
     let rate_limited = match session.kind {
         // Spec 082 RG7: a method a node may simply not offer never says
         // anything about the chain — neither banner nor notice.
-        RpcKind::Rpc if is_optional_method(&session.method) => session.saw_rate_limit,
+        RpcKind::Rpc if is_optional_method(&session.method) => throttled,
         RpcKind::Rpc => {
             model.failed_chains.insert(session.chain_id);
-            if session.saw_rate_limit {
+            if throttled {
                 model.rate_limited_chains.insert(session.chain_id);
             } else {
                 model.rate_limited_chains.remove(&session.chain_id);
             }
-            session.saw_rate_limit
+            throttled
         }
         // The bundler path never classifies chains (`poolBundlerCall`).
         RpcKind::Bundler => false,
@@ -2051,6 +2068,7 @@ fn handle_outcome(
     // Facts about this POST that outlive the route (spec 082 RA1, RF1).
     if let Some(session) = model.calls.get_mut(call_id) {
         session.maybe_delivered |= may_have_delivered(&outcome);
+        session.saw_unreached |= is_transport_failure(&outcome);
         if session.pass == 0 {
             session.first_pass_tried = session.first_pass_tried.saturating_add(1);
             session.first_pass_all_transport &= is_transport_failure(&outcome);

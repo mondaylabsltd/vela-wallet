@@ -226,9 +226,12 @@ describe('buildContactsDesktopLive — the rail before the book is read', () => 
 
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedView } from '$lib/core/generated/FeedView';
+import { resolveWalletMessages } from '$lib/i18n/engine.server';
+import { chainName } from '$lib/services/networks';
+import type { LocalTransaction } from '$lib/services/transactions-model';
+import { feedViewThroughCore } from '$lib/wallet/core/feed-through-core';
+import { dappTitle } from '$lib/wallet/live';
 import {
-	contactActivityRow,
-	contactFeedItems,
 	groupPickModel,
 	importReport,
 	liveContactDetail,
@@ -239,8 +242,12 @@ import {
 const DAY = 86_400_000;
 const NOW = new Date(2026, 8, 5, 12, 0, 0).getTime();
 const TODAY = new Date(2026, 8, 5).getTime();
+const wm = resolveWalletMessages('en');
+const rowMessages = { activity: wm.activity };
 
+/** A contact row as the core hands it: its second line the network and the day. */
 function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
+	const day_start_ms = partial.day_start_ms ?? TODAY;
 	return {
 		direction: 'out',
 		counterparty: ALICE.address,
@@ -251,93 +258,175 @@ function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
 		usd_value: 1.5,
 		chain_id: 100,
 		timestamp: Math.floor(NOW / 1000),
-		day_start_ms: TODAY,
+		day_start_ms,
 		tx_hash: null,
 		batch: null,
 		kind: partial.direction === 'in' ? 'receive' : 'send',
 		status: 'confirmed',
 		site: null,
 		counterparty_role: 'recipient',
+		subtitle: [
+			{ type: 'network', chain_id: 100 },
+			{ type: 'day', day_start_ms }
+		],
 		...partial
 	};
 }
 
+/** Alice's page is open: the core's `contact_rows` are hers, newest first. */
 const FEED: FeedView = {
-	rows: [
-		{ type: 'header', id: 'day-1', day_start_ms: TODAY, timestamp: Math.floor(NOW / 1000) },
-		{ type: 'item', item: item({ id: 't1' }) },
-		{ type: 'item', item: item({ id: 't2', direction: 'in', value: '20', symbol: 'USDC' }) },
-		// A different counterparty, and one spelled in checksum case.
-		{ type: 'item', item: item({ id: 't3', counterparty: BOB.address }) },
-		{
-			type: 'item',
-			item: item({
-				id: 't4',
-				counterparty: ALICE.address.toUpperCase().replace('0X', '0x'),
-				day_start_ms: TODAY - DAY
-			})
-		},
-		{ type: 'item', item: item({ id: 't5', day_start_ms: TODAY - 3 * DAY }) }
-	],
+	rows: [],
 	transactions: [],
 	new_item_id: null,
 	toast: null,
 	history_empty_key: 'history.emptyTitle',
-	home_empty_key: 'home.emptyNoActivity'
+	home_empty_key: 'home.emptyNoActivity',
+	contact_rows: [
+		item({ id: 't1' }),
+		item({ id: 't2', direction: 'in', value: '20', symbol: 'USDC' }),
+		item({ id: 't4', day_start_ms: TODAY - DAY }),
+		item({ id: 't5', day_start_ms: TODAY - 3 * DAY })
+	]
 };
 
-describe('contactFeedItems', () => {
-	it('keeps only this counterparty, case-insensitively, in feed order', () => {
-		expect(contactFeedItems(FEED, ALICE.address).map((i) => i.id)).toEqual([
-			't1',
-			't2',
-			't4',
-			't5'
-		]);
-		expect(contactFeedItems(FEED, BOB.address).map((i) => i.id)).toEqual(['t3']);
-		expect(contactFeedItems(null, ALICE.address)).toEqual([]);
-	});
-});
-
-describe('contactActivityRow', () => {
-	it('signs the amount by direction and says the network and the day, not the person', () => {
-		const sent = contactActivityRow(item({ id: 't1' }), m, NOW);
-		expect(sent.kind).toBe('sent');
-		expect(sent.amount).toBe('-1.5');
-		expect(sent.unit).toBe('xDAI');
-		expect(sent.positive).toBe(false);
-		expect(sent.subtitle).toContain(m.activity.today);
-		expect(sent.subtitle).not.toContain('Alice');
-
-		const received = contactActivityRow(
-			item({ id: 't2', direction: 'in', value: '20', day_start_ms: TODAY - DAY }),
-			m,
-			NOW
-		);
-		expect(received.kind).toBe('received');
-		expect(received.amount).toBe('+20');
-		expect(received.subtitle).toContain(m.activity.yesterday);
-	});
-});
-
+/**
+ * Spec 093: a contact's 最近往来 is the core's rows for that contact
+ * (`contact_rows`), drawn by Activity's own row builder — the shell keeps no
+ * counterparty filter and no "Sent"/"Received" of its own.
+ */
 describe('liveContactDetail with a feed', () => {
+	const extras = { feed: FEED, contactAddress: ALICE.address, rowMessages, now: NOW };
+
 	it('shows the recent few, all on request, and the empty state when there is nothing', () => {
-		const recent = liveContactDetail(ALICE, VIEW, m, identicon, { feed: FEED, now: NOW });
+		const recent = liveContactDetail(ALICE, VIEW, m, identicon, extras);
 		expect(recent.rows).toHaveLength(RECENT_ACTIVITY_ROWS);
 		expect(recent.rows.map((r) => r.id)).toEqual(['t1', 't2', 't4']);
 		expect(recent.emptyActivity).toBeUndefined();
 
-		const all = liveContactDetail(ALICE, VIEW, m, identicon, {
-			feed: FEED,
-			allActivity: true,
-			now: NOW
-		});
+		const all = liveContactDetail(ALICE, VIEW, m, identicon, { ...extras, allActivity: true });
 		expect(all.rows).toHaveLength(4);
+	});
 
-		const none = liveContactDetail(UNNAMED, VIEW, m, identicon, { feed: FEED, now: NOW });
+	it('draws the rows as Activity does, the second line the network and the day', () => {
+		const rows = liveContactDetail(ALICE, VIEW, m, identicon, {
+			...extras,
+			allActivity: true
+		}).rows;
+		expect(rows[0]).toMatchObject({
+			kind: 'sent',
+			title: wm.activity.sent,
+			amount: '\u22121.5',
+			unit: 'xDAI',
+			subtitle: `${chainName(100)} · ${wm.activity.today}`
+		});
+		expect(rows[1]).toMatchObject({ kind: 'received', amount: '+20', positive: true });
+		expect(rows[2].subtitle).toBe(`${chainName(100)} · ${wm.activity.yesterday}`);
+		// Older days read in the person's date preset, as the headers do.
+		expect(rows[3].subtitle).toMatch(new RegExp(`^${chainName(100)} · \\S`));
+		expect(rows[3].subtitle).not.toContain(wm.activity.yesterday);
+		// Privacy masks a contact's figures as it masks Activity's.
+		expect(
+			liveContactDetail(ALICE, VIEW, m, identicon, { ...extras, hidden: true }).rows[0]
+		).toMatchObject({ amount: '••••', masked: true });
+	});
+
+	it("another contact's rows never stand under this one", () => {
+		// The core was told about Alice; Bob's page draws nothing of hers.
+		const bob = liveContactDetail(BOB, VIEW, m, identicon, extras);
+		expect(bob.rows).toEqual([]);
+		expect(bob.emptyActivity).toBe(m.noActivity);
+		const none = liveContactDetail(UNNAMED, VIEW, m, identicon, {
+			...extras,
+			contactAddress: null
+		});
 		expect(none.rows).toEqual([]);
 		expect(none.emptyActivity).toBe(m.noActivity);
 	});
+
+	// Through the REAL core: a dApp's token transfer to Alice reads as the
+	// verb it was, beside her plain send; Bob's receipt is not on her page.
+	it("through the core: a dApp's transfer to a contact reads its verb, not 'Sent'", async () => {
+		const ME = '0xD400866e00B055B20752a826CD5C89b811de130b';
+		const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+		const at = Math.floor(NOW / 1000);
+		const transfer =
+			'0xa9059cbb' +
+			ALICE.address.slice(2).padStart(64, '0') +
+			(5_000_000).toString(16).padStart(64, '0');
+		const records: LocalTransaction[] = [
+			{
+				id: `dapp-${at * 1000}-tx`,
+				userOpHash: '0x' + 'e3'.repeat(32),
+				txHash: '0x' + 'f3'.repeat(32),
+				from: ME,
+				to: USDC,
+				value: '0x0',
+				symbol: 'ETH',
+				decimals: 18,
+				chainId: 1,
+				timestamp: at,
+				status: 'confirmed',
+				type: 'dapp_tx',
+				dappOrigin: 'https://pay.example',
+				dappUrl: 'https://pay.example',
+				intent: 'Transfer',
+				signedRequest: { method: 'eth_sendTransaction', params: [{ to: USDC, data: transfer }] },
+				dappSummary: { action: 'call', calls: 1, contract: USDC }
+			},
+			{
+				id: '0x' + 'f4'.repeat(32),
+				userOpHash: '0x' + 'e4'.repeat(32),
+				txHash: '0x' + 'f4'.repeat(32),
+				from: ME,
+				to: ALICE.address,
+				value: '0.2',
+				symbol: 'ETH',
+				decimals: 18,
+				chainId: 1,
+				timestamp: at - 86_400,
+				status: 'confirmed',
+				type: 'send'
+			},
+			{
+				id: '1-0xbob-0',
+				userOpHash: '',
+				txHash: '0x' + 'f5'.repeat(32),
+				from: BOB.address,
+				to: ME,
+				value: '3',
+				symbol: 'ETH',
+				decimals: 18,
+				chainId: 1,
+				timestamp: at - 60,
+				status: 'confirmed',
+				type: 'receive'
+			}
+		];
+		const view = await feedViewThroughCore(records, ME, NOW, [
+			{ type: 'contact_filter_changed', address: ALICE.address }
+		]);
+		expect(view.contact_rows.map((row) => row.id)).toEqual([records[0].id, records[1].id]);
+		const rows = liveContactDetail(ALICE, VIEW, m, identicon, {
+			feed: view,
+			contactAddress: ALICE.address,
+			rowMessages,
+			now: NOW
+		}).rows;
+		const [dapp, send] = rows;
+		expect(dapp.kind).toBe('dapp');
+		expect(dapp.title).toBe(dappTitle(view.contact_rows[0].dapp!, wm));
+		expect(dapp.title).not.toBe(wm.activity.sent);
+		expect(dapp.title).toContain(wm.activity.intents.intentTransfer);
+		expect(dapp.subtitle).toBe(`${chainName(1)} · ${wm.activity.today}`);
+		expect(send).toMatchObject({ title: wm.activity.sent, amount: '\u22120.2' });
+		expect(send.subtitle).toBe(`${chainName(1)} · ${wm.activity.yesterday}`);
+		// The page closed: the core hands nobody's rows.
+		const closed = await feedViewThroughCore(records, ME, NOW, [
+			{ type: 'contact_filter_changed', address: ALICE.address },
+			{ type: 'contact_filter_changed', address: null }
+		]);
+		expect(closed.contact_rows).toEqual([]);
+	}, 30_000);
 });
 
 describe('the pickers', () => {

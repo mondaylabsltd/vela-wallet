@@ -21,6 +21,12 @@
 /// A message for a page. No page is listening.
 pub fn deliver(_tab: &str, _message_json: &str) {}
 
+/// Settings' debug mode (spec 091). No page here to offer the wallet to, and
+/// no view to retire.
+pub fn set_debug_mode(_on: bool) -> bool {
+    false
+}
+
 /// Erase's sweep of the browser's own store (spec 081 FR-017).
 ///
 /// `true`, not `false`: the bool answers "was the platform asked", and the

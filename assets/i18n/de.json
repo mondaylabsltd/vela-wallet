@@ -487,14 +487,22 @@
   "qrTitleNetwork": "Mit dieser Adresse Werte auf {{network}} empfangen",
   "qrTitleAsset": "Mit dieser Adresse {{symbol}} auf {{network}} empfangen",
   "shareCardNetworkNote": "Nur Zahlungen über {{network}}",
-  "tokenContract": "Token-Vertrag"
+  "tokenContract": "Token-Vertrag",
+  "includeNetwork": "Netzwerk mitsenden",
+  "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus."
  },
  "assets": {
   "sectionTitle": "Assets",
   "addToken": "Hinzufügen",
   "searchPlaceholder": "Token suchen ...",
-  "rpcUnavailableSingle": "RPC für {{name}} nicht verfügbar",
-  "rpcUnavailableMultiple": "RPC für {{count}} Netzwerke nicht verfügbar",
+  "unreachableOne": "{{name}} ist gerade nicht erreichbar",
+  "unreachableMany": "{{n}} Netzwerke sind gerade nicht erreichbar",
+  "unreachableBody": "Ihre Assets sind nicht betroffen – wir können sie gerade nur nicht lesen.",
+  "unreachableNone": "Alle Netzwerke sind wieder erreichbar.",
+  "lastSeen": "Zuletzt gesehen: {{amount}}",
+  "lastSeenUnpriced": "Beim letzten Lesen: Token vorhanden",
+  "lastSeenEmpty": "Beim letzten Lesen: leer",
+  "notReadYet": "Noch nicht gelesen",
   "rpcFix": "Beheben",
   "emptyTitle": "Empfangen Sie Ihr erstes Asset",
   "emptySubtext": "Tippen Sie hier, um Ihre Adresse zu sehen und Token zu empfangen",
@@ -592,7 +600,8 @@
   "labelSent": "Gesendet",
   "labelReceived": "Erhalten",
   "toName": "An {{name}}",
-  "fromName": "Von {{name}}"
+  "fromName": "Von {{name}}",
+  "dappRowTitle": "{{intent}} bei {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -1031,7 +1040,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins.",
-  "sectionLinks": "Links"
+  "sectionLinks": "Links",
+  "debugMode": "Debug-Modus",
+  "debugModeBody": "Lässt http-Seiten in deinem lokalen Netzwerk die Wallet nutzen. Nur für die Entwicklung.",
+  "debugModeRevealed": "Der Debug-Modus ist jetzt verfügbar"
  },
  "clearSigning": {
   "title": "Clear-Signing-Test",

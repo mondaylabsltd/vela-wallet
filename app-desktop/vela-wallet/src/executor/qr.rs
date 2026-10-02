@@ -101,6 +101,51 @@ mod tests {
         assert_eq!(decode_first(&png.into_inner()).as_deref(), Some(PAYLOAD));
     }
 
+    /// The receive code's value, from the real core: the bare address, or with
+    /// "include network" on, the URI for Polygon.
+    fn core_code(include: bool) -> String {
+        use vela_core::app::payment_request::{Event, PaymentRequest};
+        const ME: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let mut host = crate::core_host::CoreHost::<PaymentRequest>::new();
+        let _ = host.dispatch(Event::Start {
+            account: ME.to_owned(),
+            recipient: ME.to_owned(),
+            base_url: "https://getvela.app".to_owned(),
+        });
+        let _ = host.dispatch(Event::AssetPicked {
+            chain_id: 137,
+            token_address: None,
+            symbol: "POL".to_owned(),
+            decimals: 18,
+            network_name: "Polygon".to_owned(),
+        });
+        let _ = host.dispatch(Event::IncludeNetworkChanged { include });
+        host.view().qr_value
+    }
+
+    /// Spec 090: Vela's own receive code, cut from a 1080×2400 Android
+    /// screenshot (modules ~24 px across), read from the file as it is.
+    ///
+    /// No ladder here, and none needed: the same picture defeats ZXing and
+    /// jsQR at full size (their local binarizer windows sit inside one
+    /// module), but rqrr's threshold window scales with the image, and it
+    /// reads both codes — and the full screenshots — as they are. If this
+    /// ever fails, climb `vela_core::qr_scan::still_qr_sizes` as Android does.
+    #[test]
+    fn vela_reads_its_own_receive_code_from_a_screenshot() {
+        for (file, include) in [
+            ("receive-code-on.png", true),
+            ("receive-code-off.png", false),
+        ] {
+            let bytes = std::fs::read(format!(
+                "{}/tests/fixtures/qr/{file}",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap_or_else(|error| unreachable!("the fixture {file} is checked in: {error}"));
+            assert_eq!(decode_first(&bytes), Some(core_code(include)), "{file}");
+        }
+    }
+
     /// A file that is not a picture, and a picture with no code in it, both
     /// answer "nothing found" rather than failing.
     #[test]

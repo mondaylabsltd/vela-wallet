@@ -487,14 +487,22 @@
   "qrTitleNetwork": "Gunakan alamat ini untuk menerima aset di {{network}}",
   "qrTitleAsset": "Gunakan alamat ini untuk menerima {{symbol}} di {{network}}",
   "shareCardNetworkNote": "Hanya pembayaran {{network}}",
-  "tokenContract": "Kontrak token"
+  "tokenContract": "Kontrak token",
+  "includeNetwork": "Sertakan jaringan",
+  "includeNetworkHint": "Beberapa dompet tidak bisa membaca kode ini. Jika pengirim tidak bisa memindai, matikan."
  },
  "assets": {
   "sectionTitle": "Aset",
   "addToken": "Tambah",
   "searchPlaceholder": "Cari token...",
-  "rpcUnavailableSingle": "RPC {{name}} tidak tersedia",
-  "rpcUnavailableMultiple": "RPC {{count}} jaringan tidak tersedia",
+  "unreachableOne": "{{name}} tidak bisa dijangkau saat ini",
+  "unreachableMany": "{{n}} jaringan tidak bisa dijangkau saat ini",
+  "unreachableBody": "Aset Anda tidak terpengaruh — hanya belum bisa dibaca sekarang.",
+  "unreachableNone": "Semua jaringan sudah terjangkau lagi.",
+  "lastSeen": "Terakhir terbaca: {{amount}}",
+  "lastSeenUnpriced": "Ada token saat terakhir dibaca",
+  "lastSeenEmpty": "Kosong saat terakhir dibaca",
+  "notReadYet": "Belum terbaca",
   "rpcFix": "Perbaiki",
   "emptyTitle": "Setor aset pertama Anda",
   "emptySubtext": "Ketuk di sini untuk melihat alamat dan menerima token",
@@ -592,7 +600,8 @@
   "labelSent": "Terkirim",
   "labelReceived": "Diterima",
   "toName": "Ke {{name}}",
-  "fromName": "Dari {{name}}"
+  "fromName": "Dari {{name}}",
+  "dappRowTitle": "{{intent}} di {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -1031,7 +1040,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Dibuat dengan sepenuh hati. Kunci Anda, koin Anda.",
-  "sectionLinks": "Tautan"
+  "sectionLinks": "Tautan",
+  "debugMode": "Mode debug",
+  "debugModeBody": "Izinkan halaman http di jaringan lokal Anda memakai dompet. Hanya untuk pengembangan.",
+  "debugModeRevealed": "Mode debug kini tersedia"
  },
  "clearSigning": {
   "title": "Uji Clear Signing",

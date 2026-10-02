@@ -13,8 +13,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.delay
+import app.getvela.wallet.core.crux.Wire
 import app.getvela.wallet.feature.send.core.RelayClient
+import app.getvela.wallet.feature.wallet.core.DappSummary
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
+import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
+import kotlinx.serialization.builtins.ListSerializer
 import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.UserOpCall
@@ -459,10 +463,11 @@ class SignExecutor(
                 SignRecordKind.SignTypedData -> Row("sign_typed_data", "", "0", "", 0)
                 SignRecordKind.SignMessage -> Row("sign_message", "", "0", "", 0)
             }
-            val clipped = record.params_json.length > 4096
             return JSONObject()
                 .put("id", record.record_id)
                 .put("userOpHash", record.user_op_hash)
+                // Spec 093: empty for a signature — the disk keeps that it was
+                // given, never the signature itself.
                 .put("txHash", record.result)
                 .put("from", record.from)
                 .put("to", to)
@@ -477,9 +482,16 @@ class SignExecutor(
                 // 083 H2: the origin the request arrived from, which Activity
                 // names the site by.
                 .put("dappUrl", record.dapp_url)
-                .put("signedRequest", if (clipped) record.params_json.take(4096) else record.params_json)
-                .put("requestTruncated", clipped)
+                // Spec 093: the request as the CORE kept it (≤ 8 KB, cut once,
+                // in one place) — never a cut of this shell's own.
+                .put("signedRequest", record.stored_request)
+                .put("requestTruncated", record.request_truncated)
                 .apply { record.intent?.let { put("intent", it) } }
+                // Spec 093: what the request was, and (083 F1) what the sheet's
+                // simulation said it moves — both the core's, kept verbatim and
+                // handed back to the feed untouched.
+                .apply { record.summary?.let { put("dappSummary", JSONObject(Wire.json.encodeToString(DappSummary.serializer(), it))) } }
+                .apply { record.balance_changes?.let { put("balanceChanges", JSONArray(Wire.json.encodeToString(JUDGMENTS, it))) } }
                 // Spec 082 T184: kept with the row, read back into the tracker's
                 // pending record — a restart keeps a lost reply followed as one.
                 .put("maybeSent", record.maybe_sent)
@@ -487,5 +499,7 @@ class SignExecutor(
         }
 
         private data class Row(val kind: String, val to: String, val value: String, val symbol: String, val decimals: Int)
+
+        private val JUDGMENTS = ListSerializer(TrustSimJudgment.serializer())
     }
 }

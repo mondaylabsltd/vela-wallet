@@ -143,6 +143,8 @@ pub struct BrowserHost {
     /// says nothing.
     chains: Vec<u32>,
     wallet: Option<(Vec<String>, String)>,
+    /// Settings' debug mode as last told (spec 091).
+    debug_mode: Option<bool>,
     /// Spec 079 US4 / 082 RF1: the pool's view of which chains are down, as
     /// last read — whether the chain of the page in front can be reached.
     chain_health: ChainHealth,
@@ -236,6 +238,7 @@ impl BrowserHost {
             orders: Vec::new(),
             chains: Vec::new(),
             wallet: None,
+            debug_mode: None,
             chain_health: ChainHealth::default(),
             health_watching: false,
             read_watch: ReadWatch::default(),
@@ -243,6 +246,7 @@ impl BrowserHost {
         };
         host.follow_wallet(cx);
         host.follow_networks(cx);
+        host.follow_debug_mode(cx);
         host.dispatch(Event::Start, cx);
         // An account switch is a session change; so is everything else the
         // session does, which is why `follow_wallet` compares before it speaks.
@@ -336,6 +340,24 @@ impl BrowserHost {
             },
             cx,
         );
+    }
+
+    /// Settings' debug mode (spec 091), from the preferences: told to the core,
+    /// whose gate follows it — turned off, it withdraws the wallet from a page
+    /// it no longer offers — and to the webview, whose script is written for
+    /// one mode. A view built for the other is retired, so its page is gone for
+    /// the core too, and the next frame opens a new one where it was. Called
+    /// at boot and by Settings whenever the preference changes; never from a
+    /// page's own message, which arrives inside the view it would retire.
+    pub fn follow_debug_mode(&mut self, cx: &mut Context<Self>) {
+        let Some(on) = debug_mode_news(self.debug_mode) else {
+            return;
+        };
+        self.debug_mode = Some(on);
+        self.dispatch(Event::DebugModeChanged { on }, cx);
+        if crate::webview::set_debug_mode(on) {
+            self.page_gone(cx);
+        }
     }
 
     /// The chains a site may switch or add to — the same list the network
@@ -534,6 +556,13 @@ pub fn page_gone_events() -> Vec<Event> {
             url: blank,
         },
     ]
+}
+
+/// Settings' debug mode, when it is not what the core was last `told`
+/// (spec 091).
+fn debug_mode_news(told: Option<bool>) -> Option<bool> {
+    let on = crate::executor::preferences::debug_mode().is_on();
+    (told != Some(on)).then_some(on)
 }
 
 // ---------------------------------------------------------------------------
@@ -1329,6 +1358,61 @@ mod tests {
             // to answer with.
             let out = ask(&mut driver, DAPP, "d1", "2", "eth_sign", json!([]));
             assert_eq!(answers(&out)[0]["error"]["code"], json!(4200));
+        });
+    }
+
+    /// Spec 091: Settings' debug mode reaches the core's gate — in a
+    /// developer build. Off (hidden or switched off) a LAN page is not heard;
+    /// on, it is; switched off again, what it had open is answered 4900 and it
+    /// is not heard again. In a release build the switch stored on is still
+    /// off: the core says so, and the page is never heard.
+    #[test]
+    fn debug_mode_from_the_preferences_reaches_the_gate() {
+        const LAN: &str = "http://192.168.1.5:3000";
+        storage::tests::with_temp_state("dbr-host-debug-mode", || {
+            crate::executor::preferences::load();
+            assert_eq!(debug_mode_news(None), Some(false), "told once at boot");
+            assert_eq!(debug_mode_news(Some(false)), None, "then only a change");
+            let mut driver = booted();
+            assert!(page(&mut driver, LAN, json!({"t":"hello","doc":"d1"})).is_empty());
+            assert!(ask(&mut driver, LAN, "d1", "1", "eth_chainId", json!([])).is_empty());
+
+            crate::executor::preferences::set_debug_mode(true);
+            let developer = crate::executor::preferences::DEVELOPER_BUILD;
+            let news = debug_mode_news(Some(false));
+            assert_eq!(news, developer.then_some(true), "a release build stays off");
+            let on = news.unwrap_or(false);
+            driver.dispatch(Event::DebugModeChanged { on });
+            page(&mut driver, LAN, json!({"t":"hello","doc":"d2"}));
+            let out = ask(&mut driver, LAN, "d2", "2", "eth_chainId", json!([]));
+            if !developer {
+                assert!(out.is_empty(), "a release build never answers a LAN page");
+            } else {
+                assert_eq!(answers(&out)[0]["result"], json!("0x1"));
+                seed_grant(LAN, A1, 1);
+                page(&mut driver, LAN, json!({"t":"hello","doc":"d3"}));
+                let out = ask(
+                    &mut driver,
+                    LAN,
+                    "d3",
+                    "3",
+                    "eth_requestAccounts",
+                    json!([]),
+                );
+                assert!(
+                    answers(&out).is_empty(),
+                    "a new LAN site is asked to connect"
+                );
+
+                crate::executor::preferences::set_debug_mode(false);
+                let off = debug_mode_news(Some(true)).unwrap_or_else(|| unreachable!("a change"));
+                let out = driver.dispatch(Event::DebugModeChanged { on: off });
+                assert_eq!(answers(&out)[0]["error"]["code"], json!(4900));
+                assert!(ask(&mut driver, LAN, "d3", "4", "eth_chainId", json!([])).is_empty());
+            }
+            // Leave the process as a default launch would find it.
+            let _ = storage::apply_raw(&[(vela_core::prefs::keys::DEBUG_MODE.to_owned(), None)]);
+            crate::executor::preferences::load();
         });
     }
 

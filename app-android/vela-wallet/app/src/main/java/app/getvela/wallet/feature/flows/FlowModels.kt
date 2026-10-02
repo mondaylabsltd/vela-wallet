@@ -91,6 +91,10 @@ data class FactRowModel(
      * 686), so the tier and its reason reach the last screen together.
      */
     val note: String? = null,
+    /** Spec 093: the value is the risk to see (an unlimited spending cap) — the danger tone. */
+    val danger: Boolean = false,
+    /** Spec 093: further value lines under [value] (a dApp's balance changes, one per coin). */
+    val lines: List<String> = emptyList(),
 )
 
 enum class StatusTone { Success, Warning, Error, Info }
@@ -153,7 +157,18 @@ data class ReceiveQrModel(
     val viewOnExplorer: String,
     /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
     val explorerUrl: String? = null,
+    /**
+     * Spec 090: what the code encodes — the core's `qr_value`. Blank (the
+     * gallery) encodes the address the card spells out.
+     */
+    val code: String = "",
+    /** Spec 090: the "include network" switch, as the core offers it; `null` where it offers none. */
+    val network: NetworkSwitchModel? = null,
 )
+
+/** The receive code's "include network" switch (spec 090): its position, and the calm hint while it is on. */
+@Immutable
+data class NetworkSwitchModel(val label: String, val isOn: Boolean, val hint: String? = null)
 
 /** R4 — the image "Save image" produces, not a screen someone navigates to. */
 @Immutable
@@ -206,7 +221,8 @@ data class HistoryModel(
 @Immutable
 data class TxDetailModel(
     val title: String,
-    val status: StatusChipModel,
+    /** `null` for a signature (spec 093): nothing settles it — [note] says so instead. */
+    val status: StatusChipModel?,
     val closeLabel: String,
     val amount: String,
     val fiat: String,
@@ -233,7 +249,35 @@ data class TxDetailModel(
      * transaction hash to open (an op hash is never an explorer link).
      */
     val explorerShown: Boolean = true,
+    /** Spec 093: "Off-chain signature — nothing was sent on-chain", where a chip would be. */
+    val note: String? = null,
+    /** Spec 093: the figure is an unlimited allowance — the danger tone. */
+    val amountDanger: Boolean = false,
+    /** 083 F1: a swap's one coin back, under the figure ("≈ +0.03 ETH"). */
+    val received: String? = null,
+    /** Spec 093: a dApp record's collapsed "Technical details"; `null` for everything else. */
+    val technical: TxTechnicalModel? = null,
 )
+
+/** Spec 093: the collapsed "Technical details" of a dApp record, in the core's order. */
+@Immutable
+data class TxTechnicalModel(
+    val title: String,
+    val lines: List<TxTechnicalLine>,
+)
+
+@Immutable
+sealed interface TxTechnicalLine {
+    data class Fact(val fact: FactRowModel) : TxTechnicalLine
+
+    /**
+     * The request the record kept — read from the store by [recordId] only
+     * when the section is opened, shown as the core displays a request of
+     * this [content] (`call_data`, `typed_data`, `message`: the core's word);
+     * [missing] when it kept none.
+     */
+    data class Content(val label: String, val recordId: String, val missing: String, val content: String) : TxTechnicalLine
+}
 
 /* ------------------------------------------------------------------ assets */
 

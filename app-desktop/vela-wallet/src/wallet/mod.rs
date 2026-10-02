@@ -45,10 +45,20 @@ pub struct WalletStrings {
     /// sentence, not a $0.
     pub balance_unreachable: SharedString,
     pub balance_unpriced: SharedString,
-    /// The hero's status line naming unreachable chains (078 H-03):
-    /// templates carrying `{{name}}` / `{{count}}`.
-    pub rpc_unavailable_single: String,
-    pub rpc_unavailable_multiple: String,
+    /// The line over the networks the wallet cannot reach (spec 092) — the
+    /// hero's status line and the title of the list it opens: templates
+    /// carrying `{{name}}` / `{{n}}`.
+    pub unreachable_one: String,
+    pub unreachable_many: String,
+    /// Under the list's title: what is there is unaffected, only unread.
+    pub unreachable_body: SharedString,
+    /// The list's title once every network in it has come back.
+    pub unreachable_none: SharedString,
+    /// Each row's line by the corpus key the core names (`line_key`);
+    /// `assets.lastSeen` carries `{{amount}}`.
+    pub unreachable_lines: Vec<(&'static str, String)>,
+    /// A row's way to its network's RPC editor.
+    pub unreachable_fix: SharedString,
     /// SR3, the balance breakdown the status line opens (078 H-03).
     pub detail_title: SharedString,
     /// Template carrying `{{amount}}`.
@@ -82,6 +92,12 @@ pub struct WalletStrings {
     /// — else "Contract interaction", as the sheet called it.
     pub terms: std::collections::HashMap<vela_core::app::clear_signing::ClearTerm, SharedString>,
     pub intent_contract_call: SharedString,
+    /// A dApp row's title (spec 093): template carrying `{{intent}}` (the
+    /// verb) and `{{place}}` (where — the core's protocol or site).
+    pub dapp_row_title: String,
+    /// An allowance with no limit (spec 093), drawn in the danger tone where
+    /// a figure would be — the signing sheet's own word.
+    pub unlimited_value: SharedString,
     pub today: SharedString,
     pub yesterday: SharedString,
     /// Templates carrying `{{name}}`.
@@ -158,8 +174,20 @@ impl WalletStrings {
             balance_stale: s("home.balanceStale"),
             balance_unreachable: s("onboarding.common.networkBody"),
             balance_unpriced: s("home.balanceUnpriced"),
-            rpc_unavailable_single: raw("assets.rpcUnavailableSingle"),
-            rpc_unavailable_multiple: raw("assets.rpcUnavailableMultiple"),
+            unreachable_one: raw("assets.unreachableOne"),
+            unreachable_many: raw("assets.unreachableMany"),
+            unreachable_body: s("assets.unreachableBody"),
+            unreachable_none: s("assets.unreachableNone"),
+            unreachable_lines: {
+                use vela_core::app::balance_dashboard::{
+                    LAST_SEEN, LAST_SEEN_EMPTY, LAST_SEEN_UNPRICED, NOT_READ_YET,
+                };
+                [LAST_SEEN, LAST_SEEN_UNPRICED, LAST_SEEN_EMPTY, NOT_READ_YET]
+                    .into_iter()
+                    .map(|key| (key, raw(key)))
+                    .collect()
+            },
+            unreachable_fix: s("assets.rpcFix"),
             detail_title: s("home.balanceDetailTitle"),
             detail_total: raw("assets.switcherTotal"),
             detail_networks_label: s("home.balanceDetailNetworksLabel"),
@@ -186,6 +214,8 @@ impl WalletStrings {
                 .map(|term| (term, s(&format!("componentsUi.signing.{}", term.leaf()))))
                 .collect(),
             intent_contract_call: s("componentsUi.signing.intentContractCall"),
+            dapp_row_title: raw("history.dappRowTitle"),
+            unlimited_value: s("componentsUi.signingApprove.unlimitedValue"),
             today: s("componentsUi.dayGroup.today"),
             yesterday: s("componentsUi.dayGroup.yesterday"),
             to_name: raw("history.toName"),
@@ -282,6 +312,14 @@ mod tests {
             assert_ne!(value, key, "`{key}` echoed the key");
         }
         assert!(s.to_name.contains("{{name}}"), "toName must be a template");
+        assert!(
+            s.dapp_row_title.contains("{{intent}}") && s.dapp_row_title.contains("{{place}}"),
+            "dappRowTitle must carry both vars (spec 093)"
+        );
+        assert_ne!(
+            s.unlimited_value.as_ref(),
+            "componentsUi.signingApprove.unlimitedValue"
+        );
         assert!(
             s.toast_received.contains("{{amount}}") && s.toast_received.contains("{{token}}"),
             "toastReceived must carry both vars: a celebration that names one              of them is a sentence with a hole in it"

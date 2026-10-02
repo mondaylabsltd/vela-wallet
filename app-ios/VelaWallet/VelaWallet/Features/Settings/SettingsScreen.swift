@@ -81,6 +81,11 @@ struct SettingsScreen: View {
     /// fix", a provider's "Get a key". Absent in the gallery, where a link is
     /// drawn and goes nowhere on purpose.
     var onOpenLink: ((String) -> Void)?
+    /// Settings' hidden debug mode (spec 091): seven taps on About's version
+    /// revealed the switch — store it — and the switch was turned on or off.
+    /// Absent in the gallery, where the version is only text.
+    var onRevealDebugMode: (() -> Void)?
+    var onDebugMode: ((Bool) -> Void)?
     /// What the add-network wizard raises (spec 050).
     ///
     /// Defaulted to no-ops so every gallery board and fixture call site is
@@ -96,6 +101,8 @@ struct SettingsScreen: View {
     @State private var feedbackSender = FeedbackSender()
     /// The outcome of a report whose sheet was closed before it landed.
     @State private var feedbackToast: FeedbackOutcomeToast.Model?
+    /// A brief notice — "Debug mode is now available" (spec 091).
+    @State private var notice: String?
     @Environment(\.openURL) private var openURL
     /// The destructive action waiting on its answer — a storage row's 清除, a
     /// network's bin, "reset to defaults" — and what "yes" does. One slot,
@@ -136,7 +143,9 @@ struct SettingsScreen: View {
         onEthereumBackup: (() -> Void)? = nil,
         onSaveSignerUrl: ((String) -> Bool)? = nil,
         onResetSignerUrl: (() -> Void)? = nil,
-        onOpenLink: ((String) -> Void)? = nil
+        onOpenLink: ((String) -> Void)? = nil,
+        onRevealDebugMode: (() -> Void)? = nil,
+        onDebugMode: ((Bool) -> Void)? = nil
     ) {
         self.model = model
         self.loc = loc
@@ -159,6 +168,8 @@ struct SettingsScreen: View {
         self.onSaveSignerUrl = onSaveSignerUrl
         self.onResetSignerUrl = onResetSignerUrl
         self.onOpenLink = onOpenLink
+        self.onRevealDebugMode = onRevealDebugMode
+        self.onDebugMode = onDebugMode
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -202,6 +213,7 @@ struct SettingsScreen: View {
                 // an iPhone: `https://index.invalid`, typed, gone.
                 .scrollDismissesKeyboard(.interactively)
                 .overlay(alignment: .bottom) { feedbackToastView }
+                .overlay(alignment: .bottom) { noticeView }
                 WalletTabBar(
                     tabs: model.tabs,
                     selected: model.rescue ? .wallet : .settings,
@@ -390,7 +402,18 @@ struct SettingsScreen: View {
                 ) { clear?(id) }
             }
         )
-        case .about: AboutBody(panel: model.about, onOpenLink: onOpenLink)
+        case .about: AboutBody(
+            panel: model.about,
+            onOpenLink: onOpenLink,
+            onRevealDebugMode: onRevealDebugMode.map { reveal in
+                {
+                    reveal()
+                    VelaHaptic.press.play()
+                    show(notice: model.about.debugMode.revealedNotice)
+                }
+            },
+            onDebugMode: onDebugMode
+        )
         }
     }
 
@@ -588,6 +611,29 @@ struct SettingsScreen: View {
     /// Where a row that leaves the app goes — the Community links.
     static func externalLink(forRow id: String) -> String? {
         SettingsFixtures.communityLinks.first { $0.id == id }?.url
+    }
+
+    // MARK: - A brief notice (spec 091)
+
+    @ViewBuilder private var noticeView: some View {
+        if let notice {
+            NoticeCapsule(text: notice)
+                .padding(.bottom, Tokens.Space.s16)
+                .transition(.opacity)
+                .accessibilityIdentifier("settings.notice")
+        }
+    }
+
+    /// Shown for two seconds, and said aloud for VoiceOver.
+    private func show(notice text: String) {
+        withAnimation(.easeOut(duration: 0.2)) { notice = text }
+        UIAccessibility.post(notification: .announcement, argument: text)
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            if notice == text {
+                withAnimation(.easeIn(duration: 0.2)) { notice = nil }
+            }
+        }
     }
 
     // MARK: - A report's outcome, when its sheet was closed
@@ -1058,6 +1104,11 @@ private struct AboutBody: View {
     @Environment(\.theme) private var theme
     let panel: AboutModel
     var onOpenLink: ((String) -> Void)?
+    var onRevealDebugMode: (() -> Void)?
+    var onDebugMode: ((Bool) -> Void)?
+
+    /// The taps on the version, for as long as About is shown (spec 091).
+    @State private var versionTaps = VersionTapCounter()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1066,9 +1117,12 @@ private struct AboutBody: View {
                 Text(panel.tagline)
                     .typeRole(Typography.fieldLabel)
                     .foregroundStyle(theme.fgMuted)
+                // The hidden entry (spec 091): no affordance, on purpose.
                 Text(panel.version)
                     .typeRole(Typography.monoSmall)
                     .foregroundStyle(theme.fgSubtle)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: versionTapped)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, Tokens.Space.s24)
@@ -1079,6 +1133,15 @@ private struct AboutBody: View {
                 .padding(.bottom, Tokens.Space.s8)
             ForEach(panel.rows) { KeyValueRow(row: $0) }
 
+            if panel.debugMode.mode.revealed {
+                SettingsSwitchRow(
+                    title: panel.debugMode.title,
+                    detail: panel.debugMode.body,
+                    isOn: panel.debugMode.mode.isOn,
+                    onChange: onDebugMode
+                )
+            }
+
             Spacer().frame(height: Tokens.Space.s24)
             ForEach(panel.links) { KeyValueRow(row: $0, onOpen: onOpenLink) }
 
@@ -1088,6 +1151,14 @@ private struct AboutBody: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, Tokens.Space.s24)
         }
+    }
+
+    /// Each tap goes to the core's rule with the switch as it stands; only
+    /// the tap it says revealed the switch does anything.
+    private func versionTapped() {
+        guard let onRevealDebugMode else { return }
+        let now = Date().timeIntervalSince1970 * 1000
+        if versionTaps.tap(nowMs: now, mode: panel.debugMode.mode) { onRevealDebugMode() }
     }
 }
 

@@ -49,6 +49,11 @@ export const load: PageServerLoad = ({ params }) => {
 		allNetworksLabel: walletMessages.networkFilter.allNetworks,
 		/** The identicon viewer every artwork on this route opens. */
 		identiconViewer: walletMessages.identiconViewer,
+		/**
+		 * Spec 093: the Activity row's words, so a contact's 最近往来 is drawn
+		 * by Activity's own row builder from the core's rows.
+		 */
+		rowMessages: { activity: walletMessages.activity },
 		/** The account switcher behind the sidebar header's name. */
 		accountsMessages: resolveSettingsMessages(locale).accounts
 	};

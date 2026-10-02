@@ -494,14 +494,22 @@
   "qrTitleNetwork": "Use this address to receive assets on {{network}}",
   "qrTitleAsset": "Use this address to receive {{symbol}} on {{network}}",
   "shareCardNetworkNote": "{{network}} payments only",
-  "tokenContract": "Token contract"
+  "tokenContract": "Token contract",
+  "includeNetwork": "Include network",
+  "includeNetworkHint": "Some wallets can't read this code. If theirs can't, switch it off."
  },
  "assets": {
   "sectionTitle": "Assets",
   "addToken": "Add",
   "searchPlaceholder": "Search tokens...",
-  "rpcUnavailableSingle": "{{name}} RPC unavailable",
-  "rpcUnavailableMultiple": "{{count}} networks RPC unavailable",
+  "unreachableOne": "Can't reach {{name}} right now",
+  "unreachableMany": "Can't reach {{n}} networks right now",
+  "unreachableBody": "Your assets there aren't affected — we just can't read them right now.",
+  "unreachableNone": "Every network is reachable again.",
+  "lastSeen": "Last seen {{amount}}",
+  "lastSeenUnpriced": "Held tokens when last read",
+  "lastSeenEmpty": "Held nothing when last read",
+  "notReadYet": "Not read yet",
   "rpcFix": "Fix",
   "emptyTitle": "Deposit your first asset",
   "emptySubtext": "Tap here to see your address and receive tokens",
@@ -599,7 +607,8 @@
   "labelSent": "Sent",
   "labelReceived": "Received",
   "toName": "To {{name}}",
-  "fromName": "From {{name}}"
+  "fromName": "From {{name}}",
+  "dappRowTitle": "{{intent}} on {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -1038,7 +1047,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Built with care. Your keys, your coins.",
-  "sectionLinks": "Links"
+  "sectionLinks": "Links",
+  "debugMode": "Debug mode",
+  "debugModeBody": "Lets http pages on your local network use the wallet. For development only.",
+  "debugModeRevealed": "Debug mode is now available"
  },
  "clearSigning": {
   "title": "Clear Signing Test",

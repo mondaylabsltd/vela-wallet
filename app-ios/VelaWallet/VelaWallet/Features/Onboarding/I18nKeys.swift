@@ -496,6 +496,10 @@ enum I18nKeys {
         static let aboutLinkGithub = "about.linkGitHub"
         static let aboutLinkSafe = "about.linkSafeWallet"
         static let aboutFooter = "about.footer"
+        // Settings' hidden debug mode (spec 091).
+        static let aboutDebugMode = "about.debugMode"
+        static let aboutDebugModeBody = "about.debugModeBody"
+        static let aboutDebugModeRevealed = "about.debugModeRevealed"
 
             // Account switcher + sign out + erase.
         static let accountsTitle = "settingsModals.account.modalTitle"
@@ -564,8 +568,18 @@ enum I18nKeys {
         static let bugCloseViewer = "componentsUi.bugReport.closeViewer"
         static let bugRemoveFromViewer = "componentsUi.bugReport.removeFromViewer"
 
-            // Rescue (SR1–SR5).
-        static let rpcUnavailableMultiple = "assets.rpcUnavailableMultiple"
+            // Rescue (SR1–SR6).
+            // SR6 (spec 092): the networks the wallet cannot reach — the
+            // home's line (`{{name}}` / `{{n}}`), the list under it, and the
+            // four row lines the core names in `line_key`.
+        static let unreachableOne = "assets.unreachableOne"
+        static let unreachableMany = "assets.unreachableMany"
+        static let unreachableBody = "assets.unreachableBody"
+        static let unreachableNone = "assets.unreachableNone"
+        static let lastSeen = "assets.lastSeen"
+        static let lastSeenUnpriced = "assets.lastSeenUnpriced"
+        static let lastSeenEmpty = "assets.lastSeenEmpty"
+        static let notReadYet = "assets.notReadYet"
         static let rpcFix = "assets.rpcFix"
         static let rpcFixTitle = "assets.rpcFixTitle"
         static let rpcFixWarning = "assets.rpcFixWarning"

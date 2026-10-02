@@ -12,7 +12,8 @@ import androidx.compose.ui.graphics.Color
  * replaces the fixture layer that builds them and nothing else.
  */
 
-enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8 }
+/** H9 (spec 092): the hero's line over networks the wallet cannot reach. */
+enum class WalletScreenState { H1, H1S, H2, H3, H4, H5, H6, H7, H7X, H8, H9 }
 
 @Immutable
 data class WalletHeaderModel(
@@ -83,6 +84,10 @@ data class ActivityRowModel(
      * badge was ALWAYS the dot — a colour nobody can read as a network.
      */
     val badgeLogoUrl: String? = null,
+    /** Spec 093: the figure is an unlimited allowance — drawn in the danger tone. */
+    val danger: Boolean = false,
+    /** 083 F1 / spec 093: a swap's one coin back ("≈ +0.03 ETH"), drawn under the figure. */
+    val received: String? = null,
 ) {
     /**
      * Whether the row has a figure to draw (087 F11). A dApp call that moved

@@ -47,6 +47,7 @@ vi.mock('$lib/services/rpc-pool', () => ({
 }));
 
 import { createBalanceExecutor } from './balance-executor';
+import { getAllNetworksSync } from '$lib/services/networks';
 
 const effect = (operation: BalanceEffect['operation']): BalanceEffect => ({ id: 1, operation });
 const ADDR = '0x14fb1f4e2b9c7a5d8e3f6a1b4c7d9e2f5a8b1d1e';
@@ -81,6 +82,11 @@ describe('fetch_tokens', () => {
 			failed_chain_ids: [137],
 			rate_limited_chain_ids: [56]
 		});
+		// Spec 092: the chains the round asked, so the core can tell a network
+		// that answered holding nothing from one never read.
+		const asked = getAllNetworksSync().map((net) => net.chainId);
+		expect(asked).toEqual(expect.arrayContaining([1, 56, 137]));
+		expect(result).toMatchObject({ read_chain_ids: asked });
 	});
 
 	// Send's retry-once rule waits for the NEXT round to end — and a round that

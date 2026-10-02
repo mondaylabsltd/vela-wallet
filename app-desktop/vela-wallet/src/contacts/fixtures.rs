@@ -242,6 +242,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
             badge_logo: None,
             day: None,
             received: None,
+            danger: false,
         },
         ActivityRowModel {
             kind: ActivityKind::Sent,
@@ -254,6 +255,7 @@ pub fn alice_activity(s: &ContactsStrings) -> Vec<ActivityRowModel> {
             badge_logo: None,
             day: None,
             received: None,
+            danger: false,
         },
     ]
 }

@@ -765,7 +765,9 @@ pub fn activity_row(theme: &Theme, icons: &mut IconCache, row: &ActivityRowModel
         ActivityKind::Received => Icon::ArrowDownLeft,
         ActivityKind::Dapp => Icon::Link2,
     };
-    let amount_color = if row.positive {
+    let amount_color = if row.danger {
+        theme.error_base
+    } else if row.positive {
         theme.success
     } else {
         theme.fg_base

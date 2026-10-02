@@ -132,6 +132,14 @@ class WalletFixturesTest {
         assertEquals(1.35f, scaled.textScale, 0f)
     }
 
+    /** Spec 092: H9 is the hero's line over SR6's three unreachable networks, without "RPC". */
+    @Test
+    fun h9SaysHowManyNetworksCannotBeReached() {
+        val model = WalletFixtures.buildMobileState(WalletScreenState.H9, zhStrings())
+        assertEquals(BalanceStatusKind.Warning, model.balance.status?.kind)
+        assertEquals("3 个网络暂时连不上", model.balance.status?.text)
+    }
+
     @Test
     fun h2AndH3AreEmptyAndLoading() {
         val empty = WalletFixtures.buildMobileState(WalletScreenState.H2, zhStrings())

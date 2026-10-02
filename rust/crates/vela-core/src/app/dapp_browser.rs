@@ -61,11 +61,18 @@
 //! - Messages from a subframe are ignored: the script installs nothing there,
 //!   so only a direct call to the host bridge can produce one, and there is no
 //!   way to answer a subframe that is not also a way to speak as the top page.
-//! - Messages from a page that is not a secure context ([`is_secure_context`]:
-//!   https, or http on loopback) are ignored too (spec 088 FR-004). The script
-//!   offers no provider there (`window.isSecureContext`), so only a direct call
-//!   to the host bridge can produce one — Android's listener cannot be limited
-//!   to "any https origin", so the bridge object itself is in every page.
+//! - Messages from a page that is not offered the wallet ([`offers_wallet`]:
+//!   a secure context — https, or http on loopback — and, with debug mode on,
+//!   http on this device's own network) are ignored too (spec 088 FR-004,
+//!   spec 091). The script offers no provider there, so only a direct call to
+//!   the host bridge can produce one — Android's listener cannot be limited to
+//!   "any https origin", so the bridge object itself is in every page.
+//! - Debug mode is the shell's to state ([`Event::DebugModeChanged`]) and the
+//!   script's to read when a document starts. Turned off, it takes the wallet
+//!   away from an open page at once: every document it no longer offers is
+//!   retired — what it had open is answered 4900, a sheet showing one of its
+//!   requests closes — and the page's later messages are ignored. Turned on,
+//!   a page already open has no provider until it loads again.
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -79,7 +86,7 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use super::dapp_permissions::{
-    dapp_spelling, is_insecure_public_origin, is_secure_context, origin_of, resolve_granted,
+    dapp_spelling, is_insecure_public_origin, offers_wallet, origin_of, resolve_granted,
     should_drop_grant, DpermGrant,
 };
 use super::dapp_rpc::{
@@ -230,6 +237,12 @@ pub enum Event {
     /// Every wallet address. `None` while unknown — cold-load safe.
     AccountsUpdated {
         addresses: Option<Vec<String>>,
+    },
+    /// Settings' debug mode (spec 091), stated at start and on every change:
+    /// with it on, http pages on this device's own network are offered the
+    /// wallet too ([`offers_wallet`]). Off is the default.
+    DebugModeChanged {
+        on: bool,
     },
     /// The active account changed (initial load included). Every grant
     /// follows it.
@@ -406,6 +419,8 @@ pub struct Model {
     chains: Vec<u32>,
     wallet_addresses: Option<Vec<String>>,
     active_address: Option<String>,
+    /// Settings' debug mode (spec 091) — which origins [`offers_wallet`] lets in.
+    debug_mode: bool,
     tabs: BTreeMap<String, Tab>,
     consent: Option<Consent>,
     signing: Option<SignJob>,
@@ -499,6 +514,7 @@ impl App for DappBrowser {
                 }
             }
             Event::NetworksChanged { chain_ids } => model.chains = chain_ids,
+            Event::DebugModeChanged { on } => debug_mode_changed(model, on, &mut out),
             Event::AccountsUpdated { addresses } => {
                 model.wallet_addresses = addresses;
                 reconcile_grants(model, None, &mut out);
@@ -682,8 +698,12 @@ impl App for DappBrowser {
                     let origin = tab.doc_origin.clone().or(tab.shown_origin.clone());
                     DbrTabView {
                         tab: id.clone(),
+                        // Only where the page is offered the wallet: a LAN
+                        // site connected in debug mode is not connected while
+                        // debug mode is off (spec 091).
                         connected_address: origin
                             .as_deref()
+                            .filter(|origin| offers_wallet(origin, model.debug_mode))
                             .and_then(|origin| granted(model, origin).into_iter().next()),
                         chain_id: origin
                             .as_deref()
@@ -993,6 +1013,38 @@ fn retire_document(model: &mut Model, tab_id: &str, deliver: bool, out: &mut Out
     }
 }
 
+/// Debug mode changed (spec 091). Turning it off withdraws the wallet from
+/// every open page it no longer offers, at once: the document is retired —
+/// its open requests answered 4900, its consent entries and signing jobs
+/// dropped, a sheet showing one of them closed — and the gate ignores that
+/// page from here on. Turning it on changes nothing already open: the script
+/// a page started with offered it nothing, and it is offered the wallet when
+/// it next loads.
+fn debug_mode_changed(model: &mut Model, on: bool, out: &mut Out) {
+    if model.debug_mode == on {
+        return;
+    }
+    model.debug_mode = on;
+    let withdrawn: Vec<String> = model
+        .tabs
+        .iter()
+        .filter(|(_, tab)| {
+            tab.doc.is_some()
+                && tab
+                    .doc_origin
+                    .as_deref()
+                    .is_some_and(|origin| !offers_wallet(origin, on))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    for tab in withdrawn {
+        retire_document(model, &tab, true, out);
+        if let Some(entry) = model.tabs.get_mut(&tab) {
+            entry.doc_origin = None;
+        }
+    }
+}
+
 fn page_message(model: &mut Model, message: HeldMessage, out: &mut Out) {
     // A subframe cannot be answered without speaking as the top page; the
     // script installs nothing there, so this is a direct call to the host.
@@ -1002,10 +1054,11 @@ fn page_message(model: &mut Model, message: HeldMessage, out: &mut Out) {
     let Some(frame_origin) = origin_of(&message.frame_origin) else {
         return;
     };
-    // Spec 088 FR-004: the wallet is offered only to secure contexts. The
-    // script stays silent elsewhere, so this is a page calling the bridge by
-    // hand — no hello is adopted and no request is read, let alone answered.
-    if !is_secure_context(&frame_origin) {
+    // Spec 088 FR-004, spec 091: the wallet is offered only where
+    // `offers_wallet` says. The script stays silent elsewhere, so this is a
+    // page calling the bridge by hand — no hello is adopted and no request is
+    // read, let alone answered.
+    if !offers_wallet(&frame_origin, model.debug_mode) {
         return;
     }
     match parse_page_message(&message.message_json) {

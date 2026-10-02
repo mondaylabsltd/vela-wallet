@@ -73,6 +73,8 @@
     "qrTitleNetwork": "Utilisez cette adresse pour recevoir des actifs sur {{network}}",
     "qrTitleAsset": "Utilisez cette adresse pour recevoir des {{symbol}} sur {{network}}",
     "shareCardNetworkNote": "Paiements {{network}} uniquement",
-    "tokenContract": "Contrat du jeton"
+    "tokenContract": "Contrat du jeton",
+    "includeNetwork": "Inclure le réseau",
+    "includeNetworkHint": "Certains portefeuilles ne lisent pas ce code. Si votre interlocuteur n'y arrive pas, désactivez-le."
   }
 }

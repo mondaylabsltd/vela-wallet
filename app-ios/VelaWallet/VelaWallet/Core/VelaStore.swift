@@ -118,6 +118,10 @@ struct VelaStore {
         /// The avatar style, retired (spec 074: every avatar is the identicon).
         /// Read once, by the core's migration, and removed.
         static let retiredAvatarStyle = "vela.avatarStyle"
+        /// Settings' hidden debug mode (spec 091): `off` / `on` once About's
+        /// version has been tapped seven times, absent until then. The core's
+        /// `prefs::keys::DEBUG_MODE`; what is stored is `prefsDebugModeValue`'s.
+        static let debugMode = "vela.debugMode"
     }
 
     private let defaults: UserDefaults
