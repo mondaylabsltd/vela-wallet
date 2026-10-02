@@ -140,6 +140,11 @@ filtering. The rule also reaches the desktop and web in-app browsers through the
 loopback for dev". A loopback test dApp still signs (`a_loopback_test_dapp_may_sign`). A
 real phone testing a dApp served from the Mac needs https or `adb reverse`.
 
+**Owner ruling 2026-10-02:** LAN http dApps get the wallet only in the hidden debug mode →
+[spec 091](../091-debug-mode-lan-dapps/spec.md). Seven taps on the version in Settings → About reveal
+the switch. With it on, the core's `offers_wallet(origin, debug_mode)` adds http on the device's own
+network. Off, the default, this section holds unchanged.
+
 ### Shells
 
 Both shells draw the same sheet: the host, the URL, "Open in Vela Wallet"

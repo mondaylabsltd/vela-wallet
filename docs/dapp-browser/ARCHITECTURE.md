@@ -39,7 +39,8 @@ tabs. What a page may ask, and what it is answered, is decided in ONE place.
 | Piece | Home |
 |---|---|
 | The provider | `rust/crates/vela-core/provider/inpage.js` — bundled by the extension (`extension/build.mjs`), embedded by the core |
-| The injected script (provider + bridge) | `vela_core::app::dapp_rpc::provider_script(host)`; UniFFI `dapp_provider_script`, wasm `dappProviderScript` |
+| The injected script (provider + bridge) | `vela_core::app::dapp_rpc::provider_script(host, debug_mode)`; UniFFI `dapp_provider_script`, wasm `dappProviderScript` |
+| Who is offered the wallet | `dapp_permissions::offers_wallet(origin, debug_mode)` — a secure context (spec 088), plus http on the device's own network while Settings' hidden debug mode is on (spec 091). The page gate and the script both follow it; the script's host test is written by the core (`private_host_js`) |
 | The routing table | `dapp_rpc::classify` — the extension's `lib/protocol.js` `classifyMethod` is a mirror pinned by `src/lib/dapp/core-table.test.ts` |
 | Everything a page is answered | the `dapp_browser` machine; contract in `specs/070-dapp-browser-core/contracts/dapp-browser.md` |
 | Address-bar input | `dapp_rpc::browser_input` (a host → https, a loopback/LAN host → http, anything else → a DuckDuckGo search) |
