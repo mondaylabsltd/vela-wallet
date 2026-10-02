@@ -28,6 +28,9 @@ enum FeedDirectionWire: String, Decodable {
 
 enum FeedTxStatusWire: String, Decodable {
     case pending, confirmed, failed
+    /// 087 F04: a pending record nothing will ever settle (no operation hash
+    /// past the core's grace, or past the tracker's 24 h). Only a row says it.
+    case unknown
 
     /// A lifecycle this build has never heard of reads as pending — never as
     /// confirmed, and never as a view that fails to decode.

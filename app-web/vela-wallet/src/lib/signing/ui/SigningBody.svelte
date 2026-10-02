@@ -49,7 +49,7 @@
 </script>
 
 <div class="blocks">
-	<BlockList blocks={model.blocks} {onchip} {oncustom} />
+	<BlockList blocks={model.blocks} leadIntent={model.dapp.own === true} {onchip} {oncustom} />
 </div>
 
 <div class="footer">

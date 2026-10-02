@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FALLBACK_LOCALE, SUPPORTED_LOCALES, negotiate, toLocale } from './locales';
+import { FALLBACK_LOCALE, SUPPORTED_LOCALES, localeOfPath, negotiate, toLocale } from './locales';
 
 describe('registry', () => {
 	it('ships exactly the 15 corpus locales', () => {
@@ -78,5 +78,25 @@ describe('negotiate — the RN detectSystemLanguage table over Accept-Language',
 
 	it('ignores q=0 (explicitly refused) candidates', () => {
 		expect(negotiate('ja;q=0, vi;q=0.5')).toBe('vi');
+	});
+});
+
+describe('localeOfPath (issue 317)', () => {
+	it('reads the locale a page’s path names, on the site and in the packaged extension', () => {
+		expect(localeOfPath('/ja/wallet')).toBe('ja');
+		expect(localeOfPath('/ja/wallet.html')).toBe('ja');
+		expect(localeOfPath('/zh-TW/settings.html')).toBe('zh-TW');
+		expect(localeOfPath('/pt-br.html')).toBe('pt-BR');
+		expect(localeOfPath('/de')).toBe('de');
+		for (const locale of SUPPORTED_LOCALES) {
+			expect(localeOfPath(`/${locale}/request.html`)).toBe(locale);
+		}
+	});
+
+	it('names nothing for a path no locale page has', () => {
+		expect(localeOfPath('/')).toBeUndefined();
+		expect(localeOfPath('/panel.html')).toBeUndefined();
+		expect(localeOfPath('/app/immutable/x.js')).toBeUndefined();
+		expect(localeOfPath('')).toBeUndefined();
 	});
 });

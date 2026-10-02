@@ -100,6 +100,14 @@ final class FlowNav {
     func close() {
         stack.removeAll()
     }
+
+    /// A machine closed its journey: the flow goes with it, but only while
+    /// one of that machine's screens is what is showing — a close that lands
+    /// after the person already went elsewhere must not shut that (087 F27,
+    /// Android's `if (sendClosed && flows.top in SEND_STATES) flows.close()`).
+    func close(ifShowing states: Set<FlowStateId>) {
+        if let top, states.contains(top) { close() }
+    }
 }
 
 extension FlowStep: Hashable {}

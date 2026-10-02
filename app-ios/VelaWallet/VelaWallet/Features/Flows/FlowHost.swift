@@ -116,6 +116,9 @@ struct FlowHost: View {
     /// apart, and the shell's own picking flag can.
     var onPickCta: (() -> Void)?
     var onMax: (() -> Void)?
+    /// Issue #326: the form's token card — back to the asset picker, the
+    /// payee kept. Only where the core offers it (`can_change_token`).
+    var onChangeToken: (() -> Void)?
     /// The ⇄ under the amount: type in the display currency instead of the
     /// token, or back. Drawn since 021 and enabled by the core whenever the
     /// token has a price, and `SendStore.toggleFiatInput()` had no caller
@@ -375,6 +378,7 @@ struct FlowHost: View {
                     onFee: { onNavigate(.feeToken) },
                     onDenom: { onDenom?() },
                     onMax: { _ in onMax?() },
+                    onChangeToken: onChangeToken,
                     onAddRecipient: {
                         if let onAddRecipient { onAddRecipient() }
                         else { onNavigate(.addRecipient) }
@@ -502,7 +506,14 @@ private struct FlowSheetHost: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Tokens.Space.s0) {
-                titleRow
+                // The receive code puts its ✕ on its own heading's line (issue
+                // #321): a row holding nothing but the ✕ is room the code and
+                // its two buttons need on a small phone.
+                if case .receiveQr = sheet {
+                    Color.clear.frame(height: Tokens.Space.s16)
+                } else {
+                    titleRow
+                }
                 body_
             }
             .padding(.horizontal, Tokens.Layout.screenPaddingX)
@@ -535,14 +546,7 @@ private struct FlowSheetHost: View {
                     .foregroundStyle(theme.fgBase)
             }
             Spacer(minLength: Tokens.Space.s8)
-            Button { dismiss() } label: {
-                LucideIcon(.close, size: LucideIconSize.flowBack)
-                    .foregroundStyle(theme.fgMuted)
-                    .frame(width: Tokens.Layout.hitTarget, height: Tokens.Layout.hitTarget)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(sheet.closeLabel)
+            FlowSheetCloseButton(label: sheet.closeLabel) { dismiss() }
         }
         .padding(.top, Tokens.Space.s16)
     }
@@ -553,7 +557,8 @@ private struct FlowSheetHost: View {
             ReceiveQrBody(
                 model: m,
                 onSave: { onSaveCard?() },
-                onExplorer: { onExplorer?() }
+                onExplorer: { onExplorer?() },
+                onClose: { dismiss() }
             )
         case .txDetail(let m):
             TxDetailBody(model: m, onExplorer: { onExplorer?() }, onDelete: onDeleteTx)
@@ -601,5 +606,26 @@ private struct FlowSheetHost: View {
                 onResetRate: { onBatchResetRate?() }
             )
         }
+    }
+}
+
+/// A flow sheet's ✕: the glyph in a hit-target frame. The sheet's title row
+/// draws it, and so does a body that puts it on its own heading's line (the
+/// receive code, issue #321).
+struct FlowSheetCloseButton: View {
+    @Environment(\.theme) private var theme
+
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            LucideIcon(.close, size: LucideIconSize.flowBack)
+                .foregroundStyle(theme.fgMuted)
+                .frame(width: Tokens.Layout.hitTarget, height: Tokens.Layout.hitTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }

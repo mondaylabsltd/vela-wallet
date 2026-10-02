@@ -33,7 +33,9 @@
 				"chainSetup": "체인 설정",
 				"selfHosting": "셀프 호스팅 가이드",
 				"privacy": "개인정보 처리방침",
-				"terms": "이용약관"
+				"terms": "이용약관",
+				"support": "지원",
+				"deleteData": "데이터 삭제"
 			}
 		},
 		"language": {

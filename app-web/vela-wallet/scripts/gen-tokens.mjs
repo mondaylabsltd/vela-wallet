@@ -289,6 +289,16 @@ const WEB_ADDITIONS = [
 /** Composite stacks: export families + docs/design-system.md CJK/system fallbacks. */
 const FONT_UI = "'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif";
 const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace";
+/**
+ * What every exported family falls back to (docs/design-system.md: a script
+ * the brand face lacks goes to the platform's own sans — "never a serif").
+ * Without it a family var named ONE face, and the browser drew what that face
+ * lacks in its default font: ru's signing hero ("Без лимита") and every other
+ * Cyrillic word set in `--font-numeric` / `--font-display` came out in Times
+ * (spec 089). The platform's own fonts only — no downloaded CJK face here.
+ */
+const FAMILY_FALLBACK = 'system-ui, sans-serif';
+const FAMILY_FALLBACK_MONO = 'ui-monospace, SFMono-Regular, monospace';
 
 export const BREAKPOINT_DESKTOP = 1280;
 
@@ -324,8 +334,10 @@ function flatten(setObj, prefix = '') {
 
 function cssValue({ path, type, value }) {
 	if (type === 'color') return String(value);
-	if (type === 'fontFamilies')
-		return Array.isArray(value) ? `'${value.join("', '")}'` : `'${value}'`;
+	if (type === 'fontFamilies') {
+		const named = Array.isArray(value) ? `'${value.join("', '")}'` : `'${value}'`;
+		return `${named}, ${path.endsWith('.mono') ? FAMILY_FALLBACK_MONO : FAMILY_FALLBACK}`;
+	}
 	if (type === 'shadow') {
 		// "0 1 3 0 rgba(...)" -> "0 1px 3px 0 rgba(...)"
 		const m = String(value).match(/^(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (.+)$/);

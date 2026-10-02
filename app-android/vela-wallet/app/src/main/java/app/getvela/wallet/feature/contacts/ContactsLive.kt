@@ -4,6 +4,7 @@ import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.Contact
 import app.getvela.wallet.feature.contacts.core.ContactGroupView
+import app.getvela.wallet.feature.contacts.core.ContactImportFailure
 import app.getvela.wallet.feature.contacts.core.ContactsView
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.core.FeedRow
@@ -256,10 +257,17 @@ object ContactsLive {
 
     /** After an import (spec 045 US6): the core's report, or its refusal — one sheet, one sentence, one Close. */
     fun importNotice(view: ContactsView, strings: VelaStrings, close: String): ContactNoticeModel? {
-        view.import_failure?.let {
+        view.import_failure?.let { failure ->
+            // A legacy encoding is told how to save the file (issue 333);
+            // every other refusal says which files the book reads.
+            val body = if (failure is ContactImportFailure.UnsupportedEncoding) {
+                I18nKeys.Contacts.IMPORT_FAIL_ENCODING
+            } else {
+                I18nKeys.Contacts.IMPORT_FAIL_BODY
+            }
             return ContactNoticeModel(
                 title = strings.t(I18nKeys.Contacts.IMPORT_FAIL_TITLE),
-                body = strings.t(I18nKeys.Contacts.IMPORT_FAIL_BODY),
+                body = strings.t(body),
                 close = close,
             )
         }

@@ -69,6 +69,37 @@ class CoreDriverOrderTest {
     }
 
     /**
+     * `dispatchNumbered`'s number is the event's place in the inbox even when
+     * several threads dispatch at once — what lets `CoreHost.applied` say "the
+     * core has applied THIS event" by comparing two counts.
+     */
+    @Test
+    fun `an event's number is its place in the inbox, whichever thread sent it`() = runBlocking {
+        val bridge = RecordingBridge()
+        val driver = CoreDriver(bridge, scope, perform = { "{}" }, onView = {}, escapedFailure = { _, _ -> "{}" })
+        val threads = 8
+        val each = 250
+        val numbers = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+        val start = java.util.concurrent.CountDownLatch(1)
+        val senders = (0 until threads).map { t ->
+            Thread {
+                start.await()
+                repeat(each) { i ->
+                    val n = t * each + i
+                    numbers[n] = driver.dispatchNumbered("""{"n":$n}""")
+                }
+            }.apply { start() }
+        }
+        start.countDown()
+        senders.forEach { it.join(20_000) }
+        withTimeout(20_000) { while (bridge.events.size < threads * each) delay(5) }
+        assertEquals(threads.toLong() * each, driver.eventsApplied)
+        bridge.events.toList().forEachIndexed { place, n ->
+            assertEquals("event $n applied at ${place + 1}", (place + 1).toLong(), numbers.getValue(n))
+        }
+    }
+
+    /**
      * A write the core asked for second must not land first. Persisting is a
      * synchronous act in every executor that does it, so "effects start in
      * order and run until they first suspend" is what keeps the LAST document

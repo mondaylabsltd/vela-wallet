@@ -160,10 +160,14 @@ enum ContactsLive {
     /// screen that collapsed them would tell somebody "0 added" about a file
     /// nothing had even parsed.
     static func importNotice(_ view: ContactsViewWire, loc: Loc) -> FlowAlertModel? {
-        if view.importFailure != nil {
+        if let failure = view.importFailure {
+            // A legacy encoding is told how to save the file (issue 333);
+            // every other refusal says which files the book reads.
+            let body = failure.reason == .unsupportedEncoding
+                ? "contacts.importFailEncoding" : "contacts.importFailBody"
             return FlowAlertModel(
                 title: loc.t("contacts.importFailTitle"),
-                message: loc.t("contacts.importFailBody"),
+                message: loc.t(body),
                 dismiss: loc.t("common.gotIt")
             )
         }

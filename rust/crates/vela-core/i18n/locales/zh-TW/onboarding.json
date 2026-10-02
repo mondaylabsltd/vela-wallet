@@ -174,7 +174,7 @@
       "methodHybridBody": "掃碼，用附近裝置建立",
       "methodHybridTitle": "手機或平板",
       "methodHybridUnavailable": "即將支援",
-      "methodPlatformBody": "Touch ID 或 Windows Hello",
+      "methodPlatformBody": "指紋、臉部辨識或螢幕鎖定",
       "methodPlatformTitle": "這台裝置",
       "methodSecurityKeyBody": "插入後輕觸",
       "methodSecurityKeyTitle": "USB 安全金鑰",

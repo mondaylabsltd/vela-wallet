@@ -90,5 +90,9 @@ export function urlsFor(page: LocalizedPage): { locale: Locale; path: string }[]
 export const ENGLISH_ONLY_PAGES: { path: string; changefreq: string; priority: string }[] = [
 	{ path: '/blog', changefreq: 'weekly', priority: '0.8' },
 	{ path: '/privacy', changefreq: 'yearly', priority: '0.3' },
-	{ path: '/terms', changefreq: 'yearly', priority: '0.3' }
+	{ path: '/terms', changefreq: 'yearly', priority: '0.3' },
+	// The store listings link these two (spec 088): Apple's Support URL and
+	// Google Play's data-deletion URL. English, like the legal pages.
+	{ path: '/support', changefreq: 'yearly', priority: '0.4' },
+	{ path: '/delete', changefreq: 'yearly', priority: '0.3' }
 ];

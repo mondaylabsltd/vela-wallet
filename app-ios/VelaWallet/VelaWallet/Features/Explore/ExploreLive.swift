@@ -85,9 +85,16 @@ enum ExploreLive {
                 caption: loc.t("explore.startHint"),
                 cta: loc.t("explore.startCta")
             ),
-            favorites: explore.favoritesHidden || explore.favorites.isEmpty
-                ? nil
-                : (title: loc.t("explore.favorites"), action: loc.t("explore.edit"), tiles: tiles),
+            // The Favorites heading stays on any page with something on it —
+            // no favourites yet, or Favorites hidden: its Edit is the way to
+            // Manage groups, and with every group hidden the page was left
+            // with the search field alone and no way back (issue #330).
+            // Hidden, it loses its tiles, not its heading — the desktop's rule
+            // (078 W-11).
+            favorites: populated
+                ? (title: loc.t("explore.favorites"), action: loc.t("explore.edit"),
+                   tiles: explore.favoritesHidden ? [] : tiles)
+                : nil,
             groups: groups(explore: explore, history: history, loc: loc),
             browser: browserModel(
                 explore: explore, tab: tab, engine: engine,
