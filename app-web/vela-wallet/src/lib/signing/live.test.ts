@@ -129,7 +129,8 @@ const DECODED: ClearSigningView = {
 		sign_type: 'transaction',
 		partial: false,
 		best_effort: false,
-		to_own_token: false
+		to_own_token: false,
+		terms_off_chain: false
 	}
 };
 
@@ -1637,6 +1638,7 @@ describe('a batch shows every call (089 S1)', () => {
 					result: null,
 					plain_send: { to: A, value_wei: '1', amount: '0.000000000000000001', no_value: false },
 					to: A,
+					to_name: null,
 					data_bytes: 0,
 					value_wei: '1',
 					amount: '0.000000000000000001',
@@ -1654,6 +1656,7 @@ describe('a batch shows every call (089 S1)', () => {
 					},
 					plain_send: null,
 					to: '0x' + 'cc'.repeat(20),
+					to_name: null,
 					data_bytes: 68,
 					value_wei: '0',
 					amount: '0',
@@ -1665,6 +1668,7 @@ describe('a batch shows every call (089 S1)', () => {
 					result: null,
 					plain_send: null,
 					to: B,
+					to_name: null,
 					data_bytes: 36,
 					value_wei: '10000000000000000',
 					amount: '0.01',
@@ -1845,5 +1849,135 @@ describe('what the approve carries (spec 093)', () => {
 		// The guard's placeholder token is handed over as it is; whether an
 		// unresolved token counts is the core's to say.
 		expect(opts.token_meta).toEqual(INITIAL_GUARD_VIEW.meta);
+	});
+});
+
+/**
+ * Spec 096 (part B): what the core now says about a request, drawn — the
+ * coin a lone call sends, the order whose terms are off chain, a known
+ * contract's name, and a sheet that is still reading.
+ */
+describe('the readable part says what the call does (096)', () => {
+	const BNB = { ...OPEN_SIGN, request: { ...REQUEST, chain_id: 56 } };
+
+	it('still reading: "Loading…", never the cap prompt, and the slide stays shut (F7)', () => {
+		const loading: ClearSigningView = { ...INITIAL_CLEAR_VIEW, resolving: true, surface: 'loading' };
+		const model = buildSigningModel(inputs({ clear: loading }))!;
+		expect(model.blocks).toEqual([{ kind: 'sentence', text: m.loading, tone: 'neutral' }]);
+		expect(model.blocks.some((b) => JSON.stringify(b).includes(m.chipCustom))).toBe(false);
+		// Every other machine says yes: the gate, the guard, the fee.
+		expect(OPEN_SIGN.confirm_gate_open && INITIAL_GUARD_VIEW.confirm_allowed).toBe(true);
+		expect(model.confirm.enabled).toBe(false);
+		// Read, the same sheet arms.
+		expect(buildSigningModel(inputs())!.confirm.enabled).toBe(true);
+	});
+
+	it('a decoded call that sends coin says how much, as a batch call does (F4)', () => {
+		const supply: ClearSigningView = {
+			...DECODED,
+			result: {
+				...DECODED.result!,
+				intent: 'Supply',
+				fields: [
+					field({ label: 'On behalf of', value: '0x88cca0...266894', role: 'generic', address: '0x88' })
+				]
+			},
+			native_value: { value_wei: '3000000000000000', amount: '0.003' }
+		};
+		const model = buildSigningModel(inputs({ sign: BNB, clear: supply }))!;
+		expect(model.blocks[1]).toEqual({
+			kind: 'amount',
+			line: { sign: '\u2212', value: '0.003', symbol: 'BNB', tone: 'neutral' }
+		});
+		// Beside a decoded amount of its own, the coin is a row.
+		const both = buildSigningModel(
+			inputs({ sign: BNB, clear: { ...DECODED, native_value: supply.native_value } })
+		)!;
+		expect(both.blocks).toContainEqual({
+			kind: 'rows',
+			rows: [{ label: m.labelAmount, value: '\u22120.003 BNB' }]
+		});
+	});
+
+	it('a call nobody could read still says the coin it sends (F4)', () => {
+		const blind: ClearSigningView = {
+			...INITIAL_CLEAR_VIEW,
+			resolved: true,
+			surface: 'blind_transaction',
+			native_value: { value_wei: '3000000000000000', amount: '0.003' }
+		};
+		const model = buildSigningModel(inputs({ sign: BNB, clear: blind }))!;
+		expect(model.blocks.slice(0, 2)).toEqual([
+			{ kind: 'intent', text: m.intentBlind, tone: 'danger' },
+			{ kind: 'amount', line: { sign: '\u2212', value: '0.003', symbol: 'BNB', tone: 'neutral' } }
+		]);
+	});
+
+	it("an order whose terms are off chain says so, alone and in a batch (F5)", () => {
+		const order: ClearSigningView = {
+			...DECODED,
+			result: { ...DECODED.result!, intent: 'Swap', terms_off_chain: true }
+		};
+		const warning = { kind: 'warning', tone: 'caution', text: m.warnOrderTerms };
+		expect(m.warnOrderTerms).toBeTruthy();
+		expect(buildSigningModel(inputs({ clear: order }))!.blocks).toContainEqual(warning);
+		const batch: ClearSigningView = {
+			...INITIAL_CLEAR_VIEW,
+			resolved: true,
+			surface: 'batch',
+			batch: {
+				calls: [
+					{
+						index: 1,
+						surface: 'clear_sign',
+						result: order.result,
+						plain_send: null,
+						to: '0x9008D19f58AAbD9eD0D60971565AA8510560ab41',
+						to_name: 'CoW Protocol',
+						data_bytes: 164,
+						value_wei: '0',
+						amount: '0',
+						risk: 'caution'
+					},
+					{
+						index: 2,
+						surface: 'blind_transaction',
+						result: null,
+						plain_send: null,
+						to: '0x7777777777777777777777777777777777777777',
+						to_name: null,
+						data_bytes: 4,
+						value_wei: '0',
+						amount: '0',
+						risk: 'caution'
+					}
+				],
+				total_value_wei: '0',
+				total_amount: '0',
+				risk: 'caution'
+			}
+		};
+		const model = buildSigningModel(inputs({ clear: batch }))!;
+		expect(model.blocks).toContainEqual(warning);
+		const cards = model.blocks.filter((b) => b.kind === 'card');
+		// A known contract by its name; any other by its full address.
+		expect(JSON.stringify(cards[0])).toContain(
+			JSON.stringify({ label: m.labelInteracting, value: 'CoW Protocol' })
+		);
+		expect(JSON.stringify(cards[1])).toContain(
+			JSON.stringify({
+				label: m.labelInteracting,
+				value: '0x7777777777777777777777777777777777777777',
+				mono: true
+			})
+		);
+	});
+
+	it('the new words resolve in every locale the corpus ships', () => {
+		const zh = resolveSigningMessages('zh');
+		expect(zh.loading).toBe('加载中...');
+		expect(zh.terms.valueAll).toBe('全部');
+		expect(zh.terms.labelOrder).toBe('订单');
+		expect(zh.warnOrderTerms).toContain('订单');
 	});
 });

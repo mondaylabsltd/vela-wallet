@@ -50,6 +50,7 @@ const ALL = {
 	labelNft: true,
 	labelNonce: true,
 	labelOnBehalfOf: true,
+	labelOrder: true,
 	labelOperator: true,
 	labelOwner: true,
 	labelPay: true,
@@ -70,6 +71,7 @@ const ALL = {
 	labelYouReceive: true,
 	labelYouReceiveMin: true,
 	valueUnlimited: true,
+	valueAll: true,
 	// Spec 093: the headline verbs Activity titles a dApp row with when the
 	// request is what it is — a permit, a sign-in, a message, typed data, a
 	// blind signature, a batch, a call nobody decoded.

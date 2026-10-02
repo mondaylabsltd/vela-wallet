@@ -99,7 +99,11 @@ export interface SigningMessages {
 	selfCallBlockedSafeTx: string;
 	/** What a typed cap that is not a number gets told. */
 	invalidAmount: string;
-	choosePrompt: string;
+	/**
+	 * Spec 096 F7: the sheet while the core is still reading the request — a
+	 * neutral "Loading…", never the cap editor's "set a finite amount".
+	 */
+	loading: string;
 	summarySend: string;
 	summarySendFrom: string;
 	summarySwap: string;
@@ -144,6 +148,11 @@ export interface SigningMessages {
 	 * a raw key path.
 	 */
 	warnDescriptorFetched: string;
+	/**
+	 * Spec 096 F5: the call signs an order whose amounts live off chain (a CoW
+	 * pre-signature) — the core's `terms_off_chain`.
+	 */
+	warnOrderTerms: string;
 	warnSimUnavailable: string;
 	warnDrain: string;
 	okSelfTransfer: string;
