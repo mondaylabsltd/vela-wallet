@@ -108,7 +108,8 @@ fun ActivityRow(model: ActivityRowModel, modifier: Modifier = Modifier) {
         // 087 F11: a row with no figure — a dApp call that moved no coin of
         // ours — draws no amount cell at all. The empty cell still took half
         // the row (and printed a lone " "), cutting the site name short.
-        if (model.hasFigure) {
+        // Spec 097 N5: what came back is drawn on its own when nothing left.
+        if (model.hasFigure || model.received != null) {
             Spacer(modifier = Modifier.width(VelaSpacing.lg))
             // Fixed share for the amount so extreme values wrap the unit below
             // instead of clipping or overlapping the title (H7 edge case).
@@ -129,7 +130,7 @@ private fun AmountText(model: ActivityRowModel) {
         else -> colors.fgBase
     }
     Column(horizontalAlignment = Alignment.End) {
-        AmountLine(model, amountColor)
+        if (model.hasFigure) AmountLine(model, amountColor)
         // A swap's coin back, beside what left (083 F1): what was expected.
         model.received?.let { back ->
             Text(

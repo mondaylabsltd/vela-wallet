@@ -176,6 +176,8 @@ data class SignApproveOpts(
     val balance_changes: List<app.getvela.wallet.feature.wallet.core.TrustSimJudgment>? = null,
     /** Spec 093: the approval surface's token (`GuardView.meta`), copied verbatim. */
     val token_meta: GuardTokenMetaView? = null,
+    /** Spec 097: `ClearSigningView.record_reading` — what the reading named — copied verbatim. */
+    val reading: app.getvela.wallet.feature.wallet.core.DappReading? = null,
 )
 
 @Serializable

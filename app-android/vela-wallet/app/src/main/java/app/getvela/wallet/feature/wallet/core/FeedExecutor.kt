@@ -207,7 +207,19 @@ class FeedExecutor(
             intent = if (dapp) row.stringOrNull("intent") else null,
             balance_changes = if (dapp) balanceChanges(row) else null,
             summary = if (dapp) summary(row) else null,
+            settlement = if (dapp) settlement(row) else null,
         )
+    }
+
+    /**
+     * Spec 097: how the operation ended, as the tracker's patch stored it.
+     * One that does not read is absent — the row then draws as before.
+     */
+    private fun settlement(row: JSONObject): app.getvela.wallet.feature.send.core.TrackSettlement? {
+        val stored = row.optJSONObject("settlement") ?: return null
+        return runCatching {
+            Wire.json.decodeFromString(app.getvela.wallet.feature.send.core.TrackSettlement.serializer(), stored.toString())
+        }.getOrNull()
     }
 
     /**
@@ -375,8 +387,17 @@ class FeedExecutor(
      * Rows not named are untouched; a patch for an id nobody stored is a
      * no-op, not an error — a row may have been deleted while in flight.
      */
-    suspend fun patchRecords(ids: List<String>, status: String, txHash: String?): Boolean =
+    suspend fun patchRecords(
+        ids: List<String>,
+        status: String,
+        txHash: String?,
+        settlement: app.getvela.wallet.feature.send.core.TrackSettlement? = null,
+    ): Boolean =
         writeLock.withLock {
+            // Spec 097: how it ended, kept beside the status verbatim for the feed.
+            val kept = settlement?.let {
+                JSONObject(Wire.json.encodeToString(app.getvela.wallet.feature.send.core.TrackSettlement.serializer(), it))
+            }
             if (ids.isEmpty()) return@withLock true
             val raw = store.read(KeyValueStore.Keys.TRANSACTIONS) ?: return@withLock true
             val array = runCatching { JSONArray(raw) }.getOrNull() ?: return@withLock true
@@ -387,6 +408,7 @@ class FeedExecutor(
                 if (row.optString("id") !in wanted) continue
                 row.put("status", status)
                 if (!txHash.isNullOrBlank()) row.put("txHash", txHash)
+                if (kept != null) row.put("settlement", kept)
                 touched = true
             }
             if (!touched) return@withLock true

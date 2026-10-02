@@ -328,7 +328,7 @@ object FlowLive {
             // nothing could price it — and a confident "$0.00" on a detail
             // screen is the same lie the hero told once.
             // Spec 049: the chosen currency and preset (the web's `moneyText`), never a bare `$`.
-            fiat = if (item.usd_value > 0) {
+            fiat = if (item.priced) {
                 "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value)))
             } else {
                 ""
@@ -363,8 +363,13 @@ object FlowLive {
     ): TxDetailModel {
         val txHash = item.tx_hash?.takeIf { it.isNotBlank() }
         val allowance = dapp.allowance?.takeIf { item.value == null }
+        val back = dapp.received?.let { change -> listOf(WalletLive.changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ") }
+        // Spec 097 N5: nothing left and something came back (a borrow) — what
+        // came back is the figure.
+        val leadsWithBack = allowance == null && item.value == null && back != null
         val amount = when {
             allowance != null -> listOf(WalletLive.allowanceFigure(allowance, strings), allowance.symbol).filter { it.isNotBlank() }.joinToString(" ")
+            leadsWithBack -> back.orEmpty()
             item.value == null -> ""
             else -> {
                 val digits = Formats.current.plain(item.value.toBigDecimalOrNull()?.stripTrailingZeros()?.toPlainString() ?: item.value)
@@ -375,12 +380,18 @@ object FlowLive {
         return fallback.copy(
             title = WalletLive.dappTitle(dapp, strings),
             status = if (dapp.off_chain) null else statusChip(item.status, strings),
-            note = if (dapp.off_chain) strings.t(I18nKeys.Flows.OFF_CHAIN_NOTE) else null,
+            // A signature says it was off-chain; a failed operation says why
+            // (spec 097 N4), under its chip.
+            note = when {
+                dapp.off_chain -> strings.t(I18nKeys.Flows.OFF_CHAIN_NOTE)
+                else -> dapp.failure?.let { failureText(it, strings) }
+            },
             amount = amount,
             amountDanger = allowance?.unlimited == true,
-            positive = false,
-            received = dapp.received?.let { change -> listOf(WalletLive.changeFigure(change), change.symbol).filter { it.isNotBlank() }.joinToString(" ") },
-            fiat = if (item.usd_value > 0) "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value))) else "",
+            positive = leadsWithBack && dapp.received?.direction == FeedDirection.In,
+            received = if (leadsWithBack) null else back,
+            // Spec 097 N7: only a price the core knows — unknown is not "$0.00".
+            fiat = if (item.priced && !leadsWithBack) "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value))) else "",
             facts = dapp.facts.mapNotNull { dappFact(it, item, dapp, strings, chainNames) },
             technical = TxTechnicalModel(
                 title = strings.t(I18nKeys.Flows.TECHNICAL),
@@ -391,6 +402,13 @@ object FlowLive {
             deleteLabel = strings.t(I18nKeys.Flows.DELETE_RECORD),
             deleteQuiet = item.status == FeedTxStatus.Pending || item.status == FeedTxStatus.Unknown,
         )
+    }
+
+    /** Why a dApp operation failed, in the words its request ended with (spec 097 N4). */
+    private fun failureText(failure: app.getvela.wallet.feature.send.core.TrackFailure, strings: VelaStrings): String = when (failure) {
+        app.getvela.wallet.feature.send.core.TrackFailure.Reverted -> strings.t(I18nKeys.Flows.TX_FAILED_HINT)
+        app.getvela.wallet.feature.send.core.TrackFailure.Refused -> strings.t(I18nKeys.Flows.SIGN_REFUSED)
+        app.getvela.wallet.feature.send.core.TrackFailure.NotSent -> strings.t(I18nKeys.Flows.TX_ERROR_GENERIC)
     }
 
     /** Where a record stands, as its chip says it (spec 082 RG1; 087 F04: unknown is pending that nothing will settle — not failed). */

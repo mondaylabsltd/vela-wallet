@@ -473,6 +473,13 @@ class CoreWireDriftTest {
         assertFieldsExhaustive<app.getvela.wallet.feature.wallet.core.DappSummary>("DappSummary")
         assertVariantFieldsExhaustive(TrustSimJudgment.serializer(), "TrustSimJudgment")
         assertFieldsExhaustive<GuardTokenMetaView>("GuardTokenMetaView")
+        // Spec 097: the coins a reading named, the reading the approve
+        // carries, and the tracker's settlement — each kept verbatim.
+        assertFieldsExhaustive<app.getvela.wallet.feature.wallet.core.DappToken>("DappToken")
+        assertFieldsExhaustive<app.getvela.wallet.feature.wallet.core.DappReading>("DappReading")
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.TrackSettlement>("TrackSettlement")
+        assertFieldsExhaustive<app.getvela.wallet.feature.send.core.TrackMove>("TrackMove")
+        assertStringUnion<app.getvela.wallet.feature.send.core.TrackFailure>("TrackFailure")
     }
 
     @Test

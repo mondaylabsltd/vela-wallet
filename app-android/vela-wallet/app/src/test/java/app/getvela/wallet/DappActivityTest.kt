@@ -541,6 +541,108 @@ class DappActivityTest {
         }
     }
 
+    // -- spec 097: what the chain proved, and why it failed ---------------------------
+
+    /** What the sheet's reading named rides the approve as `reading`, verbatim. */
+    @Test
+    fun `the approve copies the reading verbatim (097)`() {
+        assertNull(SigningController.approveOpts(FeeView(), ClearSigningView(), GuardView()).reading)
+        val reading = app.getvela.wallet.feature.wallet.core.DappReading(
+            address = "0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01", name = "NativeOrderFactory", owner = "1inch",
+            tokens = listOf(app.getvela.wallet.feature.wallet.core.DappToken("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", "USDC", 18)),
+        )
+        val opts = SigningController.approveOpts(FeeView(), ClearSigningView(record_reading = reading), GuardView())
+        assertEquals(reading, opts.reading)
+        val wire = JSONObject(Wire.json.encodeToString(SignApproveOpts.serializer(), opts))
+        assertEquals("NativeOrderFactory", wire.getJSONObject("reading").getString("name"))
+        assertEquals(18, wire.getJSONObject("reading").getJSONArray("tokens").getJSONObject(0).getInt("decimals"))
+    }
+
+    /** The tracker's patch keeps its settlement beside the status; the store hands it back. */
+    @Test
+    fun `the tracker's settlement is kept with the record (097)`() = runBlocking {
+        val store = FakeStore()
+        val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
+        val row = JSONObject().put("id", "dapp-1-tx").put("type", "dapp_tx").put("from", ME).put("to", "0x1")
+            .put("value", "0x0").put("symbol", "BNB").put("decimals", 18).put("chainId", 56)
+            .put("timestamp", 1_790_958_668).put("status", "pending").put("txHash", "").put("userOpHash", "0x" + "ab".repeat(32))
+        assertTrue(feed.writeRecords(listOf(row)))
+        val settlement = app.getvela.wallet.feature.send.core.TrackSettlement(
+            moved = listOf(app.getvela.wallet.feature.send.core.TrackMove("0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", "300000000000000000")),
+        )
+        assertTrue(feed.patchRecords(listOf("dapp-1-tx"), "confirmed", "0x" + "cb".repeat(32), settlement))
+        val stored = JSONArray(store.read(KeyValueStore.Keys.TRANSACTIONS)!!).getJSONObject(0)
+        assertEquals("confirmed", stored.getString("status"))
+        assertEquals("300000000000000000", stored.getJSONObject("settlement").getJSONArray("moved").getJSONObject(0).getString("delta"))
+        val loaded = feed.perform(FeedOperation.ReadTxStore(ME, 1)) as FeedShellResult.StoreLoaded
+        assertEquals(settlement, loaded.records.single().settlement)
+    }
+
+    /**
+     * The pass's rows through the REAL feed: the Aave borrow reads "+0.3
+     * USDC" (the scan's Received folded into it, still drawn) and its detail
+     * leads with it; the refused withdraw says why under its chip; the 1inch
+     * order's BNB has no price — no fiat, never "≈ $0.00".
+     */
+    @Test
+    fun `the pass's rows say what the chain proved and why they failed (097)`() = runBlocking {
+        val pool = "0x6807dc923806fe8fd134338eabca509979a7e0cb"
+        val factory = "0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01"
+        val borrowTx = "0x" + "cb".repeat(32)
+        val at = System.currentTimeMillis() / 1000
+        fun dapp(id: String, seconds: Long) = JSONObject().put("id", id).put("type", "dapp_tx").put("from", ME).put("to", pool)
+            .put("value", "0x0").put("symbol", "BNB").put("decimals", 18).put("chainId", 56).put("timestamp", seconds)
+            .put("status", "confirmed").put("txHash", "").put("userOpHash", "0x" + id.length.toString().padStart(64, '0'))
+            .put("dappUrl", "https://app.aave.com")
+            .put("dappSummary", JSONObject().put("action", "call").put("calls", 1).put("contract", pool))
+        val borrow = dapp("dapp-1-tx", at - 300).put("txHash", borrowTx).put("intent", "Borrow").put(
+            "settlement",
+            JSONObject().put(
+                "moved",
+                JSONArray()
+                    .put(JSONObject().put("token", "0xcdbbed5606d9c5c98eeedd67933991dc17f0c68d").put("delta", "300000000000000001"))
+                    .put(JSONObject().put("token", "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d").put("delta", "300000000000000000")),
+            ),
+        )
+        val received = JSONObject().put("id", "rx-1").put("type", "receive").put("from", pool).put("to", ME).put("value", "0.3")
+            .put("symbol", "USDC").put("decimals", 18).put("chainId", 56).put("timestamp", at - 290).put("status", "confirmed")
+            .put("txHash", borrowTx).put("userOpHash", "")
+        val withdraw = dapp("dapp-22-tx", at - 200).put("status", "failed").put("intent", "Withdraw")
+            .put("settlement", JSONObject().put("failure", "refused"))
+        val order = dapp("dapp-333-tx", at - 100).put("to", factory).put("value", "0xaa87bee538000").put("intent", "create order")
+            .put("signedRequest", "[{\"to\":\"$factory\",\"value\":\"0xaa87bee538000\",\"data\":\"0x8c72b608\"}]")
+            .put("txHash", "0x" + "af".repeat(32)).put("dappUrl", "https://1inch.com")
+            .put("dappSummary", JSONObject().put("action", "call").put("calls", 1).put("contract", factory)
+                .put("contract_name", "NativeOrderFactory").put("owner", "1inch"))
+            .put("settlement", JSONObject().put("moved", JSONArray()))
+        val (view, _) = realFeed(emptyList(), extra = listOf(borrow, received, withdraw, order)) { view ->
+            view.rows.count { it is FeedRow.Item } == 3
+        }
+        val rows = rowsById(view, en)
+        assertEquals("the scan's Received folds into the borrow", setOf("dapp-1-tx", "dapp-22-tx", "dapp-333-tx"), rows.keys)
+        val borrowRow = rows.getValue("dapp-1-tx")
+        assertEquals("Borrow on Aave", borrowRow.title)
+        assertFalse("nothing left", borrowRow.hasFigure)
+        assertEquals("+0.3 USDC", borrowRow.received)
+
+        val fallback = (FlowFixtures.build(FlowState.A2, en).sheet as FlowSheet.TxDetail).model
+        val borrowDetail = FlowLive.txDetail(fallback, view, "dapp-1-tx", en, chains)!!
+        assertEquals("+0.3 USDC", borrowDetail.amount)
+        assertTrue(borrowDetail.positive)
+        assertNull(borrowDetail.received)
+        assertEquals("", borrowDetail.fiat)
+
+        val failed = FlowLive.txDetail(fallback, view, "dapp-22-tx", en, chains)!!
+        assertEquals(en.t(I18nKeys.Flows.STATUS_FAILED_DETAIL), failed.status?.text)
+        assertEquals(en.t(I18nKeys.Flows.SIGN_REFUSED), failed.note)
+
+        val orderDetail = FlowLive.txDetail(fallback, view, "dapp-333-tx", en, chains)!!
+        assertEquals("Create order on 1inch", orderDetail.title)
+        assertEquals("−0.003 BNB", orderDetail.amount)
+        assertEquals("unknown is not zero", "", orderDetail.fiat)
+        assertTrue(orderDetail.facts.any { it.value == "NativeOrderFactory" })
+    }
+
     // -- helpers -------------------------------------------------------------------
 
     /** A request as data — the typed-data document inside it too — so key order is not compared. */
