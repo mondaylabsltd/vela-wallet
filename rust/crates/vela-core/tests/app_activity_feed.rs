@@ -2509,6 +2509,7 @@ fn the_place_is_the_known_protocol_else_the_site() {
     let mut on_uniswap = dapp_tx_h2("d-uni", UNIVERSAL_ROUTER, "0x0", Some("Swap"), 200_000.0);
     on_uniswap.dapp_url = Some("https://app.uniswap.org".to_owned());
     on_uniswap.status = FeedTxStatus::Confirmed;
+    on_uniswap.call_data = Some("0x3593564c".to_owned());
     let on_uniswap = summarized(
         on_uniswap,
         DappSummary {
@@ -2918,4 +2919,44 @@ fn an_unreadable_stored_summary_never_stops_the_feed() {
         rows[0].dapp.as_ref().and_then(|d| d.intent_term),
         Some(ClearTerm::TypedDataIntent)
     );
+}
+
+/// The detail names who got the money (spec 082 RJ16) — a plain send's
+/// recipient, by the row's name for them, or the one a token transfer names —
+/// and the contract only for a call that is neither.
+#[test]
+fn the_detail_names_who_got_the_money() {
+    let mut paid = dapp_tx_h2("d-paid", CAFE, "0x2386f26fc10000", Some("Send"), 200_000.0);
+    paid.to_name = Some("Ann".to_owned());
+    let transfer = dapp_tx_h2(
+        "d-transfer",
+        "0x2222222222222222222222222222222222222222",
+        "0x0",
+        Some("Send"),
+        190_000.0,
+    );
+    let transfer = FeedTxRecord {
+        call_data: Some(transfer_to_founder()),
+        ..transfer
+    };
+    let sut = boot(vec![paid, transfer]);
+    let rows = items(&sut);
+    let party = |row: &vela_core::app::activity_feed::FeedItem| {
+        row.dapp
+            .as_ref()
+            .expect("a dApp row")
+            .facts
+            .iter()
+            .find_map(|fact| match fact {
+                FeedFact::Recipient { address, name } => Some((address.clone(), name.clone())),
+                FeedFact::Contract { .. } => panic!("a payment names no contract"),
+                _ => None,
+            })
+    };
+    assert_eq!(
+        party(&rows[0]),
+        Some((CAFE.to_owned(), Some("Ann".to_owned())))
+    );
+    let (address, _) = party(&rows[1]).expect("the transfer's recipient");
+    assert_eq!(Some(address), rows[1].counterparty.clone());
 }

@@ -567,9 +567,17 @@ pub enum FeedFact {
     Site { site: String },
     /// `componentsTx.detail.labelChain` — the network, by its chain id.
     Network { chain_id: u32 },
-    /// `componentsUi.signing.interactingLabel` — the contract called, with
-    /// its built-in name when the wallet knows it.
+    /// `tokenDetail.labelContract` — the contract called, with its built-in
+    /// name when the wallet knows it. A noun, not "Interacting with": the
+    /// record is of something done (083 F3 review).
     Contract {
+        address: String,
+        name: Option<String>,
+    },
+    /// `componentsTx.detail.to` — who got the money: a plain send's
+    /// recipient, or the one a token `transfer` names (spec 082 RJ16). `name`
+    /// is the row's name for them ([`FeedItem::alias`]).
+    Recipient {
         address: String,
         name: Option<String>,
     },
@@ -1016,7 +1024,17 @@ impl App for ActivityFeed {
                     out.alias = Some(name.clone());
                 }
             }
-            // After the overlay: the second line names whom the first does.
+            // After the overlay: the second line, and the detail's recipient,
+            // name whom the row does.
+            if let (Some(dapp), Some(party)) = (out.dapp.as_mut(), out.counterparty.as_deref()) {
+                for fact in &mut dapp.facts {
+                    if let FeedFact::Recipient { address, name } = fact {
+                        if address.eq_ignore_ascii_case(party) {
+                            name.clone_from(&out.alias);
+                        }
+                    }
+                }
+            }
             out.subtitle = subtitle_of(&out);
             rows.push(FeedRow::Item { item: out });
         }
@@ -1520,10 +1538,16 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
     let site = t.dapp_url.as_deref().and_then(site_of);
     let tx_hash = dapp_tx_hash(t);
     let changes: Vec<FeedDappChange> = recorded.into_iter().map(|line| line.change).collect();
+    // Who got the money, when somebody did: the detail names them, never the
+    // contract a transfer was called on (spec 082 RJ16).
+    let paid = counterparty
+        .clone()
+        .filter(|_| counterparty_role == FeedCounterpartyRole::Recipient);
     let described = describe(
         t,
         site.as_deref(),
         tx_hash.as_deref(),
+        paid.as_deref(),
         value.is_some(),
         !changes.is_empty(),
     );
@@ -1563,7 +1587,7 @@ fn dapp_item(t: &FeedTxRecord, receipts: Option<&[&FeedTxRecord]>) -> FeedItem {
 /// granted, if anything, is [`describe`]'s allowance.
 fn signature_item(t: &FeedTxRecord) -> FeedItem {
     let site = t.dapp_url.as_deref().and_then(site_of);
-    let described = describe(t, site.as_deref(), None, false, false);
+    let described = describe(t, site.as_deref(), None, None, false, false);
     FeedItem {
         id: t.id.clone(),
         direction: FeedDirection::Out,
@@ -1654,12 +1678,14 @@ fn receipt_change(receipt: &FeedTxRecord) -> FeedDappChange {
 }
 
 /// The spec-093 half of a dApp row: what it was, where, what it granted, and
-/// its detail. `figured` says the row already carries money of its own, which
+/// its detail. `paid` is who got the money when somebody did (the row's
+/// recipient); `figured` says the row already carries money of its own, which
 /// an allowance never displaces.
 fn describe(
     t: &FeedTxRecord,
     site: Option<&str>,
     tx_hash: Option<&str>,
+    paid: Option<&str>,
     figured: bool,
     has_changes: bool,
 ) -> FeedDapp {
@@ -1710,11 +1736,14 @@ fn describe(
                 });
             }
         }
-        DappAction::Call | DappAction::TypedData => {
-            if let Some(contract) = &contract {
-                facts.push(contract_fact(contract));
-            }
-        }
+        DappAction::Call | DappAction::TypedData => match (paid, &contract) {
+            (Some(paid), _) => facts.push(FeedFact::Recipient {
+                address: paid.to_owned(),
+                name: None,
+            }),
+            (None, Some(contract)) => facts.push(contract_fact(contract)),
+            (None, None) => {}
+        },
         DappAction::Batch => {
             if let Some(contract) = &contract {
                 facts.push(contract_fact(contract));
