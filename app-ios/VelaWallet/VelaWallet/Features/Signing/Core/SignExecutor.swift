@@ -22,7 +22,9 @@
 //  outcome. The page is answered with a **transaction** hash once the receipt
 //  arrives — a reverted one included (ruling 9: the page gets its hash, the
 //  sheet and Activity say it failed) — and with the op hash when it is late;
-//  the tracker alone closes the row.
+//  the tracker alone closes the row. A `wallet_sendCalls` is the core's to
+//  answer with its id — the op hash — the moment `op_submitted` says the
+//  relay took it (spec 097 E); the wait below then ends answered.
 //
 //  ## A lost reply is not a failure (spec 082 RA1–RA3)
 //

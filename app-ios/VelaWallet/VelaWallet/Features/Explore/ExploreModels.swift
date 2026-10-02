@@ -137,6 +137,10 @@ struct ConnectionModel {
     /// — who is asking, which account, which network — and a second sheet
     /// would be a second chance to get one of them wrong.
     var consent: (approve: String, reject: String)?
+    /// The core holds a grant for this site (spec 097 E). Not connected and
+    /// not asking, the panel offers nothing that implies access: no account
+    /// it sees, no explainer, no Disconnect, no "requests appear here".
+    var connected = true
     /// The site the panel is about — what Disconnect and the network picker
     /// act on. `""` in the gallery.
     var origin: String = ""
