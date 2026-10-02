@@ -344,20 +344,22 @@ object SigningLive {
         GuardSurface.None -> emptyList()
         GuardSurface.PermitSign -> buildList {
             guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
+            // An unlimited permit is said like any unlimited approval (spec 094 S8).
+            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
             add(SigningBlock.Warning(SigningTone.Danger, s.a("permitCantCap")))
         }
         GuardSurface.ApprovalEditor -> buildList {
             guard.editor?.let { editor -> add(allowanceBlock(editor, guard.meta, guard.increase_total, guard.decimals_unverified, guard.expired, s)) }
             guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
-            // Kept as the site asked (2026-09-26) — allowed, never unsaid.
-            if (guard.editor?.choice == GuardChoice.Unlimited) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+            // Kept as the site asked (2026-09-26) — allowed, never unsaid; the core decides when (094 S8).
+            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
         }
         GuardSurface.Batch -> buildList {
             guard.batch?.legs?.forEachIndexed { index, leg ->
                 leg.editor?.let { editor -> add(allowanceBlock(editor, leg.meta, null, false, false, s, prefix = "#${index + 1} ", leg = index)) }
                 leg.approval?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
             }
-            if (guard.batch?.any_uncapped == true) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+            if (guard.unlimited_warning) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
         }
     }
 

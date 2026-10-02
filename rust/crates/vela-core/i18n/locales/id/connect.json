@@ -108,6 +108,11 @@
       "clearAllTitle": "Hapus riwayat?",
       "clearAllBody": "Ini menghapus semua dApp yang baru dibuka.",
       "a11yDeleteHistory": "Hapus dari riwayat"
+    },
+    "ext": {
+      "installedNote": "Muat ulang tab yang sudah terbuka agar situsnya bisa menemukan Vela.",
+      "accessNote": "Akses situs dibatasi: situs tidak bisa menemukan Vela dan passkey tidak berfungsi.",
+      "accessAllow": "Izinkan akses"
     }
   },
   "signHandoff": {

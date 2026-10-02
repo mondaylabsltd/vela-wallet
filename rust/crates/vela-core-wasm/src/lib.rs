@@ -1857,6 +1857,42 @@ pub fn dapp_rpc_classify(method: &str) -> String {
         .unwrap_or_else(|_| "{\"type\":\"unsupported\"}".to_owned())
 }
 
+/// EIP-5792 `wallet_getCallsStatus` (spec 094): the batch id `params_json`
+/// asks about, lower-cased — `undefined` when it is not one 32-byte hash.
+#[wasm_bindgen(js_name = dappRpcCallsStatusId)]
+pub fn dapp_rpc_calls_status_id(params_json: &str) -> Option<String> {
+    let params: serde_json::Value = serde_json::from_str(params_json).ok()?;
+    vela_core::app::dapp_rpc::calls_status_id(&params)
+}
+
+/// EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
+/// from the bundler's `eth_getUserOperationReceipt` result JSON (`undefined`
+/// or `null`: not landed) — `dapp_rpc::calls_status`, as JSON.
+#[wasm_bindgen(js_name = dappRpcCallsStatus)]
+pub fn dapp_rpc_calls_status(id: &str, chain_id: u32, receipt_json: Option<String>) -> String {
+    let receipt: Option<serde_json::Value> = receipt_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str(json).ok());
+    vela_core::app::dapp_rpc::calls_status(id, chain_id, receipt.as_ref()).to_string()
+}
+
+/// EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
+/// request's params, the site's granted addresses and the wallet's chains (all
+/// JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
+#[wasm_bindgen(js_name = dappRpcCapabilities)]
+pub fn dapp_rpc_capabilities(params_json: &str, granted_json: &str, chains_json: &str) -> String {
+    let params: serde_json::Value =
+        serde_json::from_str(params_json).unwrap_or(serde_json::Value::Null);
+    let granted: Vec<String> = serde_json::from_str(granted_json).unwrap_or_default();
+    let chains: Vec<u32> = serde_json::from_str(chains_json).unwrap_or_default();
+    match vela_core::app::dapp_rpc::capabilities(&params, &granted, &chains) {
+        Ok(result) => serde_json::json!({ "result": result }).to_string(),
+        Err((code, message)) => {
+            serde_json::json!({ "error": { "code": code, "message": message } }).to_string()
+        }
+    }
+}
+
 /// The document-start script an in-app browser injects, for `host`
 /// (`"android"` / `"ios"` / `"desktop"`) and Settings' debug mode (spec 091)
 /// — exported so the web suite can run the real bridge in a real browser,
@@ -1986,6 +2022,15 @@ pub fn sign_not_confirmed_detail(user_op_hash: &str) -> String {
 #[must_use]
 pub fn sign_request_ttl_ms() -> f64 {
     vela_core::app::sign_request::EXTENSION_REQUEST_TTL_MS
+}
+
+/// The bound on one whole fee quote, ms — `fee_policy::QUOTE_DEADLINE_MS`
+/// (spec 094 S9). The web shell bounds the deployment read it makes before a
+/// quote by the same figure.
+#[wasm_bindgen(js_name = feeQuoteDeadlineMs)]
+#[must_use]
+pub fn fee_quote_deadline_ms() -> u32 {
+    vela_core::app::fee_policy::QUOTE_DEADLINE_MS
 }
 
 // ---------------------------------------------------------------------------

@@ -108,6 +108,11 @@
       "clearAllTitle": "Verlauf löschen?",
       "clearAllBody": "Dadurch werden alle zuletzt geöffneten dApps entfernt.",
       "a11yDeleteHistory": "Aus dem Verlauf entfernen"
+    },
+    "ext": {
+      "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
+      "accessNote": "Der Websitezugriff ist eingeschränkt: Websites finden Vela nicht, und der Passkey funktioniert nicht.",
+      "accessAllow": "Zugriff erlauben"
     }
   },
   "signHandoff": {

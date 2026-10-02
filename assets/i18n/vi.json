@@ -729,7 +729,8 @@
    "syncFailedBody": "Đã tạo ví, nhưng khóa công khai chưa được tải lên — các thiết bị khác tạm thời chưa đăng nhập được.",
    "copyAddress": "Sao chép địa chỉ",
    "copied": "Đã sao chép",
-   "close": "Đóng"
+   "close": "Đóng",
+   "siteAccessBody": "Quyền truy cập trang web bị giới hạn. Chọn Cho phép truy cập ở đầu trang rồi thử lại."
   },
   "create": {
    "accountNameHint": "Tên này được lưu trên chuỗi cùng khóa công khai của bạn để đăng nhập trên nhiều thiết bị.",
@@ -985,6 +986,11 @@
    "clearAllTitle": "Xóa lịch sử?",
    "clearAllBody": "Thao tác này xóa tất cả dApp đã mở gần đây.",
    "a11yDeleteHistory": "Xóa khỏi lịch sử"
+  },
+  "ext": {
+   "installedNote": "Hãy tải lại các thẻ đã mở trước đó để các trang tìm thấy Vela.",
+   "accessNote": "Quyền truy cập trang web bị giới hạn: các trang không thấy Vela và không dùng được passkey.",
+   "accessAllow": "Cho phép truy cập"
   }
  },
  "signHandoff": {

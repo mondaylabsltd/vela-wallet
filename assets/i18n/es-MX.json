@@ -732,7 +732,8 @@
    "syncFailedBody": "Se creó la billetera, pero la llave pública no se subió — otros dispositivos aún no pueden iniciar sesión.",
    "copyAddress": "Copiar dirección",
    "copied": "Copiado",
-   "close": "Cerrar"
+   "close": "Cerrar",
+   "siteAccessBody": "El acceso de Vela a los sitios está limitado. Elige Permitir acceso arriba y vuelve a intentarlo."
   },
   "create": {
    "accountNameHint": "Este nombre se guarda con tu llave pública on-chain para iniciar sesión entre dispositivos.",
@@ -988,6 +989,11 @@
    "clearAllTitle": "¿Borrar el historial?",
    "clearAllBody": "Esto elimina todas las dApps abiertas recientemente.",
    "a11yDeleteHistory": "Quitar del historial"
+  },
+  "ext": {
+   "installedNote": "Recarga las pestañas que ya tenías abiertas para que sus sitios encuentren Vela.",
+   "accessNote": "El acceso a sitios está limitado: los sitios no ven Vela y tu passkey no funciona.",
+   "accessAllow": "Permitir acceso"
   }
  },
  "signHandoff": {

@@ -729,7 +729,8 @@
    "syncFailedBody": "Wallet erstellt, aber der öffentliche Schlüssel wurde nicht hochgeladen — andere Geräte können sich noch nicht anmelden.",
    "copyAddress": "Adresse kopieren",
    "copied": "Kopiert",
-   "close": "Schließen"
+   "close": "Schließen",
+   "siteAccessBody": "Der Websitezugriff von Vela ist eingeschränkt. Wählen Sie oben „Zugriff erlauben“ und versuchen Sie es erneut."
   },
   "create": {
    "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",
@@ -985,6 +986,11 @@
    "clearAllTitle": "Verlauf löschen?",
    "clearAllBody": "Dadurch werden alle zuletzt geöffneten dApps entfernt.",
    "a11yDeleteHistory": "Aus dem Verlauf entfernen"
+  },
+  "ext": {
+   "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
+   "accessNote": "Der Websitezugriff ist eingeschränkt: Websites finden Vela nicht, und der Passkey funktioniert nicht.",
+   "accessAllow": "Zugriff erlauben"
   }
  },
  "signHandoff": {

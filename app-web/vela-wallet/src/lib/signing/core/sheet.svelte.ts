@@ -45,6 +45,7 @@ export const INITIAL_GUARD_VIEW: GuardView = {
 	confirm_allowed: true,
 	rewritten_params_json: null,
 	unlimited_consented: false,
+	unlimited_warning: false,
 	increase_total: null,
 	decimals_unverified: false,
 	expired: false,

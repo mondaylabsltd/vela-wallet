@@ -1,7 +1,7 @@
 ---
 title: Installare Vela
 description: "Tutti i modi per usare Vela — web, estensione del browser, desktop e telefono — quanto costa ciascuno, cosa può fare e cosa serve al tuo dispositivo."
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -31,7 +31,7 @@ su un altro dispositivo ti basta accedere di nuovo con una delle tue chiavi.
 
 ## Estensione del browser
 
-Funziona nei browser Chromium: Chrome, Edge e Brave (Chrome 116 o successivo).
+Funziona nei browser Chromium: Chrome, Edge e Brave (Chrome 122 o successivo).
 Mette il wallet nella barra degli strumenti e permette alle dApp di collegarsi
 direttamente.
 Finché non è sul Chrome Web Store:

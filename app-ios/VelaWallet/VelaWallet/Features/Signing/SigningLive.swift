@@ -1104,6 +1104,11 @@ enum SigningLive {
                                      name: AddressText.short(detected.spender),
                                      address: detected.spender))
             }
+            // An unlimited permit is said like any unlimited approval (spec
+            // 094 S8) — the core's flag, the same sentence.
+            if guardView.unlimitedWarning {
+                blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
+            }
             // The dApp submits its own amount on chain, so rewriting would
             // desync the signature and revert their transaction. Saying so is
             // the only honest move.
@@ -1124,8 +1129,9 @@ enum SigningLive {
                                      name: AddressText.short(detected.spender),
                                      address: detected.spender))
             }
-            // Kept as the site asked (2026-09-26) — allowed, never unsaid.
-            if guardView.editor?.choice == .unlimited {
+            // Kept as the site asked (2026-09-26) — allowed, never unsaid. The
+            // core decides when (spec 094 S8).
+            if guardView.unlimitedWarning {
                 blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
             }
             return blocks
@@ -1146,7 +1152,7 @@ enum SigningLive {
                                          address: approval.spender))
                 }
             }
-            if guardView.batch?.anyUncapped == true {
+            if guardView.unlimitedWarning {
                 blocks.append(.warning(tone: .danger, text: s(loc, "unlimitedWarning")))
             }
             return blocks

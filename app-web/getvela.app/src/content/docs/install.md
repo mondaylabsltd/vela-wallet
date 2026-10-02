@@ -30,7 +30,7 @@ on another device you simply sign in again with one of your keys.
 
 ## Browser extension
 
-Chromium browsers: Chrome, Edge and Brave (Chrome 116 or later). It puts the wallet
+Chromium browsers: Chrome, Edge and Brave (Chrome 122 or later). It puts the wallet
 in the toolbar and lets dApps connect to it directly. Until it is on the Chrome Web
 Store:
 

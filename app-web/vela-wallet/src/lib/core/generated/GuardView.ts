@@ -28,7 +28,19 @@ rewritten_params_json: string | null,
  * only thing that lets an unbounded amount past the submit guard, so a
  * request this machine never saw still cannot carry one.
  */
-unlimited_consented: boolean, increase_total: GuardIncreaseTotalView | null, 
+unlimited_consented: boolean, 
+/**
+ * The request grants an unbounded allowance as it stands, and the
+ * person is told so in the danger tone — the ONE place every shell reads
+ * that sentence from (spec 094 S8): the single approval kept on its
+ * Requested chip, any batch leg left so, or an off-chain permit for an
+ * unbounded amount (EIP-2612, Permit2 `PermitSingle`/`PermitBatch`, a DAI
+ * `allowed: true`). A permit has no cap editor — the dApp redeems its OWN
+ * struct, so a capped signature would only revert its transaction
+ * ([`GuardBlockReason::OffChainPermit`]) — which is why, before this, an
+ * unlimited Permit2 drew a red hero and no warning at all (089 F22).
+ */
+unlimited_warning: boolean, increase_total: GuardIncreaseTotalView | null, 
 /**
  * Unverified decimals must be explicitly flagged
  * (`EditableApproveCard.tsx:200-202`; `PermitSignView.tsx:103-105`).
