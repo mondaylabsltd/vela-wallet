@@ -6,6 +6,7 @@ import type { SendDuplicateRowView } from "./SendDuplicateRowView";
 import type { SendFeeIssueView } from "./SendFeeIssueView";
 import type { SendLockError } from "./SendLockError";
 import type { SendMultiSpecView } from "./SendMultiSpecView";
+import type { SendPayee } from "./SendPayee";
 import type { SendReceiptView } from "./SendReceiptView";
 import type { SendRecipientDraft } from "./SendRecipientDraft";
 import type { SendRecipientIdentity } from "./SendRecipientIdentity";
@@ -178,7 +179,20 @@ fee: FeeEstimateView | null, gas_fee_token: string | null, amount_warning: SendA
  * The confirm slide gate: fee settled ∧ nothing re-quoting ∧ no
  * same-asset breach ∧ idle.
  */
-can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, tx_hash: string | null, user_op_hash: string | null, receipt: SendReceiptView | null, treasury_bootstrap: SendTreasuryStatus | null, recipient_identity: SendRecipientIdentity | null, recipient_risk: SendRecipientRisk | null, 
+can_confirm: boolean, sending: boolean, tx_status: SendTxStatus, tx_error: SendTxErrorKey | null, tx_hash: string | null, user_op_hash: string | null, receipt: SendReceiptView | null, treasury_bootstrap: SendTreasuryStatus | null, recipient_identity: SendRecipientIdentity | null, 
+/**
+ * Who the money goes to, as the form's recipient line and the confirm
+ * page name them (spec 097 F, S2): the address always, a name only
+ * beside it, with whose word that name is ([`SendPayee`]). One payee
+ * for a single send or a sweep (none until the address is whole); one
+ * per row, in `recipients` order, for a split.
+ *
+ * The confirm's To row used to print `recipient_identity.name` alone:
+ * "Wallet", from the public registry, where anyone can register any
+ * name — the address was one tap away on the identicon. A name never
+ * stands in for the address on the page that signs.
+ */
+payees: Array<SendPayee>, recipient_risk: SendRecipientRisk | null, 
 /**
  * The recipient is a token's own contract on the network the money moves
  * on (spec 096 F12): the token being sent, or any token in the person's

@@ -3,4 +3,10 @@
 /**
  * Recipient identity (passkey index → ENS), best-effort display data.
  */
-export type SendRecipientIdentity = { name: string | null, source: string | null, };
+export type SendRecipientIdentity = { name: string | null, 
+/**
+ * Where the name came from, as the shell's resolver labels it: `self`
+ * (one of the person's own accounts), `passkey` (the public wallet
+ * registry), or a name service's label (`ENS`, `.bnb`, `Basename`…).
+ */
+source: string | null, };
