@@ -46,3 +46,10 @@ nothing a reviewer would flag.
 - [x] T019 `docs/store-submission/mac-app-store.md`; `privacy-evidence.md` §9
 - [x] T020 Store screenshot recipe + draft captures (results.md)
 - [x] T021 Suites: desktop, core, web, iOS, Android, CI scripts — results.md
+
+## Phase 8 — Owner decisions (2026-10-02, second round)
+
+- [x] T022 Universal Purchase price with the free `.dmg`: keep — recorded in the store doc §11
+- [x] T023 `CFBundleLocalizations` (+ `CFBundleDevelopmentRegion` en) on the Mac (`packaging/macos/Info.plist.in`) and iPhone (`VelaWallet/Info.plist`), from the core's `vela_core::i18n::apple_localizations` (UniFFI `i18n_apple_localizations`) — core `every_supported_locale_has_one_apple_code`; desktop `loc::tests::the_bundle_declares_the_corpus_locales`; iOS `LocaleMappingTests.theBundleDeclaresTheCorpusLocales` (also: each declared code resolves back to its corpus language)
+- [x] T024 `SC005_BUDGET` 141,800 and the gen-i18n log line
+

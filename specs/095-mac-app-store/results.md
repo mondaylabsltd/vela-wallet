@@ -28,7 +28,6 @@ Branch `095-mac-app-store`, from `origin/main` @ `ec033f231`, rebased onto
 2. App Store Connect: add the **macOS** platform to the Vela Wallet record;
    fill the Mac version page and TestFlight Test Information from
    `docs/store-submission/mac-app-store.md` §6–§8; upload with Transporter.
-3. Decide the Universal Purchase price vs the free `.dmg` (store doc §11).
 
 Checked here instead of the store run: the `--dev` bundle (sandbox, hardened
 runtime, development certificate the profile names, entitlements byte-equal
@@ -120,10 +119,39 @@ In the session scratchpad `095/`:
   `dev-fixtures` alone: every existing recipe (`cargo run`, `sweep-gallery.sh`)
   keeps working, and a store/.dmg build (release, no `dev-fixtures`) honours
   none — proven on the binary.
-- **Menus**: localized from the corpus (17 new keys); AppKit's own inserted
-  items stay English (no `CFBundleLocalizations` — cross-platform follow-up).
+- **Menus**: localized from the corpus (17 new keys).
 - **About links** shipped on all four shells (parity), not just desktop.
 - **ATS keys** added to the shared `Info.plist.in`, so the `.dmg` build loads
   http pages too (as iOS).
 - The address bar shows a closed lock on a private-network http page — the
   core's 079 rule (`is_insecure_public_origin`), unchanged; noted.
+
+## Round 2 — owner decisions (2026-10-02)
+
+| Decision | Done |
+|---|---|
+| Universal Purchase price + free `.dmg`: keep | Recorded in the store doc §11 |
+| Declare the 15 localizations on Mac and iPhone | `CFBundleLocalizations` + `CFBundleDevelopmentRegion` en in `packaging/macos/Info.plist.in` and `VelaWallet/Info.plist`, from the core's `apple_localizations` (`zh` → `zh-Hans`, `zh-TW` → `zh-Hant`, `zh-HK`, `es-MX`, `pt-BR`, …; UniFFI `i18n_apple_localizations`). Tests: core `every_supported_locale_has_one_apple_code`, desktop `the_bundle_declares_the_corpus_locales`, iOS `theBundleDeclaresTheCorpusLocales` (which also checks each declared code resolves back to its corpus language through `Loc.mapPreferredLanguage`). Rebuilt `--dev` bundle lists the 15. |
+| `SC005_BUDGET` 141,800 | Test and gen-i18n log line |
+
+In-app language behaviour is unchanged: the desktop resolves pinned →
+`LC_ALL`/`LC_MESSAGES`/`LANG` and reads no bundle localization; iOS `Loc`
+resolves pinned → `Locale.preferredLanguages`. The only new path is iOS's
+per-app Language row (Settings → Vela), which feeds `Locale.preferredLanguages`
+— i.e. "follow the system" follows it; a language picked inside Vela still wins.
+Formats: iOS `.auto` number format reads `Locale.current`'s separators, which
+follow the region, not the bundle language.
+
+Observation, not changed: on macOS a Finder/Dock launch sets no `LANG`, so the
+desktop's "follow the system" resolves to English unless a language is picked
+in Settings — worth a follow-up (read `NSLocale.preferredLanguages` there, as
+iOS does).
+
+Suites after round 2: desktop 889 passed (0 failed, 49 ignored; fmt, clippy
+clean); core 2320 passed, clippy `-D warnings` and fmt clean; web 2413 passed,
+5 skipped, `pnpm check` 0/0; iOS `LocaleMappingTests`+`SettingsTruthTests` 7
+passed, full `VelaWalletTests` 1107 in 143 suites passed; Android 917 tests,
+0 failures; reachability / event-payloads / dead-controls pass; i18n gates,
+`build-web --check`, `gen-onboarding-types --check` pass. ja + en unchanged
+at 135,626 (no new strings).
+

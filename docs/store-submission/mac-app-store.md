@@ -319,10 +319,17 @@ phone sign-in.**
 - **CoreLocation is linked** (through `objc2-user-notifications`, a gpui
   dependency) but no CoreLocation API is called; no location purpose string is
   needed.
-- **Menu items AppKit adds** (AutoFill, Start Dictation, Emoji & Symbols) stay
-  English: the bundle declares no localizations, so the system speaks English
-  to it. Declaring `CFBundleLocalizations` (here and on iOS) would also list
-  the 15 languages on the store page — a separate, cross-platform decision.
-- **Price.** Universal Purchase gives the Mac the iOS price (one-time purchase);
-  the .dmg stays a free download (C-plat-1). Owner's call whether that pair is
-  intended.
+- **Languages.** Both bundles declare the 15 corpus locales in
+  `CFBundleLocalizations` (owner, 2026-10-02), as the core names them for Apple
+  (`vela_core::i18n::apple_localizations`: `zh` → `zh-Hans`, `zh-TW` →
+  `zh-Hant`, `zh-HK`, `es-MX`, `pt-BR`, …), each held to the core by a test
+  (desktop `loc.rs`, iOS `LocaleMappingTests`). The system's own UI (panels,
+  share sheets, the menu items AppKit adds) follows the person's language and
+  the store page lists all 15. The wallet's strings are unchanged: they come
+  from the corpus, in the language picked in Settings or followed from the
+  system. One visible addition on iPhone: iOS shows a per-app *Language* row
+  in Settings → Vela; choosing one there is what "follow the system" then
+  follows.
+- **Price (owner, 2026-10-02: keep).** Universal Purchase gives the Mac the
+  iOS price (one-time purchase); the Developer ID .dmg stays a free download
+  (C-plat-1). Decided: both stay as they are.
