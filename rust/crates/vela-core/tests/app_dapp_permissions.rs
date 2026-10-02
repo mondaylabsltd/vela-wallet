@@ -14,9 +14,10 @@ mod support;
 use support::DomainDriver;
 use vela_core::app::dapp_permissions::{
     dapp_spelling, decide_popup_request, is_connect_method, is_insecure_public_origin,
-    is_signing_method, origin_of, resolve_granted, settle_on_close, DappPermissions, DpermGrant,
-    DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome, DpermPopupView,
-    DpermRejectReason as Reason, DpermRespondPayload as Payload, DpermShellResult as Res, Event,
+    is_secure_context, is_signing_method, origin_of, resolve_granted, settle_on_close,
+    DappPermissions, DpermGrant, DpermOperation as Op, DpermPopupDecision, DpermPopupOutcome,
+    DpermPopupView, DpermRejectReason as Reason, DpermRespondPayload as Payload,
+    DpermShellResult as Res, Event,
 };
 
 type Sut = DomainDriver<DappPermissions>;
@@ -319,6 +320,48 @@ fn insecure_origin_classification_table() {
         "http://[fe80::2]",
     ] {
         assert!(!is_insecure_public_origin(origin), "{origin}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Spec 088 FR-004 — who is offered the wallet at all: a secure context
+// ---------------------------------------------------------------------------
+
+#[test]
+fn secure_context_is_https_or_exact_loopback() {
+    for origin in [
+        "https://dapp.example",
+        "https://dapp.example:8443",
+        "HTTPS://DAPP.EXAMPLE",
+        "http://localhost",
+        "http://localhost:5173",
+        "http://dev.localhost:3000",
+        "http://127.0.0.1",
+        "http://127.0.0.1:8137",
+        "http://127.12.0.9",
+        "http://[::1]",
+        "http://[::1]:8137",
+    ] {
+        assert!(is_secure_context(origin), "{origin}");
+    }
+    for origin in [
+        "http://dapp.example",
+        // A private LAN page may load, but it is reachable by anyone on that
+        // network — no provider there.
+        "http://192.168.1.4:8137",
+        "http://10.0.0.1",
+        "http://dev.local",
+        "http://[fd12::1]",
+        // Names that only start like loopback are public FQDNs.
+        "http://127.0.0.1.evil.com",
+        "http://localhost.evil.com",
+        "http://127.0.0.256",
+        "ws://localhost",
+        "file:///etc/hosts",
+        "not a url",
+        "",
+    ] {
+        assert!(!is_secure_context(origin), "{origin}");
     }
 }
 

@@ -542,6 +542,30 @@ pub fn browser_input(text: &str) -> Option<String> {
     Some(format!("https://{text}"))
 }
 
+/// A page another app or website asked this wallet to open
+/// (`velawallet://open?url=…`, spec 088 FR-004) → the host the person is asked
+/// about before anything loads, or `None` when the link is not opened at all.
+///
+/// Only an `https` page with a plain host: no `http` (nothing on the wire may
+/// rewrite what the person agreed to), no other scheme (`file:`,
+/// `javascript:`, `intent:`), and no user-info — `https://wallet.example@evil.example`
+/// would ask about one host and load another. The host keeps a non-default
+/// port, so what is shown is exactly where the page comes from. The URL itself
+/// is then opened as given, through [`browser_input`] like anything typed.
+pub fn external_page_host(url: &str) -> Option<String> {
+    let url = url.trim();
+    let (scheme, rest) = url.split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("https") {
+        return None;
+    }
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.is_empty() || authority.contains('@') || url.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let origin = super::dapp_permissions::origin_of(url)?;
+    origin.strip_prefix("https://").map(str::to_owned)
+}
+
 fn is_ipv4(host: &str) -> bool {
     let parts: Vec<&str> = host.split('.').collect();
     parts.len() == 4
@@ -652,10 +676,13 @@ const BRIDGE_JS: &str = r#"
 
 /// The whole document-start script for `host`: the bridge, then the
 /// provider, both skipped in any frame but the top one — an iframe gets no
-/// provider rather than one that can never be answered.
+/// provider rather than one that can never be answered — and in any page that
+/// is not a secure context (spec 088 FR-004): `https`, or `http` on loopback,
+/// the platform's own reading of [`super::dapp_permissions::is_secure_context`],
+/// which the machine applies again to every message.
 pub fn provider_script(host: ProviderHost) -> String {
     format!(
-        "(function () {{\n\tif (window.top !== window) return;\n{bridge}\n{provider}\n}})();\n",
+        "(function () {{\n\tif (window.top !== window || !window.isSecureContext) return;\n{bridge}\n{provider}\n}})();\n",
         bridge = BRIDGE_JS.replace("__HOST_POST__", host.post_expression()),
         provider = PROVIDER_JS,
     )
@@ -823,6 +850,36 @@ mod tests {
         );
     }
 
+    /// Spec 088 FR-004: a link from outside opens only an https page, and the
+    /// person is asked about exactly the host that will load.
+    #[test]
+    fn an_external_link_names_the_host_it_will_open() {
+        for (url, host) in [
+            ("https://app.uniswap.org/swap?x=1", "app.uniswap.org"),
+            ("  HTTPS://App.Uniswap.org  ", "app.uniswap.org"),
+            ("https://dapp.example:8443/", "dapp.example:8443"),
+            ("https://dapp.example:443/a", "dapp.example"),
+            ("https://[::1]:8137/", "[::1]:8137"),
+        ] {
+            assert_eq!(external_page_host(url).as_deref(), Some(host), "{url}");
+        }
+        for url in [
+            "http://app.uniswap.org",
+            "http://127.0.0.1:8137/",
+            "javascript:alert(1)",
+            "file:///data/data/app.getvela.wallet/shared_prefs/x.xml",
+            "intent://x#Intent;end",
+            "https://wallet.example@evil.example/",
+            "https://",
+            "https:///path",
+            "https://a b.example/",
+            "app.uniswap.org",
+            "",
+        ] {
+            assert_eq!(external_page_host(url), None, "{url}");
+        }
+    }
+
     #[test]
     fn page_messages() {
         assert_eq!(
@@ -895,7 +952,10 @@ mod tests {
             ProviderHost::Desktop,
         ] {
             let script = provider_script(host);
-            assert!(script.starts_with("(function () {\n\tif (window.top !== window) return;"));
+            // Top frame only, and only a secure context (spec 088 FR-004).
+            assert!(script.starts_with(
+                "(function () {\n\tif (window.top !== window || !window.isSecureContext) return;"
+            ));
             assert!(!script.contains("__HOST_POST__"));
             assert!(!script
                 .lines()
