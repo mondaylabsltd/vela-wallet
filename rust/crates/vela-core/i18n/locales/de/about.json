@@ -21,6 +21,9 @@
     "linkTerms": "Nutzungsbedingungen",
     "linkSupport": "Support",
     "footer": "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins.",
-    "sectionLinks": "Links"
+    "sectionLinks": "Links",
+    "debugMode": "Debug-Modus",
+    "debugModeBody": "Lässt http-Seiten in deinem lokalen Netzwerk die Wallet nutzen. Nur für die Entwicklung.",
+    "debugModeRevealed": "Der Debug-Modus ist jetzt verfügbar"
   }
 }

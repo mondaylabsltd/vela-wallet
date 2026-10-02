@@ -69,16 +69,27 @@ const ALL = {
 	labelYouPayMax: true,
 	labelYouReceive: true,
 	labelYouReceiveMin: true,
-	valueUnlimited: true
+	valueUnlimited: true,
+	// Spec 093: the headline verbs Activity titles a dApp row with when the
+	// request is what it is — a permit, a sign-in, a message, typed data, a
+	// blind signature, a batch, a call nobody decoded.
+	permitIntent: true,
+	signInIntent: true,
+	messageIntent: true,
+	typedDataIntent: true,
+	ethSignIntent: true,
+	batchIntent: true,
+	intentContractCall: true
 } satisfies Record<ClearTerm, true>;
 
 export const CLEAR_TERMS = Object.keys(ALL) as ClearTerm[];
 
 /**
- * The terms that name what a call DOES — the ones a recorded intent can be
- * (083 H2). Activity titles a dApp's transaction with one, so the wallet page
+ * The terms that name what a request DOES — the ones a recorded intent can be
+ * (083 H2), and the headline verbs of spec 093 (`permitIntent`,
+ * `signInIntent`…). Activity titles a dApp row with one, so the wallet page
  * ships these words and not the field labels.
  */
 export const INTENT_TERMS = CLEAR_TERMS.filter(
-	(term) => term.startsWith('intent') || term === 'deployIntent'
+	(term) => term.startsWith('intent') || term.endsWith('Intent')
 );

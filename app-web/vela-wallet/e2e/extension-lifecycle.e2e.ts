@@ -270,10 +270,19 @@ function chainAnswer(chainId: number, method: string, params: unknown[]): unknow
 	}
 }
 
-function serveStubNet(): Promise<StubNet> {
+/** The op hash and the transaction the stand-in relay answers with, when it answers. */
+const RELAY_OP = '0x' + 'e1'.repeat(32);
+const RELAY_TX = '0x' + 'e2'.repeat(32);
+
+/**
+ * `answerSends`: the relay takes the op AND answers — its hash, and a landed
+ * receipt (spec 094 S12: a send that succeeds end to end). Without it the
+ * reply to `eth_sendUserOperation` is held, G35's moment.
+ */
+function serveStubNet(options: { answerSends?: boolean } = {}): Promise<StubNet> {
 	const seen: string[] = [];
 	const posted: StubNet['posted'] = [];
-	const relay = happyRelay('0x' + 'e1'.repeat(32), '0x' + 'e2'.repeat(32), () => 'pending');
+	const relay = happyRelay(RELAY_OP, RELAY_TX, () => (options.answerSends ? 'landed' : 'pending'));
 	const cors = {
 		'access-control-allow-origin': '*',
 		'access-control-allow-headers': '*',
@@ -336,9 +345,9 @@ function serveStubNet(): Promise<StubNet> {
 			if (/^\/relay\/v1\/sponsor\//.test(path)) return send(200, { sponsored: true });
 			if (/^\/relay\/\d+$/.test(path) && rpc?.method) {
 				if (rpc.method === 'eth_sendUserOperation') {
-					// Taken, and the reply held: the op may have been sent.
 					posted.push({ at: Date.now(), params: rpc.params ?? [] });
-					return;
+					// Taken, and the reply held: the op may have been sent.
+					if (!options.answerSends) return;
 				}
 				const answer = relay(rpc.method, rpc.params ?? []);
 				return send(
@@ -826,6 +835,118 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 		}
 	}
 
+	/**
+	 * Spec 094 S12 / S6: what the suites never had — a dApp transaction that
+	 * SUCCEEDS end to end in the extension, and a batch whose status the dApp
+	 * asks afterwards. Signed for real by the parallel space's fixture key; the
+	 * relay and every chain are the stand-ins above, which answer this time.
+	 */
+	async function withAnsweringNet(
+		body: (wallet: Page, page: Page, net: StubNet) => Promise<void>
+	): Promise<void> {
+		const net = await serveStubNet({ answerSends: true });
+		const context = await loadExtension({ surface: 'panel' });
+		try {
+			const wallet = await seedWallet(context, extensionId());
+			await pointAtStubNet(wallet);
+			await context.route(/^https?:\/\/(?!localhost[:/]|127\.0\.0\.1[:/])/, (route) =>
+				route.abort('blockedbyclient')
+			);
+			const page = await context.newPage();
+			await page.goto(`http://localhost:${DAPP_PORT}/`);
+			await connectInPanel(page, wallet);
+			await hermeticPanel(wallet);
+			await body(wallet, page, net);
+		} finally {
+			await test
+				.info()
+				.attach('stub-net', { body: net.seen.join('\n'), contentType: 'text/plain' });
+			await context.close();
+			await closeServer(net.server);
+		}
+	}
+
+	test('eth_sendTransaction: slid in the panel, sent to the relay, landed — the page gets the transaction', async () => {
+		await withAnsweringNet(async (wallet, page, net) => {
+			const asked = page.evaluate(
+				([to, value]) =>
+					window.__ask('eth_sendTransaction', [
+						{ from: window.ethereum.selectedAddress, to, value }
+					]),
+				[DUST_TO, DUST_WEI] as const
+			);
+			asked.catch(() => {});
+			await sidePanelView(wallet, 30_000);
+			await slideInPanel(wallet);
+			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
+			const answer = (await asked) as AskResult;
+			expect(answer.ok).toBe(true);
+			// The landed transaction — or, if the receipt came late, the op that
+			// is still confirming (079); never a failure, never 4900.
+			expect([RELAY_TX, RELAY_OP]).toContain(String(answer.result).toLowerCase());
+			await expect.poll(async () => (await ledger(wallet)).session, { timeout: 5_000 }).toEqual([]);
+		});
+	});
+
+	test('wallet_sendCalls: the page gets the batch id, and wallet_getCallsStatus reads it as confirmed', async () => {
+		await withAnsweringNet(async (wallet, page, net) => {
+			const asked = page.evaluate(
+				([to, value]) =>
+					window.__ask('wallet_sendCalls', [
+						{
+							version: '2.0.0',
+							from: window.ethereum.selectedAddress,
+							atomicRequired: true,
+							calls: [{ to, value }]
+						}
+					]),
+				[DUST_TO, DUST_WEI] as const
+			);
+			asked.catch(() => {});
+			await sidePanelView(wallet, 30_000);
+			await slideInPanel(wallet);
+			await expect.poll(() => net.posted.length, { timeout: 60_000 }).toBeGreaterThan(0);
+			const sent = (await asked) as AskResult;
+			expect(sent.ok).toBe(true);
+			const id = typeof sent.result === 'string' ? sent.result : (sent.result as { id: string }).id;
+			expect(id.toLowerCase()).toBe(RELAY_OP);
+
+			// What viem's `waitForCallsStatus` asks next — 4200 before 094 (089 F04).
+			const capabilities = (await page.evaluate(() =>
+				window.__ask('wallet_getCapabilities', [window.ethereum.selectedAddress])
+			)) as AskResult;
+			expect(capabilities.ok).toBe(true);
+			expect(Object.values(capabilities.result as object)).toContainEqual({
+				atomic: { status: 'supported' }
+			});
+			await expect
+				.poll(
+					async () =>
+						(
+							(await page.evaluate(
+								(batch) => window.__ask('wallet_getCallsStatus', [batch]),
+								id
+							)) as {
+								result?: { status?: number };
+							}
+						).result?.status,
+					{ timeout: 30_000 }
+				)
+				.toBe(200);
+			const status = (await page.evaluate(
+				(batch) => window.__ask('wallet_getCallsStatus', [batch]),
+				id
+			)) as AskResult;
+			expect(status.result).toMatchObject({
+				version: '2.0.0',
+				id: RELAY_OP,
+				atomic: true,
+				status: 200,
+				receipts: [{ transactionHash: RELAY_TX, status: '0x1' }]
+			});
+		});
+	});
+
 	test('EX8 (G19): a worker stopped mid-request resumes; the answer arrives once, with no Chrome text', async () => {
 		const context = await loadExtension({ surface: 'panel' });
 		const id = extensionId();
@@ -957,5 +1078,6 @@ test.describe('a request’s life in the extension (spec 082)', () => {
 declare global {
 	interface Window {
 		__ask(method: string, params?: unknown[]): Promise<AskResult>;
+		ethereum: { selectedAddress: string };
 	}
 }

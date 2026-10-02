@@ -498,8 +498,14 @@
   "sectionTitle": "Actifs",
   "addToken": "Ajouter",
   "searchPlaceholder": "Rechercher des tokens...",
-  "rpcUnavailableSingle": "RPC de {{name}} indisponible",
-  "rpcUnavailableMultiple": "RPC indisponible sur {{count}} réseaux",
+  "unreachableOne": "{{name}} est injoignable pour le moment",
+  "unreachableMany": "{{n}} réseaux sont injoignables pour le moment",
+  "unreachableBody": "Vos actifs ne sont pas affectés : nous ne pouvons simplement pas les lire pour l’instant.",
+  "unreachableNone": "Tous les réseaux sont de nouveau joignables.",
+  "lastSeen": "Dernière lecture : {{amount}}",
+  "lastSeenUnpriced": "Des jetons à la dernière lecture",
+  "lastSeenEmpty": "Vide à la dernière lecture",
+  "notReadYet": "Pas encore lu",
   "rpcFix": "Corriger",
   "emptyTitle": "Déposez votre premier actif",
   "emptySubtext": "Appuyez ici pour voir votre adresse et recevoir des tokens",
@@ -597,7 +603,8 @@
   "labelSent": "Envoyé",
   "labelReceived": "Reçu",
   "toName": "À {{name}}",
-  "fromName": "De {{name}}"
+  "fromName": "De {{name}}",
+  "dappRowTitle": "{{intent}} sur {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -725,7 +732,8 @@
    "syncFailedBody": "Portefeuille créé, mais la clé publique n'a pas été envoyée — les autres appareils ne peuvent pas encore se connecter.",
    "copyAddress": "Copier l'adresse",
    "copied": "Copié",
-   "close": "Fermer"
+   "close": "Fermer",
+   "siteAccessBody": "L'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut, puis réessayez."
   },
   "create": {
    "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",
@@ -981,6 +989,11 @@
    "clearAllTitle": "Effacer l'historique ?",
    "clearAllBody": "Cela supprime toutes les dApps récemment ouvertes.",
    "a11yDeleteHistory": "Retirer de l'historique"
+  },
+  "ext": {
+   "installedNote": "Rechargez les onglets déjà ouverts pour que leurs sites trouvent Vela.",
+   "accessNote": "L'accès aux sites est limité : les sites ne voient pas Vela et la passkey ne fonctionne pas.",
+   "accessAllow": "Autoriser l'accès"
   }
  },
  "signHandoff": {
@@ -1033,7 +1046,10 @@
   "linkTerms": "Conditions d'utilisation",
   "linkSupport": "Assistance",
   "footer": "Conçu avec soin. Vos clés, vos cryptos.",
-  "sectionLinks": "Liens"
+  "sectionLinks": "Liens",
+  "debugMode": "Mode débogage",
+  "debugModeBody": "Permet aux pages http de votre réseau local d’utiliser le portefeuille. Réservé au développement.",
+  "debugModeRevealed": "Le mode débogage est maintenant disponible"
  },
  "clearSigning": {
   "title": "Test de signature claire",

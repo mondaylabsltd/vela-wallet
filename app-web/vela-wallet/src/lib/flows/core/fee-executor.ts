@@ -277,6 +277,25 @@ export function createFeeExecutor(options: FeeSessionOptions) {
 				});
 				return { type: 'ttl_elapsed' };
 			}
+
+			case 'start_deadline': {
+				// The bound on the whole run (spec 094 S9): the core fails a quote
+				// that has not priced by now, rather than "Estimating…" for as long
+				// as the network hangs. Cancelled with a superseded run — the same
+				// contract as the TTL above.
+				await new Promise<void>((resolve, reject) => {
+					const timer = setTimeout(resolve, operation.ms);
+					signal.addEventListener(
+						'abort',
+						() => {
+							clearTimeout(timer);
+							reject(new Error('deadline cancelled'));
+						},
+						{ once: true }
+					);
+				});
+				return { type: 'deadline_elapsed' };
+			}
 		}
 	};
 }
@@ -312,5 +331,7 @@ export function feeOperationFailure(effect: FeeEffect): FeeShellResult {
 			return { type: 'inner_calls_measured', gas: operation.calls.map(() => null) };
 		case 'start_ttl':
 			return { type: 'ttl_elapsed' };
+		case 'start_deadline':
+			return { type: 'deadline_elapsed' };
 	}
 }

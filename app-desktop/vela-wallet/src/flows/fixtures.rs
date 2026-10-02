@@ -153,6 +153,9 @@ pub struct FactRow {
     /// the confirm's speed row uses it for a speed taken because it was free
     /// (issue 686), so the tier and its reason reach the last screen together.
     pub note: Option<SharedString>,
+    /// The value in the danger tone — an unlimited spending cap (spec 093),
+    /// the one figure on a record that is a standing risk.
+    pub danger: bool,
 }
 
 /// The chip's tone, matching the other three clients' vocabulary.
@@ -311,14 +314,24 @@ pub struct HistoryPanel {
 #[derive(Clone)]
 pub struct TxDetail {
     pub title: SharedString,
-    pub status: StatusChip,
+    /// Where a transaction stands. `None` for a dApp's signature (spec 093):
+    /// nothing was sent, so nothing settles — `note` says so instead.
+    pub status: Option<StatusChip>,
+    /// "Off-chain signature — nothing was sent on-chain" (spec 093), where a
+    /// transaction's chip would be.
+    pub note: Option<SharedString>,
     /// Spec 038 #D2 — a folded batch row: its parts, under the facts.
     pub breakdown_title: Option<SharedString>,
     pub breakdown: Vec<BreakdownRow>,
     pub amount: SharedString,
     pub fiat: SharedString,
     pub positive: bool,
+    /// The figure is an unlimited allowance (spec 093): the danger tone.
+    pub danger: bool,
     pub facts: Vec<FactRow>,
+    /// A dApp record's collapsed "Technical details" (spec 093). `None` on
+    /// every other record, and in the mocks.
+    pub technical: Option<Technical>,
     pub view_on_explorer: SharedString,
     /// The transaction's page on its chain's explorer (the web's
     /// `explorerTxURL`). `None` without a hash, and in the mocks.
@@ -327,6 +340,31 @@ pub struct TxDetail {
     /// record, not the transaction. `None` in the mocks, which have nothing
     /// to delete.
     pub delete_label: Option<SharedString>,
+}
+
+/// A dApp record's "Technical details" (spec 093): the toggle, and — only
+/// once it is opened — the lines the core listed, in its order.
+#[derive(Clone)]
+pub struct Technical {
+    pub toggle: SharedString,
+    /// `None` while collapsed: the stored request is read from the store only
+    /// when the section is opened.
+    pub lines: Option<Vec<TechnicalLine>>,
+}
+
+/// One line of the technical section.
+#[derive(Clone)]
+pub enum TechnicalLine {
+    /// A label-value row, as the facts above it.
+    Fact(FactRow),
+    /// The request as the record kept it — a block of text under its label,
+    /// not a value squeezed beside one. `missing` when the record kept none
+    /// (the corpus's "Content wasn't recorded"), drawn as a sentence.
+    Text {
+        label: SharedString,
+        text: SharedString,
+        missing: bool,
+    },
 }
 
 #[derive(Clone)]
@@ -864,6 +902,7 @@ fn fact(label: &SharedString, value: impl Into<SharedString>) -> FactRow {
         mono: false,
         copy: None,
         note: None,
+        danger: false,
     }
 }
 
@@ -992,6 +1031,7 @@ fn history(s: &FlowStrings) -> Vec<HistoryGroup> {
         badge_logo: None,
         day: None,
         received: None,
+        danger: false,
     };
     let to = |name: &str, clock: &str| format!("{} · {clock}", fill(&s.to_name, "name", name));
     let from = |name: &str, clock: &str| format!("{} · {clock}", fill(&s.from_name, "name", name));
@@ -1081,6 +1121,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             mono: received,
             copy: Some(if received { ALICE_FULL } else { HOLD_ON_FULL }.into()),
             note: None,
+            danger: false,
         },
         FactRow {
             label: s.detail_chain.clone(),
@@ -1089,6 +1130,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             mono: false,
             copy: None,
             note: None,
+            danger: false,
         },
     ];
     // Only an ERC-20 transfer has a contract. DA3L's native coin does not, and
@@ -1103,6 +1145,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             mono: true,
             copy: Some(USDT_CONTRACT.into()),
             note: None,
+            danger: false,
         });
     }
     facts.push(fact(
@@ -1127,6 +1170,7 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             .into(),
         ),
         note: None,
+        danger: false,
     });
 
     TxDetail {
@@ -1137,10 +1181,11 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
         } else {
             fill(&s.tx_label_sent, "symbol", "POL").into()
         },
-        status: StatusChip {
+        status: Some(StatusChip {
             text: s.status_confirmed.clone(),
             tone: StatusTone::Success,
-        },
+        }),
+        note: None,
         amount: if received {
             "+120 USDT".into()
         } else {
@@ -1152,7 +1197,9 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
             "≈ $0.98".into()
         },
         positive: received,
+        danger: false,
         facts,
+        technical: None,
         view_on_explorer: s.view_on_explorer.clone(),
         explorer_url: None,
         delete_label: None,
@@ -1554,6 +1601,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 mono: false,
                 copy: None,
                 note: None,
+                danger: false,
             },
             FactRow {
                 label: s.to_label.clone(),
@@ -1562,6 +1610,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 mono: true,
                 copy: None,
                 note: None,
+                danger: false,
             },
             FactRow {
                 label: s.detail_chain.clone(),
@@ -1570,6 +1619,7 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
                 mono: false,
                 copy: None,
                 note: None,
+                danger: false,
             },
             fact(&s.est_fee, "~0.0021 ETH · ≈$0.55"),
         ],

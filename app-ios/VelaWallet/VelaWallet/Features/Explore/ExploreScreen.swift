@@ -485,12 +485,7 @@ struct ExploreScreen: View {
 
     @ViewBuilder private var toastView: some View {
         if let toast {
-            Text(verbatim: toast)
-                .typeRole(Typography.label)
-                .foregroundStyle(theme.bgBase)
-                .padding(.horizontal, Tokens.Space.s16)
-                .padding(.vertical, Tokens.Space.s8)
-                .background(theme.fgBase, in: Capsule())
+            NoticeCapsule(text: toast)
                 .padding(.bottom, ExploreGeometry.browserBar + Tokens.Space.s16)
                 .transition(.opacity)
                 .accessibilityIdentifier("explore.toast")

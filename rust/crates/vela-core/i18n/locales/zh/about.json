@@ -21,6 +21,9 @@
     "linkTerms": "服务条款",
     "linkSupport": "帮助与支持",
     "footer": "用心构建。您的密钥，您的资产。",
-    "sectionLinks": "链接"
+    "sectionLinks": "链接",
+    "debugMode": "调试模式",
+    "debugModeBody": "让局域网内的 http 网页使用钱包。仅供开发使用。",
+    "debugModeRevealed": "调试模式已可用"
   }
 }

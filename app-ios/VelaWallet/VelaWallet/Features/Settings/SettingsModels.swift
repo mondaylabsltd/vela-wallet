@@ -21,6 +21,8 @@ enum SettingsStateId: String, CaseIterable, Identifiable {
     case st1, st1b, st2, st3, st3b, st4, st5, st6, st7, st8
     case st9, st9b, st10, st10b, st10c, st11, st12, st13, st13b, st14, st15, st16
     case sr1, sr2, sr2b, sr3, sr4, sr5
+    /// Spec 092: every network the wallet cannot reach, in one list.
+    case sr6
 
     var id: String { rawValue }
 
@@ -37,6 +39,8 @@ enum SettingsPage: Equatable {
 enum SettingsOverlay: Equatable, Identifiable {
     case none, accounts, signOut, language, currency, numberFormat, dateFormat, timeFormat
     case clearCaches, eraseDevice, feedback, rpcFix, balanceDetail, relayer
+    /// SR6 (spec 092): every network the wallet cannot reach, in one place.
+    case unreachable
     /// One storage row's 清除, asked before it happens (058, the founder's
     /// ruling): "联系人与分组 · 清除" removed the whole address book on a
     /// single tap, with nothing in between.
@@ -373,6 +377,20 @@ struct AboutModel {
     let rows: [KeyValueRowModel]
     let links: [KeyValueRowModel]
     let footer: String
+    /// The hidden developer switch (spec 091).
+    var debugMode = DebugModeModel()
+}
+
+/// About's debug-mode switch (spec 091): drawn once seven taps on the version
+/// have revealed it, and from then on, so it can be turned off again.
+struct DebugModeModel {
+    /// How it stands — the stored preference, read by the core.
+    var mode: DebugMode = .hidden
+    var title = ""
+    /// What it does, and that it is for development only — one line.
+    var body = ""
+    /// The notice the revealing tap shows.
+    var revealedNotice = ""
 }
 
 struct FeedbackModel {
@@ -470,6 +488,29 @@ struct BalanceDetailModel {
     let done: [BalanceDetailRowModel]
 }
 
+/// SR6 (spec 092): every network the wallet cannot reach, in the core's order
+/// (last seen holding something first), each with what was last read there
+/// and its RPC fix.
+struct UnreachableModel {
+    /// The home's own line, live — or "every network is back" once none is.
+    let title: String
+    /// Absent once the list is empty.
+    let summary: String?
+    let rows: [UnreachableRowModel]
+
+    static let empty = UnreachableModel(title: "", summary: nil, rows: [])
+}
+
+struct UnreachableRowModel: Identifiable {
+    let id: String
+    let chainId: Int
+    let mark: ChainMarkModel
+    let name: String
+    /// "Last seen $1,234.50", "Not read yet", …
+    let line: String
+    let action: String
+}
+
 /// SR4: fund this chain's bundler treasury.
 struct RelayerModel {
     let title: String
@@ -549,7 +590,51 @@ struct WalletKeyRowModel: Identifiable {
     let key: CreateKeyRow
 }
 
+/// The settings screen's model: every page, sheet and rescue of it, by
+/// value — through one pointer.
+///
+/// **Copy-on-write, on purpose** (spec 091, device-found 2026-10-02). Inline,
+/// these fields came to 4.4 KB, and the screen's live builder hands the model
+/// through some twenty `SettingsLive.with…` steps. An unoptimised (Debug)
+/// build gives every temporary of every step its own stack slot, so
+/// `RootView.settingsModel` alone took a 226 KB frame; with SwiftUI's generic
+/// body frames — which allocate the whole body value, this model included,
+/// several times over — opening 设置 overflowed the iPhone's 1 MB main-thread
+/// stack (SIGSEGV). The simulator's larger stack hid it.
+///
+/// So the fields live in `SettingsScreenContent` behind one reference.
+/// Reads go straight through (`model.about`, `model.sections`), a write
+/// copies the content first only when another value still shares it, and
+/// the model is exactly the value it was. `ScreenModelStackTests` holds the
+/// size and the builder's stack to a budget.
+@dynamicMemberLookup
 struct SettingsScreenModel {
+    private final class Storage {
+        var content: SettingsScreenContent
+        init(_ content: SettingsScreenContent) { self.content = content }
+    }
+
+    private var storage: Storage
+
+    init(_ content: SettingsScreenContent) {
+        storage = Storage(content)
+    }
+
+    subscript<Value>(dynamicMember keyPath: KeyPath<SettingsScreenContent, Value>) -> Value {
+        storage.content[keyPath: keyPath]
+    }
+
+    subscript<Value>(dynamicMember keyPath: WritableKeyPath<SettingsScreenContent, Value>) -> Value {
+        get { storage.content[keyPath: keyPath] }
+        set {
+            if !isKnownUniquelyReferenced(&storage) { storage = Storage(storage.content) }
+            storage.content[keyPath: keyPath] = newValue
+        }
+    }
+}
+
+/// What `SettingsScreenModel` holds.
+struct SettingsScreenContent {
     let state: SettingsStateId
     let title: String
     /// Which page it OPENS on. A `var` because a screen elsewhere can send
@@ -615,12 +700,16 @@ struct SettingsScreenModel {
     /// is this device's chains rather than the drawing's two.
     var rpcFix: RpcFixModel
     var balanceDetail: BalanceDetailModel
+    /// SR6 (spec 092), built live from the balance core's view.
+    var unreachable: UnreachableModel = .empty
     let relayer: RelayerModel
     let indexDown: IndexDownModel
     /// Scrim title behind a rescue sheet — "钱包", "转账", "设备存储".
     let backdropTitle: String
     let closeLabel: String
+}
 
+extension SettingsScreenModel {
     /// The signed-in identity, swapped over the fixture account (spec 019's
     /// rule: a fixture name over a real address tells somebody they are signed
     /// in as a stranger).
@@ -632,7 +721,7 @@ struct SettingsScreenModel {
         // Only the ACTIVE row: the other two are fixtures, and there is no
         // honest way to make them real without an account list the core does
         // not expose yet.
-        copy.accountsSheet.rows = accountsSheet.rows.enumerated().map { index, row in
+        copy.accountsSheet.rows = self.accountsSheet.rows.enumerated().map { index, row in
             guard index == 0 else { return row }
             var updated = row
             updated.name = name

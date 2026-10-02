@@ -550,13 +550,14 @@ fn signature_record_lands_before_the_response() {
         },
         now_ms: 1_000.0,
     });
-    // Record FIRST — no response yet.
+    // Record FIRST — no response yet. The record keeps that a signature was
+    // given, never the signature itself (spec 093): that is the page's.
     assert!(
         matches!(ops.as_slice(), [Op::PersistRecord { record }]
             if record.record_id == "dapp-1000-msg"
                 && record.kind == SignRecordKind::SignMessage
                 && record.status == SignRecordStatus::Confirmed
-                && record.result == "0xsig"),
+                && record.result.is_empty()),
         "durable record precedes the result: {ops:?}"
     );
     let ops = sut.resolve(Res::RecordPersisted);

@@ -1,7 +1,7 @@
 ---
 title: Vela'yı kurun
 description: "Vela'yı çalıştırmanın bütün yolları — web, tarayıcı uzantısı, masaüstü ve telefon — her birinin maliyeti, neler yapabildiği ve cihazınızın neye ihtiyacı olduğu."
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -32,7 +32,7 @@ yapmanız yeterli.
 
 ## Tarayıcı uzantısı
 
-Chromium tabanlı tarayıcılar: Chrome, Edge ve Brave (Chrome 116 ya da sonrası).
+Chromium tabanlı tarayıcılar: Chrome, Edge ve Brave (Chrome 122 ya da sonrası).
 Cüzdanı araç çubuğuna koyar ve dApp'lerin ona doğrudan bağlanmasını sağlar. Chrome
 Web Mağazası'na gelene kadar:
 

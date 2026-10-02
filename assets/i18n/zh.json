@@ -502,8 +502,14 @@
   "sectionTitle": "资产",
   "addToken": "添加",
   "searchPlaceholder": "搜索代币...",
-  "rpcUnavailableSingle": "{{name}} RPC 不可用",
-  "rpcUnavailableMultiple": "{{count}} 个网络 RPC 不可用",
+  "unreachableOne": "暂时连不上 {{name}}",
+  "unreachableMany": "{{n}} 个网络暂时连不上",
+  "unreachableBody": "资产不受影响，只是现在读不到。",
+  "unreachableNone": "所有网络都已连上。",
+  "lastSeen": "上次读到 {{amount}}",
+  "lastSeenUnpriced": "上次读到时有资产",
+  "lastSeenEmpty": "上次读到时没有资产",
+  "notReadYet": "还没读到",
   "rpcFix": "修复",
   "emptyTitle": "存入您的第一笔资产",
   "emptySubtext": "点击此处查看地址并接收代币",
@@ -601,7 +607,8 @@
   "labelSent": "已发送",
   "labelReceived": "已收到",
   "toName": "至 {{name}}",
-  "fromName": "来自 {{name}}"
+  "fromName": "来自 {{name}}",
+  "dappRowTitle": "在 {{place}} {{intent}}"
  },
  "onboarding": {
   "welcome": {
@@ -729,7 +736,8 @@
    "syncFailedBody": "钱包已创建，但公钥未上传，其他设备暂时无法登录。",
    "copyAddress": "复制地址",
    "copied": "已复制",
-   "close": "关闭"
+   "close": "关闭",
+   "siteAccessBody": "网站访问权限受限。请点按顶部的“允许访问”，然后重试。"
   },
   "create": {
    "accountNameHint": "此名称将与您的公钥一起存储上链，用于跨设备登录。",
@@ -985,6 +993,11 @@
    "clearAllTitle": "清空记录？",
    "clearAllBody": "这会移除所有最近打开的 dApp。",
    "a11yDeleteHistory": "从记录中移除"
+  },
+  "ext": {
+   "installedNote": "重新加载之前已打开的标签页，网站才能找到 Vela。",
+   "accessNote": "网站访问权限受限：网站找不到 Vela，通行密钥也无法使用。",
+   "accessAllow": "允许访问"
   }
  },
  "signHandoff": {
@@ -1037,7 +1050,10 @@
   "linkTerms": "服务条款",
   "linkSupport": "帮助与支持",
   "footer": "用心构建。您的密钥，您的资产。",
-  "sectionLinks": "链接"
+  "sectionLinks": "链接",
+  "debugMode": "调试模式",
+  "debugModeBody": "让局域网内的 http 网页使用钱包。仅供开发使用。",
+  "debugModeRevealed": "调试模式已可用"
  },
  "clearSigning": {
   "title": "清晰签名测试",

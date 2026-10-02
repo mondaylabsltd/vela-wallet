@@ -24,26 +24,126 @@ struct ProviderScriptTests {
 
     // MARK: - The script
 
-    /// The injected script IS the core's, byte for byte — no second copy, no
-    /// assembly, no bridge string of this app's own.
+    /// The injected script IS the core's, byte for byte, for each debug mode
+    /// (spec 091) — no second copy, no assembly, no bridge string of this
+    /// app's own.
     @Test func theInjectedScriptIsTheCoresIosScript() {
-        #expect(ProviderBridge.script == dappProviderScript(host: "ios"))
-        #expect(!ProviderBridge.script.isEmpty)
+        for debugMode in [false, true] {
+            #expect(ProviderBridge.script(debugMode: debugMode)
+                    == dappProviderScript(host: "ios", debugMode: debugMode))
+            #expect(!ProviderBridge.script(debugMode: debugMode).isEmpty)
+        }
+        #expect(ProviderBridge.script(debugMode: false) != ProviderBridge.script(debugMode: true))
     }
 
     /// It carries the iOS bridge — WebKit's message handler — and not another
     /// host's transport, and it installs nothing in a subframe.
     @Test func theScriptCarriesTheIosBridge() {
-        let script = ProviderBridge.script
-        #expect(script.contains("window.webkit.messageHandlers.\(ProviderBridge.handlerName).postMessage(s)"))
-        #expect(!script.contains("window.ipc.postMessage"), "that is the desktop's transport")
-        #expect(!script.contains("(s) => VelaHost.postMessage"), "that is Android's transport")
-        #expect(script.hasPrefix("(function () {\n\tif (window.top !== window || !window.isSecureContext) return;"),
-                "a subframe gets no provider, rather than one that can never be answered — nor does a page off a secure context (spec 088)")
-        #expect(script.contains("__velaDeliver"))
-        #expect(script.contains("t: 'hello'"), "every document says hello before its own scripts run")
-        #expect(script.contains("eip6963:announceProvider"), "the provider itself is in there")
-        #expect(!script.contains("__HOST_POST__"))
+        for debugMode in [false, true] {
+            let script = ProviderBridge.script(debugMode: debugMode)
+            #expect(script.contains("window.webkit.messageHandlers.\(ProviderBridge.handlerName).postMessage(s)"))
+            #expect(!script.contains("window.ipc.postMessage"), "that is the desktop's transport")
+            #expect(!script.contains("(s) => VelaHost.postMessage"), "that is Android's transport")
+            #expect(script.hasPrefix("(function () {\n\tif (window.top !== window || "),
+                    "a subframe gets no provider, rather than one that can never be answered")
+            #expect(script.contains("__velaDeliver"))
+            #expect(script.contains("t: 'hello'"), "every document says hello before its own scripts run")
+            #expect(script.contains("eip6963:announceProvider"), "the provider itself is in there")
+            #expect(!script.contains("__HOST_POST__"))
+        }
+        // Debug mode off is spec 088's script, unchanged: a secure context only.
+        #expect(ProviderBridge.script(debugMode: false)
+            .hasPrefix("(function () {\n\tif (window.top !== window || !window.isSecureContext) return;"),
+                "a page off a secure context gets no provider (spec 088)")
+        #expect(!ProviderBridge.script(debugMode: false).contains("location.hostname"))
+    }
+
+    // MARK: - Who the script offers the wallet to (spec 091)
+
+    /// The script's own gate, run in JavaScriptCore against the core's rule.
+    ///
+    /// Nothing is cut out of the script: the WHOLE document-start script runs
+    /// in a context that plays a top-level page at each origin — `window`,
+    /// `location` as a browser spells it, `isSecureContext` as WebKit decides
+    /// it (https or loopback, which is debug mode off's answer), and WebKit's
+    /// message handler recording what is posted. A page offered the wallet
+    /// says hello; one that is not says nothing. Whether it said hello must be
+    /// exactly `dappOffersWallet` — the gate the core applies again to every
+    /// message — for debug mode off and on.
+    @Test func theScriptsGateIsTheCoresRule() throws {
+        let origins = [
+            "http://192.168.1.5:3000", "http://10.0.0.1.evil.com", "http://[fd00::1]:3000",
+            "http://foo.local", "http://foo.local.evil.com", "http://dapp.example",
+            "https://dapp.example", "http://127.0.0.1:8137", "http://172.32.0.1",
+            "http://[2001:db8::1]", "http://192.168.1.5.nip.io", "http://10.0.0.1",
+            "http://172.16.0.1", "http://172.31.255.255", "http://169.254.10.20",
+            "http://[fe80::1]", "http://localhost:5173", "http://[::1]:5173",
+            "http://10.evil.com", "https://192.168.1.5",
+        ]
+        for debugMode in [false, true] {
+            let script = ProviderBridge.script(debugMode: debugMode)
+            for origin in origins {
+                let hello = try saysHello(script: script, origin: origin)
+                #expect(hello == dappOffersWallet(origin: origin, debugMode: debugMode),
+                        "\(origin), debug mode \(debugMode ? "on" : "off")")
+            }
+        }
+        // Not vacuous: a LAN page is offered the wallet in debug mode only,
+        // and a public https page always.
+        #expect(try saysHello(script: ProviderBridge.script(debugMode: true), origin: "http://192.168.1.5:3000"))
+        #expect(try !saysHello(script: ProviderBridge.script(debugMode: false), origin: "http://192.168.1.5:3000"))
+        #expect(try saysHello(script: ProviderBridge.script(debugMode: false), origin: "https://dapp.example"))
+        #expect(try !saysHello(script: ProviderBridge.script(debugMode: true), origin: "http://dapp.example"))
+    }
+
+    /// Run `script` as the top document at `origin`: did it say hello?
+    private func saysHello(script: String, origin: String) throws -> Bool {
+        let url = try #require(URL(string: origin))
+        let scheme = try #require(url.scheme)
+        var host = try #require(url.host)
+        // `URL.host` drops an IPv6 literal's brackets; `location.hostname`
+        // keeps them.
+        if host.contains(":"), !host.hasPrefix("[") { host = "[\(host)]" }
+        let context = try #require(JSContext())
+        var exception: String?
+        context.exceptionHandler = { _, value in exception = value?.toString() }
+        context.evaluateScript("""
+        var window = globalThis;
+        window.top = window;
+        window.isSecureContext = \(dappOffersWallet(origin: origin, debugMode: false));
+        window.location = {
+            href: \(jsString(origin + "/")), origin: \(jsString(origin)),
+            protocol: \(jsString(scheme + ":")), hostname: \(jsString(host))
+        };
+        var location = window.location;
+        window.crypto = { randomUUID: function () { return 'doc-1'; } };
+        window.addEventListener = function () {};
+        window.dispatchEvent = function () { return true; };
+        window.postMessage = function () {};
+        window.setTimeout = function () { return 0; };
+        window.clearTimeout = function () {};
+        window.console = { log: function () {}, error: function () {}, warn: function () {} };
+        var document = { documentElement: { setAttribute: function () {} } };
+        function Event(type) { this.type = type; }
+        function CustomEvent(type, init) { this.type = type; this.detail = init && init.detail; }
+        var posted = [];
+        window.webkit = { messageHandlers: { VelaHost: { postMessage: function (s) { posted.push(s); } } } };
+        """)
+        #expect(exception == nil, "the stubs: \(exception ?? "")")
+        context.evaluateScript(script)
+        #expect(exception == nil, "\(origin): \(exception ?? "")")
+        let posts = context.evaluateScript("JSON.stringify(posted)")?.toString() ?? "[]"
+        let messages = (try? JSONSerialization.jsonObject(with: Data(posts.utf8)) as? [String]) ?? []
+        return messages.contains { message in
+            let decoded = try? JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any]
+            return decoded?["t"] as? String == "hello"
+        }
+    }
+
+    /// A JavaScript string literal for `text`.
+    private func jsString(_ text: String) -> String {
+        let data = (try? JSONSerialization.data(withJSONObject: [text])) ?? Data("[\"\"]".utf8)
+        return String(String(decoding: data, as: UTF8.self).dropFirst().dropLast())
     }
 
     // MARK: - Delivery
@@ -104,7 +204,7 @@ struct ProviderScriptTests {
     /// differs only in case is not a change. Run on the core's own
     /// `applyAccounts`, cut from the very script this app injects.
     @Test func accountsChangedKeepsEip55() throws {
-        let script = ProviderBridge.script
+        let script = ProviderBridge.script(debugMode: false)
         let start = try #require(script.range(of: "function applyAccounts(next) {"))
         var depth = 0
         var end = start.upperBound

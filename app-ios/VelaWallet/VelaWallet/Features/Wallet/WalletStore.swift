@@ -198,6 +198,18 @@ final class WalletStore {
         core.dispatch(CoreJSON.string(["type": "fix_chain_resolved", "chain_id": chainId]))
     }
 
+    /// The list of networks the wallet cannot reach is on screen (spec 092):
+    /// the core reads every chain again now, and keeps re-reading while it
+    /// stays open, so one that has come back leaves it.
+    func unreachableListOpened() {
+        core.dispatch(CoreJSON.string(["type": "unreachable_list_opened"]))
+    }
+
+    /// That list closed: the re-reads stop.
+    func unreachableListClosed() {
+        core.dispatch(CoreJSON.string(["type": "unreachable_list_closed"]))
+    }
+
     func appFocused() { core.dispatch(CoreJSON.string(["type": "app_focused"])) }
     func appBackgrounded() { core.dispatch(CoreJSON.string(["type": "app_backgrounded"])) }
 }

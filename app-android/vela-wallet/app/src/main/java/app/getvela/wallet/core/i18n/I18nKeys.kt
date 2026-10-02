@@ -287,7 +287,9 @@ object I18nKeys {
         const val BALANCE_STALE = "home.balanceStale"
         const val BALANCE_UNPRICED = "home.balanceUnpriced"
         /** "{{name}} RPC unavailable" — the hero's line for one unreachable chain (web `liveBalance`). */
-        const val RPC_UNAVAILABLE_SINGLE = "assets.rpcUnavailableSingle"
+        /** Spec 092: the line over the networks the wallet cannot reach — `{{name}}` / `{{n}}`. */
+        const val UNREACHABLE_ONE = "assets.unreachableOne"
+        const val UNREACHABLE_MANY = "assets.unreachableMany"
         /**
          * The hero's reason when a first load could read nothing and nothing is
          * cached (#188, spec 038 finding 15). Borrowed from the onboarding
@@ -328,6 +330,12 @@ object I18nKeys {
          * "Unknown" (never "Failed": it may have been sent).
          */
         const val ROW_UNKNOWN = "componentsUi.signing.intentUnknown"
+        /** Spec 093: a dApp row's title — "{{intent}} on {{place}}" (the core picks both). */
+        const val DAPP_ROW_TITLE = "history.dappRowTitle"
+        /** Spec 093: the headline verb is the core's `ClearTerm` leaf under this prefix (`intentSwap`, `permitIntent`…). */
+        const val SIGNING_TERM_PREFIX = "componentsUi.signing."
+        /** Spec 093: an unlimited allowance, where a figure would be. */
+        const val UNLIMITED = "componentsUi.signingApprove.unlimitedValue"
         const val DAY_TODAY = "componentsUi.dayGroup.today"
         const val DAY_YESTERDAY = "componentsUi.dayGroup.yesterday"
 
@@ -519,6 +527,31 @@ object I18nKeys {
         const val DETAIL_DATE = "componentsTx.detail.labelDate"
         const val DETAIL_HASH = "componentsTx.detail.labelHash"
         const val DETAIL_SECTION_TITLE = "componentsTx.detail.sectionTitle"
+
+        // Spec 093: a dApp interaction's detail — every word an existing key.
+        const val OFF_CHAIN_NOTE = "connect.detail.offChainNote"
+        const val DETAIL_APP = "connect.detail.labelApp"
+        /** The contract a dApp's call went to — the noun (083 F3 review), not "Interacting with". */
+        const val DAPP_CONTRACT = "tokenDetail.labelContract"
+        const val DETAIL_SPENDER = "componentsUi.signing.labelSpender"
+        const val SPENDING_CAP = "componentsUi.signingApprove.spendingCap"
+        const val EXPIRES = "componentsUi.signingApprove.expiresLabel"
+        const val NO_EXPIRY = "componentsUi.signingApprove.noExpiry"
+        const val UNLIMITED = "componentsUi.signingApprove.unlimitedValue"
+        const val BALANCE_CHANGES = "componentsUi.signing.balanceChangesTitle"
+        const val UNVERIFIED_TOKEN = "componentsUi.signing.balanceUnverifiedToken"
+        const val TECHNICAL = "componentsUi.signing.advancedToggle"
+        const val OPERATION = "componentsTx.detail.labelOperation"
+        const val OP_CONTRACT = "componentsTx.detail.opContractInteraction"
+        const val OP_BATCH = "componentsUi.signing.batchSubtitle"
+        const val OP_SIGNATURE = "componentsTx.detail.opSignature"
+        const val OP_TYPED_DATA = "componentsTx.detail.opTypedDataSignature"
+        const val CONTENT_CALL_DATA = "connect.detail.contentCallData"
+        const val CONTENT_TYPED_DATA = "connect.detail.contentTypedData"
+        const val CONTENT_MESSAGE = "connect.detail.contentMessage"
+        const val CONTENT_MISSING = "connect.detail.contentMissing"
+        const val TYPE = "componentsUi.signing.typeLabel"
+        const val USER_OP_HASH = "componentsTx.receipt.userOpHash"
 
         // Assets.
         const val ASSETS_TITLE = "assets.sectionTitle"
@@ -964,6 +997,10 @@ object I18nKeys {
         const val ABOUT_SIGNER_VALUE = "about.techSignerValue"
         const val ABOUT_NETWORKS_LABEL = "about.techNetworksLabel"
         const val ABOUT_NETWORKS_VALUE = "about.techNetworksValue"
+        /** Spec 091: the hidden developer switch, its one line, and the notice when it appears. */
+        const val ABOUT_DEBUG_MODE = "about.debugMode"
+        const val ABOUT_DEBUG_MODE_BODY = "about.debugModeBody"
+        const val ABOUT_DEBUG_MODE_REVEALED = "about.debugModeRevealed"
         const val ABOUT_LINK_WEBSITE = "about.linkWebsite"
         const val ABOUT_LINK_GITHUB = "about.linkGitHub"
         const val ABOUT_LINK_SAFE = "about.linkSafeWallet"
@@ -1034,8 +1071,15 @@ object I18nKeys {
         const val BUG_CLOSE_VIEWER = "componentsUi.bugReport.closeViewer"
         const val BUG_REMOVE_FROM_VIEWER = "componentsUi.bugReport.removeFromViewer"
 
-        // Rescue (SR1–SR5).
-        const val RPC_UNAVAILABLE_MULTIPLE = "assets.rpcUnavailableMultiple"
+        // Rescue (SR1–SR6). SR6 (spec 092): the list of every network the wallet
+        // cannot reach — its line under the title, its title once all are back,
+        // and the four row lines the core names in `line_key`.
+        const val UNREACHABLE_BODY = "assets.unreachableBody"
+        const val UNREACHABLE_NONE = "assets.unreachableNone"
+        const val LAST_SEEN = "assets.lastSeen"
+        const val LAST_SEEN_UNPRICED = "assets.lastSeenUnpriced"
+        const val LAST_SEEN_EMPTY = "assets.lastSeenEmpty"
+        const val NOT_READ_YET = "assets.notReadYet"
         const val RPC_FIX = "assets.rpcFix"
         const val RPC_FIX_TITLE = "assets.rpcFixTitle"
         const val RPC_FIX_WARNING = "assets.rpcFixWarning"

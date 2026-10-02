@@ -194,6 +194,46 @@ test.describe('connecting a dApp', () => {
 		expect(after.result).toEqual([]);
 		await context.close();
 	});
+
+	/**
+	 * Spec 094 S7 (089 F03): a page that fired a burst of connects with no
+	 * click got one focused popup PER request. One window per site now; the
+	 * person decides once, and the rest are answered from that decision.
+	 */
+	test('a burst of connects from one site opens ONE window, and one decision answers them all', async () => {
+		const context = await loadExtension();
+		const id = extensionId();
+		await seedWallet(context, id);
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+
+		let windows = 0;
+		context.on('page', (opened) => {
+			void opened
+				.waitForURL(/request\.html/, { timeout: 10_000 })
+				.then(() => (windows += 1))
+				.catch(() => {});
+		});
+		const burst = page.evaluate(() =>
+			Promise.all(
+				Array.from({ length: 6 }, () =>
+					(
+						window as unknown as {
+							ethereum: { request(a: { method: string }): Promise<unknown> };
+						}
+					).ethereum.request({ method: 'eth_requestAccounts' })
+				)
+			)
+		);
+		const win = await requestWindow(context);
+		// Give every request of the burst time to arrive and be queued.
+		await page.waitForTimeout(1_500);
+		await win.getByRole('button', { name: 'Connect' }).click();
+		expect(await burst).toEqual(Array.from({ length: 6 }, () => [FIXTURE_ONE]));
+		await noRequestWindow(context);
+		expect(windows).toBe(1);
+		await context.close();
+	});
 });
 
 declare global {

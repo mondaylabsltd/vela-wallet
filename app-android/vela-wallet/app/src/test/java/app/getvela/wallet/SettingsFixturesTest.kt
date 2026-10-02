@@ -66,11 +66,25 @@ class SettingsFixturesTest {
     }
 
     @Test
-    fun `the state inventory covers ST1-ST16 and SR1-SR5`() {
+    fun `the state inventory covers ST1-ST16 and SR1-SR6`() {
         val states = SettingsScreenState.entries
-        assertEquals(28, states.size)
-        assertEquals(22, states.count { it.name.startsWith("ST") })
-        assertEquals(6, states.count { it.name.startsWith("SR") })
+        // ST14B (spec 091) has no mock: About with the debug-mode switch revealed.
+        assertEquals(30, states.size)
+        assertEquals(23, states.count { it.name.startsWith("ST") })
+        assertEquals(7, states.count { it.name.startsWith("SR") })
+    }
+
+    /** Spec 092: SR6 is the unreachable list, drawn through the live builder. */
+    @Test
+    fun `SR6 lists every unreachable network with what was last read there`() {
+        val model = SettingsFixtures.buildState(SettingsScreenState.SR6, strings("en"))
+        assertEquals(SettingsOverlay.Unreachable, model.overlay)
+        assertEquals("Can't reach 3 networks right now", model.unreachable.title)
+        assertEquals(listOf("Ethereum", "BNB Chain", "Polygon"), model.unreachable.rows.map { it.name })
+        assertEquals(
+            listOf("Last seen \$4,500.00", "Held nothing when last read", "Not read yet"),
+            model.unreachable.rows.map { it.line },
+        )
     }
 
     @Test
@@ -112,10 +126,22 @@ class SettingsFixturesTest {
             SettingsScreenState.ST12 to SettingsPage.Endpoints,
             SettingsScreenState.ST13 to SettingsPage.Storage,
             SettingsScreenState.ST14 to SettingsPage.About,
+            SettingsScreenState.ST14B to SettingsPage.About,
         )
         for ((state, page) in pairs) {
             assertEquals(state.name, page, SettingsFixtures.buildState(state, s).page)
         }
+    }
+
+    /** Spec 091: About draws no debug-mode switch until it is revealed; ST14B shows it on. */
+    @Test
+    fun `ST14 hides the debug-mode switch and ST14B shows it on`() {
+        val s = strings("zh")
+        val hidden = SettingsFixtures.buildState(SettingsScreenState.ST14, s).about.debugMode
+        val shown = SettingsFixtures.buildState(SettingsScreenState.ST14B, s).about.debugMode
+        assertTrue(!hidden.mode.revealed)
+        assertTrue(shown.mode.revealed && shown.mode.on)
+        assertEquals("调试模式", shown.title)
     }
 
     @Test

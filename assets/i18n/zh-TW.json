@@ -495,8 +495,14 @@
   "sectionTitle": "資產",
   "addToken": "新增",
   "searchPlaceholder": "搜尋代幣…",
-  "rpcUnavailableSingle": "{{name}} RPC 無法使用",
-  "rpcUnavailableMultiple": "{{count}} 個網路的 RPC 無法使用",
+  "unreachableOne": "暫時連不上 {{name}}",
+  "unreachableMany": "{{n}} 個網路暫時連不上",
+  "unreachableBody": "資產不受影響，只是現在讀不到。",
+  "unreachableNone": "所有網路都已連上。",
+  "lastSeen": "上次讀到 {{amount}}",
+  "lastSeenUnpriced": "上次讀到時有資產",
+  "lastSeenEmpty": "上次讀到時沒有資產",
+  "notReadYet": "尚未讀到",
   "rpcFix": "修復",
   "emptyTitle": "存入您的第一筆資產",
   "emptySubtext": "點此查看您的地址並接收代幣",
@@ -594,7 +600,8 @@
   "labelSent": "已發送",
   "labelReceived": "已收到",
   "toName": "至 {{name}}",
-  "fromName": "來自 {{name}}"
+  "fromName": "來自 {{name}}",
+  "dappRowTitle": "在 {{place}} {{intent}}"
  },
  "onboarding": {
   "welcome": {
@@ -722,7 +729,8 @@
    "syncFailedBody": "錢包已建立，但公鑰尚未上傳，其他裝置暫時無法登入。",
    "copyAddress": "複製地址",
    "copied": "已複製",
-   "close": "關閉"
+   "close": "關閉",
+   "siteAccessBody": "網站存取權受限。請點選頂端的「允許存取」，然後再試一次。"
   },
   "create": {
    "accountNameHint": "此名稱會連同您的公鑰一起記錄在鏈上，用於跨裝置登入。",
@@ -978,6 +986,11 @@
    "clearAllTitle": "清除記錄？",
    "clearAllBody": "這會移除所有最近開啟的 dApp。",
    "a11yDeleteHistory": "從記錄中移除"
+  },
+  "ext": {
+   "installedNote": "重新載入先前已開啟的分頁，網站才能找到 Vela。",
+   "accessNote": "網站存取權受限：網站找不到 Vela，通行密鑰也無法使用。",
+   "accessAllow": "允許存取"
   }
  },
  "signHandoff": {
@@ -1030,7 +1043,10 @@
   "linkTerms": "服務條款",
   "linkSupport": "說明與支援",
   "footer": "用心打造。您的金鑰，您的幣。",
-  "sectionLinks": "連結"
+  "sectionLinks": "連結",
+  "debugMode": "除錯模式",
+  "debugModeBody": "讓區域網路上的 http 網頁使用錢包。僅供開發使用。",
+  "debugModeRevealed": "現在可以使用除錯模式了"
  },
  "clearSigning": {
   "title": "清晰簽署測試",

@@ -343,9 +343,21 @@ export interface SettingsMessages {
 		removeFromViewer: string;
 	};
 	rescue: {
-		/** Templates with `{{name}}` / `{{count}}`. */
-		rpcUnavailableSingle: string;
-		rpcUnavailableMultiple: string;
+		/**
+		 * Spec 092: the line over the networks the wallet cannot reach — the
+		 * home's, reused as the list's title. `{{name}}` / `{{n}}`.
+		 */
+		unreachableOne: string;
+		unreachableMany: string;
+		/** Under the title: what is there is unaffected, only unread. */
+		unreachableBody: string;
+		/** The title once every network in the list has come back. */
+		unreachableNone: string;
+		/**
+		 * Each row's line, by the corpus key the core names in `line_key`
+		 * ({@link UNREACHABLE_LINE_KEYS}); `assets.lastSeen` fills `{{amount}}`.
+		 */
+		lines: Record<string, string>;
 		rpcFix: string;
 		rpcFixTitle: string;
 		rpcFixWarning: string;
@@ -440,6 +452,18 @@ export interface SettingsMessages {
 	walletTitle: string;
 	sendTitle: string;
 }
+
+/**
+ * The corpus keys an unreachable network's row can be told with — every
+ * `line_key` `balance_dashboard` names (spec 092). A key the core adds later
+ * and this list lacks draws no line.
+ */
+export const UNREACHABLE_LINE_KEYS = [
+	'assets.lastSeen',
+	'assets.lastSeenUnpriced',
+	'assets.lastSeenEmpty',
+	'assets.notReadYet'
+] as const;
 
 /**
  * Every corpus key the settings screens consume, in the order the manifest
@@ -699,8 +723,14 @@ export const SETTINGS_KEYS = [
 	'componentsUi.bugReport.viewScreenshot',
 	'componentsUi.bugReport.closeViewer',
 	'componentsUi.bugReport.removeFromViewer',
-	'assets.rpcUnavailableSingle',
-	'assets.rpcUnavailableMultiple',
+	'assets.unreachableOne',
+	'assets.unreachableMany',
+	'assets.unreachableBody',
+	'assets.unreachableNone',
+	'assets.lastSeen',
+	'assets.lastSeenUnpriced',
+	'assets.lastSeenEmpty',
+	'assets.notReadYet',
 	'assets.rpcFix',
 	'assets.rpcFixTitle',
 	'assets.rpcFixWarning',

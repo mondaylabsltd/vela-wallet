@@ -37,7 +37,9 @@ export const INITIAL_VIEW: FeedView = {
 	// The core's own choice for "no chain filter" (spec 082 RG5), mirrored
 	// until the first view lands.
 	history_empty_key: 'history.emptyTitle',
-	home_empty_key: 'home.emptyNoActivity'
+	home_empty_key: 'home.emptyNoActivity',
+	// Spec 093: no contact's page is open.
+	contact_rows: []
 };
 
 let current: FeedView = INITIAL_VIEW;

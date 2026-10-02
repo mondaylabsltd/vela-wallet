@@ -495,8 +495,14 @@
   "sectionTitle": "자산",
   "addToken": "추가",
   "searchPlaceholder": "토큰 검색...",
-  "rpcUnavailableSingle": "{{name}} RPC를 사용할 수 없음",
-  "rpcUnavailableMultiple": "네트워크 {{count}}개의 RPC를 사용할 수 없음",
+  "unreachableOne": "지금 {{name}}에 연결할 수 없습니다",
+  "unreachableMany": "지금 네트워크 {{n}}개에 연결할 수 없습니다",
+  "unreachableBody": "자산에는 영향이 없습니다. 지금 읽을 수 없을 뿐입니다.",
+  "unreachableNone": "모든 네트워크에 다시 연결되었습니다.",
+  "lastSeen": "마지막 확인 {{amount}}",
+  "lastSeenUnpriced": "마지막 확인 시 자산 있음",
+  "lastSeenEmpty": "마지막 확인 시 자산 없음",
+  "notReadYet": "아직 읽지 못함",
   "rpcFix": "수정",
   "emptyTitle": "첫 자산을 입금하세요",
   "emptySubtext": "여기를 눌러 주소를 확인하고 토큰을 받으세요",
@@ -594,7 +600,8 @@
   "labelSent": "보냄",
   "labelReceived": "받음",
   "toName": "받는 곳: {{name}}",
-  "fromName": "보낸 곳: {{name}}"
+  "fromName": "보낸 곳: {{name}}",
+  "dappRowTitle": "{{place}}에서 {{intent}}"
  },
  "onboarding": {
   "welcome": {
@@ -722,7 +729,8 @@
    "syncFailedBody": "지갑은 생성되었지만 공개 키가 업로드되지 않아 다른 기기에서는 아직 로그인할 수 없습니다.",
    "copyAddress": "주소 복사",
    "copied": "복사됨",
-   "close": "닫기"
+   "close": "닫기",
+   "siteAccessBody": "사이트 액세스가 제한되어 있습니다. 상단의 '액세스 허용'을 누른 뒤 다시 시도하세요."
   },
   "create": {
    "accountNameHint": "이 이름은 기기 간 로그인을 위해 공개 키와 함께 온체인에 저장됩니다.",
@@ -978,6 +986,11 @@
    "clearAllTitle": "기록을 지울까요?",
    "clearAllBody": "최근에 연 dApp이 모두 삭제됩니다.",
    "a11yDeleteHistory": "기록에서 삭제"
+  },
+  "ext": {
+   "installedNote": "이미 열려 있던 탭을 새로고침해야 사이트에서 Vela를 찾을 수 있습니다.",
+   "accessNote": "사이트 액세스가 제한되어 사이트에서 Vela를 찾을 수 없고 패스키도 쓸 수 없습니다.",
+   "accessAllow": "액세스 허용"
   }
  },
  "signHandoff": {
@@ -1030,7 +1043,10 @@
   "linkTerms": "서비스 약관",
   "linkSupport": "고객 지원",
   "footer": "정성껏 만들었습니다. 내 키, 내 코인.",
-  "sectionLinks": "링크"
+  "sectionLinks": "링크",
+  "debugMode": "디버그 모드",
+  "debugModeBody": "로컬 네트워크의 http 페이지에서 지갑을 쓸 수 있게 합니다. 개발 전용입니다.",
+  "debugModeRevealed": "이제 디버그 모드를 쓸 수 있습니다"
  },
  "clearSigning": {
   "title": "Clear Signing 테스트",

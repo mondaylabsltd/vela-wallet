@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -121,7 +122,33 @@ fun ActivityRow(model: ActivityRowModel, modifier: Modifier = Modifier) {
 @Composable
 private fun AmountText(model: ActivityRowModel) {
     val colors = VelaTheme.colors
-    val amountColor = if (model.positive) colors.successBase else colors.fgBase
+    val amountColor = when {
+        // Spec 093: an unlimited allowance is the risk to see.
+        model.danger -> colors.errorBase
+        model.positive -> colors.successBase
+        else -> colors.fgBase
+    }
+    Column(horizontalAlignment = Alignment.End) {
+        AmountLine(model, amountColor)
+        // A swap's coin back, beside what left (083 F1): what was expected.
+        model.received?.let { back ->
+            Text(
+                text = back,
+                color = colors.successBase,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.medium,
+                fontSize = VelaTextSize.sm,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AmountLine(model: ActivityRowModel, amountColor: Color) {
+    val colors = VelaTheme.colors
     Text(
         text = buildAnnotatedString {
             withStyle(
@@ -136,7 +163,8 @@ private fun AmountText(model: ActivityRowModel) {
             if (model.amount.isNotBlank() && model.unit.isNotBlank()) append(" ")
             withStyle(
                 SpanStyle(
-                    color = colors.fgSubtle,
+                    // "Unlimited USDC" reads as one warning, unit and all.
+                    color = if (model.danger) amountColor else colors.fgSubtle,
                     fontWeight = VelaFontWeight.medium,
                     fontSize = VelaTextSize.sm,
                 ),

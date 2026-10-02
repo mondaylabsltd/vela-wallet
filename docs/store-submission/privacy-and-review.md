@@ -232,6 +232,8 @@ Creating a wallet writes a **permanent, pseudonymous public record** to a regist
 | **Trusted Signer** (optional key method) | Opens Vela's signing page `sign.getvela.app` in the system browser view (SFSafariViewController / Custom Tab), which decodes the request itself before the passkey signs; the answer returns through `velawallet://sign-result`. | iOS `Features/Signing/TrustedSigner/TrustedSigner.swift:14-20`; Android `SignResultActivity` (`AndroidManifest.xml:185-198`). |
 | **Erase This Device** | Settings → deletes everything the app stored on the device (§1, Account deletion). | iOS `Features/Settings/SettingsScreen.swift:464`; Android `feature/settings/SettingsScreen.kt:780`. |
 
+Not in store builds: Settings' debug mode (spec 091) exists only in developer builds (Android `debug`, iOS `Debug`, desktop `dev-fixtures`), so a store build has no hidden feature.
+
 ---
 
 ## 4. App Review notes — Apple (App Store Connect → App Review Information → Notes)

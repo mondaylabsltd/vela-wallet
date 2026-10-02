@@ -24,6 +24,12 @@ import {
 
 class Feed {
 	view = $state<FeedView>(INITIAL_VIEW);
+	/**
+	 * Spec 093: the contact the core was last told is open — whose rows
+	 * `view.contact_rows` holds. A page draws them only under that contact,
+	 * so the rows of the one just closed never stand under the next.
+	 */
+	contactAddress = $state<string | null>(null);
 
 	#booted: Promise<void> | null = null;
 
@@ -90,6 +96,18 @@ class Feed {
 	chainFilter(chainId: number | null): void {
 		if (!this.#booted) return;
 		dispatchActivityFeed({ type: 'chain_filter_changed', chain_id: chainId });
+	}
+
+	/**
+	 * A contact's page opened (`address`) or closed (`null`): the core then
+	 * hands `view.contact_rows` — what passed between the account and that
+	 * address, worded as Activity words it (spec 093). Waits for the core,
+	 * so a page opened before it booted is not lost.
+	 */
+	async contactFilter(address: string | null): Promise<void> {
+		await this.boot();
+		dispatchActivityFeed({ type: 'contact_filter_changed', address });
+		this.contactAddress = address;
 	}
 
 	deleteRecord(id: string): void {

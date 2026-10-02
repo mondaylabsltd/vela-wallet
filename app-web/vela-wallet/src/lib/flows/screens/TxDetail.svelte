@@ -11,8 +11,9 @@
 	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import StatusChip from '../ui/StatusChip.svelte';
+	import TxTechnical from '../ui/TxTechnical.svelte';
 	import { copyText } from '$lib/services/clipboard';
-	import type { TxDetailModel } from '../model';
+	import type { FactRowModel, TxDetailModel } from '../model';
 
 	interface Props {
 		model: TxDetailModel;
@@ -22,37 +23,55 @@
 
 	let { model, ondelete }: Props = $props();
 
-	let copiedIndex = $state(-1);
+	let copiedFact = $state<FactRowModel | null>(null);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 
-	function copy(index: number) {
-		const fact = model.facts[index];
-		void copyText(fact?.copyValue ?? fact?.value ?? '');
-		copiedIndex = index;
+	function copy(fact: FactRowModel) {
+		void copyText(fact.copyValue ?? fact.value);
+		copiedFact = fact;
 		clearTimeout(timer);
-		timer = setTimeout(() => (copiedIndex = -1), 150);
+		timer = setTimeout(() => (copiedFact = null), 150);
 	}
 </script>
 
 <div class="detail">
 	<p class="head">
 		<span class="what">{model.title}</span>
-		<StatusChip chip={model.status} />
+		<!-- A signature has no lifecycle to settle (spec 093): no chip. -->
+		{#if model.status !== undefined}
+			<StatusChip chip={model.status} />
+		{/if}
 	</p>
+	{#if model.note !== undefined}
+		<p class="note">{model.note}</p>
+	{/if}
 
-	<!-- A dApp call that moved no coin has no figure (083 H2): no empty hero. -->
+	<!-- A dApp call that moved and granted nothing has no figure (083 H2): no empty hero. -->
 	{#if model.amount !== '' || model.fiat !== ''}
-		<AmountHero amount={model.amount} fiat={model.fiat} positive={model.positive} />
+		<AmountHero
+			amount={model.amount}
+			fiat={model.fiat}
+			positive={model.positive}
+			danger={model.danger}
+			received={model.received}
+		/>
 	{/if}
 
 	<ul>
-		{#each model.facts as fact, i (fact.label)}
-			<li><FactRow {fact} copied={copiedIndex === i} oncopy={() => copy(i)} /></li>
+		<!-- Keyed by position: a balance change's second line has no label of its own. -->
+		{#each model.facts as fact, i (i)}
+			<li><FactRow {fact} copied={copiedFact === fact} oncopy={() => copy(fact)} /></li>
 		{/each}
 	</ul>
 
 	{#if model.breakdown !== undefined}
 		<div class="parts"><Breakdown rows={model.breakdown} title={model.breakdownTitle} /></div>
+	{/if}
+
+	{#if model.technical !== undefined}
+		{#key model.technical.key}
+			<TxTechnical model={model.technical} oncopy={copy} copied={copiedFact} />
+		{/key}
 	{/if}
 
 	<div class="cta">
@@ -92,6 +111,14 @@
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		color: var(--color-fg-base);
+	}
+
+	.note {
+		margin: 0;
+		padding-top: var(--space-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		line-height: var(--leading-normal);
+		color: var(--color-fg-muted);
 	}
 
 	ul {

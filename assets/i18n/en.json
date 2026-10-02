@@ -502,8 +502,14 @@
   "sectionTitle": "Assets",
   "addToken": "Add",
   "searchPlaceholder": "Search tokens...",
-  "rpcUnavailableSingle": "{{name}} RPC unavailable",
-  "rpcUnavailableMultiple": "{{count}} networks RPC unavailable",
+  "unreachableOne": "Can't reach {{name}} right now",
+  "unreachableMany": "Can't reach {{n}} networks right now",
+  "unreachableBody": "Your assets there aren't affected — we just can't read them right now.",
+  "unreachableNone": "Every network is reachable again.",
+  "lastSeen": "Last seen {{amount}}",
+  "lastSeenUnpriced": "Held tokens when last read",
+  "lastSeenEmpty": "Held nothing when last read",
+  "notReadYet": "Not read yet",
   "rpcFix": "Fix",
   "emptyTitle": "Deposit your first asset",
   "emptySubtext": "Tap here to see your address and receive tokens",
@@ -601,7 +607,8 @@
   "labelSent": "Sent",
   "labelReceived": "Received",
   "toName": "To {{name}}",
-  "fromName": "From {{name}}"
+  "fromName": "From {{name}}",
+  "dappRowTitle": "{{intent}} on {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -729,7 +736,8 @@
    "syncFailedBody": "Wallet created, but the public key wasn't uploaded — other devices can't sign in yet.",
    "copyAddress": "Copy address",
    "copied": "Copied",
-   "close": "Close"
+   "close": "Close",
+   "siteAccessBody": "Vela's site access is limited. Choose Allow access at the top, then try again."
   },
   "create": {
    "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",
@@ -985,6 +993,11 @@
    "clearAllTitle": "Clear history?",
    "clearAllBody": "This removes all recently-opened dApps.",
    "a11yDeleteHistory": "Remove from history"
+  },
+  "ext": {
+   "installedNote": "Reload tabs that were already open so their sites can find Vela.",
+   "accessNote": "Site access is limited, so sites can't find Vela and passkeys won't work.",
+   "accessAllow": "Allow access"
   }
  },
  "signHandoff": {
@@ -1037,7 +1050,10 @@
   "linkTerms": "Terms of Service",
   "linkSupport": "Support",
   "footer": "Built with care. Your keys, your coins.",
-  "sectionLinks": "Links"
+  "sectionLinks": "Links",
+  "debugMode": "Debug mode",
+  "debugModeBody": "Lets http pages on your local network use the wallet. For development only.",
+  "debugModeRevealed": "Debug mode is now available"
  },
  "clearSigning": {
   "title": "Clear Signing Test",

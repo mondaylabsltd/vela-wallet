@@ -105,6 +105,58 @@ data class FeedTxRecord(
      * contract the call went to.
      */
     val call_data: String? = null,
+    /** A dApp record's intent, recorded at approve time (`intent`). */
+    val intent: String? = null,
+    /** What the sheet's simulation said it moves, as stored (`balanceChanges`). */
+    val balance_changes: List<TrustSimJudgment>? = null,
+    /** Spec 093: the record's summary, stored verbatim (`dappSummary`) and handed back untouched. */
+    val summary: DappSummary? = null,
+)
+
+/** What a dApp request did (spec 093) — `dapp_activity::DappAction`. */
+@Serializable
+enum class DappAction {
+    @SerialName("call") Call,
+
+    @SerialName("batch") Batch,
+
+    @SerialName("approve") Approve,
+
+    @SerialName("permit") Permit,
+
+    @SerialName("sign_in") SignIn,
+
+    @SerialName("message") Message,
+
+    @SerialName("typed_data") TypedData,
+
+    @SerialName("blind_sign") BlindSign,
+}
+
+/**
+ * The facts of one dApp request a record keeps (spec 093), as the core built
+ * them at approve time. The shell stores them verbatim with the record
+ * (`dappSummary`) and hands them back to the feed untouched; it reads none of
+ * them. EVERY field of the Rust struct is declared here — a field left out
+ * would be lost on the disk — and `CoreWireDriftTest` checks it both ways.
+ */
+@Serializable
+data class DappSummary(
+    val action: DappAction,
+    val calls: Int = 0,
+    val contract: String? = null,
+    val spender: String? = null,
+    val token: String? = null,
+    val symbol: String? = null,
+    val decimals: Int? = null,
+    /** Raw base units, decimal string. */
+    val amount: String? = null,
+    val unlimited: Boolean = false,
+    val revoke: Boolean = false,
+    /** Epoch **seconds**. */
+    val expires_at: Double? = null,
+    val signin_domain: String? = null,
+    val primary_type: String? = null,
 )
 
 /** Who a row's `counterparty` is (spec 082 RJ16, G52): the person paid, or the contract a call went to. */
@@ -177,14 +229,232 @@ data class FeedItem(
      * a record, and a default must never say money landed or failed.
      */
     val status: FeedTxStatus = FeedTxStatus.Pending,
-    /** `DappTx` only: `host[:port]` of the asking site. */
+    /** A dApp row only: `host[:port]` of the asking site. */
     val site: String? = null,
     /**
      * Spec 082 RJ16: [counterparty] is the recipient (the default) or the
      * contract a call went to — labelled `componentsUi.signing.interactingLabel`.
      */
     val counterparty_role: FeedCounterpartyRole = FeedCounterpartyRole.Recipient,
+    /**
+     * Spec 093: a dApp interaction — a transaction or a signature. A row with
+     * one is a dApp row. Fail-soft: a payload this build cannot read is
+     * absent, never a broken feed.
+     */
+    @Serializable(with = FeedDappFailSoft::class)
+    val dapp: FeedDapp? = null,
+    /** Spec 093: the second line, in order — worded part by part, joined " · ". */
+    @Serializable(with = FeedLineList::class)
+    val subtitle: List<FeedLine> = emptyList(),
 )
+
+/** One part of a row's second line (spec 093). */
+@Serializable
+sealed class FeedLine {
+    /** Not confirmed: pending, failed or unknown — never on a signature. */
+    @Serializable
+    @SerialName("status")
+    data class Status(val status: FeedTxStatus) : FeedLine()
+
+    /** `history.toName` with [name], else the short [address]. */
+    @Serializable
+    @SerialName("to")
+    data class To(val address: String, val name: String? = null) : FeedLine()
+
+    /** `history.fromName` with [name], else the short [address]. */
+    @Serializable
+    @SerialName("from")
+    data class From(val address: String, val name: String? = null) : FeedLine()
+
+    /** A site's `host[:port]`, verbatim. */
+    @Serializable
+    @SerialName("site")
+    data class Site(val site: String) : FeedLine()
+
+    /** The network, by its id; the shell names it. */
+    @Serializable
+    @SerialName("network")
+    data class Network(val chain_id: Int) : FeedLine()
+
+    /**
+     * The day, by its local-midnight key (epoch **milliseconds**) — worded as
+     * the date headers word it. Only on a contact's rows, which have no headers.
+     */
+    @Serializable
+    @SerialName("day")
+    data class Day(val day_start_ms: Double) : FeedLine()
+}
+
+/** An allowance as Activity states it (spec 093). */
+@Serializable
+data class FeedAllowance(
+    /** Empty when nobody could name the token. */
+    val symbol: String = "",
+    /** The cap as a human decimal; `null` when [unlimited]. */
+    val value: String? = null,
+    val decimals: Int? = null,
+    /** `componentsUi.signingApprove.unlimitedValue`, in the danger tone. */
+    val unlimited: Boolean = false,
+    val token: String? = null,
+)
+
+/**
+ * One line of what a dApp transaction moved (083 F1), from the sheet's own
+ * simulation; an unverified token carries no figure.
+ */
+@Serializable
+data class FeedDappChange(
+    val direction: FeedDirection,
+    val verified: Boolean = false,
+    val symbol: String = "",
+    /** Unsigned human decimal; `null` = no figure to show. */
+    val value: String? = null,
+    val decimals: Int? = null,
+    /** The wallet vouches for it to the unit: no "≈". */
+    val exact: Boolean = false,
+)
+
+/** What a dApp record's operation was, as the detail names it. */
+@Serializable
+sealed class FeedDappOperation {
+    /** `componentsTx.detail.opContractInteraction`. */
+    @Serializable
+    @SerialName("contract_interaction")
+    data object ContractInteraction : FeedDappOperation()
+
+    /** `componentsUi.signing.batchSubtitle` {count}. */
+    @Serializable
+    @SerialName("batch")
+    data class Batch(val calls: Int) : FeedDappOperation()
+
+    /** `componentsTx.detail.opSignature`. */
+    @Serializable
+    @SerialName("signature")
+    data object Signature : FeedDappOperation()
+
+    /** `componentsTx.detail.opTypedDataSignature`. */
+    @Serializable
+    @SerialName("typed_data_signature")
+    data object TypedDataSignature : FeedDappOperation()
+}
+
+/** What a stored request holds (`connect.detail.content*`). */
+@Serializable
+enum class FeedDappContent {
+    @SerialName("call_data") CallData,
+
+    @SerialName("typed_data") TypedData,
+
+    @SerialName("message") Message,
+}
+
+/** One line of a dApp row's detail (spec 093): the core picks the lines and their order; the shell labels them. */
+@Serializable
+sealed class FeedFact {
+    @Serializable
+    @SerialName("site")
+    data class Site(val site: String) : FeedFact()
+
+    @Serializable
+    @SerialName("network")
+    data class Network(val chain_id: Int) : FeedFact()
+
+    /** The contract a call went to (`tokenDetail.labelContract`), with its built-in name when the wallet knows it. */
+    @Serializable
+    @SerialName("contract")
+    data class Contract(val address: String, val name: String? = null) : FeedFact()
+
+    /**
+     * Who got the money (`componentsTx.detail.to`): a plain send's recipient,
+     * or the one a token `transfer` names; [name] is the row's name for them.
+     * A call states this or [Contract], never both.
+     */
+    @Serializable
+    @SerialName("recipient")
+    data class Recipient(val address: String, val name: String? = null) : FeedFact()
+
+    @Serializable
+    @SerialName("spender")
+    data class Spender(val address: String, val name: String? = null) : FeedFact()
+
+    @Serializable
+    @SerialName("spending_cap")
+    data class SpendingCap(val allowance: FeedAllowance) : FeedFact()
+
+    /** Epoch **seconds**; `null` = it never expires. */
+    @Serializable
+    @SerialName("expires")
+    data class Expires(val at: Double? = null) : FeedFact()
+
+    /** The lines of [FeedDapp.changes]. */
+    @Serializable
+    @SerialName("balance_changes")
+    data object BalanceChanges : FeedFact()
+
+    /** Epoch **seconds**. */
+    @Serializable
+    @SerialName("date")
+    data class Date(val timestamp: Double) : FeedFact()
+
+    @Serializable
+    @SerialName("operation")
+    data class Operation(val operation: FeedDappOperation) : FeedFact()
+
+    /** The stored request — read from the store only when the section is opened. */
+    @Serializable
+    @SerialName("content")
+    data class Content(val content: FeedDappContent) : FeedFact()
+
+    @Serializable
+    @SerialName("primary_type")
+    data class PrimaryType(val name: String) : FeedFact()
+
+    @Serializable
+    @SerialName("hash")
+    data class Hash(val tx_hash: String) : FeedFact()
+
+    @Serializable
+    @SerialName("user_op_hash")
+    data class UserOpHash(val hash: String) : FeedFact()
+}
+
+/**
+ * What a dApp row says beyond its money (083 H2, spec 093) — the core's
+ * headline, place, allowance and detail. The shell words and draws it.
+ */
+@Serializable
+data class FeedDapp(
+    val site: String? = null,
+    /** The verb's text, shown only when [intent_term] is `null`. */
+    val intent: String? = null,
+    /** The headline verb: a key leaf under `componentsUi.signing`. */
+    val intent_term: String? = null,
+    @Serializable(with = FeedDappChangeList::class)
+    val changes: List<FeedDappChange> = emptyList(),
+    /** A swap's one coin back, drawn beside the figure. */
+    val received: FeedDappChange? = null,
+    /** The figure is the simulation's: "≈". */
+    val estimated: Boolean = false,
+    val contract_call: Boolean = false,
+    /** The title's `{{place}}` (`history.dappRowTitle`); `null` = the verb alone. */
+    val place: String? = null,
+    /** A grant's allowance, drawn where a figure would be. */
+    val allowance: FeedAllowance? = null,
+    /** A signature: no status chip, `connect.detail.offChainNote` instead. */
+    val off_chain: Boolean = false,
+    @Serializable(with = FeedFactList::class)
+    val facts: List<FeedFact> = emptyList(),
+    @Serializable(with = FeedFactList::class)
+    val technical: List<FeedFact> = emptyList(),
+)
+
+object FeedLineList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedLine>(FeedLine.serializer())
+
+object FeedFactList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedFact>(FeedFact.serializer())
+
+object FeedDappChangeList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedDappChange>(FeedDappChange.serializer())
+
+object FeedDappFailSoft : app.getvela.wallet.core.crux.FailSoftSerializer<FeedDapp>(FeedDapp.serializer())
 
 /**
  * A date header or an item, already interleaved in render order.
@@ -311,6 +581,11 @@ sealed class FeedEvent {
     @SerialName("chain_filter_changed")
     data class ChainFilterChanged(val chain_id: Int? = null) : FeedEvent()
 
+    /** Spec 093: a contact's page opened (its address) or closed (`null`) — the view's [FeedView.contact_rows]. */
+    @Serializable
+    @SerialName("contact_filter_changed")
+    data class ContactFilterChanged(val address: String? = null) : FeedEvent()
+
     @Serializable
     @SerialName("delete_requested")
     data class DeleteRequested(val id: String) : FeedEvent()
@@ -331,4 +606,14 @@ data class FeedView(
     val history_empty_key: String = "history.emptyTitle",
     /** The home Activity's empty line, chosen the same way. */
     val home_empty_key: String = "home.emptyNoActivity",
+    /**
+     * Spec 093: what passed between the account and the open contact
+     * ([FeedEvent.ContactFilterChanged]) — every row with that counterparty,
+     * on every network, newest first, worded as Activity words it; second
+     * line: status (unsettled), network, day. Fail-soft per row.
+     */
+    @Serializable(with = FeedItemList::class)
+    val contact_rows: List<FeedItem> = emptyList(),
 )
+
+object FeedItemList : app.getvela.wallet.core.crux.FailSoftListSerializer<FeedItem>(FeedItem.serializer())

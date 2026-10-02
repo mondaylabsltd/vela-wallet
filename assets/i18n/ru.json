@@ -501,8 +501,14 @@
   "sectionTitle": "Активы",
   "addToken": "Добавить",
   "searchPlaceholder": "Поиск токенов…",
-  "rpcUnavailableSingle": "RPC {{name}} недоступен",
-  "rpcUnavailableMultiple": "RPC недоступен в {{count}} сетях",
+  "unreachableOne": "Сейчас нет связи с {{name}}",
+  "unreachableMany": "Сейчас нет связи с сетями: {{n}}",
+  "unreachableBody": "Ваши активы не затронуты — просто сейчас мы не можем их прочитать.",
+  "unreachableNone": "Связь со всеми сетями восстановлена.",
+  "lastSeen": "В последний раз: {{amount}}",
+  "lastSeenUnpriced": "При последнем чтении были токены",
+  "lastSeenEmpty": "При последнем чтении пусто",
+  "notReadYet": "Ещё не прочитано",
   "rpcFix": "Исправить",
   "emptyTitle": "Получите свой первый актив",
   "emptySubtext": "Нажмите здесь, чтобы увидеть адрес и получать токены",
@@ -600,7 +606,8 @@
   "labelSent": "Отправлено",
   "labelReceived": "Получено",
   "toName": "на {{name}}",
-  "fromName": "от {{name}}"
+  "fromName": "от {{name}}",
+  "dappRowTitle": "{{intent}} в {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -728,7 +735,8 @@
    "syncFailedBody": "Кошелёк создан, но открытый ключ не загружен — другие устройства пока не могут войти.",
    "copyAddress": "Скопировать адрес",
    "copied": "Скопировано",
-   "close": "Закрыть"
+   "close": "Закрыть",
+   "siteAccessBody": "Доступ Vela к сайтам ограничен. Нажмите «Разрешить доступ» вверху и попробуйте снова."
   },
   "create": {
    "accountNameHint": "Это имя хранится вместе с вашим открытым ключом в сети для входа с разных устройств.",
@@ -984,6 +992,11 @@
    "clearAllTitle": "Очистить историю?",
    "clearAllBody": "Это удалит все недавно открытые dApp.",
    "a11yDeleteHistory": "Удалить из истории"
+  },
+  "ext": {
+   "installedNote": "Перезагрузите уже открытые вкладки, чтобы их сайты нашли Vela.",
+   "accessNote": "Доступ к сайтам ограничен: сайты не видят Vela, а passkey не работает.",
+   "accessAllow": "Разрешить доступ"
   }
  },
  "signHandoff": {
@@ -1036,7 +1049,10 @@
   "linkTerms": "Условия использования",
   "linkSupport": "Поддержка",
   "footer": "Сделано с заботой. Ваши ключи — ваши монеты.",
-  "sectionLinks": "Ссылки"
+  "sectionLinks": "Ссылки",
+  "debugMode": "Режим отладки",
+  "debugModeBody": "Даёт http-страницам в вашей локальной сети доступ к кошельку. Только для разработки.",
+  "debugModeRevealed": "Режим отладки теперь доступен"
  },
  "clearSigning": {
   "title": "Тест Clear Signing",

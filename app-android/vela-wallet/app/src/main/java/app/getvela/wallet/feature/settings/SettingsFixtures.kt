@@ -1,5 +1,9 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.data.DebugMode
+import app.getvela.wallet.feature.settings.core.CurrencyView
+import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.UnreachableNetwork
 import app.getvela.wallet.core.diagnostics.BugReport
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
@@ -596,7 +600,7 @@ object SettingsFixtures {
         )
     }
 
-    private fun about(s: VelaStrings): AboutModel = AboutModel(
+    private fun about(s: VelaStrings, state: SettingsScreenState): AboutModel = AboutModel(
         title = s.t(I18nKeys.SettingsUi.ABOUT_TITLE),
         tagline = s.t(I18nKeys.SettingsUi.ABOUT_TAGLINE),
         version = s.t(
@@ -673,6 +677,13 @@ object SettingsFixtures {
             ),
         ),
         footer = s.t(I18nKeys.SettingsUi.ABOUT_FOOTER),
+        debugMode = DebugModeRowModel(
+            title = s.t(I18nKeys.SettingsUi.ABOUT_DEBUG_MODE),
+            body = s.t(I18nKeys.SettingsUi.ABOUT_DEBUG_MODE_BODY),
+            revealedNotice = s.t(I18nKeys.SettingsUi.ABOUT_DEBUG_MODE_REVEALED),
+            // ST14B: revealed and on — the switch in both of its looks is a tap apart.
+            mode = if (state == SettingsScreenState.ST14B) DebugMode.On else DebugMode.Hidden,
+        ),
     )
 
     // --- Overlays ------------------------------------------------------------
@@ -726,6 +737,24 @@ object SettingsFixtures {
     }
 
     /** The Settings row id of the default speed (spec 069). */
+    /**
+     * Spec 092's three cases in the core's order: last seen holding $4,500,
+     * last seen empty, never read — what SR6 draws through the live builder.
+     */
+    val UNREACHABLE_VIEW = BalanceView(
+        display_total_usd = 4_500.0,
+        balance_partial = true,
+        failed_chain_ids = listOf(1, 56, 137),
+        unreachable_networks = listOf(
+            UnreachableNetwork(1, "held", 4_500.0, I18nKeys.SettingsUi.LAST_SEEN),
+            UnreachableNetwork(56, "empty", null, I18nKeys.SettingsUi.LAST_SEEN_EMPTY),
+            UnreachableNetwork(137, "not_read", null, I18nKeys.SettingsUi.NOT_READ_YET),
+        ),
+        unreachable_key = I18nKeys.Wallet.UNREACHABLE_MANY,
+        cached_total_usd = 4_500.0,
+    )
+    private val UNREACHABLE_NAMES = mapOf(1 to "Ethereum", 56 to "BNB Chain", 137 to "Polygon")
+
     const val FEE_SPEED_ROW = "fee-speed"
 
     /** The Settings row of the Trusted Signer page (spec 071). */
@@ -834,7 +863,7 @@ object SettingsFixtures {
     // --- Rescue --------------------------------------------------------------
 
     private fun rpcBanner(s: VelaStrings) = RpcBannerModel(
-        text = s.t(I18nKeys.SettingsUi.RPC_UNAVAILABLE_MULTIPLE, mapOf("count" to "2")),
+        text = s.t(I18nKeys.Wallet.UNREACHABLE_MANY, mapOf("n" to "2")),
         chips = listOf("polygon", "gnosis").map { id ->
             RpcBannerChipModel(id, mark(id), network(id).name, s.t(I18nKeys.SettingsUi.RPC_FIX))
         },
@@ -971,7 +1000,7 @@ object SettingsFixtures {
         SettingsScreenState.ST13 -> Shape(SettingsPage.Storage, SettingsOverlay.None)
         SettingsScreenState.ST13B ->
             Shape(SettingsPage.Storage, SettingsOverlay.ClearCaches, backdrop = "storage")
-        SettingsScreenState.ST14 -> Shape(SettingsPage.About, SettingsOverlay.None)
+        SettingsScreenState.ST14, SettingsScreenState.ST14B -> Shape(SettingsPage.About, SettingsOverlay.None)
         SettingsScreenState.ST15 -> Shape(SettingsPage.Home, SettingsOverlay.Feedback)
         SettingsScreenState.ST16 -> Shape(SettingsPage.Home, SettingsOverlay.EraseDevice)
         SettingsScreenState.SR1 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
@@ -982,6 +1011,8 @@ object SettingsFixtures {
         SettingsScreenState.SR4 ->
             Shape(SettingsPage.Home, SettingsOverlay.Relayer, rescue = true, backdrop = "send")
         SettingsScreenState.SR5 -> Shape(SettingsPage.Home, SettingsOverlay.None, rescue = true)
+        SettingsScreenState.SR6 ->
+            Shape(SettingsPage.Home, SettingsOverlay.Unreachable, rescue = true, backdrop = "wallet")
     }
 
     fun buildState(state: SettingsScreenState, s: VelaStrings): SettingsScreenModel {
@@ -1054,7 +1085,7 @@ object SettingsFixtures {
             rpcProviders = rpcProviders(s),
             endpoints = endpoints(s),
             storage = storage(s),
-            about = about(s),
+            about = about(s, state),
             accountsSheet = accountsSheet(s),
             signOutSheet = signOutSheet(s, warned = state == SettingsScreenState.ST3B),
             languageSheet = languageSheet(s, "zh"),
@@ -1103,6 +1134,14 @@ object SettingsFixtures {
             rpcBanner = if (state == SettingsScreenState.SR1) rpcBanner(s) else null,
             rpcFix = rpcFix(s, restored = state == SettingsScreenState.SR2B),
             balanceDetail = balanceDetail(s),
+            // SR6 is drawn through the live builder, from a view shaped like
+            // the core's: what the gallery shows is what a session would.
+            unreachable = SettingsLive.unreachable(
+                UNREACHABLE_VIEW,
+                CurrencyView(code = "USD", rate = 1.0, committed = true),
+                UNREACHABLE_NAMES,
+                s,
+            ),
             relayer = relayer(s),
             indexDown = indexDown(s),
             backdropTitle = backdropTitle,

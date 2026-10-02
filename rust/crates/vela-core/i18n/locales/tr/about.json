@@ -21,6 +21,9 @@
     "linkTerms": "Hizmet Şartları",
     "linkSupport": "Destek",
     "footer": "Özenle yapıldı. Anahtarlarınız, paranız.",
-    "sectionLinks": "Bağlantılar"
+    "sectionLinks": "Bağlantılar",
+    "debugMode": "Hata ayıklama modu",
+    "debugModeBody": "Yerel ağınızdaki http sayfalarının cüzdanı kullanmasına izin verir. Yalnızca geliştirme için.",
+    "debugModeRevealed": "Hata ayıklama modu artık kullanılabilir"
   }
 }

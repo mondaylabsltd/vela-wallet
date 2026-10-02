@@ -8,6 +8,7 @@ import app.getvela.wallet.feature.wallet.core.RpcSource
 import app.getvela.wallet.feature.wallet.core.RpcTransport
 import app.getvela.wallet.feature.wallet.core.RpcTransportOutcome
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.awaitCancellation
 import org.json.JSONObject
 
 /**
@@ -18,6 +19,8 @@ import org.json.JSONObject
  * cannot be asked to return 429.
  */
 class FakeRpcTransport(
+    /** A URL whose connection is held open: it never answers at all (spec 092). */
+    private val stall: (url: String) -> Boolean = { false },
     private val answer: (url: String, method: String, params: List<Any?>) -> RpcPostResult,
 ) : RpcTransport {
 
@@ -28,8 +31,10 @@ class FakeRpcTransport(
      * carries an `address` filter, and a fake that ignores it is not modelling
      * an endpoint, it is modelling a hostile one.
      */
-    constructor(answer: (url: String, method: String) -> RpcPostResult) :
-        this({ url, method, _ -> answer(url, method) })
+    constructor(
+        stall: (url: String) -> Boolean = { false },
+        answer: (url: String, method: String) -> RpcPostResult,
+    ) : this(stall, { url, method, _ -> answer(url, method) })
 
     /** Every URL asked, in order — the evidence for "it routed around". */
     val asked = CopyOnWriteArrayList<String>()
@@ -42,6 +47,7 @@ class FakeRpcTransport(
         timeoutMs: Int,
     ): RpcPostResult {
         asked += url
+        if (stall(url)) awaitCancellation()
         return answer(url, method, params)
     }
 

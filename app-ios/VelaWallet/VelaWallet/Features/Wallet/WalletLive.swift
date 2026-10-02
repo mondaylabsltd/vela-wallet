@@ -186,6 +186,11 @@ enum WalletLive {
         fallback: BalanceModel,
         loc: Loc?
     ) -> BalanceStatusModel? {
+        // Spec 092: networks the wallet cannot reach come first — every one,
+        // held or not, said without "RPC"; the line opens their list.
+        if let loc, let line = unreachableLine(view, loc: loc) {
+            return BalanceStatusModel(kind: .warning, text: line)
+        }
         let text = loc?.t("home.balanceStale") ?? fallback.status?.text ?? ""
         if view.balancePartial || !view.failedChainIds.isEmpty {
             return BalanceStatusModel(kind: .warning, text: text)
@@ -194,6 +199,25 @@ enum WalletLive {
             return BalanceStatusModel(kind: .refreshing, text: text)
         }
         return nil
+    }
+
+    /// The line over the networks the wallet cannot reach (spec 092) — the
+    /// hero's status line and the title of the list it opens. The core
+    /// chooses the sentence (`unreachableKey`: one network named, several
+    /// counted); this only fills it. `nil` when every network answered.
+    static func unreachableLine(_ view: BalanceViewWire, loc: Loc) -> String? {
+        let k = I18nKeys.SettingsUi.self
+        guard let first = view.unreachableNetworks.first else { return nil }
+        switch view.unreachableKey {
+        case k.unreachableOne?:
+            let name = ChainCatalog.meta(first.chainId)?.displayName
+                ?? loc.t(I18nKeys.SettingsUi.chainId, vars: ["chainId": String(first.chainId)])
+            return loc.t(k.unreachableOne, vars: ["name": name])
+        case k.unreachableMany?:
+            return loc.t(k.unreachableMany, vars: ["n": String(view.unreachableNetworks.count)])
+        default:
+            return nil
+        }
     }
 
     /// `1234.56` → `("1,234", "56")`. The drawing splits the figure so the
@@ -423,50 +447,160 @@ extension WalletLive {
             .map { ActivityGroupModel(label: $0.label, rows: $0.rows) }
     }
 
-    /// One row, from the core's `kind`, `status` and `site` (spec 082 RG1,
-    /// RG2) — nothing here guesses what a record is or how it ended.
+    /// One row, in the core's words (spec 082 RG1, RG2; spec 093) — nothing
+    /// here guesses what a record is, how it ended or what to call it.
     ///
-    /// A dApp's transaction is "dApp 交易", under the site that asked (else
-    /// its counterparty, else its chain), with an amount only when it moved
-    /// the native coin; any row not confirmed says so first — "处理中 · …",
-    /// "失败 · …" — so a pending or failed op is never read as done.
+    /// The second line is the core's `subtitle`, every part worded here and
+    /// joined with " · " — a pending or failed operation says so first. A
+    /// dApp row (a transaction or a signature) is titled by the core's verb
+    /// and place — 「在 Uniswap 兑换」 — and carries money as before ("≈"
+    /// when the core calls it the simulation's, with the coin that came
+    /// back beside it), else the allowance it granted, 无限额 in the danger
+    /// tone; a signature that granted nothing has no figure at all.
     static func activityRow(
         _ item: FeedItemWire, loc: Loc, hidden: Bool
     ) -> ActivityRowModel {
-        let incoming = item.direction == .in
-        let dapp = item.kind == .dappTx
-        let figure: String
-        if dapp {
-            // No value moved: no amount, rather than a "−0".
-            figure = item.value.map { "\u{2212}" + compactAmount($0) } ?? ""
-        } else {
-            figure = (incoming ? "+" : "\u{2212}") + compactAmount(item.value, batch: item.batch)
+        let subtitle = subtitleText(item.subtitle, loc: loc)
+        if let dapp = item.dapp {
+            return dappRow(item, dapp: dapp, subtitle: subtitle, loc: loc, hidden: hidden)
         }
-        let amount = hidden && !figure.isEmpty ? WalletFixtures.mask : figure
-        let base = dapp ? dappSubject(item) : counterparty(item, loc: loc)
+        let incoming = item.direction == .in
+        let figure = (incoming ? "+" : "\u{2212}") + compactAmount(item.value, batch: item.batch)
         return ActivityRowModel(
-            kind: dapp ? .dapp : (incoming ? .received : .sent),
-            title: dapp
-                ? loc.t("history.txLabelDappTx")
-                : loc.t(incoming ? "history.labelReceived" : "history.labelSent"),
-            subtitle: statusPrefix(item.status, loc: loc).map { "\($0) · \(base)" } ?? base,
-            amount: amount,
+            kind: incoming ? .received : .sent,
+            title: loc.t(incoming ? "history.labelReceived" : "history.labelSent"),
+            subtitle: subtitle,
+            amount: hidden ? WalletFixtures.mask : figure,
             unit: item.symbol,
             positive: incoming,
-            masked: hidden && !figure.isEmpty,
+            masked: hidden,
             badgeColor: chainColor(item.chainId),
             badgeLogoURL: Marks.chainLogoURL(item.chainId),
             itemId: item.id
         )
     }
 
-    /// Who a dApp row is about: the site that asked (`host[:port]`, verbatim),
-    /// else its counterparty's name or short address, else its chain.
-    private static func dappSubject(_ item: FeedItemWire) -> String {
-        if let site = item.site, !site.isEmpty { return site }
-        if let alias = item.alias, !alias.isEmpty { return alias }
-        if let counterparty = item.counterparty, !counterparty.isEmpty { return AddressText.short(counterparty) }
-        return ChainCatalog.meta(item.chainId)?.displayName ?? String(item.chainId)
+    /// A dApp's row — its title, figure and allowance as the core decided them.
+    private static func dappRow(
+        _ item: FeedItemWire, dapp: FeedDappWire, subtitle: String, loc: Loc, hidden: Bool
+    ) -> ActivityRowModel {
+        let money = dappFigure(item, dapp: dapp)
+        let allowance = money == nil ? dapp.allowance.flatMap { allowanceText($0, loc: loc) } : nil
+        // Privacy masks a figure and keeps its unit; "无限额" is a risk to see,
+        // not an amount, so it is never masked. Nothing to show, nothing to mask.
+        let masked = hidden && (money != nil || (allowance.map { !$0.unlimited } ?? false))
+        let amount: String
+        let unit: String
+        if let money {
+            amount = masked ? WalletFixtures.mask : money
+            unit = item.symbol
+        } else if let allowance {
+            amount = masked ? WalletFixtures.mask : allowance.amount
+            unit = allowance.unit
+        } else {
+            amount = ""
+            unit = ""
+        }
+        return ActivityRowModel(
+            kind: .dapp,
+            title: dappTitle(dapp, loc: loc),
+            subtitle: subtitle,
+            amount: amount,
+            unit: unit,
+            positive: false,
+            masked: masked,
+            badgeColor: chainColor(item.chainId),
+            badgeLogoURL: Marks.chainLogoURL(item.chainId),
+            itemId: item.id,
+            danger: money == nil && allowance?.unlimited == true,
+            received: dapp.received.map { change in
+                [changeFigure(change, hidden: hidden), change.symbol]
+                    .filter { !$0.isEmpty }.joined(separator: " ")
+            }
+        )
+    }
+
+    /// The headline verb (spec 093): `componentsUi.signing.<intent_term>`,
+    /// else the recorded text — the signing sheet's own words for the same
+    /// request (`SigningLive.localizedTerms`).
+    static func dappVerb(_ dapp: FeedDappWire, loc: Loc) -> String {
+        if let term = dapp.intentTerm {
+            let key = "componentsUi.signing.\(term)"
+            let word = loc.t(key)
+            if word != key, !word.isEmpty { return word }
+        }
+        if let intent = dapp.intent?.trimmingCharacters(in: .whitespaces), !intent.isEmpty {
+            return intent
+        }
+        // The core always names a verb (spec 093); a view without one is a
+        // build older than its core, and still reads as a dApp's transaction.
+        return loc.t("history.txLabelDappTx")
+    }
+
+    /// 「在 Uniswap 兑换」 — the verb at its place, or the verb alone.
+    static func dappTitle(_ dapp: FeedDappWire, loc: Loc) -> String {
+        let verb = dappVerb(dapp, loc: loc)
+        guard let place = dapp.place, !place.isEmpty else { return verb }
+        return loc.t("history.dappRowTitle", vars: ["intent": verb, "place": place])
+    }
+
+    /// The money a dApp row moved: "−0.001", or "≈ −100" when the core says
+    /// the figure is the simulation's. `nil` when it moved none.
+    static func dappFigure(_ item: FeedItemWire, dapp: FeedDappWire) -> String? {
+        guard let value = item.value else { return nil }
+        let sign = item.direction == .in ? "+" : "\u{2212}"
+        return (dapp.estimated ? "≈ " : "") + sign + compactAmount(value)
+    }
+
+    /// One of a dApp's balance changes as a figure, in the signing sheet's
+    /// own form plus "≈" on every line the wallet cannot vouch for: "≈ +0.03",
+    /// "−100". An unverified token keeps its direction and never a number.
+    static func changeFigure(_ change: FeedDappChangeWire, hidden: Bool) -> String {
+        let sign = change.direction == .in ? "+" : "\u{2212}"
+        guard change.verified, let value = change.value else { return sign }
+        let digits = hidden ? WalletFixtures.mask : compactAmount(value)
+        return (change.exact ? "" : "≈ ") + sign + digits
+    }
+
+    /// An allowance, split into the figure and its unit: 「无限额」 + "USDC"
+    /// (danger), or "100" + "USDC". `nil` for one that states nothing.
+    static func allowanceText(
+        _ allowance: FeedAllowanceWire, loc: Loc
+    ) -> (amount: String, unit: String, unlimited: Bool)? {
+        if allowance.unlimited {
+            return (loc.t("componentsUi.signingApprove.unlimitedValue"), allowance.symbol, true)
+        }
+        guard let value = allowance.value, !value.isEmpty else { return nil }
+        return (compactAmount(value), allowance.symbol, false)
+    }
+
+    /// A row's second line, from the core's parts (spec 093): status in the
+    /// words this shell already says it with, "至 / 来自" somebody (named, or
+    /// their short address), a site verbatim, a network by its name, a day as
+    /// the date headers say it.
+    static func subtitleText(_ lines: [FeedLineWire], loc: Loc) -> String {
+        lines.compactMap { line -> String? in
+            switch line {
+            case .status(let status): statusPrefix(status, loc: loc)
+            case .to(let address, let name):
+                loc.t("history.toName", vars: ["name": name ?? AddressText.short(address)])
+            case .from(let address, let name):
+                loc.t("history.fromName", vars: ["name": name ?? AddressText.short(address)])
+            case .site(let site): site
+            case .network(let chainId): chainName(chainId)
+            // A contact's row has no headers over it: its day is worded as
+            // a header is (its midnight names the date).
+            case .day(let dayStartMs): dayLabel(dayStartMs: dayStartMs, timestamp: dayStartMs / 1000, loc: loc)
+            case .unknown: nil
+            }
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: " · ")
+    }
+
+    /// A network as people name it.
+    static func chainName(_ chainId: Int) -> String {
+        ChainCatalog.meta(chainId)?.displayName ?? String(chainId)
     }
 
     /// "处理中" / "失败" / "未知" for a row that is not confirmed; `nil` for one
@@ -479,22 +613,6 @@ extension WalletLive {
         case .failed: loc.t("componentsTx.detail.statusFailed")
         case .unknown: loc.t("componentsUi.signing.intentUnknown")
         }
-    }
-
-    /// 至 / 来自 somebody, named if anybody could name them.
-    ///
-    /// `alias` is the core's overlay — a resolved name, or the one captured
-    /// when the send was made. A counterparty nobody could name shows as a
-    /// shortened address, which is a fact; inventing a label for it would not
-    /// be.
-    private static func counterparty(_ item: FeedItemWire, loc: Loc) -> String {
-        let name = item.alias
-            ?? item.counterparty.map(AddressText.short)
-            // A split batch has no single recipient. The count is the honest
-            // subject of that row.
-            ?? "\(item.batch?.count ?? 0)"
-        return loc.t(item.direction == .in ? "history.fromName" : "history.toName",
-                     vars: ["name": name])
     }
 
     /// 今天 / 昨天 / a date.

@@ -158,6 +158,13 @@ struct GuardTokenMetaViewWire: Decodable, Equatable {
     /// a cap read in the wrong decimals is off by orders of magnitude.
     let verified: Bool
     let loading: Bool
+
+    /// The view as the core wrote it, for the approve's `token_meta` (spec
+    /// 093): copied back verbatim, so the record can say "100 USDC". The core
+    /// reads it only once it resolved.
+    var wire: [String: Any] {
+        ["symbol": symbol, "decimals": decimals, "verified": verified, "loading": loading]
+    }
 }
 
 struct GuardEditorViewWire: Decodable, Equatable {
@@ -233,6 +240,11 @@ struct GuardViewWire: Decodable, Equatable {
     /// showed it and it was kept as asked. Copied verbatim into the approve
     /// opts as `unlimited_approved` — the submit guard's only waiver.
     let unlimitedConsented: Bool
+    /// The request grants an unbounded allowance as it stands, and the sheet
+    /// says so in the danger tone — the ONE place every shell reads that
+    /// sentence from (spec 094 S8): the approval kept on its Requested chip, a
+    /// batch leg left so, or an off-chain permit for an unbounded amount.
+    var unlimitedWarning: Bool = false
     let increaseTotal: GuardIncreaseTotalViewWire?
     /// Unverified decimals must be flagged explicitly on screen.
     let decimalsUnverified: Bool

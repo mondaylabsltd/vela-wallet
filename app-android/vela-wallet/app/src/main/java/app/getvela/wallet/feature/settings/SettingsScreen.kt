@@ -1,5 +1,12 @@
 package app.getvela.wallet.feature.settings
 
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import app.getvela.wallet.core.designsystem.tokens.VelaMotion
 import app.getvela.wallet.core.designsystem.components.VelaLabelBesideValue
 import androidx.compose.foundation.layout.navigationBarsPadding
 import app.getvela.wallet.core.designsystem.components.VelaModalSheet
@@ -73,6 +80,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import app.getvela.wallet.core.data.DebugMode
+import app.getvela.wallet.feature.settings.components.VelaSwitchRow
+import uniffi.vela_core_uniffi.VersionTaps
+import uniffi.vela_core_uniffi.prefsVersionTapped
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -251,7 +262,32 @@ data class SettingsActions(
     val onPageShown: (SettingsPage) -> Unit = {},
     /** Spec 072: a sheet came up (or went: `None`) — the account sheet asks for every account's total. */
     val onOverlayShown: (SettingsOverlay) -> Unit = {},
+    /** Spec 091: seven taps on About's version revealed the debug-mode switch — store it. The notice and the haptic are the screen's. */
+    val onDebugModeRevealed: () -> Unit = {},
+    /** Spec 091: the revealed debug-mode switch, turned. */
+    val onDebugMode: (on: Boolean) -> Unit = {},
 )
+
+/**
+ * About's hidden entry (spec 091): the taps on the version so far, kept while
+ * About is on screen. What a tap means is the core's rule
+ * (`prefsVersionTapped`: seven, each within a second of the one before,
+ * nothing once the switch is revealed — and nothing ever in a release build,
+ * whose build fact is all this hands over).
+ */
+internal class VersionTapCounter(
+    private val now: () -> Double = { System.currentTimeMillis().toDouble() },
+    private val developerBuild: Boolean = app.getvela.wallet.BuildConfig.DEBUG,
+) {
+    private var taps = VersionTaps(0u, 0.0)
+
+    /** One tap, with the switch as it stands. `true` exactly when this tap revealed it. */
+    fun tap(mode: DebugMode): Boolean {
+        val answer = prefsVersionTapped(taps, now(), mode.wire, developerBuild)
+        taps = answer.taps
+        return answer.revealed
+    }
+}
 
 @Composable
 fun SettingsRoute(
@@ -285,6 +321,12 @@ fun SettingsRoute(
         if (result == SnackbarResult.ActionPerformed) actions.onOpenLink(notice.url)
         actions.onFeedbackNoticeShown()
     }
+    // Spec 091: About's hidden entry. Revealing says so once — the haptic and
+    // the page's notice — and the switch is the preferences' from then on.
+    val versionTaps = remember(page) { VersionTapCounter() }
+    val tapHaptic = rememberVelaHaptic()
+    val noticeScope = rememberCoroutineScope()
+    val debugMode = model.about.debugMode
     Box(modifier = modifier.fillMaxSize()) {
     SettingsScreen(
         model = model,
@@ -402,6 +444,14 @@ fun SettingsRoute(
         onSignerUrlSave = actions.onSignerUrlSave,
         onSignerUrlReset = actions.onSignerUrlReset,
         onFeedbackOpened = actions.onFeedbackOpened,
+        onVersionTap = {
+            if (versionTaps.tap(debugMode.mode)) {
+                actions.onDebugModeRevealed()
+                tapHaptic(VelaHaptic.Success)
+                noticeScope.launch { noticeHost.showSnackbar(debugMode.revealedNotice) }
+            }
+        },
+        onDebugMode = actions.onDebugMode,
     )
     // Above the tab bar and the system navigation bar — never under them
     // (device pass: at the largest size the notice sat half behind both).
@@ -418,35 +468,44 @@ fun SettingsRoute(
 
 /**
  * The page's notice: a dark pill with the answer and its one action — the
- * app's toast shape, with room for the way onward.
+ * app's toast shape, with room for the way onward. A notice with nothing to
+ * do next (spec 091: "debug mode is now available") is the message alone.
  */
 @Composable
 private fun FeedbackNoticeBar(data: SnackbarData) {
     val colors = VelaTheme.colors
+    val pill = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(VelaRadius.lg))
+        .background(colors.fgBase)
+        .padding(start = VelaSpacing.lg, top = VelaSpacing.sm, bottom = VelaSpacing.sm, end = VelaSpacing.sm)
+    val message: @Composable () -> Unit = {
+        Text(
+            text = data.visuals.message,
+            color = colors.bgBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier.padding(vertical = VelaSpacing.sm),
+        )
+    }
+    // `VelaLabelBesideValue` needs both parts: with no action it has no value
+    // to measure (the app died on the first action-less notice).
+    val action = data.visuals.actionLabel
+    if (action == null) {
+        Box(modifier = pill) { message() }
+        return
+    }
     // The message whole and the action beside it when both fit; otherwise the
     // action takes its own line under the message (never a word broken to
     // make room — the largest size wrapped "发送" alone onto a second line).
     VelaLabelBesideValue(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(VelaRadius.lg))
-            .background(colors.fgBase)
-            .padding(start = VelaSpacing.lg, top = VelaSpacing.sm, bottom = VelaSpacing.sm, end = VelaSpacing.sm),
+        modifier = pill,
         gap = VelaSpacing.md,
         rowGap = 0.dp,
-        label = {
-            Text(
-                text = data.visuals.message,
-                color = colors.bgBase,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-                modifier = Modifier.padding(vertical = VelaSpacing.sm),
-            )
-        },
+        label = message,
         value = {
-          data.visuals.actionLabel?.let { label ->
             Text(
-                text = label,
+                text = action,
                 color = colors.bgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
@@ -458,7 +517,6 @@ private fun FeedbackNoticeBar(data: SnackbarData) {
                     .wrapContentHeight(Alignment.CenterVertically)
                     .padding(horizontal = VelaSpacing.md),
             )
-          }
         },
     )
 }
@@ -516,6 +574,10 @@ fun SettingsScreen(
     onRpcFixPrimary: () -> Unit = {},
     onSignerUrlSave: (String) -> Unit = {},
     onSignerUrlReset: () -> Unit = {},
+    /** Spec 091: a tap on About's version — the hidden entry. */
+    onVersionTap: () -> Unit = {},
+    /** Spec 091: About's debug-mode switch, turned. */
+    onDebugMode: (Boolean) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -610,6 +672,8 @@ fun SettingsScreen(
                             onRecheckNetwork = onRecheckNetwork,
                             onProviderTest = onProviderTest,
                             onAddNetwork = { onRow("add-network") },
+                            onVersionTap = onVersionTap,
+                            onDebugMode = onDebugMode,
                         )
                     }
                 }
@@ -843,6 +907,8 @@ private fun SettingsPageBody(
     onRecheckNetwork: () -> Unit = {},
     onProviderTest: (String) -> Unit = {},
     onAddNetwork: () -> Unit = {},
+    onVersionTap: () -> Unit = {},
+    onDebugMode: (Boolean) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     when (page) {
@@ -1164,6 +1230,13 @@ private fun SettingsPageBody(
                     color = colors.fgSubtle,
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.base,
+                    // Spec 091: the hidden entry — seven quick taps reveal debug
+                    // mode. Nothing marks it as a control: no ripple.
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onVersionTap,
+                    ),
                 )
             }
             Text(
@@ -1174,6 +1247,17 @@ private fun SettingsPageBody(
                 modifier = Modifier.padding(bottom = VelaSpacing.md),
             )
             model.about.rows.forEach { VelaKeyValueRow(it) }
+            // Spec 091: once revealed, the switch stays here — so it can be
+            // turned off again.
+            val debugMode = model.about.debugMode
+            if (debugMode.mode.revealed) {
+                VelaSwitchRow(
+                    title = debugMode.title,
+                    body = debugMode.body,
+                    checked = debugMode.mode.on,
+                    onCheckedChange = onDebugMode,
+                )
+            }
             Spacer(modifier = Modifier.height(VelaSpacing.xl3))
             model.about.links.forEach { VelaKeyValueRow(it, modifier = Modifier.clickable { onOpenLink(it.value) }) }
             Text(
@@ -1307,15 +1391,23 @@ private fun IndexDownScreen(model: IndexDownModel, modifier: Modifier = Modifier
     }
 }
 
-/** Every overlay the phone draws as a bottom sheet. */
+/**
+ * Every overlay the phone draws as a bottom sheet — ONE host whose content
+ * swaps, never a sheet stacked on a sheet. Internal since spec 092: the home
+ * hosts its status-line rescues (SR6's list, a row's SR2, SR3) over the
+ * wallet with the same bodies, instead of sending the person to Settings.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Suppress("LongMethod")
-private fun SettingsSheet(
+internal fun SettingsSheet(
     model: SettingsScreenModel,
     overlay: SettingsOverlay,
+    /** A swipe down, the scrim or Back — Material has hidden the sheet already. */
     onDismiss: () -> Unit,
     onSignOut: () -> Unit,
+    /** The sheet's own ✕. The same as [onDismiss] unless a host steps back instead (spec 092). */
+    onClose: () -> Unit = onDismiss,
     onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
     storageConfirm: ConfirmSheetModel? = null,
     onConfirmStorage: () -> Unit = {},
@@ -1330,6 +1422,7 @@ private fun SettingsSheet(
     onOpenLink: (String) -> Unit = {},
     onRelayerRetry: () -> Unit = {},
     onBalanceRetry: (String) -> Unit = {},
+    onUnreachableFix: (Int) -> Unit = {},
     onAccountSelect: (Int) -> Unit = {},
     onAccountPrimary: () -> Unit = {},
     onAccountSecondary: () -> Unit = {},
@@ -1364,7 +1457,7 @@ private fun SettingsSheet(
       val sheetScroll = rememberScrollState()
       CompositionLocalProvider(
           LocalSheetScroll provides sheetScroll,
-          LocalSheetClose provides SheetClose(model.closeLabel, onDismiss),
+          LocalSheetClose provides SheetClose(model.closeLabel, onClose),
           LocalSheetBodyMax provides maxSheetHeight - VelaSpacing.xl3,
       ) {
         Box(modifier = Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)) {
@@ -1437,6 +1530,7 @@ private fun SettingsSheet(
                 SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub, onOpen = onOpenLink, onDone = onDismiss, onOpened = onFeedbackOpened, onClosed = onFeedbackClosed)
                 SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onRpcFixPrimary, onRpcFixField)
                 SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail, onBalanceRetry)
+                SettingsOverlay.Unreachable -> UnreachableSheetBody(model.unreachable, onUnreachableFix)
                 SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onRelayerRetry)
                 SettingsOverlay.None -> Unit
             }
@@ -2417,6 +2511,72 @@ private fun BalanceDetailSheetBody(model: BalanceDetailModel, onRetry: (String) 
         BalanceDetailSection(model.sectionUnpriced, top = VelaSpacing.xl)
         model.unpriced.forEach { row -> BalanceDetailRow(row, onRetry) }
     }
+}
+
+/**
+ * SR6 (spec 092): every network the wallet cannot reach, one row each — what
+ * was last read there, and the network's RPC fix. The rows follow the live
+ * view, so one that comes back leaves while the sheet is open.
+ */
+@Composable
+private fun UnreachableSheetBody(model: UnreachableModel, onFix: (Int) -> Unit) {
+    val colors = VelaTheme.colors
+    SheetTitle(model.title)
+    model.summary?.let { summary ->
+        Text(
+            text = summary,
+            color = colors.fgSubtle,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier.padding(bottom = VelaSpacing.md),
+        )
+    }
+    model.rows.forEach { row ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    val y = size.height - VelaBorder.hairline.toPx() / 2
+                    drawLine(colors.borderBase, Offset(0f, y), Offset(size.width, y), VelaBorder.hairline.toPx())
+                }
+                .padding(vertical = VelaSpacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            VelaChainMark(row.mark)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = row.name, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.lg)
+                Text(text = row.line, color = colors.fgSubtle, fontFamily = VelaFontFamily, fontSize = VelaTextSize.sm)
+            }
+            UnreachableFixAction(row.action) { onFix(row.chainId) }
+        }
+    }
+}
+
+/** A row's 修复: a text action that still answers the finger — it gives and buzzes. */
+@Composable
+private fun UnreachableFixAction(label: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val haptic = rememberVelaHaptic()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) VelaMotion.pressScaleButton else 1f,
+        animationSpec = VelaMotion.pressSpring,
+        label = "unreachableFixPress",
+    )
+    Text(
+        text = label,
+        color = VelaTheme.colors.infoBase,
+        fontFamily = VelaFontFamily,
+        fontSize = VelaTextSize.base,
+        modifier = Modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clickable(interactionSource = interaction, indication = null) {
+                haptic(VelaHaptic.Press)
+                onClick()
+            }
+            .padding(VelaSpacing.sm),
+    )
 }
 
 @Composable

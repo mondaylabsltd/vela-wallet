@@ -7,7 +7,13 @@
  * guarantee can be unit-tested directly. The set of methods handled here MUST
  * stay in sync with isSigningMethod() in hooks/use-dapp-signing.ts — anything
  * that gets approved but isn't recorded silently vanishes from history.
+ *
+ * Spec 093: what the record says about the request is the core's — its
+ * summary, its cut of the request and its `result` (empty for a signature) —
+ * stored here verbatim. This file only projects the record's own fields.
  */
+import type { DappSummary } from '$lib/core/generated/DappSummary';
+import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
 import { nativeSymbol } from './networks';
 import { MAX_SIGNED_CONTENT, type LocalTransaction } from './transactions-model';
 import type { StoredAssetSim } from './sim/tx-simulation';
@@ -19,59 +25,18 @@ function cap(s: string | undefined): string | undefined {
 }
 
 /**
- * Budget for the stored original request (method + params) used to re-render the
- * signing panel from history. Larger than MAX_SIGNED_CONTENT because params carry
- * the full tx object; still bounded so a deploy's bytecode can't bloat the store.
+ * The stored request back into its params (spec 093). The core cut it
+ * (`SignRecord.stored_request`, ≤ 8 KB, JSON shape kept), so this only parses:
+ * anything that does not read as a JSON array is stored as `[]` — no request
+ * kept rather than half a one.
  */
-const MAX_REPLAY_REQUEST = 24000;
-
-/** Clip every string value in a structure to `capLen` chars (deep, immutable). */
-function clipStrings(v: unknown, capLen: number): unknown {
-	if (typeof v === 'string') return v.length > capLen ? v.slice(0, capLen) : v;
-	if (Array.isArray(v)) return v.map((x) => clipStrings(x, capLen));
-	if (v && typeof v === 'object') {
-		const o: Record<string, unknown> = {};
-		for (const k of Object.keys(v as Record<string, unknown>))
-			o[k] = clipStrings((v as Record<string, unknown>)[k], capLen);
-		return o;
-	}
-	return v;
-}
-
-/**
- * Capture the original request so its signing panel can be replayed read-only.
- * The serialized payload is bounded by MAX_REPLAY_REQUEST so a deploy's bytecode —
- * or a fat EIP-5792 batch of many medium calls — can't bloat history. When over
- * budget, string values (typically calldata) are progressively clipped until the
- * TOTAL fits, and `truncated` is set; the panel still resolves the intent + the
- * surviving calldata prefix (selector + early params), flagged as truncated.
- */
-export function capRequest(
-	method: string,
-	params: unknown[] | undefined
-): { signedRequest: { method: string; params: unknown[] }; requestTruncated: boolean } {
-	const safeParams = Array.isArray(params) ? params : [];
-	const sizeOf = (p: unknown[]) => JSON.stringify({ method, params: p }).length;
-
+export function storedParams(storedRequest: string): unknown[] {
 	try {
-		if (sizeOf(safeParams) <= MAX_REPLAY_REQUEST) {
-			return { signedRequest: { method, params: safeParams }, requestTruncated: false };
-		}
+		const parsed: unknown = JSON.parse(storedRequest);
+		return Array.isArray(parsed) ? parsed : [];
 	} catch {
-		// Non-serializable params — store nothing replayable rather than throw.
-		return { signedRequest: { method, params: [] }, requestTruncated: true };
+		return [];
 	}
-
-	// Over budget — clip strings progressively (a near-budget cap preserves a single
-	// large field; tighter caps bound a many-field batch) until the TOTAL fits.
-	for (const capLen of [MAX_REPLAY_REQUEST - 2000, 8000, 2000, 500, 0]) {
-		const clipped = clipStrings(safeParams, capLen) as unknown[];
-		if (sizeOf(clipped) <= MAX_REPLAY_REQUEST) {
-			return { signedRequest: { method, params: clipped }, requestTruncated: true };
-		}
-	}
-	// Pathological field COUNT (structure alone exceeds budget) — drop the params.
-	return { signedRequest: { method, params: [] }, requestTruncated: true };
 }
 
 /** Decode a hex message to readable text; keep hex if it decoded to binary. */
@@ -126,8 +91,26 @@ export function extractSignedContent(
 
 export interface SigningRecordInput {
 	method: string;
+	/** The FULL final params — the recipient/value projection and `signedContent` read them. */
 	params: unknown[] | undefined;
-	/** Return value of handleDAppRequest — a tx hash string for transactions. */
+	/**
+	 * The request as the record keeps it — the core's `stored_request` (spec
+	 * 093), never a cut of this shell's own — and whether it is shorter than
+	 * the request was (`request_truncated`).
+	 */
+	storedRequest: string;
+	requestTruncated: boolean;
+	/** The core's summary of the request (`SignRecord.summary`), stored verbatim. */
+	summary?: DappSummary | null;
+	/**
+	 * The sheet's simulation judgments as approved (`SignRecord.balance_changes`),
+	 * stored verbatim (083 F1).
+	 */
+	balanceChanges?: TrustSimJudgment[] | null;
+	/**
+	 * The core's `result`: the tx hash a transaction settled under, `""` while
+	 * pending — and always `""` for a signature, which the disk never keeps.
+	 */
 	result: unknown;
 	from: string;
 	chainId: number;
@@ -201,6 +184,10 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 	const {
 		method,
 		params,
+		storedRequest,
+		requestTruncated,
+		summary,
+		balanceChanges,
 		result,
 		from,
 		chainId,
@@ -216,9 +203,12 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 	} = input;
 	const now = Math.floor(nowMs / 1000);
 	const signedContent = extractSignedContent(method, params);
-	const { signedRequest, requestTruncated } = capRequest(method, params);
+	const signedRequest = { method, params: storedParams(storedRequest) };
 	const base = {
 		userOpHash,
+		// The core's answer verbatim: a transaction's hash, and nothing for a
+		// signature — the signature itself is never written down (spec 093).
+		txHash: typeof result === 'string' ? result : '',
 		from,
 		chainId,
 		timestamp: now,
@@ -228,6 +218,8 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 		signedContent,
 		signedRequest,
 		requestTruncated,
+		...(summary ? { dappSummary: summary } : {}),
+		...(balanceChanges && balanceChanges.length > 0 ? { balanceChanges } : {}),
 		assetChanges,
 		intent,
 		...(maybeSent ? { maybeSent: true } : {}),
@@ -245,7 +237,6 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 		return {
 			...base,
 			id: `dapp-${nowMs}-tx`,
-			txHash: typeof result === 'string' ? result : '',
 			to: typeof leg?.to === 'string' ? leg.to : '',
 			value: requestedValueHex(method, first),
 			symbol: nativeSymbol(chainId),
@@ -257,7 +248,6 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 		return {
 			...base,
 			id: `dapp-${nowMs}-typed`,
-			txHash: '',
 			to: '',
 			value: '0',
 			symbol: '',
@@ -269,7 +259,6 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
 	return {
 		...base,
 		id: `dapp-${nowMs}-msg`,
-		txHash: '',
 		to: '',
 		value: '0',
 		symbol: '',

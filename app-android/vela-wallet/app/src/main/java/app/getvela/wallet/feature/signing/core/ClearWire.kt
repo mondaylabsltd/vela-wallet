@@ -340,6 +340,11 @@ data class ClearSigningView(
     val plain_send: ClearPlainSend? = null,
     /** 089 S1: Some iff [surface] is [ClearSurface.Batch] — and then [result] and [plain_send] are null. */
     val batch: ClearBatchView? = null,
+    /**
+     * Spec 093: the verb the request's record keeps — Activity's title.
+     * Copied to `SignApproveOpts.intent`; `null` = nothing may be recorded.
+     */
+    val record_intent: String? = null,
 )
 
 @Serializable

@@ -96,6 +96,7 @@ fn stored(record: &SignRecord) -> FeedTxRecord {
         balance_changes: record.balance_changes.clone(),
         calldata: None,
         call_data: tx["data"].as_str().map(str::to_owned),
+        summary: record.summary.clone(),
     }
 }
 

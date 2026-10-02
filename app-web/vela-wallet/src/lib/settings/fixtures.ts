@@ -977,7 +977,7 @@ function feedback(m: SettingsMessages): FeedbackModel {
 
 function rpcBanner(m: SettingsMessages): RpcBannerModel {
 	return {
-		text: fill(m.rescue.rpcUnavailableMultiple, { count: 2 }),
+		text: fill(m.rescue.unreachableMany, { n: 2 }),
 		chips: [
 			{ id: 'polygon', mark: MARKS.polygon, name: 'Polygon', action: m.rescue.rpcFix },
 			{ id: 'gnosis', mark: MARKS.gnosis, name: 'Gnosis', action: m.rescue.rpcFix }

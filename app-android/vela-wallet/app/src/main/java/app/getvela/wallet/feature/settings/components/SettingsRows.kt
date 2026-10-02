@@ -10,7 +10,16 @@ import androidx.compose.runtime.mutableIntStateOf
 import app.getvela.wallet.core.designsystem.components.VelaLabelBesideValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.semantics.Role
+import app.getvela.wallet.core.designsystem.tokens.VelaOnAccent
+import app.getvela.wallet.core.platform.VelaHaptic
+import app.getvela.wallet.core.platform.rememberVelaHaptic
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,8 +68,9 @@ import app.getvela.wallet.feature.settings.StorageSegmentModel
  * The settings list's rows (spec 023).
  *
  * Every entry on ST1/ST1b is [VelaSettingsRow]; every choice in the five
- * pickers is [VelaSelectRow]; every network is [VelaNetworkRow]. There is no
- * second row component anywhere in this feature.
+ * pickers is [VelaSelectRow]; every network is [VelaNetworkRow]; the one
+ * switch (About's debug mode, spec 091) is [VelaSwitchRow]. There is no
+ * second row component for any of them anywhere in this feature.
  */
 
 /**
@@ -184,6 +194,83 @@ fun VelaSettingsRow(
             }
         }
         if (divider) SettingsDivider()
+    }
+}
+
+/**
+ * A row that is one switch (spec 091 — About's debug mode): a title, one line
+ * under it, the switch at the end, and the hairline under the row, as every
+ * other key/value row. The whole row toggles; the switch's thumb answers the
+ * row's press (the deformation), and the change is felt ([VelaHaptic.Select]).
+ * Its label is the title and the line, read together; its role and state are
+ * the switch's.
+ */
+@Composable
+fun VelaSwitchRow(
+    title: String,
+    body: String?,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VelaTheme.colors
+    val haptic = rememberVelaHaptic()
+    val interaction = remember { MutableInteractionSource() }
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = checked,
+                    interactionSource = interaction,
+                    indication = LocalIndication.current,
+                    role = Role.Switch,
+                    onValueChange = { on ->
+                        haptic(VelaHaptic.Select)
+                        onCheckedChange(on)
+                    },
+                )
+                .heightIn(min = VelaSizing.controlMd)
+                .padding(vertical = VelaSpacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(VelaSpacing.xs),
+            ) {
+                Text(
+                    text = title,
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                )
+                if (body != null) {
+                    Text(
+                        text = body,
+                        color = colors.fgSubtle,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                    )
+                }
+            }
+            // Drawn only: the row is the control, so the switch takes no tap
+            // of its own and adds no second node for a screen reader.
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                interactionSource = interaction,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = VelaOnAccent,
+                    checkedTrackColor = colors.accentBase,
+                    checkedBorderColor = colors.accentBase,
+                    uncheckedThumbColor = colors.fgSubtle,
+                    uncheckedTrackColor = colors.bgSunken,
+                    uncheckedBorderColor = colors.borderStrong,
+                ),
+            )
+        }
+        SettingsDivider()
     }
 }
 

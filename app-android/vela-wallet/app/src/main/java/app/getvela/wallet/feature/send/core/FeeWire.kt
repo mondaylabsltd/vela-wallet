@@ -327,6 +327,11 @@ sealed class FeeOperation {
     @Serializable
     @SerialName("start_ttl")
     data class StartTtl(val ms: Int) : FeeOperation()
+
+    /** The core's bound on a whole quote (spec 094 S9): answer [FeeShellResult.DeadlineElapsed] after `ms`. */
+    @Serializable
+    @SerialName("start_deadline")
+    data class StartDeadline(val ms: Int) : FeeOperation()
 }
 
 // -- what the shell observed -------------------------------------------------
@@ -367,6 +372,10 @@ sealed class FeeShellResult {
     @Serializable
     @SerialName("ttl_elapsed")
     data object TtlElapsed : FeeShellResult()
+
+    @Serializable
+    @SerialName("deadline_elapsed")
+    data object DeadlineElapsed : FeeShellResult()
 }
 
 // -- what the shell tells it -------------------------------------------------

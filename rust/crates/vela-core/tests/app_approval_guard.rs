@@ -1721,3 +1721,83 @@ fn a_batch_whose_second_call_is_an_unlimited_approve_warns() {
         "seen, so the submit guard may pass it"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The one unlimited warning every shell draws (spec 094 S8, 089 F22)
+// ---------------------------------------------------------------------------
+
+/// An unlimited Permit2 `PermitSingle` drew a red hero and no warning, because
+/// every shell derived the sentence from the cap editor a permit cannot have.
+/// The core says it now, for every unbounded permit — and still offers no
+/// editor: the dApp redeems its OWN struct, so a capped signature would only
+/// revert its transaction.
+#[test]
+fn an_unlimited_permit_is_warned_about_though_it_cannot_be_capped() {
+    for params in [
+        permit2_single_params(&max_u160().to_string()),
+        erc2612_params(&max_u256().to_string()),
+        dai_permit_params(true),
+    ] {
+        let mut sut = Sut::new();
+        sut.dispatch(approval_event(TYPED, &params));
+        let view = sut.view();
+        assert_eq!(view.surface, GuardSurface::PermitSign);
+        assert!(view.unlimited_warning, "{params}");
+        assert!(view.editor.is_none(), "a permit gets no cap editor");
+        assert!(view.confirm_allowed);
+        assert!(
+            !view.unlimited_consented,
+            "the submit guard governs only what the wallet sends"
+        );
+    }
+}
+
+#[test]
+fn a_bounded_or_revoking_permit_is_not_warned_about() {
+    for params in [
+        permit2_single_params("1000000"),
+        erc2612_params("1000000"),
+        dai_permit_params(false),
+    ] {
+        let mut sut = Sut::new();
+        sut.dispatch(approval_event(TYPED, &params));
+        let view = sut.view();
+        assert_eq!(view.surface, GuardSurface::PermitSign);
+        assert!(!view.unlimited_warning, "{params}");
+    }
+}
+
+/// The ERC-20 editor and the batch say the same thing through the same
+/// field: unbounded while kept as asked, quiet once capped.
+#[test]
+fn the_editor_and_the_batch_warn_through_the_same_field() {
+    let mut sut = Sut::new();
+    sut.dispatch(approval_event(
+        TX,
+        &tx_params(USDC, &approve_calldata(SPENDER, max_u256())),
+    ));
+    assert!(sut.view().unlimited_warning, "kept as asked");
+    sut.dispatch(Event::PresetSelected {
+        mode: GuardEditorMode::Revoke,
+    });
+    assert!(!sut.view().unlimited_warning, "revoked");
+
+    let mut finite = Sut::new();
+    finite.dispatch(approval_event(
+        TX,
+        &tx_params(USDC, &approve_calldata(SPENDER, U256::from(5u64))),
+    ));
+    assert!(!finite.view().unlimited_warning);
+
+    let mut batch = Sut::new();
+    batch.dispatch(batch_event(vec![
+        transfer_call(),
+        json!({ "to": USDC, "data": approve_calldata(SPENDER, max_u256()), "value": "0x0" }),
+    ]));
+    let view = batch.view();
+    assert!(view.unlimited_warning);
+    assert_eq!(
+        view.unlimited_warning,
+        view.batch.expect("batch").any_uncapped
+    );
+}

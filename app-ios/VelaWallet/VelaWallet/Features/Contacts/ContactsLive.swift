@@ -190,14 +190,17 @@ enum ContactsLive {
     /// One contact's page.
     ///
     /// The activity block is **this device's own record** of what passed
-    /// between the two of you — the same local store the feed reads, narrowed
-    /// to this address. It is not a history of the address: a hundred-block
-    /// scan and a local store are all this wallet has, and claiming more would
-    /// be inventing an indexer.
+    /// between the two of you: the feed core's `contact_rows` (spec 093) —
+    /// the very items Activity draws, narrowed by the core to this address and
+    /// drawn by Activity's own row builder, so a dApp's transfer to them reads
+    /// as its verb, never "已发送". It is not a history of the address: a
+    /// hundred-block scan and a local store are all this wallet has, and
+    /// claiming more would be inventing an indexer.
     static func detail(
         _ contact: ContactWire,
         view: ContactsViewWire,
-        records: [[String: Any]] = [],
+        rows: [FeedItemWire] = [],
+        hidden: Bool = false,
         loc: Loc,
         form: ContactDraft? = nil,
         groupPick: Set<String>? = nil
@@ -219,7 +222,7 @@ enum ContactsLive {
             copiedLabel: loc.t("componentsUi.identiconViewer.copied"),
             activityTitle: loc.t("contacts.recentActivity"),
             activityAction: loc.t("history.filterAll"),
-            activity: activityRows(with: contact.address, records: records, loc: loc),
+            activity: rows.map { WalletLive.activityRow($0, loc: loc, hidden: hidden) },
             activityEmpty: ContactsFixtures.activityEmpty(loc: loc),
             deleteLabel: loc.t("contacts.deleteContact"),
             backLabel: loc.t("componentsUi.mainNav.contacts"),
@@ -494,52 +497,4 @@ enum ContactsLive {
                 .contains { $0.contains(needle) }
         }
     }
-
-    /// What this device recorded between the wallet and one address.
-    ///
-    /// Both directions: a send TO them and a receipt FROM them are equally
-    /// "what passed between us", and a page that showed only one half would
-    /// read as a ledger with a missing column.
-    static func activityRows(
-        with address: String, records: [[String: Any]], loc: Loc
-    ) -> [ActivityRowModel] {
-        let wanted = address.lowercased()
-        return records.compactMap { record -> ActivityRowModel? in
-            let to = (record["to"] as? String)?.lowercased()
-            let from = (record["from"] as? String)?.lowercased()
-            let outgoing = to == wanted
-            guard outgoing || from == wanted else { return nil }
-            let symbol = record["symbol"] as? String ?? ""
-            let amount = record["value"] as? String ?? ""
-            guard !amount.isEmpty else { return nil }
-            let seconds = (record["timestamp"] as? NSNumber)?.doubleValue ?? 0
-            return ActivityRowModel(
-                kind: outgoing ? .sent : .received,
-                title: loc.t(outgoing ? "history.labelSent" : "history.labelReceived"),
-                subtitle: Self.day(seconds, loc: loc),
-                amount: (outgoing ? "−" : "+") + SendLive.trim(amount),
-                unit: symbol,
-                positive: !outgoing,
-                masked: false,
-                badgeColor: SendLive.chainColor(
-                    (record["chainId"] as? NSNumber)?.intValue ?? 0
-                )
-            )
-        }
-    }
-
-    /// The day a record belongs to, in the device's own timezone — the same
-    /// grouping key the feed uses, because a record written at 23:30 local
-    /// heads its own day.
-    private static func day(_ seconds: Double, loc: Loc) -> String {
-        let date = Date(timeIntervalSince1970: seconds)
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        if calendar.isDateInToday(date) { return loc.t("time.today") }
-        if calendar.isDateInYesterday(date) { return loc.t("time.yesterday") }
-        // The person's own preset (spec 056), like every other date this app
-        // prints.
-        return Formats.date(date)
-    }
-
 }

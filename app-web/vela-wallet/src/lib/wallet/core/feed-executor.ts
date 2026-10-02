@@ -38,10 +38,13 @@ import { deleteTransaction, loadTransactions } from '$lib/services/records';
 import { resolveRecipientIdentity } from '$lib/services/recipient-identity';
 import type { LocalTransaction } from '$lib/services/transactions-model';
 
+import type { DappAction } from '$lib/core/generated/DappAction';
+import type { DappSummary } from '$lib/core/generated/DappSummary';
 import type { FeedShellResult } from '$lib/core/generated/FeedShellResult';
 import type { FeedTxKind } from '$lib/core/generated/FeedTxKind';
 import type { FeedTxRecord } from '$lib/core/generated/FeedTxRecord';
 import type { FeedTxStatus } from '$lib/core/generated/FeedTxStatus';
+import type { TrustSimJudgment } from '$lib/core/generated/TrustSimJudgment';
 import type { FeedEffect, FeedOwnAccount, FeedRecordSink } from './feed-types';
 
 const KINDS: FeedTxKind[] = [
@@ -53,6 +56,20 @@ const KINDS: FeedTxKind[] = [
 	'connect'
 ];
 const STATUSES: FeedTxStatus[] = ['pending', 'confirmed', 'failed'];
+/** The kinds a dApp wrote (spec 093): a transaction, and its two signatures. */
+const DAPP_KINDS: FeedTxKind[] = ['dapp_tx', 'sign_message', 'sign_typed_data'];
+const ACTIONS: DappAction[] = [
+	'call',
+	'batch',
+	'approve',
+	'permit',
+	'sign_in',
+	'message',
+	'typed_data',
+	'blind_sign'
+];
+/** `u32::MAX` — the widest count or decimals serde takes. */
+const U32_MAX = 4_294_967_295;
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
 
@@ -81,6 +98,113 @@ function asValue(value: unknown): string {
 		: asString(value);
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** A `u32` serde accepts, or `undefined` when it is not one. */
+const asU32 = (value: unknown): number | undefined =>
+	typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= U32_MAX
+		? value
+		: undefined;
+
+/**
+ * The stored summary (`dappSummary`, spec 093), handed back exactly as the
+ * core wrote it — or `null` when it is not one. The store is an unvalidated
+ * JSON parse and one field serde cannot take would fault the whole feed, so a
+ * summary with ANY field of the wrong shape is dropped whole, never repaired:
+ * the record then reads by its kind, as one from before 093 does. Repairing a
+ * field (dropping a bad `unlimited`, say) would let the shell change what the
+ * row states.
+ */
+export function storedSummary(value: unknown): DappSummary | null {
+	if (!isRecord(value) || !ACTIONS.includes(value.action as DappAction)) return null;
+	const summary: DappSummary = { action: value.action as DappAction, calls: 0 };
+	if (value.calls !== undefined) {
+		const calls = asU32(value.calls);
+		if (calls === undefined) return null;
+		summary.calls = calls;
+	}
+	for (const key of [
+		'contract',
+		'spender',
+		'token',
+		'symbol',
+		'amount',
+		'signin_domain',
+		'primary_type'
+	] as const) {
+		const field = value[key];
+		if (field === undefined || field === null) continue;
+		if (typeof field !== 'string') return null;
+		summary[key] = field;
+	}
+	if (value.decimals !== undefined && value.decimals !== null) {
+		const decimals = asU32(value.decimals);
+		if (decimals === undefined) return null;
+		summary.decimals = decimals;
+	}
+	for (const key of ['unlimited', 'revoke'] as const) {
+		const field = value[key];
+		if (field === undefined) continue;
+		if (typeof field !== 'boolean') return null;
+		summary[key] = field;
+	}
+	if (value.expires_at !== undefined && value.expires_at !== null) {
+		if (typeof value.expires_at !== 'number' || !Number.isFinite(value.expires_at)) return null;
+		summary.expires_at = value.expires_at;
+	}
+	return summary;
+}
+
+/**
+ * The stored balance changes (`balanceChanges`, 083 F1), handed back exactly
+ * as the sheet judged them — or `null` when any line is not one a judgment
+ * can be. Dropped whole for the reason `storedSummary` gives: a list with a
+ * line missing would be a different account of what moved.
+ */
+export function storedJudgments(value: unknown): TrustSimJudgment[] | null {
+	if (!Array.isArray(value) || value.length === 0) return null;
+	const judgments: TrustSimJudgment[] = [];
+	for (const line of value) {
+		if (!isRecord(line) || typeof line.delta !== 'string') return null;
+		switch (line.type) {
+			case 'native':
+				judgments.push({ type: 'native', delta: line.delta });
+				break;
+			case 'erc20_trusted': {
+				const decimals = asU32(line.decimals);
+				if (typeof line.token !== 'string' || typeof line.symbol !== 'string') return null;
+				if (decimals === undefined) return null;
+				if (line.in_trusted_set !== undefined && typeof line.in_trusted_set !== 'boolean') {
+					return null;
+				}
+				judgments.push({
+					type: 'erc20_trusted',
+					token: line.token,
+					delta: line.delta,
+					symbol: line.symbol,
+					decimals,
+					...(line.in_trusted_set === true ? { in_trusted_set: true } : {})
+				});
+				break;
+			}
+			case 'erc20_unverified':
+				if (line.token !== null && line.token !== undefined && typeof line.token !== 'string') {
+					return null;
+				}
+				judgments.push({
+					type: 'erc20_unverified',
+					token: typeof line.token === 'string' ? line.token : null,
+					delta: line.delta
+				});
+				break;
+			default:
+				return null;
+		}
+	}
+	return judgments;
+}
+
 /**
  * One stored record in the core's vocabulary, or `null` when it is not a record
  * this machine can speak about. `kind: null` is the legacy untyped row the core
@@ -90,17 +214,19 @@ export function toFeedRecord(tx: LocalTransaction): FeedTxRecord | null {
 	const rawKind = tx.type;
 	if (rawKind !== undefined && !KINDS.includes(rawKind as FeedTxKind)) return null;
 	const timestamp = asNumber(tx.timestamp);
-	// What a dApp's transaction row says beyond its money (083 H2): the origin
-	// it came from and the intent it recorded. `dappUrl` only — `dappOrigin`
-	// holds the dApp's own name when it gave one, and the core names the site
-	// from what it is handed.
-	const dapp =
-		rawKind === 'dapp_tx'
-			? {
-					dapp_url: typeof tx.dappUrl === 'string' && tx.dappUrl !== '' ? tx.dappUrl : null,
-					intent: typeof tx.intent === 'string' && tx.intent !== '' ? tx.intent : null
-				}
-			: {};
+	// What a dApp's row says beyond its money (083 H2, spec 093) — for its
+	// transactions and its signatures alike: the origin it came from, the
+	// intent it recorded, the core's summary and the sheet's balance changes,
+	// each as stored. `dappUrl` only — `dappOrigin` holds the dApp's own name
+	// when it gave one, and the core names the site from what it is handed.
+	const dapp = DAPP_KINDS.includes(rawKind as FeedTxKind)
+		? {
+				dapp_url: typeof tx.dappUrl === 'string' && tx.dappUrl !== '' ? tx.dappUrl : null,
+				intent: typeof tx.intent === 'string' && tx.intent !== '' ? tx.intent : null,
+				summary: storedSummary(tx.dappSummary),
+				balance_changes: storedJudgments(tx.balanceChanges)
+			}
+		: {};
 	return {
 		id: asString(tx.id),
 		user_op_hash: asString(tx.userOpHash),

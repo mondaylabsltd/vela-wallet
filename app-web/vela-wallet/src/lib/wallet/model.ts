@@ -60,6 +60,16 @@ export interface ActivityRowModel {
 	unit: string;
 	positive: boolean;
 	masked: boolean;
+	/**
+	 * Spec 093: the figure is an allowance with no limit — drawn in the
+	 * danger tone, where money moved would be.
+	 */
+	danger?: boolean;
+	/**
+	 * Spec 093 / 083 F1: what a swap brought back, beside what left —
+	 * "≈ +0.03" ETH, or the chain's own exact receipt once it folded in.
+	 */
+	received?: { amount: string; unit: string };
 	badgeColor: string;
 	/** Live rows only: the chain's logo over the badge dot. */
 	badgeLogoUrl?: string;

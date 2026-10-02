@@ -21,6 +21,9 @@
     "linkTerms": "Términos del servicio",
     "linkSupport": "Soporte",
     "footer": "Hecho con cariño. Tus llaves, tus monedas.",
-    "sectionLinks": "Enlaces"
+    "sectionLinks": "Enlaces",
+    "debugMode": "Modo de depuración",
+    "debugModeBody": "Permite que las páginas http de tu red local usen la billetera. Solo para desarrollo.",
+    "debugModeRevealed": "El modo de depuración ya está disponible"
   }
 }

@@ -498,8 +498,14 @@
   "sectionTitle": "Asset",
   "addToken": "Aggiungi",
   "searchPlaceholder": "Cerca token…",
-  "rpcUnavailableSingle": "RPC di {{name}} non disponibile",
-  "rpcUnavailableMultiple": "RPC non disponibile su {{count}} reti",
+  "unreachableOne": "Al momento non riusciamo a raggiungere {{name}}",
+  "unreachableMany": "Al momento non riusciamo a raggiungere {{n}} reti",
+  "unreachableBody": "I tuoi asset non sono toccati: solo che ora non riusciamo a leggerli.",
+  "unreachableNone": "Tutte le reti sono di nuovo raggiungibili.",
+  "lastSeen": "Ultima lettura: {{amount}}",
+  "lastSeenUnpriced": "Token presenti all’ultima lettura",
+  "lastSeenEmpty": "Vuota all’ultima lettura",
+  "notReadYet": "Non ancora letta",
   "rpcFix": "Correggi",
   "emptyTitle": "Deposita il tuo primo asset",
   "emptySubtext": "Tocca qui per vedere il tuo indirizzo e ricevere token",
@@ -597,7 +603,8 @@
   "labelSent": "Inviato",
   "labelReceived": "Ricevuto",
   "toName": "A {{name}}",
-  "fromName": "Da {{name}}"
+  "fromName": "Da {{name}}",
+  "dappRowTitle": "{{intent}} su {{place}}"
  },
  "onboarding": {
   "welcome": {
@@ -725,7 +732,8 @@
    "syncFailedBody": "Wallet creato, ma la chiave pubblica non è stata caricata — gli altri dispositivi non possono ancora accedere.",
    "copyAddress": "Copia indirizzo",
    "copied": "Copiato",
-   "close": "Chiudi"
+   "close": "Chiudi",
+   "siteAccessBody": "L'accesso di Vela ai siti è limitato. Scegli Consenti accesso in alto, poi riprova."
   },
   "create": {
    "accountNameHint": "Questo nome viene memorizzato on-chain insieme alla tua chiave pubblica per l'accesso da più dispositivi.",
@@ -981,6 +989,11 @@
    "clearAllTitle": "Cancellare la cronologia?",
    "clearAllBody": "Questo rimuove tutte le dApp aperte di recente.",
    "a11yDeleteHistory": "Rimuovi dalla cronologia"
+  },
+  "ext": {
+   "installedNote": "Ricarica le schede già aperte perché i loro siti trovino Vela.",
+   "accessNote": "L'accesso ai siti è limitato: i siti non vedono Vela e la passkey non funziona.",
+   "accessAllow": "Consenti accesso"
   }
  },
  "signHandoff": {
@@ -1033,7 +1046,10 @@
   "linkTerms": "Termini di servizio",
   "linkSupport": "Assistenza",
   "footer": "Realizzato con cura. Le tue chiavi, le tue cripto.",
-  "sectionLinks": "Link"
+  "sectionLinks": "Link",
+  "debugMode": "Modalità debug",
+  "debugModeBody": "Consente alle pagine http della tua rete locale di usare il wallet. Solo per lo sviluppo.",
+  "debugModeRevealed": "La modalità debug è ora disponibile"
  },
  "clearSigning": {
   "title": "Test Clear Signing",

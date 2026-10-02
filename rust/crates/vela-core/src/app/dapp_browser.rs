@@ -61,11 +61,18 @@
 //! - Messages from a subframe are ignored: the script installs nothing there,
 //!   so only a direct call to the host bridge can produce one, and there is no
 //!   way to answer a subframe that is not also a way to speak as the top page.
-//! - Messages from a page that is not a secure context ([`is_secure_context`]:
-//!   https, or http on loopback) are ignored too (spec 088 FR-004). The script
-//!   offers no provider there (`window.isSecureContext`), so only a direct call
-//!   to the host bridge can produce one — Android's listener cannot be limited
-//!   to "any https origin", so the bridge object itself is in every page.
+//! - Messages from a page that is not offered the wallet ([`offers_wallet`]:
+//!   a secure context — https, or http on loopback — and, with debug mode on,
+//!   http on this device's own network) are ignored too (spec 088 FR-004,
+//!   spec 091). The script offers no provider there, so only a direct call to
+//!   the host bridge can produce one — Android's listener cannot be limited to
+//!   "any https origin", so the bridge object itself is in every page.
+//! - Debug mode is the shell's to state ([`Event::DebugModeChanged`]) and the
+//!   script's to read when a document starts. Turned off, it takes the wallet
+//!   away from an open page at once: every document it no longer offers is
+//!   retired — what it had open is answered 4900, a sheet showing one of its
+//!   requests closes — and the page's later messages are ignored. Turned on,
+//!   a page already open has no provider until it loads again.
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -79,7 +86,7 @@ use serde_json::{json, Value};
 use ts_rs::TS;
 
 use super::dapp_permissions::{
-    dapp_spelling, is_insecure_public_origin, is_secure_context, origin_of, resolve_granted,
+    dapp_spelling, is_insecure_public_origin, offers_wallet, origin_of, resolve_granted,
     should_drop_grant, DpermGrant,
 };
 use super::dapp_rpc::{
@@ -231,6 +238,12 @@ pub enum Event {
     AccountsUpdated {
         addresses: Option<Vec<String>>,
     },
+    /// Settings' debug mode (spec 091), stated at start and on every change:
+    /// with it on, http pages on this device's own network are offered the
+    /// wallet too ([`offers_wallet`]). Off is the default.
+    DebugModeChanged {
+        on: bool,
+    },
     /// The active account changed (initial load included). Every grant
     /// follows it.
     AccountSwitched {
@@ -359,6 +372,10 @@ struct Tab {
     open: BTreeMap<String, OpenKind>,
     reads_in_flight: usize,
     read_queue: VecDeque<QueuedRead>,
+    /// Reads that answer a `wallet_getCallsStatus` (spec 094): request id →
+    /// the batch and its chain, so the bundler's receipt is answered in
+    /// EIP-5792's shape ([`dapp_rpc::calls_status`]), never verbatim.
+    calls_status: BTreeMap<String, (String, u32)>,
 }
 
 #[derive(Clone, Debug)]
@@ -402,6 +419,8 @@ pub struct Model {
     chains: Vec<u32>,
     wallet_addresses: Option<Vec<String>>,
     active_address: Option<String>,
+    /// Settings' debug mode (spec 091) — which origins [`offers_wallet`] lets in.
+    debug_mode: bool,
     tabs: BTreeMap<String, Tab>,
     consent: Option<Consent>,
     signing: Option<SignJob>,
@@ -495,6 +514,7 @@ impl App for DappBrowser {
                 }
             }
             Event::NetworksChanged { chain_ids } => model.chains = chain_ids,
+            Event::DebugModeChanged { on } => debug_mode_changed(model, on, &mut out),
             Event::AccountsUpdated { addresses } => {
                 model.wallet_addresses = addresses;
                 reconcile_grants(model, None, &mut out);
@@ -678,8 +698,12 @@ impl App for DappBrowser {
                     let origin = tab.doc_origin.clone().or(tab.shown_origin.clone());
                     DbrTabView {
                         tab: id.clone(),
+                        // Only where the page is offered the wallet: a LAN
+                        // site connected in debug mode is not connected while
+                        // debug mode is off (spec 091).
                         connected_address: origin
                             .as_deref()
+                            .filter(|origin| offers_wallet(origin, model.debug_mode))
                             .and_then(|origin| granted(model, origin).into_iter().next()),
                         chain_id: origin
                             .as_deref()
@@ -989,6 +1013,38 @@ fn retire_document(model: &mut Model, tab_id: &str, deliver: bool, out: &mut Out
     }
 }
 
+/// Debug mode changed (spec 091). Turning it off withdraws the wallet from
+/// every open page it no longer offers, at once: the document is retired —
+/// its open requests answered 4900, its consent entries and signing jobs
+/// dropped, a sheet showing one of them closed — and the gate ignores that
+/// page from here on. Turning it on changes nothing already open: the script
+/// a page started with offered it nothing, and it is offered the wallet when
+/// it next loads.
+fn debug_mode_changed(model: &mut Model, on: bool, out: &mut Out) {
+    if model.debug_mode == on {
+        return;
+    }
+    model.debug_mode = on;
+    let withdrawn: Vec<String> = model
+        .tabs
+        .iter()
+        .filter(|(_, tab)| {
+            tab.doc.is_some()
+                && tab
+                    .doc_origin
+                    .as_deref()
+                    .is_some_and(|origin| !offers_wallet(origin, on))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    for tab in withdrawn {
+        retire_document(model, &tab, true, out);
+        if let Some(entry) = model.tabs.get_mut(&tab) {
+            entry.doc_origin = None;
+        }
+    }
+}
+
 fn page_message(model: &mut Model, message: HeldMessage, out: &mut Out) {
     // A subframe cannot be answered without speaking as the top page; the
     // script installs nothing there, so this is a direct call to the host.
@@ -998,10 +1054,11 @@ fn page_message(model: &mut Model, message: HeldMessage, out: &mut Out) {
     let Some(frame_origin) = origin_of(&message.frame_origin) else {
         return;
     };
-    // Spec 088 FR-004: the wallet is offered only to secure contexts. The
-    // script stays silent elsewhere, so this is a page calling the bridge by
-    // hand — no hello is adopted and no request is read, let alone answered.
-    if !is_secure_context(&frame_origin) {
+    // Spec 088 FR-004, spec 091: the wallet is offered only where
+    // `offers_wallet` says. The script stays silent elsewhere, so this is a
+    // page calling the bridge by hand — no hello is adopted and no request is
+    // read, let alone answered.
+    if !offers_wallet(&frame_origin, model.debug_mode) {
         return;
     }
     match parse_page_message(&message.message_json) {
@@ -1272,23 +1329,61 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 params: request.params,
                 bundler,
             };
-            let Some(tab) = model.tabs.get_mut(tab_id) else {
+            queue_read(model, tab_id, &doc, read, out);
+        }
+        Route::Capabilities => {
+            match dapp_rpc::capabilities(&request.params, &grant_addresses, &model.chains) {
+                Ok(answer) => deliver_result(tab_id, &doc, &id, answer, out),
+                Err((code, words)) => deliver_error(tab_id, &doc, &id, code, words, out),
+            }
+        }
+        Route::CallsStatus => {
+            let Some(batch) = dapp_rpc::calls_status_id(&request.params) else {
+                deliver_error(tab_id, &doc, &id, -32602, "Expected [id]", out);
                 return;
             };
-            if tab.reads_in_flight < READS_IN_FLIGHT {
-                tab.open.insert(id, OpenKind::Read);
-                start_read(model, tab_id, read, out);
-            } else if tab.read_queue.len() < READS_QUEUED {
-                tab.open.insert(id, OpenKind::Read);
-                tab.read_queue.push_back(read);
-            } else {
-                deliver_error(tab_id, &doc, &id, -32005, "Limit exceeded", out);
+            // Only a batch this wallet sent: a page answered with its id.
+            if !model.user_ops.contains(&batch) {
+                let code = dapp_rpc::UNKNOWN_BUNDLE_ID;
+                deliver_error(tab_id, &doc, &id, code, "Unknown bundle id", out);
+                return;
             }
+            if let Some(tab) = model.tabs.get_mut(tab_id) {
+                tab.calls_status
+                    .insert(id.clone(), (batch.clone(), chain_id));
+            }
+            let read = QueuedRead {
+                id: id.clone(),
+                chain_id,
+                method: "eth_getUserOperationReceipt".to_owned(),
+                params: json!([batch]),
+                bundler: true,
+            };
+            queue_read(model, tab_id, &doc, read, out);
         }
         Route::Unsupported => {
             let words = format!("Vela does not support {}", request.method);
             deliver_error(tab_id, &doc, &id, 4200, &words, out);
         }
+    }
+}
+
+/// A read, now or behind the tab's reads in flight — or refused when the
+/// queue is full.
+fn queue_read(model: &mut Model, tab_id: &str, doc: &str, read: QueuedRead, out: &mut Out) {
+    let Some(tab) = model.tabs.get_mut(tab_id) else {
+        return;
+    };
+    let id = read.id.clone();
+    if tab.reads_in_flight < READS_IN_FLIGHT {
+        tab.open.insert(id, OpenKind::Read);
+        start_read(model, tab_id, read, out);
+    } else if tab.read_queue.len() < READS_QUEUED {
+        tab.open.insert(id, OpenKind::Read);
+        tab.read_queue.push_back(read);
+    } else {
+        tab.calls_status.remove(&id);
+        deliver_error(tab_id, doc, &id, -32005, "Limit exceeded", out);
     }
 }
 
@@ -1531,14 +1626,25 @@ fn read_done(model: &mut Model, tab_id: &str, id: &str, body_json: Option<String
     };
     tab.reads_in_flight = tab.reads_in_flight.saturating_sub(1);
     let doc = tab.doc.clone();
+    let calls_status = tab.calls_status.remove(id);
     if let Some(doc) = doc {
         if close_open(model, tab_id, &doc, id) {
-            let message = match body_json
+            let body = body_json
                 .as_deref()
-                .and_then(|body| serde_json::from_str::<Value>(body).ok())
-            {
-                None => error_json(&doc, id, -32603, "No endpoint answered"),
-                Some(body) => match body.get("error").filter(|e| !e.is_null()) {
+                .and_then(|body| serde_json::from_str::<Value>(body).ok());
+            let message = match (calls_status, body) {
+                // A batch's status: the receipt read through EIP-5792's shape.
+                // A bundler that could not be asked, or refused, says nothing
+                // the wallet knows — still pending, and the page polls on.
+                (Some((batch, chain)), body) => {
+                    let receipt = body
+                        .as_ref()
+                        .filter(|body| body.get("error").is_none_or(Value::is_null))
+                        .and_then(|body| body.get("result"));
+                    result_json(&doc, id, &dapp_rpc::calls_status(&batch, chain, receipt))
+                }
+                (None, None) => error_json(&doc, id, -32603, "No endpoint answered"),
+                (None, Some(body)) => match body.get("error").filter(|e| !e.is_null()) {
                     Some(error) => error_body_json(&doc, id, error),
                     None => result_json(&doc, id, body.get("result").unwrap_or(&Value::Null)),
                 },

@@ -21,6 +21,9 @@
     "linkTerms": "服務條款",
     "linkSupport": "幫助同支援",
     "footer": "用心打造。你的密鑰，你的資產。",
-    "sectionLinks": "連結"
+    "sectionLinks": "連結",
+    "debugMode": "除錯模式",
+    "debugModeBody": "畀本地網絡上嘅 http 網頁用個錢包。只係開發用。",
+    "debugModeRevealed": "而家可以用除錯模式喇"
   }
 }

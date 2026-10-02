@@ -237,7 +237,7 @@ struct SendAssetsParityTests {
             displayTotalUsd: 1, balanceUnknown: unknown, balancePartial: false,
             notice: nil, hidden: false, refreshing: false, lastRefreshedAtMs: nil,
             tokens: tokens, unpricedTokens: [], failedChainIds: [],
-            rateLimitedChainIds: [], bannerChainIds: [], holdingsLoading: loading,
+            rateLimitedChainIds: [], holdingsLoading: loading,
             cachedTotalUsd: nil,
             switcher: BalanceSwitcherViewWire(open: false, loading: false, balances: [])
         )

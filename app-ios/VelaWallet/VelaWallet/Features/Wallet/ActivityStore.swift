@@ -176,6 +176,16 @@ final class ActivityStore {
         ]))
     }
 
+    /// A contact's page opened (`address`) or closed (`nil`): the view then
+    /// carries that contact's rows (`contactRows`, spec 093) — the feed's own
+    /// items, never rows a page builds from raw records.
+    func contactFilter(_ address: String?) {
+        core.dispatch(CoreJSON.string([
+            "type": "contact_filter_changed",
+            "address": address.map { $0 as Any } ?? NSNull(),
+        ]))
+    }
+
     /// Swipe to delete one row. Optimistic in the core: the row leaves the feed
     /// at once and comes back on the next read if the storage write failed.
     func deleteRequested(id: String) {
