@@ -92,9 +92,9 @@ e2e (a burst = one window); core `app_dapp_browser`; `calls-status.test.ts`.
 
 ### Functional Requirements
 
-- **FR-001 (B1)** One build writes the development package (keeps `key`, the parallel space) and the
-  store package (no `key`, no developer pages); CI builds and uploads both; the package test covers
-  both.
+- **FR-001 (B1)** One build writes the development package (keeps `key`, the parallel space), the
+  GitHub-release package (keeps `key`, no developer pages) and the store package (no `key`, no
+  developer pages); CI builds and uploads the two release zips; the package test covers all three.
 - **FR-002 (B2)** The build runs the token check and the wasm copy itself; the package test fails if a
   wasm the built code names is not in the package.
 - **FR-003 (B3)** `docs/store-submission/chrome-web-store.md` answers every dashboard field with

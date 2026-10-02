@@ -22,7 +22,7 @@ close the should-dos the audit found — each rule in the core, each shell drawi
 
 | Item | Decision | Where |
 |---|---|---|
-| B1 | Every build derives `dist-store` from `dist`: manifest minus `key`, `STORE_PRUNE = ['parallel']` (page, boot scripts, data dir). `--zip` writes both zips. CI uploads `chrome-extension` and `chrome-web-store` | `extension/build.mjs`, workflow, `package.test.ts` |
+| B1 | Every build derives two release packages from `dist`, both without the parallel space (`STORE_PRUNE = ['parallel']`: page, boot scripts, data dir): `dist-release` keeps `key` (the GitHub release's "Load unpacked" zip), `dist-store` drops it (the upload). `--zip` zips the two. CI uploads `chrome-extension` and `chrome-web-store` | `extension/build.mjs`, workflow, `package.test.ts` |
 | B2 | `build.mjs` runs `gen-tokens --check` and `sync-wasm` before `vite build`; the package test greps the built JS for `vela_core_bg.<hash>.wasm` and requires each in the package and the current `WASM_URL` among them | same |
 | B3/B4 | One sheet; images by `scripts/store-art/` (wallet tab; side panel via CDP beside a neutral demo dApp at `https://swap.example`; icon and tile from the canonical mark) | `docs/store-submission/` |
 | S1 | Manifest 122; esbuild target 122; install docs ×15 | manifest, site |

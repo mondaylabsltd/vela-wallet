@@ -61,6 +61,13 @@
   batch status, erase
 - [x] T061 every `e2e/extension-*.e2e.ts` on the final build; every suite; results.md
 
+## Phase 8 — Follow-ups (lead, 2026-10-02)
+
+- [x] T080 trim the four strings in 15 locales (−295 B ja + en); budget 141,800
+- [x] T081 the GitHub-release zip from `dist-release` (`key` kept, no parallel space); package test, CI
+- [x] T082 the iOS feedback-suite crash: iOS 17.5 runtime on main and branch alike; 62/62 on iOS 26.2
+- [x] T083 owner decisions recorded in the sheet (category, Unlisted, J1–J4, Non-trader)
+
 ## Deferred
 
 - [ ] T070 S9 balance half: the last known balance (not $0.00 / "Deposit your first asset") after an

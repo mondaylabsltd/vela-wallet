@@ -11,7 +11,8 @@ ledger (`specs/080-site-content-accuracy/claim-ledger.md`, ids `C-…`). Line nu
 Operator / data controller: **MONDAY LABS LTD** (UK). Facts and tone follow the mobile sheets
 [`privacy-and-review.md`](privacy-and-review.md) and [`privacy-evidence.md`](privacy-evidence.md).
 
-Decisions only the owner can make are marked **Owner decision**.
+The owner's decisions (2026-10-02) are recorded where they apply, marked **Owner decision
+(2026-10-02)**.
 
 ---
 
@@ -25,7 +26,8 @@ pnpm package:extension        # = node extension/build.mjs --zip
 
 The upload is `app-web/vela-wallet/vela-wallet-extension-0.9.6-chrome-web-store.zip` (the store
 package `extension/dist-store`, zipped by contents). The other zip, without `-chrome-web-store`, is the
-development package (it keeps `key` and the parallel space) and must **not** be uploaded.
+GitHub release's "Load unpacked" package (`extension/dist-release`: it keeps `key` so a tester's id
+stays the same) and must **not** be uploaded. Neither carries the parallel space.
 
 | # | Check | How | Why / evidence |
 |---|---|---|---|
@@ -128,7 +130,7 @@ Why / evidence, paragraph by paragraph:
   repetition of the same keyword more than 5 times": the text is prose (3,855 characters; "wallet"
   and "key" occur 17 times each in sentences), and the one list, the networks, names each network once.
 
-### Category — **Owner decision**
+### Category — **Owner decision (2026-10-02)**
 
 ```
 Productivity › Workflow & Planning
@@ -296,28 +298,25 @@ authenticator names `aaguid-explorer.awesometools.dev`; plus RPC nodes and publi
 | User activity | No | No click, scroll, mouse, keystroke or network monitoring; no `webRequest` permission (`manifest.json:30`). The extension only receives requests a site sends to it. |
 | Website content | **Yes** | Conservative: the provider receives what a site sends to the wallet — the transaction, message or typed data to sign, and node reads. Approved requests are kept in Activity (message up to 8,000 characters, `transactions-model.ts:65`; the request up to 24,000, `src/lib/services/dapp-history.ts:26`); reads are forwarded to the person's RPC node or relay (`background.js:1070-1086`). The signing sheet loads the site's own icon from the site (`src/lib/signing/live.ts:126-131`). The page's DOM, text, images and forms are never read (`content.js:42`). |
 
-**Owner decision — judgement calls:**
-- **J1. IP addresses as "Location".** The form's Location examples include "IP address". Every server
-  the wallet talks to sees the IP (Cloudflare for Vela's services; RPC nodes). Vela's code stores none:
+**Owner decision (2026-10-02) — judgement calls:**
+- **J1. IP addresses as "Location": not ticked**, matching the Play answer (§6.5 #7). Every server the
+  wallet talks to sees the IP (Cloudflare for Vela's services; RPC nodes); Vela's code stores none —
   the index keeps a salted 64-bit hash for at most 60 s for rate limits, the bug-report endpoint keeps
-  it in memory for its rate limiter, the relay reads none (privacy-evidence §2.1, §2.2, §3a, §6.5 #7).
-  Recommendation: **No**, matching the Play answer (§6.5 #7); the privacy policy already names
-  Cloudflare and RPC nodes as seeing the IP. Ticking Yes is also defensible and costs nothing but a
-  label.
-- **J2. Website content.** Ticked Yes on the lead's conservative reading. A narrower reading (only
-  page DOM counts) would allow No; Yes avoids a Purple Nickel / Purple Lithium mismatch with the
-  privacy policy, which describes these requests.
+  it in memory for its rate limiter, the relay reads none (privacy-evidence §2.1, §2.2, §3a, §6.5 #7);
+  the privacy policy names Cloudflare and RPC nodes as seeing it.
+- **J2. Website content: Yes** (kept). A narrower reading (only page DOM counts) would allow No; Yes
+  avoids a Purple Nickel / Purple Lithium mismatch with the privacy policy, which describes these
+  requests.
 - **J3. Bug report.** Sent only when the person writes one and taps Send: typed text, device lines
   (version, browser and OS name, language, names of unreachable networks, failure counters including
   the worker's — never site names), up to five re-encoded screenshots; it becomes a **public** GitHub
   issue via `getvela.app/api/bug-report`, screenshots kept in R2 until deleted
   (`src/lib/services/bug-report.ts:111-140, 167-206, 489-499`; privacy-evidence §3a). The form has
   no "user-generated content" type; it is covered by the privacy policy's Bug reports section.
-  Recommendation: no extra tick. If the owner reads a report as a message to us, tick **Personal
-  communications** too.
+  **No extra tick.**
 - **J4. Authentication information and the on-chain registry.** Chrome's policy says authentication
   information must not be publicly disclosed. What is published is public keys and credential IDs,
-  which cannot authenticate anyone; be ready to say so if asked.
+  which cannot authenticate anyone; be ready to say so if asked. (Kept as a note.)
 
 Evidence that the 089 draft (research R4 "Data use") was wrong: bug reports send typed text,
 device lines and screenshots, not "counters only"; Web history is handled locally, so it is "Yes".
@@ -440,25 +439,13 @@ Why / evidence:
 ## 11. Account → Trader / non-trader declaration (EU Digital Services Act)
 
 ```
-Trader
+Non-trader
 ```
 
-Why: MONDAY LABS LTD, a company, offers the product in the course of its business (its relay is paid a
-fee on each transaction, C-fee-1; the phone apps will be sold as a one-time purchase, C-plat-1). A trader is "any natural person or any legal person, who is acting for
-purposes relating to his trade, business, craft or profession"
-([Trader FAQ](https://developer.chrome.com/docs/webstore/program-policies/trader-verification-faq)).
-
-What the dashboard will **publish at the bottom of the listing** (Trader FAQ): legal name, address and
-phone number. The values (from `app-web/getvela.app/src/routes/privacy/+page.svelte:23-27`):
-
-| Field | Value | Note |
-|---|---|---|
-| Legal name | MONDAY LABS LTD | company number 16988118 (England and Wales) |
-| Address | 61 Bridge Street, Kington, HR5 3DJ, United Kingdom | public |
-| Phone | **Owner decision** — not in the repo | public, and verified by SMS: use a business number that can receive SMS, not a personal mobile |
-| Email | hello@mondaylabs.ltd | the trader contact email; can be changed in the dashboard without re-verification (Trader FAQ). Whether the dashboard shows it on the listing: confirm on the form |
-
-MetaMask declares itself a trader; Rabby does not (their listings, linked in section 2).
+**Owner decision (2026-10-02): Non-trader.** For reference, the
+[Trader FAQ](https://developer.chrome.com/docs/webstore/program-policies/trader-verification-faq)
+defines a trader as "any natural person or any legal person, who is acting for purposes relating to
+his trade, business, craft or profession"; the declaration can be changed in the dashboard later.
 
 ---
 
@@ -474,11 +461,10 @@ and large or hard-to-review code. This item has all of these.
 After approval the item can be staged and published by hand within 30 days, then it reverts to a draft
 ([Publish](https://developer.chrome.com/docs/webstore/publish)).
 
-**Owner decision — visibility for the test listing:** **Private** (trusted testers or a Google Group)
-is meant for testing before launch; **Unlisted** installs from the URL without appearing in search
-([Distribution](https://developer.chrome.com/docs/webstore/cws-dashboard-distribution)). A public
-listing would also require updating the site's install page and claim ledger C-plat-1 ("not yet on the
-Chrome Web Store").
+**Owner decision (2026-10-02) — visibility for the test listing: Unlisted** — it installs from its
+URL without appearing in search ([Distribution](https://developer.chrome.com/docs/webstore/cws-dashboard-distribution)).
+Going public later also means updating the site's install page and claim ledger C-plat-1 ("not yet on
+the Chrome Web Store").
 
 If rejected: the publisher email receives the violation and a reference ID; fix and resubmit, or appeal
 from the dashboard or the One Stop Support form (reply typically within three days). The likely
