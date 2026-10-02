@@ -105,6 +105,44 @@ class ExploreLiveTest {
     }
 
     /**
+     * Issue #329: the star lights for what it pins — the address the bar
+     * names. A first load that failed before anything committed has no engine
+     * origin; the star pinned nothing then, and could not show a pin.
+     */
+    @Test
+    fun `the star follows the failed address the bar names`() {
+        val view = ExploreView(
+            favorites = listOf(uniswap),
+            tabs = listOf(ExploreTab("t1", "https://app.uniswap.org/", "", "app.uniswap.org")),
+            selected_tab = "t1",
+            ready = true,
+        )
+        val failure = uniffi.vela_core_uniffi.BrowserLoadFailure(`class` = "offline", reasonKey = "explore.loadOffline", autoRetry = true)
+        val engine = EngineState(failed = true, failure = failure, failedUrl = "https://app.uniswap.org/")
+        val model = ExploreLive.home(fallback, view, BhistView(), engine, strings)
+        assertEquals("app.uniswap.org", model.browser.host)
+        assertTrue("the failed site is a favourite, and the star says so", model.browser.bookmarked)
+    }
+
+    /**
+     * The wiring the rule needs (issue #329): the star pins what the bar names,
+     * by the core's rule over the tab's last visit — never the engine's title,
+     * which was the WebView's error page's ("网页无法打开") — and the visit is
+     * remembered only from a load the core's visit rule accepted.
+     */
+    @Test
+    fun `the star pins the bar's address under the core's name rule`() {
+        val root = System.getProperty("vela.repo.root") ?: error("vela.repo.root not set — run via Gradle")
+        val source = File(root, "app-android/vela-wallet/app/src/main/java/app/getvela/wallet/feature/browser/core/BrowserController.kt").readText()
+        val toggle = source.substringAfter("fun toggleFavorite()").substringBefore("fun removeFavorite(")
+        assertTrue(toggle.contains("addressBar().url"))
+        assertTrue(toggle.contains("browserPinnedTitle(url, lastVisits[engine.id])"))
+        assertFalse("never the engine's own title", toggle.contains("state.title"))
+        val visit = source.substringAfter("browserLoadVisit(").substringBefore("scope.launch")
+        assertTrue("the last visit is the core's visit", visit.contains("lastVisits[tab] = visit"))
+    }
+
+    /**
      * Spec 082 RE1 (G28): what the bar names is the core's rule. A fresh tab
      * names nothing — never the drawn fixture's host with an open lock; a
      * load pending in an empty tab names its host with no lock; a load under

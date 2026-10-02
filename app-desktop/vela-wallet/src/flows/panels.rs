@@ -120,6 +120,9 @@ pub struct PanelActions {
     pub recipient_field: Option<AddressField>,
     /// DSD2L, live: the Max chip.
     pub tap_max: Option<Click>,
+    /// DSD2L, live: the token card itself — back to the asset picker with the
+    /// payee kept (issue #326). Bound only where the core offers it.
+    pub change_token: Option<Click>,
     /// DSD2L, live: ⇄ — type the amount in money, or back in the token (#197).
     pub toggle_denom: Option<Click>,
     /// DSD2eL, live: one listener per contact row, in the book's order.
@@ -411,6 +414,7 @@ pub fn render(
             model,
             theme,
             icons,
+            identicons,
             window,
             actions.search,
             actions.open_send_form,
@@ -951,8 +955,9 @@ pub enum DeleteStyle {
     Danger,
 }
 
-/// The rule: pending — the one status that wears the info tone (the live
-/// builder's `FeedTxStatus::Pending`) — is quiet; the rest are danger.
+/// The rule: pending — the status that wears the info tone (the live
+/// builder's `FeedTxStatus::Pending`, and `Unknown`, a pending record nothing
+/// will settle) — is quiet; the rest are danger.
 #[must_use]
 pub fn delete_style(status: &StatusChip) -> DeleteStyle {
     match status.tone {
@@ -1490,6 +1495,7 @@ fn send_pick(
     model: &SendPick,
     theme: &Theme,
     icons: &mut IconCache,
+    identicons: &mut IdenticonCache,
     window: &Window,
     search: Option<AddressField>,
     mut open_form: Option<Click>,
@@ -1508,7 +1514,18 @@ fn send_pick(
         return column().child(notice_card(notice, theme, notice_action, None));
     }
     let query = search.as_ref().map(|f| f.value.clone()).unwrap_or_default();
-    let mut col = column()
+    let mut col = column();
+    // Whom this is for, above what to send (issue #332): a scanned code or a
+    // contact lands here, and the person confirms the payee while choosing.
+    if let Some(recipient) = &model.recipient {
+        col = col.child(
+            div()
+                .border_b_1()
+                .border_color(theme.divider)
+                .child(fact_row(theme, icons, identicons, recipient, None)),
+        );
+    }
+    col = col
         .child(flow_search(
             theme,
             icons,
@@ -1521,11 +1538,14 @@ fn send_pick(
     // SD1b's chain lock, in the corpus's own sentence: the first pick names
     // the network and the greying that follows is explained rather than left
     // to be guessed at.
-    if let Some((chain_id, colour, letter, text)) = model
-        .selection
-        .as_ref()
-        .and_then(|selection| selection.notice.clone())
-    {
+    // Issue #312: the network a scanned code named comes first — it is also
+    // why a sweep can only be on that network.
+    if let Some((chain_id, colour, letter, text)) = model.network_notice.clone().or_else(|| {
+        model
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.notice.clone())
+    }) {
         // The web's `NoticeBanner` (078 F-10): raised, padded 8/12, radius 12,
         // 11 on 1.4, with the chain's own logo — the tinted letter only while
         // it loads or where there is none.
@@ -1705,10 +1725,12 @@ fn send_form_parts(
     let live = actions.amount_field.is_some();
     let mut card = token_header_card(
         theme,
+        icons,
         mark,
         symbol.clone(),
         detail.clone(),
         max.clone().filter(|_| !live),
+        actions.change_token.take(),
     );
     if live && let Some(max) = max {
         card = card.child(clickable(

@@ -11,6 +11,7 @@ pub mod live;
 pub mod model;
 
 use gpui::SharedString;
+use vela_core::app::contacts::ContactImportFailure;
 
 use crate::loc::Loc;
 
@@ -45,6 +46,8 @@ pub struct ContactsStrings {
     pub export_body: SharedString,
     pub import_fail_title: SharedString,
     pub import_fail_body: SharedString,
+    /// A file in a legacy encoding: how to save it as UTF-8 (issue 333).
+    pub import_fail_encoding: SharedString,
     /// The add/edit sheet. 030 called this "blocked on drawn UI that does not
     /// exist" — the WORDS existed all along, and by 031 the app had a dialog
     /// idiom and a text field to put them in.
@@ -98,6 +101,21 @@ pub struct ContactsStrings {
 }
 
 impl ContactsStrings {
+    /// The refusal an import shows: a file in a legacy encoding is told how
+    /// to save it (issue 333); any other refusal — or a file that could not
+    /// even be read — says which files the book reads.
+    #[must_use]
+    pub fn import_refusal(
+        &self,
+        failure: Option<ContactImportFailure>,
+    ) -> (SharedString, SharedString) {
+        let body = match failure {
+            Some(ContactImportFailure::UnsupportedEncoding) => &self.import_fail_encoding,
+            _ => &self.import_fail_body,
+        };
+        (self.import_fail_title.clone(), body.clone())
+    }
+
     pub fn resolve(loc: &Loc) -> Self {
         let s = |key: &str| loc.t(key);
         let raw = |key: &str| loc.t(key).to_string();
@@ -124,6 +142,7 @@ impl ContactsStrings {
             export_body: s("contacts.exportBody"),
             import_fail_title: s("contacts.importFailTitle"),
             import_fail_body: s("contacts.importFailBody"),
+            import_fail_encoding: s("contacts.importFailEncoding"),
             add_title: s("contacts.addTitle"),
             edit_title: s("contacts.editTitle"),
             save_to_contacts: s("contacts.saveToContacts"),
@@ -192,6 +211,10 @@ mod tests {
             (s.import_done_body.as_str(), "contacts.importDoneBody"),
             (s.import_fail_title.as_ref(), "contacts.importFailTitle"),
             (s.import_fail_body.as_ref(), "contacts.importFailBody"),
+            (
+                s.import_fail_encoding.as_ref(),
+                "contacts.importFailEncoding",
+            ),
             (s.add_title.as_ref(), "contacts.addTitle"),
             (s.edit_title.as_ref(), "contacts.editTitle"),
             (s.name_label.as_ref(), "contacts.nameLabel"),
@@ -213,5 +236,23 @@ mod tests {
             s.no_results.contains("{{query}}"),
             "noResults must be a template"
         );
+    }
+
+    /// Issue 333: a legacy-encoded file is told how to save it; every other
+    /// refusal, and an unreadable file, keeps the general sentence.
+    #[test]
+    fn an_encoding_refusal_says_how_to_save_the_file() {
+        let s = ContactsStrings::resolve(&Loc::from_env());
+        let (title, body) = s.import_refusal(Some(ContactImportFailure::UnsupportedEncoding));
+        assert_eq!(title, s.import_fail_title);
+        assert_eq!(body, s.import_fail_encoding);
+        assert!(body.contains("UTF-8"), "{body}");
+        for other in [
+            Some(ContactImportFailure::NoAddressColumn),
+            Some(ContactImportFailure::MalformedJson),
+            None,
+        ] {
+            assert_eq!(s.import_refusal(other).1, s.import_fail_body);
+        }
     }
 }

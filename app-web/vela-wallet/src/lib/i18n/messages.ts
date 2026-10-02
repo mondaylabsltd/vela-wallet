@@ -142,6 +142,8 @@ const FLOW_KEYS_SCREEN_KEYS = [
 	'onboarding.create.methodPlatformBody',
 	'onboarding.create.methodHybridTitle',
 	'onboarding.create.methodHybridBody',
+	// 087 F02: the sign-in sheet's phone row scans — it creates nothing.
+	'explore.scan',
 	'onboarding.create.methodHybridUnavailable',
 	// Why a route is not on offer for THIS key set (spec 075, 2026-09-23).
 	'onboarding.create.methodBlockedHint',

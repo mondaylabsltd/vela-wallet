@@ -12,6 +12,7 @@ use vela_core::app::browser_load::{
     AddressBar, Asked, BarLock, EngineSample, EngineVerdict, LoadFailureClass as C, LoadFinished,
     LoadPlatform as P, LoadWatch, Probed, RetryAction, SiteLabel, ENGINE_LIVE_PROGRESS, GIVE_UP_MS,
 };
+use vela_core::app::browser_load::{pinned_title, Visit};
 
 fn class(platform: P, code: i64, domain: Option<&str>) -> Option<C> {
     classify(platform, code, domain, false).map(|failure| failure.class)
@@ -185,12 +186,12 @@ fn every_failure_carries_its_sentence_and_retry_verdict() {
         failure.map(|f| (f.reason_key, f.auto_retry)),
         Some(("explore.loadOffline".to_owned(), true))
     );
-    // Offline, timeout and refused share one sentence; the class still
-    // drives the retry schedule.
+    // Offline and timeout share one sentence; the class still drives the
+    // retry schedule. A refusal is not the network (087 F15).
     for (c, key) in [
         (C::Offline, "explore.loadOffline"),
         (C::Timeout, "explore.loadOffline"),
-        (C::Refused, "explore.loadOffline"),
+        (C::Refused, "connect.browser.loadFailed"),
         (C::NotFound, "explore.loadNotFound"),
         (C::Certificate, "explore.loadCertificate"),
         (C::Other, "connect.browser.loadFailed"),
@@ -359,13 +360,40 @@ fn a_silent_load_is_probed_once() {
     assert_eq!(quick.watchdog(generation), None);
 }
 
+/// 087 F15: a connection REFUSED — a loopback dev server that is not running,
+/// seen on the Xiaomi at 127.0.0.1:8137 — never says the network is unstable.
+/// Every platform's refusal code reads the generic sentence and still retries
+/// on the network's schedule (a server coming up answers the next attempt).
+#[test]
+fn a_refused_connection_never_blames_the_network() {
+    for (platform, code, domain) in [
+        (P::Android, -6, None),
+        (P::Apple, -1004, Some("NSURLErrorDomain")),
+        (P::Probe, probe_code::REFUSED, None),
+    ] {
+        let failure = classify(platform, code, domain, false)
+            .unwrap_or_else(|| unreachable!("{platform:?} {code} is a failure"));
+        assert_eq!(failure.class, C::Refused, "{platform:?} {code}");
+        assert_eq!(failure.reason_key, "connect.browser.loadFailed");
+        assert_ne!(failure.reason_key, "explore.loadOffline");
+        assert!(failure.auto_retry);
+    }
+    assert_eq!(retry_delay_ms(C::Refused, 1), retry_delay_ms(C::Offline, 1));
+    assert!(retry_when_network_returns(C::Refused));
+}
+
 /// Each probe failure is the core's class, with its sentence and whether
 /// it retries by itself.
 #[test]
 fn a_failed_probe_is_classified_by_the_core() {
     for (code, class, key, auto) in [
         (probe_code::DNS, C::NotFound, "explore.loadNotFound", false),
-        (probe_code::REFUSED, C::Refused, "explore.loadOffline", true),
+        (
+            probe_code::REFUSED,
+            C::Refused,
+            "connect.browser.loadFailed",
+            true,
+        ),
         (probe_code::TIMEOUT, C::Timeout, "explore.loadOffline", true),
         (
             probe_code::TLS,
@@ -1063,6 +1091,99 @@ fn a_site_named_by_its_host_is_said_once() {
         label("app.uniswap.org", None)
     );
     assert_eq!(site_label("Uniswap", ""), label("Uniswap", None));
+}
+
+// ---------------------------------------------------------------------------
+// Spec 086 (issue #329): the title a page is pinned under
+// ---------------------------------------------------------------------------
+
+/// What a shell reads from the document when a load finishes, made a visit
+/// by the core's own rule — the only door a title has into `pinned_title`.
+fn visit_of(url: &str, title: &str, failed: bool) -> Option<Visit> {
+    visit_to_record(LoadFinished {
+        url: url.to_owned(),
+        title: title.to_owned(),
+        icon: None,
+        main_frame_failed: failed,
+        http_status: None,
+    })
+}
+
+/// Issue #329: app.uniswap.org failed to load and was pinned as "网页无法打开",
+/// the WebView's own error page. That page is never a visit — failed, or read
+/// at its `chrome-error://` address — so it never names a favourite.
+#[test]
+fn an_engine_error_page_never_names_a_favourite() {
+    let pinned = "https://app.uniswap.org/";
+    let error_page = visit_of("chrome-error://chromewebdata/", "网页无法打开", false);
+    assert_eq!(
+        error_page, None,
+        "an engine document is no visit, failed flag or not"
+    );
+    assert_eq!(pinned_title(pinned, error_page.as_ref()), None);
+    let failed = visit_of(pinned, "网页无法打开", true);
+    assert_eq!(pinned_title(pinned, failed.as_ref()), None);
+    // …and the favourite is then its host (`explore_sites`: no title → host).
+}
+
+/// The site's last good title survives a later failure of the same site.
+#[test]
+fn a_site_keeps_its_last_good_title_under_a_failure() {
+    let good = visit_of("https://app.uniswap.org/swap", "Uniswap Interface", false);
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", good.as_ref()),
+        Some("Uniswap Interface".to_owned()),
+        "same origin, another path: the same site"
+    );
+    assert_eq!(
+        pinned_title("https://APP.Uniswap.org/explore", good.as_ref()),
+        Some("Uniswap Interface".to_owned()),
+        "the host's case is not another site"
+    );
+}
+
+/// The page before is another site: its title never names this one — the
+/// failed address, or a load that has no title yet, is pinned by its host.
+#[test]
+fn another_site_s_title_never_names_a_favourite() {
+    let before = visit_of("https://bscscan.com/", "BscScan", false);
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", before.as_ref()),
+        None
+    );
+    assert_eq!(
+        pinned_title("http://bscscan.com/", before.as_ref()),
+        None,
+        "another scheme"
+    );
+    assert_eq!(
+        pinned_title("https://bscscan.com:8443/", before.as_ref()),
+        None,
+        "another port"
+    );
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", None),
+        None,
+        "nothing loaded yet"
+    );
+}
+
+/// A visit with no title, a blank one, or an address that is no web page
+/// gives no title — never an empty name.
+#[test]
+fn no_title_is_no_title() {
+    let untitled = visit_of("https://app.uniswap.org/", "   ", false);
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", untitled.as_ref()),
+        None
+    );
+    let good = visit_of("https://app.uniswap.org/", "  Uniswap Interface  ", false);
+    assert_eq!(
+        pinned_title("https://app.uniswap.org/", good.as_ref()),
+        Some("Uniswap Interface".to_owned())
+    );
+    assert_eq!(pinned_title("about:blank", good.as_ref()), None);
+    assert_eq!(pinned_title("", good.as_ref()), None);
 }
 
 // ---------------------------------------------------------------------------
