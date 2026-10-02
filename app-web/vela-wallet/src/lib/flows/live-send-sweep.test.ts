@@ -80,6 +80,8 @@ const BASE: SendView = {
 	tokens: [ETH, USDC, MATIC],
 	selected_token: null,
 	recipient: '',
+	request_chain_id: null,
+	can_change_token: false,
 	amount: '',
 	amount_fiat_code: null,
 	denom_toggle_shown: false,

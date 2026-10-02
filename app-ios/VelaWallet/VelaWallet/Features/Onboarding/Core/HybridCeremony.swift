@@ -28,12 +28,14 @@ import VelaCore
 
 final class HybridCeremony {
     private let prompts: SmartCardCtapCeremony.Prompts
-    /// Show (or clear, with nil) the caBLE QR — the ViewModel renders it.
-    private let showQr: @MainActor (String?) -> Void
+    /// Show (or clear, with nil) the caBLE QR — the ViewModel renders it —
+    /// and whether the phone is to CREATE a key (087 F02: a sign-in's card
+    /// must not say "create").
+    private let showQr: @MainActor (String?, Bool) -> Void
 
     @MainActor private var scanner: HybridCableScanner?
 
-    init(prompts: SmartCardCtapCeremony.Prompts, showQr: @escaping @MainActor (String?) -> Void) {
+    init(prompts: SmartCardCtapCeremony.Prompts, showQr: @escaping @MainActor (String?, Bool) -> Void) {
         self.prompts = prompts
         self.showQr = showQr
     }
@@ -115,7 +117,7 @@ final class HybridCeremony {
             self.scanner = s
             return s
         }
-        await MainActor.run { showQr(qr) }
+        await MainActor.run { showQr(qr, !forGet) }
 
         var openPort: CableConnPort?
         do {
@@ -188,7 +190,7 @@ final class HybridCeremony {
         await MainActor.run {
             scanner.cancel()
             if self.scanner === scanner { self.scanner = nil }
-            self.showQr(nil)
+            self.showQr(nil, false)
         }
     }
 

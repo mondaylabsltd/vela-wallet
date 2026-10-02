@@ -104,6 +104,9 @@ enum class ClearSurface {
 
     /** Spec 082 RC1: empty calldata — a plain value transfer, drawn from [ClearSigningView.plain_send]. */
     @SerialName("plain_send") PlainSend,
+
+    /** 089 S1: a batch of two or more calls — every call drawn, from [ClearSigningView.batch]. */
+    @SerialName("batch") Batch,
 }
 
 /**
@@ -118,6 +121,33 @@ data class ClearPlainSend(
     val value_wei: String,
     val amount: String,
     val no_value: Boolean = false,
+)
+
+/**
+ * 089 S1: one call of a batch as the core read it — by the ladder a lone
+ * transaction climbs. [surface] is `ClearSign` (from [result]), `PlainSend`
+ * (from [plain_send]) or `BlindTransaction`; never omitted.
+ */
+@Serializable
+data class ClearBatchCall(
+    val index: Int,
+    val surface: ClearSurface = ClearSurface.BlindTransaction,
+    val result: ClearSignResult? = null,
+    val plain_send: ClearPlainSend? = null,
+    val to: String? = null,
+    val data_bytes: Int = 0,
+    val value_wei: String? = null,
+    val amount: String? = null,
+    val risk: ClearRisk = ClearRisk.Caution,
+)
+
+/** 089 S1: every call of a batch, what it moves in all, and its worst call's risk. */
+@Serializable
+data class ClearBatchView(
+    val calls: List<ClearBatchCall> = emptyList(),
+    val total_value_wei: String? = null,
+    val total_amount: String? = null,
+    val risk: ClearRisk = ClearRisk.Caution,
 )
 
 @Serializable
@@ -308,6 +338,8 @@ data class ClearSigningView(
     val danger_haptic: Boolean = false,
     /** Some iff [surface] is [ClearSurface.PlainSend]. */
     val plain_send: ClearPlainSend? = null,
+    /** 089 S1: Some iff [surface] is [ClearSurface.Batch] — and then [result] and [plain_send] are null. */
+    val batch: ClearBatchView? = null,
 )
 
 @Serializable
@@ -370,6 +402,15 @@ sealed class ClearSigningEvent {
         val to: String? = null,
         val data: String? = null,
         val value: String? = null,
+        val chain_id: Int,
+        val locale: ClearLocale = ClearLocale(),
+    ) : ClearSigningEvent()
+
+    /** 089 S1: a `wallet_sendCalls`, handed over whole — the core reads EVERY call. */
+    @Serializable
+    @SerialName("resolve_batch")
+    data class ResolveBatch(
+        val params_json: String,
         val chain_id: Int,
         val locale: ClearLocale = ClearLocale(),
     ) : ClearSigningEvent()

@@ -15,7 +15,7 @@
 
 <main class="container">
 	<h1>Privacy Policy</h1>
-	<p class="updated">Last updated: 26 September 2026</p>
+	<p class="updated">Last updated: 1 October 2026</p>
 
 	<section>
 		<h2>Who we are</h2>
@@ -129,6 +129,13 @@
 				by Vela's founder) — receives only an authenticator model ID, to show the name of your
 				security key or password manager.
 			</li>
+			<li>
+				<strong>Trusted Signer</strong> (<code>sign.getvela.app</code>), if you chose it as the way
+				you sign — a single static page. Our server receives only the request for the page itself:
+				the signing request travels in the part of the link after "#", which browsers never send to
+				a server, and the page's own security policy stops it from making any network request. Its
+				answer goes straight back to the Vela app on your device.
+			</li>
 		</ul>
 		<p>We do not sell or share this data, build profiles from it, or use it for advertising.</p>
 	</section>
@@ -171,9 +178,14 @@
 		</p>
 		<p>
 			<strong>Signing out</strong> removes your accounts from the app but keeps your history,
-			contacts and settings. <strong>Settings → Erase this device</strong> deletes them in the web wallet
-			and Android app; erasing is not yet complete on iPhone and desktop, where uninstalling (and, on
-			desktop, deleting the app's folder in your user settings directory) removes the rest.
+			contacts and settings. <strong>Settings → Erase This Device</strong> deletes them in every
+			Vela app — iPhone, Android, desktop and the web wallet — and the iPhone, Android and desktop
+			apps also clear their in-app browser's cookies and site data. It keeps one record until its
+			job is done: a new wallet's public keys that have not yet reached the public-key index,
+			retried on the next launch. On the desktop app for Mac, the in-app browser's site data is
+			cleared when the browser has been opened since the app started.
+			<a href="/delete">Delete your data</a> gives the steps, what our services keep and for how long,
+			and how to ask us to delete it sooner.
 		</p>
 	</section>
 
@@ -251,9 +263,9 @@
 		<h2>Your rights</h2>
 		<p>
 			You can ask what personal data our services hold about you, and ask us to delete it, at
-			<a href="mailto:hello@mondaylabs.ltd">hello@mondaylabs.ltd</a>. We keep very little, and we
-			cannot delete data written on-chain. You can also complain to the UK Information
-			Commissioner's Office.
+			<a href="mailto:hello@mondaylabs.ltd">hello@mondaylabs.ltd</a>;
+			<a href="/delete">Delete your data</a> says what to include. We keep very little, and we cannot
+			delete data written on-chain. You can also complain to the UK Information Commissioner's Office.
 		</p>
 	</section>
 

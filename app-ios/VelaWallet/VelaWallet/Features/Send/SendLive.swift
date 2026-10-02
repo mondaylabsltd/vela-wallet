@@ -53,6 +53,40 @@ enum SendLive {
         }
     }
 
+    /// The drawn states the send machine owns. Anything else is still a
+    /// drawing.
+    static let flowStates: Set<FlowStateId> = [
+        .sd1, .sd1b, .sd2, .sd2b, .sd2c, .sd2d, .sd2e, .sd2f, .sd3, .sd3b, .sd3c, .sd4a, .sd4b, .sd4c,
+    ]
+
+    /// What the header's back arrow asks of the send machine (087 F27).
+    enum Back: Equatable {
+        /// `back`: the core steps back — confirm → form, form → picker (a
+        /// recipient handed in survives that, #332) — and from the picker it
+        /// closes the journey itself.
+        case step
+        /// `done`: nothing in this journey lies behind the screen — a receipt,
+        /// or a request still resolving or one this wallet cannot honour,
+        /// which are drawn AS the picker. The core closes the journey.
+        case leave
+    }
+
+    /// The arrow, by the core's stage — never by the shell's stack.
+    ///
+    /// The arrow popped the shell's `FlowNav` and the machine never heard it:
+    /// from the form it dropped the person on the home (the stack holds `.sd1`
+    /// for the whole journey), and the next 转账 resumed the abandoned journey
+    /// — the last code's recipient and network scope on a new send. The lock
+    /// stages leave rather than step: their `back` moves the machine between
+    /// steps the person cannot see, and the same screen would need a second
+    /// tap.
+    static func back(_ view: SendViewWire) -> Back {
+        switch view.stage {
+        case .selectToken, .enterDetails, .confirm: return .step
+        case .receipt, .lockResolving, .lockError: return .leave
+        }
+    }
+
     // MARK: - SD1, the token picker
 
     static func pick(
@@ -64,8 +98,14 @@ enum SendLive {
         // sweep's picking flag, and the chips were drawn in 021 with nothing
         // behind them.
         let shown = view.tokens.filter { matches(classFilter, token: $0) }
+        // Issue #312: no network pill while a scanned code names the network —
+        // the notice says which one, and a pill that opened the network sheet
+        // there could choose nothing the list would follow.
+        var header = model.header
+        if view.requestChainId != nil { header.pill = nil }
         return SendPickModel(
-            header: model.header,
+            header: header,
+            recipient: pickRecipient(view, loc: loc),
             searchPlaceholder: model.searchPlaceholder,
             // Exactly one chip lit, and it is the one in force.
             filters: model.filters.map { chip in
@@ -81,7 +121,8 @@ enum SendLive {
             //
             // The core's own `添加该网络` affordance has no drawn home on this
             // client; recorded in results rather than invented.
-            notice: lockNotice(view, loc: loc) ?? (picking && view.multiChainId != nil
+            notice: lockNotice(view, loc: loc) ?? requestNotice(view, loc: loc)
+                ?? (picking && view.multiChainId != nil
                 ? SendNoticeModel(
                     mark: model.notice?.mark
                         ?? TokenMarkModel(
@@ -114,11 +155,47 @@ enum SendLive {
                     // Nothing ticked is nothing to send.
                     accent: !view.multiSelectedIds.isEmpty
                 )
-                : model.cta
+                : model.cta,
+            // An empty list says why, once the core has looked: on a network a
+            // scanned code named, "nothing here" is the answer (issue #312).
+            empty: view.loading ? nil
+                : loc.t(view.tokens.isEmpty ? "send.noTokensWithBalance" : "send.noMatchingTokens")
         )
     }
 
 
+
+    /// Issue #312: the network a scanned code named, in the receive card's own
+    /// words ("BNB Chain payments only"). Above an empty list it is also why
+    /// the list is empty.
+    static func requestNotice(_ view: SendViewWire, loc: Loc) -> SendNoticeModel? {
+        guard let chainId = view.requestChainId else { return nil }
+        let meta = ChainCatalog.meta(chainId)
+        return SendNoticeModel(
+            mark: TokenMarkModel.chain(
+                chainId: chainId, symbol: meta?.nativeSymbol ?? "", color: chainColor(chainId)
+            ),
+            text: loc.t("receive.shareCardNetworkNote", vars: [
+                "network": meta?.displayName ?? "Chain \(chainId)",
+            ])
+        )
+    }
+
+    /// Issue #332: the picker's "To" line — the recipient the core already
+    /// holds, worded as the confirm page words it, so the person sees whom
+    /// they are paying while they choose what. Nobody held, no line; artwork
+    /// only for a real address (the founder's anti-poisoning rule).
+    static func pickRecipient(_ view: SendViewWire, loc: Loc) -> FactRowModel? {
+        let address = view.recipient.trimmingCharacters(in: .whitespaces)
+        guard !address.isEmpty else { return nil }
+        let name = view.recipientIdentity?.name
+        return FactRowModel(
+            label: loc.t("send.toLabel"),
+            value: name.map { "\($0) · \(AddressText.short(address))" } ?? AddressText.short(address),
+            lead: isAddress(address) ? .identicon(address) : nil,
+            mono: name == nil
+        )
+    }
 
     /// Which class a holding belongs to.
     ///
@@ -252,7 +329,10 @@ enum SendLive {
                 // figure on the home row are one number, digit for digit. The
                 // core's full precision used to go on this line unrounded.
                 detail: "\(chain) · " + loc.t("send.balanceLabel", vars: ["amount": WalletLive.tokenAmountText(held.balance)]),
-                max: model.token?.max
+                max: model.token?.max,
+                // Issue #326: the card is the way to another asset, where the
+                // core says the asset is the payer's to change.
+                change: view.canChangeToken == true ? loc.t("send.selectTokenTitle") : nil
             )
         }
 
@@ -1318,7 +1398,9 @@ enum SendLive {
         let note: (text: String, error: Bool)? =
             if batch.fileError {
                 (
-                    "\(loc.t("send.batchImportFailedTitle"))\n\(loc.t("send.batchImportFailedBody"))",
+                    // 087: a legacy code page says how to save the file — the
+                    // contacts import's sentence — not "use a CSV", which it is.
+                    "\(loc.t("send.batchImportFailedTitle"))\n\(loc.t(batch.fileFailure == .unsupportedEncoding ? "contacts.importFailEncoding" : "send.batchImportFailedBody"))",
                     true
                 )
             } else if batch.overBalance {

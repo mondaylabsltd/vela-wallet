@@ -442,14 +442,14 @@ private struct AddMethodPicker: View {
                 // Signer — but only those that would mint for THIS set's
                 // relying party can add to it.
                 let available = allowed.contains(method)
-                let copy = methodCopy(method)
+                let copy = methodCopy(method, chooser: .create, loc: loc)
                 Button { onPick(method) } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                            Text(loc.t(copy.title))
+                            Text(copy.title)
                                 .typeRole(Typography.rowTitle)
                                 .foregroundStyle(theme.fgBase)
-                            Text(loc.t(copy.body))
+                            Text(copy.body)
                                 .typeRole(Typography.flowCaption)
                                 .foregroundStyle(theme.fgMuted)
                                 .multilineTextAlignment(.leading)

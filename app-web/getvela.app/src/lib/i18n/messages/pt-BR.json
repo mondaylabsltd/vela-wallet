@@ -33,7 +33,9 @@
 				"chainSetup": "Configuração de rede",
 				"selfHosting": "Guia de auto-hospedagem",
 				"privacy": "Privacidade",
-				"terms": "Termos"
+				"terms": "Termos",
+				"support": "Suporte",
+				"deleteData": "Excluir seus dados"
 			}
 		},
 		"language": {

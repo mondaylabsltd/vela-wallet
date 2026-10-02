@@ -122,7 +122,9 @@ enum WalletFlowFixtures {
                     badgeColor: n.color,
                     addressDisplay: WalletFixtures.identity.addressDisplay,
                     copyLabel: loc.t("componentsUi.identiconViewer.copyAddress"),
-                    qrLabel: loc.t("componentsUi.scanner.title")
+                    // 087 F13: this button SHOWS the network's code; "扫描二维码"
+                    // is the scanner's title.
+                    qrLabel: loc.t("componentsUi.funding.showQr")
                 )
             }
         )

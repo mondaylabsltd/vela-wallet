@@ -40,4 +40,4 @@
 ## Phase 5 — Delivery
 
 - [x] T024 `results.md`; PR to `main` (closes the need for #337).
-- [ ] T025 👤 Owner: deploy `app-web/trusted-signer/dist/`, confirm `/b/0ba8ee8c…/sign` is 200 + immutable, then move `LAUNCH` to it. This is the build from merging `main` after #338: 085 and 082 in one page.
+- [x] T025 👤 Owner: deploy `app-web/trusted-signer/dist/`, confirm `/b/0ba8ee8c…/sign` is 200 + immutable, then move `LAUNCH` to it. This is the build from merging `main` after #338: 085 and 082 in one page. Deployed and verified 2026-10-01; `LAUNCH` moved on branch `signer-launch-0ba8ee8c`.
