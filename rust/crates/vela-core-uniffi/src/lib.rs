@@ -2478,6 +2478,26 @@ pub fn bundler_quote_cacheable(max_fee_per_gas: String) -> bool {
     vela_core::app::fee_policy::bundler_quote_cacheable(&max_fee_per_gas)
 }
 
+/// One size a still image is decoded at (spec 090), in pixels.
+#[derive(uniffi::Record)]
+pub struct QrScanSize {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// The sizes to read a picked or dropped image's QR code at, in order: the
+/// image as it is, then shrunk so its longest side is 1024, 640, 400 (only
+/// rungs smaller than the image). Stop at the first hit. A screenshot of
+/// Vela's own receive code draws modules ~24 px across, wider than ZXing's
+/// local binarizer window; the rule lives in `vela_core::qr_scan`.
+#[uniffi::export]
+pub fn still_qr_sizes(width: u32, height: u32) -> Vec<QrScanSize> {
+    vela_core::qr_scan::still_qr_sizes(width, height)
+        .into_iter()
+        .map(|(width, height)| QrScanSize { width, height })
+        .collect()
+}
+
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
 /// `USD`, Arc's `USDC`. `None` means "not pegged": the caller falls through to
 /// the Chainlink/DEX ladder unchanged.

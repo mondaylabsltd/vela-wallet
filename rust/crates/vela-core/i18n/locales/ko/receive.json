@@ -73,6 +73,8 @@
     "qrTitleNetwork": "이 주소로 {{network}}의 자산을 받으세요",
     "qrTitleAsset": "이 주소로 {{network}}의 {{symbol}}을 받으세요",
     "shareCardNetworkNote": "{{network}} 결제만 가능",
-    "tokenContract": "토큰 컨트랙트"
+    "tokenContract": "토큰 컨트랙트",
+    "includeNetwork": "네트워크 정보 포함",
+    "includeNetworkHint": "일부 지갑은 이 코드를 읽지 못해요. 상대가 스캔하지 못하면 꺼 주세요."
   }
 }

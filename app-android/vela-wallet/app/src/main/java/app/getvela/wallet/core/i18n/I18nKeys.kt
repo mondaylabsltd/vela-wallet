@@ -475,6 +475,9 @@ object I18nKeys {
         const val RECEIVE_SAVE_IMAGE = "receive.request.saveImage"
         const val SHARE_CARD_HEADLINE = "receive.shareCardHeadline"
         const val SHARE_CARD_NETWORK_NOTE = "receive.shareCardNetworkNote"
+        /** Spec 090: the receive code's opt-in "include network" switch and its hint. */
+        const val RECEIVE_INCLUDE_NETWORK = "receive.includeNetwork"
+        const val RECEIVE_INCLUDE_NETWORK_HINT = "receive.includeNetworkHint"
 
         // Scan.
         const val SCAN_TITLE = "componentsUi.scanner.title"

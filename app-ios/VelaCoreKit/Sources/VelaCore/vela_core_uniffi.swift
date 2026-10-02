@@ -8752,6 +8752,63 @@ public func FfiConverterTypeQrMatrix_lower(_ value: QrMatrix) -> RustBuffer {
 }
 
 
+/**
+ * One size a still image is decoded at (spec 090), in pixels.
+ */
+public struct QrScanSize: Equatable, Hashable {
+    public var width: UInt32
+    public var height: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(width: UInt32, height: UInt32) {
+        self.width = width
+        self.height = height
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension QrScanSize: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQrScanSize: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QrScanSize {
+        return
+            try QrScanSize(
+                width: FfiConverterUInt32.read(from: &buf), 
+                height: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: QrScanSize, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.width, into: &buf)
+        FfiConverterUInt32.write(value.height, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQrScanSize_lift(_ buf: RustBuffer) throws -> QrScanSize {
+    return try FfiConverterTypeQrScanSize.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQrScanSize_lower(_ value: QrScanSize) -> RustBuffer {
+    return FfiConverterTypeQrScanSize.lower(value)
+}
+
+
 public struct SafeAddressInfo: Equatable, Hashable {
     public var address: String
     public var saltNonce: Data
@@ -12744,6 +12801,31 @@ fileprivate struct FfiConverterSequenceTypeP256PublicKey: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeQrScanSize: FfiConverterRustBuffer {
+    typealias SwiftType = [QrScanSize]
+
+    public static func write(_ value: [QrScanSize], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeQrScanSize.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [QrScanSize] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [QrScanSize]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeQrScanSize.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeStorageItemRecord: FfiConverterRustBuffer {
     typealias SwiftType = [StorageItemRecord]
 
@@ -14347,6 +14429,22 @@ public func simOutcome(user: String, replyJson: String) -> SimOutcomeRecord  {
     )
 })
 }
+/**
+ * The sizes to read a picked or dropped image's QR code at, in order: the
+ * image as it is, then shrunk so its longest side is 1024, 640, 400 (only
+ * rungs smaller than the image). Stop at the first hit. A screenshot of
+ * Vela's own receive code draws modules ~24 px across, wider than ZXing's
+ * local binarizer window; the rule lives in `vela_core::qr_scan`.
+ */
+public func stillQrSizes(width: UInt32, height: UInt32) -> [QrScanSize]  {
+    return try!  FfiConverterSequenceTypeQrScanSize.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_still_qr_sizes(
+        FfiConverterUInt32.lower(width),
+        FfiConverterUInt32.lower(height),uniffiCallStatus
+    )
+})
+}
 public func toBase64url(data: Data) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -15726,6 +15824,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_sim_outcome() != 18486) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_still_qr_sizes() != 40343) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_to_base64url() != 33334) {

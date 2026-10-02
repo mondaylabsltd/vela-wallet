@@ -81,6 +81,15 @@ final class PaymentRequestStore {
         ])
     }
 
+    /// The "include network" switch under the code (spec 090). What the code
+    /// then says is the core's (`qrValue`), not this store's.
+    func includeNetwork(_ include: Bool) {
+        send([
+            "type": "include_network_changed",
+            "include": include,
+        ])
+    }
+
     /// Boot on the first event, dispatch after — the machine has no boot event
     /// of its own and an event sent before one would be dropped.
     private func send(_ event: [String: Any]) {

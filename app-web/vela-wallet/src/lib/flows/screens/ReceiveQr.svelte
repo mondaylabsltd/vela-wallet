@@ -7,6 +7,7 @@
 	 * a named asset has one, a network does not.
 	 */
 	import Button from '$lib/ui/Button.svelte';
+	import Switch from '$lib/ui/Switch.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import AddressCard from '../ui/AddressCard.svelte';
@@ -21,9 +22,11 @@
 		model: ReceiveQrModel;
 		onsave?: () => void;
 		onexplorer?: () => void;
+		/** Spec 090: the "include network" switch, flipped. Absent in the gallery. */
+		onincludenetwork?: (include: boolean) => void;
 	}
 
-	let { model, onsave, onexplorer }: Props = $props();
+	let { model, onsave, onexplorer, onincludenetwork }: Props = $props();
 
 	let copied = $state<'address' | 'contract' | null>(null);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -103,6 +106,18 @@
 		</QRCard>
 	</div>
 
+	{#if model.network !== undefined}
+		<!-- Spec 090: under the code, the switch that makes it name its
+		     network, and — only while it does — the calm line about wallets
+		     that can't read it. Subtle ink: a fact, not a danger. -->
+		<div class="network">
+			<Switch label={model.network.label} checked={model.network.on} onchange={onincludenetwork} />
+			{#if model.network.hint !== undefined}
+				<p class="hint">{model.network.hint}</p>
+			{/if}
+		</div>
+	{/if}
+
 	<p class="warning">{model.warning}</p>
 
 	<div class="actions">
@@ -164,6 +179,18 @@
 		display: flex;
 		justify-content: center;
 		padding-block: var(--space-md);
+	}
+
+	.network {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-xs);
+	}
+
+	.hint {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
 	}
 
 	.warning {

@@ -587,6 +587,60 @@ pub fn filter_chips(theme: &Theme, chips: &[FilterChip], clicks: Vec<super::pane
     row
 }
 
+/// An on/off switch with its label — the receive code's "include network"
+/// (spec 090), the product's one switch.
+///
+/// The whole row is the target. Pressing it stretches the thumb toward where it
+/// is going, the shape-deform every pressed control here makes. Monochrome on
+/// purpose: the accent belongs to the one action that moves money, so "on" is
+/// the ink track. `click` is `None` in the mocks, which draw it inert.
+pub fn switch_row(
+    theme: &Theme,
+    id: &'static str,
+    label: SharedString,
+    on: bool,
+    click: Option<super::panels::Click>,
+) -> Div {
+    let group: SharedString = SharedString::from(id);
+    let thumb = div()
+        .id(ElementId::from((id, 1usize)))
+        .size(px(16.))
+        .rounded_full()
+        .bg(theme.bg_base)
+        .group_active(group.clone(), |s| s.w(px(20.)));
+    let track = div()
+        .w(px(36.))
+        .h(px(20.))
+        .flex_none()
+        .p(px(2.))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .bg(if on {
+            theme.fg_base
+        } else {
+            theme.outline_strong
+        })
+        .when(on, |track| track.justify_end())
+        .child(thumb);
+    let row = div()
+        .group(group)
+        .w_full()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(12.))
+        .py(px(4.))
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_base)
+                .child(label),
+        )
+        .child(track);
+    super::panels::clickable(id, click, row)
+}
+
 /// The two-segment toggle — the ONE segmented control in the product.
 ///
 /// `clicks` makes each half a press (left, right); `None` draws the mock's

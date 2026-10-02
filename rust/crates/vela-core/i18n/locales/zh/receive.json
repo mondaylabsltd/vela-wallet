@@ -73,6 +73,8 @@
     "qrTitleNetwork": "使用这个地址接收 {{network}} 上的资产",
     "qrTitleAsset": "使用这个地址接收 {{network}} 上的 {{symbol}}",
     "shareCardNetworkNote": "仅支持 {{network}} 网络付款",
-    "tokenContract": "代币合约"
+    "tokenContract": "代币合约",
+    "includeNetwork": "附带网络信息",
+    "includeNetworkHint": "部分钱包无法识别。对方扫不出来时请关掉。"
   }
 }

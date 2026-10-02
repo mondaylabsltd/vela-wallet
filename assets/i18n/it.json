@@ -490,7 +490,9 @@
   "qrTitleNetwork": "Usa questo indirizzo per ricevere asset su {{network}}",
   "qrTitleAsset": "Usa questo indirizzo per ricevere {{symbol}} su {{network}}",
   "shareCardNetworkNote": "Solo pagamenti su {{network}}",
-  "tokenContract": "Contratto del token"
+  "tokenContract": "Contratto del token",
+  "includeNetwork": "Includi la rete",
+  "includeNetworkHint": "Alcuni wallet non leggono questo codice. Se l'altra persona non ci riesce, disattivalo."
  },
  "assets": {
   "sectionTitle": "Asset",

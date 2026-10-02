@@ -1148,17 +1148,6 @@ struct RootView: View {
                     if state == .r2 || state == .r3 {
                         deposits.open(address: session.view.address)
                     }
-                    // The request machine learns whose address this is when the
-                    // receive flow opens, exactly as Android's `openReceive`
-                    // does. Every question the code sheet asks it — which
-                    // asset, which precision — is answered against this.
-                    if state == .r1 {
-                        paymentRequest.start(
-                            account: session.view.address,
-                            recipient: session.view.address,
-                            baseUrl: Self.payLinkBase
-                        )
-                    }
                 }
                 // Keyed on the DRAWN state, not the derived one.
                 //
@@ -1935,11 +1924,11 @@ struct RootView: View {
                             // pretending to be about the contact.
                             onReceive: {
                                 section = .wallet
-                                flows.enter(.receive)
+                                enterReceive()
                             },
                             onShowQr: {
                                 section = .wallet
-                                flows.enter(.receive)
+                                enterReceive()
                             }
                         )
                         // Opening somebody's page asks the core about their
@@ -2235,11 +2224,7 @@ struct RootView: View {
         // The catalog's name, or the chain id in words nobody has to invent —
         // the balance wire carries the TOKEN's name, which is not the network's.
         let network = ChainCatalog.meta(token.chainId)?.displayName ?? String(token.chainId)
-        paymentRequest.start(
-            account: session.view.address,
-            recipient: session.view.address,
-            baseUrl: Self.payLinkBase
-        )
+        startPaymentRequest()
         paymentRequest.pickAsset(
             chainId: token.chainId,
             tokenAddress: token.tokenAddress,
@@ -2358,6 +2343,7 @@ struct RootView: View {
                     ?? (ChainCatalog.chains.indices.contains(receiveNetwork)
                         ? ChainCatalog.chains[receiveNetwork] : nil),
                 asset: asset,
+                pay: paymentRequest.view,
                 on: qr, loc: loc
             ))
         }
@@ -2667,7 +2653,33 @@ struct RootView: View {
 
     /// The home's flow buttons. 转账 is a journey of its own, not a push.
     private func enterFlow(_ entry: WalletFlowEntry) {
-        if entry == .send { enterSend() } else { flows.enter(entry) }
+        if entry == .send {
+            enterSend()
+        } else if entry == .receive {
+            enterReceive()
+        } else {
+            flows.enter(entry)
+        }
+    }
+
+    /// Every way into Receive: ONE request session per visit.
+    ///
+    /// The machine learns whose address this is when the flow opens, as
+    /// Android's `openReceive` does — keyed on entering the flow, not on a
+    /// step. Its `start` turns "include network" back off (spec 090), so a
+    /// start on every return to the list (where this used to live) would have
+    /// switched it off behind somebody choosing another network.
+    private func enterReceive() {
+        startPaymentRequest()
+        flows.enter(.receive)
+    }
+
+    private func startPaymentRequest() {
+        paymentRequest.start(
+            account: session.view.address,
+            recipient: session.view.address,
+            baseUrl: Self.payLinkBase
+        )
     }
 
     /// Every way into Send: a NEW journey, whatever the machine still holds.
@@ -2865,6 +2877,9 @@ struct RootView: View {
                         { UIApplication.shared.open(url) }
                     },
                     onSaveCard: session.view.address.isEmpty ? nil : { saveShareCard() },
+                    // Spec 090: the switch asks the core, which decides what
+                    // the code then says.
+                    onIncludeNetwork: { paymentRequest.includeNetwork($0) },
                     // The core's refusal outranks the save alert: one is an
                     // answer to something the person just did with money, the
                     // other is about a picture.
@@ -3063,11 +3078,17 @@ struct RootView: View {
     /// the code on screen is built from, so the image and the screen can never
     /// disagree.
     private func saveShareCard() {
+        // The card is about the asset the CODE is about — the machine's (spec
+        // 090), which a token's 收款 sets without touching `receiveNetwork`;
+        // the row index is the fallback before the machine has one.
+        let pay = paymentRequest.view
         let card = FlowsLive.shareCard(
             session.view.address,
             name: session.view.activeName,
-            chain: ChainCatalog.chains.indices.contains(receiveNetwork)
-                ? ChainCatalog.chains[receiveNetwork] : nil,
+            chain: pay.flatMap { ChainCatalog.meta($0.asset.chainId) }
+                ?? (ChainCatalog.chains.indices.contains(receiveNetwork)
+                    ? ChainCatalog.chains[receiveNetwork] : nil),
+            pay: pay,
             on: drawnShareCard,
             loc: loc
         )

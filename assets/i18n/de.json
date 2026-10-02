@@ -487,7 +487,9 @@
   "qrTitleNetwork": "Mit dieser Adresse Werte auf {{network}} empfangen",
   "qrTitleAsset": "Mit dieser Adresse {{symbol}} auf {{network}} empfangen",
   "shareCardNetworkNote": "Nur Zahlungen über {{network}}",
-  "tokenContract": "Token-Vertrag"
+  "tokenContract": "Token-Vertrag",
+  "includeNetwork": "Netzwerk mitsenden",
+  "includeNetworkHint": "Manche Wallets können diesen Code nicht lesen. Klappt es beim Gegenüber nicht, schalten Sie es aus."
  },
  "assets": {
   "sectionTitle": "Assets",
