@@ -118,8 +118,9 @@ export interface TxDetailContext {
 /**
  * A stored dApp record's request as text (spec 093): the core's cut of it,
  * which this shell keeps parsed as `signedRequest.params`, written back out.
- * `null` when the record kept none — an older row, or a request that did not
- * survive the cut.
+ * `null` when the record kept none — an older row, or a request whose shape
+ * alone was past the cut (the core keeps `""` then, stored as no params), so
+ * the row says "not recorded" rather than "[]".
  */
 export function storedRequestText(tx: LocalTransaction | undefined): string | null {
 	const params = tx?.signedRequest?.params;
@@ -225,10 +226,12 @@ function dappFacts(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): FactRo
 				return [{ label: m['connect.detail.labelApp'], value: fact.site }];
 			case 'network':
 				return [chainFact(fact.chain_id, m)];
+			// A noun for a record of something done (083 F3 review), and who got
+			// the money when somebody did — the core sends one or the other.
 			case 'contract':
-				return [
-					partyFact(m['componentsUi.signing.interactingLabel'], fact.address, fact.name, ctx)
-				];
+				return [partyFact(m['tokenDetail.labelContract'], fact.address, fact.name, ctx)];
+			case 'recipient':
+				return [partyFact(m['componentsTx.detail.to'], fact.address, fact.name, ctx)];
 			case 'spender':
 				return [partyFact(m['componentsUi.signing.labelSpender'], fact.address, fact.name, ctx)];
 			case 'spending_cap': {

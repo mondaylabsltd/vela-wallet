@@ -110,4 +110,21 @@ describe('buildSigningRecord', () => {
 		// What the message said is still the Connections list's.
 		expect(record.signedContent).toBe('Hello');
 	});
+
+	// The core keeps `""` when the request's shape alone is past its cut.
+	it('a request the core kept nothing of is stored as no params', () => {
+		const record = buildSigningRecord({
+			method: 'wallet_sendCalls',
+			params: [{ calls: [] }],
+			storedRequest: '',
+			requestTruncated: true,
+			result: '',
+			from: FROM,
+			chainId: 1,
+			dappOrigin: 'https://app.example',
+			nowMs: 1_757_000_000_000
+		});
+		expect(record.signedRequest).toEqual({ method: 'wallet_sendCalls', params: [] });
+		expect(record.requestTruncated).toBe(true);
+	});
 });

@@ -159,6 +159,8 @@ test.describe('phone width', () => {
 		await expect(sheet.getByText('≈ −100 USDC', { exact: true }).first()).toBeVisible();
 		await expect(sheet.getByText('≈ +0.03 ETH', { exact: true }).first()).toBeVisible();
 		await expect(sheet.getByText(en('componentsUi.signing.balanceChangesTitle'))).toBeVisible();
+		// The router a swap called is its Contract — a noun, never "Interacting with".
+		await expect(sheet.getByText(en('tokenDetail.labelContract'), { exact: true })).toBeVisible();
 		await expect(sheet.getByText(en('connect.detail.offChainNote'))).toHaveCount(0);
 		await sheet.getByText(en('componentsUi.signing.balanceChangesTitle')).scrollIntoViewIfNeeded();
 		// The sheet's entrance has to finish before the picture is worth taking.

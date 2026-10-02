@@ -10,6 +10,7 @@ import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
 import { buildDesktopFlowState, buildFlowState } from '$lib/flows/fixtures';
+import { buildSigningRecord } from '$lib/services/dapp-history';
 import type { TxTechnicalRow } from '$lib/flows/model';
 import { feedItemsThroughCore } from './core/feed-through-core';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';
@@ -255,7 +256,8 @@ describe('liveTxDetail', () => {
 		expect(detail.facts.map((f) => [f.label, f.value])).toEqual([
 			[fm['connect.detail.labelApp'], 'app.uniswap.org'],
 			[fm['componentsTx.detail.labelChain'], 'Ethereum'],
-			[fm['componentsUi.signing.interactingLabel'], 'Uniswap Universal Router'],
+			// A noun for a record of something done (083 F3 review).
+			[fm['tokenDetail.labelContract'], 'Uniswap Universal Router'],
 			[fm['componentsTx.detail.labelDate'], expect.any(String)]
 		]);
 		expect(detail.facts[2]).toMatchObject({ copyValue: router, mono: false });
@@ -314,6 +316,68 @@ describe('liveTxDetail', () => {
 		expect(storedRequestText({ ...tx, signedRequest: undefined })).toBeNull();
 		expect(storedRequestText(undefined)).toBeNull();
 	});
+
+	// Spec 093: the core keeps `""` when the request's shape alone is past the
+	// cut — "not recorded", never a drawn "[]".
+	it('a request the core kept nothing of reads "not recorded", not "[]"', () => {
+		const kept = buildSigningRecord({
+			method: 'wallet_sendCalls',
+			params: [{ calls: [] }],
+			storedRequest: '',
+			requestTruncated: true,
+			result: '',
+			from: ACCOUNT,
+			chainId: 1,
+			dappOrigin: 'https://app.example',
+			nowMs: NOW_S * 1000
+		});
+		expect(storedRequestText(kept)).toBeNull();
+		const content = liveTxDetail(
+			item(kept.id, { dapp: feedDapp({ technical: [{ type: 'content', content: 'call_data' }] }) }),
+			{ ...ctx, storedRequest: () => storedRequestText(kept) }
+		).technical!.rows[0];
+		if (content.kind !== 'content') throw new Error('no content row');
+		expect(content.read()).toBeNull();
+		expect(content.missing).toBe(fm['connect.detail.contentMissing']);
+	});
+
+	// Spec 093 / 082 RJ16: who got the money is a recipient — "To", by the
+	// row's name for them — never "the contract" a payment was called on.
+	it('through the core: a dApp’s plain send names its recipient, by name', async () => {
+		const ALICE = '0x' + 'a1'.repeat(20);
+		const [send] = await feedItemsThroughCore(
+			[
+				{
+					id: 'dapp-1789999000000-tx',
+					userOpHash: '0x' + 'e2'.repeat(32),
+					txHash: '0x' + 'f2'.repeat(32),
+					from: ACCOUNT,
+					to: ALICE,
+					toName: 'Alice',
+					value: '0x2386f26fc10000',
+					symbol: 'ETH',
+					decimals: 18,
+					chainId: 1,
+					timestamp: NOW_S - 30,
+					status: 'confirmed',
+					type: 'dapp_tx',
+					dappOrigin: 'https://pay.example',
+					dappUrl: 'https://pay.example',
+					intent: 'Send',
+					signedRequest: { method: 'eth_sendTransaction', params: [{ to: ALICE, value: '0x1' }] },
+					dappSummary: { action: 'call', calls: 1, contract: ALICE }
+				}
+			],
+			ACCOUNT,
+			NOW_S * 1000
+		);
+		const facts = liveTxDetail(send, ctx).facts;
+		const to = facts.find((f) => f.label === fm['componentsTx.detail.to']);
+		expect(to).toMatchObject({ value: 'Alice', copyValue: ALICE, mono: false });
+		expect(to?.lead?.kind).toBe('identicon');
+		// One or the other: no contract fact beside the recipient.
+		expect(facts.map((f) => f.label)).not.toContain(fm['tokenDetail.labelContract']);
+	}, 30_000);
 
 	// Spec 093: the fixture permit and swap, described by the REAL core.
 	it('through the core: a permit is off-chain, states its cap in red and never expires', async () => {
