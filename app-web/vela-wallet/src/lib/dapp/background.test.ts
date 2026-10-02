@@ -1316,6 +1316,101 @@ describe('one request window per site (094)', () => {
 	});
 });
 
+/**
+ * Spec 097 N4: in the pass, a request window showed "Submitted", the relay
+ * then refused the op, and the window closed ~12 s later with no words — the
+ * worker closes a window the moment its request is answered, and the core
+ * answered with the verdict. The core now holds that answer while the sheet
+ * shows the refusal (096 F8's rule); what the worker must keep doing is
+ * leave the window alone until the answer comes, deliver the refusal as it
+ * is (never "not confirmed yet"), once, and only then close it.
+ */
+describe('a refusal after "Submitted" in a request window (097 N4)', () => {
+	const OP = `0x${'4319f0f7'.repeat(8)}`;
+	const REFUSED = {
+		code: -32603,
+		message: 'the network refused this transaction; nothing was sent'
+	};
+
+	/** The pass's moment: the window's request signed, claimed for submit with its op. */
+	async function submittedInAWindow(env: Env) {
+		env.local.data['vela.ext.surface'] = 'window';
+		await startWorker(env);
+		const page = env.openPage(7, 'doc-a', 'https://app.aave.com');
+		await env.ask(page, 'tx:1', 'eth_sendTransaction');
+		await settleAll();
+		expect(env.chrome.windows.create).toHaveBeenCalledTimes(1);
+		const surface = env.portPair('vela.surface', {
+			url: 'chrome-extension://ext/en/request.html?rid=7%3Atx%3A1'
+		});
+		surface.post({ type: 'hello', kind: 'window', rid: '7:tx:1' });
+		surface.post({ type: 'claim', rid: '7:tx:1', phase: 'sign', nonce: 1 });
+		surface.post({
+			type: 'claim',
+			rid: '7:tx:1',
+			phase: 'submit',
+			nonce: 2,
+			opHash: OP,
+			chainId: 56
+		});
+		await settleAll();
+		expect(surface.received).toContainEqual({ type: 'claimResult', nonce: 2, live: true });
+		return { page, surface };
+	}
+
+	it('the window stays while the refusal shows, and the refusal’s answer closes it — once', async () => {
+		const env = makeEnv();
+		const { page, surface } = await submittedInAWindow(env);
+		// The sheet shows the refusal; nobody has closed it yet.
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		await settleAll();
+		expect(page.answers).toEqual([]);
+		expect(env.chrome.windows.remove).not.toHaveBeenCalled();
+		expect(reqKeys(env.session)).toEqual(['vela.req.7:tx:1']);
+
+		// Done: the core answers the refusal it held.
+		surface.post({ type: 'answer', rid: '7:tx:1', error: REFUSED });
+		await settleAll();
+		expect(page.answers).toEqual([{ id: 'tx:1', result: undefined, error: REFUSED }]);
+		expect(env.chrome.windows.remove).toHaveBeenCalledWith(101);
+		expect(reqKeys(env.session)).toEqual([]);
+		// Not an op the page will look up: nothing is translated for it.
+		expect(env.local.data[`vela.ext.op.${OP}`]).toBeUndefined();
+		const log = String(env.session.data['vela.sw.log']);
+		expect(log.match(/req\.answered/g)).toHaveLength(1);
+		expect(log).toMatch(/req\.answered delivered=true outcome=error/);
+
+		// The window's teardown settlement, arriving after, is not a second answer.
+		surface.post({
+			type: 'answer',
+			rid: '7:tx:1',
+			error: { code: 4900, message: 'The browser closed before the request finished' }
+		});
+		surface.close();
+		await settleAll();
+		expect(page.answers).toHaveLength(1);
+	});
+
+	it('the window closed from the OS while the refusal shows: answered once, never twice', async () => {
+		const env = makeEnv();
+		const { page, surface } = await submittedInAWindow(env);
+		env.windows.delete(101);
+		env.emit('windowRemoved', 101);
+		surface.close();
+		await settleAll();
+		// The 096 A behaviour for a window that goes from under a held
+		// failure: the window's own settlement — for a claimed submit, "not
+		// confirmed yet" naming the op (RJ2) — once.
+		expect(page.answers).toHaveLength(1);
+		expect(page.answers[0].error?.code).toBe(-32603);
+		expect(reqKeys(env.session)).toEqual([]);
+		// The core's answer, had it gone out in that breath, is not a second one.
+		const late = await env.sendFromWallet({ type: 'requestAnswer', rid: '7:tx:1', error: REFUSED });
+		expect(late).toEqual({ delivered: false });
+		expect(page.answers).toHaveLength(1);
+	});
+});
+
 describe('the page’s own deadline (RB11)', () => {
 	it('an `abandon` settles the record as expired and withdraws the sheet', async () => {
 		const env = makeEnv();

@@ -36,8 +36,9 @@
  *   A withdrawal (`tracker_withdraw`) is fed once per value.
  * - **The answer follows the tracker** (spec 082 RJ4): `track-forward` hands
  *   the machine every change of its in-flight op's tracker entry
- *   (`OpTracked`), so a refusal, a "never sent" or a landing is answered at
- *   once rather than when the receipt wait runs out.
+ *   (`OpTracked`), so a landing is answered at once rather than when the
+ *   receipt wait runs out — and a refusal or a "never sent" the sheet shows
+ *   when the person closes it (spec 097 N4).
  */
 import { loadCore } from '$lib/core/client';
 import type { SignEvent } from '$lib/core/generated/SignEvent';
