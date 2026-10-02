@@ -8,6 +8,7 @@
 use gpui::SharedString;
 
 use crate::icons::Icon;
+use crate::onboarding_flow::{PRIVACY_URL, TERMS_URL};
 use crate::wallet::fill;
 
 use super::SettingsStrings;
@@ -546,6 +547,29 @@ pub fn about_version(s: &SettingsStrings, live: bool) -> SharedString {
 mod about_tests {
     use super::*;
 
+    /// Spec 095 (App Review 5.1.1(i)): About links the privacy policy, the
+    /// terms and the support page — the same URLs onboarding opens — and every
+    /// label resolves in every language.
+    #[test]
+    fn about_links_the_policy_terms_and_support() {
+        for (tag, loc) in crate::loc::Loc::every_language() {
+            let links = about_links(&SettingsStrings::resolve(&loc));
+            let urls: Vec<&str> = links.iter().map(|(_, _, url)| url.as_ref()).collect();
+            assert_eq!(
+                urls[3..],
+                [PRIVACY_URL, TERMS_URL, "https://getvela.app/support"],
+                "{tag}"
+            );
+            for (label, host, url) in &links {
+                assert!(
+                    !label.is_empty() && !label.contains("about."),
+                    "{tag}: {label}"
+                );
+                assert_eq!(format!("https://{host}"), url.as_ref(), "{tag}");
+            }
+        }
+    }
+
     /// Spec 064 FR-C1: a live build names itself, never the mock.
     #[test]
     fn a_live_build_shows_its_own_version_and_commit() {
@@ -619,6 +643,24 @@ pub fn about_links(s: &SettingsStrings) -> Vec<(SharedString, SharedString, Shar
             s.about_link_safe.clone(),
             SharedString::from("safe.global"),
             SharedString::from("https://safe.global"),
+        ),
+        // Spec 095 (App Review 5.1.1(i)): the policy, the terms and a way to
+        // reach us, reachable after onboarding too — the same three on every
+        // shell.
+        (
+            s.about_link_privacy.clone(),
+            SharedString::from("getvela.app/privacy"),
+            SharedString::from(PRIVACY_URL),
+        ),
+        (
+            s.about_link_terms.clone(),
+            SharedString::from("getvela.app/terms"),
+            SharedString::from(TERMS_URL),
+        ),
+        (
+            s.about_link_support.clone(),
+            SharedString::from("getvela.app/support"),
+            SharedString::from("https://getvela.app/support"),
         ),
     ]
 }

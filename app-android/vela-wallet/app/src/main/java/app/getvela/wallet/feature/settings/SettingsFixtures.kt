@@ -650,6 +650,27 @@ object SettingsFixtures {
                 mono = true,
                 external = true,
             ),
+            // Spec 095 (App Review 5.1.1(i)): the policy, the terms and a way to
+            // reach us, reachable after onboarding too — the same three on every
+            // shell. The row opens https:// + its value.
+            KeyValueRowModel(
+                s.t(I18nKeys.SettingsUi.ABOUT_LINK_PRIVACY),
+                "getvela.app/privacy",
+                mono = true,
+                external = true,
+            ),
+            KeyValueRowModel(
+                s.t(I18nKeys.SettingsUi.ABOUT_LINK_TERMS),
+                "getvela.app/terms",
+                mono = true,
+                external = true,
+            ),
+            KeyValueRowModel(
+                s.t(I18nKeys.SettingsUi.ABOUT_LINK_SUPPORT),
+                "getvela.app/support",
+                mono = true,
+                external = true,
+            ),
         ),
         footer = s.t(I18nKeys.SettingsUi.ABOUT_FOOTER),
     )

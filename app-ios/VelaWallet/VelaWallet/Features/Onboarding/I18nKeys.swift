@@ -495,6 +495,9 @@ enum I18nKeys {
         static let aboutLinkWebsite = "about.linkWebsite"
         static let aboutLinkGithub = "about.linkGitHub"
         static let aboutLinkSafe = "about.linkSafeWallet"
+        static let aboutLinkPrivacy = "about.linkPrivacy"
+        static let aboutLinkTerms = "about.linkTerms"
+        static let aboutLinkSupport = "about.linkSupport"
         static let aboutFooter = "about.footer"
 
             // Account switcher + sign out + erase.

@@ -49,6 +49,22 @@ class SettingsFixturesTest {
         }
     }
 
+    /** Spec 095 (App Review 5.1.1(i)): About links the policy, the terms and support. */
+    @Test
+    fun `about links the privacy policy, terms and support`() {
+        for (locale in SHIPPED_LOCALES) {
+            val about = SettingsFixtures.buildState(SettingsScreenState.ST14, strings(locale)).about
+            assertEquals(
+                listOf("getvela.app/privacy", "getvela.app/terms", "getvela.app/support"),
+                about.links.takeLast(3).map { it.value },
+            )
+            for (row in about.links) {
+                assertTrue("$locale: ${row.label}", row.label.isNotBlank() && !row.label.startsWith("about."))
+                assertTrue(row.external)
+            }
+        }
+    }
+
     @Test
     fun `the state inventory covers ST1-ST16 and SR1-SR5`() {
         val states = SettingsScreenState.entries

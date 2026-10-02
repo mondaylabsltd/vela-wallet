@@ -499,6 +499,18 @@ enum SettingsFixtures {
                 KeyValueRowModel(label: loc.t(k.aboutLinkSafe), value: "safe.global",
                                  mono: true, external: true,
                                  link: "https://safe.global"),
+                // Spec 095 (App Review 5.1.1(i)): the policy, the terms and a
+                // way to reach us, reachable after onboarding too — the same
+                // three on every shell.
+                KeyValueRowModel(label: loc.t(k.aboutLinkPrivacy), value: "getvela.app/privacy",
+                                 mono: true, external: true,
+                                 link: "https://getvela.app/privacy"),
+                KeyValueRowModel(label: loc.t(k.aboutLinkTerms), value: "getvela.app/terms",
+                                 mono: true, external: true,
+                                 link: "https://getvela.app/terms"),
+                KeyValueRowModel(label: loc.t(k.aboutLinkSupport), value: "getvela.app/support",
+                                 mono: true, external: true,
+                                 link: "https://getvela.app/support"),
             ],
             footer: loc.t(k.aboutFooter)
         )

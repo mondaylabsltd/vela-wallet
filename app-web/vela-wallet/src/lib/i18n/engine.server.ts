@@ -515,6 +515,9 @@ export function resolveSettingsMessages(locale: Locale): SettingsMessages {
 			linkWebsite: k('about.linkWebsite'),
 			linkGitHub: k('about.linkGitHub'),
 			linkSafeWallet: k('about.linkSafeWallet'),
+			linkPrivacy: k('about.linkPrivacy'),
+			linkTerms: k('about.linkTerms'),
+			linkSupport: k('about.linkSupport'),
 			sectionLinks: k('about.sectionLinks'),
 			footer: k('about.footer')
 		},

@@ -474,9 +474,16 @@ for (let i = 1; i < PATHS.length; i++) {
 //   `receive.includeNetworkHint` — the receive code's opt-in "include network"
 //   switch (ERC-681) and the calm line under it: some wallets cannot read
 //   that code. Same branches: 1786 + 2 = 1788.
-if (PATHS.length !== 1788) fail(`expected 1788 paths (1699 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1699) fail(`expected 1699 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
+// 1809 (095, 2026-10-02): + `about.{linkPrivacy,linkTerms,linkSupport}` —
+//   Settings → About links the privacy policy, terms and support page on every
+//   shell (App Review 5.1.1(i): the policy reachable outside onboarding; the
+//   onboarding's `ack2PrivacyPolicy`/`ack2Terms` are inflected for their
+//   sentence, e.g. ru accusative, so not reused) — and the 17 leaves of the new
+//   `componentsUi.appMenu` branch: the macOS menu bar (About, Edit, View,
+//   Window), which was English-only. 1788 + 3 + 17 leaves + 1 branch = 1809.
+if (PATHS.length !== 1809) fail(`expected 1809 paths (1719 leaf + 90 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1719) fail(`expected 1719 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 90) fail(`expected 90 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {
@@ -789,7 +796,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 139,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 140,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;
