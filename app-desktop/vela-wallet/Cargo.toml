@@ -271,6 +271,10 @@ nokhwa = { version = "0.10", default-features = false, features = [
     "input-avfoundation",
 ] }
 objc2 = "0.5"
+# The decision handler WebKit hands the in-app browser's navigation gate
+# (spec 095, `webview.rs` `mac_leaves`): an Objective-C block. The version
+# objc2 0.5 already pulls, so nothing new is fetched.
+block2 = "0.5"
 # The system proxy, as WebKit resolves it (spec 082 RD2, `executor/
 # proxy_macos.rs`): CFNetwork's per-URL lookup and its PAC runner, called
 # through a small `extern "C"` block over these two. Both already in the lock
