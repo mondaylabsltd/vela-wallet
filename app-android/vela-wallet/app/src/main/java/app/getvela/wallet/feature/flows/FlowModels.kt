@@ -95,6 +95,13 @@ data class FactRowModel(
     val danger: Boolean = false,
     /** Spec 093: further value lines under [value] (a dApp's balance changes, one per coin). */
     val lines: List<String> = emptyList(),
+    /**
+     * Spec 097 F: a quiet mono line under the value — the short address under
+     * a payee's NAME. On the page that signs a name is a claim and the address
+     * is what is paid, so both are drawn, on two lines: a long name may be
+     * cut, the address under it is not.
+     */
+    val detail: String? = null,
 )
 
 enum class StatusTone { Success, Warning, Error, Info }
@@ -700,6 +707,10 @@ data class BreakdownRowModel(
     val identiconSeed: String? = null,
     val label: String,
     val value: String,
+    /** The label in the mono face: a payee with no name, drawn as their short address. */
+    val mono: Boolean = false,
+    /** Spec 097 F: the short address under a named payee, muted and mono. */
+    val detail: String? = null,
 )
 
 @Immutable
@@ -751,7 +762,7 @@ data class SendReceiptModel(
     val header: FlowHeaderModel,
     val stage: ReceiptStage,
     val title: String,
-    /** Up to two lines under the title. */
+    /** The lines under the title — with a split's people, or a sweep's coins (spec 097 F), listed one per line. */
     val captions: List<String>,
     val hash: ReceiptHashModel? = null,
     val viewOnExplorer: String? = null,

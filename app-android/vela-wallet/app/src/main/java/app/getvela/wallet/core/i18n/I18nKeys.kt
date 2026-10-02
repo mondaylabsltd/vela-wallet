@@ -692,6 +692,8 @@ object I18nKeys {
         const val CONFIRM_SEND = "send.confirmSendBtn"
         const val CONFIRM_TOTAL_LINE = "send.confirmTotalLine"
         const val ASSETS_COUNT = "componentsTx.receipt.assetsCount"
+        /** Spec 097 F: the tag beside a name from the public wallet registry. */
+        const val VELA_USER = "send.velaUser"
 
         // Send · receipt.
         const val TX_SUBMITTING = "send.txSubmitting"
@@ -700,6 +702,8 @@ object I18nKeys {
         const val TX_CLOSE_BACKGROUND = "send.txCloseBackground"
         const val TX_SUBMITTED_TITLE = "send.txSubmittedTitle"
         const val TX_CONFIRMED_TITLE = "send.txConfirmedTitle"
+        /** Spec 097 F: the confirmed title of an operation that sent several coins. */
+        const val TX_SENT = "componentsTx.detail.sent"
         const val TX_WAITING_CONFIRM = "send.txWaitingConfirm"
         const val TX_TYPICAL_TIME = "send.txTypicalTime"
         const val TX_REMAINING = "send.txRemaining"

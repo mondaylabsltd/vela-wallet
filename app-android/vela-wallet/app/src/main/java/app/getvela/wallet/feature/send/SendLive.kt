@@ -62,6 +62,9 @@ import app.getvela.wallet.feature.send.core.SendTxErrorKey
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.send.core.SendNameSource
+import app.getvela.wallet.feature.send.core.SendPayee
+import app.getvela.wallet.feature.send.core.SendReceiptKind
 import app.getvela.wallet.feature.send.core.SendReceiptStatus
 import app.getvela.wallet.feature.send.core.SendStage
 import app.getvela.wallet.feature.send.core.SendToken
@@ -234,19 +237,71 @@ object SendLive {
 
     /**
      * Issue #332: the picker's "To" line — the recipient the core already
-     * holds, worded as the confirm page words it, so the person sees whom they
-     * are paying while they choose what. Nobody held, no line; artwork only for
-     * a real address (the founder's anti-poisoning rule).
+     * holds, drawn as the confirm page draws it (spec 097 F), so the person
+     * sees whom they are paying while they choose what. Nobody held, no line;
+     * artwork only for a real address (the founder's anti-poisoning rule).
      */
     internal fun pickRecipient(view: SendView, s: VelaStrings): FactRowModel? {
         val address = view.recipient.trim()
         if (address.isEmpty()) return null
-        val name = view.recipient_identity?.name
+        return payeeFact(s.t(I18nKeys.Flows.TO_LABEL), singlePayee(view) ?: SendPayee(address), s)
+    }
+
+    // -- payees (spec 097 F, S2) ------------------------------------------------
+
+    /** The one payee of a single send or a sweep, as the core named them — never a split's first row. */
+    private fun singlePayee(view: SendView): SendPayee? =
+        if (view.split_mode) null else view.payees.firstOrNull()
+
+    /**
+     * Whose word a payee's name is: nothing for the person's own, "Vela User"
+     * for the public wallet registry (where anyone can register any name), a
+     * name service's own label as it is. The core decided which is which.
+     */
+    internal fun payeeTag(payee: SendPayee, s: VelaStrings): String? = when (val source = payee.name_source) {
+        SendNameSource.Registry -> s.t(I18nKeys.Flows.VELA_USER)
+        is SendNameSource.Service -> source.label
+        SendNameSource.Own, null -> null
+    }
+
+    /**
+     * "Wallet · Vela User", "bob.eth · ENS", "Savings" — or `null` when nobody
+     * named them. A name whose source this build could not read is not drawn
+     * (the core's own rule): untagged, it would pass for the person's own.
+     */
+    internal fun payeeName(payee: SendPayee?, s: VelaStrings): String? {
+        val name = payee?.name?.takeIf { it.isNotBlank() } ?: return null
+        if (payee.name_source == null) return null
+        return payeeTag(payee, s)?.let { "$name · $it" } ?: name
+    }
+
+    /**
+     * A named payee's two lines on the page that signs (spec 097 F, S2): the
+     * name alone — the line a long one may cut — over the line nothing cuts,
+     * whose word the name is and the short address it stands for ("Vela User ·
+     * 0x14fB…eA5c"). A long registered name can push neither out of sight.
+     * `null` when nobody named them (or the source was unreadable).
+     */
+    internal fun payeeLines(payee: SendPayee?, address: String, s: VelaStrings): Pair<String, String>? {
+        val name = payee?.name?.takeIf { it.isNotBlank() } ?: return null
+        if (payee.name_source == null) return null
+        val short = shortAddress(address)
+        return name to (payeeTag(payee, s)?.let { "$it · $short" } ?: short)
+    }
+
+    /**
+     * A To row (spec 097 F, S2): a name never stands in for the address on the
+     * page that signs — the name over its tag and short address, or the short
+     * address alone in mono. The identicon carries the full one.
+     */
+    private fun payeeFact(label: String, payee: SendPayee, s: VelaStrings): FactRowModel {
+        val lines = payeeLines(payee, payee.address, s)
         return FactRowModel(
-            label = s.t(I18nKeys.Flows.TO_LABEL),
-            value = name?.let { "$it · ${shortAddress(address)}" } ?: shortAddress(address),
-            lead = if (ADDRESS.matches(address)) FactLead.Identicon(address) else null,
-            mono = name == null,
+            label = label,
+            value = lines?.first ?: shortAddress(payee.address),
+            lead = if (ADDRESS.matches(payee.address)) FactLead.Identicon(payee.address) else null,
+            mono = lines == null,
+            detail = lines?.second,
         )
     }
 
@@ -597,16 +652,15 @@ object SendLive {
     )
 
     /**
-     * The trust line the core resolved (the web's `recipientNote`): "name ·
-     * source" when it knows one, else the first-time tell — the one that
-     * matters for a poisoned look-alike.
+     * The trust line the core resolved (the web's `recipientNote`): the
+     * payee's name and whose word it is (spec 097 F — never the resolver's
+     * own label, "passkey", printed raw), else the first-time tell — the one
+     * that matters for a poisoned look-alike.
      */
     internal fun recipientNote(view: SendView, ctx: Context): String? {
         // Spec 096 F12: a token's own contract, said before anything else.
         if (view.recipient_is_token_contract) return ctx.strings.t(I18nKeys.Flows.RECIPIENT_TOKEN_CONTRACT)
-        val identity = view.recipient_identity
-        val name = identity?.name?.takeIf { it.isNotEmpty() }
-        if (name != null) return identity.source?.takeIf { it.isNotEmpty() }?.let { "$name · $it" } ?: name
+        payeeName(singlePayee(view), ctx.strings)?.let { return it }
         if (view.recipient_risk?.first_time == true) return ctx.strings.t(I18nKeys.Flows.FIRST_TIME_SEND)
         return null
     }
@@ -965,16 +1019,29 @@ object SendLive {
             "≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(amount.toDouble() * price))}"
         } ?: ""
         val (feeLine, _) = feeText(view.fee, view, fee, ctx)
-        val recipientName = view.recipient_identity?.name
         val split = view.split_mode && view.recipients.isNotEmpty()
+        // SD3c — a sweep has no one figure (`confirm_amount` is empty): its
+        // coins are the rows below, each the amount the signature moves.
+        val sweep = if (view.multi_select_mode) sweepBreakdown(view, ctx) else null
         return fallback.copy(
             // A sweep moves several coins; one mark would name the wrong one.
             mark = if (view.multi_select_mode) null else token?.let { WalletLive.mark(it.chain_id, it.symbol, it.token_address, it.logo_urls) },
             // One send: the figure and its unit as two pieces (spec 078 round
-            // 2). A split's total and a sweep keep one phrase.
-            amount = if (split || view.multi_select_mode) "${sentFigure(view.confirm_amount, view)} $symbol".trim() else sentFigure(view.confirm_amount, view),
+            // 2). A split's total keeps one phrase; a sweep says how many coins.
+            amount = when {
+                sweep != null -> s.t(I18nKeys.Flows.ASSETS_COUNT, mapOf("n" to sweep.rows.size.toString()))
+                split -> "${sentFigure(view.confirm_amount, view)} $symbol".trim()
+                else -> sentFigure(view.confirm_amount, view)
+            },
             amountUnit = if (split || view.multi_select_mode) null else symbol.ifEmpty { null },
-            subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
+            subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) }
+                ?: sweep?.let {
+                    s.t(
+                        I18nKeys.Flows.CONFIRM_TOTAL_LINE,
+                        mapOf("fiat" to ctx.money.fiat(it.totalUsd), "network" to (view.multi_chain_id?.let { id -> ctx.chainNames[id] } ?: chain)),
+                    )
+                }
+                ?: fiat,
             // The core's own verdicts: a token's own contract (spec 096 F12)
             // first, else the first time, resolved on this page only (single
             // recipient).
@@ -993,12 +1060,9 @@ object SendLive {
                         value = s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to view.recipients.size.toString())),
                     )
                 } else {
-                    FactRowModel(
-                        label = s.t(I18nKeys.Flows.TO_LABEL),
-                        value = recipientName?.let { "$it · ${shortAddress(view.recipient)}" } ?: shortAddress(view.recipient),
-                        lead = FactLead.Identicon(view.recipient),
-                        mono = recipientName == null,
-                    )
+                    // Spec 097 F (S2): the core's payee — a name only over
+                    // the short address it pays, whose word it is beside it.
+                    payeeFact(s.t(I18nKeys.Flows.TO_LABEL), singlePayee(view) ?: SendPayee(view.recipient), s)
                 },
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.DETAIL_CHAIN),
@@ -1022,16 +1086,21 @@ object SendLive {
                     )
                 },
             ),
-            breakdown = if (split) {
-                view.recipients.map { draft ->
+            breakdown = when {
+                sweep != null -> sweep.rows
+                // Every person by the core's name for row `index` (spec 097
+                // F) — never instead of the address it pays.
+                split -> view.recipients.mapIndexed { index, draft ->
+                    val lines = payeeLines(view.payees.getOrNull(index), draft.address, s)
                     BreakdownRowModel(
                         identiconSeed = draft.address.takeIf { ADDRESS.matches(it) },
-                        label = draft.name ?: shortAddress(draft.address),
+                        label = lines?.first ?: shortAddress(draft.address),
                         value = "${Formats.current.plain(draft.amount)} $symbol".trim(),
+                        mono = lines == null,
+                        detail = lines?.second,
                     )
                 }
-            } else {
-                emptyList()
+                else -> emptyList()
             },
             ctaEnabled = view.can_confirm && !view.sending && view.treasury_bootstrap == null && view.tx_error == null,
             notice = confirmNotice(view, ctx),
@@ -1047,6 +1116,31 @@ object SendLive {
                 else -> null
             },
         )
+    }
+
+    /** A sweep's coins on the confirm page, and what the priced ones come to in USD. */
+    private class SweepBreakdown(val rows: List<BreakdownRowModel>, val totalUsd: Double)
+
+    /**
+     * SD3c (the web's `liveSendConfirm`, iOS's `sweepBreakdown`): one row per
+     * picked coin, its amount the core's reserved spec — exactly what the
+     * signature moves — never a figure summed here. A coin with no price adds
+     * nothing to the total rather than a guess.
+     */
+    private fun sweepBreakdown(view: SendView, ctx: Context): SweepBreakdown {
+        var totalUsd = 0.0
+        val rows = pickedTokens(view).map { token ->
+            val figure = sweepAmount(view, token)
+            val usd = token.price_usd?.let { price -> amount(figure) * price }
+            if (usd != null) totalUsd += usd
+            val value = "${trim(figure)} ${token.symbol}"
+            BreakdownRowModel(
+                lead = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls),
+                label = token.symbol,
+                value = usd?.let { "$value · ≈${ctx.money.fiat(it)}" } ?: value,
+            )
+        }
+        return SweepBreakdown(rows, totalUsd)
     }
 
     /** What stopped the confirm page: the relay's treasury, or a submit the relay refused. */
@@ -1091,8 +1185,17 @@ object SendLive {
         val token = view.selected_token
         val symbol = token?.symbol ?: ""
         val chain = token?.let { ctx.chainNames[it.chain_id] ?: it.network } ?: ""
-        val header = fallback.header.copy(title = s.t(I18nKeys.Flows.SEND_TITLE, mapOf("symbol" to symbol)))
+        // A sweep is several coins: "Send ETH" named only the first (spec 097 F).
+        val header = fallback.header.copy(
+            title = if (view.multi_select_mode) s.t(I18nKeys.Flows.MULTI_SEND_TITLE) else s.t(I18nKeys.Flows.SEND_TITLE, mapOf("symbol" to symbol)),
+        )
         val receipt = view.receipt
+        // Spec 097 F (S3): every coin the operation sent, as the core summed
+        // them. A sweep lists each — one recipient, N coins; its success
+        // screen used to name the first coin alone.
+        val coins = receipt?.coins.orEmpty()
+        val sweep = receipt?.kind == SendReceiptKind.MultiSelect || coins.size > 1
+        val coinLines = if (sweep) coins.map { coin -> "${sentFigure(coin.amount, view)} ${coin.symbol}".trim() } else emptyList()
         val hash = view.tx_hash?.takeIf { it.isNotBlank() }
         val explorer = token?.let { ctx.explorers[it.chain_id] }?.takeIf { it.isNotBlank() }
         return when {
@@ -1116,19 +1219,25 @@ object SendLive {
             receipt.status == SendReceiptStatus.Confirmed -> fallback.copy(
                 header = header,
                 stage = ReceiptStage.Confirmed,
-                // A split's title carries the core's SUM (`confirm_amount`), not
-                // the single-send scalar the receipt view keeps for one person.
-                title = s.t(I18nKeys.Flows.TX_CONFIRMED_TITLE, mapOf("amount" to sentFigure(if (receipt.transfers.size > 1 && view.confirm_amount.isNotEmpty()) view.confirm_amount else receipt.amount, view), "symbol" to symbol)),
+                // One coin: its figure — a split's TOTAL, the core's sum, not
+                // its first row. Several: "Sent", and every coin below.
+                title = if (coins.size > 1) {
+                    s.t(I18nKeys.Flows.TX_SENT)
+                } else {
+                    val coin = coins.firstOrNull()
+                    s.t(I18nKeys.Flows.TX_CONFIRMED_TITLE, mapOf("amount" to sentFigure(coin?.amount ?: receipt.amount, view), "symbol" to (coin?.symbol ?: symbol)))
+                },
                 // A split's parts on the receipt as on the confirm (spec 038
-                // #D2): the count, then every person with their amount.
-                captions = if (receipt.transfers.size > 1) {
+                // #D2): the count, then every person with their amount. A
+                // sweep is ONE recipient: "To …", then each of its coins.
+                captions = if (!sweep && receipt.transfers.size > 1) {
                     listOf(
                         "${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to receipt.transfers.size.toString()))} · $chain",
                     ) + receipt.transfers.map { part -> "${part.to_name ?: shortAddress(part.to)} · ${sentFigure(part.amount, view)} ${part.symbol}".trim() }
                 } else {
                     listOf(
                         "${s.t(I18nKeys.Flows.TO_NAME, mapOf("name" to (receipt.transfers.firstOrNull()?.to_name ?: shortAddress(view.recipient))))} · $chain",
-                    )
+                    ) + coinLines
                 },
                 hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS), copyValue = it) },
                 viewOnExplorer = explorer?.let { s.t(I18nKeys.Flows.VIEW_ON_EXPLORER) },
@@ -1199,7 +1308,9 @@ object SendLive {
                     header = header,
                     stage = ReceiptStage.Submitted,
                     title = s.t(I18nKeys.Flows.TX_SUBMITTED_TITLE),
-                    captions = listOfNotNull(
+                    // A sweep's coins first (spec 097 F), so the wait's own
+                    // lines — and the clock under them — stay together.
+                    captions = coinLines + listOfNotNull(
                         if (receipt.hold_reason != null) s.t(I18nKeys.Flows.TX_HELD_FEES) else s.t(I18nKeys.Flows.TX_WAITING_CONFIRM),
                         typicalLine.takeIf { eta == null },
                     ),
