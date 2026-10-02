@@ -381,7 +381,8 @@ pub fn contract_name_of(address: &str) -> Option<&'static str> {
 /// Within the budget it is kept verbatim. Past it, the string values —
 /// calldata, a typed document, a message — are clipped, ever shorter, on a
 /// character boundary, until the whole fits; the result is still the same
-/// JSON shape, so a replay still reads its selector and its early words. Text
+/// JSON shape, so a replay still reads its selector and its early words. A
+/// request whose shape alone is past the budget keeps nothing (`""`). Text
 /// that is not JSON (never signed: the machine refuses it) is cut on a
 /// character boundary.
 #[must_use]
@@ -401,8 +402,9 @@ pub fn stored_request(params_json: &str) -> (String, bool) {
             return (text, true);
         }
     }
-    // The structure alone is past the budget (thousands of fields).
-    ("[]".to_owned(), true)
+    // The structure alone is past the budget (thousands of fields): nothing
+    // is kept, and the detail says the content was not recorded.
+    (String::new(), true)
 }
 
 /// Every string in `value` cut to at most `cap` bytes.
@@ -472,6 +474,15 @@ mod tests {
         let raw = "é".repeat(STORED_REQUEST_MAX_BYTES);
         let (kept, _) = stored_request(&raw);
         assert!(kept.len() <= STORED_REQUEST_MAX_BYTES && kept.chars().all(|c| c == 'é'));
+    }
+
+    #[test]
+    fn a_shape_past_the_budget_keeps_nothing() {
+        let many: Vec<Value> = (0..3_000).map(|i| json!({ "n": i })).collect();
+        assert_eq!(
+            stored_request(&json!([many]).to_string()),
+            (String::new(), true)
+        );
     }
 
     #[test]

@@ -232,7 +232,13 @@ pub struct FeedTxRecord {
     /// (`SignRecord::balance_changes`, stored by the shell). The one account
     /// of a dApp call's money that its page did not write. Absent on every
     /// other kind, on older rows and from a shell that does not map it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Read leniently ([`stored_or_none`]): lines this build cannot read are
+    /// no lines, never a feed that fails to load.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "stored_or_none"
+    )]
     pub balance_changes: Option<Vec<TrustSimJudgment>>,
     /// `dapp_tx` only (083 F3): whether the transaction carried calldata, as
     /// the shell read it off the stored request — `true` makes `to` the
@@ -248,9 +254,29 @@ pub struct FeedTxRecord {
     pub call_data: Option<String>,
     /// A dApp record's summary (spec 093) — `SignRecord::summary`, stored
     /// verbatim by the shell (`dappSummary`) and handed back untouched.
-    /// `None` on records from before 093, which read by their kind.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// `None` on records from before 093, which read by their kind — and on
+    /// a summary this build cannot read (a newer build's action, a damaged
+    /// row): that record reads by its kind, the rest of the feed loads
+    /// ([`stored_or_none`]).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "stored_or_none"
+    )]
     pub summary: Option<DappSummary>,
+}
+
+/// A value the shell stored and hands back verbatim, read leniently: what
+/// this build cannot read is `None`. One record's field must never stop the
+/// whole store from loading — `StoreLoaded` is one list, and serde fails it
+/// whole.
+fn stored_or_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|value| serde_json::from_value(value).ok()))
 }
 
 impl FeedTxRecord {
@@ -374,18 +400,21 @@ pub struct FeedItem {
     pub tx_hash: Option<String>,
     pub batch: Option<FeedBatch>,
     /// What the row is (spec 082 RG1): `Send` (a folded batch too),
-    /// `Receive` or `DappTx`. The shell draws from this and never guesses.
+    /// `Receive`, `DappTx`, or a dApp's `SignMessage` / `SignTypedData`
+    /// (spec 093). The shell draws from this and never guesses.
     #[serde(default)]
     pub kind: FeedTxKind,
     /// The record's lifecycle; a folded batch carries its first line's. The
     /// tracker is the only thing that moves a record off `Pending`, so a row
     /// says "confirmed" or "failed" only when the stored record does — and
     /// `Unknown` when it is pending and nothing will ever settle it (087 F04).
+    /// A signature is always `Confirmed`: it was given, and nothing settles
+    /// it (spec 093).
     #[serde(default = "status_unknown")]
     pub status: FeedTxStatus,
-    /// `DappTx` only: the site that asked, read from the origin the request
-    /// arrived from (`dapp_url`, never the dApp's own name) — the same value
-    /// as `dapp.site`.
+    /// A dApp row only (a transaction or a signature): the site that asked,
+    /// read from the origin the request arrived from (`dapp_url`, never the
+    /// dApp's own name) — the same value as `dapp.site`.
     #[serde(default)]
     pub site: Option<String>,
     /// Whether `counterparty` got the money or is the contract a call went

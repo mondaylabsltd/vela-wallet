@@ -2892,3 +2892,30 @@ fn a_transfer_row_says_whom_and_where_it_stands() {
         }]
     );
 }
+
+/// A stored summary or balance-change list this build cannot read (a newer
+/// build's action, a damaged row) drops to nothing for that record — the
+/// record reads by its kind — and never stops the store from loading.
+#[test]
+fn an_unreadable_stored_summary_never_stops_the_feed() {
+    let record: FeedTxRecord = serde_json::from_value(serde_json::json!({
+        "id": "future", "user_op_hash": "", "tx_hash": "", "from": ADDR, "to": "",
+        "to_name": null, "value": "0", "symbol": "", "decimals": 0, "logo_urls": null,
+        "chain_id": 1, "timestamp": 100_000.0, "day_start_ms": 0.0, "status": "confirmed",
+        "kind": "sign_typed_data", "usd": null, "dapp_url": "https://app.example",
+        "summary": { "action": "teleport", "calls": 0 },
+        "balance_changes": [{ "type": "nft", "delta": "1" }],
+    }))
+    .expect("the record still reads");
+    assert_eq!(
+        (record.summary.clone(), record.balance_changes.clone()),
+        (None, None)
+    );
+    let sut = boot(vec![record]);
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].dapp.as_ref().and_then(|d| d.intent_term),
+        Some(ClearTerm::TypedDataIntent)
+    );
+}
