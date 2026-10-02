@@ -1967,6 +1967,15 @@ pub fn sign_request_ttl_ms() -> f64 {
 // The worker cannot load the core; its tests pin its copies to these.
 // ---------------------------------------------------------------------------
 
+/// How long one chain's balance read may take before the round gives up on
+/// it and counts that chain failed, ms (spec 092) —
+/// `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+#[wasm_bindgen(js_name = balanceChainReadDeadlineMs)]
+#[must_use]
+pub fn balance_chain_read_deadline_ms() -> u32 {
+    vela_core::app::balance_dashboard::CHAIN_READ_DEADLINE_MS
+}
+
 /// The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
 #[wasm_bindgen(js_name = rpcReadTimeoutMs)]
 #[must_use]
@@ -2322,6 +2331,7 @@ mod core_082_exports {
         assert!((dapp_receipt_wait_ms(115_000.0) - 10_000.0).abs() < f64::EPSILON);
         assert!((sign_request_ttl_ms() - 300_000.0).abs() < f64::EPSILON);
         assert_eq!(rpc_read_timeout_ms(), 8_000);
+        assert_eq!(balance_chain_read_deadline_ms(), 18_000);
         let cooldowns: Vec<f64> = (0..=6).map(rpc_cooldown_ms).collect();
         assert_eq!(
             cooldowns,

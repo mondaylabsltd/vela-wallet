@@ -112,6 +112,14 @@ pub const BALANCE_CACHE_TTL_MS: f64 = 24.0 * 60.0 * 60.0 * 1000.0;
 /// (`wallet-api.ts:360, 379`).
 pub const DEFAULT_QUOTE_DECIMALS: u32 = 6;
 
+/// How long one chain's balance read may take before the round gives up on it
+/// (spec 092). That chain is a failed chain for the round — it joins the
+/// unreachable list like any other — and every other chain's answer still
+/// lands: a connection held open, which is a real mode behind a blocking
+/// network, must never keep the round, and the home, from settling. The
+/// web's and the desktop's 18 s, now the one rule every shell reads.
+pub const CHAIN_READ_DEADLINE_MS: u32 = 18_000;
+
 /// While the list of unreachable networks is open, how long after each read
 /// the next one starts (spec 092): a network that comes back leaves the list
 /// in front of the person, not at the next 10-minute poll.

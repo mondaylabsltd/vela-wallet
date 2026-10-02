@@ -637,6 +637,13 @@ export function attestSafeMessageHash(original_hash: Uint8Array, chain_id: bigin
 export function attestSafeOpHash(op_json: string, calls_json: string, chain_id: bigint): Uint8Array;
 
 /**
+ * How long one chain's balance read may take before the round gives up on
+ * it and counts that chain failed, ms (spec 092) —
+ * `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+ */
+export function balanceChainReadDeadlineMs(): number;
+
+/**
  * Which balances one chain's read covers, in order —
  * `balance_dashboard::read_plan` (RE9): the native coin, the registry
  * stablecoins, the wrapped native, the person's own tokens, each contract
@@ -1338,6 +1345,7 @@ export interface InitOutput {
     readonly approvalguardcore_view: (a: number) => [number, number, number, number];
     readonly attestSafeMessageHash: (a: number, b: number, c: bigint, d: number, e: number) => [number, number, number, number];
     readonly attestSafeOpHash: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
+    readonly balanceChainReadDeadlineMs: () => number;
     readonly balanceReadPlan: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number, number];
     readonly balancedashboardcore_dispatch: (a: number, b: number, c: number) => [number, number, number, number];
     readonly balancedashboardcore_new: () => number;

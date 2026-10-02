@@ -12857,6 +12857,17 @@ public func amountTextClean(raw: String, number: String, previous: String?, past
 })
 }
 /**
+ * How long one chain's balance read may take before the round gives up on
+ * it and counts that chain failed — `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+ */
+public func balanceChainReadDeadlineMs() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_balance_chain_read_deadline_ms(uniffiCallStatus
+    )
+})
+}
+/**
  * Which balances one chain's read covers, in order: the native coin (unless
  * the chain has none — Tempo), the registry stablecoins, the wrapped native
  * (unless it IS the native), then the person's custom tokens; one slot per
@@ -15227,6 +15238,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_amount_text_clean() != 980) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_balance_chain_read_deadline_ms() != 17565) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_balance_read_plan() != 29039) {
