@@ -5,8 +5,8 @@
  */
 export type TrustSimJudgment = { "type": "native", delta: string, } | { "type": "erc20_trusted", token: string, delta: string, symbol: string, decimals: number, 
 /**
- * The token is one this wallet already trusts — the chain's stables
- * or wrapped coin, a token the account holds, the curated table —
+ * The token is one this wallet already trusts — the chain's registry
+ * stables or wrapped coin, a token the account holds —
  * and not merely one whose `symbol()` answered. Always so for an
  * inflow (that is what earned it a figure); an OUTFLOW renders on
  * metadata alone, so this is what tells a known coin leaving from a

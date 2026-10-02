@@ -27,7 +27,8 @@ spender?: string | null,
  */
 token?: string | null, 
 /**
- * The token's symbol, as the sheet resolved it (or the built-in table).
+ * The token's symbol: the registry's on the request's chain, else as
+ * the sheet resolved it.
  */
 symbol?: string | null, decimals?: number | null, 
 /**
