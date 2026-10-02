@@ -100,6 +100,15 @@ test.describe('connecting a dApp', () => {
 		const asked = page.evaluate(() => window.__ask('eth_requestAccounts')) as Promise<AskResult>;
 		const win = await requestWindow(context);
 		await expect(win.getByRole('heading')).toContainText(`localhost:${PORT}`);
+		// Spec 096 F11: the consent names what a Connect shares — the account
+		// the grant will pin (the core's `consent_address`) and the network.
+		const facts = win.getByTestId('consent-facts');
+		await expect(facts).toContainText('Account');
+		await expect(facts).toContainText(`${FIXTURE_ONE.slice(0, 8)}…${FIXTURE_ONE.slice(-6)}`);
+		await expect(facts).toContainText('Network');
+		if (process.env.VELA_SHOTS_DIR) {
+			await win.screenshot({ path: `${process.env.VELA_SHOTS_DIR}/096-consent-window.png` });
+		}
 		await win.getByRole('button', { name: 'Connect' }).click();
 		// The window closes on a short delay; the assertions below are about
 		// there being NO second window, so wait for the first one to be gone.

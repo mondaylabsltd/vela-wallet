@@ -335,8 +335,7 @@ mod tests {
         let params = format!(r#"[{{"to":"{ROUTER}","value":"aa87bee538000"}}]"#);
         let refused = canonical_params_json("eth_sendTransaction", &params);
         assert_eq!(refused, Err(TxRequestError::BadValue { leg: None }));
-        assert!(refused
-            .unwrap_err()
+        assert!(TxRequestError::BadValue { leg: None }
             .message()
             .contains("0x-prefixed hex quantity"));
 
