@@ -313,6 +313,11 @@ pub struct SettingsStrings {
     pub about_link_github: SharedString,
     pub about_link_safe: SharedString,
     pub about_footer: SharedString,
+    /// Spec 091: the hidden developer switch, its one line, and the notice
+    /// when seven taps on the version reveal it.
+    pub about_debug_mode: SharedString,
+    pub about_debug_mode_body: SharedString,
+    pub about_debug_mode_revealed: SharedString,
     // rescue (DSR1)
     pub rpc_fix_title: SharedString,
     pub rpc_fix_warning: SharedString,
@@ -554,6 +559,9 @@ impl SettingsStrings {
             about_link_github: s("about.linkGitHub"),
             about_link_safe: s("about.linkSafeWallet"),
             about_footer: s("about.footer"),
+            about_debug_mode: s("about.debugMode"),
+            about_debug_mode_body: s("about.debugModeBody"),
+            about_debug_mode_revealed: s("about.debugModeRevealed"),
             rpc_fix_title: s("assets.rpcFixTitle"),
             rpc_fix_warning: s("assets.rpcFixWarning"),
             rpc_fix_label: s("assets.rpcFixLabel"),
@@ -571,6 +579,19 @@ impl SettingsStrings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 091: the debug-mode words resolve — never their own keys.
+    #[test]
+    fn the_debug_mode_words_resolve() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        for (value, key) in [
+            (&s.about_debug_mode, "about.debugMode"),
+            (&s.about_debug_mode_body, "about.debugModeBody"),
+            (&s.about_debug_mode_revealed, "about.debugModeRevealed"),
+        ] {
+            assert!(!value.is_empty() && value.as_ref() != key, "{key}");
+        }
+    }
 
     /// The words this cut newly reads.
     ///

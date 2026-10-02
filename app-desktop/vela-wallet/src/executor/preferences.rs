@@ -123,6 +123,24 @@ pub fn set_text_scale(level: &str) {
     }
 }
 
+/// Settings' debug mode (spec 091): hidden until seven taps on About's
+/// version reveal it, then off or on. The rule and the stored spelling are the
+/// core's (`prefs::DebugMode`, `prefs::version_tapped`).
+#[must_use]
+pub fn debug_mode() -> prefs::DebugMode {
+    cell()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .debug_mode
+}
+
+/// The revealed switch, set on or off — and revealing it is setting it off.
+pub fn set_debug_mode(on: bool) {
+    if let Some(value) = prefs::DebugMode::switched(on).stored() {
+        write(keys::DEBUG_MODE, value);
+    }
+}
+
 /// Store one preference and put it in force. Best effort, as every shell's
 /// preference write is: the in-memory choice holds for this session either
 /// way, and a failed write is said rather than swallowed.
@@ -246,6 +264,37 @@ mod tests {
             // Leave the process as a default launch would find it.
             set_theme("system");
             set_text_scale("standard");
+        });
+    }
+
+    /// Spec 091: the debug-mode switch is hidden until revealed, stored in
+    /// the core's spelling once it is, and read back as such.
+    #[test]
+    fn the_debug_mode_switch_is_stored_in_the_cores_spelling() {
+        with_temp_state("prefs-debug-mode", || {
+            load();
+            assert_eq!(debug_mode(), prefs::DebugMode::Hidden, "nothing stored");
+            set_debug_mode(false);
+            assert_eq!(debug_mode(), prefs::DebugMode::Off, "revealed, off");
+            assert_eq!(
+                storage::read_value(keys::DEBUG_MODE).ok().flatten(),
+                Some(json!("off"))
+            );
+            set_debug_mode(true);
+            assert_eq!(debug_mode(), prefs::DebugMode::On);
+            assert_eq!(
+                storage::read_value(keys::DEBUG_MODE).ok().flatten(),
+                Some(json!("on"))
+            );
+            // A relaunch reads what was stored.
+            load();
+            assert!(debug_mode().is_on());
+            // Leave the process as a default launch would find it.
+            if storage::apply_raw(&[(keys::DEBUG_MODE.to_owned(), None)]).is_err() {
+                unreachable!("remove");
+            }
+            load();
+            assert_eq!(debug_mode(), prefs::DebugMode::Hidden);
         });
     }
 
