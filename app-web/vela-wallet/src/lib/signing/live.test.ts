@@ -2306,12 +2306,15 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 			text: m.warnPartial
 		});
 
-		// The chain is down: no figure, a caution, and the reading says it is incomplete.
+		// A token the wallet does not know on this chain, and the chain is down:
+		// no figure, a caution, and the reading says it is incomplete. (BNB
+		// Chain's USDC is the registry's, 097 D: the derived fixture names an
+		// unlisted token.)
 		const down = buildSigningModel(
-			inputs({ sign: BNB, clear: read('oneinch-native-order.json', true) })
+			inputs({ sign: BNB, clear: read('oneinch-native-order-unlisted.json', true) })
 		)!;
 		expect(down.blocks.find((b) => b.kind === 'swap')).toMatchObject({
-			receive: { sign: '', value: '\u2014 0x8ac7...', tone: 'caution' }
+			receive: { sign: '', value: '\u2014 0xa0b8...', tone: 'caution' }
 		});
 		expect(down.blocks).toContainEqual({ kind: 'warning', tone: 'caution', text: m.warnPartial });
 		expect(down.blocks).toContainEqual({
@@ -2330,13 +2333,13 @@ describe('the sheet never states the false or the unknown as certain (097)', () 
 		});
 	});
 
-	it('a batch call on a token names it, with its address beside a name the chain gave (N8)', () => {
+	it('a batch call on a token names it: the registry token by its symbol alone (N8, 097 D)', () => {
 		const model = buildSigningModel(
 			inputs({ sign: BNB, clear: read('pancakeswap-usdc-batch.json') })
 		)!;
 		const cards = model.blocks.filter((b) => b.kind === 'card');
 		expect(JSON.stringify(cards[0])).toContain(
-			JSON.stringify({ label: m.labelInteracting, value: 'USDC (0x8ac76a...cd580d)' })
+			JSON.stringify({ label: m.labelInteracting, value: 'USDC' })
 		);
 	});
 });
