@@ -296,7 +296,9 @@ pub enum Event {
     RevokeAll,
     /// The signing pipeline's answer to a forwarded request. `user_op_hash`
     /// is set when the page was answered with a user-operation hash, so its
-    /// receipt lookups can be translated.
+    /// receipt lookups can be translated. A `wallet_sendCalls` answered with
+    /// a hash needs no word from the shell: that hash is its batch id
+    /// (spec 097 E), known to `wallet_getCallsStatus` from then on.
     SigningAnswered {
         tab: String,
         id: String,
@@ -410,6 +412,8 @@ struct SignJob {
     method: String,
     params_json: String,
     origin: String,
+    /// The chain it was forwarded on — where a batch it is answered for went.
+    chain_id: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -435,8 +439,9 @@ pub struct Model {
     consent: Option<Consent>,
     signing: Option<SignJob>,
     sign_queue: VecDeque<SignJob>,
-    /// Lower-cased user-operation hashes pages were answered with.
-    user_ops: Vec<String>,
+    /// Lower-cased user-operation hashes pages were answered with, and the
+    /// chain each went to — where its receipt and its batch status are read.
+    user_ops: BTreeMap<String, u32>,
     /// Tabs the shell closed. A straggler from one of them is ignored, never
     /// adopted as a new page.
     closed_tabs: VecDeque<String>,
@@ -1322,6 +1327,7 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 method: request.method,
                 params_json: request.params.to_string(),
                 origin,
+                chain_id,
             };
             if model.signing.is_none() {
                 open(model, tab_id, &id, OpenKind::Signing);
@@ -1352,25 +1358,26 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 deliver_error(tab_id, &doc, &id, -32602, "Expected [id]", out);
                 return;
             };
-            // Only a batch this wallet sent: a page answered with its id.
-            if !model.user_ops.contains(&batch) {
+            // Only a batch this wallet sent: a page answered with its id —
+            // read on the chain it went to, wherever the site is now.
+            let Some(&chain) = model.user_ops.get(&batch) else {
                 let code = dapp_rpc::UNKNOWN_BUNDLE_ID;
                 deliver_error(tab_id, &doc, &id, code, "Unknown bundle id", out);
                 return;
-            }
+            };
             if let Some(tab) = model.tabs.get_mut(tab_id) {
                 tab.calls_status.insert(
                     id.clone(),
                     CallsStatusRead {
                         batch: batch.clone(),
-                        chain: chain_id,
+                        chain,
                         receipt: None,
                     },
                 );
             }
             let read = QueuedRead {
                 id: id.clone(),
-                chain_id,
+                chain_id: chain,
                 method: "eth_getUserOperationReceipt".to_owned(),
                 params: json!([batch]),
                 bundler: true,
@@ -1512,7 +1519,7 @@ fn consent_approved(model: &mut Model, now_ms: f64, out: &mut Out) {
 // Signing
 // ---------------------------------------------------------------------------
 
-fn forward(model: &mut Model, job: SignJob, out: &mut Out) {
+fn forward(model: &mut Model, mut job: SignJob, out: &mut Out) {
     let granted_address = granted(model, &job.origin).into_iter().next();
     let Some(granted_address) = granted_address else {
         // The grant went away while the request waited in line.
@@ -1531,13 +1538,16 @@ fn forward(model: &mut Model, job: SignJob, out: &mut Out) {
     if let Some(tab) = model.tabs.get_mut(&job.tab) {
         tab.open.insert(job.id.clone(), OpenKind::Signing);
     }
+    // The site's chain NOW: a request that waited in line goes where the site
+    // is when its turn comes.
+    job.chain_id = site_chain(model, &job.origin);
     out.op(DbrOperation::ForwardToSigning {
         tab: job.tab.clone(),
         id: job.id.clone(),
         method: job.method.clone(),
         params_json: job.params_json.clone(),
         origin: job.origin.clone(),
-        chain_id: site_chain(model, &job.origin),
+        chain_id: job.chain_id,
         granted_address,
     });
     model.signing = Some(job);
@@ -1569,10 +1579,29 @@ fn signing_answered(
         Some(job) if job.tab == tab_id && job.id == id => model.signing.take(),
         _ => None,
     };
-    if let Some(hash) = user_op_hash {
-        let hash = hash.to_ascii_lowercase();
-        if !model.user_ops.contains(&hash) {
-            model.user_ops.push(hash);
+    // The chain the answer's operation went to: the job's, else the site's.
+    let chain = job.as_ref().map(|job| job.chain_id).or_else(|| {
+        let origin = model.tabs.get(tab_id)?.doc_origin.clone()?;
+        Some(site_chain(model, &origin))
+    });
+    // A batch's answer IS its id (EIP-5792; the signing machine answers the
+    // operation's hash, spec 097 E): known here by the method, whatever the
+    // shell says — the desktop told only an answer equal to the op it had
+    // seen, and `wallet_getCallsStatus` read "Unknown bundle id".
+    let batch = job
+        .as_ref()
+        .filter(|job| job.method == "wallet_sendCalls")
+        .and_then(|_| match &payload {
+            SignResponsePayload::Ok { result: Some(id) } => dapp_rpc::calls_status_id(&json!([id])),
+            _ => None,
+        });
+    if let Some(chain) = chain {
+        for hash in user_op_hash
+            .map(|hash| hash.to_ascii_lowercase())
+            .into_iter()
+            .chain(batch)
+        {
+            model.user_ops.entry(hash).or_insert(chain);
         }
     }
     if let Some(job) = job {
@@ -1628,8 +1657,12 @@ fn start_read(model: &mut Model, tab_id: &str, read: QueuedRead, out: &mut Out) 
             .and_then(|params| params.first())
             .and_then(Value::as_str)
             .map(str::to_ascii_lowercase);
-        if let Some(hash) = hash.filter(|hash| model.user_ops.contains(hash)) {
-            out.resolve_user_op(tab_id, &read, hash);
+        if let Some((hash, &chain)) = hash.and_then(|hash| model.user_ops.get_key_value(&hash)) {
+            let read = QueuedRead {
+                chain_id: chain,
+                ..read
+            };
+            out.resolve_user_op(tab_id, &read, hash.clone());
             return;
         }
     }
