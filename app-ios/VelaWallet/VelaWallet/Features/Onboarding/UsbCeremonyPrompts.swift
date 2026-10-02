@@ -284,7 +284,8 @@ struct UsbConnectingSheet: View {
         // Same words as the remote touch prompt, from the shared corpus.
         case .hybrid: loc.t(I18nKeys.Flow.touchRemoteBody)
         case .securityKey: loc.t(I18nKeys.Create.methodSecurityKeyBody)
-        case .platform: loc.t(I18nKeys.Create.methodPlatformBody)
+        // What unlocks a passkey HERE (087 F01) — the core names it.
+        case .platform: methodCopy(.platform, chooser: .create, loc: loc).body
         case .trustedSigner: loc.t(I18nKeys.TrustedSigner.body)
         }
     }

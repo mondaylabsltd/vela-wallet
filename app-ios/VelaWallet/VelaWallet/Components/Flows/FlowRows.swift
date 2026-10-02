@@ -256,6 +256,8 @@ struct RecipientCardView: View {
     var address: Binding<String>?
     var amount: Binding<String>?
 
+    @State private var amountInHand = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s4) {
             HStack(spacing: Tokens.Space.s12) {
@@ -282,26 +284,41 @@ struct RecipientCardView: View {
                 }
                 Spacer(minLength: Tokens.Space.s8)
                 if let amount {
-                    AmountTextField(
-                        text: amount,
-                        placeholder: "0",
-                        font: Typography.rowValue.scaled(textScale).uiFont,
-                        color: theme.fgBase,
-                        alignment: .right
-                    )
-                    .frame(maxWidth: WalletGeometry.splitAmountWidth)
+                    // Issue #331: the amount is a WELL a full control tall (the
+                    // web's `.amount-well`) — it was a bare one-line figure with
+                    // the ✕ 12pt to its right, and SwiftUI answers a touch NEAR
+                    // a button (its touch radius, ~20pt here), so a tap just
+                    // past the "0" dropped the recipient. The field now runs on
+                    // to the ✕'s own 44pt target: the gap between the well and
+                    // the ✕ is still field, so no point short of the ✕ is left
+                    // for the ✕ to claim. The well is seen while it is wanted:
+                    // empty, or in hand.
+                    let well = amount.wrappedValue.isEmpty || amountInHand
+                    HStack(spacing: Tokens.Space.s0) {
+                        AmountTextField(
+                            text: amount,
+                            placeholder: "0",
+                            font: Typography.rowValue.scaled(textScale).uiFont,
+                            color: theme.fgBase,
+                            alignment: .right,
+                            minHeight: Tokens.Layout.hitTarget,
+                            room: (Tokens.Space.s8, Tokens.Space.s8 + Tokens.Space.s12),
+                            onEditing: { amountInHand = $0 }
+                        )
+                        .background(
+                            RoundedRectangle(cornerRadius: Tokens.Radius.r8)
+                                .fill(well ? theme.bgBase : .clear)
+                                .padding(.trailing, Tokens.Space.s12)
+                        )
+                        .frame(width: WalletGeometry.splitAmountWidth + Tokens.Space.s12)
+                        removeButton
+                    }
                 } else {
                     Text(verbatim: recipient.amount)
                         .typeRole(Typography.rowValue.scaled(textScale))
                         .foregroundStyle(theme.fgBase)
+                    removeButton
                 }
-                Button(action: onRemove) {
-                    LucideIcon(.close, size: LucideIconSize.flowRowAction)
-                        .foregroundStyle(theme.fgSubtle)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(recipient.removeLabel)
             }
             // The core's verdict on THIS row. A list of six with one sentence
             // underneath makes somebody count rows to find the bad one.
@@ -313,6 +330,11 @@ struct RecipientCardView: View {
         }
         .padding(Tokens.Space.s12)
         .background(RoundedRectangle(cornerRadius: Tokens.Radius.r12).fill(theme.bgRaised))
+    }
+
+    /// The way to drop the row: the flows' own icon button, a 44pt target.
+    private var removeButton: some View {
+        FlowIconButton(glyph: .close, label: recipient.removeLabel, tint: theme.fgSubtle, action: onRemove)
     }
 }
 

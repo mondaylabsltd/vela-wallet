@@ -154,6 +154,8 @@ describe('the desktop column title (T484)', () => {
 					spam: false
 				},
 				recipient: '',
+				request_chain_id: null,
+				can_change_token: false,
 				amount: '',
 				amount_fiat_code: null,
 				denom_toggle_shown: false,

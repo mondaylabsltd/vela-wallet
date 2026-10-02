@@ -47,6 +47,8 @@
 		pickFeeToken(index: number): void;
 		/** 最大 — the core's `tap_max`: the whole balance, net of the fee it estimates. */
 		max(): void;
+		/** The token card — the core's `change_token`: back to the picker, payee kept. */
+		changeToken(): void;
 		/**
 		 * ⇄ — the core's `toggle_fiat_input`: type the amount in the token or in
 		 * the display currency. Drawn since 021 and wired to nothing until now
@@ -140,10 +142,11 @@
 		scan?: ScanActions;
 		addToken?: AddTokenActions;
 		/**
-		 * The person dismissed the sheet (spec 028 T442). A sheet is a pushed
-		 * step on the route's stack, and a route that does not hear the
-		 * dismissal keeps the step — so the next `go()` to the same sheet is a
-		 * no-op and nothing opens. Absent in the gallery.
+		 * The person dismissed the sheet (spec 028 T442), whichever sheet it
+		 * was. A sheet is a pushed step on the route's stack, or a machine's
+		 * flag, and a route that does not hear the dismissal keeps it — so the
+		 * next `go()` to the same sheet is a no-op and nothing opens (issue
+		 * 328: the token sheet never told it). Absent in the gallery.
 		 */
 		onsheetclose?: () => void;
 		/** The open transaction's delete (spec 028 Phase 8). Absent in the gallery. */
@@ -182,6 +185,13 @@
 	});
 
 	const go = (to: string, index?: number) => onnavigate?.(to, index);
+
+	// The one close every sheet below takes — ✕, a drag, the scrim and Escape
+	// all end in BottomSheet's `onclose` — and the route hears each one.
+	function closeSheet(): void {
+		sheetClosed = true;
+		onsheetclose?.();
+	}
 </script>
 
 <div class="host" style:--text-scale={model.textScale === 1 ? undefined : model.textScale}>
@@ -241,6 +251,7 @@
 				onspeedpick={send?.pickSpeed ? (id) => send.pickSpeed?.(id) : undefined}
 				ondenom={send ? () => send.toggleDenom() : undefined}
 				onmax={send ? () => send.max() : undefined}
+				onchangeToken={send ? () => send.changeToken() : undefined}
 				onrecipientAction={(id) => {
 					// The split form's three pills (Phase 10): a blank row, the book
 					// into a new row, the importer sheet. Live, the first two are the
@@ -292,7 +303,7 @@
 				closeLabel={sheet.model.closeLabel}
 				height="tall"
 				hideTitle
-				onclose={() => (sheetClosed = true)}
+				onclose={closeSheet}
 			>
 				<ReceiveQr model={sheet.model} />
 			</BottomSheet>
@@ -302,7 +313,7 @@
 				closeLabel={sheet.model.closeLabel}
 				height="tall"
 				hideTitle
-				onclose={() => (sheetClosed = true)}
+				onclose={closeSheet}
 			>
 				<TxDetail model={sheet.model} ondelete={ondeletetx} />
 			</BottomSheet>
@@ -312,7 +323,7 @@
 				closeLabel={sheet.model.closeLabel}
 				height="tall"
 				hideTitle
-				onclose={() => (sheetClosed = true)}
+				onclose={closeSheet}
 			>
 				<TokenDetail
 					model={sheet.model}
@@ -329,10 +340,7 @@
 				title={sheet.model.title}
 				closeLabel={sheet.model.closeLabel}
 				height="tall"
-				onclose={() => {
-					sheetClosed = true;
-					onsheetclose?.();
-				}}
+				onclose={closeSheet}
 			>
 				<AddToken
 					model={sheet.model}
@@ -347,7 +355,7 @@
 				title={sheet.model.title}
 				closeLabel={sheet.model.closeLabel}
 				height="tall"
-				onclose={() => (sheetClosed = true)}
+				onclose={closeSheet}
 			>
 				<ContactPick
 					model={sheet.model}
@@ -363,10 +371,7 @@
 			<BottomSheet
 				title={sheet.model.title}
 				closeLabel={sheet.model.closeLabel}
-				onclose={() => {
-					sheetClosed = true;
-					onsheetclose?.();
-				}}
+				onclose={closeSheet}
 			>
 				<FeeTokenPick
 					model={sheet.model}
@@ -378,7 +383,7 @@
 				title={sheet.model.title}
 				closeLabel={sheet.model.closeLabel}
 				height="tall"
-				onclose={() => (sheetClosed = true)}
+				onclose={closeSheet}
 			>
 				<BatchImport
 					model={sheet.model}

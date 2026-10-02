@@ -104,11 +104,16 @@ fun ActivityRow(model: ActivityRowModel, modifier: Modifier = Modifier) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(modifier = Modifier.width(VelaSpacing.lg))
-        // Fixed share for the amount so extreme values wrap the unit below
-        // instead of clipping or overlapping the title (H7 edge case).
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-            AmountText(model)
+        // 087 F11: a row with no figure — a dApp call that moved no coin of
+        // ours — draws no amount cell at all. The empty cell still took half
+        // the row (and printed a lone " "), cutting the site name short.
+        if (model.hasFigure) {
+            Spacer(modifier = Modifier.width(VelaSpacing.lg))
+            // Fixed share for the amount so extreme values wrap the unit below
+            // instead of clipping or overlapping the title (H7 edge case).
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                AmountText(model)
+            }
         }
     }
 }
@@ -128,7 +133,7 @@ private fun AmountText(model: ActivityRowModel) {
             ) {
                 append(model.amount)
             }
-            append(" ")
+            if (model.amount.isNotBlank() && model.unit.isNotBlank()) append(" ")
             withStyle(
                 SpanStyle(
                     color = colors.fgSubtle,

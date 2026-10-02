@@ -78,7 +78,7 @@
       "resetToDefault": "Reset to Default",
       "sectionDebug": "DEBUG",
       "simulateFailure": "Simulate Endpoint Failure",
-      "warningText": "The Passkey Index service is unreachable. Wallet creation and sign-in require this service. Please configure a reachable endpoint below."
+      "warningText": "The Passkey Index service is unreachable. Wallet creation and sign-in require this service. Configure a reachable endpoint below."
     },
     "common": {
       "headerShared": "Create Wallet / Sign In",
@@ -174,7 +174,7 @@
       "methodHybridBody": "Scan a code and create it on a nearby device",
       "methodHybridTitle": "Phone or tablet",
       "methodHybridUnavailable": "Coming soon",
-      "methodPlatformBody": "Touch ID or Windows Hello",
+      "methodPlatformBody": "Fingerprint, face or screen lock",
       "methodPlatformTitle": "This device",
       "methodSecurityKeyBody": "Plug it in and touch it",
       "methodSecurityKeyTitle": "USB security key",
