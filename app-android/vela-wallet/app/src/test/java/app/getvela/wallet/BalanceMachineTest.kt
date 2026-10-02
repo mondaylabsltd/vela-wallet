@@ -79,11 +79,15 @@ class BalanceMachineTest {
         mainnet: Map<String, Double> = emptyMap(),
         /** The device's own storage — the custom-token cases write into it. */
         store: FakeStore = FakeStore(),
+        /** URLs whose connection is held open (spec 092). */
+        stall: (url: String) -> Boolean = { false },
+        /** The per-chain deadline; the core's 18 s unless a test needs it short. */
+        chainDeadlineMs: Long? = null,
         answer: (url: String, method: String) -> app.getvela.wallet.feature.wallet.core.RpcPostResult,
     ): Harness {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scopes += scope
-        val transport = FakeRpcTransport(answer)
+        val transport = FakeRpcTransport(stall = stall, answer = answer)
         val networks = MutableStateFlow(NetView(loaded = true, networks = rows))
         val pool = RpcPool(
             store = FakeStore(),
@@ -97,6 +101,7 @@ class BalanceMachineTest {
             store = store,
             chainInfo = { chainId -> chains[chainId] },
             mainnetPrices = { mainnet },
+            chainDeadlineMs = chainDeadlineMs ?: uniffi.vela_core_uniffi.balanceChainReadDeadlineMs().toLong(),
         )
         val host = CoreHost(
             bridge = BalanceDashboardCore().asBridge(),
@@ -729,6 +734,32 @@ class BalanceMachineTest {
         // Read once (holding something or nothing): never "not read yet".
         assertTrue(gnosis.last_known, gnosis.last_known == "held" || gnosis.last_known == "empty")
         assertEquals("assets.unreachableOne", quiet.unreachable_key)
+    }
+
+    /**
+     * Spec 092: a chain whose connection is held open never answers. The round
+     * gives up on it at the core's deadline — failed for this round, so it is
+     * on the unreachable list — and the chain that answered still lands.
+     */
+    @Test
+    fun aChainThatNeverAnswersIsFailedAtTheDeadlineAndTheRestLand() {
+        val h = harness(
+            listOf(row(1, "ETH", "Ethereum"), row(56, "BNB", "BNB Chain")),
+            stall = { url -> url.contains("chain-56") },
+            chainDeadlineMs = 300,
+        ) { _, _ -> FakeRpcTransport.body("0x14d1120d7b160000") }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val view = h.host.settle { it.last_refreshed_at_ms != null }
+        assertEquals(listOf(56), view.failed_chain_ids)
+        assertEquals(listOf(56), view.unreachable_networks.map { it.chain_id })
+        assertTrue(view.tokens.any { it.chain_id == 1 && it.symbol == "ETH" })
+    }
+
+    /** The deadline this executor uses by default is the core's, read rather than typed here. */
+    @Test
+    fun theDefaultChainDeadlineIsTheCores() {
+        assertEquals(18_000L, uniffi.vela_core_uniffi.balanceChainReadDeadlineMs().toLong())
     }
 
     private companion object {

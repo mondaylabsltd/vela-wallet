@@ -11,6 +11,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.NativeQuoteGroup
@@ -20,6 +21,7 @@ import uniffi.vela_core_uniffi.chooseNativePrice
 import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
 import uniffi.vela_core_uniffi.BalanceReadSlot
 import uniffi.vela_core_uniffi.balanceReadPlan
+import uniffi.vela_core_uniffi.balanceChainReadDeadlineMs
 
 /**
  * The only place the `balance_dashboard` core touches the outside world.
@@ -56,6 +58,12 @@ class BalanceExecutor(
     /** Chainlink's mainnet feeds, the last rung of the ladder. */
     private val mainnetPrices: suspend () -> Map<String, Double> = { emptyMap() },
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
+    /**
+     * How long one chain's read may take before the round gives up on it —
+     * the core's `CHAIN_READ_DEADLINE_MS` (spec 092), never a number of this
+     * file's own. A test passes a short one.
+     */
+    private val chainDeadlineMs: Long = balanceChainReadDeadlineMs().toLong(),
 ) {
 
     /**
@@ -259,7 +267,14 @@ class BalanceExecutor(
 
         val results = rows.map { row ->
             async {
-                val answer = readChain(address, row.chain_id.toInt(), row, chainlinkUsd)
+                // Spec 092: a chain whose connection is held open answers
+                // nothing, and the round used to wait on it for as long as the
+                // pool kept sweeping — Home never settled. Past the core's
+                // deadline it is a chain that did not answer this round (it
+                // joins the unreachable list), and the others land regardless.
+                val answer = withTimeoutOrNull(chainDeadlineMs) {
+                    readChain(address, row.chain_id.toInt(), row, chainlinkUsd)
+                } ?: ChainAnswer(row.chain_id.toInt(), answered = false, tokens = emptyList())
                 if (streaming && answer.tokens.isNotEmpty()) {
                     stream(BalanceEvent.ChainAssetsArrived(address, answer.tokens))
                 }
