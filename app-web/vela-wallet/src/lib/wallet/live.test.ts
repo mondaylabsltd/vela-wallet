@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
+import type { UnreachableNetwork } from '$lib/core/generated/UnreachableNetwork';
 import { resolveWalletMessages } from '$lib/i18n/engine.server';
 import { buildMobileState } from './fixtures';
 import {
@@ -41,11 +42,22 @@ const PRISTINE: BalanceView = {
 	unpriced_tokens: [],
 	failed_chain_ids: [],
 	rate_limited_chain_ids: [],
-	banner_chain_ids: [],
+	unreachable_networks: [],
+	unreachable_key: null,
 	holdings_loading: false,
 	cached_total_usd: null,
 	switcher: { open: false, loading: false, balances: [] }
 };
+
+/** A network the core lists as unreachable, not read yet (spec 092). */
+function unreachableRow(chainId: number): UnreachableNetwork {
+	return {
+		chain_id: chainId,
+		last_known: 'not_read',
+		last_seen_usd: null,
+		line_key: 'assets.notReadYet'
+	};
+}
 
 const ETH = {
 	chain_id: 1,
@@ -161,17 +173,27 @@ describe('liveBalance', () => {
 			balance_partial: true,
 			display_total_usd: 0,
 			failed_chain_ids: [100],
-			banner_chain_ids: [100]
+			unreachable_networks: [unreachableRow(100)],
+			unreachable_key: 'assets.unreachableOne'
 		};
 		const model = liveBalance(partial, USD, m);
 		expect(model.state).toBe('normal');
 		expect(model.liveText).toBeUndefined();
-		expect(model.status).toEqual({ kind: 'warning', text: 'Gnosis RPC unavailable' });
-		// Several unreachable chains: the count, not a list.
+		// Spec 092 (F08): no "RPC" on the home — a fact, calmly.
+		expect(model.status).toEqual({ kind: 'warning', text: "Can't reach Gnosis right now" });
+		// Several unreachable chains: the count of every one of them.
 		expect(
-			liveBalance({ ...partial, failed_chain_ids: [1, 100], banner_chain_ids: [1, 100] }, USD, m)
-				.status?.text
-		).toMatch(/^2 /);
+			liveBalance(
+				{
+					...partial,
+					failed_chain_ids: [1, 100],
+					unreachable_networks: [unreachableRow(1), unreachableRow(100)],
+					unreachable_key: 'assets.unreachableMany'
+				},
+				USD,
+				m
+			).status?.text
+		).toBe("Can't reach 2 networks right now");
 	});
 	it('a rate-limited chain is not nagged about: failed but not a banner → still-updating', () => {
 		const model = liveBalance(
@@ -183,7 +205,8 @@ describe('liveBalance', () => {
 				tokens: [ETH],
 				failed_chain_ids: [56],
 				rate_limited_chain_ids: [56],
-				banner_chain_ids: [],
+				unreachable_networks: [],
+				unreachable_key: null,
 				notice: 'still_updating'
 			},
 			USD,

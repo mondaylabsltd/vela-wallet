@@ -493,14 +493,22 @@
   "qrTitleNetwork": "Используйте этот адрес для получения активов в сети {{network}}",
   "qrTitleAsset": "Используйте этот адрес для получения {{symbol}} в сети {{network}}",
   "shareCardNetworkNote": "Только платежи в сети {{network}}",
-  "tokenContract": "Контракт токена"
+  "tokenContract": "Контракт токена",
+  "includeNetwork": "Указать сеть",
+  "includeNetworkHint": "Некоторые кошельки не читают такой код. Если не сканируется — выключите."
  },
  "assets": {
   "sectionTitle": "Активы",
   "addToken": "Добавить",
   "searchPlaceholder": "Поиск токенов…",
-  "rpcUnavailableSingle": "RPC {{name}} недоступен",
-  "rpcUnavailableMultiple": "RPC недоступен в {{count}} сетях",
+  "unreachableOne": "Сейчас нет связи с {{name}}",
+  "unreachableMany": "Сейчас нет связи с сетями: {{n}}",
+  "unreachableBody": "Ваши активы не затронуты — просто сейчас мы не можем их прочитать.",
+  "unreachableNone": "Связь со всеми сетями восстановлена.",
+  "lastSeen": "В последний раз: {{amount}}",
+  "lastSeenUnpriced": "При последнем чтении были токены",
+  "lastSeenEmpty": "При последнем чтении пусто",
+  "notReadYet": "Ещё не прочитано",
   "rpcFix": "Исправить",
   "emptyTitle": "Получите свой первый актив",
   "emptySubtext": "Нажмите здесь, чтобы увидеть адрес и получать токены",
@@ -1032,7 +1040,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Сделано с заботой. Ваши ключи — ваши монеты.",
-  "sectionLinks": "Ссылки"
+  "sectionLinks": "Ссылки",
+  "debugMode": "Режим отладки",
+  "debugModeBody": "Даёт http-страницам в вашей локальной сети доступ к кошельку. Только для разработки.",
+  "debugModeRevealed": "Режим отладки теперь доступен"
  },
  "clearSigning": {
   "title": "Тест Clear Signing",

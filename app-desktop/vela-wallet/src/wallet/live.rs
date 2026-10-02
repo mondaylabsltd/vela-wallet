@@ -9,7 +9,9 @@ use gpui::SharedString;
 use vela_core::app::activity_feed::{
     FeedAllowance, FeedDirection, FeedItem, FeedLine, FeedRow, FeedTxKind, FeedTxStatus, FeedView,
 };
-use vela_core::app::balance_dashboard::{BalanceNotice, BalanceToken, BalanceView};
+use vela_core::app::balance_dashboard::{
+    BalanceNotice, BalanceToken, BalanceView, UNREACHABLE_MANY, UNREACHABLE_ONE,
+};
 use vela_core::l10n::currency::format_fiat;
 use vela_core::l10n::number::format_token_amount;
 
@@ -146,35 +148,23 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
     };
 
     // One status line, most actionable first — the web's `liveBalance` order.
-    // `banner_chain_ids` is already failed MINUS rate-limited (a rate limit
-    // heals on its own), so a chain here really is unreachable and the person
-    // can fix its RPC: the line names it, and opens its editor. Then a figure
-    // being brought up to date — grey, because it is not wrong, only not
-    // final. Then what could not be priced.
-    let status = match view.banner_chain_ids.as_slice() {
-        [chain_id] => Some((
-            StatusKind::Warning,
-            SharedString::from(crate::wallet::fill(
-                &s.rpc_unavailable_single,
-                "name",
-                &crate::executor::custom_tokens::network_name(*chain_id),
-            )),
-        )),
-        [_, _, ..] => Some((
-            StatusKind::Warning,
-            SharedString::from(crate::wallet::fill(
-                &s.rpc_unavailable_multiple,
-                "count",
-                &view.banner_chain_ids.len().to_string(),
-            )),
-        )),
-        [] if view.refreshing || on_cache || view.notice == Some(BalanceNotice::StillUpdating) => {
+    // The networks the wallet cannot reach (spec 092: every one, held or not;
+    // a rate limit heals on its own and is never listed) — the line counts
+    // them and opens their list. Then a figure being brought up to date —
+    // grey, because it is not wrong, only not final. Then what could not be
+    // priced.
+    let status = match unreachable_line(view, s) {
+        Some(line) => Some((StatusKind::Warning, line)),
+        None if view.refreshing
+            || on_cache
+            || view.notice == Some(BalanceNotice::StillUpdating) =>
+        {
             Some((StatusKind::Refreshing, s.balance_stale.clone()))
         }
-        [] if view.notice == Some(BalanceNotice::Unpriced) => {
+        None if view.notice == Some(BalanceNotice::Unpriced) => {
             Some((StatusKind::Warning, s.balance_unpriced.clone()))
         }
-        [] => None,
+        None => None,
     };
 
     let (integer, decimals) = split_fiat(usd, locale, money);
@@ -204,6 +194,83 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str, money: &Mone
             && view.tokens.is_empty())
         .then(|| s.live_indicator.clone()),
         status,
+    }
+}
+
+/// The line over the networks the wallet cannot reach (spec 092) — the
+/// hero's status line and the title of the list it opens. The core chooses
+/// the sentence (`unreachable_key`: one network named, several counted); this
+/// only fills it. `None` when every network answered.
+#[must_use]
+pub fn unreachable_line(view: &BalanceView, s: &WalletStrings) -> Option<SharedString> {
+    let first = view.unreachable_networks.first()?;
+    let line = match view.unreachable_key.as_deref()? {
+        UNREACHABLE_ONE => crate::wallet::fill(
+            &s.unreachable_one,
+            "name",
+            &crate::executor::custom_tokens::network_name(first.chain_id),
+        ),
+        UNREACHABLE_MANY => crate::wallet::fill(
+            &s.unreachable_many,
+            "n",
+            &view.unreachable_networks.len().to_string(),
+        ),
+        _ => return None,
+    };
+    Some(SharedString::from(line))
+}
+
+/// The list the hero's "can't reach" line opens (spec 092) — the web's
+/// `liveUnreachable`: every network the core lists, in its order (last seen
+/// holding something first), each with what was last read there.
+pub struct UnreachableList {
+    /// The hero's own line, live — or "every network is back" once none is.
+    pub title: SharedString,
+    /// Absent once the list is empty.
+    pub summary: Option<SharedString>,
+    pub rows: Vec<UnreachableRow>,
+}
+
+pub struct UnreachableRow {
+    pub chain_id: u32,
+    pub name: SharedString,
+    /// "Last seen $1,234.50", "Not read yet", …
+    pub line: SharedString,
+}
+
+#[must_use]
+pub fn unreachable_list(
+    view: &BalanceView,
+    s: &WalletStrings,
+    locale: &str,
+    money: &Money,
+) -> UnreachableList {
+    let rows = view
+        .unreachable_networks
+        .iter()
+        .map(|network| {
+            let template = s
+                .unreachable_lines
+                .iter()
+                .find(|(key, _)| *key == network.line_key)
+                .map_or("", |(_, template)| template.as_str());
+            let amount = match network.last_seen_usd {
+                Some(usd) if !view.hidden => money.text(usd, locale),
+                _ => crate::wallet::fixtures::MASK.to_owned(),
+            };
+            UnreachableRow {
+                chain_id: network.chain_id,
+                name: SharedString::from(crate::executor::custom_tokens::network_name(
+                    network.chain_id,
+                )),
+                line: SharedString::from(crate::wallet::fill(template, "amount", &amount)),
+            }
+        })
+        .collect::<Vec<_>>();
+    UnreachableList {
+        title: unreachable_line(view, s).unwrap_or_else(|| s.unreachable_none.clone()),
+        summary: (!rows.is_empty()).then(|| s.unreachable_body.clone()),
+        rows,
     }
 }
 
@@ -252,7 +319,7 @@ pub fn balance_detail(
             retry: false,
         })
         .collect();
-    for &chain_id in &view.banner_chain_ids {
+    for chain_id in view.unreachable_networks.iter().map(|n| n.chain_id) {
         if pending.iter().any(|row| row.chain_id == chain_id) {
             continue;
         }
@@ -497,6 +564,26 @@ mod tests {
     /// fields with their own invariants, and a literal I typed would be a guess
     /// about them that drifts the first time one changes. (It already did —
     /// two of my guessed field names did not exist.)
+    /// The core's list for these networks (spec 092), none read yet — the
+    /// order is the core's, so it is the order given.
+    fn set_unreachable(view: &mut BalanceView, chain_ids: &[u32]) {
+        use vela_core::app::balance_dashboard::{LastKnown, NOT_READ_YET, UnreachableNetwork};
+        view.unreachable_networks = chain_ids
+            .iter()
+            .map(|&chain_id| UnreachableNetwork {
+                chain_id,
+                last_known: LastKnown::NotRead,
+                last_seen_usd: None,
+                line_key: NOT_READ_YET.to_owned(),
+            })
+            .collect();
+        view.unreachable_key = match chain_ids.len() {
+            0 => None,
+            1 => Some(UNREACHABLE_ONE.to_owned()),
+            _ => Some(UNREACHABLE_MANY.to_owned()),
+        };
+    }
+
     fn view(usd: Option<f64>) -> BalanceView {
         let mut host = CoreHost::<BalanceDashboard>::new();
         let _ = host.dispatch(BalanceEvent::AccountChanged {
@@ -1512,7 +1599,7 @@ mod tests {
         let money = Money::default();
 
         let mut down = view(Some(10.0));
-        down.banner_chain_ids = vec![1];
+        set_unreachable(&mut down, &[1]);
         down.notice = Some(BalanceNotice::Unpriced);
         let model = balance(&down, &s, "en", &money);
         let Some((StatusKind::Warning, text)) = model.status else {
@@ -1525,7 +1612,7 @@ mod tests {
             text.contains(&crate::executor::custom_tokens::network_name(1)),
             "the line names the chain: {text}"
         );
-        down.banner_chain_ids = vec![1, 10];
+        set_unreachable(&mut down, &[1, 10]);
         let (_, text) = balance(&down, &s, "en", &money).status.expect("a line");
         assert!(text.contains('2'), "several are counted: {text}");
 
@@ -1545,7 +1632,7 @@ mod tests {
 
         let mut hidden = view(Some(10.0));
         hidden.hidden = true;
-        hidden.banner_chain_ids = vec![1];
+        set_unreachable(&mut hidden, &[1]);
         assert!(balance(&hidden, &s, "en", &money).status.is_none());
 
         let mut loading = view(None);
@@ -1561,6 +1648,48 @@ mod tests {
         ));
     }
 
+    /// Spec 092: the list names every network in the core's order, each with
+    /// what was last read there (the worth in the display currency, masked
+    /// while hidden), under the hero's own line — which says so once the list
+    /// is empty.
+    #[test]
+    fn the_unreachable_list_says_what_was_last_read_on_each_network() {
+        use vela_core::app::balance_dashboard::{LAST_SEEN, LAST_SEEN_EMPTY, LastKnown};
+        let s = strings();
+        let money = Money::default();
+        let mut v = view(Some(10.0));
+        set_unreachable(&mut v, &[1, 56, 137]);
+        v.unreachable_networks[0].last_known = LastKnown::Held;
+        v.unreachable_networks[0].last_seen_usd = Some(4500.0);
+        v.unreachable_networks[0].line_key = LAST_SEEN.to_owned();
+        v.unreachable_networks[1].last_known = LastKnown::Empty;
+        v.unreachable_networks[1].line_key = LAST_SEEN_EMPTY.to_owned();
+
+        let list = unreachable_list(&v, &s, "en", &money);
+        assert_eq!(list.title, unreachable_line(&v, &s).expect("a line"));
+        assert!(list.title.contains('3'), "{}", list.title);
+        assert_eq!(list.summary, Some(s.unreachable_body.clone()));
+        let rows: Vec<u32> = list.rows.iter().map(|row| row.chain_id).collect();
+        assert_eq!(rows, vec![1, 56, 137], "the core's order");
+        assert!(list.rows[0].line.contains("4,500"), "{}", list.rows[0].line);
+        assert!(!list.rows[0].line.contains("{{"), "{}", list.rows[0].line);
+        assert_ne!(list.rows[1].line, list.rows[2].line, "empty is not unread");
+
+        v.hidden = true;
+        v.unreachable_networks[0].last_seen_usd = None;
+        let hidden = unreachable_list(&v, &s, "en", &money);
+        assert!(
+            hidden.rows[0].line.contains(crate::wallet::fixtures::MASK),
+            "{}",
+            hidden.rows[0].line
+        );
+
+        set_unreachable(&mut v, &[]);
+        let none = unreachable_list(&v, &s, "en", &money);
+        assert_eq!(none.title, s.unreachable_none);
+        assert!(none.summary.is_none() && none.rows.is_empty());
+    }
+
     /// SR3 splits the chains the way the web's does: rate-limited ones retry
     /// by themselves, unreachable ones offer Retry, and a chain in either
     /// list is not also counted as settled.
@@ -1568,7 +1697,7 @@ mod tests {
     fn the_breakdown_keeps_a_pending_chain_out_of_the_settled_ones() {
         let mut v = view(Some(10.0));
         v.rate_limited_chain_ids = vec![137];
-        v.banner_chain_ids = vec![137, 10];
+        set_unreachable(&mut v, &[137, 10]);
         let detail = balance_detail(&v, &strings(), "en", &Money::default());
         let pending: Vec<(u32, bool)> = detail
             .pending
@@ -1999,7 +2128,7 @@ mod tests {
             assert!(unreachable_chips(&view(Some(10.0))).is_empty());
 
             let mut down = view(Some(10.0));
-            down.banner_chain_ids = vec![100, 137];
+            set_unreachable(&mut down, &[100, 137]);
             let chips = unreachable_chips(&down);
             assert_eq!(chips.len(), 2);
             assert_eq!(chips[0].2, "Gnosis");
@@ -2027,7 +2156,7 @@ mod tests {
                 unreachable!("could not seed");
             }
             let mut custom = view(Some(10.0));
-            custom.banner_chain_ids = vec![7_777_777];
+            set_unreachable(&mut custom, &[7_777_777]);
             assert_eq!(unreachable_chips(&custom)[0].2, "My testnet");
         });
     }
@@ -2137,14 +2266,15 @@ mod tests {
 /// those deserve a banner. Without this the verdict is correct and invisible,
 /// which for the person looking at the screen is the same as absent.
 ///
-/// The core's list, not `failed_chain_ids`: `banner_chain_ids` is failed MINUS
-/// rate-limited (invariant ⑦), because a rate limit lifts on its own and a
-/// "fix your RPC" banner that nags about one is telling somebody to repair
-/// something that is not broken.
+/// The core's list, not `failed_chain_ids`: `unreachable_networks` is failed
+/// MINUS rate-limited (invariant ⑦), because a rate limit lifts on its own and
+/// a "fix your RPC" banner that nags about one is telling somebody to repair
+/// something that is not broken — and it is in the core's order (spec 092).
 #[must_use]
 pub fn unreachable_chips(view: &BalanceView) -> Vec<(SharedString, u32, SharedString)> {
-    view.banner_chain_ids
+    view.unreachable_networks
         .iter()
+        .map(|network| &network.chain_id)
         .map(|chain_id| {
             let name = crate::executor::custom_tokens::network_name(*chain_id);
             (

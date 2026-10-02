@@ -470,11 +470,26 @@ for (let i = 1; i < PATHS.length; i++) {
 //   file that is not UTF-8 (a GBK CSV from Excel on Chinese Windows) is refused
 //   with how to save it, where every shell used to import its names as U+FFFD.
 //   Same branches: 1785 + 1 = 1786.
-// 1787 (093, 2026-10-02): + `history.dappRowTitle` — every dApp interaction is
+// 1788 (spec 090, 2026-10-02): + `receive.includeNetwork` and
+//   `receive.includeNetworkHint` — the receive code's opt-in "include network"
+//   switch (ERC-681) and the calm line under it: some wallets cannot read
+//   that code. Same branches: 1786 + 2 = 1788.
+// 1791 (091, 2026-10-02): + `about.{debugMode,debugModeBody,debugModeRevealed}`
+//   — the hidden developer switch in About (seven taps on the version reveal
+//   it): its name, the one line saying what it does and that it is for
+//   development only, and the notice when it appears. The ja + en residency
+//   budget moves to 139,800 (owner, 2026-10-02). Same branches: 1788 + 3 = 1791.
+// 1797 (092, 2026-10-02): the home line over networks the wallet cannot reach
+//   says so without "RPC" (`assets.unreachable{One,Many}`), and the list behind
+//   it names them all under that same line (`assets.unreachable{Body,None}`), each with what was
+//   last read there (`assets.{lastSeen,lastSeenUnpriced,lastSeenEmpty,notReadYet}`);
+//   − `assets.rpcUnavailable{Single,Multiple}`. The ja + en residency budget
+//   moves to 140,800 (owner, 2026-10-02). Same branches: 1791 + 8 − 2 = 1797.
+// 1798 (093, 2026-10-02): + `history.dappRowTitle` — every dApp interaction is
 //   an Activity row titled "{{intent}} on {{place}}" (在 {{place}} {{intent}});
-//   every other word it needs is reused. Same branches: 1786 + 1 = 1787.
-if (PATHS.length !== 1787) fail(`expected 1787 paths (1698 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1698) fail(`expected 1698 leaf paths, got ${leafSet.size}`);
+//   every other word it needs is reused. Same branches: 1797 + 1 = 1798.
+if (PATHS.length !== 1798) fail(`expected 1798 paths (1709 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1709) fail(`expected 1709 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
@@ -788,7 +803,11 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
+<<<<<<< HEAD
 console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 140,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+=======
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 139,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+>>>>>>> origin/092-unreachable-network-notice
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;

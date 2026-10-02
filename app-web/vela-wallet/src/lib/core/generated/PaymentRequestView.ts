@@ -6,14 +6,31 @@ import type { ReceiveMode } from "./ReceiveMode";
 export type PaymentRequestView = { gate_loading: boolean, acknowledged: boolean, can_copy: boolean, can_save: boolean, mode: ReceiveMode, asset: Asset, amount: string, eip681_uri: string, pay_link: string, 
 /**
  * The QR's content: the built URI in request mode (bare recipient until
- * one is built), the bare recipient in address mode.
+ * one is built); in address mode the bare recipient, or
+ * `ethereum:<recipient>@<chain>` while the network switch is on (spec
+ * 090). The share image encodes this same value.
  */
 qr_value: string, 
 /**
- * What the copy button copies: pay-link in request mode, address
- * otherwise (FR-015).
+ * What the copy button copies: pay-link in request mode, the bare
+ * address otherwise (FR-015) — with or without the network switch.
  */
 copy_payload: string, 
+/**
+ * Spec 090: whether the "include network" switch is offered — address
+ * mode with a recipient. A request's code always names its network.
+ */
+network_switch: boolean, 
+/**
+ * The switch's position. Off by default: a bare address is the code
+ * every wallet can scan.
+ */
+include_network: boolean, 
+/**
+ * The calm line under the switch ("some wallets can't read this
+ * code"), shown exactly while the address code carries the network.
+ */
+network_hint: boolean, 
 /**
  * Drives `summaryAmount` vs `summaryOpen` — the words stay in the shell.
  */

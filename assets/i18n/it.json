@@ -490,14 +490,22 @@
   "qrTitleNetwork": "Usa questo indirizzo per ricevere asset su {{network}}",
   "qrTitleAsset": "Usa questo indirizzo per ricevere {{symbol}} su {{network}}",
   "shareCardNetworkNote": "Solo pagamenti su {{network}}",
-  "tokenContract": "Contratto del token"
+  "tokenContract": "Contratto del token",
+  "includeNetwork": "Includi la rete",
+  "includeNetworkHint": "Alcuni wallet non leggono questo codice. Se l'altra persona non ci riesce, disattivalo."
  },
  "assets": {
   "sectionTitle": "Asset",
   "addToken": "Aggiungi",
   "searchPlaceholder": "Cerca token…",
-  "rpcUnavailableSingle": "RPC di {{name}} non disponibile",
-  "rpcUnavailableMultiple": "RPC non disponibile su {{count}} reti",
+  "unreachableOne": "Al momento non riusciamo a raggiungere {{name}}",
+  "unreachableMany": "Al momento non riusciamo a raggiungere {{n}} reti",
+  "unreachableBody": "I tuoi asset non sono toccati: solo che ora non riusciamo a leggerli.",
+  "unreachableNone": "Tutte le reti sono di nuovo raggiungibili.",
+  "lastSeen": "Ultima lettura: {{amount}}",
+  "lastSeenUnpriced": "Token presenti all’ultima lettura",
+  "lastSeenEmpty": "Vuota all’ultima lettura",
+  "notReadYet": "Non ancora letta",
   "rpcFix": "Correggi",
   "emptyTitle": "Deposita il tuo primo asset",
   "emptySubtext": "Tocca qui per vedere il tuo indirizzo e ricevere token",
@@ -1029,7 +1037,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Realizzato con cura. Le tue chiavi, le tue cripto.",
-  "sectionLinks": "Link"
+  "sectionLinks": "Link",
+  "debugMode": "Modalità debug",
+  "debugModeBody": "Consente alle pagine http della tua rete locale di usare il wallet. Solo per lo sviluppo.",
+  "debugModeRevealed": "La modalità debug è ora disponibile"
  },
  "clearSigning": {
   "title": "Test Clear Signing",

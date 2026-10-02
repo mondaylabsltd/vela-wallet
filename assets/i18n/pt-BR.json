@@ -490,14 +490,22 @@
   "qrTitleNetwork": "Use este endereço para receber ativos na {{network}}",
   "qrTitleAsset": "Use este endereço para receber {{symbol}} na {{network}}",
   "shareCardNetworkNote": "Somente pagamentos na {{network}}",
-  "tokenContract": "Contrato do token"
+  "tokenContract": "Contrato do token",
+  "includeNetwork": "Incluir rede",
+  "includeNetworkHint": "Algumas carteiras não leem este código. Se a outra pessoa não conseguir, desative."
  },
  "assets": {
   "sectionTitle": "Ativos",
   "addToken": "Adicionar",
   "searchPlaceholder": "Buscar tokens...",
-  "rpcUnavailableSingle": "RPC de {{name}} indisponível",
-  "rpcUnavailableMultiple": "RPC de {{count}} redes indisponível",
+  "unreachableOne": "Não conseguimos acessar {{name}} agora",
+  "unreachableMany": "Não conseguimos acessar {{n}} redes agora",
+  "unreachableBody": "Seus ativos não são afetados — só não conseguimos lê-los agora.",
+  "unreachableNone": "Todas as redes estão acessíveis de novo.",
+  "lastSeen": "Última leitura: {{amount}}",
+  "lastSeenUnpriced": "Tinha tokens na última leitura",
+  "lastSeenEmpty": "Vazia na última leitura",
+  "notReadYet": "Ainda não lida",
   "rpcFix": "Corrigir",
   "emptyTitle": "Deposite seu primeiro ativo",
   "emptySubtext": "Toque aqui para ver seu endereço e receber tokens",
@@ -1029,7 +1037,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Feito com cuidado. Suas chaves, suas moedas.",
-  "sectionLinks": "Links"
+  "sectionLinks": "Links",
+  "debugMode": "Modo de depuração",
+  "debugModeBody": "Permite que páginas http da sua rede local usem a carteira. Só para desenvolvimento.",
+  "debugModeRevealed": "O modo de depuração já está disponível"
  },
  "clearSigning": {
   "title": "Teste de Clear Signing",

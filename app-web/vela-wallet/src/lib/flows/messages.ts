@@ -35,6 +35,9 @@ export const WALLET_FLOW_KEYS = [
 	'receive.request.saveImage',
 	'receive.shareCardHeadline',
 	'receive.shareCardNetworkNote',
+	// Spec 090: the code's opt-in "include network" switch and its hint.
+	'receive.includeNetwork',
+	'receive.includeNetworkHint',
 	// 087 F13: a receive row's button that shows its network's code.
 	'componentsUi.funding.showQr',
 

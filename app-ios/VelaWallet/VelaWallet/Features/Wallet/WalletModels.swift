@@ -14,6 +14,8 @@ import SwiftUI
 /// The nine mobile home states plus the chain-select sheet (H8).
 enum MobileStateId: String, CaseIterable, Identifiable {
     case h1, h1s, h2, h3, h4, h5, h6, h7, h7x, h8
+    /// Spec 092: the hero's line over networks the wallet cannot reach.
+    case h9
     var id: String { rawValue }
 
     /// Gallery chip label — mock naming, not translatable copy.
@@ -29,6 +31,7 @@ enum MobileStateId: String, CaseIterable, Identifiable {
         case .h7: "H7"
         case .h7x: "H7x"
         case .h8: "H8"
+        case .h9: "H9"
         }
     }
 }

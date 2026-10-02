@@ -108,6 +108,22 @@ class Balance {
 		dispatchBalance({ type: 'switcher_closed' });
 	}
 
+	/**
+	 * The list of networks the wallet cannot reach is on screen (spec 092): the
+	 * core reads every chain again, quietly, and keeps re-reading while it stays
+	 * open, so one that has come back leaves it.
+	 */
+	unreachableListOpened(): void {
+		if (!this.#booted) return;
+		dispatchBalance({ type: 'unreachable_list_opened' });
+	}
+
+	/** That list closed: the re-reads stop. */
+	unreachableListClosed(): void {
+		if (!this.#booted) return;
+		dispatchBalance({ type: 'unreachable_list_closed' });
+	}
+
 	/** An RPC fix landed for one chain (spec 028 Phase 8): the core retries that chain alone. */
 	fixChainResolved(chainId: number): void {
 		if (!this.#booted) return;

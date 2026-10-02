@@ -818,6 +818,75 @@ fn final_pass_only_classification_ported_verbatim() {
     assert!(view.rate_limited_chains.is_empty());
 }
 
+/// Sweep one call to its verdict, answering each endpoint by URL and every
+/// backoff at once (spec 092's classification tests).
+fn sweep_to_verdict(sut: &mut Sut, id: &str, answer: impl Fn(&str) -> Out) -> RpcCallVerdict {
+    let mut ops = sut.dispatch(rpc_call(id, "eth_getBalance", T0));
+    let mut now = T0;
+    for _ in 0..64 {
+        now += 10.0;
+        let Some(op) = ops.into_iter().next() else {
+            panic!("the sweep stopped without a verdict");
+        };
+        ops = match op {
+            Op::LoadPoolConfig { .. } => sut.resolve(config2(now)),
+            Op::JsonRpcPost { url, .. } => sut.resolve(outcome(id, &url, answer(&url), 10.0, now)),
+            Op::DrawJitter { .. } => sut.resolve(Res::Jitter {
+                call_id: id.to_owned(),
+                value: 0.0,
+            }),
+            Op::StartBackoff { .. } => sut.resolve(Res::BackoffElapsed {
+                call_id: id.to_owned(),
+                now_ms: now,
+            }),
+            Op::Conclude { verdict, .. } => {
+                assert!(sut.resolve(Res::Concluded).is_empty());
+                return verdict;
+            }
+            other => panic!("unexpected operation {other:?}"),
+        };
+    }
+    panic!("no verdict in 64 steps");
+}
+
+/// Spec 092 (iPhone pass behind a blocking network): every BNB Chain node but
+/// one could not be reached, and that one answered 429. Invariant ④ is for
+/// nodes that ANSWERED — that chain cannot be read, it is not busy, so it is
+/// failed and offered the fix rather than hidden as "rate-limited" for good.
+#[test]
+fn a_throttle_among_unreachable_nodes_is_a_failed_chain_not_a_busy_one() {
+    let mut sut = Sut::new();
+    let verdict = sweep_to_verdict(&mut sut, "c1", |url| {
+        if url == PUB1 {
+            Out::HttpError { status: 429 }
+        } else {
+            Out::NotConnected
+        }
+    });
+    assert_eq!(
+        verdict,
+        RpcCallVerdict::Failed {
+            rate_limited: false,
+            maybe_delivered: false
+        }
+    );
+    let view = sut.view();
+    assert_eq!(view.failed_chains, vec![CHAIN]);
+    assert!(view.rate_limited_chains.is_empty());
+
+    // Every node answering "slow down" is still the quiet, busy chain.
+    let mut sut = Sut::new();
+    let verdict = sweep_to_verdict(&mut sut, "c2", |_| Out::HttpError { status: 429 });
+    assert_eq!(
+        verdict,
+        RpcCallVerdict::Failed {
+            rate_limited: true,
+            maybe_delivered: false
+        }
+    );
+    assert_eq!(sut.view().rate_limited_chains, vec![CHAIN]);
+}
+
 /// The bundler path: sweeps its own pool, retries exactly once with the
 /// 0–1000ms jitter, and never classifies chains.
 #[test]

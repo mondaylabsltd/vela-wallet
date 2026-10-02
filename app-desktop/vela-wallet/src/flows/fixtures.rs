@@ -236,6 +236,17 @@ pub struct ReceiveGate {
     pub loading: bool,
 }
 
+/// The "include network" switch (spec 090), exactly as `payment_request`
+/// says: whether it is on, and the hint that rides under it while it is.
+#[derive(Clone)]
+pub struct NetworkSwitch {
+    pub label: SharedString,
+    pub on: bool,
+    /// "Some wallets can't read this code…" — `Some` exactly while the core's
+    /// `network_hint` is, in the subtle ink (a fact, not a warning).
+    pub hint: Option<SharedString>,
+}
+
 #[derive(Clone)]
 pub struct ReceiveQr {
     pub title: SharedString,
@@ -270,6 +281,9 @@ pub struct ReceiveQr {
     pub gate: Option<ReceiveGate>,
     /// May the address be copied yet? The core's `can_copy`.
     pub can_copy: bool,
+    /// Spec 090: the "include network" switch under the code — `None` where
+    /// the core offers none (request mode, no session yet).
+    pub network: Option<NetworkSwitch>,
     /// Money that landed while this code was open, newest first.
     ///
     /// Empty in every mock, because the mocks draw the screen before anything
@@ -988,6 +1002,12 @@ fn receive_qr(s: &FlowStrings, asset_mode: bool) -> ReceiveQr {
         // the warning first (spec 032 phase 38).
         gate: None,
         can_copy: false,
+        // The design's default: off, the bare address every wallet reads.
+        network: Some(NetworkSwitch {
+            label: s.include_network.clone(),
+            on: false,
+            hint: None,
+        }),
         // The mocks draw the screen before anything has arrived.
         deposits: Vec::new(),
     }
@@ -1755,6 +1775,22 @@ mod tests {
         };
         assert!(dr2.contract.is_none());
         assert!(dr3.contract.is_some());
+    }
+
+    /// Spec 090: both codes are drawn with the "include network" switch off
+    /// and no hint — the design's default is the bare address.
+    #[test]
+    fn the_codes_draw_the_network_switch_off() {
+        let s = strings();
+        for panel in [FlowPanel::Dr2, FlowPanel::Dr3] {
+            let FlowBody::ReceiveQr(qr) = body(panel, &s) else {
+                panic!()
+            };
+            let switch = qr.network.expect("the switch is drawn");
+            assert!(!switch.on);
+            assert!(switch.hint.is_none());
+            assert_eq!(switch.label, s.include_network);
+        }
     }
 
     #[test]

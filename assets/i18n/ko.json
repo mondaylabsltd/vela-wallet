@@ -487,14 +487,22 @@
   "qrTitleNetwork": "이 주소로 {{network}}의 자산을 받으세요",
   "qrTitleAsset": "이 주소로 {{network}}의 {{symbol}}을 받으세요",
   "shareCardNetworkNote": "{{network}} 결제만 가능",
-  "tokenContract": "토큰 컨트랙트"
+  "tokenContract": "토큰 컨트랙트",
+  "includeNetwork": "네트워크 정보 포함",
+  "includeNetworkHint": "일부 지갑은 이 코드를 읽지 못해요. 상대가 스캔하지 못하면 꺼 주세요."
  },
  "assets": {
   "sectionTitle": "자산",
   "addToken": "추가",
   "searchPlaceholder": "토큰 검색...",
-  "rpcUnavailableSingle": "{{name}} RPC를 사용할 수 없음",
-  "rpcUnavailableMultiple": "네트워크 {{count}}개의 RPC를 사용할 수 없음",
+  "unreachableOne": "지금 {{name}}에 연결할 수 없습니다",
+  "unreachableMany": "지금 네트워크 {{n}}개에 연결할 수 없습니다",
+  "unreachableBody": "자산에는 영향이 없습니다. 지금 읽을 수 없을 뿐입니다.",
+  "unreachableNone": "모든 네트워크에 다시 연결되었습니다.",
+  "lastSeen": "마지막 확인 {{amount}}",
+  "lastSeenUnpriced": "마지막 확인 시 자산 있음",
+  "lastSeenEmpty": "마지막 확인 시 자산 없음",
+  "notReadYet": "아직 읽지 못함",
   "rpcFix": "수정",
   "emptyTitle": "첫 자산을 입금하세요",
   "emptySubtext": "여기를 눌러 주소를 확인하고 토큰을 받으세요",
@@ -1026,7 +1034,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "정성껏 만들었습니다. 내 키, 내 코인.",
-  "sectionLinks": "링크"
+  "sectionLinks": "링크",
+  "debugMode": "디버그 모드",
+  "debugModeBody": "로컬 네트워크의 http 페이지에서 지갑을 쓸 수 있게 합니다. 개발 전용입니다.",
+  "debugModeRevealed": "이제 디버그 모드를 쓸 수 있습니다"
  },
  "clearSigning": {
   "title": "Clear Signing 테스트",

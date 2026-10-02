@@ -39,6 +39,8 @@ struct SettingsSheet: View {
     var onCommitRpc: (() -> Void)?
     /// SR3's 立即重试, per chain id.
     var onRetryChain: ((String) -> Void)?
+    /// SR6's per-network fix (spec 092): opens that chain's SR2.
+    var onFixChain: ((Int) -> Void)?
     /// The destructive action waiting on an answer — a storage row's 清除, a
     /// network's bin, "reset to defaults" — and its "yes".
     var pendingConfirm: ConfirmSheetModel?
@@ -176,6 +178,8 @@ struct SettingsSheet: View {
                     )
                 case .balanceDetail:
                     BalanceDetailSheetBody(model: model.balanceDetail, onRetry: onRetryChain)
+                case .unreachable:
+                    UnreachableSheetBody(model: model.unreachable, onFix: onFixChain)
                 case .relayer:
                     RelayerSheetBody(model: model.relayer, onPrimary: onDismiss)
                 case .none:
@@ -1369,6 +1373,59 @@ private struct BalanceDetailSheetBody: View {
             }
         }
         .padding(.vertical, Tokens.Space.s12)
+    }
+}
+
+/// SR6 (spec 092): every network the wallet cannot reach, one row each — what
+/// was last read there, and the network's RPC fix. The rows follow the live
+/// view, so one that comes back leaves while the sheet is open.
+private struct UnreachableSheetBody: View {
+    @Environment(\.theme) private var theme
+    let model: UnreachableModel
+    /// A row's fix. Absent in the gallery.
+    var onFix: ((Int) -> Void)?
+
+    var body: some View {
+        SheetTitle(title: model.title)
+        if let summary = model.summary {
+            Text(summary)
+                .typeRole(Typography.flowCaption)
+                .foregroundStyle(theme.fgSubtle)
+                .padding(.bottom, Tokens.Space.s8)
+        }
+        ForEach(model.rows) { row in
+            HStack(spacing: Tokens.Space.s12) {
+                ChainMark(mark: row.mark)
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    Text(row.name)
+                        .typeRole(Typography.fieldLabel)
+                        .foregroundStyle(theme.fgBase)
+                    Text(row.line)
+                        .typeRole(Typography.label)
+                        .foregroundStyle(theme.fgSubtle)
+                        .monospacedDigit()
+                }
+                Spacer(minLength: Tokens.Space.s8)
+                if let onFix {
+                    Button { onFix(row.chainId) } label: {
+                        Text(row.action)
+                            .typeRole(Typography.flowCaption)
+                            .foregroundStyle(theme.infoBase)
+                            .padding(.vertical, Tokens.Space.s8)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainTextButtonStyle())
+                } else {
+                    Text(row.action)
+                        .typeRole(Typography.flowCaption)
+                        .foregroundStyle(theme.infoBase)
+                }
+            }
+            .padding(.vertical, Tokens.Space.s12)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(theme.borderBase).frame(height: Tokens.BorderWidth.hairline)
+            }
+        }
     }
 }
 

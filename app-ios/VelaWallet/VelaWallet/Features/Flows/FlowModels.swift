@@ -200,12 +200,25 @@ struct ReceiveQrModel {
     var account: AddressCardModel
     /// The mark drawn in the middle of the code — the token, or the network.
     var centre: TokenMarkModel
+    /// Spec 090: the "include network" switch under the code, as the core's
+    /// `payment_request` offers it — `nil` where it offers none.
+    var network: NetworkSwitchModel?
     let warning: String
     let saveImage: String
     let viewOnExplorer: String
     /// The real code's modules, when there is a real address to encode.
     /// `nil` keeps the drawn demo pattern — see `QrCode`.
     var modules: [[Bool]]?
+}
+
+/// The receive code's "include network" switch (spec 090), exactly as the
+/// core says: its position, and the calm line under it while it is on.
+struct NetworkSwitchModel: Equatable {
+    let label: String
+    let isOn: Bool
+    /// "Some wallets can't read this code…" — present exactly while the core's
+    /// `networkHint` is.
+    let hint: String?
 }
 
 /// R4 — the image "Save image" produces, not a screen someone navigates to.

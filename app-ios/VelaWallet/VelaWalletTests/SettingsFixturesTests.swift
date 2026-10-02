@@ -25,9 +25,9 @@ struct SettingsFixturesTests {
         let states = SettingsStateId.allCases
         let st = states.filter { $0.rawValue.hasPrefix("st") }.count
         let sr = states.filter { $0.rawValue.hasPrefix("sr") }.count
-        #expect(states.count == 28)
+        #expect(states.count == 29)
         #expect(st == 22)
-        #expect(sr == 6)
+        #expect(sr == 7)
     }
 
     @Test func everyStateBuildsAndSaysWhichOneItIs() {

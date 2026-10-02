@@ -89,6 +89,9 @@ struct FlowHost: View {
     /// 保存图片 on the receive sheet. Absent in the gallery, where there is no
     /// address to put on a card.
     var onSaveCard: (() -> Void)?
+    /// The receive code's "include network" switch (spec 090). Absent in the
+    /// gallery, where the switch is a picture.
+    var onIncludeNetwork: ((Bool) -> Void)?
     /// What that action had to say. Presented **inside the sheet**, so saving
     /// a card does not close the code somebody was showing.
     var alert: FlowAlertModel?
@@ -271,6 +274,7 @@ struct FlowHost: View {
                         addTokenError: addTokenError,
                         onExplorer: onExplorer,
                         onSaveCard: onSaveCard,
+                        onIncludeNetwork: onIncludeNetwork,
                         onSendToken: onSendToken,
                         onReceiveToken: onReceiveToken,
                         onDeleteTx: onDeleteTx,
@@ -496,6 +500,7 @@ private struct FlowSheetHost: View {
     var addTokenError: String?
     var onExplorer: (() -> Void)?
     var onSaveCard: (() -> Void)?
+    var onIncludeNetwork: ((Bool) -> Void)?
     var onSendToken: (() -> Void)?
     var onReceiveToken: (() -> Void)?
     /// 删除记录 on the open transaction (058). Absent in the gallery.
@@ -558,6 +563,7 @@ private struct FlowSheetHost: View {
                 model: m,
                 onSave: { onSaveCard?() },
                 onExplorer: { onExplorer?() },
+                onIncludeNetwork: onIncludeNetwork,
                 onClose: { dismiss() }
             )
         case .txDetail(let m):

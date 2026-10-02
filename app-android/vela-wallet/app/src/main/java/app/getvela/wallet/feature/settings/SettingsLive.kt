@@ -585,8 +585,12 @@ object SettingsLive {
             timeSheet = timeSheet,
             theme = model.theme.copy(selected = theme),
             textScale = model.textScale.copy(steps = TextScaleLevel.entries.size, index = prefs.textScale.ordinal),
-        )
+        ).let { withDebugMode(it, prefs.debugMode) }
     }
+
+    /** Spec 091: About's debug-mode switch as the preferences hold it — not drawn until revealed. */
+    fun withDebugMode(model: SettingsScreenModel, mode: app.getvela.wallet.core.data.DebugMode): SettingsScreenModel =
+        model.copy(about = model.about.copy(debugMode = model.about.debugMode.copy(mode = mode)))
 
     /** The storage page from the device's own keys (spec 047 D4). */
     fun withStorage(model: SettingsScreenModel, report: DeviceStorage.Report, strings: VelaStrings): SettingsScreenModel {
@@ -839,10 +843,44 @@ object SettingsLive {
     )
 
     /**
+     * SR6 (spec 092): the list the home's "can't reach" line opens — every
+     * network the core lists, in its order, each with what was last read there
+     * (its worth in the display currency, masked while hidden) and its RPC fix.
+     * Built from the live view on every composition, so a network that comes
+     * back leaves the open sheet; the title is the home's own line.
+     */
+    fun unreachable(
+        view: BalanceView,
+        currency: CurrencyView,
+        chainNames: Map<Int, String>,
+        strings: VelaStrings,
+    ): UnreachableModel {
+        val money = WalletLive.Money.of(currency)
+        val rows = view.unreachable_networks.map { network ->
+            val id = network.chain_id
+            val name = chainNames[id] ?: id.toString()
+            val amount = network.last_seen_usd?.takeIf { !view.hidden }?.let(money::fiat) ?: MASK
+            UnreachableRowModel(
+                chainId = id,
+                mark = ChainMarkModel(name.take(1).uppercase(), markColour(id.toLong()), Marks.chainLogoUrl(id)),
+                name = name,
+                line = strings.t(network.line_key, mapOf("amount" to amount)),
+                action = strings.t(I18nKeys.SettingsUi.RPC_FIX),
+            )
+        }
+        return UnreachableModel(
+            title = WalletLive.unreachableLine(view, strings, chainNames)
+                ?: strings.t(I18nKeys.SettingsUi.UNREACHABLE_NONE),
+            summary = if (rows.isEmpty()) null else strings.t(I18nKeys.SettingsUi.UNREACHABLE_BODY),
+            rows = rows,
+        )
+    }
+
+    /**
      * SR3: the balance by network (the web's `liveBalanceDetail`) — the chains
      * still being read and the chains that settled, from the same view the hero
      * sums. A rate-limited chain is grey with no button, because it heals by
-     * itself; a chain the core puts in `banner_chain_ids` (failed MINUS
+     * itself; a chain the core lists in `unreachable_networks` (failed MINUS
      * rate-limited) is red with 立即重试. The fixture drew Polygon and Gnosis
      * and two invented amounts on every device.
      */
@@ -865,7 +903,7 @@ object SettingsLive {
                 tone = SettingsTone.Neutral,
             )
         }.toMutableList()
-        view.banner_chain_ids.filter { id -> pending.none { it.id == id.toString() } }.distinct().forEach { id ->
+        view.unreachable_networks.map { it.chain_id }.filter { id -> pending.none { it.id == id.toString() } }.distinct().forEach { id ->
             pending += BalanceDetailRowModel(
                 id = id.toString(),
                 mark = mark(id),

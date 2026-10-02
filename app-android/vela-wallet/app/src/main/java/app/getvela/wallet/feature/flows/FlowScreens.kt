@@ -79,6 +79,7 @@ import app.getvela.wallet.feature.flows.components.FlowFilterChips
 import app.getvela.wallet.feature.flows.components.FlowMonoField
 import app.getvela.wallet.feature.flows.components.FlowSearchField
 import app.getvela.wallet.feature.flows.components.FlowSegmentedToggle
+import app.getvela.wallet.feature.flows.components.FlowSwitchRow
 import app.getvela.wallet.feature.flows.components.GhostPillRow
 import app.getvela.wallet.feature.flows.components.HintCard
 import app.getvela.wallet.feature.flows.components.NetworkRow
@@ -193,6 +194,8 @@ fun ReceiveQrBody(
     close: (@Composable () -> Unit)? = null,
     onSave: () -> Unit = {},
     onExplorer: () -> Unit = {},
+    /** Spec 090: the "include network" switch, flipped. Absent in the gallery. */
+    onIncludeNetwork: ((Boolean) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
@@ -257,10 +260,11 @@ fun ReceiveQrBody(
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             QrCard(
                 label = model.title,
-                // The address the card is showing, rejoined — a scanner reads
-                // this, so it must be the same string the two lines above spell
-                // out and never a shortened one.
-                payload = (model.account.lines.first + model.account.lines.second)
+                // The core's code (spec 090) — the address the card spells out,
+                // or with "include network" on, the URI naming its network. The
+                // gallery's blank falls back to the address, rejoined: a scanner
+                // reads this, so never a shortened one.
+                payload = model.code.ifEmpty { model.account.lines.first + model.account.lines.second }
                     .takeIf { it.isNotEmpty() },
             ) {
                 // The network's (R2) or the token's (R3) own logo, the same
@@ -286,6 +290,23 @@ fun ReceiveQrBody(
                         )
                     }
                 }
+            }
+        }
+        // Spec 090: under the code, the switch that makes it name its network,
+        // and — only while it does — the calm line about wallets that can't
+        // read it. Subtle ink: a fact, not a danger.
+        model.network?.let { network ->
+            Spacer(modifier = Modifier.height(VelaSpacing.md))
+            FlowSwitchRow(label = network.label, isOn = network.isOn, onChange = onIncludeNetwork)
+            network.hint?.let { hint ->
+                Spacer(modifier = Modifier.height(VelaSpacing.xs))
+                Text(
+                    text = hint,
+                    color = colors.fgSubtle,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))

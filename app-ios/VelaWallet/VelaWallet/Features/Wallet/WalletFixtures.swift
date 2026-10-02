@@ -338,6 +338,21 @@ enum WalletFixtures {
                 assetRows: defaultAssets.map { assetRow($0, loc: loc, masked: true) },
                 tabs: tabs, sheet: nil, textScale: 1
             )
+        case .h9:
+            // The line the live builder writes for SR6's three networks.
+            return WalletHomeModel(
+                state: state, header: model.header, pill: pill,
+                balance: balance(.normal, loc: loc, integer: "$1,383", decimals: "28",
+                                 status: WalletLive.balance(SettingsFixtures.unreachableView,
+                                                            fallback: balance(.normal, loc: loc),
+                                                            loc: loc).status),
+                actions: actions,
+                activitySection: activitySection(loc: loc, mode: .rows),
+                activityGroups: groupByDay(Array(defaultActivity.prefix(2)), loc: loc),
+                assetsSection: assetsSection(loc: loc, mode: .rows),
+                assetRows: defaultAssets.map { assetRow($0, loc: loc) },
+                tabs: tabs, sheet: nil, textScale: 1
+            )
         case .h6:
             return WalletHomeModel(
                 state: state, header: model.header, pill: pill,

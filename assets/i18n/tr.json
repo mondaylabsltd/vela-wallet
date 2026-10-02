@@ -487,14 +487,22 @@
   "qrTitleNetwork": "{{network}} üzerindeki varlıkları bu adresle alın",
   "qrTitleAsset": "{{network}} üzerindeki {{symbol}} varlığını bu adresle alın",
   "shareCardNetworkNote": "Yalnızca {{network}} ödemeleri",
-  "tokenContract": "Token sözleşmesi"
+  "tokenContract": "Token sözleşmesi",
+  "includeNetwork": "Ağ bilgisini ekle",
+  "includeNetworkHint": "Bazı cüzdanlar bu kodu okuyamaz. Karşı taraf okutamazsa kapatın."
  },
  "assets": {
   "sectionTitle": "Varlıklar",
   "addToken": "Ekle",
   "searchPlaceholder": "Token ara...",
-  "rpcUnavailableSingle": "{{name}} RPC kullanılamıyor",
-  "rpcUnavailableMultiple": "{{count}} ağda RPC kullanılamıyor",
+  "unreachableOne": "{{name}} ağına şu an ulaşılamıyor",
+  "unreachableMany": "{{n}} ağa şu an ulaşılamıyor",
+  "unreachableBody": "Varlıklarınız etkilenmez — yalnızca şu an okunamıyor.",
+  "unreachableNone": "Tüm ağlara yeniden ulaşılabiliyor.",
+  "lastSeen": "Son görülen: {{amount}}",
+  "lastSeenUnpriced": "Son okumada token vardı",
+  "lastSeenEmpty": "Son okumada boştu",
+  "notReadYet": "Henüz okunmadı",
   "rpcFix": "Düzelt",
   "emptyTitle": "İlk varlığınızı yatırın",
   "emptySubtext": "Adresinizi görmek ve token almak için buraya dokunun",
@@ -1026,7 +1034,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Özenle yapıldı. Anahtarlarınız, paranız.",
-  "sectionLinks": "Bağlantılar"
+  "sectionLinks": "Bağlantılar",
+  "debugMode": "Hata ayıklama modu",
+  "debugModeBody": "Yerel ağınızdaki http sayfalarının cüzdanı kullanmasına izin verir. Yalnızca geliştirme için.",
+  "debugModeRevealed": "Hata ayıklama modu artık kullanılabilir"
  },
  "clearSigning": {
   "title": "Açık İmzalama Testi",

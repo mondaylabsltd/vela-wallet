@@ -73,6 +73,8 @@
     "qrTitleNetwork": "用呢個地址收 {{network}} 上面嘅資產",
     "qrTitleAsset": "用呢個地址收 {{network}} 上面嘅 {{symbol}}",
     "shareCardNetworkNote": "淨係收 {{network}} 網絡嘅付款",
-    "tokenContract": "代幣合約"
+    "tokenContract": "代幣合約",
+    "includeNetwork": "附上網絡資料",
+    "includeNetworkHint": "有啲錢包讀唔到。對方掃唔到就熄咗佢。"
   }
 }

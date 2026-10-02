@@ -24,10 +24,10 @@ Devices: **Xiaomi alioth** (Android 13, 1080×2400) and **iPhone 11** (iOS 26.5.
 | F03 | S3 | iOS empty Assets blank | **#355** |
 | F04/F05 | S1/S2 | dApp records "处理中" forever; record id shown as the hash | **#353**, verified on the Xiaomi (未知, no hash row) |
 | F07/F11/F15 | S3 | Chainlist chip split; blank amount cell; a refused page called "unstable network" | **#358**, Chainlist verified |
-| F08 | S2 | "N 个网络 RPC 不可用" permanent on Home in China (networks with zero holdings) | **Owner decision.** Proposal: warn only for unreachable networks holding the person's assets; the rest go under Settings → Networks |
+| F08 | S2 | "N 个网络 RPC 不可用" permanent on Home in China (networks with zero holdings) | **Owner ruling 2026-10-02:** keep the notice for every unreachable network (holdings are unknowable while it is down); no jargon; tap shows all → **spec 092** (`092-unreachable-network-notice`) |
 | F09/F13 | S3 | a11y: test ids spoken (slider); "扫描二维码" on a show-QR button | **#357**, F13 verified on the iPhone |
 | F10 | S3 | hero total stale next to fresh rows until refresh | open (minor) |
-| F12 | S2 | fee shown is limit × max bid (Arbitrum ≈ CN¥4.3 to deploy + send); default speed 超快 | **Owner decision** (relay pricing; 超快 is the factory default by design) |
+| F12 | S2 | fee shown is limit × max bid (Arbitrum ≈ CN¥4.3 to deploy + send); default speed 超快 | **Owner ruling 2026-10-02:** the fee display and the 超快 default are kept |
 | F14 | S3 | Android notification permission re-asked | **#356** |
 | F16 | S3 | favourite labelled with the full page title | open (minor) |
 | F17 | S3 | activity rows truncate at the largest text size | open |
@@ -43,7 +43,7 @@ Devices: **Xiaomi alioth** (Android 13, 1080×2400) and **iPhone 11** (iOS 26.5.
 | F28 | S2 | iOS decimal keypad can't be dismissed; covers 继续; balance truncates | **#376** (+ **#377** on top of #348), verified on the iPhone |
 | F29 | S3 | iOS pending receipt says "UserOp 哈希"; hash copy button labelled "复制地址" | open |
 | F30 | S3 | Android splash icon is a hard-edged square | open (088 #352 already replaced the robot) |
-| F32 | S2 | backing up public keys on Ethereum mainnet quoted ≈ CN¥68 | **Owner decision** (L2 registry, sponsorship, or a cheaper default speed for this sheet) |
+| F32 | S2 | backing up public keys on Ethereum mainnet quoted ≈ CN¥68 | **Owner ruling 2026-10-02:** the Ethereum backup cost is accepted |
 
 ## Not covered by the device pass
 

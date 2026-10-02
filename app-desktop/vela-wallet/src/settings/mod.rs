@@ -247,9 +247,10 @@ pub struct SettingsStrings {
     /// corpus — the scan path and the add-token screen say the same things.
     pub wizard_already_added: SharedString,
     pub wizard_not_found: SharedString,
-    /// `{{name}} RPC unavailable`: the registry listed no endpoint for the
-    /// resolved chain, and no custom RPC was typed. Carries the chain's name
-    /// because at this point the wizard HAS resolved it.
+    /// "Can't reach {{name}} right now" (spec 092's one-network line): the
+    /// registry listed no endpoint for the resolved chain, and no custom RPC
+    /// was typed. Carries the chain's name because at this point the wizard
+    /// HAS resolved it.
     pub wizard_no_rpc: String,
     pub wizard_incompatible: SharedString,
     /// Spec 038 #E1: the probes failed — not a verdict.
@@ -313,6 +314,11 @@ pub struct SettingsStrings {
     pub about_link_github: SharedString,
     pub about_link_safe: SharedString,
     pub about_footer: SharedString,
+    /// Spec 091: the hidden developer switch, its one line, and the notice
+    /// when seven taps on the version reveal it.
+    pub about_debug_mode: SharedString,
+    pub about_debug_mode_body: SharedString,
+    pub about_debug_mode_revealed: SharedString,
     // rescue (DSR1)
     pub rpc_fix_title: SharedString,
     pub rpc_fix_warning: SharedString,
@@ -320,7 +326,8 @@ pub struct SettingsStrings {
     pub rpc_fix_save: SharedString,
     pub rpc_providers_hint: SharedString,
     pub rpc_report: SharedString,
-    pub rpc_unavailable_multiple: String,
+    /// The banner's line over several unreachable networks (`{{n}}`, spec 092).
+    pub unreachable_many: String,
     pub rpc_fix_action: SharedString,
     /// The one refusal the override gate makes: this endpoint answered
     /// `eth_chainId` with ANOTHER chain's id, so nothing was written. Carries
@@ -499,7 +506,7 @@ impl SettingsStrings {
             wizard_checking: s("settingsModals.addNetwork.checkingCompatibility"),
             wizard_already_added: s("addToken.errorAlreadyAdded"),
             wizard_not_found: s("addToken.errorChainNotFound"),
-            wizard_no_rpc: raw("assets.rpcUnavailableSingle"),
+            wizard_no_rpc: raw("assets.unreachableOne"),
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
             wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
             wizard_retry: s("settingsModals.addNetwork.retry"),
@@ -554,13 +561,16 @@ impl SettingsStrings {
             about_link_github: s("about.linkGitHub"),
             about_link_safe: s("about.linkSafeWallet"),
             about_footer: s("about.footer"),
+            about_debug_mode: s("about.debugMode"),
+            about_debug_mode_body: s("about.debugModeBody"),
+            about_debug_mode_revealed: s("about.debugModeRevealed"),
             rpc_fix_title: s("assets.rpcFixTitle"),
             rpc_fix_warning: s("assets.rpcFixWarning"),
             rpc_fix_label: s("assets.rpcFixLabel"),
             rpc_fix_save: s("assets.rpcFixSaveBtn"),
             rpc_providers_hint: s("assets.rpcProvidersTitle"),
             rpc_report: s("assets.rpcReport"),
-            rpc_unavailable_multiple: raw("assets.rpcUnavailableMultiple"),
+            unreachable_many: raw("assets.unreachableMany"),
             rpc_fix_action: s("assets.rpcFix"),
             rpc_wrong_chain: raw("assets.rpcFixWrongChain"),
             offline: s("settingsModals.health.offline"),
@@ -571,6 +581,19 @@ impl SettingsStrings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec 091: the debug-mode words resolve — never their own keys.
+    #[test]
+    fn the_debug_mode_words_resolve() {
+        let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+        for (value, key) in [
+            (&s.about_debug_mode, "about.debugMode"),
+            (&s.about_debug_mode_body, "about.debugModeBody"),
+            (&s.about_debug_mode_revealed, "about.debugModeRevealed"),
+        ] {
+            assert!(!value.is_empty() && value.as_ref() != key, "{key}");
+        }
+    }
 
     /// The words this cut newly reads.
     ///

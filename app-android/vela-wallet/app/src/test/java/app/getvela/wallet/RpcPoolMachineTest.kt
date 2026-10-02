@@ -49,7 +49,7 @@ class RpcPoolMachineTest {
         urls: List<String>,
         answer: (String, String) -> app.getvela.wallet.feature.wallet.core.RpcPostResult,
     ): Pair<RpcPool, FakeRpcTransport> {
-        val transport = FakeRpcTransport(answer)
+        val transport = FakeRpcTransport(answer = answer)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scopes += scope
         val pool = RpcPool(

@@ -2011,14 +2011,27 @@ pub fn sim_outcome(user: String, reply_json: String) -> SimOutcomeRecord {
 /// THE provider (`vela-core/provider/inpage.js`, the extension's too) and
 /// the one bridge. `host` is `"android"`, `"ios"` or `"desktop"` — the only
 /// difference is how the bridge hands a string to native code.
+/// `debug_mode` is Settings' (spec 091): with it on, the script also offers
+/// the wallet to http pages on this device's own network.
 #[uniffi::export]
-pub fn dapp_provider_script(host: String) -> String {
+pub fn dapp_provider_script(host: String, debug_mode: bool) -> String {
     use vela_core::app::dapp_rpc::{provider_script, ProviderHost};
-    provider_script(match host.as_str() {
-        "ios" => ProviderHost::Ios,
-        "desktop" => ProviderHost::Desktop,
-        _ => ProviderHost::Android,
-    })
+    provider_script(
+        match host.as_str() {
+            "ios" => ProviderHost::Ios,
+            "desktop" => ProviderHost::Desktop,
+            _ => ProviderHost::Android,
+        },
+        debug_mode,
+    )
+}
+
+/// Whether a page at `origin` is offered the wallet (spec 091): a secure
+/// context, or — with debug mode on — http on this device's own network.
+/// The rule the browser machine's gate and the injected script follow.
+#[uniffi::export]
+pub fn dapp_offers_wallet(origin: String, debug_mode: bool) -> bool {
+    vela_core::app::dapp_permissions::offers_wallet(&origin, debug_mode)
 }
 
 /// Address-bar text → the URL to load: `https://` for a host, `http://` only
@@ -2135,6 +2148,15 @@ pub fn browser_load_visit(
 #[uniffi::export]
 pub fn browser_site_letter(host: String) -> String {
     vela_core::app::browser_load::site_letter(&host)
+}
+
+// -- balance rounds (spec 092) --
+
+/// How long one chain's balance read may take before the round gives up on
+/// it and counts that chain failed — `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+#[uniffi::export]
+pub fn balance_chain_read_deadline_ms() -> u32 {
+    vela_core::app::balance_dashboard::CHAIN_READ_DEADLINE_MS
 }
 
 // -- page loads, the address bar, a site named once (spec 082, contract §10) --
@@ -2475,6 +2497,26 @@ pub fn gas_signals_cacheable(
 #[uniffi::export]
 pub fn bundler_quote_cacheable(max_fee_per_gas: String) -> bool {
     vela_core::app::fee_policy::bundler_quote_cacheable(&max_fee_per_gas)
+}
+
+/// One size a still image is decoded at (spec 090), in pixels.
+#[derive(uniffi::Record)]
+pub struct QrScanSize {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// The sizes to read a picked or dropped image's QR code at, in order: the
+/// image as it is, then shrunk so its longest side is 1024, 640, 400 (only
+/// rungs smaller than the image). Stop at the first hit. A screenshot of
+/// Vela's own receive code draws modules ~24 px across, wider than ZXing's
+/// local binarizer window; the rule lives in `vela_core::qr_scan`.
+#[uniffi::export]
+pub fn still_qr_sizes(width: u32, height: u32) -> Vec<QrScanSize> {
+    vela_core::qr_scan::still_qr_sizes(width, height)
+        .into_iter()
+        .map(|(width, height)| QrScanSize { width, height })
+        .collect()
 }
 
 /// The $1 peg for a native gas coin that IS a dollar stablecoin — Tempo's
@@ -2988,6 +3030,7 @@ mod tests_082 {
             "the network refused this transaction; nothing was sent"
         );
         assert_eq!(user_op_write_ahead_wait_ms(), 5_000);
+        assert_eq!(balance_chain_read_deadline_ms(), 18_000);
         let reverts = user_op_estimate_failure(
             r#"{"code":-32500,"message":"UserOperation simulation failed","data":"Safe execution failed: the target call in executeUserOp reverted"}"#.into(),
         );

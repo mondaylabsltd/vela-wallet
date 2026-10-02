@@ -206,6 +206,12 @@ export interface ReceiveQrModel {
 	code?: QrCode;
 	/** The mark drawn in the middle of the code — the token, or the network. */
 	centre: TokenMarkModel;
+	/**
+	 * Spec 090: the "include network" switch under the code, as the core's
+	 * `payment_request` offers it — absent where it offers none. `hint` is the
+	 * calm line under it, present exactly while the code names the network.
+	 */
+	network?: { label: string; on: boolean; hint?: string };
 	warning: string;
 	saveImage: string;
 	/** Live only: what 保存图片 produces — R4, about this network or token (T488). */

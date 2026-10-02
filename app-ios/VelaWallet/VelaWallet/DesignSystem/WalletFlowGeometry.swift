@@ -21,6 +21,13 @@ enum WalletFlowGeometry {
     /// The mark drawn over the centre of the code.
     static let qrCentre: CGFloat = 36
 
+    /// The receive code's "include network" switch (spec 090) — the web's
+    /// and desktop's 36×20 track with a 16 thumb that stretches to 20 while
+    /// pressed.
+    static let switchTrack = CGSize(width: 36, height: 20)
+    static let switchThumb: CGFloat = 16
+    static let switchThumbPressed: CGFloat = 20
+
     /// The send-receipt status disc, measured 88 in SD4a/SD4c. One size for
     /// all four outcomes so the mark does not resize as the transaction moves
     /// between them.

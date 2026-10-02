@@ -503,6 +503,53 @@ struct KeyValueRow: View {
     }
 }
 
+/// A setting that is a switch — About's debug mode (spec 091): the title,
+/// what it does in one line under it, and the platform's own switch, over the
+/// hairline the key/value rows around it draw. The switch is iOS's idiom; its
+/// tint is the accent.
+struct SettingsSwitchRow: View {
+    @Environment(\.theme) private var theme
+    let title: String
+    let detail: String
+    let isOn: Bool
+    /// `nil` — the gallery — draws the switch where it stands and lets it be.
+    var onChange: ((Bool) -> Void)?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: Tokens.Space.s12) {
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    Text(title)
+                        .typeRole(Typography.fieldLabel)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(theme.fgBase)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(detail)
+                        .typeRole(Typography.flowCaption)
+                        .foregroundStyle(theme.fgSubtle)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Toggle(title, isOn: Binding(
+                    get: { isOn },
+                    set: { on in
+                        guard let onChange else { return }
+                        // A switch that takes effect: Select.
+                        VelaHaptic.select.play()
+                        onChange(on)
+                    }
+                ))
+                .labelsHidden()
+                .tint(theme.accentBase)
+                .accessibilityLabel(title)
+            }
+            .frame(minHeight: 52)
+            .padding(.vertical, Tokens.Space.s12)
+            SettingsDivider()
+        }
+    }
+}
+
 /// ST1b's 清理数据 card — the one place in settings drawn as a bordered box
 /// rather than a hairline row, because it is the only action on the screen
 /// that cannot be undone.

@@ -18,6 +18,9 @@
     "linkGitHub": "GitHub",
     "linkSafeWallet": "Safe Wallet",
     "footer": "心を込めて作りました。鍵もコインも、あなたのもの。",
-    "sectionLinks": "リンク"
+    "sectionLinks": "リンク",
+    "debugMode": "デバッグモード",
+    "debugModeBody": "ローカルネットワーク上の http ページでウォレットを使えるようにします。開発専用です。",
+    "debugModeRevealed": "デバッグモードが使えるようになりました"
   }
 }

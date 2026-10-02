@@ -29,7 +29,11 @@
 //!
 //! One initialization script from the core — `dapp_rpc::provider_script`,
 //! the provider and its bridge, the same bytes Android and iOS inject with
-//! only the post function different (spec 070 FR-007). Until 070 this file
+//! only the post function different (spec 070 FR-007). Which pages it offers
+//! the wallet to follows Settings' debug mode (spec 091), and wry reads an
+//! initialization script only when it BUILDS a view: so a change of debug
+//! mode is a new view ([`set_debug_mode`]), built at the page the old one
+//! showed the next time the browser is drawn. Until 070 this file
 //! assembled the provider itself from the extension's two module files,
 //! stripping `import`/`export` line by line, and carried its own bridge.
 //!
@@ -358,6 +362,8 @@ pub fn on_meta_to(sink: MetaSink) {
 /// window rather than in a gpui global.
 struct Browser {
     view: wry::WebView,
+    /// The debug mode its provider script was written for (spec 091).
+    debug_mode: bool,
     /// What the webview was last told, so a frame that changed nothing does
     /// not cross the platform boundary sixty times a second.
     bounds: Option<Bounds<Pixels>>,
@@ -374,6 +380,10 @@ struct Browser {
 
 thread_local! {
     static BROWSER: RefCell<Option<Browser>> = const { RefCell::new(None) };
+    /// Settings' debug mode, as the browser's host last stated it (spec 091).
+    static DEBUG_MODE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Where a view retired for a change of debug mode was (spec 091).
+    static REOPEN: RefCell<Option<String>> = const { RefCell::new(None) };
     /// Why the engine did not start (spec 083 W1b). While set, nothing builds
     /// again until the person asks: a refused folder or a missing runtime does
     /// not fix itself between frames, and each attempt on Windows filed a
@@ -411,9 +421,40 @@ fn may_build() -> bool {
 /// Keep what a build produced: the view, or why there is none.
 fn settle(built: Result<Browser, EngineFailure>) {
     match built {
-        Ok(browser) => BROWSER.with(|slot| *slot.borrow_mut() = Some(browser)),
+        Ok(browser) => {
+            REOPEN.with(|slot| slot.borrow_mut().take());
+            BROWSER.with(|slot| *slot.borrow_mut() = Some(browser));
+        }
         Err(failure) => FAILED.set(Some(failure)),
     }
+}
+
+/// Settings' debug mode changed (spec 091), stated by the browser's host
+/// beside the core. The script a view was built with cannot change, so a view
+/// built for the other mode is retired here — out of the paint pass, as
+/// [`reload`] retires a dead engine — and the next [`place`] builds a new one
+/// at the page it showed. The core has already stopped answering a page it no
+/// longer offers.
+///
+/// `true` when a view was retired: its page is gone.
+pub fn set_debug_mode(on: bool) -> bool {
+    DEBUG_MODE.set(on);
+    let retired = BROWSER.with(|slot| {
+        slot.borrow_mut()
+            .take_if(|browser| stale(browser.debug_mode, on))
+    });
+    let Some(old) = retired else {
+        return false;
+    };
+    let at = view_url(&old.view).filter(|url| scheme_of(url) == Scheme::Web);
+    REOPEN.with(|slot| *slot.borrow_mut() = at);
+    drop(old);
+    true
+}
+
+/// Whether a view built for `built_with` must be rebuilt for `wanted`.
+fn stale(built_with: bool, wanted: bool) -> bool {
+    built_with != wanted
 }
 
 /// Draw the browser at `bounds`, building it on first call.
@@ -423,6 +464,10 @@ fn settle(built: Result<Browser, EngineFailure>) {
 /// column opening beside it — the signing panel included.
 pub fn place(bounds: Bounds<Pixels>, window: &Window, home: &str, cx: &mut gpui::App) {
     if !ready() {
+        // Spec 091: a view retired for the other debug mode opens again where
+        // it was (forgotten once a view is built).
+        let reopen = REOPEN.with(|slot| slot.borrow().clone());
+        let home = reopen.as_deref().unwrap_or(home);
         // Once per start, and again only on the person's Retry (spec 083):
         // this runs every frame, and before 083 a refused build was retried
         // sixty times a second.
@@ -975,8 +1020,9 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
     let builder = wry::WebViewBuilder::new_with_web_context(&mut context).with_visible(false);
     #[cfg(not(windows))]
     let builder = wry::WebViewBuilder::new();
+    let debug_mode = DEBUG_MODE.get();
     let builder = builder
-        .with_initialization_script(provider_script(ProviderHost::Desktop))
+        .with_initialization_script(provider_script(ProviderHost::Desktop, debug_mode))
         .with_initialization_script(META_JS)
         .with_ipc_handler(on_ipc)
         // 083: see `allow_navigation`.
@@ -1032,6 +1078,7 @@ fn build<W: wry::raw_window_handle::HasWindowHandle>(
             report(Load::Requested(home.to_owned()));
             Ok(Browser {
                 view,
+                debug_mode,
                 bounds: None,
                 visible: false,
                 #[cfg(windows)]
@@ -1523,10 +1570,17 @@ mod tests {
     /// wry's IPC channel and does nothing outside the top frame.
     #[test]
     fn the_injected_script_is_the_cores_desktop_script() {
-        let script = provider_script(ProviderHost::Desktop);
-        assert!(script.contains("window.ipc.postMessage"));
-        assert!(script.contains("window.top !== window"));
-        assert!(script.contains("__velaDeliver"));
+        for debug_mode in [false, true] {
+            let script = provider_script(ProviderHost::Desktop, debug_mode);
+            assert!(script.contains("window.ipc.postMessage"));
+            assert!(script.contains("window.top !== window"));
+            assert!(script.contains("__velaDeliver"));
+            assert_eq!(
+                script.contains("location.hostname"),
+                debug_mode,
+                "only debug mode tests the page's host (spec 091)"
+            );
+        }
         // The meta report is plumbing, not a second provider.
         assert!(!META_JS.contains("ethereum"));
         assert!(META_JS.contains("window.top !== window"));
@@ -1534,6 +1588,29 @@ mod tests {
             !META_JS.contains("pushState"),
             "083: history is its own script"
         );
+    }
+
+    /// Spec 091: a view is built with one debug mode's script and is rebuilt
+    /// for the other — never for the same one, and not before a view exists.
+    #[test]
+    fn a_change_of_debug_mode_rebuilds_the_view() {
+        assert!(!stale(false, false));
+        assert!(!stale(true, true));
+        assert!(
+            stale(false, true),
+            "turned on: a new view with the LAN test"
+        );
+        assert!(stale(true, false), "turned off: a new view without it");
+        assert!(!built());
+        assert!(!set_debug_mode(true), "no view yet: nothing retired");
+        assert!(DEBUG_MODE.get());
+        assert_eq!(
+            REOPEN.with(|slot| slot.borrow().clone()),
+            None,
+            "no view yet: nothing retired, nothing to reopen"
+        );
+        assert!(!set_debug_mode(false));
+        assert!(!DEBUG_MODE.get());
     }
 
     /// 083 W15: a page's report of its own entries reaches the arrows, never

@@ -68,10 +68,13 @@ export interface WalletMessages {
 	assets: {
 		emptyTitle: string;
 		emptyCaption: string;
-		/** Template with `{{name}}` — one chain's RPC is failing (not rate-limited). */
-		rpcUnavailableSingle: string;
-		/** Template with `{{count}}`. */
-		rpcUnavailableMultiple: string;
+		/**
+		 * Spec 092: the home line over networks the wallet cannot reach — the
+		 * core names which (`unreachable_key`). `{{name}}` for one network …
+		 */
+		unreachableOne: string;
+		/** … `{{n}}` for several. */
+		unreachableMany: string;
 	};
 	networkFilter: { pillAll: string; sheetTitle: string; allNetworks: string };
 	sidebar: { networks: string };
@@ -177,8 +180,8 @@ export const WALLET_KEYS = [
 	'componentsUi.signing.intentUnknown',
 	'assets.emptyTitle',
 	'assets.emptySubtext',
-	'assets.rpcUnavailableSingle',
-	'assets.rpcUnavailableMultiple',
+	'assets.unreachableOne',
+	'assets.unreachableMany',
 	// Spec 038: the home's sentence for a first launch with no network.
 	'onboarding.common.networkBody',
 	'componentsUi.networkFilter.pillAll',

@@ -1858,16 +1858,28 @@ pub fn dapp_rpc_classify(method: &str) -> String {
 }
 
 /// The document-start script an in-app browser injects, for `host`
-/// (`"android"` / `"ios"` / `"desktop"`) — exported so the web suite can run
-/// the real bridge in a real browser.
+/// (`"android"` / `"ios"` / `"desktop"`) and Settings' debug mode (spec 091)
+/// — exported so the web suite can run the real bridge in a real browser,
+/// and the debug script's host test against [`dapp_offers_wallet`].
 #[wasm_bindgen(js_name = dappProviderScript)]
-pub fn dapp_provider_script(host: &str) -> String {
+pub fn dapp_provider_script(host: &str, debug_mode: bool) -> String {
     use vela_core::app::dapp_rpc::{provider_script, ProviderHost};
-    provider_script(match host {
-        "ios" => ProviderHost::Ios,
-        "desktop" => ProviderHost::Desktop,
-        _ => ProviderHost::Android,
-    })
+    provider_script(
+        match host {
+            "ios" => ProviderHost::Ios,
+            "desktop" => ProviderHost::Desktop,
+            _ => ProviderHost::Android,
+        },
+        debug_mode,
+    )
+}
+
+/// Whether a page at `origin` is offered the wallet (spec 091) — the rule
+/// the in-app browsers' gate follows, exported so the web suite can hold the
+/// injected script's host test to it.
+#[wasm_bindgen(js_name = dappOffersWallet)]
+pub fn dapp_offers_wallet(origin: &str, debug_mode: bool) -> bool {
+    vela_core::app::dapp_permissions::offers_wallet(origin, debug_mode)
 }
 
 // ---------------------------------------------------------------------------
@@ -1980,6 +1992,15 @@ pub fn sign_request_ttl_ms() -> f64 {
 // rpc_pool — the two clocks the extension worker keeps in JavaScript (RF2).
 // The worker cannot load the core; its tests pin its copies to these.
 // ---------------------------------------------------------------------------
+
+/// How long one chain's balance read may take before the round gives up on
+/// it and counts that chain failed, ms (spec 092) —
+/// `balance_dashboard::CHAIN_READ_DEADLINE_MS`.
+#[wasm_bindgen(js_name = balanceChainReadDeadlineMs)]
+#[must_use]
+pub fn balance_chain_read_deadline_ms() -> u32 {
+    vela_core::app::balance_dashboard::CHAIN_READ_DEADLINE_MS
+}
 
 /// The per-endpoint timeout of a chain read, ms — `rpc_pool::RPC_READ_TIMEOUT_MS`.
 #[wasm_bindgen(js_name = rpcReadTimeoutMs)]
@@ -2351,6 +2372,7 @@ mod core_082_exports {
         assert!((dapp_receipt_wait_ms(115_000.0) - 10_000.0).abs() < f64::EPSILON);
         assert!((sign_request_ttl_ms() - 300_000.0).abs() < f64::EPSILON);
         assert_eq!(rpc_read_timeout_ms(), 8_000);
+        assert_eq!(balance_chain_read_deadline_ms(), 18_000);
         let cooldowns: Vec<f64> = (0..=6).map(rpc_cooldown_ms).collect();
         assert_eq!(
             cooldowns,

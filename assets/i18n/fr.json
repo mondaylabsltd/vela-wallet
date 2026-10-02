@@ -490,14 +490,22 @@
   "qrTitleNetwork": "Utilisez cette adresse pour recevoir des actifs sur {{network}}",
   "qrTitleAsset": "Utilisez cette adresse pour recevoir des {{symbol}} sur {{network}}",
   "shareCardNetworkNote": "Paiements {{network}} uniquement",
-  "tokenContract": "Contrat du jeton"
+  "tokenContract": "Contrat du jeton",
+  "includeNetwork": "Inclure le réseau",
+  "includeNetworkHint": "Certains portefeuilles ne lisent pas ce code. Si votre interlocuteur n'y arrive pas, désactivez-le."
  },
  "assets": {
   "sectionTitle": "Actifs",
   "addToken": "Ajouter",
   "searchPlaceholder": "Rechercher des tokens...",
-  "rpcUnavailableSingle": "RPC de {{name}} indisponible",
-  "rpcUnavailableMultiple": "RPC indisponible sur {{count}} réseaux",
+  "unreachableOne": "{{name}} est injoignable pour le moment",
+  "unreachableMany": "{{n}} réseaux sont injoignables pour le moment",
+  "unreachableBody": "Vos actifs ne sont pas affectés : nous ne pouvons simplement pas les lire pour l’instant.",
+  "unreachableNone": "Tous les réseaux sont de nouveau joignables.",
+  "lastSeen": "Dernière lecture : {{amount}}",
+  "lastSeenUnpriced": "Des jetons à la dernière lecture",
+  "lastSeenEmpty": "Vide à la dernière lecture",
+  "notReadYet": "Pas encore lu",
   "rpcFix": "Corriger",
   "emptyTitle": "Déposez votre premier actif",
   "emptySubtext": "Appuyez ici pour voir votre adresse et recevoir des tokens",
@@ -1029,7 +1037,10 @@
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
   "footer": "Conçu avec soin. Vos clés, vos cryptos.",
-  "sectionLinks": "Liens"
+  "sectionLinks": "Liens",
+  "debugMode": "Mode débogage",
+  "debugModeBody": "Permet aux pages http de votre réseau local d’utiliser le portefeuille. Réservé au développement.",
+  "debugModeRevealed": "Le mode débogage est maintenant disponible"
  },
  "clearSigning": {
   "title": "Test de signature claire",

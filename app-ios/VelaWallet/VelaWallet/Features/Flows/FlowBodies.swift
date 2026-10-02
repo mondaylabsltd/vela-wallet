@@ -96,6 +96,8 @@ struct ReceiveQrBody: View {
     let model: ReceiveQrModel
     var onSave: () -> Void = {}
     var onExplorer: () -> Void = {}
+    /// Spec 090: the "include network" switch, flipped. Absent in the gallery.
+    var onIncludeNetwork: ((Bool) -> Void)?
     /// The sheet's ✕, drawn at the end of the heading's line (issue #321).
     /// Absent, the heading has the line to itself.
     var onClose: (() -> Void)?
@@ -167,6 +169,21 @@ struct ReceiveQrBody: View {
                 }
             }
             .frame(maxWidth: .infinity)
+
+            // Spec 090: under the code, the switch that makes it name its
+            // network, and — only while it does — the calm line about wallets
+            // that can't read it. Subtle ink: a fact, not a danger.
+            if let network = model.network {
+                VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                    VelaSwitchRow(label: network.label, isOn: network.isOn, onChange: onIncludeNetwork)
+                    if let hint = network.hint {
+                        Text(verbatim: hint)
+                            .typeRole(Typography.rowSub.scaled(textScale))
+                            .foregroundStyle(theme.fgSubtle)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
 
             Text(verbatim: model.warning)
                 .typeRole(Typography.rowSub.scaled(textScale))

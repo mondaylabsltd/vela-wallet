@@ -287,7 +287,9 @@ object I18nKeys {
         const val BALANCE_STALE = "home.balanceStale"
         const val BALANCE_UNPRICED = "home.balanceUnpriced"
         /** "{{name}} RPC unavailable" — the hero's line for one unreachable chain (web `liveBalance`). */
-        const val RPC_UNAVAILABLE_SINGLE = "assets.rpcUnavailableSingle"
+        /** Spec 092: the line over the networks the wallet cannot reach — `{{name}}` / `{{n}}`. */
+        const val UNREACHABLE_ONE = "assets.unreachableOne"
+        const val UNREACHABLE_MANY = "assets.unreachableMany"
         /**
          * The hero's reason when a first load could read nothing and nothing is
          * cached (#188, spec 038 finding 15). Borrowed from the onboarding
@@ -481,6 +483,9 @@ object I18nKeys {
         const val RECEIVE_SAVE_IMAGE = "receive.request.saveImage"
         const val SHARE_CARD_HEADLINE = "receive.shareCardHeadline"
         const val SHARE_CARD_NETWORK_NOTE = "receive.shareCardNetworkNote"
+        /** Spec 090: the receive code's opt-in "include network" switch and its hint. */
+        const val RECEIVE_INCLUDE_NETWORK = "receive.includeNetwork"
+        const val RECEIVE_INCLUDE_NETWORK_HINT = "receive.includeNetworkHint"
 
         // Scan.
         const val SCAN_TITLE = "componentsUi.scanner.title"
@@ -992,6 +997,10 @@ object I18nKeys {
         const val ABOUT_SIGNER_VALUE = "about.techSignerValue"
         const val ABOUT_NETWORKS_LABEL = "about.techNetworksLabel"
         const val ABOUT_NETWORKS_VALUE = "about.techNetworksValue"
+        /** Spec 091: the hidden developer switch, its one line, and the notice when it appears. */
+        const val ABOUT_DEBUG_MODE = "about.debugMode"
+        const val ABOUT_DEBUG_MODE_BODY = "about.debugModeBody"
+        const val ABOUT_DEBUG_MODE_REVEALED = "about.debugModeRevealed"
         const val ABOUT_LINK_WEBSITE = "about.linkWebsite"
         const val ABOUT_LINK_GITHUB = "about.linkGitHub"
         const val ABOUT_LINK_SAFE = "about.linkSafeWallet"
@@ -1059,8 +1068,15 @@ object I18nKeys {
         const val BUG_CLOSE_VIEWER = "componentsUi.bugReport.closeViewer"
         const val BUG_REMOVE_FROM_VIEWER = "componentsUi.bugReport.removeFromViewer"
 
-        // Rescue (SR1–SR5).
-        const val RPC_UNAVAILABLE_MULTIPLE = "assets.rpcUnavailableMultiple"
+        // Rescue (SR1–SR6). SR6 (spec 092): the list of every network the wallet
+        // cannot reach — its line under the title, its title once all are back,
+        // and the four row lines the core names in `line_key`.
+        const val UNREACHABLE_BODY = "assets.unreachableBody"
+        const val UNREACHABLE_NONE = "assets.unreachableNone"
+        const val LAST_SEEN = "assets.lastSeen"
+        const val LAST_SEEN_UNPRICED = "assets.lastSeenUnpriced"
+        const val LAST_SEEN_EMPTY = "assets.lastSeenEmpty"
+        const val NOT_READ_YET = "assets.notReadYet"
         const val RPC_FIX = "assets.rpcFix"
         const val RPC_FIX_TITLE = "assets.rpcFixTitle"
         const val RPC_FIX_WARNING = "assets.rpcFixWarning"

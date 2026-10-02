@@ -58,6 +58,8 @@ pub struct PanelActions {
     pub acknowledge: Option<Click>,
     /// DR2L: 保存图片 — the share card as a PNG.
     pub save_image: Option<Click>,
+    /// DR2L: the "include network" switch under the code (spec 090).
+    pub include_network: Option<Click>,
     /// DR1L, live: one listener per network row. Empty falls back to `open_qr`.
     pub open_qr_rows: Vec<Click>,
     /// DA1L: a row opens its transaction.
@@ -379,6 +381,7 @@ pub fn render(
             identicons,
             actions.acknowledge,
             actions.save_image,
+            actions.include_network,
         ),
         FlowBody::History(model) => {
             history(model, theme, icons, actions.open_tx, actions.open_tx_rows)
@@ -555,6 +558,7 @@ fn receive_qr(
     identicons: &mut IdenticonCache,
     acknowledge: Option<Click>,
     save_image: Option<Click>,
+    include_network: Option<Click>,
 ) -> Div {
     let mut col = column().child(
         div()
@@ -663,6 +667,26 @@ fn receive_qr(
         }),
         model.qr_payload.as_deref(),
     )))
+    // Spec 090: under the code, the switch that makes it name its network,
+    // and — only while it does — the calm line about wallets that can't read
+    // it. Subtle ink, not a warning colour: it is a fact, not a danger.
+    .children(model.network.as_ref().map(|network| {
+        column()
+            .gap(px(4.))
+            .child(super::components::switch_row(
+                theme,
+                "receive-include-network",
+                network.label.clone(),
+                network.on,
+                include_network,
+            ))
+            .children(network.hint.clone().map(|hint| {
+                div()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_subtle)
+                    .child(hint)
+            }))
+    }))
     .child(
         div()
             // Centred 11 subtle, as the web's `.warning` (078 F-11).

@@ -153,6 +153,8 @@ enum WalletFlowFixtures {
             centre: asset
                 ? TokenMarkModel(ticker: "USDT", badgeColor: ChainPalette.gnosis)
                 : TokenMarkModel(ticker: network.code, badgeColor: network.color),
+            // Spec 090: drawn off — the bare address every wallet reads.
+            network: NetworkSwitchModel(label: loc.t("receive.includeNetwork"), isOn: false, hint: nil),
             warning: loc.t("receive.warningReminder"),
             saveImage: loc.t("receive.request.saveImage"),
             viewOnExplorer: loc.t("history.viewOnExplorer")

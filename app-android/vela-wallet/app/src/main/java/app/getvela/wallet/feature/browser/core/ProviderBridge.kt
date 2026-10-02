@@ -25,33 +25,46 @@ object ProviderBridge {
     /** The bridge's object name, `VelaHost.postMessage(…)` in the page. */
     private const val HOST = "VelaHost"
 
-    val script: String by lazy { dappProviderScript("android") }
+    private val ordinaryScript: String by lazy { dappProviderScript("android", false) }
+    private val debugScript: String by lazy { dappProviderScript("android", true) }
+
+    /**
+     * The script for Settings' debug mode (spec 091): off, a secure context
+     * only (spec 088); on, http on this device's own network too. Both are
+     * the core's, built once each.
+     */
+    fun script(debugMode: Boolean): String = if (debugMode) debugScript else ordinaryScript
 
     /**
      * Installs the provider (document start, every frame — the script itself
-     * does nothing below the top frame) and the listener. `false` when this
-     * WebView cannot run either: the page then loads with NO wallet in it,
-     * which is honest, rather than with a provider injected too late to be
-     * seen or on a channel that cannot tell frames apart.
+     * does nothing below the top frame) for [debugMode], and the listener.
+     * `null` when this WebView cannot run either: the page then loads with NO
+     * wallet in it, which is honest, rather than with a provider injected too
+     * late to be seen or on a channel that cannot tell frames apart.
      */
-    fun install(webView: WebView, onMessage: (json: String, sourceOrigin: String, isMainFrame: Boolean) -> Unit): Boolean {
+    fun install(
+        webView: WebView,
+        debugMode: Boolean,
+        onMessage: (json: String, sourceOrigin: String, isMainFrame: Boolean) -> Unit,
+    ): ProviderScript? {
         val documentStart = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
         val listener = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
         if (!documentStart || !listener) {
             VelaLog.event("browser.inject", "provider unavailable", "documentStart" to documentStart.toString(), "listener" to listener.toString())
-            return false
+            return null
         }
         // Called on the UI thread, in the order the page posted.
         WebViewCompat.addWebMessageListener(webView, HOST, setOf("*")) { _, message, sourceOrigin, isMainFrame, _ ->
             val data = message.data ?: return@addWebMessageListener
             onMessage(data, sourceOrigin.toString(), isMainFrame)
         }
-        WebViewCompat.addDocumentStartJavaScript(webView, script, setOf("*"))
+        val provider = ProviderScript(debugMode) { script -> WebViewCompat.addDocumentStartJavaScript(webView, script, setOf("*"))::remove }
         VelaLog.event("browser.inject", "provider installed")
-        return true
+        return provider
     }
 
-    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    /** Lazy: a JVM test reads [script] without a main looper. */
+    private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
 
     /**
      * A string for the page's `__velaDeliver`, which drops it unless it names
@@ -65,5 +78,31 @@ object ProviderBridge {
      */
     fun deliver(webView: WebView, json: String) {
         main.post { webView.evaluateJavascript("window.__velaDeliver && window.__velaDeliver(${JSONObject.quote(json)})", null) }
+    }
+}
+
+/**
+ * The provider script one WebView carries (spec 091): the core's script for
+ * the debug mode in force, swapped when the mode changes. A WebView reads its
+ * document-start scripts when a document starts, so a swap applies to the
+ * tab's NEXT document; the page already open keeps what it started with
+ * (turning debug mode off still withdraws the wallet at once — the core
+ * retires every document it no longer offers).
+ *
+ * [add] installs a document-start script and hands back how to remove it:
+ * `WebViewCompat.addDocumentStartJavaScript`'s handler in the app, a fake in
+ * the JVM tests.
+ */
+class ProviderScript(debugMode: Boolean, private val add: (script: String) -> () -> Unit) {
+    var debugMode: Boolean = debugMode
+        private set
+
+    private var remove: () -> Unit = add(ProviderBridge.script(debugMode))
+
+    fun swap(debugMode: Boolean) {
+        if (debugMode == this.debugMode) return
+        remove()
+        remove = add(ProviderBridge.script(debugMode))
+        this.debugMode = debugMode
     }
 }

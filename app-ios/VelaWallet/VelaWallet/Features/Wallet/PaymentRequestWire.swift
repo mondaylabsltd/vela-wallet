@@ -46,6 +46,11 @@ struct PaymentRequestViewWire: Decodable, Equatable {
     let payLink: String
     let qrValue: String
     let copyPayload: String
+    /// Spec 090: the "include network" switch — whether it is offered, its
+    /// position, and whether the calm hint under it shows.
+    let networkSwitch: Bool
+    let includeNetwork: Bool
+    let networkHint: Bool
     let hasAmount: Bool
     /// `nil` until a link has been opened; then the core's verdict on it.
     let payValid: Bool?

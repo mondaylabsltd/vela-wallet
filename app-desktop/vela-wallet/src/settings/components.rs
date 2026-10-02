@@ -1315,6 +1315,88 @@ pub fn key_value_row(
         .child(div().h(px(1.)).bg(theme.divider))
 }
 
+// -- ToggleRow ----------------------------------------------------------------
+
+/// The switch's track and knob (spec 091) — the app's first switch, so it is
+/// drawn here: a 36×20 pill, the knob at the end it is set to, the accent when
+/// on and the strong border colour when off. The knob is the inverse ink —
+/// white in both palettes, as a label on the accent is.
+const SWITCH_W: f32 = 36.;
+const SWITCH_H: f32 = 20.;
+const SWITCH_KNOB: f32 = 16.;
+
+/// A setting with a switch (spec 091): the title, one line under it, the
+/// switch at the end — a hairline row like DST8's key/value rows, with no box.
+/// The whole row toggles; pressed, it dims, as every settings control does.
+pub fn toggle_row(
+    id: impl Into<ElementId>,
+    theme: &Theme,
+    title: SharedString,
+    body: SharedString,
+    on: bool,
+    on_toggle: impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    let inset = (SWITCH_H - SWITCH_KNOB) / 2.;
+    let switch = div()
+        .flex_none()
+        .w(px(SWITCH_W))
+        .h(px(SWITCH_H))
+        .rounded_full()
+        .bg(if on {
+            theme.accent
+        } else {
+            theme.border_strong
+        })
+        .flex()
+        .items_center()
+        .px(px(inset))
+        .when(on, |el| el.justify_end())
+        .child(
+            div()
+                .size(px(SWITCH_KNOB))
+                .rounded_full()
+                .bg(theme.fg_inverse)
+                .shadow(crate::ui::dialog::shadow_lg()),
+        );
+    let hover = theme.bg_sunken;
+    let row = div()
+        .id(id)
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .py(px(12.))
+        .cursor_pointer()
+        .hover(move |el| el.bg(hover))
+        .active(|el| el.opacity(0.7))
+        .on_click(on_toggle)
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.))
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_base)
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_label())
+                        .text_color(theme.fg_subtle)
+                        .child(body),
+                ),
+        )
+        .child(switch);
+    div()
+        .flex()
+        .flex_col()
+        .child(row)
+        .child(div().h(px(1.)).bg(theme.divider))
+}
+
 // -- DangerCard ---------------------------------------------------------------
 
 /// DST1's 清理数据 card — the one thing in settings drawn as a bordered box

@@ -18,6 +18,9 @@
     "linkGitHub": "GitHub",
     "linkSafeWallet": "Safe Wallet",
     "footer": "用心打造。您的金鑰，您的幣。",
-    "sectionLinks": "連結"
+    "sectionLinks": "連結",
+    "debugMode": "除錯模式",
+    "debugModeBody": "讓區域網路上的 http 網頁使用錢包。僅供開發使用。",
+    "debugModeRevealed": "現在可以使用除錯模式了"
   }
 }

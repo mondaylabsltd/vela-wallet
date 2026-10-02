@@ -32,7 +32,7 @@ struct WalletLiveTests {
             displayTotalUsd: total, balanceUnknown: false, balancePartial: false,
             notice: nil, hidden: hidden, refreshing: false, lastRefreshedAtMs: nil,
             tokens: tokens, unpricedTokens: [], failedChainIds: [],
-            rateLimitedChainIds: [], bannerChainIds: [], holdingsLoading: false,
+            rateLimitedChainIds: [], holdingsLoading: false,
             cachedTotalUsd: nil,
             switcher: BalanceSwitcherViewWire(open: false, loading: false, balances: [])
         )
@@ -63,7 +63,7 @@ struct WalletLiveTests {
             address: loading.address, displayTotalUsd: nil, balanceUnknown: false,
             balancePartial: false, notice: nil, hidden: false, refreshing: true,
             lastRefreshedAtMs: nil, tokens: [], unpricedTokens: [], failedChainIds: [],
-            rateLimitedChainIds: [], bannerChainIds: [], holdingsLoading: true,
+            rateLimitedChainIds: [], holdingsLoading: true,
             cachedTotalUsd: nil,
             switcher: BalanceSwitcherViewWire(open: false, loading: false, balances: [])
         )
@@ -87,7 +87,7 @@ struct WalletLiveTests {
             displayTotalUsd: 1_000, balanceUnknown: false, balancePartial: true,
             notice: nil, hidden: false, refreshing: false, lastRefreshedAtMs: nil,
             tokens: [], unpricedTokens: [], failedChainIds: [137],
-            rateLimitedChainIds: [], bannerChainIds: [], holdingsLoading: false,
+            rateLimitedChainIds: [], holdingsLoading: false,
             cachedTotalUsd: nil,
             switcher: BalanceSwitcherViewWire(open: false, loading: false, balances: [])
         )
@@ -97,6 +97,29 @@ struct WalletLiveTests {
         #expect(model.status?.kind == .warning)
         #expect(model.status?.text == loc.t("home.balanceStale"))
         #expect(model.status?.text.isEmpty == false)
+    }
+
+    /// Spec 092 (F08): unreachable networks come first on the line, in the
+    /// core's sentence and without "RPC" — one named, several counted, every
+    /// one of them; the list it opens is SR6 (`SettingsLive.withUnreachable`).
+    @Test func unreachableNetworksAreSaidPlainlyAndCounted() {
+        func down(_ ids: [Int], key: String) -> BalanceViewWire {
+            var view = view(total: 1_000)
+            view.unreachableNetworks = ids.map {
+                UnreachableNetworkWire(chainId: $0, lastKnown: "not_read", lastSeenUsd: nil,
+                                       lineKey: I18nKeys.SettingsUi.notReadYet)
+            }
+            view.unreachableKey = key
+            return view
+        }
+        let one = WalletLive.balance(down([56], key: I18nKeys.SettingsUi.unreachableOne),
+                                     fallback: base, loc: loc)
+        #expect(one.status?.kind == .warning)
+        #expect(one.status?.text == "暂时连不上 BNB Chain")
+        let many = WalletLive.balance(down([56, 137, 10], key: I18nKeys.SettingsUi.unreachableMany),
+                                      fallback: base, loc: loc)
+        #expect(many.status?.text == "3 个网络暂时连不上")
+        #expect(many.status?.text.contains("RPC") == false)
     }
 
     @Test func aPricedCurrencyConvertsTheHeroAndWearsItsCode() {

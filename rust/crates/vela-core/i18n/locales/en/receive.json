@@ -73,6 +73,8 @@
     "qrTitleNetwork": "Use this address to receive assets on {{network}}",
     "qrTitleAsset": "Use this address to receive {{symbol}} on {{network}}",
     "shareCardNetworkNote": "{{network}} payments only",
-    "tokenContract": "Token contract"
+    "tokenContract": "Token contract",
+    "includeNetwork": "Include network",
+    "includeNetworkHint": "Some wallets can't read this code. If theirs can't, switch it off."
   }
 }

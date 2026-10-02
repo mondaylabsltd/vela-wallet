@@ -214,6 +214,10 @@ pub struct FlowStrings {
     pub warning_confirm: SharedString,
     pub save_image: SharedString,
     pub share_card_headline: SharedString,
+    /// Spec 090: the "include network" switch under the code, and the calm
+    /// line under it while it is on.
+    pub include_network: SharedString,
+    pub include_network_hint: SharedString,
 
     // Scan.
     pub scan_title: SharedString,
@@ -617,6 +621,8 @@ impl FlowStrings {
             warning_confirm: s("receive.warningConfirm"),
             save_image: s("receive.request.saveImage"),
             share_card_headline: s("receive.shareCardHeadline"),
+            include_network: s("receive.includeNetwork"),
+            include_network_hint: s("receive.includeNetworkHint"),
 
             scan_title: s("componentsUi.scanner.title"),
             scan_hint: s("componentsUi.scanner.hint"),
@@ -885,6 +891,11 @@ mod tests {
                 "receive.searchNetworkPlaceholder",
             ),
             (s.token_contract.as_ref(), "receive.tokenContract"),
+            (s.include_network.as_ref(), "receive.includeNetwork"),
+            (
+                s.include_network_hint.as_ref(),
+                "receive.includeNetworkHint",
+            ),
             (s.add_by_address.as_ref(), "assets.addByAddress"),
             (s.not_showing_title.as_ref(), "assets.notShowingTitle"),
             (s.from_contacts.as_ref(), "send.fromContacts"),

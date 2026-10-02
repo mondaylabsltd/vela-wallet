@@ -641,11 +641,30 @@ enum FlowsLive {
     ///
     /// What 058 does add is the **asset**: `payment_request` knows which coin
     /// the code was asked for, and R3 has always been drawn for it.
+    /// What a receive code says (spec 090): the core's `qrValue` — the bare
+    /// address, or with "include network" on `ethereum:<address>@<chain>` —
+    /// once the core's answer is about THIS code's network and token. Until
+    /// then (no session yet, a pick in flight) the bare address, which every
+    /// wallet reads. `current` says which, so the switch is drawn only beside
+    /// a code it describes.
+    static func receiveCode(
+        _ address: String,
+        chainId: Int?,
+        tokenAddress: String?,
+        pay: PaymentRequestViewWire?
+    ) -> (value: String, current: Bool) {
+        guard let pay, !pay.qrValue.isEmpty, let chainId,
+              pay.asset.chainId == chainId, pay.asset.tokenAddress == tokenAddress
+        else { return (address, false) }
+        return (pay.qrValue, true)
+    }
+
     static func receiveQr(
         _ address: String,
         name: String,
         chain: ChainMeta?,
         asset: PaymentRequestAssetWire? = nil,
+        pay: PaymentRequestViewWire? = nil,
         on model: ReceiveQrModel,
         loc: Loc
     ) -> ReceiveQrModel {
@@ -701,7 +720,24 @@ enum FlowsLive {
         // demo pattern, which is why `QrCode` never falls back to it silently:
         // the caller decides, and here an unencodable address is a bug worth
         // seeing rather than a picture worth showing.
-        live.modules = QrCode.modules(address)
+        let code = receiveCode(
+            address,
+            chainId: asset?.chainId ?? chain?.chainId,
+            tokenAddress: asset?.tokenAddress,
+            pay: pay
+        )
+        live.modules = QrCode.modules(code.value)
+        // The switch and its hint are the core's (spec 090), drawn only beside
+        // a code the core's answer is about.
+        if code.current, let pay, pay.networkSwitch {
+            live.network = NetworkSwitchModel(
+                label: loc.t("receive.includeNetwork"),
+                isOn: pay.includeNetwork,
+                hint: pay.networkHint ? loc.t("receive.includeNetworkHint") : nil
+            )
+        } else {
+            live.network = nil
+        }
         return live
     }
 
@@ -717,6 +753,7 @@ enum FlowsLive {
         _ address: String,
         name: String,
         chain: ChainMeta?,
+        pay: PaymentRequestViewWire? = nil,
         on model: ShareCardModel,
         loc: Loc
     ) -> ShareCardModel {
@@ -726,7 +763,14 @@ enum FlowsLive {
         live.lines = AddressText.lines(address)
         live.identiconSeed = address
         // Level H, not the screen's M: the network's logo sits on the code.
-        live.modules = QrCode.shareModules(address)
+        // And exactly what the screen's code says (spec 090) — the core's
+        // value for the asset the card is about.
+        live.modules = QrCode.shareModules(receiveCode(
+            address,
+            chainId: chain?.chainId,
+            tokenAddress: pay?.asset.tokenAddress,
+            pay: pay
+        ).value)
         if let chain {
             live.networkNote = loc.t("receive.shareCardNetworkNote",
                                      vars: ["network": chain.displayName])

@@ -354,9 +354,9 @@ impl WalletPage {
             resident::resident::<BalanceDashboard>(cx)
                 .read(cx)
                 .view()
-                .banner_chain_ids
+                .unreachable_networks
                 .iter()
-                .map(|chain_id| crate::executor::custom_tokens::network_name(*chain_id))
+                .map(|network| crate::executor::custom_tokens::network_name(network.chain_id))
                 .collect()
         } else {
             Vec::new()

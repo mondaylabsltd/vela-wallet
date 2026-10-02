@@ -47,6 +47,19 @@ enum BalanceNoticeWire: String, Decodable {
     case unpriced
 }
 
+/// One network the last read could not reach, and what was last read there
+/// (spec 092). The core orders the list and picks each row's sentence.
+struct UnreachableNetworkWire: Decodable, Equatable {
+    let chainId: Int
+    /// `held` / `empty` / `not_read`.
+    let lastKnown: String
+    /// The worth of what it last held, USD. `nil` when nothing priced was
+    /// held — and while privacy hides it, like the hero's figure.
+    let lastSeenUsd: Double?
+    /// The corpus key of the row's line; `assets.lastSeen` fills `{{amount}}`.
+    let lineKey: String
+}
+
 struct BalanceSwitcherViewWire: Decodable, Equatable {
     let open: Bool
     let loading: Bool
@@ -81,7 +94,13 @@ struct BalanceViewWire: Decodable, Equatable {
     /// The transient subset. A chain here keeps its cached balance and must
     /// **never** be offered the "swap in your own RPC" banner (invariant ④).
     let rateLimitedChainIds: [Int]
-    let bannerChainIds: [Int]
+    /// Every network the wallet cannot reach (spec 092), held or not, in the
+    /// core's order. The core always sends it (a JSON fixture must too); the
+    /// default only serves Swift-built test views.
+    var unreachableNetworks: [UnreachableNetworkWire] = []
+    /// The corpus key of the home line over them (`assets.unreachableOne` /
+    /// `assets.unreachableMany`); `nil` when every network answered.
+    var unreachableKey: String? = nil
     let holdingsLoading: Bool
     let cachedTotalUsd: Double?
     let switcher: BalanceSwitcherViewWire

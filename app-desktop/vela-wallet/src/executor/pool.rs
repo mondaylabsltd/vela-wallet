@@ -2571,9 +2571,11 @@ mod tests {
     /// 083 H6: when every node fails, the caller hears the pool's failure,
     /// classified from the nodes in the core's order as it always was — never
     /// the hedge's own failure in its place. The first node is rate-limited
-    /// (429, slowly) and the second fails at once (502): the verdict is the
-    /// first node's "rate-limited", the transient case the balance screen
-    /// keeps quiet about (invariant ④), not the second node's plain failure.
+    /// (429, slowly) and the second refuses at once (400 — it answered): the
+    /// verdict is the first node's "rate-limited", the transient case the
+    /// balance screen keeps quiet about (invariant ④), not the second node's
+    /// plain failure. (A 5xx there would be a node not reached, and since spec
+    /// 092 that makes the chain failed rather than busy.)
     #[test]
     fn when_both_nodes_fail_the_first_nodes_failure_is_reported() {
         const CHAIN: u32 = 424_246;
@@ -2582,7 +2584,7 @@ mod tests {
         storage::tests::with_temp_state("pool-hedge-fail", || {
             let (first, _) = scripted_node(SLOW, Some(http("429 Too Many Requests", "")));
             let (second, second_log) =
-                scripted_node(Duration::ZERO, Some(http("502 Bad Gateway", "")));
+                scripted_node(Duration::ZERO, Some(http("400 Bad Request", "")));
             seed_two(CHAIN, &first, &second);
 
             let began = Instant::now();
