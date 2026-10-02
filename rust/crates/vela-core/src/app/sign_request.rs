@@ -2455,6 +2455,7 @@ fn approve_with(
     let summary = super::dapp_activity::summarize(
         &pending.method,
         &parsed,
+        chain_id,
         &pending.origin,
         opts.token_meta.as_ref(),
     );

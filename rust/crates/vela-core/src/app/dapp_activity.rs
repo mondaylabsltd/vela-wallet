@@ -146,6 +146,7 @@ pub struct DappSummary {
 pub fn summarize(
     method: &str,
     params: &Value,
+    chain_id: u32,
     origin: &str,
     token_meta: Option<&GuardTokenMetaView>,
 ) -> DappSummary {
@@ -165,7 +166,7 @@ pub fn summarize(
                 },
                 // One call is that call, as its sheet reads it (089 S1).
                 [only] => call_summary(only, token_meta),
-                calls => batch_summary(calls),
+                calls => batch_summary(chain_id, calls),
             }
         }
         "personal_sign" => message_summary(params, origin),
@@ -211,7 +212,7 @@ fn call_summary(tx: &Value, token_meta: Option<&GuardTokenMetaView>) -> DappSumm
 /// A batch: where it happens (the first call to a protocol the wallet knows)
 /// and the first allowance any call grants — the detail states it, though
 /// the title is the batch's verb.
-fn batch_summary(calls: &[Value]) -> DappSummary {
+fn batch_summary(chain_id: u32, calls: &[Value]) -> DappSummary {
     let mut summary = DappSummary {
         action: DappAction::Batch,
         calls: u32::try_from(calls.len()).unwrap_or(u32::MAX),
@@ -220,7 +221,7 @@ fn batch_summary(calls: &[Value]) -> DappSummary {
     for call in calls {
         let to = address_in(call.get("to"));
         if summary.contract.is_none() {
-            summary.contract = to.clone().filter(|to| protocol_of(to).is_some());
+            summary.contract = to.clone().filter(|to| protocol_of(chain_id, to).is_some());
         }
         if summary.spender.is_none() {
             let data = call.get("data").and_then(Value::as_str);
@@ -363,17 +364,22 @@ pub fn clean_primary_type(name: &str) -> Option<String> {
 /// Not every known contract is a place somebody acts ON: Permit2 serves every
 /// protocol (an approval of it on PancakeSwap is no Uniswap action), and a
 /// wrapped coin or a smart-wallet factory is not where anything happens. Those
-/// name no place, and the row names the site.
+/// name no place (the table's `place`), and the row names the site.
+///
+/// Read on the chain the request was for (spec 096): an address names a
+/// protocol only where the wallet checked it does.
 #[must_use]
-pub fn protocol_of(address: &str) -> Option<&'static str> {
-    let (name, owner) = known_contract(address)?;
-    (name != "Permit2" && owner != "WETH" && owner != "Coinbase").then_some(owner)
+pub fn protocol_of(chain_id: u32, address: &str) -> Option<&'static str> {
+    known_contract(chain_id, address)
+        .filter(|known| known.place)
+        .map(|known| known.owner)
 }
 
-/// The built-in name of a known contract ("Uniswap Universal Router").
+/// The built-in name of a known contract ("Uniswap Universal Router") on
+/// `chain_id`.
 #[must_use]
-pub fn contract_name_of(address: &str) -> Option<&'static str> {
-    known_contract(address).map(|(name, _)| name)
+pub fn contract_name_of(chain_id: u32, address: &str) -> Option<&'static str> {
+    known_contract(chain_id, address).map(|known| known.name)
 }
 
 /// The request as a record keeps it (spec 093): the final params' JSON, at
@@ -607,25 +613,42 @@ mod tests {
     #[test]
     fn infrastructure_names_no_place() {
         assert_eq!(
-            protocol_of("0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad"),
+            protocol_of(1, "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad"),
             Some("Uniswap")
         );
         assert_eq!(
-            protocol_of("0x13F4EA83D0bd40E75C8222255bc855a974568Dd4"),
+            protocol_of(56, "0x13F4EA83D0bd40E75C8222255bc855a974568Dd4"),
             Some("PancakeSwap")
         );
         assert_eq!(
-            protocol_of("0x000000000022d473030f116ddee9f6b43ac78ba3"),
+            protocol_of(1, "0x000000000022d473030f116ddee9f6b43ac78ba3"),
             None
         );
         assert_eq!(
-            protocol_of("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+            protocol_of(56, "0x31c2F6fcFf4F8759b3Bd5Bf0e1084A055615c768"),
+            None,
+            "PancakeSwap's own Permit2 is plumbing too"
+        );
+        assert_eq!(
+            protocol_of(1, "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
             None
         );
         assert_eq!(
-            protocol_of("0x0000000000000000000000000000000000000001"),
+            protocol_of(1, "0x0000000000000000000000000000000000000001"),
             None
         );
+    }
+
+    /// Spec 096: a row checked for one chain names nothing on another.
+    #[test]
+    fn a_chain_scoped_contract_is_a_place_only_on_its_chain() {
+        let aave_bnb = "0x6807dc923806fE8Fd134338EABCA509979a7e0cB";
+        assert_eq!(protocol_of(56, aave_bnb), Some("Aave"));
+        assert_eq!(protocol_of(1, aave_bnb), None);
+        assert_eq!(contract_name_of(1, aave_bnb), None);
+        let psm = "0x1601843c5E9bC251A3272907010AFa41Fa18347E";
+        assert_eq!(contract_name_of(8453, psm), Some("Spark PSM"));
+        assert_eq!(protocol_of(10, psm), None);
     }
 
     #[test]

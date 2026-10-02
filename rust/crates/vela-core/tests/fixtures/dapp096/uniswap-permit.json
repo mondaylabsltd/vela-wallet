@@ -1,0 +1,10 @@
+{
+ "source": "096 real dApp pass, 2026-10-02 (extension request log req-82-uni-permit.json)",
+ "method": "eth_signTypedData_v4",
+ "origin": "https://app.uniswap.org",
+ "chainId": 56,
+ "params": [
+  "0x88cca0eedbf2c4426110bbfc998f048689266894",
+  "{\"types\":{\"PermitSingle\":[{\"name\":\"details\",\"type\":\"PermitDetails\"},{\"name\":\"spender\",\"type\":\"address\"},{\"name\":\"sigDeadline\",\"type\":\"uint256\"}],\"PermitDetails\":[{\"name\":\"token\",\"type\":\"address\"},{\"name\":\"amount\",\"type\":\"uint160\"},{\"name\":\"expiration\",\"type\":\"uint48\"},{\"name\":\"nonce\",\"type\":\"uint48\"}],\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"chainId\",\"type\":\"uint256\"},{\"name\":\"verifyingContract\",\"type\":\"address\"}]},\"domain\":{\"name\":\"Permit2\",\"chainId\":\"56\",\"verifyingContract\":\"0x000000000022d473030f116ddee9f6b43ac78ba3\"},\"primaryType\":\"PermitSingle\",\"message\":{\"details\":{\"token\":\"0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c\",\"amount\":\"1461501637330902918203684832716283019655932542975\",\"expiration\":\"1793539250\",\"nonce\":\"0\"},\"spender\":\"0xdc264714f68d84cf29bc605589405e78bdbe7c9f\",\"sigDeadline\":\"1790949050\"}}"
+ ]
+}
