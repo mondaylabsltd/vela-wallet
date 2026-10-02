@@ -83,7 +83,13 @@ data class ActivityRowModel(
      * badge was ALWAYS the dot — a colour nobody can read as a network.
      */
     val badgeLogoUrl: String? = null,
-)
+) {
+    /**
+     * Whether the row has a figure to draw (087 F11). A dApp call that moved
+     * no coin of ours has neither an amount nor a unit, and draws no cell.
+     */
+    val hasFigure: Boolean get() = amount.isNotBlank() || unit.isNotBlank()
+}
 
 @Immutable
 data class ActivityGroupModel(val label: String, val rows: List<ActivityRowModel>)

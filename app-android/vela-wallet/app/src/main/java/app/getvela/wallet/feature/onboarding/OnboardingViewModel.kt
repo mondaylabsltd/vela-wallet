@@ -126,6 +126,10 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
     var cableQr by mutableStateOf<String?>(null)
         private set
 
+    /** Whether that QR's phone is to create a key, or to find one (087 F02). */
+    var cableQrCreates by mutableStateOf(false)
+        private set
+
     /** The "scan needs Location on" explainer (API ≤30), and its answer. */
     var pendingLocationAsk by mutableStateOf<PendingLocationAsk?>(null)
         private set
@@ -286,7 +290,12 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 } else {
                     null
                 },
-                showQr = { qr -> viewModelScope.launch { cableQr = qr } },
+                showQr = { qr, creates ->
+                    viewModelScope.launch {
+                        cableQr = qr
+                        cableQrCreates = creates
+                    }
+                },
                 selectorUnresponsiveMessage = {
                     strings?.t(app.getvela.wallet.core.i18n.I18nKeys.Login.ALERT_SELECTOR_UNRESPONSIVE)
                         ?: "The system passkey picker is not responding."

@@ -249,9 +249,7 @@ test.describe('signing for a dApp', () => {
 		const asked = page.evaluate(() => {
 			const self = window.ethereum.selectedAddress;
 			const data = `0x610b5925${self.replace(/^0x/, '').padStart(64, '0')}`;
-			return window.__ask('eth_sendTransaction', [
-				{ from: self, to: self, data, value: '0x0' }
-			]);
+			return window.__ask('eth_sendTransaction', [{ from: self, to: self, data, value: '0x0' }]);
 		}) as Promise<AskResult>;
 
 		const win = await requestWindow(context);
@@ -270,6 +268,61 @@ test.describe('signing for a dApp', () => {
 		const answer = await asked;
 		expect(answer.ok).toBe(false);
 		expect(answer.code).toBe(-32603);
+		await context.close();
+	});
+
+	/**
+	 * Spec 089: a transaction whose `from` names another account was signed by
+	 * the granted one — the window's by-shape guess at "the address the request
+	 * names" read only top-level strings. The core reads it now, as every
+	 * in-app browser's sign gate does: 4100, before any sheet.
+	 */
+	test('a transaction naming another account is refused before any sheet', async () => {
+		const context = await loadExtension();
+		await seedWallet(context, extensionId());
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+		await connect(context, page);
+
+		const answer = (await page.evaluate(() =>
+			window.__ask('eth_sendTransaction', [
+				{
+					from: '0x7777777777777777777777777777777777777777',
+					to: '0x7777777777777777777777777777777777777777',
+					value: '0x1'
+				}
+			])
+		)) as AskResult;
+		expect(answer).toMatchObject({ ok: false, code: 4100 });
+		// Refused before any sheet: the window the request opened closes on it.
+		await noRequestWindow(context);
+		await context.close();
+	});
+
+	/**
+	 * Spec 089: a public plain-http page — anyone on the path can rewrite it —
+	 * could ask for a signature, and got the sheet; every in-app browser refuses
+	 * it. The host is mapped to this machine for this browser only.
+	 */
+	test('a public plain-http origin cannot ask for a signature', async () => {
+		const context = await loadExtension({
+			args: ['--host-resolver-rules=MAP insecure-dapp.test 127.0.0.1', '--no-proxy-server']
+		});
+		await seedWallet(context, extensionId());
+		const page = await context.newPage();
+		await page.goto(`http://insecure-dapp.test:${PORT}/`);
+		await connect(context, page);
+
+		const answer = (await page.evaluate(
+			([message, address]) => window.__ask('personal_sign', [message, address]),
+			[MESSAGE_HEX, FIXTURE_ONE] as const
+		)) as AskResult & { message?: string };
+		expect(answer).toMatchObject({
+			ok: false,
+			code: 4100,
+			message: 'Signing requires a secure origin'
+		});
+		await noRequestWindow(context);
 		await context.close();
 	});
 

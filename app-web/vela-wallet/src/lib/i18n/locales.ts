@@ -41,6 +41,21 @@ export function toLocale(value: string): Locale | undefined {
 	return BY_LOWER.get(value.toLowerCase());
 }
 
+/**
+ * The locale a page's PATH names — its first segment, on the site (`/ja/wallet`)
+ * and in the packaged extension (`/ja/wallet.html`, `/ja.html`) alike.
+ *
+ * A layout above `[locale]` cannot ask `page.params` for it: a page the
+ * extension loads fresh has no route params until its first client navigation
+ * (measured, Chrome for Testing 151: `page.params` is `{}` and `page.route.id`
+ * null on `/ja/wallet.html`), so `page.params.locale ?? 'en'` read English
+ * (issue 317).
+ */
+export function localeOfPath(pathname: string): Locale | undefined {
+	const first = pathname.split('/')[1] ?? '';
+	return toLocale(first.replace(/\.html$/, ''));
+}
+
 /** One parsed Accept-Language candidate. */
 interface Candidate {
 	tag: string;

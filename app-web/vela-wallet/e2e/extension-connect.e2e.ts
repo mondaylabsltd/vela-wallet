@@ -123,6 +123,36 @@ test.describe('connecting a dApp', () => {
 		await context.close();
 	});
 
+	/**
+	 * Spec 089: a connected site asking AGAIN — `eth_requestAccounts` on every
+	 * load, a second Connect click — used to open a request window that only
+	 * asked the core and closed: a window flashed open and shut and took the
+	 * focus each time. It is answered by the worker now, and nothing opens.
+	 */
+	test('a connected site asking again is answered at once, and no window opens', async () => {
+		const context = await loadExtension();
+		await seedWallet(context, extensionId());
+		const page = await context.newPage();
+		await page.goto(`http://localhost:${PORT}/`);
+		const asked = page.evaluate(() => window.__ask('eth_requestAccounts')) as Promise<AskResult>;
+		const win = await requestWindow(context);
+		await win.getByRole('button', { name: 'Connect' }).click();
+		expect((await asked).result).toEqual([FIXTURE_ONE]);
+		await noRequestWindow(context);
+
+		const opened: string[] = [];
+		context.on('page', (p) => opened.push(p.url()));
+		const again = (await page.evaluate(() => window.__ask('eth_requestAccounts'))) as AskResult;
+		const perms = (await page.evaluate(() =>
+			window.__ask('wallet_requestPermissions', [{ eth_accounts: {} }])
+		)) as AskResult;
+		await page.waitForTimeout(1_500);
+		expect(again).toEqual({ ok: true, result: [FIXTURE_ONE] });
+		expect(perms).toEqual({ ok: true, result: [{ parentCapability: 'eth_accounts' }] });
+		expect(opened).toEqual([]);
+		await context.close();
+	});
+
 	test('SC-302: a dApp that only knows one wallet can still connect', async () => {
 		const context = await loadExtension();
 		const id = extensionId();

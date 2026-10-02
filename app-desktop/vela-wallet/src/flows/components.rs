@@ -1378,21 +1378,25 @@ pub fn recipient_card(
 }
 
 /// The send form's token card: which token, off which chain, out of how much.
+///
+/// `change` is the card's own tap — back to the asset picker (issue #326). It
+/// takes the token's half of the card, with a chevron saying so; the Max chip
+/// beside it stays its own control: one tap, one meaning.
 pub fn token_header_card(
     theme: &Theme,
+    icons: &mut IconCache,
     mark: &TokenMark,
     symbol: SharedString,
     detail: SharedString,
     max: Option<SharedString>,
+    change: Option<crate::flows::panels::Click>,
 ) -> Div {
-    let mut card = div()
+    let mut face = div()
+        .flex_1()
+        .min_w(px(0.))
         .flex()
         .items_center()
         .gap(px(12.))
-        .p(px(12.))
-        .rounded(px(12.))
-        // The web's `TokenHeaderCard`: a raised card, the Max chip sunken on it.
-        .bg(theme.bg_raised)
         .child(token_icon_logos(
             theme,
             mark.ticker.as_ref(),
@@ -1423,6 +1427,28 @@ pub fn token_header_card(
                         .text_ellipsis()
                         .child(detail),
                 ),
+        );
+    if change.is_some() {
+        face = face.child(div().flex_none().child(icon_img(
+            icons,
+            Icon::ChevronDown,
+            false,
+            theme.fg_muted,
+            14.,
+        )));
+    }
+    let mut card = div()
+        .flex()
+        .items_center()
+        .gap(px(12.))
+        .p(px(12.))
+        .rounded(px(12.))
+        // The web's `TokenHeaderCard`: a raised card, the Max chip sunken on it.
+        .bg(theme.bg_raised)
+        .child(
+            crate::flows::panels::clickable("send-token-card", change, face)
+                .flex_1()
+                .min_w(px(0.)),
         );
     if let Some(max) = max {
         card = card.child(max_chip(theme, max));

@@ -72,6 +72,10 @@ class CoreHost<V : Any>(
      */
     val commits: StateFlow<Long> = _commits.asStateFlow()
 
+    /** How many events the core had applied when the view now in [view] was committed. */
+    @Volatile
+    private var viewEvents = 0L
+
     private val driver = CoreDriver(
         bridge = bridge,
         scope = scope,
@@ -91,6 +95,29 @@ class CoreHost<V : Any>(
     fun <E> dispatch(event: E, eventSerializer: KSerializer<E>) =
         driver.dispatch(Wire.json.encodeToString(eventSerializer, event))
 
+    /**
+     * [dispatch], for a caller that will wait for the core's answer to THIS
+     * event: returns its number, for [applied].
+     *
+     * A commit counted from the moment of the dispatch is not "after the event".
+     * The driver applies its inbox in order, and whatever was already queued in
+     * it — the answers to the LAST question — is applied and committed after the
+     * dispatch but before the event. The send's pre-check quote took the
+     * warm-up's settled view that way, then read the view again and found its
+     * own question just starting: `busy`, no fee, "estimate failed" (the
+     * 2026-10-01 CI flake in `SendMachineTest`; a real Continue tapped as the
+     * warm-up lands does the same).
+     */
+    fun <E> dispatchNumbered(event: E, eventSerializer: KSerializer<E>): Long =
+        driver.dispatchNumbered(Wire.json.encodeToString(eventSerializer, event))
+
+    /**
+     * Whether the core had applied event [number] ([dispatchNumbered]) when the
+     * view now in [view] was committed. Ask THIS first and read [view] after:
+     * a `true` then guarantees the view read is that event's or a later one.
+     */
+    fun applied(number: Long): Boolean = viewEvents >= number
+
     fun dispose() = driver.dispose()
 
     /**
@@ -106,7 +133,11 @@ class CoreHost<V : Any>(
     private fun commit(viewJson: JSONObject) {
         runCatching { Wire.json.decodeFromString(serializer, viewJson.toString()) }
             .onSuccess {
+                // In this order: the view, then what it reflects, then the
+                // wake-up. A collector woken by the commit — or anyone who
+                // reads `applied` first — never pairs a count with an older view.
                 _view.value = it
+                viewEvents = driver.eventsApplied
                 _commits.value += 1
             }
             .onFailure(onFault)
