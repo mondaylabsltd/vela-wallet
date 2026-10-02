@@ -30,7 +30,7 @@ class WalletRescueTest {
     }
 
     @Test
-    fun `a row's fix swaps to THAT network and closing it returns to the list`() {
+    fun `a row's fix swaps to THAT network and its close button returns to the list`() {
         val list = WalletRescue.opened(down)
         val fix = list.fix(137)
         assertEquals(SettingsOverlay.RpcFix, fix.overlay)
@@ -38,12 +38,27 @@ class WalletRescueTest {
         // Not the first network (BNB) — the one tapped.
         assertTrue(fix.fromList)
 
-        val back = fix.dismissed()
+        val back = fix.closed()
         assertEquals(SettingsOverlay.Unreachable, back.overlay)
         assertNull(back.chainId)
 
-        val closed = back.dismissed()
+        val closed = back.closed()
         assertEquals(SettingsOverlay.None, closed.overlay)
+    }
+
+    /**
+     * Device pass, 2026-10-02: a swipe, the scrim or Back reach the host only
+     * after Material has hidden the sheet — "back to the list" there kept the
+     * list (and its re-reads) alive behind a sheet nobody could see. Those
+     * close everything, as a swipe does on the iPhone.
+     */
+    @Test
+    fun `a swipe closes the whole sheet, from the fix or the list`() {
+        val list = WalletRescue.opened(down)
+        val fix = list.fix(56)
+        assertEquals(SettingsOverlay.None, fix.swiped().overlay)
+        assertEquals(WalletRescue.ListEdge.Closed, fix.listEdge(fix.swiped()))
+        assertEquals(SettingsOverlay.None, list.swiped().overlay)
     }
 
     @Test
@@ -53,8 +68,8 @@ class WalletRescueTest {
         val fix = list.fix(56)
         assertEquals(WalletRescue.ListEdge.Opened, none.listEdge(list))
         assertNull("still the list's: a fix from it keeps the re-reads", list.listEdge(fix))
-        assertNull(fix.listEdge(fix.dismissed()))
-        assertEquals(WalletRescue.ListEdge.Closed, list.listEdge(list.dismissed()))
+        assertNull(fix.listEdge(fix.closed()))
+        assertEquals(WalletRescue.ListEdge.Closed, list.listEdge(list.closed()))
 
         val detail = WalletRescue.opened(BalanceView())
         assertFalse(detail.listOpen)
@@ -76,5 +91,8 @@ class WalletRescueTest {
         val tap = nav.substringAfter("onStatusClick = {").substringBefore("},")
         assertTrue(tap, tap.contains("moveRescue(WalletRescue.opened(balances))"))
         assertFalse(tap, tap.contains("navController"))
+        // The wallet hosts the sheet itself, through the one composable whose
+        // close button and swipe are driven on a device by WalletRescueSheetTest.
+        assertTrue(nav.contains("WalletRescueSheet("))
     }
 }

@@ -167,7 +167,7 @@ import app.getvela.wallet.feature.wallet.WalletFixtures
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.WalletScreen
 import app.getvela.wallet.feature.wallet.WalletRescue
-import app.getvela.wallet.feature.settings.SettingsSheet
+import app.getvela.wallet.feature.wallet.components.WalletRescueSheet
 import app.getvela.wallet.feature.wallet.WalletScreenState
 import app.getvela.wallet.feature.wallet.components.VelaTab
 import app.getvela.wallet.feature.wallet.gallery.GalleryScreen
@@ -651,17 +651,15 @@ fun VelaNavHost(
                 if (rescue.overlay != SettingsOverlay.None) {
                     val rescueBase = remember(strings) { SettingsFixtures.buildState(SettingsScreenState.SR6, strings) }
                     val rescueRow = rescue.chainId?.let { id -> networks.networks.firstOrNull { it.chain_id == id } }
-                    SettingsSheet(
+                    WalletRescueSheet(
+                        rescue = rescue,
                         model = rescueBase.copy(
                             unreachable = SettingsLive.unreachable(balances, currency, chainNames, strings),
                             balanceDetail = SettingsLive.balanceDetail(rescueBase.balanceDetail, balances, currency, chainNames, strings),
                             rpcFix = rescueRow?.let { SettingsLive.rpcFix(rescueBase.rpcFix, it, rpcDraft, rpcSaved, strings) }
                                 ?: rescueBase.rpcFix,
                         ),
-                        overlay = rescue.overlay,
-                        onDismiss = { moveRescue(rescue.dismissed()) },
-                        onSignOut = {},
-                        onUnreachableFix = { chainId -> moveRescue(rescue.fix(chainId)) },
+                        onMove = { next -> moveRescue(next) },
                         // SR3's 立即重试 (the web's `onretry`): drop the chain's failure and read
                         // now — the core's own retry is throttled like any other fetch.
                         onBalanceRetry = { id ->
@@ -678,10 +676,10 @@ fun VelaNavHost(
                                     // The chain answers again: clear its failure in the balance
                                     // core and read now — its own retry is throttled like any
                                     // other fetch, and the person just watched the probe succeed.
-                                    // Done steps back to the list it came from.
+                                    // Done steps back to the list it came from, as the ✕ does.
                                     wallet.fixChainResolved(chainId.toInt())
                                     wallet.refresh(force = true)
-                                    moveRescue(rescue.dismissed())
+                                    moveRescue(rescue.closed())
                                 } else {
                                     rpcDraft?.let { settings.editOverride(chainId, NetOverrideField.Rpc, it) }
                                     settings.commitOverride(chainId)

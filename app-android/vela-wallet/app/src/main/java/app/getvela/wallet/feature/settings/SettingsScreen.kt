@@ -1326,8 +1326,11 @@ private fun IndexDownScreen(model: IndexDownModel, modifier: Modifier = Modifier
 internal fun SettingsSheet(
     model: SettingsScreenModel,
     overlay: SettingsOverlay,
+    /** A swipe down, the scrim or Back — Material has hidden the sheet already. */
     onDismiss: () -> Unit,
     onSignOut: () -> Unit,
+    /** The sheet's own ✕. The same as [onDismiss] unless a host steps back instead (spec 092). */
+    onClose: () -> Unit = onDismiss,
     onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
     storageConfirm: ConfirmSheetModel? = null,
     onConfirmStorage: () -> Unit = {},
@@ -1377,7 +1380,7 @@ internal fun SettingsSheet(
       val sheetScroll = rememberScrollState()
       CompositionLocalProvider(
           LocalSheetScroll provides sheetScroll,
-          LocalSheetClose provides SheetClose(model.closeLabel, onDismiss),
+          LocalSheetClose provides SheetClose(model.closeLabel, onClose),
           LocalSheetBodyMax provides maxSheetHeight - VelaSpacing.xl3,
       ) {
         Box(modifier = Modifier.fillMaxWidth().heightIn(max = maxSheetHeight)) {
