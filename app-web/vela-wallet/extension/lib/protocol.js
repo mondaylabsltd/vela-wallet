@@ -436,11 +436,14 @@ export function callsStatusId(params) {
 
 /**
  * The EIP-5792 status of batch `id` on `chainId`, from the bundler's
- * `eth_getUserOperationReceipt` result (`null`/`undefined`: not landed —
- * pending, 100). `success: false` is 500 (atomic: reverted completely); else
- * 200, with the operation's own logs and status.
+ * `eth_getUserOperationReceipt` result (`null`/`undefined`: not landed) and,
+ * with no receipt, the relay's `pimlico_getUserOperationStatus` result
+ * (`relayStatus`). `success: false` is 500 (atomic: reverted completely); a
+ * landed receipt is 200, with the operation's own logs and status; no receipt
+ * and the relay's refusal before any block (`rejected` naming no transaction —
+ * the tracker's terminal state) is 400 (spec 096 F3); anything else is 100.
  */
-export function callsStatusResult(id, chainId, userOpReceipt) {
+export function callsStatusResult(id, chainId, userOpReceipt, relayStatus) {
 	const status = {
 		version: '2.0.0',
 		id,
@@ -459,6 +462,7 @@ export function callsStatusResult(id, chainId, userOpReceipt) {
 		typeof receipt !== 'object' ||
 		typeof receipt.transactionHash !== 'string'
 	) {
+		if (relayRefused(relayStatus)) status.status = 400;
 		return status;
 	}
 	const succeeded = found.success !== false;
@@ -479,6 +483,34 @@ export function callsStatusResult(id, chainId, userOpReceipt) {
 		}
 	];
 	return status;
+}
+
+/** The relay's status method, asked when a batch has no receipt (`dapp_rpc::USER_OP_STATUS_METHOD`). */
+export const USER_OP_STATUS_METHOD = 'pimlico_getUserOperationStatus';
+
+const RELAY_LIFECYCLE = new Set([
+	'not_found',
+	'queued',
+	'not_submitted',
+	'submitted',
+	'rejected',
+	'included',
+	'failed'
+]);
+
+/**
+ * The relay refused the operation before any block — `rejected`, naming no
+ * bundle transaction (`dapp_rpc::refused_before_any_block`, read the way
+ * `tx_tracker::parse_user_op_status` reads the answer: the object itself, or a
+ * whole JSON-RPC body's `result`; an unknown status is no answer).
+ */
+function relayRefused(answer) {
+	if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return false;
+	const result = 'status' in answer ? answer : answer.result;
+	if (!result || typeof result !== 'object' || typeof result.status !== 'string') return false;
+	if (!RELAY_LIFECYCLE.has(result.status)) return false;
+	const tx = result.transactionHash;
+	return result.status === 'rejected' && !(typeof tx === 'string' && tx !== '');
 }
 
 /**

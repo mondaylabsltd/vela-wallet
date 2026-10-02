@@ -714,6 +714,8 @@ export function resolveRequestMessages(locale: Locale): RequestMessages {
 		connect: k('connect.browser.connect'),
 		cancel: k('connect.browser.cancel'),
 		preparing: k('connect.browser.preparing'),
+		accountLabel: k('explore.account'),
+		networkLabel: k('explore.network'),
 		noWallet: k('connect.list.noWallet'),
 		createWallet: k('onboarding.welcome.createWallet'),
 		haveWallet: k('onboarding.welcome.alreadyHaveWallet')
@@ -1012,7 +1014,8 @@ export function resolveSigningMessages(locale: Locale): SigningMessages {
 			submitting: k('send.txSubmitting'),
 			backgroundHint: k('send.txBackgroundHint'),
 			messageSigning: k('componentsUi.signing.signing'),
-			failedHint: k('send.txErrorGeneric')
+			failedHint: k('send.txErrorGeneric'),
+			retry: k('send.txRetryBtn')
 		},
 		viewOnExplorer: k('componentsUi.signing.viewOnExplorer'),
 		byteSize: k('componentsUi.signing.byteSize'),

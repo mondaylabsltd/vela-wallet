@@ -266,6 +266,8 @@ export interface SigningMessages {
 		messageSigning: string;
 		/** `send.txErrorGeneric` — the submission failed; funds are safe. */
 		failedHint: string;
+		/** Spec 096 F8: `send.txRetryBtn` — a failure that sent nothing, tried again. */
+		retry: string;
 	};
 	viewOnExplorer: string;
 	byteSize: string;

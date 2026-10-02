@@ -60,6 +60,7 @@ import {
 	SURFACE_PORT,
 	BUNDLER_METHODS,
 	UNKNOWN_BUNDLE_ID,
+	USER_OP_STATUS_METHOD,
 	callsStatusId,
 	callsStatusResult,
 	capabilitiesResult,
@@ -1110,8 +1111,8 @@ function saveHealth(next) {
  * asked to learn) and goes back as is. When nothing answered, the page gets
  * the chain by name and no engine text (G33).
  */
-async function readChain(method, params, catalog, chainId) {
-	const endpoints = chainEndpoints(catalog, chainId, BUNDLER_METHODS.has(method));
+async function readChain(method, params, catalog, chainId, bundler = BUNDLER_METHODS.has(method)) {
+	const endpoints = chainEndpoints(catalog, chainId, bundler);
 	if (endpoints.length === 0) {
 		return { error: rpcError(ERR.CHAIN_NOT_ADDED, `Vela has no endpoint for chain ${chainId}`) };
 	}
@@ -1243,7 +1244,16 @@ async function callsStatus(params) {
 	const catalog = stored[CHAINS_KEY];
 	if (!catalog) return { error: NOT_OPENED() };
 	const found = await readChain('eth_getUserOperationReceipt', [id], catalog, entry.chainId);
-	return { result: callsStatusResult(id, entry.chainId, found.error ? null : found.result) };
+	const receipt = found.error ? null : found.result;
+	const landed = callsStatusResult(id, entry.chainId, receipt);
+	if (landed.status !== 100) return { result: landed };
+	// No receipt: did the relay refuse it before any block? Then it never
+	// lands, and the page is told so (EIP-5792 400, spec 096 F3) — not
+	// "pending" for as long as it asks.
+	const relay = await readChain(USER_OP_STATUS_METHOD, [id], catalog, entry.chainId, true);
+	return {
+		result: callsStatusResult(id, entry.chainId, receipt, relay.error ? null : relay.result)
+	};
 }
 
 // ---------------------------------------------------------------------------

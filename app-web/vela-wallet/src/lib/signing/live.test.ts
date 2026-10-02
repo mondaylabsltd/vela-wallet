@@ -600,9 +600,38 @@ describe('after the approval the sheet is a status', () => {
 			stage: 'failed',
 			title: m.receipt.failed,
 			captions: [SUMMARY, m.status.failedHint],
-			closable: true
+			closable: true,
+			// Spec 096 F8: a labelled close — the page hears the failure then.
+			actions: { close: m.receipt.done }
 		});
 		expect(signingCloseEvent(failed)).toBe('dismiss_tapped');
+	});
+
+	it('a failure that sent nothing offers Try again beside the close (spec 096 F8)', () => {
+		const retryable = signingStatus(
+			at({
+				error: { kind: 'submit_failed', detail: 'Could not estimate gas' },
+				failure_retryable: true
+			}),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(retryable?.actions).toEqual({ close: m.receipt.done, retry: m.status.retry });
+		expect(retryable?.captions).toEqual([SUMMARY, m.status.failedHint]);
+		// A refusal says so and offers no retry: the same op is refused again.
+		const refused = signingStatus(
+			at({
+				error: { kind: 'submit_failed', detail: 'AA23' },
+				failure_refused: true,
+				failure_retryable: false
+			}),
+			UNSIGNED,
+			SUMMARY,
+			m
+		);
+		expect(refused?.actions).toEqual({ close: m.receipt.done });
+		expect(refused?.captions).toEqual([SUMMARY, m.receipt.refused]);
 	});
 
 	it('an error before any approval is not a status (the form says it)', () => {

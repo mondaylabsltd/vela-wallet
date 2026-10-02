@@ -145,6 +145,20 @@ vi.mock('$lib/signing/live', () => ({
 							closable: true
 						}
 					}
+				: {}),
+			...(raw.sign.error
+				? {
+						status: {
+							stage: 'failed',
+							title: 'Failed',
+							captions: [],
+							closable: true,
+							actions: {
+								close: 'Done',
+								...(raw.sign.failure_retryable ? { retry: 'Try Again' } : {})
+							}
+						}
+					}
 				: {})
 		};
 	}
@@ -460,6 +474,54 @@ describe('the signed tick and a queued request (G65)', () => {
 		const view = mount();
 		await signed(view);
 		expect(view.text()).toContain('Signed!');
+		await view.screen.unmount();
+	});
+});
+
+/**
+ * Spec 096 F8: a failure that sent nothing stays on the sheet, unanswered —
+ * Try again is the core's `retry_tapped`, Done the plain close that answers
+ * the page.
+ */
+describe('a failure before anything was sent', () => {
+	const failed = () => ({
+		...INITIAL_SIGN_VIEW,
+		surface: 'sheet' as const,
+		request: request('tx:9', 'transaction'),
+		error: { kind: 'submit_failed', detail: 'Could not estimate gas' },
+		failure_retryable: true,
+		swipe_action: 'dismiss'
+	});
+	const button = (label: string) =>
+		[
+			...document.body.querySelectorAll<HTMLButtonElement>(
+				'[data-testid="signing-status-actions"] button'
+			)
+		].find((b) => b.textContent?.trim() === label);
+
+	it('Try again tells the core, and nothing is answered', async () => {
+		fake = new Fake();
+		const view = mount();
+		fake.sign.view = failed();
+		flushSync();
+		await tick();
+		await pause(300);
+		button('Try Again')!.click();
+		expect(fake.dispatched).toEqual([{ type: 'retry_tapped' }]);
+		await view.screen.unmount();
+	});
+
+	it('Done is the plain close the core answers the failure on', async () => {
+		fake = new Fake();
+		const view = mount();
+		fake.sign.view = failed();
+		flushSync();
+		await tick();
+		await pause(300);
+		button('Done')!.click();
+		await vi.waitFor(() => expect(fake.dispatched).toEqual([{ type: 'dismiss_tapped' }]), {
+			timeout: 1500
+		});
 		await view.screen.unmount();
 	});
 });

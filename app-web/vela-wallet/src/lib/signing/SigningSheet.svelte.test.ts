@@ -42,6 +42,7 @@ async function drawn(props: {
 	model?: SigningModel;
 	dismissible?: boolean;
 	onfeerefresh?: () => void;
+	onretry?: () => void;
 }) {
 	const onclose = vi.fn();
 	const screen = render(SigningSheet, {
@@ -49,7 +50,8 @@ async function drawn(props: {
 			model: props.model ?? model(),
 			dismissible: props.dismissible ?? true,
 			onclose,
-			onfeerefresh: props.onfeerefresh
+			onfeerefresh: props.onfeerefresh,
+			onretry: props.onretry
 		}
 	});
 	await tick();
@@ -144,6 +146,39 @@ describe('after the approval the sheet is a status (spec 079, F11)', () => {
 		expect(view.sheet.querySelector('button.refresh')).toBeNull();
 		expect(view.sheet.textContent).not.toContain('Network fee');
 		await view.screen.unmount();
+	});
+
+	it('a failure that sent nothing: Close answers, Try again goes back (spec 096 F8)', async () => {
+		const onretry = vi.fn();
+		const failed = {
+			stage: 'failed' as const,
+			title: 'Failed',
+			captions: [
+				'Swap · \u22120.003 BNB',
+				'The transaction couldn’t be submitted. Your funds are safe — please try again.'
+			],
+			closable: true,
+			actions: { close: 'Done', retry: 'Try Again' }
+		};
+		const view = await drawn({ model: model({ status: failed }), onretry });
+		const actions = view.sheet.querySelector<HTMLElement>('[data-testid="signing-status-actions"]');
+		const buttons = [...(actions?.querySelectorAll('button') ?? [])];
+		expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Done', 'Try Again']);
+		buttons[1].click();
+		expect(onretry).toHaveBeenCalledOnce();
+		expect(view.onclose).not.toHaveBeenCalled();
+		buttons[0].click();
+		await vi.waitFor(() => expect(view.onclose).toHaveBeenCalledOnce(), { timeout: 1500 });
+		await view.screen.unmount();
+
+		// A refusal: one way out, no Try again.
+		const refused = await drawn({
+			model: model({ status: { ...failed, actions: { close: 'Done' } } }),
+			onretry
+		});
+		const only = refused.sheet.querySelectorAll('[data-testid="signing-status-actions"] button');
+		expect([...only].map((b) => b.textContent?.trim())).toEqual(['Done']);
+		await refused.screen.unmount();
 	});
 
 	it('closable: the ✕ is live and closes (the host makes it a plain close)', async () => {

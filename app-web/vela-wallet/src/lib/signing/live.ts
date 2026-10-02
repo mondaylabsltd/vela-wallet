@@ -1010,7 +1010,14 @@ export function signingStatus(
 			// Spec 082 RJ3: the relay refused it — say so, with no "try
 			// again": the same op is refused the same way.
 			captions: lines(summary, sign.failure_refused ? m.receipt.refused : m.status.failedHint),
-			closable: true
+			closable: true,
+			// Spec 096 F8: the page waits for this close to hear the failure;
+			// "Try again" only when the core says nothing was sent and it was
+			// no refusal (`failure_retryable`).
+			actions: {
+				close: m.receipt.done,
+				...(sign.failure_retryable ? { retry: m.status.retry } : {})
+			}
 		};
 	}
 	const phase = sign.phase;

@@ -37,6 +37,11 @@
 	import { AskerGoneError, type ClaimPhase, type SubmitClaim } from '$lib/signing/core/sign-types';
 	import BottomSheet from '$lib/wallet/ui/BottomSheet.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import ConsentFacts from '$lib/dapp/ConsentFacts.svelte';
+	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import { shortenAddress } from '$lib/wallet/identity';
+	import { chainName } from '$lib/services/networks';
+	import { chainLogoURL } from '$lib/services/tokens-model';
 	import type { RequestMessages } from '$lib/dapp/messages';
 	import { panelSurface } from '$lib/dapp/panel-surface.svelte';
 	import { focusOwnWindow, openInBrowserTab } from '$lib/extension/open-tab';
@@ -419,9 +424,38 @@
 
 	/** The consent card's own words, shared by both shapes. */
 	const cardTitle = $derived(request ? m.title.replace('{{host}}', hostLabel(request.origin)) : '');
+
+	/**
+	 * What a Connect shares (spec 096 F11): the account the core says the grant
+	 * pins (`consent_address`), named as the wallet names it, and the network
+	 * the grant is written on — the same `chainId` `approve` hands the core.
+	 */
+	const consentAccount = $derived.by(() => {
+		const address = stage.kind === 'consent' ? stage.address : null;
+		if (!address) return null;
+		const row = session.view.accounts.find(
+			(r) => r.account.address.toLowerCase() === address.toLowerCase()
+		);
+		return {
+			name: row?.account.name ?? '',
+			address,
+			short: shortenAddress(address),
+			identiconSvg: identiconSvgForClient(address)
+		};
+	});
+	const consentNetwork = $derived({ name: chainName(chainId), logoUrl: chainLogoURL(chainId) });
 	/** Unused by the panel; the window draws its own preparing line. */
 	const showWindowChrome = $derived(mode === 'window' && stage.kind !== 'signing' && !landing);
 </script>
+
+{#snippet consentFacts()}
+	<ConsentFacts
+		accountLabel={m.accountLabel}
+		networkLabel={m.networkLabel}
+		account={consentAccount}
+		network={consentNetwork}
+	/>
+{/snippet}
 
 {#snippet actions()}
 	<!--
@@ -464,6 +498,7 @@
 				onclose={onCancel}
 			>
 				<div class="card">
+					{@render consentFacts()}
 					<p class="body">{m.body}</p>
 					{@render actions()}
 				</div>
@@ -488,6 +523,7 @@
 			</div>
 		{:else if stage.kind === 'consent' && request}
 			<h1>{cardTitle}</h1>
+			{@render consentFacts()}
 			<p class="body">{m.body}</p>
 			{@render actions()}
 		{:else if stage.kind === 'refused'}

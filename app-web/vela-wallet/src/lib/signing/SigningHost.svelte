@@ -592,6 +592,7 @@
 		dismissible={model.status ? model.status.closable : true}
 		onclosestart={() => (closeIntent = closeIntentNow())}
 		onclose={closeSheet}
+		onretry={() => signRequest.dispatch({ type: 'retry_tapped' })}
 		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
 		onchip={guardChip}
 		oncustom={guardCustom}

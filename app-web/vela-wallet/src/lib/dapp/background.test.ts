@@ -1511,15 +1511,19 @@ describe('a batch, asked after (EIP-5792, 094)', () => {
 		const env = makeEnv();
 		env.local.data['vela.ext.chains'] = catalog;
 		let landed = false;
+		let relay: unknown = { status: 'submitted' };
 		const asked: string[] = [];
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (url: string, init: { body: string }) => {
 				const body = JSON.parse(init.body);
 				asked.push(`${new URL(url).host} ${body.method}`);
-				const result = landed
-					? { success: true, logs: [], receipt: { transactionHash: TX, status: '0x1' } }
-					: null;
+				const result =
+					body.method === 'pimlico_getUserOperationStatus'
+						? relay
+						: landed
+							? { success: true, logs: [], receipt: { transactionHash: TX, status: '0x1' } }
+							: null;
 				return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result }), { status: 200 });
 			})
 		);
@@ -1531,8 +1535,15 @@ describe('a batch, asked after (EIP-5792, 094)', () => {
 		panel.post({ type: 'answer', rid: '7:b:1', result: ID, opHash: { chainId: 100 } });
 		await settleAll();
 
+		// No receipt, the relay still holds it: pending.
 		const pending = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
 		expect(pending.result).toMatchObject({ id: ID, chainId: '0x64', status: 100, atomic: true });
+		// Spec 096 F3: the relay refused it before any block — the tracker's
+		// terminal `rejected` — so the page hears 400, not 100 forever.
+		relay = { status: 'rejected', last_executor_error: 'AA23 reverted' };
+		const refused = await rpc(env, page, 'wallet_getCallsStatus', [ID]);
+		expect(refused.result).toMatchObject({ id: ID, chainId: '0x64', status: 400, atomic: true });
+		expect(refused.result).not.toHaveProperty('receipts');
 		landed = true;
 		const confirmed = await rpc(env, page, 'wallet_getCallsStatus', [
 			ID.toUpperCase().replace('0X', '0x')
@@ -1543,6 +1554,9 @@ describe('a batch, asked after (EIP-5792, 094)', () => {
 		});
 		expect(asked).toEqual([
 			'relay.example eth_getUserOperationReceipt',
+			'relay.example pimlico_getUserOperationStatus',
+			'relay.example eth_getUserOperationReceipt',
+			'relay.example pimlico_getUserOperationStatus',
 			'relay.example eth_getUserOperationReceipt'
 		]);
 	});
