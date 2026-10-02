@@ -55,6 +55,7 @@
     "importDoneInvalid": "另有 {{invalid}} 条地址无效，已跳过。",
     "importFailTitle": "导入失败",
     "importFailBody": "请使用 JSON 或 CSV 通讯录文件。",
+    "importFailEncoding": "请将文件另存为 UTF-8（Excel 中选择「CSV UTF-8」）后重试。",
     "manage": "管理",
     "sectionContacts": "联系人",
     "countPeople": "{{count}} 位",

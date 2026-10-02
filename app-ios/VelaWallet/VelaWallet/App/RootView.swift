@@ -696,9 +696,23 @@ struct RootView: View {
         // rather than `UiScale.factor` so the dependency is the observation,
         // not the order two statements ran in.
         .environment(\.walletTextScale, preferences.textScale.factor)
+        // The Done bar over every amount keypad (087 F28): a decimal pad has
+        // no return key, and on a phone nothing else put it away.
+        .environment(\.keyboardDone, loc.t("explore.done"))
         .preferredColorScheme(ThemeOverride.launchScheme ?? chosenScheme)
         // A link, from anywhere: the scheme, a universal link, a page.
         .onOpenURL { url in openLink(url) }
+        // Spec 088 FR-004: a page another app asked to open, waiting for a yes.
+        // Dismissing is "no".
+        .sheet(item: Binding(
+            get: { browser.externalPage },
+            set: { if $0 == nil { browser.answerExternal(false) } }
+        )) { page in
+            ExternalPageSheet(loc: loc, page: page) { open in
+                if browser.answerExternal(open) { section = .explore }
+            }
+            .themed(scheme)
+        }
         // The core's verdict on a `/pay` link. Watched rather than awaited,
         // because a link can arrive before the wallet has finished opening and
         // the answer has to survive that.
@@ -800,8 +814,9 @@ struct RootView: View {
             // request this wallet can honour is 600 lines that already exist.
             paymentRequest.linkOpened(event)
         case .open(let page):
-            section = .explore
-            browser.open(page)
+            // Spec 088 FR-004: a link from outside only ASKS. The sheet shows
+            // the host the core named; nothing loads before the person says yes.
+            browser.askToOpen(page)
         case nil:
             break
         }
@@ -814,7 +829,7 @@ struct RootView: View {
     /// figure there would be the wallet inventing the ask.
     private func prefillSend(from request: PayRequestWire) {
         section = .wallet
-        flows.enter(.send)
+        enterSend(handingIn: true)
         Task {
             await openSend()
             // The link's own `ethereum:` URI, through the SAME door a scanned
@@ -993,6 +1008,9 @@ struct RootView: View {
                 flows.enter(.activity)
                 notifier.clearPendingReceipt()
             }
+            // The send machine closed its journey — its back from the picker,
+            // or done — and the screens go with it (087 F27).
+            .onChange(of: send.closes) { _, _ in sendClosed() }
         }
     }
 
@@ -1036,7 +1054,16 @@ struct RootView: View {
                 .onChange(of: batch.view.rateInput) { _, value in
                     if value != batchRate { batchRate = value }
                 }
-                .onChange(of: recipientDraft) { _, value in send.setRecipient(value) }
+                // The machine's recipient, when it changed for its own reasons:
+                // a scanned code, a pick, a cleared form (issue #332). The field
+                // showed only what was typed into it, so a code scanned from the
+                // home reached the core and the form opened on an empty field —
+                // or on the last journey's typing. Every edit reaches the
+                // machine in the edit (`recipientBinding`), so a value the
+                // field just sent is already in the field.
+                .onChange(of: send.view?.recipient) { _, _ in
+                    if let live = send.view?.recipient, live != recipientDraft { recipientDraft = live }
+                }
                 // The machine's figure, when it changed for its own reasons —
                 // Max, the ⇄ swap, a cleared form. Its LIVE value, not the one
                 // this change was raised with: that one can be older than the
@@ -1159,7 +1186,7 @@ struct RootView: View {
                         model: walletModel,
                         loc: loc,
                         onSelectTab: selectTab,
-                        onFlow: { flows.enter($0) },
+                        onFlow: { enterFlow($0) },
                         onOpenActivity: { activityItemId = $0 },
                         onToggleBalance: { wallet.togglePrivacy() },
                         onStatusTap: { openRescue() },
@@ -1642,7 +1669,7 @@ struct RootView: View {
     /// and the home scanner use — the core's `scan_resolved`.
     private func sendFromScan(_ payload: String) {
         section = .wallet
-        flows.enter(.send)
+        enterSend(handingIn: true)
         Task {
             await openSend()
             send.scanned(payload)
@@ -2071,16 +2098,17 @@ struct RootView: View {
         }
     }
 
-    /// 从文件导入 — a picked file's TEXT, straight to the core.
+    /// 从文件导入 — a picked file's BYTES, straight to the core.
     ///
-    /// The shell does not parse it. The core sniffs JSON from CSV, refuses a
-    /// bad file before any write, and applies existing-wins; a shell that
-    /// pre-parsed would be a second, disagreeing reader of the same file.
+    /// The shell does not decode or parse it. The core reads the encoding
+    /// (issue 333), sniffs JSON from CSV, refuses a bad file before any
+    /// write, and applies existing-wins; a shell that pre-decoded would be a
+    /// second, disagreeing reader of the same file.
     private func importContacts(intoGroup: String? = nil) {
         Task {
             guard let picked = await documents.pick(types: DocumentTypes.addressBook) else { return }
             contacts.importFile(
-                content: String(decoding: picked.bytes, as: UTF8.self),
+                bytes: picked.bytes,
                 filename: picked.name,
                 intoGroup: intoGroup
             )
@@ -2095,7 +2123,7 @@ struct RootView: View {
     /// a button that did nothing.
     private func sendSelectedToken() {
         guard let token = wallet.balance?.tokens[safe: assetRow] else { return }
-        flows.enter(.send)
+        enterSend()
         Task {
             await openSend()
             // Matched in the SEND machine's own list, and selected by ITS id.
@@ -2230,7 +2258,7 @@ struct RootView: View {
     /// contact, a QR code and a link all land on one screen.
     private func sendToContact(_ address: String) {
         section = .wallet
-        flows.enter(.send)
+        enterSend(handingIn: true)
         Task {
             await openSend()
             send.scanned(address)
@@ -2254,7 +2282,7 @@ struct RootView: View {
         }
         section = .wallet
         contactsRoute = nil
-        flows.enter(.send)
+        enterSend()
         Task {
             // `Open` resets the machine to the picker, so the seed must follow
             // it — a split seeded first would be thrown away. The screen's own
@@ -2563,9 +2591,7 @@ struct RootView: View {
     }
 
     /// The states the send machine owns. Anything else is still a drawing.
-    private var sendStates: Set<FlowStateId> {
-        [.sd1, .sd1b, .sd2, .sd2b, .sd2c, .sd2d, .sd2e, .sd2f, .sd3, .sd3b, .sd3c, .sd4a, .sd4b, .sd4c]
-    }
+    private var sendStates: Set<FlowStateId> { SendLive.flowStates }
 
     /// The send amount as its field edits it.
     ///
@@ -2583,6 +2609,19 @@ struct RootView: View {
             set: { value in
                 amountDraft = value
                 send.setAmount(value)
+            }
+        )
+    }
+
+    /// The recipient field, the amount's way: the edit reaches the machine in
+    /// the edit, and the machine's own changes come back through
+    /// `.onChange(of: send.view?.recipient)`.
+    private var recipientBinding: Binding<String> {
+        Binding(
+            get: { recipientDraft },
+            set: { value in
+                recipientDraft = value
+                send.setRecipient(value)
             }
         )
     }
@@ -2617,6 +2656,65 @@ struct RootView: View {
             displayRate: display.rate,
             fiatDecimals: 2
         )
+    }
+
+    // MARK: - Into and out of Send (087 F27)
+
+    /// The home's flow buttons. 转账 is a journey of its own, not a push.
+    private func enterFlow(_ entry: WalletFlowEntry) {
+        if entry == .send { enterSend() } else { flows.enter(entry) }
+    }
+
+    /// Every way into Send: a NEW journey, whatever the machine still holds.
+    ///
+    /// `open` is idempotent within a journey (a rebuild must not reset the
+    /// form), so a journey left by any door the core never heard — the stack
+    /// replaced, a link, a tap elsewhere — kept it armed, and the next 转账's
+    /// `open` was dropped: the abandoned journey came back. Android re-opens
+    /// on every entry; this is the same rule, said once for all six doors.
+    ///
+    /// The two fields are the shell's own text, and a fresh machine does not
+    /// clear them. Cleared only where the clearing cannot reach the machine
+    /// after a recipient handed in by this entry: the recipient field's edits
+    /// travel a render later, and with a send screen already up that render
+    /// can follow the `scanned` this entry is about to send.
+    private func enterSend(handingIn: Bool = false) {
+        send.leave()
+        amountDraft = ""
+        if !handingIn || flows.top == nil { recipientDraft = "" }
+        flows.enter(.send)
+    }
+
+    /// The header's back arrow.
+    ///
+    /// On a send screen it is the MACHINE's back, as on every other client:
+    /// the core moves confirm → form → picker, and from the picker it closes
+    /// the journey, which takes the screens away (`sendClosed`). It popped the
+    /// shell's stack before — the core never heard, so a form's back landed
+    /// on the home (the stack holds `.sd1` for the whole journey) and the
+    /// abandoned journey was what the next 转账 opened.
+    private func flowBack(_ state: FlowStateId) {
+        guard sendStates.contains(state), let view = send.view else {
+            flows.back()
+            return
+        }
+        switch SendLive.back(view) {
+        case .step:
+            send.back()
+            // The way back to the picker clears a recipient that was typed
+            // (and keeps one handed in, #332). The field is this shell's own
+            // text, so it follows — or the next form opens on an address the
+            // machine no longer has, with 继续 dead under it.
+            if let live = send.view?.recipient, live != recipientDraft { recipientDraft = live }
+        case .leave:
+            send.done()
+        }
+    }
+
+    /// The core closed the journey: the send screens go with it.
+    private func sendClosed() {
+        recipientDraft = ""
+        flows.close(ifShowing: sendStates)
     }
 
     /// What the feedback sheet's preview says about this device — the build,
@@ -2716,7 +2814,7 @@ struct RootView: View {
     private func flowScreen(_ state: FlowStateId) -> some View {
                 FlowHost(
                     model: flowModel(state),
-                    onBack: { flows.back() },
+                    onBack: { flowBack(state) },
                     // The STACK's state this screen was built for — a detail
                     // pushed as A2 is drawn as A3 when it names a contract,
                     // and the model's state then never matched the top, so
@@ -2776,7 +2874,7 @@ struct RootView: View {
                         }
                     },
                     sendAmount: sendStates.contains(state) ? amountBinding : nil,
-                    sendRecipient: sendStates.contains(state) ? $recipientDraft : nil,
+                    sendRecipient: sendStates.contains(state) ? recipientBinding : nil,
                     sendRow: splitRows(for: state),
                     sendWarning: send.view.flatMap { SendLive.formWarning($0, loc: loc) },
                     sendCtaDisabled: sendCtaDisabled(state),
@@ -2788,6 +2886,7 @@ struct RootView: View {
                     },
                     onPickCta: { sendPickCta() },
                     onMax: { send.tapMax() },
+                    onChangeToken: { send.changeToken() },
                     onDenom: { send.toggleFiatInput() },
                     // 原生 is not a second kind of token to paste an address
                     // for — a native coin arrives with its network. Android
@@ -2906,6 +3005,16 @@ struct RootView: View {
     /// decoder. The CORE decides what it means.
     private func scannedCode(_ text: String) {
         camera.stop()
+        // The home's 扫码 is not inside a send: the code OPENS one, through the
+        // same door 探索's scanner uses (Android: the home's scanner enters the
+        // send with the viewfinder on top). It used to hand the code to
+        // whatever journey the machine last held and step back to the home —
+        // where nothing happened, until a later 转账 resumed that journey with
+        // the code in it (087 F27).
+        if flows.stack == [.s1] {
+            sendFromScan(text)
+            return
+        }
         send.scanned(text)
         flows.back()
     }
@@ -3600,7 +3709,7 @@ struct RootView: View {
         } else if let payload = onboarding.cableQr {
             // Below touch on purpose: once the phone connects and the ceremony
             // is waiting on ITS sheet, "look at your phone" replaces the QR.
-            CableQrSheet(loc: loc, payload: payload)
+            CableQrSheet(loc: loc, payload: payload, chooser: onboarding.cableQrCreates ? .create : .signIn)
                 .themed(scheme)
         } else if let prompt = onboarding.pending {
             FlowSheet(

@@ -20,3 +20,7 @@ local.properties
 app/src/main/jniLibs/
 # spec 043: the debug-only fixtures library (rust/scripts/build-dev-fixtures.sh)
 app/src/debug/jniLibs/
+
+# spec 088: the Play upload key and its passwords never enter the repo
+keystore.properties
+*.keystore

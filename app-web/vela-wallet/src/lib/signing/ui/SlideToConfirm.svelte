@@ -102,11 +102,15 @@
 </div>
 
 <style>
+	/*
+	  The track grows with its label rather than clip it (spec 089): at the
+	  side panel's 360 px, and in long locales, the label is two lines or more.
+	*/
 	.track {
 		position: relative;
 		display: flex;
 		align-items: center;
-		height: var(--size-slideTrack);
+		min-height: var(--size-slideTrack);
 		border-radius: var(--radius-full);
 		background: var(--color-bg-sunken);
 		overflow: hidden;
@@ -138,9 +142,20 @@
 		background: var(--color-accent-soft);
 	}
 
+	/*
+	  Laid out in the track BESIDE the knob, never under it (spec 089): centred
+	  across the whole track, "Slide to confirm · Confirm send" ran under the
+	  knob at the side panel's 360 px, and ru's two lines hid their first
+	  letters there. It starts past the knob and its inset, and wraps.
+	*/
 	.label {
 		flex: 1;
+		min-width: 0;
+		padding-block: var(--space-sm);
+		padding-inline: calc(var(--size-slideKnob) + var(--space-sm) * 2) var(--space-lg);
 		text-align: center;
+		line-height: var(--leading-tight);
+		overflow-wrap: anywhere;
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		color: var(--color-fg-muted);

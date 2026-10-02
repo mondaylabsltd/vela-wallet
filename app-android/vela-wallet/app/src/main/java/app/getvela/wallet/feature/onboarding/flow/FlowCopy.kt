@@ -6,6 +6,7 @@ import app.getvela.wallet.feature.onboarding.core.KeyMethod
 import app.getvela.wallet.feature.onboarding.core.PromptKind
 import app.getvela.wallet.feature.onboarding.core.StatusKey
 import app.getvela.wallet.feature.onboarding.core.SubmitLabel
+import uniffi.vela_core_uniffi.keyMethodWords
 
 /**
  * The whole translation surface of the onboarding cores.
@@ -68,21 +69,31 @@ fun progressFor(status: StatusKey?): ProgressPosition? = when (status) {
     else -> null
 }
 
+/** Which chooser a key-method row is drawn in — the core's `KeyChooser` wire names (087 F02). */
+enum class KeyChooser(val wire: String) { Create("create"), SignIn("sign_in") }
+
 /**
- * A method's title and caption in the add-key picker.
- *
- * Spec 075: the Trusted Signer is the fourth, from the signing corpus rather than
- * the create corpus — it is the same route the signing sheet's waiting card and
- * Settings' page row speak of, so it must read the same in all three places.
+ * What unlocks a passkey on an Android phone, as the core's `DeviceUnlock`
+ * (087 F01): no one product — the person's own fingerprint, face or screen
+ * lock — so the core draws the family line, never "Touch ID or Windows Hello".
  */
-fun methodCopy(method: KeyMethod): Pair<String, String> = when (method) {
-    KeyMethod.Platform ->
-        I18nKeys.Create.METHOD_PLATFORM_TITLE to I18nKeys.Create.METHOD_PLATFORM_BODY
-    KeyMethod.Hybrid ->
-        I18nKeys.Create.METHOD_HYBRID_TITLE to I18nKeys.Create.METHOD_HYBRID_BODY
-    KeyMethod.SecurityKey ->
-        I18nKeys.Create.METHOD_SECURITY_KEY_TITLE to I18nKeys.Create.METHOD_SECURITY_KEY_BODY
-    KeyMethod.TrustedSigner -> TRUSTED_SIGNER_TITLE to TRUSTED_SIGNER_BODY
+const val ANDROID_UNLOCK = "other"
+
+/**
+ * A method's title and line in the person's words, as the core decides them for
+ * [chooser] (`keyMethodWords`, 087 F01/F02) — the create picker, the sign-in
+ * sheet and the QR card cannot disagree. The sign-in sheet's phone row scans;
+ * it never says "create". The Trusted Signer's two lines are the signing
+ * sheet's own (spec 075), named by the core.
+ */
+fun methodCopy(
+    method: KeyMethod,
+    chooser: KeyChooser,
+    strings: VelaStrings,
+    unlock: String = ANDROID_UNLOCK,
+): Pair<String, String> {
+    val words = keyMethodWords(method.wire, chooser.wire, unlock) ?: return method.wire to ""
+    return strings.t(words.titleKey) to (words.lineName ?: words.lineKey?.let { strings.t(it) }.orEmpty())
 }
 
 /** The Trusted Signer's own words (`componentsUi.signing.*`), one spelling. */

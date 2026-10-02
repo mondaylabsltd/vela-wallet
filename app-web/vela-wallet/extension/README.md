@@ -40,9 +40,14 @@ They are recorded with their evidence in [`research.md`](../../../specs/027-web-
    `chrome.sidePanel.open` needs a user gesture, and the gesture travels with
    the page's message only until the worker's first `await` — so the panel is
    opened synchronously in the message listener, and a request a page fired
-   without a click (no gesture) falls back to the window. Both show the same
-   `request.html`; the panel enters it through `panel.html`, because
-   `side_panel.default_path` is one static path and the pages are per locale.
+   without a click (no gesture) falls back to the window. The panel is the
+   wallet (`wallet.html?panel`) with the request raised over it; the window
+   shows `request.html`. Each enters through a doorway — the panel through
+   `panel.html`, because `side_panel.default_path` is one static path and the
+   pages are per locale; the window (and the toolbar's tab) through
+   `open.html`, because the worker cannot read the language the person pinned
+   (issue 317). Both doorways pick the locale by the one rule in
+   `lib/locales.js`.
 5. **No top-level name in `dist/` may start with `_`.** Chrome reserves that
    prefix and rejects the whole package — "Cannot load extension with file or
    directory name \_app … Could not load manifest." SvelteKit's `kit.appDir`
@@ -60,9 +65,12 @@ icons/             the toolbar and store icons, rendered from docs/design/icon/a
 content.js         isolated world: the page bridge
 background.js      the service worker: routing, the per-site chain, reads
                    forwarded verbatim, and the page events — no authoritative state
-panel.html/.js     the side panel's doorway: picks the locale, opens request.html
+panel.html/.js     the side panel's doorway: picks the locale, opens the wallet
+open.html/.js      the request window's and the wallet tab's doorway: picks the
+                   locale the same way (lib/locales.js), opens the page
 lib/protocol.js    the message shapes both sides agree on
-lib/locales.js     the packaged locales, negotiated the same way everywhere
+lib/locales.js     the packaged locales, and the ONE rule every surface opens by:
+                   the pinned language, else Chrome's (the worker never picks)
 build.mjs          assembles the app's client build + these scripts into dist/
 dist/              build output — gitignored
 ```
@@ -72,7 +80,7 @@ dist/              build output — gitignored
 | Method                                                                 | Answered by                                                                                    |
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `eth_accounts`, `eth_chainId`, `net_version`, `wallet_getPermissions`  | the wallet's snapshot + the site's grant and chain pick                                        |
-| `eth_requestAccounts`, `wallet_requestPermissions`                     | the side panel (or window): `dapp_permissions`                                                 |
+| `eth_requestAccounts`, `wallet_requestPermissions`                     | granted: the worker (089); else the side panel (or window): `dapp_permissions`                 |
 | `personal_sign`, typed data, `eth_sendTransaction`, `wallet_sendCalls` | the side panel (or window): `sign_request`, on the site's chain                                |
 | `wallet_switchEthereumChain`, `wallet_addEthereumChain`                | the worker, against the catalog the wallet published (`vela.ext.chains`); unknown chain → 4902 |
 | `wallet_watchAsset`                                                    | `false` — tokens are added in the wallet                                                       |
@@ -81,4 +89,10 @@ dist/              build output — gitignored
 
 The page hears `accountsChanged` / `chainChanged` / `disconnect` when the
 site's grant or chain pick changes in storage — on connect, when the wallet
-switches accounts (the core re-pins the grant), on revoke, on a switch.
+switches accounts (the core re-pins the grant), on revoke, on a switch — and
+`accountsChanged` when the wallet signs out or back in (its snapshot).
+
+A grant is answered only while its account is the one the wallet is signed in
+to (`granted_to_signed_in`, spec 086, issue 315): `eth_accounts` reads the
+snapshot's `address`, and no snapshot — the wallet removes it on sign-out —
+is nobody.

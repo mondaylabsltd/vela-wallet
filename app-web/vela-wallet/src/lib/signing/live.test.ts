@@ -22,6 +22,7 @@ import { resolveSigningMessages } from '$lib/i18n/engine.server';
 import { CLEAR_TERMS } from './terms';
 import { shortenAddress, type WalletIdentity } from '$lib/wallet/identity';
 import { INITIAL_CLEAR_VIEW, INITIAL_GUARD_VIEW } from './core/sheet.svelte';
+import { txKickoff } from './core/tx-params';
 import { INITIAL_SIGN_VIEW } from './core/sign-resident.svelte';
 import { clearEstimateReverts, recordEstimateReverts } from '$lib/services/estimate-verdict';
 import { fill } from '$lib/wallet/messages';
@@ -1508,5 +1509,265 @@ describe('the words after a refusal, the fiat, and the estimate’s warning (spe
 				(b) => b.kind === 'warning' && b.text === m.warnWillFail
 			)
 		).toBe(false);
+	});
+});
+
+/**
+ * 089 S1 — what you see is what you sign, for a batch. `[1 wei → A, 1 xDAI →
+ * B]` read "Send 0.000…1 xDAI to A"; the 1 xDAI to B was only in the raw
+ * JSON. The sheet the REAL core and the REAL kickoff build must list every
+ * call, and its headline must not be call 1's.
+ */
+describe('a batch shows every call (089 S1)', () => {
+	const A = '0x7687C0bC1dD2B9d7e9a5b1b4e1B0cBd8e0C3D141';
+	const B = '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c';
+	const batchSign = (calls: unknown[]): SignView => ({
+		...OPEN_SIGN,
+		request: {
+			...REQUEST,
+			chain_id: 100,
+			method: 'wallet_sendCalls',
+			kind: 'batch',
+			params_json: JSON.stringify([
+				{ version: '2.0.0', chainId: '0x64', from: identity.address, calls }
+			])
+		}
+	});
+
+	/** The sheet's own kickoff, answered by the real core. */
+	function coreView(sign: SignView): ClearSigningView {
+		const core = new ClearSigningCore();
+		try {
+			const request = sign.request!;
+			core.dispatch(
+				JSON.stringify(
+					txKickoff(
+						request.method,
+						request.params_json,
+						request.chain_id,
+						toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })
+					)
+				)
+			);
+			return JSON.parse(core.view()) as ClearSigningView;
+		} finally {
+			core.free();
+		}
+	}
+
+	const text = (blocks: unknown) => JSON.stringify(blocks);
+
+	it('[1 wei → A, 1 xDAI → B]: both sends, both recipients, the total — and no "Send" headline', () => {
+		const sign = batchSign([
+			{ to: A, value: '0x1' },
+			{ to: B, value: '0xde0b6b3a7640000' }
+		]);
+		const clear = coreView(sign);
+		const model = buildSigningModel(inputs({ sign, clear }))!;
+		const all = text(model.blocks).toLowerCase();
+		expect(all).toContain(A.toLowerCase());
+		expect(all).toContain(B.toLowerCase());
+		expect(all).toContain('0.000000000000000001 xdai');
+		expect(all).toContain('\u22121 xdai');
+		// Every call its own card, in the order they run.
+		const cards = model.blocks.filter((b) => b.kind === 'card');
+		expect(cards).toEqual([
+			{
+				kind: 'card',
+				title: fill(m.batchStep, { index: '1', action: m.intentSend }),
+				tone: 'neutral',
+				rows: [
+					{ label: m.labelAmount, value: '\u22120.000000000000000001 xDAI' },
+					{ label: m.labelRecipient, value: clear.batch!.calls[0].plain_send!.to, mono: true }
+				]
+			},
+			{
+				kind: 'card',
+				title: fill(m.batchStep, { index: '2', action: m.intentSend }),
+				tone: 'neutral',
+				rows: [
+					{ label: m.labelAmount, value: '\u22121 xDAI' },
+					{ label: m.labelRecipient, value: clear.batch!.calls[1].plain_send!.to, mono: true }
+				]
+			}
+		]);
+		// And what the whole batch moves.
+		expect(model.blocks).toContainEqual({
+			kind: 'rows',
+			rows: [{ label: m.labelTotal, value: '\u22121.000000000000000001 xDAI' }]
+		});
+		// The headline names the batch, not call 1.
+		expect(model.blocks[0]).toEqual({ kind: 'intent', text: m.intentBatch, tone: 'neutral' });
+		expect(model.blocks[1]).toEqual({
+			kind: 'sentence',
+			text: fill(m.summaryBatch, { count: '2' }),
+			tone: 'accent'
+		});
+		expect(model.confirm.action).toBe(m.confirmPlain);
+	});
+
+	/** A batch view as the core hands it: [plain send, approve(MAX), unreadable]. */
+	const APPROVE_FIELDS = [
+		field({ value: 'Unlimited', format: 'tokenAmount', warning: true, usd_value: null, label_term: 'labelAmount', value_term: 'valueUnlimited' }),
+		field({ label: 'Spender', value: '0x1111', role: 'spender', address: '0x1111', label_term: 'labelSpender' })
+	];
+	const BATCH: ClearSigningView = {
+		...INITIAL_CLEAR_VIEW,
+		resolved: true,
+		surface: 'batch',
+		batch: {
+			calls: [
+				{
+					index: 1,
+					surface: 'plain_send',
+					result: null,
+					plain_send: { to: A, value_wei: '1', amount: '0.000000000000000001', no_value: false },
+					to: A,
+					data_bytes: 0,
+					value_wei: '1',
+					amount: '0.000000000000000001',
+					risk: 'normal'
+				},
+				{
+					index: 2,
+					surface: 'clear_sign',
+					result: {
+						...DECODED.result!,
+						intent: 'Approve',
+						intent_term: 'intentApprove',
+						risk: 'danger',
+						fields: APPROVE_FIELDS
+					},
+					plain_send: null,
+					to: '0x' + 'cc'.repeat(20),
+					data_bytes: 68,
+					value_wei: '0',
+					amount: '0',
+					risk: 'danger'
+				},
+				{
+					index: 3,
+					surface: 'blind_transaction',
+					result: null,
+					plain_send: null,
+					to: B,
+					data_bytes: 36,
+					value_wei: '10000000000000000',
+					amount: '0.01',
+					risk: 'caution'
+				}
+			],
+			total_value_wei: '10000000000000001',
+			total_amount: '0.010000000000000001',
+			risk: 'danger'
+		}
+	};
+	const unlimitedLeg = (choice: GuardView['editor']): GuardView => ({
+		...INITIAL_GUARD_VIEW,
+		surface: 'batch',
+		confirm_allowed: true,
+		batch: {
+			legs: [0, 1, 2].map((index) => ({
+				to: index === 2 ? B : A,
+				approval:
+					index === 1
+						? {
+								kind: 'erc20_approve' as const,
+								token_address: '0xdd',
+								spender: '0x1111',
+								amount_raw: 'f',
+								amount_bits: 256,
+								is_unbounded: true,
+								is_boolean_grant: false,
+								is_reducing: false,
+								editable: true,
+								block_reason: null,
+								deadline: null,
+								locus: { type: 'calldata_word' as const, word_index: 1 }
+							}
+						: null,
+				meta: { symbol: 'USDC', decimals: 6, verified: true, loading: false },
+				editor: index === 1 ? choice : null,
+				choice: index === 1 ? (choice?.choice ?? null) : null,
+				needs_editor: index === 1,
+				needs_choice: false,
+				grants_broad: index === 1 && choice?.choice?.type === 'unlimited'
+			})),
+			any_uncapped: choice?.choice?.type === 'unlimited',
+			any_to_own_token: false,
+			all_settled: true
+		}
+	});
+	const kept = {
+		mode: 'requested' as const,
+		custom_text: '',
+		error: null,
+		choice: { type: 'unlimited' as const },
+		display_amount_raw: null,
+		requested_finite: false,
+		requested_unlimited: true,
+		has_balance_cap: false,
+		revoke_offered: true,
+		balance_raw: null
+	};
+	const capped = {
+		...kept,
+		mode: 'custom' as const,
+		custom_text: '250',
+		choice: { type: 'amount' as const, amount_raw: '250000000' },
+		display_amount_raw: '250000000'
+	};
+	const batchSignOf = () =>
+		batchSign([
+			{ to: A, value: '0x1' },
+			{ to: '0x' + 'cc'.repeat(20), data: '0x095ea7b3' },
+			{ to: B, data: '0xdeadbeef', value: '0x2386f26fc10000' }
+		]);
+
+	it('every call is a card: decoded, plain and unreadable — the unreadable one says so', () => {
+		const model = buildSigningModel(
+			inputs({ sign: batchSignOf(), clear: BATCH, guard: unlimitedLeg(kept) })
+		)!;
+		expect(model.blocks[0]).toEqual({ kind: 'intent', text: m.intentBatch, tone: 'danger' });
+		const cards = model.blocks.filter((b) => b.kind === 'card');
+		expect(cards.map((c) => (c.kind === 'card' ? c.title : ''))).toEqual([
+			fill(m.batchStep, { index: '1', action: m.intentSend }),
+			// The core's term, in the reader's words (`localizedTerms`).
+			fill(m.batchStep, { index: '2', action: m.terms.intentApprove }),
+			fill(m.batchStep, { index: '3', action: fill(m.warnBlindDecode, { bytes: '36' }) })
+		]);
+		const [, approve, blind] = cards;
+		if (approve.kind !== 'card' || blind.kind !== 'card') throw new Error('kind');
+		expect(approve.tone).toBe('danger');
+		expect(approve.rows[0]).toMatchObject({ value: m.terms.valueUnlimited, valueTone: 'danger' });
+		// …and whom the call goes to: inside a batch nothing else says it.
+		expect(approve.rows.at(-1)).toEqual({
+			label: m.labelInteracting,
+			value: '0x' + 'cc'.repeat(20),
+			mono: true
+		});
+		expect(blind.tone).toBe('caution');
+		expect(blind.rows).toEqual([
+			{ label: m.labelInteracting, value: B, mono: true },
+			{ label: m.labelAmount, value: '\u22120.01 xDAI' }
+		]);
+		// The second call's unlimited approval keeps its cap card and its warning.
+		expect(model.blocks.filter((b) => b.kind === 'allowance')).toHaveLength(1);
+		expect(model.blocks).toContainEqual({ kind: 'warning', tone: 'danger', text: m.warnUnlimited });
+	});
+
+	it("a cap on the second call's approval is what ITS card reads, and the headline calms", () => {
+		const model = buildSigningModel(
+			inputs({ sign: batchSignOf(), clear: BATCH, guard: unlimitedLeg(capped) })
+		)!;
+		const approve = model.blocks.filter((b) => b.kind === 'card')[1];
+		if (approve.kind !== 'card') throw new Error('kind');
+		expect(approve.rows[0]).toMatchObject({ value: '250 USDC', valueTone: undefined });
+		// What an approve is anyway once nothing is unlimited (the single rule).
+		expect(approve.tone).toBe('caution');
+		expect(model.blocks[0]).toMatchObject({ kind: 'intent', tone: 'caution' });
+		expect(model.blocks.some((b) => b.kind === 'warning' && b.text === m.warnUnlimited)).toBe(
+			false
+		);
 	});
 });

@@ -3831,6 +3831,31 @@ export function keccak256(data) {
 }
 
 /**
+ * A key-method row's words as JSON (`{title_key, line_key, line_name}`), or
+ * `null` for a wire name the core does not know (087 F01, F02). See
+ * `vela_core::app::method_words`.
+ * @param {string} method
+ * @param {string} chooser
+ * @param {string} unlock
+ * @returns {string | undefined}
+ */
+export function keyMethodWords(method, chooser, unlock) {
+    const ptr0 = passStringToWasm0(method, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(chooser, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passStringToWasm0(unlock, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ret = wasm.keyMethodWords(ptr0, len0, ptr1, len1, ptr2, len2);
+    let v4;
+    if (ret[0] !== 0) {
+        v4 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v4;
+}
+
+/**
  * How long a logo that did not load stays failed, ms — `undefined` for the
  * session (asking again will not help), a number for a miss that may heal
  * (RE10). The web's `<img onerror>` has no status: `markMissTtlMs("unknown")`.
