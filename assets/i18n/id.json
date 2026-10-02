@@ -721,7 +721,7 @@
    "copyAddress": "Salin alamat",
    "copied": "Disalin",
    "close": "Tutup",
-   "siteAccessBody": "Chrome memblokir passkey karena akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas halaman, lalu coba lagi."
+   "siteAccessBody": "Akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas, lalu coba lagi."
   },
   "create": {
    "accountNameHint": "Nama ini disimpan di blockchain bersama kunci publik Anda untuk masuk lintas perangkat.",
@@ -979,8 +979,8 @@
    "a11yDeleteHistory": "Hapus dari riwayat"
   },
   "ext": {
-   "installedNote": "Vela sudah terpasang. Muat ulang tab yang sudah terbuka sebelumnya agar situsnya bisa menemukan Vela.",
-   "accessNote": "Akses situs Vela dibatasi, jadi situs tidak dapat menemukan dompet Anda dan passkey tidak bisa dipakai di sini.",
+   "installedNote": "Muat ulang tab yang sudah terbuka agar situsnya bisa menemukan Vela.",
+   "accessNote": "Akses situs dibatasi: situs tidak bisa menemukan Vela dan passkey tidak berfungsi.",
    "accessAllow": "Izinkan akses"
   }
  },

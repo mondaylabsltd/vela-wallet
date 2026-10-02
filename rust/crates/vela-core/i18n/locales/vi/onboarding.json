@@ -126,7 +126,7 @@
       "copyAddress": "Sao chép địa chỉ",
       "copied": "Đã sao chép",
       "close": "Đóng",
-      "siteAccessBody": "Chrome đã chặn passkey vì quyền truy cập trang web của Vela bị giới hạn. Hãy chọn Cho phép truy cập ở đầu trang rồi thử lại."
+      "siteAccessBody": "Quyền truy cập trang web bị giới hạn. Chọn Cho phép truy cập ở đầu trang rồi thử lại."
     },
     "create": {
       "accountNameHint": "Tên này được lưu trên chuỗi cùng khóa công khai của bạn để đăng nhập trên nhiều thiết bị.",

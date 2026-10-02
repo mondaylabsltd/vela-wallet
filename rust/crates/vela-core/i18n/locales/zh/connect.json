@@ -110,8 +110,8 @@
       "a11yDeleteHistory": "从记录中移除"
     },
     "ext": {
-      "installedNote": "Vela 已安装。请刷新之前已打开的标签页，这些网站才能找到它。",
-      "accessNote": "Vela 的网站访问权限受到限制，网站找不到你的钱包，这里也用不了你的通行密钥。",
+      "installedNote": "重新加载之前已打开的标签页，网站才能找到 Vela。",
+      "accessNote": "网站访问权限受限：网站找不到 Vela，通行密钥也无法使用。",
       "accessAllow": "允许访问"
     }
   },

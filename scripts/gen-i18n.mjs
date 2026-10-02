@@ -791,7 +791,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 140,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 141,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;

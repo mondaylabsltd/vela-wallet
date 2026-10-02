@@ -126,7 +126,7 @@
       "copyAddress": "複製地址",
       "copied": "已複製",
       "close": "關閉",
-      "siteAccessBody": "Vela 的網站存取權受到限制，Chrome 封鎖了通行密鑰。請點選頁面頂端的「允許存取」，然後再試一次。"
+      "siteAccessBody": "網站存取權受限。請點選頂端的「允許存取」，然後再試一次。"
     },
     "create": {
       "accountNameHint": "此名稱會連同您的公鑰一起記錄在鏈上，用於跨裝置登入。",

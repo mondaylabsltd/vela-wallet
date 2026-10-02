@@ -110,8 +110,8 @@
       "a11yDeleteHistory": "Rimuovi dalla cronologia"
     },
     "ext": {
-      "installedNote": "Vela è installata. Ricarica le schede già aperte perché i loro siti possano trovarla.",
-      "accessNote": "L'accesso di Vela ai siti è limitato: i siti non trovano il tuo wallet e qui non puoi usare la tua passkey.",
+      "installedNote": "Ricarica le schede già aperte perché i loro siti trovino Vela.",
+      "accessNote": "L'accesso ai siti è limitato: i siti non vedono Vela e la passkey non funziona.",
       "accessAllow": "Consenti accesso"
     }
   },

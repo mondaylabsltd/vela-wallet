@@ -721,7 +721,7 @@
    "copyAddress": "Adresi kopyala",
    "copied": "Kopyalandı",
    "close": "Kapat",
-   "siteAccessBody": "Vela'nın site erişimi sınırlı olduğu için Chrome passkey'i engelledi. Sayfanın üstündeki Erişime izin ver'i seçip tekrar deneyin."
+   "siteAccessBody": "Vela'nın site erişimi sınırlı. Üstteki Erişime izin ver'i seçip tekrar deneyin."
   },
   "create": {
    "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",
@@ -979,8 +979,8 @@
    "a11yDeleteHistory": "Geçmişten kaldır"
   },
   "ext": {
-   "installedNote": "Vela yüklendi. Sitelerin Vela'yı bulabilmesi için önceden açık olan sekmeleri yenileyin.",
-   "accessNote": "Vela'nın site erişimi sınırlı; siteler cüzdanınızı bulamaz ve passkey'iniz burada kullanılamaz.",
+   "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",
+   "accessNote": "Site erişimi sınırlı: siteler Vela'yı bulamaz ve passkey çalışmaz.",
    "accessAllow": "Erişime izin ver"
   }
  },

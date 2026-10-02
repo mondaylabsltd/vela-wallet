@@ -721,7 +721,7 @@
    "copyAddress": "Adresse kopieren",
    "copied": "Kopiert",
    "close": "Schließen",
-   "siteAccessBody": "Chrome hat den Passkey blockiert, weil der Websitezugriff von Vela eingeschränkt ist. Wählen Sie oben auf der Seite „Zugriff erlauben“ und versuchen Sie es erneut."
+   "siteAccessBody": "Der Websitezugriff von Vela ist eingeschränkt. Wählen Sie oben „Zugriff erlauben“ und versuchen Sie es erneut."
   },
   "create": {
    "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",
@@ -979,8 +979,8 @@
    "a11yDeleteHistory": "Aus dem Verlauf entfernen"
   },
   "ext": {
-   "installedNote": "Vela ist installiert. Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
-   "accessNote": "Der Websitezugriff von Vela ist eingeschränkt: Websites finden Ihre Wallet nicht, und Ihr Passkey lässt sich hier nicht verwenden.",
+   "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
+   "accessNote": "Der Websitezugriff ist eingeschränkt: Websites finden Vela nicht, und der Passkey funktioniert nicht.",
    "accessAllow": "Zugriff erlauben"
   }
  },

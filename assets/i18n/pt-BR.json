@@ -724,7 +724,7 @@
    "copyAddress": "Copiar endereço",
    "copied": "Copiado",
    "close": "Fechar",
-   "siteAccessBody": "O Chrome bloqueou a passkey porque o acesso da Vela aos sites está limitado. Escolha Permitir acesso no topo da página e tente de novo."
+   "siteAccessBody": "O acesso da Vela aos sites está limitado. Escolha Permitir acesso no topo e tente de novo."
   },
   "create": {
    "accountNameHint": "Este nome é armazenado junto com sua chave pública on-chain para login em vários dispositivos.",
@@ -982,8 +982,8 @@
    "a11yDeleteHistory": "Remover do histórico"
   },
   "ext": {
-   "installedNote": "A Vela foi instalada. Recarregue as abas que já estavam abertas para que os sites possam encontrá-la.",
-   "accessNote": "O acesso da Vela aos sites está limitado: os sites não encontram sua carteira e sua passkey não pode ser usada aqui.",
+   "installedNote": "Recarregue as abas que já estavam abertas para que os sites encontrem a Vela.",
+   "accessNote": "O acesso aos sites está limitado: os sites não veem a Vela e a passkey não funciona.",
    "accessAllow": "Permitir acesso"
   }
  },

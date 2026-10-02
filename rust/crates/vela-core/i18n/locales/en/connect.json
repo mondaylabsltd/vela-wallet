@@ -110,8 +110,8 @@
       "a11yDeleteHistory": "Remove from history"
     },
     "ext": {
-      "installedNote": "Vela is installed. Reload the tabs you already had open so their sites can find it.",
-      "accessNote": "Vela's site access is limited, so sites can't find your wallet and your passkey can't be used here.",
+      "installedNote": "Reload tabs that were already open so their sites can find Vela.",
+      "accessNote": "Site access is limited, so sites can't find Vela and passkeys won't work.",
       "accessAllow": "Allow access"
     }
   },

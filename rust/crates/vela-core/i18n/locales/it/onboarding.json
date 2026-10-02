@@ -126,7 +126,7 @@
       "copyAddress": "Copia indirizzo",
       "copied": "Copiato",
       "close": "Chiudi",
-      "siteAccessBody": "Chrome ha bloccato la passkey perché l'accesso di Vela ai siti è limitato. Scegli Consenti accesso in cima alla pagina, poi riprova."
+      "siteAccessBody": "L'accesso di Vela ai siti è limitato. Scegli Consenti accesso in alto, poi riprova."
     },
     "create": {
       "accountNameHint": "Questo nome viene memorizzato on-chain insieme alla tua chiave pubblica per l'accesso da più dispositivi.",

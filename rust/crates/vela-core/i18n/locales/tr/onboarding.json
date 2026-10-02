@@ -126,7 +126,7 @@
       "copyAddress": "Adresi kopyala",
       "copied": "Kopyalandı",
       "close": "Kapat",
-      "siteAccessBody": "Vela'nın site erişimi sınırlı olduğu için Chrome passkey'i engelledi. Sayfanın üstündeki Erişime izin ver'i seçip tekrar deneyin."
+      "siteAccessBody": "Vela'nın site erişimi sınırlı. Üstteki Erişime izin ver'i seçip tekrar deneyin."
     },
     "create": {
       "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",

@@ -110,8 +110,8 @@
       "a11yDeleteHistory": "Aus dem Verlauf entfernen"
     },
     "ext": {
-      "installedNote": "Vela ist installiert. Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
-      "accessNote": "Der Websitezugriff von Vela ist eingeschränkt: Websites finden Ihre Wallet nicht, und Ihr Passkey lässt sich hier nicht verwenden.",
+      "installedNote": "Laden Sie bereits geöffnete Tabs neu, damit deren Websites Vela finden.",
+      "accessNote": "Der Websitezugriff ist eingeschränkt: Websites finden Vela nicht, und der Passkey funktioniert nicht.",
       "accessAllow": "Zugriff erlauben"
     }
   },

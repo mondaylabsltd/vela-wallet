@@ -190,7 +190,7 @@ test.describe('the Chrome Web Store package, installed', () => {
 		await page.goto(`chrome-extension://${id}/en.html`);
 		const notice = page.getByTestId('ext-site-access');
 		await expect(notice).toBeVisible({ timeout: 30_000 });
-		await expect(notice).toContainText('site access is limited');
+		await expect(notice).toContainText('Site access is limited');
 		await notice.getByRole('button', { name: 'Allow access' }).click();
 		await expect(notice).toBeHidden({ timeout: 10_000 });
 		expect(
@@ -216,7 +216,7 @@ test.describe('the Chrome Web Store package, installed', () => {
 		await welcome.reload();
 		const note = welcome.getByTestId('ext-installed');
 		await expect(note).toBeVisible({ timeout: 30_000 });
-		await expect(note).toContainText('Reload the tabs you already had open');
+		await expect(note).toContainText('Reload tabs that were already open');
 		await note.getByRole('button', { name: 'Got it' }).click();
 		await expect(note).toBeHidden();
 		await context.close();

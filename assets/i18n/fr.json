@@ -724,7 +724,7 @@
    "copyAddress": "Copier l'adresse",
    "copied": "Copié",
    "close": "Fermer",
-   "siteAccessBody": "Chrome a bloqué la passkey car l'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut de la page, puis réessayez."
+   "siteAccessBody": "L'accès de Vela aux sites est limité. Choisissez Autoriser l'accès en haut, puis réessayez."
   },
   "create": {
    "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",
@@ -982,8 +982,8 @@
    "a11yDeleteHistory": "Retirer de l'historique"
   },
   "ext": {
-   "installedNote": "Vela est installée. Rechargez les onglets déjà ouverts pour que leurs sites puissent la trouver.",
-   "accessNote": "L'accès de Vela aux sites est limité : les sites ne trouvent pas votre portefeuille et votre passkey ne peut pas être utilisée ici.",
+   "installedNote": "Rechargez les onglets déjà ouverts pour que leurs sites trouvent Vela.",
+   "accessNote": "L'accès aux sites est limité : les sites ne voient pas Vela et la passkey ne fonctionne pas.",
    "accessAllow": "Autoriser l'accès"
   }
  },

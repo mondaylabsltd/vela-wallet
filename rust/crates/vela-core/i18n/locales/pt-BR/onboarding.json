@@ -126,7 +126,7 @@
       "copyAddress": "Copiar endereço",
       "copied": "Copiado",
       "close": "Fechar",
-      "siteAccessBody": "O Chrome bloqueou a passkey porque o acesso da Vela aos sites está limitado. Escolha Permitir acesso no topo da página e tente de novo."
+      "siteAccessBody": "O acesso da Vela aos sites está limitado. Escolha Permitir acesso no topo e tente de novo."
     },
     "create": {
       "accountNameHint": "Este nome é armazenado junto com sua chave pública on-chain para login em vários dispositivos.",

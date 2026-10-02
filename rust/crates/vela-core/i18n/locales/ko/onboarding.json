@@ -126,7 +126,7 @@
       "copyAddress": "주소 복사",
       "copied": "복사됨",
       "close": "닫기",
-      "siteAccessBody": "Vela의 사이트 액세스가 제한되어 Chrome이 패스키를 차단했습니다. 페이지 상단의 '액세스 허용'을 누른 뒤 다시 시도하세요."
+      "siteAccessBody": "사이트 액세스가 제한되어 있습니다. 상단의 '액세스 허용'을 누른 뒤 다시 시도하세요."
     },
     "create": {
       "accountNameHint": "이 이름은 기기 간 로그인을 위해 공개 키와 함께 온체인에 저장됩니다.",

@@ -126,7 +126,7 @@
       "copyAddress": "Salin alamat",
       "copied": "Disalin",
       "close": "Tutup",
-      "siteAccessBody": "Chrome memblokir passkey karena akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas halaman, lalu coba lagi."
+      "siteAccessBody": "Akses situs Vela dibatasi. Pilih Izinkan akses di bagian atas, lalu coba lagi."
     },
     "create": {
       "accountNameHint": "Nama ini disimpan di blockchain bersama kunci publik Anda untuk masuk lintas perangkat.",
