@@ -117,10 +117,21 @@ struct FactRowView: View {
                 .lineLimit(1)
             Spacer(minLength: Tokens.Space.s8)
             lead
-            if fact.lines.isEmpty {
-                value
-            } else {
+            if !fact.lines.isEmpty {
                 lines
+            } else if let detail = fact.detail {
+                // A name over whose word it is and the address it stands for
+                // (spec 097 F): the name may be cut, the line under it never is.
+                VStack(alignment: .trailing, spacing: Tokens.Space.s2) {
+                    value
+                    Text(verbatim: detail)
+                        .monoRole(Typography.monoAddress.scaled(textScale))
+                        .foregroundStyle(theme.fgSubtle)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            } else {
+                value
             }
             if let copy = fact.copy {
                 Button {

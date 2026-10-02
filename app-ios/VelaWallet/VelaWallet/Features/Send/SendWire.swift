@@ -189,6 +189,46 @@ struct SendRecipientIdentityWire: Decodable, Equatable {
     let source: String?
 }
 
+/// Whose word a payee's name is (spec 097 F, S2) — the core's
+/// `SendNameSource`, tagged by `type`.
+///
+/// A source this build has never heard of must not fail the view: it reads as
+/// `unknown`, and a name nobody can say the source of is not drawn — untagged,
+/// it would look like the person's own (the core's own rule for one).
+enum SendNameSourceWire: Decodable, Equatable {
+    /// The person's own word: their account, their contact, their list.
+    case own
+    /// The public wallet registry, where anyone can register any name.
+    case registry
+    /// A name service whose name resolves to this address — "ENS", ".bnb".
+    case service(label: String)
+    case unknown
+
+    private enum CodingKeys: String, CodingKey { case type, label }
+
+    init(from decoder: Decoder) throws {
+        let container = try? decoder.container(keyedBy: CodingKeys.self)
+        switch try? container?.decode(String.self, forKey: .type) {
+        case "own": self = .own
+        case "registry": self = .registry
+        case "service":
+            let label = (try? container?.decode(String.self, forKey: .label)) ?? ""
+            self = label.trimmingCharacters(in: .whitespaces).isEmpty ? .unknown : .service(label: label)
+        default: self = .unknown
+        }
+    }
+}
+
+/// Who the money goes to, as the form's line and the confirm name them
+/// (spec 097 F, S2): the address always — in full, as signed — and a name
+/// only beside it, with whose word it is.
+struct SendPayeeWire: Decodable, Equatable {
+    let address: String
+    let name: String?
+    /// Present exactly when `name` is.
+    let nameSource: SendNameSourceWire?
+}
+
 /// What the recipient is. `nil` on either field means **not judged** — never
 /// "no". A delegated EOA is a wallet, and the core owns that carve-out.
 struct SendRecipientRiskWire: Decodable, Equatable {
@@ -242,6 +282,17 @@ struct SendReceiptTransferWire: Decodable, Equatable {
     let usdValue: Double
 }
 
+/// One coin the operation sent, summed over its recipients (spec 097 F, S3).
+struct SendReceiptCoinWire: Decodable, Equatable {
+    /// Token units, as signed.
+    let amount: String
+    let symbol: String
+    let logoUrls: [String]
+    /// `nil` = the chain's native coin.
+    let tokenAddress: String?
+    let usdValue: Double
+}
+
 struct SendReceiptWire: Decodable, Equatable {
     /// `submitted` / `confirmed` / `failed`, and since spec 082 `maybe_sent`
     /// (the submit's reply was lost: "it may have been sent", no success
@@ -253,6 +304,13 @@ struct SendReceiptWire: Decodable, Equatable {
     /// `split` / `multi_select`; absent for a plain transfer.
     let kind: String?
     let transfers: [SendReceiptTransferWire]
+    /// Every coin the operation sent, in signing order (spec 097 F, S3): one
+    /// for a single send or a split (its total), one per coin for a sweep.
+    /// The screen lists these and never lets one stand for the rest.
+    /// Optional on the wire so a hand-written receipt without it decodes.
+    var coins: [SendReceiptCoinWire]?
+    /// `coins[0]`'s figure when exactly one coin moved (a split's total);
+    /// empty for a sweep of several.
     let amount: String
     let usdValue: Double
     let submittedAtMs: Double?
@@ -359,7 +417,17 @@ struct SendViewWire: Decodable, Equatable {
     let userOpHash: String?
     let receipt: SendReceiptWire?
     let treasuryBootstrap: SendTreasuryStatusWire?
+    /// The resolver's raw answer. Only the receipt's caption still names the
+    /// recipient by it, after the money moved (as the web does); every screen
+    /// before the signature draws `payees`, and `source` is never printed.
     let recipientIdentity: SendRecipientIdentityWire?
+    /// Who the money goes to (spec 097 F, S2): one payee for a single send or
+    /// a sweep once the address is whole, one per `recipients` row for a
+    /// split. The form's line, the picker's To line and the confirm read
+    /// THIS — a name from the public registry once stood alone on the confirm
+    /// for the address it claimed. Optional on the wire so a hand-written
+    /// view without it decodes (as nobody named).
+    var payees: [SendPayeeWire]?
     let recipientRisk: SendRecipientRiskWire?
     /// Spec 096 F12: the recipient is a token's own contract on this network
     /// (the core's `recipient_is_token_contract`) — said before the slide.

@@ -60,18 +60,28 @@ struct SendAssetsParityTests {
                 ["id": "r1", "address": Self.alice, "amount": "1.5", "name": "Alice"],
                 ["id": "r2", "address": Self.bob, "amount": "2", "name": NSNull()],
             ],
+            // Who each row pays, as the core names them (spec 097 F).
+            "payees": [
+                ["address": Self.alice, "name": "Alice", "name_source": ["type": "own"]],
+                ["address": Self.bob, "name": NSNull(), "name_source": NSNull()],
+            ],
         ])
         let model = confirm(view, on: .sd3b)
 
         #expect(model.breakdown.count == 2)
         #expect(model.breakdown.map(\.value) == ["1.5 xDAI", "2 xDAI"])
-        // A name never stands in for the address on the page that signs.
-        #expect(model.breakdown[0].label == "Alice · \(AddressText.short(Self.alice))")
+        // A name never stands in for the address on the page that signs: the
+        // short address is the line under it (spec 097 F).
+        #expect(model.breakdown[0].label == "Alice")
+        #expect(model.breakdown[0].detail == AddressText.short(Self.alice))
         #expect(model.breakdown[1].label == AddressText.short(Self.bob))
         #expect(model.breakdown[0].identiconSeed == Self.alice)
-        // Nothing from the drawing survives.
-        let drawn = drawnConfirm(.sd3b).breakdown.map(\.label)
-        #expect(model.breakdown.allSatisfy { !drawn.contains($0.label) })
+        // Nothing from the drawing survives — its "Alice" is somebody else's
+        // face (a name alone is no payee, spec 097 F).
+        let drawn = drawnConfirm(.sd3b).breakdown
+        #expect(model.breakdown.allSatisfy { row in
+            !drawn.contains { $0.label == row.label && $0.identiconSeed == row.identiconSeed }
+        })
         // "2 recipients", and no blank single "To" row.
         #expect(model.subline.hasPrefix(loc.t("send.recipientCount_other", vars: ["count": "2"])))
         #expect(!model.facts.contains { $0.label == loc.t("send.toLabel") })
@@ -129,7 +139,16 @@ struct SendAssetsParityTests {
         #expect(rows?.count == 1)
         #expect(rows?[0]["address"] as? String == Self.alice)
         #expect(rows?[0]["amount"] as? String == "")
-        #expect(rows?[0]["name"] as? String == "alice.eth")
+        // Only the person's own name seeds a row (spec 097 F): a split row's
+        // name is drawn untagged, as theirs, and "alice.eth" is ENS's.
+        #expect(rows?[0]["name"] is NSNull)
+        let named = ContactWire(
+            address: Self.bob, name: "Bob", resolvedName: "bob.eth", resolvedSource: "ENS",
+            kind: .unknown, favorite: false, note: nil, txCount: 0,
+            lastUsedMs: 0, firstSeenMs: 0, source: .manual
+        )
+        let own = SendLive.groupRecipients(ContactGroupWire(id: "g3", name: "Own", color: nil, members: [named]))
+        #expect(own?[0]["name"] as? String == "Bob")
         #expect(SendLive.groupRecipients(
             ContactGroupWire(id: "g2", name: "Empty", color: nil, members: [])
         ) == nil, "an empty group adds nobody")

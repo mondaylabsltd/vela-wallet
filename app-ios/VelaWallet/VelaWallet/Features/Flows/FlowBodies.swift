@@ -1441,10 +1441,28 @@ struct SendConfirmBody: View {
                             if let seed = item.identiconSeed {
                                 IdenticonAvatar(seed: seed, size: WalletFlowGeometry.inlineMark)
                             }
-                            Text(verbatim: item.label)
-                                .typeRole(Typography.body.scaled(textScale))
-                                .foregroundStyle(theme.fgBase)
-                                .lineLimit(1)
+                            // A named payee over its tag and short address
+                            // (spec 097 F): the name may be cut, those not.
+                            VStack(alignment: .leading, spacing: Tokens.Space.s2) {
+                                if item.mono {
+                                    Text(verbatim: item.label)
+                                        .monoRole(Typography.monoAddressDetail.scaled(textScale))
+                                        .foregroundStyle(theme.fgBase)
+                                        .lineLimit(1)
+                                } else {
+                                    Text(verbatim: item.label)
+                                        .typeRole(Typography.body.scaled(textScale))
+                                        .foregroundStyle(theme.fgBase)
+                                        .lineLimit(1)
+                                }
+                                if let detail = item.detail {
+                                    Text(verbatim: detail)
+                                        .monoRole(Typography.monoAddress.scaled(textScale))
+                                        .foregroundStyle(theme.fgSubtle)
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                }
+                            }
                             Spacer(minLength: Tokens.Space.s8)
                             Text(verbatim: item.value)
                                 .typeRole(Typography.body.scaled(textScale))
@@ -1543,6 +1561,8 @@ private struct ReceiptBreakdownView: View {
             VStack(spacing: Tokens.Space.s0) {
                 ForEach(rows) { row in
                     HStack(spacing: Tokens.Space.s8) {
+                        // A sweep's coins carry their marks (spec 097 F).
+                        if let lead = row.lead { InlineTokenMark(mark: lead) }
                         if let seed = row.identiconSeed {
                             IdenticonAvatar(seed: seed, size: WalletFlowGeometry.inlineMark)
                         }
