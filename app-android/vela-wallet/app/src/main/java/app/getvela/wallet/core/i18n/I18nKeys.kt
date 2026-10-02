@@ -961,6 +961,10 @@ object I18nKeys {
         const val ABOUT_SIGNER_VALUE = "about.techSignerValue"
         const val ABOUT_NETWORKS_LABEL = "about.techNetworksLabel"
         const val ABOUT_NETWORKS_VALUE = "about.techNetworksValue"
+        /** Spec 091: the hidden developer switch, its one line, and the notice when it appears. */
+        const val ABOUT_DEBUG_MODE = "about.debugMode"
+        const val ABOUT_DEBUG_MODE_BODY = "about.debugModeBody"
+        const val ABOUT_DEBUG_MODE_REVEALED = "about.debugModeRevealed"
         const val ABOUT_LINK_WEBSITE = "about.linkWebsite"
         const val ABOUT_LINK_GITHUB = "about.linkGitHub"
         const val ABOUT_LINK_SAFE = "about.linkSafeWallet"

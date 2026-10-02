@@ -73,6 +73,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import app.getvela.wallet.core.data.DebugMode
+import app.getvela.wallet.feature.settings.components.VelaSwitchRow
+import uniffi.vela_core_uniffi.VersionTaps
+import uniffi.vela_core_uniffi.prefsVersionTapped
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -251,7 +256,28 @@ data class SettingsActions(
     val onPageShown: (SettingsPage) -> Unit = {},
     /** Spec 072: a sheet came up (or went: `None`) — the account sheet asks for every account's total. */
     val onOverlayShown: (SettingsOverlay) -> Unit = {},
+    /** Spec 091: seven taps on About's version revealed the debug-mode switch — store it. The notice and the haptic are the screen's. */
+    val onDebugModeRevealed: () -> Unit = {},
+    /** Spec 091: the revealed debug-mode switch, turned. */
+    val onDebugMode: (on: Boolean) -> Unit = {},
 )
+
+/**
+ * About's hidden entry (spec 091): the taps on the version so far, kept while
+ * About is on screen. What a tap means is the core's rule
+ * (`prefsVersionTapped`: seven, each within a second of the one before, and
+ * nothing once the switch is revealed).
+ */
+internal class VersionTapCounter(private val now: () -> Double = { System.currentTimeMillis().toDouble() }) {
+    private var taps = VersionTaps(0u, 0.0)
+
+    /** One tap, with the switch as it stands. `true` exactly when this tap revealed it. */
+    fun tap(mode: DebugMode): Boolean {
+        val answer = prefsVersionTapped(taps, now(), mode.wire)
+        taps = answer.taps
+        return answer.revealed
+    }
+}
 
 @Composable
 fun SettingsRoute(
@@ -285,6 +311,12 @@ fun SettingsRoute(
         if (result == SnackbarResult.ActionPerformed) actions.onOpenLink(notice.url)
         actions.onFeedbackNoticeShown()
     }
+    // Spec 091: About's hidden entry. Revealing says so once — the haptic and
+    // the page's notice — and the switch is the preferences' from then on.
+    val versionTaps = remember(page) { VersionTapCounter() }
+    val tapHaptic = rememberVelaHaptic()
+    val noticeScope = rememberCoroutineScope()
+    val debugMode = model.about.debugMode
     Box(modifier = modifier.fillMaxSize()) {
     SettingsScreen(
         model = model,
@@ -402,6 +434,14 @@ fun SettingsRoute(
         onSignerUrlSave = actions.onSignerUrlSave,
         onSignerUrlReset = actions.onSignerUrlReset,
         onFeedbackOpened = actions.onFeedbackOpened,
+        onVersionTap = {
+            if (versionTaps.tap(debugMode.mode)) {
+                actions.onDebugModeRevealed()
+                tapHaptic(VelaHaptic.Success)
+                noticeScope.launch { noticeHost.showSnackbar(debugMode.revealedNotice) }
+            }
+        },
+        onDebugMode = actions.onDebugMode,
     )
     // Above the tab bar and the system navigation bar — never under them
     // (device pass: at the largest size the notice sat half behind both).
@@ -418,35 +458,44 @@ fun SettingsRoute(
 
 /**
  * The page's notice: a dark pill with the answer and its one action — the
- * app's toast shape, with room for the way onward.
+ * app's toast shape, with room for the way onward. A notice with nothing to
+ * do next (spec 091: "debug mode is now available") is the message alone.
  */
 @Composable
 private fun FeedbackNoticeBar(data: SnackbarData) {
     val colors = VelaTheme.colors
+    val pill = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(VelaRadius.lg))
+        .background(colors.fgBase)
+        .padding(start = VelaSpacing.lg, top = VelaSpacing.sm, bottom = VelaSpacing.sm, end = VelaSpacing.sm)
+    val message: @Composable () -> Unit = {
+        Text(
+            text = data.visuals.message,
+            color = colors.bgBase,
+            fontFamily = VelaFontFamily,
+            fontSize = VelaTextSize.base,
+            modifier = Modifier.padding(vertical = VelaSpacing.sm),
+        )
+    }
+    // `VelaLabelBesideValue` needs both parts: with no action it has no value
+    // to measure (the app died on the first action-less notice).
+    val action = data.visuals.actionLabel
+    if (action == null) {
+        Box(modifier = pill) { message() }
+        return
+    }
     // The message whole and the action beside it when both fit; otherwise the
     // action takes its own line under the message (never a word broken to
     // make room — the largest size wrapped "发送" alone onto a second line).
     VelaLabelBesideValue(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(VelaRadius.lg))
-            .background(colors.fgBase)
-            .padding(start = VelaSpacing.lg, top = VelaSpacing.sm, bottom = VelaSpacing.sm, end = VelaSpacing.sm),
+        modifier = pill,
         gap = VelaSpacing.md,
         rowGap = 0.dp,
-        label = {
-            Text(
-                text = data.visuals.message,
-                color = colors.bgBase,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-                modifier = Modifier.padding(vertical = VelaSpacing.sm),
-            )
-        },
+        label = message,
         value = {
-          data.visuals.actionLabel?.let { label ->
             Text(
-                text = label,
+                text = action,
                 color = colors.bgBase,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.semibold,
@@ -458,7 +507,6 @@ private fun FeedbackNoticeBar(data: SnackbarData) {
                     .wrapContentHeight(Alignment.CenterVertically)
                     .padding(horizontal = VelaSpacing.md),
             )
-          }
         },
     )
 }
@@ -516,6 +564,10 @@ fun SettingsScreen(
     onRpcFixPrimary: () -> Unit = {},
     onSignerUrlSave: (String) -> Unit = {},
     onSignerUrlReset: () -> Unit = {},
+    /** Spec 091: a tap on About's version — the hidden entry. */
+    onVersionTap: () -> Unit = {},
+    /** Spec 091: About's debug-mode switch, turned. */
+    onDebugMode: (Boolean) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -610,6 +662,8 @@ fun SettingsScreen(
                             onRecheckNetwork = onRecheckNetwork,
                             onProviderTest = onProviderTest,
                             onAddNetwork = { onRow("add-network") },
+                            onVersionTap = onVersionTap,
+                            onDebugMode = onDebugMode,
                         )
                     }
                 }
@@ -843,6 +897,8 @@ private fun SettingsPageBody(
     onRecheckNetwork: () -> Unit = {},
     onProviderTest: (String) -> Unit = {},
     onAddNetwork: () -> Unit = {},
+    onVersionTap: () -> Unit = {},
+    onDebugMode: (Boolean) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     when (page) {
@@ -1164,6 +1220,13 @@ private fun SettingsPageBody(
                     color = colors.fgSubtle,
                     fontFamily = VelaMonoFontFamily,
                     fontSize = VelaTextSize.base,
+                    // Spec 091: the hidden entry — seven quick taps reveal debug
+                    // mode. Nothing marks it as a control: no ripple.
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onVersionTap,
+                    ),
                 )
             }
             Text(
@@ -1174,6 +1237,17 @@ private fun SettingsPageBody(
                 modifier = Modifier.padding(bottom = VelaSpacing.md),
             )
             model.about.rows.forEach { VelaKeyValueRow(it) }
+            // Spec 091: once revealed, the switch stays here — so it can be
+            // turned off again.
+            val debugMode = model.about.debugMode
+            if (debugMode.mode.revealed) {
+                VelaSwitchRow(
+                    title = debugMode.title,
+                    body = debugMode.body,
+                    checked = debugMode.mode.on,
+                    onCheckedChange = onDebugMode,
+                )
+            }
             Spacer(modifier = Modifier.height(VelaSpacing.xl3))
             model.about.links.forEach { VelaKeyValueRow(it, modifier = Modifier.clickable { onOpenLink(it.value) }) }
             Text(

@@ -687,6 +687,20 @@ class SettingsLiveTest {
         }
     }
 
+    /** Spec 091: About's switch is the preferences' — not drawn until revealed, then off or on as stored. */
+    @Test
+    fun `about's debug-mode switch follows the preferences`() {
+        assertEquals(app.getvela.wallet.core.data.DebugMode.Hidden, base().about.debugMode.mode)
+        for (mode in app.getvela.wallet.core.data.DebugMode.entries) {
+            val live = SettingsLive.withPreferences(base(), PrefsView(debugMode = mode, loaded = true), "en", strings, theme = "auto")
+            assertEquals(mode, live.about.debugMode.mode)
+        }
+        val about = base().about.debugMode
+        assertEquals(strings.t(I18nKeys.SettingsUi.ABOUT_DEBUG_MODE), about.title)
+        assertEquals(strings.t(I18nKeys.SettingsUi.ABOUT_DEBUG_MODE_BODY), about.body)
+        assertEquals(strings.t(I18nKeys.SettingsUi.ABOUT_DEBUG_MODE_REVEALED), about.revealedNotice)
+    }
+
     /**
      * SR2 is THIS chain's fix: the fixture drew Polygon whichever chain the
      * home named. Save & Retry until the saved URL's probe says ok; only then

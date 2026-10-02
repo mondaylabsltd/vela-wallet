@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import app.getvela.wallet.core.data.DebugMode
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
@@ -29,7 +30,9 @@ import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.core.i18n.LocalVelaStrings
+import app.getvela.wallet.feature.settings.SettingsActions
 import app.getvela.wallet.feature.settings.SettingsFixtures
+import app.getvela.wallet.feature.settings.SettingsLive
 import app.getvela.wallet.feature.settings.SettingsRoute
 import app.getvela.wallet.feature.settings.SettingsScreenState
 
@@ -80,10 +83,22 @@ fun SettingsGalleryScreen(
             }
 
             Box(modifier = Modifier.fillMaxSize()) {
-                val model = remember(state, strings) {
-                    SettingsFixtures.buildState(state, strings)
+                // Spec 091: About's hidden switch works here — seven taps on
+                // ST14's version reveal it, and it turns — so every look of it
+                // can be seen without a wallet. `null` is the fixture's own.
+                var debugMode by rememberSaveable(state) { mutableStateOf<DebugMode?>(null) }
+                val model = remember(state, strings, debugMode) {
+                    SettingsFixtures.buildState(state, strings).let { built ->
+                        debugMode?.let { SettingsLive.withDebugMode(built, it) } ?: built
+                    }
                 }
-                SettingsRoute(model = model)
+                SettingsRoute(
+                    model = model,
+                    actions = SettingsActions(
+                        onDebugModeRevealed = { debugMode = DebugMode.Off },
+                        onDebugMode = { on -> debugMode = if (on) DebugMode.On else DebugMode.Off },
+                    ),
+                )
             }
         }
     }
