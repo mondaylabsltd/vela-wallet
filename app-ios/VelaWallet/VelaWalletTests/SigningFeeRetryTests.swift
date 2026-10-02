@@ -19,6 +19,7 @@
 //
 
 import Foundation
+import os
 import SwiftUI
 import Testing
 import VelaCore
@@ -270,7 +271,6 @@ struct SigningFeeRetryTests {
             ports: SigningController.Ports(knownChains: { [100] }),
             firstDeploymentReadMs: 300
         )
-        let opened = Date()
         controller.open(SigningController.Incoming(
             id: "r1", method: "eth_sendTransaction",
             paramsJson: #"[{"to":"0x76875e38fc6bc2dedcaed807ce00782db5c0d141","value":"0x1"}]"#,
@@ -279,9 +279,11 @@ struct SigningFeeRetryTests {
         let unreachable = FeeFailureText.chainRead(rateLimited: false).text
         await Wait.until { controller.quoteStartFailure == unreachable }
         #expect(controller.quoteStartFailure == unreachable)
-        // The silent port holds eth_getCode 120 s: well under that is the
-        // bound at work (a loaded parallel run took 5.1 s for a 0.3 s bound).
-        #expect(Date().timeIntervalSince(opened) < 30, "said within the bound, not after the pool gave up")
+        // Proved by order, never by a stopwatch (a loaded CI runner took
+        // 34.6 s for a 0.3 s bound, #398): the failure is said while every
+        // deployment read is still held open — none ran its 120 s, so it is
+        // the bound speaking, not the pool giving up.
+        #expect(port.codeReadsThatRanOut == 0, "said within the bound, not after the pool gave up")
         #expect(SigningController.firstDeploymentReadMs == 15_000)
         controller.swipeDismissed()
     }
@@ -324,9 +326,15 @@ struct SigningFeeRetryTests {
 @MainActor
 final class SilentCodePort: RelayPort {
     let inner = ScriptedRelayPort()
+    /// `eth_getCode` reads that ran their whole 120 s — the pool giving up,
+    /// not the bound (a bound cancels the read, ending its sleep early).
+    private let ranOut = OSAllocatedUnfairLock(initialState: 0)
+    var codeReadsThatRanOut: Int { ranOut.withLock { $0 } }
     func call(chainId: Int, method: String, params: [Any], kind: String) async -> RpcOutcome {
         if method == "eth_getCode" {
-            try? await Task.sleep(nanoseconds: 120_000_000_000)
+            if (try? await Task.sleep(nanoseconds: 120_000_000_000)) != nil {
+                ranOut.withLock { $0 += 1 }
+            }
             return .failed(rateLimited: false)
         }
         return await inner.call(chainId: chainId, method: method, params: params, kind: kind)
