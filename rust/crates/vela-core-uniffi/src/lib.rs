@@ -1006,6 +1006,15 @@ pub fn i18n_plural_suffixes(locale: String) -> Vec<String> {
     vela_core::i18n::plural_suffixes(&locale)
 }
 
+/// What "follow the system" resolves to: the first of the platform's
+/// preferred languages (most preferred first; BCP-47 or POSIX) a shipped
+/// locale serves, else `en` (spec 095 — the rule iOS and Android each kept a
+/// copy of).
+#[uniffi::export]
+pub fn i18n_system_language(preferred: Vec<String>) -> String {
+    vela_core::i18n::system_language(&preferred).to_owned()
+}
+
 /// The Apple localization codes for the shipped locales, in their order
 /// (spec 095) — what the iPhone app's `CFBundleLocalizations` must list.
 #[uniffi::export]

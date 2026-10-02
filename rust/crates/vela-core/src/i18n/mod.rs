@@ -21,7 +21,10 @@ pub use plural::{
     plural_suffix_legacy, plural_suffixes, plural_suffixes_legacy,
 };
 pub use plural::{Category, PluralMode};
-pub use resolve::{apple_localizations, resolve_language, Dir, LanguageState, SUPPORTED};
+pub use resolve::{
+    apple_localizations, match_system_tag, resolve_language, system_language, Dir, LanguageState,
+    SUPPORTED,
+};
 
 /// Canonicalise a BCP-47 tag the way i18next's `formatLanguageCode` does — which
 /// only rewrites codes containing `-`, so bare `ZH` is returned unchanged.

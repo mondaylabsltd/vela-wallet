@@ -95,6 +95,77 @@ pub fn apple_localizations() -> Vec<&'static str> {
         .collect()
 }
 
+/// The shipped locale ONE of the platform's preferred-language tags asks for,
+/// or `None` when nothing ships for it — the rule every client applies to
+/// what the system says (spec 095; it was three copies: iOS
+/// `Loc.mapPreferredLanguage`, Android `LocaleResolver`, the web's `matchTag`).
+///
+/// Takes BCP-47 (`zh-Hant-HK`, Apple and Android) and POSIX (`zh_TW.UTF-8`,
+/// `LANG`) alike. Chinese goes by script first, then region: `Hant` is
+/// traditional (Hong Kong and Macau → `zh-HK`, else `zh-TW`), an explicit
+/// `Hans` is simplified, and an unmarked tag is traditional only for TW, HK
+/// or MO. One Spanish and one Portuguese ship, so any `es` is `es-MX` and any
+/// `pt` is `pt-BR`. `in` is Indonesian's legacy code. Otherwise
+/// language-region if it ships, then the language alone.
+#[must_use]
+pub fn match_system_tag(tag: &str) -> Option<&'static str> {
+    let cleaned = tag
+        .split(['.', '@'])
+        .next()
+        .unwrap_or(tag)
+        .replace('_', "-");
+    let subtags: Vec<String> = cleaned
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect();
+    let first = subtags.first()?;
+    let code = if first == "in" { "id" } else { first.as_str() };
+    let script = subtags[1..]
+        .iter()
+        .find(|part| part.len() == 4)
+        .map(String::as_str);
+    let region = subtags[1..]
+        .iter()
+        .find(|part| {
+            part.len() == 2 || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))
+        })
+        .map(|part| part.to_ascii_uppercase());
+    let region = region.as_deref();
+    match code {
+        "zh" => {
+            let traditional = script == Some("hant")
+                || (script.is_none() && matches!(region, Some("TW" | "HK" | "MO")));
+            Some(if !traditional {
+                "zh"
+            } else if matches!(region, Some("HK" | "MO")) {
+                "zh-HK"
+            } else {
+                "zh-TW"
+            })
+        }
+        "es" => Some("es-MX"),
+        "pt" => Some("pt-BR"),
+        _ => region
+            .and_then(|region| {
+                let regional = format!("{code}-{region}");
+                SUPPORTED.iter().copied().find(|s| *s == regional)
+            })
+            .or_else(|| SUPPORTED.iter().copied().find(|s| *s == code)),
+    }
+}
+
+/// What "follow the system" means: the first of the person's preferred
+/// languages, most preferred first, that a shipped locale serves — else
+/// `en`. A person whose first language Vela does not speak gets their second.
+#[must_use]
+pub fn system_language<S: AsRef<str>>(preferred: &[S]) -> &'static str {
+    preferred
+        .iter()
+        .find_map(|tag| match_system_tag(tag.as_ref()))
+        .unwrap_or(FALLBACK)
+}
+
 /// Text direction of a locale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dir {
@@ -534,6 +605,67 @@ fn ordinal_category(locale: &str, count: f64) -> super::plural::Category {
             }
         }
         _ => Category::Other,
+    }
+}
+
+#[cfg(test)]
+mod system_language_tests {
+    use super::{match_system_tag, system_language, SUPPORTED};
+
+    /// The fixtures the iOS and Android shells pinned for their own copies of
+    /// this rule (iOS `LocaleMappingTests`, Android `LocaleResolverTest`),
+    /// now held by the one copy.
+    #[test]
+    fn a_platform_tag_finds_its_shipped_locale() {
+        for (tag, want) in [
+            ("zh", "zh"),
+            ("zh-CN", "zh"),
+            ("zh-Hans-CN", "zh"),
+            ("zh-Hans", "zh"),
+            ("zh-Hans-HK", "zh"),
+            ("zh-Hant", "zh-TW"),
+            ("zh-TW", "zh-TW"),
+            ("zh-Hant-TW", "zh-TW"),
+            ("zh-HK", "zh-HK"),
+            ("zh-Hant-HK", "zh-HK"),
+            ("zh-Hant-MO", "zh-HK"),
+            ("zh-MO", "zh-HK"),
+            ("zh_TW.UTF-8", "zh-TW"),
+            ("es", "es-MX"),
+            ("es-AR", "es-MX"),
+            ("es-419", "es-MX"),
+            ("es-MX", "es-MX"),
+            ("pt", "pt-BR"),
+            ("pt-PT", "pt-BR"),
+            ("pt-BR", "pt-BR"),
+            ("pt_BR.UTF-8", "pt-BR"),
+            ("in", "id"),
+            ("id", "id"),
+            ("id-ID", "id"),
+            ("fr-CA", "fr"),
+            ("de-DE", "de"),
+            ("en-GB", "en"),
+            ("en_US.UTF-8", "en"),
+            ("ru-RU", "ru"),
+            ("ja-JP", "ja"),
+        ] {
+            assert_eq!(match_system_tag(tag), Some(want), "{tag}");
+        }
+        for tag in ["ar", "hi-IN", "th", "C", "POSIX", "", "-"] {
+            assert_eq!(match_system_tag(tag), None, "{tag}");
+        }
+        for tag in SUPPORTED {
+            assert_eq!(match_system_tag(tag), Some(tag), "a shipped tag is itself");
+        }
+    }
+
+    /// The list is walked in the person's order; nothing served is `en`.
+    #[test]
+    fn the_first_served_preference_wins() {
+        assert_eq!(system_language(&["zh-Hans-CN", "en-CN"]), "zh");
+        assert_eq!(system_language(&["ar-SA", "fr-CA", "de"]), "fr");
+        assert_eq!(system_language(&["th", "hi"]), "en");
+        assert_eq!(system_language::<&str>(&[]), "en");
     }
 }
 

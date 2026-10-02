@@ -142,10 +142,8 @@ per-app Language row (Settings → Vela), which feeds `Locale.preferredLanguages
 Formats: iOS `.auto` number format reads `Locale.current`'s separators, which
 follow the region, not the bundle language.
 
-Observation, not changed: on macOS a Finder/Dock launch sets no `LANG`, so the
-desktop's "follow the system" resolves to English unless a language is picked
-in Settings — worth a follow-up (read `NSLocale.preferredLanguages` there, as
-iOS does).
+Observation from this round, fixed in round 3: on macOS a Finder/Dock launch
+sets no `LANG`, so the desktop's "follow the system" resolved to English.
 
 Suites after round 2: desktop 889 passed (0 failed, 49 ignored; fmt, clippy
 clean); core 2320 passed, clippy `-D warnings` and fmt clean; web 2413 passed,
@@ -154,4 +152,34 @@ passed, full `VelaWalletTests` 1107 in 143 suites passed; Android 917 tests,
 0 failures; reachability / event-payloads / dead-controls pass; i18n gates,
 `build-web --check`, `gen-onboarding-types --check` pass. ja + en unchanged
 at 135,626 (no new strings).
+
+## Round 3 — the desktop follows the Mac's languages (lead, 2026-10-02)
+
+- The rule that maps a platform's preferred-language tag to a shipped locale
+  was a shell rule in three copies (iOS `Loc.mapPreferredLanguage`, Android
+  `LocaleResolver`, web `matchTag`). It is now the core's
+  `vela_core::i18n::match_system_tag` + `system_language` (walk the person's
+  list in order, first served wins, else `en`), exported as
+  `i18n_system_language`. iOS and Android call it; their own fixture tables
+  (unchanged) now test the core through each shell. iOS behaviour change: it
+  read only the first preferred language and now walks the list, as Android
+  and the web already did.
+- Desktop: `loc::system_language()` = developer pin → on macOS
+  `CFLocaleCopyPreferredLanguages` through the core rule → the environment
+  chain (`LC_ALL`/`LC_MESSAGES`/`LANG`) resolved by the engine, as before, on
+  Windows and Linux or when the list is empty. The Settings language row's
+  "System (…)" label reads the same function. `system_tag()` (formats and the
+  display currency's region) is unchanged.
+- Not moved: the web's `matchTag` (`app-web/vela-wallet/src/lib/i18n/locales.ts`,
+  Accept-Language negotiation on the server). It differs in one edge: an
+  explicit `zh-Hans-HK` is `zh-HK` there and `zh` in the core. Moving it means
+  a wasm export and the extension's JS mirror — a follow-up.
+
+Suites after round 3: desktop 892 passed (0 failed, 49 ignored; fmt, clippy
+clean); core 2322 passed, clippy `-D warnings` and fmt clean; web 2413
+passed, 5 skipped; iOS `LocaleMappingTests` 3 passed, full `VelaWalletTests`
+1108 in 143 suites passed; Android 917 tests, 0 failures (a first run under
+full machine load timed out once in `SendRefusalsTest`, unrelated to this
+change; the rerun alone passed); reachability / event-payloads /
+dead-controls pass; `build-web --check`, `gen-onboarding-types --check` pass.
 

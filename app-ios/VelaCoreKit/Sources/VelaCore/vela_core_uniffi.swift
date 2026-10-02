@@ -13591,6 +13591,20 @@ public func i18nPluralSuffixesLegacy() -> [String]  {
     )
 })
 }
+/**
+ * What "follow the system" resolves to: the first of the platform's
+ * preferred languages (most preferred first; BCP-47 or POSIX) a shipped
+ * locale serves, else `en` (spec 095 — the rule iOS and Android each kept a
+ * copy of).
+ */
+public func i18nSystemLanguage(preferred: [String]) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_i18n_system_language(
+        FfiConverterSequenceString.lower(preferred),uniffiCallStatus
+    )
+})
+}
 public func i18nTextDirection(lng: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -15501,6 +15515,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_plural_suffixes_legacy() != 20218) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_i18n_system_language() != 43465) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_text_direction() != 33468) {

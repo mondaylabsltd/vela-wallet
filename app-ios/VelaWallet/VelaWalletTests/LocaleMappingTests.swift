@@ -2,7 +2,7 @@
 //  LocaleMappingTests.swift
 //  VelaWalletTests
 //
-//  D6 fixtures — semantics of src/i18n/shared.ts#detectSystemLanguage.
+//  D6 fixtures — now the core's `system_language` (spec 095), through the shell.
 //
 
 import Foundation
@@ -31,6 +31,16 @@ struct LocaleMappingTests {
     func mapsPreferredLanguage(fixture: (String, String)) {
         #expect(Loc.mapPreferredLanguage(fixture.0) == fixture.1,
                 "\(fixture.0) should map to \(fixture.1)")
+    }
+
+    /// Spec 095: "follow the system" walks the person's whole list through
+    /// the core's rule — a first language Vela does not speak gives way to
+    /// the second.
+    @Test func theWholePreferredListIsWalked() {
+        #expect(Loc.systemLanguage(["ar-SA", "ja-JP"]) == "ja")
+        #expect(Loc.systemLanguage(["zh-Hant-HK", "en-US"]) == "zh-HK")
+        #expect(Loc.systemLanguage(["th", "hi"]) == "en")
+        #expect(Loc.systemLanguage([]) == "en")
     }
 
     /// Spec 095: the app declares exactly the corpus's locales, as the core

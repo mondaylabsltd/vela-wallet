@@ -5,7 +5,7 @@ import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Research D4 ladder, table-tested (mirror of resolve.rs semantics). */
+/** Research D4 ladder, table-tested — the core's `system_language` (spec 095) through the shell. */
 class LocaleResolverTest {
 
     private fun resolve(vararg tags: String): String =

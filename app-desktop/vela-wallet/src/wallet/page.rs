@@ -10012,7 +10012,7 @@ impl WalletPage {
         let prefs = crate::executor::preferences::current();
         let pinned = crate::executor::preferences::pinned_language();
         // What "follow the system" follows, by the locale it resolves to.
-        let system_language = vela_core::i18n::resolve_language(&crate::loc::system_tag()).language;
+        let system_language = crate::loc::system_language();
         let page = cx.entity();
 
         let language_value = settings_live::language_value(pinned.as_deref(), &system_language, s);
