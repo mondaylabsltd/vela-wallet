@@ -62,6 +62,68 @@ final class ParallelSpaceDeviceTests: XCTestCase {
         app.terminate()
     }
 
+    // MARK: - The send form's keypad (087 F28)
+
+    /// On an iPhone 11 the amount's decimal pad could not be put away — no
+    /// Done key, and neither a tap outside nor a drag of the form did
+    /// anything — and it sat over 继续 until the form was scrolled by hand.
+    /// Nothing here spends; the form is filled in and left.
+    func testTheSendKeypadCanBePutAway() throws {
+        let app = launch()
+        XCTAssertTrue(app.buttons["收款"].waitForExistence(timeout: 40), "the wallet never opened")
+        settle(4)
+        app.buttons["转账"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["xDAI"].waitForExistence(timeout: 40), "the picker never listed xDAI")
+        app.staticTexts["xDAI"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["收款人"].waitForExistence(timeout: 20), "the form never opened")
+        settle(2)
+        attach(app.screenshot(), named: "f28-1-form")
+
+        let amount = app.textFields["send.amount"]
+        let keyboard = app.keyboards.firstMatch
+        let cta = app.buttons["继续"].firstMatch
+
+        // The keypad up: 继续 is above it, not under it.
+        amount.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5), "the amount field raised no keypad")
+        amount.typeText("0.01")
+        settle(1)
+        attach(XCUIScreen.main.screenshot(), named: "f28-2-keypad-up")
+        XCTAssertLessThanOrEqual(cta.frame.maxY, keyboard.frame.minY + 1,
+                                 "继续 is under the keypad")
+
+        // 完成 on the keypad puts it away.
+        let done = app.buttons["keyboard.done"].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 3), "the keypad has no 完成")
+        XCTAssertEqual(done.label, "完成")
+        done.tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3), "完成 left the keypad up")
+
+        // A drag of the form puts it away.
+        amount.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        app.scrollViews.firstMatch.swipeDown()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3), "dragging the form left the keypad up")
+
+        // A tap on the form, away from every control, puts it away.
+        amount.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        app.staticTexts["收款人"].firstMatch.tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3), "a tap outside the field left the keypad up")
+
+        // The recipient's keyboard goes with its own return key.
+        let recipient = app.textFields["send.recipient"]
+        recipient.tap()
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5), "the recipient field raised no keyboard")
+        attach(XCUIScreen.main.screenshot(), named: "f28-3-recipient-keyboard")
+        // The return key, in whatever language the keyboard is in ("done" on
+        // the simulator's English one).
+        app.keyboards.buttons.matching(NSPredicate(format: "label ==[c] 'done' OR label == '完成'")).firstMatch.tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 3), "the recipient's return key left the keyboard up")
+        attach(app.screenshot(), named: "f28-4-put-away")
+        app.terminate()
+    }
+
     /// 探索 — a real dApp, loaded, in the app's own browser.
     ///
     /// Uniswap is the founder's own test case. What this asserts is that the

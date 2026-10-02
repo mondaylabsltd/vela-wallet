@@ -37,21 +37,25 @@ struct ActivityRowView: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: Tokens.Space.s12)
-            // Inline when it fits (H1 −2 POL); otherwise the unit drops to a
-            // second line (mock H7 −0.0000001 / BNB).
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s4) {
-                    amountText.lineLimit(1)
-                    unitText.lineLimit(1)
+            // 087 F11: a dApp call that moved no coin of ours has no figure,
+            // and draws no amount cell — never an empty one.
+            if !model.amount.isEmpty || !model.unit.isEmpty {
+                // Inline when it fits (H1 −2 POL); otherwise the unit drops to
+                // a second line (mock H7 −0.0000001 / BNB).
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: Tokens.Space.s4) {
+                        amountText.lineLimit(1)
+                        unitText.lineLimit(1)
+                    }
+                    VStack(alignment: .trailing, spacing: Tokens.Space.s2) {
+                        amountText
+                            .lineLimit(1)
+                            .minimumScaleFactor(WalletGeometry.heroMinScale)
+                        unitText.lineLimit(1)
+                    }
                 }
-                VStack(alignment: .trailing, spacing: Tokens.Space.s2) {
-                    amountText
-                        .lineLimit(1)
-                        .minimumScaleFactor(WalletGeometry.heroMinScale)
-                    unitText.lineLimit(1)
-                }
+                .layoutPriority(1)
             }
-            .layoutPriority(1)
         }
         .frame(minHeight: WalletGeometry.rowMinHeight)
     }

@@ -99,14 +99,14 @@ struct SignInMethodSheet: View {
                 // All three routes are live now: platform, scan (our caBLE
                 // initiator, BLE-only capable), and a security key.
                 let available = true
-                let copy = methodCopy(method)
+                let copy = methodCopy(method, chooser: .signIn, loc: loc)
                 Button { if available { onPick(method) } } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: Tokens.Space.s2) {
-                            Text(loc.t(copy.title))
+                            Text(copy.title)
                                 .typeRole(Typography.rowTitle)
                                 .foregroundStyle(theme.fgBase)
-                            Text(loc.t(available ? copy.body : I18nKeys.Create.methodHybridUnavailable))
+                            Text(available ? copy.body : loc.t(I18nKeys.Create.methodHybridUnavailable))
                                 .typeRole(Typography.flowCaption)
                                 .foregroundStyle(theme.fgMuted)
                                 .multilineTextAlignment(.leading)

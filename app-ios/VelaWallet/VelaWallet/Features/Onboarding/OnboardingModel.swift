@@ -68,6 +68,8 @@ final class OnboardingModel {
     private(set) var usbTouch: UsbTouch?
     /// The caBLE QR to show (the OTHER phone scans it), or nil when none is up.
     private(set) var cableQr: String?
+    /// Whether that QR's phone is to create a key, or to find one (087 F02).
+    private(set) var cableQrCreates = false
 
     // MARK: - The one onboarding bottom sheet
 
@@ -171,7 +173,10 @@ final class OnboardingModel {
     fileprivate func presentPin(_ pin: PendingPin) { pendingPin = pin }
     fileprivate func presentWalletPick(_ pick: PendingWalletPick) { pendingWalletPick = pick }
     fileprivate func presentTouch(_ touch: UsbTouch?) { usbTouch = touch }
-    fileprivate func presentQr(_ payload: String?) { cableQr = payload }
+    fileprivate func presentQr(_ payload: String?, creates: Bool) {
+        cableQr = payload
+        cableQrCreates = creates
+    }
 
     /// Spec 075: the fourth passkey route. Set by the host once the sign_pref
     /// store exists (it names the page and the relay); `nil` in previews and
@@ -205,7 +210,7 @@ final class OnboardingModel {
         // prompt reads "look at your phone"), plus the QR the other phone scans.
         passkey.hybrid = HybridCeremony(
             prompts: UsbPromptsBridge(model: self),
-            showQr: { [weak self] payload in self?.presentQr(payload) }
+            showQr: { [weak self] payload, creates in self?.presentQr(payload, creates: creates) }
         )
         // The stored override, applied before any machine can ask a question:
         // a flow that started against the default and then switched mid-way

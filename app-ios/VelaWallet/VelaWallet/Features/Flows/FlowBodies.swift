@@ -10,6 +10,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - Receive
 
@@ -606,6 +607,15 @@ struct SendPickBody: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
+            // Whom this is for, above what to send (issue #332): a scanned code
+            // or a contact lands here, and the person confirms the payee while
+            // choosing.
+            if let recipient = model.recipient {
+                VStack(spacing: Tokens.Space.s0) {
+                    FactRowView(fact: recipient)
+                    FlowDivider()
+                }
+            }
             FlowSearchField(placeholder: model.searchPlaceholder, text: $query)
             FlowFilterChips(options: model.filters, onSelect: onFilter)
             if let notice = model.notice {
@@ -629,6 +639,15 @@ struct SendPickBody: View {
                     .buttonStyle(.plain)
                     .disabled(dimmed)
                 }
+            }
+            // A list with nothing in it says so rather than showing a blank panel.
+            if shown.isEmpty, let empty = model.empty {
+                Text(verbatim: empty)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.fgMuted)
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .padding(.vertical, Tokens.Space.s12)
             }
             if let selection = model.selection {
                 Button { onSelectAll(shown.map(\.offset)) } label: {
@@ -668,6 +687,9 @@ struct SendFormBody: View {
     var onFee: () -> Void = {}
     var onDenom: () -> Void = {}
     var onMax: (Int) -> Void = { _ in }
+    /// Issue #326: the token card — back to the asset picker. Absent in the
+    /// gallery, where the card is a picture.
+    var onChangeToken: (() -> Void)?
     var onAddRecipient: () -> Void = {}
     var onContinue: () -> Void = {}
     /// The two live fields. Absent everywhere the form is a picture.
@@ -690,7 +712,7 @@ struct SendFormBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
             if let token = model.token {
-                TokenHeaderCardView(token: token, onMax: { onMax(0) })
+                TokenHeaderCardView(token: token, onMax: { onMax(0) }, onChange: onChangeToken)
             }
             if let summary = model.sweepSummary {
                 Text(verbatim: summary)
@@ -810,6 +832,35 @@ struct SendFormBody: View {
                 .disabled(ctaDisabled)
                 .opacity(ctaDisabled ? Tokens.Opacity.disabled : 1)
                 .padding(.top, Tokens.Space.s4)
+                .id(Self.continueId)
+        }
+        // A split's rows are typed into one by one, top to bottom, and pulling
+        // the page down to its button would hide the row being typed.
+        .modifier(KeepsInViewAboveKeyboard(target: Self.continueId, enabled: model.mode != .split))
+    }
+
+    /// 继续, as the page scrolls to it.
+    static let continueId = "send.form.continue"
+}
+
+/// The keyboard came up: scroll `target` to just above it (087 F28).
+///
+/// On an iPhone 11 the amount's decimal pad sat over 继续 until the form was
+/// scrolled by hand. The page already makes room for the keyboard; this uses
+/// it, once per showing, so the button the person is filling the form in for
+/// is in sight while they type.
+struct KeepsInViewAboveKeyboard: ViewModifier {
+    let target: String
+    var enabled = true
+
+    func body(content: Content) -> some View {
+        ScrollViewReader { proxy in
+            content.onReceive(
+                NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)
+            ) { _ in
+                guard enabled else { return }
+                withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(target, anchor: .bottom) }
+            }
         }
     }
 }

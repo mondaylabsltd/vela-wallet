@@ -38,6 +38,8 @@
 		/** The ⇄ swap — the core's `toggle_fiat_input` (issue 197). */
 		ondenom?: () => void;
 		onmax?: (index: number) => void;
+		/** The token card: back to the asset picker — the core's `change_token`. */
+		onchangeToken?: () => void;
 		onaddRecipient?: () => void;
 		/**
 		 * The split rows, typed into (spec 028 Phase 10): a patch to one row,
@@ -77,6 +79,7 @@
 		onspeedpick,
 		ondenom,
 		onmax,
+		onchangeToken,
 		onaddRecipient,
 		onrecipientRow,
 		onpickRecipientRow,
@@ -94,7 +97,7 @@
 
 <div class="form">
 	{#if model.token !== undefined}
-		<TokenHeaderCard token={model.token} onmax={() => onmax?.(0)} />
+		<TokenHeaderCard token={model.token} onmax={() => onmax?.(0)} onchange={onchangeToken} />
 	{/if}
 
 	{#if model.sweepSummary !== undefined}

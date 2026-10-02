@@ -6,8 +6,9 @@ import app.getvela.wallet.feature.documents.DocumentPorts
 /**
  * The `batch_import` machine's three shell duties (spec 045 D3): the fiat
  * rate through the wallet's own waterfall (never a defaulted 1 — the core
- * refuses to price on `null`), the document picker (CSV/TXT as text, XLSX as
- * a cell matrix), and the document creator for the template.
+ * refuses to price on `null`), the document picker (CSV/TXT as their bytes,
+ * which the core decodes; XLSX as a cell matrix), and the document creator
+ * for the template.
  */
 class BatchExecutor(
     private val fiatRate: suspend (String) -> Double?,
@@ -28,7 +29,7 @@ class BatchExecutor(
                 val content = if (picked.name.lowercase().endsWith(".xlsx")) {
                     BatchFileContent.Matrix(XlsxMatrix.read(picked.bytes))
                 } else {
-                    BatchFileContent.Text(picked.bytes.decodeToString())
+                    BatchFileContent.Bytes.of(picked.bytes)
                 }
                 BatchShellResult.FilePicked(picked.name, content)
             }
