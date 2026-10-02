@@ -1042,6 +1042,9 @@
   "linkWebsite": "Site",
   "linkGitHub": "GitHub",
   "linkSafeWallet": "Safe Wallet",
+  "linkPrivacy": "Política de Privacidade",
+  "linkTerms": "Termos de Serviço",
+  "linkSupport": "Suporte",
   "footer": "Feito com cuidado. Suas chaves, suas moedas.",
   "sectionLinks": "Links",
   "debugMode": "Modo de depuração",
@@ -1609,6 +1612,25 @@
   },
   "qrPlaceholder": {
    "caption": "Espaço reservado de demonstração · não escaneável"
+  },
+  "appMenu": {
+   "about": "Sobre o Vela Wallet",
+   "hide": "Ocultar Vela Wallet",
+   "hideOthers": "Ocultar Outros",
+   "showAll": "Mostrar Tudo",
+   "quit": "Encerrar Vela Wallet",
+   "edit": "Editar",
+   "undo": "Desfazer",
+   "redo": "Refazer",
+   "cut": "Recortar",
+   "copy": "Copiar",
+   "paste": "Colar",
+   "selectAll": "Selecionar Tudo",
+   "view": "Visualizar",
+   "fullScreen": "Alternar Tela Cheia",
+   "window": "Janela",
+   "minimize": "Minimizar",
+   "closeWindow": "Fechar Janela"
   }
  },
  "settingsModals": {

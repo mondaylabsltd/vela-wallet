@@ -553,7 +553,7 @@ struct FeedbackSheetBody: View {
         }
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
-            let loaders: [() async -> Data?] = items.map { item in
+            let loaders: [FeedbackSender.Loader] = items.map { item in
                 { try? await item.loadTransferable(type: Data.self) }
             }
             picked = []

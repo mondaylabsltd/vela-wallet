@@ -17,7 +17,7 @@ import VelaCore
 
 struct RegistryResolver: Sendable {
     /// The RAW `result` hex, or `nil` when that chain did not answer.
-    let ethCall: @Sendable (_ chainId: Int, _ to: String, _ data: String) async -> String?
+    let ethCall: @concurrent @Sendable (_ chainId: Int, _ to: String, _ data: String) async -> String?
 
     /// The core's walks. Replaceable only so a test can script them.
     var keyStep: @Sendable (_ publicKeyHex: String, _ answersJson: String) -> String = {

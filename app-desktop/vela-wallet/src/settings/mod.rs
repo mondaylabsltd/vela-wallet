@@ -313,6 +313,9 @@ pub struct SettingsStrings {
     pub about_link_website: SharedString,
     pub about_link_github: SharedString,
     pub about_link_safe: SharedString,
+    pub about_link_privacy: SharedString,
+    pub about_link_terms: SharedString,
+    pub about_link_support: SharedString,
     pub about_footer: SharedString,
     /// Spec 091: the hidden developer switch, its one line, and the notice
     /// when seven taps on the version reveal it.
@@ -560,6 +563,9 @@ impl SettingsStrings {
             about_link_website: s("about.linkWebsite"),
             about_link_github: s("about.linkGitHub"),
             about_link_safe: s("about.linkSafeWallet"),
+            about_link_privacy: s("about.linkPrivacy"),
+            about_link_terms: s("about.linkTerms"),
+            about_link_support: s("about.linkSupport"),
             about_footer: s("about.footer"),
             about_debug_mode: s("about.debugMode"),
             about_debug_mode_body: s("about.debugModeBody"),

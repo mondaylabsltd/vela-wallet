@@ -62,7 +62,7 @@ pub fn take() -> Option<String> {
 /// work panic, once, so the sheet can be seen without breaking anything real.
 pub fn test_panic_requested() -> bool {
     static FIRED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    std::env::var("VELA_TEST_PANIC").as_deref() == Ok("1")
+    crate::dev_env::flag!("VELA_TEST_PANIC")
         && !FIRED.swap(true, std::sync::atomic::Ordering::SeqCst)
 }
 

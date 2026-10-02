@@ -423,6 +423,25 @@
     },
     "qrPlaceholder": {
       "caption": "Hình giữ chỗ demo · không quét được"
+    },
+    "appMenu": {
+      "about": "Giới thiệu về Vela Wallet",
+      "hide": "Ẩn Vela Wallet",
+      "hideOthers": "Ẩn mục khác",
+      "showAll": "Hiển thị tất cả",
+      "quit": "Thoát Vela Wallet",
+      "edit": "Sửa",
+      "undo": "Hoàn tác",
+      "redo": "Làm lại",
+      "cut": "Cắt",
+      "copy": "Sao chép",
+      "paste": "Dán",
+      "selectAll": "Chọn tất cả",
+      "view": "Xem",
+      "fullScreen": "Bật/tắt toàn màn hình",
+      "window": "Cửa sổ",
+      "minimize": "Thu nhỏ",
+      "closeWindow": "Đóng cửa sổ"
     }
   }
 }

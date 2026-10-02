@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The Mac App Store bundle's entitlements (spec 095), used by
+  scripts/build-macos-mas.sh for both the store build and the sandboxed
+  development build. EVERY key here is something the app does; nothing more:
+
+    app-sandbox                 required on the Mac App Store
+    application-identifier,     what the embedded profile validates against;
+    team-identifier             same team and bundle id as the iOS app
+                                (Universal Purchase)
+    associated-domains          "This device" passkeys (Touch ID / iCloud
+                                Keychain) for getvela.app — same claim as the
+                                Developer ID build (entitlements-signed.plist)
+    network.client              every RPC, the relay, the index, the caBLE
+                                tunnel, the in-app browser (WKWebView's own
+                                processes are Apple's and carry their own)
+    files.user-selected.read-write
+                                open/save panels: contacts import/export,
+                                batch import, the receive share card, a QR
+                                image, feedback screenshots
+    device.camera               the QR scanner's live preview
+    device.bluetooth            a phone or tablet as the authenticator (caBLE
+                                proximity scan, BLE L2CAP channel)
+    device.usb                  a USB security key over HID (hidapi/IOKit)
+    smartcard                   the same key over CCID (PC/SC)
+
+  Not here, on purpose: network.server (the app listens on nothing on macOS;
+  the Trusted Signer answers through the velawallet:// URL scheme),
+  downloads/pictures folder access (the panels grant per-file access),
+  JIT/unsigned-memory (no JIT in this process; WebKit's runs in Apple's
+  WebContent process), get-task-allow.
+-->
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.application-identifier</key>
+    <string>F9W689P9NE.app.getvela.VelaWallet</string>
+    <key>com.apple.developer.team-identifier</key>
+    <string>F9W689P9NE</string>
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>webcredentials:getvela.app</string>
+    </array>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.security.device.camera</key>
+    <true/>
+    <key>com.apple.security.device.bluetooth</key>
+    <true/>
+    <key>com.apple.security.device.usb</key>
+    <true/>
+    <key>com.apple.security.smartcard</key>
+    <true/>
+</dict>
+</plist>

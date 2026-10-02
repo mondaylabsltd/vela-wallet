@@ -33,10 +33,10 @@ final class BatchExecutor {
 
     /// USD → this currency. `nil` is the honest "no source could price it",
     /// **including when the source threw**.
-    private let fiatRate: (String) async -> Double?
+    private let fiatRate: @MainActor (String) async -> Double?
     private let documents: () -> DocumentPorts?
 
-    init(fiatRate: @escaping (String) async -> Double?, documents: @escaping () -> DocumentPorts?) {
+    init(fiatRate: @escaping @MainActor (String) async -> Double?, documents: @escaping () -> DocumentPorts?) {
         self.fiatRate = fiatRate
         self.documents = documents
     }

@@ -19,8 +19,8 @@ impl ThemeMode {
     /// `VELA_THEME` override, else the person's stored choice (spec 072:
     /// `vela.theme`), else — for `system` — the window's current appearance.
     pub fn detect(window: &Window) -> Self {
-        let pinned = match std::env::var("VELA_THEME").as_deref() {
-            Ok(pin @ ("light" | "dark")) => pin.to_owned(),
+        let pinned = match crate::dev_env::var!("VELA_THEME").as_deref() {
+            Some(pin @ ("light" | "dark")) => pin.to_owned(),
             _ => crate::executor::preferences::theme().to_owned(),
         };
         match pinned.as_str() {
@@ -36,8 +36,8 @@ impl ThemeMode {
     /// Whether `VELA_THEME` pins the mode (appearance changes are then ignored).
     pub fn is_pinned() -> bool {
         matches!(
-            std::env::var("VELA_THEME").as_deref(),
-            Ok("light") | Ok("dark")
+            crate::dev_env::var!("VELA_THEME").as_deref(),
+            Some("light" | "dark")
         )
     }
 }
@@ -657,7 +657,7 @@ pub fn launch_due(last_played_ms: Option<f64>, now_ms: f64) -> bool {
 }
 
 pub fn launch_disabled() -> bool {
-    std::env::var("VELA_SKIP_LAUNCH_ANIMATION").as_deref() == Ok("1")
+    crate::dev_env::flag!("VELA_SKIP_LAUNCH_ANIMATION")
 }
 
 /// Box size for a viewport, per the shared fit rule. Centred by the caller;

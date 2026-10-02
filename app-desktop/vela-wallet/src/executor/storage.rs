@@ -87,6 +87,11 @@ pub fn generation() -> u64 {
 /// its own convention (`~/Library/Application Support`, `%APPDATA%`,
 /// `$XDG_CONFIG_HOME`) and a wallet that ignores it is a wallet the platform's
 /// own backup and migration tools do not know about.
+///
+/// In the Mac App Store build (spec 095) the sandbox points that directory
+/// into the app's container; the bundle's `container-migration.plist` moves a
+/// Developer ID copy's `VelaWallet` folder in on the first launch, so a tester
+/// who installs from TestFlight keeps their wallets.
 pub fn path() -> Result<PathBuf> {
     // `VELA_STATE_DIR` overrides it — the same env-switch family as
     // `VELA_THEME` / `VELA_LANG` / `VELA_GALLERY`. It exists so a test can run
@@ -101,11 +106,27 @@ pub fn path() -> Result<PathBuf> {
     Ok(base.join("VelaWallet").join("wallet.json"))
 }
 
+/// Where a save panel opens: the person's Downloads folder (spec 095).
+///
+/// Not `dirs::home_dir()`, which every save panel used: under the Mac App
+/// Store sandbox `$HOME` is the app's CONTAINER, so the panel opened on the
+/// wallet's own private folder — somewhere nobody looks for a saved file.
+/// `dirs`' Downloads is `$HOME/Downloads`: the person's own folder outside the
+/// sandbox, and inside it the container's `Downloads` link to that same
+/// folder — the one form of it the sandboxed panel accepts as a starting
+/// place (it ignores a path outside the container and opens on Documents;
+/// measured 2026-10-02). The panel, out of process, may then write wherever
+/// the person picks (the user-selected-file entitlement).
+pub fn save_panel_dir() -> PathBuf {
+    dirs::download_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
 /// `VELA_STATE_DIR`, when set — one reading, so the wallet document and the
 /// browser's profile (spec 083) always move together.
 fn state_dir_override() -> Option<PathBuf> {
-    std::env::var("VELA_STATE_DIR")
-        .ok()
+    crate::dev_env::var!("VELA_STATE_DIR")
         .filter(|dir| !dir.is_empty())
         .map(PathBuf::from)
 }
@@ -608,6 +629,28 @@ pub fn clear_signed_in_wallet() -> Result<()> {
 pub(crate) mod tests {
     use super::*;
     use vela_core::app::AccountKey;
+
+    /// Spec 095: a save panel opens in Downloads — `$HOME`'s, which is the
+    /// person's own folder outside the sandbox and the container's link to
+    /// it inside — never the home directory itself.
+    #[test]
+    fn save_panels_open_in_downloads() {
+        let dir = save_panel_dir();
+        match dirs::download_dir() {
+            Some(downloads) => {
+                assert_eq!(dir, downloads);
+                assert_ne!(Some(dir), dirs::home_dir());
+            }
+            // A system with no Downloads folder at all (a bare CI home on
+            // Linux): the home directory, never nowhere.
+            None => assert_eq!(Some(dir), dirs::home_dir()),
+        }
+        #[cfg(target_os = "macos")]
+        assert!(
+            dirs::download_dir().is_some(),
+            "macOS always has a Downloads folder"
+        );
+    }
 
     /// The raw view the shared rules read: a string as itself, a record as its
     /// JSON text — and a raw value written back lands as the same JSON value,

@@ -91,7 +91,7 @@ final class SettingsStore {
         store: VelaStore,
         accounts: AccountStore,
         pool: RpcPool,
-        networkPerform: (([String: Any]) async -> String)? = nil
+        networkPerform: (@MainActor ([String: Any]) async -> String)? = nil
     ) {
         // The pool travels with the networks machine too (spec 081 FR-001).
         // Without it `invalidate_pools` — the operation the core emits on

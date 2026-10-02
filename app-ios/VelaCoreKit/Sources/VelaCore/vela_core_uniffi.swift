@@ -13738,6 +13738,17 @@ public func hashTypedData(typedDataJson: String)throws  -> Data  {
 })
 }
 /**
+ * The Apple localization codes for the shipped locales, in their order
+ * (spec 095) — what the iPhone app's `CFBundleLocalizations` must list.
+ */
+public func i18nAppleLocalizations() -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_i18n_apple_localizations(uniffiCallStatus
+    )
+})
+}
+/**
  * Interpolate a template in isolation, without a key lookup.
  */
 public func i18nInterpolate(template: String, opts: TOptions)throws  -> String  {
@@ -13778,6 +13789,20 @@ public func i18nPluralSuffixesLegacy() -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_vela_core_uniffi_fn_func_i18n_plural_suffixes_legacy(uniffiCallStatus
+    )
+})
+}
+/**
+ * What "follow the system" resolves to: the first of the platform's
+ * preferred languages (most preferred first; BCP-47 or POSIX) a shipped
+ * locale serves, else `en` (spec 095 — the rule iOS and Android each kept a
+ * copy of).
+ */
+public func i18nSystemLanguage(preferred: [String]) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_i18n_system_language(
+        FfiConverterSequenceString.lower(preferred),uniffiCallStatus
     )
 })
 }
@@ -15732,6 +15757,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_func_hash_typed_data() != 2552) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_func_i18n_apple_localizations() != 29020) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_interpolate() != 21333) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -15745,6 +15773,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_plural_suffixes_legacy() != 20218) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_i18n_system_language() != 43465) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_i18n_text_direction() != 33468) {

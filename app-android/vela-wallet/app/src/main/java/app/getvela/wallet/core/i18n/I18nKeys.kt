@@ -1004,6 +1004,9 @@ object I18nKeys {
         const val ABOUT_LINK_WEBSITE = "about.linkWebsite"
         const val ABOUT_LINK_GITHUB = "about.linkGitHub"
         const val ABOUT_LINK_SAFE = "about.linkSafeWallet"
+        const val ABOUT_LINK_PRIVACY = "about.linkPrivacy"
+        const val ABOUT_LINK_TERMS = "about.linkTerms"
+        const val ABOUT_LINK_SUPPORT = "about.linkSupport"
         const val ABOUT_FOOTER = "about.footer"
 
         // Account switcher + sign out + erase.

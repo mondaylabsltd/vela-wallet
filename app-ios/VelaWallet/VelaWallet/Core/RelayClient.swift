@@ -173,7 +173,7 @@ final class RelayClient {
 
     private let port: RelayPort
     /// The configured relay host, for when the pool names no base for a chain.
-    private let builtinBase: () async -> String
+    private let builtinBase: @MainActor () async -> String
     private let now: () -> Double
     /// The submit retry's pause; `nil` is the core's (`RetryAfter.delay_ms`),
     /// tests set zero.
@@ -233,7 +233,7 @@ final class RelayClient {
 
     init(
         port: RelayPort,
-        builtinBase: @escaping () async -> String = { NetDefaults.bundlerServiceURL },
+        builtinBase: @escaping @MainActor () async -> String = { NetDefaults.bundlerServiceURL },
         now: @escaping () -> Double = { Date().timeIntervalSince1970 * 1000 },
         retryDelayMs: Double? = nil
     ) {
