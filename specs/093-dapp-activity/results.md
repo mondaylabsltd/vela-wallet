@@ -17,21 +17,21 @@ width), desktop (headless gpui), iOS (simulator). Android has no screenshot harn
 
 | Suite | Command | Result |
 |---|---|---|
-| Core | `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | 2,337 passed, 0 failed |
+| Core | `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | 2,341 passed, 0 failed |
 | Core | `cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings`; `cargo fmt --all --check` | clean |
-| Web | `pnpm build:extension && npx vitest run && pnpm check` | 170 files, 2,408 passed, 5 skipped; check 0 errors |
-| Web e2e | `e2e/dapp-activity.e2e.ts` (+ activity-delete, reopen-pending, tx-detail-account-switch, signing-scenarios, extension-signing on the first pass) | 4/4 (18/18) |
+| Web | `pnpm build:extension && npx vitest run && pnpm check` | 171 files, 2,414 passed, 5 skipped; check 0 errors |
+| Web e2e | `e2e/dapp-activity.e2e.ts` (+ activity-delete, reopen-pending, tx-detail-account-switch, signing-scenarios, extension-signing on the first pass) | 5/5 (18/18) |
 | Desktop | `cargo fmt --check && cargo clippy --all-targets && cargo test` | 885 passed, 0 failed, 49 ignored; clippy 54/56 pre-existing warnings, none in changed code |
-| Android | `:app:testDebugUnitTest -PvelaSkipRustBuild` | 923 tests, 0 failures |
-| iOS | `xcodebuild test … -only-testing:VelaWalletTests` (cloned iPhone 16 Pro, iOS 18.2) | 1,114 tests in 142 suites passed; 13 targeted suites 124 passed; `DappActivityScreenshotTests` 1 passed; `check-ios-core-fresh` ok |
-| CI scripts | `check-native-reachability`, `check-event-payloads`, `check-dead-controls` | reachable; 0 mismatches; 0 dead controls |
+| Android | `:app:testDebugUnitTest -PvelaSkipRustBuild` | 926 tests, 0 failures |
+| iOS | `xcodebuild test … -only-testing:VelaWalletTests` (cloned iPhone 16 Pro, iOS 18.2) | 1,116 tests in 142 suites passed; 16 targeted suites 181 passed; `DappActivityScreenshotTests` 1 passed; `check-ios-core-fresh` ok |
+| CI scripts | `check-native-reachability`, `check-event-payloads`, `check-dead-controls` | reachable; 0 mismatches (532 sites); 0 dead controls |
 | Artefacts | `build-web --check`, `gen-core-types --check`, `gen-onboarding-types --check` | current |
 
 ## Screenshots (session scratchpad `093-shots/`)
 
-- web: `activity-phone-{en,zh}.png`, `activity-desktop-en.png`, `permit-detail-{phone,desktop}-en.png`, `swap-detail-phone-en.png`
-- desktop (headless): `activity-{en,zh}.png`, `detail-{permit,permit-technical,swap-technical,siwe-technical}-{en,zh}.png`
-- iOS: `{en,zh}-{home-activity,history,permit-detail,permit-technical,permit-technical-scrolled,swap-detail}.png`
+- web: `activity-phone-{en,zh}.png`, `activity-desktop-en.png`, `permit-detail-{phone,desktop}-en.png`, `swap-detail-phone-en.png`, `contact-detail-phone-en.png`
+- desktop (headless): `activity-{en,zh}.png`, `contact-{en,zh}.png`, `detail-{permit,permit-technical,swap-technical,siwe-technical}-{en,zh}.png`
+- iOS: `{en,zh}-{home-activity,history,permit-detail,permit-technical,permit-technical-scrolled,swap-detail,contact-page}.png`
 
 ## Decisions taken while building (for the lead)
 
@@ -48,6 +48,11 @@ width), desktop (headless gpui), iOS (simulator). Android has no screenshot harn
   stored value drops for that record instead of failing the feed.
 - Unlimited allowances are never masked under balance privacy (a risk, not a balance) on web, desktop
   and iOS.
+- Lead round 3: Technical details show the core's `request_display` (typed data pretty-printed, a message
+  as its text or hex, call data pretty-printed) on every shell; desktop's own pretty-printer is gone. A
+  contact's page draws the feed's `contact_rows` (`ContactFilterChanged`) with Activity's row builder on
+  every shell — iOS built rows from raw records (a dApp transfer to a contact read 已发送), web built its
+  own titles, desktop/Android filtered the feed themselves.
 
 ## Not done / open
 
@@ -55,12 +60,12 @@ width), desktop (headless gpui), iOS (simulator). Android has no screenshot harn
   export and the web sheet has no live "Balance changes" block; doing it in TypeScript would put a rule
   in the shell. Web rows get figures from the call's own value and from folded receipts only.
 - Android never masks live Activity figures under balance privacy (pre-existing); the allowance follows.
-- Typed data in Technical details: desktop pretty-prints the document inside the request; web, iOS and
-  Android show the request as stored (the document as an escaped string). Decide whether the core
-  should offer a display form.
-- History cap 200 (web / Android / iOS) is now shared by sends, receives and signatures.
-- iOS rows wrap a long title to two lines (all rows) so "Unlimited USDC" is never cut.
-- `ts-rs` prints "failed to parse serde attribute deserialize_with" when built with `bindings`
-  (gen-core-types); harmless.
+- Follow-up (accepted by the lead): the history cap of 200 records (web / Android / iOS) is now shared by
+  sends, receives and signatures.
+- Accepted as is: a batch's unlimited approval shows only in the detail's spending-cap fact; iOS rows
+  wrap a long title to two lines; `ts-rs` prints "failed to parse serde attribute deserialize_with" when
+  built with `bindings` (gen-core-types).
+- Web and Android draw a contact's rows only while `contact_rows` belong to the open contact (a guard for
+  the dispatch gap between opening one contact and the core switching over).
 - Merge with 090–092: `scripts/gen-i18n.mjs` path pin (1787 here, 1788 on main → 1789 after merge), the
   i18n catalogs, `assets/wasm`, `rust/pkg-web` and the TS mirrors conflict — regenerate after merging.
