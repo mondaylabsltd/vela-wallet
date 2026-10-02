@@ -17,15 +17,20 @@ use vela_core::app::activity_feed::{
     FeedCounterpartyRole, FeedDapp, FeedDappChange, FeedDirection, FeedItem, FeedOperation as Op,
     FeedRow, FeedShellResult as Res, FeedTxKind, FeedTxRecord, FeedTxStatus, FeedView,
     HISTORY_EMPTY_ALL, HISTORY_EMPTY_FILTERED, HOME_EMPTY_ALL, HOME_EMPTY_FILTERED,
+    UNFOLLOWED_AFTER_MS,
 };
 use vela_core::app::clear_signing::ClearTerm;
 use vela_core::app::token_trust::TrustSimJudgment;
+use vela_core::app::tx_tracker::ABANDON_AGE_MS;
 
 type Sut = DomainDriver<ActivityFeed>;
 
 const ADDR: &str = "0xA11ceFeedAA";
 const OTHER: &str = "0xSomebodyElse";
 const T0: f64 = 1_754_700_000_000.0;
+/// A minute before the fake clock, in stored seconds: a record young enough
+/// that only the tracker can settle it (087 F04).
+const RECENT: f64 = T0 / 1000.0 - 60.0;
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -396,7 +401,7 @@ fn a_pending_dapp_transaction_is_a_row_with_its_site() {
         "http://127.0.0.1:8137",
         "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
         "0x2386f26fc10000",
-        100_000.0,
+        RECENT,
     );
     pending.status = FeedTxStatus::Pending;
     pending.tx_hash = String::new();
@@ -458,7 +463,7 @@ fn a_maybe_sent_op_under_its_local_hash_is_a_pending_row() {
         "https://app.test",
         "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
         "0x0",
-        100_000.0,
+        RECENT,
     );
     maybe_sent.user_op_hash = local_hash.to_owned();
     maybe_sent.tx_hash = String::new();
@@ -475,6 +480,132 @@ fn a_maybe_sent_op_under_its_local_hash_is_a_pending_row() {
     assert_eq!(
         tx.user_op_hash, local_hash,
         "the detail sheet keeps the hash"
+    );
+}
+
+/// Stored seconds for a record `age_ms` older than the fake clock.
+fn aged(age_ms: f64) -> f64 {
+    (T0 - age_ms) / 1000.0
+}
+
+/// 087 F04: a record from an older build that wrote it before any hash
+/// existed — no operation hash, no tx hash — has nothing the tracker can
+/// follow. It is pending while a submit could still be under way, and past
+/// [`UNFOLLOWED_AFTER_MS`] it reads `Unknown`: never `Failed` (it may have
+/// been sent) and never a spinner for ever. The stored record is untouched.
+#[test]
+fn a_pending_record_nothing_can_follow_reads_unknown_past_the_grace() {
+    let hashless = |id: &str, age_ms: f64| {
+        let mut r = dapp_tx(id, "https://app.test", CAFE, "0x0", aged(age_ms));
+        r.user_op_hash = String::new();
+        r.tx_hash = String::new();
+        r.status = FeedTxStatus::Pending;
+        r
+    };
+    let young = hashless("dapp-1-tx", UNFOLLOWED_AFTER_MS - 60_000.0);
+    let sut = boot(vec![young]);
+    assert_eq!(items(&sut)[0].status, FeedTxStatus::Pending);
+
+    let at_the_line = hashless("dapp-2-tx", UNFOLLOWED_AFTER_MS);
+    let three_days = hashless("dapp-17905-tx", 3.0 * 86_400_000.0);
+    let mut send_without_hash = send("s", "", "0xCcc", "1", aged(2.0 * UNFOLLOWED_AFTER_MS));
+    send_without_hash.status = FeedTxStatus::Pending;
+    send_without_hash.tx_hash = String::new();
+    let sut = boot(vec![at_the_line, three_days, send_without_hash]);
+    let rows = items(&sut);
+    assert_eq!(rows.len(), 3);
+    assert!(
+        rows.iter().all(|row| row.status == FeedTxStatus::Unknown),
+        "{rows:?}"
+    );
+    assert!(
+        rows.iter().all(|row| row.tx_hash.is_none()),
+        "no hash is claimed — least of all the record's id"
+    );
+    assert!(
+        sut.view()
+            .transactions
+            .iter()
+            .all(|record| record.status == FeedTxStatus::Pending),
+        "only the row says it; the record stays pending on disk"
+    );
+}
+
+/// A record the tracker follows stays pending until the tracker's own 24 h
+/// line, past which it stops asking (`ABANDON_AGE_MS`): from there nothing
+/// settles it either, so it reads `Unknown` — still never `Failed`.
+#[test]
+fn a_followed_record_reads_unknown_only_once_the_tracker_gives_up() {
+    let mut followed = dapp_tx("dapp-3-tx", "https://app.test", CAFE, "0x0", 0.0);
+    followed.status = FeedTxStatus::Pending;
+    followed.tx_hash = String::new();
+
+    followed.timestamp = aged(ABANDON_AGE_MS - 60_000.0);
+    let sut = boot(vec![followed.clone()]);
+    assert_eq!(items(&sut)[0].status, FeedTxStatus::Pending);
+
+    followed.timestamp = aged(ABANDON_AGE_MS);
+    let sut = boot(vec![followed]);
+    assert_eq!(items(&sut)[0].status, FeedTxStatus::Unknown);
+
+    // A folded batch says it once, on the row and on its summary.
+    let mut a = send("h-0", "0xH", "0xAaa", "10", aged(2.0 * ABANDON_AGE_MS));
+    let mut b = send("h-1", "0xH", "0xBbb", "20", aged(2.0 * ABANDON_AGE_MS));
+    a.status = FeedTxStatus::Pending;
+    b.status = FeedTxStatus::Pending;
+    let sut = boot(vec![a, b]);
+    let row = &items(&sut)[0];
+    assert_eq!(row.status, FeedTxStatus::Unknown);
+    assert_eq!(
+        row.batch.as_ref().map(|batch| batch.status),
+        Some(FeedTxStatus::Unknown)
+    );
+}
+
+/// Time only ever ends "pending": a confirmed or failed record reads as
+/// stored however old and however hashless; a millisecond timestamp ages
+/// like a second one.
+#[test]
+fn time_never_settles_a_record() {
+    let old = aged(3.0 * 86_400_000.0);
+    let mut confirmed = dapp_tx("c", "https://app.test", CAFE, "0x0", old);
+    confirmed.user_op_hash = String::new();
+    let mut failed = dapp_tx("f", "https://app.test", CAFE, "0x0", old - 1.0);
+    failed.user_op_hash = String::new();
+    failed.status = FeedTxStatus::Failed;
+    let mut millis = dapp_tx("m", "https://app.test", CAFE, "0x0", 0.0);
+    millis.user_op_hash = String::new();
+    millis.tx_hash = String::new();
+    millis.status = FeedTxStatus::Pending;
+    millis.timestamp = T0 - 2.0 * UNFOLLOWED_AFTER_MS;
+    let sut = boot(vec![confirmed, failed, millis]);
+    let rows = items(&sut);
+    assert_eq!(
+        rows.iter().map(|row| row.status).collect::<Vec<_>>(),
+        vec![
+            FeedTxStatus::Unknown,
+            FeedTxStatus::Confirmed,
+            FeedTxStatus::Failed
+        ]
+    );
+}
+
+/// The grace is principled, not picked: past the longest any client keeps a
+/// submit open, and the word crosses the wire as `"unknown"`.
+#[test]
+fn the_grace_outlasts_every_submit_window() {
+    use vela_core::app::sign_request::{DAPP_TX_ANSWER_WINDOW_MS, PAGE_WAIT_CAP_MS};
+    const {
+        assert!(UNFOLLOWED_AFTER_MS == 30.0 * 60.0 * 1000.0);
+        assert!(UNFOLLOWED_AFTER_MS > PAGE_WAIT_CAP_MS);
+        assert!(UNFOLLOWED_AFTER_MS > DAPP_TX_ANSWER_WINDOW_MS);
+        assert!(UNFOLLOWED_AFTER_MS < ABANDON_AGE_MS);
+    }
+    assert_eq!(
+        serde_json::to_string(&FeedTxStatus::Unknown)
+            .ok()
+            .as_deref(),
+        Some("\"unknown\"")
     );
 }
 
@@ -521,13 +652,13 @@ fn a_dapp_row_shows_an_amount_only_for_native_value() {
 /// batch is a `Send` carrying its FIRST line's status.
 #[test]
 fn every_row_says_its_kind_and_status_and_a_batch_uses_its_first_line() {
-    let mut a = send("h-0", "0xH", "0xAaa", "10", 300_000.0);
-    let mut b = send("h-1", "0xH", "0xBbb", "20", 300_000.0);
+    let mut a = send("h-0", "0xH", "0xAaa", "10", RECENT);
+    let mut b = send("h-1", "0xH", "0xBbb", "20", RECENT);
     a.status = FeedTxStatus::Failed;
     b.status = FeedTxStatus::Confirmed;
-    let mut single = send("s", "0xS", "0xCcc", "1", 200_000.0);
+    let mut single = send("s", "0xS", "0xCcc", "1", RECENT - 10.0);
     single.status = FeedTxStatus::Pending;
-    let incoming = recv("r", "0xBob", "5", "USDT", 100_000.0);
+    let incoming = recv("r", "0xBob", "5", "USDT", RECENT - 20.0);
     let mut sut = boot(vec![a, b, single, incoming]);
     drain_aliases(&mut sut);
 

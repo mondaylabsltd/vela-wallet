@@ -955,8 +955,9 @@ pub enum DeleteStyle {
     Danger,
 }
 
-/// The rule: pending — the one status that wears the info tone (the live
-/// builder's `FeedTxStatus::Pending`) — is quiet; the rest are danger.
+/// The rule: pending — the status that wears the info tone (the live
+/// builder's `FeedTxStatus::Pending`, and `Unknown`, a pending record nothing
+/// will settle) — is quiet; the rest are danger.
 #[must_use]
 pub fn delete_style(status: &StatusChip) -> DeleteStyle {
     match status.tone {
