@@ -592,7 +592,8 @@
   "labelSent": "送金",
   "labelReceived": "受取",
   "toName": "宛先: {{name}}",
-  "fromName": "差出人: {{name}}"
+  "fromName": "差出人: {{name}}",
+  "dappRowTitle": "{{place}}で{{intent}}"
  },
  "onboarding": {
   "welcome": {

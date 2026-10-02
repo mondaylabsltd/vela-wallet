@@ -592,7 +592,8 @@
   "labelSent": "已發送",
   "labelReceived": "已接收",
   "toName": "至 {{name}}",
-  "fromName": "來自 {{name}}"
+  "fromName": "來自 {{name}}",
+  "dappRowTitle": "喺 {{place}} {{intent}}"
  },
  "onboarding": {
   "welcome": {

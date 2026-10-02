@@ -592,7 +592,8 @@
   "labelSent": "Gönderildi",
   "labelReceived": "Alındı",
   "toName": "Alıcı: {{name}}",
-  "fromName": "Gönderen: {{name}}"
+  "fromName": "Gönderen: {{name}}",
+  "dappRowTitle": "{{place}} üzerinde {{intent}}"
  },
  "onboarding": {
   "welcome": {

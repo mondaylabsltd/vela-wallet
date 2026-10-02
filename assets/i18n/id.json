@@ -592,7 +592,8 @@
   "labelSent": "Terkirim",
   "labelReceived": "Diterima",
   "toName": "Ke {{name}}",
-  "fromName": "Dari {{name}}"
+  "fromName": "Dari {{name}}",
+  "dappRowTitle": "{{intent}} di {{place}}"
  },
  "onboarding": {
   "welcome": {

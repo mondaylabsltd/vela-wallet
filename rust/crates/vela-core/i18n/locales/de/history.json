@@ -19,6 +19,7 @@
     "labelSent": "Gesendet",
     "labelReceived": "Erhalten",
     "toName": "An {{name}}",
-    "fromName": "Von {{name}}"
+    "fromName": "Von {{name}}",
+    "dappRowTitle": "{{intent}} bei {{place}}"
   }
 }

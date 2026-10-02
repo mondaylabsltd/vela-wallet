@@ -592,7 +592,8 @@
   "labelSent": "보냄",
   "labelReceived": "받음",
   "toName": "받는 곳: {{name}}",
-  "fromName": "보낸 곳: {{name}}"
+  "fromName": "보낸 곳: {{name}}",
+  "dappRowTitle": "{{place}}에서 {{intent}}"
  },
  "onboarding": {
   "welcome": {

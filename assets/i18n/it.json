@@ -595,7 +595,8 @@
   "labelSent": "Inviato",
   "labelReceived": "Ricevuto",
   "toName": "A {{name}}",
-  "fromName": "Da {{name}}"
+  "fromName": "Da {{name}}",
+  "dappRowTitle": "{{intent}} su {{place}}"
  },
  "onboarding": {
   "welcome": {
