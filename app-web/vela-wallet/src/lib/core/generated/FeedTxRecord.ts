@@ -68,6 +68,8 @@ intent?: string | null,
  * (`SignRecord::balance_changes`, stored by the shell). The one account
  * of a dApp call's money that its page did not write. Absent on every
  * other kind, on older rows and from a shell that does not map it.
+ * Read leniently ([`stored_or_none`]): lines this build cannot read are
+ * no lines, never a feed that fails to load.
  */
 balance_changes?: Array<TrustSimJudgment> | null, 
 /**
@@ -87,6 +89,9 @@ call_data?: string | null,
 /**
  * A dApp record's summary (spec 093) — `SignRecord::summary`, stored
  * verbatim by the shell (`dappSummary`) and handed back untouched.
- * `None` on records from before 093, which read by their kind.
+ * `None` on records from before 093, which read by their kind — and on
+ * a summary this build cannot read (a newer build's action, a damaged
+ * row): that record reads by its kind, the rest of the feed loads
+ * ([`stored_or_none`]).
  */
 summary?: DappSummary | null, };
