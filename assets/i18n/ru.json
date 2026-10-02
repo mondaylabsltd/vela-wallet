@@ -493,7 +493,9 @@
   "qrTitleNetwork": "Используйте этот адрес для получения активов в сети {{network}}",
   "qrTitleAsset": "Используйте этот адрес для получения {{symbol}} в сети {{network}}",
   "shareCardNetworkNote": "Только платежи в сети {{network}}",
-  "tokenContract": "Контракт токена"
+  "tokenContract": "Контракт токена",
+  "includeNetwork": "Указать сеть",
+  "includeNetworkHint": "Некоторые кошельки не читают такой код. Если не сканируется — выключите."
  },
  "assets": {
   "sectionTitle": "Активы",

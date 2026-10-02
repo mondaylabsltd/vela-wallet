@@ -156,6 +156,8 @@
 		 * phone is a sheet the route raises. Absent in the gallery.
 		 */
 		onchains?: () => void;
+		/** Spec 090: the receive code's "include network" switch. Absent in the gallery. */
+		onincludenetwork?: (include: boolean) => void;
 	}
 
 	let {
@@ -168,7 +170,8 @@
 		addToken,
 		onsheetclose,
 		ondeletetx,
-		onchains
+		onchains,
+		onincludenetwork
 	}: Props = $props();
 
 	const base = $derived(model.base);
@@ -305,7 +308,7 @@
 				hideTitle
 				onclose={closeSheet}
 			>
-				<ReceiveQr model={sheet.model} />
+				<ReceiveQr model={sheet.model} {onincludenetwork} />
 			</BottomSheet>
 		{:else if sheet.kind === 'tx-detail'}
 			<BottomSheet

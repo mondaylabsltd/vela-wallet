@@ -487,7 +487,9 @@
   "qrTitleNetwork": "このアドレスで {{network}} 上の資産を受け取れます",
   "qrTitleAsset": "このアドレスで {{network}} 上の {{symbol}} を受け取れます",
   "shareCardNetworkNote": "{{network}} での支払いのみ",
-  "tokenContract": "トークンコントラクト"
+  "tokenContract": "トークンコントラクト",
+  "includeNetwork": "ネットワーク情報を含める",
+  "includeNetworkHint": "読み取れないウォレットもあります。相手が読み取れないときはオフにしてください。"
  },
  "assets": {
   "sectionTitle": "資産",

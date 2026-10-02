@@ -8,8 +8,19 @@ import type { BalanceToken } from '$lib/core/generated/BalanceToken';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
 import { getAllNetworksSync } from '$lib/services/networks';
+import { PaymentRequestCore } from '$lib/core/client';
+import type { PaymentRequestEvent } from '$lib/core/generated/PaymentRequestEvent';
+import type { PaymentRequestView } from '$lib/core/generated/PaymentRequestView';
+import { parseEIP681 } from '$lib/services/eip681';
+import { encodeQr, encodeShareQr } from '$lib/wallet/qr';
 import { buildDesktopFlowState, buildFlowState } from './fixtures';
-import { receiveNetworks, withLiveDesktopFlow, withLiveFlow, type FlowsLiveInputs } from './live';
+import {
+	receiveAssetPicked,
+	receiveNetworks,
+	withLiveDesktopFlow,
+	withLiveFlow,
+	type FlowsLiveInputs
+} from './live';
 
 const m = resolveWalletMessages('en');
 const fm = resolveWalletFlowMessages('en');
@@ -98,6 +109,107 @@ describe('the code screen (T482)', () => {
 		expect(qr.contract?.copyValue).toBe(USDC_BNB.token_address);
 		expect(qr.centre.ticker).toBe('USDC');
 		expect(qr.centre.badgeHidden).toBe(false);
+	});
+});
+
+/** A real `payment_request` core (the wasm `engine.server` already loaded), driven as the route drives it. */
+function payCore(): { send(event: PaymentRequestEvent): PaymentRequestView; free(): void } {
+	const core = new PaymentRequestCore();
+	return {
+		send: (event) =>
+			(JSON.parse(core.dispatch(JSON.stringify(event))) as { view: PaymentRequestView }).view,
+		free: () => core.free()
+	};
+}
+
+describe('the include-network switch (spec 090)', () => {
+	const start: PaymentRequestEvent = {
+		type: 'start',
+		account: identity.address,
+		recipient: identity.address,
+		base_url: 'https://wallet.getvela.app/pay'
+	};
+
+	it('is drawn off in the gallery, with no hint', () => {
+		const drawn = buildFlowState('r2', fm, identicon);
+		if (drawn.sheet?.kind !== 'receive-qr') throw new Error('r2 shows the code');
+		expect(drawn.sheet.model.network).toEqual({ label: fm['receive.includeNetwork'], on: false });
+	});
+
+	it('draws what the core says: off = the bare address, on = the network URI on screen and in the saved card', () => {
+		const core = payCore();
+		try {
+			core.send(start);
+			const at = { ...inputs, receiveChainId: 100 };
+			const off = core.send(receiveAssetPicked(at, false));
+			const offQr = withLiveFlow(buildFlowState('r2', fm, identicon), { ...at, pay: off });
+			if (offQr.sheet?.kind !== 'receive-qr') throw new Error('r2 shows the code');
+			expect(offQr.sheet.model.network).toEqual({
+				label: fm['receive.includeNetwork'],
+				on: false,
+				hint: undefined
+			});
+			expect(offQr.sheet.model.code).toEqual(encodeQr(identity.address));
+			expect(offQr.sheet.model.share?.code).toEqual(encodeShareQr(identity.address));
+
+			const on = core.send({ type: 'include_network_changed', include: true });
+			const uri = `ethereum:${identity.address}@100`;
+			expect(on.qr_value).toBe(uri);
+			expect(on.copy_payload).toBe(identity.address);
+			const onQr = withLiveFlow(buildFlowState('r2', fm, identicon), { ...at, pay: on });
+			if (onQr.sheet?.kind !== 'receive-qr') throw new Error('r2 shows the code');
+			expect(onQr.sheet.model.network).toEqual({
+				label: fm['receive.includeNetwork'],
+				on: true,
+				hint: fm['receive.includeNetworkHint']
+			});
+			expect(onQr.sheet.model.code).toEqual(encodeQr(uri));
+			expect(onQr.sheet.model.share?.code).toEqual(encodeShareQr(uri));
+
+			// Vela's own scanner reads it back to the same address and chain.
+			expect(parseEIP681(on.qr_value)).toMatchObject({
+				recipient: identity.address,
+				chainId: 100,
+				isNative: true
+			});
+		} finally {
+			core.free();
+		}
+	});
+
+	it('a token code names only its network', () => {
+		const core = payCore();
+		try {
+			core.send(start);
+			const at = { ...inputs, selectedToken: USDC_BNB };
+			core.send(receiveAssetPicked(at, true));
+			const on = core.send({ type: 'include_network_changed', include: true });
+			expect(on.qr_value).toBe(`ethereum:${identity.address}@56`);
+			const qr = withLiveFlow(buildFlowState('r3', fm, identicon), { ...at, pay: on });
+			if (qr.sheet?.kind !== 'receive-qr') throw new Error('r3 shows the code');
+			expect(qr.sheet.model.code).toEqual(encodeQr(on.qr_value));
+		} finally {
+			core.free();
+		}
+	});
+
+	it('an answer about another network is not drawn: the bare address, no switch', () => {
+		const core = payCore();
+		try {
+			core.send(start);
+			core.send(receiveAssetPicked({ receiveChainId: 100 }, false));
+			const on = core.send({ type: 'include_network_changed', include: true });
+			const qr = withLiveFlow(buildFlowState('r2', fm, identicon), {
+				...inputs,
+				receiveChainId: 56,
+				pay: on
+			});
+			if (qr.sheet?.kind !== 'receive-qr') throw new Error('r2 shows the code');
+			expect(qr.sheet.model.code).toEqual(encodeQr(identity.address));
+			expect(qr.sheet.model.network).toBeUndefined();
+		} finally {
+			core.free();
+		}
 	});
 });
 

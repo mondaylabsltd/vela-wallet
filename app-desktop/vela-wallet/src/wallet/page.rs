@@ -5821,6 +5821,10 @@ impl WalletPage {
             );
         match (receiving, self.money_watch.receiving.is_some()) {
             (true, false) => {
+                // A receive visit is a request session too (spec 090): its
+                // `Start` turns the "include network" switch back off, so the
+                // code shown first is always the one every wallet reads.
+                resident::forget::<PaymentRequest>(cx);
                 resident::forget::<ReceiveWatch>(cx);
                 let watch = resident::resident::<ReceiveWatch>(cx);
                 self.money_watch.deposits = 0;
@@ -5840,6 +5844,54 @@ impl WalletPage {
             }
             _ => {}
         }
+        if receiving {
+            self.keep_receive_asset(cx);
+        }
+    }
+
+    /// Tell `payment_request` which network's code is on screen (spec 090).
+    ///
+    /// With "include network" on, the code names that chain — and the core
+    /// can only name the one it was told. The panel is drawn from
+    /// `receive_chain` / `receive_token`, so the machine follows those, here,
+    /// once per change: three doors set them (a row, the sidebar filter, a
+    /// token's 收款) and a pick sent from each would be three chances to miss.
+    fn keep_receive_asset(&mut self, cx: &mut Context<Self>) {
+        let token = match self.flows.last() {
+            Some(FlowPanel::Dr3) => self.receive_token.clone(),
+            _ => None,
+        };
+        let chain_id = token.as_ref().map_or(self.receive_chain, |t| t.chain_id);
+        let token_address = token.as_ref().and_then(|t| t.token_address.clone());
+        let pay = resident::resident::<PaymentRequest>(cx);
+        let shown = pay.read(cx).view().asset;
+        if shown.chain_id == chain_id && shown.token_address == token_address {
+            return;
+        }
+        let network_name = flows_live::chain_name(chain_id);
+        let (symbol, decimals) = match &token {
+            Some(token) => (token.symbol.clone(), token.decimals),
+            // A network's code asks for that chain's own coin.
+            None => (
+                flows_live::receivable_chains()
+                    .into_iter()
+                    .find(|(id, _)| *id == chain_id)
+                    .map_or_else(|| network_name.clone(), |(_, symbol)| symbol),
+                18,
+            ),
+        };
+        pay.update(cx, |resident, cx| {
+            resident.dispatch(
+                vela_core::app::payment_request::Event::AssetPicked {
+                    chain_id,
+                    token_address,
+                    symbol,
+                    decimals,
+                    network_name,
+                },
+                cx,
+            );
+        });
     }
 
     /// Open a flow from the wallet home (spec 021 SC-002).
@@ -6679,6 +6731,19 @@ impl WalletPage {
             })) as panels::Click),
             save_image: Some(Box::new(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                 this.save_share_card(cx);
+            })) as panels::Click),
+            // Spec 090: the switch flips what the CORE says it is — the
+            // machine decides what the code then encodes.
+            include_network: Some(Box::new(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                let pay = resident::resident::<PaymentRequest>(cx);
+                let include = !pay.read(cx).view().include_network;
+                pay.update(cx, |resident, cx| {
+                    resident.dispatch(
+                        vela_core::app::payment_request::Event::IncludeNetworkChanged { include },
+                        cx,
+                    );
+                });
+                cx.notify();
             })) as panels::Click),
             open_qr_rows: Vec::new(),
             open_tx: bind(FlowStep::TxDetail, cx),

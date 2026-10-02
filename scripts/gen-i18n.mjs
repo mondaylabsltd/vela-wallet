@@ -470,8 +470,12 @@ for (let i = 1; i < PATHS.length; i++) {
 //   file that is not UTF-8 (a GBK CSV from Excel on Chinese Windows) is refused
 //   with how to save it, where every shell used to import its names as U+FFFD.
 //   Same branches: 1785 + 1 = 1786.
-if (PATHS.length !== 1786) fail(`expected 1786 paths (1697 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1697) fail(`expected 1697 leaf paths, got ${leafSet.size}`);
+// 1788 (spec 090, 2026-10-02): + `receive.includeNetwork` and
+//   `receive.includeNetworkHint` — the receive code's opt-in "include network"
+//   switch (ERC-681) and the calm line under it: some wallets cannot read
+//   that code. Same branches: 1786 + 2 = 1788.
+if (PATHS.length !== 1788) fail(`expected 1788 paths (1699 leaf + 89 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1699) fail(`expected 1699 leaf paths, got ${leafSet.size}`);
 if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
@@ -785,7 +789,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 138,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 139,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;

@@ -153,7 +153,18 @@ data class ReceiveQrModel(
     val viewOnExplorer: String,
     /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
     val explorerUrl: String? = null,
+    /**
+     * Spec 090: what the code encodes — the core's `qr_value`. Blank (the
+     * gallery) encodes the address the card spells out.
+     */
+    val code: String = "",
+    /** Spec 090: the "include network" switch, as the core offers it; `null` where it offers none. */
+    val network: NetworkSwitchModel? = null,
 )
+
+/** The receive code's "include network" switch (spec 090): its position, and the calm hint while it is on. */
+@Immutable
+data class NetworkSwitchModel(val label: String, val isOn: Boolean, val hint: String? = null)
 
 /** R4 — the image "Save image" produces, not a screen someone navigates to. */
 @Immutable

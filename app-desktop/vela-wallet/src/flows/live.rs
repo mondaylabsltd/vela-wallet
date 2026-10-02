@@ -44,9 +44,9 @@ use crate::flows::fixtures::{
     AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, BreakdownRow, ContactPick,
     CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeSpeedModel,
     FeeSpeedOption, FeeTokenPick, FeeTokenRow, FilterChip, HistoryGroup, HistoryPanel, NetworkRow,
-    ReceiptStage, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm,
-    SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, SweepForm, SweepRow, TokenMark,
-    address_lines,
+    NetworkSwitch, ReceiptStage, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm,
+    SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, SweepForm, SweepRow,
+    TokenMark, address_lines,
 };
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
@@ -874,6 +874,14 @@ pub fn receive_qr(
         // ready to copy long before anybody has been told which networks it
         // is safe on.
         can_copy: pay.can_copy,
+        // Spec 090: the switch and its hint are the core's — whether it is
+        // offered, where it sits, and when the hint shows. The code above
+        // already says what the switch chose (`qr_value`).
+        network: pay.network_switch.then(|| NetworkSwitch {
+            label: s.include_network.clone(),
+            on: pay.include_network,
+            hint: pay.network_hint.then(|| s.include_network_hint.clone()),
+        }),
         // A NETWORK code wears the network's own logo (the web's `chainMark`).
         // The native coin's rule would put Ethereum's mark in the middle of a
         // Base or Arbitrum code — the one picture on this screen that says
@@ -5468,6 +5476,76 @@ mod tests {
         );
         let plain = open("plain", false);
         assert!(plain.breakdown.is_empty() && plain.breakdown_title.is_none());
+    }
+
+    /// Spec 090: the switch under the code is the core's — off by default with
+    /// the bare address; on, the code names the network on screen, the calm
+    /// hint rides under it, and Vela's own scanner reads the code back to the
+    /// same address and chain.
+    #[test]
+    fn the_network_switch_is_the_cores_and_its_code_scans_back() {
+        use vela_core::app::payment_request::{Event as PayEvent, PaymentRequest};
+        crate::executor::storage::tests::with_temp_state("flows-qr-network", || {
+            const ADDR: &str = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+            let quiet = ReceiveWatchView {
+                detected: false,
+                deposits: Vec::new(),
+            };
+            let s = strings();
+            let mut host = CoreHost::<PaymentRequest>::new();
+            let _ = host.dispatch(PayEvent::Start {
+                account: ADDR.to_owned(),
+                recipient: ADDR.to_owned(),
+                base_url: "https://getvela.app".to_owned(),
+            });
+            let _ = host.dispatch(PayEvent::AssetPicked {
+                chain_id: 100,
+                token_address: None,
+                symbol: "xDAI".to_owned(),
+                decimals: 18,
+                network_name: "Gnosis".to_owned(),
+            });
+            let draw = |pay: &PaymentRequestView| {
+                receive_qr(
+                    ADDR,
+                    "Me",
+                    100,
+                    &quiet,
+                    pay,
+                    &s,
+                    "en-US",
+                    crate::wallet::live::Money::usd(),
+                )
+            };
+
+            let off = draw(&host.view());
+            let switch = off.network.as_ref().expect("the switch is offered");
+            assert!(!switch.on);
+            assert!(switch.hint.is_none());
+            assert_eq!(switch.label, s.include_network);
+            assert_eq!(off.qr_payload.as_deref(), Some(ADDR));
+
+            let _ = host.dispatch(PayEvent::IncludeNetworkChanged { include: true });
+            let on = draw(&host.view());
+            let switch = on.network.as_ref().expect("the switch is offered");
+            assert!(switch.on);
+            assert_eq!(switch.hint.as_ref(), Some(&s.include_network_hint));
+            let code = on.qr_payload.as_deref().unwrap_or_default();
+            assert_eq!(code, format!("ethereum:{ADDR}@100"));
+            let scanned = crate::flows::eip681::parse(code).expect("Vela's scanner reads it");
+            assert_eq!(scanned.recipient, ADDR);
+            assert_eq!(scanned.chain_id, Some(100));
+            assert_eq!(scanned.token_address, None);
+            assert_eq!(scanned.amount_base_units, None);
+            // People paste addresses: copy is still the bare one.
+            assert_eq!(host.view().copy_payload, ADDR);
+
+            // Request mode's code always names its network: no switch there.
+            let _ = host.dispatch(PayEvent::ModeChanged {
+                mode: vela_core::app::payment_request::Mode::Request,
+            });
+            assert!(draw(&host.view()).network.is_none());
+        });
     }
 
     /// The QR encodes what the CORE says, and a live one is never the demo

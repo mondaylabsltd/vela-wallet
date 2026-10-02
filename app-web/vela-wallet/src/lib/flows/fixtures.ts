@@ -270,6 +270,8 @@ function receiveQr(m: WalletFlowMessages, identicon: Identicon, asset: boolean):
 		centre: asset
 			? { ticker: 'USDT', badgeColor: CHAIN_COLORS.gnosis }
 			: { ticker: network.code, badgeColor: network.color },
+		// Spec 090: drawn off — the bare address every wallet can read.
+		network: { label: m['receive.includeNetwork'], on: false },
 		warning: m['receive.warningReminder'],
 		saveImage: m['receive.request.saveImage'],
 		viewOnExplorer: m['history.viewOnExplorer']
