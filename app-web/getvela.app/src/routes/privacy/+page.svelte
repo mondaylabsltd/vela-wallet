@@ -15,7 +15,7 @@
 
 <main class="container">
 	<h1>Privacy Policy</h1>
-	<p class="updated">Last updated: 1 October 2026</p>
+	<p class="updated">Last updated: 2 October 2026</p>
 
 	<section>
 		<h2>Who we are</h2>
@@ -241,9 +241,50 @@
 	<section>
 		<h2>The browser extension</h2>
 		<p>
-			The extension can read and act on the pages you visit so that it can offer the wallet to
-			dApps. It stores which sites you've connected and which network each uses in your browser, and
-			forwards a connected site's read requests to your RPC nodes and relay. It sends nothing else.
+			The extension is the Vela wallet packaged for Chrome, so what this page says about the apps
+			applies to it too, including bug reports. To let dApps find the wallet, it adds a wallet
+			provider (EIP-1193 and EIP-6963) to every web page you open, in the page's main frame only.
+			The provider does not read the page's text, forms or anything else on it; it only receives the
+			requests a site sends to the wallet.
+		</p>
+		<ul>
+			<li>
+				<strong>Requests that need no signature</strong> — such as reading a balance, a contract or the
+				latest block, or passing on a transaction that is already signed — are sent on to the RPC nodes
+				and relay set in your wallet, for the network that site is on. This happens for any site that
+				asks, whether or not you have connected it. The extension sends them, not the site, and the node
+				or relay receives the request and your IP address.
+			</li>
+			<li>
+				<strong>Connecting and signing</strong> — a site learns your address only after you approve a
+				connection, and your wallet signs or sends nothing until you approve it in Vela's side panel or
+				window with one of your keys.
+			</li>
+			<li>
+				<strong>What it keeps in your browser</strong> — the sites you connected and the address each
+				may see; the network each site switched to (a site can ask to switch before you connect it, so
+				this can include sites you never connected); and, in your activity, each request you approved,
+				with the site's address, the message or transaction, and its status. While the browser is open
+				it also keeps the requests waiting for your answer and a short log of the sites that asked to
+				connect or sign; these are cleared when the browser closes.
+			</li>
+			<li>
+				<strong>Feedback</strong> sent from the extension works as described under Bug reports. Its device
+				details also include counts of the extension's own errors, never site names.
+			</li>
+		</ul>
+		<p>
+			The extension does not keep a list of the pages you visit. To tell a site's open tabs about a
+			change, such as a disconnect, it checks which of your open tabs belong to that site, without
+			storing their addresses; when it is first installed it counts the pages already open, only to
+			say whether they need a reload. It cannot be turned on in Incognito windows. Apart from the requests
+			and the services described on this page, it sends nothing. Removing the extension, or Settings
+			→ Erase This Device, deletes what it stored in your browser; your passkeys stay with your
+			passkey provider.
+		</p>
+		<p>
+			The use of information received from Google APIs will adhere to the Chrome Web Store User Data
+			Policy, including the Limited Use requirements.
 		</p>
 	</section>
 

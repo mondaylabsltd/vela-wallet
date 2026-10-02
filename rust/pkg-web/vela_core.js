@@ -3290,6 +3290,78 @@ export function dappRequestDisplay(content, stored_request) {
 }
 
 /**
+ * EIP-5792 `wallet_getCallsStatus`'s answer for batch `id` on `chain_id`,
+ * from the bundler's `eth_getUserOperationReceipt` result JSON (`undefined`
+ * or `null`: not landed) — `dapp_rpc::calls_status`, as JSON.
+ * @param {string} id
+ * @param {number} chain_id
+ * @param {string | null} [receipt_json]
+ * @returns {string}
+ */
+export function dappRpcCallsStatus(id, chain_id, receipt_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(receipt_json) ? 0 : passStringToWasm0(receipt_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.dappRpcCallsStatus(ptr0, len0, chain_id, ptr1, len1);
+        deferred3_0 = ret[0];
+        deferred3_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * EIP-5792 `wallet_getCallsStatus` (spec 094): the batch id `params_json`
+ * asks about, lower-cased — `undefined` when it is not one 32-byte hash.
+ * @param {string} params_json
+ * @returns {string | undefined}
+ */
+export function dappRpcCallsStatusId(params_json) {
+    const ptr0 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.dappRpcCallsStatusId(ptr0, len0);
+    let v2;
+    if (ret[0] !== 0) {
+        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    }
+    return v2;
+}
+
+/**
+ * EIP-5792 `wallet_getCapabilities` — `dapp_rpc::capabilities` over the
+ * request's params, the site's granted addresses and the wallet's chains (all
+ * JSON). Answers `{"result":…}` or `{"error":{"code","message"}}`.
+ * @param {string} params_json
+ * @param {string} granted_json
+ * @param {string} chains_json
+ * @returns {string}
+ */
+export function dappRpcCapabilities(params_json, granted_json, chains_json) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(params_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(granted_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(chains_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.dappRpcCapabilities(ptr0, len0, ptr1, len1, ptr2, len2);
+        deferred4_0 = ret[0];
+        deferred4_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+    }
+}
+
+/**
  * The core's route for `method`, as JSON (`{"type":"read","bundler":true}`).
  * @param {string} method
  * @returns {string}
@@ -3462,6 +3534,17 @@ export function feeFailureReasonKey(failure) {
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
     return v2;
+}
+
+/**
+ * The bound on one whole fee quote, ms — `fee_policy::QUOTE_DEADLINE_MS`
+ * (spec 094 S9). The web shell bounds the deployment read it makes before a
+ * quote by the same figure.
+ * @returns {number}
+ */
+export function feeQuoteDeadlineMs() {
+    const ret = wasm.feeQuoteDeadlineMs();
+    return ret >>> 0;
 }
 
 /**

@@ -102,6 +102,25 @@ export const openDoor = (rid) =>
 	rid === undefined ? 'open.html' : `open.html?rid=${encodeURIComponent(rid)}`;
 
 /**
+ * The doorway the worker opens on a fresh install (spec 094 S3): the wallet
+ * tab's, marked `installed` when `staleTabs` web pages were already open —
+ * pages Chrome put no provider into, which the welcome asks the person to
+ * reload.
+ */
+export const installDoor = (staleTabs) => (staleTabs > 0 ? 'open.html?installed=1' : 'open.html');
+
+/**
+ * Where the welcome finds the install mark `open.html` carried over
+ * (`sessionStorage` of the tab — the doorway replaces its own page, and the
+ * wallet route may move on to the welcome client-side, so a query would be
+ * lost on the way).
+ */
+export const INSTALLED_KEY = 'vela.ext.installed';
+
+/** Did the doorway's query say "freshly installed, with tabs to reload"? */
+export const installedMark = (search) => new URLSearchParams(search).get('installed') === '1';
+
+/**
  * Where `open.html` sends its page: the request window to its request, the
  * toolbar's tab to the wallet — in `locale`. `search` is the doorway's own
  * query (`?rid=…`).

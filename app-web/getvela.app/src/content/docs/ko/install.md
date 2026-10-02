@@ -1,7 +1,7 @@
 ---
 title: Vela 설치
 description: "웹, 브라우저 확장 프로그램, 데스크톱, 휴대폰까지 Vela를 쓰는 모든 방법. 각각의 비용과 할 수 있는 일, 기기에 필요한 조건을 정리했습니다."
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -31,7 +31,7 @@ source: fa80f5cfdb95
 
 ## 브라우저 확장 프로그램
 
-Chromium 기반 브라우저인 Chrome, Edge, Brave에서 쓸 수 있습니다(Chrome 116 이상).
+Chromium 기반 브라우저인 Chrome, Edge, Brave에서 쓸 수 있습니다(Chrome 122 이상).
 지갑을 도구 모음에 두고, dApp이 지갑에 바로 연결할 수 있게 해 줍니다. Chrome 웹 스토어에
 올라가기 전까지는 다음과 같이 설치합니다.
 

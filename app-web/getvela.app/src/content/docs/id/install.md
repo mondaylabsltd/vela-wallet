@@ -1,7 +1,7 @@
 ---
 title: Memasang Vela
 description: "Semua cara menjalankan Vela — web, ekstensi browser, desktop, dan ponsel — berapa biaya masing-masing, apa yang bisa dilakukan, dan apa yang dibutuhkan perangkat Anda."
-source: fa80f5cfdb95
+source: b2ba824a16c8
 ---
 
 <script>
@@ -31,7 +31,7 @@ ini; di perangkat lain, cukup masuk lagi dengan salah satu kunci Anda.
 
 ## Ekstensi browser
 
-Untuk browser berbasis Chromium: Chrome, Edge, dan Brave (Chrome 116 atau yang lebih
+Untuk browser berbasis Chromium: Chrome, Edge, dan Brave (Chrome 122 atau yang lebih
 baru). Ekstensi ini menaruh dompet di bilah alat dan memungkinkan dApp terhubung
 langsung dengannya. Selama belum ada di Chrome Web Store:
 

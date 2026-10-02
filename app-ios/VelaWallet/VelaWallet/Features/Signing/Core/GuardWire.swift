@@ -240,6 +240,11 @@ struct GuardViewWire: Decodable, Equatable {
     /// showed it and it was kept as asked. Copied verbatim into the approve
     /// opts as `unlimited_approved` — the submit guard's only waiver.
     let unlimitedConsented: Bool
+    /// The request grants an unbounded allowance as it stands, and the sheet
+    /// says so in the danger tone — the ONE place every shell reads that
+    /// sentence from (spec 094 S8): the approval kept on its Requested chip, a
+    /// batch leg left so, or an off-chain permit for an unbounded amount.
+    var unlimitedWarning: Bool = false
     let increaseTotal: GuardIncreaseTotalViewWire?
     /// Unverified decimals must be flagged explicitly on screen.
     let decimalsUnverified: Bool

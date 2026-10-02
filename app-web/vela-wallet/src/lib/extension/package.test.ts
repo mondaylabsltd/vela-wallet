@@ -28,7 +28,21 @@ const APP_ROOT = join(import.meta.dirname, '../../..');
 const DIST = process.env.VELA_EXTENSION_DIST
 	? resolve(APP_ROOT, process.env.VELA_EXTENSION_DIST)
 	: join(APP_ROOT, 'extension/dist');
+/**
+ * The Chrome Web Store package (spec 094), which every build derives beside the
+ * development one — `build.mjs`'s rule: `VELA_EXTENSION_STORE_DIST`, else
+ * `<development package>-store`.
+ */
+const STORE_DIST = process.env.VELA_EXTENSION_STORE_DIST
+	? resolve(APP_ROOT, process.env.VELA_EXTENSION_STORE_DIST)
+	: `${DIST}-store`;
+/** The GitHub release's "Load unpacked" package — `key` kept, no developer pages. */
+const RELEASE_DIST = process.env.VELA_EXTENSION_RELEASE_DIST
+	? resolve(APP_ROOT, process.env.VELA_EXTENSION_RELEASE_DIST)
+	: `${DIST}-release`;
 const MANIFEST = join(APP_ROOT, 'extension/manifest.json');
+/** The wasm the app's code names (`WASM_URL`), from the build's own source of it. */
+const WASM_URL_MODULE = join(APP_ROOT, '../../rust/pkg-web/vela_core_wasm_url.js');
 
 /** Every `.html` in the package. */
 function pages(dir: string): string[] {
@@ -40,8 +54,20 @@ function pages(dir: string): string[] {
 	});
 }
 
+/** Every file in the package, as paths relative to its root. */
+function files(dir: string, prefix = ''): string[] {
+	if (!existsSync(dir)) return [];
+	return readdirSync(dir).flatMap((name) => {
+		const path = join(dir, name);
+		const relative = prefix ? `${prefix}/${name}` : name;
+		return statSync(path).isDirectory() ? files(path, relative) : [relative];
+	});
+}
+
 /** An inline script is one with a body and no `src`. */
 const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/g;
+/** A core artifact named anywhere in a script: `vela_core_bg.<hash>.wasm`. */
+const WASM_NAME = /vela_core_bg\.[0-9a-f]+\.wasm/g;
 
 describe('the manifest', () => {
 	const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
@@ -59,8 +85,20 @@ describe('the manifest', () => {
 	});
 
 	it('pins its own id, so the relying party and the tests address one origin', () => {
+		// The DEVELOPMENT manifest only: the store package drops it (below).
 		expect(typeof manifest.key).toBe('string');
 		expect(manifest.key.length).toBeGreaterThan(300);
+	});
+
+	it('asks for the Chrome that lets an extension page use the getvela.app passkey (spec 094)', () => {
+		// Below 122, an extension page may not claim a relying party it holds
+		// host permission for: the passkey ceremony fails on a Chrome the
+		// store would still have installed it on.
+		expect(manifest.minimum_chrome_version).toBe('122');
+	});
+
+	it('stays out of incognito windows (spec 094)', () => {
+		expect(manifest.incognito).toBe('not_allowed');
 	});
 
 	it('lets no web page reach into the package (spec 089)', () => {
@@ -95,14 +133,22 @@ describe('the manifest', () => {
 	});
 });
 
-describe('the packaged pages', () => {
-	const built = pages(DIST);
+/**
+ * What both packages must be — the development one the e2e loads, and the one
+ * uploaded to the store, which is derived from it (spec 094).
+ */
+describe.each([
+	['development', DIST],
+	['release', RELEASE_DIST],
+	['store', STORE_DIST]
+])('the %s package', (_name, dist) => {
+	const built = pages(dist);
 
-	it('exist — run `pnpm build:extension` before trusting this file', () => {
+	it('exists — run `pnpm build:extension` before trusting this file', () => {
 		expect(built.length).toBeGreaterThan(0);
 	});
 
-	it('sit beside no top-level `_` name, or Chrome installs none of them', () => {
+	it('sits beside no top-level `_` name, or Chrome installs none of it', () => {
 		// Chrome refuses the PACKAGE, not the file: "Load unpacked" answers
 		// "Cannot load extension with file or directory name _app. Filenames
 		// starting with `_` are reserved for use by the system." — so this is a
@@ -112,11 +158,11 @@ describe('the packaged pages', () => {
 		// catch a regression: every extension e2e passed while the shipped
 		// package was uninstallable by hand, because Playwright's
 		// `--load-extension` accepts a name chrome://extensions rejects.
-		const reserved = readdirSync(DIST).filter((name) => name.startsWith('_'));
+		const reserved = readdirSync(dist).filter((name) => name.startsWith('_'));
 		expect(reserved, 'top-level names Chrome reserves for itself').toEqual([]);
 	});
 
-	it('carry no inline script anywhere', () => {
+	it('carries no inline script anywhere', () => {
 		const carriers = built.filter((path) => {
 			const html = readFileSync(path, 'utf8');
 			INLINE_SCRIPT.lastIndex = 0;
@@ -128,8 +174,31 @@ describe('the packaged pages', () => {
 	it('ships the core artifact at the root the app addresses it by', () => {
 		// `WASM_URL` is absolute (`/vela_core_bg.<hash>.wasm`), which is why the
 		// app is packaged at the extension's ROOT rather than under a folder.
-		const artifacts = readdirSync(DIST).filter((name) => /^vela_core_bg\..*\.wasm$/.test(name));
+		const artifacts = readdirSync(dist).filter((name) => /^vela_core_bg\..*\.wasm$/.test(name));
 		expect(artifacts).toHaveLength(1);
+	});
+
+	it('carries the very wasm its code names (spec 094 B2)', () => {
+		// A package that names a core it does not carry loads every page and
+		// then cannot decide anything: `pnpm build:extension` used to skip the
+		// copy into `static/`, and the package shipped whichever wasm was
+		// there — none on a fresh checkout. Asked of the BUILT code: every
+		// artifact any script names must be a file at the root, and the one the
+		// source names now is among them.
+		const named = new Set<string>();
+		for (const path of files(dist).filter((file) => file.endsWith('.js'))) {
+			for (const match of readFileSync(join(dist, path), 'utf8').matchAll(WASM_NAME)) {
+				named.add(match[0]);
+			}
+		}
+		const current = /export const WASM_URL = '\/([^']+)'/.exec(
+			readFileSync(WASM_URL_MODULE, 'utf8')
+		)?.[1];
+		expect(current, 'rust/pkg-web/vela_core_wasm_url.js names a wasm').toBeTruthy();
+		expect([...named], 'the scripts name the current core').toContain(current);
+		for (const name of named) {
+			expect(existsSync(join(dist, name)), `${name} is in the package`).toBe(true);
+		}
 	});
 
 	it('ships both doorways, each with its script beside it (issue 317)', () => {
@@ -141,9 +210,65 @@ describe('the packaged pages', () => {
 			['panel.html', 'panel.js'],
 			['open.html', 'open.js']
 		]) {
-			expect(existsSync(join(DIST, page)), page).toBe(true);
-			expect(existsSync(join(DIST, script)), script).toBe(true);
-			expect(readFileSync(join(DIST, page), 'utf8')).toContain(`<script src="${script}"></script>`);
+			expect(existsSync(join(dist, page)), page).toBe(true);
+			expect(existsSync(join(dist, script)), script).toBe(true);
+			expect(readFileSync(join(dist, page), 'utf8')).toContain(`<script src="${script}"></script>`);
 		}
+	});
+
+	it('declares the version the source manifest does', () => {
+		const packaged = JSON.parse(readFileSync(join(dist, 'manifest.json'), 'utf8'));
+		const source = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+		expect(packaged.version).toBe(source.version);
+	});
+});
+
+describe('the development package', () => {
+	const manifest = () => JSON.parse(readFileSync(join(DIST, 'manifest.json'), 'utf8'));
+
+	it('keeps the pinned id the e2e computes', () => {
+		expect(manifest().key).toBe(JSON.parse(readFileSync(MANIFEST, 'utf8')).key);
+	});
+
+	it('keeps the parallel space the e2e enters through', () => {
+		expect(existsSync(join(DIST, 'en/parallel.html'))).toBe(true);
+	});
+});
+
+/** Developer pages: the parallel space, a gallery, the `dev/` tree. */
+const developerFiles = (dist: string) =>
+	files(dist).filter((path) => /(^|\/)(parallel|gallery)(\.|\/)|^dev\//.test(path));
+
+describe('the release package — the GitHub release’s "Load unpacked" (spec 094)', () => {
+	const manifest = () => JSON.parse(readFileSync(join(RELEASE_DIST, 'manifest.json'), 'utf8'));
+
+	it('keeps the pinned id, so a tester’s id stays the same from version to version', () => {
+		expect(manifest().key).toBe(JSON.parse(readFileSync(MANIFEST, 'utf8')).key);
+	});
+
+	it('is otherwise the source manifest, field for field', () => {
+		expect(manifest()).toEqual(JSON.parse(readFileSync(MANIFEST, 'utf8')));
+	});
+
+	it('carries no developer pages (owner ruling 2026-10-02)', () => {
+		expect(developerFiles(RELEASE_DIST)).toEqual([]);
+	});
+});
+
+describe('the store package (spec 094)', () => {
+	const manifest = () => JSON.parse(readFileSync(join(STORE_DIST, 'manifest.json'), 'utf8'));
+
+	it('carries no `key` — the store assigns the id and refuses an upload with one', () => {
+		expect(manifest().key).toBeUndefined();
+	});
+
+	it('is otherwise the source manifest, field for field', () => {
+		const source = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+		delete source.key;
+		expect(manifest()).toEqual(source);
+	});
+
+	it('carries no developer pages — the parallel space or a gallery (owner ruling 2026-10-02)', () => {
+		expect(developerFiles(STORE_DIST)).toEqual([]);
 	});
 });

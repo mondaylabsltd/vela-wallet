@@ -729,7 +729,8 @@
    "syncFailedBody": "Cüzdan oluşturuldu ancak açık anahtar yüklenmedi — diğer cihazlar henüz giriş yapamaz.",
    "copyAddress": "Adresi kopyala",
    "copied": "Kopyalandı",
-   "close": "Kapat"
+   "close": "Kapat",
+   "siteAccessBody": "Vela'nın site erişimi sınırlı. Üstteki Erişime izin ver'i seçip tekrar deneyin."
   },
   "create": {
    "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",
@@ -985,6 +986,11 @@
    "clearAllTitle": "Geçmiş temizlensin mi?",
    "clearAllBody": "Bu, son açılan tüm dApp'leri kaldırır.",
    "a11yDeleteHistory": "Geçmişten kaldır"
+  },
+  "ext": {
+   "installedNote": "Sitelerin Vela'yı bulabilmesi için önceden açık sekmeleri yenileyin.",
+   "accessNote": "Site erişimi sınırlı: siteler Vela'yı bulamaz ve passkey çalışmaz.",
+   "accessAllow": "Erişime izin ver"
   }
  },
  "signHandoff": {

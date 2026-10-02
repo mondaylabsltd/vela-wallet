@@ -372,6 +372,10 @@ struct Tab {
     open: BTreeMap<String, OpenKind>,
     reads_in_flight: usize,
     read_queue: VecDeque<QueuedRead>,
+    /// Reads that answer a `wallet_getCallsStatus` (spec 094): request id →
+    /// the batch and its chain, so the bundler's receipt is answered in
+    /// EIP-5792's shape ([`dapp_rpc::calls_status`]), never verbatim.
+    calls_status: BTreeMap<String, (String, u32)>,
 }
 
 #[derive(Clone, Debug)]
@@ -1325,23 +1329,61 @@ fn handle_request(model: &mut Model, tab_id: &str, request: PageRequest, out: &m
                 params: request.params,
                 bundler,
             };
-            let Some(tab) = model.tabs.get_mut(tab_id) else {
+            queue_read(model, tab_id, &doc, read, out);
+        }
+        Route::Capabilities => {
+            match dapp_rpc::capabilities(&request.params, &grant_addresses, &model.chains) {
+                Ok(answer) => deliver_result(tab_id, &doc, &id, answer, out),
+                Err((code, words)) => deliver_error(tab_id, &doc, &id, code, words, out),
+            }
+        }
+        Route::CallsStatus => {
+            let Some(batch) = dapp_rpc::calls_status_id(&request.params) else {
+                deliver_error(tab_id, &doc, &id, -32602, "Expected [id]", out);
                 return;
             };
-            if tab.reads_in_flight < READS_IN_FLIGHT {
-                tab.open.insert(id, OpenKind::Read);
-                start_read(model, tab_id, read, out);
-            } else if tab.read_queue.len() < READS_QUEUED {
-                tab.open.insert(id, OpenKind::Read);
-                tab.read_queue.push_back(read);
-            } else {
-                deliver_error(tab_id, &doc, &id, -32005, "Limit exceeded", out);
+            // Only a batch this wallet sent: a page answered with its id.
+            if !model.user_ops.contains(&batch) {
+                let code = dapp_rpc::UNKNOWN_BUNDLE_ID;
+                deliver_error(tab_id, &doc, &id, code, "Unknown bundle id", out);
+                return;
             }
+            if let Some(tab) = model.tabs.get_mut(tab_id) {
+                tab.calls_status
+                    .insert(id.clone(), (batch.clone(), chain_id));
+            }
+            let read = QueuedRead {
+                id: id.clone(),
+                chain_id,
+                method: "eth_getUserOperationReceipt".to_owned(),
+                params: json!([batch]),
+                bundler: true,
+            };
+            queue_read(model, tab_id, &doc, read, out);
         }
         Route::Unsupported => {
             let words = format!("Vela does not support {}", request.method);
             deliver_error(tab_id, &doc, &id, 4200, &words, out);
         }
+    }
+}
+
+/// A read, now or behind the tab's reads in flight — or refused when the
+/// queue is full.
+fn queue_read(model: &mut Model, tab_id: &str, doc: &str, read: QueuedRead, out: &mut Out) {
+    let Some(tab) = model.tabs.get_mut(tab_id) else {
+        return;
+    };
+    let id = read.id.clone();
+    if tab.reads_in_flight < READS_IN_FLIGHT {
+        tab.open.insert(id, OpenKind::Read);
+        start_read(model, tab_id, read, out);
+    } else if tab.read_queue.len() < READS_QUEUED {
+        tab.open.insert(id, OpenKind::Read);
+        tab.read_queue.push_back(read);
+    } else {
+        tab.calls_status.remove(&id);
+        deliver_error(tab_id, doc, &id, -32005, "Limit exceeded", out);
     }
 }
 
@@ -1584,14 +1626,25 @@ fn read_done(model: &mut Model, tab_id: &str, id: &str, body_json: Option<String
     };
     tab.reads_in_flight = tab.reads_in_flight.saturating_sub(1);
     let doc = tab.doc.clone();
+    let calls_status = tab.calls_status.remove(id);
     if let Some(doc) = doc {
         if close_open(model, tab_id, &doc, id) {
-            let message = match body_json
+            let body = body_json
                 .as_deref()
-                .and_then(|body| serde_json::from_str::<Value>(body).ok())
-            {
-                None => error_json(&doc, id, -32603, "No endpoint answered"),
-                Some(body) => match body.get("error").filter(|e| !e.is_null()) {
+                .and_then(|body| serde_json::from_str::<Value>(body).ok());
+            let message = match (calls_status, body) {
+                // A batch's status: the receipt read through EIP-5792's shape.
+                // A bundler that could not be asked, or refused, says nothing
+                // the wallet knows — still pending, and the page polls on.
+                (Some((batch, chain)), body) => {
+                    let receipt = body
+                        .as_ref()
+                        .filter(|body| body.get("error").is_none_or(Value::is_null))
+                        .and_then(|body| body.get("result"));
+                    result_json(&doc, id, &dapp_rpc::calls_status(&batch, chain, receipt))
+                }
+                (None, None) => error_json(&doc, id, -32603, "No endpoint answered"),
+                (None, Some(body)) => match body.get("error").filter(|e| !e.is_null()) {
                     Some(error) => error_body_json(&doc, id, error),
                     None => result_json(&doc, id, body.get("result").unwrap_or(&Value::Null)),
                 },

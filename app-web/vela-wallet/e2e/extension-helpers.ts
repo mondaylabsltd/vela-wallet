@@ -32,6 +32,15 @@ export const EXTENSION_DIST = process.env.VELA_EXTENSION_DIST
 export const extensionBuilt = (): boolean => existsSync(join(EXTENSION_DIST, 'manifest.json'));
 
 /**
+ * The Chrome Web Store package every build derives beside the development one
+ * (spec 094) — the build's and the package test's rule.
+ */
+export const STORE_DIST = process.env.VELA_EXTENSION_STORE_DIST
+	? resolve(APP_ROOT, process.env.VELA_EXTENSION_STORE_DIST)
+	: `${EXTENSION_DIST}-store`;
+export const storeBuilt = (): boolean => existsSync(join(STORE_DIST, 'manifest.json'));
+
+/**
  * Chrome's id for an unpacked extension with a `key`: the first 32 hex digits
  * of SHA-256 over the DER public key, with 0–f mapped onto a–p.
  */
@@ -55,27 +64,71 @@ export async function loadExtension(
 		surface?: 'window' | 'panel';
 		/** More Chrome switches for this browser only (e.g. `--host-resolver-rules`). */
 		args?: string[];
+		/** Another package than the development one (the store's, spec 094). */
+		dist?: string;
+		/** Leave the welcome tab a fresh install opens (spec 094 S3) where it is. */
+		keepWelcome?: boolean;
 	} = {}
 ): Promise<BrowserContext> {
+	const dist = options.dist ?? EXTENSION_DIST;
 	const context = await chromium.launchPersistentContext('', {
 		headless: false,
 		args: [
 			'--headless=new',
-			`--disable-extensions-except=${EXTENSION_DIST}`,
-			`--load-extension=${EXTENSION_DIST}`,
+			`--disable-extensions-except=${dist}`,
+			`--load-extension=${dist}`,
 			...(options.args ?? [])
 		],
 		...(options.viewport ? { viewport: options.viewport } : {})
 	});
+	if (!options.keepWelcome) await closeWelcome(context);
 	if ((options.surface ?? 'window') === 'window') {
 		// Any document of the extension's origin can write its storage; the
 		// manifest is the cheapest one to open.
 		const page = await context.newPage();
-		await page.goto(`chrome-extension://${extensionId()}/manifest.json`);
+		// A package with no `key` (the store's) has the id Chrome gave it.
+		const id = options.dist ? await runningExtensionId(context) : extensionId();
+		await page.goto(`chrome-extension://${id}/manifest.json`);
 		await preferWindows(page);
 		await page.close();
 	}
 	return context;
+}
+
+/** Is this the tab a fresh install opens (the doorway, then the welcome)? */
+const isWelcomeTab = (page: Page): boolean => /^chrome-extension:\/\/[a-p]{32}\//.test(page.url());
+
+/**
+ * Every browser here is a fresh install, so each one opens the wallet's
+ * welcome in a tab (spec 094 S3, `runtime.onInstalled`). It is closed as soon
+ * as it shows, so a suite counts only the pages it opens itself; a suite about
+ * the welcome passes `keepWelcome` and finds it with `welcomeTab`.
+ */
+async function closeWelcome(context: BrowserContext): Promise<void> {
+	const tab = await welcomeTab(context).catch(() => null);
+	await tab?.close().catch(() => {});
+}
+
+/** The tab a fresh install opened, once it shows (spec 094 S3). */
+export async function welcomeTab(context: BrowserContext, timeoutMs = 15_000): Promise<Page> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		const found = context.pages().find(isWelcomeTab);
+		if (found) return found;
+		await new Promise((r) => setTimeout(r, 100));
+	}
+	throw new Error('no welcome tab opened');
+}
+
+/**
+ * The id Chrome gave the extension — from its service worker, for a package
+ * with no `key` to compute it from (the store's, spec 094).
+ */
+export async function runningExtensionId(context: BrowserContext): Promise<string> {
+	const worker =
+		context.serviceWorkers().find((w) => w.url().startsWith('chrome-extension://')) ??
+		(await context.waitForEvent('serviceworker', { timeout: 15_000 }));
+	return new URL(worker.url()).host;
 }
 
 /** Refuse every request that is not to the extension's own origin. */

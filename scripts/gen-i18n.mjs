@@ -488,9 +488,15 @@ for (let i = 1; i < PATHS.length; i++) {
 // 1798 (093, 2026-10-02): + `history.dappRowTitle` — every dApp interaction is
 //   an Activity row titled "{{intent}} on {{place}}" (在 {{place}} {{intent}});
 //   every other word it needs is reused. Same branches: 1797 + 1 = 1798.
-if (PATHS.length !== 1798) fail(`expected 1798 paths (1709 leaf + 89 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1709) fail(`expected 1709 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 89) fail(`expected 89 branch paths, got ${branchSet.size}`);
+// 1803 (094, 2026-10-02): + the extension's own notices, branch `connect.ext`
+//   with `{installedNote, accessNote, accessAllow}` — a fresh install asks for
+//   the tabs open before it to be reloaded, and limited site access is said in
+//   plain words with its one-click grant — and `onboarding.common.siteAccessBody`,
+//   the passkey Chrome refused for that reason (was Chrome's raw SecurityError).
+//   1798 + 4 leaves + 1 branch = 1803 (1713 leaf + 90 branch).
+if (PATHS.length !== 1803) fail(`expected 1803 paths (1713 leaf + 90 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1713) fail(`expected 1713 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 90) fail(`expected 90 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {
@@ -803,7 +809,7 @@ const en = stats.find((s) => s.lng === 'en');
 const ja = stats.find((s) => s.lng === 'ja');
 const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr array (wasm32)
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
-console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 140,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
+console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 141,800 for the per-locale halves — tests/i18n_residency.rs SC005_BUDGET)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;

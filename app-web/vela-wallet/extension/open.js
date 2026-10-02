@@ -13,7 +13,23 @@
  * page, so `chrome.*` is available.
  */
 /* global chrome */
-import { openDoorTarget, pinnedLanguage, surfaceLocale } from './lib/locales.js';
+import {
+	INSTALLED_KEY,
+	installedMark,
+	openDoorTarget,
+	pinnedLanguage,
+	surfaceLocale
+} from './lib/locales.js';
 
 const locale = surfaceLocale(pinnedLanguage(), chrome.i18n?.getUILanguage?.());
+// A fresh install with web pages already open (spec 094 S3): the welcome this
+// tab lands on says to reload them. Carried in the TAB's session storage,
+// which survives the navigation below and goes with the tab.
+if (installedMark(location.search)) {
+	try {
+		sessionStorage.setItem(INSTALLED_KEY, '1');
+	} catch {
+		/* storage denied: the welcome simply says nothing about other tabs */
+	}
+}
 location.replace(chrome.runtime.getURL(openDoorTarget(location.search, locale)));

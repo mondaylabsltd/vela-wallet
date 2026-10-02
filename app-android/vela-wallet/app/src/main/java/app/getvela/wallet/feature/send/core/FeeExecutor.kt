@@ -46,6 +46,7 @@ class FeeExecutor(
         is FeeShellResult.UserOpGas -> "gas=${result.outcome::class.simpleName}"
         is FeeShellResult.InnerCallsMeasured -> "inner=${result.gas.joinToString(",") { it ?: "-" }}"
         FeeShellResult.TtlElapsed -> "ttl"
+        FeeShellResult.DeadlineElapsed -> "deadline"
     }
 
     private suspend fun arm(operation: FeeOperation): FeeShellResult = when (operation) {
@@ -90,6 +91,13 @@ class FeeExecutor(
         is FeeOperation.StartTtl -> {
             delay(operation.ms.toLong())
             FeeShellResult.TtlElapsed
+        }
+
+        // The core's bound on a whole run (spec 094 S9): a quote that has not
+        // priced by then fails, retryably, instead of "Estimating…".
+        is FeeOperation.StartDeadline -> {
+            delay(operation.ms.toLong())
+            FeeShellResult.DeadlineElapsed
         }
     }
 
@@ -151,5 +159,6 @@ class FeeExecutor(
         is FeeOperation.EstimateUserOpGas -> FeeShellResult.UserOpGas(FeeGasOutcome.ContextUnavailable)
         is FeeOperation.MeasureInnerCalls -> FeeShellResult.InnerCallsMeasured(operation.calls.map { null })
         is FeeOperation.StartTtl -> FeeShellResult.TtlElapsed
+        is FeeOperation.StartDeadline -> FeeShellResult.DeadlineElapsed
     }
 }

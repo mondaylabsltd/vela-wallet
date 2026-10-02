@@ -31,6 +31,7 @@ import {
 	type TransactionFeeEstimate
 } from '$lib/services/safe-transaction';
 import { DeploymentReadError } from '$lib/services/deployment-read';
+import { feeQuoteDeadlineMs } from '$lib/core/kernels';
 import { createFeeSession, type FeeSession } from './fee-session';
 import { resolveFee } from './send-estimates';
 
@@ -292,10 +293,14 @@ export class FeeQuote {
 		this.pending = true;
 
 		// Deployment status decides whether the priced op carries initCode, and
-		// `accountIsDeployed` throws rather than answer an indeterminate read.
+		// `accountIsDeployed` throws rather than answer an indeterminate read —
+		// or a read that outlives the core's bound on a whole quote (spec 094
+		// S9): offline it hung, and the row read "Estimating…" with nothing
+		// scheduled to ask again.
 		let deployed: boolean;
 		try {
-			deployed = await accountIsDeployed(request.account, request.chainId);
+			await loadCore();
+			deployed = await withinQuoteDeadline(accountIsDeployed(request.account, request.chainId));
 		} catch (error) {
 			if (seq !== this.#seq) return this.#supersededOutcome(seq, { kind: 'context_unavailable' });
 			this.#neverReachedCore = true;
@@ -595,4 +600,25 @@ export class FeeQuote {
 			settle(outcome);
 		}
 	}
+}
+
+/**
+ * `read`, or a failed deployment read once the core's bound on a whole quote
+ * has passed (`fee_policy::QUOTE_DEADLINE_MS`) — the same lost-context path,
+ * and the same retry, as a read that failed on its own.
+ */
+function withinQuoteDeadline<T>(read: Promise<T>): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new DeploymentReadError(false)), feeQuoteDeadlineMs());
+		read.then(
+			(value) => {
+				clearTimeout(timer);
+				resolve(value);
+			},
+			(error: unknown) => {
+				clearTimeout(timer);
+				reject(error);
+			}
+		);
+	});
 }

@@ -1073,6 +1073,11 @@ export function signRequestTtlMs(): number {
 	return wasm.signRequestTtlMs();
 }
 
+/** The bound on one whole fee quote — the core's `QUOTE_DEADLINE_MS` (spec 094 S9). */
+export function feeQuoteDeadlineMs(): number {
+	return wasm.feeQuoteDeadlineMs();
+}
+
 /**
  * How long one chain's balance read may take before the round counts it failed
  * — the core's `CHAIN_READ_DEADLINE_MS` (spec 092), the same on every shell.
