@@ -772,4 +772,120 @@ struct DappActivityTests {
         #expect(!detail.facts.contains { $0.label == zh.t("componentsTx.detail.labelHash") },
                 "the hash is a technical detail")
     }
+
+    // MARK: - Spec 097: what the chain proved, and why it failed
+
+    /// What the sheet's reading named rides the approve as `reading`,
+    /// verbatim; nothing named, nothing sent.
+    @Test func theApproveCopiesTheReadingVerbatim() throws {
+        var clear = ClearSigningViewWire.empty
+        #expect(SigningController.approveOpts(fee: nil, clear: clear, guard: .empty)["reading"] is NSNull)
+        clear.recordReading = DappReadingWire(
+            address: "0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01",
+            name: "NativeOrderFactory", owner: "1inch",
+            tokens: [DappTokenWire(address: "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", symbol: "USDC", decimals: 18)]
+        )
+        let reading = try #require(
+            SigningController.approveOpts(fee: nil, clear: clear, guard: .empty)["reading"] as? [String: Any]
+        )
+        #expect(reading["name"] as? String == "NativeOrderFactory")
+        #expect(reading["owner"] as? String == "1inch")
+        let tokens = try #require(reading["tokens"] as? [[String: Any]])
+        #expect(tokens.first?["symbol"] as? String == "USDC")
+        #expect(tokens.first?["decimals"] as? Int == 18)
+    }
+
+    /// The tracker's patch keeps the settlement beside the status, and the
+    /// store hands it back to the core untouched.
+    @Test func theTrackersSettlementIsKeptAndHandedBack() async throws {
+        let store = VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        TxRecords.writeRecords([
+            ["id": "dapp-1-tx", "type": "dapp_tx", "status": "pending", "chainId": 56,
+             "timestamp": 1_790_958_668, "userOpHash": F.opHash, "txHash": ""],
+        ], store: store)
+        let executor = TrackerExecutor(
+            store: store, relay: RelayClient(port: ScriptedRelayPort(), now: { 0 }, retryDelayMs: 0)
+        )
+        let settlement: [String: Any] = ["moved": [
+            ["token": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", "delta": "300000000000000000"],
+        ]]
+        _ = await executor.perform([
+            "type": "update_tx_records", "ids": ["dapp-1-tx"],
+            "patch": ["status": "confirmed", "tx_hash": F.txHash, "settlement": settlement],
+        ])
+        let row = try #require(TxRecords.load(store: store).first)
+        #expect(row["status"] as? String == "confirmed")
+        let kept = try #require(row["settlement"] as? [String: Any])
+        #expect((kept["moved"] as? [[String: Any]])?.first?["delta"] as? String == "300000000000000000")
+        let wire = try #require(TxRecords.toWire(row))
+        #expect((wire["settlement"] as? [String: Any])?["moved"] != nil)
+    }
+
+    /// The pass's rows through the REAL core: the Aave borrow reads "+0.3
+    /// USDC" (the scan's Received folded in, still drawn) and its detail leads
+    /// with it; the refused withdraw says why under its chip; the 1inch
+    /// order's BNB has no price — no fiat, never "≈ $0.00".
+    @Test func thePassRowsSayWhatTheChainProvedAndWhyTheyFailed() throws {
+        let pool = "0x6807dc923806fe8fd134338eabca509979a7e0cb"
+        let factory = "0xe12e0f117d23a5ccc57f8935cd8c4e80cd91ff01"
+        let borrowTx = "0x" + String(repeating: "cb", count: 32)
+        let at = Int(now / 1000)
+        func dappRow(_ id: String, _ seconds: Int, _ extra: [String: Any]) -> [String: Any] {
+            var row: [String: Any] = [
+                "id": id, "type": "dapp_tx", "from": F.me, "to": pool, "value": "0x0",
+                "symbol": "BNB", "decimals": 18, "chainId": 56, "timestamp": seconds,
+                "status": "confirmed", "userOpHash": "0x" + String(repeating: "0\(id.count % 10)", count: 32),
+                "txHash": "", "dappUrl": "https://app.aave.com",
+                "dappSummary": ["action": "call", "calls": 1, "contract": pool],
+            ]
+            row.merge(extra) { $1 }
+            return row
+        }
+        let rows: [[String: Any]] = [
+            dappRow("dapp-1-tx", at - 300, [
+                "txHash": borrowTx, "intent": "Borrow",
+                "settlement": ["moved": [
+                    ["token": "0xcdbbed5606d9c5c98eeedd67933991dc17f0c68d", "delta": "300000000000000001"],
+                    ["token": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", "delta": "300000000000000000"],
+                ]],
+            ]),
+            ["id": "rx-1", "type": "receive", "from": pool, "to": F.me, "value": "0.3", "symbol": "USDC",
+             "decimals": 18, "chainId": 56, "timestamp": at - 290, "status": "confirmed",
+             "txHash": borrowTx, "userOpHash": ""],
+            dappRow("dapp-2-tx", at - 200, [
+                "status": "failed", "intent": "Withdraw", "settlement": ["failure": "refused"],
+            ]),
+            dappRow("dapp-33-tx", at - 100, [
+                "to": factory, "value": "0xaa87bee538000", "intent": "create order",
+                "signedRequest": #"[{"to":"\#(factory)","value":"0xaa87bee538000","data":"0x8c72b608"}]"#,
+                "txHash": "0x" + String(repeating: "af", count: 32), "dappUrl": "https://1inch.com",
+                "dappSummary": ["action": "call", "calls": 1, "contract": factory,
+                                "contract_name": "NativeOrderFactory", "owner": "1inch"],
+                "settlement": ["moved": [[String: Any]]()],
+            ]),
+        ]
+        let view = try feed(rows)
+        #expect(items(view).count == 3, "the scan's Received folds into the borrow")
+        let borrow = try item("dapp-1-tx", in: view)
+        let borrowRow = WalletLive.activityRow(borrow, loc: en, hidden: false)
+        #expect(borrowRow.title == "Borrow on Aave")
+        #expect(borrowRow.amount.isEmpty)
+        #expect(borrowRow.received?.contains("+0.3") == true)
+        let borrowDetail = FlowsLive.txDetail(borrow, record: nil, on: try drawnDetail, loc: en)
+        #expect(borrowDetail.amount == "+0.3 USDC")
+        #expect(borrowDetail.positive)
+        #expect(borrowDetail.received == nil)
+
+        let failed = FlowsLive.txDetail(try item("dapp-2-tx", in: view), record: nil, on: try drawnDetail, loc: en)
+        #expect(failed.status?.text == en.t("componentsTx.detail.statusFailed"))
+        #expect(failed.note == en.t("componentsUi.signing.refused"))
+
+        let order = try item("dapp-33-tx", in: view)
+        #expect(!order.priced)
+        let orderDetail = FlowsLive.txDetail(order, record: nil, on: try drawnDetail, loc: en)
+        #expect(orderDetail.title == "Create order on 1inch")
+        #expect(orderDetail.amount == "\u{2212}0.003 BNB")
+        #expect(orderDetail.fiat.isEmpty)
+        #expect(orderDetail.facts.contains { $0.value == "NativeOrderFactory" })
+    }
 }

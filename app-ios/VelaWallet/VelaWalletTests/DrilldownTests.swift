@@ -33,7 +33,9 @@ struct DrilldownTests {
             id: id, direction: direction, counterparty: counterparty, alias: alias,
             value: value, symbol: symbol, decimals: 6, usdValue: 120, chainId: chainId,
             timestamp: now, dayStartMs: dayStart, txHash: "0xabcdef0123456789", batch: nil,
-            status: status
+            status: status,
+            // As the core says it (spec 097 N7): 120 USDT has a known price.
+            priced: true
         )
     }
 

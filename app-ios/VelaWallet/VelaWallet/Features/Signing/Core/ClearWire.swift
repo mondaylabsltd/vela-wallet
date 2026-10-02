@@ -135,6 +135,56 @@ struct ClearNativeValueWire: Decodable, Equatable {
     let amount: String
 }
 
+/// What the sheet's reading named, for the record (spec 097, `DappReading`):
+/// the contract it read with its name and owner, and the coins it showed
+/// amounts of. Copied to the approve as `reading` — verbatim, never decided.
+struct DappReadingWire: Decodable, Equatable {
+    var address: String? = nil
+    var name: String? = nil
+    var owner: String? = nil
+    var tokens: [DappTokenWire] = []
+
+    private enum CodingKeys: String, CodingKey {
+        case address, name, owner, tokens
+    }
+
+    init(address: String? = nil, name: String? = nil, owner: String? = nil, tokens: [DappTokenWire] = []) {
+        self.address = address
+        self.name = name
+        self.owner = owner
+        self.tokens = tokens
+    }
+
+    /// `tokens` is left out of the core's JSON when it is empty.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        address = try c.decodeIfPresent(String.self, forKey: .address)
+        name = try c.decodeIfPresent(String.self, forKey: .name)
+        owner = try c.decodeIfPresent(String.self, forKey: .owner)
+        tokens = try c.decodeIfPresent([DappTokenWire].self, forKey: .tokens) ?? []
+    }
+
+    /// The approve's `reading`, in the core's own field names.
+    var wire: [String: Any] {
+        [
+            "address": address as Any? ?? NSNull(),
+            "name": name as Any? ?? NSNull(),
+            "owner": owner as Any? ?? NSNull(),
+            "tokens": tokens.map(\.wire),
+        ]
+    }
+}
+
+/// A coin a reading named: its contract, and the symbol and decimals it
+/// answered (`DappToken`).
+struct DappTokenWire: Decodable, Equatable {
+    let address: String
+    let symbol: String
+    let decimals: Int
+
+    var wire: [String: Any] { ["address": address, "symbol": symbol, "decimals": decimals] }
+}
+
 enum ClearSignMethod: String, Decodable {
     case personalSign = "personal_sign"
     /// `eth_sign` signs an opaque hash. It gets the hard-warning surface,
@@ -349,6 +399,9 @@ struct ClearSigningViewWire: Decodable, Equatable {
     /// Spec 096 F4: the coin a lone contract call sends, when its reading
     /// does not say it — on `clearSign` and `blindTransaction` only.
     var nativeValue: ClearNativeValueWire? = nil
+    /// Spec 097: what the reading named — the contract and the coins — which
+    /// the approve copies as `reading` so Activity names them as the sheet did.
+    var recordReading: DappReadingWire? = nil
 
     static let empty = ClearSigningViewWire(
         resolving: false, resolved: false, result: nil, message: nil,

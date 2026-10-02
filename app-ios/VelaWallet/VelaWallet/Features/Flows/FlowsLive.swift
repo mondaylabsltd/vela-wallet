@@ -296,8 +296,9 @@ enum FlowsLive {
                     + (item.symbol.isEmpty ? "" : " \(item.symbol)"),
             // The STORED figure, not a recomputed one: it is what this wallet
             // recorded the transfer was worth when it happened, and re-pricing
-            // it today would quietly restate history.
-            fiat: record?.usd.map { "≈ \($0)" } ?? "",
+            // it today would quietly restate history. None at all when the
+            // core knows no price (spec 097 N7: unknown is not "$0.00").
+            fiat: item.priced ? (record?.usd.map { "≈ \($0)" } ?? "") : "",
             positive: incoming,
             facts: facts,
             viewOnExplorer: hash.isEmpty ? nil : model.viewOnExplorer,
@@ -332,9 +333,16 @@ enum FlowsLive {
     ) -> TxDetailModel {
         let money = WalletLive.dappFigure(item, dapp: dapp)
         let allowance = money == nil ? dapp.allowance.flatMap { WalletLive.allowanceText($0, loc: loc) } : nil
+        let backText = dapp.received.map { change in
+            [WalletLive.changeFigure(change, hidden: false), change.symbol]
+                .filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        // Spec 097 N5: nothing left and something came back (a borrow) —
+        // what came back is the figure.
+        let leadsWithBack = money == nil && allowance == nil && backText != nil
         let amount = money.map { [$0, item.symbol] }
             ?? allowance.map { [$0.amount, $0.unit] }
-            ?? []
+            ?? (leadsWithBack ? [backText ?? ""] : [])
         let hash = item.txHash ?? ""
         let technical = dapp.technical.compactMap {
             technicalLine($0, id: item.id, loc: loc, readRequest: readRequest)
@@ -344,23 +352,36 @@ enum FlowsLive {
             status: dapp.offChain ? nil : status(item.status, loc: loc),
             closeLabel: model.closeLabel,
             amount: amount.filter { !$0.isEmpty }.joined(separator: " "),
-            // The STORED figure, as for any transfer — never re-priced.
-            fiat: money == nil ? "" : (record?.usd.map { "≈ \($0)" } ?? ""),
-            positive: false,
+            // The STORED figure, as for any transfer — never re-priced; none
+            // when the core knows no price (spec 097 N7).
+            fiat: money == nil || !item.priced ? "" : (record?.usd.map { "≈ \($0)" } ?? ""),
+            positive: leadsWithBack && dapp.received?.direction == .in,
             facts: dapp.facts.compactMap { fact($0, item: item, dapp: dapp, loc: loc) },
             viewOnExplorer: hash.isEmpty ? nil : model.viewOnExplorer,
             deleteLabel: loc.t("history.deleteRecord"),
             deleteQuiet: !dapp.offChain && (item.status == .pending || item.status == .unknown),
-            note: dapp.offChain ? loc.t("connect.detail.offChainNote") : nil,
+            // A signature says it was off-chain; a failed operation says why
+            // (spec 097 N4), under its chip.
+            note: dapp.offChain
+                ? loc.t("connect.detail.offChainNote")
+                : dapp.failure.flatMap { failureText($0, loc: loc) },
             amountDanger: money == nil && allowance?.unlimited == true,
-            received: dapp.received.map { change in
-                [WalletLive.changeFigure(change, hidden: false), change.symbol]
-                    .filter { !$0.isEmpty }.joined(separator: " ")
-            },
+            received: leadsWithBack ? nil : backText,
             technical: technical.isEmpty ? nil : TxTechnicalModel(
                 title: loc.t("componentsUi.signing.advancedToggle"), lines: technical
             )
         )
+    }
+
+    /// Why a dApp operation failed, in the words its request ended with
+    /// (spec 097 N4). `nil` for a reason this build has never heard of.
+    static func failureText(_ failure: String, loc: Loc) -> String? {
+        switch failure {
+        case "reverted": return loc.t("componentsTx.receipt.failedHint")
+        case "refused": return loc.t("componentsUi.signing.refused")
+        case "not_sent": return loc.t("send.txErrorGeneric")
+        default: return nil
+        }
     }
 
     /// One of the core's detail facts, labelled (spec 093). `nil` for a

@@ -1004,6 +1004,8 @@ final class SigningController {
             "unlimited_approved": guardView.unlimitedConsented,
             "token_meta": guardView.meta.wire,
             "balance_changes": balanceChanges.map { $0.map(\.wire) as Any } ?? NSNull(),
+            // Spec 097: what the reading named, copied verbatim.
+            "reading": clear.recordReading?.wire as Any? ?? NSNull(),
         ]
     }
 
