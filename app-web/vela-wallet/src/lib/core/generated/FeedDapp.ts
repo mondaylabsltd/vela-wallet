@@ -4,6 +4,7 @@ import type { DappAction } from "./DappAction";
 import type { FeedAllowance } from "./FeedAllowance";
 import type { FeedDappChange } from "./FeedDappChange";
 import type { FeedFact } from "./FeedFact";
+import type { TrackFailure } from "./TrackFailure";
 
 /**
  * What a dApp transaction row says beyond its money (083 H2, 079 D3): which
@@ -45,8 +46,11 @@ changes?: Array<FeedDappChange>,
  * coin the wallet trusts. Drawn beside the figure as what the
  * simulation EXPECTED: the chain may deliver another amount (slippage).
  * Once the chain's own "Received" record in the same transaction folds
- * into the row (spec 093), it is that record instead, `exact`. `None`
- * otherwise, and always for a failed operation.
+ * into the row (spec 093), it is that record instead, `exact`. Once the
+ * operation's own receipt was read (spec 097), it is the one coin the
+ * receipt proves arrived that the wallet can name — on its own when
+ * nothing left (a borrow): the shell draws it whether or not the row
+ * has a figure. `None` otherwise, and always for a failed operation.
  */
 received?: FeedDappChange | null, 
 /**
@@ -93,4 +97,11 @@ facts: Array<FeedFact>,
 /**
  * The detail's collapsed "Technical details", in order.
  */
-technical: Array<FeedFact>, };
+technical: Array<FeedFact>, 
+/**
+ * A failed operation: why — the words its request ended with (spec 097
+ * N4), drawn beside the failed status in the detail. `None` on every
+ * other row, and on a failed record that kept no reason (closed before
+ * 097).
+ */
+failure?: TrackFailure | null, };

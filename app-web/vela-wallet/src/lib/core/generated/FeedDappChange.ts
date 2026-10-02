@@ -34,8 +34,9 @@ symbol: string,
 value: string | null, decimals: number | null, 
 /**
  * The wallet can vouch for this figure to the unit: a native outflow
- * equal to the value the wallet itself submitted, or a receipt the
- * chain recorded (spec 093). Every other line is
+ * equal to the value the wallet itself submitted, a receipt the chain
+ * recorded (spec 093), or a line the operation's own receipt logs prove
+ * (spec 097). Every other line is
  * what the simulation expected — an inflow may arrive short (slippage)
  * and an exact-output swap's outflow may differ too, and the wallet
  * cannot tell which kind of swap it signed — so the shell marks it "≈".

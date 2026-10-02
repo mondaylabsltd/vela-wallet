@@ -2,6 +2,7 @@
 import type { DappSummary } from "./DappSummary";
 import type { FeedTxKind } from "./FeedTxKind";
 import type { FeedTxStatus } from "./FeedTxStatus";
+import type { TrackSettlement } from "./TrackSettlement";
 import type { TrustSimJudgment } from "./TrustSimJudgment";
 
 /**
@@ -94,4 +95,12 @@ call_data?: string | null,
  * row): that record reads by its kind, the rest of the feed loads
  * ([`stored_or_none`]).
  */
-summary?: DappSummary | null, };
+summary?: DappSummary | null, 
+/**
+ * How the operation ended, as the tracker proved it (spec 097) — the
+ * closing patch's `settlement`, stored verbatim by the shell and handed
+ * back untouched: what the receipt proves it moved, or why it failed.
+ * `None` on records closed before 097, by a shell that does not keep
+ * it, and on one this build cannot read ([`stored_or_none`]).
+ */
+settlement?: TrackSettlement | null, };
