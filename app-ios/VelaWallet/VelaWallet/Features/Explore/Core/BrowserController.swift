@@ -102,6 +102,10 @@ final class BrowserController {
     /// may be switched to from the connection panel.
     private(set) var chainIds: [Int] = []
 
+    /// Settings' debug mode (spec 091), as the app last said. Which pages are
+    /// offered the wallet is the core's rule; this is only the fact it reads.
+    private(set) var debugMode = false
+
     /// Visits recorded before the history store answered.
     private var queuedVisits: [[String: Any]] = []
     private var historyReady = false
@@ -192,7 +196,31 @@ final class BrowserController {
     /// Idempotent, and harmless before any page exists: it only lists the
     /// stored sites.
     func startConnections() {
-        dbrCore.boot(CoreJSON.string(["type": "start"]))
+        guard dbrCore.boot(CoreJSON.string(["type": "start"])) else { return }
+        // Right behind `start`, before any engine exists to send a page
+        // message: what is dispatched before the boot is dropped.
+        tellCoreDebugMode()
+    }
+
+    /// Settings' debug mode, at construction and on every change (spec 091).
+    ///
+    /// The core hears it (`debug_mode_changed`) and decides which pages are
+    /// offered the wallet. Turning it OFF takes the wallet from a LAN page at
+    /// once: the core retires every document it no longer offers — its open
+    /// requests answered 4900, a sheet showing one closed. Every open tab
+    /// installs the matching script, which a WebView reads when a document
+    /// starts: a page already open without the wallet gets it at its next
+    /// load (reload or navigation), never mid-page. New tabs start with it.
+    func setDebugMode(_ on: Bool) {
+        guard on != debugMode else { return }
+        debugMode = on
+        tellCoreDebugMode()
+        for engine in engines.values { engine.setDebugMode(on) }
+    }
+
+    /// Dropped before the core boots; `startConnections` says it then.
+    private func tellCoreDebugMode() {
+        dbrCore.dispatch(CoreJSON.string(["type": "debug_mode_changed", "on": debugMode]))
     }
 
     /// The wallet's chains. A site may switch or add only to one of these.
@@ -578,7 +606,7 @@ final class BrowserController {
     }
 
     private func makeEngine(id: String) -> BrowserEngine {
-        let engine = BrowserEngine(id: id)
+        let engine = BrowserEngine(id: id, debugMode: debugMode)
         engine.onPageMessage = { [weak self] frameOrigin, isMainFrame, body in
             self?.dbrCore.dispatch(CoreJSON.string([
                 "type": "page_message",
@@ -689,6 +717,9 @@ extension BrowserController {
     func rendererGoneForTesting(tab: String) {
         dbrCore.dispatch(CoreJSON.string(["type": "renderer_gone", "tab": tab]))
     }
+
+    /// The engine a tab has, if one was made.
+    func engineForTesting(_ tab: String) -> BrowserEngine? { engines[tab] }
 
     /// Where `deliver` goes when there is no web view — a test's sink.
     func deliverForTesting(_ sink: @escaping (_ tab: String, _ messageJson: String) -> Void) {

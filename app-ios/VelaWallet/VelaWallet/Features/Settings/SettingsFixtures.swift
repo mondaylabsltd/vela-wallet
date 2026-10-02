@@ -500,7 +500,12 @@ enum SettingsFixtures {
                                  mono: true, external: true,
                                  link: "https://safe.global"),
             ],
-            footer: loc.t(k.aboutFooter)
+            footer: loc.t(k.aboutFooter),
+            debugMode: DebugModeModel(
+                title: loc.t(k.aboutDebugMode),
+                body: loc.t(k.aboutDebugModeBody),
+                revealedNotice: loc.t(k.aboutDebugModeRevealed)
+            )
         )
     }
 

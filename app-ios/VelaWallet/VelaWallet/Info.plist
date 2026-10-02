@@ -21,7 +21,9 @@
 	  Spec 088: the wallet itself is offered only to a SECURE CONTEXT — https, or
 	  http on this device's loopback (`dapp_permissions::is_secure_context`, and
 	  `window.isSecureContext` in the injected script). An http page on the
-	  internet or on a LAN loads, with no provider in it.
+	  internet or on a LAN loads, with no provider in it. Spec 091: with
+	  Settings' hidden debug mode on, http pages on this device's own network
+	  are offered the wallet too (`dapp_permissions::offers_wallet`).
 	-->
 	<!--
 	  Local network (spec 088, audit I20). The app opens no socket of its own on

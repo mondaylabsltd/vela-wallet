@@ -373,6 +373,20 @@ struct AboutModel {
     let rows: [KeyValueRowModel]
     let links: [KeyValueRowModel]
     let footer: String
+    /// The hidden developer switch (spec 091).
+    var debugMode = DebugModeModel()
+}
+
+/// About's debug-mode switch (spec 091): drawn once seven taps on the version
+/// have revealed it, and from then on, so it can be turned off again.
+struct DebugModeModel {
+    /// How it stands — the stored preference, read by the core.
+    var mode: DebugMode = .hidden
+    var title = ""
+    /// What it does, and that it is for development only — one line.
+    var body = ""
+    /// The notice the revealing tap shows.
+    var revealedNotice = ""
 }
 
 struct FeedbackModel {

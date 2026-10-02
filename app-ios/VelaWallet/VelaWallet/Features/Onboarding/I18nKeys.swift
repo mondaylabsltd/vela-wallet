@@ -496,6 +496,10 @@ enum I18nKeys {
         static let aboutLinkGithub = "about.linkGitHub"
         static let aboutLinkSafe = "about.linkSafeWallet"
         static let aboutFooter = "about.footer"
+        // Settings' hidden debug mode (spec 091).
+        static let aboutDebugMode = "about.debugMode"
+        static let aboutDebugModeBody = "about.debugModeBody"
+        static let aboutDebugModeRevealed = "about.debugModeRevealed"
 
             // Account switcher + sign out + erase.
         static let accountsTitle = "settingsModals.account.modalTitle"

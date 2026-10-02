@@ -223,6 +223,56 @@ struct BrowserWireDriftTests {
         }
     }
 
+    /// Spec 091: `debug_mode_changed` is an event the core reads, and the
+    /// withdrawal it causes — a LAN page's open request answered 4900, the
+    /// sheet showing it closed — asks only what this build's executor
+    /// answers. The view decodes on both sides of it.
+    @Test func debugModeWithdrawalAsksOnlyWhatTheExecutorAnswers() throws {
+        let core = DappBrowserCore()
+        let lan = "http://192.168.1.5:3000"
+        let address = "0x88cca0eedbf2c4426110bbfc998f048689266894"
+        let started = try dispatch(core, ["type": "start"])
+        let listId = (try effects(from: started).first?["id"] as? NSNumber)?.uint64Value ?? 0
+        _ = try dispatch(core, ["type": "networks_changed", "chain_ids": [1, 100]])
+        _ = try dispatch(core, ["type": "accounts_updated", "addresses": [address]])
+        _ = try dispatch(core, ["type": "account_switched", "address": address, "now_ms": 1_757_000_000_000])
+        _ = try core.resolveEffect(effectId: listId, resultJson: CoreJSON.string([
+            "type": "sites_listed",
+            "sites": [[
+                "origin": lan,
+                "grant": ["origin": lan, "address": address, "chain_id": 100, "granted_at_ms": 1_757_000_000_000],
+                "chain_id": 100,
+            ]],
+        ]))
+        _ = try dispatch(core, ["type": "debug_mode_changed", "on": true])
+
+        func page(_ message: [String: Any]) throws -> String {
+            try dispatch(core, [
+                "type": "page_message", "tab": "t1", "frame_origin": lan, "is_main_frame": true,
+                "message_json": CoreJSON.string(message),
+            ])
+        }
+        _ = try page(["t": "hello", "doc": "d1"])
+        let signing = try page([
+            "t": "req", "doc": "d1", "id": "1", "method": "personal_sign", "params": ["0x68656c6c6f", address],
+        ])
+        #expect(tags(try effects(from: signing)).contains("forward_to_signing"), "debug mode on: the LAN page is served")
+        let open = try CoreJSON.decode(DbrViewWire.self, from: try view(from: signing))
+        #expect(open.tab("t1")?.connectedAddress != nil)
+
+        let off = try dispatch(core, ["type": "debug_mode_changed", "on": false])
+        let asked = tags(try effects(from: off))
+        for expected in ["deliver", "cancel_signing"] {
+            #expect(asked.contains(expected), "turning debug mode off never asked `\(expected)`")
+        }
+        for tag in asked {
+            #expect(DbrExecutor.operations.contains(tag), "`\(tag)` is not an operation this executor handles")
+        }
+        let withdrawn = try CoreJSON.decode(DbrViewWire.self, from: try view(from: off))
+        #expect(withdrawn.signing == nil, "the sheet is closed")
+        #expect(withdrawn.tab("t1")?.connectedAddress == nil, "no connection shown while debug mode is off")
+    }
+
     // MARK: - sign_request
 
     @Test func signViewDecodes() throws {

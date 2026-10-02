@@ -538,6 +538,11 @@ struct RootView: View {
         Marks.adopt(accounts.loadServiceEndpoints())
         Formats.apply(prefs)
         UiScale.apply(prefs)
+        // Settings' debug mode (spec 091), before the browser boots: its core
+        // hears it right behind `start`, and every tab's script follows it.
+        // An erase builds a new root over the emptied store, so this reads
+        // hidden — off — again.
+        browserController.setDebugMode(prefs.debugMode.isOn)
         _preferences = State(initialValue: prefs)
         _batch = State(initialValue: BatchStore(executor: BatchExecutor(
             fiatRate: { [weak settingsStore] code in await settingsStore?.usdRate(code) },
@@ -3304,7 +3309,11 @@ struct RootView: View {
                 return settings.signPref?.signerUrlError == nil
             },
             onResetSignerUrl: { settings.resetSignerUrl() },
-            onOpenLink: { openExternal($0) }
+            onOpenLink: { openExternal($0) },
+            // Settings' hidden debug mode (spec 091): the preference and the
+            // browser are told in one place, so they cannot disagree.
+            onRevealDebugMode: { debugModeChanged { $0.revealDebugMode() } },
+            onDebugMode: { on in debugModeChanged { $0.setDebugMode(on) } }
         )
         // The wallet's own request, over the page that raised it. Settings
         // keeps its pickers on a sheet of its own INSIDE the screen; the row
@@ -3357,6 +3366,15 @@ struct RootView: View {
             // every saved key each time Settings opened was asking about
             // pages nobody was looking at.
         }
+    }
+
+    /// Settings' debug mode (spec 091): seven taps on About's version reveal
+    /// the switch (stored off), and the switch turns it on or off. The browser
+    /// follows what is stored — its core decides which pages that offers the
+    /// wallet, and its tabs' next documents start with the matching script.
+    private func debugModeChanged(_ change: (Preferences) -> Void) {
+        change(preferences)
+        browser.setDebugMode(preferences.debugMode.isOn)
     }
 
     /// A link out of the app — About's rows, "suggest a fix", "Get a key".

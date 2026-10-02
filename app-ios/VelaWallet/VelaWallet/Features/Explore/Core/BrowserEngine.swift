@@ -201,9 +201,13 @@ final class BrowserEngine: NSObject {
 
     private var observations: [NSKeyValueObservation] = []
     private var tornDown = false
+    /// Which provider script this tab's next document starts with — Settings'
+    /// debug mode, as `BrowserController` last said (spec 091).
+    private(set) var debugMode: Bool
 
-    init(id: String) {
+    init(id: String, debugMode: Bool = false) {
         self.id = id
+        self.debugMode = debugMode
 
         let configuration = WKWebViewConfiguration()
         configuration.processPool = Self.processPool
@@ -223,7 +227,7 @@ final class BrowserEngine: NSObject {
         self.stopper = { [weak webView] in webView?.stopLoading() }
         super.init()
 
-        ProviderBridge.install(into: configuration.userContentController, handler: self)
+        ProviderBridge.install(into: configuration.userContentController, handler: self, debugMode: debugMode)
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
@@ -479,6 +483,17 @@ final class BrowserEngine: NSObject {
     func deliver(_ messageJson: String) {
         guard !tornDown, let expression = ProviderBridge.deliverExpression(messageJson) else { return }
         webView.evaluateJavaScript(expression, in: nil, in: .page) { _ in }
+    }
+
+    /// Settings' debug mode changed (spec 091): the next document in this
+    /// tab — a reload, a navigation — starts with that mode's script. The
+    /// page now showing keeps the one it started with; turning debug mode off
+    /// still takes the wallet from it at once, because the core retires every
+    /// document it no longer offers.
+    func setDebugMode(_ on: Bool) {
+        guard !tornDown, on != debugMode else { return }
+        debugMode = on
+        ProviderBridge.replaceScript(in: webView.configuration.userContentController, debugMode: on)
     }
 
     /// The tab closed. Idempotent.
