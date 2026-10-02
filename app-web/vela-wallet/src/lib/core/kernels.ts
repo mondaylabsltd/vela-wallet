@@ -15,6 +15,7 @@ import type { Assertion } from '$lib/onboarding/core/passkey';
 import type { Account } from '$lib/core/generated/Account';
 import type { KeyMethod } from '$lib/core/generated/KeyMethod';
 import type { FeeFailure } from '$lib/core/generated/FeeFailure';
+import type { FeedDappContent } from '$lib/core/generated/FeedDappContent';
 import type { ReadSlot } from '$lib/core/generated/ReadSlot';
 import type { SignEnding } from '$lib/core/generated/SignEnding';
 import type { SignEndingState } from '$lib/core/generated/SignEndingState';
@@ -1039,6 +1040,18 @@ export function signEndingState(
 				wasm.signEndingState(JSON.stringify(ending), entry ? JSON.stringify(entry) : null)
 			) as SignEndingState
 	);
+}
+
+/**
+ * A dApp record's stored request as its "Technical details" show it (spec
+ * 093, `dapp_activity::request_display`): typed data as its document,
+ * pretty-printed; a message as its text (or its hex); call data as the
+ * params, pretty-printed. `storedRequest` is the params' JSON text as the
+ * record kept it — `''` when it kept nothing. `null` when there is nothing to
+ * show; the shell then says it was not recorded. No shell formats it itself.
+ */
+export function dappRequestDisplay(content: FeedDappContent, storedRequest: string): string | null {
+	return wasm.dappRequestDisplay(content, storedRequest) ?? null;
 }
 
 /** How long the dApp's receipt wait may still run, `elapsedMs` after approval (RA12). */

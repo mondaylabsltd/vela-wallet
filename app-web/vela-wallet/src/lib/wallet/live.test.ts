@@ -299,7 +299,8 @@ describe('empty activity, chosen by the core', () => {
 		new_item_id: null,
 		toast: null,
 		history_empty_key: 'history.emptyTitle',
-		home_empty_key: 'home.emptyNoActivity'
+		home_empty_key: 'home.emptyNoActivity',
+		contact_rows: []
 	};
 	const FILTERED: FeedView = {
 		...EMPTY_FEED,

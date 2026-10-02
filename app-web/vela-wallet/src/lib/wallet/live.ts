@@ -37,6 +37,13 @@ import { fill } from './messages';
 import { currencyGlyph, currencySymbol } from '$lib/settings/fixtures';
 import { BALANCE_MASK, chainColor, MASK } from './fixtures';
 import type { WalletMessages } from './messages';
+
+/**
+ * The words an Activity row is built from — the wallet bundle's `activity`
+ * part, which a contact's page ships too (spec 093), so both draw the core's
+ * rows through one builder.
+ */
+export type RowMessages = Pick<WalletMessages, 'activity'>;
 import type {
 	ActivityGroupModel,
 	ActivityRowModel,
@@ -435,7 +442,7 @@ function localMidnight(ms: number): number {
 }
 
 /** "Today" / "Yesterday" from the corpus; older days in the date preset. */
-export function dayLabel(dayStartMs: number, m: WalletMessages, now = Date.now()): string {
+export function dayLabel(dayStartMs: number, m: RowMessages, now = Date.now()): string {
 	const today = localMidnight(now);
 	if (dayStartMs === today) return m.activity.today;
 	if (dayStartMs === today - 86_400_000) return m.activity.yesterday;
@@ -447,8 +454,10 @@ export function dayLabel(dayStartMs: number, m: WalletMessages, now = Date.now()
 
 export function liveActivityRow(
 	item: FeedItem,
-	m: WalletMessages,
-	hidden: boolean
+	m: RowMessages,
+	hidden: boolean,
+	/** The clock a `day` part is worded against (tests inject one). */
+	now = Date.now()
 ): ActivityRowModel {
 	// Spec 082 RG1, spec 093: what the row IS, and where it stands, are the
 	// core's (`FeedItem.kind`, `.status`, `.dapp`) — never guessed from a
@@ -477,7 +486,7 @@ export function liveActivityRow(
 		// The core's second line (spec 093), worded: status first when the
 		// tracker has not closed the row (RG2, 087 F04), then the site, the
 		// network, or whom a transfer went to — in the core's order.
-		subtitle: subtitleText(item.subtitle ?? [], m),
+		subtitle: subtitleText(item.subtitle ?? [], m, now),
 		amount: masked ? MASK : figure.amount,
 		unit: figure.unit,
 		positive: received,
@@ -502,7 +511,7 @@ export function liveActivityRow(
 function rowFigure(
 	item: FeedItem,
 	received: boolean,
-	m: WalletMessages
+	m: RowMessages
 ): { amount: string; unit: string; danger: boolean; maskable: boolean } {
 	if (item.value !== null) {
 		const about = item.dapp?.estimated ? '≈ ' : '';
@@ -527,7 +536,7 @@ function rowFigure(
 /** An allowance as a row figure (spec 093): the core's cap and symbol, worded. */
 export function allowanceFigure(
 	allowance: FeedAllowance,
-	m: WalletMessages
+	m: RowMessages
 ): { amount: string; unit: string; danger: boolean; maskable: boolean } {
 	if (allowance.unlimited) {
 		return { amount: m.activity.unlimited, unit: allowance.symbol, danger: true, maskable: false };
@@ -555,9 +564,10 @@ export function changeFigure(change: FeedDappChange): string {
  * A row's second line (spec 093): the core's parts, in its order, each worded
  * here and joined " · ". Which parts there are — a status the tracker has not
  * closed, the site when the title named a protocol, the network, whom a
- * transfer went to or came from — is the core's (`FeedItem.subtitle`).
+ * transfer went to or came from, the day on a contact's page — is the core's
+ * (`FeedItem.subtitle`). The day reads as the date headers do.
  */
-export function subtitleText(lines: readonly FeedLine[], m: WalletMessages): string {
+export function subtitleText(lines: readonly FeedLine[], m: RowMessages, now = Date.now()): string {
 	return lines
 		.map((line) => {
 			switch (line.type) {
@@ -577,6 +587,8 @@ export function subtitleText(lines: readonly FeedLine[], m: WalletMessages): str
 					return line.site;
 				case 'network':
 					return chainName(line.chain_id);
+				case 'day':
+					return dayLabel(line.day_start_ms, m, now);
 			}
 		})
 		.filter((part) => part !== '')
@@ -588,7 +600,7 @@ export function subtitleText(lines: readonly FeedLine[], m: WalletMessages): str
  * core's `intent_term` in the reader's language, else the descriptor's text
  * when the wallet has no word for it.
  */
-function dappVerb(dapp: FeedDapp, m: WalletMessages): string {
+function dappVerb(dapp: FeedDapp, m: RowMessages): string {
 	const word = dapp.intent_term ? m.activity.intents[dapp.intent_term] : undefined;
 	return word || dapp.intent || m.activity.contractCall;
 }
@@ -598,7 +610,7 @@ function dappVerb(dapp: FeedDapp, m: WalletMessages): string {
  * a protocol the wallet knows by address, else the site's host, as the core
  * decided — or the verb alone when there is no place.
  */
-export function dappTitle(dapp: FeedDapp, m: WalletMessages): string {
+export function dappTitle(dapp: FeedDapp, m: RowMessages): string {
 	const intent = dappVerb(dapp, m);
 	return dapp.place != null ? fill(m.activity.dappRowTitle, { intent, place: dapp.place }) : intent;
 }

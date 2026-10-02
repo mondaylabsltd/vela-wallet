@@ -302,6 +302,32 @@ describe('liveActivityRow', () => {
 		expect(liveActivityRow(item({ id: 'n', subtitle: [] }), m, false).subtitle).toBe('');
 	});
 
+	// Spec 093: a contact's rows carry the day instead of headers — worded as
+	// the date headers are: today, yesterday, else the person's date preset.
+	it('the day part reads as the date headers do', () => {
+		const now = new Date(2026, 8, 3, 12).getTime();
+		const today = new Date(2026, 8, 3).getTime();
+		const row = (day: number) =>
+			liveActivityRow(
+				item({
+					id: 'd',
+					subtitle: [
+						{ type: 'network', chain_id: 1 },
+						{ type: 'day', day_start_ms: day }
+					]
+				}),
+				m,
+				false,
+				now
+			).subtitle;
+		expect(row(today)).toBe(`${chainName(1)} · ${m.activity.today}`);
+		expect(row(today - DAY)).toBe(`${chainName(1)} · ${m.activity.yesterday}`);
+		preferences.setDateFormat('iso');
+		expect(row(today - 3 * DAY)).toBe(`${chainName(1)} · 2026-08-31`);
+		expect(row(today - 3 * DAY)).toBe(`${chainName(1)} · ${dayLabel(today - 3 * DAY, m, now)}`);
+		preferences.resetForTests();
+	});
+
 	it('an allowance is the figure: unlimited in red and never masked, a cap like money', () => {
 		const grant = (id: string, value: string | null, unlimited: boolean) =>
 			item({
@@ -413,7 +439,8 @@ describe('liveActivityGroups', () => {
 			new_item_id: null,
 			toast: null,
 			history_empty_key: 'history.emptyTitle',
-			home_empty_key: 'home.emptyNoActivity'
+			home_empty_key: 'home.emptyNoActivity',
+			contact_rows: []
 		};
 		const groups = liveActivityGroups(view, m, false);
 		expect(groups.map((g) => [g.label, g.rows.length])).toEqual([

@@ -29,6 +29,7 @@ import type {
 	TxDetailModel,
 	TxTechnicalRow
 } from '$lib/flows/model';
+import { dappRequestDisplay } from '$lib/core/kernels';
 import { chainMeta } from '$lib/services/chains';
 import { formatDate, formatTime } from '$lib/services/locale-format';
 import { chainName, explorerTxURL } from '$lib/services/networks';
@@ -109,26 +110,28 @@ export interface TxDetailContext {
 	identicon: (seed: string) => string;
 	now?: number;
 	/**
-	 * Spec 093: the stored request of a dApp record, by record id — asked
-	 * only when its "Technical details" open. Absent: none to show.
+	 * Spec 093: the stored request of a dApp record, by record id, as the
+	 * params' JSON text (`storedRequestJson`, `''` for none) — asked only
+	 * when its "Technical details" open. Absent: none to show.
 	 */
-	storedRequest?: (id: string) => string | null;
+	storedRequest?: (id: string) => string;
 }
 
 /**
- * A stored dApp record's request as text (spec 093): the core's cut of it,
- * which this shell keeps parsed as `signedRequest.params`, written back out.
- * `null` when the record kept none — an older row, or a request whose shape
- * alone was past the cut (the core keeps `""` then, stored as no params), so
- * the row says "not recorded" rather than "[]".
+ * A stored dApp record's request as the record kept it (spec 093): the
+ * params' JSON text — the core's cut, which this shell keeps parsed as
+ * `signedRequest.params` — or `''` when it kept none (an older row, or a
+ * request whose shape alone was past the cut: the core keeps `""` then, stored
+ * as no params). Unformatted: what Technical details shows of it is the
+ * core's (`dappRequestDisplay`).
  */
-export function storedRequestText(tx: LocalTransaction | undefined): string | null {
+export function storedRequestJson(tx: LocalTransaction | undefined): string {
 	const params = tx?.signedRequest?.params;
-	if (!Array.isArray(params) || params.length === 0) return null;
+	if (!Array.isArray(params) || params.length === 0) return '';
 	try {
-		return JSON.stringify(params, null, 2);
+		return JSON.stringify(params);
 	} catch {
-		return null;
+		return '';
 	}
 }
 
@@ -321,7 +324,9 @@ function dappTechnical(item: FeedItem, dapp: FeedDapp, ctx: TxDetailContext): Tx
 						kind: 'content',
 						label: contentLabel(fact.content, m),
 						missing: m['connect.detail.contentMissing'],
-						read: () => ctx.storedRequest?.(item.id) ?? null
+						// Read from the store when the section opens, and shown as
+						// the core words it — never formatted here.
+						read: () => dappRequestDisplay(fact.content, ctx.storedRequest?.(item.id) ?? '')
 					}
 				];
 			case 'primary_type':

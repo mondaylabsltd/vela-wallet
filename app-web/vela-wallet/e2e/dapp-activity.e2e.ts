@@ -11,6 +11,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { CHAINS } from '../src/lib/services/chains';
+import type { LocalTransaction } from '../src/lib/services/transactions-model';
 import { dappActivityRecords } from '../src/lib/wallet/dapp-activity-fixtures';
 import { en } from './live-helpers';
 import {
@@ -33,10 +34,52 @@ const FIXTURE_PUBLIC_KEY =
 	'04197db9030a1e166bec2cee05e0ddb94b26ee0b6d6f429f1748cda4eedac36f04fe546861a9c9dfaf75719b53c75e0b933d4aad6d325f18c75776a260d507647b';
 const SHOTS = 'e2e/__screenshots__/093';
 
-async function seed(page: Page): Promise<void> {
-	const records = dappActivityRecords(SAFE, Math.floor(Date.now() / 1000) - 60);
+/** Alice, in the address book — the contact whose page the last test opens. */
+const ALICE = '0x' + 'a1'.repeat(20);
+const USDC = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+
+/**
+ * What a dApp's token transfer to Alice leaves behind: a `transfer(Alice, 5
+ * USDC)` called on the token, as the signing path stores it.
+ */
+function transferToAlice(nowSec: number): LocalTransaction {
+	const data =
+		'0xa9059cbb' + ALICE.slice(2).padStart(64, '0') + (5_000_000).toString(16).padStart(64, '0');
+	return {
+		id: `dapp-${nowSec * 1000}-tx`,
+		userOpHash: '0x' + 'e3'.repeat(32),
+		txHash: '0x' + 'f3'.repeat(32),
+		from: SAFE,
+		to: USDC,
+		value: '0x0',
+		symbol: 'ETH',
+		decimals: 18,
+		chainId: 1,
+		timestamp: nowSec,
+		status: 'confirmed',
+		type: 'dapp_tx',
+		dappOrigin: 'https://pay.example',
+		dappUrl: 'https://pay.example',
+		intent: 'Transfer',
+		signedRequest: { method: 'eth_sendTransaction', params: [{ to: USDC, data }] },
+		requestTruncated: false,
+		dappSummary: { action: 'call', calls: 1, contract: USDC },
+		balanceChanges: [
+			{
+				type: 'erc20_trusted',
+				token: USDC,
+				delta: '-5000000',
+				symbol: 'USDC',
+				decimals: 6,
+				in_trusted_set: true
+			}
+		]
+	};
+}
+
+async function seed(page: Page, records: LocalTransaction[], contacts: unknown[] = []) {
 	await page.addInitScript(
-		([rows, safe, key]) => {
+		([rows, book, safe, key]) => {
 			localStorage.setItem('vela.intro.seen', String(Date.now()));
 			if (localStorage.getItem('vela.accounts') === null) {
 				localStorage.setItem(
@@ -56,19 +99,17 @@ async function seed(page: Page): Promise<void> {
 				const open = indexedDB.open('vela', 1);
 				open.onupgradeneeded = () => open.result.createObjectStore('kv');
 				open.onsuccess = () => {
-					open.result
-						.transaction('kv', 'readwrite')
-						.objectStore('kv')
-						.put(JSON.stringify(rows), 'vela.transactionHistory');
+					const store = open.result.transaction('kv', 'readwrite').objectStore('kv');
+					store.put(JSON.stringify(rows), 'vela.transactionHistory');
+					if (book.length > 0) store.put(JSON.stringify(book), 'vela.contacts');
 				};
 			}
 		},
-		[records, SAFE, FIXTURE_PUBLIC_KEY] as const
+		[records, contacts, SAFE, FIXTURE_PUBLIC_KEY] as const
 	);
 }
 
 test.beforeEach(async ({ page }) => {
-	await seed(page);
 	await denyOffOrigin(page);
 	await stubChainRegistry(page, {
 		1: {
@@ -112,8 +153,12 @@ async function openWallet(page: Page, locale = 'en'): Promise<void> {
 
 const TITLES = ['Swap on Uniswap', 'Spending permit on Uniswap', 'Sign in on app.uniswap.org'];
 
+const fixtures = (page: Page) =>
+	seed(page, dappActivityRecords(SAFE, Math.floor(Date.now() / 1000) - 60));
+
 test.describe('phone width', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
+	test.beforeEach(({ page }) => fixtures(page));
 
 	test('the three rows say what happened and where; the permit opens to its facts', async ({
 		page
@@ -144,7 +189,8 @@ test.describe('phone width', () => {
 		await expect(sheet.getByText(/"primaryType"/)).toHaveCount(0);
 		await sheet.getByRole('button', { name: en('componentsUi.signing.advancedToggle') }).click();
 		await expect(sheet.getByText('PermitSingle', { exact: true })).toBeVisible();
-		await expect(sheet.getByText(/PermitSingle\\",/)).toBeVisible();
+		// The core's reading of the kept request: the typed document, pretty.
+		await expect(sheet.getByText(/"primaryType": "PermitSingle"/)).toBeVisible();
 		await sheet.getByText(en('componentsTx.detail.labelOperation')).scrollIntoViewIfNeeded();
 		await page.screenshot({ path: `${SHOTS}/permit-detail-phone-en.png` });
 	});
@@ -181,6 +227,7 @@ test.describe('phone width', () => {
 
 test.describe('desktop width', () => {
 	test.use({ viewport: { width: 1440, height: 900 } });
+	test.beforeEach(({ page }) => fixtures(page));
 
 	test('the rows and the permit’s technical details in the third column', async ({ page }) => {
 		await openWallet(page);
@@ -202,5 +249,45 @@ test.describe('desktop width', () => {
 			.click();
 		await expect(page.getByText('PermitSingle', { exact: true })).toBeVisible();
 		await page.screenshot({ path: `${SHOTS}/permit-detail-desktop-en.png` });
+	});
+});
+
+/**
+ * Spec 093: a contact's 最近往来 is the core's rows for that contact, drawn by
+ * Activity's builder — a dApp's token transfer to Alice reads as the verb it
+ * was ("Transfer …"), never the page's own "Sent".
+ */
+test.describe('a contact page', () => {
+	test.use({ viewport: { width: 390, height: 844 } });
+	test.beforeEach(({ page }) =>
+		seed(
+			page,
+			[transferToAlice(Math.floor(Date.now() / 1000) - 60)],
+			[
+				{
+					address: ALICE,
+					name: 'Alice',
+					kind: 'unknown',
+					favorite: false,
+					txCount: 1,
+					lastUsed: Date.now(),
+					firstSeen: Date.now(),
+					source: 'manual'
+				}
+			]
+		)
+	);
+
+	test("a dApp's transfer to Alice reads as its verb on her page", async ({ page }) => {
+		await page.goto('/en/contacts');
+		await expect(page.getByRole('heading', { name: en('contacts.title') }).first()).toBeVisible();
+		await page.getByText('Alice', { exact: true }).first().click();
+		await expect(page.getByText(en('contacts.recentActivity')).first()).toBeVisible();
+		const verb = en('componentsUi.signing.intentTransfer');
+		await expect(page.getByText(new RegExp(`^${verb}`)).first()).toBeVisible({ timeout: 20_000 });
+		await expect(page.getByText(en('history.labelSent'), { exact: true })).toHaveCount(0);
+		await expect(page.getByText('≈ \u22125', { exact: true })).toBeVisible();
+		await page.waitForTimeout(400);
+		await page.screenshot({ path: `${SHOTS}/contact-detail-phone-en.png`, fullPage: true });
 	});
 });

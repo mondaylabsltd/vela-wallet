@@ -11,6 +11,7 @@ import type { FeedView } from '$lib/core/generated/FeedView';
 import { resolveWalletFlowMessages, resolveWalletMessages } from '$lib/i18n/engine.server';
 import { buildDesktopFlowState, buildFlowState } from '$lib/flows/fixtures';
 import { buildSigningRecord } from '$lib/services/dapp-history';
+import { dappRequestDisplay } from '$lib/core/kernels';
 import type { TxTechnicalRow } from '$lib/flows/model';
 import { feedItemsThroughCore } from './core/feed-through-core';
 import { dappActivityRecords, feedDapp } from './dapp-activity-fixtures';
@@ -22,7 +23,7 @@ import {
 	liveTxDetail,
 	shownTxDetailStateDesktop,
 	shownTxDetailStateMobile,
-	storedRequestText,
+	storedRequestJson,
 	withLiveTxDetailDesktop,
 	withLiveTxDetailMobile
 } from './live-detail';
@@ -79,6 +80,7 @@ const FEED: FeedView = {
 	toast: null,
 	history_empty_key: 'history.emptyTitle',
 	home_empty_key: 'home.emptyNoActivity',
+	contact_rows: [],
 	rows: [
 		{ type: 'header', id: 'day-1', day_start_ms: 1, timestamp: 1 },
 		{ type: 'item', item: item('a') },
@@ -290,7 +292,7 @@ describe('liveTxDetail', () => {
 				...ctx,
 				storedRequest: (id) => {
 					asked.push(id);
-					return id === 'dapp-7-tx' ? '[{"to":"0x1"}]' : null;
+					return id === 'dapp-7-tx' ? '[{"to":"0x1"}]' : '';
 				}
 			}
 		);
@@ -299,8 +301,10 @@ describe('liveTxDetail', () => {
 		const content = detail.technical!.rows[0];
 		if (content.kind !== 'content') throw new Error('no content row');
 		expect(content.missing).toBe(fm['connect.detail.contentMissing']);
-		expect(content.read()).toBe('[{"to":"0x1"}]');
-		expect(asked).toEqual(['dapp-7-tx']);
+		// Shown as the core words it (`dappRequestDisplay`): call data, pretty.
+		expect(content.read()).toBe(dappRequestDisplay('call_data', '[{"to":"0x1"}]'));
+		expect(content.read()).toBe('[\n  {\n    "to": "0x1"\n  }\n]');
+		expect(asked).toEqual(['dapp-7-tx', 'dapp-7-tx']);
 		// No reader (or no record): none to show.
 		const bare = liveTxDetail(
 			item('x', { dapp: feedDapp({ technical: [{ type: 'content', content: 'message' }] }) }),
@@ -309,12 +313,32 @@ describe('liveTxDetail', () => {
 		expect(bare.kind === 'content' && bare.read()).toBeNull();
 	});
 
-	it("a stored request's text is its kept params; an empty or absent one is none", () => {
+	it("a stored request is its kept params' JSON, unformatted; an empty or absent one is ''", () => {
 		const tx = dappActivityRecords(ACCOUNT, NOW_S)[2];
-		expect(JSON.parse(storedRequestText(tx)!)).toEqual(tx.signedRequest!.params);
-		expect(storedRequestText({ ...tx, signedRequest: { method: 'x', params: [] } })).toBeNull();
-		expect(storedRequestText({ ...tx, signedRequest: undefined })).toBeNull();
-		expect(storedRequestText(undefined)).toBeNull();
+		expect(storedRequestJson(tx)).toBe(JSON.stringify(tx.signedRequest!.params));
+		expect(storedRequestJson({ ...tx, signedRequest: { method: 'x', params: [] } })).toBe('');
+		expect(storedRequestJson({ ...tx, signedRequest: undefined })).toBe('');
+		expect(storedRequestJson(undefined)).toBe('');
+	});
+
+	// Spec 093: what Technical details shows is the core's reading of the
+	// kept request, asked with the content word and the params' JSON.
+	it('the fixtures read as the core shows them: a pretty document, a message as its text', () => {
+		const [signIn, permit] = dappActivityRecords(ACCOUNT, NOW_S);
+		const read = (tx: typeof permit, content: 'typed_data' | 'message') => {
+			const row = liveTxDetail(
+				item(tx.id, { dapp: feedDapp({ technical: [{ type: 'content', content }] }) }),
+				{ ...ctx, storedRequest: () => storedRequestJson(tx) }
+			).technical!.rows[0];
+			if (row.kind !== 'content') throw new Error('no content row');
+			return row.read();
+		};
+		const typed = read(permit, 'typed_data')!;
+		expect(typed).toBe(dappRequestDisplay('typed_data', storedRequestJson(permit)));
+		expect(typed).toContain('"primaryType": "PermitSingle"');
+		expect(typed).not.toContain('\\"');
+		const message = read(signIn, 'message')!;
+		expect(message.startsWith('app.uniswap.org wants you to sign in')).toBe(true);
 	});
 
 	// Spec 093: the core keeps `""` when the request's shape alone is past the
@@ -331,10 +355,11 @@ describe('liveTxDetail', () => {
 			dappOrigin: 'https://app.example',
 			nowMs: NOW_S * 1000
 		});
-		expect(storedRequestText(kept)).toBeNull();
+		expect(storedRequestJson(kept)).toBe('');
+		expect(dappRequestDisplay('call_data', '')).toBeNull();
 		const content = liveTxDetail(
 			item(kept.id, { dapp: feedDapp({ technical: [{ type: 'content', content: 'call_data' }] }) }),
-			{ ...ctx, storedRequest: () => storedRequestText(kept) }
+			{ ...ctx, storedRequest: () => storedRequestJson(kept) }
 		).technical!.rows[0];
 		if (content.kind !== 'content') throw new Error('no content row');
 		expect(content.read()).toBeNull();

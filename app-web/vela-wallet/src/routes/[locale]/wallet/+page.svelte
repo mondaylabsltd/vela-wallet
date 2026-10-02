@@ -116,7 +116,7 @@
 		liveTxDetail,
 		shownTxDetailStateDesktop,
 		shownTxDetailStateMobile,
-		storedRequestText,
+		storedRequestJson,
 		withLiveTxDetailDesktop,
 		withLiveTxDetailMobile
 	} from '$lib/wallet/live-detail';
@@ -201,7 +201,7 @@
 					identicon: identiconSvgForClient,
 					// Spec 093: a dApp record's stored request, read from the store's
 					// rows by id when its "Technical details" open — never before.
-					storedRequest: (id) => storedRequestText(activityFeedTx(id))
+					storedRequest: (id) => storedRequestJson(activityFeedTx(id))
 				})
 	);
 
